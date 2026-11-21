@@ -510,8 +510,8 @@ class SceneBuilder:
     def add_blink_animation(
         self, eyelid_nodes: Sequence[str] = ("eyelid_left", "eyelid_right"), closed_angle: float = 1.48, *, name: str = "Blink"
     ) -> AnimationClip:
-        """Add a glTF 2.0 Blink clip keyframing eyelid rotation around local +X."""
-        times = [0.0, 2.40, 2.48, 2.56, 2.68, 3.00]
+        """Add a snappy 1998-calibrated 135 ms glTF 2.0 Blink clip keyframing eyelid rotation around local +X."""
+        times = [0.0, 2.40, 2.435, 2.490, 2.535, 3.00]
         q_open, q_closed = (0.0, 0.0, 0.0, 1.0), quat_from_axis_angle((1.0, 0.0, 0.0), closed_angle)
         vals = [q_open, q_open, q_closed, q_closed, q_open, q_open]
         return self.add_animation(name, [AnimationChannel(n, "rotation", list(times), list(vals)) for n in eyelid_nodes if self.nodes.get(n)], replace=True)

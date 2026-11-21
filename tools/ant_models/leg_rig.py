@@ -16,15 +16,39 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import numpy as np
 
 try:
-    from .mesh_core import AnimationChannel, SceneBuilder, curved_tube, quat_from_euler_xyz, quat_mul
+    from .mesh_core import (
+        AnimationChannel,
+        SceneBuilder,
+        curved_tube,
+        quat_from_axis_angle,
+        quat_from_euler_xyz,
+        quat_mul,
+    )
 except ImportError:
-    from mesh_core import AnimationChannel, SceneBuilder, curved_tube, quat_from_euler_xyz, quat_mul  # type: ignore
+    from mesh_core import (  # type: ignore
+        AnimationChannel,
+        SceneBuilder,
+        curved_tube,
+        quat_from_axis_angle,
+        quat_from_euler_xyz,
+        quat_mul,
+    )
 
 Vec3 = Tuple[float, float, float]
 Quat = Tuple[float, float, float, float]
 
 LEG_NODES: Tuple[str, ...] = ("leg_mid_left", "leg_mid_right", "leg_rear_left", "leg_rear_right")
+ARM_NODES: Tuple[str, ...] = ("arm_left", "forearm_left", "arm_right", "forearm_right")
 LEG_STYLES: Tuple[str, ...] = ("natural", "worker", "thief", "bomber", "swimmer", "fire", "symmetric")
+
+# Per-leg organic Idle motion personality (non-lockstep variation):
+# node -> (knee_bow_mult, splay_mult, phase_rad, swivel_amp_rad)
+_LEG_VARIATION: Dict[str, Tuple[float, float, float, float]] = {
+    "leg_mid_left": (1.25, 0.90, 0.00, 0.085),
+    "leg_mid_right": (1.80, 1.15, 1.55, 0.105),
+    "leg_rear_left": (1.50, 1.05, 2.95, 0.095),
+    "leg_rear_right": (2.00, 1.25, 4.45, 0.110),
+}
 
 # Per-leg organic offsets for the canonical "natural" stance (left = +X):
 # (outward foot dx, foot stride dz, knee dy, knee dz, ankle dz, foot yaw).
@@ -244,12 +268,14 @@ def _solve_knee_scale(
     *,
     knee_bow: float,
     splay: float,
+    flex_bias: float = 0.0,
 ) -> np.ndarray:
     """Compute anisotropic knee-bend scale (sx, sy, sz) whose scaled hip vector matches `||target_vec||` exactly."""
     d_len = max(1e-6, float(np.linalg.norm(target_vec)))
     c_y = max(0.72, min(1.32, float(target_vec[1]) / max(0.05, float(v_rest_y))))
-    sx = max(0.72, min(1.45, 1.0 + splay * (1.0 - c_y)))
-    sz = max(0.62, min(1.70, 1.0 + knee_bow * (1.0 - c_y)))
+    drive = (1.0 - c_y) + float(flex_bias)
+    sx = max(0.72, min(1.45, 1.0 + splay * drive))
+    sz = max(0.62, min(1.75, 1.0 + knee_bow * drive))
 
     hx, hy, hz = float(hip_loc[0]), float(hip_loc[1]), float(hip_loc[2])
     rem = d_len * d_len - (sx * hx) ** 2 - (sz * hz) ** 2
@@ -299,12 +325,18 @@ def _flex_channels(
     *,
     knee_bow: float,
     splay: float,
+    swivel: float = 1.0,
 ) -> List[AnimationChannel]:
     channels: List[AnimationChannel] = []
+    t_start = float(times[0]) if times else 0.0
+    t_dur = max(1e-6, float(times[-1]) - t_start) if len(times) >= 2 else 1.0
+    swivel_gain = max(0.0, float(swivel))
+
     for node, pivot, hip in leg_rig_info(scene):
         offsets = per_leg.get(node)
         if not offsets:
             continue
+        bow_mult, splay_mult, phase_off, swivel_amp = _LEG_VARIATION.get(node, (1.0, 1.0, 0.0, 0.09))
         xf = scene.get_node_transform(node)
         r0 = xf.rotation if xf is not None else (0.0, 0.0, 0.0, 1.0)
         t0 = np.asarray(xf.translation if xf is not None else pivot, dtype=np.float64)
@@ -325,20 +357,40 @@ def _flex_channels(
         r_vals: List[Quat] = []
         t_vals: List[Vec3] = []
         prev_q: Optional[Quat] = None
-        for dx, dy, dz in offsets:
+        for idx, (dx, dy, dz) in enumerate(offsets):
+            u = (float(times[idx]) - t_start) / t_dur
+            phi = 2.0 * math.pi * u + phase_off
+            phi2 = 4.0 * math.pi * u + 1.35 * phase_off
+            bow_k = knee_bow * bow_mult * (1.0 + 0.16 * math.sin(phi))
+            splay_k = splay * splay_mult * (1.0 + 0.14 * math.cos(phi))
+            flex_bias = 0.024 * swivel_gain * math.sin(phi)
+            twist_ang = swivel_gain * swivel_amp * (0.78 * math.sin(phi) + 0.22 * math.sin(phi2))
+
             h_target = hip + np.array([dx, dy, dz], dtype=np.float64)
             t_cur = t0.copy()
             s_cur = s0.copy()
             q_cur = r0
-            # Two exact vector-tracking iterations: first solve at rest pivot to measure sole
-            # lift/recentering, then re-solve at the re-planted pivot so hip tracks `h_target` < 0.2 mm.
+            # Two exact vector-tracking iterations: solve per-leg knee-bend scale + shortest-arc
+            # rotation + exact hip-preserving swivel twist around normalize(d_vec), then re-seat
+            # the sole on Y = 0.0 and refine once for sub-mm hip closure.
             for step in range(2):
                 d_vec = h_target - t_cur
-                s_rel = _solve_knee_scale(hip_loc * s0, float(v_rest[1]), d_vec, knee_bow=knee_bow, splay=splay)
+                s_rel = _solve_knee_scale(
+                    hip_loc * s0,
+                    float(v_rest[1]),
+                    d_vec,
+                    knee_bow=bow_k,
+                    splay=splay_k,
+                    flex_bias=flex_bias,
+                )
                 s_cur = s0 * s_rel
                 v_scaled = _quat_rotate(r0, hip_loc * s_cur)
                 q_arc = _shortest_arc_quat(v_scaled, d_vec)
-                q_cur = quat_mul(q_arc, r0)
+                if abs(twist_ang) > 1e-7 and float(np.linalg.norm(d_vec)) > 1e-8:
+                    q_tw = quat_from_axis_angle(tuple(float(c) for c in d_vec), twist_ang)
+                    q_cur = quat_mul(q_tw, quat_mul(q_arc, r0))
+                else:
+                    q_cur = quat_mul(q_arc, r0)
                 if step == 0:
                     sole_now = _quat_rotate(q_cur, sole * s_cur)
                     foot_now = _quat_rotate(q_cur, foot_low * s_cur)
@@ -358,6 +410,14 @@ def _flex_channels(
             s_vals.append((float(s_cur[0]), float(s_cur[1]), float(s_cur[2])))
             r_vals.append(q_cur)
             t_vals.append((float(t_cur[0]), float(t_cur[1]), float(t_cur[2])))
+        # Exact periodic loop closure when first & last offsets match.
+        if len(offsets) >= 2 and offsets[0] == offsets[-1]:
+            s_vals[-1] = s_vals[0]
+            q_end = r_vals[0]
+            if len(r_vals) >= 2 and sum(a * b for a, b in zip(r_vals[-2], q_end)) < 0.0:
+                q_end = (-q_end[0], -q_end[1], -q_end[2], -q_end[3])
+            r_vals[-1] = q_end
+            t_vals[-1] = t_vals[0]
         channels.append(AnimationChannel(node, "scale", list(times), s_vals))
         channels.append(AnimationChannel(node, "rotation", list(times), r_vals))
         channels.append(AnimationChannel(node, "translation", list(times), t_vals))
@@ -374,6 +434,7 @@ def add_leg_flex_channels(
     knee_bow: float = 1.6,
     splay: float = 0.45,
     weight_shift: float = 0.35,
+    swivel: float = 1.0,
 ) -> List[AnimationChannel]:
     """Return grounded knee-flex channels following a body offset track; extend your clip's channels with them.
 
@@ -394,7 +455,7 @@ def add_leg_flex_channels(
         per_leg[node] = [
             (float(dxs[k]), float(upper_dys[k]) - weight_shift * side * float(dxs[k]), float(dzs[k])) for k in range(n)
         ]
-    return _flex_channels(scene, times, per_leg, knee_bow=knee_bow, splay=splay)
+    return _flex_channels(scene, times, per_leg, knee_bow=knee_bow, splay=splay, swivel=swivel)
 
 
 def sync_leg_flex_to_clip(
@@ -405,12 +466,13 @@ def sync_leg_flex_to_clip(
     knee_bow: float = 1.6,
     splay: float = 0.45,
     weight_shift: float = 0.0,
+    swivel: float = 1.0,
 ) -> List[AnimationChannel]:
     """Derive per-leg knee flex from `clip_name`'s body translation + rotation and append it to that clip.
 
     One line for any custom idle (Thief weight pivot, Bomber, Swimmer, Fire): each leg's hip follows
-    the animated body exactly (including roll and pitch), while its foot stays planted at Y = 0.0.
-    Existing leg channels in the clip are replaced. Returns the appended channels.
+    the animated body exactly (including roll and pitch), while its foot stays planted at Y = 0.0
+    and each knee breathes/swivels organically out of phase. Replaces existing leg channels.
     """
     clip = next((c for c in scene.animations if c.name == clip_name), None)
     if clip is None:
@@ -429,17 +491,24 @@ def sync_leg_flex_to_clip(
         qq = _sample(r_ch.times, r_ch.values, t_val, True) if r_ch is not None else q0
         return tt, qq
 
-    # Insert one midpoint sample across any large body swing (> 0.025) so linear glTF TRS
-    # interpolation stays tightly locked to the moving hip arc between sparse keyframes.
+    # Ensure dense enough sampling (>= 16 segments/cycle & subdividing any swing > 0.025) so
+    # staggered knee-swivel harmonics and big body arcs track smoothly with sub-mm hip error.
+    dur = max(1e-6, float(base_times[-1]) - float(base_times[0])) if len(base_times) >= 2 else 1.0
+    max_dt = dur / 16.0
     times: List[float] = []
     frames: List[Tuple[np.ndarray, Quat]] = []
     for idx, t_val in enumerate(base_times):
         cur_f = _eval_body(t_val)
-        if idx > 0 and float(np.linalg.norm(cur_f[0] - frames[-1][0])) > 0.025:
-            t_mid = round(0.5 * (times[-1] + t_val), 5)
-            if times[-1] < t_mid < t_val:
-                times.append(t_mid)
-                frames.append(_eval_body(t_mid))
+        if idx > 0:
+            t_prev = times[-1]
+            dt = float(t_val) - t_prev
+            jump = float(np.linalg.norm(cur_f[0] - frames[-1][0]))
+            n_sub = max(1, int(math.ceil(dt / max_dt)), 2 if jump > 0.025 else 1)
+            for s_i in range(1, n_sub):
+                t_mid = round(t_prev + dt * (s_i / n_sub), 5)
+                if t_prev < t_mid < float(t_val):
+                    times.append(t_mid)
+                    frames.append(_eval_body(t_mid))
         times.append(t_val)
         frames.append(cur_f)
 
@@ -456,6 +525,81 @@ def sync_leg_flex_to_clip(
 
     leg_set = set(LEG_NODES)
     clip.channels = [ch for ch in clip.channels if ch.target_node not in leg_set]
-    new_channels = _flex_channels(scene, times, per_leg, knee_bow=knee_bow, splay=splay)
+    new_channels = _flex_channels(scene, times, per_leg, knee_bow=knee_bow, splay=splay, swivel=swivel)
+    clip.channels.extend(new_channels)
+    return new_channels
+
+
+def sync_arm_idle_to_clip(
+    scene: SceneBuilder,
+    clip_name: str = "Idle",
+    *,
+    left_scale: float = 1.0,
+    right_scale: float = 1.0,
+    samples: int = 16,
+) -> List[AnimationChannel]:
+    """Attach asymmetric, out-of-phase organic shoulder + elbow/hand Idle channels to `clip_name`.
+
+    Targets `arm_left`, `forearm_left`, `arm_right`, `forearm_right` with distinct left vs right
+    phases and lagging forearm follow-through so hands gesture naturally rather than mirroring.
+    Pass `right_scale=0.0` (or `left_scale=0.0`) to keep a prop-holding arm fixed.
+    """
+    clip = next((c for c in scene.animations if c.name == clip_name), None)
+    if clip is None:
+        return []
+    t_end = max((float(ch.times[-1]) for ch in clip.channels if ch.times), default=1.65)
+    t_start = min((float(ch.times[0]) for ch in clip.channels if ch.times), default=0.0)
+    dur = max(0.20, t_end - t_start)
+    n_steps = max(12, int(samples))
+    times = [round(t_start + dur * k / n_steps, 5) for k in range(n_steps + 1)]
+
+    def _rest_r(node: str) -> Quat:
+        xf = scene.get_node_transform(node)
+        return xf.rotation if xf is not None else (0.0, 0.0, 0.0, 1.0)
+
+    # Distinct organic phase offsets & amplitudes: left (+X) steady poise, right (-X) livelier gesture.
+    arm_specs = (
+        ("arm_left", "forearm_left", +1.0, float(left_scale), 0.35, 0.90, 0.65, 1.00),
+        ("arm_right", "forearm_right", -1.0, float(right_scale), 2.25, 3.10, 0.78, 1.18),
+    )
+    new_channels: List[AnimationChannel] = []
+    arm_set = set(ARM_NODES)
+    for upper_node, fore_node, side, gain, ph1, ph2, lag, amp in arm_specs:
+        if abs(gain) <= 1e-6:
+            continue
+        g = gain * amp
+        if upper_node in scene.nodes and scene.get_node(upper_node):
+            r0 = _rest_r(upper_node)
+            u_vals: List[Quat] = []
+            for k in range(n_steps + 1):
+                u = k / n_steps
+                p1 = 2.0 * math.pi * u + ph1
+                p2 = 4.0 * math.pi * u + ph2
+                q = quat_from_euler_xyz(
+                    rx=g * (0.068 * math.sin(p1) + 0.020 * math.sin(p2)),
+                    ry=side * g * 0.048 * math.cos(p1 + 0.40),
+                    rz=side * g * 0.052 * math.sin(p1 - 0.30),
+                )
+                u_vals.append(quat_mul(r0, q))
+            u_vals[-1] = u_vals[0]
+            new_channels.append(AnimationChannel(upper_node, "rotation", list(times), u_vals))
+
+        if fore_node in scene.nodes and scene.get_node(fore_node):
+            r0 = _rest_r(fore_node)
+            f_vals: List[Quat] = []
+            for k in range(n_steps + 1):
+                u = k / n_steps
+                p1 = 2.0 * math.pi * u + ph1 - lag
+                p2 = 4.0 * math.pi * u + ph2 - 0.65 * lag
+                q = quat_from_euler_xyz(
+                    rx=g * (0.125 * math.sin(p1) + 0.040 * math.sin(p2) - 0.045),
+                    ry=side * g * 0.088 * math.cos(p1 + 0.25),
+                    rz=side * g * 0.044 * math.sin(p2 + 0.30),
+                )
+                f_vals.append(quat_mul(r0, q))
+            f_vals[-1] = f_vals[0]
+            new_channels.append(AnimationChannel(fore_node, "rotation", list(times), f_vals))
+
+    clip.channels = [ch for ch in clip.channels if ch.target_node not in arm_set]
     clip.channels.extend(new_channels)
     return new_channels

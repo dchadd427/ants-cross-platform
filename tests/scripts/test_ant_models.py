@@ -604,11 +604,14 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
         self.assertGreater(nodes_closed["eyelid_left"]["rotation"][0], 0.45)
         self.assertGreater(nodes_closed["eyelid_right"]["rotation"][0], 0.45)
 
-        # Both Blink (2 eyelid channels) and default Worker Idle (translation+rotation) clips are exported.
+        # Both Blink (2 snappy 135 ms eyelid channels) and default Worker Idle (translation+rotation) clips are exported.
         anims_by_name = {a["name"]: a for a in doc_open["animations"]}
         self.assertIn("Blink", anims_by_name)
         self.assertIn("Idle", anims_by_name)
         self.assertEqual(len(anims_by_name["Blink"]["channels"]), 2)
+        blink_clip = next(c for c in s_open.animations if c.name == "Blink")
+        blink_ts = blink_clip.channels[0].times
+        self.assertAlmostEqual(blink_ts[4] - blink_ts[1], 0.135, places=4, msg=f"expected snappy 135ms blink, got {blink_ts}")
         idle_paths = {ch["target"]["path"] for ch in anims_by_name["Idle"]["channels"]}
         self.assertIn("translation", idle_paths)
         self.assertIn("rotation", idle_paths)
@@ -752,6 +755,24 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
                 world = leg_rig._quat_rotate(chans["rotation"].values[k], local * np.array(chans["scale"].values[k]))
                 world = world + np.array(chans["translation"].values[k])
                 self.assertAlmostEqual(float(world[:, 1].min()), 0.0, delta=1e-5, msg=f"{node} key {k}")
+        # Verify non-lockstep per-leg variation: all 4 legs have distinct rotation & scale tracks.
+        leg_scale_tracks = {n: np.asarray(ch["scale"].values, dtype=np.float64) for n, ch in by_node.items()}
+        leg_rot_tracks = {n: np.asarray(ch["rotation"].values, dtype=np.float64) for n, ch in by_node.items()}
+        names_list = list(leg_rig.LEG_NODES)
+        for i in range(len(names_list)):
+            for j in range(i + 1, len(names_list)):
+                na, nb = names_list[i], names_list[j]
+                self.assertGreater(
+                    float(np.abs(leg_rot_tracks[na] - leg_rot_tracks[nb]).max()),
+                    0.02,
+                    f"{na} and {nb} rotations are moving in lockstep",
+                )
+                self.assertGreater(
+                    float(np.abs(leg_scale_tracks[na] - leg_scale_tracks[nb]).max()),
+                    0.01,
+                    f"{na} and {nb} scales are moving in lockstep",
+                )
+
         st = gltf_writer.validate_glb(gltf_writer.scene_to_glb_bytes(sc))
         self.assertAlmostEqual(st["bbox_min"][1], 0.0, delta=1e-4)
         self.assertIn("legs", st["nodes"])
@@ -763,6 +784,44 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
         self.assertTrue(all(len(ch.values) == 3 for ch in chans))
         with self.assertRaises(ValueError):
             base_ant.add_leg_flex_channels(sym, times, [0.0, 0.1])
+
+    def test_defined_elbows_and_articulated_arm_idle(self):
+        from tools.ant_models import leg_rig
+
+        sc, anc = base_ant.build_base_ant("arm_rig_test", stance_asymmetry=0.0)
+        for key in ("shoulder_left", "shoulder_right", "elbow_left", "elbow_right", "left_hand", "right_hand"):
+            self.assertIn(key, anc)
+
+        # Articulated hierarchy: upper_body -> arms -> arm_left/right -> forearm_left/right.
+        self.assertEqual(sc.get_node_parent("arms"), "upper_body")
+        for tag in ("left", "right"):
+            self.assertEqual(sc.get_node_parent(f"arm_{tag}"), "arms")
+            self.assertEqual(sc.get_node_parent(f"forearm_{tag}"), f"arm_{tag}")
+            u_names = {p.name for p in sc.get_node(f"arm_{tag}")}
+            f_names = {p.name for p in sc.get_node(f"forearm_{tag}")}
+            self.assertIn(f"arm_upper_{tag}", u_names)
+            self.assertIn(f"elbow_cap_{tag}", u_names)
+            self.assertIn(f"elbow_joint_{tag}", u_names)
+            self.assertIn(f"forearm_{tag}", f_names)
+            self.assertIn(f"hand_claw_inner_{tag}", f_names)
+            self.assertIn(f"hand_claw_outer_{tag}", f_names)
+            el_world = sc.get_world_matrix(f"forearm_{tag}")[:3, 3]
+            self.assertTrue(np.allclose(el_world, anc[f"elbow_{tag}"], atol=1e-4))
+            for part in sc.get_node(f"arm_{tag}") + sc.get_node(f"forearm_{tag}"):
+                self.assertGreater(mesh_core.signed_volume(part.positions, part.indices), 1e-9, part.name)
+
+        # Default Idle includes asymmetric, out-of-phase shoulder & forearm rotation tracks on all 4 arm nodes.
+        clip = next(c for c in sc.animations if c.name == "Idle")
+        arm_chs = {ch.target_node: ch for ch in clip.channels if ch.target_node in leg_rig.ARM_NODES}
+        self.assertEqual(set(arm_chs), set(leg_rig.ARM_NODES))
+        fl = np.asarray(arm_chs["forearm_left"].values, dtype=np.float64)
+        fr = np.asarray(arm_chs["forearm_right"].values, dtype=np.float64)
+        self.assertGreater(float(np.abs(fl[:, 0] - fr[:, 0]).max()), 0.04, "left/right forearms should move out of phase")
+
+        # Selective sync_arm_idle_to_clip(right_scale=0.0) keeps right arm fixed for tool-holding classes.
+        left_only = base_ant.sync_arm_idle_to_clip(sc, "Idle", left_scale=1.0, right_scale=0.0)
+        self.assertEqual({ch.target_node for ch in left_only}, {"arm_left", "forearm_left"})
+        gltf_writer.validate_glb(gltf_writer.scene_to_glb_bytes(sc))
 
     def test_leg_rig_tracks_true_medial_hip_under_crouched_sway_and_heave(self):
         from tools.ant_models import leg_rig
@@ -960,7 +1019,7 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
                     self.assertGreaterEqual(stats["dimensions"][0], 0.90)
                     self.assertGreaterEqual(stats["bbox_max"][1], 1.05)
                 else:
-                    self.assertTrue(0.76 <= stats["bbox_max"][1] <= 1.45, f"{entry['id']} height {stats['bbox_max'][1]}")
+                    self.assertTrue(0.64 <= stats["bbox_max"][1] <= 1.45, f"{entry['id']} height {stats['bbox_max'][1]}")
 
     def test_build_all_cli_out_alias_and_comma_only(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -24,7 +24,14 @@ except ImportError:
 
 if HAS_NUMPY:
     from .base_ant import BROW_STYLES, EYELID_CLOSED_ANGLE, add_idle_animation, apply_head_pose, build_base_ant
-    from .leg_rig import LEG_NODES, LEG_STYLES, add_leg_flex_channels, sync_leg_flex_to_clip
+    from .leg_rig import (
+        ARM_NODES,
+        LEG_NODES,
+        LEG_STYLES,
+        add_leg_flex_channels,
+        sync_arm_idle_to_clip,
+        sync_leg_flex_to_clip,
+    )
     from .mesh_core import (
         AnimationChannel,
         AnimationClip,
@@ -78,9 +85,11 @@ __all__ = [
     "EYELID_CLOSED_ANGLE",
     "add_idle_animation",
     "apply_head_pose",
+    "ARM_NODES",
     "LEG_NODES",
     "LEG_STYLES",
     "add_leg_flex_channels",
+    "sync_arm_idle_to_clip",
     "sync_leg_flex_to_clip",
     "AnimationChannel",
     "AnimationClip",

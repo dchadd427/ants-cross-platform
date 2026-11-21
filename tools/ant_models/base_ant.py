@@ -19,7 +19,15 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 
 try:
-    from .leg_rig import LEG_NODES, LEG_STYLES, add_leg_flex_channels, build_legs, sync_leg_flex_to_clip
+    from .leg_rig import (
+        ARM_NODES,
+        LEG_NODES,
+        LEG_STYLES,
+        add_leg_flex_channels,
+        build_legs,
+        sync_arm_idle_to_clip,
+        sync_leg_flex_to_clip,
+    )
     from .mesh_core import (
         AnimationChannel,
         AnimationClip,
@@ -38,7 +46,15 @@ try:
         torus_arc,
     )
 except ImportError:
-    from leg_rig import LEG_NODES, LEG_STYLES, add_leg_flex_channels, build_legs, sync_leg_flex_to_clip  # type: ignore
+    from leg_rig import (  # type: ignore
+        ARM_NODES,
+        LEG_NODES,
+        LEG_STYLES,
+        add_leg_flex_channels,
+        build_legs,
+        sync_arm_idle_to_clip,
+        sync_leg_flex_to_clip,
+    )
     from mesh_core import (  # type: ignore
         AnimationChannel,
         AnimationClip,
@@ -73,41 +89,42 @@ _BROW_PRESETS: Dict[str, Tuple[Tuple[float, float, float, float], Tuple[float, f
 }
 
 # Canonical left-side (+X) arm control curves anchored at the petite thorax shoulder: [shoulder, elbow, wrist, hand].
+# Elbows sit slightly outward/back so each arm forms a crisp ~100 deg insect forelimb bend (zero sausage C-curve).
 _ARM_PRESETS_LEFT: Dict[str, List[Tuple[float, float, float]]] = {
     "idle": [
         (0.078, 0.456, 0.014),
-        (0.156, 0.418, 0.058),
-        (0.140, 0.372, 0.136),
-        (0.114, 0.366, 0.164),
+        (0.172, 0.402, 0.006),
+        (0.142, 0.372, 0.118),
+        (0.114, 0.366, 0.160),
     ],
     "hold_tool": [
         (0.078, 0.456, 0.014),
-        (0.174, 0.428, 0.072),
-        (0.184, 0.436, 0.172),
+        (0.184, 0.418, 0.024),
+        (0.184, 0.436, 0.162),
         (0.174, 0.456, 0.218),
     ],
     "hold_front": [
         (0.078, 0.456, 0.014),
-        (0.174, 0.428, 0.072),
-        (0.184, 0.436, 0.172),
+        (0.184, 0.418, 0.024),
+        (0.184, 0.436, 0.162),
         (0.174, 0.456, 0.218),
     ],
     "hold_high": [
         (0.078, 0.456, 0.014),
-        (0.182, 0.468, 0.072),
-        (0.200, 0.550, 0.166),
+        (0.190, 0.456, 0.026),
+        (0.200, 0.548, 0.158),
         (0.190, 0.608, 0.218),
     ],
     "akimbo": [
         (0.078, 0.456, 0.014),
-        (0.178, 0.420, 0.044),
-        (0.162, 0.362, 0.116),
+        (0.192, 0.406, -0.004),
+        (0.162, 0.362, 0.106),
         (0.138, 0.354, 0.144),
     ],
     "wide": [
         (0.078, 0.456, 0.014),
-        (0.178, 0.420, 0.044),
-        (0.162, 0.362, 0.116),
+        (0.192, 0.406, -0.004),
+        (0.162, 0.362, 0.106),
         (0.138, 0.354, 0.144),
     ],
 }
@@ -725,59 +742,126 @@ def _build_arm(
     *,
     y_off: float = 0.0,
     stance_asymmetry: float = 0.0,
-) -> Tuple[Tuple[float, float, float], Tuple[float, float, float], Tuple[float, float, float]]:
-    """Build one continuous, seamlessly flowing tapered insect forelimb + twin pincer claws."""
+) -> Tuple[
+    Tuple[float, float, float],
+    Tuple[float, float, float],
+    Tuple[float, float, float],
+    Tuple[float, float, float],
+]:
+    """Build one crisp 2-segment articulated insect forelimb (upper arm -> angular elbow -> forearm + claws).
+
+    Creates `arm_{label}` (parented to `arms`, pivoted at shoulder) and `forearm_{label}`
+    (parented to `arm_{label}`, pivoted at the defined elbow) so upper arm and forearm articulate
+    independently with zero rubber-hose sausage look.
+    """
     pts = _resolve_arm_points(pose, side, y_off=y_off, stance_asymmetry=stance_asymmetry)
-    n_pts = len(pts)
-    sx, sy, sz = pts[0]
-    root = np.array([side * 0.056, sy - 0.006, sz - 0.006], dtype=np.float64)
+    p_arr = [np.array(p, dtype=np.float64) for p in pts]
+    p0 = p_arr[0]
+    p1 = p_arr[1]
+    fore_pts = p_arr[1:]
+    sx, sy, sz = float(p0[0]), float(p0[1]), float(p0[2])
+    ex, ey, ez = float(p1[0]), float(p1[1]), float(p1[2])
+    root = np.array([side * 0.052, sy - 0.005, sz - 0.006], dtype=np.float64)
 
-    if n_pts == 4:
-        p0, p1, p2, p3 = [np.array(p, dtype=np.float64) for p in pts]
-        upper_mid = 0.5 * (p0 + p1) + np.array([0.0, 0.005, 0.0])
-        # Single uninterrupted curved_tube from deep thorax socket through elbow to tapered wrist/palm.
-        arm_mesh = curved_tube(
-            [root, p0, upper_mid, p1, p2, p3],
-            [
-                (0.025, 0.027),
-                (0.022, 0.024),
-                (0.021, 0.025),
-                (0.018, 0.020),
-                (0.016, 0.017),
-                (0.016, 0.016),
-            ],
-            samples_per_seg=4,
-            radial_segs=12,
-            cap_rings=3,
-            name=f"arm_{label}",
-            material="chitin_dark",
-        )
-    else:
-        ctrl = [root] + [np.array(p, dtype=np.float64) for p in pts]
-        rads = [(float(r) * 0.90, float(r) * 1.08) for r in np.linspace(0.024, 0.016, len(ctrl))]
-        arm_mesh = curved_tube(
-            ctrl,
-            rads,
-            samples_per_seg=4,
-            radial_segs=12,
-            cap_rings=3,
-            name=f"arm_{label}",
-            material="chitin_dark",
-        )
-    scene.add("arms", arm_mesh)
+    # 1. Upper arm (`arm_{label}`): thorax socket -> swollen humerus belly -> pinched elbow neck + angular cap.
+    upper_mid = 0.45 * p0 + 0.55 * p1 + np.array([side * 0.003, 0.005, -0.004])
+    upper_neck = 0.14 * p0 + 0.86 * p1
+    upper_mesh = curved_tube(
+        [root, p0, upper_mid, upper_neck, p1],
+        [
+            (0.024, 0.026),
+            (0.021, 0.023),
+            (0.022, 0.026),  # defined chitinous humerus swell
+            (0.0115, 0.0130),  # crisp pinched elbow neck
+            (0.0135, 0.0145),
+        ],
+        samples_per_seg=4,
+        radial_segs=12,
+        cap_rings=3,
+        name=f"arm_upper_{label}",
+        material="chitin_dark",
+    )
 
-    # Smoothly blended insect pincer fingers continuing out of the tapered wrist/hand tip.
-    hand = np.array(pts[-1], dtype=np.float64)
-    prev = np.array(pts[-2], dtype=np.float64)
+    # Crisp angular sculpted elbow joint cap oriented along the exterior elbow bisector.
+    v_up = p1 - p0
+    v_up /= max(1e-8, float(np.linalg.norm(v_up)))
+    v_fo = p1 - fore_pts[1]
+    v_fo /= max(1e-8, float(np.linalg.norm(v_fo)))
+    bisect = v_up + v_fo
+    if float(np.linalg.norm(bisect)) < 1e-4:
+        bisect = np.array([float(side), 0.0, -0.6], dtype=np.float64)
+    bisect /= max(1e-8, float(np.linalg.norm(bisect)))
+    hinge_y = np.cross(v_up, v_fo)
+    if float(np.linalg.norm(hinge_y)) < 1e-4:
+        hinge_y = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+    hinge_y /= max(1e-8, float(np.linalg.norm(hinge_y)))
+    hinge_x = np.cross(hinge_y, bisect)
+    hinge_x /= max(1e-8, float(np.linalg.norm(hinge_x)))
+    hinge_y = np.cross(bisect, hinge_x)
+    cap_mat = np.eye(4, dtype=np.float64)
+    cap_mat[:3, 0], cap_mat[:3, 1], cap_mat[:3, 2] = hinge_x, hinge_y, bisect
+    cap_mat[:3, 3] = p1 + 0.0055 * bisect
+    elbow_cap = superellipsoid(
+        0.0145, 0.0135, 0.0195, e1=0.66, e2=0.70, u_segs=14, v_segs=10, name=f"elbow_cap_{label}", material="chitin_dark"
+    ).transform(cap_mat)
+    elbow_joint = ellipsoid(
+        0.0142, 0.0142, 0.0142, u_segs=12, v_segs=8, name=f"elbow_joint_{label}", material="chitin_dark"
+    ).translate(ex, ey, ez)
+
+    upper_node = f"arm_{label}"
+    scene.add(
+        upper_node,
+        [p.translate(-sx, -sy, -sz) for p in (upper_mesh, elbow_cap, elbow_joint)],
+        parent="arms",
+    )
+    scene.set_node_transform(upper_node, translation=(sx, sy, sz))
+
+    # 2. Forearm + wrist cuff + 2-finger pincer claws (`forearm_{label}`, pivoted RIGHT AT elbow `p1`).
+    hand = fore_pts[-1]
+    prev = fore_pts[-2]
     hdir = hand - prev
     hlen = float(np.linalg.norm(hdir))
     hdir = hdir / hlen if hlen > 1e-8 else np.array([0.0, 0.0, 1.0])
+
+    if len(fore_pts) == 3:
+        f_el, f_wr, f_ha = fore_pts
+        f_neck = 0.86 * f_el + 0.14 * f_wr
+        f_belly = 0.58 * f_el + 0.42 * f_wr + np.array([0.0, 0.003, 0.0])
+        f_ctrl = [f_el, f_neck, f_belly, f_wr, f_ha]
+        f_rads = [
+            (0.0125, 0.0135),  # pinched elbow origin
+            (0.0120, 0.0130),
+            (0.0185, 0.0205),  # sculpted insect forearm swell
+            (0.0115, 0.0125),  # slender tapered wrist
+            (0.0158, 0.0148),  # crisp wrist cuff / palm
+        ]
+    else:
+        f_neck = 0.86 * fore_pts[0] + 0.14 * fore_pts[1]
+        f_belly = 0.56 * fore_pts[0] + 0.44 * fore_pts[1]
+        f_wrist = 0.22 * fore_pts[0] + 0.78 * hand
+        f_ctrl = [fore_pts[0], f_neck, f_belly] + fore_pts[1:-1] + [f_wrist, hand]
+        f_rads = (
+            [(0.0125, 0.0135), (0.0120, 0.0130), (0.0185, 0.0205)]
+            + [(0.0155, 0.0170)] * max(0, len(fore_pts) - 2)
+            + [(0.0115, 0.0125), (0.0158, 0.0148)]
+        )
+
+    forearm_mesh = curved_tube(
+        f_ctrl,
+        f_rads,
+        samples_per_seg=4,
+        radial_segs=12,
+        cap_rings=3,
+        name=f"forearm_{label}",
+        material="chitin_dark",
+    )
 
     up_ref = np.array([0.0, 1.0, 0.0]) if abs(hdir[1]) < 0.9 else np.array([1.0, 0.0, 0.0])
     side_v = np.cross(hdir, up_ref)
     side_v /= max(1e-8, float(np.linalg.norm(side_v)))
     up_v = np.cross(side_v, hdir)
 
+    fore_parts: List[MeshPart] = [forearm_mesh]
     for finger_sign, fname in ((-1.0, "inner"), (1.0, "outer")):
         f_root = hand - 0.005 * hdir + finger_sign * 0.007 * side_v
         f_base = hand + 0.009 * hdir + finger_sign * 0.012 * side_v + 0.002 * up_v
@@ -792,10 +876,19 @@ def _build_arm(
             name=f"hand_claw_{fname}_{label}",
             material="chitin_dark",
         )
-        scene.add("arms", claw)
+        fore_parts.append(claw)
+
+    fore_node = f"forearm_{label}"
+    scene.add(
+        fore_node,
+        [p.translate(-ex, -ey, -ez) for p in fore_parts],
+        parent=upper_node,
+    )
+    scene.set_node_transform(fore_node, translation=(ex - sx, ey - sy, ez - sz))
 
     return (
-        (float(sx), float(sy), float(sz)),
+        (sx, sy, sz),
+        (ex, ey, ez),
         (float(hand[0]), float(hand[1]), float(hand[2])),
         (float(hdir[0]), float(hdir[1]), float(hdir[2])),
     )
@@ -806,10 +899,11 @@ def add_idle_animation(
     *,
     cycle_s: float = 1.65,
     bob_y: float = 0.022,
-    bob_x: float = 0.0,
+    bob_x: float = 0.006,
     bob_z: float = 0.0,
     body_pitch: float = 0.022,
-    body_roll: float = 0.0,
+    body_roll: float = 0.018,
+    body_yaw: float = 0.014,
     head_pitch: float = 0.042,
     head_yaw: float = 0.026,
     head_roll: float = 0.020,
@@ -819,14 +913,16 @@ def add_idle_animation(
     breaths_per_cycle: int = 2,
     samples: int = 16,
     leg_flex: bool = True,
+    arm_idle: bool = True,
     name: str = "Idle",
 ) -> AnimationClip:
     """Attach (or replace) a looping hierarchical glTF 2.0 Idle clip on `scene`.
 
     Default values match original 1998 Worker `agst301` (1,650 ms calm double-breath
-    settle-and-lift with subtle head nod/sway, antenna twitch, and counter-phase gaster
-    breath). With `leg_flex`, each individual leg compresses and extends about its planted
-    foot in step with the body (knees bend on the settle), every foot staying on Y = 0.0.
+    settle-and-lift with subtle side-to-side weight transfer, head nod/sway, antenna
+    twitch, and counter-phase gaster breath). With `leg_flex`, each leg flexes and
+    swivels organically out of phase while staying glued to Y = 0.0; with `arm_idle`,
+    left & right shoulders/forearms gesture asymmetrically.
     """
     dur = max(0.20, float(cycle_s))
     n_steps = max(8, int(samples))
@@ -855,13 +951,17 @@ def add_idle_animation(
                 t_vals.append((bx + bob_x * sway, by + bob_y * breath, bz + bob_z * breath))
             t_vals[-1] = t_vals[0]
             channels.append(AnimationChannel("upper_body", "translation", list(times), t_vals))
-        if abs(body_pitch) > 1e-6 or abs(body_roll) > 1e-6:
+        if abs(body_pitch) > 1e-6 or abs(body_roll) > 1e-6 or abs(body_yaw) > 1e-6:
             r0 = _rest_r("upper_body")
             r_vals = []
             for k in range(n_steps + 1):
                 phase_b = 2.0 * math.pi * breaths * (k / n_steps)
                 phase_s = 2.0 * math.pi * (k / n_steps)
-                q = quat_from_euler_xyz(rx=body_pitch * math.sin(phase_b), rz=body_roll * math.sin(phase_s))
+                q = quat_from_euler_xyz(
+                    rx=body_pitch * math.sin(phase_b),
+                    ry=body_yaw * math.sin(phase_s + 0.35),
+                    rz=body_roll * math.sin(phase_s),
+                )
                 r_vals.append(quat_mul(r0, q))
             r_vals[-1] = r_vals[0]
             channels.append(AnimationChannel("upper_body", "rotation", list(times), r_vals))
@@ -918,6 +1018,8 @@ def add_idle_animation(
     clip = scene.add_animation(name, channels, replace=True)
     if leg_flex:
         sync_leg_flex_to_clip(scene, name)
+    if arm_idle:
+        sync_arm_idle_to_clip(scene, name)
     return clip
 
 
@@ -1010,8 +1112,9 @@ def build_base_ant(
         ant_anchors = _build_antennae(scene, head_center, antenna_asymmetry=antenna_asymmetry)
 
     body_anchors = _build_body(scene, y_off=-c)
-    sh_l, hand_l, hdir_l = _build_arm(scene, left_arm_pose, side=+1, label="left", y_off=-c, stance_asymmetry=sa)
-    sh_r, hand_r, hdir_r = _build_arm(scene, right_arm_pose, side=-1, label="right", y_off=-c, stance_asymmetry=sa)
+    scene.set_node_transform("arms", translation=(0.0, 0.0, 0.0))
+    sh_l, el_l, hand_l, hdir_l = _build_arm(scene, left_arm_pose, side=+1, label="left", y_off=-c, stance_asymmetry=sa)
+    sh_r, el_r, hand_r, hdir_r = _build_arm(scene, right_arm_pose, side=-1, label="right", y_off=-c, stance_asymmetry=sa)
     leg_anchors = build_legs(scene, crouch=c, stance_asymmetry=sa, leg_style=leg_style)
 
     # Assemble clean hierarchical animation rig while keeping `legs` rooted at Y = 0.0
@@ -1061,6 +1164,8 @@ def build_base_ant(
         "crouch": c,
         "shoulder_left": sh_l,
         "shoulder_right": sh_r,
+        "elbow_left": el_l,
+        "elbow_right": el_r,
         "left_hand": hand_l,
         "right_hand": hand_r,
         "left_hand_dir": hdir_l,
