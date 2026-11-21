@@ -4,8 +4,8 @@
 The game's hints (a player's orders, sent to the other players ahead of their sealed turns) travel between the browsers over WebRTC data channels, always through the operator's relay unless two players
 both turned on direct connections. What this file checks:
 
-  - the code RUNS in node (tests/scripts/web_p2p_check.js: a fake RTCPeerConnection, the rule of the address for every pair of settings, the browser's own choice, who offers and who answers, the hints and
-    the heartbeat, a channel that fails);
+  - the code RUNS in node (tests/scripts/web_p2p_check.js: a fake RTCPeerConnection, the rule of the address for every pair of settings, the browser's own choice, who offers and who answers, the hints, the
+    echo that measures the round trip to each player, a channel that fails);
   - the files, where no run of the page's code can look: the game page loads the script before the inline script that makes its arguments, the Dockerfile's COPY steps put the file in the image, the local
     web build and the CI's list of the image's files name it (a page without the script opens no channel, without a word), nginx serves it by the rule for scripts, it is within its byte budget
     (tools/size_limits.py), and the page's side of the setting is the one the room writes (the key `ants.direct`);
