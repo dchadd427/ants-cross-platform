@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the desktop game's encrypted link for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the rules that the suites test_wss (the certificate checks as the library reports them, the upgrade's accept key and extensions, the client's masking and time limit, the wss address and which addresses may still use plain TCP) and test_wss_match (a whole match over wss, the way back, a plain link to an address of the Internet refused) and test_start_menu (which servers of the start menu are wss and which are plain TCP) and test_rejoin_app (which key a join through wss or plain TCP finds: each server by its own written name) hold. Not here, because no test can tell them from the original: the library's own VERIFY_REQUIRED and the recorded-result check after the handshake guard each other (either alone still refuses a certificate that fails), so a mutant of one survives by design.",
+ "note": "Mutants of the desktop game's encrypted link for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the rules that the suites test_wss (the certificate checks as the library reports them, the upgrade's accept key and extensions, the client's masking and time limit, the wss address and which addresses may still use plain TCP) and test_wss_match (a whole match over wss, the way back, a plain link to an address of the Internet refused) and test_start_menu (which servers of the start menu are wss and which are plain TCP) and test_rejoin_app (which key a join through wss or plain TCP finds: each server by its own written name) hold. The library's own VERIFY_REQUIRED and the recorded-result check after the handshake guard each other (either alone still refuses a certificate that fails, so a mutant of one survives by design): the mutant certificate_not_verified_at_all takes both away together, and the tests must see that.",
  "mutants": [
   {
    "id": "tls_name_not_given_to_library",
@@ -264,6 +264,105 @@
    ],
    "test": "./build/tests/test_app/test_rejoin_app",
    "expect": "RA4.2"
+  },
+  {
+   "id": "certificate_not_verified_at_all",
+   "file": "src/ants_net/tls.cpp",
+   "old": "    mbedtls_ssl_conf_authmode(&m.conf, MBEDTLS_SSL_VERIFY_REQUIRED);                 // the certificate is checked, always: a failed check fails the handshake\n    mbedtls_ssl_conf_ca_chain(&m.conf, const_cast<mbedtls_x509_crt*>(roots), nullptr);\n    mbedtls_ssl_conf_ciphersuites(&m.conf, kCipherSuites);\n    mbedtls_ssl_conf_verify(&m.conf, Impl::note_certificate, &m);                    // (it only notes the chain, see there)\n#if defined(MBEDTLS_SSL_SESSION_TICKETS)\n    mbedtls_ssl_conf_session_tickets(&m.conf, MBEDTLS_SSL_SESSION_TICKETS_DISABLED);  // every link starts from nothing: nothing is kept that could be replayed\n#endif\n    rc = mbedtls_ssl_setup(&m.ssl, &m.conf);\n    if (rc == 0) rc = mbedtls_ssl_set_hostname(&m.ssl, host.c_str());                // the name that the certificate must be for (and the name the server is asked for)\n    if (rc != 0) {\n        why = \"The security library could not be set up: \" + library_text(rc);\n        return nullptr;\n    }\n    m.stream = std::move(stream);\n    mbedtls_ssl_set_bio(&m.ssl, &m, Impl::bio_send, Impl::bio_recv, nullptr);\n    return client;\n}\n\nvoid TlsClient::fail(TlsFailure kind, const std::string& why) {\n    if (state_ == State::Failed) return;\n    state_ = State::Failed;\n    failure_ = kind;\n    error_ = why;\n    if (impl_ && impl_->stream) impl_->stream->close();\n}\n\nTlsClient::State TlsClient::advance() {\n    if (state_ != State::Handshaking) {\n        if (state_ == State::Open) flush();\n        return state_;\n    }\n    Impl& m = *impl_;\n    switch (m.stream->state()) {\n        case TcpStream::State::Connecting: return state_;\n        case TcpStream::State::Failed: fail(TlsFailure::Unreachable, \"The server could not be reached.\"); return state_;\n        case TcpStream::State::Closed: fail(TlsFailure::Protocol, \"The server closed the connection before the secure link was made.\"); return state_;\n        case TcpStream::State::Open: break;\n    }\n    const int rc = mbedtls_ssl_handshake(&m.ssl);\n    if (rc == 0) {\n        const uint32_t flags = mbedtls_ssl_get_verify_result(&m.ssl);\n        if (flags != 0) {",
+   "new": "    mbedtls_ssl_conf_authmode(&m.conf, MBEDTLS_SSL_VERIFY_NONE);                 // the certificate is checked, always: a failed check fails the handshake\n    mbedtls_ssl_conf_ca_chain(&m.conf, const_cast<mbedtls_x509_crt*>(roots), nullptr);\n    mbedtls_ssl_conf_ciphersuites(&m.conf, kCipherSuites);\n    mbedtls_ssl_conf_verify(&m.conf, Impl::note_certificate, &m);                    // (it only notes the chain, see there)\n#if defined(MBEDTLS_SSL_SESSION_TICKETS)\n    mbedtls_ssl_conf_session_tickets(&m.conf, MBEDTLS_SSL_SESSION_TICKETS_DISABLED);  // every link starts from nothing: nothing is kept that could be replayed\n#endif\n    rc = mbedtls_ssl_setup(&m.ssl, &m.conf);\n    if (rc == 0) rc = mbedtls_ssl_set_hostname(&m.ssl, host.c_str());                // the name that the certificate must be for (and the name the server is asked for)\n    if (rc != 0) {\n        why = \"The security library could not be set up: \" + library_text(rc);\n        return nullptr;\n    }\n    m.stream = std::move(stream);\n    mbedtls_ssl_set_bio(&m.ssl, &m, Impl::bio_send, Impl::bio_recv, nullptr);\n    return client;\n}\n\nvoid TlsClient::fail(TlsFailure kind, const std::string& why) {\n    if (state_ == State::Failed) return;\n    state_ = State::Failed;\n    failure_ = kind;\n    error_ = why;\n    if (impl_ && impl_->stream) impl_->stream->close();\n}\n\nTlsClient::State TlsClient::advance() {\n    if (state_ != State::Handshaking) {\n        if (state_ == State::Open) flush();\n        return state_;\n    }\n    Impl& m = *impl_;\n    switch (m.stream->state()) {\n        case TcpStream::State::Connecting: return state_;\n        case TcpStream::State::Failed: fail(TlsFailure::Unreachable, \"The server could not be reached.\"); return state_;\n        case TcpStream::State::Closed: fail(TlsFailure::Protocol, \"The server closed the connection before the secure link was made.\"); return state_;\n        case TcpStream::State::Open: break;\n    }\n    const int rc = mbedtls_ssl_handshake(&m.ssl);\n    if (rc == 0) {\n        const uint32_t flags = mbedtls_ssl_get_verify_result(&m.ssl);\n        if (false) {",
+   "build": [
+    "test_wss"
+   ],
+   "test": "./build/tests/test_net/test_wss",
+   "expect": "WSS3.1"
+  },
+  {
+   "id": "cipher_suites_not_restricted",
+   "file": "src/ants_net/tls.cpp",
+   "old": "mbedtls_ssl_conf_ciphersuites(&m.conf, kCipherSuites);",
+   "new": "(void)kCipherSuites;",
+   "build": [
+    "test_wss"
+   ],
+   "test": "./build/tests/test_net/test_wss",
+   "expect": "WSS3.5"
+  },
+  {
+   "id": "priming_for_any_failure",
+   "file": "src/ants_net/wss.cpp",
+   "old": "if (primed_ || !trust_.system_roots || tls_->failure() != TlsFailure::Untrusted) return false;",
+   "new": "if (primed_ || !trust_.system_roots) return false;",
+   "build": [
+    "test_wss"
+   ],
+   "test": "./build/tests/test_net/test_wss",
+   "expect": "WSS7.2"
+  },
+  {
+   "id": "priming_for_the_callers_roots",
+   "file": "src/ants_net/wss.cpp",
+   "old": "if (primed_ || !trust_.system_roots || tls_->failure() != TlsFailure::Untrusted) return false;",
+   "new": "if (primed_ || tls_->failure() != TlsFailure::Untrusted) return false;",
+   "build": [
+    "test_wss"
+   ],
+   "test": "./build/tests/test_net/test_wss",
+   "expect": "WSS7.2"
+  },
+  {
+   "id": "priming_without_end",
+   "file": "src/ants_net/wss.cpp",
+   "old": "    primed_ = true;\n    priming_ = std::make_shared<Priming>();",
+   "new": "    primed_ = false;\n    priming_ = std::make_shared<Priming>();",
+   "build": [
+    "test_wss"
+   ],
+   "test": "./build/tests/test_net/test_wss",
+   "expect": "WSS7.2"
+  },
+  {
+   "id": "roots_not_read_again",
+   "file": "src/ants_net/wss.cpp",
+   "old": "bool WssConnection::restart_link() {\n    reload_system_roots();",
+   "new": "bool WssConnection::restart_link() {",
+   "build": [
+    "test_wss"
+   ],
+   "test": "./build/tests/test_net/test_wss",
+   "expect": "WSS7.1"
+  },
+  {
+   "id": "no_retry_after_priming",
+   "file": "src/ants_net/wss.cpp",
+   "old": "if (answer != 1 || !restart_link()) {",
+   "new": "if (true) {",
+   "build": [
+    "test_wss"
+   ],
+   "test": "./build/tests/test_net/test_wss",
+   "expect": "WSS7.1"
+  },
+  {
+   "id": "chain_noted_as_trusted",
+   "file": "src/ants_net/tls.cpp",
+   "old": "        (void)flags;\n        Impl* m = static_cast<Impl*>(ctx);",
+   "new": "        if (flags != nullptr) *flags = 0;\n        Impl* m = static_cast<Impl*>(ctx);",
+   "build": [
+    "test_wss"
+   ],
+   "test": "./build/tests/test_net/test_wss",
+   "expect": "WSS3.1"
+  },
+  {
+   "id": "menu_plain_port_of_the_internet_accepted",
+   "file": "src/ants_app/start_menu.cpp",
+   "old": "if (!tcp && port == kLocalServerPort) {",
+   "new": "if (false && port == kLocalServerPort) {",
+   "build": [
+    "test_start_menu"
+   ],
+   "test": "./build/tests/test_app/test_start_menu",
+   "expect": "M5.1"
   }
  ]
 }

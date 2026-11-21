@@ -13,9 +13,11 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <deque>
 #include <exception>
 #include <fstream>
@@ -23,6 +25,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <set>
 #include <string>
 #include <thread>
@@ -92,11 +95,12 @@ struct Rig {
     uint32_t served_messages{0};
 
     void issue(const Names& names, int from_days = -1, int to_days = 30) { id = ca.issue(names, from_days, to_days); }
-    void bridge(const WsServerOptions& options = WsServerOptions(), mbedtls_ssl_protocol_version max = MBEDTLS_SSL_VERSION_TLS1_3) {
+    void bridge(const WsServerOptions& options = WsServerOptions(), mbedtls_ssl_protocol_version max = MBEDTLS_SSL_VERSION_TLS1_3, const std::vector<int>& suites = std::vector<int>()) {
         ws = WsListener::listen(0, true, options);
         TerminatorOptions o;
         o.backend_port = ws->port();
         o.max_version = max;
+        o.ciphersuites = suites;
         term.reset(new Terminator(id.get(), o));
     }
     void script(std::function<std::string(std::string&)> fn, bool tls = true, bool close_after = false) {
@@ -204,6 +208,14 @@ bool client_frames(const std::string& stream, std::vector<std::pair<uint8_t, Byt
         payload.clear();
     }
 }
+
+// The test's own source of roots and its own primer (tls.hpp), put back when the case ends
+struct RootSeams {
+    ~RootSeams() {
+        set_system_roots_source_for_test(nullptr);
+        set_root_primer_for_test(nullptr);
+    }
+};
 
 }  // namespace
 
@@ -584,6 +596,175 @@ int main() {
                 ASSERT_EQ(link.c->state(), Connection::State::Failed);
                 ASSERT_EQ(link.c->tls_failure(), TlsFailure::Unreachable);
             }
+        }
+    } TEST_END();
+
+    TEST_CASE("WSS3.5 Only suites of authenticated encryption are offered: a server that has TLS 1.2 suites with a CBC mode only is refused (nothing of the game is sent), one that has AES-GCM or ChaCha20-Poly1305 is accepted") {
+        for (const int suite : {static_cast<int>(MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256), static_cast<int>(MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA)}) {
+            Rig rig;
+            rig.issue(Names{{"localhost"}, {}});
+            rig.bridge(WsServerOptions(), MBEDTLS_SSL_VERSION_TLS1_2, {suite});
+            Link link;
+            ASSERT_TRUE(open_link(rig, link, rig.url(), trusting(rig.ca)));
+            ASSERT_EQ(link.c->state(), Connection::State::Failed);
+            ASSERT_EQ(link.c->tls_failure(), TlsFailure::Protocol);
+            ASSERT_EQ(rig.term->handshakes, 0u);
+            ASSERT_EQ(rig.term->app_bytes_up, 0u);
+        }
+        for (const int suite : {static_cast<int>(MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256), static_cast<int>(MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384),
+                                static_cast<int>(MBEDTLS_TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256)}) {
+            Rig rig;
+            rig.issue(Names{{"localhost"}, {}});
+            rig.bridge(WsServerOptions(), MBEDTLS_SSL_VERSION_TLS1_2, {suite});
+            Link link;
+            ASSERT_TRUE(open_link(rig, link, rig.url(), trusting(rig.ca)));
+            ASSERT_EQ(link.c->state(), Connection::State::Open);
+            ASSERT_TRUE(link.c->send(bytes_of("over an AEAD suite")));
+            ASSERT_TRUE(run_until(rig, link, [&]() { return link.got.size() == 1; }));
+        }
+    } TEST_END();
+
+    TEST_CASE("WSS7.1 A chain whose only fault is a root that the system does not trust yet is given to the system once, the roots are read again and the link is made again: it opens, and the library still judged the chain (two TCP links, one failed handshake, one that opened)") {
+        RootSeams seams;
+        Rig rig;
+        rig.issue(Names{{"localhost"}, {}});
+        rig.bridge();
+        Ca other("A Root That The System Had");
+        std::atomic<bool> learned{false};
+        std::atomic<int> asked{0};
+        std::mutex lock;
+        std::vector<std::string> seen;
+        set_system_roots_source_for_test([&]() {
+            std::vector<RootBlob> roots{RootBlob{true, other.pem()}};
+            if (learned.load()) roots.push_back(RootBlob{true, rig.ca.pem()});
+            return roots;
+        });
+        set_root_primer_for_test([&](const std::vector<std::string>& chain) {
+            {
+                std::lock_guard<std::mutex> hold(lock);
+                seen = chain;
+            }
+            ++asked;
+            learned = true;                                                                         // (the system now has the root)
+            return true;
+        });
+        Link link;
+        WssUrl u;
+        std::string why;
+        ASSERT_TRUE(parse_wss_url(rig.url(), u, why));
+        link.c = WssConnection::connect(u, "127.0.0.1", TlsTrust(), link.why, 10000);                // (the system's roots alone, as in the game)
+        ASSERT_TRUE(link.c != nullptr);
+        ASSERT_TRUE(run_until(rig, link, [&]() { return link.c->state() != Connection::State::Connecting; }, 15000));
+        ASSERT_EQ(link.c->state(), Connection::State::Open);
+        ASSERT_TRUE(link.c->tls_failure() == TlsFailure::None);
+        ASSERT_EQ(asked.load(), 1);
+        {
+            std::lock_guard<std::mutex> hold(lock);
+            ASSERT_TRUE(seen.size() == 1 && seen[0].size() == rig.id->chain.raw.len && std::memcmp(seen[0].data(), rig.id->chain.raw.p, seen[0].size()) == 0);      // the server's own certificate, as it sent it
+        }
+        ASSERT_EQ(rig.term->handshakes, 1u);
+        ASSERT_EQ(rig.term->handshake_failures, 1u);                                                // (the first link was refused by the library: no byte of the game went through it)
+        ASSERT_TRUE(link.c->send(bytes_of("after the roots were learned")));
+        ASSERT_TRUE(run_until(rig, link, [&]() { return link.got.size() == 1; }));
+    } TEST_END();
+
+    TEST_CASE("WSS7.2 The priming gives up when it must: a system that has nothing to ask makes no second link; a root that is still not trusted after the one retry fails the link (no loop); a fault that is not an untrusted root is never primed; the caller's own roots are never primed") {
+        RootSeams seams;
+        for (const int mode : {0, 1, 2, 3, 4}) {
+            Rig rig;
+            rig.issue(mode == 2 ? Names{{"other.example.test"}, {}} : Names{{"localhost"}, {}}, mode == 3 ? -10 : -1, mode == 3 ? -1 : 30);
+            rig.bridge();
+            Ca other("A Root That The System Had");
+            std::atomic<int> asked{0};
+            set_system_roots_source_for_test([&]() { return std::vector<RootBlob>{RootBlob{true, mode == 2 || mode == 3 ? rig.ca.pem() : other.pem()}}; });     // (modes 2 and 3: the root is trusted, the name or the date is the fault)
+            set_root_primer_for_test([&](const std::vector<std::string>&) {
+                ++asked;
+                return mode != 0;                                                                   // mode 0: the platform has nothing to ask
+            });
+            WssUrl u;
+            std::string why;
+            ASSERT_TRUE(parse_wss_url(rig.url(), u, why));
+            Link link;
+            TlsTrust trust;
+            if (mode == 4) {                                                                        // the caller names the roots itself: nothing of the system is asked
+                trust.system_roots = false;
+                trust.extra_pem = other.pem();
+            }
+            link.c = WssConnection::connect(u, "127.0.0.1", trust, link.why, 10000);
+            ASSERT_TRUE(link.c != nullptr);
+            ASSERT_TRUE(run_until(rig, link, [&]() { return link.c->state() != Connection::State::Connecting; }, 15000));
+            ASSERT_EQ(link.c->state(), Connection::State::Failed);
+            ASSERT_EQ(link.c->tls_failure(), mode == 2 ? TlsFailure::WrongName : mode == 3 ? TlsFailure::Dates : TlsFailure::Untrusted);
+            ASSERT_EQ(asked.load(), mode == 2 || mode == 3 || mode == 4 ? 0 : 1);
+            for (int i = 0; i < 50; ++i) {                                                          // (the terminator learns of a refusal when its pass reads the client's alert)
+                rig.pump();
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            }
+            ASSERT_EQ(rig.term->handshakes, 0u);
+            ASSERT_EQ(rig.term->app_bytes_up, 0u);
+            ASSERT_EQ(rig.term->handshake_failures, mode == 1 ? 2u : 1u);                           // (mode 1: the one retry, then the end)
+        }
+    } TEST_END();
+
+    TEST_CASE("WSS7.3 The system is asked on a thread of its own: a slow answer leaves the connection polling (not frozen), and the link opens when the answer is in") {
+        RootSeams seams;
+        Rig rig;
+        rig.issue(Names{{"localhost"}, {}});
+        rig.bridge();
+        Ca other("A Root That The System Had");
+        std::atomic<bool> learned{false};
+        set_system_roots_source_for_test([&]() {
+            std::vector<RootBlob> roots{RootBlob{true, other.pem()}};
+            if (learned.load()) roots.push_back(RootBlob{true, rig.ca.pem()});
+            return roots;
+        });
+        set_root_primer_for_test([&](const std::vector<std::string>&) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(400));
+            learned = true;
+            return true;
+        });
+        WssUrl u;
+        std::string why;
+        ASSERT_TRUE(parse_wss_url(rig.url(), u, why));
+        Link link;
+        link.c = WssConnection::connect(u, "127.0.0.1", TlsTrust(), link.why, 10000);
+        ASSERT_TRUE(link.c != nullptr);
+        int polls_while_connecting = 0;
+        const auto start = std::chrono::steady_clock::now();
+        ASSERT_TRUE(run_until(rig, link, [&]() {
+            if (link.c->state() == Connection::State::Connecting) ++polls_while_connecting;
+            return link.c->state() != Connection::State::Connecting;
+        }, 15000));
+        ASSERT_EQ(link.c->state(), Connection::State::Open);
+        ASSERT_TRUE(std::chrono::steady_clock::now() - start >= std::chrono::milliseconds(380));
+        ASSERT_GE(polls_while_connecting, 20);                                                      // (the caller kept polling while the system was asked)
+    } TEST_END();
+
+    TEST_CASE("WSS7.4 The platform's own priming (Windows: the chain engine; elsewhere there is nothing to ask) never makes an untrusted chain trusted: the test authority is not in the system's roots afterwards, and a link with the system's roots alone is still refused") {
+        Rig rig;
+        rig.issue(Names{{"localhost"}, {}});
+        rig.bridge();
+        const size_t before = read_system_roots().size();
+        const std::vector<std::string> chain{std::string(reinterpret_cast<const char*>(rig.id->chain.raw.p), rig.id->chain.raw.len), rig.ca.der()};
+#ifdef _WIN32
+        ASSERT_TRUE(prime_platform_roots(chain));                                                   // (the chain engine was asked: the real call ran)
+#else
+        ASSERT_FALSE(prime_platform_roots(chain));
+#endif
+        ASSERT_FALSE(prime_platform_roots(std::vector<std::string>()));
+        ASSERT_EQ(read_system_roots().size(), before);                                              // (nothing was added)
+        reload_system_roots();
+        if (system_root_count() > 0) {
+            WssUrl u;
+            std::string why;
+            ASSERT_TRUE(parse_wss_url(rig.url(), u, why));
+            Link link;
+            link.c = WssConnection::connect(u, "127.0.0.1", TlsTrust(), link.why, 20000);
+            ASSERT_TRUE(link.c != nullptr);
+            ASSERT_TRUE(run_until(rig, link, [&]() { return link.c->state() != Connection::State::Connecting; }, 25000));
+            ASSERT_EQ(link.c->state(), Connection::State::Failed);
+            ASSERT_EQ(link.c->tls_failure(), TlsFailure::Untrusted);
+            ASSERT_EQ(rig.term->handshakes, 0u);
         }
     } TEST_END();
 

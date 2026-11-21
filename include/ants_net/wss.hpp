@@ -7,7 +7,8 @@
 //
 // What it does. TCP connects (to the address that the caller looked up once, so the name is never looked up again by a link of the way back), TLS verifies the server's certificate for the host
 // of the URL (tls.hpp: no way to skip it), the HTTP upgrade runs (the request and the answer are the pure functions below), then frames flow. A link that is not open 20 s after it was started
-// fails. The codec is the one of ws.hpp (the server's side of the same wire): a client masks every frame with a fresh random key and refuses masked frames, text frames and every other
+// fails; when the only fault of the server's chain is a root that the system does not trust yet, the system is asked once to learn it (Windows installs the roots of its program on first use, TlsClient: prime_system_roots, on a thread
+// of its own so that the window stays alive), its roots are read again and the link is made once more: the chain is still judged by Mbed TLS alone. The codec is the one of ws.hpp (the server's side of the same wire): a client masks every frame with a fresh random key and refuses masked frames, text frames and every other
 // protocol error of the server's side as the server does of a client's; a ping is answered with a pong, a close frame is answered with a close frame and ends the link (Closed), a protocol
 // error is answered with its close status and ends it (Failed).
 //
@@ -75,10 +76,13 @@ public:
     size_t backlog() const noexcept { return tls_ ? tls_->flush() : 0; }
 
 private:
-    enum class Stage : uint8_t { Tls, Upgrade, Frames, Done };
-    WssConnection(const WssUrl& url, std::unique_ptr<TlsClient> tls, uint32_t timeout_ms);
+    enum class Stage : uint8_t { Tls, Priming, Upgrade, Frames, Done };
+    struct Priming;
+    WssConnection(const WssUrl& url, std::unique_ptr<TlsClient> tls, uint32_t timeout_ms, const std::string& address, const TlsTrust& trust);
     void pump();
     bool pump_handshakes();
+    bool start_priming();
+    bool restart_link();
     bool drain_parser();
     bool enqueue(WsOpcode opcode, const uint8_t* data, size_t size);
     void fail(const std::string& why);
@@ -92,6 +96,10 @@ private:
     std::string reply_;                             // the server's answer to the upgrade, until it is whole
     std::chrono::steady_clock::time_point started_;
     uint32_t timeout_ms_{kWssConnectTimeoutMs};
+    std::string address_;                           // the numeric address that the first link went to (empty: the URL's host name): a link that is made again goes there
+    TlsTrust trust_;
+    bool primed_{false};                            // the roots were primed once for this connection: a chain that is still not trusted after that fails
+    std::shared_ptr<Priming> priming_;
     WsFrameParser parser_;                          // the server's frames: unmasked
     std::deque<std::vector<uint8_t>> messages_;     // received, not yet polled
     size_t inbox_bytes_{0};

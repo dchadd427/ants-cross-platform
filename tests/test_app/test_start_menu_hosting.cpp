@@ -256,7 +256,7 @@ void run_start_menu_hosting_tests() {
     TEST_CASE("M5.1 Servers: wss://HOST[:PORT][/PATH] is the encrypted door; HOST[:PORT] is the wss door for a host of the Internet (443, /ws) and plain TCP (4001) for this machine or the local network; tcp:// forces plain TCP; anything else is refused with a reason, ws:// with its own; what the screen shows reads back") {
         struct Good { const char* text; const char* host; uint16_t port; bool tcp; const char* path; };
         const Good good[] = {
-            {"beta.playants.org", "beta.playants.org", 443, false, "/ws"}, {"beta.playants.org:4001", "beta.playants.org", 4001, false, "/ws"}, {"beta.playants.org:8443", "beta.playants.org", 8443, false, "/ws"},
+            {"beta.playants.org", "beta.playants.org", 443, false, "/ws"}, {"beta.playants.org:8443", "beta.playants.org", 8443, false, "/ws"},
             {"  example.org:80  ", "example.org", 80, false, "/ws"}, {"2001:db8::1", "2001:db8::1", 443, false, "/ws"}, {"[2606:4700::1111]:9", "2606:4700::1111", 9, false, "/ws"},
             {"wss://beta.playants.org/ws", "beta.playants.org", 443, false, "/ws"}, {"WSS://Play.Example.org:8443/x/y?z=1", "play.example.org", 8443, false, "/x/y?z=1"}, {"wss://example.org", "example.org", 443, false, "/"},
             {"wss://[2001:db8::7]:4443/ws", "2001:db8::7", 4443, false, "/ws"}, {"wss://localhost:9/ws", "localhost", 9, false, "/ws"},
@@ -288,11 +288,19 @@ void run_start_menu_hosting_tests() {
         std::string why_ws;
         ServerAddress other;
         std::string why_other;
+        ServerAddress plain_port;
+        std::string why_plain_port;
+        ASSERT_FALSE(parse_server("beta.playants.org:4001", plain_port, why_plain_port));             // the old default's form: the plain game port of an Internet host, which the site does not open
+        ASSERT_TRUE(why_plain_port.find("wss://beta.playants.org/ws") != std::string::npos && why_plain_port.find("4001") != std::string::npos);      // (it says what to write)
+        ASSERT_TRUE(parse_server("beta.playants.org:4002", plain_port, why_plain_port) && plain_port.port == 4002 && !plain_port.tcp);                // (another port is the wss door on that port)
+        ASSERT_TRUE(parse_server("wss://beta.playants.org:4001/ws", plain_port, why_plain_port) && plain_port.port == 4001 && !plain_port.tcp);      // (written out, it is what it says)
+        ASSERT_TRUE(parse_server("tcp://beta.playants.org:4001", plain_port, why_plain_port) && plain_port.tcp);                                     // (and tcp:// is plain TCP, refused only when the connection is made)
+        ASSERT_TRUE(parse_server("192.168.1.20:4001", plain_port, why_plain_port) && plain_port.tcp && plain_port.port == 4001);                      // (a server of the local network keeps its port)
         ASSERT_FALSE(parse_server("ws://example.org/ws", ws_plain, why_ws));
         ASSERT_FALSE(parse_server("ftp://example.org", other, why_other));
         ASSERT_NE(why_ws, why_other);                                                      // (the refusal of an unencrypted WebSocket says that it is unencrypted)
         const char* bad[] = {"", "   ", "host:", "host:0", "host:65536", "host:99999999", "host:-1", "host:12a", "host name", "ho$t", ".host", "-host", "a..b", "[::1", "[::1]x",
-                             "[::1]:", "[host]:1", "[]", "http://x", "wss://", "wss://x:0/", "wss://x/a b", "ws://x", "tcp://", "tcp://x:0", "a:b:c:zz", "host:4001:1", "tab\thost", "[1:2]", "[abc]", "host:4294967297", "host:99999999999999999999", "host:4294967296", "host:1 2"};
+                             "[::1]:", "[host]:1", "[]", "http://x", "wss://", "wss://x:0/", "wss://x/a b", "ws://x", "tcp://", "tcp://x:0", "beta.playants.org:4001", "play.example.org:04001", "[2001:db8::1]:4001", "a:b:c:zz", "host:4001:1", "tab\thost", "[1:2]", "[abc]", "host:4294967297", "host:99999999999999999999", "host:4294967296", "host:1 2"};
         for (const char* text : bad) {
             ServerAddress s;
             std::string why;
@@ -677,7 +685,7 @@ void run_start_menu_hosting_tests() {
         const std::vector<std::vector<std::string>> setting_up = {
             {"--name", "Bob"}, {"--game-mode", "187"}, {"--settings", "s.ini"}, {"--seed", "5"}, {"--fullscreen"}, {"--frames", "9"}, {"--show-grid"}, {"--team-name", "1", "Bob"}, {"-N1Bob"}, {"--title", "T"},
             {"--window-pos", "10,10"}, {"--window-size", "800,600"}, {"--grid", "2x2"}, {"--cell", "1"}, {"--display", "0"}, {"--audio-focus"}, {"--port", "4005"}, {"--loopback"},
-            {"--lan-port", "5000"}, {"--no-lan"}, {"--start-when", "2"}, {"--server", "play.example.org:4001"}, {"--unknown-option"}};
+            {"--lan-port", "5000"}, {"--no-lan"}, {"--start-when", "2"}, {"--server", "play.example.org:4010"}, {"--unknown-option"}};
         for (const auto& args : setting_up) {
             const ApplicationConfig c = menu_for(args);
             if (!c.start_menu) std::cout << "\n    the menu was skipped by " << args[0];

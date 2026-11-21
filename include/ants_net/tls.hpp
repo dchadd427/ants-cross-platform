@@ -6,13 +6,14 @@
 // What it guarantees. The server's certificate is ALWAYS verified, and there is no way to switch that off: the chain must lead to a root that the system trusts (or to a root that the caller
 // names, see TlsTrust), must be valid now, and must be for the name that the caller asked for (the host name or the address of the URL, checked against the certificate's subject alternative names). A
 // handshake whose certificate fails any of that fails, and so does a link whose certificate the library accepted but whose recorded verification result is not clean (a second check after the handshake). TLS 1.2 is the lowest version;
-// session tickets and renegotiation are off. Nothing blocks: advance() makes progress whenever the owner polls, over a TcpStream that is itself non-blocking.
+// session tickets and renegotiation are off, and only the suites of authenticated encryption are offered (TLS 1.3, and TLS 1.2 with AES-GCM or ChaCha20-Poly1305 over ECDHE). Nothing blocks: advance() makes progress whenever the owner polls, over a TcpStream that is itself non-blocking.
 //
 // Where the roots come from: the system's own store (the roots of the Security framework on macOS, the "ROOT" and "AuthRoot" stores on Windows, the bundle file of the distribution on Linux: tls_roots.cpp),
 // read once per process. A computer where none can be read cannot make a TLS link at all (the error says so): there is no list of roots built into the game and no way around the check.
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -33,8 +34,21 @@ struct RootBlob {
     std::string bytes;
 };
 
-/// The system's trusted roots, as the platform gives them (empty when it gives none). Platform code only (tls_roots.cpp); the TLS code reads them once.
+/// The system's trusted roots, as the platform gives them (empty when it gives none). Platform code only (tls_roots.cpp); the TLS code reads them once, and again after reload_system_roots().
+/// Windows: the stores "ROOT" and "AuthRoot" without the certificates of the store "Disallowed".
 std::vector<RootBlob> read_system_roots();
+/// Platform code only (tls_roots.cpp): asks the operating system to build the chain that a server presented, so that it learns the root that it trusts but has not installed yet (Windows fetches the
+/// roots of its own program when a chain first needs one, and a fresh machine has few installed). Nothing is added to the game's trust by it: only a later read_system_roots() can show a new root, and Mbed
+/// TLS still checks the chain. `chain_der` is the server's certificates, the server's own first. True when the system was asked (Windows), false where there is nothing to ask.
+bool prime_platform_roots(const std::vector<std::string>& chain_der);
+/// What a link does when the only fault of a server's chain is a root that is not trusted: ask for the chain to be primed (prime_platform_roots, or the test's function), and say whether anything could
+/// have changed, so that the caller reads the roots again and makes the link once more
+bool prime_system_roots(const std::vector<std::string>& chain_der);
+/// The next link reads the system's roots again (a link that is being made keeps the roots it started with)
+void reload_system_roots();
+/// The tests: where the roots come from instead of the platform (an empty function: the platform again), and what priming does instead of asking the platform. Main thread, before the links of the test.
+void set_system_roots_source_for_test(std::function<std::vector<RootBlob>()> source);
+void set_root_primer_for_test(std::function<bool(const std::vector<std::string>&)> primer);
 
 /// How many roots the system's store gives on this computer (the first call reads them; the number is what a link would trust, besides TlsTrust::extra_pem)
 size_t system_root_count();
@@ -80,6 +94,9 @@ public:
     /// Why the link failed, in words for a player (empty when it did not), and as a kind
     const std::string& error() const noexcept { return error_; }
     TlsFailure failure() const noexcept { return failure_; }
+    /// The certificates that the server presented in the last handshake (DER, the server's own first); empty before a certificate was seen. They are only recorded for the priming of the roots: nothing is
+    /// trusted because of them
+    std::vector<std::string> presented_chain() const;
     /// The negotiated protocol and cipher suite as text (diagnostics and the tests): "TLSv1.3 TLS1-3-AES-256-GCM-SHA384"
     std::string describe() const;
 

@@ -22,14 +22,24 @@ bool crypto_ready() {
     return ok;
 }
 
-// The parsed roots of the system's store, once per process (a game that reconnects makes many links)
+// Where the roots come from: the platform, or the function that a test gave
+std::function<std::vector<RootBlob>()>& roots_source() {
+    static std::function<std::vector<RootBlob>()> source;
+    return source;
+}
+std::function<bool(const std::vector<std::string>&)>& root_primer() {
+    static std::function<bool(const std::vector<std::string>&)> primer;
+    return primer;
+}
+
+// The parsed roots of the system's store, read once (and again after reload_system_roots(): a link that is being made keeps the chain that it started with, which it holds by shared pointer)
 struct SystemChain {
     std::vector<RootBlob> blobs;
     mbedtls_x509_crt chain;
     size_t count{0};
     SystemChain() {
         mbedtls_x509_crt_init(&chain);
-        blobs = read_system_roots();
+        blobs = roots_source() ? roots_source()() : read_system_roots();
         for (const RootBlob& b : blobs) add_blob(chain, b);
         for (const mbedtls_x509_crt* c = &chain; c != nullptr; c = c->next) {
             if (c->raw.p != nullptr) ++count;
@@ -50,10 +60,31 @@ struct SystemChain {
     }
 };
 
-const SystemChain& system_chain() {
-    static const SystemChain chain;
-    return chain;
+std::shared_ptr<const SystemChain>& chain_slot() {
+    static std::shared_ptr<const SystemChain> slot;
+    return slot;
 }
+
+std::shared_ptr<const SystemChain> system_chain() {
+    std::shared_ptr<const SystemChain>& slot = chain_slot();
+    if (!slot) slot = std::make_shared<const SystemChain>();
+    return slot;
+}
+
+// The suites that are offered: authenticated encryption only (TLS 1.3, and TLS 1.2 with AES-GCM or ChaCha20-Poly1305 over ECDHE). The library's own list holds suites with a CBC mode and a SHA-1 MAC, CCM_8, Camellia and ARIA
+// that no server of the site needs; nginx's defaults (TLS 1.3, ECDHE with GCM and ChaCha20) are all in this list. The list lives as long as the program (the configuration keeps a pointer to it).
+const int kCipherSuites[] = {
+    MBEDTLS_TLS1_3_AES_128_GCM_SHA256,
+    MBEDTLS_TLS1_3_AES_256_GCM_SHA384,
+    MBEDTLS_TLS1_3_CHACHA20_POLY1305_SHA256,
+    MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+    MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+    MBEDTLS_TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+    MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+    MBEDTLS_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+    MBEDTLS_TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+    0,
+};
 
 std::string library_text(int code) {
     char buf[160];
@@ -89,6 +120,8 @@ struct TlsClient::Impl {
     mbedtls_ssl_context ssl;
     mbedtls_ssl_config conf;
     mbedtls_x509_crt own_chain;                     // the roots of this link when it has roots of its own (the system's and the caller's extra ones); else the shared system chain is used
+    std::shared_ptr<const SystemChain> shared_roots;    // the system's roots of this link when it uses them alone (kept alive for as long as the configuration points at them)
+    std::vector<std::string> presented;             // the certificates of the server by depth (0: its own), recorded for the priming of the roots
     std::vector<uint8_t> pending;                   // plaintext that waits to be handed to the library (it waits when the socket is full)
     size_t inflight{0};                             // the length of a write that the library has not finished: the retry must repeat it
     std::string host;
@@ -107,6 +140,16 @@ struct TlsClient::Impl {
     Impl(const Impl&) = delete;
     Impl& operator=(const Impl&) = delete;
 
+    // Called by the library for every certificate of the chain as it judges it: the certificates are noted (never the verdict: the flags are left as the library set them, and the result is 0)
+    static int note_certificate(void* ctx, mbedtls_x509_crt* crt, int depth, uint32_t* flags) {
+        (void)flags;
+        Impl* m = static_cast<Impl*>(ctx);
+        if (crt != nullptr && crt->raw.p != nullptr && depth >= 0 && depth < 16) {
+            if (m->presented.size() <= static_cast<size_t>(depth)) m->presented.resize(static_cast<size_t>(depth) + 1);
+            m->presented[static_cast<size_t>(depth)].assign(reinterpret_cast<const char*>(crt->raw.p), crt->raw.len);
+        }
+        return 0;
+    }
     static int bio_send(void* ctx, const unsigned char* buf, size_t len) {
         TcpStream* s = static_cast<Impl*>(ctx)->stream.get();
         const long n = s->send(buf, len);
@@ -150,14 +193,16 @@ std::unique_ptr<TlsClient> TlsClient::start(std::unique_ptr<TcpStream> stream, c
     // the roots: the shared chain of the system's store when nothing is added, else a chain of this link's own
     const mbedtls_x509_crt* roots = nullptr;
     if (trust.extra_pem.empty() && trust.system_roots) {
-        if (system_chain().count == 0) {
+        m.shared_roots = system_chain();
+        if (m.shared_roots->count == 0) {
             why = "No trusted root certificates could be read on this computer, so a secure link cannot be made.";
             return nullptr;
         }
-        roots = &system_chain().chain;
+        roots = &m.shared_roots->chain;
     } else {
         if (trust.system_roots) {
-            for (const RootBlob& b : system_chain().blobs) SystemChain::add_blob(m.own_chain, b);
+            const std::shared_ptr<const SystemChain> system = system_chain();
+            for (const RootBlob& b : system->blobs) SystemChain::add_blob(m.own_chain, b);
         }
         if (!trust.extra_pem.empty()) {
             std::string text = trust.extra_pem;
@@ -181,6 +226,8 @@ std::unique_ptr<TlsClient> TlsClient::start(std::unique_ptr<TcpStream> stream, c
     mbedtls_ssl_conf_min_tls_version(&m.conf, MBEDTLS_SSL_VERSION_TLS1_2);
     mbedtls_ssl_conf_authmode(&m.conf, MBEDTLS_SSL_VERIFY_REQUIRED);                 // the certificate is checked, always: a failed check fails the handshake
     mbedtls_ssl_conf_ca_chain(&m.conf, const_cast<mbedtls_x509_crt*>(roots), nullptr);
+    mbedtls_ssl_conf_ciphersuites(&m.conf, kCipherSuites);
+    mbedtls_ssl_conf_verify(&m.conf, Impl::note_certificate, &m);                    // (it only notes the chain, see there)
 #if defined(MBEDTLS_SSL_SESSION_TICKETS)
     mbedtls_ssl_conf_session_tickets(&m.conf, MBEDTLS_SSL_SESSION_TICKETS_DISABLED);  // every link starts from nothing: nothing is kept that could be replayed
 #endif
@@ -311,7 +358,31 @@ std::string TlsClient::describe() const {
     return std::string(version != nullptr ? version : "?") + " " + (suite != nullptr ? suite : "?");
 }
 
-size_t system_root_count() { return crypto_ready() ? system_chain().count : 0; }
+std::vector<std::string> TlsClient::presented_chain() const {
+    std::vector<std::string> out;
+    if (impl_) {
+        for (const std::string& der : impl_->presented) {
+            if (!der.empty()) out.push_back(der);
+        }
+    }
+    return out;
+}
+
+bool prime_system_roots(const std::vector<std::string>& chain_der) {
+    if (chain_der.empty()) return false;
+    return root_primer() ? root_primer()(chain_der) : prime_platform_roots(chain_der);
+}
+
+void reload_system_roots() { chain_slot().reset(); }
+
+void set_system_roots_source_for_test(std::function<std::vector<RootBlob>()> source) {
+    roots_source() = std::move(source);
+    reload_system_roots();
+}
+
+void set_root_primer_for_test(std::function<bool(const std::vector<std::string>&)> primer) { root_primer() = std::move(primer); }
+
+size_t system_root_count() { return crypto_ready() ? system_chain()->count : 0; }
 
 bool tls_random(uint8_t* out, size_t size) {
     if (size == 0) return true;

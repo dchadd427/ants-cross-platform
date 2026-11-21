@@ -280,6 +280,10 @@ bool parse_server(const std::string& text_in, ServerAddress& out, std::string& w
             return false;
         }
         port = static_cast<uint16_t>(value);
+        if (!tcp && port == kLocalServerPort) {                                 // HOST:4001 of a host of the Internet (what a settings file or a launcher of the first versions says): 4001 is the plain game port, which the site does not open
+            why = "The server '" + text + "' names port " + std::to_string(kLocalServerPort) + ", the plain game port, which the site does not open: write " + host + " alone, or wss://" + host + "/ws, to join through the site.";
+            return false;
+        }
     }
     out.host = host;
     out.port = port;

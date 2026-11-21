@@ -176,10 +176,12 @@ inline std::string pem_of(const std::vector<uint8_t>& der) {
 class Ca {
 public:
     explicit Ca(const std::string& common_name = "Ants Test CA") : name_("CN=" + common_name + ",O=Ants Tests") {
-        pem_ = pem_of(make_certificate(key_.pk(), name_, key_.pk(), name_, nullptr, true, -1, 3650));
+        der_ = make_certificate(key_.pk(), name_, key_.pk(), name_, nullptr, true, -1, 3650);
+        pem_ = pem_of(der_);
     }
-    // The authority's certificate as a client is told to trust it
+    // The authority's certificate as a client is told to trust it, and the same in DER
     const std::string& pem() const noexcept { return pem_; }
+    std::string der() const { return std::string(der_.begin(), der_.end()); }
     // A leaf for `names`, valid from `from_days` to `to_days` after now (negative: in the past)
     std::unique_ptr<Identity> issue(const Names& names, int from_days = -1, int to_days = 30) {
         std::unique_ptr<Identity> id(new Identity());
@@ -192,6 +194,7 @@ public:
 private:
     Key key_;
     std::string name_;
+    std::vector<uint8_t> der_;
     std::string pem_;
 };
 
@@ -203,6 +206,7 @@ struct TerminatorOptions {
     bool use_tls{true};                                         // false: a server that does not speak TLS (the bytes are plain)
     mbedtls_ssl_protocol_version max_version{MBEDTLS_SSL_VERSION_TLS1_3};
     bool close_after_script{false};                             // scripted: close the link after the first answer
+    std::vector<int> ciphersuites;                              // the suites that the server offers (ids as the library has them); empty: the library's own list
 };
 
 class Terminator {
@@ -218,6 +222,11 @@ public:
             check(mbedtls_ssl_conf_own_cert(&conf_, &identity->chain, identity->key.pk()), "own certificate");
             mbedtls_ssl_conf_authmode(&conf_, MBEDTLS_SSL_VERIFY_NONE);
             mbedtls_ssl_conf_max_tls_version(&conf_, options_.max_version);
+            if (!options_.ciphersuites.empty()) {
+                suites_ = options_.ciphersuites;
+                suites_.push_back(0);                           // (the list ends with 0 and must outlive the configuration)
+                mbedtls_ssl_conf_ciphersuites(&conf_, suites_.data());
+            }
         }
     }
     ~Terminator() {
@@ -416,6 +425,7 @@ private:
     TerminatorOptions options_;
     std::unique_ptr<ants::net::TcpListener> listener_;
     mbedtls_ssl_config conf_;
+    std::vector<int> suites_;
     std::vector<std::unique_ptr<Link>> links_;
     std::string raw_in_;
     std::string raw_out_;

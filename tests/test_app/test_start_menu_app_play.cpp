@@ -136,6 +136,15 @@ void run_start_menu_app_play_tests() {
             ASSERT_TRUE(app.init(menu_config("", settings)));
             ASSERT_TRUE(app.start_menu().server() == ServerAddress{});
         }
+        {   // the form of the first versions' default, the plain game port of the site: the site does not open it, so the menu uses the default (the site's door) and says why on the console
+            std::ofstream out(settings, std::ios::app | std::ios::binary);
+            out << "server=beta.playants.org:4001\n";
+        }
+        {
+            Application app;
+            ASSERT_TRUE(app.init(menu_config("", settings)));
+            ASSERT_TRUE(app.start_menu().server() == ServerAddress{});
+        }
         // the server of the command line must parse: a bad one never gets to the menu (parse_arguments refuses it, init refuses the config)
         std::vector<std::string> args = {"ants", "--headless", "--start-menu", "--server", "no good", "--settings", settings};
         std::vector<char*> storage;
@@ -143,6 +152,9 @@ void run_start_menu_app_play_tests() {
         ASSERT_HAS(bad.startup_error, "--server no good");
         Application refused;
         ASSERT_FALSE(refused.init(bad));
+        args = {"ants", "--headless", "--start-menu", "--server", "beta.playants.org:4001", "--settings", settings};   // (what a launcher of the first versions passes: refused with the way to write it now)
+        const ApplicationConfig plain_port = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, storage));
+        ASSERT_HAS(plain_port.startup_error, "wss://beta.playants.org/ws");
     } TEST_END();
 
     TEST_CASE("A2.1 Single player with nobody: the match is the original's single-player game exactly: the same four teams, no bot code, the same state after the get-ready dialog (5 s in which the simulation waits) and 100 ticks as the game that never saw the menu") {

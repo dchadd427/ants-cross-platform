@@ -3,7 +3,9 @@
 #include "ants_net/wss.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
+#include <thread>
 
 namespace ants::net {
 
@@ -131,8 +133,13 @@ WssReply wss_parse_reply(const std::string& bytes, const std::string& key_b64) {
 // ------------------------------------------------------------------------------------------------
 // The connection
 
-WssConnection::WssConnection(const WssUrl& url, std::unique_ptr<TlsClient> tls, uint32_t timeout_ms)
-    : url_(url), tls_(std::move(tls)), started_(std::chrono::steady_clock::now()), timeout_ms_(timeout_ms), parser_(false, kMaxMessageBytes) {}
+// What the thread that primes the roots leaves for the connection: 0 while it runs, then 1 (the system was asked: read the roots again) or 2 (nothing to ask)
+struct WssConnection::Priming {
+    std::atomic<int> state{0};
+};
+
+WssConnection::WssConnection(const WssUrl& url, std::unique_ptr<TlsClient> tls, uint32_t timeout_ms, const std::string& address, const TlsTrust& trust)
+    : url_(url), tls_(std::move(tls)), started_(std::chrono::steady_clock::now()), timeout_ms_(timeout_ms), address_(address), trust_(trust), parser_(false, kMaxMessageBytes) {}
 
 WssConnection::~WssConnection() { close(); }
 
@@ -144,7 +151,7 @@ std::unique_ptr<WssConnection> WssConnection::connect(const WssUrl& url, const s
     }
     std::unique_ptr<TlsClient> tls = TlsClient::start(std::move(stream), url.host, trust, why);
     if (!tls) return nullptr;
-    std::unique_ptr<WssConnection> c(new WssConnection(url, std::move(tls), timeout_ms));
+    std::unique_ptr<WssConnection> c(new WssConnection(url, std::move(tls), timeout_ms, address, trust));
     std::array<uint8_t, 16> key{};
     if (!tls_random(key.data(), key.size())) {
         why = "The security library has no random numbers on this computer.";
@@ -186,10 +193,23 @@ bool WssConnection::pump_handshakes() {
         fail("The server did not answer in time.");
         return false;
     }
+    if (stage_ == Stage::Priming) {
+        const int answer = priming_->state.load();
+        if (answer == 0) return false;                                          // (the system is still being asked; the time limit above runs)
+        priming_.reset();
+        if (answer != 1 || !restart_link()) {
+            fail(tls_->error());                                                // nothing to learn, or no new link: the link fails as it did
+            return false;
+        }
+        return false;
+    }
     if (stage_ == Stage::Tls) {
         switch (tls_->advance()) {
             case TlsClient::State::Handshaking: return false;
-            case TlsClient::State::Failed: fail(tls_->error()); return false;
+            case TlsClient::State::Failed:
+                if (start_priming()) return false;
+                fail(tls_->error());
+                return false;
             case TlsClient::State::Closed: fail("The server closed the connection before the secure link was made."); return false;
             case TlsClient::State::Open: break;
         }
@@ -235,6 +255,33 @@ bool WssConnection::pump_handshakes() {
         }
     }
     return stage_ == Stage::Frames;
+}
+
+// A chain that failed only because its root is not trusted is given to the system once (on a thread of its own: Windows may go to the network), and the link is made again when the answer is in
+bool WssConnection::start_priming() {
+    if (primed_ || !trust_.system_roots || tls_->failure() != TlsFailure::Untrusted) return false;
+    const std::vector<std::string> chain = tls_->presented_chain();
+    if (chain.empty()) return false;
+    primed_ = true;
+    priming_ = std::make_shared<Priming>();
+    std::thread([state = priming_, chain]() { state->state.store(prime_system_roots(chain) ? 1 : 2); }).detach();
+    stage_ = Stage::Priming;
+    started_ = std::chrono::steady_clock::now();                                // (the time limit of the link starts again: the system may take a while)
+    return true;
+}
+
+// A new TCP and TLS link to the same address, with the roots that the system has now
+bool WssConnection::restart_link() {
+    reload_system_roots();
+    std::unique_ptr<TcpStream> stream = TcpStream::connect(address_.empty() ? url_.host : address_, url_.port);
+    if (!stream) return false;
+    std::string why;
+    std::unique_ptr<TlsClient> next = TlsClient::start(std::move(stream), url_.host, trust_, why);
+    if (!next) return false;
+    tls_ = std::move(next);
+    stage_ = Stage::Tls;
+    started_ = std::chrono::steady_clock::now();
+    return true;
 }
 
 bool WssConnection::drain_parser() {
