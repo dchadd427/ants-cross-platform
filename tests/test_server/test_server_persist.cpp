@@ -1251,15 +1251,15 @@ void run_persist_server_tests_5() {
         ASSERT_TRUE(w.record_files().empty());
     } TEST_END();
 
-    TEST_CASE("S3.99 A Record Keeps No Address Of A Client: The Start Message That The Room Sent To Machines That Announce A Port Names Their Addresses (Host Migration's Business, A Game On The Local Network's); The Record's Start Message Has None, And Neither Has The Start That A Machine From Nothing Is Sent After A Restart")  {
+    TEST_CASE("S3.99 A Server's Room Names No Machine: The Start Message That The Room Sends To Machines That Announce A Port Has No Address And No Port Of Any Of Them (Only A Game On The Local Network Passes Them On: Host Migration's Business); The Record's Start Message Has None, And Neither Has The Start That A Machine From Nothing Is Sent After A Restart")  {
         PWorld w("persist-93");
         w.announce_port = 4321;
         w.start_server(500);
         std::vector<RClient*> m = play_room(w, held_spec("E-1", 2), 3000);
         const net::StartMsg& live = m[0]->lobby->start_info();
-        size_t named = 0;
-        for (const net::Endpoint& e : live.endpoints) named += e.port == 4321 && !e.address.empty() ? 1u : 0u;
-        ASSERT_EQ(named, size_t{2});                                                           // (the live Start names the two machines: the premise of the test)
+        ASSERT_EQ(live.roster, 0x03);                                                          // (the live Start is the one of the match of two machines that announced a port each)
+        for (const net::Endpoint& e : live.endpoints) ASSERT_TRUE(e.address.empty() && e.port == 0);
+        for (const net::Endpoint& e : m[1]->lobby->start_info().endpoints) ASSERT_TRUE(e.address.empty() && e.port == 0);
         const RestartLoaded rec = w.read_record("E-1");
         ASSERT_TRUE(rec.ok());
         for (const net::Endpoint& e : rec.head.start.endpoints) ASSERT_TRUE(e.address.empty() && e.port == 0);
@@ -1273,6 +1273,75 @@ void run_persist_server_tests_5() {
         w.run(500);
         for (const net::Endpoint& e : reloaded.lobby->start_info().endpoints) ASSERT_TRUE(e.address.empty() && e.port == 0);
         ASSERT_EQ(reloaded.lobby->start_info().seed, live.seed);
+    } TEST_END();
+
+    TEST_CASE("S3.99b Nothing That A Server's Room Sends To A Player Carries The Address Or The Port Of Another: A Game That Announces A Port, A Page That Announces None And A Page That Announces One Anyway Play In One Room; Every Message Of The Server (The Start Of Each, The Start Of A Machine From Nothing, The Catch-Up Of A Machine That Lost Its Link, What Follows A Restart) Is Looked At: No Start Names A Machine, No Message Has The Text Of An Address, And The Room's Status Has None")  {
+        constexpr char kAddresses[] = "198.51.100.";                                          // (every link of this test comes from here: a message with this text names a machine)
+        PWorld w("persist-93b");
+        size_t frames = 0;
+        size_t starts = 0;
+        size_t naming_starts = 0;
+        size_t with_address = 0;
+        w.on_server_send = [&](const std::vector<uint8_t>& message) {
+            ++frames;
+            if (std::search(message.begin(), message.end(), kAddresses, kAddresses + sizeof kAddresses - 1) != message.end()) ++with_address;
+            if (net::peek_type(message) != net::MsgType::Start) return;
+            ++starts;
+            net::StartMsg start;
+            bool names = !net::decode(message.data(), message.size(), start);                  // (a Start that cannot be read is no good either)
+            for (const net::Endpoint& e : start.endpoints) names = names || !e.address.empty() || e.port != 0;
+            if (names) ++naming_starts;
+        };
+        w.start_server(500);
+        ASSERT_TRUE(w.mgr->create_room(held_spec("E-2", 3), w.server_now()).ok);
+        const auto join = [&](const char* name, const char* address, uint16_t port, uint8_t platform, uint8_t seat = 255, const net::SeatKey& key = net::SeatKey{}) -> RClient& {
+            w.link_address = address;
+            w.announce_port = port;
+            w.announce_platform = platform;
+            return w.connect(name, "E-2", seat, key);
+        };
+        RClient& game = join("Game", "198.51.100.1", 4321, net::kOsLinux);                      // a desktop game that keeps a port open for the others
+        RClient& page = join("Page", "198.51.100.2", 0, static_cast<uint8_t>(net::kOsMacos | net::kPlatformBrowser));          // a page: no port
+        RClient& forger = join("Forger", "198.51.100.3", 5555, static_cast<uint8_t>(net::kOsWindows | net::kPlatformBrowser));  // a page that names a port that it has no use for
+        for (RClient* c : {&game, &page, &forger}) c->record_hashes = true;
+        w.run(3000 + kPre);
+        ASSERT_EQ(w.status("E-2").state, RoomState::Running);
+        ASSERT_EQ(starts, size_t{3});                                                          // (the live Start: one for each machine)
+        for (RClient* c : {&game, &page, &forger}) {
+            for (const net::Endpoint& e : c->lobby->start_info().endpoints) ASSERT_TRUE(e.address.empty() && e.port == 0);
+        }
+        // a machine that lost its link comes back by itself with what it has (its key and its turns): the catch-up
+        w.link_address = "198.51.100.4";
+        w.net.cut(page.end);
+        ASSERT_TRUE(w.until([&]() { return w.status("E-2").rejoins >= 1 && !w.status("E-2").paused; }, 60000));
+        // a machine that starts from nothing (a page that was reloaded) is sent the Start of the match
+        const uint8_t forger_seat = forger.lobby->my_seat();
+        const net::SeatKey forger_key = forger.lobby->key();
+        forger.reconnects = false;
+        w.net.cut(forger.end);
+        RClient& forger_again = join("Forger", "198.51.100.5", 5555, static_cast<uint8_t>(net::kOsWindows | net::kPlatformBrowser), forger_seat, forger_key);
+        ASSERT_TRUE(w.until([&]() { return forger_again.lobby != nullptr && forger_again.lobby->phase() == net::ClientLobby::Phase::Begun; }, 30000));
+        for (const net::Endpoint& e : forger_again.lobby->start_info().endpoints) ASSERT_TRUE(e.address.empty() && e.port == 0);
+        ASSERT_TRUE(w.until([&]() { return !w.status("E-2").paused; }, 60000));
+        ASSERT_EQ(starts, size_t{4});
+        // the server stops and starts again from its record: every machine comes back, one of them from nothing
+        const uint8_t game_seat = game.lobby->my_seat();
+        const net::SeatKey game_key = game.lobby->key();
+        w.link_address = "198.51.100.6";
+        w.stop_server(true);
+        game.reconnects = false;
+        w.start_server(500);
+        RClient& game_again = join("Game", "198.51.100.7", 4321, net::kOsLinux, game_seat, game_key);
+        ASSERT_TRUE(w.until([&]() { return game_again.lobby != nullptr && game_again.lobby->phase() == net::ClientLobby::Phase::Begun; }, 60000));
+        for (const net::Endpoint& e : game_again.lobby->start_info().endpoints) ASSERT_TRUE(e.address.empty() && e.port == 0);
+        ASSERT_TRUE(w.until([&]() { return !w.status("E-2").paused; }, 60000));
+        w.run(3000);
+        ASSERT_EQ(w.status("E-2").state, RoomState::Running);
+        ASSERT_EQ(starts, size_t{5});
+        ASSERT_TRUE(frames > 300);                                                             // (the turns of the match went by as well as the Starts: the looking was not a glance)
+        ASSERT_EQ(naming_starts, size_t{0});
+        ASSERT_EQ(with_address, size_t{0});
+        ASSERT_TRUE(status_json_text(w, "E-2").find(kAddresses) == std::string::npos);
     } TEST_END();
 }
 

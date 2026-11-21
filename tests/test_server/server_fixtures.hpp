@@ -1088,11 +1088,13 @@ struct PWorld : LinkSource {
             net.cut(ends.first, true);
             return ends.second;
         }
-        mgr->add_connection(std::make_unique<TapSend>(ends.first, &on_server_send), "127.0.0.1", server_now());
+        mgr->add_connection(std::make_unique<TapSend>(ends.first, &on_server_send), link_address, server_now());
         server_ends.push_back(ends.first);
         return ends.second;
     }
+    std::string link_address{"127.0.0.1"};                  // where the server is told that the next link comes from (a machine's new link after a cut too)
     uint16_t announce_port{0};                              // the listen port that the machines made by connect() announce
+    uint8_t announce_platform{0};                           // the platform byte that they tell (protocol 15: valid_platform; 0: not told)
     std::optional<net::CreateBlock> next_create;            // the block that the next connect() puts in its Hello (connect_creating sets it for one call)
     RClient& connect(const std::string& name, const std::string& room, uint8_t seat = 255, const net::SeatKey& key = net::SeatKey{}) {
         net::Connection* end = open_link();
@@ -1103,6 +1105,7 @@ struct PWorld : LinkSource {
         c.want_seat = seat;
         c.key = key;
         c.listen_port = announce_port;
+        c.platform = announce_platform;
         c.create = next_create;
         c.start(end, static_cast<uint32_t>(clients.size()) * 7919u);
         return c;

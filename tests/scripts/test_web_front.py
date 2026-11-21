@@ -929,7 +929,7 @@ class TheCardsAtManyWidths(unittest.TestCase):
         self.assertIn("(max-width: 700px)", " ".join(head for head, _ in css_blocks(self.room)))
 
     def test_the_media_rules_come_in_the_order_that_lets_the_narrower_ones_win_and_the_two_sides_of_a_break_agree(self):
-        heads = [head for head, _ in css_blocks(self.room) if head.startswith("@media (max-width")]
+        heads = [head for head, _ in css_blocks(self.room) if re.fullmatch(r"@media \(max-width: \d+px\)", head)]       # (the blocks of one width: a block for a phone, which is also for a low window, is none of them)
         self.assertEqual(heads, ["@media (max-width: 700px)", "@media (max-width: 374px)"], "the narrower rules come later: they win")
         self.assertIn("@media (min-width: 701px) and (max-height: 759px)", self.room)                           # (700 and 701: the same break, seen from both sides)
         self.assertEqual(self.sheet.value(".share", "display"), "none")                               # (the Share button is for phones, and the script shows it only where a share sheet exists)

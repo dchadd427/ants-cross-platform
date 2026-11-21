@@ -133,8 +133,7 @@ async function main() {
         await page.goto(rig.site.url + '/', { waitUntil: 'load' });
         await page.waitForSelector('#gchat', { state: 'attached', timeout: 8000 });
         await page.waitForFunction(() => { const d = document.querySelector('#gchat'); return !!d && d.getAttribute('data-state') === 'live'; }, null, { timeout: 8000 });
-        if (w <= 700) { const tab = page.locator('.htab.t-chat'); await tab.click().catch(() => {}); }
-        if (w > 700 && h < 500 && (await page.getAttribute('#gchat', 'data-open')) === 'false') await page.click('#gchat .gc-head');
+        if (w <= 700 || h <= 500) { const tab = page.locator('.htab.t-chat'); await tab.click().catch(() => {}); }
         await page.waitForFunction(() => document.querySelectorAll('#gchat .gc-line').length > 6, null, { timeout: 8000 });
         if (o.staff) await page.waitForFunction(() => document.querySelectorAll('#gchat .gc-line[data-act]').length > 0, null, { timeout: 8000 });
         else await sleep(500);
@@ -449,7 +448,7 @@ async function main() {
     const card = (i) => '#players .pl-card[data-i="' + i + '"]';
     async function openList(rig, size, w, h, touch, staff) {
         const o = await open(rig, size, w, h, touch, { staff });
-        if (w <= 700) await o.page.locator('.htab.t-players').click();
+        if (w <= 700 || h <= 500) await o.page.locator('.htab.t-players').click();
         await o.page.waitForFunction(() => document.querySelectorAll('#players .pl-card[data-i]').length >= 6, null, { timeout: 8000 });
         await sleep(300);
         return o;
