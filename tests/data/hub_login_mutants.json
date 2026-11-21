@@ -854,8 +854,8 @@
   {
    "id": "limit_of_an_address_is_the_header",
    "file": "hub/server.py",
-   "old": "address = limitmod.address_key(h.get(\"x-client-address\"), peername[0] if peername else \"\")\n        writer.write(await route(request, address))",
-   "new": "address = limitmod.address_key(h.get(\"x-forwarded-for\"), peername[0] if peername else \"\")\n        writer.write(await route(request, address))",
+   "old": "headers.get(\"x-client-address\")",
+   "new": "headers.get(\"x-forwarded-for\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLimitsOfStart"
   },
   {
@@ -875,8 +875,8 @@
   {
    "id": "pages_take_a_body",
    "file": "hub/server.py",
-   "old": "if h.get(\"content-length\", \"0\") != \"0\" or \"transfer-encoding\" in h:\n            raise http.HttpError(400, \"body\")\n        peername",
-   "new": "if False:\n            raise http.HttpError(400, \"body\")\n        peername",
+   "old": "if h.get(\"content-length\", \"0\") != \"0\" or \"transfer-encoding\" in h:\n            raise http.HttpError(400, \"body\")\n        writer.write(await route(",
+   "new": "if False:\n            raise http.HttpError(400, \"body\")\n        writer.write(await route(",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart tests.scripts.test_hub_login.TheLogout"
   },
   {
