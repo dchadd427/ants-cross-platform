@@ -13,6 +13,7 @@ from typing import List, Tuple
 import numpy as np
 
 try:
+    from .ability_clips_fire import add_fire_abilities
     from .base_ant import build_base_ant, sync_arm_idle_to_clip, sync_leg_flex_to_clip
     from .hit_clips import add_fire_hit
     from .mesh_core import (
@@ -34,6 +35,7 @@ try:
         torus_arc,
     )
 except ImportError:
+    from ability_clips_fire import add_fire_abilities  # type: ignore
     from base_ant import build_base_ant, sync_arm_idle_to_clip, sync_leg_flex_to_clip  # type: ignore
     from hit_clips import add_fire_hit  # type: ignore
     from mesh_core import (  # type: ignore
@@ -866,6 +868,7 @@ def build_fire(blink: float = 0.0, *, hold_magnifying_glass: bool = False) -> Sc
     _add_fire_idle(scene, hold_magnifying_glass=hold_magnifying_glass)
     _add_fire_attack(scene, hold_magnifying_glass=hold_magnifying_glass)
     add_fire_hit(scene, hold_magnifying_glass=hold_magnifying_glass)
+    add_fire_abilities(scene, anchors, build_magnifying_glass)
     return scene
 
 
