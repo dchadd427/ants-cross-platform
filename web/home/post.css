@@ -1,0 +1,34 @@
+/* Posting an image in Home's chat (web/home/post.js, docs/HUB_IMAGES.md), loaded with it for a person who may post. The colors, .btn and the frame are the page's own; the dock's helper buttons are talk.css's. Every target is
+   at least 44 px; nothing scrolls sideways. */
+/* ---- the image button, beside the emoji and the microphone (talk.js's .gt-tools) ---- */
+.gt-tools .gt-pic .gt-ico { width: 24px; height: 24px; }
+
+/* ---- a phone held upright: with a fourth button the one row has no room to type in, so the box takes two rows (the field on top, the three helpers and Send under it), as it already does when the words need more than one line ---- */
+@media (max-width: 700px) and (min-height: 501px) {
+    .gc-form.gt-on.gp-two, .gc-form.gt-on.gp-two.gt-tall { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "f f" "t s"; gap: 0 8px; padding: 4px 6px 6px; }
+}
+
+/* ---- a picture dragged over the dock (a mouse): the dock's edge turns gold and says what a drop does ---- */
+.gc.gp-over { position: relative; outline: 3px dashed var(--gold); outline-offset: -9px; }
+.gp-dropmsg { position: absolute; z-index: 8; inset: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; color: var(--cream); background: rgba(8, 14, 18, .88); border-radius: 6px; pointer-events: none; }
+.gp-dropmsg b { font-size: 22px; font-weight: 500; }
+.gp-dropmsg span { font-size: 15px; color: #a8cfc0; }
+.gp-dropmsg svg { width: 38px; height: 38px; fill: none; stroke: var(--gold); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---- the picture that waits to be sent: a card above the field (the emoji picker's place); the field below it is the caption ---- */
+.gp-card { position: absolute; z-index: 6; left: 0; right: 0; bottom: 100%; margin: 0 0 8px; box-sizing: border-box; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 12px; align-items: start; padding: 8px 6px 8px 8px; color: var(--cream); background: #0b1117; border: 2px solid var(--edge); border-radius: 8px; box-shadow: 0 0 0 2px #000, 0 10px 28px rgba(0, 0, 0, .55); }
+.gp-card.gp-bad { border-color: #6b5a22; background: #10161d; }
+.gp-card .gp-th { grid-row: 1 / span 3; display: block; width: 112px; height: 72px; padding: 0; object-fit: contain; background: #05090c; border: 2px solid #24574a; border-radius: 4px; }
+.gp-card .gp-ph { grid-row: 1 / span 3; display: flex; align-items: center; justify-content: center; width: 72px; height: 72px; color: #f2c48c; background: #05090c; border: 2px dashed #6b5a22; border-radius: 4px; }
+.gp-card .gp-ph svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.gp-t { margin: 0; font-size: 16px; line-height: 22px; font-weight: 500; }
+.gp-s { margin: 0; font-size: 14px; line-height: 19px; color: #a8cfc0; }
+.gp-s.gp-warn { color: #f2c48c; }
+.gp-x { grid-column: 3; grid-row: 1; width: 44px; height: 44px; margin: -4px -2px 0 0; padding: 0; display: inline-flex; align-items: center; justify-content: center; color: #a8cfc0; background: none; border: 0; border-radius: 8px; cursor: pointer; }
+.gp-x svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.gp-x:hover { color: var(--cream); background: #14232b; }
+.gp-card .gp-again { grid-column: 2 / span 2; grid-area: auto; justify-self: start; min-width: 0; min-height: 44px; margin-top: 2px; padding: 0 16px; box-shadow: var(--bevel-sm); }
+.gp-bar { grid-column: 2 / span 2; height: 8px; margin-top: 4px; overflow: hidden; background: #05090c; border: 1px solid #1f5a49; border-radius: 4px; }
+.gp-bar i { display: block; height: 100%; background: linear-gradient(#5fd9a0, #2f9a6c); }
+.gp-card.gp-sending .gp-x { opacity: .5; }
+

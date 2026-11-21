@@ -70,7 +70,8 @@ class ThePageAndTheOtherPages(unittest.TestCase):
 
     def test_the_dock_asks_only_for_a_frame_that_has_a_row_and_only_once(self):
         js = code_of(read("web", "home", "chat.js"))
-        self.assertEqual(len(re.findall(r"env\.load\(", js)), 1, "one place asks")
+        self.assertEqual(sorted(re.findall(r"env\.load\('home/(\w+)'", js)), ["cmds", "pics", "post"], "three places ask, one for each part that the dock loads (the commands' helper, the images' reader and poster), each by name")
+        self.assertEqual(len(re.findall(r"env\.load\(", js)), 3)
         self.assertIn("else if (cmdsRows.length && !cmdsAsked && env.load) {", js, "a row, not asked before, and a page that has a loader")
         self.assertEqual(js.count("setCmds(["), 2, "a visitor that is nobody, and a login that ended: no rows")
 
