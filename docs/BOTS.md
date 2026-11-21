@@ -684,7 +684,7 @@ The bot suites (2.20 to 2.22 and 2.28) are listed in [`TESTING.md`](TESTING.md).
 
 - Host migration drops a LAN host's bot: the bot lives in the old host's process and has no endpoint, so the new host drops its seat in its first turn (the survivors continue identically); a dedicated server never migrates.
 
-- Fog of War with bots is refused. A per-team view would need the engine to keep a reveal mask per seat.
+- Fog of War with bots is refused, in every door: the room's plan (a plan with fog and a computer player is refused as a whole, and a Room message with both is no Room message: [`NETWORK_PORT.md`](NETWORK_PORT.md#protocol-28-fog-of-war-in-the-leaders-plan), [`PLAY_IN_BROWSER.md`](PLAY_IN_BROWSER.md#fog-of-war)) as much as the control interface and the command line. A per-team view would need the engine to keep a reveal mask per seat.
 
 - A room's teams are chosen before the start, as described in [NETWORK_PORT.md](NETWORK_PORT.md#the-rooms-own-teams-a-word-of-its-code-until-protocol-15-its-create-blocks-since).
 

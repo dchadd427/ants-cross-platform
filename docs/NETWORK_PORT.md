@@ -933,6 +933,16 @@ A bite takes its unit from the first object of its food tile that still has one,
 
 ## Protocol 27: [`READY_UP.md`](READY_UP.md)
 
+## Protocol 28: Fog of War in the leader's plan
+
+`kProtocolVersion` goes from 27 to **28**; one layout changes. A Hello of 27 is refused with `VersionMismatch`, as every other version is.
+
+- **`PlanMsg` (type 32) ends with one more byte, fog (0 or 1)**: `[32][map][4 kinds][team a][team b][mode][fog]`. The decoder is exact: a fog byte above 1, a missing byte (a plan of protocol 27) and an extra byte are no plan (`test_lockstep` N2.106, N2.112, N2.115; the golden bytes `plan-fog` of `tests/data/lobby_messages.txt`). `RoomMsg` and `StartMsg` carried fog already; nothing else changes on the wire.
+- **The Room message** that shows fog together with a color whose kind is a computer player (Easy, Medium, Hard) is no Room message, in the C++ decoder and in `web/front/lobby_net.js`.
+- **The room** (`HostLobby::apply_plan`): only the leader of an open lobby room whose START does not wait is heard (as for every plan); a plan with fog and a bot color (or a seated bot) is refused **as a whole**, the leader is told with `kNoticeFillFog` ("Bots cannot play with Fog of War."), and it counts as an ignored plan (no offence at first, then a violation, as every ignored plan). Otherwise the fog of the room is the plan's, and a change is shown to everybody and counts as use of the room. The rematch (`Rematch::fog`) keeps the match's fog and `reopen` refuses fog with a bot color. The list of games has the key `fog` in every row ([`PUBLIC_ROOMS.md`](PUBLIC_ROOMS.md)); the room's status and its restart record say the room's own fog, the plan's for a lobby room.
+- **The page** (`web/front/lobby_net.js`): `encodePlan(..., fog)`, and `setPlan` takes the room's own fog when a plan says none (a click on a map or a team never switches fog off), and sends nothing for fog with a bot color. The switch, the notes and the tag are in [`PLAY_IN_BROWSER.md`](PLAY_IN_BROWSER.md#fog-of-war).
+- **The number** is held in the tests in one place, `tests/common/protocol_pin.hpp` (with `web/front/lobby_net.js` and the golden Hello of `tests/data/lobby_messages.txt`, which the encoder test prints again with `ANTS_WRITE_LOBBY_MESSAGES=1`).
+
 ## Reconnect (protocol 10): a player whose connection is lost can come back
 
 ### The behaviour that is decided
