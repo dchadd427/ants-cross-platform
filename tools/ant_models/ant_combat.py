@@ -528,7 +528,7 @@ def _build_arms(scene: SceneBuilder) -> Tuple[np.ndarray, np.ndarray, np.ndarray
         scene.add(right_node, part.mirror_x(f"{part.name}_right"))
 
     # Full, smooth, meaty deltoid shoulder caps blending seamlessly into the beefier upper biceps
-    # (zero armor scales or rivets — lets the thick yellow X-sash drape right on top cleanly!).
+    # (zero armor scales or rivets — lets the thick golden X-sash drape right on top cleanly!).
     deltoid_l = (
         superellipsoid(0.122, 0.112, 0.122, e1=0.84, e2=0.86, u_segs=18, v_segs=12, name="deltoid_cap", material="chitin_team")
         .rotate_xyz(rz=-0.54)
@@ -546,30 +546,27 @@ def _build_arms(scene: SceneBuilder) -> Tuple[np.ndarray, np.ndarray, np.ndarray
     )
     _add_arm_pair(forearm_muscle, right_node="right_forearm")
 
-    # Bold, cohesive organic green brawler fists/pincer-hands (`chitin_team` back/outer knuckle shell
-    # & sculpted curled finger/thumb lobes with a subtle recessed `chitin_dark` inner palm crease,
-    # matching `acst301`/`acst201` powerful inward-curving fists cleanly in rest & flex!).
+    # Bold, clean, solid clenched heavyweight brawler fists (`chitin_team`) flowing smoothly out of
+    # the muscular forearms with a crisp dorsal knuckle plane, compact curled-finger block, and
+    # tucked thumb ridge (matching `acst301`/`acat301`, zero splayed sausage fingers!).
     _add_arm_pair(
-        superellipsoid(0.074, 0.070, 0.086, e1=0.74, e2=0.78, u_segs=18, v_segs=14, name="fist_back", material="chitin_team")
-        .rotate_xyz(rx=0.28, ry=-0.48, rz=0.14)
-        .translate(fi + np.array([0.004, 0.002, 0.006])),
+        superellipsoid(0.085, 0.081, 0.094, e1=0.56, e2=0.62, u_segs=20, v_segs=14, name="fist_block", material="chitin_team")
+        .rotate_xyz(rx=0.20, ry=-0.44, rz=0.14)
+        .translate(fi + np.array([-0.004, -0.006, 0.022])),
         right_node="right_forearm",
     )
     _add_arm_pair(
-        superellipsoid(0.056, 0.056, 0.062, e1=0.78, e2=0.82, u_segs=14, v_segs=10, name="fist_palm_inner", material="chitin_dark")
-        .rotate_xyz(rx=0.25, ry=-0.48, rz=0.14)
-        .translate(fi + np.array([-0.022, -0.010, 0.020])),
+        superellipsoid(0.058, 0.064, 0.056, e1=0.58, e2=0.64, u_segs=16, v_segs=12, name="fist_knuckle_fold", material="chitin_team")
+        .rotate_xyz(rx=0.22, ry=-0.58, rz=0.12)
+        .translate(fi + np.array([-0.036, -0.015, 0.048])),
         right_node="right_forearm",
     )
-    # Chunky sculpted inward-curving brawler finger-pincer lobes & opposable thumb in `chitin_team`.
-    pincer_lobes = (
-        ("fist_finger_upper", [(0.032, 0.030, 0.044), (0.012, 0.016, 0.104), (-0.036, -0.006, 0.114)], [0.034, 0.036, 0.022]),
-        ("fist_finger_lower", [(0.028, -0.024, 0.040), (0.008, -0.040, 0.096), (-0.036, -0.056, 0.102)], [0.032, 0.034, 0.020]),
-        ("fist_thumb",        [(-0.036, 0.034, 0.024), (-0.068, 0.018, 0.072), (-0.046, -0.014, 0.098)], [0.030, 0.030, 0.020]),
+    _add_arm_pair(
+        superellipsoid(0.044, 0.035, 0.052, e1=0.64, e2=0.70, u_segs=14, v_segs=10, name="fist_thumb_tuck", material="chitin_team")
+        .rotate_xyz(rx=0.14, ry=-0.72, rz=0.26)
+        .translate(fi + np.array([-0.039, 0.030, 0.038])),
+        right_node="right_forearm",
     )
-    for lobe_name, ctrl, rads in pincer_lobes:
-        c_pts = [fi + np.asarray(c) for c in ctrl]
-        _add_arm_pair(curved_tube(c_pts, rads, samples_per_seg=4, radial_segs=14, cap_rings=4, name=lobe_name, material="chitin_team"), right_node="right_forearm")
 
     # Sample right (-X) mid-to-lower bicep (`idx = 13`) cleanly below the smooth deltoid cap
     # and just above the elbow bend so the hot-magenta cloth strip sits at authentic `acst301`/`901` height!
@@ -732,16 +729,16 @@ def _conform_belt_to_torso(
 
 
 def _make_tactical_pouch(center: np.ndarray, width_dir: np.ndarray, out_n: np.ndarray, tangent: np.ndarray, label: str) -> List[MeshPart]:
-    """One bold, chunky (~1.38x thicker/wider) quilted bright-yellow tactical utility pouch (`acst301`)."""
+    """One bold, chunky (~1.38x thicker/wider) gleaming metallic-gold tactical utility pouch (`acst301`)."""
     mat = _frame(center, width_dir, out_n, tangent)
-    body = rounded_box(0.158, 0.058, 0.072, bevel=0.013, segs=1, name=f"tactical_pouch_{label}", material="gear_yellow_plastic").transform(mat)
-    flap = rounded_box(0.162, 0.020, 0.054, bevel=0.006, segs=1, name=f"pouch_flap_{label}", material="gear_yellow_plastic").translate(0.0, 0.024, -0.005).transform(mat)
-    crease = rounded_box(0.152, 0.009, 0.010, bevel=0.002, segs=1, name=f"pouch_seam_{label}", material="gear_gold").translate(0.0, 0.018, 0.020).transform(mat)
+    body = rounded_box(0.158, 0.058, 0.072, bevel=0.013, segs=1, name=f"tactical_pouch_{label}", material="gear_gold_metal").transform(mat)
+    flap = rounded_box(0.162, 0.020, 0.054, bevel=0.006, segs=1, name=f"pouch_flap_{label}", material="gear_gold_metal").translate(0.0, 0.024, -0.005).transform(mat)
+    crease = rounded_box(0.152, 0.009, 0.010, bevel=0.002, segs=1, name=f"pouch_seam_{label}", material="gear_brass_trim").translate(0.0, 0.018, 0.020).transform(mat)
     return [body, flap, crease]
 
 
 def _build_bandoliers(scene: SceneBuilder, torso_verts: np.ndarray) -> None:
-    """Two full closed 3D bold (~1.38x thicker/wider) diagonal crossed yellow tactical sashes
+    """Two full closed 3D bold (~1.38x thicker/wider) diagonal crossed golden tactical sashes
     draping cleanly ON TOP OF the shoulders (covering shoulder tops, zero arm clipping!) and
     forming an unmistakable X across BOTH front chest/lower torso AND back (`acst301`/`701`).
     """
@@ -815,7 +812,7 @@ def _build_bandoliers(scene: SceneBuilder, torso_verts: np.ndarray) -> None:
             j = (i + 1) % n_pts
             f = (s - cum[i]) / max(1e-8, float(seg_lens[i]))
             p = (1.0 - f) * pts[i] + f * pts[j]
-            # Leave clean room for the bold front AND rear yellow X-junction clasps.
+            # Leave clean room for the bold front AND rear golden X-junction clasps.
             if abs(p[0]) < 0.092 and (p[2] > 0.16 or p[2] < -0.20):
                 continue
             t = _normalize((1.0 - f) * tangents[i] + f * tangents[j])
@@ -827,13 +824,13 @@ def _build_bandoliers(scene: SceneBuilder, torso_verts: np.ndarray) -> None:
                 t = -t
             scene.add("gear_bandolier", _make_tactical_pouch(p + 0.028 * o, w, o, t, f"x{s_idx}_{k}"))
 
-    # Bold ~1.32x yellow tactical X-junction clasps anchoring the crossed sashes on BOTH front & back.
+    # Bold ~1.32x warm metallic-gold tactical X-junction clasps anchoring the crossed sashes on BOTH front & back.
     front_pos = 0.5 * (front_cross_pts[0] + front_cross_pts[1]) + np.array([0.0, 0.0, +0.026])
     back_pos = 0.5 * (back_cross_pts[0] + back_cross_pts[1]) + np.array([0.0, 0.0, -0.026])
     for side_tag, pos, rx_deg, z_sign in (("front", front_pos, 14.0, +1.0), ("back", back_pos, -14.0, -1.0)):
-        frame = rounded_box(0.176, 0.176, 0.048, bevel=0.015, segs=2, name=f"buckle_frame_{side_tag}", material="gear_yellow_plastic").rotate_xyz(rx=rx_deg, rz=45.0, degrees=True).translate(*pos)
-        recess = rounded_box(0.106, 0.106, 0.052, bevel=0.010, segs=1, name=f"buckle_recess_{side_tag}", material="gear_gold").rotate_xyz(rx=rx_deg, rz=45.0, degrees=True).translate(*pos)
-        boss = superellipsoid(0.044, 0.044, 0.026, e1=0.74, e2=0.74, u_segs=14, v_segs=8, name=f"buckle_boss_{side_tag}", material="gear_yellow_plastic").rotate_xyz(rx=rx_deg, degrees=True).translate(pos[0], pos[1], pos[2] + z_sign * 0.024)
+        frame = rounded_box(0.176, 0.176, 0.048, bevel=0.015, segs=2, name=f"buckle_frame_{side_tag}", material="gear_gold_metal").rotate_xyz(rx=rx_deg, rz=45.0, degrees=True).translate(*pos)
+        recess = rounded_box(0.106, 0.106, 0.052, bevel=0.010, segs=1, name=f"buckle_recess_{side_tag}", material="gear_brass_trim").rotate_xyz(rx=rx_deg, rz=45.0, degrees=True).translate(*pos)
+        boss = superellipsoid(0.044, 0.044, 0.026, e1=0.74, e2=0.74, u_segs=14, v_segs=8, name=f"buckle_boss_{side_tag}", material="gear_gold_metal").rotate_xyz(rx=rx_deg, degrees=True).translate(pos[0], pos[1], pos[2] + z_sign * 0.024)
         scene.add("gear_bandolier", [frame, recess, boss])
 
 
