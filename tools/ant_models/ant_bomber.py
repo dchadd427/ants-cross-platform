@@ -881,16 +881,18 @@ def _scale_bomber_head_and_tall_antennae(
         )
         by = surf_y - 0.002
         base_p = (bx, by, bz)
-        h_boost = 0.020 if side > 0 else -0.014
-        z_extra = -0.016 if side > 0 else +0.012
+        # Compact ~28% shorter slicked-back Bomber antennae matching abst301/abst201/abst901
+        # (ending cleanly just above the magenta cup-bomb tips instead of towering way over the fuses!).
+        h_boost = 0.014 if side > 0 else -0.010
+        z_extra = -0.012 if side > 0 else +0.009
         pts = [
-            (bx - side * 0.004, by - 0.022, bz + 0.003),
+            (bx - side * 0.004, by - 0.020, bz + 0.003),
             base_p,
-            (bx + side * 0.014, by + 0.132 + 0.35 * h_boost, bz - 0.032 + 0.3 * z_extra),
-            (bx + side * 0.028, by + 0.224 + 0.70 * h_boost, bz - 0.088 + 0.6 * z_extra),
-            (bx + side * 0.038, by + 0.264 + 0.95 * h_boost, bz - 0.148 + 0.9 * z_extra),
-            (bx + side * 0.044, by + 0.258 + h_boost, bz - 0.198 + z_extra),
-            (bx + side * 0.048, by + 0.230 + 0.90 * h_boost, bz - 0.228 + 1.1 * z_extra),
+            (bx + side * 0.012, by + 0.094 + 0.35 * h_boost, bz - 0.022 + 0.3 * z_extra),
+            (bx + side * 0.022, by + 0.156 + 0.70 * h_boost, bz - 0.062 + 0.6 * z_extra),
+            (bx + side * 0.030, by + 0.184 + 0.95 * h_boost, bz - 0.104 + 0.9 * z_extra),
+            (bx + side * 0.034, by + 0.178 + h_boost, bz - 0.138 + z_extra),
+            (bx + side * 0.037, by + 0.158 + 0.90 * h_boost, bz - 0.158 + 1.1 * z_extra),
         ]
         stalk = swept_tube(
             pts,
@@ -918,8 +920,103 @@ def _scale_bomber_head_and_tall_antennae(
     return new_hc, new_hr, new_eye_l, new_eye_r, new_head_back_z
 
 
+def _bomber_arm_pose(side: int, crouch: float) -> List[Tuple[float, float, float]]:
+    """Build lifted, forward-reaching athletic Bomber arm curve clearing every leg cleanly (abst901)."""
+    s = 1.0 if side >= 0 else -1.0
+    dy_s = 0.010 if side >= 0 else -0.008
+    dz_s = 0.010 if side >= 0 else -0.008
+    return [
+        (s * 0.078, 0.456 - crouch, 0.014),
+        (s * 0.156, 0.422 - crouch + 0.5 * dy_s, 0.036 + 0.4 * dz_s),
+        (s * 0.126, 0.404 - crouch + 0.8 * dy_s, 0.144 + 0.8 * dz_s),
+        (s * 0.098, 0.400 - crouch + dy_s, 0.192 + dz_s),
+    ]
+
+
+def _rebuild_bomber_legs(scene: SceneBuilder, crouch: float) -> None:
+    """Rebuild Bomber's 4 legs in an upright, compact, cleanly separated stance with zero leg-vs-leg phasing.
+
+    Keeps the mid legs strictly forward of Z=0 and the rear legs strictly rearward of Z=0 (zero Z-crossing
+    between mid ankle and rear knee!), seats medial hip roots cleanly inside the thorax without cross-midline
+    overlap, and matches the sturdy leg_rig cross-section radii with feet grounded solidly on Y = 0.0.
+    """
+    c = float(crouch)
+    radii = [
+        (0.031, 0.035), (0.030, 0.035), (0.034, 0.039), (0.028, 0.033), (0.026, 0.030),
+        (0.024, 0.028), (0.023, 0.027), (0.021, 0.025), (0.020, 0.024),
+        (0.019, 0.0215), (0.018, 0.0205), (0.0175, 0.016), (0.0145, 0.0135), (0.0085, 0.0075),
+    ]
+    lift = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+    specs = (
+        # (label, side, hip_x, hip_y, hip_z, knee, ankle, foot, foot_yaw, root_z)
+        (
+            "mid_left", +1, 0.074, 0.326 - c, +0.044,
+            (0.148, 0.214, +0.146), (0.144, 0.104, +0.076), (0.140, 0.0, +0.138), +0.18, +0.038,
+        ),
+        (
+            "mid_right", -1, 0.074, 0.326 - c, +0.044,
+            (0.144, 0.218, +0.140), (0.140, 0.106, +0.072), (0.136, 0.0, +0.132), -0.16, +0.038,
+        ),
+        (
+            "rear_left", +1, 0.072, 0.302 - c, -0.062,
+            (0.160, 0.194, -0.040), (0.156, 0.094, -0.132), (0.150, 0.0, -0.068), +0.24, -0.058,
+        ),
+        (
+            "rear_right", -1, 0.072, 0.302 - c, -0.062,
+            (0.156, 0.198, -0.046), (0.152, 0.096, -0.138), (0.146, 0.0, -0.074), -0.22, -0.058,
+        ),
+    )
+    for label, side, hx, hy, hz, knee, ankle, foot, foot_yaw, root_z in specs:
+        s = 1.0 if side >= 0 else -1.0
+        p_root = np.array([s * 0.046, hy + 0.006, root_z], dtype=np.float64)
+        p_hip = np.array([s * hx, hy, hz], dtype=np.float64)
+        p_knee = np.array([s * knee[0], knee[1], knee[2]], dtype=np.float64)
+        p_ankle = np.array([s * ankle[0], ankle[1], ankle[2]], dtype=np.float64)
+        p_foot = np.array([s * foot[0], 0.0, foot[2]], dtype=np.float64)
+        fwd = np.array([math.sin(foot_yaw), 0.0, math.cos(foot_yaw)], dtype=np.float64)
+
+        femur_mid = 0.48 * p_hip + 0.52 * p_knee + np.array([s * 0.004, 0.012, 0.005])
+        pre_knee = 0.18 * p_hip + 0.82 * p_knee + np.array([s * 0.002, 0.005, 0.003])
+        post_knee = 0.82 * p_knee + 0.18 * p_ankle + np.array([s * 0.003, -0.004, 0.004])
+        tibia_mid = 0.48 * p_knee + 0.52 * p_ankle + np.array([s * 0.004, 0.0, -0.004])
+        pre_ankle = 0.16 * p_knee + 0.84 * p_ankle + np.array([s * 0.002, 0.004, -0.005])
+        post_ankle = 0.80 * p_ankle + 0.20 * (p_foot + 0.020 * lift) + np.array([0.0, -0.005, -0.003])
+        tarsus_mid = 0.42 * p_ankle + 0.58 * (p_foot + 0.017 * lift)
+        tarsus_heel = p_foot + 0.0165 * lift - 0.006 * fwd
+        tarsus_ball = p_foot + 0.0135 * lift + 0.018 * fwd
+        tarsus_tip = p_foot + 0.0075 * lift + 0.044 * fwd
+
+        leg_tube = curved_tube(
+            [
+                p_root, p_hip, femur_mid, pre_knee, p_knee,
+                post_knee, tibia_mid, pre_ankle, p_ankle,
+                post_ankle, tarsus_mid, tarsus_heel, tarsus_ball, tarsus_tip,
+            ],
+            radii,
+            samples_per_seg=3,
+            radial_segs=12,
+            cap_rings=3,
+            name=f"leg_{label}",
+            material="chitin_dark",
+        )
+
+        def _ground_sole(pos: np.ndarray) -> np.ndarray:
+            p = pos.copy()
+            p[:, 1] = np.maximum(p[:, 1], 0.0)
+            return p
+
+        leg_tube = leg_tube.deform(_ground_sole)
+        ball = p_foot + 0.018 * fwd
+        pivot = (float(ball[0]), 0.0, float(ball[2]))
+        node = f"leg_{label}"
+        scene.nodes[node] = [leg_tube.translate(-pivot[0], 0.0, -pivot[2])]
+        scene.set_node_parent(node, "legs")
+        scene.set_node_transform(node, translation=pivot)
+
+
 def build_bomber(blink: float = 0.0) -> SceneBuilder:
-    """Build the sculpted 3D Bomber Ant SceneBuilder with flatter crown, compact goggles, Blink, and 1.70s Idle."""
+    """Build the sculpted 3D Bomber Ant SceneBuilder with compact upright stance, goggles, Blink, and 1.70s Idle."""
+    bomber_crouch = 0.095
     scene, anchors = build_base_ant(
         scene_name="ant_bomber",
         include_antennae=True,
@@ -936,11 +1033,12 @@ def build_bomber(blink: float = 0.0) -> SceneBuilder:
         stance_asymmetry=0.40,
         leg_style="bomber",
         include_idle=False,
-        crouch=0.168,
-        left_arm_pose="idle",
-        right_arm_pose="idle",
+        crouch=bomber_crouch,
+        left_arm_pose=_bomber_arm_pose(+1, bomber_crouch),
+        right_arm_pose=_bomber_arm_pose(-1, bomber_crouch),
         blink=blink,
     )
+    _rebuild_bomber_legs(scene, bomber_crouch)
     head_c, head_r, eye_l, eye_r, head_back_z = _scale_bomber_head_and_tall_antennae(
         scene,
         anchors,
@@ -963,9 +1061,8 @@ def build_bomber(blink: float = 0.0) -> SceneBuilder:
         scene.set_node_transform("goggles", translation=head_xf.translation)
     scene.attach_world_node("dynamite_pack", "upper_body", preserve_world_pose=False)
     _add_bomber_idle(scene)
-    # Uniformly scale ~1.058x after crouch=0.168 & Idle leg-flex sync so Bomber keeps exact ~0.88 height
-    # with ~20% shorter sturdier legs, exact hip tracking, and feet grounded cleanly at Y = 0.0.
-    scene.scale_all(1.058)
+    # Subtle uniform similarity scale so Bomber lands cleanly at ~0.88 total height with upright compact legs.
+    scene.scale_all(1.042)
     return scene
 
 
