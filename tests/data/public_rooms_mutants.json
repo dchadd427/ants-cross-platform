@@ -874,8 +874,8 @@
   {
    "id": "codec_protocol_one_behind",
    "file": "include/ants_net/protocol.hpp",
-   "old": "inline constexpr uint16_t kProtocolVersion = 27;",
-   "new": "inline constexpr uint16_t kProtocolVersion = 26;",
+   "old": "inline constexpr uint16_t kProtocolVersion = 28;",
+   "new": "inline constexpr uint16_t kProtocolVersion = 27;",
    "build": [
     "test_lockstep",
     "test_lobby"
