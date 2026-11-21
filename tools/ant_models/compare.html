@@ -98,13 +98,21 @@
 
       <span class="toolbar-sep" role="separator" aria-orientation="vertical"></span>
 
+      <div class="toolbar-group" role="group" aria-label="Animation action">
+        <span class="group-label" aria-hidden="true">Action</span>
+        <button type="button" data-action="idle" aria-pressed="true" title="Idle stance animation (A to toggle)">Idle</button>
+        <button type="button" data-action="attack" aria-pressed="false" title="1998 attack sequence (A to toggle)">Attack</button>
+      </div>
+
+      <span class="toolbar-sep" role="separator" aria-orientation="vertical"></span>
+
       <div class="toolbar-group" role="group" aria-label="Playback and timing controls">
         <span class="group-label" aria-hidden="true">Play</span>
-        <button type="button" id="btn-idle" aria-pressed="true" title="Play or pause synchronized idle animation (I)">Idle</button>
+        <button type="button" id="btn-idle" aria-pressed="true" title="Play or pause synchronized animation (I)">Play</button>
         <button type="button" data-speed="0.5" aria-pressed="false" title="Half playback speed">0.5&times;</button>
         <button type="button" data-speed="1" aria-pressed="true" title="Normal playback speed">1&times;</button>
         <button type="button" data-speed="1.5" aria-pressed="false" title="1.5x playback speed">1.5&times;</button>
-        <button type="button" id="btn-sync-reset" class="action-btn" title="Restart 1998 and 3D idle clocks together (R)">Sync Reset</button>
+        <button type="button" id="btn-sync-reset" class="action-btn" title="Restart 1998 and 3D animation clocks together (R)">Sync Reset</button>
       </div>
     </div>
 

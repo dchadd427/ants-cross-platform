@@ -32,9 +32,18 @@ CLASS_PREFIXES: Tuple[Tuple[str, str], ...] = (
     ("swimmer", "asst"),
     ("fire", "afst"),
 )
+ATTACK_PREFIXES: Tuple[Tuple[str, str], ...] = (
+    ("worker", "agat"),
+    ("combat", "acat"),
+    ("thief", "atat"),
+    ("bomber", "abat"),
+    ("swimmer", "asat"),
+    ("fire", "afat"),
+)
 ANT_CLASSES: Tuple[str, ...] = tuple(cls for cls, _ in CLASS_PREFIXES)
 CANONICAL_ANGLES: Tuple[str, ...] = ("301", "201", "901", "801", "701")
 ORIGINAL_TEAMS: Tuple[str, ...] = ("green", "red", "blue", "black")
+ACTIONS: Tuple[str, ...] = ("idle", "attack")
 
 
 def can_generate_orig_sprites(
@@ -123,22 +132,24 @@ def _composite_frame(
     return canvas
 
 
-def build_orig_sprites_bundle(
+def _build_action_sprites(
     *,
-    anim_json: Path = DEFAULT_ANIM_JSON,
-    classes: Sequence[Tuple[str, str]] = CLASS_PREFIXES,
-    angles: Sequence[str] = CANONICAL_ANGLES,
-    teams: Sequence[str] = ORIGINAL_TEAMS,
-) -> Dict[str, Any]:
-    """Build and return the deterministic 1998 sprite-sheet bundle dict."""
+    anims: Dict[str, Dict[str, Any]],
+    anim_json: Path,
+    class_prefixes: Sequence[Tuple[str, str]],
+    angles: Sequence[str],
+    teams: Sequence[str],
+    sprite_cache: Dict[Tuple[int, str], Any],
+    artlib: Any,
+    ref_world_foot_y: Optional[Dict[Tuple[str, str], int]] = None,
+    include_attack_aliases: bool = False,
+) -> Tuple[Dict[str, Dict[str, Any]], Dict[Tuple[str, str], int]]:
     from PIL import Image
 
-    artlib = _load_artlib()
-    anims = _load_animations_by_name(anim_json)
-    sprite_cache: Dict[Tuple[int, str], Any] = {}
     sprites_out: Dict[str, Dict[str, Any]] = {}
+    world_foot_y_out: Dict[Tuple[str, str], int] = {}
 
-    for cls_name, prefix in classes:
+    for cls_name, prefix in class_prefixes:
         cls_map: Dict[str, Any] = {}
         for angle in angles:
             anim_name = f"{prefix}{angle}"
@@ -161,7 +172,7 @@ def build_orig_sprites_bundle(
                     unique_layers.append(layers)
                 steps.append({"f": f_idx, "ms": int(sub["duration_ms"])})
 
-            # Compute tight union bounds across all unique frames & teams using authentic (dx, dy).
+            # Compute tight union bounds across all unique frames using authentic (dx, dy).
             min_x = min_y = 10**9
             max_x = max_y = -10**9
             for layers in unique_layers:
@@ -190,7 +201,13 @@ def build_orig_sprites_bundle(
             bb0 = f0_ref.getbbox() or (0, 0, fw, fh)
             vis_w = int(bb0[2] - bb0[0])
             vis_h = int(bb0[3] - bb0[1])
-            foot_y = int(bb0[3])
+            ref_y = ref_world_foot_y.get((cls_name, angle)) if ref_world_foot_y else None
+            if ref_y is not None:
+                # Lock attack foot_y to the exact CHD world ground row used by idle so Idle <-> Attack never jumps.
+                foot_y = max(1, min(fh, int(ref_y - min_y)))
+            else:
+                foot_y = int(bb0[3])
+            world_foot_y_out[(cls_name, angle)] = int(min_y + foot_y)
 
             sheets: Dict[str, str] = {}
             for team in teams:
@@ -200,29 +217,87 @@ def build_orig_sprites_bundle(
                     strip.paste(frame_img, (f_idx * fw, 0))
                 sheets[team] = _png_data_uri(strip)
 
-            total_ms = int(entry.get("total_duration_ms") or sum(s["ms"] for s in steps))
-            cls_map[angle] = {
+            durations_ms = [int(s["ms"]) for s in steps]
+            total_ms = int(entry.get("total_duration_ms") or sum(durations_ms))
+            origin_x = int(-min_x)
+            origin_y = int(-min_y)
+            spec: Dict[str, Any] = {
                 "anim_name": anim_name,
                 "total_ms": total_ms,
+                "durations_ms": durations_ms,
                 "fw": fw,
                 "fh": fh,
                 "foot_y": foot_y,
+                "anchor_x": origin_x,
+                "anchor_y": foot_y,
                 "vis_w": vis_w,
                 "vis_h": vis_h,
-                "origin_x": int(-min_x),
-                "origin_y": int(-min_y),
+                "origin_x": origin_x,
+                "origin_y": origin_y,
                 "frame_count": frame_count,
                 "steps": steps,
                 "sheets": sheets,
             }
+            if include_attack_aliases:
+                spec["frame_w"] = fw
+                spec["frame_h"] = fh
+                spec["total_duration_ms"] = total_ms
+            cls_map[angle] = spec
         sprites_out[cls_name] = cls_map
+
+    return sprites_out, world_foot_y_out
+
+
+def build_orig_sprites_bundle(
+    *,
+    anim_json: Path = DEFAULT_ANIM_JSON,
+    classes: Sequence[Tuple[str, str]] = CLASS_PREFIXES,
+    attack_classes: Optional[Sequence[Tuple[str, str]]] = None,
+    angles: Sequence[str] = CANONICAL_ANGLES,
+    teams: Sequence[str] = ORIGINAL_TEAMS,
+) -> Dict[str, Any]:
+    """Build and return the deterministic 1998 sprite-sheet bundle dict (idle + attack)."""
+    artlib = _load_artlib()
+    anims = _load_animations_by_name(anim_json)
+    sprite_cache: Dict[Tuple[int, str], Any] = {}
+
+    if attack_classes is None:
+        attack_lookup = dict(ATTACK_PREFIXES)
+        attack_pairs: Sequence[Tuple[str, str]] = tuple(
+            (cls_name, attack_lookup.get(cls_name, prefix[:-2] + "at")) for cls_name, prefix in classes
+        )
+    else:
+        attack_pairs = attack_classes
+
+    idle_sprites, idle_world_foot_y = _build_action_sprites(
+        anims=anims,
+        anim_json=anim_json,
+        class_prefixes=classes,
+        angles=angles,
+        teams=teams,
+        sprite_cache=sprite_cache,
+        artlib=artlib,
+    )
+    attack_sprites, _ = _build_action_sprites(
+        anims=anims,
+        anim_json=anim_json,
+        class_prefixes=attack_pairs,
+        angles=angles,
+        teams=teams,
+        sprite_cache=sprite_cache,
+        artlib=artlib,
+        ref_world_foot_y=idle_world_foot_y,
+        include_attack_aliases=True,
+    )
 
     return {
         "schema_version": 1,
+        "actions": list(ACTIONS),
         "classes": [cls for cls, _ in classes],
         "angles": list(angles),
         "teams": list(teams),
-        "sprites": sprites_out,
+        "sprites": idle_sprites,
+        "attack_sprites": attack_sprites,
     }
 
 
