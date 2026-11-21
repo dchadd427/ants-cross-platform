@@ -134,6 +134,7 @@ class Hub:
         self.converter = imgdoor.Converter(cfg.image_converter_url, self.limits)       # (the images: hub/images.py says who may post and keeps the files, hub/imgdoor.py is the upload and the call to the converter)
         self.images = imagesmod.Images(cfg, self.limits, store, self.chat.roles, clock, store.clock, log, self.chat.ref, self.admin.is_owner, self.chat.key_of)
         self.chat.images = self.images
+        self.chat.roles.watch_images = self.images.on             # (a person's pages are told when their images' state changes: a first answer of Discord, a role that ran out)
         self.image_door = imgdoor.Door(self)
         self.next_images_log = float("-inf")
         self.chat.commands.door = gamedoor.GameDoor(cfg.game_admin_url, cfg.admin_gate_secret if cfg.admin_gate_on else "", self.limits, clock, store.clock, self.chat.ref, self.admin.is_owner)       # (`/bots`: hub/gamedoor.py)
@@ -147,6 +148,7 @@ class Hub:
         self.chat.roles.start()
         if self.images.on:
             try:
+                self.images.sync()                                         # (the flags are read before the first socket: until they are, nobody but the operator's account may post)
                 self.images.sweep()                                        # (what a crash left: the files of the images whose lines are gone)
             except Exception as e:
                 self.images_trouble(self.clock(), e)

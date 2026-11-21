@@ -71,7 +71,7 @@ class Entry:
         self.nick = ""                          # the person's nickname in the server as the last member answer said it, made fit to show (text.clean_shown), or '' (none, not usable, not a member)
         self.display = None                     # the person's Discord display name as that same answer said it, made fit to show, or '' for none; None when the answer did not say
         self.images = False                     # whether that answer says that the person holds the images' role
-        self.shown_images = False               # whether the pages were last told that the person may post images
+        self.shown_images = (False, False)      # what the pages were last told of the images: whether the person may post, and whether their role was known (`role` and `wait` are told apart by it)
 
 
 class Roles:
@@ -96,6 +96,7 @@ class Roles:
         self.bucket = TokenBucket(limits.roles_burst, limits.roles_refill_seconds, clock())
         self.pause_until = float("-inf")        # no call before this (a refused token, server or access)
         self.hold_until = float("-inf")         # no call before this (Discord said wait)
+        self.watch_images = False               # the hub sets it when it has images: only then is a change of the images' state (a person's first answer, a role that ran out) told to the pages
         self.down = False
         self.problem = (None, None)             # (kind, HTTP status) of the last refusal of the token, the server or the access (the admin page's Status says them; no account, no id)
         self.next_log = float("-inf")
@@ -262,7 +263,7 @@ class Roles:
 
     def settle(self, account, entry, now):
         """If the role that the person holds now is not the one that the pages were told, tell them (a live `you` frame, by the chat)."""
-        current, images = self.role_of(account), self.images_of(account)
+        current, images = self.role_of(account), (self.images_of(account), self.knows(account)) if self.watch_images else (False, False)
         if current != entry.shown or images != entry.shown_images:
             if entry.shown != NONE and current == NONE:
                 entry.lost_at = now

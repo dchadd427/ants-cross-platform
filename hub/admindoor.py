@@ -3,7 +3,7 @@
   GET  /hub/admin/gate         asked only by the site's nginx (auth_request) before it passes an /admin/api request on, with the visitor's own headers: 204 and a signed pass in
                                `X-Ants-Admin-Pass` when the visitor may, 401 when nobody is logged in, 403 when somebody is but may not, 503 when the door is shut (no good key: for everybody, nobody
                                logged in too; nginx turns that into its `door_off` answer, the page says it is not available, and never that the visitor is not an admin). No body, no CORS.
-  GET  /hub/admin/api/me, bans, mutes, hidden, noimages, modlog, status
+  GET  /hub/admin/api/me, bans, mutes, hidden, imagesoff, modlog, status
   POST /hub/admin/api/ban, unban, mute, unmute, nopic, pic, noimages, images, del      one JSON object, the same rules as the hub's other POSTs and a token (`csrf` of /me)
 
 THE rule (`Door.decide`, used by every one of the above): the visitor's hub login names an account; the account may when it is `ANTS_HUB_OWNER` (no call to Discord) or when its role is
@@ -52,7 +52,7 @@ MAX_MUTE_MINUTES = 10080
 MODLOG_DAYS = 30
 MODLOG_SHOWN = 500
 STAFF_MAX = 1000                                 # (accounts that the door remembers as having held a role: a handful in practice)
-READS = frozenset(("me", "bans", "mutes", "hidden", "noimages", "modlog", "status"))
+READS = frozenset(("me", "bans", "mutes", "hidden", "imagesoff", "modlog", "status"))
 WRITES = frozenset(("ban", "unban", "mute", "unmute", "nopic", "pic", "noimages", "images", "del"))
 TABLE_WORD = {"nopic": "ban", "pic": "unban", "noimages": "ban", "images": "unban"}      # (the table of the chat's powers has the commands of the chat: a picture's block, taking posting of images away and their lifts need what a ban and its lift need)
 ACCOUNT_ARGUMENT = re.compile(r"[!-~]{1,40}\Z")
@@ -359,10 +359,10 @@ class Door:
             blocked = sorted(r for r, state in store.picture_marks().items() if state == SHOW_BLOCKED)
             names = store.usernames_by_reference(blocked)
             return http.response(200, {"hidden": [{"ref": r, "name": names.get(r, "")} for r in blocked], "untrusted": True, "untrusted_fields": ["name"]})
-        if name == "noimages":
+        if name == "imagesoff":
             marks = sorted(store.noimages_marks().items(), key=lambda item: -item[1][0])
             names = store.usernames_by_reference({r for r, _ in marks} | {by for _, (_, by) in marks if pseudo.REFERENCE.match(by)})
-            return http.response(200, {"noimages": [{"ref": r, "name": untyped_id(names.get(r, "")), "at": at, "by": by if pseudo.REFERENCE.match(by) else "command line" if by == TERMINAL else "", "by_name": untyped_id(names.get(by, ""))} for r, (at, by) in marks],
+            return http.response(200, {"imagesoff": [{"ref": r, "name": untyped_id(names.get(r, "")), "at": at, "by": by if pseudo.REFERENCE.match(by) else "command line" if by == TERMINAL else "", "by_name": untyped_id(names.get(by, ""))} for r, (at, by) in marks],
                                        "untrusted": True, "untrusted_fields": ["name", "by_name"]})
         rows = store.actions(store.clock() - MODLOG_DAYS * 86400, MODLOG_SHOWN)
         names = store.usernames_by_reference({r for row in rows for r in (row.actor, row.target) if r})

@@ -62,7 +62,7 @@ class TheText(unittest.TestCase):
         self.assertEqual(sorted(writes.group(1).split("|")), WRITES)
         self.assertIn('default "";', MAP)
         self.assertEqual(len(re.findall(r'"~\^', MAP)), 2)
-        self.assertEqual((len(READS), len(WRITES)), (6, 7))
+        self.assertEqual((len(READS), len(WRITES)), (7, 9))
 
     def test_the_checks_come_before_the_allowance_and_before_anything_is_passed_on(self):
         self.assertIn('if ($hub_admin_call = "") { return 404; }', DOOR)

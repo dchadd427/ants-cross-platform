@@ -7,7 +7,7 @@ WHO. `state_of(account)` is the one place that says whether an account may post 
     `role`  Discord's answer is known and says no
     `wait`  nothing can be said now: Discord has not answered, or the answer is old, or the flags could not be read (fail closed: not allowed, and the person is told that it is not known)
     None    the hub has no converter or no folder: no image at all, and the pages are told nothing
-The flags are read into memory when the store's counter says that they changed (here, or by the command line in another process): `sync` returns the references that changed, for the pages of those accounts.
+The flags are read into memory when the store's counter says that they changed (here, or by the command line in another process): `sync` returns the references that changed, for the pages of those accounts (EVERYBODY for the first reading).
 
 FILES. `<name>.<x>` (`x` is `jpg`, `png` or `gif`) and `<name>.t.jpg` in one folder, `name` 32 random lower-case hex digits that are made from nothing. A file is written under a temporary name, made durable
 and renamed; the row (hub/store `images`) follows. The folder is a volume that the site's web server reads and serves (docker/nginx.conf), so a file that is deleted here is gone from the site at once.
@@ -24,6 +24,7 @@ from .limits import UploadLimits
 from .store.base import IMAGE_TYPES
 
 ON, OFF, ROLE, WAIT = "on", "off", "role", "wait"
+EVERYBODY = frozenset(("*",))                  # what `sync` returns for the first reading of the flags: every account's state may have changed
 FILE = re.compile(r"([0-9a-f]{32})(\.t)?\.(jpg|png|gif)(\.tmp)?\Z")
 
 
@@ -83,9 +84,10 @@ class Images:
         if self.loaded and seq == self.seen:
             return set()
         marks = set(self.store.noimages_marks())
-        changed = marks ^ self.blocked if self.loaded else set(marks)
+        first = not self.loaded
+        changed = marks ^ self.blocked
         self.blocked, self.seen, self.loaded = marks, seq, True
-        return changed
+        return EVERYBODY if first else changed                  # (until the flags were read every account was `wait`: the first reading is news for all of them)
 
     # ---- files -----------------------------------------------------------------------------------------------------------------------------
 

@@ -952,7 +952,7 @@ class TheChanges(DoorTest):
     def test_the_status_is_numbers_for_the_store_the_health_of_the_roles_the_last_picture_and_the_program(self):
         self.line()
         body = self.get("status").json()
-        self.assertEqual(sorted(body), ["health", "last_picture", "store", "version"])
+        self.assertEqual(sorted(body), ["health", "images", "last_picture", "store", "version"])
         store = body["store"]
         self.assertEqual(sorted(store), ["blocked", "bytes", "free", "limit", "lines", "log", "off", "oldest", "picture_bytes", "picture_bytes_max", "pictures", "pictures_max"])
         self.assertEqual((store["limit"], store["lines"], store["pictures"], store["off"], store["blocked"]), (self.rig.limits.db_max_bytes, 1, 0, 0, 0))

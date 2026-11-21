@@ -35,7 +35,7 @@ import json
 import os
 import re
 
-from . import PROTOCOL, admin as adminmod, commands as commandsmod, presence as presencemod, pseudo, session as sessionmod, text as textrules
+from . import PROTOCOL, admin as adminmod, commands as commandsmod, images as imagesmod, presence as presencemod, pseudo, session as sessionmod, text as textrules
 from .commands import NEEDS, RANK
 from .limits import AccountLimits, RateByAccount, TokenBucket
 from .store import PICKS, StoreError
@@ -179,7 +179,7 @@ class Chat:
             return
         for peer in list(self.peers):
             who = peer.identity
-            if who is not None and not getattr(peer, "closed", False) and self.ref(who.account_id) in refs:
+            if who is not None and not getattr(peer, "closed", False) and (refs is imagesmod.EVERYBODY or self.ref(who.account_id) in refs):
                 peer.send_text(dumps({"t": "you", "you": self.you_of(who)}))
 
     def sync_images(self):
@@ -388,7 +388,7 @@ class Chat:
             return self.mistake(peer, "rate")
         self.global_limit.take(now)
         try:
-            entry = self.store.add_line(who.account_id, who.name, line, max(RANK[role], 1 if mod else 0), image=img)       # (the role that the author has now: what the line will say of it)
+            entry = self.store.add_line(who.account_id, who.name, line, max(RANK[role], 1 if mod else 0), **({} if img is None else {"image": img}))       # (the role that the author has now: what the line will say of it)
         except ImageGone:
             self.account_limits.refund(who.account_id, counted)
             self.global_limit.give_back()

@@ -210,7 +210,7 @@ class Door:
         account = who.account_id
         if who.young or hub.store.is_banned(account) or hub.store.muted_until(account) or not images.may_post(account):
             return self.fail(403, "images")
-        if "transfer-encoding" in h or not h.get("content-length", "").isdigit() or len(h["content-length"]) > 9:
+        if "transfer-encoding" in h or not h.get("content-length", "").isdigit() or len(h["content-length"]) > 15:
             return self.fail(411, "length")
         length = int(h["content-length"])
         if length < 1:
@@ -237,7 +237,7 @@ class Door:
         finally:
             self.bodies -= 1
         if not body.startswith((b"\x89PNG", b"\xff\xd8\xff", b"GIF8", b"RIFF")):
-            return self.fail(415, "type")                      # (the first bytes only: the converter looks at the rest)
+            return refused(415, "type")                        # (the first bytes only: the converter looks at the rest; nothing was converted, so the token is back)
         self.waiting += 1
         try:
             try:

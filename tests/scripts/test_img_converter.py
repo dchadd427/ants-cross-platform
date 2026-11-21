@@ -233,7 +233,7 @@ class TheCaps(unittest.TestCase):
         r = convert.convert(save(noise((2600, 1500), 7), "PNG"))
         self.assertEqual(max(r.w, r.h), 2048)
         self.assertEqual((r.w, r.h), (2048, round(1500 * 2048 / 2600)))
-        self.assertLessEqual(len(r.full), convert.FULL_MAX)
+        self.assertLessEqual(len(r.full), 1_572_864, "1.5 MiB: the number itself, not the file's name for it")
         self.assertEqual(r.x, "jpg", "a picture of noise is a JPEG")
         im = Image.open(io.BytesIO(r.full))
         self.assertEqual(im.size, (r.w, r.h))
@@ -298,7 +298,7 @@ class TheAnimation(unittest.TestCase):
     def test_a_big_animation_is_made_400_pixels_on_its_longer_side_and_fits_in_1_5_mib(self):
         r = convert.convert(self.gif(5, size=(900, 500)))
         self.assertEqual(max(r.w, r.h), 400)
-        self.assertLessEqual(len(r.full), convert.FULL_MAX)
+        self.assertLessEqual(len(r.full), 1_572_864)
 
     def test_more_than_100_frames_or_15_seconds_is_refused_with_frames(self):
         for data in (self.gif(101, size=(20, 20), duration=20), self.gif(10, size=(20, 20), duration=1600)):
