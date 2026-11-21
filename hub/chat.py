@@ -193,7 +193,7 @@ class Chat:
 
     def sweep_images(self):
         """The files of the images whose lines are deleted or gone are deleted now (hub/images.py `sweep`): right after the line goes, so that nothing that was taken off the screens stays on the site."""
-        if self.images is not None and self.images.on:
+        if self.images is not None and self.images.files:
             try:
                 self.images.sweep()
             except StoreError as e:
@@ -418,7 +418,7 @@ class Chat:
         if who is None:
             return self.mistake(peer, "login")
         line_id = msg.get("id")
-        if set(msg) != {"t", "id"} or type(line_id) is not int or not 0 < line_id < 2 ** 62 or self.images is None or not self.images.on:
+        if set(msg) != {"t", "id"} or type(line_id) is not int or not 0 < line_id < 2 ** 62 or self.images is None or not self.images.files:
             return self.mistake(peer, "bad")
         if not self.delimg_limits.take(self.key_of(who.account_id), self.clock()):
             return self.mistake(peer, "rate", count=False)

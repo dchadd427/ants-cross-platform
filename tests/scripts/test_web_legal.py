@@ -216,16 +216,16 @@ class TheLegalPage(unittest.TestCase):
         self.assertNotRegex(self.main[start:self.main.index("</section>", start)], r"href=|src=|<script|<img")        # (the panel loads nothing and links nothing)
 
     def test_the_paragraph_of_the_images_says_what_is_kept_and_its_numbers_are_the_numbers_of_the_code(self):
-        """The sizes and the hour that the page promises about the chat's images are the code's own, read from where they are made: the converter's two sides and the nginx header of the picture's door."""
+        """The sizes and the revalidation that the page promises about the chat's images are the code's own, read from where they are made: the converter's two sides and the nginx header of the picture's door."""
         start = self.main.index('<section class="panel" id="chat-login">')
         panel = plain(self.main[start:self.main.index("</section>", start)])
         converter = read("imgconv", "convert.py")
         side, animated = int(re.search(r"^MAX_SIDE = (\d+)", converter, re.M).group(1)), int(re.search(r"^ANIM_SIDE = (\d+)", converter, re.M).group(1))
         self.assertIn("at most %s pixels on a side" % format(side, ","), panel)
         self.assertIn("a GIF of at most %d pixels that keeps moving" % animated, panel)
-        door = re.search(r"location ~ \"\^/hub/img/(?s:.*?)add_header Cache-Control \"private, max-age=(\d+)\"", read("docker", "nginx.conf"))
-        self.assertEqual(door.group(1), "3600")
-        self.assertIn("may keep its own copy for up to an hour", panel)
+        door = re.search(r"location ~ \"\^/hub/img/(?s:.*?)add_header Cache-Control \"(private, [a-z0-9=-]+)\"", read("docker", "nginx.conf"))
+        self.assertEqual(door.group(1), "private, no-cache")                                                      # (a browser asks again before it shows a picture again: "asks the site again before it shows it again")
+        self.assertIn("a browser that has loaded one asks the site again before it shows it again", panel)
         for words in ("Moderators, administrators and members of the project's Discord server who hold its images role may post images in the chat", "unless an administrator has taken that away from them", "stays after Forget me",
                       "never keeps your image as you sent it", "a new file from the pixels alone", "the location, camera and other details of a photo are left out", "kept only as long as the chat line that shows them",
                       "deleted for good", "when you or a moderator delete the image and when you use Forget me", "random addresses that hold nothing of your Discord id", "anyone who has an address can open the picture",

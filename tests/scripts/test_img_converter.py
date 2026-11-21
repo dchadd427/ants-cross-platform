@@ -8,6 +8,7 @@ Every picture here is made by the test (a made-up location, a made-up camera); n
   TheCaps          the pixel cap (from the header, nothing decoded), the side and the bytes of the result, the types (by the first bytes), damaged and truncated files, a decompression bomb
   TheAnimation     a GIF stays animated, with its own timing, within 100 frames and 15 seconds and 400 px; an animated PNG or WebP is its first frame
   TheServer        the door: a good image, a refused one, the lengths, a conversion that hangs or dies is one refused image
+  TheMemory        a legal 24 megapixel image of each kind peaks well under what the container has, and where the limit is kept (Linux) a conversion that wants more is `bad`, not killed
 """
 import http.client
 import io
@@ -16,7 +17,9 @@ import multiprocessing
 import os
 import random
 import struct
+import subprocess
 import sys
+import tempfile
 import threading
 import time
 import unittest
@@ -336,6 +339,29 @@ class TheAnimation(unittest.TestCase):
         self.assertEqual((r.anim, r.still), (False, False))
         self.assertIn(r.x, ("png", "jpg"))
 
+    def test_a_frame_that_lies_outside_the_screen_of_the_file_is_refused_not_given_a_bigger_canvas(self):
+        """99 frames of 8 x 8 whose descriptors put them at 5992, 5992: Pillow makes the canvas 6000 x 6000 when it gets to the second, past the pixel caps that were checked against the first."""
+        frames = [Image.new("P", (8, 8), i % 2) for i in range(99)]
+        for i, im in enumerate(frames):
+            im.putpalette([i * 2 % 256, 10, 20, 200, 100, 50])
+        data = bytearray(save(frames[0], "GIF", save_all=True, append_images=frames[1:], duration=100, loop=0, disposal=1))
+        at, moved = 0, 0
+        while True:
+            at = data.find(b"\x2c", at)                                      # (an image descriptor: 0x2C, left, top, width, height)
+            if at < 0:
+                break
+            if data[at + 5:at + 9] == b"\x08\x00\x08\x00":
+                moved += 1
+                if moved > 1:
+                    data[at + 1:at + 5] = struct.pack("<HH", 5992, 5992)
+            at += 1
+        self.assertEqual(moved, 99, "the test's own file has its 99 descriptors")
+        started = time.process_time()
+        with self.assertRaises(convert.ConvertError) as raised:
+            convert.convert(bytes(data))
+        self.assertEqual(raised.exception.code, "pixels")
+        self.assertLess(time.process_time() - started, 2.0, "refused at the second frame, not after the work of 99 canvases of 36 megapixels")
+
     def test_an_animated_webp_or_png_is_its_first_frame_and_says_so(self):
         ims = [Image.new("RGB", (60, 40), (i * 40, 10, 10)) for i in range(4)]
         for fmt in ("WEBP", "PNG"):
@@ -353,6 +379,60 @@ class TheAnimation(unittest.TestCase):
         with self.assertRaises(convert.ConvertError) as caught:
             convert.convert(self.gif(100, size=(1600, 1000), duration=100))      # 100 x 1.6 million pixels
         self.assertIn(caught.exception.code, ("pixels", "bad", "big"))
+
+
+PEAK = """
+import resource, sys
+sys.path.insert(0, sys.argv[1])
+import convert
+data = open(sys.argv[2], "rb").read()
+unit = 1 if sys.platform == "darwin" else 1024                      # (ru_maxrss: bytes on macOS, kilobytes on Linux)
+before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * unit
+convert.convert(data)
+print(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * unit - before)
+"""
+
+
+@needs_pillow
+class TheMemory(unittest.TestCase):
+    SIDE = 4898                                                      # (4898 x 4898 is 23.99 megapixels: the most that is let in)
+
+    def peak(self, kind):
+        """The most that the memory of a fresh process grows by when it converts the image (the process that makes the image is another one: its own peak is not in it)."""
+        side = self.SIDE
+        im = {"rgba": lambda: Image.new("RGBA", (side, side), (10, 20, 30, 128)), "rgb": lambda: Image.new("RGB", (side, side), (10, 20, 30)), "p": lambda: Image.new("P", (side, side), 3),
+              "l": lambda: Image.new("L", (side, side), 50)}[kind]()
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "image.png")
+            im.save(path, "PNG")
+            del im
+            done = subprocess.run([sys.executable, "-c", PEAK, os.path.join(HERE, "..", "..", "imgconv"), path], capture_output=True, text=True, timeout=120)
+        self.assertEqual(done.returncode, 0, done.stderr[-500:])
+        return int(done.stdout.split()[-1])
+
+    # What a conversion of a 24 megapixel image adds to the memory of its process (megabytes, the peak that the system reports, measured on a Mac: 245, 132, 131, 132) with a third more to spare for another
+    # system's allocator; before the decoder let go of its copies they were 370, 292, 229 and 186.
+    PEAKS = {"rgba": 330, "rgb": 180, "p": 180, "l": 170}
+
+    def test_a_legal_image_of_each_kind_takes_what_a_container_of_this_size_can_give(self):
+        for kind, most in self.PEAKS.items():
+            self.assertLess(self.peak(kind), most * 1024 * 1024, kind)
+
+    def test_a_24_megapixel_rgba_image_is_converted_by_the_server_s_child_with_the_limit_that_the_server_sets(self):
+        data = save(Image.new("RGBA", (self.SIDE, self.SIDE), (10, 20, 30, 128)), "PNG")
+        kind, value = server.run_child(data, wall=30)
+        self.assertEqual(kind, "ok", value)
+        self.assertEqual((value.x, max(value.w, value.h)), ("png", 2048))
+
+    @unittest.skipUnless(sys.platform.startswith("linux") and server.address_space() is not None, "the address space is limited, and read, on Linux only")
+    def test_a_conversion_that_wants_more_than_it_may_is_bad_and_the_server_goes_on(self):
+        real = convert.convert
+        try:
+            convert.convert = lambda data: bytearray(server.WORKING_BYTES + 64 * 1024 * 1024)
+            self.assertEqual(server.run_child(b"x", wall=30), ("error", "bad"))
+        finally:
+            convert.convert = real
+        self.assertEqual(server.run_child(save(gradient((40, 30)), "PNG"), wall=30)[0], "ok")
 
 
 @needs_pillow

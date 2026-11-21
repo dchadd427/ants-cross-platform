@@ -1,7 +1,7 @@
 # =============================================================================
 # The image converter (ants-img): the only place that decodes an image that somebody uploaded to the chat (docs/HUB_IMAGES.md). Python and Pillow, and nothing else.
 #   docker build -f Dockerfile.img -t ants-img .
-#   docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 16 --memory 384m --tmpfs /tmp ants-img
+#   docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 16 --memory 768m --tmpfs /tmp ants-img
 # It listens on port 4050 inside the container and is NOT published: the chat hub (ants-hub) reaches it over a private network of the stack that has no other member and no way out. It holds no secret,
 # reads no variable but its port, mounts no volume and writes no file: it is given the bytes of an image and answers with the bytes of a new one (imgconv/convert.py).
 # No ANTS_BUILD_ID argument on purpose: the image depends on imgconv/ and nothing else.

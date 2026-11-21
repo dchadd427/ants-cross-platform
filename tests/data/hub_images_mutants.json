@@ -18,6 +18,9 @@
   },
   {
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheUpload.test_the_status_says_how_long_ago_the_newest_image_was_kept_and_nothing_of_who"
+  },
+  {
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images.TheDeletes"
   }
  ],
  "mutants": [
@@ -290,8 +293,8 @@
   {
    "id": "converter_orientation_not_applied",
    "file": "imgconv/convert.py",
-   "old": "        im = ImageOps.exif_transpose(im)               # (the orientation is applied now: the metadata that says it is dropped below)",
-   "new": "        pass",
+   "old": "            return replaced(im, ImageOps.exif_transpose(im))",
+   "new": "            return im",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_img_converter.TheMetadata"
   },
   {
@@ -395,8 +398,8 @@
   {
    "id": "images_files_kept_by_a_shared_cache",
    "file": "docker/nginx.conf",
-   "old": "\"private, max-age=3600\"",
-   "new": "\"public, max-age=3600\"",
+   "old": "\"private, no-cache\"",
+   "new": "\"private, max-age=3600\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_img"
   },
   {
@@ -447,6 +450,62 @@
    "old": "        if type(x) is not str or x not in SIGNATURES or None in sizes or",
    "new": "        if x not in SIGNATURES or None in sizes or",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheConverter.test_an_answer_that_is_not_exactly_the_converters_is_down_and_nothing_is_stored"
+  },
+  {
+   "id": "images_empty_address_takes_the_default",
+   "file": "docker-compose.stack.yml",
+   "old": "${ANTS_HUB_IMAGE_CONVERTER_URL-http://ants-img:4050}",
+   "new": "${ANTS_HUB_IMAGE_CONVERTER_URL:-http://ants-img:4050}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack.TheConverterService"
+  },
+  {
+   "id": "converter_may_take_what_the_container_has",
+   "file": "imgconv/server.py",
+   "old": "WORKING_BYTES = 512 * 1024 * 1024",
+   "new": "WORKING_BYTES = 1024 * 1024 * 1024",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack.TheConverterService"
+  },
+  {
+   "id": "converter_gif_canvas_may_grow",
+   "file": "imgconv/convert.py",
+   "old": "        if im.size != (w, h):",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_img_converter.TheAnimation"
+  },
+  {
+   "id": "converter_turns_every_image_into_a_copy",
+   "file": "imgconv/convert.py",
+   "old": "if im.getexif().get(0x0112, 1) in (2, 3, 4, 5, 6, 7, 8):",
+   "new": "if True:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_img_converter.TheMemory"
+  },
+  {
+   "id": "images_off_stops_the_sweep_after_a_deletion",
+   "file": "hub/chat.py",
+   "old": "        if self.images is not None and self.images.files:\n            try:\n                self.images.sweep()",
+   "new": "        if self.images is not None and self.images.on:\n            try:\n                self.images.sweep()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images.TheDeletes"
+  },
+  {
+   "id": "images_off_stops_the_hourly_look",
+   "file": "hub/images.py",
+   "old": "        if not self.files:\n            return",
+   "new": "        if not self.on:\n            return",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images.TheDeletes"
+  },
+  {
+   "id": "images_off_stops_the_authors_delete",
+   "file": "hub/chat.py",
+   "old": "or self.images is None or not self.images.files:",
+   "new": "or self.images is None or not self.images.on:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images.TheDeletes"
+  },
+  {
+   "id": "images_off_makes_a_folder_of_its_own",
+   "file": "hub/images.py",
+   "old": "            if cfg.image_converter_url:\n                os.makedirs(self.dir, exist_ok=True)",
+   "new": "            if True:\n                os.makedirs(self.dir, exist_ok=True)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images.TheDeletes"
   }
  ]
 }

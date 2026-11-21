@@ -246,7 +246,7 @@ class TheConverterService(unittest.TestCase):
         cls.img = service(cls.text, "ants-img")
 
     def test_it_is_hardened_and_small(self):
-        for line in ("read_only: true", "cap_drop: [ALL]", 'security_opt: ["no-new-privileges:true"]', "pids_limit: 16", "mem_limit: 384m", "cpus: 1", "dockerfile: Dockerfile.img", "restart: unless-stopped"):
+        for line in ("read_only: true", "cap_drop: [ALL]", 'security_opt: ["no-new-privileges:true"]', "pids_limit: 16", "mem_limit: 768m", "cpus: 1", "dockerfile: Dockerfile.img", "restart: unless-stopped"):
             self.assertIn(line, self.img, line)
         self.assertRegex(self.img, r"tmpfs:\s*\n\s+- /tmp\b")
 
@@ -271,8 +271,27 @@ class TheConverterService(unittest.TestCase):
         self.assertIn("ants-hub-images", top_level_keys(self.text, "volumes"))
 
     def test_the_hub_reaches_it_by_its_name_and_may_be_told_that_there_is_none(self):
-        self.assertIn("ANTS_HUB_IMAGE_CONVERTER_URL: ${ANTS_HUB_IMAGE_CONVERTER_URL:-http://ants-img:4050}", service(self.text, "ants-hub"))
         self.assertIn("ANTS_HUB_IMAGE_DIR: /images", service(self.text, "ants-hub"))
+
+    def test_an_empty_address_switches_images_off_and_only_an_unset_one_takes_the_default(self):
+        """The stack file rendered by docker compose, three times: the address not set (the default: images on), set and empty (off: the hub is given an empty address, not the default), set to another."""
+        seen = {}
+        for label, given in (("unset", None), ("empty", ""), ("other", "http://converter.test:4050")):
+            env = {k: v for k, v in os.environ.items() if k != "ANTS_HUB_IMAGE_CONVERTER_URL"}
+            if given is not None:
+                env["ANTS_HUB_IMAGE_CONVERTER_URL"] = given
+            done = subprocess.run(["docker", "compose", "-f", STACK, "config", "--format", "json"], capture_output=True, text=True, env=env)
+            if done.returncode != 0:
+                self.skipTest("docker compose is not available: " + done.stderr[:200])
+            seen[label] = json.loads(done.stdout)["services"]["ants-hub"]["environment"].get("ANTS_HUB_IMAGE_CONVERTER_URL")
+        self.assertEqual(seen, {"unset": "http://ants-img:4050", "empty": "", "other": "http://converter.test:4050"})
+
+    def test_a_conversion_cannot_take_what_the_container_has(self):
+        """The most that a conversion may take (imgconv/server.py WORKING_BYTES, on top of the address space that its process starts with) leaves the converter's container a quarter of a gigabyte at least for the
+        server, the interpreter and the libraries: the kernel's OOM killer is never the one that ends a big image."""
+        working = eval(re.search(r"(?m)^WORKING_BYTES = ([0-9 *]+)", read(os.path.join(REPO, "imgconv", "server.py"))).group(1))     # (digits and stars only: the regular expression says so)
+        limit = re.search(r"(?m)^    mem_limit: ([0-9]+)m$", self.img).group(1)
+        self.assertGreaterEqual(int(limit) * 1024 * 1024, working + 256 * 1024 * 1024)
 
     def test_the_image_is_made_from_its_own_folder_and_runs_as_nobody_in_particular(self):
         docker = read(os.path.join(REPO, "Dockerfile.img"))
@@ -293,8 +312,8 @@ class TheConverterService(unittest.TestCase):
         workflow = read(os.path.join(REPO, ".github", "workflows", "ci.yml"))
         step = workflow[workflow.index("- name: Build the image converter and start it with the stack's hardening"):]
         step = step[:step.index("# The stack file")]
-        for needle in ("docker buildx build --load -f Dockerfile.img -t ants-img .", "--read-only", "--cap-drop ALL", "--security-opt no-new-privileges", "--pids-limit 16", "--memory 384m", "--cpus 1", "--tmpfs /tmp",
-                       "State.Health.Status", "= healthy", "/convert", "docker rm -f ants-img-check"):
+        for needle in ("docker buildx build --load -f Dockerfile.img -t ants-img .", "--read-only", "--cap-drop ALL", "--security-opt no-new-privileges", "--pids-limit 16", "--memory 768m", "--cpus 1", "--tmpfs /tmp",
+                       "State.Health.Status", "= healthy", "/convert", "docker rm -f ants-img-check", "4898, 4898", "State.OOMKilled"):
             self.assertIn(needle, step, needle)
         self.assertIn("python3-pil", workflow)
         self.assertIn('ANTS_REQUIRE_PILLOW: "1"', workflow)

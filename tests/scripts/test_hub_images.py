@@ -329,6 +329,42 @@ class TheDeletes(WorldTest):
         self.w.store.delete_line(plain, "x")
         self.assertEqual(self.w.chat.store.image_of_line(plain), None)
 
+    def test_with_posting_switched_off_the_files_of_a_deleted_line_still_go(self):
+        """The converter's address is empty (images are off for everybody: no upload, no `img` in `you`), the folder is still there: a moderator's /del and a poster's own delete take the files away, and the hourly
+        look deletes a file that no row has. It is when somebody has turned images off because of an incident that the files must be deletable."""
+        w = ImageWorld(converter=False)
+        self.addCleanup(w.close)
+        self.assertFalse(w.images.on)
+        self.assertTrue(w.images.files)
+        alice, carol = w.join(ALICE), w.join(CAROL)
+        w.roles.roles[CAROL.account_id] = "mod"
+        one, two = w.pending(ALICE), w.pending(ALICE, "png")
+        for name in (one, two):
+            w.store.add_line(ALICE.account_id, "alice", "see", 0, image=name)
+        lines = [row.id for row in w.store.recent_lines(10)]
+        w.command(carol, "/del %d" % lines[0])
+        self.assertTrue(not w.exists(one) and not w.exists(one, thumb=True) and one not in w.store.image_names(), "a moderator's /del")
+        w.chat.on_text(alice, json.dumps({"t": "delimg", "id": lines[1]}))
+        self.assertEqual(alice.codes(), [], "the author's own delete is taken")
+        self.assertTrue(not w.exists(two, "png") and not w.exists(two, "png", thumb=True) and two not in w.store.image_names(), "the author's delete")
+        orphan = w.images.path(w.images.new_name(), "jpg")
+        with open(orphan, "wb") as f:
+            f.write(JPEG)
+        os.utime(orphan, (0, 0))
+        w.images.next_scan = float("-inf")
+        w.images.on_tick(w.clock())
+        self.assertFalse(os.path.exists(orphan), "the hourly look")
+        self.assertEqual(w.files(), [])
+
+    def test_a_folder_that_cannot_be_written_deletes_nothing_and_a_hub_with_no_folder_makes_none(self):
+        with tempfile.TemporaryDirectory() as folder:
+            gone = os.path.join(folder, "not-made")
+            cfg = config.load({"ANTS_HUB_PUBLIC_URL": SITE, "ANTS_HUB_IMAGE_DIR": gone})
+            w = ImageWorld(converter=False)
+            self.addCleanup(w.close)
+            images = imagesmod.Images(cfg, w.limits, w.store, w.roles, w.clock, w.wall, logmod.Log(io.StringIO()), w.chat.ref, lambda a: False, w.chat.key_of)
+            self.assertEqual((images.files, images.on, os.path.exists(gone)), (False, False, False), "no converter: no folder is made, and there is none to delete from")
+
     def test_a_line_without_an_image_is_deleted_as_it_was_and_logged_as_del(self):
         self.w.say(self.alice, "just words")
         self.w.command(self.carol, "/del %d" % self.reader.kinds("line")[-1]["id"])
