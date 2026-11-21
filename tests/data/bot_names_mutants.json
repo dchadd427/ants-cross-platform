@@ -47,46 +47,6 @@
    "new": "mix64((key & 0xFF) ^ kPickSeed)"
   },
   {
-   "id": "suffix_bot",
-   "old": "if (inside == \"bot\") return true;",
-   "new": "if (inside == \"bots\") return true;"
-  },
-  {
-   "id": "suffix_bot_comma",
-   "old": "starts_with(inside, \"bot,\") && inside.size() > 4",
-   "new": "false && inside.size() > 4"
-  },
-  {
-   "id": "suffix_empty_tail",
-   "old": "inside.size() > 4 &&",
-   "new": "inside.size() > 3 &&"
-  },
-  {
-   "id": "suffix_paren_in_tail",
-   "old": " && inside.find(')') == std::string::npos;",
-   "new": ";"
-  },
-  {
-   "id": "suffix_last_paren",
-   "old": "const size_t open = s.rfind('(');",
-   "new": "const size_t open = s.find('(');"
-  },
-  {
-   "id": "legacy_prefix",
-   "old": "if (starts_with(s, \"bot(\")) return true;",
-   "new": "if (starts_with(s, \"bot\")) return true;"
-  },
-  {
-   "id": "blanks_kept",
-   "old": "if (c != ' ' && c != '\\t' && c != '\\r' && c != '\\n') s.push_back(lower(c));",
-   "new": "s.push_back(lower(c));"
-  },
-  {
-   "id": "case_kept",
-   "old": "if (c != ' ' && c != '\\t' && c != '\\r' && c != '\\n') s.push_back(lower(c));",
-   "new": "if (c != ' ' && c != '\\t' && c != '\\r' && c != '\\n') s.push_back(c);"
-  },
-  {
    "id": "parse_comma_blank",
    "old": "if (!starts_with(inside, \", \")) return false;",
    "new": "if (!starts_with(inside, \",\")) return false;"
@@ -172,15 +132,135 @@
    "new": "return kBotNames[index];"
   },
   {
-   "id": "tabs_kept",
-   "old": " && c != '\\t' && c != '\\r' && c != '\\n') s.push_back",
-   "new": ") s.push_back"
-  },
-  {
    "id": "count_not_clipped",
    "old": "    count = std::min(count, kNameCount);\n",
    "new": "",
    "note": "the picker then loops for ever when more names are asked for than the list holds (the test asks for the list's size + 50): caught only by the timeout of the test command"
+  },
+  {
+   "id": "legacy_needs_open",
+   "old": "if (end < n && f[end].glyph == Glyph::Open) return true;",
+   "new": "if (end < n && f[end].glyph == Glyph::Close) return true;"
+  },
+  {
+   "id": "legacy_blanks_before_open",
+   "old": "while (end < n && (f[end].glyph == Glyph::Skip || f[end].glyph == Glyph::Break)) ++end;",
+   "new": "while (end < n && f[end].glyph == Glyph::Skip) ++end;"
+  },
+  {
+   "id": "legacy_word_at_start",
+   "old": "if (bot_word_at(f, 0, end)) {",
+   "new": "if (bot_word_at(f, 1, end)) {"
+  },
+  {
+   "id": "label_needs_no_letter_after",
+   "old": "if (end < n && f[end].glyph != Glyph::Letter) return true;",
+   "new": "if (end < n) return true;"
+  },
+  {
+   "id": "label_ends_with_bracket_only",
+   "old": "if (end < n && f[end].glyph != Glyph::Letter) return true;",
+   "new": "if (end < n && f[end].glyph == Glyph::Close) return true;"
+  },
+  {
+   "id": "label_end_of_name_counts",
+   "old": "if (end < n && f[end].glyph != Glyph::Letter) return true;",
+   "new": "if (end >= n || f[end].glyph != Glyph::Letter) return true;"
+  },
+  {
+   "id": "label_invisible_after_bot",
+   "old": "while (end < n && f[end].glyph == Glyph::Skip) ++end;\n        if (end < n && f[end].glyph != Glyph::Letter) return true;",
+   "new": "if (end < n && f[end].glyph != Glyph::Letter) return true;"
+  },
+  {
+   "id": "word_with_breaks",
+   "old": "        } else if (f[i].glyph == Glyph::Open || f[i].glyph == Glyph::Close) {\n            return false;\n        }",
+   "new": "        } else if (f[i].glyph != Glyph::Skip) {\n            return false;\n        }"
+  },
+  {
+   "id": "word_stops_at_bracket",
+   "old": "        } else if (f[i].glyph == Glyph::Open || f[i].glyph == Glyph::Close) {\n            return false;\n        }",
+   "new": "        }"
+  },
+  {
+   "id": "opening_bracket_square",
+   "old": "if (c == '(' || c == '[' || c == '{' || c == '<') out.glyph = Glyph::Open;",
+   "new": "if (c == '(' || c == '{' || c == '<') out.glyph = Glyph::Open;"
+  },
+  {
+   "id": "opening_bracket_curly",
+   "old": "if (c == '(' || c == '[' || c == '{' || c == '<') out.glyph = Glyph::Open;",
+   "new": "if (c == '(' || c == '[' || c == '<') out.glyph = Glyph::Open;"
+  },
+  {
+   "id": "opening_bracket_angle",
+   "old": "if (c == '(' || c == '[' || c == '{' || c == '<') out.glyph = Glyph::Open;",
+   "new": "if (c == '(' || c == '[' || c == '{') out.glyph = Glyph::Open;"
+  },
+  {
+   "id": "digit_zero_is_o",
+   "old": "out.letter = c == '0' ? 'o' : c == '7' ? 't' : c == '8' ? 'b' : c;",
+   "new": "out.letter = c == '7' ? 't' : c == '8' ? 'b' : c;"
+  },
+  {
+   "id": "digit_seven_is_t",
+   "old": "out.letter = c == '0' ? 'o' : c == '7' ? 't' : c == '8' ? 'b' : c;",
+   "new": "out.letter = c == '0' ? 'o' : c == '8' ? 'b' : c;"
+  },
+  {
+   "id": "digit_eight_is_b",
+   "old": "out.letter = c == '0' ? 'o' : c == '7' ? 't' : c == '8' ? 'b' : c;",
+   "new": "out.letter = c == '0' ? 'o' : c == '7' ? 't' : c;"
+  },
+  {
+   "id": "plus_is_t",
+   "old": "if (c == '+') return letter_glyph('t');",
+   "new": ""
+  },
+  {
+   "id": "case_folded",
+   "old": "const char c = lower(static_cast<char>(cp));\n        if ((c >= 'a'",
+   "new": "const char c = static_cast<char>(cp);\n        if ((c >= 'a'"
+  },
+  {
+   "id": "wide_forms",
+   "old": "if (cp >= 0xFF01u && cp <= 0xFF5Eu) return fold_code_point(cp - 0xFEE0u);",
+   "new": ""
+  },
+  {
+   "id": "bold_letters",
+   "old": "if (cp >= 0x1D400u && cp <= 0x1D6A3u) return",
+   "new": "if (cp >= 0x1D500u && cp <= 0x1D6A3u) return"
+  },
+  {
+   "id": "circled_letters",
+   "old": "if (cp >= 0x24D0u && cp <= 0x24E9u) return",
+   "new": "if (cp >= 0x24E0u && cp <= 0x24E9u) return"
+  },
+  {
+   "id": "invisible_skipped",
+   "old": "(cp >= 0x200Bu && cp <= 0x200Fu)",
+   "new": "(cp >= 0x200Cu && cp <= 0x200Fu)"
+  },
+  {
+   "id": "cyrillic_o",
+   "old": "{0x041E, 0x041E, 'o'}, {0x043E, 0x043E, 'o'},",
+   "new": "{0x041E, 0x041E, 'o'},"
+  },
+  {
+   "id": "greek_o",
+   "old": "{0x039F, 0x039F, 'o'}, {0x03BF, 0x03BF, 'o'},",
+   "new": "{0x039F, 0x039F, 'o'},"
+  },
+  {
+   "id": "accented_o",
+   "old": "{0x00F2, 0x00F6, 'o'},",
+   "new": "{0x00F3, 0x00F6, 'o'},"
+  },
+  {
+   "id": "angle_bracket",
+   "old": "0x27E6, 0x27E8, 0x27EA,",
+   "new": "0x27E6, 0x27EA,"
   }
  ]
 }

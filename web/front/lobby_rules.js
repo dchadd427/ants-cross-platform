@@ -51,14 +51,20 @@
     }
 
     // ---- names ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    // A name that reads as a computer player's label (ai::is_reserved_bot_name; the name is printable ASCII here): the word bot first and a bracket after it ("Bot (Hard)"), or a bracket, the word bot and then a sign or a blank
+    // ("Pip (bot, Hard)", "Pip [bot]", "Pip (bot) x"); case, blanks and signs between the letters are looked through, and 0 7 8 + read as o t b.
+    function readsAsBot(name) {
+        var s = name.toLowerCase().replace(/0/g, 'o').replace(/7/g, 't').replace(/8/g, 'b').replace(/\+/g, 't');
+        return /^[^a-z0-9()\[\]{}<>]*b[^a-z0-9()\[\]{}<>]*o[^a-z0-9()\[\]{}<>]*t[^a-z0-9()\[\]{}<>]*[(\[{<]/.test(s) || /[(\[{<][^a-z0-9()\[\]{}<>]*b[^a-z0-9()\[\]{}<>]*o[^a-z0-9()\[\]{}<>]*t(?=[^a-z0-9])/.test(s);
+    }
     // The rules of a name, the same as the game page's own name step (the NAME block of web/shell.html and web/lobby.html, which tests/scripts/web_lobby_rules_check.js compares with this): printable ASCII only,
-    // the blanks at both ends cut off, at most 32 characters, nothing that starts with "Bot (" or ends with "(bot)" or "(bot, ...)" (blanks and case ignored). Empty is fine: it is no name. { ok: true, name } or { ok: false, why }.
+    // the blanks at both ends cut off, at most 32 characters, nothing that reads as a computer player's label: "Bot (...)", "Pip (bot)", "Pip (bot, Hard)" (blanks, signs between the letters and case ignored). Empty is fine: it is no name. { ok: true, name } or { ok: false, why }.
     function nameCheck(text) {
         var raw = typeof text === 'string' ? text.replace(/[\t\r\n]/g, '') : '';
         if (/[^\x20-\x7e]/.test(raw)) return { ok: false, why: 'A name can hold printable ASCII characters only: letters, digits and signs without accents.' };
         var name = raw.replace(/^ +/, '').replace(/ +$/, '');
         if (name.length > 32) return { ok: false, why: 'A name has at most 32 characters.' };
-        if (/^bot\(|\(bot(,[^()]+)?\)$/.test(name.replace(/ /g, '').toLowerCase())) return { ok: false, why: 'A name like "Bot (...)" or "Pip (bot)" is for computer players. Please choose another name.' };
+        if (readsAsBot(name)) return { ok: false, why: 'A name like "Bot (...)" or "Pip (bot)" is for computer players. Please choose another name.' };
         return { ok: true, name: name };
     }
 

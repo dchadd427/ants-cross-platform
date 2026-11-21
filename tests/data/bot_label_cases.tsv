@@ -128,17 +128,17 @@ reserved	bo t	0
 reserved	Bot-1	0
 reserved	(bot	0
 reserved	bot)	0
-reserved	Pip (bot, )	0
-reserved	Pip (bot,)	0
-reserved	Pip (bot, Hard	0
-reserved	Pip (bot) x	0
-reserved	Pip (bot, Hard) x	0
+reserved	Pip (bot, )	1
+reserved	Pip (bot,)	1
+reserved	Pip (bot, Hard	1
+reserved	Pip (bot) x	1
+reserved	Pip (bot, Hard) x	1
 reserved	Pip (bottle)	0
 reserved	Pip (bots)	0
-reserved	Pip (bot Hard)	0
+reserved	Pip (bot Hard)	1
 reserved	Pip (robot)	0
-reserved	Pip (bot, Hard))	0
-reserved	Pip (bot, (x))	0
+reserved	Pip (bot, Hard))	1
+reserved	Pip (bot, (x))	1
 reserved	<empty>	0
 reserved	(	0
 reserved	)	0
@@ -148,6 +148,47 @@ reserved	Pip (bot, Hard)\x09	1
 reserved	\x09Bot (	1
 reserved	Pip (bot, Hard)\x0d\x0a	1
 reserved	Pip\x09(bot)	1
-reserved	Pip (bot, Hard)\x0b	0
+reserved	Pip (bot, Hard)\x0b	1
 parse	Pip (bot, Hard)\x09	FAIL
 label	Pi\x09p	hard	Bot (Hard)
+reserved	Pip (bot, Hard).	1
+reserved	Pip (bot, Hard)'	1
+reserved	Pip (bot, Hard) .	1
+reserved	Pip (bot).	1
+reserved	Pip (BOT , HARD) !	1
+reserved	Pip [bot, Hard]	1
+reserved	Pip {bot}	1
+reserved	Pip <bot>	1
+reserved	Pip (b0t, Hard)	1
+reserved	Pip (8o7)	1
+reserved	Pip (b-o-t)	1
+reserved	Pip (b.o.t, Hard)	1
+reserved	Pip (+)	0
+reserved	.Bot (Hard)	1
+reserved	- Bot (x	1
+reserved	Pip (bot, Hard)\x0c	1
+reserved	Pip\x0b(bot, Hard)	1
+reserved	Pip (bot, Hard)	1
+reserved	Pip (bоt, Hard)	1
+reserved	Pip (bοt)	1
+reserved	Pip (ｂｏｔ, Hard)	1
+reserved	Pip （bot, Hard）	1
+reserved	Pip (𝐛𝐨𝐭)	1
+reserved	Pip (ⓑⓞⓣ)	1
+reserved	Pip (bòt, Hard)	1
+reserved	Pip (b​ot, Hard)	1
+reserved	Pip (bot​, Hard)	1
+reserved	Pip ⟨bot, Hard⟩	1
+reserved	Pip (bottle, Hard)	0
+reserved	Pip (bot2)	0
+reserved	Pip (botany)	0
+reserved	Pip (b0b)	0
+reserved	Bots (Hard)	0
+reserved	Maya (bot	0
+reserved	Dr (Bob) Bot	0
+reserved	Pip (bоb, Hard)	0
+reserved	Pip (bo+)	1
+reserved	Pip (bot​tle)	0
+reserved	Pip (bot​)	1
+reserved	Bot​(	1
+reserved	Bot​ty (	0
