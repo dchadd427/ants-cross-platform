@@ -2187,7 +2187,7 @@ void run_lobby_rooms_tests() {
             ASSERT_EQ(room.host.room().slots[static_cast<size_t>(room.guests[pip].lobby->my_seat())].name, std::string("Player ") + std::to_string(room.guests[pip].lobby->my_seat() + 1));
             ASSERT_EQ(room.host.room().slots[static_cast<size_t>(room.guests[ann].lobby->my_seat())].name, std::string("Ann"));
             // a name that only looks like a label (a mark behind it, another bracket, a 0 for the o, signs between the letters) is replaced the same way: no name that reads as a computer player's is a person's
-            for (const char* spoof : {"Pip (bot, Hard).", "Pip [bot, Hard]", "Pip (b0t, Hard)", "Pip (bot, Hard)'", "Pip (bot, Hard) .", "Pip (b.o.t, Hard)", "Pip (bot) x"}) {
+            for (const char* spoof : {"Pip (bot, Hard).", "Pip [bot, Hard]", "Pip (b0t, Hard)", "Pip (bot, Hard)'", "Pip (bot, Hard) .", "Pip (b.o.t, Hard)", "Pip (bot) x", "Pip (b o t)"}) {
                 Room spoof_room(lobby_room_config(85));
                 const size_t who = spoof_room.join_seat(spoof);
                 ASSERT_EQ(spoof_room.host.room().slots[static_cast<size_t>(spoof_room.guests[who].lobby->my_seat())].name, std::string("Player ") + std::to_string(spoof_room.guests[who].lobby->my_seat() + 1));
@@ -2257,7 +2257,7 @@ void run_lobby_rooms_tests() {
                 name.name = bad;
                 ASSERT_FALSE(decode(encode(name), got));
             }
-            for (const char* fine : {"Robot", "Pip (bots)", "Pip (bottle)", "Bot", "Maya (bot", "Bot Jones (Hard)"}) {
+            for (const char* fine : {"Robot", "Pip (bots)", "Pip (bottle)", "Bot", "Maya (bot", "Bot Jones (Hard)", "Joe (807)", "Pip [8-0-7]", "Bo T. (SE)", "Ann (Bo T)", "Pip (b o t h)"}) {
                 name.name = fine;
                 ASSERT_TRUE(decode(encode(name), got));
             }

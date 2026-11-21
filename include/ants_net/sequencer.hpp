@@ -39,7 +39,7 @@ struct HashVerdict {
 /// What became of a command that a seat handed in (Sequencer::submit_checked)
 enum class Submit : uint8_t {
     Queued,        ///< it is in the next turn or waits for a later one
-    OverBudget,    ///< the seat has used up its budget of orders: dropped, counted, the seat is marked (Sequencer::heavy_seats)
+    OverBudget,    ///< the seat has used up its budget (Config): dropped, counted, the seat is marked (Sequencer::heavy_seats); a seat with a budget never has a command refused for the commands that wait (a flood is dropped, not an offence)
     NoAnts,        ///< the vetter says that the order names no ant that the seat can order: dropped and counted
     Refused        ///< not a command that this seat may send (the seat is not at the table, a command that only the sequencer makes) or the seat has too many waiting: a client that sends one is at fault
 };
@@ -52,13 +52,19 @@ public:
         uint32_t max_carried_commands = 16 * 64;  // per peer: the commands that wait for a later turn (sixteen turns' worth at the default: a click on a big selection is up to 48 commands): a stuck uplink that is let go delivers
                                                   // all the orders of the player at once (15 a second for 5 s are 76), which are NOT a flood and must not cost the player its
                                                   // seat; beyond this many waiting commands a peer is refused
-        // The budget of orders of a seat: it holds `order_burst` orders and earns back `orders_per_second` of them every second of sealed turns (kTurnsPerSecond turns), and each command that is
-        // sealed takes one. The busiest second of the recordings that were measured (the repository's, the arena's hardest computer player among them) is 6 orders, the busiest ten seconds 30 and the busiest
-        // minute 110; a click on a huge selection is up to 48 commands (hud.hpp), a stuck uplink that is let go delivers 76 orders of a player who gave 15 a second, and ten of the biggest clicks (480) are what
-        // the carry was made for. So the store holds 512 and earns 8 a second: at most 520 orders in a second, 592 in ten seconds and 992 in a minute, far above what is played. 0 in either number: no budget
-        // (a test that wants none). A seat that goes over is marked in heavy_seats().
-        uint32_t order_burst = 512;
-        uint32_t orders_per_second = 8;
+        // The budgets of a seat. Each is a store that holds `*_burst` commands and earns back `*_per_second` of them every second of sealed turns (kTurnsPerSecond turns); a command that is sealed takes one
+        // from the store of its kind, and a command that finds it empty is dropped (a test that wants no budget gives 0 in either number of a store).
+        // Orders, the commands that carry an ant list (group orders and Stop: the only ones that can be padded, 8 + 4 n bytes each, and the ones that a click on a big selection sends as one command for
+        // every 32 ants): 6,144 and 12 a second. An honest player does not meet it: the busiest second of the recordings measured is 6 commands, the busiest minute 110; the biggest play that a person can
+        // make is the HUD's click, ceil(ants / 32) commands (docs/CONTROLS.md), so an army of 200 ants clicked 4 times a second for five minutes is 8,400 commands and a fight of 100 ants clicked 12 times a
+        // second is 48 a second: the store holds 6,144 and earns 12 a second (9,744 commands in five minutes, 6,864 in a minute). And what one seat can make of it is bounded in time: 6,144 + 12 x 7,200 are
+        // 92,544 commands in the longest match (2 hours), at most 137 bytes each in the turn log: 12 MiB, three quarters of its 16 MiB.
+        uint32_t order_burst = 6144;
+        uint32_t orders_per_second = 12;
+        // Control commands, the others (Hatch, the alliance commands, a second Quit): a store of their own, 512 and 8 a second, so that a seat that has used up its orders can still say them and a seat
+        // that says them as fast as it can cannot fill the log (9 bytes each, 64 a turn were 11 KB a second). The first Quit of a seat is never charged: a seat that is over a budget can always leave.
+        uint32_t control_burst = 512;
+        uint32_t controls_per_second = 8;
     };
 
     Sequencer() : Sequencer(Config{}) {}
@@ -76,13 +82,13 @@ public:
 
     /// A command of `player` for the next turn. The issuer is set to `player` whatever the payload says. Refused when the player is not active, the command is not one that a
     /// client may send, or the peer already has max_carried_commands commands waiting beyond the max_commands_per_turn of this turn. NoAnts when the vetter turns it down, OverBudget when the
-    /// seat has no order left in its budget (Config::order_burst). A command that does not fit into the turn
+    /// seat has none left in the budget of its kind of command (Config::order_burst for the commands that carry ants, control_burst for the rest; a seat's first Quit has none to take). A command that does not fit into the turn
     /// goes into one of the next turns (the first that has room for it, behind the older commands of the same player: the order in which a player sent its commands is kept).
     /// The sequencer alone decides which turn carries a command, so every machine runs the same turns.
     Submit submit_checked(uint8_t player, sim::Command command);
     /// submit_checked() as a yes or no: true when the command was queued
     bool submit(uint8_t player, sim::Command command) { return submit_checked(player, std::move(command)) == Submit::Queued; }
-    /// Commands of `player` that were dropped because its budget was used up, and commands that were dropped because the vetter found no ant in them (for the whole match: they are never reset); the seats that
+    /// Commands of `player` that were dropped because a budget was used up, and commands that were dropped because the vetter found no ant in them (for the whole match: they are never reset); the seats that
     /// have gone over their budget at least once (a bit for each seat): the "heavy order rate" mark of the status, the replay's head and the history
     uint32_t dropped_over_budget(uint8_t player) const noexcept { return player < sim::MAX_PLAYERS ? over_budget_[player] : 0u; }
     uint32_t dropped_no_ants(uint8_t player) const noexcept { return player < sim::MAX_PLAYERS ? no_ants_[player] : 0u; }
@@ -149,6 +155,8 @@ private:
     std::array<std::deque<sim::Command>, sim::MAX_PLAYERS> carry_;   // per player: the commands beyond max_commands_per_turn, in the order they came
     Vetter vetter_;
     std::array<uint32_t, sim::MAX_PLAYERS> budget_milli_{};     // the orders that each seat has left, in thousandths: full at the start, one turn's earnings added at every seal
+    std::array<uint32_t, sim::MAX_PLAYERS> control_milli_{};    // ... and the control commands
+    std::array<bool, sim::MAX_PLAYERS> quit_sent_{};            // the seat's first Quit has been given (it was never charged; a later one is a control command)
     std::array<uint32_t, sim::MAX_PLAYERS> over_budget_{};
     std::array<uint32_t, sim::MAX_PLAYERS> no_ants_{};
     uint8_t heavy_{0};

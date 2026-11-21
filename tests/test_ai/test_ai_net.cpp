@@ -622,7 +622,7 @@ void run_net_tests() {
             ASSERT_FALSE(host.submit_bot(2, drop));
             int accepted = 0;
             for (int i = 0; i < 1300; ++i) accepted += host.submit_bot(2, hatch_of(2)) ? 1 : 0;
-            ASSERT_EQ(accepted, 511);                                                                        // the seat's budget of orders is 512 and the move took one; the rest is a flood and is dropped (S2.59: the budget, N2.5b: the 64 a turn and the 1,024 that wait)
+            ASSERT_EQ(accepted, 512);                                                                        // the seat's budget of control commands is 512 (the move was an order, from the other store); the rest is a flood and is dropped (S2.59: the budgets, N2.5b: the 64 a turn and the 1,024 that wait)
             uint32_t now = 0;
             while (now < 1500) {
                 now += 10;

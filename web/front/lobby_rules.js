@@ -52,10 +52,10 @@
 
     // ---- names ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     // A name that reads as a computer player's label (ai::is_reserved_bot_name; the name is printable ASCII here): the word bot first and a bracket after it ("Bot (Hard)"), or a bracket, the word bot and then a sign or a blank
-    // ("Pip (bot, Hard)", "Pip [bot]", "Pip (bot) x"); case, blanks and signs between the letters are looked through, and 0 7 8 + read as o t b.
+    // ("Pip (bot, Hard)", "Pip [bot]", "Pip (bot) x"); case, blanks and signs between the letters are looked through, and 0 reads as o; the letters are one after the other or each pair parted ("b o t", not "Bo T"), and a word that is parted is one only when no letter follows its blanks ("(b o t h)" is a name).
     function readsAsBot(name) {
-        var s = name.toLowerCase().replace(/0/g, 'o').replace(/7/g, 't').replace(/8/g, 'b').replace(/\+/g, 't');
-        return /^[^a-z0-9()\[\]{}<>]*b[^a-z0-9()\[\]{}<>]*o[^a-z0-9()\[\]{}<>]*t[^a-z0-9()\[\]{}<>]*[(\[{<]/.test(s) || /[(\[{<][^a-z0-9()\[\]{}<>]*b[^a-z0-9()\[\]{}<>]*o[^a-z0-9()\[\]{}<>]*t(?=[^a-z0-9])/.test(s);
+        var s = name.toLowerCase().replace(/0/g, 'o');
+        return /^[^a-z0-9()\[\]{}<>]*(?:bot|b[^a-z0-9()\[\]{}<>]+o[^a-z0-9()\[\]{}<>]+t)[^a-z0-9()\[\]{}<>]*[(\[{<]/.test(s) || /[(\[{<][^a-z0-9()\[\]{}<>]*(?:bot(?=[^a-z0-9])|b[^a-z0-9()\[\]{}<>]+o[^a-z0-9()\[\]{}<>]+t(?=[^a-z0-9])(?! +[a-z0-9]))/.test(s);
     }
     // The rules of a name, the same as the game page's own name step (the NAME block of web/shell.html and web/lobby.html, which tests/scripts/web_lobby_rules_check.js compares with this): printable ASCII only,
     // the blanks at both ends cut off, at most 32 characters, nothing that reads as a computer player's label: "Bot (...)", "Pip (bot)", "Pip (bot, Hard)" (blanks, signs between the letters and case ignored). Empty is fine: it is no name. { ok: true, name } or { ok: false, why }.

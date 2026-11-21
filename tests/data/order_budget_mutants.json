@@ -4,26 +4,26 @@
   {
    "id": "budget_off",
    "file": "src/ants_net/sequencer.cpp",
-   "old": "const bool budgeted = cfg_.order_burst != 0 && cfg_.orders_per_second != 0;",
-   "new": "const bool budgeted = false;",
+   "old": "if (listed && cfg_.order_burst != 0 && cfg_.orders_per_second != 0) store = &budget_milli_[player];",
+   "new": "if (false) store = &budget_milli_[player];",
    "build": "test_lockstep",
-   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
   },
   {
    "id": "budget_not_charged",
    "file": "src/ants_net/sequencer.cpp",
-   "old": "if (budgeted) budget_milli_[player] -= kMilli;",
-   "new": "if (false) budget_milli_[player] -= kMilli;",
+   "old": "if (store != nullptr) *store -= kMilli;",
+   "new": "if (false) *store -= kMilli;",
    "build": "test_lockstep",
-   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
   },
   {
    "id": "budget_partial_order_passes",
    "file": "src/ants_net/sequencer.cpp",
-   "old": "if (budgeted && budget_milli_[player] < kMilli) {",
-   "new": "if (budgeted && budget_milli_[player] < 1) {",
+   "old": "if (store != nullptr && *store < kMilli) return over();",
+   "new": "if (store != nullptr && *store < 1) return over();",
    "build": "test_lockstep",
-   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
   },
   {
    "id": "budget_earns_nothing",
@@ -31,7 +31,7 @@
    "old": "const uint32_t earned = cfg_.orders_per_second * kMilli / kTurnsPerSecond;",
    "new": "const uint32_t earned = 0;",
    "build": "test_lockstep",
-   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
   },
   {
    "id": "budget_earns_double",
@@ -39,7 +39,7 @@
    "old": "const uint32_t earned = cfg_.orders_per_second * kMilli / kTurnsPerSecond;",
    "new": "const uint32_t earned = 2 * cfg_.orders_per_second * kMilli / kTurnsPerSecond;",
    "build": "test_lockstep",
-   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
   },
   {
    "id": "budget_store_uncapped",
@@ -47,23 +47,23 @@
    "old": "for (uint32_t& left : budget_milli_) left = std::min(full, left + earned);",
    "new": "for (uint32_t& left : budget_milli_) left = std::min(full + 100u * kMilli, left + earned);",
    "build": "test_lockstep",
-   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
   },
   {
    "id": "burst_far_too_small",
    "file": "include/ants_net/sequencer.hpp",
-   "old": "uint32_t order_burst = 512;",
+   "old": "uint32_t order_burst = 6144;",
    "new": "uint32_t order_burst = 4;",
    "build": "test_lockstep",
-   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
   },
   {
    "id": "rate_far_too_small",
    "file": "include/ants_net/sequencer.hpp",
-   "old": "uint32_t orders_per_second = 8;",
+   "old": "uint32_t orders_per_second = 12;",
    "new": "uint32_t orders_per_second = 1;",
    "build": "test_lockstep",
-   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
   },
   {
    "id": "seat_not_marked",
@@ -71,7 +71,7 @@
    "old": "        heavy_ = static_cast<uint8_t>(heavy_ | (1u << player));\n",
    "new": "",
    "build": "test_lockstep",
-   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
   },
   {
    "id": "over_budget_not_counted",
@@ -79,7 +79,7 @@
    "old": "        ++over_budget_[player];\n",
    "new": "",
    "build": "test_lockstep",
-   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
   },
   {
    "id": "over_budget_is_a_refusal",
@@ -87,7 +87,7 @@
    "old": "        return Submit::OverBudget;",
    "new": "        return Submit::Refused;",
    "build": "test_lockstep",
-   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
   },
   {
    "id": "no_ants_is_a_refusal",
@@ -95,7 +95,7 @@
    "old": "        return Submit::NoAnts;",
    "new": "        return Submit::Refused;",
    "build": "test_lockstep",
-   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
   },
   {
    "id": "no_ants_not_counted",
@@ -103,7 +103,7 @@
    "old": "        ++no_ants_[player];\n",
    "new": "",
    "build": "test_lockstep",
-   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
   },
   {
    "id": "vetter_not_asked",
@@ -111,7 +111,7 @@
    "old": "if (vetter_ && !vetter_(player, command)) {",
    "new": "if (false) {",
    "build": "test_lockstep",
-   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
   },
   {
    "id": "resume_keeps_the_budget",
@@ -119,7 +119,7 @@
    "old": "    joined_.fill(0);\n    budget_milli_.fill(cfg_.order_burst * kMilli);",
    "new": "    joined_.fill(0);",
    "build": "test_lockstep",
-   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
   },
   {
    "id": "foreign_ants_kept",
@@ -396,10 +396,146 @@
   {
    "id": "recordings_pass_a_small_budget",
    "file": "include/ants_net/sequencer.hpp",
-   "old": "uint32_t order_burst = 512;\n        uint32_t orders_per_second = 8;",
+   "old": "uint32_t order_burst = 6144;\n        uint32_t orders_per_second = 12;",
    "new": "uint32_t order_burst = 2;\n        uint32_t orders_per_second = 1;",
    "build": "test_replay_own_file",
    "test": "timeout 600 env ANTS_TEST_FILTER=RP9.14 ./build/tests/test_replay/test_replay_own_file"
+  },
+  {
+   "id": "control_commands_are_free",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "else if (!listed && cfg_.control_burst != 0 && cfg_.controls_per_second != 0) store = &control_milli_[player];",
+   "new": "else if (false) store = &control_milli_[player];",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "orders_charged_to_the_control_store",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "if (listed && cfg_.order_burst != 0 && cfg_.orders_per_second != 0) store = &budget_milli_[player];",
+   "new": "if (listed && cfg_.order_burst != 0 && cfg_.orders_per_second != 0) store = &control_milli_[player];",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "controls_charged_to_the_order_store",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "else if (!listed && cfg_.control_burst != 0 && cfg_.controls_per_second != 0) store = &control_milli_[player];",
+   "new": "else if (!listed && cfg_.control_burst != 0 && cfg_.controls_per_second != 0) store = &budget_milli_[player];",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "every_command_is_an_order",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "const bool listed = sim::has_ant_list(command.type);",
+   "new": "const bool listed = true;",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "control_store_not_refilled",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "for (uint32_t& left : control_milli_) left = std::min(full_control, left + earned_control);",
+   "new": "for (uint32_t& left : control_milli_) left = std::min(full_control, left);",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "control_store_uncapped",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "for (uint32_t& left : control_milli_) left = std::min(full_control, left + earned_control);",
+   "new": "for (uint32_t& left : control_milli_) left = std::min(full_control + 100u * kMilli, left + earned_control);",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "control_refill_earns_double",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "const uint32_t earned_control = cfg_.controls_per_second * kMilli / kTurnsPerSecond;",
+   "new": "const uint32_t earned_control = 2 * cfg_.controls_per_second * kMilli / kTurnsPerSecond;",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "control_burst_far_too_small",
+   "file": "include/ants_net/sequencer.hpp",
+   "old": "uint32_t control_burst = 512;",
+   "new": "uint32_t control_burst = 4;",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "control_rate_far_too_small",
+   "file": "include/ants_net/sequencer.hpp",
+   "old": "uint32_t controls_per_second = 8;",
+   "new": "uint32_t controls_per_second = 1;",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "resume_keeps_the_control_store",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "    control_milli_.fill(cfg_.control_burst * kMilli);\n    quit_sent_.fill(false);",
+   "new": "    quit_sent_.fill(false);",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "first_quit_is_charged",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "const bool first_quit = command.type == sim::CommandType::Quit && !quit_sent_[player];",
+   "new": "const bool first_quit = false;",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "every_quit_is_free",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "const bool first_quit = command.type == sim::CommandType::Quit && !quit_sent_[player];",
+   "new": "const bool first_quit = command.type == sim::CommandType::Quit;",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "first_quit_not_remembered",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "    if (first_quit) quit_sent_[player] = true;\n",
+   "new": "",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "resume_keeps_the_quit_mark",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "    quit_sent_.fill(false);\n",
+   "new": "",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "first_quit_refused_for_a_full_carry",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "if (carry_[player].size() >= cfg_.max_carried_commands && !first_quit)",
+   "new": "if (carry_[player].size() >= cfg_.max_carried_commands)",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "full_carry_with_a_budget_is_a_refusal",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "return store != nullptr ? over() : Submit::Refused;",
+   "new": "return Submit::Refused;",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "full_carry_is_never_refused",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "return store != nullptr ? over() : Submit::Refused;",
+   "new": "return store != nullptr ? over() : Submit::Queued;",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
   }
  ]
 }

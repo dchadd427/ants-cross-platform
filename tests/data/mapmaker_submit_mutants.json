@@ -578,22 +578,22 @@
   {
    "id": "maker_bot_start_is_free",
    "file": "web/front/mapmaker_submit.js",
-   "old": "/^[^a-z0-9()\\[\\]{}<>]*b[^a-z0-9()\\[\\]{}<>]*o[^a-z0-9()\\[\\]{}<>]*t[^a-z0-9()\\[\\]{}<>]*[(\\[{<]/.test(s)",
+   "old": "/^[^a-z0-9()\\[\\]{}<>]*(?:bot|b[^a-z0-9()\\[\\]{}<>]+o[^a-z0-9()\\[\\]{}<>]+t)[^a-z0-9()\\[\\]{}<>]*[(\\[{<]/.test(s)",
    "new": "/^bat/.test(s)",
    "test": "node tests/scripts/web_mapmaker_submit_check.js"
   },
   {
    "id": "maker_bot_end_is_free",
    "file": "web/front/mapmaker_submit.js",
-   "old": "/[(\\[{<][^a-z0-9()\\[\\]{}<>]*b[^a-z0-9()\\[\\]{}<>]*o[^a-z0-9()\\[\\]{}<>]*t(?=[^a-z0-9])/.test(s)",
+   "old": "/[(\\[{<][^a-z0-9()\\[\\]{}<>]*(?:bot(?=[^a-z0-9])|b[^a-z0-9()\\[\\]{}<>]+o[^a-z0-9()\\[\\]{}<>]+t(?=[^a-z0-9])(?! +[a-z0-9]))/.test(s)",
    "new": "/[(\\[{<]bat/.test(s)",
    "test": "node tests/scripts/web_mapmaker_submit_check.js"
   },
   {
-   "id": "maker_bot_digits_read_as_letters",
+   "id": "maker_zero_does_not_read_as_o",
    "file": "web/front/mapmaker_submit.js",
-   "old": ".replace(/0/g, 'o').replace(/7/g, 't').replace(/8/g, 'b').replace(/\\+/g, 't')",
-   "new": "",
+   "old": "var s = f.replace(/0/g, 'o');",
+   "new": "var s = f;",
    "test": "node tests/scripts/web_mapmaker_submit_check.js"
   },
   {
@@ -706,6 +706,27 @@
    "file": "web/front/mapmaker_store.js",
    "old": "\\u200B-\\u200F",
    "new": "\\u200C-\\u200F",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "maker_seven_and_eight_read_as_letters",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "var s = f.replace(/0/g, 'o');",
+   "new": "var s = f.replace(/0/g, 'o').replace(/7/g, 't').replace(/8/g, 'b');",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "maker_parted_word_then_a_letter_is_a_label",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "t(?=[^a-z0-9])(?! +[a-z0-9]))/.test(s)",
+   "new": "t(?=[^a-z0-9]))/.test(s)",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "maker_word_needs_the_same_gaps",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "(?:bot|b[^a-z0-9()\\[\\]{}<>]+o[^a-z0-9()\\[\\]{}<>]+t)[^a-z0-9()\\[\\]{}<>]*[(\\[{<]/.test(s)",
+   "new": "(?:bot|b[^a-z0-9()\\[\\]{}<>]*o[^a-z0-9()\\[\\]{}<>]*t)[^a-z0-9()\\[\\]{}<>]*[(\\[{<]/.test(s)",
    "test": "node tests/scripts/web_mapmaker_submit_check.js"
   }
  ]

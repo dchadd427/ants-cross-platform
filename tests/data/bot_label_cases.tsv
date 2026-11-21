@@ -160,7 +160,7 @@ reserved	Pip [bot, Hard]	1
 reserved	Pip {bot}	1
 reserved	Pip <bot>	1
 reserved	Pip (b0t, Hard)	1
-reserved	Pip (8o7)	1
+reserved	Pip (8o7)	0
 reserved	Pip (b-o-t)	1
 reserved	Pip (b.o.t, Hard)	1
 reserved	Pip (+)	0
@@ -187,8 +187,25 @@ reserved	Bots (Hard)	0
 reserved	Maya (bot	0
 reserved	Dr (Bob) Bot	0
 reserved	Pip (bоb, Hard)	0
-reserved	Pip (bo+)	1
+reserved	Pip (bo+)	0
 reserved	Pip (bot​tle)	0
 reserved	Pip (bot​)	1
 reserved	Bot​(	1
 reserved	Bot​ty (	0
+reserved	Joe (807)	0
+reserved	Pip [8-0-7]	0
+reserved	Pip (b07)	0
+reserved	Bo T. (SE)	0
+reserved	Ann (Bo T)	0
+reserved	Bo t (x)	0
+reserved	Pip (b o t h)	0
+reserved	Pip (b o t 2)	0
+reserved	Pip (b o t, Hard)	1
+reserved	Pip (b o t )	1
+reserved	Pip (B.O.T)	1
+reserved	Pip (b-o-t h)	0
+reserved	Pip (b-o-t, h)	1
+reserved	B.O.T (Hard)	1
+reserved	Pip (b o t	0
+reserved	Ann (B ot)	0
+reserved	Pip (b(o)t)	0

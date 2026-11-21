@@ -1207,9 +1207,10 @@ void run_sequencer_tests() {
         ASSERT_EQ(second.commands.size(), 13u);
         for (int i = 0; i < 12; ++i) ASSERT_EQ(second.commands[static_cast<size_t>(i)].tile_x, 64 + i);
         ASSERT_EQ(second.commands[12].tile_x, 100);
-        // a burst that fills the turn and the carry: 64 + 1,024 are taken, the rest refused; nobody's quota is shared (the budget of orders is another rule: S2.59, switched off here)
+        // a burst that fills the turn and the carry: 64 + 1,024 are taken, the rest refused; nobody's quota is shared (the budgets of a seat are another rule: S2.59, switched off here)
         Sequencer::Config no_budget;
         no_budget.orders_per_second = 0;
+        no_budget.controls_per_second = 0;
         Sequencer flood(no_budget);
         flood.set_active(1, true);
         flood.set_active(2, true);

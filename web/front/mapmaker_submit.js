@@ -43,10 +43,10 @@
         var f = fold(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[ıøłđðħŧ]/g, function (c) { return ACCENTS.charAt(ACCENTS.indexOf(c) + 1); }).replace(/l/g, 'i');
         return [f, f.replace(/[0-5]/g, function (c) { return 'oi eas'.charAt(c); })].map(function (x) { return x.replace(/[^a-z\u0080-\uffff]/g, ''); });
     }
-    // a label of a computer player ("Bot (...)", "Pip (bot, Hard)"; ai::is_reserved_bot_name says how a name is read: blanks and signs between the letters are looked through, 0 7 8 + read as o t b)
+    // a label of a computer player ("Bot (...)", "Pip (bot, Hard)"; ai::is_reserved_bot_name says how a name is read: blanks and signs between the letters are looked through, a 0 reads as o; the letters stand one after the other or each pair parted, "Bo T" is a name)
     function readsAsBot(f) {
-        var s = f.replace(/0/g, 'o').replace(/7/g, 't').replace(/8/g, 'b').replace(/\+/g, 't');
-        return /^[^a-z0-9()\[\]{}<>]*b[^a-z0-9()\[\]{}<>]*o[^a-z0-9()\[\]{}<>]*t[^a-z0-9()\[\]{}<>]*[(\[{<]/.test(s) || /[(\[{<][^a-z0-9()\[\]{}<>]*b[^a-z0-9()\[\]{}<>]*o[^a-z0-9()\[\]{}<>]*t(?=[^a-z0-9])/.test(s);
+        var s = f.replace(/0/g, 'o');
+        return /^[^a-z0-9()\[\]{}<>]*(?:bot|b[^a-z0-9()\[\]{}<>]+o[^a-z0-9()\[\]{}<>]+t)[^a-z0-9()\[\]{}<>]*[(\[{<]/.test(s) || /[(\[{<][^a-z0-9()\[\]{}<>]*(?:bot(?=[^a-z0-9])|b[^a-z0-9()\[\]{}<>]+o[^a-z0-9()\[\]{}<>]+t(?=[^a-z0-9])(?! +[a-z0-9]))/.test(s);
     }
     function makerProblem(t) {
         return skeletons(t).some(function (k) { return /^(the)?(owner|admin|administrator|system|moderator|mod|staff|assistant|server|ants|root)$/.test(k); }) || readsAsBot(fold(t)) ?

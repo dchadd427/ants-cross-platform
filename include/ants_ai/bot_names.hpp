@@ -62,10 +62,12 @@ bool parse_bot_label(std::string_view text, BotLabel& out);
 /// The short form for a narrow place (the HUD's label is cut at 15 characters): "Pip (bot)" for a label in the new form, `text` unchanged for anything else
 std::string bot_short_label(std::string_view text);
 
-/// Whether a PERSON may not be called `text`: a name that reads as a computer player's label. Read the way a person reads it: case, blanks and signs between the letters, invisible characters, and letters that are drawn
-/// like b, o or t (0 7 8 +, the Cyrillic and Greek ones, letters with accents, wide and bold forms) are looked through. It is a label when the word bot comes first and an opening bracket follows ("Bot (Hard)", the legacy
-/// form), or when an opening bracket ( [ { < is followed by the word bot and then by anything that is not a letter: "Pip (bot)", "Pip [bot, Hard]", "Pip (bot, Hard).", "Pip (b0t, Hard)", "Pip (bot) x". "Pip (bottle)", "Robot (Hard)",
-/// "Bot" and "(bot" are names. It builds a vector, so it is not noexcept. The places that guard the names take it (docs/BOT_NAMES.md); the web pages' twin is web/front/bot_names.js (the same table of cases).
+/// Whether a PERSON may not be called `text`: a name that reads as a computer player's label. Read the way a person reads it: case, blanks and signs between the letters, invisible characters, and letters that are
+/// drawn like b, o or t (a 0 for the o, the Cyrillic and Greek ones, letters with accents, wide and bold forms) are looked through. It is a label when the word bot comes first and an opening bracket follows ("Bot (Hard)",
+/// the legacy form), or when an opening bracket ( [ { < is followed by the word bot and then by anything that is not a letter or a digit: "Pip (bot)", "Pip [bot, Hard]", "Pip (bot, Hard).", "Pip (b0t, Hard)", "Pip (bot) x".
+/// The word is its three letters one after the other, or each pair of them parted by blanks or signs ("b o t", "b.o.t"), not one pair parted and the other not ("Bo T"); a word that is spelled apart is a word
+/// only when no letter follows it after its blanks ("Pip (b o t h)" is a name). "Pip (bottle)", "Robot (Hard)", "Joe (807)", "Bo T. (SE)", "Bot" and "(bot" are names. It builds a vector, so it is not noexcept. The places that
+/// guard the names take it (docs/BOT_NAMES.md); the web pages' twin is web/front/bot_names.js (the same table of cases).
 bool is_reserved_bot_name(std::string_view text);
 
 }  // namespace ants::ai

@@ -144,43 +144,38 @@
   },
   {
    "id": "legacy_blanks_before_open",
-   "old": "while (end < n && (f[end].glyph == Glyph::Skip || f[end].glyph == Glyph::Break)) ++end;",
-   "new": "while (end < n && f[end].glyph == Glyph::Skip) ++end;"
+   "old": "while (end < n && is_break(f[end])) ++end;\n",
+   "new": ""
   },
   {
    "id": "legacy_word_at_start",
-   "old": "if (bot_word_at(f, 0, end)) {",
-   "new": "if (bot_word_at(f, 1, end)) {"
+   "old": "if (bot_word_at(f, 0, end, parted)) {",
+   "new": "if (bot_word_at(f, 1, end, parted)) {"
   },
   {
    "id": "label_needs_no_letter_after",
-   "old": "if (end < n && f[end].glyph != Glyph::Letter) return true;",
+   "old": "if (end < n && !(next < n && f[next].glyph == Glyph::Letter)) return true;",
    "new": "if (end < n) return true;"
   },
   {
    "id": "label_ends_with_bracket_only",
-   "old": "if (end < n && f[end].glyph != Glyph::Letter) return true;",
+   "old": "if (end < n && !(next < n && f[next].glyph == Glyph::Letter)) return true;",
    "new": "if (end < n && f[end].glyph == Glyph::Close) return true;"
   },
   {
    "id": "label_end_of_name_counts",
-   "old": "if (end < n && f[end].glyph != Glyph::Letter) return true;",
-   "new": "if (end >= n || f[end].glyph != Glyph::Letter) return true;"
-  },
-  {
-   "id": "label_invisible_after_bot",
-   "old": "while (end < n && f[end].glyph == Glyph::Skip) ++end;\n        if (end < n && f[end].glyph != Glyph::Letter) return true;",
-   "new": "if (end < n && f[end].glyph != Glyph::Letter) return true;"
+   "old": "if (end < n && !(next < n && f[next].glyph == Glyph::Letter)) return true;",
+   "new": "if (end >= n || !(next < n && f[next].glyph == Glyph::Letter)) return true;"
   },
   {
    "id": "word_with_breaks",
-   "old": "        } else if (f[i].glyph == Glyph::Open || f[i].glyph == Glyph::Close) {\n            return false;\n        }",
-   "new": "        } else if (f[i].glyph != Glyph::Skip) {\n            return false;\n        }"
+   "old": "bool is_break(const Folded& f) noexcept { return f.glyph == Glyph::Space || f.glyph == Glyph::Sign; }",
+   "new": "bool is_break(const Folded& f) noexcept { return f.glyph == Glyph::Space; }"
   },
   {
    "id": "word_stops_at_bracket",
-   "old": "        } else if (f[i].glyph == Glyph::Open || f[i].glyph == Glyph::Close) {\n            return false;\n        }",
-   "new": "        }"
+   "old": "bool is_break(const Folded& f) noexcept { return f.glyph == Glyph::Space || f.glyph == Glyph::Sign; }",
+   "new": "bool is_break(const Folded& f) noexcept { return f.glyph == Glyph::Space || f.glyph == Glyph::Sign || f.glyph == Glyph::Open || f.glyph == Glyph::Close; }"
   },
   {
    "id": "opening_bracket_square",
@@ -199,23 +194,8 @@
   },
   {
    "id": "digit_zero_is_o",
-   "old": "out.letter = c == '0' ? 'o' : c == '7' ? 't' : c == '8' ? 'b' : c;",
-   "new": "out.letter = c == '7' ? 't' : c == '8' ? 'b' : c;"
-  },
-  {
-   "id": "digit_seven_is_t",
-   "old": "out.letter = c == '0' ? 'o' : c == '7' ? 't' : c == '8' ? 'b' : c;",
-   "new": "out.letter = c == '0' ? 'o' : c == '8' ? 'b' : c;"
-  },
-  {
-   "id": "digit_eight_is_b",
-   "old": "out.letter = c == '0' ? 'o' : c == '7' ? 't' : c == '8' ? 'b' : c;",
-   "new": "out.letter = c == '0' ? 'o' : c == '7' ? 't' : c;"
-  },
-  {
-   "id": "plus_is_t",
-   "old": "if (c == '+') return letter_glyph('t');",
-   "new": ""
+   "old": "out.letter = c == '0' ? 'o' : c;",
+   "new": "out.letter = c;"
   },
   {
    "id": "case_folded",
@@ -261,6 +241,46 @@
    "id": "angle_bracket",
    "old": "0x27E6, 0x27E8, 0x27EA,",
    "new": "0x27E6, 0x27EA,"
+  },
+  {
+   "id": "digits_seven_and_eight_are_letters",
+   "old": "out.letter = c == '0' ? 'o' : c;",
+   "new": "out.letter = c == '0' ? 'o' : c == '7' ? 't' : c == '8' ? 'b' : c;"
+  },
+  {
+   "id": "word_parts_mixed",
+   "old": "    if (gap[0] != gap[1]) return false;\n",
+   "new": ""
+  },
+  {
+   "id": "word_first_pair_not_parted_only",
+   "old": "    if (gap[0] != gap[1]) return false;\n",
+   "new": "    if (gap[0] && !gap[1]) return false;\n"
+  },
+  {
+   "id": "word_first_pair_parted_only",
+   "old": "    if (gap[0] != gap[1]) return false;\n",
+   "new": "    if (gap[1] && !gap[0]) return false;\n"
+  },
+  {
+   "id": "word_leading_breaks_kept",
+   "old": "    size_t i = at;\n    while (i < f.size() && is_break(f[i])) ++i;\n",
+   "new": "    size_t i = at;\n"
+  },
+  {
+   "id": "parted_word_blanks_not_passed",
+   "old": "            while (next < n && f[next].glyph == Glyph::Space) ++next;\n",
+   "new": ""
+  },
+  {
+   "id": "parted_word_signs_passed",
+   "old": "while (next < n && f[next].glyph == Glyph::Space) ++next;",
+   "new": "while (next < n && is_break(f[next])) ++next;"
+  },
+  {
+   "id": "blanks_passed_for_every_word",
+   "old": "        if (parted) {\n            while (next",
+   "new": "        if (true) {\n            while (next"
   }
  ]
 }

@@ -41,14 +41,16 @@ bool starts_with(std::string_view s, std::string_view p) noexcept { return s.siz
 bool ends_with(std::string_view s, std::string_view p) noexcept { return s.size() >= p.size() && s.compare(s.size() - p.size(), p.size(), p) == 0; }
 
 // ---- the names that a person may not take (is_reserved_bot_name) --------------------------------------------------------------------------------------------------------------------
-// A name is read the way a person reads it, not the way it is spelled: case, blanks, signs between letters, invisible characters and letters that are drawn like b, o or t (0 7 8 +, the Cyrillic and Greek ones,
-// letters with accents, wide and bold forms) do not hide a label. Every character becomes one Glyph; everything that is not a letter, a digit or a bracket is only a break between letters.
+// A name is read the way a person reads it, not the way it is spelled: case, blanks, signs between letters, invisible characters and letters that are drawn like b, o or t (a 0 for the o, the Cyrillic and
+// Greek ones, letters with accents, wide and bold forms) do not hide a label. Every character becomes one Glyph; everything that is not a letter, a digit or a bracket is only a break between letters (a blank,
+// or another sign), and an invisible character is not there at all.
 
-enum class Glyph : uint8_t { Skip, Break, Open, Close, Letter };      // Skip: it is not there to the eye (a combining mark, a zero-width character); Break: a blank or a sign
+enum class Glyph : uint8_t { Skip, Space, Sign, Open, Close, Letter };      // Skip: it is not there to the eye (a combining mark, a zero-width character); Space: a blank; Sign: any other mark that is no letter, digit or bracket
 struct Folded {
-    Glyph glyph{Glyph::Break};
-    char letter{0};                                                    // Letter: a to z or a digit (the look-alikes of b, o and t already turned into them)
+    Glyph glyph{Glyph::Sign};
+    char letter{0};                                                    // Letter: a to z or a digit (the look-alikes of b and o and t already turned into them: a 0 is an o, and no other digit is a letter)
 };
+bool is_break(const Folded& f) noexcept { return f.glyph == Glyph::Space || f.glyph == Glyph::Sign; }
 
 constexpr uint32_t kBadCodePoint = 0xFFFDu;
 
@@ -74,7 +76,7 @@ uint32_t next_code_point(std::string_view s, size_t& i) noexcept {      // UTF-8
 Folded letter_glyph(char c) noexcept {
     Folded out;
     out.glyph = Glyph::Letter;
-    out.letter = c == '0' ? 'o' : c == '7' ? 't' : c == '8' ? 'b' : c;
+    out.letter = c == '0' ? 'o' : c;
     return out;
 }
 
@@ -101,9 +103,9 @@ Folded fold_code_point(uint32_t cp) noexcept {
     if (cp < 0x80u) {
         const char c = lower(static_cast<char>(cp));
         if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) return letter_glyph(c);
-        if (c == '+') return letter_glyph('t');
         if (c == '(' || c == '[' || c == '{' || c == '<') out.glyph = Glyph::Open;
         else if (c == ')' || c == ']' || c == '}' || c == '>') out.glyph = Glyph::Close;
+        else if (c == ' ' || (c >= '\t' && c <= '\r')) out.glyph = Glyph::Space;
         return out;                                                                      // (a blank or a sign: a break)
     }
     if (cp >= 0xFF01u && cp <= 0xFF5Eu) return fold_code_point(cp - 0xFEE0u);                            // the wide forms of ASCII
@@ -120,7 +122,11 @@ Folded fold_code_point(uint32_t cp) noexcept {
         if (cp == open) out.glyph = Glyph::Open;
         else if (cp == open + 1) out.glyph = Glyph::Close;
     }
-    if (out.glyph != Glyph::Break) return out;
+    if (out.glyph != Glyph::Sign) return out;
+    if (cp == 0x0085u || cp == 0x00A0u || cp == 0x1680u || (cp >= 0x2000u && cp <= 0x200Au) || cp == 0x2028u || cp == 0x2029u || cp == 0x202Fu || cp == 0x205Fu || cp == 0x3000u) {
+        out.glyph = Glyph::Space;                                                        // (a no-break space, a wide space, a line or paragraph end: a blank)
+        return out;
+    }
     for (const Lookalike& l : kLookalikes) {
         if (cp >= l.first && cp <= l.last) return letter_glyph(l.letter);
     }
@@ -130,28 +136,34 @@ Folded fold_code_point(uint32_t cp) noexcept {
 std::vector<Folded> fold_name(std::string_view text) {
     std::vector<Folded> out;
     out.reserve(text.size());
-    for (size_t i = 0; i < text.size();) out.push_back(fold_code_point(next_code_point(text, i)));
+    for (size_t i = 0; i < text.size();) {
+        const Folded one = fold_code_point(next_code_point(text, i));
+        if (one.glyph != Glyph::Skip) out.push_back(one);                                // (an invisible character is not part of the name)
+    }
     return out;
 }
 
-// The word bot at `at`: the letters b, o, t, in that order, with breaks and invisible characters between them and nothing else (not another letter, not a bracket); `end` is the place after the t
-bool bot_word_at(const std::vector<Folded>& f, size_t at, size_t& end) noexcept {
+// The word bot from `at` (blanks and signs may stand before it): the letters b, o, t, in that order, either one after the other or each pair of them parted by blanks or signs ("b o t", "b.o.t"), never
+// one pair parted and the other not ("Bo T"); `end` is the place after the t and `parted` says which of the two it was. Anything else between the letters (another letter, a bracket) is no word.
+bool bot_word_at(const std::vector<Folded>& f, size_t at, size_t& end, bool& parted) noexcept {
     static const char kWord[3] = {'b', 'o', 't'};
-    size_t found = 0;
     size_t i = at;
-    for (; i < f.size() && found < 3; ++i) {
-        if (f[i].glyph == Glyph::Letter) {
-            if (f[i].letter != kWord[found]) return false;
-            ++found;
-        } else if (f[i].glyph == Glyph::Open || f[i].glyph == Glyph::Close) {
-            return false;
+    while (i < f.size() && is_break(f[i])) ++i;
+    bool gap[2] = {false, false};
+    for (size_t k = 0; k < 3; ++k) {
+        if (i >= f.size() || f[i].glyph != Glyph::Letter || f[i].letter != kWord[k]) return false;
+        ++i;
+        if (k < 2) {
+            const size_t before = i;
+            while (i < f.size() && is_break(f[i])) ++i;
+            gap[k] = i > before;
         }
     }
-    if (found < 3) return false;
+    if (gap[0] != gap[1]) return false;
+    parted = gap[0];
     end = i;
     return true;
 }
-
 }  // namespace
 
 size_t bot_name_count() noexcept { return kNameCount; }
@@ -256,15 +268,20 @@ bool is_reserved_bot_name(std::string_view text) {
     const size_t n = f.size();
     // "Bot (...)": the word bot at the start, then an opening bracket (blanks and signs may stand between)
     size_t end = 0;
-    if (bot_word_at(f, 0, end)) {
-        while (end < n && (f[end].glyph == Glyph::Skip || f[end].glyph == Glyph::Break)) ++end;
+    bool parted = false;
+    if (bot_word_at(f, 0, end, parted)) {
+        while (end < n && is_break(f[end])) ++end;
         if (end < n && f[end].glyph == Glyph::Open) return true;
     }
-    // "... (bot)", "... (bot, Hard)": an opening bracket, the word bot, and then no letter (a bracket, a comma, a blank, a sign: whatever follows, the name reads as a computer player's label)
+    // "... (bot)", "... (bot, Hard)": an opening bracket, the word bot, and then no letter (a bracket, a comma, a blank, a sign: whatever follows, the name reads as a computer player's label); for the word
+    // that is spelled apart ("b o t") the blanks after it are passed first: "(b o t h)" is a name
     for (size_t i = 0; i < n; ++i) {
-        if (f[i].glyph != Glyph::Open || !bot_word_at(f, i + 1, end)) continue;
-        while (end < n && f[end].glyph == Glyph::Skip) ++end;
-        if (end < n && f[end].glyph != Glyph::Letter) return true;
+        if (f[i].glyph != Glyph::Open || !bot_word_at(f, i + 1, end, parted)) continue;
+        size_t next = end;
+        if (parted) {
+            while (next < n && f[next].glyph == Glyph::Space) ++next;
+        }
+        if (end < n && !(next < n && f[next].glyph == Glyph::Letter)) return true;
     }
     return false;
 }

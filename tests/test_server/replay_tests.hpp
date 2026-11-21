@@ -400,12 +400,12 @@ void run_replay_tests() {
         const uint8_t heavy = ann.lobby->my_seat();
         const uint8_t calm = bob.lobby->my_seat();
         ASSERT_TRUE(heavy < 2 && calm < 2 && heavy != calm);
-        send_orders(w, ann, 260);                                                         // 10,400 orders in 13 s
-        w.run(20000);
+        send_orders(w, ann, 600);                                                         // 24,000 orders in 30 s (the store of a seat's orders is 6,144 and earns 12 a second)
+        w.run(10000);
         RoomStatus s = w.status("HEAVY-1");
         ASSERT_MSG(s.state == RoomState::Running && s.ticks >= 650, "state " + std::string(room_state_name(s.state)) + " ticks " + std::to_string(s.ticks));
         ASSERT_EQ(s.heavy_order_seats, static_cast<uint8_t>(1u << heavy));
-        ASSERT_TRUE(s.orders_over_budget[heavy] > 9000 && s.orders_over_budget[heavy] < 10400);         // (512 at once and 8 a second are sealed, the rest is not)
+        ASSERT_TRUE(s.orders_over_budget[heavy] > 16000 && s.orders_over_budget[heavy] < 24000 - 6144);   // (6,144 at once and 12 a second are sealed, the rest is not)
         ASSERT_EQ(s.orders_over_budget[calm], 0u);
         ASSERT_EQ(s.orders_without_ants[heavy], 0u);
         ASSERT_TRUE(!s.names[heavy].empty() && !s.names[calm].empty() && !ann.lost && !bob.lost);        // nobody was dropped, nobody was thrown out

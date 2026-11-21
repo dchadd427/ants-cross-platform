@@ -158,8 +158,10 @@
         return p && !p.legacy ? p.name + ' (bot)' : text;
     }
     // Whether a PERSON may not be called `text` (the twin of ai::is_reserved_bot_name, which says the rule in full: tests/data/bot_label_cases.tsv is the table that both answer): a name that reads as a label. The word bot
-    // first and an opening bracket after it ("Bot (Hard)"), or an opening bracket ( [ { < then the word bot then anything that is not a letter ("Pip (bot)", "Pip [bot, Hard]", "Pip (bot, Hard).", "Pip (b0t, Hard)"). Case, blanks,
-    // signs between the letters, invisible characters and letters drawn like b, o or t (0 7 8 +, Cyrillic and Greek ones, accents, wide and bold forms) are looked through.
+    // first and an opening bracket after it ("Bot (Hard)"), or an opening bracket ( [ { < then the word bot then anything that is not a letter ("Pip (bot)", "Pip [bot, Hard]", "Pip (bot, Hard).", "Pip (b0t, Hard)"). The word is
+    // its three letters one after the other, or each pair of them parted by blanks or signs ("b o t", "b.o.t"), not one pair parted and the other not ("Bo T"); a word that is spelled apart is one only when no letter
+    // follows it after its blanks ("Pip (b o t h)" is a name). Case, blanks, signs between the letters, invisible characters and letters drawn like b, o or t (a 0 for the o, Cyrillic and Greek ones, accents, wide and
+    // bold forms) are looked through.
     var LOOKALIKES = [   // [first, last, letter] as in bot_names.cpp (kLookalikes)
         [0xB0, 0xB0, 'o'], [0xBA, 0xBA, 'o'], [0xD2, 0xD6, 'o'], [0xD8, 0xD8, 'o'], [0xF2, 0xF6, 'o'], [0xF8, 0xF8, 'o'], [0x14C, 0x151, 'o'], [0x1A0, 0x1A1, 'o'], [0x1D1, 0x1D2, 'o'], [0x1EA, 0x1ED, 'o'], [0x1ECC, 0x1EE3, 'o'],
         [0x39F, 0x39F, 'o'], [0x3BF, 0x3BF, 'o'], [0x41E, 0x41E, 'o'], [0x43E, 0x43E, 'o'], [0x585, 0x585, 'o'], [0x1D0F, 0x1D0F, 'o'], [0x1D52, 0x1D52, 'o'], [0x2092, 0x2092, 'o'],
@@ -167,16 +169,16 @@
         [0x162, 0x167, 't'], [0x1AB, 0x1AB, 't'], [0x1AD, 0x1AD, 't'], [0x21A, 0x21B, 't'], [0x3A4, 0x3A4, 't'], [0x3C4, 0x3C4, 't'], [0x422, 0x422, 't'], [0x442, 0x442, 't'], [0x1D1B, 0x1D1B, 't'], [0x1D57, 0x1D57, 't'], [0x1E6A, 0x1E6F, 't'], [0x2020, 0x2020, 't']
     ];
     var OPENERS = [0x2329, 0x2768, 0x276A, 0x276C, 0x2770, 0x27E6, 0x27E8, 0x27EA, 0x3008, 0x300A, 0x300C, 0x300E, 0x3010, 0x3014, 0xFE59, 0xFE5B, 0xFE5D];
-    var SKIP = 0, BREAK = 1, OPEN = 2, CLOSE = 3, LETTER = 4;
-    function letterOf(c) { return c === '0' ? 'o' : c === '7' ? 't' : c === '8' ? 'b' : c; }
+    var SKIP = 0, SPACE = 1, SIGN = 5, OPEN = 2, CLOSE = 3, LETTER = 4;
+    function letterOf(c) { return c === '0' ? 'o' : c; }
+    function isBreak(g) { return g[0] === SPACE || g[0] === SIGN; }
     // one code point as [kind, letter]
     function foldCodePoint(cp) {
         var k, c;
         if (cp < 0x80) {
             c = String.fromCharCode(cp >= 65 && cp <= 90 ? cp + 32 : cp);
             if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) return [LETTER, letterOf(c)];
-            if (c === '+') return [LETTER, 't'];
-            return [c === '(' || c === '[' || c === '{' || c === '<' ? OPEN : c === ')' || c === ']' || c === '}' || c === '>' ? CLOSE : BREAK, ''];
+            return [c === '(' || c === '[' || c === '{' || c === '<' ? OPEN : c === ')' || c === ']' || c === '}' || c === '>' ? CLOSE : c === ' ' || (cp >= 9 && cp <= 13) ? SPACE : SIGN, ''];
         }
         if (cp >= 0xFF01 && cp <= 0xFF5E) return foldCodePoint(cp - 0xFEE0);
         if (cp >= 0x1D400 && cp <= 0x1D6A3) return [LETTER, String.fromCharCode(97 + (cp - 0x1D400) % 52 % 26)];
@@ -192,41 +194,54 @@
         for (k = 0; k < LOOKALIKES.length; k++) {
             if (cp >= LOOKALIKES[k][0] && cp <= LOOKALIKES[k][1]) return [LETTER, LOOKALIKES[k][2]];
         }
-        return [BREAK, ''];
+        if (cp === 0x85 || cp === 0xA0 || cp === 0x1680 || (cp >= 0x2000 && cp <= 0x200A) || cp === 0x2028 || cp === 0x2029 || cp === 0x202F || cp === 0x205F || cp === 0x3000) return [SPACE, ''];
+        return [SIGN, ''];
     }
     function foldName(text) {
-        var out = [], i = 0, cp, next;
+        var out = [], i = 0, cp, next, g;
         while (i < text.length) {
             cp = text.charCodeAt(i++);
             if (cp >= 0xD800 && cp <= 0xDBFF && i < text.length && (next = text.charCodeAt(i)) >= 0xDC00 && next <= 0xDFFF) { cp = 0x10000 + ((cp - 0xD800) << 10) + (next - 0xDC00); i++; }
             else if (cp >= 0xD800 && cp <= 0xDFFF) cp = 0xFFFD;                       // (a lone surrogate: nothing a person sees; a break)
-            out.push(foldCodePoint(cp));
+            g = foldCodePoint(cp);
+            if (g[0] !== SKIP) out.push(g);                                            // (an invisible character is not part of the name)
         }
         return out;
     }
-    // the letters b, o, t from `at` with breaks and invisible characters between them and nothing else; the place after the t, or -1
+    // the word bot from `at` (blanks and signs may stand before it): the letters b, o, t one after the other or each pair parted by blanks or signs, never one pair parted and the other not; the place after the t
+    // and whether the word is parted, as [end, parted], or null
     function botWordAt(f, at) {
-        var want = 'bot', found = 0, i = at;
-        for (; i < f.length && found < 3; i++) {
-            if (f[i][0] === LETTER) {
-                if (f[i][1] !== want.charAt(found)) return -1;
-                found++;
-            } else if (f[i][0] === OPEN || f[i][0] === CLOSE) return -1;
+        var want = 'bot', i = at, k, before, gap = [false, false];
+        while (i < f.length && isBreak(f[i])) i++;
+        for (k = 0; k < 3; k++) {
+            if (i >= f.length || f[i][0] !== LETTER || f[i][1] !== want.charAt(k)) return null;
+            i++;
+            if (k < 2) {
+                before = i;
+                while (i < f.length && isBreak(f[i])) i++;
+                gap[k] = i > before;
+            }
         }
-        return found === 3 ? i : -1;
+        return gap[0] !== gap[1] ? null : [i, gap[0]];
     }
     function isReservedBotName(text) {
-        var f = foldName(typeof text === 'string' ? text : ''), n = f.length, i, end = botWordAt(f, 0);
-        if (end >= 0) {
-            while (end < n && (f[end][0] === SKIP || f[end][0] === BREAK)) end++;
+        var f = foldName(typeof text === 'string' ? text : ''), n = f.length, i, word, end, next;
+        word = botWordAt(f, 0);
+        if (word) {
+            end = word[0];
+            while (end < n && isBreak(f[end])) end++;
             if (end < n && f[end][0] === OPEN) return true;
         }
         for (i = 0; i < n; i++) {
             if (f[i][0] !== OPEN) continue;
-            end = botWordAt(f, i + 1);
-            if (end < 0) continue;
-            while (end < n && f[end][0] === SKIP) end++;
-            if (end < n && f[end][0] !== LETTER) return true;
+            word = botWordAt(f, i + 1);
+            if (!word) continue;
+            end = word[0];
+            next = end;
+            if (word[1]) {
+                while (next < n && f[next][0] === SPACE) next++;
+            }
+            if (end < n && !(next < n && f[next][0] === LETTER)) return true;
         }
         return false;
     }

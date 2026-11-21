@@ -1,16 +1,82 @@
-// What a seat may have sealed (docs/NETWORK_PORT.md, "The order budget"): the sequencer's budget of orders (Sequencer::Config::order_burst, orders_per_second), the question that takes out of an order the ants that
+// What a seat may have sealed (docs/NETWORK_PORT.md, "The order budgets"): the sequencer's two budgets (Sequencer::Config: order_burst and orders_per_second for the commands that carry ants, control_burst and controls_per_second for the others), the question that takes out of an order the ants that
 // the engine would not carry out (HostSession::vet_ants, the sequencer's vetter), and the host's counters and mark (heavy_order_seats). The sealed turn is what every machine runs, so what is dropped is never
 // in it; an honest player's turns are what they were.
 #include "lockstep_fixtures.hpp"
 
+#include <array>
+
 namespace {
 
-// The commands that a seat gives at the pace of `per_second` a second for `seconds`, one turn at a time (the clock of the budget is the sealed turns): returns the commands that were dropped for the budget
+// The rule of the budgets, written out a second time for the tests (not read from the code): the stores of one seat in thousandths of a command, 6,144 orders that earn 12 a second (600 a turn) and 512 control
+// commands that earn 8 (400 a turn), a seat's first Quit taking nothing
+struct Model {
+    uint32_t orders{6144u * 1000u};
+    uint32_t control{512u * 1000u};
+    bool quit{false};
+    bool takes(const Command& c) {
+        if (c.type == CommandType::Quit && !quit) {
+            quit = true;
+            return true;
+        }
+        uint32_t& store = sim::has_ant_list(c.type) ? orders : control;
+        if (store < 1000u) return false;
+        store -= 1000u;
+        return true;
+    }
+    void seal() {
+        orders = std::min(6144u * 1000u, orders + 600u);
+        control = std::min(512u * 1000u, control + 400u);
+    }
+};
+
+// Gives a seat the commands that `plan` says for each of `turns` turns, one turn at a time, to a sequencer and to the model, and counts what the sequencer did against what the model says it must
+struct Fate {
+    uint32_t taken{0};
+    uint32_t dropped{0};
+    uint32_t disagreed{0};
+};
+Fate run_against_model(Sequencer& seq, Model& model, uint8_t seat, uint32_t turns, const std::function<std::vector<Command>(uint32_t)>& plan) {
+    Fate fate;
+    for (uint32_t turn = 0; turn < turns; ++turn) {
+        for (const Command& c : plan(turn)) {
+            const bool expect = model.takes(c);
+            const Submit got = seq.submit_checked(seat, c);
+            if (got == Submit::Queued) ++fate.taken;
+            else ++fate.dropped;
+            if (expect != (got == Submit::Queued) || (!expect && got != Submit::OverBudget)) ++fate.disagreed;
+        }
+        seq.seal();
+        model.seal();
+    }
+    return fate;
+}
+
+Command group_move(uint8_t seat, int16_t x, int16_t y = 0, uint32_t ants = 1) {
+    std::vector<uint32_t> list;
+    for (uint32_t i = 0; i < ants; ++i) list.push_back(7 + i);
+    return cmd(CommandType::GroupMove, seat, 255, x, y, list);
+}
+
+// The commands that a seat gives at the pace of `per_second` a second for `seconds` (one at a time: the HUD's clicks of several commands are give_clicks), turn by turn; returns what was dropped
 uint32_t give_at_pace(Sequencer& seq, uint8_t seat, uint32_t per_second, uint32_t seconds) {
     uint32_t given = 0;
     for (uint32_t turn = 0; turn < seconds * kTurnsPerSecond; ++turn) {
         const uint32_t due = ((turn + 1) * per_second) / kTurnsPerSecond - (turn * per_second) / kTurnsPerSecond;
-        for (uint32_t i = 0; i < due; ++i) seq.submit_checked(seat, cmd(CommandType::GroupMove, seat, 255, static_cast<int16_t>(given++ % 50), 0, {7}));
+        for (uint32_t i = 0; i < due; ++i) seq.submit_checked(seat, group_move(seat, static_cast<int16_t>(given++ % 50)));
+        seq.seal();
+    }
+    return seq.dropped_over_budget(seat);
+}
+
+// Clicks on a selection of `commands_per_click` chunks (the HUD sends one command for every 32 ants, all at once, to the same tile): `clicks_per_second` of them a second for `seconds`, the clicks spread over the second
+uint32_t give_clicks(Sequencer& seq, uint8_t seat, uint32_t clicks_per_second, uint32_t commands_per_click, uint32_t seconds) {
+    uint32_t sent = 0;
+    for (uint32_t turn = 0; turn < seconds * kTurnsPerSecond; ++turn) {
+        const uint32_t clicks = ((turn + 1) * clicks_per_second) / kTurnsPerSecond - (turn * clicks_per_second) / kTurnsPerSecond;
+        for (uint32_t c = 0; c < clicks; ++c) {
+            for (uint32_t i = 0; i < commands_per_click; ++i) seq.submit_checked(seat, group_move(seat, static_cast<int16_t>(sent % 50), 4, 32));
+            ++sent;
+        }
         seq.seal();
     }
     return seq.dropped_over_budget(seat);
@@ -29,91 +95,126 @@ std::vector<std::vector<uint8_t>> sealed_turns(HostSession& host) {
 }  // namespace
 
 void run_order_tests() {
-    TEST_CASE("S2.59 Sequencer, The Budget Of Orders: A Seat Can Have 512 Orders Sealed At Once And Earns 8 A Second; The Rest Is Dropped And Counted, The Seat Is Marked, Nobody Else's Budget Is Touched, And What Is Dropped Is In No Turn") {
+    TEST_CASE("S2.59 Sequencer, The Budgets: Orders (The Commands That Carry Ants) Have A Store Of 6,144 That Earns 12 A Second And Control Commands One Of 512 That Earns 8; A Command Over Its Store Is Dropped, Counted And Marks The Seat, Never Refused; The Other Seats' Stores Are Not Touched; The Commands Dropped Are In No Turn; Every Decision Is The Model's") {
         Sequencer seq;
         seq.set_active(0, true);
         seq.set_active(1, true);
+        Model model;
+        // 200 turns of 40 group orders and 30 Hatch commands at once (the control store of 512 goes first), 400 turns of rest, then 100 turns of 64 group orders again (the orders store is not full but never above its 6,144)
+        const auto flood = [&](uint32_t turn) {
+            std::vector<Command> out;
+            if (turn < 200) {
+                for (int i = 0; i < 40; ++i) out.push_back(group_move(1, static_cast<int16_t>(turn % 50)));
+                for (int i = 0; i < 30; ++i) out.push_back(cmd(CommandType::Hatch, 1));
+            } else if (turn >= 600) {
+                for (int i = 0; i < 64; ++i) out.push_back(group_move(1, static_cast<int16_t>(turn % 50)));
+            }
+            return out;
+        };
+        const Fate fate = run_against_model(seq, model, 1, 700, flood);
+        ASSERT_EQ(fate.disagreed, 0u);
+        ASSERT_TRUE(fate.dropped > 1000 && fate.taken > 6000);
+        ASSERT_EQ(seq.dropped_over_budget(1), fate.dropped);
+        ASSERT_EQ(seq.heavy_seats(), 1u << 1);                                    // seat 1 is marked
+        ASSERT_EQ(seq.dropped_over_budget(0), 0u);                                // seat 0 has stores of its own
+        ASSERT_TRUE(seq.submit_checked(0, cmd(CommandType::Hatch, 0)) == Submit::Queued && seq.submit_checked(0, group_move(0, 1)) == Submit::Queued);
+        // what is dropped is in no turn: the commands that the turns hold are the ones that were taken, in the order they came
+        Sequencer count;
+        count.set_active(1, true);
+        Model again;
+        std::vector<int16_t> expected;
+        std::vector<int16_t> sealed;
+        int16_t next = 0;
+        for (uint32_t turn = 0; turn < 400; ++turn) {
+            for (int i = 0; i < 40; ++i) {
+                const Command c = group_move(1, next++);
+                if (again.takes(c)) {
+                    expected.push_back(c.tile_x);
+                    ASSERT_TRUE(count.submit_checked(1, c) == Submit::Queued);
+                } else {
+                    ASSERT_TRUE(count.submit_checked(1, c) == Submit::OverBudget);
+                }
+            }
+            again.seal();
+            for (const sim::Command& c : count.seal().commands) sealed.push_back(c.tile_x);
+        }
+        ASSERT_TRUE(sealed == expected && expected.size() > 6000 && expected.size() < 16000);
+        // a flood that is too fast for the turns: what cannot wait (64 in the turn and 1,024 that wait) is dropped like the rest of the flood, never an offence that throws a seat out
+        Sequencer burst;
+        burst.set_active(1, true);
         uint32_t queued = 0;
         uint32_t over = 0;
-        for (int i = 0; i < 700; ++i) {
-            const Submit r = seq.submit_checked(1, cmd(CommandType::GroupMove, 1, 255, static_cast<int16_t>(i), 0, {7}));
+        uint32_t refused = 0;
+        for (int i = 0; i < 2000; ++i) {
+            const Submit r = burst.submit_checked(1, group_move(1, 1));
             queued += r == Submit::Queued ? 1u : 0u;
             over += r == Submit::OverBudget ? 1u : 0u;
+            refused += r == Submit::Refused ? 1u : 0u;
         }
-        ASSERT_EQ(queued, 512u);
-        ASSERT_EQ(over, 188u);
-        ASSERT_EQ(seq.dropped_over_budget(1), 188u);
-        const uint32_t emptied_at = seq.next_turn();                               // (the budget is empty from here: what it holds again is what the turns since earned)
-        ASSERT_EQ(seq.heavy_seats(), 1u << 1);                                    // seat 1 is marked
-        ASSERT_EQ(seq.dropped_over_budget(0), 0u);
-        ASSERT_TRUE(seq.submit_checked(0, cmd(CommandType::Hatch, 0)) == Submit::Queued);      // seat 0 has its own budget
-        size_t sealed = 0;
-        int16_t expected_x = 0;
-        while (seq.queued() > 0 || seq.carried(1) > 0) {
-            for (const sim::Command& c : seq.seal().commands) {
-                if (c.issuer != 1) continue;
-                ASSERT_EQ(c.tile_x, expected_x++);                              // the first 512 in the order they came, the dropped 188 in no turn
-                ++sealed;
-            }
-        }
-        ASSERT_EQ(sealed, size_t{512});
-        // the budget earns 8 a second, one turn's worth (0.4 of an order) at every seal: the orders that fit are the earnings of the turns since the budget was empty
-        for (int i = 0; i < 20; ++i) seq.seal();
-        uint32_t fit = 0;
-        for (int i = 0; i < 20; ++i) fit += seq.submit_checked(1, cmd(CommandType::Hatch, 1)) == Submit::Queued ? 1u : 0u;
-        ASSERT_EQ(fit, (seq.next_turn() - emptied_at) * 8u / kTurnsPerSecond);     // 28 turns (eight that sealed the orders, twenty after them): 11 orders, and the twelfth does not fit
-        ASSERT_EQ(fit, 11u);
-        // a seat that rests for 70 s has all 512 again, never more
-        for (int i = 0; i < 70 * static_cast<int>(kTurnsPerSecond); ++i) seq.seal();
-        fit = 0;
-        for (int i = 0; i < 700; ++i) fit += seq.submit_checked(1, cmd(CommandType::Hatch, 1)) == Submit::Queued ? 1u : 0u;
-        ASSERT_EQ(fit, 512u);
-        // a budget of 0 is no budget (the tests of the quotas of a turn want none)
+        ASSERT_EQ(queued, 64u + 1024u);
+        ASSERT_EQ(over, 2000u - 64u - 1024u);
+        ASSERT_EQ(refused, 0u);
+        ASSERT_EQ(burst.heavy_seats(), 1u << 1);
+        // a budget of 0 is no budget (the tests of the quotas of a turn want none): only the quotas of a turn and of the carry limit then, and a command beyond them is Refused
         Sequencer::Config none;
         none.orders_per_second = 0;
+        none.controls_per_second = 0;
         Sequencer free_seq(none);
         free_seq.set_active(1, true);
         uint32_t all = 0;
-        for (int i = 0; i < 1200; ++i) all += free_seq.submit_checked(1, cmd(CommandType::Hatch, 1)) == Submit::Queued ? 1u : 0u;
-        ASSERT_EQ(all, 64u + 1024u);                                              // (the quotas of the turn and of the carry are the only limits then)
+        uint32_t refused_free = 0;
+        for (int i = 0; i < 1200; ++i) {
+            const Submit r = free_seq.submit_checked(1, i % 2 == 0 ? cmd(CommandType::Hatch, 1) : group_move(1, 1));
+            all += r == Submit::Queued ? 1u : 0u;
+            refused_free += r == Submit::Refused ? 1u : 0u;
+        }
+        ASSERT_EQ(all, 64u + 1024u);
+        ASSERT_EQ(refused_free, 1200u - 64u - 1024u);
         ASSERT_EQ(free_seq.heavy_seats(), 0u);
         // a seat that is not at the table, or a command that clients do not send, is Refused, not counted as a seat that is too busy
         ASSERT_TRUE(seq.submit_checked(2, cmd(CommandType::Hatch, 2)) == Submit::Refused);
         ASSERT_TRUE(seq.submit_checked(1, cmd(CommandType::Drop, 1)) == Submit::Refused);
         ASSERT_EQ(seq.dropped_over_budget(2), 0u);
-        // a host that resumes starts every seat's budget again
+        // a host that resumes starts every seat's stores again (and its first Quit is free again)
         Sequencer moved;
         moved.set_active(1, true);
-        for (int i = 0; i < 700; ++i) moved.submit(1, cmd(CommandType::Hatch, 1));
+        Model before;
+        Fate used = run_against_model(moved, before, 1, 300, [](uint32_t) { std::vector<Command> o; for (int i = 0; i < 64; ++i) o.push_back(group_move(1, 1)); return o; });
+        ASSERT_TRUE(used.dropped > 0 && used.disagreed == 0);
         moved.resume(500);
         moved.set_active(1, true);
-        fit = 0;
-        for (int i = 0; i < 700; ++i) fit += moved.submit(1, cmd(CommandType::Hatch, 1)) ? 1u : 0u;
-        ASSERT_EQ(fit, 512u);
+        Model fresh;
+        used = run_against_model(moved, fresh, 1, 120, [](uint32_t) { std::vector<Command> o; for (int i = 0; i < 64; ++i) o.push_back(group_move(1, 1)); return o; });
+        ASSERT_TRUE(used.disagreed == 0 && used.taken >= 6144u);
     } TEST_END();
 
-    TEST_CASE("S2.60 Sequencer, The Budget Is Far Above Honest Play: A Seat That Gives 6 Orders A Second (The Busiest Second Of The Recordings Measured), Ten Clicks Of 48 Commands In A Second, And A Stuck Uplink's 76 Orders Is Never Dropped, Not In An Hour; 8 A Second Is Allowed For Ever; 12 A Second Is Marked") {
-        {
+    TEST_CASE("S2.60 Sequencer, The Budgets Are Far Above Honest Play And Bound A Flood: An Army Of 200 Ants Clicked 4 Times A Second For 5 Minutes (7 Commands A Click), A Fight Of 100 Ants Clicked 12 Times A Second, Ten Clicks Of 48 Commands, A Stuck Uplink's 76 Orders And An Hour Of 7.5 A Second Lose Nothing; One Seat Cannot Fill The 16 MiB Turn Log In 2 Hours Nor Pass 1 MiB Of Recording In Under 100 Seconds") {
+        {   // an army of 200 ants: a click is 7 commands (six of 32 ants and one of 8), 4 clicks a second, five minutes: 8,400 commands
             Sequencer seq;
             seq.set_active(1, true);
-            ASSERT_EQ(give_at_pace(seq, 1, 6, 3600), 0u);                         // an hour at the busiest second of the recordings, all the time
+            ASSERT_EQ(give_clicks(seq, 1, 4, 7, 300), 0u);
             ASSERT_EQ(seq.heavy_seats(), 0u);
         }
-        {
+        {   // a fight of 100 ants (4 commands a click) at 12 clicks a second: 48 commands a second, for a whole minute
             Sequencer seq;
             seq.set_active(1, true);
-            ASSERT_EQ(give_at_pace(seq, 1, 8, 3600), 0u);                         // the earnings: what a seat may do for ever
+            ASSERT_EQ(give_clicks(seq, 1, 12, 4, 60), 0u);
         }
-        {
+        {   // the same fight in bursts: 20 s at 12 clicks a second, then 2 clicks a second, for five minutes
             Sequencer seq;
             seq.set_active(1, true);
-            const uint32_t dropped = give_at_pace(seq, 1, 12, 600);
-            ASSERT_TRUE(dropped > 0);                                             // 12 a second for ten minutes is no honest play
-            ASSERT_EQ(seq.heavy_seats(), 1u << 1);
-            // ... and what is sealed is what the budget earned: 512 and 8 a second, never more
-            ASSERT_TRUE(12u * 600u - dropped <= 512u + 8u * 600u + 1u);
+            for (int minute = 0; minute < 5; ++minute) {
+                ASSERT_EQ(give_clicks(seq, 1, 12, 4, 20), 0u);
+                ASSERT_EQ(give_clicks(seq, 1, 2, 4, 40), 0u);
+            }
         }
-        {   // the HUD's biggest click is 48 commands (hud.hpp): ten of them in a second (the carry's own case), none of them is over the budget
+        {   // an hour at the busiest second of the recordings measured, all the time, and an hour of 7.5 a second
+            Sequencer seq;
+            seq.set_active(1, true);
+            ASSERT_EQ(give_at_pace(seq, 1, 6, 3600), 0u);
+            ASSERT_EQ(give_at_pace(seq, 1, 12, 3600), 0u);                         // (12 a second is what the store earns: for ever)
+        }
+        {   // the HUD's biggest click is 48 commands (hud.hpp): ten of them in a second (the carry's own case), then the player goes on
             Sequencer seq;
             seq.set_active(1, true);
             for (int click = 0; click < 10; ++click) {
@@ -125,35 +226,79 @@ void run_order_tests() {
         {   // a stuck uplink that is let go after 5 s delivers the 76 orders of a player who gave 15 a second (docs/NETWORK_PORT.md): every one is sealed
             Sequencer seq;
             seq.set_active(1, true);
-            for (int i = 0; i < 76; ++i) ASSERT_TRUE(seq.submit(1, cmd(CommandType::GroupMove, 1, 255, static_cast<int16_t>(i), 0, {7})));
+            for (int i = 0; i < 76; ++i) ASSERT_TRUE(seq.submit(1, group_move(1, static_cast<int16_t>(i))));
             ASSERT_EQ(seq.dropped_over_budget(1), 0u);
+        }
+        {   // 40 commands a second for ten minutes is no play: it is dropped beyond what the store holds and earns, and the seat is marked
+            Sequencer seq;
+            seq.set_active(1, true);
+            const uint32_t dropped = give_at_pace(seq, 1, 40, 600);
+            ASSERT_EQ(seq.heavy_seats(), 1u << 1);
+            const uint32_t taken = 40u * 600u - dropped;
+            ASSERT_TRUE(taken >= 6144u + 12u * 600u - 12u && taken <= 6144u + 12u * 600u);       // (what the store held and earned)
+        }
+        {   // a seat that sends as fast as the server takes it (160 a second), for the longest match (2 hours), every command of 32 ants (137 bytes in the recording): 12 of the turn log's 16 MiB, and 1 MiB of recording not before 100 s
+            Sequencer seq;
+            seq.set_active(1, true);
+            uint64_t bytes = 0;
+            uint32_t second_of_a_mebibyte = 0;
+            std::vector<uint32_t> ants;
+            for (uint32_t i = 0; i < 32; ++i) ants.push_back(100 + i);
+            for (uint32_t turn = 0; turn < 7200u * kTurnsPerSecond; ++turn) {
+                for (int i = 0; i < 8; ++i) seq.submit_checked(1, cmd(CommandType::GroupMove, 1, 255, 5, 5, ants));
+                for (const sim::Command& c : seq.seal().commands) bytes += 1 + sim::encoded_size(c);
+                if (second_of_a_mebibyte == 0 && bytes > (1u << 20)) second_of_a_mebibyte = turn / kTurnsPerSecond + 1;
+            }
+            ASSERT_TRUE(bytes < (uint64_t{16} << 20) * 4 / 5 && bytes > (uint64_t{8} << 20));
+            ASSERT_TRUE(second_of_a_mebibyte >= 100 && second_of_a_mebibyte <= 200);
         }
     } TEST_END();
 
-    TEST_CASE("S2.61 Sequencer, The Vetter: An Order That Names No Ant That The Seat Can Order Is Not Sealed (NoAnts) And Costs No Budget; The Ants It Keeps Are The Only Ones In The Turn; A Seat That Sends Such Orders Is Not Marked For Its Rate") {
-        Sequencer seq;
-        seq.set_vetter([](uint8_t, sim::Command& c) {
-            if (!sim::has_ant_list(c.type)) return true;
-            c.ants.erase(std::remove_if(c.ants.begin(), c.ants.end(), [](uint32_t id) { return id >= 100; }), c.ants.end());
-            return !c.ants.empty();
-        });
-        seq.set_active(1, true);
-        ASSERT_TRUE(seq.submit_checked(1, cmd(CommandType::GroupMove, 1, 255, 3, 4, {5, 150, 6})) == Submit::Queued);
-        ASSERT_TRUE(seq.submit_checked(1, cmd(CommandType::GroupMove, 1, 255, 3, 4, {150, 151})) == Submit::NoAnts);
-        ASSERT_TRUE(seq.submit_checked(1, cmd(CommandType::Hatch, 1)) == Submit::Queued);      // (a command with no ant list is let through by this vetter)
-        ASSERT_EQ(seq.dropped_no_ants(1), 1u);
-        const TurnMsg turn = seq.seal();
-        ASSERT_EQ(turn.commands.size(), size_t{2});
-        ASSERT_TRUE(turn.commands[0].ants == (std::vector<uint32_t>{5, 6}));
-        // 1,000 orders of nothing do not use the budget: what is left of the 512 is sealed, and the seat is marked for the orders that are over the budget only
-        for (int i = 0; i < 1000; ++i) ASSERT_TRUE(seq.submit_checked(1, cmd(CommandType::GroupMove, 1, 255, 3, 4, {150})) == Submit::NoAnts);
-        ASSERT_EQ(seq.heavy_seats(), 0u);
-        uint32_t fit = 0;
-        for (int i = 0; i < 700; ++i) fit += seq.submit(1, cmd(CommandType::GroupMove, 1, 255, 1, 1, {1})) ? 1u : 0u;
-        ASSERT_EQ(fit, 510u);                                                      // (two of the 512 went to the orders above, and the turn that was sealed earned 0.4 of one)
-        ASSERT_EQ(seq.dropped_no_ants(1), 1001u);
-        ASSERT_EQ(seq.heavy_seats(), 1u << 1);                                      // (marked now for the 190 orders that were over the budget, and only for those)
-        ASSERT_EQ(seq.dropped_over_budget(1), 190u);
+    TEST_CASE("S2.61 Sequencer, Quit And The Control Commands: A Seat's First Quit Takes Nothing From Any Store And Is Never Refused For A Full Carry; The Others Are Charged To The Control Store, A Second Quit Too; A Seat That Used Up Its Orders Can Still Say Them, And One That Says Them Without End Is Dropped Like The Rest") {
+        {   // the carry is full (2,000 orders at once: 64 in the turn, 1,024 that wait, the rest dropped): the first Quit goes in all the same, behind the others; a second one finds the carry full
+            Sequencer seq;
+            seq.set_active(1, true);
+            for (int i = 0; i < 2000; ++i) seq.submit_checked(1, group_move(1, 1));
+            ASSERT_EQ(seq.heavy_seats(), 1u << 1);
+            ASSERT_TRUE(seq.submit_checked(1, cmd(CommandType::Quit, 1)) == Submit::Queued);
+            ASSERT_TRUE(seq.submit_checked(1, cmd(CommandType::Quit, 1)) == Submit::OverBudget);
+            bool sealed_quit = false;
+            for (int turn = 0; turn < 40 && !sealed_quit; ++turn) {
+                for (const sim::Command& c : seq.seal().commands) sealed_quit = sealed_quit || (c.issuer == 1 && c.type == CommandType::Quit);
+            }
+            ASSERT_TRUE(sealed_quit);
+        }
+        {   // the orders are used up (64 a turn for 200 turns, every decision the model's): the next order is dropped, and Hatch, an answer to an invitation and the first Quit are not
+            Sequencer seq;
+            seq.set_active(1, true);
+            Model model;
+            const Fate fate = run_against_model(seq, model, 1, 200, [](uint32_t) { std::vector<Command> o; for (int i = 0; i < 64; ++i) o.push_back(group_move(1, 1)); return o; });
+            ASSERT_TRUE(fate.disagreed == 0 && fate.dropped > 5000);
+            seq.submit_checked(1, group_move(1, 2));                                                // (the last turn's earnings may be enough for one order, never for two)
+            ASSERT_TRUE(seq.submit_checked(1, group_move(1, 3)) == Submit::OverBudget);
+            ASSERT_TRUE(seq.submit_checked(1, cmd(CommandType::Hatch, 1)) == Submit::Queued);
+            ASSERT_TRUE(seq.submit_checked(1, cmd(CommandType::AllianceAccept, 1, 2)) == Submit::Queued);
+            ASSERT_TRUE(seq.submit_checked(1, cmd(CommandType::AllianceDeny, 1, 3)) == Submit::Queued);
+            ASSERT_TRUE(seq.submit_checked(1, cmd(CommandType::Quit, 1)) == Submit::Queued);
+        }
+        {   // a seat that says Hatch as fast as it can (64 a turn): the control store holds 512 and earns 8 a second, the model decides each one, and the seat is marked
+            Sequencer seq;
+            seq.set_active(1, true);
+            Model model;
+            const Fate fate = run_against_model(seq, model, 1, 100, [](uint32_t) { std::vector<Command> o; for (int i = 0; i < 64; ++i) o.push_back(cmd(CommandType::Hatch, 1)); return o; });
+            ASSERT_EQ(fate.disagreed, 0u);
+            ASSERT_TRUE(fate.taken >= 551 && fate.taken <= 552);                                  // 512 and the 99 turns that seal before the last of them, 8 a second
+            ASSERT_EQ(seq.heavy_seats(), 1u << 1);
+            // ... and while it is over, a group order of the seat is taken (the stores are apart)
+            ASSERT_TRUE(seq.submit_checked(1, group_move(1, 1)) == Submit::Queued);
+        }
+        {   // Quit said again and again: the first is free and the others are charged like any control command (513 in all fit in the turn and the carry)
+            Sequencer seq;
+            seq.set_active(1, true);
+            uint32_t quits = 0;
+            for (int i = 0; i < 1000; ++i) quits += seq.submit_checked(1, cmd(CommandType::Quit, 1)) == Submit::Queued ? 1u : 0u;
+            ASSERT_EQ(quits, 513u);
+        }
     } TEST_END();
 
     TEST_CASE("S2.62 HostSession::vet_ants On A Real Engine: Ants Of Other Players, The Id 0, Ids That No Ant Has And None Is About To Have, And Repeats Are Taken Out, In The Order The Rest Were Given; An Ant Of The Seat Stays Whether It Is Alive Or Dead; A Command With No Ant List Is Let Through") {
@@ -196,7 +341,7 @@ void run_order_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S2.63 Dedicated Server: A Seat That Sends Orders As Fast As It Can Gets 512 And 8 A Second Sealed, Is Marked, Is Not Dropped And Is Not A Violation; The Others' Orders Are All Run, And Every Machine Runs The Same Turns") {
+    TEST_CASE("S2.63 Dedicated Server: A Seat That Sends Orders As Fast As It Can Gets 6,144 And 12 A Second Sealed, Is Marked, Is Not Dropped And Is Not A Violation; The Others' Orders Are All Run, And Every Machine Runs The Same Turns") {
         ServerMatch m(1, 3, {30, 5}, {}, {}, true);
         uint32_t run_by_1 = 0;
         uint32_t run_by_2 = 0;
@@ -208,7 +353,7 @@ void run_order_tests() {
         uint32_t sent_by_1 = 0;
         uint32_t sent_by_2 = 0;
         uint32_t step = 0;
-        m.run(20000, false, [&](uint32_t) {
+        m.run(60000, false, [&](uint32_t) {
             for (size_t i = 0; i < 3; ++i) {                                       // 300 a second from seat 1 (a message budget of 1,000 a second is not met)
                 m.clients[1]->submit(cmd(CommandType::GroupMove, 1, 255, static_cast<int16_t>(sent_by_1 % 60), static_cast<int16_t>(step % 60), {m.ids.ants[1][i]}));
                 ++sent_by_1;
@@ -220,9 +365,9 @@ void run_order_tests() {
         });
         m.run(5000, false);
         m.settle();
-        ASSERT_TRUE(sent_by_1 >= 5900);
+        ASSERT_TRUE(sent_by_1 >= 17900);
         ASSERT_EQ(m.host->orders_over_budget(1) + run_by_1, sent_by_1);            // every order was run or dropped for the budget: none was lost anywhere else
-        ASSERT_TRUE(run_by_1 >= 512 && run_by_1 <= 512u + 8u * 21u);               // 512 at once and 8 a second for the 20 s of the flood of orders
+        ASSERT_TRUE(run_by_1 >= 6144 && run_by_1 <= 6144u + 12u * 61u);            // 6,144 at once and 12 a second for the 60 s of the flood of orders
         ASSERT_EQ(m.host->heavy_order_seats(), 1u << 1);
         ASSERT_EQ(run_by_2, sent_by_2);                                            // seat 2 is not touched
         ASSERT_EQ(m.host->orders_over_budget(2), 0u);
@@ -305,5 +450,91 @@ void run_order_tests() {
         ASSERT_EQ(with.heavy, 0u);
         ASSERT_EQ(without.dropped, 0u);
         ASSERT_TRUE(with.turns.size() > 500 && with.turns == without.turns);
+    } TEST_END();
+
+    TEST_CASE("S2.66 Dedicated Server, Five Minutes Of Big-Army Play: An Army Of 200 Ants At 4 Clicks A Second (7 Commands A Click) And A Fight Of 100 Ants In Bursts Of 12 Clicks A Second Lose Not One Order And Are Not Marked, While A Seat That Floods Beside Them Is Dropped And Marked, Can Still Quit, And Every Machine Runs The Same Turns") {
+        const uint32_t kSeconds = 300;
+        const uint32_t kFloodSeconds = 150;
+        ServerMatch m(7, 3, {30, 5}, {}, {}, false);
+        std::array<uint32_t, 3> run{};
+        uint32_t quits_by_2 = 0;
+        m.host->runner().set_on_command([&](const sim::Command& c, const sim::CommandResult&) {
+            if (c.issuer < 3 && c.type != CommandType::Quit) ++run[c.issuer];
+            if (c.issuer == 2 && c.type == CommandType::Quit) ++quits_by_2;
+        });
+        m.run(8000, false);
+        std::array<uint32_t, 3> sent{};
+        uint32_t step = 0;
+        const auto click = [&](uint8_t seat, uint32_t commands, int16_t x) {
+            for (uint32_t i = 0; i < commands; ++i) m.clients[seat]->submit(cmd(CommandType::GroupMove, seat, 255, x, static_cast<int16_t>(step % 50), m.ids.ants[seat]));
+            sent[seat] += commands;
+        };
+        const auto due = [](uint32_t per_hundred_steps, uint32_t at) { return (per_hundred_steps * (at + 1)) / 100 - (per_hundred_steps * at) / 100; };      // the clicks of one 10 ms step at a pace of so many a second
+        m.run(kSeconds * 1000, false, [&](uint32_t) {
+            const uint32_t second = step / 100;
+            for (uint32_t k = 0; k < due(4, step); ++k) click(0, 7, static_cast<int16_t>((step / 25) % 60));                                      // seat 0: an army of 200 ants (7 commands a click), 4 clicks a second
+            for (uint32_t k = 0; k < due(second % 60 < 20 ? 12u : 2u, step); ++k) click(1, 4, static_cast<int16_t>((step / 8) % 60));         // seat 1: a fight of 100 ants (4 commands a click), 20 s of every minute at 12 clicks a second, else 2
+            if (second < kFloodSeconds) {                                                                                                       // seat 2: 300 a second, and then it quits
+                for (int i = 0; i < 3; ++i) click(2, 1, static_cast<int16_t>(step % 60));
+            } else if (second == kFloodSeconds && step % 100 == 0) {
+                m.clients[2]->submit(cmd(CommandType::Quit, 2));
+            }
+            ++step;
+        });
+        m.run(5000, false);                                                            // (what the last clicks sent is run before the counts are read)
+        m.settle();
+        for (uint8_t seat = 0; seat < 2; ++seat) {
+            ASSERT_EQ(run[seat], sent[seat]);                                          // every order of the two that play honestly was run
+            ASSERT_EQ(m.host->orders_over_budget(seat), 0u);
+            ASSERT_EQ(m.host->orders_without_ants(seat), 0u);
+        }
+        ASSERT_TRUE(sent[0] == 7u * 4u * kSeconds && sent[1] > 4u * 2u * kSeconds);
+        ASSERT_EQ(m.host->heavy_order_seats(), 1u << 2);                               // only the seat that floods is marked
+        ASSERT_TRUE(m.host->orders_over_budget(2) > 30000 && run[2] < sent[2] / 4);
+        ASSERT_EQ(run[2] + m.host->orders_over_budget(2), sent[2]);                    // (every order of the flood was run or dropped for the budget: none was lost elsewhere)
+        ASSERT_EQ(quits_by_2, 1u);                                                     // its Quit was sealed and run although it was over its budget
+        ASSERT_TRUE(m.referee.is_player_dropped(2));
+        ASSERT_EQ(m.host->violations(2), 0u);
+        ASSERT_TRUE(m.host->desyncs().empty() && m.all_equal());
+        const uint32_t sealed = m.host->turns_sealed();
+        const uint32_t first = sealed > LockstepRunner::kTurnLogTurns - 10 ? sealed - (static_cast<uint32_t>(LockstepRunner::kTurnLogTurns) - 10) : 0u;
+        for (uint32_t t = first; t < sealed; ++t) {
+            const TurnMsg* host_turn = m.host->runner().logged_turn(t);
+            ASSERT_TRUE(host_turn != nullptr);
+            for (auto& c : m.clients) {
+                const TurnMsg* turn = c->runner().logged_turn(t);
+                ASSERT_TRUE(turn != nullptr && encode(*turn) == encode(*host_turn));
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("S2.67 Sequencer, The Vetter: An Order That Names No Ant That The Seat Can Order Is Not Sealed (NoAnts) And Costs No Budget; The Ants It Keeps Are The Only Ones In The Turn; A Seat That Sends Such Orders Is Not Marked For Its Rate") {
+        Sequencer seq;
+        seq.set_vetter([](uint8_t, sim::Command& c) {
+            if (!sim::has_ant_list(c.type)) return true;
+            c.ants.erase(std::remove_if(c.ants.begin(), c.ants.end(), [](uint32_t id) { return id >= 100; }), c.ants.end());
+            return !c.ants.empty();
+        });
+        seq.set_active(1, true);
+        ASSERT_TRUE(seq.submit_checked(1, cmd(CommandType::GroupMove, 1, 255, 3, 4, {5, 150, 6})) == Submit::Queued);
+        ASSERT_TRUE(seq.submit_checked(1, cmd(CommandType::GroupMove, 1, 255, 3, 4, {150, 151})) == Submit::NoAnts);
+        ASSERT_TRUE(seq.submit_checked(1, cmd(CommandType::Hatch, 1)) == Submit::Queued);      // (a command with no ant list is let through by this vetter)
+        ASSERT_EQ(seq.dropped_no_ants(1), 1u);
+        const TurnMsg turn = seq.seal();
+        ASSERT_EQ(turn.commands.size(), size_t{2});
+        ASSERT_TRUE(turn.commands[0].ants == (std::vector<uint32_t>{5, 6}));
+        // 1,000 orders of nothing do not use the budget: what follows is what a seat that had sent none has (the model's decisions), and the seat is not marked for them
+        Model model;
+        model.takes(cmd(CommandType::GroupMove, 1));                                            // (the one that was taken above)
+        model.takes(cmd(CommandType::Hatch, 1));
+        model.seal();
+        for (int i = 0; i < 1000; ++i) ASSERT_TRUE(seq.submit_checked(1, cmd(CommandType::GroupMove, 1, 255, 3, 4, {150})) == Submit::NoAnts);
+        ASSERT_EQ(seq.heavy_seats(), 0u);
+        ASSERT_EQ(seq.dropped_no_ants(1), 1001u);
+        const Fate fate = run_against_model(seq, model, 1, 150, [](uint32_t) { std::vector<Command> o; for (int i = 0; i < 64; ++i) o.push_back(cmd(CommandType::GroupMove, 1, 255, 1, 1, {1})); return o; });
+        ASSERT_EQ(fate.disagreed, 0u);
+        ASSERT_TRUE(fate.taken >= 6144u - 1u && fate.dropped > 0);                              // (the store had been used for one order only)
+        ASSERT_EQ(seq.heavy_seats(), 1u << 1);                                                  // (marked now, for the commands that were over the budget and only for those)
+        ASSERT_EQ(seq.dropped_over_budget(1), fate.dropped);
     } TEST_END();
 }
