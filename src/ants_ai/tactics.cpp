@@ -354,7 +354,6 @@ void without_thief_batch(LevelPlan& p) noexcept {
 
 void without_unstick_batch(LevelPlan& p) noexcept {
     p.plugs = false;
-    p.raid_way_home = false;
     p.refusal_memory = false;
     p.rescue_thief = false;
 }

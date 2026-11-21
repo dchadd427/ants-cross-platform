@@ -1,50 +1,14 @@
 {
- "note": "Mutants of the unstick batch of the computer players (docs/BOT_UNSTUCK.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the way home of a raid (at the launch, at the look again, the field of the own hill), the plug task (which power-ups are plugs, whose ants are sent and in which order, the tiles shared with the trip task), the refusal memory (the second refusal blocks, the block grows, carriers and mound clicks and walking ants are not judged), the rescue of a walled-in Thief and the stuck tally against test_ai AI57. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_unstick_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "note": "Mutants of the unstick batch of the computer players (docs/BOT_UNSTUCK.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the plug task (which power-ups are plugs, whose ants are sent and in which order, the tiles shared with the trip task), the refusal memory (the second refusal blocks, the block grows, carriers and mound clicks and walking ants are not judged), the rescue of a walled-in Thief and the stuck tally against test_ai AI57. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_unstick_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
  "mutants": [
-  {
-   "id": "rhome_launch_off",
-   "file": "src/ants_ai/standard_tasks_raid.cpp",
-   "old": "if (plan.raid_way_home && !way_home(c, t)) continue;",
-   "new": "",
-   "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.2 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI57.2"
-  },
-  {
-   "id": "rhome_recheck_off",
-   "file": "src/ants_ai/standard_tasks_raid.cpp",
-   "old": "bad = !reach || (plan.raid_way_home && !way_home(c, r.team));",
-   "new": "bad = !reach;",
-   "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.2 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI57.2"
-  },
-  {
-   "id": "rhome_any_front_tile",
-   "file": "src/ants_ai/standard_tasks_raid.cpp",
-   "old": "if (grid.in_bounds(e) && home_field_.cost[tile_index(grid, e)] >= 0) return true;",
-   "new": "if (grid.in_bounds(e)) return true;",
-   "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.2 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI57.2"
-  },
-  {
-   "id": "rhome_field_never_renewed",
-   "file": "src/ants_ai/standard_tasks_raid.cpp",
-   "old": "if (home_field_tick_ != v.tick()) {",
-   "new": "if (home_field_tick_ == ~uint64_t{0}) {",
-   "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.2 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI57.2"
-  },
   {
    "id": "plug_worthless_taken",
    "file": "src/ants_ai/plug_task.cpp",
    "old": "if (worth > 0) plugs.push_back(Plug{&p, beyond, worth});",
    "new": "plugs.push_back(Plug{&p, beyond, worth});",
    "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.4 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI57.4"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.3"
   },
   {
    "id": "plug_any_part",
@@ -52,8 +16,8 @@
    "old": "if (parts.size() < 2 || parts.count(home) == 0) continue;",
    "new": "if (parts.size() < 2) continue;",
    "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.4 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI57.4"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.3"
   },
   {
    "id": "plug_typed_ant_sent",
@@ -61,8 +25,8 @@
    "old": "if (a.type != view.default_ant_type() || a.holding || a.carried_points > 0 || a.hp < 5) return false;",
    "new": "if (a.holding || a.carried_points > 0 || a.hp < 5) return false;",
    "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.5 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI57.5"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.4"
   },
   {
    "id": "plug_home_ant_first",
@@ -70,8 +34,8 @@
    "old": "if (best != nullptr && (best_far != beyond ? best_far : cost >= best_cost)) continue;",
    "new": "if (best != nullptr && (best_far != beyond ? !best_far : cost >= best_cost)) continue;",
    "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.3 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI57.3"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.2"
   },
   {
    "id": "plug_task_off_in_look",
@@ -79,8 +43,8 @@
    "old": "if (v.powerups().empty()) return;",
    "new": "return;",
    "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.3 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI57.3"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.2"
   },
   {
    "id": "plug_tile_shared_with_trips",
@@ -88,8 +52,8 @@
    "old": "if (std::find(tactics_.plug_tiles.begin(), tactics_.plug_tiles.end(), p.tile) != tactics_.plug_tiles.end()) continue;",
    "new": "",
    "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.6 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI57.6"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.5"
   },
   {
    "id": "plug_trip_tiles_ignored",
@@ -97,8 +61,8 @@
    "old": " || std::find(tactics_.trip_tiles.begin(), tactics_.trip_tiles.end(), p.tile) != tactics_.trip_tiles.end()) continue;",
    "new": ") continue;",
    "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.6 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI57.6"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.5"
   },
   {
    "id": "refusal_first_blocks",
@@ -106,8 +70,8 @@
    "old": "if (r.count >= 2) {",
    "new": "if (r.count >= 1) {",
    "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.7 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI57.7"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.6"
   },
   {
    "id": "refusal_block_does_not_grow",
@@ -115,8 +79,8 @@
    "old": "block *= 2u;",
    "new": "block *= 1u;",
    "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.7 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI57.7"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.6"
   },
   {
    "id": "refusal_carrier_judged",
@@ -124,8 +88,8 @@
    "old": "if (at == seen_.end() || at->second.loaded) continue;",
    "new": "if (at == seen_.end()) continue;",
    "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.7 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI57.7"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.6"
   },
   {
    "id": "refusal_mound_judged",
@@ -133,8 +97,8 @@
    "old": "        if (in_mound) continue;\n",
    "new": "",
    "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.7 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI57.7"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.6"
   },
   {
    "id": "refusal_walk_in_place_judged",
@@ -142,8 +106,8 @@
    "old": "const bool still = ant->tile == it->from;",
    "new": "const bool still = true;",
    "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.7 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI57.7"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.6"
   },
   {
    "id": "rescue_wall_not_harm",
@@ -151,8 +115,8 @@
    "old": "    if (plan.rescue_thief && shuts_in_own_thief(view, map, tile)) return 1;",
    "new": "",
    "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.9 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI57.9"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.8"
   },
   {
    "id": "rescue_any_wall",
@@ -160,8 +124,8 @@
    "old": "                if (e == wall) return true;",
    "new": "                if (e == wall || true) return true;",
    "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.9 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI57.9"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.8"
   },
   {
    "id": "rescue_no_fire_wanted",
@@ -169,8 +133,8 @@
    "old": "|| (plan.rescue_thief && !gate_breaching && has_shut_in_thief(view, *map))",
    "new": "",
    "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.9 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI57.9"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.8"
   },
   {
    "id": "stuck_span_too_short",
@@ -178,8 +142,8 @@
    "old": "static constexpr uint64_t kStuckTicks = 200;",
    "new": "static constexpr uint64_t kStuckTicks = 20;",
    "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.8 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI57.8"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.7"
   },
   {
    "id": "stuck_loop_not_counted",
@@ -187,8 +151,8 @@
    "old": "                case sim::UnitState::CantGo:\n                    nowhere = !queueing;",
    "new": "                case sim::UnitState::CantGo:\n                    nowhere = false;",
    "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.8 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI57.8"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.7"
   },
   {
    "id": "stuck_carrier_not_counted",
@@ -196,8 +160,8 @@
    "old": "nowhere = !queueing && (order != sim::AntUnit::kOrderNone || (carrier && u.waypoints.empty() && !near_own_hill(sim, a.player_id, a.tile_x, a.tile_y)));",
    "new": "nowhere = !queueing && (order != sim::AntUnit::kOrderNone || (carrier && false && u.waypoints.empty() && !near_own_hill(sim, a.player_id, a.tile_x, a.tile_y)));",
    "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.8 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI57.8"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.7"
   },
   {
    "id": "stuck_queue_carrier_counted",
@@ -205,8 +169,8 @@
    "old": "(carrier && u.waypoints.empty() && !near_own_hill(sim, a.player_id, a.tile_x, a.tile_y))",
    "new": "(carrier && u.waypoints.empty() && (!near_own_hill(sim, a.player_id, a.tile_x, a.tile_y) || true))",
    "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.8 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI57.8"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.7"
   }
  ]
 }

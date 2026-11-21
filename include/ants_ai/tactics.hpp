@@ -283,8 +283,6 @@ struct LevelPlan {
                                          // rescue=0: the bot as it was (docs/BOT_UNSTUCK.md)
     bool plugs{true};                    // a power-up that plugs the way between the own hill and an ant or a pile of the seat is taken by one ant, which opens it (PlugTask, docs/BOT_UNSTUCK.md; false, the ablation plugs=0:
                                          // the bot as it was)
-    bool raid_way_home{true};            // a thief raids a hole only when a walk leads from the hole to its own hill as the map is now: the engine walks the thief home when the raid is done, and a thief with no way home stands on
-                                         // the raid tile in the can't-go loop for good, taking no order (docs/BOT_UNSTUCK.md; false, the ablation rhome=0: the bot as it was)
     // the stall detector (StandardBot, docs/BOTS.md; 0 switches a trigger off): stall_ticks without a point, or repeat_limit equal orders within repeat_window with nothing banked, send the seat to the
     // plain economy for fallback_ticks (doubled at every stall, at most 9,600)
     uint32_t stall_ticks{3600};
@@ -504,7 +502,7 @@ void without_home_mines(LevelPlan& plan) noexcept;
 void without_kill_batch(LevelPlan& plan) noexcept;
 /// The thief batch off (docs/BOTS.md, "Thieves: the answer to a raid"): the bot as it was before it
 void without_thief_batch(LevelPlan& plan) noexcept;
-/// The unstick batch off (docs/BOT_UNSTUCK.md): no plug task, no check of the way home before a raid, no refusal memory, no rescue of a walled-in Thief: the bot as it was before it. For `bot_arena --tune unstick=0` and
+/// The unstick batch off (docs/BOT_UNSTUCK.md): no plug task, no refusal memory, no rescue of a walled-in Thief: the bot as it was before it. For `bot_arena --tune unstick=0` and
 /// the tests whose subject is an older rule
 void without_unstick_batch(LevelPlan& plan) noexcept;
 /// The plan without the defence batch (docs/BOT_PEOPLE.md, "Step 1: everyone hits back"): the fights that answer a blow take the own default type and Combat Ants only, as many as the level's defenders, and

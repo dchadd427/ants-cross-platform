@@ -520,9 +520,6 @@ private:
         uint64_t next_path{0};               // the tick of the next look at the walk (plan.raid_recheck)
     };
     bool launch(TaskContext& context, const AntView& thief);
-    /// (plan.raid_way_home) Whether a walk leads from one of the three tiles in front of the hole of `team` to the own hill as the map is now: the thief that has raided is walked home by the engine, and with
-    /// no way it stands on the raid tile in the can't-go loop, which takes no order (docs/BOT_UNSTUCK.md). The field of the own hill is made once for a look
-    bool way_home(TaskContext& context, uint8_t team);
     /// What shuts the hole of `team` for the thief `thief` now: Walls (no hill, or the walls, bombs and solid tiles leave fewer tiles in front of it than the plan asks: they last for minutes), Held (an ant on
     /// the raid tile or on the tiles in front of it, an own thief on the raid tile: a matter of seconds), or Open
     enum class Hole : uint8_t { Open, Walls, Held };
@@ -545,8 +542,6 @@ private:
     };
     Tactics& tactics_;
     Params params_;
-    MapInfo::NowField home_field_;
-    uint64_t home_field_tick_{~uint64_t{0}};
     std::map<uint32_t, Waiting> waiting_;
     uint64_t ambush_pause_until_{0};
     uint32_t ambushes_{0};
