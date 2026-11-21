@@ -122,10 +122,10 @@ void run_public_room_tests() {
         Client& pia = w.connect_page("Pia", "gam00001", lobby_block_of());
         w.run(300);
         ASSERT_TRUE(pia.lobby->is_leader() && !w.status("gam00001").lobby_public);
-        ASSERT_EQ(door(w, "GET").body, R"({"format":1,"lobbies":[{"private":true,"host":"Pia","map":"TINY.LVL","mode":"highest-score","people":1,"bots":0,"free":3,"size":4}],"count":0})");      // (a new room is private: it is a locked row, with no code, and not a public one)
+        ASSERT_EQ(door(w, "GET").body, R"({"format":1,"lobbies":[{"private":true,"host":"Pia","map":"TINY.LVL","mode":"highest-score","fog":false,"people":1,"bots":0,"free":3,"size":4}],"count":0})");      // (a new room is private: it is a locked row, with no code, and not a public one)
         say_visibility(w, pia, true);
         ASSERT_TRUE(w.status("gam00001").lobby_public && pia.lobby->room_is_public());
-        ASSERT_EQ(door(w, "GET").body, R"({"format":1,"lobbies":[{"code":"gam00001","host":"Pia","map":"TINY.LVL","mode":"highest-score","people":1,"bots":0,"free":3,"size":4,"age":0}],"count":1})");
+        ASSERT_EQ(door(w, "GET").body, R"({"format":1,"lobbies":[{"code":"gam00001","host":"Pia","map":"TINY.LVL","mode":"highest-score","fog":false,"people":1,"bots":0,"free":3,"size":4,"age":0}],"count":1})");
         // the numbers follow the people: Bob joins
         Client& bob = w.connect_page("Bob", "gam00001", lobby_block_of());
         w.run(300);
@@ -155,7 +155,7 @@ void run_public_room_tests() {
         const ctl::JsonValue list = list_of(w);
         ASSERT_TRUE(list.size() == 3 && list.key_at(0) == "format" && list.key_at(1) == "lobbies" && list.key_at(2) == "count");
         const ctl::JsonValue& first = list.get("lobbies").at(0);
-        const std::vector<std::string> want = {"code", "host", "map", "mode", "people", "bots", "free", "size", "age"};
+        const std::vector<std::string> want = {"code", "host", "map", "mode", "fog", "people", "bots", "free", "size", "age"};
         ASSERT_TRUE(first.keys() == want);
         ASSERT_TRUE(list.get("format").as_int_or(0) == 1 && list.get("count").as_int_or(-1) == 1);
         // the leader goes: the next person leads, and the room is private (Bob never made it public): the list is empty. Bob chooses for himself, and the list says his name
@@ -179,7 +179,30 @@ void run_public_room_tests() {
         spec.players = 4;
         ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
         w.run(300);
-        ASSERT_EQ(door(w, "GET").body, R"({"format":1,"lobbies":[{"private":true,"host":"Bob","map":"SMALL.LVL","mode":"highest-score","people":1,"bots":0,"free":2,"size":3}],"count":0})");     // (the plan that Pia chose stays: the map and three colors)
+        ASSERT_EQ(door(w, "GET").body, R"({"format":1,"lobbies":[{"private":true,"host":"Bob","map":"SMALL.LVL","mode":"highest-score","fog":false,"people":1,"bots":0,"free":2,"size":3}],"count":0})");     // (the plan that Pia chose stays: the map and three colors)
+    } TEST_END();
+
+    TEST_CASE("S3.309 The List Of Games Says Fog Of War (Protocol 28): A Public Row And A Locked Row Have The Key \"fog\" (False Until The Leader's Plan Says Fog, True After), It Follows The Plan (On, Off), And Nothing Else Of The Row Changes") {
+        World w(public_limits());
+        Client& pia = w.connect_page("Pia", "gam00001", lobby_block_of());
+        w.run(300);
+        ASSERT_TRUE(locked_of(w).size() == 1 && locked_of(w)[0].get("fog").is_bool() && !locked_of(w)[0].get("fog").as_bool_or(true));            // (a new room is private: a locked row)
+        net::PlanMsg plan = plan_msg({K::Open, K::Open, K::Open, K::Nobody});
+        plan.fog = true;
+        ASSERT_TRUE(pia.lobby->request_plan(plan));
+        w.run(300);
+        ASSERT_EQ(locked_of(w).size(), size_t{1});
+        const ctl::JsonValue locked = locked_of(w)[0];
+        ASSERT_TRUE(locked.get("fog").as_bool_or(false) && locked.get("private").as_bool_or(false) && locked.get("size").as_int_or(-1) == 3 && !locked.has("code"));
+        say_visibility(w, pia, true);
+        ctl::JsonValue row = row_of(w, "gam00001");
+        ASSERT_TRUE(row.get("fog").is_bool() && row.get("fog").as_bool_or(false) && row.get("people").as_int_or(-1) == 1 && row.get("size").as_int_or(-1) == 3);
+        ASSERT_EQ(door(w, "GET").body, R"({"format":1,"lobbies":[{"code":"gam00001","host":"Pia","map":"TINY.LVL","mode":"highest-score","fog":true,"people":1,"bots":0,"free":2,"size":3,"age":0}],"count":1})");
+        w.run(1000);
+        plan.fog = false;
+        ASSERT_TRUE(pia.lobby->request_plan(plan));
+        w.run(300);
+        ASSERT_TRUE(row_of(w, "gam00001").get("fog").is_bool() && !row_of(w, "gam00001").get("fog").as_bool_or(true));
     } TEST_END();
 
     TEST_CASE("S3.233 What The List Leaves Out (Protocol 22): A Private Room, A Room That Waits For The Games Of Its START, A Match That Loads Or Runs, A Room Nobody Is Connected To (Only Held Seats), A Room With No Free Color (Four People, Or The Plan Gave The Rest To Bots Or To Nobody); Each Comes Back When It Is Over: The Cancelled START, The Person Who Comes Back With The Key, The Person Who Leaves") {
@@ -385,7 +408,7 @@ void run_public_room_tests() {
         }
         // the plan's letters and the words of the status are not in it either, and the answer is these nine numbers and names of one room, whoever asks
         ASSERT_TRUE(body.find("oooo") == std::string::npos && body.find("reconnect") == std::string::npos && body.find("leader") == std::string::npos);
-        ASSERT_EQ(body, R"({"format":1,"lobbies":[{"code":"sec00001","host":"Pia","map":"TINY.LVL","mode":"highest-score","people":3,"bots":0,"free":1,"size":4,"age":0}],"count":1})");
+        ASSERT_EQ(body, R"({"format":1,"lobbies":[{"code":"sec00001","host":"Pia","map":"TINY.LVL","mode":"highest-score","fog":false,"people":3,"bots":0,"free":1,"size":4,"age":0}],"count":1})");
         ctl::HttpRequest asked;
         asked.method = "GET";
         asked.path = "/lobbies";
@@ -590,7 +613,7 @@ void run_public_room_tests() {
         ctl::JsonValue list = list_of(w);
         ASSERT_TRUE(list.size() == 3 && list.key_at(0) == "format" && list.key_at(1) == "lobbies" && list.key_at(2) == "count");
         ASSERT_TRUE(list.get("count").as_int_or(-1) == 0 && list.get("lobbies").size() == 1);
-        const std::vector<std::string> want = {"private", "host", "map", "mode", "people", "bots", "free", "size"};
+        const std::vector<std::string> want = {"private", "host", "map", "mode", "fog", "people", "bots", "free", "size"};
         ASSERT_TRUE(list.get("lobbies").at(0).keys() == want);
         ASSERT_TRUE(list.get("lobbies").at(0).get("private").is_bool() && list.get("lobbies").at(0).get("private").as_bool_or(false));
         ASSERT_EQ(list.get("lobbies").at(0).get("host").str(), "Pia");
@@ -706,7 +729,7 @@ void run_public_room_tests() {
         ASSERT_EQ(locked_hosts(w), "Pia");
         const std::string body = door(w, "GET").body;
         const std::string code = "k7m2xq9w";
-        const std::vector<std::string> want = {"private", "host", "map", "mode", "people", "bots", "free", "size"};
+        const std::vector<std::string> want = {"private", "host", "map", "mode", "fog", "people", "bots", "free", "size"};
         std::string upper = code;
         for (char& ch : upper) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
         std::string encoded;
@@ -729,7 +752,7 @@ void run_public_room_tests() {
             ASSERT_TRUE(body.find(secret) == std::string::npos);
         }
         ASSERT_TRUE(body.find("oooo") == std::string::npos && body.find("reconnect") == std::string::npos && body.find("leader") == std::string::npos && body.find("\"age\"") == std::string::npos);
-        ASSERT_EQ(body, R"({"format":1,"lobbies":[{"private":true,"host":"Pia","map":"TINY.LVL","mode":"highest-score","people":3,"bots":0,"free":1,"size":4}],"count":0})");
+        ASSERT_EQ(body, R"({"format":1,"lobbies":[{"private":true,"host":"Pia","map":"TINY.LVL","mode":"highest-score","fog":false,"people":3,"bots":0,"free":1,"size":4}],"count":0})");
         ctl::HttpRequest asked;
         asked.method = "GET";
         asked.path = "/lobbies";

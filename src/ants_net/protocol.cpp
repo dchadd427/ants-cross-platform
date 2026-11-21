@@ -525,6 +525,12 @@ bool decode(const uint8_t* data, size_t size, RoomMsg& out) {
         ai::BotLabel label;
         if (plan_fill_level(m.plan[seat]) == FillLevel::None || !ai::parse_bot_label(slot.name, label)) return false;
     }
+    // protocol 28: bots and Fog of War never mix: a room that shows fog and a color for a computer player is not a room that a server makes
+    if (fog == 1) {
+        for (const PlanKind kind : m.plan) {
+            if (plan_fill_level(kind) != FillLevel::None) return false;
+        }
+    }
     m.fog = fog == 1;
     out = std::move(m);
     return true;
@@ -797,6 +803,7 @@ std::vector<uint8_t> encode(const PlanMsg& m) {
     w.u8(m.team_a);
     w.u8(m.team_b);
     w.u8(m.mode);                                                                       // (protocol 17)
+    w.u8(m.fog ? 1 : 0);                                                                // (protocol 28)
     return out;
 }
 bool decode(const uint8_t* data, size_t size, PlanMsg& out) {
@@ -810,7 +817,9 @@ bool decode(const uint8_t* data, size_t size, PlanMsg& out) {
     m.team_a = r->u8();
     m.team_b = r->u8();
     m.mode = r->u8();
-    if (!r->done() || !sim::valid_game_mode(m.mode) || (!m.map_name.empty() && !valid_map_name(m.map_name))) return false;      // exactly the type, a map, four kinds, two team bytes and the mode
+    const uint8_t fog = r->u8();
+    if (!r->done() || fog > 1 || !sim::valid_game_mode(m.mode) || (!m.map_name.empty() && !valid_map_name(m.map_name))) return false;      // exactly the type, a map, four kinds, two team bytes, the mode and the fog byte (a plan of protocol 27 ends before it)
+    m.fog = fog == 1;
     for (size_t seat = 0; seat < plan.size(); ++seat) {
         if (plan[seat] > kPlanKindLast) return false;
         m.plan[seat] = static_cast<PlanKind>(plan[seat]);

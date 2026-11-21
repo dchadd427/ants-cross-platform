@@ -687,7 +687,7 @@ RestartHead Room::make_head() const {
     h.map = map_.name;
     h.map_hash = map_.hash;
     h.players = spec_.players;
-    h.fog = spec_.fog;
+    h.fog = lobby_.fog();                                        // (the room's own: a lobby room has the fog that its leader's plan chose, a room that was made with one has the spec's: protocol 28)
     h.early_start = spec_.early_start;
     h.public_room = spec_.public_room;
     h.wait_ms = spec_.wait_ms;
@@ -1180,6 +1180,7 @@ void Room::list_seats(ListedSeats& out, size_t free_now) const {
     out.host = leader_name.empty() ? "Player " + std::to_string(static_cast<unsigned>(leader) + 1u) : leader_name;      // (a Hello with no name: the list names the person as the lobby names a player who gave none)
     out.map = lobby_.map_name();
     out.mode = lobby_.mode();
+    out.fog = lobby_.fog();
     out.people = static_cast<uint8_t>(lobby_.people_colors());
     out.bots = static_cast<uint8_t>(lobby_.bot_colors());
     out.free_colors = static_cast<uint8_t>(free_now);
@@ -1210,7 +1211,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
     RoomStatus s;
     s.code = spec_.code;
     s.map = lobby_waiting() ? lobby_.map_name() : map_.name;           // (a lobby room's plan names the map before the room has loaded it)
-    s.fog = spec_.fog;
+    s.fog = lobby_.fog();                                        // (the lobby's: the spec's for a room that was made with fog, the leader's plan's for a lobby room)
     s.mode = lobby_.mode();
     s.expected = spec_.players;
     s.early_start = spec_.early_start;

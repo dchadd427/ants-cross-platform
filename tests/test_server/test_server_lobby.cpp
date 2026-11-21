@@ -322,6 +322,70 @@ void run_lobby_room_tests() {
         }
     } TEST_END();
 
+    TEST_CASE("S3.308 Fog Of War Through A Real Lobby Room (Protocol 28): The Leader's Plan Sets It (The Status, The Control Interface And Every Page's Room Message Say It), A Guest's Plan Does Not, A Plan With Fog And A Computer Player Is Refused As A Whole And The Leader Is Told, The START Puts It Into The Start Of The Match, Every Engine Of The Match Has Fog, And The Match Is Recorded With It") {
+        World w(lobby_limits());
+        Client& pia = w.connect_page("Pia", "fog00001", lobby_block_of());
+        Client& bob = w.connect_page("Bob", "fog00001", lobby_block_of());
+        const net::SeatKey key = pia.lobby->key();
+        w.run(300);
+        ASSERT_TRUE(pia.lobby->is_leader() && !bob.lobby->is_leader());
+        ASSERT_TRUE(!w.status("fog00001").fog && !pia.lobby->room().fog && !bob.lobby->room().fog);
+        ASSERT_FALSE(status_to_json(w.status("fog00001")).get("fog").as_bool_or(true));
+        // a guest's plan is not heard (the client knows it does not lead; as raw bytes it is an ignored plan)
+        net::PlanMsg plan = plan_msg({K::Open, K::Open, K::Nobody, K::Nobody});
+        plan.fog = true;
+        ASSERT_FALSE(bob.lobby->request_plan(plan));
+        bob.end->send(net::encode(plan));
+        w.run(300);
+        ASSERT_TRUE(!w.status("fog00001").fog && !pia.lobby->room().fog);
+        // the leader's plan with fog: the room, the control interface's status and every page say it
+        ASSERT_TRUE(pia.lobby->request_plan(plan));
+        w.run(300);
+        ASSERT_TRUE(w.status("fog00001").fog && pia.lobby->room().fog && bob.lobby->room().fog);
+        ASSERT_TRUE(status_to_json(w.status("fog00001")).get("fog").as_bool_or(false));
+        // a plan with fog and a computer player: the whole plan is refused (the map stays, fog stays), and the leader alone is told in the room's words
+        pia.room_chat.clear();                                                       // (the fixture's client keeps what the room said in room_chat)
+        bob.room_chat.clear();
+        w.run(1000);
+        net::PlanMsg bad = plan_msg({K::Open, K::Medium, K::Nobody, K::Nobody}, net::kNoTeam, net::kNoTeam, "SMALL.LVL");
+        bad.fog = true;
+        ASSERT_TRUE(pia.lobby->request_plan(bad));
+        w.run(300);
+        ASSERT_TRUE(w.status("fog00001").fog && pia.lobby->room().map_name == "TINY.LVL" && pia.lobby->room().plan[1] == K::Open);
+        std::vector<std::string> told;
+        for (const net::ChatLine& l : pia.room_chat) told.push_back(l.notice() ? l.text : "(a line of " + l.name + ")");
+        ASSERT_TRUE(told.size() == 1 && told[0] == net::kNoticeFillFog);
+        ASSERT_TRUE(bob.room_chat.empty());
+        w.run(1000);
+        w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
+        ASSERT_TRUE(pia.lobby->request_start());
+        w.run(300);
+        ASSERT_TRUE(w.status("fog00001").starting);
+        Client& pia_game = w.connect_game("Pia", "fog00001", key);
+        Client& bob_game = w.connect_game("Bob", "fog00001", bob.lobby->key());
+        w.run(3500);
+        const RoomStatus s = w.status("fog00001");
+        ASSERT_TRUE(s.state == RoomState::Running && s.fog);
+        for (Client* game : {&pia_game, &bob_game}) {
+            ASSERT_TRUE(game->lobby->start_info().fog);
+            ASSERT_TRUE(game->sim.is_fog_of_war_enabled());
+        }
+        {   // a page that never switched fog starts a match without it
+            World plain(lobby_limits());
+            Client& ann = plain.connect_page("Ann", "fog00003", lobby_block_of());
+            const net::SeatKey ann_key = ann.lobby->key();
+            ASSERT_TRUE(ann.lobby->request_plan(plan_msg({K::Open, K::Medium, K::Nobody, K::Nobody})));
+            plain.run(300);
+            plain.pages_ready();
+            ASSERT_TRUE(ann.lobby->request_start());
+            plain.run(300);
+            Client& ann_game = plain.connect_game("Ann", "fog00003", ann_key);
+            plain.run(3500);
+            ASSERT_TRUE(plain.status("fog00003").state == RoomState::Running && !plain.status("fog00003").fog);
+            ASSERT_TRUE(!ann_game.lobby->start_info().fog && !ann_game.sim.is_fog_of_war_enabled());
+        }
+    } TEST_END();
+
     TEST_CASE("S3.188 A Match Of Game Mode 187 That Starts With Teams Works From The Start To The End On Every Engine (Protocols 13 And 17): The Leader's Teams And The Room's Own Teams Stand On The Referee And On Every Machine Before The First Tick, The Mode Is On All Of Them, The Machines Fight, And Every State Hash Agrees With The Referee's To The Last Tick") {
         using net::FillLevel;
         const auto allies_text = [](const std::array<uint8_t, 4>& a) {

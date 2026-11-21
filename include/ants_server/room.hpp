@@ -197,12 +197,13 @@ struct RoomRow {
     bool winner{false};
 };
 
-/// What the list of games says of a lobby room that a newcomer could join: the leader's name, the map's file name, the game mode and the seats. Public and private rooms share it. It has no member for a code, a key or an id: a row that is
+/// What the list of games says of a lobby room that a newcomer could join: the leader's name, the map's file name, the game mode, Fog of War and the seats. Public and private rooms share it. It has no member for a code, a key or an id: a row that is
 /// made of nothing else cannot carry what leads to the room.
 struct ListedSeats {
     std::string host;                       // the leader's name, as the room shows it
     std::string map;                        // the plan's map (a file name)
     uint8_t mode{0};                        // sim::GameMode as a byte
+    bool fog{false};                        // the plan's Fog of War (protocol 28)
     uint8_t people{0};                      // the colors that a person holds (a seat that is held counts)
     uint8_t bots{0};                        // the colors that nobody holds and the plan gives to a bot
     uint8_t free_colors{0};                 // the colors that a newcomer can take (nobody holds them and the plan calls them Open)

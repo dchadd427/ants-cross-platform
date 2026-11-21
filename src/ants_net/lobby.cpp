@@ -658,7 +658,9 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
             // goes on beyond it is flooding.
             if (phase_ == Phase::Room && !starting_.active && seat == room_.leader) {
                 switch (guests_[seat].plans.take(now_ms, kPlanBurst, kPlansPerSecond, kPlanExcessBurst)) {
-                    case ChatBudget::Verdict::Relay: apply_plan(m); return;
+                    case ChatBudget::Verdict::Relay:
+                        if (apply_plan(m)) return;                           // (a plan that the room refuses is an ignored plan, counted below: no offence at first)
+                        break;
                     case ChatBudget::Verdict::Drop: return;
                     case ChatBudget::Verdict::Offence: return violation(seat);
                 }
@@ -953,6 +955,7 @@ Rematch HostLobby::rematch() const {
     r.team_a = room_.team_a;
     r.team_b = room_.team_b;
     r.mode = room_.mode;
+    r.fog = room_.fog;                                                                   // (protocol 28: the lobby that follows a fog match is a fog lobby until its leader says otherwise)
     r.public_by = public_ ? public_by_ : 0u;                                             // (a public room's lobby that follows is public too, for the person who made it so)
     for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {                                     // (the seats as the Start made them: nothing moves in the lobby once its match has begun)
         if (room_.slots[s].state != SlotState::Client || key_is_zero(guests_[s].key)) continue;
@@ -968,7 +971,7 @@ bool HostLobby::reopen(const Rematch& r, uint32_t now_ms) {
     const bool teams_ok = (r.team_a == kNoTeam && r.team_b == kNoTeam) || (r.team_a < r.team_b && r.team_b < sim::MAX_PLAYERS);
     if (!teams_ok || !sim::valid_game_mode(r.mode)) return false;
     for (const PlanKind k : r.plan) {
-        if (static_cast<uint8_t>(k) > kPlanKindLast) return false;
+        if (static_cast<uint8_t>(k) > kPlanKindLast || (r.fog && plan_fill_level(k) != FillLevel::None)) return false;      // (and no bot with fog)
     }
     uint8_t seats = 0;
     for (size_t i = 0; i < r.people.size(); ++i) {
@@ -984,6 +987,7 @@ bool HostLobby::reopen(const Rematch& r, uint32_t now_ms) {
     room_.team_a = r.team_a;
     room_.team_b = r.team_b;
     room_.mode = r.mode;
+    room_.fog = r.fog;
     for (const Rematch::Person& p : r.people) {
         Guest& g = guests_[p.seat];
         g = Guest{};
@@ -1129,8 +1133,14 @@ void HostLobby::rename(uint8_t seat, const std::string& raw) {
     broadcast_room();
 }
 
-// A plan of the leader (already heard: the leader, an open room, within the budget): the map when the server offers it, what each color is, the teams, the game mode. The room is shown to everybody when something changed.
-void HostLobby::apply_plan(const PlanMsg& plan) {
+// A plan of the leader (already heard: the leader, an open room, within the budget): the map when the server offers it, what each color is, the teams, the game mode and (protocol 28) Fog of War. The room is shown to
+// everybody when something changed. False when the room refuses the plan as a whole, and nothing of it is taken: Fog of War and a computer player never go together (a bot would see through the fog), so a plan
+// that has fog and a color that is a bot (Easy, Medium, Hard), or a room that seats a bot, is refused and the leader is told why, with the words of every other refusal of that rule.
+bool HostLobby::apply_plan(const PlanMsg& plan) {
+    if (plan.fog && (plan.has_bot() || has_bot())) {
+        notify(room_.leader, kNoticeFillFog);
+        return false;
+    }
     bool changed = false;
     if (!plan.map_name.empty()) {                                // ("" keeps the map; a map that the server does not offer keeps it too)
         const std::string file = map_choice_ ? map_choice_(plan.map_name) : plan.map_name;
@@ -1152,9 +1162,14 @@ void HostLobby::apply_plan(const PlanMsg& plan) {
         room_.mode = plan.mode;
         changed = true;
     }
-    if (!changed) return;
+    if (room_.fog != plan.fog) {                                 // (protocol 28)
+        room_.fog = plan.fog;
+        changed = true;
+    }
+    if (!changed) return true;
     ++plan_changes_;
     broadcast_room();
+    return true;
 }
 
 // The leader's choice (already heard: the leader, an open room, within the budget). A change is shown to everybody and is use of the room; so is "public" said to a room that is public, the leader's page looking

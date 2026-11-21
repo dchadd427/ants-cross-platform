@@ -501,7 +501,7 @@ ctl::HttpResponse handle_public_live(const RoomManager& rooms, const ctl::HttpRe
     return live_missing(false, std::string());
 }
 
-// GET /lobbies of the public door: the public list of games (RoomManager::lobbies), read only. Only what a visitor may see: the room's code (the link, public on purpose), the leader's name, the map's file name, the mode and numbers;
+// GET /lobbies of the public door: the public list of games (RoomManager::lobbies), read only. Only what a visitor may see: the room's code (the link, public on purpose), the leader's name, the map's file name, the mode, Fog of War and numbers;
 // never an address, a key, a platform, another person's name or chat. After the public rows come the PRIVATE rooms (RoomManager::private_lobbies), each a row of its own kind that is built from a PrivateListing and so has no code: the
 // page draws it as a locked card, and nothing in it leads to the room. A query or another method is a 404, as for /live; a server that offers no lobby rooms has an empty list. `count` is the public rows alone.
 ctl::HttpResponse handle_public_lobbies(const RoomManager& rooms, const ctl::HttpRequest& request, uint32_t now_ms) {
@@ -513,6 +513,7 @@ ctl::HttpResponse handle_public_lobbies(const RoomManager& rooms, const ctl::Htt
         e.set("host", JsonValue::make_string(l.host));
         e.set("map", JsonValue::make_string(l.map));
         e.set("mode", JsonValue::make_string(sim::game_mode_name(static_cast<sim::GameMode>(l.mode))));
+        e.set("fog", JsonValue::make_bool(l.fog));
         e.set("people", JsonValue::make_int(l.people));
         e.set("bots", JsonValue::make_int(l.bots));
         e.set("free", JsonValue::make_int(l.free_colors));
@@ -527,6 +528,7 @@ ctl::HttpResponse handle_public_lobbies(const RoomManager& rooms, const ctl::Htt
         e.set("host", JsonValue::make_string(l.host));
         e.set("map", JsonValue::make_string(l.map));
         e.set("mode", JsonValue::make_string(sim::game_mode_name(static_cast<sim::GameMode>(l.mode))));
+        e.set("fog", JsonValue::make_bool(l.fog));
         e.set("people", JsonValue::make_int(l.people));
         e.set("bots", JsonValue::make_int(l.bots));
         e.set("free", JsonValue::make_int(l.free_colors));

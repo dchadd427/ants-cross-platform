@@ -1,0 +1,188 @@
+// Tests of Fog of War in the room before a match (network protocol 28, docs/PLAY_IN_BROWSER.md "Fog of War"): the leader's plan sets it, everybody is shown it, a plan with fog and a computer player is refused as a whole with the
+// room's own words, the marks of Ready and the plan's other parts are as they were, a new leader and the rematch keep it (N4.65 - N4.67)
+#include "lobby_fixtures.hpp"
+
+namespace {
+
+using K = PlanKind;
+
+// What the room and every guest that is in it show of fog: "1" when all show it on, "0" when all show it off, "?" when they disagree
+char fog_shown(Room& room) {
+    char seen = room.host.room().fog ? '1' : '0';
+    for (auto& g : room.guests) {
+        if (g.lobby->phase() != ClientLobby::Phase::InRoom) continue;
+        if ((g.lobby->room().fog ? '1' : '0') != seen) return '?';
+    }
+    return seen;
+}
+
+PlanMsg fog_plan(const std::array<PlanKind, sim::MAX_PLAYERS>& kinds, bool fog, uint8_t team_a = kNoTeam, uint8_t team_b = kNoTeam, const std::string& map = std::string()) {
+    PlanMsg m = plan_of(kinds, team_a, team_b, map);
+    m.fog = fog;
+    return m;
+}
+
+}  // namespace
+
+void run_lobby_fog_tests() {
+    TEST_CASE("N4.65 Fog Of War In The Plan (Protocol 28): The Leader's Plan Switches It, Every Guest Is Shown It, A Guest's Plan Does Nothing, The Same Plan Again Changes Nothing, And The Map, The Colors And The Teams Of A Plan Keep What It Says Of Fog") {
+        Room room(lobby_room_config(501));
+        const size_t ann = room.join_seat("Ann");
+        const size_t bob = room.join_seat("Bob");
+        room.run(100);
+        ASSERT_TRUE(room.guests[ann].lobby->is_leader() && !room.host.fog() && fog_shown(room) == '0');
+        // the leader says fog on: the room and both guests show it, and it is use of the room (a change of the plan)
+        ASSERT_TRUE(room.guests[ann].lobby->request_plan(fog_plan({K::Open, K::Open, K::Open, K::Open}, true)));
+        room.run(100);
+        ASSERT_TRUE(room.host.fog() && fog_shown(room) == '1' && room.host.plan_changes() == 1u);
+        // the same plan again: nothing changed, nothing is shown, nothing is counted
+        ASSERT_TRUE(room.guests[ann].lobby->request_plan(fog_plan({K::Open, K::Open, K::Open, K::Open}, true)));
+        room.run(100);
+        ASSERT_TRUE(room.host.fog() && room.host.plan_changes() == 1u && room.host.ignored_plans() == 0u);
+        // a plan that changes the map, the colors and the teams and keeps fog on is one change, and fog is still on; the same plan with fog off switches it off and nothing else moves
+        ASSERT_TRUE(room.guests[ann].lobby->request_plan(fog_plan({K::Open, K::Nobody, K::Open, K::Open}, true, 0, 2, "SMALL.LVL")));
+        room.run(100);
+        ASSERT_TRUE(room.host.fog() && room.host.map_name() == "SMALL.LVL" && plan_text(room.host.room()) == "onoo 0+2" && fog_shown(room) == '1' && room.host.plan_changes() == 2u);
+        ASSERT_TRUE(room.guests[ann].lobby->request_plan(fog_plan({K::Open, K::Nobody, K::Open, K::Open}, false, 0, 2, "SMALL.LVL")));
+        room.run(100);
+        ASSERT_TRUE(!room.host.fog() && fog_shown(room) == '0' && room.host.map_name() == "SMALL.LVL" && plan_text(room.host.room()) == "onoo 0+2" && room.host.plan_changes() == 3u);
+        // a guest that does not lead is not heard: the plan with fog is counted as ignored and fog stays as it was
+        ASSERT_FALSE(room.guests[bob].lobby->request_plan(fog_plan({K::Open, K::Open, K::Open, K::Open}, true)));        // (the client knows it does not lead)
+        const std::vector<uint8_t> wish = encode(fog_plan({K::Open, K::Nobody, K::Open, K::Open}, true, 0, 2, "SMALL.LVL"));
+        room.guests[bob].client_end->send(wish);
+        room.run(100);
+        ASSERT_TRUE(!room.host.fog() && fog_shown(room) == '0' && room.host.ignored_plans() == 1u && room.host.plan_changes() == 3u);
+        // a plan of protocol 27 (no fog byte) and a fog byte above 1 are no plan at all
+        PlanMsg scratch;
+        std::vector<uint8_t> old_plan = wish;
+        old_plan.pop_back();
+        ASSERT_FALSE(decode(old_plan, scratch));
+        std::vector<uint8_t> loud = wish;
+        loud.back() = 2;
+        ASSERT_FALSE(decode(loud, scratch));
+        ASSERT_TRUE(decode(wish, scratch) && scratch.fog);
+    } TEST_END();
+
+    TEST_CASE("N4.66 Bots And Fog Of War Never Mix: A Plan With Fog And A Color That Is A Computer Player Is Refused As A Whole (Nothing Of It Is Taken), The Leader Is Told With The Room's Words, It Counts As An Ignored Plan; Open, Nobody And Fog Together Are Fine, And Bots Come Back When Fog Goes Off") {
+        Room room(lobby_room_config(502));
+        const size_t ann = room.join_seat("Ann");
+        const size_t bob = room.join_seat("Bob");
+        room.run(100);
+        notices_of(*room.guests[ann].lobby);
+        // fog with a Medium bot in Blue, a new map and a team pair: the whole plan is refused
+        ASSERT_TRUE(room.guests[ann].lobby->request_plan(fog_plan({K::Open, K::Open, K::Medium, K::Open}, true, 0, 2, "SMALL.LVL")));
+        room.run(100);
+        ASSERT_TRUE(!room.host.fog() && fog_shown(room) == '0' && plan_text(room.host.room()) == "oooo -" && room.host.map_name() == "TINY.LVL");
+        ASSERT_TRUE(room.host.plan_changes() == 0u && room.host.ignored_plans() == 1u);
+        const std::vector<std::string> told = notices_of(*room.guests[ann].lobby);
+        ASSERT_TRUE(told.size() == 1 && told[0] == kNoticeFillFog && told[0] == "Bots cannot play with Fog of War.");
+        ASSERT_TRUE(notices_of(*room.guests[bob].lobby).empty());                                        // (the leader alone is told)
+        ASSERT_TRUE(room.host.occupied(room.guests[ann].lobby->my_seat()));                              // (no offence the first time)
+        // Easy and Hard are bots too; Nobody and Open are not
+        for (const K bot : {K::Easy, K::Hard}) {
+            room.run(1000);
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(fog_plan({bot, K::Open, K::Open, K::Open}, true)));
+            room.run(100);
+            ASSERT_TRUE(!room.host.fog() && plan_text(room.host.room()) == "oooo -");
+            notices_of(*room.guests[ann].lobby);
+        }
+        ASSERT_EQ(room.host.ignored_plans(), 3u);
+        room.run(1000);
+        ASSERT_TRUE(room.guests[ann].lobby->request_plan(fog_plan({K::Open, K::Nobody, K::Open, K::Nobody}, true)));
+        room.run(100);
+        ASSERT_TRUE(room.host.fog() && plan_text(room.host.room()) == "onon -" && notices_of(*room.guests[ann].lobby).empty());
+        // with fog on, a plan that adds a bot (fog stays on) is refused as a whole; the room stays as it was
+        room.run(1000);
+        ASSERT_TRUE(room.guests[ann].lobby->request_plan(fog_plan({K::Open, K::Nobody, K::Open, K::Easy}, true)));
+        room.run(100);
+        ASSERT_TRUE(room.host.fog() && plan_text(room.host.room()) == "onon -");
+        ASSERT_EQ(notices_of(*room.guests[ann].lobby), std::vector<std::string>{kNoticeFillFog});
+        // the way out of fog: one plan that takes fog off and gives a color to a bot
+        room.run(1000);
+        ASSERT_TRUE(room.guests[ann].lobby->request_plan(fog_plan({K::Open, K::Nobody, K::Open, K::Easy}, false)));
+        room.run(100);
+        ASSERT_TRUE(!room.host.fog() && fog_shown(room) == '0' && plan_text(room.host.room()) == "onoe -" && notices_of(*room.guests[ann].lobby).empty());
+        // and the one plan that the question of the page sends: the bot colors open and fog on
+        room.run(1000);
+        ASSERT_TRUE(room.guests[ann].lobby->request_plan(fog_plan({K::Open, K::Nobody, K::Open, K::Open}, true)));
+        room.run(100);
+        ASSERT_TRUE(room.host.fog() && fog_shown(room) == '1' && plan_text(room.host.room()) == "onoo -");
+        // a Room message that has fog and a color of a computer player is no Room message (the decoder, as the room never says it)
+        RoomMsg m = room.host.room();
+        ASSERT_TRUE(m.fog);
+        RoomMsg back;
+        ASSERT_TRUE(decode(encode(m), back) && back.fog);
+        m.plan[3] = K::Easy;
+        m.slots[3].name = "Pip (bot, Easy)";                                                              // (the room names a planned bot on its empty color)
+        ASSERT_FALSE(decode(encode(m), back));
+        m.fog = false;
+        ASSERT_TRUE(decode(encode(m), back) && !back.fog);
+    } TEST_END();
+
+    TEST_CASE("N4.67 Fog Of War And The Room Around It: The Marks Of Ready Stay When It Changes, A Plan Is Not Heard While The START Waits, A New Leader Finds It As It Was And Can Switch It, And The Lobby After A Match Has Its Fog Again (A Rematch With Fog And A Bot Is Not Taken)") {
+        {   // Ready marks stay; the leader leaves and the next one leads a room that is still in fog
+            Room room(lobby_room_config(503));
+            const size_t ann = room.join_with(page_config("Ann"));
+            room.run(100);
+            const size_t bob = room.join_with(page_config("Bob"));
+            room.run(100);
+            const size_t cat = room.join_with(page_config("Cat"));
+            room.run(100);
+            ASSERT_TRUE(room.guests[bob].lobby->request_ready(true));
+            room.run(100);
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(fog_plan({K::Open, K::Open, K::Open, K::Open}, true)));
+            room.run(100);
+            ASSERT_TRUE(room.host.fog() && room.host.ready(1) && !room.host.ready(2) && fog_shown(room) == '1');          // (the mark of Bob stays)
+            room.run(1000);
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(fog_plan({K::Open, K::Open, K::Open, K::Open}, false)));
+            room.run(100);
+            ASSERT_TRUE(!room.host.fog() && room.host.ready(1));
+            room.run(1000);
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(fog_plan({K::Open, K::Open, K::Open, K::Open}, true)));
+            room.run(100);
+            ASSERT_TRUE(room.host.fog());
+            room.guests[ann].lobby->leave();
+            room.run(300);
+            ASSERT_TRUE(room.guests[bob].lobby->is_leader() && !room.guests[cat].lobby->is_leader());
+            ASSERT_TRUE(room.host.fog() && fog_shown(room) == '1');                                             // (a new leader finds the room's rules as they were)
+            room.run(1000);
+            ASSERT_FALSE(room.guests[cat].lobby->request_plan(fog_plan({K::Open, K::Open, K::Open, K::Open}, false)));
+            ASSERT_TRUE(room.guests[bob].lobby->request_plan(fog_plan({K::Open, K::Open, K::Open, K::Open}, false)));
+            room.run(100);
+            ASSERT_TRUE(!room.host.fog() && fog_shown(room) == '0');
+        }
+        {   // while the START waits nobody changes the plan (fog included)
+            Room room(lobby_room_config(504));
+            const size_t ann = room.join_with(page_config("Ann"));
+            room.run(100);
+            const size_t bob = room.join_with(page_config("Bob"));
+            room.run(100);
+            ASSERT_TRUE(room.guests[bob].lobby->request_ready(true));
+            room.run(100);
+            ASSERT_TRUE(room.guests[ann].lobby->request_start());
+            room.run(100);
+            ASSERT_TRUE(room.host.starting());
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(fog_plan({K::Open, K::Open, K::Open, K::Open}, true)));        // (the client sends it; the room does not hear it)
+            room.run(100);
+            ASSERT_TRUE(!room.host.fog() && fog_shown(room) == '0');
+        }
+        {   // the rematch: the lobby that follows a match is a lobby with the match's fog; fog with a bot is not a match that could have been played, and is not taken
+            Room room(lobby_room_config(505), false);
+            Rematch r;
+            r.map_name = "TINY.LVL";
+            r.plan = {K::Open, K::Open, K::Nobody, K::Open};
+            r.fog = true;
+            r.people.push_back(Rematch::Person{0, "Ann", key_with(1), 1, static_cast<uint8_t>(kPlatformBrowser | kOsMacos)});
+            r.people.push_back(Rematch::Person{1, "Bob", key_with(2), 2, static_cast<uint8_t>(kPlatformBrowser | kOsWindows)});
+            ASSERT_TRUE(room.host.reopen(r, room.now));
+            ASSERT_TRUE(room.host.fog() && room.host.room().fog && plan_text(room.host.room()) == "oono -");
+            Room bad(lobby_room_config(506), false);
+            Rematch with_bot = r;
+            with_bot.plan[3] = K::Hard;
+            ASSERT_FALSE(bad.host.reopen(with_bot, bad.now));
+            ASSERT_TRUE(!bad.host.fog() && !bad.host.any_reserved());
+            with_bot.fog = false;
+            ASSERT_TRUE(bad.host.reopen(with_bot, bad.now) && !bad.host.fog() && plan_text(bad.host.room()) == "oonh -");
+        }
+    } TEST_END();
+}
