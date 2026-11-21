@@ -62,7 +62,7 @@ class TheImage(unittest.TestCase):
         cls.code = code(cls.text)
 
     def test_it_is_slim_python_and_runs_as_a_user_that_is_not_root(self):
-        self.assertRegex(self.code, r"(?m)^FROM python:3\.\d+-slim-\w+\s*$")
+        self.assertRegex(self.code, r"(?m)^FROM python:3\.\d+-slim-\w+(@sha256:[0-9a-f]{64})?\s*$")
         self.assertRegex(self.code, r"(?m)^USER hub\s*$")
         self.assertRegex(self.code, r"useradd --system .*--shell /usr/sbin/nologin hub")
         self.assertLess(self.code.index("useradd"), self.code.index("USER hub"))

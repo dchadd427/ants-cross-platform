@@ -5,6 +5,7 @@ A tag can be moved to another image, and a package index can serve another file 
 host that builds the production stack. These are settings with nothing to run (the build itself is run by the CI, which builds every image), so the files are read as text, and each check is
 shown to fail on a copy that breaks it:
 
+  - every Dockerfile: each base image from outside (not an earlier stage) names a tag and a digest, `name:tag@sha256:...`
   - .github/dependabot.yml: the converter's packages, the Dockerfiles' base images and the workflows' actions are updated weekly, grouped, against home-next, and every Dockerfile of the
     repository is in a folder that the file watches
 """
@@ -35,6 +36,21 @@ def dockerfiles():
     return sorted(found)
 
 
+def unpinned_images(text):
+    """The base images of a Dockerfile that come from outside (a `FROM` that does not name an earlier stage) and have no tag or no digest."""
+    stages, found = set(), []
+    for line in text.splitlines():
+        match = re.match(r"(?i)^FROM\s+(?:--\S+\s+)*(\S+)(?:\s+AS\s+(\S+))?\s*$", line)
+        if not match:
+            continue
+        image, stage = match.group(1), match.group(2)
+        if image not in stages and not re.fullmatch(r"[a-z0-9._/-]+:[A-Za-z0-9._-]+@" + DIGEST, image):
+            found.append(image)
+        if stage:
+            stages.add(stage)
+    return found
+
+
 def problems_of_dependabot(config, dockerfile_paths=None):
     """What the Dependabot file lacks: an ecosystem, the weekly grouped updates against home-next, a folder that exists, or a Dockerfile in a folder that no entry watches."""
     problems = []
@@ -59,6 +75,23 @@ def problems_of_dependabot(config, dockerfile_paths=None):
         if os.path.dirname(path) not in watched:
             problems.append("%s is in a folder that is not watched" % path)
     return problems
+
+
+class TheBaseImages(unittest.TestCase):
+    def test_every_base_image_of_every_dockerfile_is_pinned_by_tag_and_digest(self):
+        paths = dockerfiles()
+        self.assertGreaterEqual(len(paths), 5)
+        for path in paths:
+            self.assertEqual(unpinned_images(read(path)), [], path)
+
+    def test_the_check_finds_an_image_without_a_digest_or_a_tag_and_leaves_the_stages_alone(self):
+        pinned = "FROM nginx:alpine@sha256:" + "a" * 64 + " AS runner\n"
+        self.assertEqual(unpinned_images(pinned), [])
+        self.assertEqual(unpinned_images("FROM nginx:alpine AS runner\n"), ["nginx:alpine"])
+        self.assertEqual(unpinned_images("FROM nginx@sha256:" + "a" * 64 + "\n"), ["nginx@sha256:" + "a" * 64])
+        self.assertEqual(unpinned_images("FROM nginx:alpine@sha256:" + "a" * 63 + "\n"), ["nginx:alpine@sha256:" + "a" * 63])
+        self.assertEqual(unpinned_images(pinned + "FROM runner AS second\nFROM second\n"), [], "the name of an earlier stage is not an image")
+        self.assertEqual(unpinned_images(pinned + "FROM later AS second\n"), ["later"], "a name that no stage has yet is an image")
 
 
 @unittest.skipUnless(yaml, "PyYAML is needed")
