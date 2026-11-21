@@ -790,13 +790,13 @@ def _scale_bomber_head_and_tall_antennae(
     new_eye_l = (raw_el[0] - eye_inward_dx, raw_el[1], raw_el[2])
     new_eye_r = (raw_er[0] + eye_inward_dx, raw_er[1], raw_er[2])
 
-    # 1. Scale `head` around `piv`, then apply a smooth C^3 superelliptic flat-top ceiling deform to
-    # `cranium` above eye/strap midline so the top of Bomber's skull sits nearly flush with the top edge
-    # of the yellow goggles (matching abst901/abst301) while leaving eyes, eyelids, and jaw untouched.
+    # 1. Scale `head` around `piv`, then apply a smooth superelliptic crown compression to `cranium`
+    # above eye/strap midline so Bomber keeps his compact low goggle-level silhouette while preserving
+    # a gentle, natural softly-rounded dome curve on top (matching abst901/abst301 without a table-flat top).
     ey_mid = 0.5 * (new_eye_l[1] + new_eye_r[1])
     crown_start_y = ey_mid + 0.020
-    crown_cap_h = 0.064
-    crown_p = 3.5
+    crown_cap_h = 0.082
+    crown_p = 2.15
 
     def _flatten_crown(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
@@ -903,7 +903,7 @@ def _scale_bomber_head_and_tall_antennae(
         )
         sock = (
             ellipsoid(0.025, 0.012, 0.025, u_segs=12, v_segs=8, name=f"antenna_socket_{tag}", material="chitin_dark")
-            .rotate_xyz(rx=-0.08, rz=-side * 0.08)
+            .rotate_xyz(rx=-0.14, rz=-side * 0.12)
             .translate(*base_p)
         )
         scene.nodes[node_name] = [
@@ -936,7 +936,7 @@ def build_bomber(blink: float = 0.0) -> SceneBuilder:
         stance_asymmetry=0.40,
         leg_style="bomber",
         include_idle=False,
-        crouch=0.12,
+        crouch=0.168,
         left_arm_pose="idle",
         right_arm_pose="idle",
         blink=blink,
@@ -963,6 +963,9 @@ def build_bomber(blink: float = 0.0) -> SceneBuilder:
         scene.set_node_transform("goggles", translation=head_xf.translation)
     scene.attach_world_node("dynamite_pack", "upper_body", preserve_world_pose=False)
     _add_bomber_idle(scene)
+    # Uniformly scale ~1.058x after crouch=0.168 & Idle leg-flex sync so Bomber keeps exact ~0.88 height
+    # with ~20% shorter sturdier legs, exact hip tracking, and feet grounded cleanly at Y = 0.0.
+    scene.scale_all(1.058)
     return scene
 
 

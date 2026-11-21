@@ -568,20 +568,21 @@ def _make_diving_flipper(name: str, length: float = 0.155, blade_w: float = 0.08
 
 
 def _build_flippers(scene: SceneBuilder, anchors: Dict[str, Any]) -> None:
-    """Attach bold ~1.55x larger frogman diving flippers individually onto all 4 feet at Y = 0.0."""
+    """Attach 4 forward-facing frogman diving flippers individually onto all 4 feet at Y = 0.0."""
     mid_l = anchors.get("foot_mid_left", (0.152, 0.0, 0.094))
     mid_r = anchors.get("foot_mid_right", (-mid_l[0], 0.0, mid_l[2]))
     rear_l = anchors.get("foot_rear_left", (0.160, 0.0, -0.028))
     rear_r = anchors.get("foot_rear_right", (-rear_l[0], 0.0, rear_l[2]))
 
-    rear_yaw = math.pi - 0.34
-    mid_yaw = 0.28
+    # All 4 flippers face FORWARD (+Z), splayed naturally outward so mid & rear blades stay cleanly separated.
+    mid_yaw = 0.24
+    rear_yaw = 0.72
 
     for tag, foot_pos, length, blade_w, yaw_signed, boot_z_off in (
-        ("rear_left", rear_l, 0.232, 0.132, +rear_yaw, -0.010),
-        ("rear_right", rear_r, 0.232, 0.132, -rear_yaw, -0.010),
-        ("mid_left", mid_l, 0.222, 0.126, +mid_yaw, +0.018),
-        ("mid_right", mid_r, 0.222, 0.126, -mid_yaw, +0.018),
+        ("rear_left", rear_l, 0.208, 0.110, +rear_yaw, +0.018),
+        ("rear_right", rear_r, 0.208, 0.110, -rear_yaw, +0.018),
+        ("mid_left", mid_l, 0.214, 0.116, +mid_yaw, +0.018),
+        ("mid_right", mid_r, 0.214, 0.116, -mid_yaw, +0.018),
     ):
         fx, _, fz = foot_pos
         fin = _make_diving_flipper(f"flipper_{tag}", length=length, blade_w=blade_w)
@@ -589,13 +590,13 @@ def _build_flippers(scene: SceneBuilder, anchors: Dict[str, Any]) -> None:
 
         # Snug dark rubber boot pocket encasing the curved digitigrade tarsus cleanly above Y = 0.0.
         boot_vamp = (
-            superellipsoid(0.027, 0.019, 0.052, e1=0.72, e2=0.76, u_segs=14, v_segs=10, name=f"flipper_boot_{tag}", material="gear_dark")
+            superellipsoid(0.028, 0.020, 0.052, e1=0.72, e2=0.76, u_segs=14, v_segs=10, name=f"flipper_boot_{tag}", material="gear_dark")
             .translate(0.0, 0.021, boot_z_off)
             .rotate_xyz(ry=yaw_signed)
             .translate(fx, 0.0, fz)
         )
         collar = (
-            cylinder(0.028, 0.022, 0.038, radial_segs=14, bevel=0.005, axis="y", name=f"flipper_collar_{tag}", material="gear_dark")
+            cylinder(0.030, 0.025, 0.040, radial_segs=14, bevel=0.005, axis="y", name=f"flipper_collar_{tag}", material="gear_dark")
             .translate(fx, 0.026, fz)
         )
         scene.add("flippers", boot_vamp)
