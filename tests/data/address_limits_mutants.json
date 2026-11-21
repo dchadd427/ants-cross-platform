@@ -90,7 +90,7 @@
    "id": "wrong_code_not_noted",
    "file": "src/ants_server/address_limits.cpp",
    "old": "s.wrong.add(now_ms, static_cast<size_t>(limits_.wrong_codes_per_minute) + kWrongCodeOverCap + 1);",
-   "new": "(void)now_ms;",
+   "new": "(void)kWrongCodeOverCap;",
    "build": "test_address_limits",
    "test": "env ANTS_TEST_FILTER=S3.350 ./build/tests/test_server/test_address_limits",
    "expect": "S3.350"
@@ -144,7 +144,7 @@
    "id": "sweep_forgets_nothing",
    "file": "src/ants_server/address_limits.cpp",
    "old": "if (left == 0) it = seen_.erase(it);",
-   "new": "if (false) it = seen_.erase(it);",
+   "new": "if (left == 1000000) it = seen_.erase(it);",
    "build": "test_address_limits",
    "test": "env ANTS_TEST_FILTER=S3.350 ./build/tests/test_server/test_address_limits",
    "expect": "S3.350"
@@ -180,7 +180,7 @@
    "id": "network_prefix_bits_ignored",
    "file": "src/ants_server/address_limits.cpp",
    "old": "if ((b[whole_bytes] & mask) != (net.bytes[whole_bytes] & mask)) continue;",
-   "new": "if (false) continue;",
+   "new": "if (mask == 0xFFFFu && (b[whole_bytes] & mask) != (net.bytes[whole_bytes] & mask)) continue;",
    "build": "test_address_limits",
    "test": "env ANTS_TEST_FILTER=S3.352 ./build/tests/test_server/test_address_limits",
    "expect": "S3.352"
@@ -198,7 +198,7 @@
    "id": "header_believed_from_anyone",
    "file": "src/ants_server/address_limits.cpp",
    "old": "if (!proxies.contains(peer)) return peer;",
-   "new": "if (false) return peer;",
+   "new": "if (false && !proxies.contains(peer)) return peer;",
    "build": "test_address_limits",
    "test": "env ANTS_TEST_FILTER=S3.352 ./build/tests/test_server/test_address_limits",
    "expect": "S3.352"
@@ -261,7 +261,7 @@
    "id": "public_room_has_no_creator",
    "file": "src/ants_server/room_manager.cpp",
    "old": "    spec.creator = creator;\n    spec.early_start = true;",
-   "new": "    spec.early_start = true;",
+   "new": "    spec.creator = creator.substr(0, 0);\n    spec.early_start = true;",
    "build": "test_address_limits",
    "test": "env ANTS_TEST_FILTER=S3.355 ./build/tests/test_server/test_address_limits",
    "expect": "S3.355"
@@ -270,7 +270,7 @@
    "id": "lobby_room_has_no_creator",
    "file": "src/ants_server/room_manager.cpp",
    "old": "    spec.creator = creator;\n    return create_room(std::move(spec), now_ms).ok;",
-   "new": "    return create_room(std::move(spec), now_ms).ok;",
+   "new": "    spec.creator = creator.substr(0, 0);\n    return create_room(std::move(spec), now_ms).ok;",
    "build": "test_address_limits",
    "test": "env ANTS_TEST_FILTER=S3.355 ./build/tests/test_server/test_address_limits",
    "expect": "S3.355"
@@ -351,7 +351,7 @@
    "id": "held_answers_not_bounded_per_address",
    "file": "src/ants_server/room_manager_limits.cpp",
    "old": "if (delayed_.size() >= kWrongCodeHeldTotal || held_by_id >= kWrongCodeHeldPerAddress) {",
-   "new": "if (delayed_.size() >= kWrongCodeHeldTotal) {",
+   "new": "if (delayed_.size() >= kWrongCodeHeldTotal || (held_by_id >= kWrongCodeHeldPerAddress && false)) {",
    "build": "test_address_limits",
    "test": "env ANTS_TEST_FILTER=S3.356 ./build/tests/test_server/test_address_limits",
    "expect": "S3.356"
@@ -414,7 +414,7 @@
    "id": "relay_gate_has_no_seat_address",
    "file": "include/ants_net/lobby.hpp",
    "old": "return seat < sim::MAX_PLAYERS ? guests_[seat].address : kNone;",
-   "new": "return kNone;",
+   "new": "return seat > sim::MAX_PLAYERS ? guests_[seat].address : kNone;",
    "build": "test_address_limits",
    "test": "env ANTS_TEST_FILTER=S3.358 ./build/tests/test_server/test_address_limits",
    "expect": "S3.358"
@@ -450,7 +450,7 @@
    "id": "program_ignores_the_proxies_variable",
    "file": "src/ants_server/main.cpp",
    "old": "const std::string list = o.trusted_proxies_given ? o.trusted_proxies : std::string(env != nullptr ? env : \"\");",
-   "new": "const std::string list = o.trusted_proxies_given ? o.trusted_proxies : std::string();",
+   "new": "const std::string list = o.trusted_proxies_given ? o.trusted_proxies : std::string(env != nullptr ? \"\" : \"\");",
    "build": "test_address_limits ants_server",
    "test": "env ANTS_TEST_FILTER=S3.362 ./build/tests/test_server/test_address_limits",
    "expect": "S3.362"
@@ -468,7 +468,7 @@
    "id": "program_takes_any_limit_value",
    "file": "src/ants_server/main.cpp",
    "old": "if (!ants::server::set_address_limit(o.address_limits, key, n, why)) {",
-   "new": "if (false) {",
+   "new": "if (!ants::server::set_address_limit(o.address_limits, key, n, why) && n == 0x7fffffffffffffffLL) {",
    "build": "test_address_limits ants_server",
    "test": "env ANTS_TEST_FILTER=S3.362 ./build/tests/test_server/test_address_limits",
    "expect": "S3.362"

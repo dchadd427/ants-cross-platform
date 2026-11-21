@@ -541,7 +541,7 @@ void run_address_limit_tests() {
         ASSERT_EQ(w.mgr.address_refusals().connections, uint64_t{4});
     } TEST_END();
 
-    TEST_CASE("S3.358 Relay Credentials Are Counted Per Address Across Matches: With Three An Hour, The First Match Of Two People From One Address Gets Two, The Second Gets One And Then The Answer Of A Server With No Relay, And Another Address Is Given Its Own; An Hour Later The Count Is Empty") {
+    TEST_CASE("S3.358 Relay Credentials Are Counted Per Address Across Matches: With Three An Hour, The First Match Of Two People From One Address Gets Two, The Second Gets One And Then The Answer Of A Server With No Relay, And Another Address Is Given Its Own; 50 Minutes Later The Count Still Holds, An Hour After The Credentials It Is Empty") {
         ServerLimits l;
         l.address.relay_per_hour = 3;
         auto turn = std::make_shared<net::TurnSettings>();
@@ -549,6 +549,8 @@ void run_address_limit_tests() {
         turn->credential = net::make_turn_signer("room-secret");
         l.turn = turn;
         World w(l);
+        w.now += 20u * 60u * 1000u;                                                                              // (the server has been up for twenty minutes: the credentials below are from minute 20)
+        w.run(100);
         const std::array<std::string, 2> home = {kHousehold, kHousehold};
         const auto first = relay_match(w, "RLY-1", home);
         ASSERT_TRUE(given(first[0]) && given(first[1]));
@@ -563,11 +565,18 @@ void run_address_limit_tests() {
         const auto mixed = relay_match(w, "RLY-4", {kHousehold, kCarrier});                                     // (a person of each: the household's seat is refused, the other seat is not)
         ASSERT_TRUE(mixed[0].size() == 1 && mixed[0][0].credential.empty());
         ASSERT_TRUE(given(mixed[1]));
-        for (const char* code : {"RLY-1", "RLY-2", "RLY-3", "RLY-4"}) w.mgr.close_room(code, w.now);         // (the matches end; an hour passes)
+        for (const char* code : {"RLY-1", "RLY-2", "RLY-3", "RLY-4"}) w.mgr.close_room(code, w.now);         // (the matches end)
         w.run(1000);
-        w.now += 3600u * 1000u;
+        w.now += 50u * 60u * 1000u;                                                                              // minute 70: the household's credentials are 50 minutes old, and still count
         w.run(100);
-        const auto next_hour = relay_match(w, "RLY-5", home);
+        const auto still = relay_match(w, "RLY-5", home);
+        ASSERT_TRUE(still[0].size() == 1 && still[0][0].credential.empty() && still[1].size() == 1 && still[1][0].credential.empty());
+        ASSERT_EQ(w.mgr.address_refusals().relay, uint64_t{4});                                                      // (the second match, the household's seat of the mixed one, and both of these)
+        w.mgr.close_room("RLY-5", w.now);
+        w.run(1000);
+        w.now += 15u * 60u * 1000u;                                                                              // minute 85: an hour has passed since minute 20
+        w.run(100);
+        const auto next_hour = relay_match(w, "RLY-6", home);
         ASSERT_TRUE(given(next_hour[0]) && given(next_hour[1]));
         ASSERT_TRUE(net::turn_credential_valid("room-secret", next_hour[0][0].username, next_hour[0][0].credential, unix_seconds()));
         // with no limit the same house is never refused
