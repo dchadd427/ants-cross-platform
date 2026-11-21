@@ -1,4 +1,6 @@
-// Tests of the room before a match: the lobby messages, joining and refusing, leaving, the start barrier (and the countdown that Begin carries, protocol 21), cancelled starts, kicking, the leader, the flood control and the keys (N4.1 - N4.14)
+// Tests of the room before a match: the lobby messages, joining and refusing, leaving, the start barrier (and the countdown that Begin carries, protocol 21), cancelled starts, kicking, the leader, the flood control and the keys (N4.1 - N4.14),
+// and the messages that only a running match takes (N4.55)
+#include "ants_net/p2p.hpp"
 #include "lobby_fixtures.hpp"
 
 void run_lobby_basics_tests() {
@@ -1521,6 +1523,29 @@ void run_lobby_basics_tests() {
             const size_t b = room.join_seat("B");                                          // call 2: 7 again, refused; call 3: 3
             ASSERT_TRUE(room.guests[a].lobby->key()[0] == 7 && room.guests[b].lobby->key()[0] == 3);
             ASSERT_EQ(calls, 3);
+        }
+    } TEST_END();
+
+    TEST_CASE("N4.55 The Relay Is For The Running Match: A P2pConfig Or A Signal That Reaches The Room Before The Match Has Begun Is A Message A Guest May Not Send, A Violation Each, And Nothing Is Handed Out") {
+        HostLobby::Config hc;
+        hc.host_seat = 255;
+        hc.min_players = 2;
+        Room room(hc);
+        const size_t ann = room.join_seat("Ann");
+        const size_t bob = room.join_seat("Bob");
+        const uint8_t ann_seat = room.guests[ann].lobby->my_seat();
+        room.guests[ann].frozen = true;                                            // (her lobby no longer reads: what the room sends her stays on her link, for the test to look at)
+        Connection* ann_end = room.guests[ann].client_end;
+        for (unsigned i = 0; i < 7; ++i) ann_end->send(i % 2 == 0 ? encode(P2pConfigMsg{false}) : encode(SignalMsg{1, SignalKind::Offer, "v=0\r\n"}));
+        room.run(300);
+        ASSERT_TRUE(room.host.occupied(ann_seat));                                 // seven are a violation each, below the eight that throw a guest out
+        ann_end->send(encode(P2pConfigMsg{true}));
+        room.run(300);
+        ASSERT_FALSE(room.host.occupied(ann_seat));                                // the eighth does
+        ASSERT_TRUE(room.host.occupied(room.guests[bob].lobby->my_seat()));        // and nobody else is touched
+        std::vector<uint8_t> heard;
+        while (ann_end->poll(heard)) {
+            ASSERT_TRUE(peek_type(heard) != MsgType::IceConfig && peek_type(heard) != MsgType::P2pPeers);       // no credential, and no list of who is ready
         }
     } TEST_END();
 }

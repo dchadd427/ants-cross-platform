@@ -161,9 +161,12 @@ public:
         size_t stream_window_bytes{kStreamWindowBytes};
         // Hints and channels (protocol 26, p2p.hpp). `turn`: the relay's addresses and the maker of its credentials; null, or without addresses: no relay, so no player is given a credential and none opens a channel.
         // `random_bytes` makes the random label of a credential's user name (the operating system's source; without it no credential is made) and `unix_now` is the clock of its expiry (empty: the system clock).
+        // A credential is made only once the match has begun, only in a match that began with two or more people (a computer player's hints need no channel) and at most kMaxP2pCredentials (p2p.hpp) times for a player.
+        // `relay_ttl_s` is the longest a credential may live: the longest the match can last and a margin (the room sets it); 0: the relay's own (TurnSettings::ttl_s). The shorter of the two counts.
         std::shared_ptr<const TurnSettings> turn;
         std::function<bool(uint8_t*, size_t)> random_bytes;
         std::function<uint32_t()> unix_now;
+        uint32_t relay_ttl_s{0};
         bool bot_hints{true};                                   // a computer player's order is sent to every player the moment the bot gives it, ahead of its turn (the turn is what counts)
     };
 
@@ -327,8 +330,9 @@ private:
         uint32_t progress_ms{0};
         bool p2p_ready{false};              // protocol 26: it sent P2pConfig and the room has a relay: it may exchange Signals
         bool p2p_direct{false};             // ... and allows direct channels
-        uint32_t p2p_configs{0};            // its P2pConfigs and Signals in this match (a credential is made for each P2pConfig; the numbers are limited)
+        uint32_t p2p_configs{0};            // its P2pConfigs and Signals in this match (the numbers are limited)
         uint32_t p2p_signals{0};
+        uint32_t p2p_credentials{0};        // the relay credentials made for it in this match (at most kMaxP2pCredentials)
     };
     void handle_p2p_config(uint8_t player, const P2pConfigMsg& m);
     void handle_signal(uint8_t player, const SignalMsg& m);
@@ -388,6 +392,7 @@ private:
     std::unique_ptr<LockstepRunner> runner_;
     std::array<Client, sim::MAX_PLAYERS> clients_{};
     uint8_t bot_seats_{0};                  // bit s: seat s is a bot (no connection; acknowledged by this host). A new host after a migration has none: the bots leave with the old host
+    uint8_t people_{0};                     // bit s: seat s was a person's when the match began (a bot's seat is not; a host with a seat is one): a relay credential needs two of them
     std::vector<DesyncMsg> desyncs_;
     uint32_t diverged_drops_{0};
     std::function<void(uint8_t)> on_left_;

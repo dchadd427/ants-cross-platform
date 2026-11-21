@@ -9,8 +9,11 @@ What is checked:
     the metrics), neither in docker/turnserver.conf nor on the command line of the stack, so that a second TURN server on the machine meets none of its ports; the range is the one that the documents
     tell the operator to open;
   - the stack: the one variable ANTS_TURN_PORT reaches the relay and the game server (which tells the players) and the number 3478 is written nowhere in the stack file, the health check is the entry
-    point's, and the operator's steps name every variable that the relay reads.
+    point's, and the operator's steps name every variable that the relay reads;
+  - who the relay refuses: peers in every range that is not a player's public address are denied (probed with addresses of each range and of IPv4-mapped forms), no player's public address is, and neither
+    is the relay's own address (two players' relay sessions are on it: denying it would end every relayed connection), and each credential holds what a four-player match needs and a retry, no more.
 """
+import ipaddress
 import json
 import os
 import re
@@ -54,6 +57,31 @@ def options(text):
         name, _, value = line.partition("=")
         found[name.strip()] = value.strip()
     return found
+
+
+def all_values(text, name):
+    """Every value of an option that may stand on several lines (denied-peer-ip), in order."""
+    values = []
+    for line in text.splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            key, _, value = line.partition("=")
+            if key.strip() == name:
+                values.append(value.strip())
+    return values
+
+
+def denied(address, values):
+    """Is `address` in one of the ranges ("a-b") or single addresses of a denied-peer-ip list? An IPv4-mapped IPv6 address counts as its IPv4 address, as coturn reads it."""
+    ip = ipaddress.ip_address(address)
+    if ip.version == 6 and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    for value in values:
+        low, _, high = value.partition("-")
+        low, high = ipaddress.ip_address(low), ipaddress.ip_address(high or low)
+        if low.version == ip.version and low <= ip <= high:
+            return True
+    return False
 
 
 # The ports that coturn would bind if an option were set; none of these options may be set (the relay binds its listening port, which comes from the entry point, and its relay range).
@@ -183,6 +211,37 @@ class TheConfiguration(unittest.TestCase):
         section = section[:section.index("\n## ", 5)]
         self.assertIn("UDP **%s**" % rng, section)
         self.assertIn(rng, self.stack)
+
+    def test_the_relay_refuses_every_peer_that_is_not_a_players_public_address(self):
+        """Defect caught: a range dropped from or cut short in `denied-peer-ip` would make the relay carry packets to the machine's private networks, the cloud's metadata address or multicast. No run of this
+        suite can show that (it needs the TURN server itself, probed by hand: error 403 on the permission), so the list is read as ranges and probed with addresses of each."""
+        values = all_values(self.conf, "denied-peer-ip")
+        for probe in ("0.0.0.5", "0.255.255.255", "10.0.0.1", "10.255.255.254", "100.64.0.1", "100.127.255.254", "127.0.0.1", "127.255.255.254", "169.254.169.254", "172.16.0.1", "172.31.255.254",
+                      "192.0.0.5", "192.168.0.1", "192.168.255.254", "198.18.0.1", "198.19.255.254", "224.0.0.1", "239.1.1.1", "255.255.255.255", "::1", "fc00::1", "fd12:3456::1", "fe80::1",
+                      "::ffff:10.1.2.3", "::ffff:127.0.0.1", "::ffff:169.254.169.254", "::ffff:192.168.1.5"):
+            self.assertTrue(denied(probe, values), "%s is not a player's public address and the relay must refuse it as a peer" % probe)
+        for public in ("8.8.8.8", "1.1.1.1", "93.184.216.34", "198.51.100.7", "203.0.113.9", "100.63.255.255", "100.128.0.1", "172.15.255.255", "172.32.0.1", "192.0.1.1", "198.17.255.255", "198.20.0.1"):
+            self.assertFalse(denied(public, values), "%s may be a player's address (or its neighbor): the relay must not refuse it" % public)
+
+    def test_each_credential_holds_what_a_four_player_match_needs_and_no_more(self):
+        """Defect caught: a per-credential quota that is raised or removed would let one credential take a large share of the relay's sessions, and one that is cut would leave a player of a four-player match
+        without a relay for some of its connections. No run of this suite can show it (the TURN server itself counts the sessions), so the number is read. A browser asks for two sessions (UDP and TCP) for
+        each connection, a four-player match has three connections for each player, and a connection that is tried again was closed first."""
+        quota = int(self.opts["user-quota"])
+        self.assertEqual(quota, 3 * 2)
+        doc = read(SERVER_DOC)
+        self.assertIn("each credential may hold %d sessions" % quota, doc, "the operator's document names the quota of the configuration")
+
+    def test_the_relays_own_address_is_not_refused_as_a_peer(self):
+        """Defect caught: a relay that refuses its own public address as a peer ends every relayed connection, because the relay sessions of both players of a pair are on that address and each player's
+        session sends to the other's (probed with turnutils_uclient -y against the TURN server itself: error 403 on the channel bind). No run of this suite can show it, so the denied addresses, those of the
+        configuration and those that the entry point adds on the command line, are read."""
+        box = Sandbox()
+        self.addCleanup(box.close)
+        code_, _, called = box.run(GOOD, ARGS)
+        self.assertEqual(code_, 0)
+        values = all_values(self.conf, "denied-peer-ip") + [a.partition("=")[2] for a in called if a.startswith("--denied-peer-ip=")]
+        self.assertFalse(denied(GOOD["ANTS_TURN_EXTERNAL_IP"], values))
 
 
 class TheStack(unittest.TestCase):
