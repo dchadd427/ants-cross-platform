@@ -399,8 +399,8 @@ private:
         uint32_t ping_sent[8]{};
         bool measured{false};
         uint32_t rtt_ms{0};
-        std::string address;                     // where the guest's connection came from
-        uint16_t listen_port{0};                 // the port on which it accepts the other guests during the match (0: none)
+        std::string address;                     // where the guest's connection came from (the Start passes it on only when the host holds a seat: host migration)
+        uint16_t listen_port{0};                 // the port on which it accepts the other guests during the match (0: none; a dedicated server's room never passes it on)
         uint32_t join_order{0};                  // 1, 2, 3, ... in the order of the Welcomes: the earliest guest still here leads a server's room
         SeatKey key{};                           // protocol 10: the key of the seat, handed out with the Welcome (all zero: none)
         MessageBudget talk;                      // flood control: every message that the guest sends takes one from it
@@ -539,7 +539,7 @@ public:
     struct Config {
         std::string name{"Player"};
         uint32_t welcome_timeout_ms{10000};
-        uint16_t listen_port{0};             // where this guest accepts the other guests during the match, announced in Hello (0: nowhere)
+        uint16_t listen_port{0};             // where this guest accepts the other guests during the match, announced in Hello (0: nowhere; a game that joins a server's room announces none: the server relays everything)
         uint8_t want_seat{255};              // the seat this guest asks for in Hello (0 .. 3; 255: any). Taken, or the host's: the first free seat
         std::string room;                    // the room of a server (valid_room_code), "" for a LAN / direct host
         std::string token;                   // the credential that came with the room code ("" when none)

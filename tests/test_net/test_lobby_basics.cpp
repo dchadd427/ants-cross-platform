@@ -734,6 +734,65 @@ void run_lobby_basics_tests() {
         ASSERT_EQ(again.guests[0].lobby->cancel_reason(), CancelMsg::Reason::LoadFailed);
     } TEST_END();
 
+    TEST_CASE("N4.5c What The Start Says About Where A Guest Can Be Reached: A Dedicated Server's Room (A Host Without A Seat) Names No Address And No Port Of Any Guest, Whatever The Guests Announce, Also For A Guest That Took Its Seat Back With Its Key; A Host With A Seat Passes On What Each Guest Announced (The Links Of Host Migration)") {
+        const auto announcing = [](const std::string& name, uint16_t port, const SeatKey& key = SeatKey{}) {
+            ClientLobby::Config cc;
+            cc.name = name;
+            cc.listen_port = port;
+            cc.key = key;
+            return cc;
+        };
+        const auto names_nobody = [](const StartMsg& s) {
+            for (const Endpoint& e : s.endpoints) {
+                if (!e.address.empty() || e.port != 0) return false;
+            }
+            return true;
+        };
+        {   // a server's room: the host holds no seat
+            Room room(keyed_server_config(21));
+            const size_t ann = join_with(room, announcing("Ann", 4321), "203.0.113.5");
+            room.run(300);
+            const size_t bob = join_with(room, announcing("Bob", 4322), "203.0.113.6");
+            room.run(300);
+            const SeatKey ann_key = room.guests[ann].lobby->key();
+            ASSERT_FALSE(key_is_zero(ann_key));
+            const size_t ann_again = join_with(room, announcing("Ann", 4399, ann_key), "203.0.113.9");        // Ann's game was started again: her seat, a new connection, another port
+            room.run(300);
+            ASSERT_EQ(room.guests[ann_again].lobby->my_seat(), 0);
+            ASSERT_TRUE(room.host.can_start());
+            ASSERT_TRUE(room.host.start(7, 99, room.now));
+            room.run(100);
+            ASSERT_EQ(room.host.start_info().roster, 0x03);
+            ASSERT_TRUE(names_nobody(room.host.start_info()));
+            ASSERT_EQ(room.guests[bob].lobby->start_info().roster, 0x03);
+            ASSERT_TRUE(names_nobody(room.guests[bob].lobby->start_info()) && names_nobody(room.guests[ann_again].lobby->start_info()));
+        }
+        {   // a host with a seat: its guests are told where the others can be reached
+            HostLobby::Config hc = keyed_server_config(22);
+            hc.host_seat = 0;
+            Room room(hc);
+            const size_t ann = join_with(room, announcing("Ann", 4321), "203.0.113.5");
+            room.run(300);
+            const size_t bob = join_with(room, announcing("Bob", 4322), "203.0.113.6");
+            room.run(300);
+            const SeatKey ann_key = room.guests[ann].lobby->key();
+            const size_t ann_again = join_with(room, announcing("Ann", 4399, ann_key), "203.0.113.9");
+            room.run(300);
+            ASSERT_EQ(room.guests[ann_again].lobby->my_seat(), 1);
+            ASSERT_TRUE(room.host.can_start());
+            ASSERT_TRUE(room.host.start(7, 99, room.now));
+            room.run(100);
+            const StartMsg& s = room.host.start_info();
+            ASSERT_TRUE(s.endpoints[0].address.empty() && s.endpoints[0].port == 0);                  // (the host's own seat)
+            ASSERT_TRUE((s.endpoints[1] == Endpoint{"203.0.113.9", 4399}));                           // (what Ann's new connection said)
+            ASSERT_TRUE((s.endpoints[2] == Endpoint{"203.0.113.6", 4322}));
+            ASSERT_TRUE(s.endpoints[3].address.empty() && s.endpoints[3].port == 0);
+            for (const size_t guest : {bob, ann_again}) {
+                for (size_t seat = 0; seat < s.endpoints.size(); ++seat) ASSERT_TRUE(room.guests[guest].lobby->start_info().endpoints[seat] == s.endpoints[seat]);
+            }
+        }
+    } TEST_END();
+
     TEST_CASE("N4.6 Kicking And Hostile Guests: A Kicked Guest Is Told, Wrong Messages Get A Guest Thrown Out") {
         Room room;
         room.join("Bob");
