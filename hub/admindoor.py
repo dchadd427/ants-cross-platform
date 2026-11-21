@@ -382,11 +382,13 @@ class Door:
                 "health": self.health(), "last_picture": {"kind": last[0], "age": last[1]} if last else None, "version": dict(self.version)}
 
     def images_status(self):
-        """The Status page's numbers of the images: the files kept and their bytes, of the two limits, the accounts whose posting is taken away, and whether the converter can be asked (`off`: the hub has none, `ok`: the last
-        upload did not find it down, `down`: it did). No account, no name."""
-        images, limits = self.hub.images, self.hub.limits
-        rows, size = self.hub.store.image_usage()
-        return {"on": images.on, "files": rows, "files_max": limits.image_files_max, "bytes": size, "bytes_max": limits.image_bytes_max, "off": len(self.hub.store.noimages_marks()), "converter": self.hub.image_door.converter_state()}
+        """The Status page's numbers of the images: the files kept and their bytes, of the two limits, the accounts whose posting is taken away, whether the converter can be asked (`off`: the hub has none, `ok`: the last
+        upload did not find it down, `down`: it did) and how many seconds ago the newest image was kept (`last`, None when none is). No account, no name."""
+        images, limits, store = self.hub.images, self.hub.limits, self.hub.store
+        rows, size = store.image_usage()
+        last = store.last_image_at()
+        return {"on": images.on, "files": rows, "files_max": limits.image_files_max, "bytes": size, "bytes_max": limits.image_bytes_max, "off": len(store.noimages_marks()), "converter": self.hub.image_door.converter_state(),
+                "last": None if last is None else max(0, int(store.clock() - last))}
 
     def health(self):
         """What the roles' lookups are doing, in words (no account, no id): `off` when no role is asked of Discord, `refused` while Discord refuses the token, the server or the access, `down` while

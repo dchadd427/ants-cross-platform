@@ -156,6 +156,10 @@ class StoreBase:
         """The set of names that have a row."""
         raise NotImplementedError
 
+    def last_image_at(self):
+        """The time (seconds since 1970) of the newest row of an image, posted or waiting, or None when there is none."""
+        raise NotImplementedError
+
     def set_noimages(self, account, on, by, note=None):
         """Take away (`on`) or give back the account's posting of images: a row of its reference that beats its Discord role. True when that changed something (a flag that is there is not made again, a flag that is not there is not lifted); `note` goes into the moderators' log in the same step, and only then."""
         raise NotImplementedError

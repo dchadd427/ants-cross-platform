@@ -513,6 +513,17 @@ class TheUpload(ImgTest):
                 self.assertRegex(line, r"^\S+ image kind=[a-z]+$")
 
 
+    def test_the_status_says_how_long_ago_the_newest_image_was_kept_and_nothing_of_who(self):
+        numbers = lambda: self.rig.call(self.rig.hub.admin.images_status)
+        self.assertIsNone(numbers()["last"], "no image yet")
+        self.know(HOLDER)
+        self.assertEqual(self.upload(HOLDER).status, 200)
+        first = numbers()
+        self.assertTrue(0 <= first["last"] < 30, first)
+        self.assertEqual((first["files"], first["converter"]), (1, "ok"))
+        self.assertEqual(sorted(first), ["bytes", "bytes_max", "converter", "files", "files_max", "last", "off", "on"], "no account, no name")
+
+
 class TheConverter(ImgTest):
     def setUp(self):
         super().setUp()
@@ -841,8 +852,8 @@ class TheAdminDoor(DoorTest):
 
     def test_the_status_has_the_numbers_of_the_images_and_no_account(self):
         body = self.get("status").json()["images"]
-        self.assertEqual(sorted(body), ["bytes", "bytes_max", "converter", "files", "files_max", "off", "on"])
-        self.assertEqual((body["files"], body["off"], body["on"], body["converter"]), (0, 0, False, "off"))
+        self.assertEqual(sorted(body), ["bytes", "bytes_max", "converter", "files", "files_max", "last", "off", "on"])
+        self.assertEqual((body["files"], body["off"], body["on"], body["converter"], body["last"]), (0, 0, False, "off", None))
 
     def test_the_names_of_the_door_are_the_ones_that_nginx_lets_through(self):
         from hub import admindoor

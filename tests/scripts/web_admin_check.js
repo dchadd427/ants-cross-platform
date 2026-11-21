@@ -113,6 +113,7 @@ function world(overrides) {
         mutes: [{ ref: '66f6666666666666', name: 'hazel_b', until: at('2026-10-18T21:31:00Z'), by: '77a7777777777777', by_name: 'sage' },
             { ref: '88b8888888888888', name: 'pebble_9', until: at('2026-10-25T18:40:00Z'), by: '22b2222222222222', by_name: 'basil' }],
         hidden: [{ ref: '99c9999999999999', name: 'marlow.old' }, { ref: 'aaaaaaaaaaaaaaaa', name: '' }],
+        imagesoff: [{ ref: 'dddddddddddddddd', name: 'hazel_b', at: at('2026-10-18T16:31:00Z'), by: '22b2222222222222', by_name: 'basil' }, { ref: 'eeeeeeeeeeeeeeee', name: '', at: at('2026-10-14T18:00:00Z'), by: 'command line', by_name: '' }],
         modlog: [{ at: at('2026-10-18T19:02:00Z'), action: 'mute', actor: '22b2222222222222', actor_name: 'basil', target: '66f6666666666666', target_name: 'hazel_b', detail: '60' },
             { at: at('2026-10-18T18:47:00Z'), action: 'del', actor: '77a7777777777777', actor_name: 'sage', target: '11a1111111111111', target_name: 'clover.4782', detail: '148' },
             { at: at('2026-10-18T16:12:00Z'), action: 'ban', actor: '22b2222222222222', actor_name: 'basil', target: '11a1111111111111', target_name: 'clover.4782', detail: '' },
@@ -177,14 +178,16 @@ function world(overrides) {
         if (url === '/hub/admin/api/bans') return reply(200, { bans: w.bans, untrusted: true, untrusted_fields: ['name', 'by_name'] });
         if (url === '/hub/admin/api/mutes') return reply(200, { mutes: w.mutes, untrusted: true, untrusted_fields: ['name', 'by_name'] });
         if (url === '/hub/admin/api/hidden') return reply(200, { hidden: w.hidden, untrusted: true, untrusted_fields: ['name'] });
+        if (url === '/hub/admin/api/imagesoff') return reply(200, { imagesoff: w.imagesoff, untrusted: true, untrusted_fields: ['name', 'by_name'] });
         if (url === '/hub/admin/api/modlog') return reply(200, { modlog: w.modlog, untrusted: true, untrusted_fields: ['actor_name', 'target_name'] });
         if (url === '/hub/admin/api/status') return reply(200, w.status);
         if (method === 'POST' && url === '/hub/logout') return reply(200, { ok: true });
-        if (method === 'POST' && /^\/hub\/admin\/api\/(ban|unban|mute|unmute|nopic|pic|del)$/.test(url)) {
+        if (method === 'POST' && /^\/hub\/admin\/api\/(ban|unban|mute|unmute|nopic|pic|noimages|images|del)$/.test(url)) {
             const body = JSON.parse(init.body), name = url.split('/').pop();
             if (name === 'unban') w.bans = w.bans.filter((x) => x.ref !== body.account);
             if (name === 'unmute') w.mutes = w.mutes.filter((x) => x.ref !== body.account);
             if (name === 'pic') w.hidden = w.hidden.filter((x) => x.ref !== body.account);
+            if (name === 'images') w.imagesoff = w.imagesoff.filter((x) => x.ref !== body.account);
             return reply(200, name === 'mute' ? { ok: true, until: at('2026-10-18T21:00:00Z') } : { ok: true });
         }
         const m = /^\/admin\/api\/maps\?state=(\w+)$/.exec(url);
@@ -1000,21 +1003,21 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
         const { app } = await open(w);
         w.calls.length = 0;
         await section(app, 'Chat');
-        same('Chat: the hub is asked for its token once, then for the three lists (nothing else)', w.calls.map((c) => c.method + ' ' + c.url), ['GET /hub/admin/api/me', 'GET /hub/admin/api/bans', 'GET /hub/admin/api/mutes', 'GET /hub/admin/api/hidden']);
-        same('Chat: the panels and their headings', [texts(app, '.panel h2')], [['Mute or ban someone', 'Hide a picture', 'Hidden now(2)', 'Banned(3)', 'Muted(2)']]);
+        same('Chat: the hub is asked for its token once, then for the four lists (nothing else)', w.calls.map((c) => c.method + ' ' + c.url), ['GET /hub/admin/api/me', 'GET /hub/admin/api/bans', 'GET /hub/admin/api/mutes', 'GET /hub/admin/api/hidden', 'GET /hub/admin/api/imagesoff']);
+        same('Chat: the panels and their headings', [texts(app, '.panel h2')], [['Mute or ban someone', 'Hide a picture', 'Hidden now(2)', 'Banned(3)', 'Muted(2)', 'Image posting', 'Taken away now(2)']]);
         same('Chat: the form has a username box and a minutes box with their labels, and the minutes start at 60', [texts(app, '.f label'), all(app, 'input').map((i) => i.id), all(app, '.f label').map((l) => l.getAttribute('for')), all(app, 'input')[1].value, all(app, 'input')[0].getAttribute('placeholder')],
-            [['Username', 'Minutes (a mute only)', 'Username'], ['cm-user', 'cm-min', 'hp-user'], ['cm-user', 'cm-min', 'hp-user'], '60', 'for example clover.4782']);
+            [['Username', 'Minutes (a mute only)', 'Username', 'Username'], ['cm-user', 'cm-min', 'hp-user', 'ni-user'], ['cm-user', 'cm-min', 'hp-user', 'ni-user'], '60', 'for example clover.4782']);
         same('Chat: the minutes have four presets and a hint', [texts(app, '.minrow .chip'), texts(app, '.fh')], [['10 min', '1 hour', '1 day', '1 week'], ['1 to 10080 (one week). A mute ends by itself.']]);
-        same('Chat: Mute and Ban, Ban in red, and Hide picture', [texts(app, '.acts button'), all(app, '.acts button')[1].className.indexOf('bad') > 0], [['Mute', 'Ban', 'Hide picture'], true]);
+        same('Chat: Mute and Ban, Ban in red, Hide picture and Take away image posting', [texts(app, '.acts button'), all(app, '.acts button')[1].className.indexOf('bad') > 0], [['Mute', 'Ban', 'Hide picture', 'Take away image posting'], true]);
         same('Chat: Banned lists the newest first, each with its time and who did it (a username, the terminal for the command line, a short code when no name is left) and Unban', [texts(app, '.p-banned .pn'), texts(app, '.p-banned .ps'), texts(app, '.p-banned .btn')],
             [['clover.4782', 'spam.king', '55e5555555555555'], ['banned today, 09:12 · by basil', 'banned 14 Oct · by tess', 'banned 9 Oct · by terminal'], ['Unban', 'Unban', 'Unban']]);
         same('Chat: a ban that has no name left shows its short code in a code element, marked as typed text', all(app, '.p-banned .pn code').map((n) => [n.textContent, n.getAttribute('data-untrusted')]), [['55e5555555555555', 'typed-text']]);
         same('Chat: Muted shows the end time and what is left, in Pacific time, and who did it', [texts(app, '.p-muted .pn'), texts(app, '.p-muted .ps'), texts(app, '.p-muted .btn')], [['hazel_b', 'pebble_9'], ['until today, 14:31 (1 h 31 min left) · by sage', 'until 25 Oct, 11:40 (6 days left) · by basil'], ['Unmute', 'Unmute']]);
         same('Chat: Hidden now lists the accounts whose picture is hidden, with Show again, and the words about what comes after', [texts(app, '.p-pics .pn'), texts(app, '.p-pics .ps'), texts(app, '.p-pics .btn').filter((t) => t !== 'Hide picture'), texts(app, '.p-pics .ph')],
             [['marlow.old', 'aaaaaaaaaaaaaaaa'], ['picture hidden', 'picture hidden'], ['Show again', 'Show again'], ['Hides a person\u2019s Discord picture in the chat; their letter shows instead.', 'After \u201CShow again\u201D the picture stays off until the person turns it on themselves.']]);
-        check('Chat: every name of a list is typed text and marked (a short code too)', all(app, '.pn').length === 7 && all(app, '.pn').every((n) => n.getAttribute('data-untrusted') === 'typed-text' || (n.children.length === 1 && n.children[0].getAttribute('data-untrusted') === 'typed-text')));
-        same('Chat: the names in the small lines are typed text and marked', all(app, '.ps [data-untrusted]').map((n) => [n.textContent, n.getAttribute('data-untrusted')]), [['basil', 'typed-text'], ['tess', 'typed-text'], ['sage', 'typed-text'], ['basil', 'typed-text']]);
-        same('Chat: the order of a phone: the form, Banned, Muted, the pictures last (the classes the style orders by)', all(app, '.panel').map((p) => p.className.split(' ').filter((c) => /^p-/.test(c))[0]).sort(), ['p-banned', 'p-form', 'p-muted', 'p-pics']);
+        check('Chat: every name of a list is typed text and marked (a short code too)', all(app, '.pn').length === 9 && all(app, '.pn').every((n) => n.getAttribute('data-untrusted') === 'typed-text' || (n.children.length === 1 && n.children[0].getAttribute('data-untrusted') === 'typed-text')));
+        same('Chat: the names in the small lines are typed text and marked', all(app, '.ps [data-untrusted]').map((n) => [n.textContent, n.getAttribute('data-untrusted')]), [['basil', 'typed-text'], ['tess', 'typed-text'], ['sage', 'typed-text'], ['basil', 'typed-text'], ['basil', 'typed-text']]);
+        same('Chat: the order of a phone: the form, Banned, Muted, the pictures last (the classes the style orders by)', all(app, '.panel').map((p) => p.className.split(' ').filter((c) => /^p-/.test(c))[0]).sort(), ['p-banned', 'p-form', 'p-muted', 'p-noimg', 'p-pics']);
         noMarkup('Chat', app);
         noId('Chat', app, w.calls);
         all(app, '.minrow .chip')[3].click();
@@ -1034,7 +1037,7 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
         const post = w.calls[0];
         same('Mute: a POST to the hub\'s mute with the username as typed (without the blanks), the minutes as a number, the hub\'s token, the JSON type and the cookie', [post.method, post.url, post.body, post.headers['X-Ants-Csrf'], post.headers['Content-Type'], post.credentials],
             ['POST', '/hub/admin/api/mute', { account: 'hazel_b', minutes: 60 }, 'hub-token-1', 'application/json', 'same-origin']);
-        same('Mute: the three lists are asked again afterwards', w.calls.slice(1).map((c) => c.url), ['/hub/admin/api/bans', '/hub/admin/api/mutes', '/hub/admin/api/hidden']);
+        same('Mute: the four lists are asked again afterwards', w.calls.slice(1).map((c) => c.url), ['/hub/admin/api/bans', '/hub/admin/api/mutes', '/hub/admin/api/hidden', '/hub/admin/api/imagesoff']);
         same('Mute: the line in the form says what was done, with the name as typed text, and it is a status, not an alert', [texts(app, '.panel .msg'), all(app, '.panel .msg')[0].className, all(app, '.panel .msg')[0].getAttribute('role'), all(app, '.panel .msg [data-untrusted]').map((n) => n.textContent)], [['Done: hazel_b is muted for 60 minutes.'], 'msg ok', 'status', ['hazel_b']]);
         same('Mute: the username box is empty again and the minutes stay', [all(app, 'input')[0].value, all(app, 'input')[1].value], ['', '60']);
         type(app, 'cm-user', '12345');
@@ -1163,6 +1166,32 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
         await press(app, 'Hide picture');
         same('Hide picture sends the nopic call with the username, empties the box and says what was done', [w.calls[0].url, w.calls[0].body, all(app, 'input')[2].value, texts(app, '.panel .msg')], ['/hub/admin/api/nopic', { account: 'marlow.old' }, '', ['Done: marlow.old has the picture hidden.']]);
     }
+    {   // the panel "Image posting": the list, Give back, Take away image posting, and the hub's no in words
+        const w = world();
+        const { app } = await open(w);
+        await section(app, 'Chat');
+        same('Chat: Taken away now lists the accounts whose posting is taken away, newest first, by whom and when (a name, or the code of the account with none left), with Give back, and the words that go with it',
+            [texts(app, '.p-noimg .pn'), texts(app, '.p-noimg .ps'), texts(app, '.p-noimg .btn').filter((t) => t !== 'Take away image posting'), texts(app, '.p-noimg .ph'), all(app, '.p-noimg .pn code').map((n) => [n.textContent, n.getAttribute('data-untrusted')])],
+            [['hazel_b', 'eeeeeeeeeeeeeeee'], ['taken away by basil \u00b7 today, 09:31', 'taken away by terminal \u00b7 14 Oct'], ['Give back', 'Give back'], ['People with the Active Anters role, moderators and administrators can post images in the chat. Here an administrator takes that away from one person, or gives it back.',
+                'Images that the person posted stay in the chat until a moderator deletes them. Only administrators can take image posting away or give it back.'], [['eeeeeeeeeeeeeeee', 'typed-text']]]);
+        w.calls.length = 0;
+        await press(app, 'Give back', 0);
+        same('Give back sends the images call with the reference (the name is only what is shown), asks the lists again and says what was done', [w.calls[0].url, w.calls[0].body, w.calls[0].headers['X-Ants-Csrf'], texts(app, '.panel .msg'), texts(app, '.panel h2').filter((t) => /^Taken away now/.test(t))],
+            ['/hub/admin/api/images', { account: 'dddddddddddddddd' }, 'hub-token-1', ['Done: hazel_b can post images again.'], ['Taken away now(1)']]);
+        type(app, 'ni-user', 'marlow.old');
+        w.calls.length = 0;
+        await press(app, 'Take away image posting');
+        same('Take away image posting sends the noimages call with the username, empties the box and says what was done', [w.calls[0].url, w.calls[0].body, all(app, 'input')[3].value, texts(app, '.panel .msg')], ['/hub/admin/api/noimages', { account: 'marlow.old' }, '', ['Done: marlow.old cannot post images now.']]);
+        await press(app, 'Take away image posting');
+        same('...and no name is nothing sent, with the same line as the other boxes', [w.calls.filter((c) => c.method === 'POST').length, texts(app, '.panel .msg')[0]], [1, 'Type a username first.']);
+        for (const [name, body, words] of [['noimages', 'marlow.old', 'marlow.old: image posting is taken away already.'], ['images', null, 'hazel_b: image posting is not taken away.']]) {
+            const v = world({ replies: { ['POST /hub/admin/api/' + name]: { status: 409, json: { error: 'bad' } } } });
+            const o = await open(v);
+            await section(o.app, 'Chat');
+            if (body) { type(o.app, 'ni-user', body); await press(o.app, 'Take away image posting'); } else await press(o.app, 'Give back', 0);
+            same('a 409 on ' + name + ' says what it means', texts(o.app, '.panel .msg')[0], words);
+        }
+    }
     // ---- what the hub says no to, in words; and the doors
     {
         const cases = [
@@ -1289,11 +1318,11 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
         noMarkup('Log', app);
         noId('Log', app, w.calls);
         // every action word, and a word that this page does not know
-        const actions = ['mute', 'unmute', 'ban', 'unban', 'kick', 'nopic', 'pic', 'del', 'something_new'];
-        const odd = world({ modlog: actions.map((action, i) => ({ at: at('2026-10-18T19:00:00Z') - i, action, actor: 'terminal', actor_name: '', target: '66f6666666666666', target_name: 'hazel_b', detail: action === 'mute' ? '1' : action === 'del' ? 'purge' : '' })), audit: [] });
+        const actions = ['mute', 'unmute', 'ban', 'unban', 'kick', 'nopic', 'pic', 'noimages', 'images', 'del_img', 'del', 'something_new'];
+        const odd = world({ modlog: actions.map((action, i) => ({ at: at('2026-10-18T19:00:00Z') - i, action, actor: 'terminal', actor_name: '', target: '66f6666666666666', target_name: 'hazel_b', detail: action === 'mute' ? '1' : action === 'del' ? 'purge' : action === 'del_img' ? '148' : '' })), audit: [] });
         const x = await open(odd);
         await section(x.app, 'Log');
-        same('every action of the hub has its words, an unknown one is shown as the word it is, a purge is not a line number', texts(x.app, '.arow2 .wt'), ['ChatMuted hazel_b for 1 minute', 'ChatUnmuted hazel_b', 'ChatBanned hazel_b', 'ChatUnbanned hazel_b', 'ChatKicked hazel_b', 'ChatHid the picture of hazel_b', 'ChatShowed the picture of hazel_b', 'ChatDeleted the recent lines of hazel_b', 'Chatsomething_new hazel_b']);
+        same('every action of the hub has its words, an unknown one is shown as the word it is, a purge is not a line number', texts(x.app, '.arow2 .wt'), ['ChatMuted hazel_b for 1 minute', 'ChatUnmuted hazel_b', 'ChatBanned hazel_b', 'ChatUnbanned hazel_b', 'ChatKicked hazel_b', 'ChatHid the picture of hazel_b', 'ChatShowed the picture of hazel_b', 'ChatTook away image posting from hazel_b', 'ChatGave back image posting to hazel_b', 'ChatDeleted the image on line 148 by hazel_b', 'ChatDeleted the recent lines of hazel_b', 'Chatsomething_new hazel_b']);
         {   // a start and a stop of bot matches from the chat are rows of the hub's log with numbers and no person
             const bots = world({ modlog: [{ at: at('2026-10-18T19:00:00Z'), action: 'bots_start', actor: 'terminal', actor_name: '', target: '', target_name: '', detail: '1000 every 0s' }, { at: at('2026-10-18T18:59:00Z'), action: 'bots_stop', actor: 'terminal', actor_name: '', target: '', target_name: '', detail: 'stopped 3 dropped 940' }], audit: [] });
             const b = await open(bots);
@@ -1330,7 +1359,7 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
         await section(app, 'Log');
         same('the Log with a row that has no time: every row is there', [all(app, '.arow2').length, texts(app, '.arow2 .tm').filter((x) => x === '').length], [9, 2]);
         await section(app, 'Chat');
-        same('the Chat lists with rows that have no time are drawn', [all(app, '.prow').length, texts(app, '.p-banned .ps')[0], texts(app, '.p-muted .ps')[0]], [7, 'banned  · by basil', 'until  () · by sage']);
+        same('the Chat lists with rows that have no time are drawn', [all(app, '.prow').length, texts(app, '.p-banned .ps')[0], texts(app, '.p-muted .ps')[0]], [9, 'banned  · by basil', 'until  () · by sage']);
     }
     // ---- the Status: all well, as drawn
     {
@@ -1354,6 +1383,16 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
         w.status.health.roles_known = 15;
         await press(app, 'Refresh');
         same('Refresh asks for both again and draws the new numbers', [w.calls.map((c) => c.url).sort(), all(app, '.kv')[0].textContent, texts(app, '.state')[0]], [['/busy', '/hub/admin/api/status'], 'Matches running0', 'WorkingRoles known for 15 accounts']);
+    }
+    {   // the Status of the images: two rows in the store's panel when the hub has images, none when it has not
+        const base = world().status, withImages = (im) => world({ status: Object.assign({}, base, { images: im }) });
+        const rows = async (im) => { const o = await open(withImages(im)); await section(o.app, 'Status'); return all(o.app, '.kv').map((r) => r.textContent).filter((t) => /^(Pictures kept|Chat images|Image converter|Switched off)/.test(t)); };
+        same('Status: images on and working: the files kept of their limits, the converter, and when the newest image was kept', await rows({ on: true, files: 37, files_max: 600, bytes: 22020096, bytes_max: 314572800, off: 2, converter: 'ok', last: 240 }),
+            ['Pictures kept41 1.1 of 24 MB', 'Chat images37 kept 21.0 of 300 MB', 'Image converterWorking last image 4 minutes ago', 'Switched off / blocked6 / 1']);
+        same('...a converter that did not answer the last upload is said so, and no image yet is said too', [(await rows({ on: true, files: 0, files_max: 600, bytes: 0, bytes_max: 314572800, off: 0, converter: 'down', last: null }))[1], (await rows({ on: true, files: 0, files_max: 600, bytes: 0, bytes_max: 314572800, off: 0, converter: 'down', last: null }))[2]],
+            ['Chat images0 kept 0.0 of 300 MB', 'Image converterNot answering no image yet']);
+        same('...a hub with no images shows neither row (nothing to watch)', await rows({ on: false, files: 0, files_max: 600, bytes: 0, bytes_max: 314572800, off: 0, converter: 'off', last: null }), ['Pictures kept41 1.1 of 24 MB', 'Switched off / blocked6 / 1']);
+        same('...and an older hub that has no images in its status shows neither row', await rows(undefined), ['Pictures kept41 1.1 of 24 MB', 'Switched off / blocked6 / 1']);
     }
     // ---- the Status in trouble: Discord refuses, Discord does not answer, the roles are off, the picture fetch is down, the store is full
     {
@@ -1423,7 +1462,7 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
         await section(app, 'Status');
         await section(app, 'Maps');
         const urls = w.calls.map((c) => c.url);
-        same('every address that the page asked for is one of the known ones, and none holds a query but the maps\'', urls.filter((u) => !/^(\/admin\/api\/(me|audit\?kind=(maps|bots)|bot-matches|maps\?state=\w+)|\/hub\/admin\/api\/(me|bans|mutes|hidden|modlog|status)|\/busy)$/.test(u)), []);
+        same('every address that the page asked for is one of the known ones, and none holds a query but the maps\'', urls.filter((u) => !/^(\/admin\/api\/(me|audit\?kind=(maps|bots)|bot-matches|maps\?state=\w+)|\/hub\/admin\/api\/(me|bans|mutes|hidden|imagesoff|modlog|status)|\/busy)$/.test(u)), []);
         noId('the whole visit', app, w.calls);
     }
     // ---- the section "Bot matches": Start now, Running and Schedules, what each button sends, what the server's refusals are told as, and that every typed word is text

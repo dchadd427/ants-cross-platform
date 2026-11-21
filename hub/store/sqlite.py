@@ -441,6 +441,10 @@ class Store(StoreBase):
     def image_names(self):
         return {r[0] for r in self.db.execute("SELECT name FROM images")}
 
+    def last_image_at(self):
+        at = self.db.execute("SELECT MAX(at) FROM images").fetchone()[0]
+        return None if at is None else int(at)
+
     def count_noimages_change(self):
         """Inside a transaction that changed a flag: one more on the counter that last_noimages_change() reads."""
         self.db.execute("INSERT OR IGNORE INTO meta (k, v) VALUES ('noimg_seq', 0)")
