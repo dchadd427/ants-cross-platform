@@ -64,7 +64,7 @@
     var REFERENCE = /^[0-9a-f]{16}$/;                      // the hub's short name for an account (never a Discord id)
     var ID_SHAPED = /^[0-9]{15,20}$/;                      // as long as a Discord id: never typed into this page's boxes, never sent
     var HUB_API = '/hub/admin/api/';
-    var CHAT_ACTIONS = { mute: 'Muted', unmute: 'Unmuted', ban: 'Banned', unban: 'Unbanned', kick: 'Kicked', nopic: 'Hid the picture of', pic: 'Showed the picture of' };
+    var CHAT_ACTIONS = { mute: 'Muted', unmute: 'Unmuted', ban: 'Banned', unban: 'Unbanned', kick: 'Kicked', nopic: 'Hid the picture of', pic: 'Showed the picture of', bots_start: 'Started bot matches from the chat', bots_stop: 'Stopped bot matches from the chat' };
     var MAP_ACTIONS = { map_approved: 'Approved ', map_declined: 'Declined ', map_taken_down: 'Took down ', map_put_back: 'Put back ' };
     var PICTURE_KINDS = {
         ok: ['active', 'Saved'], none: ['active', 'Discord has no picture to keep'], down: ['warn', 'Discord did not answer'], type: ['warn', 'Not a picture that the hub accepts'],
@@ -949,6 +949,7 @@
                     add(wt, doc.createTextNode('Muted '), target, doc.createTextNode(' for ' + minutesWords(parseInt(r.detail, 10) || 0)));
                 } else if (CHAT_ACTIONS[r.action]) {
                     add(wt, doc.createTextNode(CHAT_ACTIONS[r.action] + ' '), target);
+                    if (r.action.indexOf('bots_') === 0 && r.detail) add(wt, typed('span', 'why', r.detail));              // (the numbers of the batch, as the hub keeps them: "1000 every 0s", "stopped 3 dropped 940")
                 } else {
                     add(wt, typed('span', null, r.action), doc.createTextNode(' '), target);
                 }

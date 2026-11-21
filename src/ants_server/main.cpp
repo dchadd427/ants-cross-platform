@@ -986,7 +986,10 @@ int main(int argc, char** argv) {
         return test_store && std::filesystem::exists(std::filesystem::path(test_store->config().dir) / (stem + ".lvl"), looked);
     };
     if (pictures) pictures->prune(picture_kept);
+    ants::server::LoopLoad loop_load;                          // (how busy the loop is: the matches of computer players wait while it is over 40 %: loop_load.hpp)
+    rooms.set_loop_load(&loop_load);
     while (!g_stop) {
+        const auto pass_began = std::chrono::steady_clock::now();
         const uint32_t now = now_ms();
         if (tcp) {
             for (int i = 0; i < 32; ++i) {
@@ -1057,6 +1060,7 @@ int main(int argc, char** argv) {
         for (const std::string& line : rooms.take_notices()) log(line);          // (a record that the disk refused, ...)
         stats.save_if_due();
         for (const std::string& line : stats.take_notices()) log(line);
+        loop_load.add(now_ms(), static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - pass_began).count()));
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
     log("stopping");

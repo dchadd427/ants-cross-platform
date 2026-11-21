@@ -68,6 +68,9 @@
 #   ANTS_HUB_ROLE_RECHECK_SECONDS=180               how often the role of everybody who is in the chat is asked again, 60 to 3600 (optional; this is the default)
 #   ANTS_HUB_OWNER=<account id>                     one account (Discord's id, digits only) that is always an administrator, even when Discord does not answer (optional; none by default).
 #                                                   Moderation from a terminal: docker exec ants-hub python -m hub.admin list
+#   ANTS_HUB_GAME_ADMIN_URL=http://ants-server:4030  where the chat hub reaches the game server's admin door, for the administrators' `/bots` command (docs/HUB_COMMANDS.md, "The game door"): `http://`, the
+#                                                   service's name and the port of ANTS_SUBMIT_PORT above (4030), nothing else. The call is signed with ANTS_ADMIN_GATE_SECRET and goes over the network
+#                                                   below: no port is published for it. Empty (the default): `/bots` answers that it is off. Needs ANTS_SUBMIT_PORT=4030 and the admin key (optional)
 #   ANTS_HUB_ADMIN_GATE_SECRET=<32+ characters>     the hub's OLD name for ANTS_ADMIN_GATE_SECRET above (the one key; the hub reads this one only when that one is not set; optional; none by default; the release after this one
 #                                                   drops it). Keys come from this stack's environment and never from a file of the repository; with no key the door is shut for everybody
 #
@@ -176,6 +179,8 @@ services:
       ANTS_ADMIN_GATE_SECRET: ${ANTS_ADMIN_GATE_SECRET:-}
       ANTS_HUB_ADMIN_GATE_SECRET: ${ANTS_HUB_ADMIN_GATE_SECRET:-}
       ANTS_HUB_OWNER: ${ANTS_HUB_OWNER:-}
+      # where the game server's admin door is, for `/bots` (empty: off); the call stays on this network and publishes no port
+      ANTS_HUB_GAME_ADMIN_URL: ${ANTS_HUB_GAME_ADMIN_URL:-}
     volumes:
       - ants-hub-data:/data
     networks:

@@ -16,7 +16,8 @@ PICKS = ("display", "username")
 MAX_LINES = 200                                # the store keeps the newest this many chat lines (every line counts, a moderator's and a deleted one too), and no line older than `retention`: whichever limit is smaller deletes first
 MODLOG_DAYS = 30                        # the moderators' log keeps an action this long ...
 MODLOG_ROWS = 10000                     # ... and at most this many rows (the newest)
-ACTIONS = ("mute", "unmute", "del", "kick", "ban", "unban", "nopic", "pic")     # what the log can say was done
+ACTIONS = ("mute", "unmute", "del", "kick", "ban", "unban", "nopic", "pic", "bots_start", "bots_stop")     # what the log can say was done
+BOTS_DETAILS = {"bots_start": re.compile(r"[0-9]{1,6} every [0-9]{1,5}s\Z"), "bots_stop": re.compile(r"stopped [0-9]{1,6} dropped [0-9]{1,6}\Z")}      # the detail of a `/bots` row: numbers and fixed words, each number short of an id's length
 TERMINAL = "terminal"                   # the actor of an action that the command line did
 REFERENCE = re.compile(r"[0-9a-f]{16}\Z")      # the pseudonymous reference of an account (hub/pseudo.py)
 PICTURE_NAME = re.compile(r"[0-9a-f]{32}\Z")        # the public name of a picture: 128 random bits (hub/pictures.py)
@@ -35,10 +36,10 @@ class StoreUnavailable(StoreError):
 
 def check_note(note):
     """The note that goes into the moderators' log with an action: (actor, action, target, detail) where the actor is a reference or `terminal`, the action one of ACTIONS, the target a reference
-    (or '' for an action that has none) and the detail a few plain characters (minutes, a line's number). Anything else is a bug of the caller and is refused: an account id never goes in."""
+    (or '' for an action that has none) and the detail a few plain characters (minutes, a line's number; for `bots_start` and `bots_stop` the numbers of the batch, in their one fixed form). Anything else is a bug of the caller and is refused: an account id never goes in."""
     actor, action, target, detail = note
     if not ((isinstance(actor, str) and REFERENCE.match(actor)) or actor == TERMINAL) or action not in ACTIONS or not (target == "" or (isinstance(target, str) and REFERENCE.match(target))) \
-            or not isinstance(detail, str) or not re.fullmatch(r"[0-9a-z]{0,12}", detail):
+            or not isinstance(detail, str) or not (BOTS_DETAILS[action].match(detail) if action in BOTS_DETAILS else re.fullmatch(r"[0-9a-z]{0,12}", detail)):
         raise ValueError("not a note of the moderators' log")
     return note
 
@@ -274,6 +275,10 @@ class StoreBase:
 
     def secret(self):
         """The 32 random bytes that the pseudonymous references of this hub are keyed with (hub/pseudo.py): made once, when the data is first opened, and the same for every process that opens it."""
+        raise NotImplementedError
+
+    def log_action(self, note):
+        """Write one row of the moderators' log (see check_note) for an action that changes none of the hub's data (a `/bots` start or stop: the game server did it)."""
         raise NotImplementedError
 
     def actions(self, since=0, limit=1000):
