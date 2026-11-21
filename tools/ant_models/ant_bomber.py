@@ -719,6 +719,202 @@ def _add_bomber_idle(scene: SceneBuilder) -> AnimationClip:
     return clip
 
 
+def _quat_track(r0: Tuple[float, float, float, float], deltas: List[Tuple[float, float, float]]) -> List[Tuple[float, float, float, float]]:
+    """Build a hemisphere-continuous closed-loop quaternion list from `(rx, ry, rz)` euler deltas."""
+    out: List[Tuple[float, float, float, float]] = []
+    for rx, ry, rz in deltas:
+        q = quat_mul(r0, quat_from_euler_xyz(rx=rx, ry=ry, rz=rz))
+        if out and sum(a * b for a, b in zip(out[-1], q)) < 0.0:
+            q = (-q[0], -q[1], -q[2], -q[3])
+        out.append(q)
+    if len(out) >= 2:
+        q_end = out[0]
+        if sum(a * b for a, b in zip(out[-2], q_end)) < 0.0:
+            q_end = (-q_end[0], -q_end[1], -q_end[2], -q_end[3])
+        out[-1] = q_end
+    return out
+
+
+def _add_bomber_attack(scene: SceneBuilder) -> AnimationClip:
+    """Attach Bomber's authentic 1998 0.36s goggle-first headbutt slam (`abat`) Attack clip."""
+    # Exact 1998 abat 6-frame cadence [60, 60, 60, 60, 60, 60] ms + exact loop closure at 0.36 s.
+    times = [0.00, 0.06, 0.12, 0.18, 0.24, 0.30, 0.36]
+
+    def _rest_t(node: str) -> Tuple[float, float, float]:
+        xf = scene.get_node_transform(node)
+        return xf.translation if xf is not None else (0.0, 0.0, 0.0)
+
+    def _rest_r(node: str) -> Tuple[float, float, float, float]:
+        xf = scene.get_node_transform(node)
+        return xf.rotation if xf is not None else (0.0, 0.0, 0.0, 1.0)
+
+    channels: List[AnimationChannel] = []
+    bx, by, bz = _rest_t("upper_body")
+    body_t_deltas = [
+        (0.0, 0.000, 0.000),   # f0: ready
+        (0.0, +0.018, -0.014), # f1: windup rise
+        (0.0, +0.030, -0.026), # f2: peak rear windup
+        (0.0, -0.024, +0.062), # f3: fierce forward headbutt slam
+        (0.0, -0.032, +0.074), # f4: impact crunch
+        (0.0, -0.010, +0.026), # f5: elastic recoil
+        (0.0, 0.000, 0.000),   # loop wrap
+    ]
+    channels.append(
+        AnimationChannel(
+            "upper_body",
+            "translation",
+            list(times),
+            [(bx + dx, by + dy, bz + dz) for dx, dy, dz in body_t_deltas],
+        )
+    )
+    channels.append(
+        AnimationChannel(
+            "upper_body",
+            "rotation",
+            list(times),
+            _quat_track(
+                _rest_r("upper_body"),
+                [
+                    (0.00, 0.0, 0.0),
+                    (-0.14, 0.0, 0.0),
+                    (-0.22, 0.0, 0.0),
+                    (+0.62, 0.0, 0.0),
+                    (+0.72, 0.0, 0.0),
+                    (+0.30, 0.0, 0.0),
+                    (0.00, 0.0, 0.0),
+                ],
+            ),
+        )
+    )
+    channels.append(
+        AnimationChannel(
+            "head_group",
+            "rotation",
+            list(times),
+            _quat_track(
+                _rest_r("head_group"),
+                [
+                    (0.00, 0.0, 0.0),
+                    (-0.10, 0.0, 0.0),
+                    (-0.18, 0.0, 0.0),
+                    (+0.38, 0.0, 0.0),
+                    (+0.44, 0.0, 0.0),
+                    (+0.14, 0.0, 0.0),
+                    (0.00, 0.0, 0.0),
+                ],
+            ),
+        )
+    )
+    # Arms spread wide & high on windup (abat301 f1-f2), then sweep cleanly outward/back above legs on slam.
+    for side, tag in ((+1.0, "left"), (-1.0, "right")):
+        arm_node = f"arm_{tag}"
+        fore_node = f"forearm_{tag}"
+        if arm_node in scene.nodes:
+            channels.append(
+                AnimationChannel(
+                    arm_node,
+                    "rotation",
+                    list(times),
+                    _quat_track(
+                        _rest_r(arm_node),
+                        [
+                            (0.00, 0.00, 0.00),
+                            (-0.18, +side * 0.22, +side * 0.36),
+                            (-0.28, +side * 0.34, +side * 0.56),
+                            (-0.34, -side * 0.52, +side * 0.62),
+                            (-0.38, -side * 0.62, +side * 0.68),
+                            (-0.14, -side * 0.20, +side * 0.24),
+                            (0.00, 0.00, 0.00),
+                        ],
+                    ),
+                )
+            )
+        if fore_node in scene.nodes:
+            channels.append(
+                AnimationChannel(
+                    fore_node,
+                    "rotation",
+                    list(times),
+                    _quat_track(
+                        _rest_r(fore_node),
+                        [
+                            (0.00, 0.00, 0.00),
+                            (-0.12, -side * 0.14, +side * 0.14),
+                            (-0.20, -side * 0.24, +side * 0.22),
+                            (-0.18, +side * 0.24, +side * 0.16),
+                            (-0.22, +side * 0.30, +side * 0.20),
+                            (-0.08, +side * 0.10, +side * 0.08),
+                            (0.00, 0.00, 0.00),
+                        ],
+                    ),
+                )
+            )
+    if "gaster_group" in scene.nodes:
+        channels.append(
+            AnimationChannel(
+                "gaster_group",
+                "rotation",
+                list(times),
+                _quat_track(
+                    _rest_r("gaster_group"),
+                    [
+                        (0.00, 0.0, 0.0),
+                        (+0.08, 0.0, 0.0),
+                        (+0.14, 0.0, 0.0),
+                        (-0.30, 0.0, 0.0),
+                        (-0.38, 0.0, 0.0),
+                        (-0.12, 0.0, 0.0),
+                        (0.00, 0.0, 0.0),
+                    ],
+                ),
+            )
+        )
+    for node_name, side in (("antenna_left", +1.0), ("antenna_right", -1.0)):
+        if node_name in scene.nodes and scene.get_node(node_name):
+            channels.append(
+                AnimationChannel(
+                    node_name,
+                    "rotation",
+                    list(times),
+                    _quat_track(
+                        _rest_r(node_name),
+                        [
+                            (0.00, 0.0, 0.0),
+                            (+0.12, 0.0, +side * 0.06),
+                            (+0.22, 0.0, +side * 0.10),
+                            (-0.38, 0.0, -side * 0.12),
+                            (-0.46, 0.0, -side * 0.14),
+                            (+0.24, 0.0, +side * 0.08),
+                            (0.00, 0.0, 0.0),
+                        ],
+                    ),
+                )
+            )
+    if "mandibles" in scene.nodes and scene.get_node("mandibles"):
+        channels.append(
+            AnimationChannel(
+                "mandibles",
+                "rotation",
+                list(times),
+                _quat_track(
+                    _rest_r("mandibles"),
+                    [
+                        (0.00, 0.0, 0.0),
+                        (-0.08, 0.0, 0.0),
+                        (-0.14, 0.0, 0.0),
+                        (+0.14, 0.0, 0.0),
+                        (+0.18, 0.0, 0.0),
+                        (+0.06, 0.0, 0.0),
+                        (0.00, 0.0, 0.0),
+                    ],
+                ),
+            )
+        )
+    clip = scene.add_animation("Attack", channels, replace=True)
+    sync_leg_flex_to_clip(scene, "Attack", knee_bow=1.1, splay=0.30, swivel=0.25)
+    return clip
+
+
 def _cranium_top_y_at(cranium: MeshPart, x: float, z: float, fallback_y: float) -> float:
     """Return the exact upper-surface Y of `cranium` at `(x, z)` via vertical ray-triangle intersection."""
     pos = cranium.positions.astype(np.float64)
@@ -1061,6 +1257,7 @@ def build_bomber(blink: float = 0.0) -> SceneBuilder:
         scene.set_node_transform("goggles", translation=head_xf.translation)
     scene.attach_world_node("dynamite_pack", "upper_body", preserve_world_pose=False)
     _add_bomber_idle(scene)
+    _add_bomber_attack(scene)
     # Subtle uniform similarity scale so Bomber lands cleanly at ~0.88 total height with upright compact legs.
     scene.scale_all(1.042)
     return scene

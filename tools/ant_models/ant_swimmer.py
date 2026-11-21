@@ -310,8 +310,8 @@ def _build_snorkel(
     head_center: Tuple[float, float, float],
     head_top: Tuple[float, float, float],
     clip_anchor: Tuple[float, float, float],
-) -> None:
-    """Build two-tone tactical banded vertical snorkel on ant's LEFT (+X) side."""
+) -> Tuple[float, float, float]:
+    """Build two-tone tactical banded vertical snorkel on ant's LEFT (+X) side and return its barrel tip."""
     hx, hy, hz = head_center
     cx, cy, cz = clip_anchor
     tube_x = cx + 0.028
@@ -410,6 +410,7 @@ def _build_snorkel(
         .translate(tube_x, upper_top_y - 0.001, tube_z)
     )
     scene.add("snorkel", top_bore)
+    return (tube_x, upper_top_y, tube_z)
 
 
 def _build_scuba_tank(
@@ -1037,8 +1038,200 @@ def _add_swimmer_idle(scene: SceneBuilder) -> AnimationClip:
     return clip
 
 
+def _quat_track(r0: Tuple[float, float, float, float], deltas: List[Tuple[float, float, float]]) -> List[Tuple[float, float, float, float]]:
+    """Build a hemisphere-continuous closed-loop quaternion list from `(rx, ry, rz)` euler deltas."""
+    out: List[Tuple[float, float, float, float]] = []
+    for rx, ry, rz in deltas:
+        q = quat_mul(r0, quat_from_euler_xyz(rx=rx, ry=ry, rz=rz))
+        if out and sum(a * b for a, b in zip(out[-1], q)) < 0.0:
+            q = (-q[0], -q[1], -q[2], -q[3])
+        out.append(q)
+    if len(out) >= 2:
+        q_end = out[0]
+        if sum(a * b for a, b in zip(out[-2], q_end)) < 0.0:
+            q_end = (-q_end[0], -q_end[1], -q_end[2], -q_end[3])
+        out[-1] = q_end
+    return out
+
+
+def _build_snorkel_water_fx(
+    scene: SceneBuilder,
+    snorkel_tip: Tuple[float, float, float],
+    head_translation: Tuple[float, float, float],
+) -> Tuple[float, float, float]:
+    """Attach 3 hidden rest-scale (`1e-4`) glossy aqua water-cannon FX nodes inside the snorkel tip."""
+    tx, ty, tz = snorkel_tip
+    hx, hy, hz = head_translation
+    # Tuck rest pivot 18 mm inside the opaque yellow snorkel barrel so Idle/rest bounds & look stay 100% untouched.
+    local_origin = (tx + hx, ty - 0.018 + hy, tz + hz)
+    tiny = (1e-4, 1e-4, 1e-4)
+
+    glob_parts = [
+        ellipsoid(0.048, 0.056, 0.048, u_segs=14, v_segs=10, name="water_glob_outer", material="glass_tinted"),
+        ellipsoid(0.028, 0.036, 0.028, u_segs=12, v_segs=8, name="water_glob_core", material="glass_clear"),
+    ]
+    spray_a_parts: List[MeshPart] = [
+        ellipsoid(0.058, 0.048, 0.058, u_segs=14, v_segs=10, name="water_spray_a_hub", material="glass_tinted"),
+    ]
+    for k in range(5):
+        ang = 2.0 * math.pi * k / 5.0 + 0.25
+        ca, sa = math.cos(ang), math.sin(ang)
+        lobe = (
+            ellipsoid(0.038, 0.062, 0.034, u_segs=12, v_segs=8, name=f"water_spray_a_lobe_{k}", material="glass_tinted")
+            .rotate_xyz(rx=0.58 * sa, rz=-0.58 * ca)
+            .translate(0.064 * ca, 0.024, 0.064 * sa)
+        )
+        spray_a_parts.append(lobe)
+    spray_a_parts.append(
+        ellipsoid(0.030, 0.046, 0.030, u_segs=10, v_segs=8, name="water_spray_a_foam", material="glass_clear").translate(0.0, 0.048, 0.0)
+    )
+
+    spray_b_parts: List[MeshPart] = []
+    drops = (
+        (+0.115, +0.020, +0.042, 0.034, "glass_tinted"),
+        (-0.118, +0.032, +0.038, 0.032, "glass_tinted"),
+        (+0.052, +0.056, +0.112, 0.030, "glass_tinted"),
+        (-0.048, +0.048, -0.108, 0.032, "glass_tinted"),
+        (+0.132, +0.072, -0.056, 0.026, "glass_tinted"),
+        (-0.124, +0.064, -0.062, 0.028, "glass_tinted"),
+        (+0.068, +0.095, -0.028, 0.022, "glass_clear"),
+        (-0.062, +0.088, +0.048, 0.022, "glass_clear"),
+    )
+    for idx, (dx, dy, dz, rad, mat) in enumerate(drops):
+        spray_b_parts.append(
+            ellipsoid(rad, rad * 1.25, rad, u_segs=10, v_segs=8, name=f"water_drop_{idx}", material=mat).translate(dx, dy, dz)
+        )
+
+    for node_name, parts in (
+        ("snorkel_water_glob", glob_parts),
+        ("snorkel_water_spray_a", spray_a_parts),
+        ("snorkel_water_spray_b", spray_b_parts),
+    ):
+        for p in parts:
+            scene.add(node_name, p, parent="head_group")
+        scene.set_node_transform(node_name, translation=local_origin, scale=tiny)
+    return local_origin
+
+
+def _add_swimmer_attack(scene: SceneBuilder, water_origin: Tuple[float, float, float]) -> AnimationClip:
+    """Attach Swimmer's authentic 1998 0.76s snorkel water-cannon blast (`asat`) Attack clip."""
+    # Exact 1998 asat 10-frame cadence [60, 60, 60, 80, 80, 80, 100, 100, 80, 60] ms + loop wrap at 0.76 s.
+    times = [0.00, 0.06, 0.12, 0.18, 0.26, 0.34, 0.42, 0.52, 0.62, 0.70, 0.76]
+
+    def _rest_t(node: str) -> Tuple[float, float, float]:
+        xf = scene.get_node_transform(node)
+        return xf.translation if xf is not None else (0.0, 0.0, 0.0)
+
+    def _rest_r(node: str) -> Tuple[float, float, float, float]:
+        xf = scene.get_node_transform(node)
+        return xf.rotation if xf is not None else (0.0, 0.0, 0.0, 1.0)
+
+    channels: List[AnimationChannel] = []
+    bx, by, bz = _rest_t("upper_body")
+    body_t_deltas = [
+        (0.0, 0.000, 0.000),   # f0: upright rest
+        (0.0, -0.020, +0.018), # f1: fast duck forward
+        (0.0, -0.036, +0.026), # f2: snorkel horizontal cannon aim
+        (0.0, -0.040, +0.022), # f3: brace & charge
+        (0.0, -0.042, +0.020), # f4: water glob swells
+        (0.0, -0.044, +0.018), # f5: full water ball at nozzle
+        (0.0, -0.032, +0.000), # f6: water cannon blast + recoil
+        (0.0, -0.034, +0.008), # f7: wide splash burst
+        (0.0, -0.018, +0.010), # f8: droplets scatter, rising
+        (0.0, -0.006, +0.004), # f9: snapping upright
+        (0.0, 0.000, 0.000),   # loop wrap
+    ]
+    channels.append(
+        AnimationChannel("upper_body", "translation", list(times), [(bx + dx, by + dy, bz + dz) for dx, dy, dz in body_t_deltas])
+    )
+    body_rx = [0.00, 0.44, 0.72, 0.75, 0.75, 0.76, 0.66, 0.70, 0.42, 0.14, 0.00]
+    channels.append(
+        AnimationChannel("upper_body", "rotation", list(times), _quat_track(_rest_r("upper_body"), [(rx, 0.0, 0.0) for rx in body_rx]))
+    )
+    # Head bends +1.10 rad on top of body +0.72 rad (+1.82 rad total, cancelling -15.5 deg rest pitch -> horizontal +Z!).
+    head_rx = [0.00, 0.58, 1.10, 1.12, 1.12, 1.14, 1.00, 1.06, 0.58, 0.18, 0.00]
+    channels.append(
+        AnimationChannel("head_group", "rotation", list(times), _quat_track(_rest_r("head_group"), [(rx, 0.0, 0.0) for rx in head_rx]))
+    )
+    # Counter-rotate right arm so the handheld yellow beach shovel stays cleanly horizontal & above flippers!
+    if "arm_right" in scene.nodes:
+        channels.append(
+            AnimationChannel(
+                "arm_right",
+                "rotation",
+                list(times),
+                _quat_track(_rest_r("arm_right"), [(-0.96 * rx, 0.0, -0.14 * rx) for rx in body_rx]),
+            )
+        )
+    if "arm_left" in scene.nodes:
+        channels.append(
+            AnimationChannel(
+                "arm_left",
+                "rotation",
+                list(times),
+                _quat_track(_rest_r("arm_left"), [(-0.55 * rx, -0.35 * rx, +0.42 * rx) for rx in body_rx]),
+            )
+        )
+    if "gaster_group" in scene.nodes:
+        channels.append(
+            AnimationChannel(
+                "gaster_group",
+                "rotation",
+                list(times),
+                _quat_track(_rest_r("gaster_group"), [(-0.48 * rx, 0.0, 0.0) for rx in body_rx]),
+            )
+        )
+    for node_name, side in (("antenna_left", +1.0), ("antenna_right", -1.0)):
+        if node_name in scene.nodes and scene.get_node(node_name):
+            a_deltas = [
+                (0.0, 0.0, 0.0),
+                (-0.18, 0.0, 0.0),
+                (-0.30, 0.0, side * 0.06),
+                (-0.24, 0.0, side * 0.05),
+                (-0.20, 0.0, side * 0.04),
+                (-0.22, 0.0, side * 0.05),
+                (+0.22, 0.0, -side * 0.08),
+                (+0.14, 0.0, -side * 0.04),
+                (-0.10, 0.0, 0.0),
+                (+0.08, 0.0, 0.0),
+                (0.0, 0.0, 0.0),
+            ]
+            channels.append(AnimationChannel(node_name, "rotation", list(times), _quat_track(_rest_r(node_name), a_deltas)))
+
+    # Animated water-cannon FX traveling straight out along head_group +Y (snorkel barrel axis -> world +Z!).
+    wx, wy, wz = water_origin
+    tiny = (1e-4, 1e-4, 1e-4)
+    glob_dy = [0.0, 0.0, 0.0, 0.0, 0.058, 0.092, 0.170, 0.235, 0.0, 0.0, 0.0]
+    glob_sc = [
+        tiny, tiny, tiny, tiny,
+        (0.75, 0.80, 0.75), (1.15, 1.18, 1.15), (0.95, 1.85, 0.95), (0.28, 0.36, 0.28),
+        tiny, tiny, tiny,
+    ]
+    spray_a_dy = [0.0, 0.0, 0.0, 0.0, 0.0, 0.04, 0.230, 0.325, 0.385, 0.0, 0.0]
+    spray_a_sc = [
+        tiny, tiny, tiny, tiny, tiny, tiny,
+        (1.18, 1.12, 1.18), (1.44, 1.18, 1.44), (0.30, 0.30, 0.30), tiny, tiny,
+    ]
+    spray_b_dy = [0.0, 0.0, 0.0, 0.0, 0.0, 0.04, 0.275, 0.415, 0.485, 0.0, 0.0]
+    spray_b_sc = [
+        tiny, tiny, tiny, tiny, tiny, tiny,
+        (0.86, 0.86, 0.86), (1.52, 1.32, 1.52), (0.56, 0.56, 0.56), tiny, tiny,
+    ]
+    for node_name, dys, scs in (
+        ("snorkel_water_glob", glob_dy, glob_sc),
+        ("snorkel_water_spray_a", spray_a_dy, spray_a_sc),
+        ("snorkel_water_spray_b", spray_b_dy, spray_b_sc),
+    ):
+        channels.append(AnimationChannel(node_name, "translation", list(times), [(wx, wy + dy, wz) for dy in dys]))
+        channels.append(AnimationChannel(node_name, "scale", list(times), list(scs)))
+
+    clip = scene.add_animation("Attack", channels, replace=True)
+    sync_leg_flex_to_clip(scene, "Attack", knee_bow=1.1, splay=0.30, swivel=0.25)
+    return clip
+
+
 def build_swimmer(blink: float = 0.0) -> SceneBuilder:
-    """Build the sculpted 3D Swimmer Ant SceneBuilder with earnest wonder expression, Blink, and 1.80s Idle."""
+    """Build the sculpted 3D Swimmer Ant SceneBuilder with Blink, 1.80s Idle, and 0.76s Water-Cannon Attack."""
     scene, anchors = build_base_ant(
         scene_name="ant_swimmer",
         include_antennae=True,
@@ -1061,19 +1254,21 @@ def build_swimmer(blink: float = 0.0) -> SceneBuilder:
     trimmed_cranium = _trim_swimmer_crown(scene, anchors)
     _build_clubbed_antennae(scene, anchors, cranium=trimmed_cranium)
     clip_anchor = _build_scuba_mask(scene, anchors["head_center"], anchors["head_radii"], anchors["eye_left"], closed_angle)
-    _build_snorkel(scene, anchors["head_center"], anchors["head_top"], clip_anchor)
+    snorkel_tip = _build_snorkel(scene, anchors["head_center"], anchors["head_top"], clip_anchor)
     _build_scuba_tank(scene, anchors["back_anchor"], anchors["thorax_center"])
     _build_flippers(scene, anchors)
     _build_shovel(scene, anchors["right_hand"], anchors["right_hand_dir"])
 
     head_xf = scene.get_node_transform("head")
+    head_t = head_xf.translation if head_xf is not None else (0.0, 0.0, 0.0)
     for h_node in ("scuba_mask", "snorkel"):
         scene.attach_world_node(h_node, "head_group", preserve_world_pose=False)
         if head_xf is not None:
             scene.set_node_transform(h_node, translation=head_xf.translation)
+    water_origin = _build_snorkel_water_fx(scene, snorkel_tip, head_t)
     scene.attach_world_node("scuba_tank", "upper_body", preserve_world_pose=False)
     # Parent shovel directly onto forearm_right (pivoted at elbow_right) so the grip rides lockstep
-    # inside Swimmer's right pincer claws at rest and across every articulated Idle frame.
+    # inside Swimmer's right pincer claws at rest and across every articulated Idle & Attack frame.
     scene.set_node_parent("shovel", "forearm_right")
     sh_xf = scene.get_node_transform("shovel")
     er = anchors["elbow_right"]
@@ -1081,6 +1276,7 @@ def build_swimmer(blink: float = 0.0) -> SceneBuilder:
         gx, gy, gz = sh_xf.translation
         scene.set_node_transform("shovel", translation=(gx - er[0], gy - er[1], gz - er[2]))
     _add_swimmer_idle(scene)
+    _add_swimmer_attack(scene, water_origin)
     return scene
 
 
