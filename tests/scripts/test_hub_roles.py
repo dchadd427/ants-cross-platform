@@ -1082,7 +1082,8 @@ class TheSecrets(unittest.TestCase):
         for text in (repr(cfg), str(cfg), json.dumps(cfg.summary()), repr(roles), str(roles), repr(roles.entries), repr(vars(roles.client).keys())):
             for secret in SECRETS + (OWNER,):
                 self.assertNotIn(secret, text)
-        self.assertEqual(cfg.summary(), {"port": 4040, "origin": "none", "roles_configured": 1, "owner": 1, "recheck": 180, "test_login": 0, "login_configured": 0, "min_account_days": 7})
+        self.assertEqual(cfg.summary(), {"port": 4040, "origin": "none", "roles_configured": 1, "owner": 1, "recheck": 180, "test_login": 0, "login_configured": 0, "min_account_days": 7,
+                                       "role_images_configured": 0, "images_configured": 0})
         for name, value in (("ANTS_HUB_DISCORD_BOT_TOKEN", "canary token with blanks " + TOKEN), ("ANTS_HUB_DISCORD_BOT_TOKEN", "short"), ("ANTS_HUB_DISCORD_GUILD", "canary-guild"),
                             ("ANTS_HUB_ROLE_ADMIN", "canary-role"), ("ANTS_HUB_ROLE_MOD", "0123456"), ("ANTS_HUB_OWNER", "canary-owner"), ("ANTS_HUB_ROLE_RECHECK_SECONDS", "canary")):
             with self.assertRaises(config.ConfigError, msg=name) as caught:

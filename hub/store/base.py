@@ -7,8 +7,10 @@ here: they stay on that backend's class. tests/scripts/test_hub_store_contract.p
 import collections
 import re
 
-Line = collections.namedtuple("Line", "id at account name text mod")
+Line = collections.namedtuple("Line", "id at account name text mod img", defaults=(None,))        # img: None, or the Image of the line (docs/HUB_IMAGES.md)
 Line.__repr__ = lambda self: "<Line %d>" % self.id                 # (the default shows the account's Discord id: that is like a password and is in no representation)
+Image = collections.namedtuple("Image", "name x w h tw th anim")     # a posted image: its public name (32 random hex digits), its type (`jpg`, `png` or `gif`), the size of the image and of its thumbnail, and whether it is animated
+Image.__repr__ = lambda self: "<Image>"
 Action = collections.namedtuple("Action", "id at actor action target detail")         # a row of the moderators' log (see StoreBase.actions)
 Usage = collections.namedtuple("Usage", "bytes free lines oldest log")         # (see StoreBase.usage)
 Profile = collections.namedtuple("Profile", "username display pick")
@@ -16,11 +18,14 @@ PICKS = ("display", "username")
 MAX_LINES = 200                                # the store keeps the newest this many chat lines (every line counts, a moderator's and a deleted one too), and no line older than `retention`: whichever limit is smaller deletes first
 MODLOG_DAYS = 30                        # the moderators' log keeps an action this long ...
 MODLOG_ROWS = 10000                     # ... and at most this many rows (the newest)
-ACTIONS = ("mute", "unmute", "del", "kick", "ban", "unban", "nopic", "pic", "bots_start", "bots_stop")     # what the log can say was done
+ACTIONS = ("mute", "unmute", "del", "kick", "ban", "unban", "nopic", "pic", "noimages", "images", "del_img", "bots_start", "bots_stop")     # what the log can say was done
 BOTS_DETAILS = {"bots_start": re.compile(r"[0-9]{1,6} every [0-9]{1,5}s\Z"), "bots_stop": re.compile(r"stopped [0-9]{1,6} dropped [0-9]{1,6}\Z")}      # the detail of a `/bots` row: numbers and fixed words, each number short of an id's length
 TERMINAL = "terminal"                   # the actor of an action that the command line did
 REFERENCE = re.compile(r"[0-9a-f]{16}\Z")      # the pseudonymous reference of an account (hub/pseudo.py)
 PICTURE_NAME = re.compile(r"[0-9a-f]{32}\Z")        # the public name of a picture: 128 random bits (hub/pictures.py)
+IMAGE_NAME = PICTURE_NAME                           # ... and of an image (hub/images.py): the same shape, 128 random bits
+IMAGE_TYPES = ("jpg", "png", "gif")                 # what a kept image is (the converter writes nothing else)
+NOIMAGES_MAX = 10000                                # the accounts whose posting of images is taken away that are kept in all (the oldest go first)
 PICTURE_DAYS = 400                      # a person's `off` is remembered this long after their last login, then the row goes (the default is on again)
 SHOW_ON, SHOW_OFF, SHOW_BLOCKED = 1, 0, 2       # the state of an account's picture: shown (the default), switched off by the person, blocked by the operator
 PROFILE_DAYS = 35                       # a profile that has not been refreshed by a login for this long belongs to nobody who is logged in (a login lasts 30 days): purge() deletes it
@@ -28,6 +33,10 @@ PROFILE_DAYS = 35                       # a profile that has not been refreshed 
 
 class StoreError(Exception):
     """The data could not be read or written now (locked, full, refused). Nothing was done; the caller may tell the sender and try again later."""
+
+
+class ImageGone(Exception):
+    """The image that a line was to carry is not there for this account: unknown, used already, not its own, or waiting too long. Nothing was written."""
 
 
 class StoreUnavailable(StoreError):
@@ -58,8 +67,8 @@ class StoreBase:
 
     # ---- lines ----
 
-    def add_line(self, account, name, text, mod):
-        """Keep a line and return it as a Line. `mod` is the role that its author had when it wrote it: 0 (none), 1 (a moderator) or 2 (an administrator); a bool is 0 or 1. It is a mark for the pages, never a reason to allow anything. The lines past the newest `max_lines` are deleted in the same step, so the store never holds more."""
+    def add_line(self, account, name, text, mod, image=None):
+        """(`image`: the public name of an upload that waits for this account: the line carries it, in the same step, or ImageGone is raised and nothing is written.) Keep a line and return it as a Line. `mod` is the role that its author had when it wrote it: 0 (none), 1 (a moderator) or 2 (an administrator); a bool is 0 or 1. It is a mark for the pages, never a reason to allow anything. The lines past the newest `max_lines` are deleted in the same step, so the store never holds more."""
         raise NotImplementedError
 
     def recent_lines(self, count):
@@ -115,6 +124,56 @@ class StoreBase:
 
     def forget(self, account, since=0):
         """Remove the account's logins, profile and lines and wipe its name from its mute and ban (which stay). Returns the ids of the lines that a screen may still show."""
+        raise NotImplementedError
+
+    # ---- images: what people post (hub/images.py), keyed by the account's pseudonymous reference, never by its id ----
+
+    def add_image(self, account, name, image, nbytes):
+        """Keep the row of an upload that waits (`image` is an Image, `nbytes` the size of its two files) for the account to post it with a line. At most the account's waiting ones are counted by pending_images."""
+        raise NotImplementedError
+
+    def pending_images(self, account):
+        """How many uploads of the account wait for a line (not past `image_pending_seconds`)."""
+        raise NotImplementedError
+
+    def image_of_line(self, line_id):
+        """The Image of a line that is not deleted, or None."""
+        raise NotImplementedError
+
+    def images_gone(self, stale_before):
+        """[(name, type)] of the rows whose files are to be deleted: an upload that waited since before `stale_before`, and an image whose line is deleted or gone."""
+        raise NotImplementedError
+
+    def drop_images(self, names):
+        """Delete these rows (their files are gone)."""
+        raise NotImplementedError
+
+    def image_usage(self):
+        """(rows, bytes) of every image kept, posted or waiting."""
+        raise NotImplementedError
+
+    def image_names(self):
+        """The set of names that have a row."""
+        raise NotImplementedError
+
+    def set_noimages(self, account, on, by, note=None):
+        """Take away (`on`) or give back the account's posting of images: a row of its reference that beats its Discord role. True when that changed something (a flag that is there is not made again, a flag that is not there is not lifted); `note` goes into the moderators' log in the same step, and only then."""
+        raise NotImplementedError
+
+    def set_noimages_by_reference(self, reference, on, by, note=None):
+        """set_noimages() for the row that has this reference (the account may be gone: Forget me leaves the flag); None when there is no such row to lift."""
+        raise NotImplementedError
+
+    def noimages_marks(self):
+        """{reference: (time, the actor's reference)} of the accounts whose posting is taken away."""
+        raise NotImplementedError
+
+    def noimages_state_by_reference(self, reference):
+        """Whether the account with this reference has the flag."""
+        raise NotImplementedError
+
+    def last_noimages_change(self):
+        """The number of the last change of the flags, by this process or by another (the command line): it only goes up."""
         raise NotImplementedError
 
     # ---- pictures: the small copy of an account's Discord picture (hub/pictures.py), keyed by the account's pseudonymous reference, never by its id ----

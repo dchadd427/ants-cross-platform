@@ -3,8 +3,8 @@
   GET  /hub/admin/gate         asked only by the site's nginx (auth_request) before it passes an /admin/api request on, with the visitor's own headers: 204 and a signed pass in
                                `X-Ants-Admin-Pass` when the visitor may, 401 when nobody is logged in, 403 when somebody is but may not, 503 when the door is shut (no good key: for everybody, nobody
                                logged in too; nginx turns that into its `door_off` answer, the page says it is not available, and never that the visitor is not an admin). No body, no CORS.
-  GET  /hub/admin/api/me, bans, mutes, hidden, modlog, status
-  POST /hub/admin/api/ban, unban, mute, unmute, nopic, pic, del      one JSON object, the same rules as the hub's other POSTs and a token (`csrf` of /me)
+  GET  /hub/admin/api/me, bans, mutes, hidden, noimages, modlog, status
+  POST /hub/admin/api/ban, unban, mute, unmute, nopic, pic, noimages, images, del      one JSON object, the same rules as the hub's other POSTs and a token (`csrf` of /me)
 
 THE rule (`Door.decide`, used by every one of the above): the visitor's hub login names an account; the account may when it is `ANTS_HUB_OWNER` (no call to Discord) or when its role is
 `admin` on the hub's own freshness rule (hub/roles.py `role_of`: an answer of Discord that is not past its interval and its grace; a role that is not known or not that young is looked up
@@ -39,7 +39,7 @@ import secrets
 
 from . import admin as adminmod, chat as chatmod, http, limits as limitmod, pseudo, roles as rolesmod
 from .store import StoreError
-from .store.base import SHOW_BLOCKED, SHOW_OFF
+from .store.base import SHOW_BLOCKED, SHOW_OFF, TERMINAL
 
 GATE_PATH = "/hub/admin/gate"
 API_PREFIX = "/hub/admin/api/"
@@ -52,9 +52,9 @@ MAX_MUTE_MINUTES = 10080
 MODLOG_DAYS = 30
 MODLOG_SHOWN = 500
 STAFF_MAX = 1000                                 # (accounts that the door remembers as having held a role: a handful in practice)
-READS = frozenset(("me", "bans", "mutes", "hidden", "modlog", "status"))
-WRITES = frozenset(("ban", "unban", "mute", "unmute", "nopic", "pic", "del"))
-TABLE_WORD = {"nopic": "ban", "pic": "unban"}      # (the table of the chat's powers has the commands of the chat: a picture's block and its lift need what a ban and its lift need)
+READS = frozenset(("me", "bans", "mutes", "hidden", "noimages", "modlog", "status"))
+WRITES = frozenset(("ban", "unban", "mute", "unmute", "nopic", "pic", "noimages", "images", "del"))
+TABLE_WORD = {"nopic": "ban", "pic": "unban", "noimages": "ban", "images": "unban"}      # (the table of the chat's powers has the commands of the chat: a picture's block, taking posting of images away and their lifts need what a ban and its lift need)
 ACCOUNT_ARGUMENT = re.compile(r"[!-~]{1,40}\Z")
 DIGITS = re.compile(r"[0-9]{1,18}\Z")
 ID_SHAPED = re.compile(r"[0-9]{15,20}\Z")
@@ -359,6 +359,11 @@ class Door:
             blocked = sorted(r for r, state in store.picture_marks().items() if state == SHOW_BLOCKED)
             names = store.usernames_by_reference(blocked)
             return http.response(200, {"hidden": [{"ref": r, "name": names.get(r, "")} for r in blocked], "untrusted": True, "untrusted_fields": ["name"]})
+        if name == "noimages":
+            marks = sorted(store.noimages_marks().items(), key=lambda item: -item[1][0])
+            names = store.usernames_by_reference({r for r, _ in marks} | {by for _, (_, by) in marks if pseudo.REFERENCE.match(by)})
+            return http.response(200, {"noimages": [{"ref": r, "name": untyped_id(names.get(r, "")), "at": at, "by": by if pseudo.REFERENCE.match(by) else "command line" if by == TERMINAL else "", "by_name": untyped_id(names.get(by, ""))} for r, (at, by) in marks],
+                                       "untrusted": True, "untrusted_fields": ["name", "by_name"]})
         rows = store.actions(store.clock() - MODLOG_DAYS * 86400, MODLOG_SHOWN)
         names = store.usernames_by_reference({r for row in rows for r in (row.actor, row.target) if r})
         out = [{"at": r.at, "action": r.action, "actor": r.actor, "actor_name": names.get(r.actor, ""), "target": r.target, "target_name": names.get(r.target, ""), "detail": r.detail} for r in rows]
@@ -373,7 +378,15 @@ class Door:
         last = pictures.last_fetch() if pictures is not None else None
         return {"store": {"bytes": used.bytes, "limit": limits.db_max_bytes, "log": used.log, "free": used.free, "lines": used.lines, "oldest": used.oldest if used.lines else None,
                           "pictures": count, "pictures_max": limits.pictures_rows_max, "picture_bytes": size, "picture_bytes_max": limits.pictures_bytes_max, "off": marks.count(SHOW_OFF), "blocked": marks.count(SHOW_BLOCKED)},
+                "images": self.images_status(),
                 "health": self.health(), "last_picture": {"kind": last[0], "age": last[1]} if last else None, "version": dict(self.version)}
+
+    def images_status(self):
+        """The Status page's numbers of the images: the files kept and their bytes, of the two limits, the accounts whose posting is taken away, and whether the converter can be asked (`off`: the hub has none, `ok`: the last
+        upload did not find it down, `down`: it did). No account, no name."""
+        images, limits = self.hub.images, self.hub.limits
+        rows, size = self.hub.store.image_usage()
+        return {"on": images.on, "files": rows, "files_max": limits.image_files_max, "bytes": size, "bytes_max": limits.image_bytes_max, "off": len(self.hub.store.noimages_marks()), "converter": self.hub.image_door.converter_state()}
 
     def health(self):
         """What the roles' lookups are doing, in words (no account, no id): `off` when no role is asked of Discord, `refused` while Discord refuses the token, the server or the access, `down` while
@@ -436,6 +449,15 @@ class Door:
             target = store.account_of_line(line)
             if target is None:
                 return self.fail(404, "bad")
+        elif name in ("noimages", "images"):
+            if name == "images" and pseudo.REFERENCE.match(argument) and store.noimages_state_by_reference(argument):          # (a flag that outlived its account's other rows is lifted by its reference, as the command line does)
+                found = adminmod.resolve(store, argument, ids=False)[0]
+                target = found if found is not None else None
+                whom = argument
+            else:
+                target, shown = adminmod.resolve(store, argument, ids=False)
+                if target is None:
+                    return self.fail(404, "who")
         elif name in ("nopic", "pic"):
             if pseudo.REFERENCE.match(argument) and store.picture_state_by_reference(argument) is not None:      # (a block that outlived its account is found by its reference, as `hub.admin` does)
                 target = adminmod.resolve(store, argument, ids=False)[0]
@@ -480,9 +502,16 @@ class Door:
             if not store.unban(target, note=(by, "unban", whom, "")):
                 return self.fail(409, "bad")
         elif name == "del":
-            if not store.delete_line(line, by, note=(by, "del", whom, str(line))):
+            kind = "del_img" if store.image_of_line(line) is not None else "del"
+            if not store.delete_line(line, by, note=(by, kind, whom, str(line))):
                 return self.fail(409, "bad")
             chat.sync_deletions()
+        elif name in ("noimages", "images"):
+            on = name == "noimages"
+            changed = store.set_noimages(target, on, by, note=(by, name, whom, "")) if target is not None else store.set_noimages_by_reference(argument, on, by, note=(by, name, argument, ""))
+            if not changed:
+                return self.fail(409, "bad")
+            chat.sync_images()
         else:
             if adminmod.change_picture(store, name, whom, state, lambda show, note: setter(show, (by,) + note[1:]), io.StringIO(), io.StringIO()):         # (the command line's own change, with this actor in the log's row)
                 return self.fail(409, "bad")

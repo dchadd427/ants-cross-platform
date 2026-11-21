@@ -31,6 +31,7 @@ GUILD_ID = "700000000000000001"
 ROLE_ADMIN = "700000000000000002"
 ROLE_MOD = "700000000000000003"
 ROLE_OTHER = "700000000000000004"
+ROLE_IMAGES = "700000000000000005"                      # the images' role (made up, like every id here)
 EPOCH_MS = 1420070400000
 AVATAR = "0123456789abcdef0123456789abcdef"      # a made-up picture code of the shape that Discord's are (the fake `me` says it when `avatar` is set to it)
 
