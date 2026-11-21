@@ -12,7 +12,9 @@ import glob
 import json
 import math
 import os
+import shutil
 import struct
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -1171,6 +1173,216 @@ class SoftwarePreviewRenderer(unittest.TestCase):
         edge_luma = float(img[6:10, 6:10].mean())
         # Bright white eye behind dark tinted glass must shine noticeably brighter than glass-only edges.
         self.assertGreater(center_luma, edge_luma + 35.0)
+
+
+class All1998ClipsAndViewerTests(unittest.TestCase):
+    """Regression coverage for all 88 1998 glTF clips, hidden FX props, CI stdlib guards, and viewer JS."""
+
+    _EXPECTED_CLIPS = {
+        "worker": {
+            "Blink": 3.00, "Idle": 1.65, "Attack": 0.42, "Hit": 0.80,
+            "Walk": 0.60, "Harvest": 0.42, "CantGo": 0.36, "Enter": 1.00, "Hatch": 0.52,
+            "BlownBack": 0.90, "BlownUp": 1.15, "Stunned": 3.125, "Drown": 2.37,
+        },
+        "combat": {
+            "Blink": 3.00, "Idle": 7.82, "Attack": 0.54, "Hit": 0.88,
+            "Walk": 0.60, "Harvest": 0.36, "CantGo": 0.62, "Enter": 1.20, "Hatch": 0.64,
+            "BlownBack": 0.98, "BlownUp": 1.165, "Stunned": 3.00, "Drown": 2.37,
+        },
+        "thief": {
+            "Blink": 3.00, "IdleLookout": 2.52, "Idle": 2.52, "Attack": 0.72, "Hit": 0.95,
+            "Walk": 0.60, "Harvest": 0.34, "CantGo": 0.89, "Enter": 1.00, "Hatch": 0.52,
+            "BlownBack": 0.91, "BlownUp": 1.15, "Stunned": 2.61, "Drown": 2.37, "Steal": 3.51,
+        },
+        "bomber": {
+            "Blink": 3.00, "Idle": 1.70, "Attack": 0.36, "Hit": 1.00,
+            "Walk": 0.60, "Harvest": 0.44, "CantGo": 1.38, "Enter": 1.24, "Hatch": 0.64,
+            "BlownBack": 1.06, "BlownUp": 1.61, "Stunned": 3.835, "Drown": 2.38,
+            "PlantBomb": 1.36, "DefuseBomb": 1.10,
+        },
+        "swimmer": {
+            "Blink": 3.00, "Idle": 1.80, "Attack": 0.76, "Hit": 1.05,
+            "Walk": 0.60, "Harvest": 0.32, "CantGo": 0.96, "Enter": 0.90, "Hatch": 0.48,
+            "BlownBack": 1.15, "BlownUp": 1.05, "Stunned": 2.88,
+            "Swim": 0.48, "Dive": 1.04, "Surface": 0.42, "Shovel": 0.48, "ShovelWater": 0.50,
+        },
+        "fire": {
+            "Blink": 3.00, "Idle": 0.60, "Attack": 0.36, "Hit": 1.00,
+            "Walk": 0.60, "Harvest": 0.40, "CantGo": 0.66, "Enter": 0.50, "Hatch": 0.30,
+            "BlownBack": 1.10, "BlownUp": 1.33, "Stunned": 3.00, "Drown": 2.37,
+            "StartFire": 1.76, "Extinguish": 1.20,
+        },
+    }
+
+    _EXPECTED_HIDDEN_FX = {
+        "worker": ("stun_stars", "drown_splash"),
+        "combat": ("stun_stars", "drown_splash"),
+        "thief": (
+            "stun_stars", "drown_splash", "thief_loot_crumb",
+            "thief_whip_lasso", "thief_whip_crack", "thief_whip_recoil",
+        ),
+        "bomber": ("stun_stars", "drown_splash", "bomber_held_bomb", "bomber_defuse_puff"),
+        "swimmer": (
+            "stun_stars", "swimmer_splash_ring", "swimmer_dirt_toss", "swimmer_water_toss",
+            "snorkel_water_glob", "snorkel_water_spray_a", "snorkel_water_spray_b",
+        ),
+        "fire": ("stun_stars", "drown_splash", "fire_mag_glass", "fire_spark", "fire_extinguisher", "fire_foam"),
+    }
+
+    _SCENES_CACHE = None
+
+    @classmethod
+    def _build_all_six(cls):
+        if cls._SCENES_CACHE is None:
+            from tools.ant_models import ant_bomber, ant_combat, ant_fire, ant_swimmer, ant_thief, ant_worker
+
+            cls._SCENES_CACHE = {
+                "worker": ant_worker.build_ant(),
+                "combat": ant_combat.build_ant(),
+                "thief": ant_thief.build_ant(),
+                "bomber": ant_bomber.build_ant(),
+                "swimmer": ant_swimmer.build_ant(),
+                "fire": ant_fire.build_ant(),
+            }
+        return cls._SCENES_CACHE
+
+    @unittest.skipUnless(HAS_NUMPY, "numpy is needed")
+    def test_all_classes_export_complete_1998_clips_and_exact_durations(self):
+        scenes = self._build_all_six()
+        total_clips = 0
+        for cls_name, expected in self._EXPECTED_CLIPS.items():
+            sc = scenes[cls_name]
+            by_name = {clip.name: clip for clip in sc.animations}
+            self.assertEqual(
+                set(by_name.keys()),
+                set(expected.keys()),
+                f"{cls_name}: animation set mismatch",
+            )
+            if cls_name == "swimmer":
+                self.assertNotIn("Drown", by_name)
+            total_clips += len(by_name)
+            for clip_name, exp_dur in expected.items():
+                clip = by_name[clip_name]
+                self.assertGreater(len(clip.channels), 0, f"{cls_name}.{clip_name} has no channels")
+                clip_dur = 0.0
+                for ch in clip.channels:
+                    self.assertGreater(len(ch.times), 0, f"{cls_name}.{clip_name}.{ch.target_node} empty times")
+                    self.assertEqual(len(ch.times), len(ch.values))
+                    prev_t = -1.0
+                    for t_val, vec in zip(ch.times, ch.values):
+                        self.assertTrue(math.isfinite(t_val) and t_val >= 0.0, f"{cls_name}.{clip_name} bad t={t_val}")
+                        self.assertGreaterEqual(t_val, prev_t, f"{cls_name}.{clip_name} non-monotonic t")
+                        prev_t = t_val
+                        for comp in vec:
+                            self.assertTrue(math.isfinite(comp), f"{cls_name}.{clip_name} non-finite value")
+                    clip_dur = max(clip_dur, float(ch.times[-1]))
+                self.assertAlmostEqual(
+                    clip_dur,
+                    exp_dur,
+                    delta=0.02,
+                    msg=f"{cls_name}.{clip_name} duration {clip_dur:.4f}s != CHD {exp_dur:.4f}s",
+                )
+        self.assertEqual(total_clips, 88)
+
+    @unittest.skipUnless(HAS_NUMPY, "numpy is needed")
+    def test_hidden_fx_props_stay_hidden_at_rest_and_ground_min_y_preserved(self):
+        scenes = self._build_all_six()
+        for cls_name, expected_fx in self._EXPECTED_HIDDEN_FX.items():
+            sc = scenes[cls_name]
+            for fx_node in expected_fx:
+                self.assertIn(fx_node, sc.nodes, f"{cls_name} missing hidden FX node {fx_node!r}")
+                xf = sc.get_node_transform(fx_node)
+                self.assertIsNotNone(xf, f"{cls_name}.{fx_node} missing rest transform")
+                max_scale = max(abs(float(c)) for c in xf.scale)
+                self.assertLessEqual(
+                    max_scale,
+                    1e-3,
+                    f"{cls_name}.{fx_node} must start hidden at rest (max scale {max_scale} > 1e-3)",
+                )
+            lo, hi = sc.bounds()
+            self.assertAlmostEqual(float(lo[1]), 0.0, delta=1e-3, msg=f"{cls_name} rest min_y drifted: {lo[1]}")
+            for axis in range(3):
+                self.assertTrue(math.isfinite(float(lo[axis])) and math.isfinite(float(hi[axis])))
+                self.assertGreater(float(hi[axis] - lo[axis]), 0.1, f"{cls_name} degenerate rest axis {axis}")
+
+    def test_wave_clip_modules_and_orig_sprites_import_without_numpy_or_pil(self):
+        # Verify CI pure-stdlib safety in an isolated Python process blocking numpy and PIL.
+        modules = (
+            "tools.ant_models.shared_clips_loco",
+            "tools.ant_models.shared_clips_hazards",
+            "tools.ant_models.ability_clips_special",
+            "tools.ant_models.ability_clips_swimmer",
+            "tools.ant_models.ability_clips_fire",
+            "tools.ant_models.hit_clips",
+            "tools.ant_models.hit_clips_special",
+            "tools.ant_models.thief_attack",
+            "tools.ant_models.orig_sprites",
+        )
+        script = (
+            "import builtins, importlib, sys\n"
+            f"sys.path.insert(0, {REPO!r})\n"
+            "_orig = builtins.__import__\n"
+            "def _blocked(name, *a, **kw):\n"
+            "    if name in ('numpy', 'PIL') or name.startswith(('numpy.', 'PIL.')):\n"
+            "        raise ImportError(name)\n"
+            "    return _orig(name, *a, **kw)\n"
+            "builtins.__import__ = _blocked\n"
+            f"for mod_name in {modules!r}:\n"
+            "    m = importlib.import_module(mod_name)\n"
+            "    assert m is not None\n"
+        )
+        proc = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=False)
+        self.assertEqual(proc.returncode, 0, f"Pure-stdlib import failed:\n{proc.stderr}")
+
+    def test_extra_sprite_specs_match_viewer_actions_registry_and_js_syntax(self):
+        from tools.ant_models import orig_sprites
+
+        shared_extra_ids = {spec[0] for spec in orig_sprites.EXTRA_SHARED_SPECS}
+        class_extra_by_id = {}
+        for cls_name, specs in orig_sprites.EXTRA_CLASS_SPECS.items():
+            for spec in specs:
+                class_extra_by_id.setdefault(spec[0], []).append(cls_name)
+        all_orig_ids = set(orig_sprites.ACTIONS) | shared_extra_ids | set(class_extra_by_id.keys())
+        self.assertEqual(len(all_orig_ids), 22)
+
+        js_dir = os.path.join(REPO, "tools", "ant_models")
+        js_files = sorted(glob.glob(os.path.join(js_dir, "*.js")))
+        self.assertEqual(len(js_files), 7, f"Expected 7 viewer JS files, found {[os.path.basename(p) for p in js_files]}")
+
+        node = shutil.which("node")
+        if node is None:
+            self.skipTest("node is not installed; skipping viewer_actions.js execution and node --check")
+
+        for js_path in js_files:
+            chk = subprocess.run([node, "--check", js_path], capture_output=True, text=True, check=False)
+            self.assertEqual(chk.returncode, 0, f"node --check failed on {os.path.basename(js_path)}:\n{chk.stderr}")
+
+        # Execute viewer_actions.js in a minimal Node sandbox to cross-check live registry behavior.
+        actions_js = os.path.join(js_dir, "viewer_actions.js")
+        probe = (
+            "const fs = require('fs'), vm = require('vm');\n"
+            "const sandbox = { window: {} };\n"
+            f"vm.runInNewContext(fs.readFileSync({actions_js!r}, 'utf8'), sandbox);\n"
+            "const reg = sandbox.window.__antActions;\n"
+            "const near = reg.nearestAvailableAngle('201', ['301', '901', '701']);\n"
+            "console.log(JSON.stringify({ actions: reg.ACTIONS, quick: reg.QUICK_ACTIONS, near }));\n"
+        )
+        run = subprocess.run([node, "-e", probe], capture_output=True, text=True, check=False)
+        self.assertEqual(run.returncode, 0, f"viewer_actions.js execution failed:\n{run.stderr}")
+        payload = json.loads(run.stdout)
+        viewer_actions = payload["actions"]
+        viewer_ids = {a["id"] for a in viewer_actions}
+        self.assertEqual(viewer_ids, all_orig_ids)
+        self.assertEqual(payload["quick"], ["idle", "walk", "attack", "hit"])
+        self.assertIn(payload["near"]["angle"], ("301", "901"))
+        self.assertFalse(payload["near"]["exact"])
+
+        by_id = {a["id"]: a for a in viewer_actions}
+        self.assertNotIn("swimmer", by_id["drown"]["classes"])
+        for aid, classes in class_extra_by_id.items():
+            self.assertEqual(sorted(by_id[aid]["classes"]), sorted(classes), f"Class list mismatch for {aid!r}")
+        for aid in shared_extra_ids:
+            self.assertTrue(by_id[aid].get("extra"), f"Shared extra action {aid!r} must set extra=true")
 
 
 if __name__ == "__main__":
