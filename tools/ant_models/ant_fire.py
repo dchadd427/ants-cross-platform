@@ -55,6 +55,15 @@ except ImportError:
 
 _HAT_MAT = "gear_yellow_plastic"
 
+# Confident, open, alert idle firefighter arms poised slightly outward at his sides (never cowering/hugging chest!).
+_FIRE_LEFT_ARM_IDLE: List[Tuple[float, float, float]] = [
+    (0.078, 0.456, 0.014),
+    (0.168, 0.418, 0.044),
+    (0.178, 0.376, 0.104),
+    (0.154, 0.362, 0.160),
+]
+_FIRE_RIGHT_ARM_IDLE: List[Tuple[float, float, float]] = [(-x, y, z) for x, y, z in _FIRE_LEFT_ARM_IDLE]
+
 # Optional right-arm pose when `hold_magnifying_glass=True` (kept for Fire's fire-starting animation).
 _FIRE_RIGHT_ARM: List[Tuple[float, float, float]] = [
     (-0.078, 0.456, 0.014),
@@ -587,9 +596,9 @@ _build_magnifying_glass = build_magnifying_glass
 
 
 def _add_fire_idle(scene: SceneBuilder, *, hold_magnifying_glass: bool = False) -> AnimationClip:
-    """Attach Fire's calm, composed 1.50s breathing bounce + gentle chin-up helmet nod Idle clip."""
-    dur = 1.50
-    n_steps = 16
+    """Attach Fire's brisk, confident upright 0.60s (`afst` [100x6]ms) proud standing bounce Idle clip."""
+    dur = 0.60
+    n_steps = 12
     times = [round(dur * k / n_steps, 5) for k in range(n_steps + 1)]
 
     def _rest_t(node: str) -> Tuple[float, float, float]:
@@ -601,16 +610,17 @@ def _add_fire_idle(scene: SceneBuilder, *, hold_magnifying_glass: bool = False) 
         return xf.rotation if xf is not None else (0.0, 0.0, 0.0, 1.0)
 
     channels: List[AnimationChannel] = []
+    # Upbeat, buoyant chest-up bounce (matching `afst301`/`afst901` 600ms upright standing rhythm).
     pumps = [0.5 * (1.0 - math.cos(2.0 * math.pi * (k / n_steps))) for k in range(n_steps + 1)]
     pumps[-1] = pumps[0]
 
     bx, by, bz = _rest_t("upper_body")
-    body_t = [(bx, by + 0.023 * p, bz - 0.003 * p) for p in pumps]
+    body_t = [(bx, by + 0.028 * p, bz - 0.004 * p) for p in pumps]
     body_t[-1] = body_t[0]
     channels.append(AnimationChannel("upper_body", "translation", list(times), body_t))
 
     r0_b = _rest_r("upper_body")
-    body_r = [quat_mul(r0_b, quat_from_euler_xyz(rx=-0.024 * p)) for p in pumps]
+    body_r = [quat_mul(r0_b, quat_from_euler_xyz(rx=-0.044 * p)) for p in pumps]
     body_r[-1] = body_r[0]
     channels.append(AnimationChannel("upper_body", "rotation", list(times), body_r))
 
@@ -619,14 +629,31 @@ def _add_fire_idle(scene: SceneBuilder, *, hold_magnifying_glass: bool = False) 
         quat_mul(
             r0_h,
             quat_from_euler_xyz(
-                rx=-0.064 * pumps[k],
-                rz=0.012 * math.sin(2.0 * math.pi * (k / n_steps)),
+                rx=-0.056 * pumps[k],
+                rz=0.014 * math.sin(2.0 * math.pi * (k / n_steps)),
             ),
         )
         for k in range(n_steps + 1)
     ]
     head_r[-1] = head_r[0]
     channels.append(AnimationChannel("head_group", "rotation", list(times), head_r))
+
+    # Confident, open, alert arm bounce lifting gently outward-up with each upright breath (never cowering!).
+    for side_tag, sign, scale in (("left", +1.0, 1.0), ("right", -1.0, 0.55 if hold_magnifying_glass else 1.0)):
+        arm_n, fore_n = f"arm_{side_tag}", f"forearm_{side_tag}"
+        if arm_n in scene.nodes and scene.get_node(arm_n):
+            r0_a = _rest_r(arm_n)
+            a_r = [
+                quat_mul(r0_a, quat_from_euler_xyz(rx=-0.055 * scale * p, ry=sign * 0.035 * scale * p, rz=sign * 0.055 * scale * p))
+                for p in pumps
+            ]
+            a_r[-1] = a_r[0]
+            channels.append(AnimationChannel(arm_n, "rotation", list(times), a_r))
+        if fore_n in scene.nodes and scene.get_node(fore_n):
+            r0_f = _rest_r(fore_n)
+            f_r = [quat_mul(r0_f, quat_from_euler_xyz(rx=0.065 * scale * p, rz=sign * 0.030 * scale * p)) for p in pumps]
+            f_r[-1] = f_r[0]
+            channels.append(AnimationChannel(fore_n, "rotation", list(times), f_r))
 
     if "magnifying_glass" in scene.nodes and scene.get_node("magnifying_glass"):
         r0_m = _rest_r("magnifying_glass")
@@ -636,7 +663,7 @@ def _add_fire_idle(scene: SceneBuilder, *, hold_magnifying_glass: bool = False) 
 
     if "gaster_group" in scene.nodes:
         r0_g = _rest_r("gaster_group")
-        g_r = [quat_mul(r0_g, quat_from_euler_xyz(rx=0.034 * p)) for p in pumps]
+        g_r = [quat_mul(r0_g, quat_from_euler_xyz(rx=0.042 * p)) for p in pumps]
         g_r[-1] = g_r[0]
         channels.append(AnimationChannel("gaster_group", "rotation", list(times), g_r))
 
@@ -648,7 +675,6 @@ def _add_fire_idle(scene: SceneBuilder, *, hold_magnifying_glass: bool = False) 
 
     clip = scene.add_animation("Idle", channels, replace=True)
     sync_leg_flex_to_clip(scene, "Idle")
-    sync_arm_idle_to_clip(scene, "Idle", left_scale=1.0, right_scale=0.6 if hold_magnifying_glass else 1.0)
     return clip
 
 
@@ -793,15 +819,15 @@ def build_fire(blink: float = 0.0, *, hold_magnifying_glass: bool = False) -> Sc
         include_eyes=True,
         include_brows=False,
         brow_style="plucky",
-        head_tilt_deg=3.5,
-        head_yaw_deg=-3.0,
-        head_pitch_deg=-15.5,
-        eye_look=(0.05, 0.04),
+        head_tilt_deg=2.5,
+        head_yaw_deg=-2.0,
+        head_pitch_deg=-17.5,
+        eye_look=(0.04, 0.06),
         stance_asymmetry=0.18,
         leg_style="fire",
         include_idle=False,
-        left_arm_pose="idle",
-        right_arm_pose=_FIRE_RIGHT_ARM if hold_magnifying_glass else "idle",
+        left_arm_pose=_FIRE_LEFT_ARM_IDLE,
+        right_arm_pose=_FIRE_RIGHT_ARM if hold_magnifying_glass else _FIRE_RIGHT_ARM_IDLE,
         blink=blink,
     )
     orig_head_r = anchors["head_radii"]

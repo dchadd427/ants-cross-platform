@@ -18,20 +18,24 @@ import numpy as np
 try:
     from .mesh_core import (
         AnimationChannel,
+        MeshPart,
         SceneBuilder,
         curved_tube,
         quat_from_axis_angle,
         quat_from_euler_xyz,
         quat_mul,
+        superellipsoid,
     )
 except ImportError:
     from mesh_core import (  # type: ignore
         AnimationChannel,
+        MeshPart,
         SceneBuilder,
         curved_tube,
         quat_from_axis_angle,
         quat_from_euler_xyz,
         quat_mul,
+        superellipsoid,
     )
 
 Vec3 = Tuple[float, float, float]
@@ -89,6 +93,46 @@ def _resolve_offsets(leg_style: str) -> Tuple[float, Dict[str, Tuple[float, ...]
     return amount, out
 
 
+def _joint_collar(
+    name: str,
+    center: np.ndarray,
+    axis_a: np.ndarray,
+    axis_b: np.ndarray,
+    radii: Vec3,
+    out_bias: float,
+) -> MeshPart:
+    """Build a sculpted chitin exoskeleton joint condyle collar seated on a knee or ankle bend."""
+    ua = axis_a / max(1e-8, float(np.linalg.norm(axis_a)))
+    ub = axis_b / max(1e-8, float(np.linalg.norm(axis_b)))
+    bis = -(ua + ub)
+    bn = float(np.linalg.norm(bis))
+    bis = bis / bn if bn > 1e-6 else np.array([0.0, 0.0, 1.0], dtype=np.float64)
+    tan = ub - ua
+    tn = float(np.linalg.norm(tan))
+    tan = tan / tn if tn > 1e-6 else np.array([0.0, 1.0, 0.0], dtype=np.float64)
+    lat = np.cross(tan, bis)
+    ln = float(np.linalg.norm(lat))
+    lat = lat / ln if ln > 1e-6 else np.array([1.0, 0.0, 0.0], dtype=np.float64)
+    bis = np.cross(lat, tan)
+    pos_c = center + out_bias * bis
+    basis = np.column_stack([lat, tan, bis])
+
+    def _place(p: np.ndarray) -> np.ndarray:
+        return (p @ basis.T) + pos_c[None, :]
+
+    return superellipsoid(
+        radii[0],
+        radii[1],
+        radii[2],
+        e1=0.68,
+        e2=0.74,
+        u_segs=14,
+        v_segs=10,
+        name=name,
+        material="leg_chitin",
+    ).deform(_place)
+
+
 def _add_leg(
     scene: SceneBuilder,
     label: str,
@@ -99,7 +143,8 @@ def _add_leg(
     foot_yaw: float,
     side: int,
 ) -> Vec3:
-    """Build one 3-segment digitigrade leg (hip -> forward KNEE > -> rearward ANKLE < -> foot) as its own node.
+    """Build one sculpted segmented exoskeleton digitigrade leg (pinched joints, spindle femur,
+    armored knee/ankle condyle collars, angular tibia, 2-segment claw tarsus) pivoted at Y = 0.0.
 
     Returns the world-space foot pivot (x, 0.0, z) where the node is anchored.
     """
@@ -112,36 +157,70 @@ def _add_leg(
     fwd = np.array([math.sin(yaw_s), 0.0, math.cos(yaw_s)], dtype=np.float64)
     lift = np.array([0.0, 1.0, 0.0], dtype=np.float64)
 
-    # Segment 1 (femur): deep medial hip socket inside thorax_core -> muscular thigh -> forward KNEE (>).
+    # 1. Coxa/trochanter + swollen spindle-shaped exoskeleton femur with pinched hip & knee necks.
     p_root = np.array([s * 0.024, p_hip[1] + 0.004, p_hip[2] * 0.62], dtype=np.float64)
-    femur_mid = 0.48 * p_hip + 0.52 * p_knee + np.array([s * 0.003, 0.006, 0.005])
-    pre_knee = 0.18 * p_hip + 0.82 * p_knee + np.array([s * 0.002, 0.003, 0.004])
-    # Segment 2 (tibia): KNEE (>) -> sweeping backward-down -> rearward-bent ANKLE (<).
-    post_knee = 0.82 * p_knee + 0.18 * p_ankle + np.array([s * 0.003, -0.004, 0.004])
-    tibia_mid = 0.48 * p_knee + 0.52 * p_ankle + np.array([s * 0.004, 0.0, -0.004])
-    pre_ankle = 0.16 * p_knee + 0.84 * p_ankle + np.array([s * 0.002, 0.004, -0.005])
-    # Segment 3 (tarsus): ANKLE (<) -> angling forward-down -> planted tapered claw tip on Y = 0.
-    post_ankle = 0.80 * p_ankle + 0.20 * (p_foot + 0.020 * lift) + np.array([0.0, -0.005, -0.003])
-    tarsus_mid = 0.42 * p_ankle + 0.58 * (p_foot + 0.017 * lift)
-    tarsus_heel = p_foot + 0.0165 * lift - 0.006 * fwd
-    tarsus_ball = p_foot + 0.0135 * lift + 0.018 * fwd
-    tarsus_tip = p_foot + 0.0075 * lift + 0.044 * fwd
+    troch = 0.78 * p_hip + 0.22 * p_knee + np.array([0.0, -0.002, 0.0])
+    fem_a = 0.56 * p_hip + 0.44 * p_knee + np.array([s * 0.003, 0.008, 0.006])
+    fem_b = 0.34 * p_hip + 0.66 * p_knee + np.array([s * 0.003, 0.007, 0.006])
+    fem_neck = 0.10 * p_hip + 0.90 * p_knee + np.array([0.0, 0.002, 0.002])
+    femur = curved_tube(
+        [p_root, p_hip, troch, fem_a, fem_b, fem_neck, p_knee],
+        [(0.026, 0.030), (0.024, 0.028), (0.017, 0.020), (0.034, 0.043), (0.032, 0.040), (0.016, 0.019), (0.019, 0.022)],
+        samples_per_seg=3,
+        radial_segs=12,
+        cap_rings=2,
+        name=f"leg_{label}_femur",
+        material="leg_chitin",
+    )
 
-    leg_tube = curved_tube(
-        [
-            p_root, p_hip, femur_mid, pre_knee, p_knee,
-            post_knee, tibia_mid, pre_ankle, p_ankle,
-            post_ankle, tarsus_mid, tarsus_heel, tarsus_ball, tarsus_tip,
-        ],
-        [
-            (0.033, 0.037), (0.031, 0.036), (0.035, 0.041), (0.029, 0.034), (0.027, 0.031),
-            (0.025, 0.029), (0.024, 0.028), (0.022, 0.026), (0.021, 0.025),
-            (0.0195, 0.022), (0.0185, 0.021), (0.018, 0.0165), (0.015, 0.014), (0.0085, 0.0075),
-        ],
+    # 2. Angular tapered exoskeleton tibia with pinched sub-knee neck, dorsal calf swell & distal ankle spur.
+    tib_neck = 0.88 * p_knee + 0.12 * p_ankle + np.array([0.0, -0.003, 0.002])
+    tib_hi = 0.66 * p_knee + 0.34 * p_ankle + np.array([s * 0.003, 0.002, -0.002])
+    tib_lo = 0.28 * p_knee + 0.72 * p_ankle + np.array([s * 0.002, 0.002, -0.004])
+    tib_spur = 0.12 * p_knee + 0.88 * p_ankle + np.array([s * 0.001, 0.004, -0.006])
+    tibia = curved_tube(
+        [p_knee, tib_neck, tib_hi, tib_lo, tib_spur, p_ankle],
+        [(0.018, 0.020), (0.014, 0.016), (0.023, 0.029), (0.018, 0.022), (0.022, 0.026), (0.013, 0.015)],
+        samples_per_seg=3,
+        radial_segs=12,
+        cap_rings=2,
+        name=f"leg_{label}_tibia",
+        material="leg_chitin",
+    )
+
+    # 3. Sculpted armored exoskeleton knee-cap & ankle condyle joint collars wrapping the outer bends.
+    knee_cap = _joint_collar(
+        f"leg_{label}_knee_cap",
+        p_knee,
+        p_hip - p_knee,
+        p_ankle - p_knee,
+        (0.025, 0.028, 0.027),
+        out_bias=0.007,
+    )
+    tars_ref = p_foot + 0.016 * lift - 0.006 * fwd
+    ankle_cap = _joint_collar(
+        f"leg_{label}_ankle_cap",
+        p_ankle,
+        p_knee - p_ankle,
+        tars_ref - p_ankle,
+        (0.019, 0.021, 0.021),
+        out_bias=0.005,
+    )
+
+    # 4. 2-segment articulated tarsus (pinched basitarsus spindle -> mid-tarsal bead -> curved pointed claw).
+    tars_neck = 0.86 * p_ankle + 0.14 * tars_ref
+    tars_seg1 = 0.56 * p_ankle + 0.44 * tars_ref + np.array([0.0, -0.002, -0.002])
+    tars_mid_pinch = 0.28 * p_ankle + 0.72 * tars_ref
+    tars_heel = p_foot + 0.0155 * lift - 0.005 * fwd
+    tars_ball = p_foot + 0.0130 * lift + 0.018 * fwd
+    tars_tip = p_foot + 0.0055 * lift + 0.044 * fwd
+    tarsus = curved_tube(
+        [p_ankle, tars_neck, tars_seg1, tars_mid_pinch, tars_heel, tars_ball, tars_tip],
+        [(0.013, 0.014), (0.011, 0.012), (0.018, 0.020), (0.0115, 0.0125), (0.0175, 0.0155), (0.014, 0.0125), (0.0055, 0.0050)],
         samples_per_seg=3,
         radial_segs=12,
         cap_rings=3,
-        name=f"leg_{label}",
+        name=f"leg_{label}_tarsus",
         material="leg_chitin",
     )
 
@@ -151,12 +230,12 @@ def _add_leg(
         p[:, 1] = np.maximum(p[:, 1], 0.0)
         return p
 
-    leg_tube = leg_tube.deform(ground_tarsus)
+    parts = [femur, knee_cap, tibia, ankle_cap, tarsus.deform(ground_tarsus)]
     # Pivot at the ball of the foot (centroid of the planted contact patch) so flex scaling never slides it.
     ball = p_foot + 0.018 * fwd
     pivot = (float(ball[0]), 0.0, float(ball[2]))
     node = f"leg_{label}"
-    scene.add(node, leg_tube.translate(-pivot[0], 0.0, -pivot[2]), parent="legs")
+    scene.add(node, [part.translate(-pivot[0], 0.0, -pivot[2]) for part in parts], parent="legs")
     scene.set_node_transform(node, translation=pivot)
     return (float(p_foot[0]), 0.0, float(p_foot[2]))
 
