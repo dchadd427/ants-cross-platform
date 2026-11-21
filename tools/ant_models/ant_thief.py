@@ -1,29 +1,12 @@
 """Sculpted high-detail 3D model for the iconic Rogue Bandit Thief Ant.
 
-Built on `base_ant` (keeping its broad heart-shield head, chunky lobster-claw
-mandibles, and flowing ball-free legs) with Thief's signature full domino
-bandit mask, rogue gear, and extreme shifty lookout eyes:
-- One single unified continuous sculpted woven-gold domino mask + headband
-  shell (`gear_gold`) ray-cast flush across the forehead, nose bridge, upper
-  cheeks, temples, and back, with two clean softly-beveled oval eye cutouts
-  punched directly out of the single watertight cloth surface (zero separate
-  bolted-on strips or seam cracks)
-- Plump side knot on the left temple (`+X`) with two large, sweeping, pleated
-  cloth tails flaring boldly back-left across every camera angle
-- Extreme shifty lookout eyes: trimmed spherical sclera (`#148`) with huge
-  curved spherical-cap olive irises (~72%) and dark glossy pupils (~46%) on
-  pivoted `eye_ball_left` / `eye_ball_right` nodes rotating `+-0.62 rad` in
-  the `"IdleLookout"` glTF 2.0 clip, plus spherical eyelids with guaranteed
-  `>= +0.007` radial clearance across all blink and gaze frames
-- Rogue utility gear: dark leather crossbody strap (`gear_dark`) with brass
-  chest buckle (`gear_gold_metal` / `gear_brass_trim`) carrying a compact
-  cinched brown canvas loot pouch (`prop_brown` + `gear_gold` drawstring +
-  brass clasp) slung neatly at the lower right-back hip
+Built on `base_ant` with a wide sleek oval-shield head, unified watertight ray-cast
+woven-gold domino mask (`gear_gold`) with upward-sweeping V-fan cloth tails, extreme
+shifty lookout eyes (`IdleLookout`), crossbody leather strap + canvas loot pouch, and
+authentic 1998 `atst` crouched weight-shift (`Idle`) + `atat` bullwhip (`Attack`) clips.
 
 Coordinate system (glTF 2.0 right-handed):
-  +Y = up (feet grounded cleanly at Y = 0.0)
-  +Z = front (South / canonical camera 301)
-  +X = ant's left (viewer's right from front), -X = ant's right
+  +Y = up (grounded at Y = 0.0), +Z = front (South 301), +X = ant's left.
 """
 from __future__ import annotations
 
@@ -53,6 +36,7 @@ try:
         swept_tube,
         torus_arc,
     )
+    from .thief_attack import add_thief_attack_animation, add_thief_whip_meshes
 except ImportError:
     from base_ant import EYELID_CLOSED_ANGLE, build_base_ant, sync_arm_idle_to_clip, sync_leg_flex_to_clip  # type: ignore
     from mesh_core import (  # type: ignore
@@ -74,6 +58,7 @@ except ImportError:
         swept_tube,
         torus_arc,
     )
+    from thief_attack import add_thief_attack_animation, add_thief_whip_meshes  # type: ignore
 
 # Hard shifty lookout gaze (+-0.72 rad = +-41.2 deg): black pupils tuck ALL THE WAY flush
 # into the far-left & far-right eye corners (zero white sliver past the pupil on the gaze side,
@@ -1278,16 +1263,29 @@ def build_thief(blink: float = 0.0, gaze: float = -1.0) -> SceneBuilder:
     _add_knot_and_tails(scene, caster)
     _add_rogue_strap_and_loot_pouch(scene, anchors)
 
-    # Parent Thief's canonical neutral head gear & eyes in 1:1 lockstep under tilted `head_group`
-    # (matching `head`'s exact `-neck_center` local origin so zero drift occurs under stance_asymmetry!).
-    for head_child in ("eyes", "eye_ball_left", "eye_ball_right", "eyelid_left", "eyelid_right", "gear_bandana", "bandana_tails", "bandana_tail_lower"):
+    # Parent eyes under `head_group` and worn bandana under `bandana_worn_group` (pivoted inside
+    # the opaque cranium at `head_center` so `Attack` can cleanly whip the bandana off & back on!).
+    hc_vec = np.asarray(anchors["head_center"], dtype=np.float64)
+    for head_child in ("eyes", "eye_ball_left", "eye_ball_right", "eyelid_left", "eyelid_right"):
         cur_xf = scene.get_node_transform(head_child)
         cur_t = np.asarray(cur_xf.translation, dtype=np.float64) if cur_xf is not None else np.zeros(3)
         scene.attach_world_node(head_child, "head_group", preserve_world_pose=False)
         xf = scene.get_node_transform(head_child)
-        local_t = tuple(float(c) for c in (cur_t - neck_vec))
-        scene.set_node_transform(head_child, translation=local_t, rotation=xf.rotation, scale=xf.scale)
+        scene.set_node_transform(head_child, translation=tuple(float(c) for c in (cur_t - neck_vec)), rotation=xf.rotation, scale=xf.scale)
+    scene.set_node_parent("bandana_worn_group", "head_group")
+    scene.set_node_transform("bandana_worn_group", translation=tuple(float(c) for c in (hc_vec - neck_vec)))
+    for worn in ("gear_bandana", "bandana_tails", "bandana_tail_lower"):
+        cur_xf = scene.get_node_transform(worn)
+        cur_t = np.asarray(cur_xf.translation, dtype=np.float64) if cur_xf is not None else np.zeros(3)
+        scene.set_node_parent(worn, "bandana_worn_group")
+        scene.set_node_transform(
+            worn,
+            translation=tuple(float(c) for c in (cur_t - hc_vec)),
+            rotation=cur_xf.rotation if cur_xf is not None else (0.0, 0.0, 0.0, 1.0),
+            scale=cur_xf.scale if cur_xf is not None else (1.0, 1.0, 1.0),
+        )
     scene.attach_world_node("gear_rogue", "upper_body", preserve_world_pose=False)
+    add_thief_whip_meshes(scene, anchors)
 
     # Sneaky hunched forward torso lean (+0.22 rad ~ +12.6 deg) + gentle forward head tuck (+3 deg)
     # -> combined ~15.6 deg forward burglar lean so Thief sits low & reveals both shifty eyes cleanly at 45 deg!
@@ -1305,6 +1303,7 @@ def build_thief(blink: float = 0.0, gaze: float = -1.0) -> SceneBuilder:
     scene.scale_all(_THIEF_UNIFORM_SCALE)
     scene.ground_to_y(0.0)
     _add_thief_idle_animation(scene)
+    add_thief_attack_animation(scene, GAZE_ANGLE)
     return scene
 
 
