@@ -797,7 +797,7 @@ def build_fire(blink: float = 0.0, *, hold_magnifying_glass: bool = False) -> Sc
         head_yaw_deg=-3.0,
         head_pitch_deg=-15.5,
         eye_look=(0.05, 0.04),
-        stance_asymmetry=0.35,
+        stance_asymmetry=0.18,
         leg_style="fire",
         include_idle=False,
         left_arm_pose="idle",

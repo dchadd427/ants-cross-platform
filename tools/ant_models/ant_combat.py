@@ -509,29 +509,29 @@ def _build_arms(scene: SceneBuilder) -> Tuple[np.ndarray, np.ndarray, np.ndarray
     pts_r = [np.array([-p[0], p[1], p[2]], dtype=np.float64) for p in pts]
     sh_r, mid_r, el_r, wr_r, fi_r = pts_r
 
-    # Clean, smooth, athletic upper arms with natural bicep swell (no fused shoulder lumpiness!)
-    # flowing smoothly into clean organic muscular forearms & cohesive sculpted green brawler fists.
+    # Beefy sculpted ape upper arms (~1.24x fuller deltoid-to-bicep shoulder transition)
+    # flowing smoothly into muscular forearms & cohesive sculpted green brawler fists.
     scene.add("left_upper_arm", [
-        curved_tube([sh, 0.52 * sh + 0.48 * mid, mid, el], [0.080, 0.100, 0.108, 0.086], samples_per_seg=5, radial_segs=18, cap_rings=4, name="gorilla_upper_left", material="chitin_team"),
-        sphere(0.086, u_segs=14, v_segs=10, name="elbow_joint_left", material="chitin_team").translate(el),
+        curved_tube([sh, 0.52 * sh + 0.48 * mid, mid, el], [0.100, 0.126, 0.128, 0.092], samples_per_seg=5, radial_segs=18, cap_rings=4, name="gorilla_upper_left", material="chitin_team"),
+        sphere(0.090, u_segs=14, v_segs=10, name="elbow_joint_left", material="chitin_team").translate(el),
     ])
-    scene.add("left_forearm", curved_tube([el, 0.45 * el + 0.55 * wr, wr, fi], [0.088, 0.096, 0.072, 0.064], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_forearm_left", material="chitin_team"))
+    scene.add("left_forearm", curved_tube([el, 0.45 * el + 0.55 * wr, wr, fi], [0.090, 0.098, 0.072, 0.064], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_forearm_left", material="chitin_team"))
     scene.add("right_upper_arm", [
-        curved_tube([sh_r, 0.52 * sh_r + 0.48 * mid_r, mid_r, el_r], [0.080, 0.100, 0.108, 0.086], samples_per_seg=5, radial_segs=18, cap_rings=4, name="gorilla_upper_right", material="chitin_team"),
-        sphere(0.086, u_segs=14, v_segs=10, name="elbow_joint_right", material="chitin_team").translate(el_r),
+        curved_tube([sh_r, 0.52 * sh_r + 0.48 * mid_r, mid_r, el_r], [0.100, 0.126, 0.128, 0.092], samples_per_seg=5, radial_segs=18, cap_rings=4, name="gorilla_upper_right", material="chitin_team"),
+        sphere(0.090, u_segs=14, v_segs=10, name="elbow_joint_right", material="chitin_team").translate(el_r),
     ])
-    scene.add("right_forearm", curved_tube([el_r, 0.45 * el_r + 0.55 * wr_r, wr_r, fi_r], [0.088, 0.096, 0.072, 0.064], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_forearm_right", material="chitin_team"))
+    scene.add("right_forearm", curved_tube([el_r, 0.45 * el_r + 0.55 * wr_r, wr_r, fi_r], [0.090, 0.098, 0.072, 0.064], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_forearm_right", material="chitin_team"))
 
     def _add_arm_pair(part: MeshPart, *, right_node: str) -> None:
         scene.add(right_node.replace("right_", "left_"), part)
         scene.add(right_node, part.mirror_x(f"{part.name}_right"))
 
-    # One sleek, distinct, smooth deltoid shoulder cap per upper arm (clearly separated from torso,
-    # zero armor scales, zero rivets, zero fused blobs — lets the thick yellow X sash drape right on top!).
+    # Full, smooth, meaty deltoid shoulder caps blending seamlessly into the beefier upper biceps
+    # (zero armor scales or rivets — lets the thick yellow X-sash drape right on top cleanly!).
     deltoid_l = (
-        superellipsoid(0.098, 0.090, 0.100, e1=0.84, e2=0.86, u_segs=18, v_segs=12, name="deltoid_cap", material="chitin_team")
-        .rotate_xyz(rz=-0.52)
-        .translate(0.396, 0.650, -0.008)
+        superellipsoid(0.122, 0.112, 0.122, e1=0.84, e2=0.86, u_segs=18, v_segs=12, name="deltoid_cap", material="chitin_team")
+        .rotate_xyz(rz=-0.54)
+        .translate(0.402, 0.644, -0.004)
     )
     deltoid_r = deltoid_l.mirror_x("deltoid_cap_right")
     scene.add("left_upper_arm", deltoid_l)
@@ -577,14 +577,15 @@ def _build_arms(scene: SceneBuilder) -> Tuple[np.ndarray, np.ndarray, np.ndarray
     p_l = sampled[idx]
     t_l = _normalize(sampled[idx + 1] - sampled[idx - 1])
     right_arm_verts = np.vstack([p.positions for p in scene.get_node("right_upper_arm") + scene.get_node("right_forearm")]).astype(np.float64)
-    shoulder_cap_verts = np.vstack([deltoid_l.positions, deltoid_r.positions]).astype(np.float64)
+    upper_arm_verts = np.vstack([p.positions for p in scene.get_node("left_upper_arm") + scene.get_node("right_upper_arm")]).astype(np.float64)
+    shoulder_cap_verts = np.vstack([deltoid_l.positions, deltoid_r.positions, upper_arm_verts[upper_arm_verts[:, 1] > 0.56]])
     return np.array([-p_l[0], p_l[1], p_l[2]]), _normalize(np.array([-t_l[0], t_l[1], t_l[2]])), right_arm_verts, shoulder_cap_verts
 
 
 def _sturdy_foot(name: str) -> MeshPart:
     """Broad sturdy armored dark insect claw-foot resting flat on Y = 0.0."""
     prof = [(0.000, -0.042), (0.032, -0.030), (0.046, 0.004), (0.040, 0.046), (0.022, 0.080), (0.000, 0.096)]
-    foot = lathe(prof, radial_segs=14, cap_bottom=False, cap_top=False, axis="z", name=name, material="chitin_dark").scale(1.12, 0.72, 1.0)
+    foot = lathe(prof, radial_segs=14, cap_bottom=False, cap_top=False, axis="z", name=name, material="leg_chitin").scale(1.12, 0.72, 1.0)
     foot = foot.deform(lambda p: np.column_stack([p[:, 0], np.maximum(p[:, 1], -0.018), p[:, 2]]))
     return foot.translate(0.0, -float(foot.bounds()[0][1]), 0.0)
 
@@ -605,7 +606,7 @@ def _build_flowing_leg(
         radial_segs=16,
         cap_rings=3,
         name=f"{node_name}_tube",
-        material="chitin_dark",
+        material="leg_chitin",
     )
     yaw_s = side * foot_yaw
     foot_x = float(pts[-1][0])
@@ -866,40 +867,42 @@ def _build_right_bicep_cloth(
         _sculpted_ribbon_mesh(lap_pts, band_out, np.full(n_ring, 0.015), np.full(n_ring, 0.006), closed=True, profile_segs=8, name="bicep_cloth_lap", material=cloth_mat),
     )
 
-    # Real tight tied overhand cloth knot anchored flush on the outer-rear side (-X, slightly -Z).
-    knot_dir = _normalize(0.88 * out_x - 0.47 * fwd)
+    # Real tight tied overhand cloth knot anchored rearward on the outer-back bicep (-X, strongly -Z)
+    # so the fluttering V-ribbons trail cleanly back toward Combat's back in `901 E` while still flaring
+    # outward on viewer-left in `301 S` (`acst301` / `acst901`).
+    knot_dir = _normalize(0.56 * out_x - 0.83 * fwd)
     knot_idx = int(np.argmax(band_out @ knot_dir))
     knot = band_pts[knot_idx] + 0.011 * knot_dir
     up_v = _normalize(-t)
-    back_v = _normalize(0.72 * out_x - 0.69 * fwd)
+    back_dir = _normalize(-fwd)
     knot_core = (
         superellipsoid(0.030, 0.026, 0.024, e1=0.68, e2=0.72, u_segs=14, v_segs=10, name="cloth_knot_core", material=cloth_mat)
-        .rotate_xyz(rx=0.22, ry=0.45, rz=0.18)
+        .rotate_xyz(rx=0.22, ry=0.85, rz=0.18)
         .translate(knot)
     )
     cinch = (
         torus_arc(0.023, 0.009, u_segs=16, v_segs=8, plane="xy", name="cloth_knot_cinch", material=cloth_mat)
-        .rotate_xyz(rx=0.35, ry=1.18, rz=-0.25)
+        .rotate_xyz(rx=0.35, ry=1.42, rz=-0.25)
         .translate(knot - 0.004 * knot_dir)
     )
     scene.add("gear_bow", [knot_core, cinch])
 
-    # Two crisp, bold, fluttering V-angled flat cloth tails matching sprite_1800 / sprite_1813 silhouette.
+    # Two crisp, bold, fluttering V-angled flat cloth tails streaming back toward his back & slightly out (-X).
     upper_ctrl = [
         knot - 0.005 * knot_dir,
-        knot + 0.040 * out_x + 0.050 * up_v + 0.018 * back_v,
-        knot + 0.078 * out_x + 0.098 * up_v + 0.032 * back_v,
-        knot + 0.104 * out_x + 0.132 * up_v + 0.038 * back_v,
+        knot + 0.028 * out_x + 0.052 * back_dir + 0.044 * up_v,
+        knot + 0.058 * out_x + 0.102 * back_dir + 0.084 * up_v,
+        knot + 0.082 * out_x + 0.138 * back_dir + 0.108 * up_v,
     ]
     lower_ctrl = [
         knot - 0.005 * knot_dir,
-        knot + 0.048 * out_x - 0.004 * up_v + 0.036 * back_v,
-        knot + 0.094 * out_x - 0.014 * up_v + 0.074 * back_v,
-        knot + 0.122 * out_x - 0.018 * up_v + 0.100 * back_v,
+        knot + 0.034 * out_x + 0.058 * back_dir - 0.006 * up_v,
+        knot + 0.070 * out_x + 0.118 * back_dir - 0.016 * up_v,
+        knot + 0.096 * out_x + 0.158 * back_dir - 0.022 * up_v,
     ]
     for tag, ctrl, widths, face_vec in (
-        ("upper_tail", upper_ctrl, [0.013, 0.028, 0.032, 0.009], _normalize(0.28 * out_x + 0.90 * fwd + 0.34 * up_v)),
-        ("lower_tail", lower_ctrl, [0.013, 0.027, 0.031, 0.009], _normalize(0.22 * out_x + 0.72 * fwd + 0.66 * up_v)),
+        ("upper_tail", upper_ctrl, [0.013, 0.028, 0.032, 0.009], _normalize(0.82 * out_x + 0.44 * fwd + 0.36 * up_v)),
+        ("lower_tail", lower_ctrl, [0.013, 0.027, 0.031, 0.009], _normalize(0.76 * out_x + 0.36 * fwd + 0.54 * up_v)),
     ):
         pts = catmull_rom_spline(ctrl, samples_per_seg=4, closed=False)
         n_t = len(pts)
@@ -1049,7 +1052,7 @@ def _add_combat_attack_animation(scene: SceneBuilder) -> None:
     lsh_f1, lel_f1 = _aim_arm(sh_l, el_l, fi_l, (0.20, -0.52, 0.83), (-0.82, 0.22, 0.53))
     rsh_f1, rel_f1 = _aim_arm(sh_r, el_r, fi_r, (-0.20, -0.64, 0.74), (0.82, -0.16, 0.55))
     lsh_f2, lel_f2 = _aim_arm(sh_l, el_l, fi_l, (0.12, -0.54, 0.83), (-0.88, 0.24, 0.41))
-    rsh_f2, rel_f2 = _aim_arm(sh_r, el_r, fi_r, (-0.12, -0.66, 0.74), (0.88, -0.18, 0.44))
+    rsh_f2, rel_f2 = _aim_arm(sh_r, el_r, fi_r, (-0.16, -0.62, 0.77), (0.86, -0.16, 0.48))
     # Explosive double-arm haymaker fling wide outward & high (`acat301`/`acat901` f3-f4) + follow-through (f5).
     lsh_f3, lel_f3 = _aim_arm(sh_l, el_l, fi_l, (0.88, 0.34, 0.33), (0.92, 0.28, 0.26))
     rsh_f3, rel_f3 = _aim_arm(sh_r, el_r, fi_r, (-0.88, 0.38, 0.28), (-0.92, 0.32, 0.22))

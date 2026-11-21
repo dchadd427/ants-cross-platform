@@ -113,9 +113,9 @@ def _add_leg(
     lift = np.array([0.0, 1.0, 0.0], dtype=np.float64)
 
     # Segment 1 (femur): deep medial hip socket inside thorax_core -> muscular thigh -> forward KNEE (>).
-    p_root = np.array([s * 0.024, p_hip[1] + 0.006, p_hip[2] * 0.62], dtype=np.float64)
-    femur_mid = 0.48 * p_hip + 0.52 * p_knee + np.array([s * 0.004, 0.016, 0.006])
-    pre_knee = 0.18 * p_hip + 0.82 * p_knee + np.array([s * 0.002, 0.006, 0.004])
+    p_root = np.array([s * 0.024, p_hip[1] + 0.004, p_hip[2] * 0.62], dtype=np.float64)
+    femur_mid = 0.48 * p_hip + 0.52 * p_knee + np.array([s * 0.003, 0.006, 0.005])
+    pre_knee = 0.18 * p_hip + 0.82 * p_knee + np.array([s * 0.002, 0.003, 0.004])
     # Segment 2 (tibia): KNEE (>) -> sweeping backward-down -> rearward-bent ANKLE (<).
     post_knee = 0.82 * p_knee + 0.18 * p_ankle + np.array([s * 0.003, -0.004, 0.004])
     tibia_mid = 0.48 * p_knee + 0.52 * p_ankle + np.array([s * 0.004, 0.0, -0.004])
@@ -142,7 +142,7 @@ def _add_leg(
         radial_segs=12,
         cap_rings=3,
         name=f"leg_{label}",
-        material="chitin_dark",
+        material="leg_chitin",
     )
 
     # Seat only the underside contact patch flush on Y = 0.0 (organic grounded claw, never a flat ski).
@@ -179,23 +179,23 @@ def build_legs(
     bend = REST_KNEE_BEND * min(1.0, amount)
     scene.set_node_transform("legs", translation=(0.0, 0.0, 0.0))
 
-    mid_ankle_y = max(0.072, 0.148 - 0.36 * c)
-    rear_ankle_y = max(0.068, 0.136 - 0.36 * c)
+    mid_ankle_y = max(0.072, 0.146 - 0.36 * c)
+    rear_ankle_y = max(0.068, 0.134 - 0.36 * c)
     anchors: Dict[str, Vec3] = {}
     for side, tag, dz in ((+1, "left", 0.014 * sa), (-1, "right", -0.012 * sa)):
         for kind in ("mid", "rear"):
             if kind == "mid":
-                hip = (0.068, 0.326 - c, 0.033)
-                knee = (0.158 + 0.15 * c, 0.296 - 0.54 * c, 0.130 + 0.14 * c + 0.5 * dz)
-                ankle = (0.156 + 0.10 * c, mid_ankle_y, 0.038 - 0.12 * c + 0.5 * dz)
-                foot = (0.152 + 0.08 * c, 0.0, 0.102 + dz)
-                yaw = 0.18
+                hip = (0.058, 0.314 - c, 0.036)
+                knee = (0.124 + 0.12 * c, 0.262 - 0.48 * c, 0.128 + 0.14 * c + 0.5 * dz)
+                ankle = (0.120 + 0.08 * c, mid_ankle_y, 0.040 - 0.12 * c + 0.5 * dz)
+                foot = (0.114 + 0.06 * c, 0.0, 0.102 + dz)
+                yaw = 0.14
             else:
-                hip = (0.066, 0.302 - c, -0.070)
-                knee = (0.178 + 0.15 * c, 0.278 - 0.54 * c, -0.030 + 0.12 * c + 0.4 * dz)
-                ankle = (0.178 + 0.10 * c, rear_ankle_y, -0.124 - 0.12 * c + 0.4 * dz)
-                foot = (0.168 + 0.08 * c, 0.0, -0.048 + 0.7 * dz)
-                yaw = 0.26
+                hip = (0.056, 0.294 - c, -0.078)
+                knee = (0.140 + 0.12 * c, 0.258 - 0.48 * c, -0.044 + 0.12 * c + 0.4 * dz)
+                ankle = (0.136 + 0.08 * c, rear_ankle_y, -0.132 - 0.12 * c + 0.4 * dz)
+                foot = (0.128 + 0.06 * c, 0.0, -0.052 + 0.7 * dz)
+                yaw = 0.22
             label = f"{kind}_{tag}"
             fdx, fdz, kdy, kdz, adz, dyaw = offs[label]
             foot = (foot[0] + fdx, 0.0, foot[2] + fdz)

@@ -243,6 +243,14 @@ _SPECS: Tuple[MaterialSpec, ...] = (
         texture_family="rubber",
         normal_scale=0.32,
     ),
+    MaterialSpec(
+        name="leg_chitin",
+        base_color=(0.155, 0.102, 0.072, 1.0),
+        metallic=0.05,
+        roughness=0.26,
+        texture_family="chitin",
+        normal_scale=0.45,
+    ),
 )
 
 MATERIAL_ORDER: Tuple[str, ...] = tuple(spec.name for spec in _SPECS)
