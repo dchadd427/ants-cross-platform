@@ -194,54 +194,68 @@ def add_thief_whip_meshes(scene: SceneBuilder, anchors: dict, *, head_scale: flo
     scene.add("thief_whip_lasso", [lasso_band] + lasso_tails, parent="upper_body")
     scene.set_node_transform("thief_whip_lasso", translation=(0.0, 0.0, 0.0), scale=_HIDE_SCALE)
 
-    # 2. Wide flat-ribbed folded golden bandana cloth SLAP (`f6`: bold cloth paddle + twin knot-tails
-    #    slapping straight forward-down out of right hand, matching `atat301 f6` & `atat901 f6`!).
+    # 2. Long, sweeping flat-ribbed golden bandana cloth HORIZONTAL SLAP (`f6`: extended ~33% longer
+    #    forward reach + crisp level horizontal left-to-right S-wave cloth paddle & billowing knot-tails!).
     crack_pts = [
-        (-0.072, +0.085, +0.11),
-        (-0.046, +0.125, +0.22),
-        (-0.008, +0.165, +0.34),
-        (+0.020, +0.192, +0.45),
-        (+0.004, +0.195, +0.54),
+        (-0.040, +0.096, +0.14),
+        (-0.122, +0.140, +0.28),
+        (-0.084, +0.184, +0.43),
+        (+0.032, +0.228, +0.57),
+        (+0.104, +0.262, +0.67),
+        (+0.056, +0.278, +0.74),
     ]
     crack_band = _cloth_whip_ribbon(
         crack_pts,
-        half_widths=[0.024, 0.062, 0.092, 0.096, 0.068],
-        half_thicknesses=[0.009, 0.011, 0.011, 0.010, 0.008],
-        face_hint=(0.14, 0.98, -0.14),
-        twist_deg=(-16.0, 46.0),
+        half_widths=[0.028, 0.068, 0.096, 0.108, 0.112, 0.084],
+        half_thicknesses=[0.009, 0.011, 0.011, 0.010, 0.010, 0.008],
+        face_hint=(0.12, 0.96, -0.24),
+        twist_deg=(-14.0, 24.0),
         name="thief_whip_crack_ribbon",
     )
-    crack_tails = _add_twin_knot_tails(crack_pts[-1], (0.04, 0.14, 0.99), (0.98, 0.08, -0.06), (0.06, 0.98, -0.14), "thief_slap")
+    crack_tails = _add_twin_knot_tails(
+        crack_pts[-1],
+        (-0.24, 0.08, 0.96),
+        (0.92, 0.10, 0.36),
+        (0.12, 0.96, -0.22),
+        "thief_slap",
+    )
     scene.add("thief_whip_crack", [crack_band] + crack_tails, parent="upper_body")
     scene.set_node_transform("thief_whip_crack", translation=(0.0, 0.0, 0.0), scale=_HIDE_SCALE)
 
-    # 3. Wide folded bandana U-curl rebound (`f7`: cloth folds upward & curls back on itself right
-    #    after slap impact, matching `atat301 f7` & `atat901 f7`!).
+    # 3. Extended wide folded bandana U-fold recoil (`f7`: long sweeping horizontal-to-upward S/U-curl
+    #    rebound out in front after the hard horizontal slap, matching `atat301 f7` & `atat901 f7`!).
     recoil_pts = [
-        (-0.072, +0.085, +0.11),
-        (-0.040, +0.105, +0.23),
-        (+0.018, +0.130, +0.35),
-        (+0.036, +0.225, +0.41),
-        (-0.010, +0.275, +0.33),
-        (-0.042, +0.240, +0.25),
+        (-0.026, +0.102, +0.15),
+        (-0.052, +0.126, +0.30),
+        (+0.024, +0.156, +0.46),
+        (+0.114, +0.214, +0.58),
+        (+0.078, +0.308, +0.54),
+        (-0.028, +0.318, +0.42),
     ]
     recoil_band = _cloth_whip_ribbon(
         recoil_pts,
-        half_widths=[0.024, 0.058, 0.088, 0.094, 0.084, 0.042],
+        half_widths=[0.026, 0.062, 0.092, 0.104, 0.096, 0.056],
         half_thicknesses=[0.009, 0.011, 0.011, 0.010, 0.009, 0.007],
         face_hint=(0.18, 0.92, -0.34),
         twist_deg=(-12.0, 22.0),
         name="thief_whip_recoil_ribbon",
     )
-    recoil_tails = _add_twin_knot_tails(recoil_pts[-1], (-0.42, -0.32, -0.85), (0.88, 0.18, -0.44), (0.14, 0.94, -0.32), "thief_recoil")
+    recoil_tails = _add_twin_knot_tails(
+        recoil_pts[-1],
+        (-0.56, -0.22, -0.80),
+        (0.80, 0.22, -0.56),
+        (0.18, 0.94, -0.28),
+        "thief_recoil",
+    )
     scene.add("thief_whip_recoil", [recoil_band] + recoil_tails, parent="upper_body")
     scene.set_node_transform("thief_whip_recoil", translation=(0.0, 0.0, 0.0), scale=_HIDE_SCALE)
 
 
 def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
-    """Attach authentic 1998 `atat` 0.72 s 12-frame bandana-off bullwhip crack `"Attack"` clip."""
-    # Exact cumulative timestamps for `[60, 40, 80, 60, 40, 40, 80, 80, 60, 80, 60, 40]` ms = 720 ms.
-    times = [0.00, 0.06, 0.10, 0.18, 0.24, 0.28, 0.32, 0.40, 0.48, 0.54, 0.62, 0.68, 0.72]
+    """Attach authentic 1998 `atat` 0.72 s 12-frame bandana-off horizontal slap `"Attack"` clip."""
+    # Exact cumulative timestamps for `[60, 40, 80, 60, 40, 40, 80, 80, 60, 80, 60, 40]` ms = 720 ms,
+    # with a 0.30 s mid-swing keyframe between f5 (0.28) and f6 (0.32) for sub-mm hip tracking.
+    times = [0.00, 0.06, 0.10, 0.18, 0.24, 0.28, 0.30, 0.32, 0.40, 0.48, 0.54, 0.62, 0.68, 0.72]
 
     def _rest_t(node: str) -> Tuple[float, float, float]:
         xf = scene.get_node_transform(node)
@@ -271,12 +285,13 @@ def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
         (0.000, +0.000, +0.000),  # f0 0.00: coil start
         (-0.012, -0.008, -0.006), # f1 0.06: reach up & grab bandana
         (-0.020, -0.014, -0.010), # f2 0.10: peel bandana off brow
-        (-0.010, +0.010, -0.016), # f3 0.18: rip off -> lasso whirl
-        (+0.014, +0.014, -0.020), # f4 0.24: overhead lasso spin
-        (+0.022, +0.004, -0.010), # f5 0.28: wide side windup
-        (-0.008, -0.006, +0.062), # f6 0.32: EXPLOSIVE FORWARD WHIP CRACK
-        (-0.004, +0.002, +0.036), # f7 0.40: whip-tip snap recoil
-        (+0.008, +0.010, +0.004), # f8 0.48: lasso sweeps back around head
+        (-0.012, +0.010, -0.016), # f3 0.18: rip off -> lasso whirl
+        (-0.014, +0.012, -0.018), # f4 0.24: overhead lasso spin
+        (-0.018, +0.006, -0.014), # f5 0.28: wide back-left horizontal windup
+        (-0.002, +0.000, +0.025), # mid 0.30: explosive horizontal sweep midpoint
+        (+0.014, -0.006, +0.064), # f6 0.32: EXPLOSIVE LEFT-TO-RIGHT BANDANA SLAP!
+        (+0.008, +0.002, +0.036), # f7 0.40: follow-through & extended U-fold recoil
+        (+0.006, +0.010, +0.004), # f8 0.48: lasso sweeps back around head
         (-0.008, +0.004, -0.004), # f9 0.54: bandana snaps back on
         (-0.004, +0.002, +0.000), # f10 0.62: tug neat
         (0.000, +0.000, +0.000),  # f11 0.68: settle
@@ -292,11 +307,12 @@ def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
                 (+0.02, -0.06, +0.02),
                 (+0.08, -0.14, +0.08),
                 (+0.14, -0.22, +0.12),
-                (-0.08, +0.06, -0.04),
-                (-0.12, +0.18, -0.10),
-                (-0.06, +0.26, -0.12),
-                (+0.22, -0.18, +0.06),
-                (+0.12, -0.08, +0.02),
+                (-0.08, -0.12, +0.04),
+                (-0.10, -0.24, +0.08),
+                (-0.08, -0.32, +0.10),  # f5: coil right shoulder back-left (-X)
+                (+0.06, +0.00, +0.00),  # mid: snapping across center
+                (+0.20, +0.32, -0.10),  # f6: hard horizontal torso torque across to +X!
+                (+0.10, +0.22, -0.06),  # f7: follow-through hold
                 (-0.06, +0.10, -0.04),
                 (+0.04, -0.08, +0.04),
                 (+0.02, -0.04, +0.02),
@@ -312,11 +328,12 @@ def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
                 (+0.02, +0.04, -0.02),
                 (+0.10, +0.12, -0.08),
                 (+0.16, +0.18, -0.12),
-                (-0.06, -0.04, +0.04),
-                (-0.08, -0.12, +0.08),
-                (-0.04, -0.18, +0.08),
-                (-0.18, +0.14, -0.04),
-                (-0.12, +0.06, -0.02),
+                (-0.06, +0.10, -0.04),
+                (-0.08, +0.18, -0.06),
+                (-0.04, +0.24, -0.08),  # f5: eyes stay locked forward on target
+                (-0.10, +0.00, +0.00),  # mid
+                (-0.16, -0.24, +0.08),  # f6: head counter-rotates to stare down victim!
+                (-0.10, -0.16, +0.04),  # f7
                 (-0.04, -0.06, +0.04),
                 (+0.06, +0.06, -0.06),
                 (+0.02, +0.02, -0.02),
@@ -325,15 +342,15 @@ def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
             ],
         )
     )
-    # Eyes lock fierce straight ahead during the bare-headed bullwhip crack (f3..f8), then dart back left!
-    gaze_factors = [-1.0, -0.8, -0.4, 0.0, 0.0, 0.0, 0.0, 0.0, -0.2, -0.7, -0.95, -1.0, -1.0]
+    # Eyes lock fierce straight ahead during the bare-headed bandana slap (f3..f8), then dart back left!
+    gaze_factors = [-1.0, -0.8, -0.4, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.2, -0.7, -0.95, -1.0, -1.0]
     for side in ("left", "right"):
         ball = f"eye_ball_{side}"
         if ball in scene.nodes:
             qs = [quat_from_axis_angle((0.0, 1.0, 0.0), g * gaze_angle) for g in gaze_factors]
             channels.append(AnimationChannel(ball, "rotation", list(times), qs))
 
-    # Right arm grabs bandana (f0-f2), whips lasso overhead (f3-f5), snaps bullwhip forward (f6-f7), re-ties (f8-f10).
+    # Right arm grabs bandana (f0-f2), coils wide back-left (f3-f5), whips hard across (f6-f7), re-ties (f8-f10).
     if "arm_right" in scene.nodes:
         channels.append(
             _rot_track(
@@ -342,11 +359,12 @@ def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
                     (-0.24, +0.10, -0.18),
                     (-0.88, +0.34, -0.48),
                     (-1.12, +0.44, -0.62),
-                    (-1.26, +0.16, -0.96),
-                    (-1.18, -0.26, -1.10),
-                    (-0.78, -0.46, -0.92),
-                    (-0.18, +0.38, -0.22),
-                    (-0.36, +0.26, -0.34),
+                    (-1.24, +0.12, -0.96),
+                    (-1.14, -0.34, -1.14),
+                    (-0.74, -0.58, -1.16),  # f5: arm flung wide back-left for horizontal windup
+                    (-0.44, +0.04, -0.48),  # mid: snapping horizontally across
+                    (-0.14, +0.62, +0.18),  # f6: hard horizontal slap follow-through across chest!
+                    (-0.42, +0.52, +0.04),  # f7: high rebound carry-through
                     (-1.04, +0.18, -0.78),
                     (-0.84, +0.32, -0.44),
                     (-0.32, +0.14, -0.20),
@@ -364,10 +382,11 @@ def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
                     (-0.46, +0.22, +0.12),
                     (-0.52, +0.28, +0.16),
                     (-0.24, +0.10, -0.16),
-                    (-0.16, -0.12, -0.20),
-                    (-0.12, -0.20, -0.14),
-                    (+0.22, +0.18, +0.06),
-                    (-0.18, +0.14, +0.10),
+                    (-0.16, -0.14, -0.22),
+                    (-0.10, -0.26, -0.18),  # f5: forearm extended out on windup
+                    (+0.08, +0.04, -0.02),  # mid
+                    (+0.26, +0.34, +0.14),  # f6: wrist/forearm snaps forward-right into slap!
+                    (-0.16, +0.26, +0.16),  # f7: recoil snap-up
                     (-0.38, +0.16, +0.06),
                     (-0.44, +0.20, +0.14),
                     (-0.18, +0.08, +0.04),
@@ -387,9 +406,10 @@ def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
                     (-0.44, -0.22, +0.48),
                     (-0.32, -0.26, +0.58),
                     (-0.28, -0.32, +0.62),
-                    (-0.36, -0.28, +0.56),
-                    (-0.46, -0.38, +0.64),
-                    (-0.34, -0.28, +0.50),
+                    (-0.36, -0.22, +0.54),  # f5
+                    (-0.42, -0.34, +0.62),  # mid
+                    (-0.48, -0.46, +0.70),  # f6: strong left-arm counterbalance back-right!
+                    (-0.36, -0.34, +0.56),  # f7
                     (-0.42, -0.20, +0.44),
                     (-0.56, -0.18, +0.36),
                     (-0.22, -0.10, +0.18),
@@ -409,6 +429,7 @@ def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
                     (-0.18, 0.0, +0.20),
                     (-0.14, 0.0, +0.22),
                     (-0.20, 0.0, +0.20),
+                    (-0.22, 0.0, +0.21),
                     (-0.24, 0.0, +0.22),
                     (-0.16, 0.0, +0.16),
                     (-0.22, 0.0, +0.16),
@@ -420,11 +441,11 @@ def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
             )
         )
 
-    # Razor-sharp STEP visibility swaps between worn bandana, overhead lasso, and forward bullwhip crack!
+    # Razor-sharp STEP visibility swaps between worn bandana, overhead lasso, and long horizontal bandana slap!
     if "bandana_worn_group" in scene.nodes:
         worn_vis = [
             _SHOW_SCALE, _SHOW_SCALE, _SHOW_SCALE,
-            _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE,
+            _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE,
             _SHOW_SCALE, _SHOW_SCALE, _SHOW_SCALE, _SHOW_SCALE,
         ]
         channels.append(AnimationChannel("bandana_worn_group", "scale", list(times), worn_vis, interpolation="STEP"))
@@ -435,7 +456,7 @@ def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
                     (0.0, 0.0, 0.0),
                     (-0.08, 0.0, -0.10),
                     (-0.22, -0.08, -0.26),
-                    (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
+                    (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
                     (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
                     (-0.10, +0.08, +0.18),
                     (-0.02, +0.02, +0.04),
@@ -448,7 +469,7 @@ def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
     if "thief_whip_lasso" in scene.nodes:
         lasso_vis = [
             _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE,
-            _SHOW_SCALE, _SHOW_SCALE, _SHOW_SCALE,
+            _SHOW_SCALE, _SHOW_SCALE, _SHOW_SCALE, _SHOW_SCALE,
             _HIDE_SCALE, _HIDE_SCALE,
             _SHOW_SCALE,
             _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE,
@@ -459,9 +480,10 @@ def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
                 "thief_whip_lasso",
                 [
                     (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
-                    (+0.18, +0.06, -0.08),   # f3: wide bandana peels off both sides of bare head
-                    (+0.38, -0.58, +0.40),   # f4: broad cloth loops wide around head
-                    (+0.78, -0.84, +0.30),   # f5: bold low-forward horizontal cloth windup!
+                    (+0.18, +0.20, -0.08),   # f3: wide bandana peels off both sides of bare head
+                    (+0.38, -0.24, +0.36),   # f4: broad cloth loops wide around head
+                    (+0.72, -0.34, +0.26),   # f5: bold wide back-left horizontal windup!
+                    (+0.76, +0.28, -0.12),   # mid: whipping across center into f6 slap!
                     (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
                     (+0.52, +3.04, -0.06),   # f8: wide bandana cups low across front cheeks/brow!
                     (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
@@ -471,9 +493,9 @@ def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
 
     if "thief_whip_crack" in scene.nodes:
         crack_vis = [
-            _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE,
-            (1.00, 1.00, 1.04),      # f6: full explosive forward wide-bandana SLAP!
-            _HIDE_SCALE,             # f7 hands off cleanly to curled-back `thief_whip_recoil`!
+            _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE,
+            (1.02, 1.02, 1.04),      # f6: long explosive horizontal left-to-right bandana SLAP!
+            _HIDE_SCALE,             # f7 hands off cleanly to extended curled `thief_whip_recoil`!
             _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE,
         ]
         channels.append(AnimationChannel("thief_whip_crack", "scale", list(times), crack_vis, interpolation="STEP"))
@@ -482,15 +504,15 @@ def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
                 "thief_whip_crack",
                 [
                     (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
-                    (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
-                    (-0.04, +0.04, -0.06),   # f6: bold flat-forward towel slap impact!
+                    (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
+                    (+0.00, -0.06, -0.10),   # f6: crisp level horizontal cloth slap impact!
                     (0.0, 0.0, 0.0),
                     (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
                 ],
             )
         )
         ct0 = _rest_t("thief_whip_crack")
-        crack_dzs = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, +0.028, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        crack_dzs = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, +0.032, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         channels.append(
             AnimationChannel(
                 "thief_whip_crack",
@@ -502,9 +524,9 @@ def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
 
     if "thief_whip_recoil" in scene.nodes:
         recoil_vis = [
-            _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE,
+            _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE,
             _HIDE_SCALE,
-            (1.02, 1.02, 1.00),      # f7: wide folded bandana U-curl snap-back rebound!
+            (1.02, 1.02, 1.02),      # f7: long wide folded bandana U-fold snap-back rebound!
             _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE,
         ]
         channels.append(AnimationChannel("thief_whip_recoil", "scale", list(times), recoil_vis, interpolation="STEP"))
@@ -513,15 +535,15 @@ def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
                 "thief_whip_recoil",
                 [
                     (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
-                    (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
+                    (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
                     (0.0, 0.0, 0.0),
-                    (-0.08, +0.10, -0.14),   # f7: curled wide cloth rebound!
+                    (-0.08, +0.06, -0.18),   # f7: sweeping extended cloth rebound!
                     (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
                 ],
             )
         )
 
-    # Lively antenna & gaster inertia across the whip crack!
+    # Lively antenna & gaster inertia across the horizontal bandana slap!
     for ant_n, s in (("antenna_left", +1.0), ("antenna_right", -1.0)):
         if ant_n in scene.nodes and scene.get_node(ant_n):
             channels.append(
@@ -529,9 +551,10 @@ def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
                     ant_n,
                     [
                         (0.0, 0.0, 0.0), (-0.10, 0.0, s * 0.08), (-0.18, 0.0, s * 0.14),
-                        (+0.14, 0.0, -s * 0.16), (+0.18, 0.0, -s * 0.22), (+0.10, 0.0, -s * 0.18),
-                        (-0.28, 0.0, s * 0.14), (-0.18, 0.0, s * 0.10), (+0.12, 0.0, -s * 0.10),
-                        (-0.08, 0.0, s * 0.06), (-0.02, 0.0, s * 0.02), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
+                        (+0.14, 0.0, -s * 0.16), (+0.18, 0.0, -s * 0.22), (+0.12, 0.0, -s * 0.20),
+                        (-0.08, 0.0, 0.0), (-0.30, 0.0, s * 0.16), (-0.18, 0.0, s * 0.12),
+                        (+0.12, 0.0, -s * 0.10), (-0.08, 0.0, s * 0.06), (-0.02, 0.0, s * 0.02),
+                        (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
                     ],
                 )
             )
@@ -542,8 +565,9 @@ def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
                 [
                     (0.0, 0.0, 0.0), (+0.08, 0.0, 0.0), (+0.12, 0.0, 0.0),
                     (-0.08, 0.0, 0.0), (-0.12, 0.0, 0.0), (-0.06, 0.0, 0.0),
-                    (+0.18, 0.0, 0.0), (+0.10, 0.0, 0.0), (-0.04, 0.0, 0.0),
-                    (+0.04, 0.0, 0.0), (+0.02, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
+                    (+0.06, 0.0, 0.0), (+0.18, 0.0, 0.0), (+0.10, 0.0, 0.0),
+                    (-0.04, 0.0, 0.0), (+0.04, 0.0, 0.0), (+0.02, 0.0, 0.0),
+                    (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
                 ],
             )
         )
