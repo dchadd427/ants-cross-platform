@@ -2186,6 +2186,12 @@ void run_lobby_rooms_tests() {
             const size_t pip = room.join_seat("Pip (bot, Hard)");
             ASSERT_EQ(room.host.room().slots[static_cast<size_t>(room.guests[pip].lobby->my_seat())].name, std::string("Player ") + std::to_string(room.guests[pip].lobby->my_seat() + 1));
             ASSERT_EQ(room.host.room().slots[static_cast<size_t>(room.guests[ann].lobby->my_seat())].name, std::string("Ann"));
+            // a name that only looks like a label (a mark behind it, another bracket, a 0 for the o, signs between the letters) is replaced the same way: no name that reads as a computer player's is a person's
+            for (const char* spoof : {"Pip (bot, Hard).", "Pip [bot, Hard]", "Pip (b0t, Hard)", "Pip (bot, Hard)'", "Pip (bot, Hard) .", "Pip (b.o.t, Hard)", "Pip (bot) x"}) {
+                Room spoof_room(lobby_room_config(85));
+                const size_t who = spoof_room.join_seat(spoof);
+                ASSERT_EQ(spoof_room.host.room().slots[static_cast<size_t>(spoof_room.guests[who].lobby->my_seat())].name, std::string("Player ") + std::to_string(spoof_room.guests[who].lobby->my_seat() + 1));
+            }
             // a control byte or a byte above the table between the letters, in a Hello that no honest client writes (raw bytes): the room cuts such bytes out BEFORE it checks the name, so what is stored is the cleaned
             // name, and it is never a bot's
             for (const char* sneaky : {"Pip (bo\x01t)", "Pip (b\x7F" "ot)", "Pip (bot\x01, Hard)", "Bo\x01t (Hard)", "Pip (bo\xC3\xA9t, Hard)", "Pip (bot)\x09"}) {
@@ -2237,7 +2243,7 @@ void run_lobby_rooms_tests() {
             {   // a client never sends such a name: the server would count a violation and, eight times, throw it out
                 Room rename_room(lobby_room_config(83));
                 const size_t sam = rename_room.join_seat("Sam");
-                for (const char* bad : {"Pip (bot)", "Bot (Hard)", "x ( BOT , idle )"}) ASSERT_FALSE(rename_room.guests[sam].lobby->request_name(bad));
+                for (const char* bad : {"Pip (bot)", "Bot (Hard)", "x ( BOT , idle )", "Pip (bot, Hard).", "Pip [bot]"}) ASSERT_FALSE(rename_room.guests[sam].lobby->request_name(bad));
                 ASSERT_TRUE(rename_room.guests[sam].lobby->request_name("Robot"));
                 rename_room.run(100);
                 ASSERT_EQ(rename_room.host.renames(), 1u);
@@ -2246,11 +2252,12 @@ void run_lobby_rooms_tests() {
             NameMsg got;
             name.name = "Pip";
             ASSERT_TRUE(decode(encode(name), got) && got.name == "Pip");
-            for (const char* bad : {"Pip (bot)", "Pip (bot, Hard)", "Bot (Hard)", "x (BOT , idle )", "bot(x", "Pip (bo\x01t)", "Pip (bot\xC3\xA9)"}) {
+            for (const char* bad : {"Pip (bot)", "Pip (bot, Hard)", "Bot (Hard)", "x (BOT , idle )", "bot(x", "Pip (bo\x01t)", "Pip (bot\xC3\xA9)",
+                                    "Pip (bot, Hard).", "Pip (bot) x", "Pip (bot, Hard))", "Pip [bot, Hard]", "Pip (b0t, Hard)", "Pip ( b . o . t , Hard ) '", ".Bot (Hard)"}) {      // (a label that something follows is still a label)
                 name.name = bad;
                 ASSERT_FALSE(decode(encode(name), got));
             }
-            for (const char* fine : {"Robot", "Pip (bots)", "Pip (bot) x", "Bot"}) {
+            for (const char* fine : {"Robot", "Pip (bots)", "Pip (bottle)", "Bot", "Maya (bot", "Bot Jones (Hard)"}) {
                 name.name = fine;
                 ASSERT_TRUE(decode(encode(name), got));
             }

@@ -157,16 +157,78 @@
         var p = parseBotLabel(text);
         return p && !p.legacy ? p.name + ' (bot)' : text;
     }
-    // Whether a PERSON may not be called `text`: a name that starts with "Bot (" (legacy) or ends with "(bot)" or "(bot, ...)" (any words between the comma and the parenthesis). Blanks (also tabs and line ends) and case are ignored.
+    // Whether a PERSON may not be called `text` (the twin of ai::is_reserved_bot_name, which says the rule in full: tests/data/bot_label_cases.tsv is the table that both answer): a name that reads as a label. The word bot
+    // first and an opening bracket after it ("Bot (Hard)"), or an opening bracket ( [ { < then the word bot then anything that is not a letter ("Pip (bot)", "Pip [bot, Hard]", "Pip (bot, Hard).", "Pip (b0t, Hard)"). Case, blanks,
+    // signs between the letters, invisible characters and letters drawn like b, o or t (0 7 8 +, Cyrillic and Greek ones, accents, wide and bold forms) are looked through.
+    var LOOKALIKES = [   // [first, last, letter] as in bot_names.cpp (kLookalikes)
+        [0xB0, 0xB0, 'o'], [0xBA, 0xBA, 'o'], [0xD2, 0xD6, 'o'], [0xD8, 0xD8, 'o'], [0xF2, 0xF6, 'o'], [0xF8, 0xF8, 'o'], [0x14C, 0x151, 'o'], [0x1A0, 0x1A1, 'o'], [0x1D1, 0x1D2, 'o'], [0x1EA, 0x1ED, 'o'], [0x1ECC, 0x1EE3, 'o'],
+        [0x39F, 0x39F, 'o'], [0x3BF, 0x3BF, 'o'], [0x41E, 0x41E, 'o'], [0x43E, 0x43E, 'o'], [0x585, 0x585, 'o'], [0x1D0F, 0x1D0F, 'o'], [0x1D52, 0x1D52, 'o'], [0x2092, 0x2092, 'o'],
+        [0x180, 0x180, 'b'], [0x253, 0x253, 'b'], [0x299, 0x299, 'b'], [0x392, 0x392, 'b'], [0x3B2, 0x3B2, 'b'], [0x412, 0x412, 'b'], [0x432, 0x432, 'b'], [0x42C, 0x42C, 'b'], [0x44C, 0x44C, 'b'], [0x1D2E, 0x1D2E, 'b'], [0x1D47, 0x1D47, 'b'], [0x1E02, 0x1E07, 'b'],
+        [0x162, 0x167, 't'], [0x1AB, 0x1AB, 't'], [0x1AD, 0x1AD, 't'], [0x21A, 0x21B, 't'], [0x3A4, 0x3A4, 't'], [0x3C4, 0x3C4, 't'], [0x422, 0x422, 't'], [0x442, 0x442, 't'], [0x1D1B, 0x1D1B, 't'], [0x1D57, 0x1D57, 't'], [0x1E6A, 0x1E6F, 't'], [0x2020, 0x2020, 't']
+    ];
+    var OPENERS = [0x2329, 0x2768, 0x276A, 0x276C, 0x2770, 0x27E6, 0x27E8, 0x27EA, 0x3008, 0x300A, 0x300C, 0x300E, 0x3010, 0x3014, 0xFE59, 0xFE5B, 0xFE5D];
+    var SKIP = 0, BREAK = 1, OPEN = 2, CLOSE = 3, LETTER = 4;
+    function letterOf(c) { return c === '0' ? 'o' : c === '7' ? 't' : c === '8' ? 'b' : c; }
+    // one code point as [kind, letter]
+    function foldCodePoint(cp) {
+        var k, c;
+        if (cp < 0x80) {
+            c = String.fromCharCode(cp >= 65 && cp <= 90 ? cp + 32 : cp);
+            if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) return [LETTER, letterOf(c)];
+            if (c === '+') return [LETTER, 't'];
+            return [c === '(' || c === '[' || c === '{' || c === '<' ? OPEN : c === ')' || c === ']' || c === '}' || c === '>' ? CLOSE : BREAK, ''];
+        }
+        if (cp >= 0xFF01 && cp <= 0xFF5E) return foldCodePoint(cp - 0xFEE0);
+        if (cp >= 0x1D400 && cp <= 0x1D6A3) return [LETTER, String.fromCharCode(97 + (cp - 0x1D400) % 52 % 26)];
+        if (cp >= 0x1D7CE && cp <= 0x1D7FF) return [LETTER, letterOf(String.fromCharCode(48 + (cp - 0x1D7CE) % 10))];
+        if (cp >= 0x24B6 && cp <= 0x24CF) return [LETTER, String.fromCharCode(97 + cp - 0x24B6)];
+        if (cp >= 0x24D0 && cp <= 0x24E9) return [LETTER, String.fromCharCode(97 + cp - 0x24D0)];
+        if (cp === 0xAD || cp === 0x34F || (cp >= 0x300 && cp <= 0x36F) || (cp >= 0x1AB0 && cp <= 0x1AFF) || (cp >= 0x1DC0 && cp <= 0x1DFF) || (cp >= 0x200B && cp <= 0x200F) ||
+            (cp >= 0x202A && cp <= 0x202E) || (cp >= 0x2060 && cp <= 0x206F) || (cp >= 0x20D0 && cp <= 0x20FF) || (cp >= 0xFE00 && cp <= 0xFE0F) || cp === 0xFEFF) return [SKIP, ''];
+        for (k = 0; k < OPENERS.length; k++) {
+            if (cp === OPENERS[k]) return [OPEN, ''];
+            if (cp === OPENERS[k] + 1) return [CLOSE, ''];
+        }
+        for (k = 0; k < LOOKALIKES.length; k++) {
+            if (cp >= LOOKALIKES[k][0] && cp <= LOOKALIKES[k][1]) return [LETTER, LOOKALIKES[k][2]];
+        }
+        return [BREAK, ''];
+    }
+    function foldName(text) {
+        var out = [], i = 0, cp, next;
+        while (i < text.length) {
+            cp = text.charCodeAt(i++);
+            if (cp >= 0xD800 && cp <= 0xDBFF && i < text.length && (next = text.charCodeAt(i)) >= 0xDC00 && next <= 0xDFFF) { cp = 0x10000 + ((cp - 0xD800) << 10) + (next - 0xDC00); i++; }
+            else if (cp >= 0xD800 && cp <= 0xDFFF) cp = 0xFFFD;                       // (a lone surrogate: nothing a person sees; a break)
+            out.push(foldCodePoint(cp));
+        }
+        return out;
+    }
+    // the letters b, o, t from `at` with breaks and invisible characters between them and nothing else; the place after the t, or -1
+    function botWordAt(f, at) {
+        var want = 'bot', found = 0, i = at;
+        for (; i < f.length && found < 3; i++) {
+            if (f[i][0] === LETTER) {
+                if (f[i][1] !== want.charAt(found)) return -1;
+                found++;
+            } else if (f[i][0] === OPEN || f[i][0] === CLOSE) return -1;
+        }
+        return found === 3 ? i : -1;
+    }
     function isReservedBotName(text) {
-        var s = typeof text === 'string' ? asciiLower(text.replace(/[ \t\r\n]/g, '')) : '';
-        if (s.indexOf('bot(') === 0) return true;
-        if (s.charAt(s.length - 1) !== ')') return false;
-        var open = s.lastIndexOf('(');
-        if (open < 0) return false;
-        var inside = s.slice(open + 1, s.length - 1);
-        if (inside === 'bot') return true;
-        return inside.indexOf('bot,') === 0 && inside.length > 4 && inside.indexOf(')') < 0;
+        var f = foldName(typeof text === 'string' ? text : ''), n = f.length, i, end = botWordAt(f, 0);
+        if (end >= 0) {
+            while (end < n && (f[end][0] === SKIP || f[end][0] === BREAK)) end++;
+            if (end < n && f[end][0] === OPEN) return true;
+        }
+        for (i = 0; i < n; i++) {
+            if (f[i][0] !== OPEN) continue;
+            end = botWordAt(f, i + 1);
+            if (end < 0) continue;
+            while (end < n && f[end][0] === SKIP) end++;
+            if (end < n && f[end][0] !== LETTER) return true;
+        }
+        return false;
     }
 
     // for the tests: the 64-bit finalizer on a key given as in keyOf, as 16 hexadecimal digits

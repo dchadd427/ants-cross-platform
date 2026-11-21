@@ -260,13 +260,27 @@ class TheMutants(unittest.TestCase):
         self.mutant_fails("mod64(a, n) { return ((a[0] % n) * (4294967296 % n) + (a[1] % n)) % n; }", "mod64(a, n) { return (a[1] % n); }", "the high half in the remainder")
 
     def test_the_check_notices_a_wrong_suffix_or_prefix_rule(self):
-        self.mutant_fails("if (inside === 'bot') return true;", "if (inside === 'bots') return true;", "the short suffix (bot) is not reserved")
-        self.mutant_fails("return inside.indexOf('bot,') === 0 && inside.length > 4 && inside.indexOf(')') < 0;", "return false;", "the (bot, level) suffix is not reserved")
-        self.mutant_fails("return inside.indexOf('bot,') === 0 && inside.length > 4 && inside.indexOf(')') < 0;", "return inside.indexOf('bot,') === 0;", "an empty tail counts")
-        self.mutant_fails("if (s.indexOf('bot(') === 0) return true;", "if (s.indexOf('bot(') === 1) return true;", "the legacy prefix")
-        self.mutant_fails("asciiLower(text.replace(/[ \\t\\r\\n]/g, ''))", "text.replace(/[ \\t\\r\\n]/g, '')", "case is not ignored")
-        self.mutant_fails("asciiLower(text.replace(/[ \\t\\r\\n]/g, ''))", "asciiLower(text.replace(/^ +/, ''))", "blanks inside a name are not ignored")
-        self.mutant_fails("var open = s.lastIndexOf('(');", "var open = s.indexOf('(');", "the LAST parenthesis opens the suffix")
+        self.mutant_fails("if (end < n && f[end][0] === OPEN) return true;", "if (end < n && f[end][0] === CLOSE) return true;", "the legacy form needs its opening bracket")
+        self.mutant_fails("while (end < n && (f[end][0] === SKIP || f[end][0] === BREAK)) end++;", "while (end < n && f[end][0] === SKIP) end++;", "blanks between the legacy word and its bracket")
+        self.mutant_fails("end = botWordAt(f, 0);", "end = botWordAt(f, 1);", "the legacy word is at the start")
+        self.mutant_fails("if (end < n && f[end][0] !== LETTER) return true;", "if (end < n) return true;", "a letter after the word bot is no label")
+        self.mutant_fails("if (end < n && f[end][0] !== LETTER) return true;", "if (end < n && f[end][0] === CLOSE) return true;", "a comma after the word bot is a label")
+        self.mutant_fails("if (end < n && f[end][0] !== LETTER) return true;", "if (end >= n || f[end][0] !== LETTER) return true;", "the end of the name after the word bot is a name")
+        self.mutant_fails("while (end < n && f[end][0] === SKIP) end++;\n            if (end < n && f[end][0] !== LETTER) return true;", "if (end < n && f[end][0] !== LETTER) return true;", "an invisible character after the word bot")
+        self.mutant_fails("} else if (f[i][0] === OPEN || f[i][0] === CLOSE) return -1;", "} else if (f[i][0] !== SKIP) return -1;", "signs between the letters of the word")
+        self.mutant_fails("} else if (f[i][0] === OPEN || f[i][0] === CLOSE) return -1;", "}", "a bracket inside the word")
+        self.mutant_fails("return [c === '(' || c === '[' || c === '{' || c === '<' ? OPEN", "return [c === '(' || c === '{' || c === '<' ? OPEN", "the square bracket opens a label")
+        self.mutant_fails("return [c === '(' || c === '[' || c === '{' || c === '<' ? OPEN", "return [c === '(' || c === '[' || c === '<' ? OPEN", "the curly bracket opens a label")
+        self.mutant_fails("return [c === '(' || c === '[' || c === '{' || c === '<' ? OPEN", "return [c === '(' || c === '[' || c === '{' ? OPEN", "the angle bracket opens a label")
+        self.mutant_fails("function letterOf(c) { return c === '0' ? 'o' : c === '7' ? 't' : c === '8' ? 'b' : c; }", "function letterOf(c) { return c === '7' ? 't' : c === '8' ? 'b' : c; }", "0 reads as o")
+        self.mutant_fails("function letterOf(c) { return c === '0' ? 'o' : c === '7' ? 't' : c === '8' ? 'b' : c; }", "function letterOf(c) { return c === '0' ? 'o' : c === '8' ? 'b' : c; }", "7 reads as t")
+        self.mutant_fails("function letterOf(c) { return c === '0' ? 'o' : c === '7' ? 't' : c === '8' ? 'b' : c; }", "function letterOf(c) { return c === '0' ? 'o' : c === '7' ? 't' : c; }", "8 reads as b")
+        self.mutant_fails("if (c === '+') return [LETTER, 't'];", "", "+ reads as t")
+        self.mutant_fails("c = String.fromCharCode(cp >= 65 && cp <= 90 ? cp + 32 : cp);", "c = String.fromCharCode(cp);", "case is not ignored")
+        self.mutant_fails("if (cp >= 0xFF01 && cp <= 0xFF5E) return foldCodePoint(cp - 0xFEE0);", "", "wide forms read as ASCII")
+        self.mutant_fails("(cp >= 0x200B && cp <= 0x200F)", "(cp >= 0x200B && cp <= 0x200A)", "zero-width characters are invisible")
+        self.mutant_fails("[0x41E, 0x41E, 'o'], [0x43E, 0x43E, 'o'],", "[0x41E, 0x41E, 'o'],", "the Cyrillic o")
+        self.mutant_fails("[0x39F, 0x39F, 'o'], [0x3BF, 0x3BF, 'o'],", "[0x39F, 0x39F, 'o'],", "the Greek o")
 
     def test_the_check_notices_a_wrong_parser_or_label(self):
         self.mutant_fails("if (inside.slice(0, 2) !== ', ') return null;", "inside = inside.replace(/^, ?/, ', ');", "the blank after the comma may be left out")
@@ -290,7 +304,6 @@ class TheMutants(unittest.TestCase):
 
     def test_the_check_notices_a_lower_case_that_is_not_ascii(self):
         self.mutant_fails("asciiLower(tag) : '';", "tag.toLowerCase() : '';", "toLowerCase on a tag (the Kelvin sign)")
-        self.mutant_fails("replace(/[ \\t\\r\\n]/g, '')", "replace(/ /g, '')", "tabs and line ends are not ignored")
 
     def test_the_check_notices_a_list_that_breaks_a_rule(self):
         names = names_of_list()

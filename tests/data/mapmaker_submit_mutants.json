@@ -578,22 +578,22 @@
   {
    "id": "maker_bot_start_is_free",
    "file": "web/front/mapmaker_submit.js",
-   "old": "/^bot\\(|",
-   "new": "/^bat\\(|",
+   "old": "/^[^a-z0-9()\\[\\]{}<>]*b[^a-z0-9()\\[\\]{}<>]*o[^a-z0-9()\\[\\]{}<>]*t[^a-z0-9()\\[\\]{}<>]*[(\\[{<]/.test(s)",
+   "new": "/^bat/.test(s)",
    "test": "node tests/scripts/web_mapmaker_submit_check.js"
   },
   {
    "id": "maker_bot_end_is_free",
    "file": "web/front/mapmaker_submit.js",
-   "old": "\\(bot(,[^()]+)?\\)$/",
-   "new": "\\(bat(,[^()]+)?\\)$/",
+   "old": "/[(\\[{<][^a-z0-9()\\[\\]{}<>]*b[^a-z0-9()\\[\\]{}<>]*o[^a-z0-9()\\[\\]{}<>]*t(?=[^a-z0-9])/.test(s)",
+   "new": "/[(\\[{<]bat/.test(s)",
    "test": "node tests/scripts/web_mapmaker_submit_check.js"
   },
   {
-   "id": "maker_bot_blanks_count",
+   "id": "maker_bot_digits_read_as_letters",
    "file": "web/front/mapmaker_submit.js",
-   "old": "fold(t).replace(/\\s/g, '')",
-   "new": "fold(t)",
+   "old": ".replace(/0/g, 'o').replace(/7/g, 't').replace(/8/g, 'b').replace(/\\+/g, 't')",
+   "new": "",
    "test": "node tests/scripts/web_mapmaker_submit_check.js"
   },
   {

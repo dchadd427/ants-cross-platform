@@ -62,8 +62,10 @@ bool parse_bot_label(std::string_view text, BotLabel& out);
 /// The short form for a narrow place (the HUD's label is cut at 15 characters): "Pip (bot)" for a label in the new form, `text` unchanged for anything else
 std::string bot_short_label(std::string_view text);
 
-/// Whether a PERSON may not be called `text`: a name that starts with "Bot (" (the legacy form) or ends with "(bot)" or "(bot, ...)" (the new form, any words between the comma
-/// and the parenthesis). Blanks (also tabs and line ends) and case are ignored. It builds a string, so it is not noexcept. Nothing calls it yet; the six places that guard the names today (docs/BOTS.md) take it over in a later change.
+/// Whether a PERSON may not be called `text`: a name that reads as a computer player's label. Read the way a person reads it: case, blanks and signs between the letters, invisible characters, and letters that are drawn
+/// like b, o or t (0 7 8 +, the Cyrillic and Greek ones, letters with accents, wide and bold forms) are looked through. It is a label when the word bot comes first and an opening bracket follows ("Bot (Hard)", the legacy
+/// form), or when an opening bracket ( [ { < is followed by the word bot and then by anything that is not a letter: "Pip (bot)", "Pip [bot, Hard]", "Pip (bot, Hard).", "Pip (b0t, Hard)", "Pip (bot) x". "Pip (bottle)", "Robot (Hard)",
+/// "Bot" and "(bot" are names. It builds a vector, so it is not noexcept. The places that guard the names take it (docs/BOT_NAMES.md); the web pages' twin is web/front/bot_names.js (the same table of cases).
 bool is_reserved_bot_name(std::string_view text);
 
 }  // namespace ants::ai

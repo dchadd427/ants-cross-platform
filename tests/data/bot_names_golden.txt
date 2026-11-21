@@ -4,7 +4,7 @@
 #   digest fuzz N H1 H2    the same for N strings of tokens: parse, short form and reserved answer of each, as the two programs write them (see the tests)
 #   pick KEY COUNT NAMES   a key (16 hexadecimal digits), how many names, and the names it gives
 digest picks 10000 44a3ff23 e617182f
-digest fuzz 10000 6105bfb4 36894c70
+digest fuzz 10000 3fca8df0 1f6fca6c
 pick 0000000000000000 2 Rowan,Pretzel
 pick 0000000000000001 3 Cora,Abel,Anton
 pick 0000000000000002 4 Hiro,Carys,Fenna,Daisy

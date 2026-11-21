@@ -25,7 +25,8 @@ namespace ants::replay {
 
 class Recorder {
 public:
-    explicit Recorder(Header head);
+    /// `max_bytes` is what the commands may take in the file (kMaxFileBytes: a match whose orders pass it is no recording, and finish() says so); a smaller one is for a test of that failure
+    explicit Recorder(Header head, size_t max_bytes = kMaxFileBytes);
 
     /// A command that the engine is given now, before the tick of turn `turns()`. In a lock-step match on_turn does this; a game on one machine calls it itself.
     void on_command(const sim::Command& command);
@@ -57,6 +58,10 @@ public:
     /// The server makes one at most once a second for a match (ants_server/live_board.hpp).
     std::vector<uint8_t> snapshot(uint32_t shown_turns, std::string& error) const;
 
+    /// The seats whose orders went over their budget in this match (a bit for each seat; Header::heavy_orders): the room says so before finish(), which writes it into the head. Whatever the mask is, the commands
+    /// and the match are the same.
+    void set_heavy_orders(uint8_t seats) noexcept { replay_.head.heavy_orders = seats; }
+
     /// Keeps the bytes of the map file to be written into the file (the tmap chunk, replay.hpp) when the recording is finished; never into a snapshot. True when they are kept: not empty, at most
     /// kMaxEmbeddedMapBytes and the file that the head's map_hash names. False keeps nothing and changes nothing else (the recording goes on without the map; the caller says what that means).
     bool set_embedded_map(const std::vector<uint8_t>& bytes);
@@ -72,6 +77,7 @@ private:
     uint32_t skipped_{0};
     size_t own_{0};                    // of the commands held, those of the recorder's seat
     size_t bytes_{0};                  // what the commands will take in the file, about
+    size_t max_bytes_{kMaxFileBytes};
     std::string failure_;
     bool finished_{false};
 };

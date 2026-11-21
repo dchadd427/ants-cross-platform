@@ -509,7 +509,7 @@
   {
    "id": "a_text_that_is_too_long_is_given_as_it_is",
    "file": "src/ants_server/history_details.cpp",
-   "old": "    }\n    return history_details_marker();",
+   "old": "    }\n    return history_details_marker(record.heavy_orders);",
    "new": "    }\n    return text;",
    "build": "test_history_details",
    "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"

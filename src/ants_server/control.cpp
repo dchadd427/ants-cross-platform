@@ -129,6 +129,25 @@ JsonValue status_to_json(const RoomStatus& s, bool in_list) {
     o.set("drops_by_cap", JsonValue::make_int(s.drops_by_cap));
     if (!in_list) o.set("drops_by_countdown_hold", JsonValue::make_int(s.drops_by_countdown_hold));
     o.set("drops_by_state", JsonValue::make_int(s.drops_by_state));
+    if (s.heavy_order_seats != 0) {                                  // the "heavy order rate" mark (a seat whose orders went over its budget): the key exists only when a seat has it
+        JsonValue heavy = JsonValue::make_array();
+        for (int seat = 0; seat < 4; ++seat) {
+            if ((s.heavy_order_seats & (1u << seat)) != 0) heavy.push_back(JsonValue::make_int(seat));
+        }
+        o.set("heavy_order_seats", std::move(heavy));
+    }
+    if (!in_list) {                                                  // the orders that were not sealed, by seat
+        JsonValue orders = JsonValue::make_object();
+        JsonValue over = JsonValue::make_array();
+        JsonValue without = JsonValue::make_array();
+        for (size_t seat = 0; seat < 4; ++seat) {
+            over.push_back(JsonValue::make_int(s.orders_over_budget[seat]));
+            without.push_back(JsonValue::make_int(s.orders_without_ants[seat]));
+        }
+        orders.set("over_budget", std::move(over));
+        orders.set("without_ants", std::move(without));
+        o.set("orders", std::move(orders));
+    }
     o.set("rejoins_refused", JsonValue::make_int(s.rejoins_refused));
     o.set("catch_up_expired", JsonValue::make_int(s.catch_up_expired));
     o.set("streamed_bytes", JsonValue::make_int(static_cast<int64_t>(s.streamed_bytes)));

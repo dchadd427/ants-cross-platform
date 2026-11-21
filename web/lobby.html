@@ -274,15 +274,21 @@
         // SHAPES_END
         // NAME_BEGIN (tests/scripts/web_name_check.js runs this block; web/lobby.html and web/shell.html carry the same text)
         // THE PLAYER'S NAME is not typed on the web: a person who is logged in with Discord plays under the login's name, anybody else under a guest name (front/player_name.js). The game takes printable ASCII only, the blanks at
-        // both ends cut off, at most 32 characters, and nothing that starts with "Bot (" or ends with "(bot)" or "(bot, ...)" (blanks and case ignored: a computer player is always shown as one): the rules of the desktop game's
+        // both ends cut off, at most 32 characters, and nothing that reads as a computer player's label: "Bot (...)", "Pip (bot)", "Pip (bot, Hard)" (blanks, signs between the letters and case ignored: a computer player is always shown as one, and a person never): the rules of the desktop game's
         // start menu (check_player_name in src/ants_app/start_menu.cpp). nameCheck(text) is { ok: true, name } or { ok: false, why }. A name is only ever shown as text and put into a link with encodeURIComponent, never markup.
         var NAME_MAX = 32;
+        // A name that reads as a computer player's label (ai::is_reserved_bot_name; the name is printable ASCII here): the word bot first and a bracket after it ("Bot (Hard)"), or a bracket, the word bot and then a sign or a blank
+        // ("Pip (bot, Hard)", "Pip [bot]", "Pip (bot) x"); case, blanks and signs between the letters are looked through, and 0 7 8 + read as o t b.
+        function readsAsBot(name) {
+            var s = name.toLowerCase().replace(/0/g, 'o').replace(/7/g, 't').replace(/8/g, 'b').replace(/\+/g, 't');
+            return /^[^a-z0-9()\[\]{}<>]*b[^a-z0-9()\[\]{}<>]*o[^a-z0-9()\[\]{}<>]*t[^a-z0-9()\[\]{}<>]*[(\[{<]/.test(s) || /[(\[{<][^a-z0-9()\[\]{}<>]*b[^a-z0-9()\[\]{}<>]*o[^a-z0-9()\[\]{}<>]*t(?=[^a-z0-9])/.test(s);
+        }
         function nameCheck(text) {
             var raw = typeof text === 'string' ? text.replace(/[\t\r\n]/g, '') : '';
             if (/[^\x20-\x7e]/.test(raw)) return { ok: false, why: 'A name can hold printable ASCII characters only: letters, digits and signs without accents.' };
             var name = raw.replace(/^ +/, '').replace(/ +$/, '');
             if (name.length > NAME_MAX) return { ok: false, why: 'A name has at most ' + NAME_MAX + ' characters.' };
-            if (/^bot\(|\(bot(,[^()]+)?\)$/.test(name.replace(/ /g, '').toLowerCase())) return { ok: false, why: 'A name like "Bot (...)" or "Pip (bot)" is for computer players. Please choose another name.' };
+            if (readsAsBot(name)) return { ok: false, why: 'A name like "Bot (...)" or "Pip (bot)" is for computer players. Please choose another name.' };
             return { ok: true, name: name };
         }
         // THE WORDS under the name on the card: whose name it is; where a login changes it (the chat menu's switch, when the hub says that there is another name); why a login plays under the username (its shown name did not fit)

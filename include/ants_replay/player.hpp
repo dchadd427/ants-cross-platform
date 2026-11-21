@@ -73,6 +73,10 @@ struct Outcome {
     uint8_t dropped_mask{0};        // bit s: seat s left the match (quit, dropped, 60 s without a sign of life) before it ended; such a seat has no row in `result.rows()`
 };
 
+/// Reads what a match came to from the engine that played it (the end of play(); also a room's referee, whose engine has the match's own numbers when its recording could not be made): the state hash, whether the
+/// rules ended the match, the score boxes, the seats that dropped out and the engine's MatchResult, for the seats of `roster`. Sets `ran`; `turns` is the caller's.
+void take_result_of(uint8_t roster, sim::SimulationEngine& engine, Outcome& out);
+
 /// Plays `replay` on `level` (the map that load_map found). A file of other simulation rules than this build's (plays_here) is refused: it would play out differently, and `error` names both numbers.
 Outcome play(const Replay& replay, const assets::LevelData& level, const Hooks& hooks = Hooks{});
 
