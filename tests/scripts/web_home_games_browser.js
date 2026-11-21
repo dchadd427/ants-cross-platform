@@ -158,7 +158,7 @@ async function flows() {
             for (const size of [['desktop', 1280, 800], ['laptop', 1366, 640], ['tablet', 900, 700], ['small window', 800, 600], ['701 wide', 701, 800], ['700 wide', 700, 800], ['phone', 390, 844], ['side', 844, 390], ['small side', 568, 320]]) {
                 const plain = await newPage(browser, prod, 'Maple', size, '/', true), test = await newPage(browser, staging, 'Maple', size, '/', true);
                 await plain.waitForSelector('.gpop .gitem'); await plain.waitForSelector('.gc', { state: 'attached' }); await test.waitForSelector('.gpop .gitem'); await test.waitForSelector('.gc', { state: 'attached' }); await sleep(300);
-                const a = await look(plain), b = await look(test), at = size[0] + ' (' + size[1] + ' x ' + size[2] + ')', phone = size[1] <= 700;
+                const a = await look(plain), b = await look(test), at = size[0] + ' (' + size[1] + ' x ' + size[2] + ')', phone = size[1] <= 700 || size[2] <= 500;
                 check('Home, ' + at + ': the Games list is docked in the body (#hmain: a region, five cards with a Join each), there is no Yard and no stand-in, the bar has no Games button, nothing scrolls sideways', a.popShown && a.role === 'region' && a.rows === 5 && a.joins === 5 && !a.yard && a.gamesInBar === 0 && a.wide
                     && a.main && a.pop[0] >= a.main[0] && a.pop[1] >= a.main[1] && a.pop[0] + a.pop[2] <= a.main[0] + a.main[2] + 1 && a.pop[1] + a.pop[3] <= a.main[1] + a.main[3] + 1, JSON.stringify(a));
                 if (!phone) check('... a wide window: the chat panel lies under the list along the bottom of Home, as wide as the body (no strip: the games, the players and the chat are all there), and no Join or code field of the list is under anything else ' + at,
@@ -726,7 +726,7 @@ async function flows() {
             for (const [w, h] of [[568, 320], [480, 300], [600, 400], [630, 360], [640, 360], [844, 390]]) {
                 await bar.setViewportSize({ width: w, height: h });
                 await sleep(300);       // (the window's resize makes the chat dock open or close by itself, as the strip shows or goes: the press comes after it, or the press is undone by it)
-                await bar.evaluate((phone) => { const g = document.querySelector('.gc'); if (phone) document.querySelector('.htab.t-chat').click(); else if (g && g.getAttribute('data-open') !== 'true') document.querySelector('.gc-fold').click(); }, w <= 700);
+                await bar.evaluate((phone) => { const g = document.querySelector('.gc'); if (phone) document.querySelector('.htab.t-chat').click(); else if (g && g.getAttribute('data-open') !== 'true') document.querySelector('.gc-fold').click(); }, w <= 700 || h <= 500);
                 await bar.waitForFunction(() => { const g = document.querySelector('.gc'); return !!g && g.getAttribute('data-open') === 'true'; }, null, { timeout: 3000 }).catch(() => null);       // (the panel opens a moment after the press: it is waited for, not guessed at)
                 await sleep(50);
                 const m = await bar.evaluate(() => { const g = document.querySelector('.gc'), b = document.querySelector('.hbar').getBoundingClientRect(); return g ? { open: g.getAttribute('data-open'), hidden: g.hidden, top: Math.round(g.getBoundingClientRect().top * 10) / 10, bar: Math.round(b.bottom * 10) / 10 } : null; });
@@ -751,7 +751,7 @@ async function flows() {
                 await (await page.context().newCDPSession(page)).send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 0, left: 0, bottom: inset, right: 0 } });
                 await page.waitForSelector('.gc', { state: 'attached' });
                 for (const open of [false, true]) {
-                    await page.evaluate(([o, phone]) => { const g = document.querySelector('.gc'); if (phone) document.querySelector(o ? '.htab.t-chat' : '.htab.t-games').click(); else if ((g.getAttribute('data-open') === 'true') !== o) document.querySelector('.gc-fold').click(); }, [open, w <= 700]);
+                    await page.evaluate(([o, phone]) => { const g = document.querySelector('.gc'); if (phone) document.querySelector(o ? '.htab.t-chat' : '.htab.t-games').click(); else if ((g.getAttribute('data-open') === 'true') !== o) document.querySelector('.gc-fold').click(); }, [open, w <= 700 || h <= 500]);
                     await sleep(150);
                     const m = await page.evaluate(() => { const b = (q) => Math.round(document.querySelector(q).getBoundingClientRect().bottom * 10) / 10; return { home: b('#home'), yard: b('#hmain'), chat: b('.gc'), open: document.querySelector('.gc').getAttribute('data-open'), end: window.innerHeight }; });
                     const limit = h - inset;

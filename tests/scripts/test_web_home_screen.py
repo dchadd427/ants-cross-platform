@@ -305,7 +305,7 @@ class TheBodyOfHome(unittest.TestCase):
     def test_the_strip_has_three_buttons_and_the_chat_is_open_only_on_its_own_view_on_a_phone(self):
         code = self.code
         self.assertIn("var TABS = [['games', 'Games'], ['players', 'Players'], ['chat', 'Chat']];", code)
-        self.assertIn("var PHONE = '(max-width: 700px)';", code)
+        self.assertIn("var PHONE = '(max-width: 700px), (max-height: 500px)';", code)
         self.assertIn("if (dock && phone()) dock.open(name === 'chat');", code)
         self.assertIn("host.setAttribute('data-tab', name);", code)
         self.assertIn("if (dock && ph !== was) dock.open(ph ? tab === 'chat' : (win.innerHeight || 0) >= 601);", code, "a window that changes from a phone's width to a wide one (or back) opens or shuts the chat for its view")
@@ -320,7 +320,7 @@ class TheBodyOfHome(unittest.TestCase):
         self.assertIn(".hmain { flex: 1 1 auto; min-height: 0; display: grid;", css)
         self.assertIn(".pl-on .hmain { grid-template-columns: minmax(0, 1fr) clamp(220px, 24vw, 280px); }", css, "the players list is a sidebar of 220 to 280 px, and only once there is a list")
         self.assertIn(".htabs { display: none; }", css)
-        phone = css[css.index("@media (max-width: 700px) {\n    .hmain"):]
+        phone = css[css.index("@media (max-width: 700px), (max-height: 500px) {\n    .hmain"):]
         phone = phone[:phone.index("\n}\n")]
         self.assertIn(".htabs { order: 9; flex: none; display: flex;", phone)
         self.assertIn('#home[data-tab="chat"] .hmain, #home:not([data-tab="chat"]) .gc, #home[data-tab="games"] .pl, #home[data-tab="players"] .gdock { display: none; }', phone)
@@ -355,7 +355,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_screen_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
     FILES = ["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/alert_core.js", "web/front/player_name.js", "web/home/home.js", "web/home/home.css", "web/home/room.css", "web/home/roomchat.js", "web/home/roomchat.css", "web/home/chat.js", "web/home/chat.css", "web/home/games.js", "web/home/alerts.js", "web/home/alerts.css", "web/home/games.css", "web/home/players.js", "web/home/players.css", "web/home/talk.js", "web/home/talk.css", "web/home/mod.js", "web/home/mod.css", "web/home/split.js", "web/home/split.css", "web/home/cmds.js", "web/home/cmds.css", "web/home/pics.js", "web/home/pics.css", "web/home/post.js", "web/home/post.css", "web/home/vp.js", "web/shapes.js", "tests/scripts/test_web_home_screen.py", "tests/scripts/web_home_screen_check.js", "tests/scripts/web_page_harness.js",
-             "tests/scripts/web_home_check.py", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml", "docker/nginx.conf", "docs/PLAY_IN_BROWSER.md"] + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")]
+             "tests/scripts/web_home_check.py", "tests/scripts/fake_media.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml", "docker/nginx.conf", "docs/PLAY_IN_BROWSER.md"] + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")]
 
     SPEC = "home_screen_mutants.json"
 

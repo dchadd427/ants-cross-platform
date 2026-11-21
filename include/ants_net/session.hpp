@@ -415,7 +415,7 @@ public:
     struct Config {
         uint8_t player{1};
         uint8_t host{0};                     // the seat of the host (kNoSeat for a dedicated server's room)
-        bool migration{true};                // false (a dedicated server): the host is not a player and nobody can take over: a lost link ends the match here (Lost)
+        bool migration{true};                // false (a dedicated server): the host is not a player and nobody can take over, and nothing that another guest says over a link is heard: a lost link ends the match here (Lost)
         LockstepRunner::Config runner{};
         uint32_t ping_every_ms{1000};
         uint32_t host_silence_ms{10000};     // a host that says nothing for this long is gone (its answers to our pings keep it alive)

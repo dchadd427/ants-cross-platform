@@ -1,8 +1,8 @@
-/* The handles of Home (web/home/split.js, docs/HOME_SCREEN.md "The splitters"), loaded after the first paint. Wide windows only: a phone (up to 700 px) has its strip and shows none. The line is thin; the target
+/* The handles of Home (web/home/split.js, docs/HOME_SCREEN.md "The splitters"), loaded after the first paint. Wide, tall windows only: a phone (up to 700 px wide or up to 500 px high) has its strip and shows none. The line is thin; the target
    around it is about 30 px (the line's own box and padding that reaches over the edge of the lists), so it takes no room from the layout. Sizes come as two properties on Home's div, --pl-w (the players'
    width) and --gc-h (the chat dock's height); the id of Home makes these rules win over the dock's own height (chat.css, talk.css), which stay as the first size. */
 .sp { display: none; }
-@media (min-width: 701px) {
+@media (min-width: 701px) and (min-height: 501px) {
     #home { --pl-w: clamp(220px, 24vw, 280px); }
     #home[data-split-w].pl-on .hmain { grid-template-columns: minmax(0, 1fr) var(--pl-w); }
     #home[data-split-h] .gc[data-open="true"] { height: var(--gc-h); }

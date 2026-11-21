@@ -128,7 +128,7 @@ async function shot(page, name) { if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: 
             await page.waitForFunction(() => document.querySelector('.hbar .quick.host') && !document.querySelector('.hbar .quick.host').disabled, null, { timeout: 15000 });
             await page.addStyleTag({ content: '.gc-form[hidden] { display: grid !important; }' });       // (the chat is offline here: it shows the field that it shows online)
             await sleep(400);
-            const phone = w <= 700;
+            const phone = w <= 700 || h <= 500;
             const views = phone ? ['games', 'players', 'chat'] : [null];
             for (const view of views) {
                 const label = name + (view ? '/' + view : '');

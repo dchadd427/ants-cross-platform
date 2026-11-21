@@ -2279,6 +2279,53 @@ void run_migration_tests() {
         ASSERT_TRUE(command_seen);                                           // commands go to the new host now
     } TEST_END();
 
+    TEST_CASE("N2.34b Host Migration Is Off In A Dedicated Server's Room: What Another Guest Says Over A Link (A Proposal, An Accept, A Refusal, A Resume, A Request For Turns) Is Not Heard, While The Server Is Quiet And While The Machine Is On Its Way Back To It: The Server's Link Stays The Host Link, Nothing Is Answered, And The Way Back Goes On (N2.34 Has The Same Words Move A Session Whose Host Plays)") {
+        const auto peer_words = []() {
+            return std::vector<std::vector<uint8_t>>{encode(ProposeMsg{1, 0}), encode(AcceptMsg{1, 0, 0}), encode(RefuseMsg{1, 0}), encode(ResumeMsg{1, 0, 0xFFFFFF}), encode(RequestMsg{0})};
+        };
+        const auto answered_nothing = [](Connection* end) {                  // (the machine pings its links; that is all that it says to a guest)
+            std::vector<uint8_t> m;
+            while (end->poll(m)) {
+                if (peek_type(m) != MsgType::Ping) return false;
+            }
+            return true;
+        };
+        {   // the server is quiet for longer than a host is called alive, and shorter than it is called gone
+            LoneSession L;
+            auto peer = L.net.connect({5, 0});                               // the link to seat 0
+            L.s->set_peer(0, peer.second);
+            L.first().pong = true;
+            L.step(1500);
+            L.first().pong = false;
+            L.step(2600);
+            ASSERT_EQ(L.s->mode(), ClientSession::Mode::Normal);
+            for (const auto& word : peer_words()) peer.first->send(word);
+            L.step(300);
+            ASSERT_EQ(L.s->mode(), ClientSession::Mode::Normal);
+            ASSERT_FALSE(L.s->electing());
+            ASSERT_EQ(L.s->host_seat(), kNoSeat);
+            ASSERT_TRUE(L.first().cli->is_open());                           // (an election closes the link to the old host)
+            ASSERT_TRUE(answered_nothing(peer.first));
+        }
+        {   // the server link is lost: the machine is on its way back, and a guest's proposal does not take it over
+            LoneSession L;
+            auto peer = L.net.connect({5, 0});
+            L.s->set_peer(0, peer.second);
+            L.step(100);
+            L.lose_link();
+            ASSERT_EQ(L.s->mode(), ClientSession::Mode::Reconnecting);
+            for (const auto& word : peer_words()) peer.first->send(word);
+            L.step(300);
+            ASSERT_EQ(L.s->mode(), ClientSession::Mode::Reconnecting);
+            ASSERT_EQ(L.s->host_seat(), kNoSeat);
+            ASSERT_TRUE(L.s->wants_connection(L.now));
+            ASSERT_TRUE(answered_nothing(peer.first));
+            L.attach_new();                                                  // the way back goes on to the server
+            L.step(100);
+            ASSERT_EQ(L.s->mode(), ClientSession::Mode::Rejoining);
+        }
+    } TEST_END();
+
     TEST_CASE("N2.35 Host Migration: 20000 Garbage Messages On The Links Between Guests Change Nothing While The Host Lives") {
         Mesh m(15, 4, same_link({25, 0}));
         Lcg rng(4242);
