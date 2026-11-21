@@ -153,12 +153,14 @@ def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
         # 1. Wide rounded cranium (`1.10x` X -> ~45% of H matching `ORIG agst701`/`agst301`) & sleek depth (`0.86x` Z).
         p[:, 0] = hc[0] + x_scale * rx
         p[:, 2] = hc[2] + z_scale * rz
-        # 2. Smoothly lower the tall forehead (~38 mm less crown height above the eyes, keeping a
-        #    cute rounded top arch — never flat) and gently round the upper-back occiput corner.
+        # 2. Keep a full, cute rounded forehead high enough to wrap cleanly over the tall viewer-left eye
+        #    (gentle upper-front brow fullness so zero white sclera or open eyelid pokes out of the crown),
+        #    while softly rounding the upper-back occiput corner (`ORIG agst301`/`agst901`).
         crown_t = np.clip((ry - 0.045) / 0.143, 0.0, 1.0)
         corner_w = _smoothstep(0.030, 0.145, ry) * _smoothstep(-0.020, -0.135, rz)
-        p[:, 1] -= 0.038 * (crown_t ** 1.45) + 0.005 * corner_w
-        p[:, 2] += 0.014 * corner_w
+        brow_w = _smoothstep(0.025, 0.125, ry) * _smoothstep(0.015, 0.125, rz)
+        p[:, 1] += -0.008 * (crown_t ** 1.45) + 0.012 * brow_w - 0.005 * corner_w
+        p[:, 2] += 0.014 * corner_w + 0.016 * brow_w
         return p
 
     head_parts = scene.get_node("head")
