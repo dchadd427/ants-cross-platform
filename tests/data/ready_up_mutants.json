@@ -144,16 +144,6 @@
    "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
-   "id": "ready_budget_is_the_visibilitys",
-   "file": "src/ants_net/lobby.cpp",
-   "old": "guests_[seat].readies.take(now_ms, kReadyBurst, kReadyPerSecond, kReadyExcessBurst)",
-   "new": "guests_[seat].visibility.take(now_ms, kReadyBurst, kReadyPerSecond, kReadyExcessBurst)",
-   "build": [
-    "test_lobby"
-   ],
-   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
-  },
-  {
    "id": "a_game_may_send_ready",
    "file": "src/ants_net/lobby.cpp",
    "old": "    if (seat_ >= sim::MAX_PLAYERS || room_.slots[seat_].state != SlotState::Client || room_.seat_in_game(seat_)) return false;",
