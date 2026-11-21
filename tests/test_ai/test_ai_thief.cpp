@@ -309,6 +309,7 @@ void run_thief_tests() {
             const uint32_t thief = sim.spawn_unit(0, sim::AntType::Thief, TileCoord{30, 12});
             LevelPlan plan = quiet_plan(Level::Hard);
             plan.raid_recheck = recheck;
+            plan.raid_way_home = false;                                                                         // (the subject is the look at the walk to the hole; the walk home has its own test, AI57.2)
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
             CantGoTally tally;
             rig.count_with(&tally);

@@ -22,6 +22,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -76,6 +77,7 @@ public:
         uint32_t orders{0};                    // the group orders (move, special, attack) for the seat, as the engine was given them
         uint32_t attacks{0};                   // of them, the attack orders
         uint32_t refused{0};                   // of them, those followed within kRefusedWindow ticks by the first reaction of an ant they name (the engine answers a walk within 4)
+        uint32_t again{0};                     // of the refused ones, those that give the same kind of order to the same first ant onto the same tile as an order that was refused before (docs/BOT_UNSTUCK.md)
     };
     /// A command that the engine was given when its tick count was `tick`: the ants it names are remembered
     void command(const sim::Command& c, uint64_t tick);
@@ -97,6 +99,8 @@ private:
     std::vector<Last> last_;                   // by ant id
     std::vector<uint8_t> refused_;             // by order number: counted as refused already
     std::vector<uint8_t> order_seat_;          // by order number: the seat it was for
+    std::vector<uint64_t> order_key_;          // by order number: the first ant, the kind of order and the tile
+    std::map<uint64_t, uint32_t> refused_keys_;   // the keys of the orders that were refused, and how often
 };
 
 /// What the arena counts of the flowers (docs/BOTS.md, "The flowers"): per match `landings` (the end of every droplet's fall; a landing replaces an untaken power-up) and `landed` (them by the
@@ -188,6 +192,8 @@ public:
         uint64_t after_idle_ticks{0};
         uint32_t raids{0};                     // raids begun by the seat's Thieves
         uint32_t raid_points{0};               // ... and what they took (the raid_amount of the Thief when it began)
+        uint32_t steals{0};                    // ... the Thieves that carried loot to the hill's entrance (a steal completed), and the points they banked
+        uint32_t steal_points{0};
     };
     void scan(sim::SimulationEngine& sim);
     const Seat& seat(uint8_t s) const noexcept { return seats_[s < sim::MAX_PLAYERS ? s : 0]; }
@@ -198,9 +204,53 @@ private:
     std::array<Seat, sim::MAX_PLAYERS> seats_{};
     std::vector<uint64_t> idle_since_;         // by ant id: the tick at which the ant began to stand idle (0: it does not)
     std::vector<uint8_t> target_team_;         // by ant id: the Thief's target team at the last look (255: none)
+    std::vector<uint16_t> loot_;               // by ant id: the loot that a Thief held at the last look (0: none)
     uint64_t units_{0};                        // the units on all piles at the last look
     uint64_t last_food_{0};
     bool started_{false};
+};
+
+/// What the arena counts of the ants that are stuck (docs/BOT_UNSTUCK.md): per seat, from the engine's own state, looked at every 4th tick. An ant is STUCK when, for kStuckTicks (10 seconds) in a
+/// row, it has stood on one tile and was in a state that is going nowhere: it shows the can't-go clip, or it has an order (a walk, a pick-up, a harvest) and does not move, or it holds food or
+/// loot and has no order at all. An ant in a clip of its own work (a raid, a plant, a fire wall, a pick-up, a bite, the hill's entrance) or queueing for its hill (home_state) is not. The count is
+/// one for each ant and span, the ticks are the ant-ticks of the span past the 10 seconds; the first kMaxEpisodes spans are kept with what the ant was doing, to look at (a test hook, like the rest).
+class StuckTally {
+public:
+    static constexpr uint64_t kStuckTicks = 200;
+    static constexpr uint64_t kPeriod = 4;
+    static constexpr size_t kMaxEpisodes = 64;
+    struct Seat {
+        uint32_t ants{0};                      // the spans that reached kStuckTicks (one for each ant and span)
+        uint64_t ticks{0};                     // the ant-ticks of those spans past the first kStuckTicks
+        uint32_t looping{0};                   // of the spans, the ones of an ant that showed the can't-go clip when the span reached kStuckTicks
+        uint32_t blocked{0};                   // ... that had an order and did not move
+        uint32_t carriers{0};                  // ... that held food or loot and had no order: a carrier that the engine's walk home left standing (the rescue of docs/BOTS.md sends it after 900 ticks)
+    };
+    struct Episode {
+        uint64_t tick{0};                      // the look at which the span reached kStuckTicks
+        uint8_t seat{0};
+        uint32_t ant{0};
+        sim::AntType type{sim::AntType::Worker};
+        int32_t x{0}, y{0};
+        sim::UnitState state{sim::UnitState::Idle};
+        uint8_t order{0};                      // AntUnit::kOrder*, 0 none
+        int32_t order_x{0}, order_y{0};
+        bool holding{false};
+        int32_t carried{0};
+    };
+    void scan(sim::SimulationEngine& sim);
+    const Seat& seat(uint8_t s) const noexcept { return seats_[s < sim::MAX_PLAYERS ? s : 0]; }
+    const std::vector<Episode>& episodes() const noexcept { return episodes_; }
+
+private:
+    struct Track {
+        int32_t x{-1}, y{-1};
+        uint64_t since{0};                     // the look at which the ant came to this tile and was in a going-nowhere state, 0: not now
+        bool counted{false};
+    };
+    std::array<Seat, sim::MAX_PLAYERS> seats_{};
+    std::vector<Track> tracks_;                // by ant id
+    std::vector<Episode> episodes_;
 };
 
 class ExpeditionTask;
@@ -278,6 +328,7 @@ struct ArenaSeatResult {
     uint32_t rush_ticks{0};                    //     the ticks they lasted
     uint32_t rush_attacks{0};                  //     and the ants they ordered at an enemy ant (one count a member and order)
     uint32_t refused_orders{0};                // of them, the ones that were followed by a first reaction of an ant they named within CantGoTally::kRefusedWindow ticks
+    uint32_t refused_again{0};                 // of the refused ones, those that repeat a refused order (CantGoTally::Seat::again)
     std::array<uint32_t, 6> took{};            // the power-ups that the seat's ants took, by the kind of ant they became (FlowerTally::Seat::took)
     uint32_t took_at_flowers{0};               // of them, the ones taken at a flower's drop tile
     uint64_t ant_ticks{0};                     // the idle tally (IdleTally): the seat's living ants in ticks, the ones that stood idle, the same two from the last food taken to the end,
@@ -286,6 +337,13 @@ struct ArenaSeatResult {
     uint64_t after_idle_ticks{0};
     uint32_t raids{0};
     uint32_t raid_points{0};
+    uint32_t steals{0};                        // the steals completed (IdleTally::Seat::steals) and the points banked by them
+    uint32_t steal_points{0};
+    uint32_t stuck_ants{0};                    // the stuck tally (StuckTally): the spans of an ant that stood nowhere for 10 seconds, the ant-ticks past them, and the spans by what the ant was doing
+    uint64_t stuck_ticks{0};
+    uint32_t stuck_looping{0};
+    uint32_t stuck_blocked{0};
+    uint32_t stuck_carriers{0};
     ExpeditionResult expedition;
     MinerFlightResult miner_flight;
     BotController::SeatStats stats;
@@ -307,6 +365,7 @@ struct ArenaResult {
     uint32_t reachable_units_left{0};
     uint64_t last_food{0};                     // the last look at which the food on the map fell (IdleTally::last_food); 0: no unit was ever taken
     std::vector<DropTally::Drop> drops;        // the power-ups that dead typed ants left (DropTally)
+    std::vector<StuckTally::Episode> stuck;    // the first StuckTally::kMaxEpisodes stuck spans of the match
     uint32_t landings{0};                      // the droplets of the flower droppers that landed (FlowerTally)
     std::array<uint32_t, 6> landed{};          // ... by the kind of ant they make (index = sim::AntType)
     std::vector<ArenaSeatResult> seats;        // in seat order

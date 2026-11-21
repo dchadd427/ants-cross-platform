@@ -357,6 +357,7 @@ void WallTask::step(TaskContext& c) {
 
 int harm_to(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile, bool map_owned) noexcept {
     if (harms_economy(view, map, plan, tile, map_owned)) return 1;
+    if (plan.rescue_thief && shuts_in_own_thief(view, map, tile)) return 1;                       // (the wall that shuts in an own Thief: the points in its hands are the economy's too)
     const uint8_t ally = view.ally();
     if (!plan.ally_help || ally >= sim::MAX_PLAYERS) return 0;
     if (plan.own_ground_counters && !map_owned && ally_hazard_ground(view, map, plan, tile) == HazardGround::Foreign) return 0;      // nor is a third team's base the ally's business

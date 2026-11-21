@@ -472,6 +472,7 @@ void run_bombs_tests() {
                 spec.factory = [on](const BotSpec& b) {
                     return std::make_unique<StandardBot>(b.level, b.style, [on](LevelPlan& p) {
                         without_thief_batch(p);                                                       // (the subject is the detour: the thief batch plays another game of the same matches, and six matches are a sample)
+                        without_unstick_batch(p);                                                     // (and so does the unstick batch)
                         if (!on) {
                             p.bomb_detour = 0;
                             p.bomb_route = false;

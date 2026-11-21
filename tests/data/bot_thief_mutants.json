@@ -40,8 +40,8 @@
   {
    "id": "recheck_no_walk_check",
    "file": "src/ants_ai/standard_tasks_raid.cpp",
-   "old": "        bad = !reach;",
-   "new": "        bad = !reach && false;",
+   "old": "        bad = !reach || (plan.raid_way_home && !way_home(c, r.team));",
+   "new": "        bad = (!reach && false) || (plan.raid_way_home && !way_home(c, r.team));",
    "build": "test_ai",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI53.4 ' ./build/tests/test_ai/test_ai",
    "expect": "AI53.4"

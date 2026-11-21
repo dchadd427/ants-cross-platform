@@ -88,6 +88,20 @@ RaidTask::Hole RaidTask::hole_state(TaskContext& c, uint8_t t, uint32_t thief_id
 
 bool RaidTask::hole_shut(TaskContext& c, uint8_t t, uint32_t thief_id) const { return hole_state(c, t, thief_id) != Hole::Open; }
 
+bool RaidTask::way_home(TaskContext& c, uint8_t team) {
+    const BotView& v = c.view;
+    if (home_field_tick_ != v.tick()) {
+        home_field_ = c.map.field_now(v.grid(), c.seat, v.walk_context());
+        home_field_tick_ = v.tick();
+    }
+    if (!home_field_.valid()) return true;                                                  // (no own hill to walk to: nothing to judge by)
+    const sim::Grid& grid = v.grid();
+    for (const sim::TileCoord& e : east_tiles(c.map.hill(team))) {
+        if (grid.in_bounds(e) && home_field_.cost[tile_index(grid, e)] >= 0) return true;
+    }
+    return false;
+}
+
 bool RaidTask::launch(TaskContext& c, const AntView& thief) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
@@ -120,6 +134,7 @@ bool RaidTask::launch(TaskContext& c, const AntView& thief) {
             if (cost >= 0 && (best < 0 || cost < best)) best = cost;
         }
         if (best < 0) continue;                                                        // not on foot from where the thief stands
+        if (plan.raid_way_home && !way_home(c, t)) continue;                           // a thief with no way home from the hole would stand on the raid tile for good
         const int32_t home = c.map.walking_cost(c.seat, east_tiles(hill)[1]);          // back to the own gate (the analysis of the start; the way is the same both ways)
         const uint64_t go = static_cast<uint64_t>(MapInfo::walking_ticks(best)) + 10u;
         const uint64_t back = home < 0 ? go : static_cast<uint64_t>(MapInfo::walking_ticks(home)) + 30u;
@@ -180,7 +195,7 @@ bool RaidTask::recheck(TaskContext& c, const AntView& thief, std::map<uint32_t, 
         const std::vector<int32_t> field = MapInfo::cost_field(grid, mask, thief.tile);
         bool reach = false;
         for (const sim::TileCoord& e : east_tiles(hill)) reach = reach || (grid.in_bounds(e) && !field.empty() && field[tile_index(grid, e)] >= 0);
-        bad = !reach;
+        bad = !reach || (plan.raid_way_home && !way_home(c, r.team));
         lasting = bad;
     }
     if (!bad) return false;

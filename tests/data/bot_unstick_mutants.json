@@ -1,0 +1,203 @@
+{
+ "note": "Mutants of the unstick batch of the computer players (docs/BOT_UNSTUCK.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the way home of a raid (at the launch, at the look again, the field of the own hill), the plug task (which power-ups are plugs, whose ants are sent and in which order, the tiles shared with the trip task), the refusal memory (the second refusal blocks, the block grows, carriers and mound clicks and walking ants are not judged), the rescue of a walled-in Thief and the stuck tally against test_ai AI57. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_unstick_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "rhome_launch_off",
+   "file": "src/ants_ai/standard_tasks_raid.cpp",
+   "old": "if (plan.raid_way_home && !way_home(c, t)) continue;",
+   "new": "",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.2"
+  },
+  {
+   "id": "rhome_recheck_off",
+   "file": "src/ants_ai/standard_tasks_raid.cpp",
+   "old": "bad = !reach || (plan.raid_way_home && !way_home(c, r.team));",
+   "new": "bad = !reach;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.2"
+  },
+  {
+   "id": "rhome_any_front_tile",
+   "file": "src/ants_ai/standard_tasks_raid.cpp",
+   "old": "if (grid.in_bounds(e) && home_field_.cost[tile_index(grid, e)] >= 0) return true;",
+   "new": "if (grid.in_bounds(e)) return true;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.2"
+  },
+  {
+   "id": "rhome_field_never_renewed",
+   "file": "src/ants_ai/standard_tasks_raid.cpp",
+   "old": "if (home_field_tick_ != v.tick()) {",
+   "new": "if (home_field_tick_ == ~uint64_t{0}) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.2"
+  },
+  {
+   "id": "plug_worthless_taken",
+   "file": "src/ants_ai/plug_task.cpp",
+   "old": "if (worth > 0) plugs.push_back(Plug{&p, beyond, worth});",
+   "new": "plugs.push_back(Plug{&p, beyond, worth});",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.4"
+  },
+  {
+   "id": "plug_any_part",
+   "file": "src/ants_ai/plug_task.cpp",
+   "old": "if (parts.size() < 2 || parts.count(home) == 0) continue;",
+   "new": "if (parts.size() < 2) continue;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.4"
+  },
+  {
+   "id": "plug_typed_ant_sent",
+   "file": "src/ants_ai/plug_task.cpp",
+   "old": "if (a.type != view.default_ant_type() || a.holding || a.carried_points > 0 || a.hp < 5) return false;",
+   "new": "if (a.holding || a.carried_points > 0 || a.hp < 5) return false;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.5"
+  },
+  {
+   "id": "plug_home_ant_first",
+   "file": "src/ants_ai/plug_task.cpp",
+   "old": "if (best != nullptr && (best_far != beyond ? best_far : cost >= best_cost)) continue;",
+   "new": "if (best != nullptr && cost >= best_cost) continue;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.3"
+  },
+  {
+   "id": "plug_task_off_in_look",
+   "file": "src/ants_ai/plug_task.cpp",
+   "old": "if (v.powerups().empty()) return;",
+   "new": "return;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.3"
+  },
+  {
+   "id": "plug_tile_shared_with_trips",
+   "file": "src/ants_ai/standard_tasks_powerup.cpp",
+   "old": "if (std::find(tactics_.plug_tiles.begin(), tactics_.plug_tiles.end(), p.tile) != tactics_.plug_tiles.end()) continue;",
+   "new": "",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.6"
+  },
+  {
+   "id": "plug_trip_tiles_ignored",
+   "file": "src/ants_ai/plug_task.cpp",
+   "old": " || std::find(tactics_.trip_tiles.begin(), tactics_.trip_tiles.end(), p.tile) != tactics_.trip_tiles.end()) continue;",
+   "new": ") continue;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.6"
+  },
+  {
+   "id": "refusal_first_blocks",
+   "file": "src/ants_ai/refusal_memory.cpp",
+   "old": "if (r.count >= 2) {",
+   "new": "if (r.count >= 1) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.7"
+  },
+  {
+   "id": "refusal_block_does_not_grow",
+   "file": "src/ants_ai/refusal_memory.cpp",
+   "old": "block *= 2u;",
+   "new": "block *= 1u;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.7"
+  },
+  {
+   "id": "refusal_carrier_judged",
+   "file": "src/ants_ai/refusal_memory.cpp",
+   "old": "if (at == seen_.end() || at->second.loaded) continue;",
+   "new": "if (at == seen_.end()) continue;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.7"
+  },
+  {
+   "id": "refusal_mound_judged",
+   "file": "src/ants_ai/refusal_memory.cpp",
+   "old": "        if (in_mound) continue;\n",
+   "new": "",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.7"
+  },
+  {
+   "id": "refusal_walk_in_place_judged",
+   "file": "src/ants_ai/refusal_memory.cpp",
+   "old": "const bool still = ant->tile == it->from;",
+   "new": "const bool still = true;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.7"
+  },
+  {
+   "id": "rescue_wall_not_harm",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "    if (plan.rescue_thief && shuts_in_own_thief(view, map, tile)) return 1;",
+   "new": "",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.9"
+  },
+  {
+   "id": "rescue_any_wall",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "            if (!h.present || h.raid != a.tile) continue;\n            for (const sim::TileCoord& e : east_tiles(h)) {\n                if (e == wall) return true;\n            }",
+   "new": "            if (!h.present || h.raid != a.tile) continue;\n            return true;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.9"
+  },
+  {
+   "id": "rescue_no_fire_wanted",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "|| (plan.rescue_thief && !gate_breaching && has_shut_in_thief(view, *map))",
+   "new": "",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.9"
+  },
+  {
+   "id": "stuck_span_too_short",
+   "file": "include/ants_ai/arena.hpp",
+   "old": "static constexpr uint64_t kStuckTicks = 200;",
+   "new": "static constexpr uint64_t kStuckTicks = 20;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.8"
+  },
+  {
+   "id": "stuck_loop_not_counted",
+   "file": "src/ants_ai/arena.cpp",
+   "old": "                case sim::UnitState::CantGo:\n                    nowhere = !queueing;",
+   "new": "                case sim::UnitState::CantGo:\n                    nowhere = false;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.8"
+  },
+  {
+   "id": "stuck_carrier_not_counted",
+   "file": "src/ants_ai/arena.cpp",
+   "old": "nowhere = !queueing && (order != sim::AntUnit::kOrderNone || (carrier && u.waypoints.empty()));",
+   "new": "nowhere = !queueing && order != sim::AntUnit::kOrderNone;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.8"
+  }
+ ]
+}
