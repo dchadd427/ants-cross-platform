@@ -621,9 +621,10 @@ class TheConverter(ImgTest):
         self.failed(503, "down")
         self.converter.mode = "rawhold:promise"
         self.converter.raw["promise"] = b"HTTP/1.1 200 OK\r\nContent-Length: 99999999\r\nConnection: close\r\n\r\n" + b"x" * 100
+        self.limit(image_convert_seconds=20.0)
         started = time.monotonic()
         self.failed(503, "down")
-        self.assertLess(time.monotonic() - started, 4, "a length over the cap is refused at once, not waited for until the converter's time is out")
+        self.assertLess(time.monotonic() - started, 8, "a length over the cap is refused at once, not waited for until the converter's time (here 20 seconds) is out")
 
     def test_the_hub_checks_its_own_ends_even_for_an_honest_answer_at_the_edges(self):
         full = b"\xff\xd8\xff" + b"x" * (self.rig.hub.limits.image_reply_max - 10 - 200) + b"\xff\xd9"

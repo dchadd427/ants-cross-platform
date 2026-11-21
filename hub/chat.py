@@ -717,9 +717,9 @@ class Chat:
         gone = set(ids)
         for line in [l for l in self.ring if l.id in gone]:
             self.ring.remove(line)
+        self.sweep_images()                                        # (the files of their images go first: a page that is told that a line is gone never finds its file)
         for line_id in sorted(gone)[-self.limits.deleted_announce_max:]:
             self.broadcast({"t": "del", "id": line_id})
-        self.sweep_images()                                        # (the files of their images go now, after the screens were told)
 
     # ---- the clock's work -----------------------------------------------------------------------------------------------------------------
 

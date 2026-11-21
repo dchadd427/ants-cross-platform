@@ -150,7 +150,7 @@
   {
    "id": "images_no_sweep_after_a_deletion",
    "file": "hub/chat.py",
-   "old": "        self.sweep_images()                                        # (the files of their images go now, after the screens were told)",
+   "old": "        self.sweep_images()                                        # (the files of their images go first: a page that is told that a line is gone never finds its file)",
    "new": "        pass",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images"
   },
