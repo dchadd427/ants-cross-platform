@@ -1,0 +1,225 @@
+{
+ "note": "Mutants of the rules number 14 of the original's game and 15 of 187 for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the path manager's refusal of what an event asked is given after the turn's commands (which refusals wait, when they are given, what an order does to a refusal that waits, the engine's setting, its default and its reset, the player's setting from the head's number, the numbers that have the rule and the ones that are played, recorded or refused). Each build is the targets of test_pathmgr_gap and test_rules_cantgo, and each test run is the one that must notice.",
+ "mutants": [
+  {
+   "id": "held_refusal_never_given",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    pathmgr_answer();                                       // (the rules numbers 14 and later:",
+   "new": "    //pathmgr_answer();                                     // (the rules numbers 14 and later:",
+   "build": [
+    "test_pathmgr_gap"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_pathmgr_gap",
+   "expect": "PG1."
+  },
+  {
+   "id": "every_refusal_given_at_once",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "        if (path_answers_after_commands_ && delivery->path.empty() && serial != path_request_serial_.end()",
+   "new": "        if (false && path_answers_after_commands_ && delivery->path.empty() && serial != path_request_serial_.end()",
+   "build": [
+    "test_pathmgr_gap"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_pathmgr_gap",
+   "expect": "PG1.1"
+  },
+  {
+   "id": "a_command_s_refusal_is_held_too",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "((path_answers_after_commands_ && occ_in_tick_) ? kEventRequestBit : 0u)",
+   "new": "((path_answers_after_commands_) ? kEventRequestBit : 0u)",
+   "build": [
+    "test_pathmgr_gap"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_pathmgr_gap",
+   "expect": "PG1.7"
+  },
+  {
+   "id": "no_request_is_an_event_s",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "((path_answers_after_commands_ && occ_in_tick_) ? kEventRequestBit : 0u)",
+   "new": "((path_answers_after_commands_ && false) ? kEventRequestBit : 0u)",
+   "build": [
+    "test_pathmgr_gap"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_pathmgr_gap",
+   "expect": "PG1.1"
+  },
+  {
+   "id": "a_new_order_leaves_the_held_refusal",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    pathmgr_forget_answer(a.id);\n",
+   "new": "",
+   "build": [
+    "test_pathmgr_gap"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_pathmgr_gap",
+   "expect": "PG1.1"
+  },
+  {
+   "id": "a_held_refusal_is_no_pending_request",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "        if (a.present && a.ant_id == ant_id) return true;        // (asked and not answered yet",
+   "new": "        if (false && a.present && a.ant_id == ant_id) return true;        // (asked and not answered yet",
+   "build": [
+    "test_pathmgr_gap"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_pathmgr_gap",
+   "expect": "PG1.1"
+  },
+  {
+   "id": "the_event_bit_makes_the_answer_stale",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "(it->second & ~kEventRequestBit) != a->move_serial",
+   "new": "it->second != a->move_serial",
+   "build": [
+    "test_pathmgr_gap"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_pathmgr_gap",
+   "expect": "PG1.1"
+  },
+  {
+   "id": "default_is_the_old_rule",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "bool path_answers_after_commands_{true};",
+   "new": "bool path_answers_after_commands_{false};",
+   "build": [
+    "test_pathmgr_gap"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_pathmgr_gap",
+   "expect": "PG1."
+  },
+  {
+   "id": "game_mode_keeps_the_old_setting",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": " impl_->path_answers_after_commands_ = true;       // (the rules of a match that is played now;",
+   "new": "       // (the rules of a match that is played now;",
+   "build": [
+    "test_pathmgr_gap"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_pathmgr_gap",
+   "expect": "PG1.6"
+  },
+  {
+   "id": "setter_ignores_its_argument",
+   "file": "src/ants_sim/pathmgr_rules.cpp",
+   "old": "    impl_->path_answers_after_commands_ = on;",
+   "new": "    impl_->path_answers_after_commands_ = true;\n    (void)on;",
+   "build": [
+    "test_pathmgr_gap"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_pathmgr_gap",
+   "expect": "PG1.3"
+  },
+  {
+   "id": "getter_always_true",
+   "file": "src/ants_sim/pathmgr_rules.cpp",
+   "old": "    return impl_->path_answers_after_commands_;",
+   "new": "    return true;",
+   "build": [
+    "test_pathmgr_gap"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_pathmgr_gap",
+   "expect": "PG1.6"
+  },
+  {
+   "id": "player_always_plays_the_new_rule",
+   "file": "src/ants_replay/player.cpp",
+   "old": "engine.set_path_answers_after_commands(path_answers_after_commands_rules(sim_rules_of(replay.head)));",
+   "new": "engine.set_path_answers_after_commands(true);",
+   "build": [
+    "test_rules_cantgo"
+   ],
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_cantgo",
+   "expect": "RP18."
+  },
+  {
+   "id": "player_never_plays_the_new_rule",
+   "file": "src/ants_replay/player.cpp",
+   "old": "engine.set_path_answers_after_commands(path_answers_after_commands_rules(sim_rules_of(replay.head)));",
+   "new": "engine.set_path_answers_after_commands(false);",
+   "build": [
+    "test_rules_cantgo"
+   ],
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_cantgo",
+   "expect": "RP18."
+  },
+  {
+   "id": "rule_starts_one_number_late",
+   "file": "include/ants_replay/replay.hpp",
+   "old": "    return rules >= kSimRulesCantGoFirst;",
+   "new": "    return rules > kSimRulesCantGoFirst;",
+   "build": [
+    "test_rules_cantgo"
+   ],
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_cantgo",
+   "expect": "RP18.1"
+  },
+  {
+   "id": "number_13_is_not_played",
+   "file": "include/ants_replay/replay.hpp",
+   "old": "(rules == kSimRules || rules == kSimRulesBeforeCantGo || rules == kSimRulesBeforeEmptyRecord",
+   "new": "(rules == kSimRules || rules == kSimRulesBeforeEmptyRecord",
+   "build": [
+    "test_rules_cantgo"
+   ],
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_cantgo",
+   "expect": "RP18.1"
+  },
+  {
+   "id": "number_12_of_187_is_not_played",
+   "file": "include/ants_replay/replay.hpp",
+   "old": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeCantGo || rules == kSimRulesMode187BeforeNoDrops",
+   "new": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeNoDrops",
+   "build": [
+    "test_rules_cantgo"
+   ],
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_cantgo",
+   "expect": "RP18.1"
+  },
+  {
+   "id": "head_refuses_187_under_12",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "(h.sim_rules == kSimRulesMode187 || h.sim_rules == kSimRulesMode187BeforeCantGo || h.sim_rules == kSimRulesMode187BeforeNoDrops",
+   "new": "(h.sim_rules == kSimRulesMode187 || h.sim_rules == kSimRulesMode187BeforeNoDrops",
+   "build": [
+    "test_rules_cantgo"
+   ],
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_cantgo",
+   "expect": "RP18.1"
+  },
+  {
+   "id": "head_refuses_the_original_under_13",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "(h.sim_rules == kSimRules || h.sim_rules == kSimRulesBeforeCantGo || h.sim_rules == kSimRulesBeforeEmptyRecord",
+   "new": "(h.sim_rules == kSimRules || h.sim_rules == kSimRulesBeforeEmptyRecord",
+   "build": [
+    "test_rules_cantgo"
+   ],
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_cantgo",
+   "expect": "RP18.1"
+  },
+  {
+   "id": "the_text_of_the_played_rules_leaves_out_13",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "std::to_string(kSimRulesMode187BeforeCantGo) + \", \" + std::to_string(kSimRulesBeforeCantGo) + \", \" + ",
+   "new": "std::to_string(kSimRulesMode187BeforeCantGo) + \", \" + ",
+   "build": [
+    "test_rules_cantgo"
+   ],
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_cantgo",
+   "expect": "RP18.1"
+  },
+  {
+   "id": "no_drops_of_12_is_lost",
+   "file": "src/ants_replay/player.cpp",
+   "old": "sim_rules_of(replay.head) < kSimRulesMode187BeforeCantGo));",
+   "new": "sim_rules_of(replay.head) < kSimRulesMode187));",
+   "build": [
+    "test_rules_cantgo"
+   ],
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_cantgo",
+   "expect": "RP18.1"
+  }
+ ]
+}

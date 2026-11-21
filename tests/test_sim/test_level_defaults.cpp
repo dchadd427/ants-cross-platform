@@ -523,6 +523,7 @@ int main() {
             LevelData level;
             ASSERT_TRUE(level.load_from_file(maps_dir() + pin.map + ".LVL"));
             SimulationEngine sim;
+            sim.set_path_answers_after_commands(false);                                      // (the pins are of the build before the default ant type existed: the rules of the numbers 13 and before, the refusal of the path manager given at once)
             sim.init(level, 11, static_cast<uint8_t>(pin.roster));
             ASSERT_EQ(sim.grid().default_ant_tile(), kNoDefault);
             auto compare = [&](const char* when, uint64_t got, uint64_t want) {

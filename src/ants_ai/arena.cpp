@@ -177,7 +177,9 @@ void CantGoTally::scan(const sim::SimulationEngine& sim, const std::vector<sim::
     for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
         if (a.id > (1u << 20)) continue;
         if (a.id >= in_cantgo_.size()) in_cantgo_.resize(static_cast<size_t>(a.id) + 1, 0);
-        const bool now = a.state == sim::UnitState::CantGo;
+        // (from the rules number 14 the ant of a can't-go loop shows its idle label for the tick between the end of one clip and the engine's refusal of the walk that follows: the walk is still asked and not answered, so
+        // that tick is no end of the state, and a loop is the one beginning that it always was)
+        const bool now = a.state == sim::UnitState::CantGo || (in_cantgo_[a.id] != 0 && sim.has_pending_path(a.id));
         flagged += now ? 1u : 0u;
         if (now && in_cantgo_[a.id] == 0 && a.player_id < sim::MAX_PLAYERS) {
             ++seats_[a.player_id].began;

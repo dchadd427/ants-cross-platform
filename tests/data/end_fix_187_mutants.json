@@ -127,7 +127,7 @@
   {
    "id": "rules_11_not_played",
    "file": "include/ants_replay/replay.hpp",
-   "old": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeNoDrops ||",
+   "old": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeCantGo || rules == kSimRulesMode187BeforeNoDrops ||",
    "new": "(rules == kSimRulesMode187 ||",
    "build": "test_rules_end_fix",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_end_fix",
@@ -172,7 +172,7 @@
   {
    "id": "head_11_without_the_mode_ok",
    "file": "src/ants_replay/replay.cpp",
-   "old": "h.sim_rules == kSimRulesMode187 || h.sim_rules == kSimRulesMode187BeforeNoDrops ||",
+   "old": "h.sim_rules == kSimRulesMode187 || h.sim_rules == kSimRulesMode187BeforeCantGo || h.sim_rules == kSimRulesMode187BeforeNoDrops ||",
    "new": "h.sim_rules == kSimRulesMode187 ||",
    "build": "test_rules_end_fix",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_end_fix",

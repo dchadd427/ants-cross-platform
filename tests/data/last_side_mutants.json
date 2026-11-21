@@ -166,8 +166,8 @@
   {
    "id": "the_original_plays_only_number_8",
    "file": "include/ants_replay/replay.hpp",
-   "old": "(rules == kSimRules || rules == kSimRulesBeforeEmptyRecord || rules == kSimRulesBeforeFireWall || rules == kSimRulesBeforeLastSide)",
-   "new": "(rules == kSimRules || rules == kSimRulesBeforeEmptyRecord || rules == kSimRulesBeforeFireWall)",
+   "old": "(rules == kSimRules || rules == kSimRulesBeforeCantGo || rules == kSimRulesBeforeEmptyRecord || rules == kSimRulesBeforeFireWall || rules == kSimRulesBeforeLastSide)",
+   "new": "(rules == kSimRules || rules == kSimRulesBeforeCantGo || rules == kSimRulesBeforeEmptyRecord || rules == kSimRulesBeforeFireWall)",
    "build": "test_rules_last_side",
    "test": "timeout 600 ./build/tests/test_replay/test_rules_last_side",
    "expect": "RP13.1"
@@ -175,7 +175,7 @@
   {
    "id": "the_original_plays_every_number_from_5",
    "file": "include/ants_replay/replay.hpp",
-   "old": "(rules == kSimRules || rules == kSimRulesBeforeEmptyRecord || rules == kSimRulesBeforeFireWall || rules == kSimRulesBeforeLastSide)",
+   "old": "(rules == kSimRules || rules == kSimRulesBeforeCantGo || rules == kSimRulesBeforeEmptyRecord || rules == kSimRulesBeforeFireWall || rules == kSimRulesBeforeLastSide)",
    "new": "(rules >= kSimRulesBeforeLastSide)",
    "build": "test_rules_last_side",
    "test": "timeout 600 ./build/tests/test_replay/test_rules_last_side",
@@ -202,7 +202,7 @@
   {
    "id": "a_187_head_may_name_the_number_8",
    "file": "src/ants_replay/replay.cpp",
-   "old": "} else if ((h.sim_rules == kSimRules || h.sim_rules == kSimRulesBeforeEmptyRecord || h.sim_rules == kSimRulesBeforeFireWall) && h.mode != 0) {",
+   "old": "} else if ((h.sim_rules == kSimRules || h.sim_rules == kSimRulesBeforeCantGo || h.sim_rules == kSimRulesBeforeEmptyRecord || h.sim_rules == kSimRulesBeforeFireWall) && h.mode != 0) {",
    "new": "} else if (false) {",
    "build": "test_rules_last_side",
    "test": "timeout 600 ./build/tests/test_replay/test_rules_last_side",

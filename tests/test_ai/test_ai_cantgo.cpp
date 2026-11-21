@@ -132,7 +132,7 @@ struct EveryTickCount {
         }
         for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
             if (a.id >= in.size()) in.resize(static_cast<size_t>(a.id) + 1, 0);
-            const bool now = a.state == sim::UnitState::CantGo;
+            const bool now = a.state == sim::UnitState::CantGo || (in[a.id] != 0 && sim.has_pending_path(a.id));          // (the tick between two clips of a loop, with the walk asked and not answered, is no end of the state: rules number 14)
             if (now && in[a.id] == 0 && a.player_id < sim::MAX_PLAYERS) ++began[a.player_id];
             in[a.id] = now ? 1 : 0;
         }
