@@ -1077,6 +1077,13 @@ void Renderer::end_frame() {
 // IRenderer Interface Implementations
 // ============================================================================
 
+void Renderer::copy_scaled(SDL_Texture* tex, const SDL_Rect* src, const SDL_Rect* dst, int32_t own_alpha) {
+    const bool scaled = alpha_scale_ != 255;
+    if (scaled) SDL_SetTextureAlphaMod(tex, scaled_alpha(static_cast<uint8_t>(own_alpha)));
+    SDL_RenderCopy(renderer_, tex, src, dst);
+    if (scaled) SDL_SetTextureAlphaMod(tex, static_cast<uint8_t>(own_alpha));
+}
+
 void Renderer::draw_sprite(uint32_t sprite_id, int32_t x, int32_t y, bool mirrored) {
     if (!renderer_ || !texture_cache_ || !archive_) return;
     SDL_Texture* tex = texture_cache_->get_sprite_texture(sprite_id, mirrored, hud_team_id_);
@@ -1088,11 +1095,11 @@ void Renderer::draw_sprite(uint32_t sprite_id, int32_t x, int32_t y, bool mirror
         // Clip top 3 rows and align at y = 163 to perfectly match butdef1a/2a without vertical jump or flash.
         SDL_Rect src = { 0, 3, static_cast<int>(sp.width), static_cast<int>(sp.height) - 3 };
         const SDL_Rect dst = placed(x, 163, static_cast<int>(sp.width), static_cast<int>(sp.height) - 3);
-        SDL_RenderCopy(renderer_, tex, &src, &dst);
+        copy_scaled(tex, &src, &dst);
         return;
     }
     const SDL_Rect dst = placed(x, y, static_cast<int>(sp.width), static_cast<int>(sp.height));
-    SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+    copy_scaled(tex, nullptr, &dst);
 }
 
 // A part of a sprite, scaled to a rectangle (IRenderer::draw_sprite_region): the frame of the match screen is drawn in parts, and a part that is one column or one row wide is
@@ -1103,7 +1110,7 @@ void Renderer::draw_sprite_region(uint32_t sprite_id, int32_t x, int32_t y, int3
     if (!tex) return;
     const SDL_Rect src = {sx, sy, sw, sh};
     const SDL_Rect dst = placed(x, y, w, h);
-    SDL_RenderCopy(renderer_, tex, &src, &dst);
+    copy_scaled(tex, &src, &dst);
 }
 
 void Renderer::draw_rgba_image(int32_t x, int32_t y, int32_t w, int32_t h, const uint8_t* rgba) {
@@ -1139,7 +1146,7 @@ void Renderer::draw_rgba_blended(int32_t x, int32_t y, int32_t w, int32_t h, con
         it = blend_textures_.emplace(key, tex).first;
     }
     const SDL_Rect dst = placed(x, y, w, h);
-    SDL_RenderCopy(renderer_, it->second, nullptr, &dst);
+    copy_scaled(it->second, nullptr, &dst);
 }
 
 void Renderer::draw_named_sprite(const std::string& name, int32_t x, int32_t y, bool mirrored) {
@@ -1153,6 +1160,7 @@ void Renderer::draw_named_sprite(const std::string& name, int32_t x, int32_t y, 
 
 void Renderer::fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) {
     if (!renderer_) return;
+    color.a = scaled_alpha(color.a);
     if (color.a < 255) {
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     }
@@ -1177,6 +1185,7 @@ void Renderer::clear_clip_rect() {
 
 void Renderer::draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) {
     if (!renderer_) return;
+    color.a = scaled_alpha(color.a);
     if (color.a < 255) {
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     }

@@ -7,7 +7,7 @@ about it without a browser is checked:
     picture's box: it is not the game's touch, and it goes with the stage into the browser's fullscreen);
   - the script: RUNS with fakes for the page (node, when it is installed: tests/scripts/web_countdown_check.js): shown only while the game says that a countdown runs, over the game's place, kept inside
     the picture, one request for fullscreen per click, hidden in fullscreen, and the poll;
-  - the exports: the page reads only the game's `_ants_probe`, whose codes 60 - 65 (the seconds left, the button's place, the lines of the chat log) the game answers;
+  - the exports: the page reads only the game's `_ants_probe`, whose codes 60 - 69 (the seconds left, the button's place, the lines of the chat log, the card's level, its bottom, the bottom of what is above the button, its width) the game answers;
   - the browser check (tests/scripts/web_countdown_check.py, opt-in: tests/scripts/test_web_countdown.sh): its command line and its skip without a page.
 """
 import os
@@ -90,12 +90,12 @@ class TheScript(unittest.TestCase):
 
     def test_the_game_answers_the_probes_the_script_reads(self):
         source = read(APPLICATION)
-        self.assertIn("case 60: case 61: case 62: case 63: case 64: case 65: return g_web_app->countdown_probe(what);", source)
+        for code in range(60, 70):
+            self.assertRegex(source, r"case %d:[^\n]*countdown_probe\(what\)" % code)
         net = read(os.path.join(REPO, "src", "ants_app", "application_net.cpp"))
-        for code in range(60, 66):
+        for code in range(60, 70):
             self.assertRegex(net, r"case %d: return " % code)
-        self.assertRegex(self.script, r"ask\(60\)")
-        for code in (61, 62, 63, 64):
+        for code in (60, 61, 62, 63, 64, 66, 67, 68, 69):
             self.assertRegex(self.script, r"ask\(%d\)" % code)
 
 

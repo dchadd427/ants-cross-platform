@@ -1061,7 +1061,7 @@ void test_countdown_card(const assets::AssetArchive& arc) {
     std::printf("[hud] the countdown card of a room of two or more people\n");
     // the layout: 400 x 346 in the middle of the map view, everything inside the card, whatever the view's shape
     for (const LayoutRect& view : {LayoutRect{16, 21, 442, 440}, LayoutRect{17, 20, 762, 500}, LayoutRect{17, 20, 1062, 500}, LayoutRect{0, 0, 300, 300}}) {
-        const CountdownCardLayout l = countdown_card_layout(view);
+        const ClassicCountdownLayout l = classic_countdown_layout(view);
         check(l.card.w == 400 && l.card.h == 346, "countdown: the card is 400 x 346");
         if (view.w > 400 && view.h > 346) {
             check(l.card.x == view.x + (view.w - 400) / 2 && l.card.y == view.y + (view.h - 346) / 2, "countdown: the card is in the middle of the map view");
@@ -1095,7 +1095,7 @@ void test_countdown_card(const assets::AssetArchive& arc) {
         check(hud.is_match_start_modal_active() && hud.is_match_countdown_active() && hud.is_modal_open() && hud.chat_takes_text(), "countdown: it is the start dialog, and the chat takes text behind it");
         ViewportCamera camera;
         hud.render(rr, arc, world, camera);
-        const CountdownCardLayout l = countdown_card_layout(hud.layout().view());
+        const ClassicCountdownLayout l = classic_countdown_layout(hud.layout().view());
         bool clay = false;
         bool frame = false;
         for (const auto& f : rr.fills) {
@@ -1128,7 +1128,7 @@ void test_countdown_card(const assets::AssetArchive& arc) {
     // one person alone (a computer player beside, or nobody): the same card, the count and the Fullscreen button, the colors that play, and a line of its own where two or more people are told to say hello
     {
         const std::array<CountdownSeat, 4> alone = {CountdownSeat{true, false, "Juniper"}, CountdownSeat{true, true, "Pip (bot, Hard)"}, CountdownSeat{}, CountdownSeat{}};
-        const auto line_at_hint = [&](bool chat, const std::array<CountdownSeat, 4>& who, uint8_t me, const CountdownCardLayout& expect_l, bool& found_card) {
+        const auto line_at_hint = [&](bool chat, const std::array<CountdownSeat, 4>& who, uint8_t me, const ClassicCountdownLayout& expect_l, bool& found_card) {
             RecordingRenderer rr(arc);
             sim::WorldState world;
             HUD hud;
@@ -1137,7 +1137,7 @@ void test_countdown_card(const assets::AssetArchive& arc) {
             hud.start_match_countdown(10000, who);
             ViewportCamera camera;
             hud.render(rr, arc, world, camera);
-            const CountdownCardLayout l = countdown_card_layout(hud.layout().view());
+            const ClassicCountdownLayout l = classic_countdown_layout(hud.layout().view());
             found_card = l.card.x == expect_l.card.x && find(rr, "10") != nullptr && find(rr, "seconds to the start") != nullptr && find(rr, "Fullscreen") != nullptr;
             for (const auto& t : rr.texts) {
                 if (t.y == l.hint_y && t.size == FontSize::Px18) return t.text;
@@ -1146,7 +1146,7 @@ void test_countdown_card(const assets::AssetArchive& arc) {
         };
         HUD probe;
         probe.init(0);
-        const CountdownCardLayout pl = countdown_card_layout(probe.layout().view());
+        const ClassicCountdownLayout pl = classic_countdown_layout(probe.layout().view());
         bool card_alone = false;
         bool card_group_chat = false;
         bool card_group_quiet = false;
@@ -1285,5 +1285,202 @@ void test_countdown_card(const assets::AssetArchive& arc) {
         ViewportCamera camera;
         hud.render(rr, arc, world, camera);
         check(find(rr, "Do you really want to quit?") != nullptr && find(rr, "Get ready to play!") == nullptr, "countdown: the quit dialog is drawn in place of the card");
+    }
+}
+
+// The new countdown card's geometry (countdown_card.hpp): 480 x 236 units at a scale that makes a unit a whole number of device pixels, inside the map view, rows in one list, what is above the button
+void test_countdown_card_geometry() {
+    std::printf("[hud] the new countdown card: its scale, its rows and its places\n");
+    const LayoutRect wide{17, 20, 762, 500};                                  // the map view of 960 x 540
+    const double outputs[] = {1.0, 4.0 / 3.0, 2.0, 8.0 / 3.0, 4.0, 2.108, 3.0};
+    for (const double s : outputs) {
+        const CountdownCardScale scale = countdown_card_scale(wide, 540, s);
+        const double device_per_unit = scale.f * s;
+        check(std::fabs(device_per_unit - std::round(device_per_unit)) < 1e-9 && device_per_unit >= 1.0, "card scale at " + std::to_string(s) + ": a unit is a whole number of device pixels (" + std::to_string(device_per_unit) + ")");
+        check(scale.sheet == std::min<int32_t>(3, static_cast<int32_t>(std::lround(device_per_unit))), "card scale at " + std::to_string(s) + ": the sheet is the device pixels to a unit, at most 3");
+        check(480 * scale.f <= wide.w + 1e-9 && 236 * scale.f <= wide.h + 1e-9, "card scale at " + std::to_string(s) + ": the card lies inside the map view");
+        check(static_cast<int32_t>(std::floor(540.0 * s / 360.0 + 1e-6)) == static_cast<int32_t>(std::lround(device_per_unit)), "card scale at " + std::to_string(s) + ": 360 units on the picture's shorter side");
+    }
+    check(countdown_card_scale(wide, 540, 4.0 / 3.0).f == 1.5 && countdown_card_scale(wide, 540, 2.0).f == 1.5 && countdown_card_scale(wide, 540, 1.0).f == 1.0, "card scale: 2 device pixels to a unit at 720p, 3 at 1080p");
+    {   // a view that is too small for one device pixel to the unit shrinks the card to the view
+        const LayoutRect small{0, 0, 300, 300};
+        const CountdownCardScale scale = countdown_card_scale(small, 480, 1.0);
+        const CountdownCard card = countdown_card(small, scale, 4);
+        check(scale.f < 1.0 && card.card.w <= 300 && card.card.h <= 300 && card.card.x == 0, "card scale: a view that is smaller than the card holds the whole card");
+    }
+    for (const double s : {1.0, 4.0 / 3.0, 2.0}) {
+        for (size_t rows = 0; rows <= 4; ++rows) {
+            const CountdownCardScale scale = countdown_card_scale(wide, 540, s);
+            const CountdownCard c = countdown_card(wide, scale, rows);
+            const std::string at = "card at " + std::to_string(s) + " with " + std::to_string(rows) + " rows: ";
+            check(c.card.x >= wide.x && c.card.right() <= wide.right() && c.card.y >= wide.y && c.card.bottom() <= wide.bottom(), at + "inside the map view");
+            check(std::abs(c.card.x + c.card.w / 2 - (wide.x + wide.w / 2)) <= 1 && c.card.y - wide.y < wide.bottom() - c.card.bottom(), at + "in the middle across and a little above the middle");
+            bool ok = true;
+            for (size_t i = 0; i < rows; ++i) {
+                const LayoutRect& r = c.row[i];
+                ok = ok && r.x >= c.card.x && r.right() <= c.card.right() && r.y >= c.well.y - 4 * c.scale.f - 1 && r.bottom() <= c.well.bottom() + 6 * c.scale.f + 1 && c.dot[i].x >= r.x && c.dot[i].right() <= r.right() && c.dot[i].y >= r.y && c.dot[i].bottom() <= r.bottom();
+                if (i > 0) ok = ok && r.y > c.row[i - 1].bottom() && r.x == c.row[i - 1].x && r.w == c.row[i - 1].w;
+                ok = ok && c.row_y[i] == (i == 0 ? c.row_y[0] : c.row_y[i - 1] + kCardRowH + kCardRowGap);
+            }
+            check(ok, at + "the rows are one list, 9 units apart, each with its square inside, beside the well");
+            check(c.well.right() < c.row[0].x || rows == 0, at + "the well is at the left of the list");
+            check(c.button.x >= c.card.x && c.button.right() <= c.card.right() && c.button.bottom() <= c.card.bottom() && c.button.y > c.content.bottom() - 1 - static_cast<int32_t>(3 * c.scale.f), at + "the button is inside the card and below the rows");
+            check(c.content.bottom() <= c.button.y + 1 && c.content.y == c.card.y, at + "what is above the button ends above it");
+        }
+    }
+    // a row's words: the player's own is the ping to the server, another person's the channel's round trip, a computer player's level is its tag, a game on this computer says no number
+    {
+        CountdownSeat me{true, false, "Ana", net::PeerLink::None, 38, true};
+        const CountdownRowWords a = countdown_row_words(me, true, "Green");
+        check(a.name == "Ana (you)" && a.tag == "server" && a.ping == "38 ms", "row words: yourself, the ping to the server");
+        const CountdownRowWords b = countdown_row_words(CountdownSeat{true, false, "Bea", net::PeerLink::Direct, 24, true}, false, "Red");
+        check(b.name == "Bea" && b.tag == "direct" && b.ping == "24 ms", "row words: another person over a direct channel");
+        check(countdown_row_words(CountdownSeat{true, false, "Cy", net::PeerLink::Relay, 118, true}, false, "Blue").tag == "relay", "row words: ... over the relay");
+        const CountdownRowWords d = countdown_row_words(CountdownSeat{true, false, "Di", net::PeerLink::None, -1, true}, false, "Black");
+        check(d.tag == "in" && d.ping == "-- ms", "row words: a person with no channel yet: in, and no number");
+        const CountdownRowWords e = countdown_row_words(CountdownSeat{true, true, "Pip (bot, Hard)", net::PeerLink::None, -1, false}, false, "Blue");
+        check(e.name == "Pip" && e.tag == "bot, Hard" && e.ping.empty(), "row words: a computer player: its level is the small word, no number");
+        check(countdown_row_words(CountdownSeat{true, true, "Odd", net::PeerLink::None, -1, false}, false, "Blue").tag == "bot", "row words: a computer player with no level in its name says bot");
+        const CountdownRowWords f = countdown_row_words(CountdownSeat{true, false, "", net::PeerLink::None, -1, false}, false, "Red");
+        check(f.name == "Red" && f.tag == "in" && f.ping.empty(), "row words: no name is the color; a game on this computer shows no number");
+        check(countdown_row_words(CountdownSeat{true, false, "X", net::PeerLink::Direct, 123456, true}, false, "Red").ping == "999 ms", "row words: a number is cut at 999 ms");
+        check(ping_color(79).g == 240 && ping_color(80).r == 246 && ping_color(149).r == 246 && ping_color(150).r == 255 && ping_color(-1).r == 168, "the colors of a number: green under 80, gold under 150, red from there, gray for none");
+    }
+}
+
+// The classic card in a game over the network: the number stands above the small word of each person's row, in the color of its quality
+void test_countdown_classic_pings(const assets::AssetArchive& arc) {
+    std::printf("[hud] the classic countdown card's numbers\n");
+    std::array<CountdownSeat, 4> seats{};
+    seats[0] = CountdownSeat{true, false, "Juniper", net::PeerLink::None, 38, true};
+    seats[1] = CountdownSeat{true, false, "Sam", net::PeerLink::Relay, 236, true};
+    seats[2] = CountdownSeat{true, false, "Maple", net::PeerLink::None, -1, true};
+    seats[3] = CountdownSeat{true, true, "Pip (bot, Hard)", net::PeerLink::None, -1, false};
+    RecordingRenderer rr(arc);
+    sim::WorldState world;
+    HUD hud;
+    hud.init(0);
+    hud.start_match_countdown(28000, seats);
+    ViewportCamera camera;
+    hud.render(rr, arc, world, camera);
+    const auto find = [&](const std::string& text) -> const RecordingRenderer::Text* {
+        for (const auto& t : rr.texts) {
+            if (t.text == text) return &t;
+        }
+        return nullptr;
+    };
+    const ClassicCountdownLayout l = classic_countdown_layout(hud.layout().view());
+    const auto* mine = find("38 ms");
+    const auto* far_one = find("236 ms");
+    const auto* none = find("-- ms");
+    check(mine != nullptr && mine->color.g == 240 && mine->y >= l.seat[0].y && mine->y < l.seat[0].y + 14, "classic card: your row has your ping in green above its small word");
+    check(far_one != nullptr && far_one->color.r == 255 && far_one->color.g == 149 && find("relay") != nullptr && find("relay")->y > far_one->y, "classic card: a poor number is red and the channel's word is under it");
+    check(none != nullptr && none->color.r == 168 && find("server") != nullptr && find("in") != nullptr, "classic card: a person with no number says -- ms in gray, your own row says server");
+    size_t numbers = 0;
+    for (const auto& t : rr.texts) numbers += t.text.size() > 3 && t.text.compare(t.text.size() - 3, 3, " ms") == 0 ? 1u : 0u;
+    check(numbers == 3 && find("bot") != nullptr, "classic card: a computer player has no number");
+}
+
+// Looking round the map in the countdown (docs/VIEW_AND_HUD.md "The countdown card"): the camera moves, nothing is picked and nothing is ordered
+void test_countdown_look_around() {
+    std::printf("[hud] looking round in the countdown: the view moves, nothing is picked or ordered\n");
+    const std::array<CountdownSeat, 4> seats = {CountdownSeat{true, false, "Juniper"}, CountdownSeat{true, false, "Sam"}, CountdownSeat{}, CountdownSeat{}};
+    struct CountingSink : sim::CommandSink {
+        int submitted{0};
+        sim::CommandResult submit(const sim::Command&) override { ++submitted; return sim::CommandResult{}; }
+    };
+    const auto rig_with_ant = [&](sim::SimulationEngine& sim, ViewportCamera& camera, HUD& hud, int32_t& sx, int32_t& sy) {
+        sim.init_test_world(60, 60, 1, 600000);
+        const uint32_t id = sim.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{30, 30});
+        hud.init(0);
+        hud.set_sim_query(&sim);
+        camera.set_view(hud.layout().view());
+        camera.centre_small_maps = false;
+        camera.center_on(30 * 32 + 16, 30 * 32 + 16, 60, 60);                 // (a tile is 32 world pixels: the middle of the ant's)
+        for (const auto& a : sim.get_world_state().ants) {
+            if (a.id == id) return camera.world_to_screen(a.px, a.py, sx, sy);
+        }
+        return false;
+    };
+    {   // a press on the map takes hold of the ground: the view follows the pointer, nothing is picked, nothing is ordered
+        sim::SimulationEngine sim;
+        ViewportCamera camera;
+        HUD hud;
+        CountingSink sink;
+        int32_t sx = 0;
+        int32_t sy = 0;
+        check(rig_with_ant(sim, camera, hud, sx, sy), "look round: (an own ant on the screen)");
+        hud.set_command_sink(&sink);
+        // the control: without the card the same click picks the ant
+        hud.handle_mouse_down(sx, sy, SDL_BUTTON_LEFT, sim, camera);
+        hud.handle_mouse_up(sx, sy, SDL_BUTTON_LEFT, sim, camera);
+        check(hud.get_selected_ant_ids().size() == 1 || hud.get_selected_ant_id() != 0u, "look round: (control) outside the countdown a click on an own ant picks it");
+        hud.init(0);
+        hud.start_match_countdown(30000, seats);
+        check(hud.countdown_takes_camera() && hud.view_zoom_allowed() && hud.view_gesture_allowed(), "look round: the card lets the wheel and two fingers through");
+        const float x0 = camera.x;
+        const float y0 = camera.y;
+        check(hud.handle_mouse_down(sx, sy, SDL_BUTTON_LEFT, sim, camera) && hud.is_looking(), "look round: a press on the map takes hold of the ground");
+        hud.handle_mouse_motion(sx - 50, sy - 20, sim, camera);
+        check(camera.x > x0 && camera.y > y0 && camera.x - x0 > 20.0f, "look round: dragged left and up, the view moves right and down (the ground follows the pointer)");
+        hud.handle_mouse_motion(sx - 50, sy - 20, sim, camera);
+        const float held_x = camera.x;
+        hud.handle_mouse_motion(sx, sy, sim, camera);
+        check(camera.x < held_x, "look round: dragged back, the view comes back");
+        hud.handle_mouse_up(sx, sy, SDL_BUTTON_LEFT, sim, camera);
+        check(!hud.is_looking() && hud.get_selected_ant_ids().empty() && hud.get_selected_ant_id() == 0u && sink.submitted == 0 && hud.is_match_countdown_active(), "look round: the release picks nothing, orders nothing, and the card stays");
+        // a motion with no button moves nothing
+        const float rest_x = camera.x;
+        hud.handle_mouse_motion(sx - 90, sy, sim, camera);
+        check(camera.x == rest_x, "look round: a pointer that moves with no button held does not move the view");
+        // other buttons and keys: nothing of the match, no view either (arrow keys do not scroll the game)
+        hud.handle_mouse_down(sx, sy, SDL_BUTTON_RIGHT, sim, camera);
+        hud.handle_mouse_up(sx, sy, SDL_BUTTON_RIGHT, sim, camera);
+        hud.handle_key_down(SDLK_LEFT, sim, camera, 0, false);
+        hud.handle_key_down(SDLK_a, sim, camera, KMOD_CTRL, false);
+        hud.handle_key_down('1', sim, camera, KMOD_CTRL, false);
+        check(camera.x == rest_x && sink.submitted == 0 && hud.get_selected_ant_ids().empty() && hud.get_selected_ant_id() == 0u, "look round: the right button, the arrow keys, Ctrl+A and the group keys do nothing");
+        // the pointer over the map is the plain arrow, never a crosshair
+        check(hud.evaluate_cursor(sx, sy, sim.get_world_state(), sim.grid(), camera) == CursorType::Normal, "look round: the pointer over the map is the arrow");
+        // a dialog over the card is a dialog: the wheel and the fingers wait
+        hud.open_quit_dialog();
+        check(!hud.countdown_takes_camera() && !hud.view_zoom_allowed() && !hud.view_gesture_allowed(), "look round: the quit dialog over the card takes the view back");
+    }
+    {   // the minimap: the left button held on it moves the view (the application steps it every 50 ms: input_tick)
+        sim::SimulationEngine sim;
+        ViewportCamera camera;
+        HUD hud;
+        int32_t sx = 0;
+        int32_t sy = 0;
+        rig_with_ant(sim, camera, hud, sx, sy);
+        hud.start_match_countdown(30000, seats);
+        const LayoutRect mini = hud.layout().minimap();
+        const float x0 = camera.x;
+        hud.handle_mouse_down(mini.x + 3, mini.y + 3, SDL_BUTTON_LEFT, sim, camera);
+        check(hud.is_input_captured() && hud.input_tick(camera, 60, 60, mini.x + 3, mini.y + 3) && camera.x < x0, "look round: the minimap held in its corner moves the view there");
+        hud.handle_mouse_up(mini.x + 3, mini.y + 3, SDL_BUTTON_LEFT, sim, camera);
+        check(!hud.is_input_captured(), "look round: ... and the release lets go");
+        // the edge of the picture scrolls as in the match
+        const float x1 = camera.x;
+        check(hud.input_tick(camera, 60, 60, hud.layout().width - 1, hud.layout().height / 2) && camera.x > x1, "look round: the pointer at the picture's right edge scrolls the view");
+    }
+    {   // a drag that the first turn finds still held is nobody's click: the release must not pick the ant under it
+        sim::SimulationEngine sim;
+        ViewportCamera camera;
+        HUD hud;
+        CountingSink sink;
+        int32_t sx = 0;
+        int32_t sy = 0;
+        rig_with_ant(sim, camera, hud, sx, sy);
+        hud.set_command_sink(&sink);
+        hud.start_match_countdown(30000, seats);
+        hud.handle_mouse_down(sx, sy, SDL_BUTTON_LEFT, sim, camera);
+        hud.dismiss_match_start_modal();
+        check(!hud.is_looking(), "first turn: the held drag is let go");
+        hud.handle_mouse_up(sx, sy, SDL_BUTTON_LEFT, sim, camera);
+        check(hud.get_selected_ant_ids().empty() && hud.get_selected_ant_id() == 0u && sink.submitted == 0, "first turn: the release of that drag picks nothing");
+        hud.handle_mouse_down(sx, sy, SDL_BUTTON_LEFT, sim, camera);
+        hud.handle_mouse_up(sx, sy, SDL_BUTTON_LEFT, sim, camera);
+        check(hud.get_selected_ant_ids().size() == 1 || hud.get_selected_ant_id() != 0u, "first turn: the next click is the match's: it picks the ant");
     }
 }

@@ -41,6 +41,7 @@
 #include "ants_app/fps_overlay.hpp"
 #include "ants_app/game_menu.hpp"
 #include "ants_app/health_changes.hpp"
+#include "ants_app/connections_overlay.hpp"
 #include "ants_app/latency_corner.hpp"
 #include "ants_app/local_teams.hpp"
 #include "ants_app/midi_player.hpp"
@@ -606,6 +607,10 @@ public:
     bool pointer_outside() const noexcept { return pointer_outside_; }
     /// Where the last frame put the network's ping and delay (none when it drew none: a game of one machine, a screen without the readout); for the tests
     const std::optional<LatencyCornerLayout>& last_latency_layout() const noexcept { return last_latency_layout_; }
+    /// The list of connections of a match of a network game (connections_overlay.hpp): open or not, and the rectangle of the corner's "ping" text that opens and closes it (empty when the corner shows none)
+    bool connections_open() const noexcept { return connections_open_; }
+    const LayoutRect& connections_hit() const noexcept { return connections_hit_; }
+    std::array<CountdownSeat, 4> connection_seats() const;  // who plays and how this machine is connected to each (the card's rows, and the list's, in the match)
     /// The line that a match of the network shows at the top of the playfield right now (an empty text: nothing, and always for a game that is not a match of the network): the one that
     /// render_net_overlay draws, from what the network layer reports. Public for the tests (the seconds before the first turn of a match must say nothing)
     NetOverlayLine net_overlay_now() const;
@@ -742,6 +747,10 @@ private:
     float replay_speed_{1.0f};
     AutoCamera auto_camera_;                              // the camera of a replay (auto_camera.hpp): Auto locks on the biggest action and follows it, Manual leaves the view where the viewer put it
     int camera_taken_{0};                                 // how many times the viewer has taken the camera from Auto (ReplayValue::CameraTaken)
+    bool look_seen_{false};                               // track_look_around: the view's place at the last frame of the countdown card
+    float look_x_{0.0f};
+    float look_y_{0.0f};
+    float look_zoom_{0.0f};
     float camera_zoom_seen_{0.0f};                        // the zoom of the last frame: a change keeps Auto, at the viewer's zoom
     double camera_pan_px_{0.0};                           // what two fingers have panned lately (a pinch drifts a pixel or two: that is not taking the camera)
     double camera_pan_at_ms_{0.0};
@@ -794,6 +803,9 @@ private:
     double held_since_ms_{-1.0};                          // net_time_ms_ when the match began to be held on this screen (a seat missing, or the countdown after a pause): -1 when it is not (track_net_state)
     std::vector<net::PauseInfo::Seat> prev_missing_;      // the seats that were missing at the last look: who came back when the list empties
     std::string back_name_;                               // the seat that came back, while the countdown that follows its return runs ("" when nobody did)
+    bool connections_open_{false};                        // the list of connections is on the screen (a click on the corner's ping text toggles it)
+    LayoutRect connections_hit_{};                        // the corner's ping text, a little larger, as the last frame drew it (empty: no corner in this frame)
+    bool connections_press_{false};                       // a left press went down on that text (its release inside is the toggle)
     uint8_t vote_press_{0};                               // a left press went down on a button of the vote block: 1 keep waiting, 2 go on without the seat (its release is the choice)
     bool catch_up_backlog_{false};                        // this machine has caught up: the sounds that the engine queued meanwhile are dropped with the first live tick (post_tick)
     std::string net_notice_;
@@ -901,6 +913,8 @@ private:
     bool handle_vote_key(const SDL_KeyboardEvent& key);   // F2 / F3 while a vote is open
     bool handle_vote_mouse(const SDL_MouseButtonEvent& button);   // a click on a button of the vote block
     void render_latency_corner(int32_t version_x, int32_t text_y, const CornerPlate& plate);       // "ping NN ms" / "delay NN ms" next to the frame rate, in a room and a match of a network game
+    void render_connections();                            // the list of connections over the map view of a match of a network game, when it is open (connections_overlay.hpp)
+    bool handle_connections_mouse(const SDL_MouseButtonEvent& button);   // a press and a release on the corner's ping text open and close the list (nothing of it reaches the map)
     std::optional<LatencyCornerLayout> last_latency_layout_;                                         // where the last frame put the network's readout (none: it drew none)
     void apply_team_names(const std::array<std::string, 4>& names, uint8_t roster);   // simulation texts, HUD labels, results rows
 
@@ -959,6 +973,7 @@ private:
     bool presentation_hidden_{false};                     // macOS: the game has made the Dock and the menu bar leave the fullscreen Space that the window is in (update_mouse_grab gives them back)
 #endif
     bool button_outside_window(const SDL_MouseButtonEvent& button) const;   // the position SDL delivered (before the clamp) lies outside the window, not merely the picture
+    void track_look_around();                             // the countdown card: when the view moved since the last frame the card turns see-through (application_view.cpp)
     void update_auto_camera(float dt);                    // a replay's frame: the camera model moves the view (Auto) and the minimap's ring shows the busiest place (application_view.cpp)
     void take_camera();                                   // the viewer moved the view by hand (the edge of the screen, the minimap, two fingers): Manual
     void show_start_view();                               // the view at the start of a match: scrolled just far enough to show the square around the hill's anchor tile

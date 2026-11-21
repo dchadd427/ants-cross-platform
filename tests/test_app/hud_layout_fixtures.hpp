@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <string>
 #include <vector>
+#include "ants_app/connections_overlay.hpp"
 #include "ants_app/fps_overlay.hpp"
 #include "ants_app/hud.hpp"
 #include "ants_app/latency_corner.hpp"
@@ -172,6 +173,7 @@ void test_held_keys_on_original_screens();
 void test_button_zones(const assets::AssetArchive& arc);
 void test_latency_corner(const assets::AssetArchive& arc);
 void test_net_overlay();
+void test_connections_overlay(const assets::AssetArchive& arc);
 void test_more_button_zones(const assets::AssetArchive& arc);
 void test_pedestal_chains(const assets::AssetArchive& arc);
 void test_pedestal_timeline(const assets::AssetArchive& arc);
@@ -185,5 +187,8 @@ void test_text_sizes(const assets::AssetArchive& arc);
 void test_results_screen(const assets::AssetArchive& arc);
 void test_label_wrap();
 void test_countdown_card(const assets::AssetArchive& arc);
+void test_countdown_card_geometry();
+void test_countdown_classic_pings(const assets::AssetArchive& arc);
+void test_countdown_look_around();
 void test_alliance_dialog_layout(const assets::AssetArchive& arc);
 void test_alliance_answers(const assets::AssetArchive&);

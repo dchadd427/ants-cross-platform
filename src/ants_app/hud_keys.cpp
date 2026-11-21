@@ -12,7 +12,7 @@ namespace ants::app {
 // The INPUT task (0x100ae26, every 50 ms) as far as the view is concerned: FUN_01026aa3 for the edge strips, or, while the left button
 // is held on the minimap, FUN_01009850. The step is in screen pixels (the same distance on the screen at every zoom): the camera moves by step / zoom world pixels.
 bool HUD::input_tick(ViewportCamera& camera, uint32_t map_w, uint32_t map_h, int32_t mouse_x, int32_t mouse_y) {
-    if (is_modal_open() || map_w == 0 || map_h == 0) return false;
+    if ((is_modal_open() && !countdown_takes_camera()) || map_w == 0 || map_h == 0) return false;      // (the countdown card lets the player look around: the edge strips and the minimap work)
     const int32_t rate = options_.state().scroll_speed;       // the profile's Scroll Speed 0 .. 99 (FUN_01027329: the half extent is rate + 10)
     EdgeScroll step;
     if (is_radar_dragging_) {

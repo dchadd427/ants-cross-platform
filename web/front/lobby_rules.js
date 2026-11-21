@@ -466,6 +466,14 @@
         return { kind: kind, text: TEXT[kind](args || {}), tone: meta.tone, btn: meta.btn };
     }
 
+    // ---- the quality of a ping ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    // One scale for every ping that is shown, the same as ping_quality() of include/ants_net/latency.hpp (tests/data/ping_quality_table.json is run through both): 'none' for no number (a negative number, or no
+    // number at all), 'good' under 80 ms, 'fair' under 150 ms, else 'poor'
+    var PING_FAIR_MS = 80, PING_POOR_MS = 150;
+    function pingQuality(ms) {
+        return typeof ms !== 'number' || !(ms >= 0) ? 'none' : ms < PING_FAIR_MS ? 'good' : ms < PING_POOR_MS ? 'fair' : 'poor';
+    }
+
     return {
         READY: READY,
         COLORS: COLORS, GRID: GRID, MAPS: MAPS, DEFAULT_MAP_KEY: DEFAULT_MAP_KEY, KINDS: KINDS, CODE_CHARS: CODE_CHARS, TEXT: TEXT, HINT: HINT, META: META, ACTS: ACTS,
@@ -473,6 +481,6 @@
         levelWord: levelWord, article: article, listOf: listOf, modelOf: modelOf, playing: playing, hostName: hostName, nameOf: nameOf, nameAt: nameAt,
         sidesFix: sidesFix, pairOf: pairOf, shownOf: shownOf, sideOpen: sideOpen, pressSide: pressSide, teamBytes: teamBytes, teamsText: teamsText, reconcileSides: reconcileSides,
         planWith: planWith, withMode: withMode, pendingAfter: pendingAfter, teamNeedsFix: teamNeedsFix, moveOf: moveOf, startsAlone: startsAlone, viewOf: viewOf, sideView: sideView, noticeKind: noticeKind, banner: banner,
-        notBack: notBack, startNote: startNote
+        notBack: notBack, startNote: startNote, pingQuality: pingQuality
     };
 });

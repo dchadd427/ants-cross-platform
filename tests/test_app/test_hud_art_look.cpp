@@ -335,9 +335,11 @@ size_t copies_with_prefix(const ArtSpy& spy, const Art& art, const std::string& 
     return n;
 }
 
-ArtSpy render_once(HudRig& rig, const assets::AssetArchive& arc, bool face = true) {
+ArtSpy render_once(HudRig& rig, const assets::AssetArchive& arc, bool face = true, double output = 1.0) {
     ArtSpy spy(arc);
     spy.dialog_face = face;
+    spy.face_ready = face;
+    spy.output = output;
     rig.hud.render(spy, arc, rig.world(), rig.cam);
     return spy;
 }
@@ -624,32 +626,99 @@ void test_windows_more(const assets::AssetArchive& arc, const Art& art) {
         check(panel_copies(original, art) == 0 && original.blended.size() == 2 /* (the Classic corner's plate and button, no picture of the quick help) */ && [&] { for (const ArtSpy::Ev& e : original.events) if (e.name == "breturn1.bmp" && e.x == 529 && e.y == 437) return true; return false; }(), "quick help without the art: the original's two bitmaps and Return button");
     }
 
-    // ---- the countdown card
+    // ---- the countdown card: the new look (countdown_card.hpp: 480 x 236 units at a scale of its own), the pieces in the card's units, the writing in the game's faces
     {
         HudRig rig(arc, wide);
         rig.hud.set_art(&art);
         std::array<CountdownSeat, 4> seats{};
-        seats[0] = {true, false, "Ann"};
-        seats[1] = {true, false, "Bea"};
-        seats[2] = {true, true, "Pip (bot, Hard)"};
-        seats[3] = {false, false, ""};
+        seats[0] = CountdownSeat{true, false, "Ann", net::PeerLink::None, 38, true};
+        seats[1] = CountdownSeat{true, false, "Bea", net::PeerLink::Direct, 24, true};
+        seats[2] = CountdownSeat{true, true, "Pip (bot, Hard)", net::PeerLink::None, -1, false};
+        seats[3] = CountdownSeat{false, false, ""};
         rig.hud.start_match_countdown(23400, seats);
-        const CountdownCardLayout l = countdown_card_layout(wide.view());
+        const LayoutRect view = wide.view();
+        const CountdownCard c = countdown_card(view, countdown_card_scale(view, wide.height, 1.0), 3);
         const ArtSpy spy = render_once(rig, arc);
-        check(panel_copies(spy, art) > 0 && once_at(spy, art, "cd_title", l.card.x + 77, l.card.y + 20) && once_at(spy, art, "cd_count_box", l.card.x + 114, l.card.y + 79), "countdown: the new panel, the title and the count's box, in the middle of the map view");
-        check(copies_of(spy, art, "cd_seat") == 3 && once_at(spy, art, "cd_dot_0", l.seat[0].x + 9, l.seat[0].y + 8) && once_at(spy, art, "cd_dot_1", l.seat[1].x + 9, l.seat[1].y + 8) &&
-                  once_at(spy, art, "cd_dot_2", l.seat[2].x + 9, l.seat[2].y + 8) && copies_of(spy, art, "cd_dot_3") == 0, "countdown: a row and a color dot for each color that plays, on the card's own seats");
-        check(once_at(spy, art, "dlg_btn_fullscreen_up", l.button.x, l.button.y), "countdown: the native game's Fullscreen button, on the card's place");
-        check(has_text(spy, "24", FontSize::Px96) && has_text(spy, "seconds to the start", FontSize::Px18) && has_text(spy, "Ann (you)", FontSize::Px18) && has_text(spy, "bot", FontSize::Px14), "countdown: the count, the words under it, the names and the tags are the game's own text");
+        check(c.scale.f == 1.0 && c.scale.sheet == 1 && c.card.w == 480 && c.card.h == 236, "countdown: at one device pixel to a canvas pixel the card is 480 x 236, a unit a canvas pixel");
+        check(panel_copies(spy, art) > 0 && once_at(spy, art, "cd_title", c.card.x + 132, c.card.y + 18) && once_at(spy, art, "cd_count_well", c.card.x + 19, c.card.y + 69), "countdown: the panel, the title and the count's well, in the middle of the map view");
+        const std::vector<ArtSpy::Copy> rows = spy.of_sprite(art, "cd_row_well");
+        bool rows_ok = rows.size() == 3;
+        for (size_t i = 0; rows_ok && i < 3; ++i) rows_ok = rows[i].x == c.row[i].x - 5 && rows[i].y == c.row[i].y - 5;
+        check(rows_ok && c.row[1].y - c.row[0].y == 30 && c.row[0].x == c.card.x + 188, "countdown: one well for each color that plays, 30 units apart, in one list");
+        check(once_at(spy, art, "cd_dot_0", c.dot[0].x, c.dot[0].y) && once_at(spy, art, "cd_dot_1", c.dot[1].x, c.dot[1].y) && once_at(spy, art, "cd_dot_2", c.dot[2].x, c.dot[2].y) && copies_of(spy, art, "cd_dot_3") == 0,
+              "countdown: a color square in each well, the colors of the seats that play");
+        check(once_at(spy, art, "dlg_btn_fullscreen_up", c.button.x, c.button.y), "countdown: the native game's Fullscreen button, on the card's place");
+        check(rig.hud.countdown_button_rect() == c.button, "countdown: the button's place is the new card's");
+        const ArtSpy::Face* count = spy.face("24");
+        const ArtSpy::Face* ann = spy.face("Ann (you)");
+        const ArtSpy::Face* ping = spy.face("38 ms");
+        check(count != nullptr && count->em_tenths == 820 && count->color.r == 246 && ann != nullptr && ann->em_tenths == 135 && spy.face("Bea") != nullptr && spy.face("Pip") != nullptr,
+              "countdown: the count and the names are the game's face, at the sizes of the picture (82 and 13.5 units)");
+        check(spy.face("server") != nullptr && spy.face("direct") != nullptr && spy.face("bot, Hard") != nullptr && spy.face("24 ms") != nullptr && ping != nullptr && spy.face("seconds to the start") != nullptr,
+              "countdown: the small words (server for yourself, direct, a computer player's level) and the numbers");
+        check(ping != nullptr && ping->color.g == 240 && spy.face("24 ms")->color.g == 240, "countdown: a number under 80 ms is green");
         bool lines = false;
-        for (const ArtSpy::Line& line : spy.lines) lines = lines || (line.text == "Everybody is in. Say hello in the chat." && line.baseline == l.card.y + 300 && line.em_tenths == 135);
-        check(lines && spy.lines.size() == 2, "countdown: the card's own words (the subtitle and the hint) are in the windows' face");
-        rig.hud.handle_mouse_down(l.button.x + 5, l.button.y + 5, SDL_BUTTON_LEFT, rig.sim, rig.cam);
-        check(once_at(render_once(rig, arc), art, "dlg_btn_fullscreen_down", l.button.x, l.button.y), "countdown: held, the button's pressed picture");
+        for (const ArtSpy::Line& line : spy.lines) lines = lines || (line.text == "Everybody is in. Say hello in the chat." && line.x == c.x(24) && line.baseline == c.y(211) && line.em_tenths == 120);
+        check(lines && spy.lines.size() == 2, "countdown: the card's own words (the subtitle and the hint) are in the windows' face, the hint at the left");
+        check(!spy.sheets.empty() && spy.sheets.front() == c.scale.sheet && spy.sheets.back() == 0, "countdown: the card picks its own sheet and gives the choice back");
+        rig.hud.handle_mouse_down(c.button.x + 5, c.button.y + 5, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+        check(once_at(render_once(rig, arc), art, "dlg_btn_fullscreen_down", c.button.x, c.button.y), "countdown: held, the button's pressed picture");
+        rig.hud.handle_mouse_up(c.button.x + c.button.w + 60, c.button.y + 5, SDL_BUTTON_LEFT, rig.sim, rig.cam);        // (let go away from it)
+        // no face of the game (a renderer that only records): the nearest of the original's sizes
+        const ArtSpy nofont = render_once(rig, arc, false);
+        check(nofont.face_lines.empty() && has_text(nofont, "Ann (you)", FontSize::Px18) && has_text(nofont, "38 ms", FontSize::Px18) && has_text(nofont, "server", FontSize::Px14), "countdown: without the game's face the writing is the original's nearest sizes");
+        // a larger screen: a whole number of device pixels to a unit, the sheet of that number
+        const ArtSpy big = render_once(rig, arc, true, 2.0);
+        const CountdownCard c2 = countdown_card(view, countdown_card_scale(view, wide.height, 2.0), 3);
+        check(c2.scale.f == 1.5 && c2.scale.sheet == 3 && c2.card.w == 720 && c2.card.h == 354, "countdown: at 2 device pixels to a canvas pixel a unit is 3 of them: 1.5 canvas pixels, the 3x sheet");
+        check(!big.sheets.empty() && big.sheets.front() == 3 && once_at(big, art, "dlg_btn_fullscreen_up", c2.button.x, c2.button.y), "countdown: and it is drawn so");
         HudRig plain(arc, wide);
         plain.hud.start_match_countdown(23400, seats);
         const ArtSpy original = render_once(plain, arc);
-        check(panel_copies(original, art) == 0 && !original.of(ArtSpy::Kind::Fill).empty(), "countdown without the art: the original's flat card");
+        check(panel_copies(original, art) == 0 && !original.of(ArtSpy::Kind::Fill).empty() && plain.hud.countdown_button_rect() == classic_countdown_layout(view).button, "countdown without the art: the original's flat card, at its own place");
+    }
+    // the card while the player looks round the map: the panel and its frame fade a lot, the wells, the writing and the button a little, the sentences turn light; solid again after a second
+    {
+        HudRig rig(arc, wide);
+        rig.hud.set_art(&art);
+        std::array<CountdownSeat, 4> seats{};
+        seats[0] = CountdownSeat{true, false, "Ann", net::PeerLink::None, 38, true};
+        seats[1] = CountdownSeat{true, false, "Bea", net::PeerLink::Relay, 118, true};
+        rig.hud.start_match_countdown(23400, seats);
+        const auto alphas = [&](const ArtSpy& spy) {
+            std::pair<int32_t, int32_t> out{-1, -1};
+            const std::vector<ArtSpy::Copy> panel = spy.of_sprite(art, "panel_c");
+            const std::vector<ArtSpy::Copy> well = spy.of_sprite(art, "cd_count_well");
+            if (!panel.empty()) out.first = panel[0].alpha;
+            if (!well.empty()) out.second = well[0].alpha;
+            return out;
+        };
+        check(alphas(render_once(rig, arc)) == std::make_pair(255, 255) && rig.hud.countdown_card_look() == 0, "look round: solid at the start");
+        rig.hud.note_view_moved();
+        rig.hud.update(rig.world(), 2);
+        const std::pair<int32_t, int32_t> see = alphas(render_once(rig, arc));
+        check(rig.hud.countdown_card_look() == 255 && see.first == kCardBackSeeThrough && see.second == kCardFrontSeeThrough, "look round: 100 ms after the view moved the panel shows 34 % of itself and the wells 86 %");
+        const ArtSpy mid = render_once(rig, arc);
+        const ArtSpy::Face* sentence_face = mid.face("38 ms");
+        check(sentence_face != nullptr && sentence_face->alpha == kCardFrontSeeThrough, "look round: the numbers keep 86 % too");
+        rig.hud.note_view_moved();
+        for (int i = 0; i < 19; ++i) rig.hud.update(rig.world(), 1);                      // 0.95 s without a move: still see-through
+        check(rig.hud.countdown_card_look() == 255, "look round: it stays see-through for a second after the view stopped");
+        rig.hud.update(rig.world(), 1);
+        check(rig.hud.countdown_card_look() < 255 && rig.hud.countdown_card_look() > 0, "look round: then it fades back in");
+        for (int i = 0; i < 6; ++i) rig.hud.update(rig.world(), 1);
+        check(rig.hud.countdown_card_look() == 0 && alphas(render_once(rig, arc)) == std::make_pair(255, 255) && rig.hud.countdown_card_opacity() == 255, "look round: solid again 300 ms later");
+        rig.hud.note_view_moved();
+        rig.hud.update(rig.world(), 2);
+        check(rig.hud.countdown_card_opacity() == kCardFrontSeeThrough, "look round: the page's button follows the wells' level");
+        // the classic card is one level, the whole card
+        HudRig plain(arc, wide);
+        plain.hud.start_match_countdown(23400, seats);
+        plain.hud.note_view_moved();
+        plain.hud.update(plain.world(), 2);
+        ArtSpy flat(arc);
+        plain.hud.render(flat, arc, plain.world(), plain.cam);
+        check(std::count(flat.alphas_set.begin(), flat.alphas_set.end(), kClassicCardSeeThrough) == 1 && std::count(flat.alphas_set.begin(), flat.alphas_set.end(), kCardBackSeeThrough) == 0, "look round: the classic card is one level, the whole card");
     }
 
     // ---- the windows' face with the real renderer
@@ -675,6 +744,48 @@ void test_windows_more(const assets::AssetArchive& arc, const Art& art) {
             }
             for (int32_t x = 100; x < 100 + w; ++x) below += px[(static_cast<size_t>(215) * 960u + static_cast<size_t>(x)) * 4u] == 219 ? 0 : 1;
             check(ink > 300 && below == 0, "the real renderer draws the sentence in the dialogs' ink on its baseline (and nothing 15 pixels below it)");
+            // the game's own face at any size (the countdown card writes in it at the card's scale)
+            check(rig.renderer.face_text_ready(), "the real renderer has the game's face");
+            const int32_t fw = rig.renderer.face_text_width("38 ms", 135);
+            check(fw > 15 && rig.renderer.face_text_width("38 ms", 270) > fw * 3 / 2 && rig.renderer.face_text_width("", 135) == 0, "the game's face: a larger size is wider (" + std::to_string(fw) + " at 13.5 pixels), no text no width");
+            rig.renderer.begin_frame();
+            rig.renderer.fill_rect(0, 0, 960, 540, assets::ColorRGBA{20, 20, 20, 255});
+            rig.renderer.draw_face_text("38 ms", 100, 300, assets::ColorRGBA{154, 240, 180, 255}, 135);
+            const std::vector<uint8_t> fpx = rig.read();
+            int lit = 0, under = 0;
+            for (int32_t y = 288; y < 301; ++y) {
+                for (int32_t x = 100; x < 100 + fw; ++x) lit += fpx[(static_cast<size_t>(y) * 960u + static_cast<size_t>(x)) * 4u + 1] > 150 ? 1 : 0;
+            }
+            for (int32_t x = 100; x < 100 + fw; ++x) under += fpx[(static_cast<size_t>(310) * 960u + static_cast<size_t>(x)) * 4u + 1] > 30 ? 1 : 0;
+            check(lit > 20 && under == 0, "the game's face: the line stands on its baseline in its color");
+            // the alpha scale: what is drawn under it keeps that share of its opacity
+            rig.renderer.begin_frame();
+            rig.renderer.fill_rect(0, 0, 960, 540, assets::ColorRGBA{0, 0, 0, 255});
+            rig.renderer.set_alpha_scale(128);
+            rig.renderer.fill_rect(10, 10, 20, 20, assets::ColorRGBA{200, 100, 50, 255});
+            rig.renderer.draw_face_text("38 ms", 100, 300, assets::ColorRGBA{200, 200, 200, 255}, 135);
+            rig.renderer.set_alpha_scale(255);
+            rig.renderer.fill_rect(40, 10, 20, 20, assets::ColorRGBA{200, 100, 50, 255});
+            const std::vector<uint8_t> apx = rig.read();
+            const auto at = [&](int32_t x, int32_t y, size_t c) { return static_cast<int>(apx[(static_cast<size_t>(y) * 960u + static_cast<size_t>(x)) * 4u + c]); };
+            check(std::abs(at(20, 20, 0) - 100) <= 2 && std::abs(at(20, 20, 1) - 50) <= 2 && at(50, 20, 0) == 200, "the alpha scale: a fill under 128 is half of itself over what is behind, after it is whole again");
+            int dim = 0;
+            for (int32_t x = 100; x < 100 + fw; ++x) dim += at(x, 296, 0) > 0 && at(x, 296, 0) <= 130 ? 1 : 0;
+            check(rig.renderer.alpha_scale() == 255 && dim > 0, "the alpha scale: the game's face is dimmed by it too");
+            // a sheet of the card's own choice: the 11 x 11 color square of the first seat drawn at 33 x 33 from the 3x sheet is the sheet's pixels, 3 to a pixel
+            const int32_t dot = art.find_sprite("cd_dot_0");
+            check(dot >= 0, "the color square is in the set");
+            if (dot >= 0) {
+                rig.renderer.begin_frame();
+                rig.renderer.fill_rect(0, 0, 960, 540, assets::ColorRGBA{255, 0, 255, 255});
+                rig.renderer.set_art_scale(3);
+                rig.renderer.draw_art(art, dot, 100, 100, 33, 33, 0, 0, 11, 11);
+                rig.renderer.set_art_scale(0);
+                const std::vector<uint8_t> dpx = rig.read();
+                const auto dc = [&](int32_t x, int32_t y, size_t c) { return static_cast<int>(dpx[(static_cast<size_t>(y) * 960u + static_cast<size_t>(x)) * 4u + c]); };
+                check(std::abs(dc(116, 116, 0) - 63) <= 2 && std::abs(dc(116, 116, 1) - 174) <= 2 && std::abs(dc(116, 116, 2) - 106) <= 2, "the card's sheet: the middle of the square is its color");
+                check(dc(101, 116, 0) < 60 && dc(101, 116, 1) < 60 && std::abs(dc(100 + 4, 116, 0) - 63) <= 2 && dc(100 + 2, 116, 0) < 60 && dc(100 + 36, 116, 0) == 255, "the card's sheet: a dark rim 3 pixels wide, then the color, and nothing outside the 33 x 33");
+            }
             rig.renderer.set_dialog_font_path(art_folder() + "/no_such_face.ttf");
             check(!rig.renderer.dialog_text_ready(), "a face that does not open: no face, the original's text is drawn");
         }

@@ -32,6 +32,9 @@ public:
     /// The next hint message that a peer's channel delivered, with the seat of the channel (the page stamps it; the message's own issuer must agree), if any
     virtual bool poll_hint(uint8_t& from, std::vector<uint8_t>& message) = 0;
     virtual PeerLink link(uint8_t seat) const = 0;
+    /// The round trip in milliseconds to the page of the player of `seat` over the channel (a ping and its echo, web/p2p.js), the mean of the last five answers; -1 when there is no number: no channel, no
+    /// answer for four seconds, or a page that does not answer. A transport with no measurement keeps this answer.
+    virtual int32_t rtt_ms(uint8_t /*seat*/) const noexcept { return -1; }
     /// Closes every channel (the match is over, or the game leaves)
     virtual void close() = 0;
 };

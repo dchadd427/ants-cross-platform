@@ -130,6 +130,8 @@ target_include_directories(test_latency PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
 )
 
+target_link_libraries(test_latency PRIVATE ants_test_paths)
+
 add_test(NAME test_latency COMMAND test_latency)
 
 add_executable(test_jitter

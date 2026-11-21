@@ -509,7 +509,7 @@ bool Renderer::draw_number_text(const std::string& text, int32_t x, int32_t y, i
         const SDL_Rect dst{left - static_cast<int32_t>(std::lround(static_cast<double>(pic->box_x) * k)), mid - pic->box_h / 2 - pic->box_y,
                            static_cast<int32_t>(std::lround(static_cast<double>(pic->w) * k)), pic->h};
         SDL_SetTextureColorMod(pic->texture, color.r, color.g, color.b);
-        SDL_SetTextureAlphaMod(pic->texture, color.a);
+        SDL_SetTextureAlphaMod(pic->texture, scaled_alpha(color.a));              // (under the alpha scale: a window that is see-through takes its numbers with it)
         SDL_RenderCopy(renderer_, pic->texture, nullptr, &dst);
         drawn = true;
     }

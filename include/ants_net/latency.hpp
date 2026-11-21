@@ -28,6 +28,16 @@
 
 namespace ants::net {
 
+/// How good a round trip is, for the colors of the countdown card and the list of connections in a match: one scale for every number that is shown (docs/MULTIPLAYER.md, "Ping and delay").
+/// None: there is no number (-1). The web copy is pingQuality() in web/front/lobby_rules.js; tests/data/ping_quality_table.json is run through both.
+enum class PingQuality : uint8_t { None, Good, Fair, Poor };
+constexpr int32_t kPingFairMs = 80;       // from here on a round trip is fair (a turn is 50 ms; the reasons are in docs/P2P_HINTS.md and docs/MULTIPLAYER.md)
+constexpr int32_t kPingPoorMs = 150;      // from here on it is poor
+/// The quality of a round trip of `ms` milliseconds: a negative number (the readouts say -1 for none) is None, under kPingFairMs Good, under kPingPoorMs Fair, else Poor
+constexpr PingQuality ping_quality(int32_t ms) noexcept {
+    return ms < 0 ? PingQuality::None : ms < kPingFairMs ? PingQuality::Good : ms < kPingPoorMs ? PingQuality::Fair : PingQuality::Poor;
+}
+
 /// The mean of the last N values that were added, rounded to the nearest whole number (halves up). Holds nothing until the first add().
 template <size_t N>
 class MeanWindow {

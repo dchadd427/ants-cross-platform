@@ -42,7 +42,7 @@ bool Application::touch_two_fingers_allowed(double x, double y) const {
 
 // The match is on the screen with nothing over it (no results, no dialog): its HUD holds the presses that a cancel ends. A network match's catch-up screen is this too, though no match is drawn.
 bool Application::touch_match_screen() const {
-    return renderer_ != nullptr && state_ == AppState::Playing && !scorecard_.is_open() && !hud_.is_modal_open();
+    return renderer_ != nullptr && state_ == AppState::Playing && !scorecard_.is_open() && (!hud_.is_modal_open() || hud_.countdown_takes_camera());      // (the countdown card lets the player look around)
 }
 
 // Does the press that a finger made hold something? On the match screen the HUD says: a button, the minimap or the chat log took it, or nothing did (the frame, a blank part of the panel: the

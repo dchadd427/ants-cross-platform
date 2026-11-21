@@ -144,6 +144,8 @@ bool Application::load_match(const std::string& map_path, uint32_t seed, uint8_t
 
 // The moment a match starts for the player: music and the start sound, the HUD, the "get ready" modal, the Playing state.
 void Application::enter_match(bool rejoin) {
+    connections_open_ = false;                                       // (the list of connections is closed in a new match)
+    connections_press_ = false;
     // In-Game Music: Shuffle between ANTS2A, ANTS2B, ANTSFUN3. A match that begins while the page is hidden (a background step) starts no music and no sound effect: the page
     // is not heard; the music starts when it is shown (apply_pending_music). A match that is rejoined is not announced: no start sound, no "Get ready" dialog below.
     if (background_stepping_) {

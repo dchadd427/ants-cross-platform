@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the page's data channels (web/p2p.js; docs/P2P_HINTS.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_p2p_check.js (a fake RTCPeerConnection): the rule of the address (a candidate or an address sent or accepted for a pair that did not both allow direct, the policy, the STUN server, the SDP's candidates and addresses, the related address, the browser's chosen path), the marks, the three copies, the channel that is not open, the heartbeat, the limit of what waits for the game, the seat of a hint, who offers, the retries, the wait for the credential and for readiness, the channel that has said nothing, and the setting.",
+ "note": "Mutants of the page's data channels (web/p2p.js; docs/P2P_HINTS.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_p2p_check.js (a fake RTCPeerConnection): the rule of the address (a candidate or an address sent or accepted for a pair that did not both allow direct, the policy, the STUN server, the SDP's candidates and addresses, the related address, the browser's chosen path), the marks, the three copies, the channel that is not open, the echo (an answer sent, its number, the last five, the rounding, the silence of four seconds, a ping each second on an open channel), the limit of what waits for the game, the seat of a hint, who offers, the retries, the wait for the credential and for readiness, the channel that has said nothing, and the setting.",
  "baseline": {
   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
  },
@@ -226,6 +226,97 @@
    "file": "web/p2p.js",
    "old": "negotiated: true, id: 1,",
    "new": "id: 1,",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "a_ping_is_not_answered",
+   "file": "web/p2p.js",
+   "old": "if (p.dc.readyState === 'open') p.dc.send(new Uint8Array([PONG | n]));",
+   "new": "if (false) p.dc.send(new Uint8Array([PONG | n]));",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "an_answer_carries_no_number",
+   "file": "web/p2p.js",
+   "old": "p.dc.send(new Uint8Array([PONG | n]));",
+   "new": "p.dc.send(new Uint8Array([PONG]));",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "a_message_of_more_than_one_byte_is_answered_as_a_ping",
+   "file": "web/p2p.js",
+   "old": "if (b.length === 1) echo(p, b[0]);",
+   "new": "if (b.length >= 1) echo(p, b[0]);",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "an_answer_to_an_older_ping_is_taken",
+   "file": "web/p2p.js",
+   "old": "p.waiting && n === p.pingN)",
+   "new": "p.waiting)",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "an_answer_that_comes_twice_counts_twice",
+   "file": "web/p2p.js",
+   "old": "kind === PONG && p.waiting && n === p.pingN",
+   "new": "kind === PONG && n === p.pingN",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "the_mean_is_over_the_last_four",
+   "file": "web/p2p.js",
+   "old": "RTT_KEPT = 5",
+   "new": "RTT_KEPT = 4",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "the_mean_is_over_the_last_six",
+   "file": "web/p2p.js",
+   "old": "RTT_KEPT = 5",
+   "new": "RTT_KEPT = 6",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "the_mean_is_cut_instead_of_rounded",
+   "file": "web/p2p.js",
+   "old": "return Math.round(sum / p.rtts.length);",
+   "new": "return Math.floor(sum / p.rtts.length);",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "a_number_is_read_after_the_silence",
+   "file": "web/p2p.js",
+   "old": " || now() - p.answered > SILENT_MS)",
+   "new": ")",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "a_page_with_no_answer_has_a_number",
+   "file": "web/p2p.js",
+   "old": " || !p.rtts.length",
+   "new": "",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "a_ping_goes_out_on_a_channel_that_is_not_open",
+   "file": "web/p2p.js",
+   "old": "if (p.up && p.dc.readyState === 'open') ping(p);",
+   "new": "if (p.up) ping(p);",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "a_ping_goes_out_every_two_seconds",
+   "file": "web/p2p.js",
+   "old": "PING_MS = 1000",
+   "new": "PING_MS = 2000",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "the_ping_numbers_wrap_at_eight",
+   "file": "web/p2p.js",
+   "old": "p.pingN = (p.pingN + 1) & 15;",
+   "new": "p.pingN = (p.pingN + 1) & 7;",
    "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
   }
  ]
