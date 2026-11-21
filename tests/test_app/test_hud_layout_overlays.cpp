@@ -1458,3 +1458,54 @@ void test_alliance_answers(const assets::AssetArchive&) {
               "attack on the ally: Yes sends the break and then the attack");
     }
 }
+
+// The list of connections of a match of a network game (connections_overlay.hpp): the rows, the panel, what is drawn
+void test_connections_overlay(const assets::AssetArchive& arc) {
+    std::printf("[hud] the list of connections in a match\n");
+    std::array<CountdownSeat, 4> seats{};
+    seats[0] = CountdownSeat{true, false, "Juniper", net::PeerLink::None, 38, true};
+    seats[1] = CountdownSeat{true, false, "Sam", net::PeerLink::Direct, 24, true};
+    seats[2] = CountdownSeat{true, false, "Maple", net::PeerLink::Relay, 236, true};
+    seats[3] = CountdownSeat{true, true, "Pip (bot, Hard)", net::PeerLink::None, -1, false};
+    const std::vector<ConnectionRow> rows = connection_rows(seats, 0);
+    check(rows.size() == 4, "connections: a row for each color that plays");
+    check(rows.size() == 4 && rows[0].name == "Juniper (you)" && rows[0].tag == "server" && rows[0].ping == "38 ms" && rows[0].color.g == 240, "connections: your own row is your ping to the server, green under 80 ms");
+    check(rows.size() == 4 && rows[1].tag == "direct" && rows[1].ping == "24 ms" && rows[2].tag == "relay" && rows[2].ping == "236 ms" && rows[2].color.r == 255 && rows[2].color.g == 149, "connections: another person's row is the channel's round trip, red from 150 ms");
+    check(rows.size() == 4 && rows[3].name == "Pip" && rows[3].tag == "bot, Hard" && rows[3].ping.empty() && rows[3].color.r == 168, "connections: a computer player has its level and no number, in gray");
+    std::array<CountdownSeat, 4> some = seats;
+    some[1].plays = false;
+    some[2].link = net::PeerLink::None;
+    some[2].ping_ms = -1;
+    const std::vector<ConnectionRow> fewer = connection_rows(some, 2);
+    check(fewer.size() == 3 && fewer[0].name == "Juniper" && fewer[1].name == "Maple (you)" && fewer[1].ping == "-- ms" && fewer[1].tag == "server", "connections: a color that does not play has no row; your own is the one that is yours");
+    const std::vector<ConnectionRow> none = connection_rows(std::array<CountdownSeat, 4>{}, 0);
+    check(none.empty(), "connections: no color plays: no row");
+    // the panel: at the top right of the map view, inside it, as high as its rows need
+    for (const LayoutRect& view : {LayoutRect{17, 20, 762, 500}, LayoutRect{17, 20, 1062, 500}, LayoutRect{16, 21, 442, 440}, LayoutRect{0, 0, 100, 100}}) {
+        for (size_t n = 0; n <= 4; ++n) {
+            const ConnectionsLayout l = connections_layout(view, n);
+            check(l.panel.right() <= view.right() - 10 || view.w < 252, "connections: the panel is 10 pixels from the view's right edge (" + std::to_string(view.w) + " wide, " + std::to_string(n) + " rows)");
+            check(l.panel.y == view.y + 10 && l.panel.x >= view.x, "connections: ... and 10 from its top edge, never left of it");
+            check(l.first_row_y > l.title_y && l.note_y >= l.first_row_y + static_cast<int32_t>(n) * l.row_pitch && l.note_y + 30 <= l.panel.bottom(), "connections: the title, the rows and the note stand in order inside the panel");
+        }
+        check(connections_layout(view, 4).panel.h > connections_layout(view, 1).panel.h, "connections: more rows make it taller");
+    }
+    // what is drawn: the title, a square and the words of each row, the note; and no address, ever
+    RecordingRenderer rr(arc);
+    const ConnectionsLayout l = connections_layout(LayoutRect{17, 20, 762, 500}, rows.size());
+    draw_connections(rr, l, rows);
+    const auto has = [&](const std::string& text) {
+        for (const auto& t : rr.texts) {
+            if (t.text == text) return true;
+        }
+        return false;
+    };
+    check(has("Connections") && has("Juniper (you)") && has("Sam") && has("Maple") && has("Pip") && has("38 ms") && has("24 ms") && has("236 ms") && has("server") && has("direct") && has("relay") && has("bot, Hard"), "connections: the title and every row's words are drawn");
+    check(has("you: to the server") && has("others: to them, relay or direct"), "connections: the note says what the numbers are");
+    bool inside = true;
+    for (const auto& t : rr.texts) inside = inside && t.x >= l.panel.x && t.x < l.panel.right() && t.y >= l.panel.y && t.y < l.panel.bottom();
+    check(inside, "connections: every text stands inside the panel");
+    size_t squares = 0;
+    for (const auto& f : rr.fills) squares += f.w == 7 && f.h == 7 ? 1u : 0u;
+    check(squares == 4, "connections: a square for each row");
+}

@@ -294,6 +294,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
     hatch_button_.is_pressed = false;
     team_up_button_.is_pressed = false;
     is_radar_dragging_ = false;
+    look_dragging_ = false;
     const LayoutPoint page = open_window_offset();                        // (the windows and the dialogs: see handle_mouse_down)
     const LayoutPoint modal = layout_.modal_offset();
     if (show_quick_help_) {
@@ -340,6 +341,10 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
     }
 
     if (show_match_start_modal_) return handle_countdown_mouse_up(x, y, left_release, fire_quit, fire_all, fire_team);          // (protocol 21: the countdown card)
+    if (swallow_release_ && left_release) {                               // the card closed while this button was held on the map: it was no click of the match
+        swallow_release_ = false;
+        return true;
+    }
 
     // ProcessInput ignores the button events of an input lock and of a scroll arrow (the strip test is off while a button is captured)
     const bool right = (button == SDL_BUTTON_RIGHT);
@@ -382,8 +387,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
     return false;
 }
 
-bool HUD::handle_mouse_motion(int32_t x, int32_t y,
-                              [[maybe_unused]] sim::SimulationEngine& sim, [[maybe_unused]] ViewportCamera& camera) {
+bool HUD::handle_mouse_motion(int32_t x, int32_t y, sim::SimulationEngine& sim, ViewportCamera& camera) {
     mouse_x_ = x;
     mouse_y_ = y;
     for (UIButton* b : {&help_button_, &options_button_, &quit_button_, &fullscreen_button_, &send_to_button_, &team_button_}) {
@@ -441,6 +445,15 @@ bool HUD::handle_mouse_motion(int32_t x, int32_t y,
         return true;
     }
 
+    if (look_dragging_) {                          // the countdown: the ground follows the pointer (a finger's drag on a phone is this too)
+        const int32_t dx = x - look_x_;
+        const int32_t dy = y - look_y_;
+        look_x_ = x;
+        look_y_ = y;
+        if ((dx != 0 || dy != 0) && sim.grid().width() > 0 && sim.grid().height() > 0) camera.scroll_screen(-dx, -dy, sim.grid().width(), sim.grid().height());
+        return true;
+    }
+
     if (is_radar_dragging_) return true;
 
     return false;
@@ -456,7 +469,7 @@ void HUD::cancel_press() noexcept {
 
 bool HUD::is_input_captured() const noexcept {
     // [5534] != 0: the map, the minimap (left or right button) or a button holds the mouse; the pedestals do not capture
-    return is_dragging_ || is_radar_dragging_ || right_capture_ != 0 || help_button_.is_pressed || options_button_.is_pressed ||
+    return is_dragging_ || is_radar_dragging_ || look_dragging_ || right_capture_ != 0 || help_button_.is_pressed || options_button_.is_pressed ||
            quit_button_.is_pressed || fullscreen_button_.is_pressed || send_to_button_.is_pressed || team_button_.is_pressed;
 }
 

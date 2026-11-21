@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -246,6 +247,9 @@ public:
     /// Everything that is drawn afterwards is moved by (x, y), until set_origin(0, 0): a window of the original's own 640 x 480 screen (the options screen, the quick help, a dialog) is drawn
     /// with its own numbers and put where the picture wants it. Not a clip: nothing is cut. A renderer that records its calls sees them as they are given (without the move).
     virtual void set_origin(int32_t x, int32_t y) { (void)x; (void)y; }
+    /// Everything that is drawn afterwards (rectangles, text, the pieces of the HUD art) is laid over what is there with this share of its own opacity, 0 (not at all) .. 255 (as it is), until
+    /// set_alpha_scale(255): the countdown card is see-through while the player moves the view. A renderer that records its calls (the test renderers) ignores it.
+    virtual void set_alpha_scale(int32_t alpha) { (void)alpha; }
     virtual void fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) = 0;
     virtual void draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) = 0;
     virtual void draw_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color) = 0;
@@ -285,6 +289,19 @@ public:
     virtual void draw_dialog_text(const std::string& text, int32_t x, int32_t baseline, ants::assets::ColorRGBA color, int32_t em_tenths) {
         (void)text; (void)x; (void)baseline; (void)color; (void)em_tenths;
     }
+    /// The game's own face (Libre Franklin, the one draw_text uses) at any size, for a window that is drawn at a scale of its own (the countdown card): `em_tenths` is the em in tenths of a canvas pixel.
+    /// A renderer without it says false and the caller draws with draw_text at the nearest FontSize.
+    virtual bool face_text_ready() const { return false; }
+    virtual int32_t face_text_width(const std::string& text, int32_t em_tenths) const { (void)text; (void)em_tenths; return 0; }
+    /// A line of the face with its first letter's left edge at `x` and its baseline at `baseline`
+    virtual void draw_face_text(const std::string& text, int32_t x, int32_t baseline, ants::assets::ColorRGBA color, int32_t em_tenths) {
+        (void)text; (void)x; (void)baseline; (void)color; (void)em_tenths;
+    }
+    /// How many device pixels one canvas pixel is (1 when there is no output to measure): a window that is drawn in a whole number of device pixels to its own unit needs it
+    virtual double output_scale() const { return 1.0; }
+    /// The HUD art's sheet (1, 2 or 3) that the pieces drawn afterwards are taken from, until set_art_scale(0) leaves the choice to the output's scale: the countdown card picks the sheet that makes
+    /// one of its units whole device pixels
+    virtual void set_art_scale(int32_t scale) { (void)scale; }
     /// Restricts everything that is drawn afterwards to a rectangle until clear_clip_rect(): the original draws a label into a surface of the label's own
     /// size, so what sticks out of the box (the half line at the edge of the chat log) is not seen. A renderer without clipping draws it all.
     virtual void set_clip_rect(int32_t x, int32_t y, int32_t w, int32_t h) { (void)x; (void)y; (void)w; (void)h; }
@@ -510,6 +527,13 @@ public:
     /// (for the tests) pretends that the device takes no texture with a side above `limit` pixels (0: the device's own limit), as a small phone's does
     void set_art_texture_limit(int32_t limit) noexcept { art_texture_limit_ = limit; }
     void set_origin(int32_t x, int32_t y) override { origin_ = LayoutPoint{x, y}; }
+    void set_alpha_scale(int32_t alpha) override { alpha_scale_ = static_cast<uint8_t>(std::clamp(alpha, 0, 255)); }
+    int32_t alpha_scale() const noexcept { return alpha_scale_; }
+    void set_art_scale(int32_t scale) override { art_scale_override_ = std::clamp(scale, 0, 3); }
+    double output_scale() const override;
+    bool face_text_ready() const override;
+    int32_t face_text_width(const std::string& text, int32_t em_tenths) const override;
+    void draw_face_text(const std::string& text, int32_t x, int32_t baseline, ants::assets::ColorRGBA color, int32_t em_tenths) override;
     const LayoutPoint& origin() const noexcept { return origin_; }
     void fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) override;
     void draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) override;
@@ -705,6 +729,9 @@ private:
     std::unordered_map<std::string, CachedTextEntry> dialog_cache_;
     TTF_Font* dialog_font(int32_t em_tenths) const;
     void drop_dialog_fonts();
+    mutable std::unordered_map<int32_t, TTF_Font*> face_fonts_;    // the game's face at any size (face_text_ready), by em in tenths of a pixel, opened at twice the size
+    std::unordered_map<std::string, CachedTextEntry> face_cache_;
+    TTF_Font* face_font(int32_t em_tenths) const;
     static constexpr size_t kFontSizes = 8;          // the enumerators of FontSize
     static size_t font_index(FontSize size) noexcept;
     TTF_Font* font_for(FontSize size) const noexcept { return fonts_[font_index(size)]; }
@@ -725,7 +752,7 @@ private:
     int32_t art_texture_limit_{0};                         // (for the tests) the largest side of a texture that is made; 0: the device's own
     void drop_art_textures();
     SDL_Texture* art_texture(const hud_art::Art& art, int32_t scale);
-    int32_t art_scale_for_output(double* output_scale = nullptr) const;
+    int32_t art_scale_for_output(double* out = nullptr) const;
     std::array<SDL_Texture*, 12> fixed_glyphs_{};   // draw_fixed_text: '0' .. '9', '-' and '+', built on first use
     std::unordered_map<uint64_t, SDL_Texture*> blend_textures_;   // draw_rgba_blended: one for each different picture (by what it holds)
     int32_t rgba_texture_w_{0};
@@ -778,6 +805,11 @@ private:
     int32_t canvas_h_{CANVAS_HEIGHT};
     LayoutRect picture_{0, 0, CANVAS_WIDTH, CANVAS_HEIGHT};
     bool picture_inset_{false};            // the picture is smaller than the canvas: its corner is added to every position and it is the clip
+    uint8_t alpha_scale_{255};             // set_alpha_scale: the share of its opacity that what is drawn keeps (255: all of it)
+    int32_t art_scale_override_{0};        // set_art_scale: the sheet that the HUD art is taken from (0: the one the output's scale needs)
+    uint8_t scaled_alpha(uint8_t a) const noexcept { return alpha_scale_ == 255 ? a : static_cast<uint8_t>((static_cast<int32_t>(a) * alpha_scale_ + 127) / 255); }
+    /// One copy of a texture whose own opacity is `own_alpha`, kept under the alpha scale (set_alpha_scale): every picture of a window that goes through it is see-through with the rest
+    void copy_scaled(SDL_Texture* tex, const SDL_Rect* src, const SDL_Rect* dst, int32_t own_alpha = 255);
     LayoutPoint origin_{};                 // set_origin: what a window of the original's own screen is moved by (nothing, outside the HUD's pages and dialogs)
     /// A rectangle of the picture's own coordinates as SDL gets it (the picture's corner added, and the origin of a window)
     SDL_Rect placed(int32_t x, int32_t y, int32_t w, int32_t h) const noexcept { return SDL_Rect{x + picture_.x + origin_.x, y + picture_.y + origin_.y, w, h}; }

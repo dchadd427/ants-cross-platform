@@ -59,7 +59,7 @@ DIALOG_BUTTONS = {
     'accept': (77, 20, ['Accept'], 11.5, None), 'decline': (77, 20, ['Decline'], 11.5, None), 'withdraw': (77, 20, ['Withdraw'], 11.5, None),
     'return': (95, 23, ['Return to', 'Game'], 9.6, 9.4),
 }
-FULLSCREEN_FACE = (148, 29)                       # the countdown card's own button: its 150 x 32 box less the cast shadow
+FULLSCREEN_FACE = (94, 22)                        # the countdown card's own button (the sprite is 3 wider and 4 higher: the cast shadow)
 SWITCH_FACE = (46, 20)
 SWITCH_STATES = ('up', 'hover', 'down', 'chosen', 'chosen_hover')
 STATES = ('up', 'hover', 'down')
@@ -76,7 +76,7 @@ def fullscreen_drawing(state, origin):
     """(w, h, svg) of the Fullscreen button of the countdown card: state up or down"""
     fw, fh = FULLSCREEN_FACE
     u = K.new_uid()
-    return fw + 3, fh + 4, K.svg(fw + 3, fh + 4, K.button(u, origin[0], origin[1], fw, fh, ['Fullscreen'], state, size=15), u, origin)
+    return fw + 3, fh + 4, K.svg(fw + 3, fh + 4, K.button(u, origin[0], origin[1], fw, fh, ['Fullscreen'], state, size=11.5), u, origin)
 
 
 def switch_drawing(word, state, origin):

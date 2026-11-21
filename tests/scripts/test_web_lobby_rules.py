@@ -3,7 +3,7 @@
 that needs no browser is in this one script, so that it can be checked with no screen: the player's name (the same block as the game page's, held byte for byte), the room's code (made, shown in
 two groups, read back from what a person typed), the six maps (against the level files of the original game), the model of a room (who is the host, who the guest, what each of the four cards
 shows and may do, the START button and the plan sentence), the teams (the rules of the live match card: who may be on a team, the refusals, the bytes of a plan), the move of a color, the
-sentences of the server (which of them means what) and every message strip of the page.
+sentences of the server (which of them means what), every message strip of the page and the scale of the ping colors (a table that the game's own test of the same scale runs too).
 
   - tests/scripts/web_lobby_rules_check.js holds all of it to tables: every exported function is called with real inputs (the check fails when one is never called), the Room messages of the
     tables are real bytes that web/front/lobby_net.js reads, the pictures of the design are compared word for word (pictures 1, 2, 3, 5, 5b, 6, 13, 13b and the strips of 15),
@@ -29,6 +29,7 @@ LOBBY = os.path.join(REPO, "web", "lobby.html")
 SHELL = os.path.join(REPO, "web", "shell.html")
 MAPS = os.path.join(REPO, "Original-Ants", "Maps")
 PROTOCOL = os.path.join(REPO, "include", "ants_net", "protocol.hpp")
+PING_TABLE = os.path.join(REPO, "tests", "data", "ping_quality_table.json")
 NODE = shutil.which("node")
 
 
@@ -97,10 +98,12 @@ class TheCheckIsNotVacuous(unittest.TestCase):
     """a copy of the files with ONE thing changed: the check must fail (and a copy with nothing changed must pass, so that a failure is the change's)"""
 
     def tree(self, folder):
-        """a repository folder of copies: web/front/lobby_rules.js and lobby_net.js, the (empty) preview pictures, web/lobby.html, web/shell.html, the level files and protocol.hpp"""
+        """a repository folder of copies: web/front/lobby_rules.js and lobby_net.js, the (empty) preview pictures, web/lobby.html, web/shell.html, the level files, protocol.hpp and the table of the ping scale"""
         os.makedirs(os.path.join(folder, "web", "front"))
         os.makedirs(os.path.join(folder, "Original-Ants", "Maps"))
         os.makedirs(os.path.join(folder, "include", "ants_net"))
+        os.makedirs(os.path.join(folder, "tests", "data"))
+        shutil.copy(PING_TABLE, os.path.join(folder, "tests", "data", "ping_quality_table.json"))
         shutil.copy(RULES, os.path.join(folder, "web", "front", "lobby_rules.js"))
         shutil.copy(NET, os.path.join(folder, "web", "front", "lobby_net.js"))
         for name in os.listdir(FRONT):
@@ -177,6 +180,16 @@ class TheCheckIsNotVacuous(unittest.TestCase):
 
     def test_the_map_info_line_of_a_map(self):
         self.must_fail("web/front/lobby_rules.js", "Race for your life! (10 min)", "Race for your life! (9 min)")
+
+    # ---- the scale of the ping colors (the table is the one that the C++ test of ping_quality() runs too)
+    def test_a_round_trip_of_80_ms_is_good(self):
+        self.must_fail("web/front/lobby_rules.js", "PING_FAIR_MS = 80,", "PING_FAIR_MS = 81,")
+
+    def test_a_round_trip_of_150_ms_is_fair(self):
+        self.must_fail("web/front/lobby_rules.js", "PING_POOR_MS = 150;", "PING_POOR_MS = 151;")
+
+    def test_a_round_trip_of_0_ms_is_no_number(self):
+        self.must_fail("web/front/lobby_rules.js", "!(ms >= 0)", "!(ms > 0)")
 
     # ---- a person alone on a map of the players starts like one alone on an original (a game for one: no computer player asked for)
     def test_alone_on_a_map_of_the_players_asks_for_a_computer_player_again(self):

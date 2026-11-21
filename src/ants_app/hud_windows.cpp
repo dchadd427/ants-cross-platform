@@ -1,7 +1,9 @@
 // The windows of the match in the new look (hud.hpp, window_art.hpp): the quit and alliance questions, "Get ready to play!", the quick help, the options window's veil, the countdown card, and the
 // Fullscreen button. Each draws the HUD art's pieces when the set has every piece of the window and fits the places of the original's, and the original's own pictures otherwise (window_pieces).
 #include <algorithm>
+#include <cmath>
 #include <string>
+#include <vector>
 
 #include "ants_app/hud.hpp"
 #include "ants_app/renderer.hpp"
@@ -77,64 +79,142 @@ void HUD::render_veil(IRenderer& renderer) {
     }
 }
 
-// The countdown card in the new look: the panel, the title and the count's box from the set, the seats' rows and their color dots, and the card's words in the windows' face; the count, the names and the
-// words under the count are the game's own text, in its own place as before (render_match_countdown)
+namespace {
+
+/// The pieces of the new card are drawn in the card's own units and put on the canvas at the card's scale (countdown_card.hpp): a sprite's rectangle is mapped edge by edge, so neighbors share an edge
+std::vector<hud_art::Draw> on_card(const CountdownCard& card, std::vector<hud_art::Draw> draws) {
+    for (hud_art::Draw& d : draws) d.dst = card.rect(d.dst.x, d.dst.y, d.dst.w, d.dst.h);
+    return draws;
+}
+
+std::vector<hud_art::Draw> sprite_on_card(const hud_art::Art& art, const char* name, int32_t ux, int32_t uy) {
+    const int32_t id = art.find_sprite(name);
+    const hud_art::Sprite* s = art.sprite_at(id);
+    if (s == nullptr) return {};
+    return {hud_art::Draw{id, LayoutRect{ux, uy, s->w, s->h}, LayoutRect{0, 0, s->w, s->h}}};
+}
+
+/// The card's own text at sizes of the card's units: the game's face at any size when the renderer has it, else the nearest of the original's sizes (a renderer that only records)
+class CardPen {
+public:
+    CardPen(IRenderer& renderer, const CountdownCard& card) : r_(renderer), card_(card), face_(renderer.face_text_ready()) {}
+    int32_t width(const std::string& text, double em_units) const {
+        if (face_) return r_.face_text_width(text, card_.em_tenths(em_units));
+        return r_.get_text_width(text, nearest(em_units));
+    }
+    /// `x` is the left edge (align 0), the middle (1) or the right edge (2) of the line, `baseline` its baseline in canvas pixels
+    void draw(const std::string& text, int32_t x, int32_t baseline, assets::ColorRGBA color, double em_units, int align = 0) const {
+        if (text.empty()) return;
+        const int32_t w = width(text, em_units);
+        const int32_t left = align == 0 ? x : align == 1 ? x - w / 2 : x - w;
+        if (face_) {
+            r_.draw_face_text(text, left, baseline, color, card_.em_tenths(em_units));
+        } else {
+            const FontSize size = nearest(em_units);
+            r_.draw_text(text, left, baseline - font_cell_height(size) * 4 / 5, color, size);
+        }
+    }
+    /// The text cut at the end with three dots until it is no wider than `max_w`
+    std::string fit(std::string text, int32_t max_w, double em_units) const {
+        if (width(text, em_units) <= max_w) return text;
+        while (!text.empty() && width(text + "...", em_units) > max_w) {
+            size_t cut = text.size() - 1;
+            while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xC0) == 0x80) --cut;      // (never in the middle of a character)
+            text.resize(cut);
+        }
+        return text + "...";
+    }
+
+private:
+    FontSize nearest(double em_units) const {
+        const double cell = em_units * card_.scale.f * 1.2;
+        for (FontSize size : {FontSize::Px12, FontSize::Px14, FontSize::Px18, FontSize::Px20, FontSize::Px24, FontSize::Px27, FontSize::Px35}) {
+            if (static_cast<double>(font_cell_height(size)) + 0.5 >= cell) return size;
+        }
+        return FontSize::Px96;
+    }
+    IRenderer& r_;
+    const CountdownCard& card_;
+    bool face_;
+};
+
+assets::ColorRGBA mix(assets::ColorRGBA a, assets::ColorRGBA b, int32_t t255) {
+    const auto lerp = [&](uint8_t x, uint8_t y) { return static_cast<uint8_t>((x * (255 - t255) + y * t255 + 127) / 255); };
+    return assets::ColorRGBA{lerp(a.r, b.r), lerp(a.g, b.g), lerp(a.b, b.b), 255};
+}
+
+}  // namespace
+
+// The countdown card in the new look (countdown_card.hpp: 480 x 236 units at a scale that makes a unit whole device pixels): the panel and its frame from the set, the title and the seconds' well, a well
+// for each player with a color square, and the button; the game writes the rest (the seconds, the names, the numbers, the two sentences) in its faces. While the player looks round the map the panel
+// and its frame fade to a third (the map shows through) and everything that must stay readable keeps most of itself; the two sentences stand on the panel, so they turn light with a dark edge as it goes.
 void HUD::render_match_countdown_new(IRenderer& renderer, const assets::AssetArchive& assets) {
     using assets::ColorRGBA;
     (void)assets;
     const hud_art::Art& art = *art_;
-    const CountdownCardLayout l = countdown_card_layout(layout_.view());
-    const LayoutRect& c = l.card;
+    const CountdownCard card = countdown_card_now();
+    const LayoutRect& c = card.card;
+    const CardPen pen(renderer, card);
     const ColorRGBA cream{244, 236, 226, 255};
     const ColorRGBA gold{246, 208, 88, 255};
-    const auto centred = [&](const std::string& text, const LayoutRect& box, int32_t y, FontSize size, ColorRGBA color) {
-        const int32_t w = renderer.get_text_width(text, size);
-        renderer.draw_text(text, box.x + (w < box.w ? (box.w - w) / 2 : 0), y, color, size);
-    };
-    const auto words = [&](const std::string& text, int32_t em_tenths, int32_t baseline, FontSize fallback, int32_t fallback_y) {   // a line of the card's own words, centred on the card
-        if (renderer.dialog_text_ready()) renderer.draw_dialog_text(text, c.x + (c.w - renderer.dialog_text_width(text, em_tenths)) / 2, c.y + baseline, window_art::kInk, em_tenths);
-        else centred(text, c, fallback_y, fallback, window_art::kInk);
-    };
+    const ColorRGBA dim{168, 194, 184, 255};
+    const int32_t look = card_look_;
 
-    hud_art::draw_all(renderer, art, hud_art::panel_draws(art, c));
-    hud_art::draw_all(renderer, art, hud_art::animation_draws_at(art, "cd_card", 0, c.x, c.y));
+    renderer.set_art_scale(card.scale.sheet);
+    renderer.set_alpha_scale(255 - look * (255 - kCardBackSeeThrough) / 255);
+    hud_art::draw_all(renderer, art, on_card(card, hud_art::panel_draws(art, LayoutRect{0, 0, kCardW, kCardH})));
+    renderer.set_alpha_scale(countdown_card_opacity());
+    hud_art::draw_all(renderer, art, on_card(card, hud_art::animation_draws_at(art, "cd_card", 0, 0, 0)));
 
+    // the sentences of the card (the windows' face): dark ink on the panel, light with a dark edge as the panel fades
+    const auto sentence = [&](const std::string& text, int32_t x, int32_t baseline, double em_units, int align) {
+        const int32_t em = card.em_tenths(em_units);
+        if (renderer.dialog_text_ready()) {
+            const int32_t left = align == 1 ? x - renderer.dialog_text_width(text, em) / 2 : x;
+            if (look > 0) renderer.draw_dialog_text(text, left + 1, baseline + 1, ColorRGBA{11, 15, 13, static_cast<uint8_t>(look * 230 / 255)}, em);
+            renderer.draw_dialog_text(text, left, baseline, mix(window_art::kInk, cream, look), em);
+        } else {
+            pen.draw(text, x, baseline, mix(window_art::kInk, cream, look), em_units, align);
+        }
+    };
     static const char* const kTeamNames[4] = {"Green", "Red", "Blue", "Black"};
-    words(std::string("You are the ") + kTeamNames[local_player_id_ % 4] + " Ants.", 150, 68, FontSize::Px20, l.subtitle_y);
+    sentence(std::string("You are the ") + kTeamNames[local_player_id_ % 4] + " Ants.", c.x + c.w / 2, card.y(58), 13.0, 1);
 
-    // the count: whole seconds rounded up, in the box; the words under it have the HUD's dark edge, as the labels of its buttons do
+    // the count: whole seconds rounded up, in the well; the words under it are small and dim
     const int32_t shown = countdown_seconds_shown(match_countdown_left_ms_);
-    const LayoutRect& b = l.count_box;
-    centred(std::to_string(shown), b, l.digits_y, FontSize::Px96, gold);
-    const std::string caption = countdown_caption(shown == 0);
-    const int32_t caption_w = renderer.get_text_width(caption, FontSize::Px18);
-    renderer.draw_text(caption, b.x + (caption_w < b.w ? (b.w - caption_w) / 2 : 0) + 1, l.caption_y + 1, ColorRGBA{11, 19, 7, 230}, FontSize::Px18);
-    centred(caption, b, l.caption_y, FontSize::Px18, cream);
+    const int32_t well_mid = card.x(kCardWell.x + kCardWell.w / 2.0);
+    pen.draw(std::to_string(shown), well_mid, card.y(kCardWell.y + 74), gold, 82.0, 1);
+    pen.draw(countdown_caption(shown == 0), well_mid, card.y(kCardWell.y + kCardWell.h - 9), dim, 10.5, 1);
 
-    // who plays which color: the people are "in" (everybody has loaded), a computer player says so
+    // one well for each color that plays: its square, the name, the small word and the number in the color of its quality
     static const char* const kDots[4] = {"cd_dot_0", "cd_dot_1", "cd_dot_2", "cd_dot_3"};
-    for (size_t seat = 0; seat < 4; ++seat) {
+    size_t line = 0;
+    for (size_t seat = 0; seat < 4 && line < card.rows; ++seat) {
         const CountdownSeat& who = countdown_seats_[seat];
         if (!who.plays) continue;
-        const LayoutRect& r = l.seat[seat];
-        put_sprite(renderer, art, "cd_seat", r.x, r.y);
-        put_sprite(renderer, art, kDots[seat], r.x + 9, r.y + 8);
-        std::string name = who.name.empty() ? std::string(kTeamNames[seat]) : who.name;
-        if (seat == local_player_id_ && !who.computer) name += " (you)";
-        const char* tag = countdown_tag(who);
-        const int32_t tag_w = renderer.get_text_width(tag, FontSize::Px14);
-        renderer.draw_text_squeezed(name, r.x + 28, r.y + (r.h - 18) / 2, cream, FontSize::Px18, r.w - 28 - tag_w - 12);
-        renderer.draw_text(tag, r.right() - tag_w - 9, r.y + (r.h - 14) / 2, who.computer ? ColorRGBA{168, 194, 184, 255} : ColorRGBA{143, 224, 178, 255}, FontSize::Px14);
+        const int32_t ry = card.row_y[line];
+        hud_art::draw_all(renderer, art, on_card(card, hud_art::animation_draws_at(art, "cd_row", 0, kCardRowX, ry)));
+        hud_art::draw_all(renderer, art, on_card(card, sprite_on_card(art, kDots[seat], kCardRowX + 7, ry + 5)));
+        const CountdownRowWords words = countdown_row_words(who, seat == local_player_id_ && !who.computer, kTeamNames[seat]);
+        const int32_t right = card.x(kCardRowX + kCardRowW - 7);
+        const int32_t tag_right = card.x(kCardRowX + kCardRowW - 7 - (words.ping.empty() ? 0 : 62));
+        pen.draw(words.ping, right, card.y(ry + 15.5), ping_color(who.ping_ms >= 0 ? who.ping_ms : -1), 12.5, 2);
+        pen.draw(words.tag, tag_right, card.y(ry + 15), dim, 10.5, 2);
+        const int32_t name_left = card.x(kCardRowX + 25);
+        const int32_t room = tag_right - pen.width(words.tag, 10.5) - static_cast<int32_t>(std::lround(10.0 * card.scale.f)) - name_left;      // (the name stops 10 units short of the small word)
+        pen.draw(pen.fit(words.name, room, 13.5), name_left, card.y(ry + 16), cream, 13.5);
+        ++line;
     }
 
     size_t people_in = 0;
     for (const CountdownSeat& who : countdown_seats_) people_in += who.plays && !who.computer ? 1u : 0u;
-    words(people_in <= 1 ? "Get ready. Fullscreen is one press away." : (options_.state().chat ? "Everybody is in. Say hello in the chat." : "Everybody is in. The match starts soon."), 135, 300, FontSize::Px18, l.hint_y);
+    sentence(people_in <= 1 ? "Get ready. Fullscreen is one press away." : (options_.state().chat ? "Everybody is in. Say hello in the chat." : "Everybody is in. The match starts soon."), card.x(24), card.y(211), 12.0, 0);
 
 #if !defined(__EMSCRIPTEN__)
     // the native game draws its own Fullscreen button (the browser's page lays a real one over this place: a request for fullscreen needs the click of a real button)
-    put_sprite(renderer, art, countdown_button_pressed_ ? "dlg_btn_fullscreen_down" : "dlg_btn_fullscreen_up", l.button.x, l.button.y);
+    hud_art::draw_all(renderer, art, on_card(card, sprite_on_card(art, countdown_button_pressed_ ? "dlg_btn_fullscreen_down" : "dlg_btn_fullscreen_up", kCardButton.x, kCardButton.y)));
 #endif
+    renderer.set_art_scale(0);
 }
 
 // ---- the Fullscreen button and the corner of the top bar ----------------------------------------------------------------------------------------------------------

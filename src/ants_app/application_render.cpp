@@ -113,7 +113,9 @@ void Application::render_frame() {
         renderer_->fill_rect(spark_x + i, bar_y, 1, bar_h, bar_color);
     }
 
+    connections_hit_ = LayoutRect{};                         // (set again by the corner, in a match of a network game)
     render_latency_corner(ver_x, text_y, plate);
+    render_connections();
 
     // Authentic Software Cursor (Matching Ants.exe 0x1026c5c / 0x1027e65): the pointer is the picture's
     renderer_->set_picture(picture_);

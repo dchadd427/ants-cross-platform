@@ -387,6 +387,8 @@ public:
     void set_hints_enabled(bool on) noexcept { hints_enabled_ = on; }
     /// How this machine is connected to the player of `seat` (PeerLink::None without a transport or for this player's own seat)
     PeerLink peer_link(uint8_t seat) const;
+    /// The round trip in milliseconds over the channel to the player of `seat` (P2pTransport::rtt_ms); -1 for no number: no transport, this player's own seat, a seat that is not one, or a channel that has no answer
+    int32_t peer_rtt_ms(uint8_t seat) const noexcept;
     /// The hints that the game sent and took (the tests and the readout): `sent` for each order given, `from_server` for a computer player's, `from_peers` for what the channels delivered
     struct HintCounts {
         uint64_t sent{0};

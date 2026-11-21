@@ -136,7 +136,7 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y, const sim::W
     // was attached (the thunk 0x101279a = FUN_01027e65(1, 0) in slot +0x20 of all 15 window vtables, called by AddChild 0x102f977), and nothing that runs while it is open
     // writes another mode: the pointer over a dialog is always the arrow, whatever it was before (a scroll arrow, the attack crosshair); the next input run after the
     // dialog closed decides again
-    if (is_modal_open()) {
+    if (is_modal_open() && !countdown_takes_camera()) {
         current_cursor_ = CursorType::Normal;
         return current_cursor_;
     }
@@ -152,7 +152,7 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y, const sim::W
         }
     }
 
-    if (view_only_) {                                                                         // a replay: the picture is not a place to click, the pointer over it is the plain arrow
+    if (view_only_ || countdown_takes_camera()) {                                             // a replay, and the countdown card: the picture is not a place to click, the pointer over it is the plain arrow
         current_cursor_ = CursorType::Normal;
         return current_cursor_;
     }

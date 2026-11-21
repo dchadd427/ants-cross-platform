@@ -31,6 +31,14 @@ void Renderer::drop_dialog_fonts() {
         if (pair.second) TTF_CloseFont(pair.second);
     }
     dialog_fonts_.clear();
+    for (auto& pair : face_cache_) {
+        if (pair.second.texture) SDL_DestroyTexture(pair.second.texture);
+    }
+    face_cache_.clear();
+    for (auto& pair : face_fonts_) {
+        if (pair.second) TTF_CloseFont(pair.second);
+    }
+    face_fonts_.clear();
 }
 
 TTF_Font* Renderer::dialog_font(int32_t em_tenths) const {
@@ -92,12 +100,66 @@ void Renderer::draw_dialog_text(const std::string& text, int32_t x, int32_t base
         }
         const SDL_Rect at = placed(x, top, it->second.width, it->second.height);
         const SDL_FRect dst{static_cast<float>(at.x) + dx, static_cast<float>(at.y) + dy, static_cast<float>(at.w), static_cast<float>(at.h)};
+        if (alpha_scale_ != 255) SDL_SetTextureAlphaMod(it->second.texture, scaled_alpha(c.a));      // (the countdown card, see-through)
         SDL_RenderCopyF(renderer_, it->second.texture, nullptr, &dst);
+        if (alpha_scale_ != 255) SDL_SetTextureAlphaMod(it->second.texture, c.a);
     };
     draw(ants::assets::ColorRGBA{255, 196, 147, 46}, 1.0f, 1.0f);
     draw(color, 0.0f, 0.0f);
     draw(color, 0.35f, 0.0f);
     draw(color, 0.0f, 0.35f);
+}
+
+// The game's own face at any size (renderer.hpp, face_text_ready): the face of draw_text opened at twice the size and halved into the canvas, as the dialog's face is, without its pale edge
+TTF_Font* Renderer::face_font(int32_t em_tenths) const {
+    if (!ttf_initialized_ || ttf_path_.empty() || em_tenths <= 0) return nullptr;
+    const auto it = face_fonts_.find(em_tenths);
+    if (it != face_fonts_.end()) return it->second;
+    TTF_Font* font = TTF_OpenFont(ttf_path_.c_str(), std::max(2, static_cast<int>(std::lround(em_tenths * 2.0 / 10.0))));
+    face_fonts_[em_tenths] = font;
+    return font;
+}
+
+bool Renderer::face_text_ready() const {
+    return face_font(200) != nullptr;
+}
+
+int32_t Renderer::face_text_width(const std::string& text, int32_t em_tenths) const {
+    if (text.empty()) return 0;
+    TTF_Font* font = face_font(em_tenths);
+    int w = 0, h = 0;
+    if (font == nullptr || TTF_SizeUTF8(font, text.c_str(), &w, &h) != 0) return 0;
+    return (w + 1) / 2;
+}
+
+void Renderer::draw_face_text(const std::string& text, int32_t x, int32_t baseline, ants::assets::ColorRGBA color, int32_t em_tenths) {
+    if (!renderer_ || text.empty()) return;
+    TTF_Font* font = face_font(em_tenths);
+    if (font == nullptr) return;
+    const std::string key = text + '\x1f' + std::to_string(em_tenths) + ':' + std::to_string((static_cast<uint32_t>(color.r) << 24) | (static_cast<uint32_t>(color.g) << 16) | (static_cast<uint32_t>(color.b) << 8));
+    auto it = face_cache_.find(key);
+    if (it == face_cache_.end()) {
+        if (face_cache_.size() >= static_cast<size_t>(kMaxDialogLines)) {
+            for (auto& pair : face_cache_) {
+                if (pair.second.texture) SDL_DestroyTexture(pair.second.texture);
+            }
+            face_cache_.clear();
+        }
+        SDL_Surface* surf = TTF_RenderUTF8_Blended(font, text.c_str(), SDL_Color{color.r, color.g, color.b, 255});
+        if (surf == nullptr) return;
+        SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer_, surf);
+        const int32_t lw = (surf->w + 1) / 2;
+        const int32_t lh = (surf->h + 1) / 2;
+        SDL_FreeSurface(surf);
+        if (tex == nullptr) return;
+        SDL_SetTextureScaleMode(tex, SDL_ScaleModeLinear);
+        SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+        it = face_cache_.emplace(key, CachedTextEntry{tex, lw, lh, 0}).first;
+    }
+    const int32_t top = baseline - (TTF_FontAscent(font) + 1) / 2;
+    const SDL_Rect dst = placed(x, top, it->second.width, it->second.height);
+    SDL_SetTextureAlphaMod(it->second.texture, scaled_alpha(color.a));
+    SDL_RenderCopy(renderer_, it->second.texture, nullptr, &dst);
 }
 
 #else
@@ -106,6 +168,9 @@ void Renderer::set_dialog_font_path(const std::string& path) { dialog_path_ = pa
 bool Renderer::dialog_text_ready() const { return false; }
 int32_t Renderer::dialog_text_width(const std::string&, int32_t) const { return 0; }
 void Renderer::draw_dialog_text(const std::string&, int32_t, int32_t, ants::assets::ColorRGBA, int32_t) {}
+bool Renderer::face_text_ready() const { return false; }
+int32_t Renderer::face_text_width(const std::string&, int32_t) const { return 0; }
+void Renderer::draw_face_text(const std::string&, int32_t, int32_t, ants::assets::ColorRGBA, int32_t) {}
 
 #endif
 

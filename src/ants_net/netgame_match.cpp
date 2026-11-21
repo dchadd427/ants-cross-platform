@@ -51,6 +51,11 @@ void NetGame::install_hooks() {
 // ---- hints and channels (protocol 26) -----------------------------------------------------------------------------------------------------------------
 
 PeerLink NetGame::peer_link(uint8_t seat) const { return p2p_ == nullptr || seat >= sim::MAX_PLAYERS || seat == seat_ ? PeerLink::None : p2p_->link(seat); }
+int32_t NetGame::peer_rtt_ms(uint8_t seat) const noexcept {
+    if (p2p_ == nullptr || seat >= sim::MAX_PLAYERS || seat == seat_) return -1;
+    const int32_t ms = p2p_->rtt_ms(seat);
+    return ms < 0 ? -1 : ms;
+}
 
 // What the server sends that belongs to the channels: a computer player's order ahead of its turn (a hint, straight to the prediction), and the relay's credential, who is ready and the signalling of
 // the other players (to the page's transport, which does not exist in most builds: then they are not even looked at)

@@ -83,7 +83,8 @@ Pieces check(const hud_art::Art& art, const assets::AssetArchive& assets) {
                 has_sprites(art, {"op_thumb_up", "op_thumb_hover", "op_thumb_held"});
     p.quick_help = art.find_animation("qh_window") != nullptr && all_replace(art, assets, {{"qh_return1", "qh_return1", 0, 0}, {"qh_return2", "qh_return1", 0, 0}, {"qh_return3", "qh_return1", 0, 0}}) &&
                    assets.find_sprite_id("qh1.bmp") >= 0 && assets.find_sprite_id("qh2.bmp") >= 0;
-    p.countdown = art.find_animation("cd_card") != nullptr && has_sprites(art, {"cd_seat", "cd_dot_0", "cd_dot_1", "cd_dot_2", "cd_dot_3", "dlg_btn_fullscreen_up", "dlg_btn_fullscreen_down"});
+    p.countdown = art.find_animation("cd_card") != nullptr && art.find_animation("cd_row") != nullptr &&
+                  has_sprites(art, {"cd_dot_0", "cd_dot_1", "cd_dot_2", "cd_dot_3", "dlg_btn_fullscreen_up", "dlg_btn_fullscreen_down"});
     p.fullscreen = has_fullscreen_button(art);
     return p;
 }
