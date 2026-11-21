@@ -172,7 +172,7 @@
   {
    "id": "number_9_is_not_played",
    "file": "include/ants_replay/replay.hpp",
-   "old": "(rules == kSimRules || rules == kSimRulesBeforeEmptyRecord || rules == kSimRulesBeforeFireWall || rules == kSimRulesBeforeLastSide)",
+   "old": "(rules == kSimRules || rules == kSimRulesBeforeCantGo || rules == kSimRulesBeforeEmptyRecord || rules == kSimRulesBeforeFireWall || rules == kSimRulesBeforeLastSide)",
    "new": "(rules == kSimRules || rules == kSimRulesBeforeFireWall || rules == kSimRulesBeforeLastSide)",
    "build": [
     "test_rules_empty_record"
@@ -194,7 +194,7 @@
   {
    "id": "refusal_forgets_the_new_number",
    "file": "src/ants_replay/replay.cpp",
-   "old": "std::to_string(kSimRulesMode187) + \" and \" + std::to_string(kSimRules);",
+   "old": "std::to_string(kSimRulesMode187BeforeCantGo) + \", \" + std::to_string(kSimRulesBeforeCantGo) + \", \" + std::to_string(kSimRules) + \" and \" + std::to_string(kSimRulesMode187);",
    "new": "std::to_string(kSimRulesMode187) + \" and \" + std::to_string(kSimRulesMode187);",
    "build": [
     "test_rules_empty_record"
@@ -205,7 +205,7 @@
   {
    "id": "head_check_lets_13_name_another_mode",
    "file": "src/ants_replay/replay.cpp",
-   "old": "(h.sim_rules == kSimRules || h.sim_rules == kSimRulesBeforeEmptyRecord || h.sim_rules == kSimRulesBeforeFireWall) && h.mode != 0",
+   "old": "(h.sim_rules == kSimRules || h.sim_rules == kSimRulesBeforeCantGo || h.sim_rules == kSimRulesBeforeEmptyRecord || h.sim_rules == kSimRulesBeforeFireWall) && h.mode != 0",
    "new": "(h.sim_rules == kSimRulesBeforeEmptyRecord || h.sim_rules == kSimRulesBeforeFireWall) && h.mode != 0",
    "build": [
     "test_rules_empty_record"

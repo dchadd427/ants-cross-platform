@@ -17,6 +17,7 @@ add_library(ants_sim STATIC
     last_side.cpp
     loader_rules.cpp
     food_rules.cpp
+    pathmgr_rules.cpp
     event_queue.cpp
     order_claims.cpp
 )

@@ -71,7 +71,7 @@ There are no speed constants. An ant moves by the displacement of its current wa
 
 A bridge, at any stage of its building, walks like mud.
 
-- Paths come from a port of the original's asynchronous `PATHMGR` A*: one 1000-expansion slice per 50 ms for each team, 8 directions.
+- Paths come from a port of the original's asynchronous `PATHMGR` A*: one 1000-expansion slice per 50 ms for each team, 8 directions. The manager's refusal ("Can't go there.") is given at the start of the tick that follows its search, after the turn's commands (rules number 14, network protocol 28), so an ant that an event has just sent (the end of a can't-go clip, an arrival) has no path yet when the commands of that turn come and takes an order: a thief that cannot get home is freed by a move to a tile that can be reached, on the one turn of each 900 ms cycle that finds it so ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) 5.40).
 - On a big map that asks for it (the map's rules word 2, [`MAP_FORMAT.md`](MAP_FORMAT.md) "Orders on a big map") the search goes on where the original gives up: an order of 450 tiles along an open row finds its path. Every order the original finds gets the identical path, at the identical time when no other order of the team is searched past the limit (the team's searches take turns, so a search that the original gives up on and this one goes on with can delay another order of the team); every other map plays as before.
 - An order snaps the ant to the centre of its tile, like the original's `GoTo`.
 - A walker waits 300 ms behind a moving ant, and re-plans around a standing one.
