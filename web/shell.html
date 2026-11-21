@@ -2003,6 +2003,21 @@
             document.addEventListener('visibilitychange', function() { if (!document.hidden) check(); });
         })();
 
+        // ANTS_QUIET_BEGIN (tests/scripts/web_quiet_dialog_check.js runs this block on a page of fakes)
+        // A box of the browser's own (confirm, prompt) stops the page until it is answered, and with it the page's feed of SDL's Web Audio: the context goes on playing the last piece of sound over and
+        // over, loud. So the game's sound is paused while such a box is open and goes on when it closes (only when it was playing: a context that has not been let start yet is left as it is).
+        function antsQuietly(ask) {
+            var ctx = null, paused = false;
+            try { ctx = (typeof Module !== 'undefined' && Module.SDL2 && Module.SDL2.audioContext) || null; } catch (e) { ctx = null; }
+            if (ctx && ctx.state === 'running' && ctx.suspend) {
+                try { var stop = ctx.suspend(); paused = true; if (stop && stop.catch) stop.catch(function () {}); } catch (e) { /* not paused: the box is asked all the same */ }
+            }
+            try { return ask(); } finally {
+                if (paused) { try { var go = ctx.resume(); if (go && go.catch) go.catch(function () {}); } catch (e) { /* the next press resumes it (the block above) */ } }
+            }
+        }
+        // ANTS_QUIET_END
+
         // A hidden page (another tab in front, a minimised window): the browser stops requestAnimationFrame and slows the page's timers (to once a second; then Chrome to once a
         // minute: measured in headless Chrome 154, the throttle began after about 58 s hidden; Chrome documents it for a page hidden for five minutes), so a network match cannot
         // depend on the frame loop. The game drives itself from the messages of the game server instead: each one wakes it (src/ants_net/wasm_ws.cpp), and
@@ -2561,7 +2576,7 @@
                 try { playing = typeof Module !== 'undefined' && !!Module._ants_match_running && Module._ants_match_running() === 1; } catch (err) { /* the game does not answer: it is not running a match */ }
                 return ANTS_ARGS.indexOf('--join-url') !== -1 || playing;
             },
-            ask: function () { return window.confirm('Leave the game and go back to the menu?'); },
+            ask: function () { return antsQuietly(function () { return window.confirm('Leave the game and go back to the menu?'); }); },
             running: function () { try { return typeof Module !== 'undefined' && !!Module._ants_match_running && Module._ants_match_running() === 1; } catch (err) { return false; } },
             leave: antsLeaveMatch,
             focus: function () { canvas.focus(); }
@@ -3377,9 +3392,9 @@
                 var url = replayUrl();
                 var done = function () { say('Link to this match copied.'); };
                 try {
-                    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(url).then(done, function () { window.prompt('Copy the link to this match:', url); }); return; }
+                    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(url).then(done, function () { antsQuietly(function () { return window.prompt('Copy the link to this match:', url); }); }); return; }
                 } catch (e) { /* the prompt below */ }
-                window.prompt('Copy the link to this match:', url);
+                antsQuietly(function () { return window.prompt('Copy the link to this match:', url); });
             };
             $('copy-btn').addEventListener('click', copy);
             $('b-fsx').addEventListener('click', function () { $('fullscreen-btn').click(); });
