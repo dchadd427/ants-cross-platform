@@ -233,6 +233,7 @@ void test_frame() {
         std::string where;
         for (const hud_art::Animation& a : art.animations()) {
             if (a.cursor) continue;                                                      // (a cursor's pieces stand at the click point, which can be anywhere: the cursors' own cases are in test_hud_art_cursors.cpp)
+            if (a.name == "cd_row") continue;                                            // (its origin is the top left of a row's ground, wherever the game puts the row: its well starts a few pixels before it; see [windows])
             for (size_t f = 0; f < a.frames.size(); ++f) {
                 for (const Draw& d : hud_art::animation_draws(art, a.name, f, layout)) {
                     if (d.dst.x < 0 || d.dst.y < 0 || d.dst.right() > shape.w || d.dst.bottom() > shape.h) {
@@ -562,6 +563,17 @@ void test_window_pieces(const assets::AssetArchive& arc, const Art& art) {
     const std::string text = shipped_manifest();
     const window_art::Pieces all = window_art::check(art, arc);
     check(all.dialogs && all.options && all.quick_help && all.countdown && all.fullscreen, "the shipped art has every window");
+    // the countdown card's pieces that the game draws against: a row's well is placed from the top left of the row's ground (268 x 21) and holds it with a bezel round it, a color square is 11 x 11, the Fullscreen button
+    // is a face of 94 x 22 and its cast shadow (3 across, 4 down), and the card's own pieces stand inside the card of 480 x 236
+    const std::vector<Draw> row = hud_art::animation_draws_at(art, "cd_row", 0, 0, 0);
+    check(row.size() == 1 && row[0].dst.x >= -6 && row[0].dst.x <= -4 && row[0].dst.y >= -6 && row[0].dst.y <= -4 && row[0].dst.right() >= 268 + 4 && row[0].dst.bottom() >= 21 + 4,
+          "a countdown row is one well that starts 4 to 6 pixels left of and above the origin and reaches 4 or more beyond the row's 268 x 21");
+    const auto size_is = [&](const char* name, int32_t w, int32_t h) { const hud_art::Sprite* s = art.sprite_at(art.find_sprite(name)); return s != nullptr && s->w == w && s->h == h; };
+    check(size_is("cd_dot_0", 11, 11) && size_is("cd_dot_1", 11, 11) && size_is("cd_dot_2", 11, 11) && size_is("cd_dot_3", 11, 11), "the four color squares of the countdown card are 11 x 11");
+    check(size_is("dlg_btn_fullscreen_up", 97, 26) && size_is("dlg_btn_fullscreen_down", 97, 26), "the countdown card's Fullscreen button is a face of 94 x 22 and its cast shadow: 97 x 26");
+    bool card_inside = true;
+    for (const Draw& d : hud_art::animation_draws_at(art, "cd_card", 0, 0, 0)) card_inside = card_inside && d.dst.x >= 0 && d.dst.y >= 0 && d.dst.right() <= 480 && d.dst.bottom() <= 236;
+    check(card_inside && !hud_art::animation_draws_at(art, "cd_card", 0, 0, 0).empty(), "the countdown card's fixed pieces are inside its 480 x 236");
     // a missing animation or sprite takes away its window and no other
     const struct { const char* what; std::string manifest; bool window_art::Pieces::*gone; } damaged[] = {
         {"the hover picture of Yes", without_anim(text, "yes2"), &window_art::Pieces::dialogs},
