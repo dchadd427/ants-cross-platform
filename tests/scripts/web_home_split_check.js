@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const HOME = path.resolve(__dirname, '..', '..', 'web', 'home');
 const S = require(path.join(HOME, 'split.js'));
+const Media = require(path.join(__dirname, 'fake_media.js'));
 const source = fs.readFileSync(path.join(HOME, 'split.js'), 'utf8');
 const homeSource = fs.readFileSync(path.join(HOME, 'home.js'), 'utf8');
 let checks = 0, failures = 0;
@@ -51,7 +52,7 @@ function rig(o) {
     bar.className = 'hbar'; bar.bar = 80; pl.className = 'pl'; host.appendChild(bar); host.appendChild(main); main.appendChild(pl); host.appendChild(chat);
     host.h = 800; main.w = 1280; pl.box = { width: 280, height: 500 }; chat.box = { width: 1232, height: 224 };
     const store = { data: {}, throwing: !!o.throws };
-    const win = { innerWidth: o.width || 1280, wide: o.width === undefined || o.width >= 701, listeners: {}, matchMedia() { return { get matches() { return win.wide; }, addEventListener(t, f) { win.mq = f; } }; },
+    const win = { innerWidth: o.width || 1280, innerHeight: 800, listeners: {}, matchMedia(q) { return { get matches() { return Media.matches(q, win.innerWidth, win.innerHeight); }, addEventListener(t, f) { win.mq = f; } }; },
         addEventListener(t, f) { (win.listeners[t] = win.listeners[t] || []).push(f); },
         get localStorage() { if (store.throwing === 'access') throw new Error('blocked'); return { getItem(k) { if (store.throwing) throw new Error('full'); return k in store.data ? store.data[k] : null; }, setItem(k, v) { if (store.throwing) throw new Error('full'); store.data[k] = v; }, removeItem(k) { if (store.throwing) throw new Error('full'); delete store.data[k]; } }; } };
     if (o.stored) store.data[S.KEY] = o.stored;
@@ -59,7 +60,7 @@ function rig(o) {
     const doc = { documentElement: root, getElementById(id) { return id === 'gchat' ? chat : null; }, createElement(t) { return new Node(t); } };
     const m = S.mount({ doc, win, host, main });
     return { host, main, pl, chat, bar, win, store, doc, root, m, x: main.children.find((c) => c.className.indexOf('sp-x') !== -1), y: chat.children.find((c) => c.className.indexOf('sp-y') !== -1),
-        resize(w, h) { win.innerWidth = w; win.wide = w >= 701; main.w = w; host.h = h; win.listeners.resize.forEach((f) => f()); } };
+        resize(w, h) { win.innerWidth = w; win.innerHeight = h; main.w = w; host.h = h; win.listeners.resize.forEach((f) => f()); } };
 }
 const ptr = (x, y, id) => ({ button: 0, isPrimary: true, pointerId: id === undefined ? 1 : id, clientX: x, clientY: y, preventDefault() {} });
 {
@@ -107,17 +108,28 @@ const ptr = (x, y, id) => ({ button: 0, isPrimary: true, pointerId: id === undef
     same('a narrow window clamps the players (760 - 62 - 240 = 458 holds, 400 stays)', r.host.styleMap['--pl-w'], '400px');
     r.resize(700 + 1 + 0, 560); r.resize(701, 560);
     same('and the chat to 70% of 480', r.host.styleMap['--gc-h'], '300px');
-    r.resize(701, 300);
-    same('a low window clamps the chat (70% of 220)', r.host.styleMap['--gc-h'], '154px');
+    r.resize(701, 501);
+    same('a low window (501 px high) clamps the chat (70% of 421)', r.host.styleMap['--gc-h'], '294px');
     r.resize(1280, 800);
     same('a window that grows again gives the size that was asked for back', [r.host.styleMap['--pl-w'], r.host.styleMap['--gc-h']], ['400px', '300px']);
     r.resize(390, 844);
     check('a phone: no size on Home, nothing kept', !('--pl-w' in r.host.styleMap) && !('--gc-h' in r.host.styleMap) && r.store.data[S.KEY] === undefined);
     r.resize(1280, 800); same('and back wide: the default again', r.host.styleMap['--pl-w'], undefined);
+
 }
 {   // a phone at the start takes no kept size
     const r = rig({ stored: '{"p":400,"c":300}', width: 390 });
     check('opened on a phone: kept sizes are not applied', !('--pl-w' in r.host.styleMap) && !('--gc-h' in r.host.styleMap));
+}
+{   // a phone held sideways is wider than 700 px and 500 px high or less: it has the strip and no handle, as a phone upright does
+    const r = rig({ stored: '{"p":400,"c":300}' });
+    r.resize(844, 390);
+    check('844 x 390: no size on Home, nothing kept', !('--pl-w' in r.host.styleMap) && !('--gc-h' in r.host.styleMap) && r.store.data[S.KEY] === undefined);
+    r.resize(1366, 450);
+    check('1366 x 450 (wide, 500 px high or less): the same', !('--pl-w' in r.host.styleMap) && !('--gc-h' in r.host.styleMap));
+    r.resize(1366, 501);
+    r.x.fire('keydown', { key: 'ArrowLeft', shiftKey: false, preventDefault() {} });
+    check('501 px high is a window with handles again: a key moves the players\' handle', '--pl-w' in r.host.styleMap);
 }
 for (const why of [true, 'access']) {   // storage that throws
     const r = rig({ throws: why });

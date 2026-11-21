@@ -24,8 +24,8 @@
     // The Menu's links: the footer's and the header's (test_web_home_screen.py keeps them equal), and the page's How it works (no address)
     var MENU_MAIN = [['Home', '/'], ['Matches', '/matches'], ['Map maker', '/mapmaker'], ['How it works', ''], ['Discord server', 'https://discord.gg/WaWrXQnKPj']];
     var MENU_SMALL = [['Sprites and sounds', '/asset_catalog/'], ['Changelog', '/changelog'], ['GitHub', 'https://github.com/dchadd427/ants-cross-platform'], ['Feedback', 'https://github.com/dchadd427/ants-cross-platform/issues'], ['Legal', '/legal']];
-    var TABS = [['games', 'Games'], ['players', 'Players'], ['chat', 'Chat']];      // the phone's strip (a window up to 700 px wide): one view at a time
-    var PHONE = '(max-width: 700px)';
+    var TABS = [['games', 'Games'], ['players', 'Players'], ['chat', 'Chat']];      // the phone's strip (a window up to 700 px wide or up to 500 px high): one view at a time
+    var PHONE = '(max-width: 700px), (max-height: 500px)';
 
     // ---- the pure parts ----
     // "3/4": the colors that play (a person or a computer player) of the colors that are not out of the match, from the page's model; null before the room has told its plan
@@ -243,7 +243,7 @@
                 win.history.pushState(stateOf(to), '', path() + (to === 'room' ? HASH : ''));
             } catch (e) { /* the address stays */ }
         }
-        // The phone's strip: Games, Players and Chat, one at a time (home.css shows it up to 700 px wide; a wider window shows all three and ignores it). The chat is open only on its own view, so what comes while it is away counts as unread.
+        // The phone's strip: Games, Players and Chat, one at a time (home.css shows it up to 700 px wide or up to 500 px high; a wider, taller window shows all three and ignores it). The chat is open only on its own view, so what comes while it is away counts as unread.
         function phone() { try { return !!win.matchMedia && win.matchMedia(PHONE).matches; } catch (e) { return false; } }
         function pick(name) {
             tab = name; host.setAttribute('data-tab', name);

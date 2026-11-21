@@ -72,7 +72,7 @@ class TheScript(unittest.TestCase):
         self.assertIn("setPointerCapture", self.js)
         self.assertIn("var STEP = 16, BIG = 64;", self.js)
         self.assertIn("var SIDE_MIN = 240, CHAT_MIN = 120, CHAT_SHARE = 0.7;", self.js)
-        self.assertIn("var WIDE = '(min-width: 701px)';", self.js)
+        self.assertIn("var WIDE = '(min-width: 701px) and (min-height: 501px)';", self.js)
 
 
 class TheStyle(unittest.TestCase):
@@ -81,10 +81,10 @@ class TheStyle(unittest.TestCase):
         cls.css = read("web", "home", "split.css")
 
     def test_every_rule_that_moves_a_size_is_for_wide_windows_only(self):
-        wide = self.css.split("@media (min-width: 701px) {", 1)[1]
+        wide = self.css.split("@media (min-width: 701px) and (min-height: 501px) {", 1)[1]
         for rule in ("grid-template-columns: minmax(0, 1fr) var(--pl-w)", "height: var(--gc-h)", "cursor: col-resize", "cursor: row-resize"):
             self.assertIn(rule, wide)
-            self.assertNotIn(rule, self.css.split("@media (min-width: 701px) {", 1)[0])
+            self.assertNotIn(rule, self.css.split("@media (min-width: 701px) and (min-height: 501px) {", 1)[0])
         self.assertIn(".sp { display: none; }", self.css, "a phone shows no handle")
 
     def test_the_size_of_the_chat_beats_the_docks_own_height_by_the_id_of_home(self):
@@ -115,7 +115,7 @@ class TheLoader(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_split_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
-    FILES = ["tools/size_limits.py", "web/home/home.js", "web/home/split.js", "web/home/split.css", "web/home/talk.css", "tests/scripts/test_web_home_split.py", "tests/scripts/web_home_split_check.js",
+    FILES = ["tools/size_limits.py", "web/home/home.js", "web/home/split.js", "web/home/split.css", "web/home/talk.css", "tests/scripts/test_web_home_split.py", "tests/scripts/web_home_split_check.js", "tests/scripts/fake_media.js",
              "Dockerfile", ".github/workflows/ci.yml"]
 
     @classmethod

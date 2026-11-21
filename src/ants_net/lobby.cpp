@@ -407,12 +407,13 @@ bool HostLobby::start(uint32_t seed, uint64_t map_hash, uint32_t now_ms, const s
     start_.map_hash = map_hash;
     start_.fog = room_.fog;
     start_.mode = room_.mode;                                    // (protocol 17: the rules of the match, the same on every machine)
+    const bool guests_link = cfg_.host_seat < sim::MAX_PLAYERS;  // (the guests of a host that holds a seat can take its place, so they need each other's addresses; a dedicated server's room relays everything and names no machine)
     for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
         if (room_.slots[s].state == SlotState::Empty) continue;
         start_.roster = static_cast<uint8_t>(start_.roster | (1u << s));
         start_.names[s] = room_.slots[s].name;
         start_.platforms[s] = room_.slots[s].platform;
-        if (guests_[s].conn != nullptr && !guests_[s].address.empty() && guests_[s].listen_port != 0) {
+        if (guests_link && guests_[s].conn != nullptr && !guests_[s].address.empty() && guests_[s].listen_port != 0) {
             start_.endpoints[s] = Endpoint{guests_[s].address, guests_[s].listen_port};      // how the other guests reach it
         }
     }
