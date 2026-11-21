@@ -171,6 +171,23 @@ void run_lobby_ready_tests() {
             room.run(100);
             ASSERT_TRUE(all_show(room, "12") && room.host.everyone_ready());
         }
+        {   // a page that takes the seat over while the old link is still up (a second window with the key) starts with no mark, and says Ready itself
+            Room room(lobby_room_config(407));
+            const std::vector<size_t> g = pages(room, {"Ann", "Bob", "Cat"});
+            room.run(500);
+            const SeatKey bob_key = room.guests[g[1]].lobby->key();
+            ASSERT_TRUE(room.guests[g[1]].lobby->request_ready(true) && room.guests[g[2]].lobby->request_ready(true));
+            room.run(100);
+            ASSERT_TRUE(all_show(room, "12"));
+            ClientLobby::Config again = page_config("Bob");
+            again.key = bob_key;
+            const size_t bob2 = join_with(room, again);
+            room.run(300);
+            ASSERT_TRUE(!room.host.held(1) && all_show(room, "2") && !room.host.everyone_ready());       // (the new page is in the seat, not ready; Cat keeps the mark)
+            ASSERT_TRUE(room.guests[bob2].lobby->request_ready(true));
+            room.run(100);
+            ASSERT_TRUE(all_show(room, "12") && room.host.everyone_ready());
+        }
         {   // a START that stands keeps the marks: the pages go to the game page, their links end, and the marks are not lost
             HostLobby::Config hc = lobby_room_config(406);
             hc.start_wait_ms = 5000;

@@ -35,8 +35,8 @@
   {
    "id": "a_bot_must_ready",
    "file": "src/ants_net/lobby.cpp",
-   "old": "return cfg_.lobby_room && seat < sim::MAX_PLAYERS && room_.slots[seat].state == SlotState::Client &&",
-   "new": "return cfg_.lobby_room && seat < sim::MAX_PLAYERS && room_.slots[seat].state != SlotState::Empty &&",
+   "old": "room_.slots[seat].state == SlotState::Client && seat != room_.leader && person(seat) &&",
+   "new": "room_.slots[seat].state != SlotState::Empty && seat != room_.leader &&",
    "build": [
     "test_lobby"
    ],
