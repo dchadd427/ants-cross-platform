@@ -20,8 +20,8 @@
   {
    "id": "a_change_name_is_a_read",
    "file": "docker/nginx.conf",
-   "old": "(?:me|bans|mutes|hidden|modlog|status)\\z\" read;",
-   "new": "(?:me|bans|mutes|hidden|modlog|status|ban)\\z\" read;"
+   "old": "(?:me|bans|mutes|hidden|imagesoff|modlog|status)\\z\" read;",
+   "new": "(?:me|bans|mutes|hidden|imagesoff|modlog|status|ban)\\z\" read;"
   },
   {
    "id": "any_method_goes_through",
