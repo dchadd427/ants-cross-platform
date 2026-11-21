@@ -1,4 +1,4 @@
-"""Sculpted 3D Bomber Ant (compact riveted aviator goggles, empty idle hands, 4-bomb pack, 0.80s Idle).
+"""Sculpted 3D Bomber Ant (compact riveted aviator goggles, empty idle hands, 3-bomb pack, 1.70s Idle).
 
 Coordinate system (glTF 2.0 right-handed):
   +Y = up (feet grounded solidly at Y = 0.0)
@@ -454,16 +454,26 @@ def _build_cup_bomb(
     )
     parts.append(socket)
 
-    fdir = 1.0 if fuse_curve_x >= 0.0 else -1.0
-    fspan = max(0.68 * h, abs(fuse_curve_x) * 2.1)
-    # 2x longer braided white cord fuses with playful outward & rearward S-curve arcs (clear of antennae!).
-    fuse_pts = [
-        (0.0, 1.63 * h, 0.0),
-        (0.10 * fdir * fspan, 2.08 * h, -0.08 * h),
-        (0.42 * fdir * fspan, 2.52 * h, -0.18 * h),
-        (0.78 * fdir * fspan, 2.84 * h, -0.22 * h),
-        (1.06 * fdir * fspan, 2.94 * h, -0.18 * h),
-    ]
+    if abs(fuse_curve_x) < 1e-4:
+        # Center bomb fuse arches gracefully up & rearward (-Z) with a subtle S-flick, clear of both antennae!
+        fuse_pts = [
+            (0.0, 1.63 * h, 0.0),
+            (0.05 * h, 2.08 * h, -0.18 * h),
+            (-0.04 * h, 2.52 * h, -0.42 * h),
+            (0.03 * h, 2.84 * h, -0.64 * h),
+            (0.01 * h, 2.94 * h, -0.78 * h),
+        ]
+    else:
+        fdir = 1.0 if fuse_curve_x > 0.0 else -1.0
+        fspan = max(0.68 * h, abs(fuse_curve_x) * 2.1)
+        # 2x longer braided white cord fuses with playful outward & rearward S-curve arcs (clear of antennae!).
+        fuse_pts = [
+            (0.0, 1.63 * h, 0.0),
+            (0.10 * fdir * fspan, 2.08 * h, -0.08 * h),
+            (0.42 * fdir * fspan, 2.52 * h, -0.18 * h),
+            (0.78 * fdir * fspan, 2.84 * h, -0.22 * h),
+            (1.06 * fdir * fspan, 2.94 * h, -0.18 * h),
+        ]
     fuse = curved_tube(
         fuse_pts,
         [0.056 * h, 0.052 * h, 0.048 * h, 0.044 * h, 0.040 * h],
@@ -489,16 +499,16 @@ def _build_dynamite_pack(
     thorax_center: Tuple[float, float, float],
     head_back_z: float,
 ) -> None:
-    """Build Bomber's sculpted tan-leather tactical backpack physically holding 4 riveted cup-bombs."""
+    """Build Bomber's sculpted tan-leather tactical backpack physically holding 3 riveted cup-bombs."""
     bx, by, bz = back_anchor
     _, ty, tz = thorax_center
     pack_y = by + 0.112
     pack_z = min(bz - 0.068, head_back_z - 0.028)
 
-    # 1. Plump sculpted tan/brown canvas-leather main rucksack body flush against the dorsal carapace
-    # and extending solidly rearward to physically house & cradle all 4 cup-bombs (zero floating!).
+    # 1. Compact sculpted tan/brown canvas-leather main rucksack body flush against the dorsal carapace
+    # and extending solidly rearward to physically house & cradle all 3 fuller cup-bombs (zero floating!).
     pack_body = (
-        rounded_box(0.214, 0.194, 0.144, bevel=0.030, segs=4, name="pack_rucksack_body", material="prop_brown")
+        rounded_box(0.194, 0.192, 0.142, bevel=0.028, segs=4, name="pack_rucksack_body", material="prop_brown")
         .rotate_xyz(rx=-0.30)
         .translate(bx, pack_y + 0.012, pack_z - 0.052)
     )
@@ -506,7 +516,7 @@ def _build_dynamite_pack(
 
     # Reinforced dark leather lower pack base pad (keeps tidy clearance above petiole/gaster).
     pack_base = (
-        rounded_box(0.196, 0.052, 0.132, bevel=0.016, segs=3, name="pack_base_boot", material="gear_dark")
+        rounded_box(0.178, 0.052, 0.130, bevel=0.016, segs=3, name="pack_base_boot", material="gear_dark")
         .rotate_xyz(rx=-0.30)
         .translate(bx, pack_y - 0.072, pack_z - 0.026)
     )
@@ -514,18 +524,18 @@ def _build_dynamite_pack(
 
     # Sculpted rear flap / ordnance pouch on the back face of the backpack with a gleaming gold buckle.
     rear_pouch = (
-        rounded_box(0.156, 0.104, 0.044, bevel=0.016, segs=3, name="pack_rear_pouch", material="prop_brown")
+        rounded_box(0.140, 0.104, 0.044, bevel=0.016, segs=3, name="pack_rear_pouch", material="prop_brown")
         .rotate_xyz(rx=-0.30)
         .translate(bx, pack_y - 0.008, pack_z - 0.118)
     )
     scene.add("dynamite_pack", rear_pouch)
 
-    # Side canvas holster pouches on left & right flanks of the rucksack physically cradling outer bombs 0 & 3.
+    # Side canvas holster pouches on left & right flanks of the rucksack cradling the two flanking bombs.
     for side_sign, tag in ((+1.0, "left"), (-1.0, "right")):
         side_pouch = (
-            rounded_box(0.068, 0.118, 0.088, bevel=0.018, segs=3, name=f"pack_side_pouch_{tag}", material="prop_brown")
+            rounded_box(0.064, 0.116, 0.086, bevel=0.017, segs=3, name=f"pack_side_pouch_{tag}", material="prop_brown")
             .rotate_xyz(rx=-0.30, rz=-side_sign * 0.24)
-            .translate(bx + side_sign * 0.106, pack_y + 0.024, pack_z - 0.064)
+            .translate(bx + side_sign * 0.094, pack_y + 0.024, pack_z - 0.062)
         )
         scene.add("dynamite_pack", side_pouch)
 
@@ -573,14 +583,14 @@ def _build_dynamite_pack(
     )
     scene.add("dynamite_pack", chest_belt)
 
-    # Dark leather cinch straps wrapping tightly around the backpack & bombs with gleaming gold buckles!
+    # Dark leather cinch straps wrapping tightly around the 3-pocket backpack with gleaming gold buckle!
     for strap_idx, y_off, z_off in ((0, 0.044, -0.128), (1, -0.020, -0.132)):
         c_pts = [
-            (-0.144, pack_y + y_off - 0.012, pack_z - 0.044),
-            (-0.118, pack_y + y_off + 0.008, pack_z + z_off + 0.024),
+            (-0.128, pack_y + y_off - 0.012, pack_z - 0.044),
+            (-0.106, pack_y + y_off + 0.008, pack_z + z_off + 0.024),
             (0.000, pack_y + y_off + 0.016, pack_z + z_off),
-            (+0.118, pack_y + y_off + 0.008, pack_z + z_off + 0.024),
-            (+0.144, pack_y + y_off - 0.012, pack_z - 0.044),
+            (+0.106, pack_y + y_off + 0.008, pack_z + z_off + 0.024),
+            (+0.128, pack_y + y_off - 0.012, pack_z - 0.044),
         ]
         c_strap = curved_tube(
             c_pts,
@@ -600,13 +610,12 @@ def _build_dynamite_pack(
     )
     scene.add("dynamite_pack", rack_buckle)
 
-    # Seat all 4 hot-magenta cup-bombs SOLIDLY INTO the top & side pockets of the tan backpack (zero floating!)
-    # with 2x longer braided fuses arching outward/upward with bright golden spark tips!
+    # Seat 3 fuller (~1.08x) hot-magenta cup-bombs SOLIDLY INTO the 3 pockets of the tan backpack (zero floating!):
+    # center bomb seated squarely in the middle pocket + left & right flanking bombs fanned cleanly outward.
     pack_specs = (
-        (+20.0, -18.0, -0.110, 0.046, -0.072, 0.080, -0.034),
-        (+6.0, -21.0, -0.046, 0.088, -0.092, 0.084, -0.028),
-        (-6.0, -21.0, +0.046, 0.088, -0.092, 0.084, +0.028),
-        (-20.0, -18.0, +0.110, 0.046, -0.072, 0.080, +0.034),
+        (+22.0, -19.0, -0.094, 0.052, -0.074, 0.088, -0.036),
+        (0.0, -23.0, 0.000, 0.086, -0.094, 0.091, 0.000),
+        (-22.0, -19.0, +0.094, 0.052, -0.074, 0.088, +0.036),
     )
     for idx, (rz_deg, rx_deg, ox, oy, oz, cup_h, fuse_dx) in enumerate(pack_specs):
         holster = (
