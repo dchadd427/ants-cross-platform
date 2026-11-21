@@ -2,7 +2,7 @@
 // map's side (the pictures 1, 2, 3, 4, 5, 5b, 6, 12, 13, 13b, 14, 15b, 16, 17 and the rematch's R2, which the words below are compared with), who may press which of the Team 1 / Team 2 buttons and what is said when
 // a press is refused, what the leader asks of the room (the plan, a color moved or exchanged), the player's name (the same rules as the game page's own NAME block, which is read from web/shell.html and
 // web/lobby.html and must be the same text in both), the room codes (the alphabet, the two groups of three, what a typed or pasted code may be), the maps (against the level files of Original-Ants/Maps),
-// the sentences that the server says (noticeKind) and every message strip of picture 15 (text, tone and button).
+// the sentences that the server says (noticeKind), every message strip of picture 15 (text, tone and button) and the scale of the ping colors (tests/data/ping_quality_table.json, which the game's C++ test of the same scale runs too).
 //   - the Room messages are built as bytes and read by web/front/lobby_net.js (the codec of the same protocol), so a table row is a message that a server can send;
 //   - every exported function of lobby_rules.js must be called by this check (a function that no table reaches is a failure);
 //   - the random runs use a fixed seed: the same rooms every time.
@@ -55,7 +55,7 @@ const N = require(path.join(path.dirname(path.resolve(rulesPath)), 'lobby_net.js
 same('the library exports exactly these names (a new one needs a table here)', Object.keys(RAW).sort(), [
     'ACTS', 'CODE_CHARS', 'COLORS', 'DEFAULT_MAP_KEY', 'GRID', 'HINT', 'KINDS', 'MAPS', 'META', 'TEXT',
     'article', 'banner', 'codeText', 'communityName', 'hostName', 'levelWord', 'listOf', 'makeCode', 'mapByKey', 'mapOfFile', 'modelOf', 'moveOf', 'nameAt', 'nameCheck', 'nameOf', 'notBack', 'noticeKind', 'pairOf', 'pendingAfter',
-    'planWith', 'playing', 'pressSide', 'reconcileSides', 'shownOf', 'sideOpen', 'sideView', 'sidesFix', 'startNote', 'startsAlone', 'teamBytes', 'teamNeedsFix', 'teamsText', 'typedCode', 'validMapFile', 'viewOf', 'withMode'
+    'pingQuality', 'planWith', 'playing', 'pressSide', 'reconcileSides', 'shownOf', 'sideOpen', 'sideView', 'sidesFix', 'startNote', 'startsAlone', 'teamBytes', 'teamNeedsFix', 'teamsText', 'typedCode', 'validMapFile', 'viewOf', 'withMode'
 ]);
 
 // The colors: the server's seats (Green 0, Red 1, Blue 2, Black 3); the cards lie Black, Green, Red, Blue
@@ -1119,6 +1119,16 @@ check('the random rooms were many and of every kind (the generator is not stuck)
     check('the fixed lines (the pictures\' words) have no stray blank: none at the ends or doubled', Array.from(fixed).filter((s) => s !== '' && (/^\s|\s$|\s\s/.test(s))).length === 0, Array.from(fixed).filter((s) => /^\s|\s$|\s\s/.test(s)).join('|'));
     check('the fixed lines are plain text: no markup in them', Array.from(fixed).every((s) => !/[<>]/.test(s)));
     check('the words use the characters of the pictures only: ASCII and the ellipsis, the apostrophe of a possessive and the middle dot', Array.from(fixed).every((s) => /^[\x20-\x7e…’·]*$/.test(s)), Array.from(fixed).filter((s) => !/^[\x20-\x7e…’·]*$/.test(s)).join('|'));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 11. The quality of a ping: the table that the C++ test of ping_quality() (tests/test_net/test_latency.cpp) reads too, so that the two scales cannot drift apart
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const table = JSON.parse(fs.readFileSync(path.join(repoDir, 'tests', 'data', 'ping_quality_table.json'), 'utf8'));
+    check('the table of the ping scale holds its boundaries (79, 80, 149, 150, none, zero, huge)', [79, 80, 149, 150, -1, 0, 2147483647].every((ms) => table.cases.some((c) => c.ms === ms)), String(table.cases.length));
+    table.cases.forEach((c) => same('pingQuality(' + c.ms + ')', R.pingQuality(c.ms), c.quality));
+    same('what is no number is none', [R.pingQuality(undefined), R.pingQuality(null), R.pingQuality(NaN), R.pingQuality('40')], ['none', 'none', 'none', 'none']);
 }
 
 // ---- END OF SECTIONS ----
