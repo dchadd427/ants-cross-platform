@@ -45,6 +45,8 @@ A delete of an image line by a moderator is the `/del` that it always was: the `
 
 Then the body is read within 30 seconds (400 `body` when it does not come), its first bytes must be a PNG, a JPEG, a GIF or a WebP (415 `type`; the converter looks at the rest), and it goes to the converter, one at a time, waiting at most 10 seconds in the queue. The answer is checked again here (below). The account's role is looked at once more (it may have changed while the converter worked), the room on the disk is checked, the files are written, the row follows, and the answer is `200 {"id","w","h","x","anim","still"}`. A refusal of the converter is `415 type`, `422 pixels`, `422 bad`, `422 frames` or `413 big`; a converter that is not there, hangs or lies is `503 down`; no room is `503 full`. An answer is JSON with one code and nothing else. A token that was spent for an upload that failed for a reason that is not the account's doing (busy, down, full) is given back. The log says `image kind=ok|type|pixels|bad|frames|big|down|full` and nothing else.
 
+A browser that sends no `Sec-Fetch-Site` header with the upload (Safari before 16.4) is refused with 403 `origin`, and the page says that the upload did not work: the door takes no other header in its place, and nginx's exact location asks for the same header. Those visitors can read the chat and see its images, but cannot post one until the browser is updated.
+
 The id is 128 random bits (32 hex digits) and the name of the image in every address; it is bound to the account's reference, can be used for one line, and is valid for 10 minutes; a waiting upload that nobody used is deleted then, files and row.
 
 ## The converter
