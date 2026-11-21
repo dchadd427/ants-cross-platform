@@ -1194,8 +1194,8 @@
   {
    "id": "marks_alone_are_a_line",
    "file": "web/home/chat.js",
-   "old": "if (!shows(text)) return null;",
-   "new": "if (!text) return null;",
+   "old": "if (!shows(text) && !img) return null;",
+   "new": "if (!text && !img) return null;",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {

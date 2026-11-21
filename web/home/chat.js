@@ -44,7 +44,8 @@
     var DONE = { mute: 'Done: the person is muted.', unmute: 'Done: the person can write again.', del: 'Done: the line is gone.', kick: 'Done: the person was removed.', ban: 'Done: the person is banned.', unban: 'Done: the ban is lifted.', noimages: 'Done: the person cannot post images.', images: 'Done: the person can post images again.' };
     var MAXBANS = 50;                                                    // (the hub sends the newest 50)
     var ABOUT = ['power', 'role', 'who'];                                // the codes that are only for a command (a line is never refused with them)
-    var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young', 'quota', 'bad', 'img', 'imgid'];       // the codes that the hub answers a line with: an err of any other code (a refused `here` has its own) is not about a line
+    var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young', 'quota', 'bad'];       // the codes that the hub answers a line with: an err of any other code (a refused `here` has its own) is not about a line
+    SAID.push('img', 'imgid');                                           // (and the two of an image line: the upload is not the account's, or it may not post one)
     var ERR = {                                                          // the words of the hub's err codes (docs/HUB.md: "the page owns the words") and of this page's own refusals
         rate: 'Slow down a little', login: 'Log in with Discord to chat', muted: 'You cannot chat for a while', banned: 'You cannot chat here', long: 'That line is too long', empty: 'Write something first',
         young: 'Your account is too new to chat yet', quota: 'You have chatted a lot, try again later', bad: 'That line could not be sent', markup: 'Lines cannot hold < or >', power: 'You are not allowed to do that', role: 'Could not confirm your role, try again in a moment', who: 'Nobody by that name is here', offline: TEXT.offline, readonly: TEXT.readonly, failed: 'That did not work, try again',
@@ -130,13 +131,14 @@
         var name = nameOf(y.name), role = y.role === 'admin' || y.role === 'mod' || y.role === 'none' ? y.role : y.mod === true ? 'mod' : 'none';       // (`role` where the hub says it; an older hub says `mod` only)
         return name ? { name: name, mod: role !== 'none', role: role, k: nameOf(y.k), pick: y.pick, other: y.pick === 'display' || y.pick === 'username' ? nameOf(y.other) : '', pic: picsOf(y.pics) === 'on' ? picOf(y.pic) : '', pics: picsOf(y.pics), img: y.img === 'on' || y.img === 'role' || y.img === 'off' || y.img === 'wait' ? y.img : '' } : null;       // (a picture only where the switch says `on`, whatever else a frame holds)
     }
-    function imgOf(v) { return v && typeof v === 'object' && typeof v.n === 'string' && /^[0-9a-f]{32}$/.test(v.n) ? v : null; }       // (the image of a line: pics.js checks the rest before it makes an address)
+    function imgOf(v) { return v && typeof v === 'object' && typeof v.n === 'string' && PICNAME.test(v.n) ? v : null; }       // (the image of a line: pics.js checks the rest before it makes an address)
     function lineOf(m) {                                                 // one line of the hub, cleaned: { id, who, text, mod, role, sys (the hub's own line: only its flag says so), k (the author's key), u (the author's username: a moderator's copy only) }, or null when it is no line
         if (!m || typeof m !== 'object' || typeof m.who !== 'string' || typeof m.text !== 'string' || count(m.id) === null) return null;
         var text = clip(plain(m.text.slice(0, LIMIT.line * 4)), LIMIT.line), sys = m.sys === true;
         var img = sys ? null : imgOf(m.img);
         if (!shows(text) && !img) return null;                           // (an image may have no words)
-        var out = { id: m.id, who: nameOf(m.who) || '?', text: text, mod: !sys && m.mod === true, role: sys ? 'none' : roleOf(m.role, m.mod), sys: sys, k: nameOf(m.k), u: nameOf(m.u), img: img };
+        var out = { id: m.id, who: nameOf(m.who) || '?', text: text, mod: !sys && m.mod === true, role: sys ? 'none' : roleOf(m.role, m.mod), sys: sys, k: nameOf(m.k), u: nameOf(m.u) };
+        out.img = img;
         if (dayOf(m.at) !== '') out.at = m.at;                           // (the hub's own time of the line, seconds since 1970; a line without one shows no time: the page never makes one up)
         return out;
     }
@@ -662,12 +664,15 @@
         function holdFor(entry, frame) {                                            // a frame that waits for its answer: done(code) once ('ok', the hub's code, `offline` or `silent`)
             var done = entry.done;
             entry.done = function (code) { clearTimeout(entry.timer); delWait = delWait.filter(function (w) { return w.entry !== entry; }); tell1(function () { done(code); }); };
+            waiting(); sendHeld(entry, frame);
+        }
+        function sendHeld(entry, frame) {                                           // the frame goes out and its entry waits for the answer (8 s)
             try { sock.send(JSON.stringify(frame)); } catch (e) { lost(); entry.done('offline'); return; }
-            waiting(); unanswered.push(entry);
+            unanswered.push(entry);
             entry.timer = setTimeout(guard(function () { var at = unanswered.indexOf(entry); if (at >= 0) unanswered.splice(at, 1); entry.done('silent'); }), MS.pending);
         }
         function sendImage(id, words, done) {                                    // a line that carries an upload: '' when it went out, else the code that says why not
-            var text = plain(String(words || '')), why = !sock || sock.readyState !== 1 || state !== 'live' ? 'offline' : you ? (removed === 'banned' ? 'banned' : you.img !== 'on' ? 'img' : points(text) > LIMIT.line ? 'long' : /[<>]/.test(text) ? 'markup' : '') : 'readonly';
+            var text = plain(String(words || '')), why = !sock || sock.readyState !== 1 || state !== 'live' ? 'offline' : you ? (removed === 'banned' ? 'banned' : you.img !== 'on' ? 'img' : LIMIT.line < points(text) ? 'long' : text.search(/[<>]/) >= 0 ? 'markup' : '') : 'readonly';
             if (why) { tell(why); return why; }
             holdFor({ text: text, key: '', at: now(), cmd: false, img: true, done: done }, { t: 'say', text: text, img: id });
             return '';
@@ -700,7 +705,8 @@
             var about = ABOUT.indexOf(code) !== -1, at = oldest(about || code === 'bad'), refused = at < 0 && about ? { cmd: true } : unanswered.splice(at < 0 ? 0 : at, 1)[0];       // (power, role and who are a command's, even when its wait is over)
             if (!refused) return;
             if (code === 'banned') removed = 'banned';                           // (a banned person who reloads the page is told by the hub's refusal: the notice and the field off)
-            if (refused.done) { if (refused.img) tell(code); refused.done(code); render(); return; }          // (the sheet's own command: the sheet says the words; an image's refusal is told in the note as well)
+            if (refused.img) tell(code);                                         // (an image line's refusal is told in the note as well)
+            if (refused.done) { refused.done(code); render(); return; }          // (the sheet's own command: the sheet says the words)
             if (refused.cmd) answer([code === 'bad' ? TEXT.cmdBad : code === 'rate' ? TEXT.cmdRate : wordOf(code, login)]); else tell(code);
             if (refused.text === undefined) return;
             delete said[refused.text];
@@ -731,12 +737,10 @@
             if (!you || you.role === 'none') { entry.done('power'); return; }
             if (!sock || sock.readyState !== 1 || !welcomed || state !== 'live') { entry.done('offline'); return; }
             if (oldest(true) >= 0) { entry.done('rate'); return; }
-            try { sock.send(JSON.stringify({ t: 'say', text: entry.text })); } catch (e) { lost(); entry.done('offline'); return; }
-            unanswered.push(entry);
-            entry.timer = setTimeout(guard(function () { var at = unanswered.indexOf(entry); if (at >= 0) unanswered.splice(at, 1); entry.done('silent'); }), MS.pending);
+            sendHeld(entry, { t: 'say', text: entry.text });
         }
         function lineById(id) {                                                 // a copy of a person's line of the log (never a private answer), or null
-            for (var i = 0; i < feed.length; i++) { var e = feed[i]; if (!e.priv && e.id === id) return { id: e.id, who: e.who, text: e.text, role: e.role, sys: e.sys, u: e.u, own: !!e.own, img: !!e.img }; }
+            for (var i = 0; i < feed.length; i++) { var e = feed[i]; if (!e.priv && e.id === id) return { id: e.id, who: e.who, text: e.text, role: e.role, sys: e.sys, u: e.u, img: !!e.img, own: !!e.own }; }
             return null;
         }
         function byAuthor(id) {                                                 // staff only: the lines of the log (no private answer, no hub line) that the account of line `id` wrote, newest first, as { id, text, at }; matched by the hub's key, never a name
