@@ -29,7 +29,41 @@ All of them are plan switches that ship on at every level and that `bot_arena --
 
 ## Measured
 
-(filled in by the numbers below)
+`bot_arena`, seeds 1 to 8, four bots of one kind on the four seats (Hard, Medium, Hard, Medium), ten maps (the six of the original, POPcOrN, HELLRAISER, Bombz Away and the map with plugged gaps; 320 seat-matches). "Before" is `--tune unstick=0`.
+
+| | before | after |
+|---|---|---|
+| stuck spans (10 s) per seat and match | 0.41 | 0.30 |
+| of them looping in the can't-go clip | 0.19 | 0.12 |
+| ant-minutes stuck per match | 6.7 | 3.7 |
+| can't-go reactions per seat-minute | 5.38 | 1.78 |
+| refused orders per 1,000 orders | 41.6 | 29.8 |
+| refused orders that repeat an earlier refusal, per seat and match | 4.78 | 2.79 |
+| mean score per seat | 931 | 933 |
+| steals completed per seat and match (points banked) | 5.57 (275) | 5.42 (268) |
+| power-ups taken per seat and match | 3.76 | 3.92 |
+
+By map: HELLRAISER 290 to 17 can't-go reactions a seat (score 42 to 73), POPcOrN 48 to 19 (looping spans 0.19 to 0.03), the map with plugged gaps 241 to 101 (looping spans 0.78 to 0.41; refused orders 96 to 62 in 1,000), TREASURE 81 to 50, ISLANDS 17.9 to 8.2 refused orders in 1,000; TINY, SMALL, GAUNTLET and Bombz Away play as before. 89 to 99 percent of the raids that begin are completed (steals) on the maps where thieves can get home; HELLRAISER's thieves never get home, their raids only take points.
+
+**One rule at a time**, two bots with the rule against two without it in the same match (Hard, every arrangement, seeds 1 to 4, six maps, 144 matches each; `--seat N=standard+plugs=1,...`): mean score a seat, with and without; matches won by a seat with the rule against one without (ties left out):
+
+| rule | with | without | won |
+|---|---|---|---|
+| `plugs` | 1,071 | 1,050 | 72 : 66 (the map with plugged gaps 1,259 : 1,131, 15 : 9) |
+| `refmem` | 1,059 | 1,054 | 68 : 65 |
+| `rescue` | 1,056 | 1,056 | 69 : 69 |
+| `rhome` | 1,011 | 1,105 | 68 : 71 (HELLRAISER 77 : 131, the map with plugged gaps 968 : 1,430, POPcOrN 557 : 605) |
+
+`rhome` is the one that costs points, and it is a trade: a raid that cannot bank still takes up to 50 points from the hill that it raided (the victim's box falls, nobody's rises), so a seat whose thieves stand in the can't-go loop for the rest of the match has been a weapon against the others; with the rule a seat gives that up and keeps the Thief out of the loop, and in a match against bots without it the others' trap raids still reach it. Matches won stay even. With the plugs open (the map with plugged gaps) the same raids bank: 98 percent of them. `--tune rhome=0` is the bot that raids wherever the walk leads there.
+
+**All four rules together**, two bots with them against two without, in the same match (every arrangement, seeds 1 to 4, ten maps, 240 matches each; `--seat N=standard+styled=1:LEVEL` for the two and `standard+styled=1,plugs=0,rhome=0,refmem=0,rescue=0:LEVEL` for the other two: a seat with `standard+K=V` and no `styled=1` plays the level's neutral plan with no style, which is another bot):
+
+| level | with | without | won | can't-go reactions a seat |
+|---|---|---|---|---|
+| Hard | 962 | 877 | 119 : 101 (20 ties) | 23 : 74 |
+| Medium | 993 | 930 | 110 : 113 (17 ties) | 22 : 69 |
+
+The map with plugged gaps gives most of the difference (Hard 1,541 : 821, Medium 1,538 : 852); on the other maps the seats score alike, TREASURE and POPcOrN swing a little either way with the level.
 
 ## Tests
 

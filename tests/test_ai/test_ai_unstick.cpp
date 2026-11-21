@@ -277,10 +277,12 @@ void run_unstick_tests() {
             plan.plugs = true;
             plan.refusal_memory = false;
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
-            PlugTask::Params quick = rig.as<StandardBot>().plugs().params();
-            quick.first_look = 0;                                                              // (the plug task looks at every tick, so that it is the one that sees the power-up that appears at tick 100)
-            quick.look_ticks = 1;
-            rig.as<StandardBot>().plugs_for_labs().set_params(quick);
+            if (!plug_first) {
+                PlugTask::Params quick = rig.as<StandardBot>().plugs().params();
+                quick.first_look = 0;                                                          // (the plug task looks at every tick, so that it is the one that sees the power-up that appears at tick 100)
+                quick.look_ticks = 1;
+                rig.as<StandardBot>().plugs_for_labs().set_params(quick);
+            }
             for (int t = 0; t < 700; ++t) {
                 if (!plug_first && t == 100) sim.grid_mut().place_powerup(14, 10, 1);              // (the power-up appears while the other task is looking: a dropped one)
                 rig.tick();
@@ -291,7 +293,7 @@ void run_unstick_tests() {
             }
             return std::make_pair(clicks, count_type(sim, 0, sim::AntType::Bomber));
         };
-        const auto first = play(true);                                                        // the power-up is there at the start: the trip task goes first, the plug task finds an ant on its way
+        const auto first = play(true);                                                        // the power-up is there at the start: the trip task goes first (the plug task looks from tick 60), the plug task finds an ant on its way
         ASSERT_EQ(first.first, 1u);
         ASSERT_EQ(first.second, 1u);
         const auto later = play(false);                                                       // it appears at tick 100: the plug task goes first, the trip task finds an ant on its way
