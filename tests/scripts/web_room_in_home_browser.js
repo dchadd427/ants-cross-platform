@@ -8,7 +8,8 @@
 //   2. Ready: the guest has Ready up on their own card, the host has none; START of the host is off with the line "Waiting for <guest> to ready up" until the guest presses Ready, then it is on and the line says that everyone is ready; the host
 //      changes the map and the marks stay; the guest takes the mark back and START is off again; the bot and the host show Ready by themselves; a guest's START says that it waits for the host;
 //   3. a window lower than the room needs (1366 x 650): the page does not scroll, the room's panel scrolls inside itself and START stays in view;
-//   4. a phone upright (390 x 844) and held sideways (844 x 390): the strip has Room, Players and Chat; the Room view scrolls with START at its bottom, the Chat view has the two tabs;
+//   4. the phone layout (up to 700 px wide or up to 500 px high): upright (390 x 844), held sideways (844 x 390, 932 x 430) and a wide, low window (1366 x 450): the strip has Room, Players and Chat; the Room view scrolls with START at its
+//      bottom, the Chat view has the two tabs and a field in the window, the Players view has the list, no handle of the splitters is drawn;
 //   --shots DIR writes the pictures of every scene (room_*.png).
 // usage: node web_room_in_home_browser.js --server PATH/ants_server --maps PATH/Original-Ants/Maps [--shots DIR]     (exit 0: every check holds; every failure is printed)
 'use strict';
@@ -222,10 +223,10 @@ const measure = (page) => page.eval(MEASURE);
 const text = (page, selector) => page.eval('(function () { var e = document.querySelector(' + JSON.stringify(selector) + '); return e ? e.textContent : null; })()');
 
 // a room of a host (Hazel), a guest who joined by the link (Wren) and, when asked, a Medium computer player in the third color
-async function makeRoom(chrome, site, w, h, bot) {
-    const hostPage = await open(chrome, site, 'Hazel', [w, h]);
+async function makeRoom(chrome, site, w, h, bot, mobile) {
+    const hostPage = await open(chrome, site, 'Hazel', [w, h], '/', mobile);
     const link = await host(hostPage);
-    const guestPage = await open(chrome, site, 'Wren', [w, h], new URL(link).pathname + new URL(link).search);
+    const guestPage = await open(chrome, site, 'Wren', [w, h], new URL(link).pathname + new URL(link).search, mobile);
     await guestPage.waitFor('the name card', '!document.getElementById("name-step").hidden || document.body.getAttribute("data-screen") === "room"', 10000).catch(() => null);
     if (await guestPage.eval('!document.getElementById("name-step").hidden')) await guestPage.press('#name-step-go');
     try { await hostPage.waitFor('the guest is in', 'document.querySelectorAll("#slots .k-person").length === 2', 15000); } catch (e) { await hostPage.shot('fail_host'); await guestPage.shot('fail_guest'); console.log('guest errors: ' + JSON.stringify(guestPage.errors)); throw e; }
@@ -335,52 +336,57 @@ async function main() {
         await hostPage.close();
     }
 
-    // 4. a phone upright (the strip has Room, Players and Chat; the Room view scrolls and START is in view at its end; the Chat view has the two tabs) and held sideways (844 px wide is a window of the desktop's layout:
-    //    the low-window rule, the room's panel scrolls inside itself, START in view at its end, the chat box folded to its header with both tabs, one press from open)
-    for (const phone of [['390x844', 390, 844, true], ['844x390', 844, 390, false]]) {
-        const page = await chrome.newPage(phone[1], phone[2], true);
-        await page.send('Network.enable');
-        await page.send('Network.setCookie', { name: 'who', value: 'Hazel', url: site.url });
-        await page.goto(site.url + '/');
-        await page.waitFor('Home is lit', '(function () { var h = document.querySelector(".quick.host"), j = document.querySelector(".quick.join"); return !!h && !!j && !h.disabled && !j.disabled; })()', 15000);
-        await host(page);
-        await page.waitFor('the page\'s toast has gone', '(function () { return [".gtoast", "#toast"].every(function (q) { var t = document.querySelector(q); return !t || t.hidden; }); })()', 12000);
-        await sleep(300);
+    // 4. the phone layout (a window up to 700 px wide or up to 500 px high): upright (390 x 844), held sideways (844 x 390, 932 x 430) and a wide window that is only low (1366 x 450). Home is one of three views and the strip
+    //    along the bottom picks it: Games (Room, while a room is held), Players, Chat. The room's panel scrolls inside itself with START in view at its end, the chat is a view of its own with the two tabs and a field that
+    //    is in the window, the players' list has its view, and no handle of the splitters is there.
+    const PHONES = [['390x844', 390, 844, true], ['844x390', 844, 390, true], ['932x430', 932, 430, true], ['1366x450', 1366, 450, false]];
+    for (const phone of PHONES) {
         const at = phone[0];
+        // the games' view, before there is a room: the strip is Games, Players, Chat; the list is shown and the chat and the splitters are not
+        {
+            const first = await open(chrome, site, 'Hazel', [phone[1], phone[2]], '/', phone[3]);
+            await sleep(400);
+            const home = await first.eval('(function () { var vis = function (q) { var e = document.querySelector(q); return !!e && e.getClientRects().length > 0; }, d = document.documentElement, t = document.querySelector(".htabs"), b = t ? t.getBoundingClientRect() : null;' +
+                ' return { strip: [].map.call(document.querySelectorAll(".htab .name"), function (e) { return e.textContent; }), stripShown: !!b && b.height > 0, games: vis(".gdock"), chat: vis("#gchat"), players: vis(".pl"), handles: [].filter.call(document.querySelectorAll(".sp"), function (e) { return e.getClientRects().length > 0; }).length, page: d.scrollHeight <= innerHeight + 1 && d.scrollWidth <= innerWidth }; })()');
+            check('phone ' + at + ': Home with no room is the Games view, with the strip Games, Players, Chat along the bottom, no chat, no players and no handle drawn', JSON.stringify(home.strip) === JSON.stringify(['Games', 'Players', 'Chat']) && home.stripShown && home.games && !home.chat && !home.players && home.handles === 0 && home.page, JSON.stringify(home));
+            await first.shot('phone_' + at + '_games');
+            await first.close();
+        }
+        // a room of three (the host, a guest who joined by the link, a Medium computer player): the cards are the fullest
+        const { hostPage: page, guestPage } = await makeRoom(chrome, site, phone[1], phone[2], true, phone[3]);
         const view = await page.eval('(function () { var l = document.getElementById("lobby"), d = document.documentElement; return { page: d.scrollHeight <= innerHeight + 1 && d.scrollWidth <= innerWidth, scrolls: l.scrollHeight > l.clientHeight }; })()');
-        check('phone ' + at + ': the page does not scroll and the room\'s panel does', view.page && view.scrolls, JSON.stringify(view));
+        check('phone ' + at + ': the page does not scroll' + (phone[2] < 600 ? ' and the room\'s panel does' : ''), view.page && (phone[2] >= 600 || view.scrolls), JSON.stringify(view));
+        const fingers = await page.eval('[].filter.call(document.querySelectorAll("#lobby button, #lobby select, #lobby .rm"), function (e) { var b = e.getBoundingClientRect(); return b.width > 0 && getComputedStyle(e).visibility !== "hidden" && (b.height < (e.classList.contains("rm") ? 40 : 44) - 0.5 || b.width < 44 - 0.5); }).map(function (e) { var b = e.getBoundingClientRect(); return (e.className || e.tagName) + " " + Math.round(b.width) + "x" + Math.round(b.height); })');
+        check('phone ' + at + ': every button and menu of the room is 44 px each way or more (Remove: 40 high)', fingers.length === 0, JSON.stringify(fingers));
         await page.shot('phone_' + at + '_room_top');
         await page.eval('document.getElementById("lobby").scrollTop = 100000');
         await sleep(200);
         const end = await page.eval('(function () { var s = document.getElementById("start").getBoundingClientRect(), t = document.querySelector(".htabs"), tr = t && t.getClientRects().length ? t.getBoundingClientRect() : null; return { in: s.top >= 0 && s.bottom <= (tr ? tr.top : innerHeight) + 1 && s.height >= 44, start: [Math.round(s.top), Math.round(s.bottom)], strip: tr ? Math.round(tr.top) : null }; })()');
-        check('phone ' + at + ': at the end of the room START is in the window' + (phone[3] ? ' above the strip' : ''), end.in, JSON.stringify(end));
+        check('phone ' + at + ': at the end of the room START is in the window above the strip', end.strip !== null && end.in, JSON.stringify(end));
         await page.shot('phone_' + at + '_room_end');
-        if (phone[3]) {
-            const strip = await page.eval('[].map.call(document.querySelectorAll(".htab .name"), function (e) { return e.textContent; })');
-            check('phone ' + at + ': the strip is Room, Players, Chat', JSON.stringify(strip) === JSON.stringify(['Room', 'Players', 'Chat']), JSON.stringify(strip));
-            await page.press('.htab.t-chat');
-        } else {
-            const folded = await page.eval('document.getElementById("gchat").getAttribute("data-open")');
-            check('phone ' + at + ': the chat box is folded to its header, and its header has the two tabs', folded === 'false' && await page.eval('document.querySelectorAll(".rc-tab").length === 2'), folded);
-            await page.shot('phone_' + at + '_chat_folded');
-            await page.press('.rc-tab', 'Room');
-        }
+        const strip = await page.eval('[].map.call(document.querySelectorAll(".htab"), function (e) { var b = e.getBoundingClientRect(); return [e.querySelector(".name").textContent, Math.round(b.height), b.width > 0]; })');
+        check('phone ' + at + ': the strip is Room, Players, Chat, each 44 px high at least', JSON.stringify(strip.map((t) => t[0])) === JSON.stringify(['Room', 'Players', 'Chat']) && strip.every((t) => t[2] && t[1] >= 44), JSON.stringify(strip));
+        await page.press('.htab.t-chat');
         await sleep(300);
-        const tabs = await page.eval('[].map.call(document.querySelectorAll(".rc-tab"), function (e) { var b = e.getBoundingClientRect(); return [e.textContent, Math.round(b.height), b.width > 0]; })');
-        check('phone ' + at + ': the chat has the two tabs, each 44 px high at least', tabs.length === 2 && tabs.every((t) => t[2] && t[1] >= 44), JSON.stringify(tabs));
-        if (phone[3]) await page.shot('phone_' + at + '_chat_open');
-        else check('phone ' + at + ': a press on the Room tab of the folded box opens the box with the room\'s chat', await page.eval('document.getElementById("gchat").getAttribute("data-open") === "true" && !document.getElementById("chat").hidden'));
+        const chat = await page.eval('(function () { var vis = function (q) { var e = document.querySelector(q); return !!e && e.getClientRects().length > 0; }, t = document.querySelector(".htabs").getBoundingClientRect(), f = document.querySelector("#gchat .gc-input, #gchat textarea"), b = f ? f.getBoundingClientRect() : null, send = document.querySelector("#gchat .gc-send"), sb = send ? send.getBoundingClientRect() : null;' +
+            ' return { open: document.getElementById("gchat").getAttribute("data-open"), room: vis("#lobby"), field: b ? [Math.round(b.top), Math.round(b.bottom), Math.round(b.height)] : null, send: sb ? Math.round(sb.height) : null, strip: Math.round(t.top), tabs: [].map.call(document.querySelectorAll(".rc-tab"), function (e) { var r = e.getBoundingClientRect(); return [e.textContent, Math.round(r.height), r.width > 0]; }) }; })()');
+        check('phone ' + at + ': the chat view is open with the room hidden, the field and Send (44 px or more) are in the window above the strip, and the two tabs are 44 px or more', chat.open === 'true' && !chat.room && chat.field && chat.field[0] >= 0 && chat.field[1] <= chat.strip && chat.field[2] >= 44 && chat.send >= 44 && chat.tabs.length === 2 && chat.tabs.every((t) => t[2] && t[1] >= 44), JSON.stringify(chat));
+        await page.shot('phone_' + at + '_chat_open');
         await page.press('.rc-tab', 'Ants');
         await sleep(300);
         await page.shot('phone_' + at + '_chat_global');
         await page.press('.rc-tab', 'Room');
         await sleep(300);
         await page.shot('phone_' + at + '_chat_room');
-        if (phone[3]) {
-            await page.press('.htab.t-players');
-            await sleep(300);
-            await page.shot('phone_' + at + '_players');
-        }
+        await page.press('.htab.t-players');
+        await sleep(300);
+        const players = await page.eval('(function () { var vis = function (q) { var e = document.querySelector(q); return !!e && e.getClientRects().length > 0; }; return { players: vis(".pl"), room: vis("#lobby"), chat: vis("#gchat") }; })()');
+        check('phone ' + at + ': the players\' view shows the players and neither the room nor the chat', players.players && !players.room && !players.chat, JSON.stringify(players));
+        await page.shot('phone_' + at + '_players');
+        await page.press('.htab.t-games');
+        await sleep(300);
+        check('phone ' + at + ': the first tab brings the room back', await page.eval('document.getElementById("lobby").getClientRects().length > 0'));
+        await guestPage.close();
         await page.close();
     }
 }
