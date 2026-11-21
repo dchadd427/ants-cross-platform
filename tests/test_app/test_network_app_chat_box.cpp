@@ -1105,18 +1105,18 @@ void run_one_card_tests() {
         ASSERT_TRUE(c.fill_bots == net::FillPlan(std::array<L, 4>{L::Easy, L::Medium, L::None, L::None}));        // (a bot at Green: the plan's seat 0 is a seat like the others)
         for (int seat = 0; seat < 4; ++seat) {                                                                   // every color can be the person's
             const std::string text = std::to_string(seat);
-            args = {"ants", "--join-url", "ws://localhost/ws", "--room", "k7m2xq", "--seat", text, "--start-when", "3"};
+            args = {"ants", "--join-url", "wss://localhost/ws", "--room", "k7m2xq", "--seat", text, "--start-when", "3"};
             c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
             ASSERT_TRUE(c.net_seat == seat && c.net_start_when == 3 && c.startup_error.empty());
         }
         for (int people = 1; people <= 4; ++people) {                                                            // You and up to three friends: one to four people to wait for
             const std::string text = std::to_string(people);
-            args = {"ants", "--join-url", "ws://localhost/ws", "--room", "k7m2xq", "--start-when", text};
+            args = {"ants", "--join-url", "wss://localhost/ws", "--room", "k7m2xq", "--start-when", text};
             c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
             ASSERT_TRUE(c.net_start_when == people && c.startup_error.empty());
         }
         for (const char* text : {"0", "5", "40", "-1", "x", ""}) {                                               // anything else is no hook (and no error: the page only ever passes 1 - 4)
-            args = {"ants", "--join-url", "ws://localhost/ws", "--room", "k7m2xq", "--start-when", text};
+            args = {"ants", "--join-url", "wss://localhost/ws", "--room", "k7m2xq", "--start-when", text};
             c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
             ASSERT_TRUE(c.net_start_when == 0 && c.startup_error.empty());
         }

@@ -58,6 +58,38 @@ private:
     size_t inbox_bytes_{0};                     // the payload bytes of messages_
 };
 
+/// A non-blocking TCP stream of raw bytes, with no framing of its own: what a link that frames itself runs over (the TLS link of tls.hpp, which the WebSocket client of wss.hpp rides on). Nothing blocks: connect,
+/// send and receive make progress whenever the owner polls.
+class TcpStream final {
+public:
+    enum class State : uint8_t { Connecting, Open, Closed, Failed };
+
+    /// Starts a connection to host:port as TcpConnection::connect does (a numeric address needs no lookup); nullptr when the address cannot be used at all
+    static std::unique_ptr<TcpStream> connect(const std::string& host, uint16_t port);
+
+    ~TcpStream();
+    TcpStream(const TcpStream&) = delete;
+    TcpStream& operator=(const TcpStream&) = delete;
+
+    /// Connecting until the handshake of TCP is done (this call advances it), then Open; Closed after the peer's orderly close or close(); Failed after a refusal or a reset
+    State state();
+    /// Reads what is there: the number of bytes (at most `size`), 0 when nothing is waiting, -1 when the stream is closed or has failed (state() says which)
+    long recv(uint8_t* buffer, size_t size);
+    /// Writes as much as the socket takes: the number of bytes taken (0 when the socket's buffer is full), -1 when the stream is closed or has failed
+    long send(const uint8_t* data, size_t size);
+    void close();
+    /// The peer's address as text (diagnostics)
+    const std::string& peer() const noexcept { return peer_; }
+
+private:
+    friend class TcpListener;
+    TcpStream(int fd, std::string peer) : fd_(fd), peer_(std::move(peer)) {}
+
+    int fd_{-1};
+    State state_{State::Connecting};
+    std::string peer_;
+};
+
 /// One address that a name stands for, as the system's lookup gave it
 struct ResolvedAddress {
     std::string text;                  // numeric, no port; an IPv6 address that has a scope keeps it ("fe80::1%2")
@@ -89,6 +121,8 @@ public:
 
     /// The next incoming connection (already Open), or nullptr when none is waiting
     std::unique_ptr<TcpConnection> accept();
+    /// The same as a raw stream with no framing, for a protocol that frames itself (the tests' TLS terminator, which stands in for the site's proxy)
+    std::unique_ptr<TcpStream> accept_stream();
     uint16_t port() const noexcept { return port_; }
 
 private:

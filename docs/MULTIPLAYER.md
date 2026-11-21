@@ -27,7 +27,7 @@ Every option of the game that is named on this page is listed in [`COMMAND_LINE.
 
 ### On a local network
 
-One player hosts and the others join. A local network, a VPN or a forwarded port 4001 will do.
+One player hosts and the others join. A local network or a VPN will do (plain TCP, not encrypted: the desktop game refuses to send a game server's room code over it to an address of the Internet, which is what the encrypted door below is for).
 
 ```bash
 ants --host --name Alice               # on one machine: opens a room (TCP port 4001)
@@ -44,10 +44,10 @@ ants --join 192.168.1.20 --name Bob    # joins the room of that host
 
 ### On the game server
 
-- The desktop start menu has **Join with a code** and **Host an online match** ([`CONTROLS.md`](CONTROLS.md) "Start Menu"). They use the game server's TCP port, `beta.playants.org:4001` unless `--server HOST[:PORT]` (or the settings key `server`) says another. The room's code is shown with a Copy button, every failure and every refusal is told in words, and a network game that ends takes you back to the menu. **Rejoin your match (CODE)** takes your seat in a match that still runs back.
-- From the command line the same is `ants --join HOST --room CODE`.
+- The desktop start menu has **Join with a code** and **Host an online match** ([`CONTROLS.md`](CONTROLS.md) "Start Menu"). They use the game server's encrypted door, `wss://beta.playants.org/ws` (TLS: the certificate is checked, and nothing is sent in the clear) unless `--server` (or the settings key `server`) says another: `--server wss://HOST[/PATH]`, or `--server HOST[:PORT]`, which is the wss door for a host of the Internet and plain TCP on 4001 for a server of this machine or the local network. The room's code is shown with a Copy button, every failure and every refusal is told in words, and a network game that ends takes you back to the menu. **Rejoin your match (CODE)** takes your seat in a match that still runs back.
+- From the command line the same is `ants --join-url wss://HOST/ws --room CODE` (`ants --join HOST --room CODE` for a server on this machine or the local network).
 - The first player in a server's room is its leader (`early_start` in the room's specification, on by default). Its setup screen is the host's, with START, and it may start the match with the players who are there: two at least, or one alone with bots in the empty seats. A room whose seats are all taken starts by itself, unless its create block says that a full room waits for its leader (the leader can then arrange the colors first). The leader also moves a player to another color: a press on the player's row puts that player in the next free color, or, in a room that waits for its leader's START when it is full, changes places with the next player when every color is held; the rooms of the front page and of the start menu start as soon as every color is held ([`CONTROLS.md`](CONTROLS.md)).
-- The server's rooms, its TCP and WebSocket doors, the control interface, reconnect and the Docker stack are described in [`SERVER.md`](SERVER.md) (the sections "The control interface", "Reconnect" and "The stack (Docker)").
+- The server's rooms, its TCP (LAN and development) and WebSocket doors, the control interface, reconnect and the Docker stack are described in [`SERVER.md`](SERVER.md) (the sections "The control interface", "Reconnect" and "The stack (Docker)").
 
 ### In the browser
 
@@ -113,9 +113,9 @@ The prediction is **on by default** in every match of the network. `--no-predict
 
 - No late join: a running match takes nobody new (the original has none either). Only a seat that was lost comes back, with its key, in a server's room.
 - A game on the local network has no pause, as in the original. A server's room pauses only for a player whose connection is lost.
-- A room on a local network is found with `ants --lan-list` and joined with `--join HOST[:PORT]` over TCP (a LAN, a VPN or a forwarded port 4001). There is no in-game LAN screen.
+- A room on a local network is found with `ants --lan-list` and joined with `--join HOST[:PORT]` over TCP (a LAN or a VPN). There is no in-game LAN screen.
 - The start menu joins and hosts on the game server only.
-- The browser build joins a game server over a WebSocket (`--join-url`). It cannot host a room or join a LAN room.
+- The browser build joins a game server over a WebSocket (`--join-url`, ws:// or wss://); the desktop game does so over wss:// only. It cannot host a room or join a LAN room.
 - A LAN host that dies in the first second of the match, before the links between guests are made, can split it.
 - When a network match ends, Leave on the results screen ends the program, as in the original ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) sections 5.49 and 5.63), unless the game was started from the start menu: then it returns to the menu ([`CONTROLS.md`](CONTROLS.md) "After a network match").
 - A player has one pending team offer at a time (the original queues several, section 5.42).

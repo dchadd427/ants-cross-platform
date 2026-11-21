@@ -152,7 +152,9 @@ std::string resolve_host(const std::string& host) {
     return pick_address(found);
 }
 
-std::unique_ptr<TcpConnection> TcpConnection::connect(const std::string& host, uint16_t port) {
+// A non-blocking socket that is connecting to host:port (the first address of the name that a socket can be made for and that starts at once); kBadSocket when there is none. `peer` is the address
+// that was taken, as text. Both the framed connection and the raw stream below start their links here.
+static socket_t start_connecting(const std::string& host, uint16_t port, std::string& peer) {
     ensure_sockets();
     addrinfo hints;
     std::memset(&hints, 0, sizeof(hints));
@@ -160,9 +162,9 @@ std::unique_ptr<TcpConnection> TcpConnection::connect(const std::string& host, u
     hints.ai_socktype = SOCK_STREAM;
     addrinfo* res = nullptr;
     const std::string service = std::to_string(port);
-    if (getaddrinfo(host.c_str(), service.c_str(), &hints, &res) != 0 || res == nullptr) return nullptr;
-    std::unique_ptr<TcpConnection> out;
-    for (addrinfo* ai = res; ai != nullptr && !out; ai = ai->ai_next) {
+    if (getaddrinfo(host.c_str(), service.c_str(), &hints, &res) != 0 || res == nullptr) return kBadSocket;
+    socket_t out = kBadSocket;
+    for (addrinfo* ai = res; ai != nullptr && out == kBadSocket; ai = ai->ai_next) {
         const socket_t s = ::socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
         if (s == kBadSocket) continue;
         if (!set_nonblocking(s)) {
@@ -172,13 +174,38 @@ std::unique_ptr<TcpConnection> TcpConnection::connect(const std::string& host, u
         tune(s);
         const int rc = ::connect(s, ai->ai_addr, static_cast<addrlen_t>(ai->ai_addrlen));
         if (rc == 0 || in_progress()) {
-            out.reset(new TcpConnection(static_cast<int>(s), true, address_text(ai->ai_addr)));
+            out = s;
+            peer = address_text(ai->ai_addr);
         } else {
             close_socket(s);
         }
     }
     freeaddrinfo(res);
     return out;
+}
+
+// Whether a connecting socket has finished: Connecting (still), Open, or Failed (the connection was refused or timed out)
+static TcpStream::State connect_progress(socket_t s) {
+    fd_set wset;
+    fd_set eset;
+    FD_ZERO(&wset);
+    FD_ZERO(&eset);
+    FD_SET(s, &wset);
+    FD_SET(s, &eset);
+    timeval tv{0, 0};
+    const int r = ::select(static_cast<int>(s) + 1, nullptr, &wset, &eset, &tv);
+    if (r <= 0) return TcpStream::State::Connecting;
+    int err = 0;
+    socklen_t len = sizeof(err);
+    getsockopt(s, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&err), &len);
+    return err != 0 || FD_ISSET(s, &eset) ? TcpStream::State::Failed : TcpStream::State::Open;
+}
+
+std::unique_ptr<TcpConnection> TcpConnection::connect(const std::string& host, uint16_t port) {
+    std::string peer;
+    const socket_t s = start_connecting(host, port, peer);
+    if (s == kBadSocket) return nullptr;
+    return std::unique_ptr<TcpConnection>(new TcpConnection(static_cast<int>(s), true, peer));
 }
 
 void TcpConnection::fail() {
@@ -207,19 +234,9 @@ void TcpConnection::pump() {
     if (fd_ < 0) return;
     const socket_t s = static_cast<socket_t>(fd_);
     if (state_ == State::Connecting) {
-        fd_set wset;
-        fd_set eset;
-        FD_ZERO(&wset);
-        FD_ZERO(&eset);
-        FD_SET(s, &wset);
-        FD_SET(s, &eset);
-        timeval tv{0, 0};
-        const int r = ::select(static_cast<int>(s) + 1, nullptr, &wset, &eset, &tv);
-        if (r <= 0) return;                                         // still connecting
-        int err = 0;
-        socklen_t len = sizeof(err);
-        getsockopt(s, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&err), &len);
-        if (err != 0 || FD_ISSET(s, &eset)) return fail();
+        const TcpStream::State progress = connect_progress(s);
+        if (progress == TcpStream::State::Connecting) return;               // still connecting
+        if (progress == TcpStream::State::Failed) return fail();
         state_ = State::Open;
     }
     if (state_ != State::Open) return;
@@ -308,6 +325,76 @@ bool TcpConnection::poll(std::vector<uint8_t>& message) {
 
 // ------------------------------------------------------------------------------------------------
 
+std::unique_ptr<TcpStream> TcpStream::connect(const std::string& host, uint16_t port) {
+    std::string peer;
+    const socket_t s = start_connecting(host, port, peer);
+    if (s == kBadSocket) return nullptr;
+    return std::unique_ptr<TcpStream>(new TcpStream(static_cast<int>(s), peer));
+}
+
+TcpStream::~TcpStream() { close(); }
+
+void TcpStream::close() {
+    if (fd_ >= 0) {
+        // What the peer has sent and nobody has read is read and thrown away first: closing a socket that holds unread bytes resets the connection (Windows does it always), and a reset takes with it the
+        // goodbye that this side has just written (a close frame, the TLS close notice), which the peer would otherwise read
+        uint8_t scratch[4096];
+        for (int i = 0; i < 16; ++i) {
+            if (::recv(static_cast<socket_t>(fd_), reinterpret_cast<char*>(scratch), static_cast<iolen_t>(sizeof(scratch)), 0) <= 0) break;
+        }
+        close_socket(static_cast<socket_t>(fd_));
+        fd_ = -1;
+    }
+    if (state_ != State::Failed) state_ = State::Closed;
+}
+
+TcpStream::State TcpStream::state() {
+    if (state_ == State::Connecting && fd_ >= 0) {
+        const State progress = connect_progress(static_cast<socket_t>(fd_));
+        if (progress == State::Failed) {
+            close_socket(static_cast<socket_t>(fd_));
+            fd_ = -1;
+            state_ = State::Failed;
+        } else if (progress == State::Open) {
+            state_ = State::Open;
+        }
+    }
+    return state_;
+}
+
+long TcpStream::recv(uint8_t* buffer, size_t size) {
+    if (state() != State::Open) return state_ == State::Connecting ? 0 : -1;
+    const auto n = ::recv(static_cast<socket_t>(fd_), reinterpret_cast<char*>(buffer), static_cast<iolen_t>(size), 0);
+    if (n > 0) return static_cast<long>(n);
+    if (n == 0) {                                                   // the peer closed in an orderly way
+        close();
+        return -1;
+    }
+    if (would_block()) return 0;
+    close_socket(static_cast<socket_t>(fd_));
+    fd_ = -1;
+    state_ = State::Failed;
+    return -1;
+}
+
+long TcpStream::send(const uint8_t* data, size_t size) {
+    if (state() != State::Open) return state_ == State::Connecting ? 0 : -1;
+#ifdef MSG_NOSIGNAL
+    const int flags = MSG_NOSIGNAL;
+#else
+    const int flags = 0;
+#endif
+    const auto n = ::send(static_cast<socket_t>(fd_), reinterpret_cast<const char*>(data), static_cast<iolen_t>(std::min<size_t>(size, 1u << 16)), flags);
+    if (n >= 0) return static_cast<long>(n);
+    if (would_block()) return 0;
+    close_socket(static_cast<socket_t>(fd_));
+    fd_ = -1;
+    state_ = State::Failed;
+    return -1;
+}
+
+// ------------------------------------------------------------------------------------------------
+
 std::unique_ptr<TcpListener> TcpListener::listen(uint16_t port, bool loopback_only) {
     ensure_sockets();
     const socket_t s = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -332,6 +419,21 @@ std::unique_ptr<TcpListener> TcpListener::listen(uint16_t port, bool loopback_on
 
 TcpListener::~TcpListener() {
     if (fd_ >= 0) close_socket(static_cast<socket_t>(fd_));
+}
+
+std::unique_ptr<TcpStream> TcpListener::accept_stream() {
+    sockaddr_storage peer;
+    socklen_t len = sizeof(peer);
+    const socket_t c = ::accept(static_cast<socket_t>(fd_), reinterpret_cast<sockaddr*>(&peer), &len);
+    if (c == kBadSocket) return nullptr;
+    if (!set_nonblocking(c)) {
+        close_socket(c);
+        return nullptr;
+    }
+    tune(c);
+    std::unique_ptr<TcpStream> out(new TcpStream(static_cast<int>(c), address_text(reinterpret_cast<sockaddr*>(&peer))));
+    out->state_ = TcpStream::State::Open;
+    return out;
 }
 
 std::unique_ptr<TcpConnection> TcpListener::accept() {

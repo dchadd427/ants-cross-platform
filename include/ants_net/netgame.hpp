@@ -53,10 +53,10 @@ std::string match_lost_text(ClientSession::LostReason reason);
 /// How a client reached its server, kept by join() and join_url() so that the way back can make the same link again: the TCP address and port of a native client, or the WebSocket URL of the
 /// browser build, and what the Hello said (the name, the seat that was asked for, the room's code, the token: carried, never interpreted, never written to a log).
 struct JoinTarget {
-    std::string address;               // native: the host to connect to, as the player gave it (empty in the browser)
-    std::string resolved;              // native: the numeric address that `address` stood for when the game was joined: the way back's links go there, the name is not looked up again
-    uint16_t port{0};
-    std::string url;                   // the browser build: the ws:// or wss:// URL (empty natively)
+    std::string address;               // native, TCP: the host to connect to, as the player gave it (empty for a URL and in the browser)
+    std::string resolved;              // native: the numeric address that `address` (or the URL's host) stood for when the game was joined: the way back's links go there, the name is not looked up again
+    uint16_t port{0};                  // native, TCP: the port
+    std::string url;                   // the WebSocket URL: wss:// natively (the written form of wss_url_text), ws:// or wss:// in the browser build; empty for a TCP link
     std::string name;
     uint8_t want_seat{255};
     std::string room;
@@ -157,10 +157,19 @@ public:
     /// `rejoin`). A room that is over, that does not hold the seat or that has dropped it refuses, with the reasons of the way back (status_text()).
     bool join(const std::string& address, uint16_t port, const std::string& name, uint8_t want_seat = 255, const std::string& room = std::string(), const std::string& token = std::string(),
               const SeatKey& key = SeatKey{});
-    /// The same through a WebSocket (ws:// or wss:// URL, the game server's door behind its proxy): the browser build's only way to join. False when the URL cannot
-    /// be used or there is no WebSocket (every native build: it joins with TCP). A server's room has no host migration and no links between guests.
+    /// The same through a WebSocket, the game server's door behind its proxy: the browser build's only way to join (ws:// or wss://), and the desktop game's encrypted one (wss:// only, the TLS client
+    /// of ants_net/wss.hpp: the certificate is checked for the URL's host, and the name is looked up once, here, or not at all when `resolved` gives the numeric address that the caller looked up). False when the URL
+    /// cannot be used (not wss:// natively), the name does not resolve, or no TLS link can be set up. A server's room has no host migration and no links between guests.
     bool join_url(const std::string& url, const std::string& name, uint8_t want_seat = 255, const std::string& room = std::string(), const std::string& token = std::string(),
-                  const SeatKey& key = SeatKey{});
+                  const SeatKey& key = SeatKey{}, const std::string& resolved = std::string());
+    /// Why the last join() or join_url() returned false, in words for a player (empty when it did not, or when it was only the address that could not be used)
+    const std::string& join_refusal() const noexcept { return join_refusal_; }
+    /// More certificate authorities that the encrypted link trusts besides the system's (PEM; a private server's CA, a test's): they add to the checks, nothing here skips one. Native builds; before join_url().
+    void set_extra_trusted_ca_pem(std::string pem) { extra_ca_pem_ = std::move(pem); }
+    /// Trust only `extra_trusted_ca_pem`, not the system's roots (the tests: no machine's store decides a result)
+    void set_system_roots_trusted_for_test(bool trusted) noexcept { system_roots_trusted_ = trusted; }
+    /// Why the uplink's connection failed, in words for a player, when the transport can tell (a certificate that is not trusted, a server that did not accept the upgrade); empty otherwise
+    std::string link_failure_text() const;
     /// Before join() / join_url() / host() (protocol 15): what this machine tells the room about itself and about the room it would make. `set_platform`: the platform byte of the Hello (net::kOs...,
     /// with kPlatformBrowser for a game in a page), or of the host's own seat when it hosts, which the room hands on to everybody as an icon beside the name; cosmetic, nothing is decided by it; the
     /// default is net::native_platform() (a web game: a system in a browser, unless its address says another). `set_create`: the CREATE BLOCK of the Hello: the map, the seats, the teams and the leader-starts flag of the room if the server has none of this code yet (a server that
@@ -592,6 +601,9 @@ private:
     std::function<void()> on_wake_;
     std::function<std::unique_ptr<Connection>()> link_maker_;      // (the tests: make_link)
     std::function<std::string(const std::string&)> resolver_;      // (the tests: join's one lookup)
+    std::string join_refusal_;                                      // why the last join was refused, for the player (join_refusal)
+    std::string extra_ca_pem_;                                      // more trusted roots of the encrypted link (set_extra_trusted_ca_pem)
+    bool system_roots_trusted_{true};                               // the system's roots are trusted besides them (always, but in the tests)
     std::function<void()> on_tick_;
     std::function<void()> on_prediction_dropped_;
     std::function<void(const sim::Command&, const sim::CommandResult&)> on_command_;
