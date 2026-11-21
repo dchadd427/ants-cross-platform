@@ -1506,7 +1506,6 @@ void run_reconnect_session_tests() {
             m.run(1000, true, [&](uint32_t now) {
                 if (paused_after_ms == 0 && m.host->paused()) paused_after_ms = now - at;
             });
-            std::fprintf(stderr, "DEBUG half-open paused_after_ms=%u\n", paused_after_ms);
             ASSERT_TRUE(paused_after_ms >= 10000 && paused_after_ms <= 10100);
             ASSERT_TRUE(m.until([&]() { return !m.host->paused() && m.clients[2]->mode() == ClientSession::Mode::Normal; }, 8000));      // the host closed the dead link: the machine found out and came back
             m.run(2000);
