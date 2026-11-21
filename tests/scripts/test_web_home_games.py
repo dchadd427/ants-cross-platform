@@ -60,7 +60,7 @@ class ThePage(unittest.TestCase):
 
     def test_what_the_script_reads_of_the_page_is_there_once(self):
         js = read("web", "home", "games.js")
-        for ident in ("rejoin", "rejoin-go", "room-h", "slots"):
+        for ident in ("rejoin", "rejoin-go", "room-h", "r-notes"):
             self.assertIn("getElementById('%s')" % ident, js, ident)
             self.assertEqual(self.page.count('id="%s"' % ident), 1, ident)
 
@@ -227,7 +227,7 @@ class TheStyle(unittest.TestCase):
         self.assertIn("toast.hidden || toastAsks ? null : later(", js, "a toast with a question stays; the others have a timer")
         self.assertIn("toast.matches(':hover, :focus-within')", js, "a toast under the pointer or the focus waits")
         self.assertIn("doc.body.appendChild(toast)", js, "the toast is the body's, not part of Home's flow")
-        self.assertIn("placeVis(); placeToast(); }));", js, "placed again when the window changes")
+        self.assertIn("if (isOpen) place(); placeToast(); }));", js, "placed again when the window changes")
         self.assertIn("if (!toast.hidden) placeToast(); pollLive(); }))", js, "placed again when a phone's view or the chat's fold changes (and the looks at /live follow whether the list is drawn)")
         self.assertIn("attributeFilter: ['data-tab', 'data-open', 'data-screen', 'hidden']", js)
         self.assertIn("if (!dialog && toast.contains(doc.activeElement)) { clearNotice();", js, "Escape closes a toast that has the focus, and only then")

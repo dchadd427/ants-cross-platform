@@ -4,8 +4,8 @@
 //   - the messages: every layout round-trips and every decoder refuses what an honest page never sends (a kind that is not predicted, a seat that is not one, trailing bytes, a credential with no address);
 //   - the credential: coturn's rule (an expiry, a random label, base64(HMAC-SHA1)): good until the expiry and for nobody else, and the code of HMAC-SHA1 itself against RFC 2202;
 //   - the rule of the address: a relay candidate may always be passed, anything that shows a player's own address only between two players who both allow direct connections;
-//   - the session: who is given a credential, who is told who is ready, what is relayed and what is counted as a violation, and that a computer player's order is sent to every player the moment it is
-//     given, at the tick of the turn that will carry it;
+//   - the session: who is given a credential (a player of a match that began with two or more people, at most twice, for no longer than the match can last), who is told who is ready, what is relayed
+//     and what is counted as a violation, and that a computer player's order is sent to every player the moment it is given, at the tick of the turn that will carry it;
 //   - what none of it can do: the turns, the record and the state hashes are the same with and without all this traffic.
 #include <chrono>
 
@@ -47,11 +47,13 @@ struct P2pRig {
     uint32_t random_calls{0};
     uint8_t persons{2};
 
-    explicit P2pRig(uint8_t persons_ = 2, bool relay = true, uint8_t bots_from = 255, bool bot_hints = true) : net(7), persons(persons_) {
+    // `host_seat`: the seat that the host itself plays (a LAN host); the persons of the other seats are its guests, the first of them is `ends[0]` and `got[0]`
+    explicit P2pRig(uint8_t persons_ = 2, bool relay = true, uint8_t bots_from = 255, bool bot_hints = true, uint32_t relay_ttl_s = 0, uint8_t host_seat = kNoSeat) : net(7), persons(persons_) {
         ids = build_world(referee, 5);
         HostSession::Config hc;
-        hc.host_player = kNoSeat;
+        hc.host_player = host_seat;
         hc.bot_hints = bot_hints;
+        hc.relay_ttl_s = relay_ttl_s;
         if (relay) {
             auto turn = std::make_shared<TurnSettings>();
             turn->urls = {"stun:relay.example:3478", "turn:relay.example:3478?transport=udp"};
@@ -71,6 +73,7 @@ struct P2pRig {
                 if (bots_from != 255 && p >= bots_from) host->add_bot_seat(p);
                 continue;
             }
+            if (p == host_seat) continue;
             sims.push_back(std::make_unique<sim::SimulationEngine>());
             build_world(*sims.back(), 5);
             auto link = net.connect({5, 0});
@@ -78,7 +81,7 @@ struct P2pRig {
             host->add_client(p, link.first);
             ClientSession::Config cc;
             cc.player = p;
-            cc.host = kNoSeat;
+            cc.host = host_seat;
             cc.migration = false;
             clients.push_back(std::make_unique<ClientSession>(*sims.back(), cc));
             clients.back()->set_connection(link.second);
@@ -210,7 +213,7 @@ void run_message_tests() {
         big[3] = static_cast<uint8_t>((kMaxSignalChars + 1) & 0xFF);
         big[4] = static_cast<uint8_t>((kMaxSignalChars + 1) >> 8);
         ASSERT_FALSE(decode(big, signal));
-        ASSERT_TRUE(MsgType::Signal == MsgType::Last && peek_type(encode(P2pConfigMsg{true})) == MsgType::P2pConfig);
+        ASSERT_TRUE(static_cast<int>(MsgType::Signal) == 40 && static_cast<int>(MsgType::Ready) == static_cast<int>(MsgType::Signal) + 1 && peek_type(encode(P2pConfigMsg{true})) == MsgType::P2pConfig);
     } TEST_END();
 }
 
@@ -315,7 +318,7 @@ void run_rule_tests() {
 }
 
 void run_session_tests() {
-    TEST_CASE("P25.4 A Player Who Says P2pConfig Is Handed The Relay's Credential: Good For Three Hours, With A Random Label That Is Not A Name, A New One For Every Player And Every Ask") {
+    TEST_CASE("P25.4 A Player Who Says P2pConfig Is Handed The Relay's Credential: Good Until Its Expiry, With A Random Label That Is Not A Name, A New One For Every Player And Every Ask") {
         P2pRig m(2);
         m.say_config(0, false);
         m.say_config(1, true);
@@ -418,8 +421,12 @@ void run_session_tests() {
     TEST_CASE("P25.8 A Page That Floods The Server With P2pConfigs And Signals, Signals Itself, Or Sends Frames That Do Not Decode Is Counted And Thrown Out With The Others' Violations") {
         P2pRig m(2);
         for (int i = 0; i < 40 && m.host->violations(0) < 8; ++i) m.say_config(0, false);
-        ASSERT_TRUE(m.host->violations(0) > 0);                                      // after 16, every ask is a violation (a credential is made for each)
-        ASSERT_EQ(m.received<IceConfigMsg>(0, MsgType::IceConfig).size(), 16u);
+        ASSERT_TRUE(m.host->violations(0) > 0);                                      // after 16, every ask is a violation
+        const std::vector<IceConfigMsg> asked = m.received<IceConfigMsg>(0, MsgType::IceConfig);
+        ASSERT_EQ(asked.size(), 16u);                                                // (each of the sixteen was answered, and only the first kMaxP2pCredentials of them carry a credential)
+        size_t with_credential = 0;
+        for (const IceConfigMsg& a : asked) with_credential += a.credential.empty() ? 0u : 1u;
+        ASSERT_EQ(with_credential, size_t{kMaxP2pCredentials});
         P2pRig s(2);
         s.say_config(0, false);
         s.say_config(1, false);
@@ -438,6 +445,77 @@ void run_session_tests() {
         f.run(3000);
         ASSERT_TRUE(f.host->violations(0) > 0 || !f.host->client_present(0));       // (the signals that are over the limit count)
         ASSERT_TRUE(f.received<SignalMsg>(1, MsgType::Signal).size() <= 512u);
+    } TEST_END();
+
+    TEST_CASE("P25.12 The Relay's Credential Is For A Match Of Two Or More People: One Person Alone, With Computer Players Or Without, Is Answered With An Empty List And No Credential Is Made") {
+        for (const bool with_bots : {true, false}) {
+            P2pRig m(1, true, with_bots ? uint8_t{1} : uint8_t{255});                // one person; seats 1 to 3 are computer players, or empty
+            m.say_config(0, true);
+            const std::vector<IceConfigMsg> a = m.received<IceConfigMsg>(0, MsgType::IceConfig);
+            ASSERT_TRUE(a.size() == 1 && a[0].urls.empty() && a[0].username.empty() && a[0].credential.empty());
+            ASSERT_EQ(m.random_calls, 0u);                                             // (no label was drawn: nothing was made and thrown away)
+            ASSERT_TRUE(m.received<P2pPeersMsg>(0, MsgType::P2pPeers).empty());       // (not ready: nobody opens a channel)
+            m.say_signal(0, 1, SignalKind::Offer, "v=0\r\n");
+            ASSERT_EQ(m.host->violations(0), 1u);                                      // (a Signal is what an honest page does not send then)
+        }
+        // the computer players' hints do not need a credential: they come on the server's own connection
+        P2pRig bots(1, true, 1);
+        bots.say_config(0, false);
+        bots.run(500);
+        ASSERT_TRUE(bots.host->submit_bot(1, bot_walk(bots.ids, 1, 20, 40)));
+        bots.run(300);
+        ASSERT_EQ(bots.received<HintMsg>(0, MsgType::Hint).size(), 1u);
+        // two persons: each is given one, whoever else sits in the room
+        P2pRig two(2, true, 2);
+        two.say_config(0, false);
+        two.say_config(1, false);
+        ASSERT_TRUE(!two.received<IceConfigMsg>(0, MsgType::IceConfig)[0].credential.empty() && !two.received<IceConfigMsg>(1, MsgType::IceConfig)[0].credential.empty());
+        ASSERT_EQ(two.random_calls, 2u);
+        // a host that plays a seat of its own is one of the people: with one guest it is a match of two
+        P2pRig seated(2, true, 255, true, 0, 0);
+        seated.say_config(0, false);                                                   // (the one guest, seat 1)
+        ASSERT_TRUE(seated.received<IceConfigMsg>(0, MsgType::IceConfig).size() == 1 && !seated.received<IceConfigMsg>(0, MsgType::IceConfig)[0].credential.empty());
+    } TEST_END();
+
+    TEST_CASE("P25.13 A Player Is Given At Most Two Credentials In A Match: Every Ask After Them Is Answered With An Empty List, Takes The Player Out Of The Ready Seats And Is No Violation; Another Player's Count Is Its Own") {
+        P2pRig m(2);
+        for (int i = 0; i < 3; ++i) m.say_config(0, false);
+        const std::vector<IceConfigMsg> a = m.received<IceConfigMsg>(0, MsgType::IceConfig);
+        ASSERT_EQ(a.size(), 3u);                                                     // every ask is answered
+        ASSERT_EQ(kMaxP2pCredentials, 2u);
+        ASSERT_TRUE(!a[0].credential.empty() && !a[1].credential.empty() && a[0].credential != a[1].credential);
+        ASSERT_TRUE(a[2].urls.empty() && a[2].username.empty() && a[2].credential.empty());
+        ASSERT_EQ(m.random_calls, 2u);                                               // (the third was not made and thrown away)
+        ASSERT_EQ(m.host->violations(0), 0u);                                        // (an honest page that was reloaded twice is no offender)
+        for (int i = 0; i < 5; ++i) m.say_config(0, true);                           // later asks get the empty list as well
+        ASSERT_EQ(m.received<IceConfigMsg>(0, MsgType::IceConfig).size(), 8u);
+        ASSERT_EQ(m.random_calls, 2u);
+        m.say_signal(0, 1, SignalKind::Offer, "v=0\r\n");
+        ASSERT_EQ(m.host->violations(0), 1u);                                        // (a player that is not ready sends no Signal)
+        m.say_config(1, false);                                                      // the other player's own first ask
+        const std::vector<IceConfigMsg> b = m.received<IceConfigMsg>(1, MsgType::IceConfig);
+        ASSERT_TRUE(b.size() == 1 && !b[0].credential.empty());
+        const std::vector<P2pPeersMsg> peers = m.received<P2pPeersMsg>(1, MsgType::P2pPeers);
+        ASSERT_TRUE(!peers.empty() && peers.back().ready == 0x02);                  // seat 1 is ready; seat 0, which had its two, is not
+    } TEST_END();
+
+    TEST_CASE("P25.14 A Credential Lasts No Longer Than The Match Can: The Room's Limit Shortens The Relay's Own, Which Is A Ceiling, And Without One The Relay's Own Counts") {
+        const auto lifetime = [](uint32_t relay_ttl_s) {
+            P2pRig m(2, true, 255, true, relay_ttl_s);                               // (the relay's own limit in this rig is 3,600 s)
+            m.say_config(0, false);
+            const std::vector<IceConfigMsg> a = m.received<IceConfigMsg>(0, MsgType::IceConfig);
+            return a.size() == 1 ? a[0].expires - m.unix : 0u;
+        };
+        ASSERT_EQ(lifetime(0), 3600u);                                               // none asked for: the relay's own
+        ASSERT_EQ(lifetime(900), 900u);                                              // a match that can last 15 minutes
+        ASSERT_EQ(lifetime(3600), 3600u);
+        ASSERT_EQ(lifetime(86400), 3600u);                                           // a room that could last a day does not lengthen the relay's own limit
+        // and the relay refuses it after that
+        P2pRig m(2, true, 255, true, 900);
+        m.say_config(0, false);
+        const IceConfigMsg a = m.received<IceConfigMsg>(0, MsgType::IceConfig)[0];
+        ASSERT_TRUE(turn_credential_valid("test-secret", a.username, a.credential, m.unix + 899u));
+        ASSERT_FALSE(turn_credential_valid("test-secret", a.username, a.credential, m.unix + 900u));
     } TEST_END();
 }
 

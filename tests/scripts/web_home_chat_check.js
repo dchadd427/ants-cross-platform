@@ -1035,12 +1035,12 @@ function bring(env) {                                     // the two files arriv
     const dock = env.$('home').children[4];
     check('Home\'s own parts are where they were (the bar, the body, the card, the strip)', env.$('home').children.slice(0, 4).map((c) => c.tagName).join() === 'header,main,div,nav' && dock.getAttribute('data-open') === 'true');
     env.home('mine').click();
-    check('My room still makes the room (the page\'s own socket), and the Room shows: the dock is told (it is not on the screen)', env.sockets.length === 1 && env.screen() === 'room' && hub.length === 1);
+    check('My room still makes the room (the page\'s own socket), and the Room shows: the dock is told (it is on the screen beside the Room, as beside the games)', env.sockets.length === 1 && env.screen() === 'room' && hub.length === 1);
     hub[0].readyState = 1; hub[0].onmessage({ data: JSON.stringify(W({ you: YOU, history: HISTORY })) });
     hub[0].onmessage({ data: JSON.stringify(L(40, 'a', 'on the Room')) });
-    check('a line that comes while the Room shows is unread, and the link stays', one(dock, 'gc-unread').hidden === false && one(dock, 'gc-unread').textContent === '1' && hub.length === 1);
+    check('a line that comes while the Room shows is read (the dock lies beside the Room), and the link stays', one(dock, 'gc-unread').hidden === true && hub.length === 1);
     env.roomBar('rhome').click();
-    check('Home again: the dock is read, the link is the same one', one(dock, 'gc-unread').hidden === true && hub.length === 1);
+    check('the games\' list again: the dock is read, the link is the same one', one(dock, 'gc-unread').hidden === true && hub.length === 1);
     env.advance(10);
     check('show(home) again does not load the dock a second time', fresh(env).length === 2 && env.$('home').children.length === 5);
 }
@@ -1065,10 +1065,10 @@ function bring(env) {                                     // the two files arriv
     late.advance(15000);
     check('... and 15 s later, when Home is free, so is the dock', !lateRoot.hasAttribute('inert') && !late.home('hbar').hasAttribute('inert'));
 }
-{   // a link to a room opens the Room: no Home, no dock until Home is shown
+{   // a link to a room opens the Room, and the dock comes with it (the Room is inside Home)
     const env = runLobby('?room=k7m2xq', { 'ants.name': 'Sam' });
     env.advance(10);
-    check('a page that opens on the Room asks for no chat (Home was never shown)', fresh(env).length === 0);
+    check('a page that opens on the Room asks for the chat too: the dock is on the screen beside the Room (its style and its script)', fresh(env).length === 2);
     env.$('name-step-go').click();
     env.arrive({ seat: 1, key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
     env.roomBar('rhome').click();

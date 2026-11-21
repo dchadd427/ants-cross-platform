@@ -230,6 +230,7 @@ void run_lobby_public_tests() {
             const size_t ann = room.join_seat("Ann");
             const size_t pia = join_with(room, page_config("Pia"));
             room.run(100);
+            pages_ready(room, {pia});
             ASSERT_TRUE(room.guests[ann].lobby->request_visibility(true));
             room.run(200);
             ASSERT_TRUE(room.guests[ann].lobby->request_start());

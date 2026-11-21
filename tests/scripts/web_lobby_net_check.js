@@ -39,7 +39,7 @@ for (const raw of fs.readFileSync(goldenPath, 'utf8').split('\n')) {
     else golden[parts[1]] = { kind: parts[0], hex: parts[2] };
 }
 const names = Object.keys(golden);
-check('the golden file has messages of every kind', ['hello', 'leave', 'pong', 'ping', 'seatmove', 'plan', 'name', 'remove', 'visibility', 'startrequest', 'chat', 'welcome', 'reject', 'room', 'other'].every((k) => names.some((n) => golden[n].kind === k)));
+check('the golden file has messages of every kind', ['hello', 'leave', 'pong', 'ping', 'seatmove', 'plan', 'name', 'remove', 'visibility', 'ready', 'startrequest', 'chat', 'welcome', 'reject', 'room', 'other'].every((k) => names.some((n) => golden[n].kind === k)));
 const bytesOf = (name) => N.bytesOfHex(golden[name].hex);
 
 // ---- what a page sends: made from the fields, the same bytes ---------------------------------------------------------------------------------------------------------------------------------------
@@ -64,6 +64,8 @@ const sends = {
     'remove-0': () => N.encodeRemove(0, 0xFFFFFFFF),
     'visibility-public': () => N.encodeVisibility(true),
     'visibility-private': () => N.encodeVisibility(false),
+    'ready-yes': () => N.encodeReady(true),
+    'ready-no': () => N.encodeReady(false),
     'start-teams': () => N.encodeStartRequest([N.FILL.None, N.FILL.Easy, N.FILL.Medium, N.FILL.Hard], 0, 1),
     'start-ffa-nobody': () => N.encodeStartRequest([0, 0, 0, 0], 255, 255),
     'chat-plain': () => N.encodeChat(0, false, 'hello there'),
@@ -74,7 +76,7 @@ for (const name of Object.keys(sends)) {
     if (golden[name]) same('sends ' + name, hex(sends[name]()), golden[name].hex);
 }
 check('no golden message that a page sends is left unchecked (the game\'s Hello too: the game page\'s results screen sends it in the rematch)',
-    names.filter((n) => ['hello', 'leave', 'pong', 'seatmove', 'plan', 'name', 'remove', 'visibility', 'startrequest'].includes(golden[n].kind) && sends[n] === undefined).join() === '');
+    names.filter((n) => ['hello', 'leave', 'pong', 'seatmove', 'plan', 'name', 'remove', 'visibility', 'ready', 'startrequest'].includes(golden[n].kind) && sends[n] === undefined).join() === '');
 
 // fill levels of a plan: Open and Nobody are none
 same('fillOfPlan', N.fillOfPlan([N.PLAN.Open, N.PLAN.Easy, N.PLAN.Medium, N.PLAN.Hard]), [0, 1, 2, 3]);
@@ -109,27 +111,31 @@ const E = N.SLOT.Empty, C = N.SLOT.Client, B = N.SLOT.Bot;
 const roomWant = {
     'room-lobby-waiting': {
         slots: [slot(C, 'Priya', 12, 0), slot(C, 'Sam', 40, 0x12), slot(B, 'Bot (Medium)', 0, 0), slot(E, '', 0xFFFF, 0)], map: 'TREASURE.LVL', fog: false, you: 1, leader: 0, teamA: 255, teamB: 255,
-        flags: 3, plan: [0, 0, 2, 0], inGame: 0, mode: 0, lobby: true, starting: false, leaderStarts: true, isPublic: false
+        flags: 3, plan: [0, 0, 2, 0], inGame: 0, mode: 0, ready: 0, lobby: true, starting: false, leaderStarts: true, isPublic: false
     },
     'room-lobby-starting': {
         slots: [slot(C, 'Priya', 12, 0), slot(C, 'Sam', 40, 0), slot(C, 'Juniper', 0xFFFF, 0), slot(B, 'Bot (Hard)', 0, 0)], map: 'ISLANDS.LVL', fog: false, you: 2, leader: 1, teamA: 0, teamB: 2,
-        flags: 7, plan: [0, 0, 0, 3], inGame: 5, mode: 0, lobby: true, starting: true, leaderStarts: true, isPublic: false
+        flags: 7, plan: [0, 0, 0, 3], inGame: 5, mode: 0, ready: 0, lobby: true, starting: true, leaderStarts: true, isPublic: false
     },
     'room-lobby-alone-no-map': {
         slots: [slot(C, 'Priya', 12, 0), slot(E, '', 0xFFFF, 0), slot(E, '', 0xFFFF, 0), slot(E, '', 0xFFFF, 0)], map: '', fog: false, you: 0, leader: 0, teamA: 255, teamB: 255,
-        flags: 3, plan: [0, 4, 1, 0], inGame: 0, mode: 0, lobby: true, starting: false, leaderStarts: true, isPublic: false
+        flags: 3, plan: [0, 4, 1, 0], inGame: 0, mode: 0, ready: 0, lobby: true, starting: false, leaderStarts: true, isPublic: false
     },
     'room-plain-not-a-lobby': {
         slots: [slot(C, 'A', 0xFFFF, 0), slot(C, 'B', 5, 0), slot(C, 'C', 6, 0), slot(C, 'D', 7, 0)], map: 'SMALL.LVL', fog: false, you: 255, leader: 255, teamA: 0, teamB: 1,
-        flags: 0, plan: [0, 0, 0, 0], inGame: 0, mode: 0, lobby: false, starting: false, leaderStarts: false, isPublic: false
+        flags: 0, plan: [0, 0, 0, 0], inGame: 0, mode: 0, ready: 0, lobby: false, starting: false, leaderStarts: false, isPublic: false
     },
     'room-lobby-public': {
         slots: [slot(C, 'Priya', 12, 0), slot(C, 'Sam', 40, 0), slot(E, '', 0xFFFF, 0), slot(E, '', 0xFFFF, 0)], map: 'TINY.LVL', fog: false, you: 1, leader: 0, teamA: 255, teamB: 255,
-        flags: 11, plan: [0, 0, 0, 0], inGame: 0, mode: 0, lobby: true, starting: false, leaderStarts: true, isPublic: true
+        flags: 11, plan: [0, 0, 0, 0], inGame: 0, mode: 0, ready: 0, lobby: true, starting: false, leaderStarts: true, isPublic: true
+    },
+    'room-lobby-ready': {
+        slots: [slot(C, 'Priya', 12, 0), slot(C, 'Sam', 40, 0), slot(C, 'Juniper', 9, 0), slot(B, 'Bot (Hard)', 0, 0)], map: 'TINY.LVL', fog: false, you: 2, leader: 0, teamA: 255, teamB: 255,
+        flags: 3, plan: [0, 0, 0, 3], inGame: 0, mode: 0, ready: 2, lobby: true, starting: false, leaderStarts: true, isPublic: false
     },
     'room-lobby-187': {
         slots: [slot(C, 'Priya', 12, 0), slot(C, 'Sam', 40, 0), slot(E, '', 0xFFFF, 0), slot(E, '', 0xFFFF, 0)], map: 'TINY.LVL', fog: false, you: 0, leader: 0, teamA: 255, teamB: 255,
-        flags: 3, plan: [0, 0, 0, 0], inGame: 0, mode: 1, lobby: true, starting: false, leaderStarts: true, isPublic: false
+        flags: 3, plan: [0, 0, 0, 0], inGame: 0, mode: 1, ready: 0, lobby: true, starting: false, leaderStarts: true, isPublic: false
     }
 };
 for (const name of Object.keys(roomWant)) {
@@ -174,7 +180,8 @@ for (const name of names) {
 }
 check('an empty message is refused', N.decode(new Uint8Array(0)) === null);
 check('type 0 is refused', N.decode(Uint8Array.from([0])) === null);
-check('type 36 is refused (35, the Visibility of protocol 22, is the last message)', N.decode(Uint8Array.from([36, 1, 2])) === null && N.MSG.Last === 35);
+check('type 42 is refused (41, the Ready of protocol 27, is the last message)', N.decode(Uint8Array.from([42, 1, 2])) === null && N.MSG.Last === 41);
+check('type 41 is a message that a page does not use (the server never sends it)', JSON.stringify(N.decode(Uint8Array.from([41, 1]))) === JSON.stringify({ type: 'other', code: 41 }));
 check('type 35 is a message that a page does not use (the server never sends it)', JSON.stringify(N.decode(Uint8Array.from([35, 1]))) === JSON.stringify({ type: 'other', code: 35 }));
 check('type 255 is refused', N.decode(Uint8Array.from([255])) === null);
 check('a bare reject is refused', N.decode(Uint8Array.from([3])) === null && N.decode(Uint8Array.from([3, 0])) === null && N.decode(Uint8Array.from([3, 10])) === null);
@@ -197,41 +204,57 @@ check('welcome flags 3 is refused', N.decode(mutate('welcome-created', 19, 3)) =
 {
     const room = bytesOf('room-lobby-waiting');
     const r = Array.from(room);
-    const tail = r.length - (1 + 4 + 1 + 1); // flags is 6 bytes before the end: flags, plan x4, in_game, mode (protocol 17)
-    check('the tail of the room message is where the check thinks', r[r.length - 7] === 3 && r[r.length - 1] === 0 && r[r.length - 2] === 0);
+        check('the tail of the room message is where the check thinks: flags, the plan x4, in_game, mode (protocol 17), the ready mask (protocol 27)', r[r.length - 8] === 3 && r[r.length - 1] === 0 && r[r.length - 2] === 0 && r[r.length - 3] === 0);
     const with_ = (i, v) => { const c = Uint8Array.from(room); c[i] = v; return c; };
     const L = r.length;
     check('room: a state above 3', N.decode(with_(1, 4)) === null);
-    check('room: a plan value of 5', N.decode(with_(L - 4, 5)) === null);
-    check('room: a plan value in a room that is no lobby (flags 1)', N.decode((() => { const c = Uint8Array.from(room); c[L - 7] = 1; return c; })()) === null);
-    check('room: starting without lobby (flags 5)', N.decode(with_(L - 7, 5)) === null);
-    check('room: lobby without leader-starts (flags 2)', N.decode(with_(L - 7, 2)) === null);
-    check('room: an unknown flag bit', N.decode(with_(L - 7, 19)) === null);
-    check('room: public in a lobby room (flags 11, protocol 22) is a public room', (N.decode(with_(L - 7, 11)) || {}).isPublic === true);
-    check('room: public while the START waits (flags 15) is fine', (N.decode(with_(L - 7, 15)) || {}).isPublic === true);
-    check('room: public without lobby (flags 9) is refused', N.decode(with_(L - 7, 9)) === null);
-    check('room: public without lobby and without leader-starts (flags 8) is refused', N.decode(with_(L - 7, 8)) === null);
-    check('room: public with lobby but without leader-starts (flags 10) is refused', N.decode(with_(L - 7, 10)) === null);
-    check('room: every flag byte above 15 is refused', Array.from({ length: 240 }, (_, i) => i + 16).every((v) => N.decode(with_(L - 7, v)) === null));
-    check('room: a game for a seat that holds nobody (seat 3)', N.decode(with_(L - 2, 8)) === null);
-    check('room: a game for a bot (seat 2)', N.decode(with_(L - 2, 4)) === null);
-    check('room: a game for a person (seat 1)', N.decode(with_(L - 2, 2)) !== null);
-    check('room: an in_game bit above 3', N.decode(with_(L - 2, 16)) === null);
-    check('room: you = 4', N.decode(with_(L - 11, 4)) === null);
-    check('room: you = 255 is fine', N.decode(with_(L - 11, 255)) !== null);
-    check('room: a leader that is a bot (seat 2)', N.decode(with_(L - 10, 2)) === null);
-    check('room: a leader that holds nobody (seat 3)', N.decode(with_(L - 10, 3)) === null);
-    check('room: no leader is fine', N.decode(with_(L - 10, 255)) !== null);
-    check('room: teams 1,0 are refused', N.decode((() => { const c = Uint8Array.from(room); c[L - 9] = 1; c[L - 8] = 0; return c; })()) === null);
-    check('room: teams 0,4 are refused', N.decode((() => { const c = Uint8Array.from(room); c[L - 9] = 0; c[L - 8] = 4; return c; })()) === null);
-    check('room: teams 0,255 are refused', N.decode((() => { const c = Uint8Array.from(room); c[L - 9] = 0; c[L - 8] = 255; return c; })()) === null);
-    check('room: teams 1,3 are fine', N.decode((() => { const c = Uint8Array.from(room); c[L - 9] = 1; c[L - 8] = 3; return c; })()) !== null);
-    check('room: fog = 2', N.decode(with_(L - 12, 2)) === null);
-    check('room: the mode byte 1 (187) is fine and decodes as the mode', (N.decode(with_(L - 1, 1)) || {}).mode === 1);
-    check('room: the mode byte 2 is refused', N.decode(with_(L - 1, 2)) === null);
-    check('room: the mode byte 255 is refused', N.decode(with_(L - 1, 255)) === null);
-    check('room: every mode byte above the last is refused, never read as another mode', Array.from({ length: 254 }, (_, i) => i + 2).every((v) => N.decode(with_(L - 1, v)) === null) && N.LAST_GAME_MODE === 1);
-    check('room: protocol 16 (no mode byte) is no Room message', N.decode(room.subarray(0, L - 1)) === null);
+    check('room: a plan value of 5', N.decode(with_(L - 5, 5)) === null);
+    check('room: a plan value in a room that is no lobby (flags 1)', N.decode((() => { const c = Uint8Array.from(room); c[L - 8] = 1; return c; })()) === null);
+    check('room: starting without lobby (flags 5)', N.decode(with_(L - 8, 5)) === null);
+    check('room: lobby without leader-starts (flags 2)', N.decode(with_(L - 8, 2)) === null);
+    check('room: an unknown flag bit', N.decode(with_(L - 8, 19)) === null);
+    check('room: public in a lobby room (flags 11, protocol 22) is a public room', (N.decode(with_(L - 8, 11)) || {}).isPublic === true);
+    check('room: public while the START waits (flags 15) is fine', (N.decode(with_(L - 8, 15)) || {}).isPublic === true);
+    check('room: public without lobby (flags 9) is refused', N.decode(with_(L - 8, 9)) === null);
+    check('room: public without lobby and without leader-starts (flags 8) is refused', N.decode(with_(L - 8, 8)) === null);
+    check('room: public with lobby but without leader-starts (flags 10) is refused', N.decode(with_(L - 8, 10)) === null);
+    check('room: every flag byte above 15 is refused', Array.from({ length: 240 }, (_, i) => i + 16).every((v) => N.decode(with_(L - 8, v)) === null));
+    check('room: a game for a seat that holds nobody (seat 3)', N.decode(with_(L - 3, 8)) === null);
+    check('room: a game for a bot (seat 2)', N.decode(with_(L - 3, 4)) === null);
+    check('room: a game for a person (seat 1)', N.decode(with_(L - 3, 2)) !== null);
+    check('room: an in_game bit above 3', N.decode(with_(L - 3, 16)) === null);
+    check('room: you = 4', N.decode(with_(L - 12, 4)) === null);
+    check('room: you = 255 is fine', N.decode(with_(L - 12, 255)) !== null);
+    check('room: a leader that is a bot (seat 2)', N.decode(with_(L - 11, 2)) === null);
+    check('room: a leader that holds nobody (seat 3)', N.decode(with_(L - 11, 3)) === null);
+    check('room: no leader is fine', N.decode(with_(L - 11, 255)) !== null);
+    check('room: teams 1,0 are refused', N.decode((() => { const c = Uint8Array.from(room); c[L - 10] = 1; c[L - 9] = 0; return c; })()) === null);
+    check('room: teams 0,4 are refused', N.decode((() => { const c = Uint8Array.from(room); c[L - 10] = 0; c[L - 9] = 4; return c; })()) === null);
+    check('room: teams 0,255 are refused', N.decode((() => { const c = Uint8Array.from(room); c[L - 10] = 0; c[L - 9] = 255; return c; })()) === null);
+    check('room: teams 1,3 are fine', N.decode((() => { const c = Uint8Array.from(room); c[L - 10] = 1; c[L - 9] = 3; return c; })()) !== null);
+    check('room: fog = 2', N.decode(with_(L - 13, 2)) === null);
+    check('room: the mode byte 1 (187) is fine and decodes as the mode', (N.decode(with_(L - 2, 1)) || {}).mode === 1);
+    check('room: the mode byte 2 is refused', N.decode(with_(L - 2, 2)) === null);
+    check('room: the mode byte 255 is refused', N.decode(with_(L - 2, 255)) === null);
+    check('room: every mode byte above the last is refused, never read as another mode', Array.from({ length: 254 }, (_, i) => i + 2).every((v) => N.decode(with_(L - 2, v)) === null) && N.LAST_GAME_MODE === 1);
+    check('room: protocol 16 (no mode byte, no ready mask) is no Room message', N.decode(room.subarray(0, L - 2)) === null);
+    check('room: protocol 26 (the mode, no ready mask) is no Room message', N.decode(room.subarray(0, L - 1)) === null);
+    // the ready mask (protocol 27): the last byte; a mark belongs to a lobby room's person who is a page and does not lead (the room's leader is seat 0, Sam is seat 1, a bot holds seat 2, seat 3 is empty)
+    check('room: a mark for a person who does not lead (seat 1) is fine and decodes', (N.decode(with_(L - 1, 2)) || {}).ready === 2);
+    check('room: a mark for the leader (seat 0) is refused', N.decode(with_(L - 1, 1)) === null);
+    check('room: a mark for a bot (seat 2) is refused', N.decode(with_(L - 1, 4)) === null);
+    check('room: a mark for a seat that holds nobody (seat 3) is refused', N.decode(with_(L - 1, 8)) === null);
+    check('room: a mark above the four seats is refused', Array.from({ length: 240 }, (_, i) => i + 16).every((v) => N.decode(with_(L - 1, v)) === null));
+    check('room: a mark for a person whose game is open (seat 1 in_game) is refused', N.decode((() => { const c = Uint8Array.from(room); c[L - 3] = 2; c[L - 1] = 2; return c; })()) === null);
+    check('room: a mark in a room that is no lobby room (flags 1) is refused', N.decode((() => { const c = Uint8Array.from(room); c[L - 8] = 1; c[L - 1] = 2; for (let i = L - 7; i < L - 3; i++) c[i] = 0; return c; })()) === null);
+    check('room: no leader and a mark for seat 0 is fine', (N.decode((() => { const c = Uint8Array.from(room); c[L - 11] = 255; c[L - 1] = 1; return c; })()) || {}).ready === 1);
+    // the helpers of the START's wait: who the room waits for
+    const asked = N.decode(bytesOf('room-lobby-ready'));
+    check('waitingFor: Juniper (seat 2) is the one who has not said Ready (the leader, a bot and Sam are not asked or have said it)', JSON.stringify(N.waitingFor(asked)) === '[2]' && N.mustReady(asked, 1) && N.mustReady(asked, 2) && !N.mustReady(asked, 0) && !N.mustReady(asked, 3));
+    check('waitingFor: nobody when everybody has said it', N.waitingFor(Object.assign({}, asked, { ready: 6 })).length === 0);
+    check('waitingFor: nobody is asked in a room that is no lobby room', N.waitingFor(Object.assign({}, asked, { lobby: false })).length === 0);
+    check('waitingFor: nobody is asked for a person whose game is open', JSON.stringify(N.waitingFor(Object.assign({}, asked, { inGame: 4 }))) === '[]');
+    check('encodeReady is the type 41 and the choice', hex(N.encodeReady(true)) === '2901' && hex(N.encodeReady(false)) === '2900' && N.MSG.Ready === 41);
     // the encoder of a plan never builds a message with a mode that the codec does not know (the server would refuse it): it throws, for every value outside 0 .. LAST_GAME_MODE and for what is no whole number
     const planWith = (m) => N.encodePlan('', [0, 0, 0, 0], 255, 255, m);
     const throwsRange = (m) => { try { planWith(m); return false; } catch (e) { return e instanceof RangeError; } };

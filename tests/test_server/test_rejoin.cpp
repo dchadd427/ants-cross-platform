@@ -1904,6 +1904,8 @@ void run_way_back_tests() {
         plan.team_b = 1;
         ASSERT_TRUE(ann.lobby->request_plan(plan));
         ASSERT_TRUE(w.run_until([&]() { return bob.lobby->room().plan[3] == net::PlanKind::Easy && bob.lobby->room().team_a == 0 && bob.lobby->room().team_b == 1; }, 3000));
+        ASSERT_TRUE(bob.lobby->request_ready(true));                                         // (protocol 27: the START waits for Bob's Ready)
+        ASSERT_TRUE(w.run_until([&]() { return ann.lobby->room().seat_ready(1); }, 3000));
         ASSERT_TRUE(ann.lobby->request_start());                                             // the START of a page: it waits until both are games
         ASSERT_TRUE(w.run_until([&]() { return bob.lobby->room().starting(); }, 3000));
         RoomStatus s = w.status("lob27001");

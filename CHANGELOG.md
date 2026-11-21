@@ -26,6 +26,24 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.20.0 - 2026-11-20 - The room inside Home, Ready up
+
+**For players:**
+- **The room lives inside Home.** A room you host or join takes the place of the Games list, and the chat has two tabs, Ants & Uncles and Room, with a dot on the one that has something new. Home fits the window without scrolling from 1280x800 up.
+- **Ready up.** In a room, everyone except the host presses Ready; the host's START waits until all are ready and shows who is not.
+
+**Rules / network:** network protocol 27 (Ready up): a v0.19 game cannot join a v0.20 room.
+
+**Fixes:**
+- The "Leave the game?" box and the box that copies a recording's link no longer make the game's sound repeat loudly while they are open.
+- A match whose player lost their connection during the countdown no longer stays stuck before the first turn: after 60 s the missing seat is dropped and the match goes on.
+
+**For operators:**
+- The relay hands a credential only once a match with two or more people has begun, at most two per player, lasting as long as the match can plus 10 minutes; it listens and relays on ANTS_TURN_EXTERNAL_IP only (an address the machine must hold) and writes its pid file to a small memory folder.
+- New server option --countdown-hold-seconds (default 60; control key countdown_hold_seconds).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5cd7452b...faa0179c)
+
 ## v0.19.3 - 2026-11-20 - Commands in the chat
 
 **For players:**
@@ -505,16 +523,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/354be26a...bfbcbda8)
 
-## v0.12.151 - 2026-10-28 - Tests: the map submission checks no longer fail on a slow machine
+## Older versions (v0.12.151 and before)
 
-**For players:**
-- **No change for players or server owners.** The game, the server and the map files are as before.
-- **A test of the map submissions no longer fails on a slow, busy test machine.** It checks that a player can send a map, find it again and withdraw it. The server limits the time it spends checking maps, and on a loaded machine that time ran out in the middle of the test, so the server answered "busy" where the test expected "accepted". The tests now give that limit all the time they need, and a new test keeps the real "busy" answer covered: a send that takes longer than the limit closes the window, and the next window starts clean.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/308ce544...c7027eb3)
-
-## Older versions (v0.12.150 and before)
-
-Every release before v0.12.151, and the long notes of v0.12.150 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.152, and the long notes of v0.12.151 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

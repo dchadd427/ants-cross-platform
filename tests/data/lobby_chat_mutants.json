@@ -857,9 +857,9 @@
   },
   {
    "id": "page_room_notice_is_hidden_by_style",
-   "file": "web/lobby.html",
-   "old": ".room-notice { margin: 0 0 18px;",
-   "new": ".room-notice { display: none; margin: 0 0 18px;",
+   "file": "web/home/room.css",
+   "old": ".room-notice { margin: 3px 0 0;",
+   "new": ".room-notice { display: none; margin: 3px 0 0;",
    "test": "python3 -m unittest tests.scripts.test_web_lobby_chat.ThePage tests.scripts.test_web_lobby_chat.TheStylesheet"
   },
   {

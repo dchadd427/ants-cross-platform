@@ -295,6 +295,12 @@ inline HostLobby::Config lobby_room_config(uint32_t seed) {
     return hc;
 }
 
+// The pages of a lobby room that are not its leader say Ready (protocol 27: the leader's START waits for them), and the room is run until it has heard them
+inline void pages_ready(Room& r, std::initializer_list<size_t> who) {
+    for (const size_t i : who) r.guests[i].lobby->request_ready(true);
+    r.run(100);
+}
+
 // What the front page is in a Hello: a lobby page, which cannot play a match
 inline ClientLobby::Config page_config(const std::string& name) {
     ClientLobby::Config cc;
@@ -337,3 +343,4 @@ void run_lobby_rejoin_tests();
 void run_lobby_rooms_tests();
 void run_lobby_rematch_tests();
 void run_lobby_public_tests();
+void run_lobby_ready_tests();

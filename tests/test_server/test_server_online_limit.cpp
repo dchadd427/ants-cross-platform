@@ -430,6 +430,8 @@ void run_online_limit_tests() {
         ASSERT_TRUE(pia.lobby->request_plan(plan_for("Small Ext.lvl")));
         w.run(300);
         ASSERT_EQ(w.status("stal0001").map, std::string("Small Ext.lvl"));
+        ASSERT_TRUE(bob.lobby->request_ready(true));                                            // (protocol 27: the START waits for every person who is not the leader to say Ready)
+        w.run(100);
         ASSERT_TRUE(pia.lobby->request_start());
         w.run(100);
         Client& pia_game = w.connect_game("Pia", "stal0001", pia_key, false, dir.string());          // Pia's game is of the newest version
@@ -510,7 +512,10 @@ void run_online_limit_tests() {
         Client& bob = w.connect_page("Bob", "stal0002", lobby_block_of());
         const net::SeatKey pia_key = pia.lobby->key();
         const net::SeatKey bob_key = bob.lobby->key();
+        ASSERT_TRUE(bob.lobby->request_ready(true));                                            // (protocol 27: the START waits for every person who is not the leader to say Ready)
+        w.run(100);
         ASSERT_TRUE(pia.lobby->request_start());
+        w.run(100);                                                                                  // (the START is armed before the games' Hellos: a page that takes its seat over before that says Ready again)
         Client& pia_game = w.connect_game("Pia", "stal0002", pia_key, true);                         // the LEADER's game cannot load the map
         Client& bob_game = w.connect_game("Bob", "stal0002", bob_key);
         w.run(500);
@@ -624,6 +629,8 @@ void run_online_limit_tests() {
             const net::SeatKey bob_key = bob.lobby->key();
             ASSERT_TRUE(pia.lobby->request_plan(plan_for("Small Ext.lvl")));
             w.run(300);
+            ASSERT_TRUE(bob.lobby->request_ready(true));                                            // (protocol 27: the START waits for every person who is not the leader to say Ready)
+            w.run(100);
             ASSERT_TRUE(pia.lobby->request_start());
             w.run(100);
             Client& pia_game = w.connect_game("Pia", "stal0005", pia_key, false, dir.string());
@@ -654,6 +661,9 @@ void run_online_limit_tests() {
             const net::SeatKey cat_key = cat.lobby->key();
             ASSERT_TRUE(pia.lobby->request_plan(plan_for("Small Ext.lvl", {K::Open, K::Open, K::Open, K::Nobody})));
             w.run(300);
+            ASSERT_TRUE(bob.lobby->request_ready(true));                                            // (protocol 27: the START waits for every person who is not the leader to say Ready)
+            ASSERT_TRUE(cat.lobby->request_ready(true));                                            // (protocol 27: the START waits for every person who is not the leader to say Ready)
+            w.run(100);
             ASSERT_TRUE(pia.lobby->request_start());
             w.run(100);
             Client& pia_game = w.connect_game("Pia", "stal0006", pia_key, false, dir.string());

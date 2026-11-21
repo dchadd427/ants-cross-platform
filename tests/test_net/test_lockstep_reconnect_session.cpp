@@ -1506,7 +1506,9 @@ void run_reconnect_session_tests() {
             m.run(1000, true, [&](uint32_t now) {
                 if (paused_after_ms == 0 && m.host->paused()) paused_after_ms = now - at;
             });
-            ASSERT_TRUE(paused_after_ms >= 10000 && paused_after_ms <= 10100);
+            const uint32_t last_word_ms = m.taps[2]->last_delivered_ms;                  // the last message that the host heard from it: the links' delays are random, so it was a little before the silence began
+            ASSERT_TRUE(paused_after_ms != 0 && last_word_ms <= at && at - last_word_ms <= 200);
+            ASSERT_TRUE(at + paused_after_ms - last_word_ms >= 10000 && at + paused_after_ms - last_word_ms <= 10100);       // 10 s after the last word
             ASSERT_TRUE(m.until([&]() { return !m.host->paused() && m.clients[2]->mode() == ClientSession::Mode::Normal; }, 8000));      // the host closed the dead link: the machine found out and came back
             m.run(2000);
             m.settle();

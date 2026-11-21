@@ -100,6 +100,7 @@ JsonValue status_to_json(const RoomStatus& s, bool in_list) {
     o.set("resume_countdown_seconds", JsonValue::make_int(s.resume_countdown_ms / 1000));
     o.set("countdown_seconds", JsonValue::make_int(s.countdown_s));
     if (!in_list) o.set("solo_countdown_seconds", JsonValue::make_int(s.solo_countdown_s));      // (not in the list: a list of a thousand rooms must stay under the answer's cap)
+    if (!in_list) o.set("countdown_hold_seconds", JsonValue::make_int(s.countdown_hold_ms / 1000));      // (nor this one, nor the counter of its drops below)
     o.set("paused", JsonValue::make_bool(s.paused));
     o.set("resume_seconds", JsonValue::make_int(s.resume_s));
     JsonValue absent = JsonValue::make_array();
@@ -126,6 +127,7 @@ JsonValue status_to_json(const RoomStatus& s, bool in_list) {
     o.set("rejoins", JsonValue::make_int(s.rejoins));
     o.set("drops_by_vote", JsonValue::make_int(s.drops_by_vote));
     o.set("drops_by_cap", JsonValue::make_int(s.drops_by_cap));
+    if (!in_list) o.set("drops_by_countdown_hold", JsonValue::make_int(s.drops_by_countdown_hold));
     o.set("drops_by_state", JsonValue::make_int(s.drops_by_state));
     o.set("rejoins_refused", JsonValue::make_int(s.rejoins_refused));
     o.set("catch_up_expired", JsonValue::make_int(s.catch_up_expired));
@@ -307,6 +309,9 @@ bool spec_from_json(const JsonValue& body, RoomSpec& out, std::string& error) {
     int64_t solo_countdown_s = spec.solo_countdown_s;        // ... and when exactly one person plays (the shorter of the two applies)
     if (!number("solo_countdown_seconds", 0, net::kMaxCountdownSeconds, solo_countdown_s)) return false;
     spec.solo_countdown_s = static_cast<uint32_t>(solo_countdown_s);
+    int64_t hold_s = spec.countdown_hold_ms / 1000;          // the most that the match is held for seats that are away before it begins to play
+    if (!number("countdown_hold_seconds", kMinCountdownHoldMs / 1000, kMaxCountdownHoldMs / 1000, hold_s)) return false;
+    spec.countdown_hold_ms = static_cast<uint32_t>(hold_s * 1000);
     // The computer players that sit in the room from the start (docs/SERVER.md, "Bots fill the empty seats, and chat in the waiting room"): [{"seat": 2, "bot": "medium"}]; "bot" is what --bot takes after the seat ("easy", "medium", "hard",
     // "idle", "worker", "worker:easy", "hard:raider" (a pinned style), ...; "standard" is the default kind)
     if (const JsonValue* v = body.find("bots")) {

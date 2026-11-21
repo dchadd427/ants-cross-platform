@@ -198,4 +198,99 @@ void run_protocol21_tests() {
             ASSERT_TRUE(n.host->desyncs().empty() && n.all_equal());
         }
     } TEST_END();
+    TEST_CASE("S2.58 Protocol 21, The Countdown Hold Through The Referee: A Seat That Is Lost In The Countdown And Does Not Come Back Is Dropped When The Hold Is Over (Here 20 s), The Others Wait Out The Resume Countdown And Go On Without It, The Drop At The Same Tick On Every Machine; A Seat That Is Back In Time Costs Nothing; After The First Turn The Hold Is Not Applied")
+    {
+        const uint32_t hold_ms = 20000;
+        const auto options = [&](uint32_t seed) {
+            HoldOptions o;
+            o.link = {30, 0};
+            o.seed = seed;
+            o.host.start_delay_ms = kCountdownMs;
+            o.host.attendance.resume_countdown_ms = kResumeCountdownMs;
+            o.host.attendance.countdown_hold_ms = hold_ms;
+            return o;
+        };
+        {   // never back: cut 5 s into the countdown, dropped 20 s later, the first turn after the resume countdown, and the match goes on with the two that stayed
+            HoldMatch m(3, options(37));
+            m.auto_reconnect[1] = false;
+            m.run(5000, false);
+            m.cut(1);
+            m.run(1000, false);
+            ASSERT_TRUE(m.host->paused() && m.host->seat_held(1));
+            m.run(18000, false);                                                    // 24 s from the start, 19 s after the cut: one second of the hold is left
+            ASSERT_TRUE(m.host->paused() && m.host->seat_held(1));
+            ASSERT_EQ(m.host->attendance().drops_by_countdown_hold(), 0u);
+            ASSERT_EQ(m.sealed(), 0u);
+            ASSERT_TRUE(m.until([&]() { return m.host->attendance().state(1) == Attendance::State::Dropped; }, 3000));
+            const uint32_t dropped_at = m.now;
+            ASSERT_TRUE(dropped_at >= 5000 + hold_ms && dropped_at <= 5000 + hold_ms + 300);       // the hold is counted from the cut, to the 10 ms step
+            ASSERT_EQ(m.host->attendance().drops_by_countdown_hold(), 1u);
+            ASSERT_EQ(m.host->attendance().drops_by_cap(), 0u);
+            ASSERT_FALSE(m.host->seat_held(1));
+            ASSERT_TRUE(m.host->attendance().counting_down(m.now));                  // the resume countdown that follows a pause (the match is held 10 s more, and the others are told the seconds)
+            ASSERT_TRUE(m.until([&]() { return m.sealed() >= 1; }, 20000));
+            ASSERT_TRUE(m.now - dropped_at >= kResumeCountdownMs - 200 && m.now - dropped_at <= kResumeCountdownMs + 500);
+            const uint32_t first_turn_at = m.now;
+            ASSERT_TRUE(first_turn_at <= 5000 + hold_ms + kResumeCountdownMs + 800);        // the longest that a lost seat can hold the countdown: the hold and the resume countdown
+            m.run(4000, false);
+            ASSERT_TRUE(m.sealed() > 40);
+            const std::vector<uint8_t> issuers = issuers_of(*m.host);
+            ASSERT_TRUE(issuers.size() == 1 && issuers[0] == 1);                      // seat 1's Drop is in the turns, once: nobody gave an order
+            for (uint8_t seat : {uint8_t{0}, uint8_t{2}}) {
+                ASSERT_TRUE(m.sims[seat]->is_player_dropped(1));
+                ASSERT_TRUE(m.host->client_present(seat));
+                ASSERT_FALSE(m.clients[seat]->paused());
+            }
+            ASSERT_TRUE(m.referee.is_player_dropped(1));
+            m.settle();
+            ASSERT_TRUE(m.host->desyncs().empty());
+            ASSERT_TRUE(m.all_equal());                                              // the Drop was applied at the same tick everywhere: the states are one
+            m.auto_reconnect[1] = true;                                              // the machine of the dropped seat finds a link: the seat is gone, and it is told so
+            m.run(5000, false);
+            ASSERT_TRUE(m.clients[1]->lost() && m.clients[1]->rejected() && m.clients[1]->reject_reason() == RejectReason::Dropped);
+        }
+        {   // back in time: 10 s of the hold, then the seat is back and verified; the hold does not drop anybody, and the match runs in step
+            HoldMatch m(3, options(38));
+            m.auto_reconnect[1] = false;
+            m.run(5000, false);
+            m.cut(1);
+            m.run(10000, false);
+            ASSERT_TRUE(m.host->paused());
+            m.auto_reconnect[1] = true;
+            ASSERT_TRUE(m.until([&]() { return m.sealed() >= 1; }, 40000));
+            ASSERT_EQ(m.host->attendance().drops_by_countdown_hold(), 0u);
+            ASSERT_EQ(m.host->attendance().state(1), Attendance::State::Present);
+            m.run(4000, false);
+            m.settle();
+            ASSERT_TRUE(m.host->desyncs().empty() && m.all_equal());
+            ASSERT_FALSE(m.sims[0]->is_player_dropped(1));
+            for (uint8_t seat : {uint8_t{0}, uint8_t{1}, uint8_t{2}}) ASSERT_TRUE(m.clients[seat]->presence().cap_s > 1000);      // the first turn told the players the cap of a match that plays (30 minutes): the last Presence of the pause named the hold's seconds, and a player whose link is lost later gives up by them
+        }
+        {   // the hold is a rule of the countdown: a seat that is lost after the first turn is held as long as the cap says, 20 s and more
+            HoldMatch m(3, options(39));
+            m.run(kCountdownMs + 3000, false);
+            ASSERT_TRUE(m.sealed() > 20);
+            m.auto_reconnect[1] = false;
+            m.cut(1);
+            m.run(hold_ms + 15000, false);                                          // 35 s of absence: the hold would have dropped the seat at 20
+            ASSERT_TRUE(m.host->paused() && m.host->seat_held(1));
+            ASSERT_EQ(m.host->attendance().drops_by_countdown_hold(), 0u);
+            ASSERT_EQ(m.host->attendance().state(1), Attendance::State::Absent);
+            m.auto_reconnect[1] = true;
+            ASSERT_TRUE(m.until([&]() { return !m.host->paused(); }, 60000));
+            m.run(4000, false);
+            m.settle();
+            ASSERT_TRUE(m.host->desyncs().empty() && m.all_equal());
+            ASSERT_FALSE(m.sims[0]->is_player_dropped(1));
+        }
+        {   // everybody lost in the countdown: every seat that is not present is dropped at the hold, and nobody is left to seal for
+            HoldMatch m(3, options(40));
+            for (uint8_t seat = 0; seat < 3; ++seat) m.auto_reconnect[seat] = false;
+            m.run(3000, false);
+            for (uint8_t seat = 0; seat < 3; ++seat) m.cut(seat);
+            m.run(hold_ms + 500, false);
+            ASSERT_EQ(m.host->attendance().drops_by_countdown_hold(), 3u);
+            for (uint8_t seat = 0; seat < 3; ++seat) ASSERT_FALSE(m.host->seat_held(seat) || m.host->client_present(seat));
+        }
+    } TEST_END();
 }

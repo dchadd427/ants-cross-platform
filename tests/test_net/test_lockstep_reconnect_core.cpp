@@ -2034,4 +2034,136 @@ void run_reconnect_core_tests() {
             ASSERT_EQ(runner.buffer_turns(), 1u);
         }
     } TEST_END();
+    TEST_CASE("N2.114 Attendance: The Countdown Hold: A Match That Has Not Begun To Play Is Held For Absent Seats At Most countdown_hold_ms In All, Then Every Seat That Is Not Present Is Dropped (Counted Apart From The Cap); Once The First Turn Is Sealed Only The Cap Counts; The Vote Still Goes On Sooner; A Restored Match, A Library Default And A Longer Hold Than The Cap Are Exempt; cap_s Tells What Is Left Of The Nearer Limit") {
+        using S = Attendance::State;
+        const uint32_t t0 = 5000000;
+        Attendance::Config cfg;
+        cfg.countdown_hold_ms = 60000;
+        {   // one seat is lost 5 s in and never comes back: dropped exactly when the pauses reach 60 s, by the hold and not by the cap or a vote
+            Attendance a(cfg);
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(a.countdown_hold_on());
+            ASSERT_TRUE(a.lost(1, t0 + 5000));
+            ASSERT_EQ(a.presence_for(0, t0 + 10000).cap_s, 55);                                   // the nearer limit is the hold (the cap would say 1,795)
+            ASSERT_TRUE(a.update(t0 + 64999).empty() && a.state(1) == S::Absent && a.paused());
+            ASSERT_EQ(a.cap_left_ms(t0 + 64999), 1u);
+            ASSERT_EQ(a.cap_s(t0 + 64999), 1);
+            const std::vector<uint8_t> dropped = a.update(t0 + 65000);
+            ASSERT_TRUE(dropped.size() == 1 && dropped[0] == 1 && a.state(1) == S::Dropped);
+            ASSERT_EQ(a.drops_by_countdown_hold(), 1u);
+            ASSERT_EQ(a.drops_by_cap(), 0u);
+            ASSERT_EQ(a.drops_by_vote(), 0u);
+            ASSERT_FALSE(a.paused());
+            ASSERT_EQ(a.pause_ms(t0 + 70000), 60000u);
+            ASSERT_TRUE(a.cap_reached(t0 + 70000) && a.cap_s(t0 + 70000) == 0);               // (the match has no pause left before its first turn: a later loss is dropped by the next update)
+            ASSERT_TRUE(a.lost(2, t0 + 80000));
+            const std::vector<uint8_t> at_once = a.update(t0 + 80000);
+            ASSERT_TRUE(at_once.size() == 1 && at_once[0] == 2);
+            ASSERT_EQ(a.drops_by_countdown_hold(), 2u);
+        }
+        {   // two seats: both go when the hold ends, the one that was away 10 s as the one that was away 60 s
+            Attendance a(cfg);
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(a.lost(1, t0) && a.lost(2, t0 + 50000));
+            const std::vector<uint8_t> dropped = a.update(t0 + 60000);
+            ASSERT_TRUE(dropped.size() == 2 && dropped[0] == 1 && dropped[1] == 2);
+            ASSERT_EQ(a.drops_by_countdown_hold(), 2u);
+            ASSERT_EQ(a.drops_by_cap(), 0u);
+        }
+        {   // the pauses add up before the first turn: 20 s and 25 s, and the third loss is dropped when it has used the 15 s that are left
+            Attendance a(cfg);
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(a.lost(1, t0) && a.returning(1, t0 + 19000) && a.caught_up(1, t0 + 20000));
+            ASSERT_EQ(a.cap_left_ms(t0 + 30000), 40000u);
+            ASSERT_TRUE(a.lost(2, t0 + 100000) && a.returning(2, t0 + 124000) && a.caught_up(2, t0 + 125000));
+            ASSERT_EQ(a.pause_ms(t0 + 200000), 45000u);
+            ASSERT_EQ(a.cap_left_ms(t0 + 200000), 15000u);
+            ASSERT_TRUE(a.lost(1, t0 + 300000));
+            ASSERT_TRUE(a.update(t0 + 314999).empty() && a.state(1) == S::Absent);
+            const std::vector<uint8_t> dropped = a.update(t0 + 315000);
+            ASSERT_TRUE(dropped.size() == 1 && dropped[0] == 1);
+            ASSERT_EQ(a.drops_by_countdown_hold(), 1u);
+        }
+        {   // the hold is ABSOLUTE like the cap: a seat that is catching up, with progress, goes with it
+            Attendance a(cfg);
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(a.lost(1, t0) && a.returning(1, t0 + 30000));
+            ASSERT_TRUE(a.progress(1, 5, t0 + 40000) && a.progress(1, 6, t0 + 55000));
+            ASSERT_TRUE(a.update(t0 + 59999).empty() && a.state(1) == S::CatchingUp);
+            const std::vector<uint8_t> dropped = a.update(t0 + 60000);
+            ASSERT_TRUE(dropped.size() == 1 && dropped[0] == 1 && a.state(1) == S::Dropped);
+            ASSERT_EQ(a.drops_by_countdown_hold(), 1u);
+        }
+        {   // a match that plays (begin_play): the hold is over, a loss is held for the cap, not for 60 s
+            Attendance a(cfg);
+            a.seat_humans(0b0111, t0);
+            a.begin_play();
+            ASSERT_FALSE(a.countdown_hold_on());
+            ASSERT_TRUE(a.lost(1, t0 + 5000));
+            ASSERT_TRUE(a.update(t0 + 65000).empty() && a.state(1) == S::Absent);
+            ASSERT_EQ(a.cap_s(t0 + 65000), 1740);                                                 // 30 minutes less the minute that has gone
+            ASSERT_TRUE(a.update(t0 + 5000 + kMaxPauseMs - 1).empty());
+            ASSERT_EQ(a.update(t0 + 5000 + kMaxPauseMs).size(), 1u);
+            ASSERT_EQ(a.drops_by_cap(), 1u);
+            ASSERT_EQ(a.drops_by_countdown_hold(), 0u);
+        }
+        {   // the pauses of the countdown still count toward the cap once the match plays, and nothing of the hold is carried over
+            Attendance a(cfg);
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(a.lost(1, t0) && a.returning(1, t0 + 19000) && a.caught_up(1, t0 + 20000));
+            ASSERT_EQ(a.cap_left_ms(t0 + 30000), 40000u);
+            a.begin_play();
+            ASSERT_EQ(a.cap_left_ms(t0 + 30000), kMaxPauseMs - 20000u);
+        }
+        {   // the vote goes on sooner: with three seats, two of them vote at 30 s and the third is dropped by the vote, 30 s before the hold would have done it
+            Attendance a(cfg);
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(a.lost(1, t0));
+            ASSERT_EQ(a.vote_subject(t0 + 29999), 255);
+            ASSERT_EQ(a.vote_subject(t0 + 30000), 1);
+            ASSERT_TRUE(a.vote(0, 1, true, t0 + 30000) && a.vote(2, 1, true, t0 + 30000));
+            const std::vector<uint8_t> dropped = a.update(t0 + 30000);
+            ASSERT_TRUE(dropped.size() == 1 && dropped[0] == 1);
+            ASSERT_EQ(a.drops_by_vote(), 1u);
+            ASSERT_EQ(a.drops_by_countdown_hold(), 0u);
+        }
+        {   // the library's default has no hold (the other tests of this file, and a game on the local network, rely on it): a seat is held for the cap
+            Attendance a;
+            a.seat_humans(0b0111, t0);
+            ASSERT_FALSE(a.countdown_hold_on());
+            ASSERT_TRUE(a.lost(1, t0));
+            ASSERT_TRUE(a.update(t0 + 600000).empty() && a.state(1) == S::Absent);
+        }
+        {   // a hold that is longer than the cap is the cap's business, and the cap says so in its own counter
+            Attendance::Config longer;
+            longer.countdown_hold_ms = 120000;
+            longer.max_pause_ms = 60000;
+            Attendance a(longer);
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(a.lost(1, t0));
+            ASSERT_EQ(a.cap_s(t0), 55);                                                           // (a pause counts 5 s at least)
+            ASSERT_EQ(a.update(t0 + 60000).size(), 1u);
+            ASSERT_EQ(a.drops_by_cap(), 1u);
+            ASSERT_EQ(a.drops_by_countdown_hold(), 0u);
+        }
+        {   // a match that a restart brought back is exempt: its seats are absent from the restart, and the restart's own rules (the vote after 90 s, the cap) apply
+            Attendance a(cfg);
+            a.seat_restored(0b0111, 0, t0);
+            ASSERT_FALSE(a.countdown_hold_on());
+            ASSERT_TRUE(a.paused());
+            ASSERT_TRUE(a.update(t0 + 61000).empty());
+            ASSERT_TRUE(a.state(0) == S::Absent && a.state(1) == S::Absent && a.state(2) == S::Absent);
+            ASSERT_TRUE(a.cap_s(t0 + 61000) > 1000);
+        }
+        {   // a new match on the same object starts with the hold again, and with its counters at 0
+            Attendance a(cfg);
+            a.seat_humans(0b0111, t0);
+            ASSERT_TRUE(a.lost(1, t0));
+            ASSERT_EQ(a.update(t0 + 60000).size(), 1u);
+            a.begin_play();
+            a.seat_humans(0b0111, t0 + 100000);
+            ASSERT_TRUE(a.countdown_hold_on());
+            ASSERT_EQ(a.drops_by_countdown_hold(), 0u);
+        }
+    } TEST_END();
 }

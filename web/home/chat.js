@@ -203,14 +203,14 @@
     function addressOf(loc) { return (loc.protocol === 'https:' ? 'wss://' : 'ws://') + loc.host + PATH; }
 
     // ---- the dock ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    // mount({ doc, win, host (Home's div), chip (the bar's login button), screen() ('home' or 'room'), go(url), fetch, now, random, WebSocket, error }) returns { root, slot, field, shown(isHome), open(on), say(text), state() }
+    // mount({ doc, win, host (Home's div), chip (the bar's login button), screen() ('home' or 'room'), go(url), fetch, now, random, WebSocket, error }) returns { root, slot, field, shown(isHome), open(on), away(on) (another chat has the box: the room's tab), say(text), state() }
     function mount(env) {
         var doc = env.doc, win = env.win, host = env.host, chip = env.chip || null;
         var visit = env.go || function (url) { win.location.assign(url); };
         var now = env.now || function () { return Date.now(); }, rnd = env.random || Math.random, Socket = env.WebSocket || win.WebSocket;
         var feed = [], you = null, login = false, people = null, state = 'connecting', welcomed = false, ever = false, lastId = -1, bad = 0, attempt = 0, liveSince = null, lastTry = 0;
         var rx = 0, wokeAt = null, grace = false, lockOf = null;       // (when the hub last spoke; when the page last came back; the Web Lock held)
-        var sock = null, stopped = false, isHome = false, stale = true, notice = '', unanswered = [], stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0, flood: 0, pics: 0 };       // (unanswered: lines and commands sent and not answered yet, oldest first)
+        var sock = null, stopped = false, isHome = false, aside = false, stale = true, notice = '', unanswered = [], stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0, flood: 0, pics: 0 };       // (unanswered: lines and commands sent and not answered yet, oldest first)
         var picWait = false, picWant = false, picFailed = false;                  // (the switch: a press waits for the `you` frame; a refusal or 8 s of silence puts it back)
         var busy = false, menuOn = false, forgetSure = false, refocus = false, forgetAt = 0;                                       // (a POST of the login is on its way; the chip's dropdown of the account is open)
         var tokens = PACE.burst, tokensAt = now(), said = Object.create(null), heard = 0, skipped = 0, muted = { repaint: false, flood: false };       // (said: the texts that were sent in the last 31 s, as the hub remembers them)
@@ -286,7 +286,7 @@
 
         // ---- what is seen -----------------------------------------------------------------------------------------------------------------------------------------------------------------------
         function visible() { return !doc.hidden; }
-        function seen() { return isHome && open && visible(); }                 // the log is on the screen and somebody can read it
+        function seen() { return isHome && open && !aside && visible(); }       // the log is on the screen and somebody can read it (aside: another chat has the box, the room's tab: web/home/roomchat.js)
         function unread() { var n = 0; for (var i = 0; i < feed.length; i++) if (feed[i].fresh) n++; return n; }
         function row(e) {
             var r, admin = e.role === 'admin';
@@ -784,7 +784,8 @@
             you: function () { return you ? { name: you.name, role: you.role } : null; }, line: lineById, by: byAuthor, when: clockOf, arrived: function (fn) { arrivalFns.push(fn); }, command: guard(command), mutes: guard(function (done) { command('/mutes', done, true); }), note: guard(function (text) { answer([String(text)]); }), rows: function (fn) { rowFns.push(fn); },
             tap: function (fn) { taps.push(fn); if (hello) tell1(fn, 'live', hello); else if (state === 'offline') tell1(fn, 'lost'); },
             send: out,
-            shown: guard(function (on) { isHome = !!on; if (!on) menuOn = false; if (seen()) stale = true; render(); tapped('shown', !!on); }), open: guard(setOpen)
+            shown: guard(function (on) { isHome = !!on; if (!on) menuOn = false; if (seen()) stale = true; render(); tapped('shown', !!on); }), open: guard(setOpen),
+            away: guard(function (on) { on = !!on; if (aside === on) return; aside = on; if (seen()) stale = true; render(); })
         };
     }
 

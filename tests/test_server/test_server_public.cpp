@@ -192,6 +192,7 @@ void run_public_room_tests() {
         ASSERT_EQ(codes_of(w), "fil00001");
         const net::SeatKey pia_key = pia.lobby->key();
         const net::SeatKey bob_key = bob.lobby->key();
+        w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
         ASSERT_TRUE(pia.lobby->request_start());
         w.run(300);
         ASSERT_TRUE(w.status("fil00001").starting && w.status("fil00001").lobby_public);        // (public and starting: the leader's choice stands, the list does not show it)
@@ -616,6 +617,7 @@ void run_public_room_tests() {
         // START waits for the games: not listed, whichever kind it is; the START that is cancelled brings the room back, as a locked row
         const net::SeatKey pia_key = pia.lobby->key();
         const net::SeatKey bob_key = bob.lobby->key();
+        w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
         ASSERT_TRUE(pia.lobby->request_start());
         w.run(300);
         ASSERT_TRUE(w.status("prv00001").starting && !w.status("prv00001").lobby_public);

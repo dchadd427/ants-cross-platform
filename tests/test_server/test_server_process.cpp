@@ -412,6 +412,8 @@ void rematch_process_scenario() {
     RClient& bob_page = w.connect("Bob", code, lobby_block_of(), net::kClientPage);
     ASSERT_TRUE(w.until([&]() { return bob_page.lobby->phase() == net::ClientLobby::Phase::InRoom && pia_page.lobby->room().slots[1].state == net::SlotState::Client; }, 15000));
     ASSERT_TRUE(pia_page.lobby->is_leader() && bob_page.lobby->my_seat() == 1);
+    ASSERT_TRUE(bob_page.lobby->request_ready(true));                                   // (protocol 27: the START waits for Bob's Ready)
+    ASSERT_TRUE(w.until([&]() { return pia_page.lobby->room().seat_ready(1); }, 10000));
     ASSERT_TRUE(pia_page.lobby->request_start());
     ASSERT_TRUE(w.until([&]() { return pia_page.lobby->room().starting(); }, 10000));
     const net::SeatKey pia_key = pia_page.lobby->key();

@@ -112,6 +112,10 @@ function page(name, code, extra) {
 const login = (name) => ({ login: true, you: { name, mod: false } });
 function names(c) { return c.room ? c.room.slots.map((s) => (s.state === N.SLOT.Client ? s.name : s.state === N.SLOT.Bot ? '(bot)' : '-')).join('|') : '(no room)'; }
 const online = (c) => () => c.status === 'online' && c.room !== null;
+// The mark of Ready (protocol 27, docs/READY_UP.md): the START of a leader waits for every person who is not the leader to say it, and the room shows the mark to everybody
+const readyOf = (viewer, who) => { const at = viewer.seatOf(who); return at >= 0 && viewer.room && ((viewer.room.ready >> at) & 1) === 1; };
+// The page of the harness (the real front page) presses the Ready up switch on its own card
+const pressReady = (env) => { const button = env.$('slots').findAll((e) => e.tagName === 'button' && e.hasAttribute('data-ready'))[0]; if (button) button.click(); return !!button; };
 
 (async () => {
     // ---- 1. two pages in one lobby: the code makes the room, and the same link joins it ---------------------------------------------------------------------------------------------------------------
@@ -331,6 +335,8 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         B.connect();
         await step('B joins', () => online(B));
         await step('A sees B', () => () => A.count('joined') === 1);
+        check('B says Ready (the START of the leader waits for it)', B.setReady(true) === true);
+        await step('A is shown that B is ready', () => () => readyOf(A, 'Bea'));
         check('A presses START (the request carries the plan\'s fill and teams)', A.start() === true);
         await step('both pages are told that the START waits, and that no game is in yet', () => () => A.room.starting && B.room.starting && A.count('starting') === 1 && B.count('starting') === 1 && A.room.inGame === 0);
         check('(the leader cannot move, plan, rename or start again while it waits)', A.move(1, 2) === false && A.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }) === false && A.rename('Zed') === false && A.start() === false);
@@ -587,6 +593,8 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         await step('Home follows what the room says: My room counts the two colors that play of the two that are in the match', () => () => env.home('mine').children[1].textContent === '2/2' && env.home('mine').getAttribute('aria-label') === 'My room, 2 of 2');
         await sleep(2500);
         check('2.5 seconds on Home: the page answered the server\'s pings, and Bea is still in her color (no hold, no drop)', A.count('left') === 0 && A.room.slots[2].state === N.SLOT.Client && A.room.slots[2].name === 'Bea' && pageSockets.length === 1 && env.screen() === 'home');
+        check('Bea presses Ready up on her own card (the page is on Home: the room is still the page\'s)', pressReady(env) === true);
+        await step('... Ada is shown that Bea is ready', () => () => readyOf(A, 'Bea'));
         check('Ada presses START', A.start() === true);
         await step('START reaches the page on Home: the tab goes to the game page of its seat and name, once', () => () => env.assigned.length === 1, 5000);
         check('... the address of the game page (the plain code, the seat, the name; no key)', JSON.stringify(env.assigned) === JSON.stringify(['https://play.test/?join=/ws&room=' + room + '&seat=2&name=Bea']), JSON.stringify(env.assigned));
@@ -752,6 +760,8 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         await step('a room of two that will START', () => () => online(S)() && online(S2)(), 8000);
         check('(its leader sets the plan for the two of them and presses START: the room waits for the games)', S.setPlan({ map: '', kinds: [N.PLAN.Open, N.PLAN.Open, N.PLAN.Nobody, N.PLAN.Nobody], teamA: N.NO_TEAM, teamB: N.NO_TEAM }) === true);
         await sleep(400);
+        check('(the other person says Ready)', S2.setReady(true) === true);
+        await step('(the leader is shown the mark)', () => () => readyOf(S, 'Qjstart2'));
         check('(START)', S.start() === true);
         await step('the room says that START waits', () => () => S.room.starting === true, 8000);
         const stale = (codeOf, host, age) => ({ code: codeOf, host: host, map: 'TINY.LVL', mode: 'highest-score', people: 3, bots: 0, free: 1, size: 4, age: age });
@@ -816,6 +826,8 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         env.roomBar('rhome').click();
         check('(Bea goes Home, Ada plans for two)', env.screen() === 'home' && A.setPlan({ map: '', kinds: [N.PLAN.Open, N.PLAN.Open, N.PLAN.Nobody, N.PLAN.Nobody], teamA: N.NO_TEAM, teamB: N.NO_TEAM }) === true);
         await step('... the plan is in (My room says 2/2)', () => () => env.home('mine').children[1].textContent === '2/2');
+        check('Bea presses Ready up on her own card', pressReady(env) === true);
+        await step('... Ada is shown that Bea is ready', () => () => readyOf(A, 'Bea'));
         check('Ada presses START', A.start() === true);
         await step('START reaches the page: it goes to the game page (and does not get there)', () => () => env.assigned.length === 1, 5000);
         const t0 = Date.now();

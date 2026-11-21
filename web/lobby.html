@@ -67,17 +67,11 @@
 
     /* ---- the black boxes of the setup screen ---- */
     .panel { background: var(--inset); color: var(--cream); border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); padding: 20px 22px 18px; }
-    .grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 30px; align-items: start; }
     .panel h2 { font-size: 22px; font-weight: 500; line-height: 1.2; }
     .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
     .code { font-size: 15px; color: var(--muted); white-space: nowrap; }
     .code b { font-weight: 500; color: var(--cream); font-variant-numeric: tabular-nums; letter-spacing: .06em; margin-left: 4px; background: #0d171f; border: 1px solid #1c3a30; padding: 2px 8px; border-radius: 3px; }
 
-    /* the invitation: one link for everybody */
-    .invite { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px 14px; align-items: center; }
-    .invite input { appearance: none; width: 100%; min-height: 48px; padding: 8px 14px; font-size: 16px; color: var(--cream); background: #0b1117; border: 3px solid var(--frame); border-color: var(--frame-lo) var(--frame-hi) var(--frame-hi) var(--frame-lo); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); text-overflow: ellipsis; }
-    .invite .btn { min-height: 52px; }
-    .invite-note { margin-top: 10px; font-size: 15px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: space-between; }
     .joinbox { display: flex; gap: 10px; margin-top: 10px; }
     .hint { margin-top: 6px; font-size: 14px; color: #f2c48c; }
     .hint:empty { display: none; }
@@ -87,13 +81,6 @@
     .joinbox input { flex: 1; min-width: 0; min-height: 44px; padding: 6px 12px; background: #0b1117; border: 3px solid var(--frame); border-color: var(--frame-lo) var(--frame-hi) var(--frame-hi) var(--frame-lo); border-radius: 4px; color: var(--cream); }
     .joinbox input::placeholder { color: #7f9c92; opacity: 1; }                 /* (the browser's own grey is 4.1:1 on this field; the name card's field has the same color) */
 
-    /* ---- the four colors ---- */
-    .slots { list-style: none; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px 16px; margin: 18px 0 0; padding: 0; }
-    .slot { --accent: #79bf93; position: relative; display: grid; grid-template-columns: calc(24px * var(--k) + 4px) minmax(0, 1fr); gap: 2px 14px; align-items: center; padding: 18px 14px 14px 14px; min-height: calc(41px * var(--k) + 42px);
-        background: linear-gradient(180deg, #0f1820, #080c11); border: 2px solid var(--edge); border-radius: 6px; box-shadow: inset 0 0 0 1px #17382f, inset 0 4px 0 var(--accent); color: var(--cream); }
-    .slot[data-c="red"] { --accent: #d4707f; } .slot[data-c="blue"] { --accent: #8f8fd6; } .slot[data-c="black"] { --accent: #b3afb9; }
-    .slot .antbox { position: relative; align-self: end; height: calc(41px * var(--k)); }
-    .slot .antbox::after { content: ""; position: absolute; left: 50%; bottom: -3px; width: calc(20px * var(--k)); height: calc(5px * var(--k)); transform: translateX(-50%); background: radial-gradient(closest-side, rgba(0, 0, 0, .75), transparent); z-index: 0; }
     .ant { position: relative; z-index: 1; display: block; width: calc(24px * var(--k)); height: calc(41px * var(--k)); margin: 0 auto; background: url("front/ants.png?v=ed388ed5") no-repeat 0 0 / calc(168px * var(--k)) calc(164px * var(--k)); image-rendering: pixelated; animation: ant-stand 1650ms step-end infinite; }
     .ant-red { background-position-y: calc(-41px * var(--k)); } .ant-blue { background-position-y: calc(-82px * var(--k)); } .ant-black { background-position-y: calc(-123px * var(--k)); }
     @keyframes ant-stand {
@@ -102,78 +89,7 @@
         72.7273% { background-position-x: calc(-144px * var(--k)); } 77.2727% { background-position-x: calc(-48px * var(--k)); } 81.8182% { background-position-x: calc(-72px * var(--k)); } 90.9091% { background-position-x: calc(-120px * var(--k)); }
     }
     @media (prefers-reduced-motion: reduce) { .ant { animation: none; } }
-    .slot.k-open .ant, .slot.k-nobody .ant { filter: brightness(0) invert(1); opacity: .13; animation: none; }
-    .slot.k-open { border-style: dashed; border-color: #2b6b4f; background: #0a1016; }
-    .slot.k-nobody { background: #0a0d10; }
-    .slot .txt { min-width: 0; display: grid; gap: 1px; align-content: start; }
-    .cname { font-size: 13px; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); }
-    .pname { font-size: 24px; line-height: 1.15; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-width: 0; min-height: 52px; overflow-wrap: anywhere; }       /* as tall as a drop-down, so that the rows of the colors line up */
-    .slot.k-open .pname, .slot.k-nobody .pname, .slot.k-bot .pname { color: #a8c2b8; } .botname { display: block; font-size: 15px; line-height: 1.2; color: #a8c2b8; overflow-wrap: anywhere; }
-    .you { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--gold); background: #2a2208; border: 1px solid #6b5a14; border-radius: 3px; padding: 0 6px; line-height: 1.5; }
-    .pstat { font-size: 14px; color: var(--muted); min-height: 20px; }
-    /* START has been pressed: each player's line says whether their game is open yet */
-    .pstat.in, .pstat.wait { display: flex; align-items: center; }
-    .pstat.in::before, .pstat.wait::before { content: ""; flex: none; width: 9px; height: 9px; margin-right: 8px; border-radius: 50%; box-shadow: 0 0 0 1px #000; }
-    .pstat.in { color: #b6e8c8; } .pstat.in::before { background: #44e08a; box-shadow: 0 0 0 1px #000, 0 0 7px rgba(68, 224, 138, .8); }
-    .pstat.wait { color: #f2d68a; } .pstat.wait::before { background: var(--gold); animation: wait-blink 1.1s ease-in-out infinite; }
-    @keyframes wait-blink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
-    @media (prefers-reduced-motion: reduce) { .pstat.wait::before { animation: none; } }
-    .pname input { min-width: 0; width: 100%; font-size: 24px; line-height: 1.1; color: var(--cream); background: #0b1117; border: 2px solid var(--frame-hi); border-radius: 3px; padding: 0 6px; }
-    /* the host's Remove button on another player's color: small, the color of a warning, and always followed by a question */
-    .rm { flex: none; min-height: 30px; padding: 2px 12px; font-size: 14px; line-height: 1.1; cursor: pointer; color: #f6c9c0; background: #1f1011; border: 2px solid #7a3b34; border-radius: 6px; }
-    .rm:hover { color: #ffe4de; background: #2c1514; border-color: #c4655a; }
-    .rmask { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 2px; }
-    .rmask span { flex: 1 1 100%; font-size: 15px; line-height: 1.3; color: #ffe4de; overflow-wrap: anywhere; }
-    .rmask .rm { min-height: 38px; padding: 4px 18px; font-size: 16px; }
-    .rmask .rm.yes { color: #1a0a08; background: #e08a7d; border-color: #7a3b34; }
-    .rmask .rm.yes:hover { background: #eca396; }
-    .rmask .rm.keep { color: var(--cream); background: #0b1117; border-color: var(--frame-hi); }
-    .rmask .rm.keep:hover { background: #13222b; }
-    .slot.removing { outline: 3px solid #e08a7d; outline-offset: 2px; }
-    @media (pointer: coarse) { .rm { min-height: 40px; padding: 4px 14px; } .rmask .rm { min-height: 44px; } }
-    .mode { appearance: none; -webkit-appearance: none; width: 100%; max-width: 260px; margin: 2px 0 4px; min-height: 46px; padding: 6px 44px 6px 12px; font-size: 20px; color: var(--cream); cursor: pointer;
-        background: #0b1117 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22'%3E%3Crect x='1' y='1' width='20' height='20' rx='2' fill='%232b6357' stroke='%23050a08' stroke-width='2'/%3E%3Cpath d='M6 9l5 5 5-5' fill='none' stroke='%23f4ece2' stroke-width='2.4'/%3E%3C/svg%3E") no-repeat right 8px center;
-        border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); }
-    option { background: #0b1612; color: var(--cream); }
-    .grip { position: absolute; top: 12px; right: 6px; width: 36px; height: 36px; display: grid; place-items: center; background: none; border: 0; border-radius: 4px; cursor: grab; touch-action: none; }
-    .grip i { display: block; width: 14px; height: 22px; background: radial-gradient(circle, #8fb3a6 1.7px, transparent 2.2px) 0 0 / 7px 7px; }
-    .grip:hover { background: #13222b; }
-    .slot .tab { position: absolute; left: 12px; top: -2px; transform: translateY(-50%); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: #1a1405; background: var(--gold); border: 2px solid var(--edge); border-radius: 3px; padding: 0 8px; line-height: 1.5; }
-    .slot.fresh { animation: fresh 1.6s ease-out; }
-    @keyframes fresh { 0% { box-shadow: inset 0 0 0 1px #17382f, inset 0 4px 0 var(--accent), 0 0 0 4px var(--gold); } 100% { box-shadow: inset 0 0 0 1px #17382f, inset 0 4px 0 var(--accent), 0 0 0 0 rgba(246, 208, 88, 0); } }
-    .slot.lifted { opacity: .4; outline: 2px dashed var(--gold); outline-offset: 2px; }
-    .slot.picked { outline: 3px solid var(--gold); outline-offset: 2px; }
-    .slot.drop { outline: 3px solid var(--gold); outline-offset: 3px; background: linear-gradient(180deg, #1c2a1c, #101a12); }
-    .slot.drop::after { content: attr(data-drop); position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: 3; background: var(--gold); color: #1a1405; padding: 3px 14px; border-radius: 4px; border: 2px solid var(--edge); box-shadow: 2px 3px 0 var(--shadow); font-size: 15px; white-space: nowrap; pointer-events: none; }
-    .slot.picked-target { cursor: pointer; outline: 2px dashed #b9a24a; outline-offset: 2px; }
-    .slot.picked-target::after { content: attr(data-drop); position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); background: #2a2208; color: var(--gold); border: 1px solid #6b5a14; font-size: 13px; padding: 1px 10px; border-radius: 4px; white-space: nowrap; pointer-events: none; }
-    /* the token that follows the pointer while a player is dragged: the ant and the name, so that the color under it stays in view */
-    .chip { --k: 2; position: fixed; z-index: 60; pointer-events: none; display: flex; align-items: center; gap: 12px; padding: 8px 18px 8px 8px; background: #0f1820; color: var(--cream); border: 3px solid var(--gold); border-radius: 8px; transform: rotate(-2deg); box-shadow: 0 14px 26px rgba(0, 0, 0, .55); }
-    .chip .ant { margin: 0; animation: none; background-position-x: 0; }
-    .chip b { display: block; font-weight: 500; font-size: 22px; line-height: 1.1; }
-    .chip small { display: block; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
-    .slots-note { margin-top: 12px; font-size: 15px; color: var(--muted); min-height: 22px; }
-    .teams-note { margin-top: 2px; } .teams-note.warn { color: #f2c48c; }
-    /* Team 1 and Team 2 on every color that plays (when three or four play): lit when the color is on that team */
-    .teamset { display: flex; gap: 8px; margin-top: 8px; }
-    .teamset button { flex: 0 1 94px; min-width: 0; min-height: 36px; padding: 3px 8px; font-size: 15px; line-height: 1.1; cursor: pointer; color: var(--muted); background: #0b1117; border: 2px solid #28493e; border-radius: 6px; }
-    .teamset button:hover { border-color: var(--frame-hi); color: var(--cream); }
-    .teamset button[aria-pressed="true"] { color: var(--gold); background: #1c1b0e; border-color: var(--gold); }
-    .teamset button[aria-disabled="true"] { border-style: dashed; color: #8da39a; background: #090d11; }
 
-    /* ---- the map, the teams and START ---- */
-    .side { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; }
-    .maprow { display: grid; gap: 14px; }
-    .tv { margin: 4px auto 6px; width: 300px; max-width: 100%; border: 3px solid var(--edge); background: var(--edge); box-shadow: 0 0 0 3px var(--frame), 0 0 0 5px var(--edge), 4px 6px 0 5px var(--shadow); }
-    .tv img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; }
-    .mapcard { display: grid; gap: 8px; justify-items: center; min-width: 0; text-align: center; }
-    .map-name { font-size: 28px; line-height: 1.1; overflow-wrap: anywhere; } .map-facts { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; } .map-facts:empty { display: none; }
-    .map-facts span { padding: 1px 9px; font-size: 14px; color: var(--cream); background: #0f1820; border: 1px solid #28493e; border-radius: 10px; } .map-facts .tag { color: #1a1405; background: var(--gold); border-color: var(--gold); text-transform: uppercase; letter-spacing: .06em; font-size: 12px; }
-    .change { min-height: 44px; min-width: 160px; }
-    .info { text-align: center; font-size: 15px; color: var(--cream); }
-    .go { display: grid; gap: 10px; }
-    .go .plan { font-size: 15px; line-height: 1.35; color: var(--ink); overflow-wrap: anywhere; }
-    .plan-short { display: none; }
 
     /* ---- footer ---- */
     /* the site footer is not drawn on either screen (the Room has the recording notice under START, and the Menu has the links, the numbers and the version: web/home/home.js reads them from the markup below) */
@@ -192,8 +108,6 @@
     .how h3 { font-weight: 500; font-size: 18px; margin: 12px 0 4px; }
     .how p { margin: 0 0 8px; max-width: 70ch; }
     .how .sheets { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; } .how .sheets img { max-width: 100%; height: auto; border: 3px solid var(--edge); }
-    body.offline .slots, body.offline .maprow, body.offline .gtype { filter: saturate(.4) brightness(.72); }
-    body.joining .maprow, body.joining .gtype { visibility: hidden; }      /* the map is not known until the player is in the room */
     /* ---- the name step of a link that somebody else shared: the same card as the game page's own ---- */
     .name-modal { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(12, 8, 5, .78); }
     .name-step { padding: 18px 20px 16px; width: min(420px, 100%); max-height: 100%; overflow-y: auto; text-align: left; background: var(--clay) var(--tile); border: 3px solid var(--edge); box-shadow: 0 0 0 3px var(--frame), 0 0 0 5px var(--edge), 4px 6px 0 5px var(--shadow); }
@@ -208,12 +122,6 @@
     .name-step-back { margin-top: 14px; }
 
     /* ---- narrower windows ---- */
-    @media (min-width: 1041px) and (min-height: 880px) { :root { --k: 4; } }
-    @media (max-width: 1040px) {
-        .grid { grid-template-columns: minmax(0, 1fr); gap: 22px; }
-        .side { grid-template-columns: minmax(0, 300px) minmax(0, 1fr); align-items: start; gap: 22px 26px; grid-template-rows: auto 1fr; }     /* the map's column is tall: the game type and START! stack at the top of theirs, the spare height is the second row's */
-        .side .maprow { grid-row: span 2; }
-    }
     @media (max-width: 720px) {
         :root { --k: 2; }
         .wrap { padding: 14px 16px 0; }
@@ -222,48 +130,14 @@
         .mast h1 { grid-area: logo; } .mast p { grid-area: text; } .mast #watch-top { grid-area: btn; justify-self: end; margin-left: 0; }
         .panel { padding: 14px 14px 12px; }
         .head { margin-bottom: 10px; flex-wrap: wrap; }
-        .invite { grid-template-columns: minmax(0, 1fr) auto; }
-        .invite input { display: none; }
-        .invite .btn { min-height: 48px; } .invite #copy { width: 100%; }
-        .slots { grid-template-columns: minmax(0, 1fr); gap: 14px; margin-top: 14px; }
-        body:not(.guest) .slots { padding: 0 clamp(0px, calc((100vw - 340px) * .24), 12px); }          /* the host's cards stop short of the panel's edge: a strip each side where a thumb can scroll (a touch that starts on the dots never scrolls the page); 12 px at 390 px, 8 px at 375, none at 340 and under. body.guest is also set once START is pressed and while the connection is down, when the dots are gone too */
-        .slot { grid-template-columns: calc(24px * var(--k) + 4px) minmax(0, 1fr) 36px; min-height: calc(41px * var(--k) + 22px); padding: 14px 4px 8px 8px; gap: 2px 10px; }
-        .slot .antbox { grid-column: 1; } .slot .txt { grid-column: 2; }
-        .slot .grip { position: static; grid-column: 3; grid-row: 1; align-self: start; margin-top: -8px; width: 36px; height: 44px; }      /* the dots get a column of their own, so they never sit on a name or a drop-down */
-        body.guest .slot { grid-template-columns: calc(24px * var(--k) + 4px) minmax(0, 1fr); padding-right: 12px; }
-        .pstat { font-size: 13px; min-height: 18px; } .teamset { margin-top: 6px; } .rm { padding: 4px 10px; }
-        .pname, .pname input { font-size: 21px; } .pname { min-height: 38px; }
-        .teamset button { flex: 1 1 0; max-width: 112px; min-height: 34px; }
-        .mode { max-width: none; min-height: 38px; font-size: 17px; margin: 0; padding: 6px 34px 6px 10px; background-position: right 6px center; }
-        .grid { gap: 18px; }
-        .side { display: contents; }
-        .side .maprow { grid-row: auto; grid-template-columns: 112px minmax(0, 1fr); align-items: center; gap: 4px 14px; }
-        .tv { margin: 0; width: 112px; box-shadow: 0 0 0 2px var(--frame), 0 0 0 4px var(--edge), 3px 4px 0 4px var(--shadow); border-width: 2px; }
-        .mapcard { justify-items: start; text-align: left; gap: 6px; } .map-facts { justify-content: flex-start; } .map-name { font-size: 24px; }
-        .info { text-align: left; }
-        .go { position: sticky; bottom: 0; z-index: 20; margin: 0 -16px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); background: var(--clay) var(--tile); border-top: 3px solid var(--frame); box-shadow: 0 -4px 0 rgba(157, 13, 23, .9); gap: 6px; }
-        .btn.big { min-height: 58px; font-size: 26px; }
-        .plan-long { display: none; } .plan-short { display: inline; }
-        .go .plan { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .bar { padding: 12px 16px calc(14px + env(safe-area-inset-bottom, 0px)); }
-        .share { display: inline-flex; }
-        .toast { bottom: 150px; }
-        .change { min-width: 0; padding: 4px 16px; }
     }
-    @media (max-width: 374px) {
-        .mode { font-size: 15px; padding: 6px 28px 6px 6px; background-position: right 4px center; } .pname, .pname input { font-size: 19px; } .teamset button { padding: 3px 4px; font-size: 14px; }
-        /* a narrow phone: a smaller picture, so the map's name and its button are not cut off */
-        .side .maprow { grid-template-columns: 96px minmax(0, 1fr); gap: 4px 12px; } .tv { width: 96px; } .map-name { font-size: 21px; }
-    }
-    @media (min-width: 721px) { .share { display: none; } }
-    @media (pointer: coarse) { .grip { width: 44px; height: 44px; right: 2px; top: 8px; } }
     /* ---- the pieces that the page has and the pictures do not draw ---- */
     .mast h1 { display: block; font-size: inherit; font-weight: inherit; line-height: 0; }
     .bar strong { font-weight: 500; color: var(--gold); margin-right: 10px; }              /* the label of a site, in front of the version */
     /* the line of numbers flows as one text, as the phone picture draws it ("... 5 players online · 31 games / played (5 today)"): the dot that joins the two parts keeps a no-break space before it (a line never begins with it) and a space after it */
     #stats-played::before { content: "\00a0\00b7\0020"; }
     #stats-played:empty { display: none; }
-    .room-notice { margin: 0 0 18px; font-size: 13px; line-height: 1.35; color: var(--ink); max-width: 90ch; }       /* (the recording notice of the Room, under START) */
     .bar .coffee { margin: 6px 0 0; text-align: center; } .bar .coffee a { display: inline-block; padding: 0; } .bar .coffee img { display: block; width: 217px; max-width: 100%; height: auto; border-radius: 6px; }                      /* the recording notice, for a visitor who is not asked for a name */
     .name-step-notice { margin-top: 8px; }
     .live.on { background: #44e08a; box-shadow: 0 0 0 1px #000, 0 0 7px rgba(68, 224, 138, .8); }
@@ -273,7 +147,7 @@
 
 
     </style>
-<link rel="stylesheet" href="front/map_picker.css"><link rel="stylesheet" href="front/lobby_chat.css"><link rel="stylesheet" href="front/rematch.css"><link rel="stylesheet" href="front/game_type.css"><link rel="stylesheet" href="front/lobby_direct.css"><link rel="stylesheet" href="home/home.css"><link rel="stylesheet" href="update_notice.css">
+<link rel="stylesheet" href="front/map_picker.css"><link rel="stylesheet" href="front/lobby_chat.css"><link rel="stylesheet" href="front/rematch.css"><link rel="stylesheet" href="front/game_type.css"><link rel="stylesheet" href="front/lobby_direct.css"><link rel="stylesheet" href="home/home.css"><link rel="stylesheet" href="home/room.css"><link rel="stylesheet" href="update_notice.css">
 </head>
 <body data-screen="home">
 <div class="screen" id="screen">
@@ -284,23 +158,28 @@
 <div id="home"></div>
 <main class="wrap">
     <header class="mast"><h1>Ants!</h1><p><span class="tag">Four colonies, one picnic.</span><span class="sub">The 1998 ant war game, rebuilt for your browser.</span></p><a class="btn sm" href="/matches" id="watch-top" title="Matches: every match played here, with its stats and replay">Matches</a><a class="btn sm discord" href="https://discord.gg/WaWrXQnKPj" id="discord-top" target="_blank" rel="noopener noreferrer" title="Discord: chat with other players (opens the project&rsquo;s Discord invite in a new tab)"><svg class="dc" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="currentColor" d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg><span class="dt">Discord</span></a></header>
-
-    <div class="grid" id="lobby">
-        <section class="panel" aria-labelledby="room-h">
-            <div class="head"><span class="hl"><h2 id="room-h">Your room</h2><span class="modetag" id="mode-tag" hidden></span></span><span class="code">Room code <b id="code"></b></span></div>
-            <div class="invite">
-                <input id="link" type="text" readonly value="" aria-label="Invitation link">
-                <button class="btn" type="button" id="copy">Copy link</button>
-                <button class="btn share" type="button" id="share" hidden>Share</button>
-            </div>
-            <div class="invite-note"><span id="invite-line">Players who open this link take the next free color.</span></div>
-
+</main>
+<section class="panel" id="lobby" aria-labelledby="room-h">
+    <div class="r-top">
+        <div class="head"><span class="hl"><h2 id="room-h">Your room</h2><span class="modetag" id="mode-tag" hidden></span></span><span class="code">Room code <b id="code"></b></span></div>
+        <div class="r-acts" id="r-acts"></div>
+    </div>
+    <div class="r-link">
+        <div class="invite">
+            <input id="link" type="text" readonly value="" aria-label="Invitation link">
+            <button class="btn" type="button" id="copy">Copy link</button>
+            <button class="btn share" type="button" id="share" hidden>Share</button>
+        </div>
+        <div class="r-notes" id="r-notes"><p class="invite-note"><span id="invite-line">Players who open this link take the next free color.</span></p></div>
+    </div>
+    <div class="r-body">
+        <div class="r-seats">
             <ul class="slots" id="slots" aria-label="The four colors"></ul>
             <p class="slots-note" id="slots-note" role="status"></p>
             <p class="slots-note teams-note" id="teams-note" role="status"></p>
-        </section>
-        <section class="panel chat" id="chat" hidden></section>
-
+            <p class="plan"><span class="plan-long" id="plan"></span><span class="plan-short" id="plan-short"></span></p>
+            <div id="direct"></div>
+        </div>
         <aside class="side" aria-label="The match">
             <div class="maprow">
                 <figure class="tv"><img id="preview" src="front/preview_treasure.png" alt="The map: Treasure" width="300" height="300"></figure>
@@ -308,16 +187,16 @@
                 <button class="btn change" type="button" id="change-map" aria-haspopup="dialog" hidden>Change map</button></div>
             </div>
             <div id="gtype"></div>
-            <div id="direct"></div>
             <div class="go">
                 <button class="btn big" type="button" id="start">START!</button>
-                <p class="plan"><span class="plan-long" id="plan"></span><span class="plan-short" id="plan-short"></span></p>
+                <p class="ready-line" id="ready-line" role="status" hidden></p>
                 <p class="start-note" id="start-note" role="status" hidden></p>
             </div>
-            <p class="room-notice" id="room-notice">Online matches are recorded. Recordings are kept for up to 90 days. Results and names are kept for good and are public.</p>
         </aside>
     </div>
-</main>
+    <p class="room-notice" id="room-notice">Online matches are recorded. Recordings are kept for up to 90 days. Results and names are kept for good and are public.</p>
+    <section class="chat" id="chat" hidden></section>
+</section>
 
 <footer class="bar" id="footer-bar"><div class="bar-in">
     <p class="stats" id="stats" hidden><i class="live" id="stats-dot" aria-hidden="true"></i><span id="stats-live"></span><span id="stats-played"></span></p>
@@ -546,7 +425,7 @@
         var lis = {};                                 // the card of each color (by seat)
         var back = null;                              // the match that this tab came back from to its room (the rematch, front/rematch.js readBack): the strip at the top and the words of the colors, until START
         var backBar = Rematch.frontStrip({ doc: document, before: $('screen'), win: window, fetch: window.fetch ? function (u, i) { return window.fetch(u, i); } : null, later: function (fn, ms) { return setTimeout(fn, ms); } });
-        var chat = Chat.mount({ doc: document, host: $('chat'), colors: COLORS, say: function (text) { return !!client && client.say(text); }, toast: say });      // the chat box (front/lobby_chat.js): the room's lines, a line of one's own, a toast for a line that comes while the box is off screen
+        var chat = Chat.mount({ doc: document, host: $('chat'), colors: COLORS, say: function (text) { return !!client && client.say(text); }, toast: function (text) { if (!(Home && Home.roomChatNews(text))) say(text); }, onScreen: function () { return Home ? Home.roomChatSeen() : null; } });      // the chat box (front/lobby_chat.js): the room's lines, a line of one's own, a toast for a line that comes while the box is off screen
 
         function el(tag, cls, text) {
             var e = document.createElement(tag);
@@ -695,6 +574,7 @@
             box.appendChild(el('span', 'ant ant-' + c.id));
             li.appendChild(box);
             var txt = el('div', 'txt');
+            var botLabel = '';
             txt.appendChild(el('span', 'cname', c.name));
             if (card.mode) {
                 var select = el('select', 'mode');
@@ -707,7 +587,7 @@
                     option.selected = o[0] === card.mode;
                     select.appendChild(option);
                 });
-                txt.appendChild(select); if (card.who.length) txt.appendChild(el('span', 'botname', card.who[0].text));      // (the bot's name, small, under the level switch)
+                txt.appendChild(select); botLabel = card.who.length ? card.who[0].text : '';      // (the bot's name is the line under the level switch, in place of "Computer player")
             } else {
                 var who = el('span', 'pname');
                 card.who.forEach(function (w) { who.appendChild(el('span', w.cls, w.text)); });
@@ -718,6 +598,15 @@
                     rm.setAttribute('data-remove', String(seat));
                     rm.setAttribute('aria-label', 'Remove ' + card.who[0].text + ' from the room');
                     who.appendChild(rm);
+                }
+                if (card.ready && card.ready.kind === 'button') {              // (protocol 27: this page's own Ready, a switch: pressed is ready)
+                    var rd = el('button', 'btn rdy-btn', card.ready.on ? Rules.READY.buttonOn : Rules.READY.button);
+                    rd.type = 'button';
+                    rd.setAttribute('data-key', 'ready:' + seat);
+                    rd.setAttribute('data-ready', String(seat));
+                    rd.setAttribute('aria-pressed', String(card.ready.on));
+                    if (card.ready.off) rd.disabled = true;
+                    who.appendChild(rd);
                 }
                 txt.appendChild(who);
             }
@@ -734,7 +623,14 @@
                 ask.appendChild(keep);
                 txt.appendChild(ask);
             } else {
-                txt.appendChild(el('span', card.statCls, card.stat));
+                var stat = el('span', card.statCls);
+                if (card.ready && card.ready.kind === 'chip') {                // (protocol 27: Ready or Not ready; the host's, a computer player's and a game's are always Ready)
+                    var chipMark = el('span', 'rdy-chip' + (card.ready.on ? '' : ' no') + (card.ready.bot ? ' bot' : ''), card.ready.on ? Rules.READY.chip : Rules.READY.chipOff);
+                    if (card.ready.title) chipMark.setAttribute('title', card.ready.title);
+                    stat.appendChild(chipMark);
+                }
+                stat.appendChild(document.createTextNode(botLabel || card.stat));
+                txt.appendChild(stat);
             }
             if (card.teams) {
                 var set = el('div', 'teamset');
@@ -777,6 +673,7 @@
             if (start.textContent !== side.startLabel) start.textContent = side.startLabel;
             setText($('plan'), side.plan);
             setText($('plan-short'), side.planShort);
+            setText($('ready-line'), side.readyLine); $('ready-line').hidden = !side.readyLine; $('ready-line').className = 'ready-line' + (side.readyOk ? ' ok' : '');
             setText($('start-note'), side.note); $('start-note').hidden = !side.note;
         }
         // The colors glow for a moment when a player arrives or changes places
@@ -1161,11 +1058,19 @@
                 } else removePerson(+rm.getAttribute('data-remove-yes'));
                 return;
             }
+            if (t.closest('[data-ready]')) { pressReady(); return; }
             var grip = t.closest('.grip');
             if (grip) { if (e.detail === 0) tapSlot(+grip.getAttribute('data-grip')); return; }               // Enter or Space on the dots (a mouse or finger press is handled on pointerdown)
             var li = t.closest('.slot');
             if (picked >= 0 && li && !t.closest('select')) tapSlot(+li.getAttribute('data-i'));
         });
+        // This page's own Ready (protocol 27): the room says the new mark back in its next Room message; a press that the page's pace holds back is told, and changes nothing
+        function pressReady() {
+            if (!client || !model || model.guest === false || model.starting || offline) return;
+            var me = model.slots[model.you];
+            if (!me || me.kind !== 'person' || !me.asked) return;
+            if (!client.setReady(!me.ready)) say('One moment, then press Ready again.');
+        }
         function removePerson(seat) {
             var name = model && model.slots[seat] && model.slots[seat].kind === 'person' ? model.slots[seat].name : '';
             removing = -1;
@@ -1399,7 +1304,7 @@
         else if ($('game-build-id').textContent.indexOf('@') !== -1) $('game-build').style.display = 'none'; else if ($('game-build-date').textContent.indexOf('@') !== -1) $('game-build-date').style.display = 'none';
 
         // THE TWO SCREENS (web/home/home.js, docs/HOME_SCREEN.md): Home or the Room is a class of <body>; the client, the model and the session storage above are not touched by it
-        var Home = window.AntsHome.mount({ doc: document, win: window, host: $('home'), lobby: $('lobby'), page: {
+        var Home = window.AntsHome.mount({ doc: document, win: window, host: $('home'), room: $('lobby'), page: {
             info: function () { return { client: !!client, model: model, offline: offline }; }, make: function () { connect({ code: newCode(), name: myName(), own: true }); }, how: openHow, stalled: stalled,
             client: function () { return client; }, join: probe, typed: joinTyped, name: myName, handing: function () { return handing; }, cancel: function () { if (lastProbe && lastProbe !== client) lastProbe.leave(); }, hold: inert, holds: function () { return !!client && !handing; },
             leave: function () { if (handing) return; var old = client; client = null; model = null; offline = 'none'; painted = {}; if (old) old.leave(); forgetSession(); leaveBack(); hideBanner(); render(); } } });

@@ -44,6 +44,11 @@
 // is dropped at once, Absent or CatchingUp, whatever progress it shows (and a seat that goes Absent after that is dropped by the next update(): the match has no pause left). cap_s() is
 // what the match has left, for the screens.
 //
+// THE COUNTDOWN HOLD. A match that has not begun to play (no turn sealed yet: the countdown, and the pauses that a loss there causes) is held for seats that are away for at most
+// countdown_hold_ms in all (60 s in a server's room; 0: no such limit): the same absolute rule as the cap, with the smaller number, until begin_play(). When the limit is reached every seat that
+// is not present is dropped (counted as drops_by_countdown_hold), the Drops go into the first turn as for any drop, and cap_s() (so Presence) tells the seconds that are left of whichever limit comes first.
+// A match that is brought back after a restart of the server is exempt (nobody's fault: seat_restored). The vote stays what it is: the others can still go on sooner.
+//
 // THE BUDGETS of a seat, so that a key holder cannot hold the room or the server's bandwidth (docs/NETWORK_PORT.md):
 //   - the CATCH-UP TIME of one absence (max_catch_up_ms, 5 minutes): the time that the seat spent CatchingUp, over all the attempts of the absence. When it is used up update() fails the
 //     catch-up (the seat is Absent: the vote and the cap apply) and returning() refuses
@@ -80,6 +85,7 @@ inline constexpr uint32_t kVoteAfterMs = 30000;             // the vote opens fo
 inline constexpr uint32_t kCatchUpStallMs = 20000;          // a seat that is catching up and shows no progress for this long is absent again
 inline constexpr uint32_t kMinAbsenceMs = 5000;             // an absence that is over counts at least this much toward the seat's total away time, and toward the match's pauses
 inline constexpr uint32_t kMaxPauseMs = 30u * 60u * 1000u;  // the match's pauses may last this long in all
+inline constexpr uint32_t kCountdownHoldMs = 60u * 1000u;       // a match that has not begun to play is held this long in all for seats that are away (a room's default; the library's is 0: none)
 inline constexpr uint32_t kMaxCatchUpMs = 5u * 60u * 1000u; // one absence may spend this long catching up in all, over all its attempts
 inline constexpr uint32_t kRejoinAttempts = 12;             // Hellos with a seat's key that are accepted per kRejoinWindowMs ...
 inline constexpr uint32_t kRejoinWindowMs = 60000;
@@ -100,6 +106,7 @@ public:
         uint32_t catch_up_stall_ms = kCatchUpStallMs;
         uint32_t min_absence_ms = kMinAbsenceMs;
         uint32_t max_pause_ms = kMaxPauseMs;
+        uint32_t countdown_hold_ms = 0;                             // until begin_play(): the pauses may last this long in all, then every seat that is not present is dropped (0: no such limit; a room's is kCountdownHoldMs: ants_server)
         uint32_t max_catch_up_ms = kMaxCatchUpMs;
         uint32_t rejoin_attempts = kRejoinAttempts;             // 1 .. kMaxRejoinAttempts
         uint32_t rejoin_window_ms = kRejoinWindowMs;
@@ -133,6 +140,10 @@ public:
     /// the match is paused (the pause begins now), the vote about such a seat opens after Config::restart_vote_after_ms of absence, and when the seat is back its absence adds nothing to its away
     /// time. The seat is no loss for the flapping rule. Forgets everything that was before, like seat_humans.
     void seat_restored(uint8_t humans, uint8_t dropped, uint32_t now_ms);
+    /// The match begins to play (its first turn is sealed): the countdown hold is over, and the cap on the pauses is the one that counts from here on. Idempotent.
+    void begin_play() noexcept { playing_ = true; }
+    /// The countdown hold applies: it is set (Config::countdown_hold_ms) and the match has not begun to play
+    bool countdown_hold_on() const noexcept { return !playing_ && cfg_.countdown_hold_ms != 0; }
     State state(uint8_t seat) const noexcept { return seat < sim::MAX_PLAYERS ? seats_[seat].state : State::Empty; }
 
     /// A present seat's connection is lost: it is absent from now on, and the match is paused (the pause begins now when no other seat was away). False unless the seat was Present.
@@ -182,7 +193,7 @@ public:
     uint32_t away_ms(uint8_t seat, uint32_t now_ms) const noexcept;
     /// The match's paused time so far, in ms, as the cap counts it: the moments at which a seat was Absent or CatchingUp, each moment once, and every pause at least min_absence_ms
     uint32_t pause_ms(uint32_t now_ms) const noexcept;
-    /// What the pauses may still last before the cap: max_pause_ms less pause_ms, 0 when it is used up
+    /// What the pauses may still last before the cap: max_pause_ms less pause_ms, 0 when it is used up; while the countdown hold applies, the smaller of that and countdown_hold_ms less pause_ms
     uint32_t cap_left_ms(uint32_t now_ms) const noexcept;
     /// The same in whole seconds, rounded up (so it is 0 exactly when the cap is reached), at most 0xFFFF (kCapSecondsMore): what Presence tells
     uint16_t cap_s(uint32_t now_ms) const noexcept;
@@ -209,10 +220,11 @@ public:
     /// `your_vote`), 255 for none.
     PresenceMsg presence_for(uint8_t viewer, uint32_t now_ms) const;
 
-    /// Counters for the room's status: seats dropped by a won vote, seats dropped by the cap, absences that ended with a seat that caught up, Hellos with a key that were refused for a
+    /// Counters for the room's status: seats dropped by a won vote, seats dropped by the cap, seats dropped by the countdown hold, absences that ended with a seat that caught up, Hellos with a key that were refused for a
     /// budget (the catch-up time, the attempts, the bytes), absences whose catch-up time ran out, and the bytes of the log that were streamed (all seats)
     uint32_t drops_by_vote() const noexcept { return drops_by_vote_; }
     uint32_t drops_by_cap() const noexcept { return drops_by_cap_; }
+    uint32_t drops_by_countdown_hold() const noexcept { return drops_by_countdown_hold_; }
     uint32_t rejoins() const noexcept { return rejoins_; }
     uint32_t rejoins_refused() const noexcept { return refused_; }
     uint32_t catch_up_expired() const noexcept { return expired_; }
@@ -257,12 +269,14 @@ private:
     uint32_t pause_before_ms_{0};                       // the pauses that are over, added up as the cap counts them (saturating)
     uint32_t pause_real_before_ms_{0};                  // ... and as they really lasted
     uint32_t pause_since_ms_{0};                        // while paused: when the pause that goes on began
+    bool playing_{false};                               // the first turn was sealed (begin_play): the countdown hold is over
     bool owe_countdown_{false};                         // the pause that goes on cut a countdown short: a countdown follows it, however short it is
     bool resuming_{false};                              // a countdown began at resume_since_ms_ (it is over when resume_countdown_ms have passed)
     uint32_t resume_since_ms_{0};
     uint32_t resume_before_ms_{0};                      // the countdowns that are over, added up
     uint32_t drops_by_vote_{0};
     uint32_t drops_by_cap_{0};
+    uint32_t drops_by_countdown_hold_{0};
     uint32_t rejoins_{0};
     uint32_t refused_{0};
     uint32_t expired_{0};

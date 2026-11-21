@@ -16,7 +16,8 @@
 //   Hint       [36][seq u32][tick u32][a Command]               a player's order ahead of its turn: server -> player (a bot's order, the issuer is the bot's seat), player <-> player over a channel (the
 //                                                                issuer is stamped by the channel and must equal the byte in the command). Only the kinds that Prediction::predicts() names.
 //   P2pConfig  [37][direct u8]                                  player -> server, once the match has begun: "I can open channels" and whether this player allows direct ones
-//   IceConfig  [38][expires u32][username][credential][n u8][url]*n   server -> that player: the relay's short-lived credential and its addresses; n = 0: this server has no relay (the player opens nothing)
+//   IceConfig  [38][expires u32][username][credential][n u8][url]*n   server -> that player: the relay's short-lived credential and its addresses; n = 0: this server has no relay, or none for this player
+//                                                                (a match of one person, a player who has had its credentials): the player opens nothing
 //   P2pPeers   [39][ready u8][direct u8]                        server -> every player that sent P2pConfig, whenever they change: the seats that sent P2pConfig and are here, and those of them that allow direct
 //   Signal     [40][peer u8][kind u8][len u16][text]            player -> server: for seat `peer`; server -> player: from seat `peer`. Offer / Answer (SDP text), Candidate ("index|candidate line"), Bye.
 
@@ -85,12 +86,15 @@ bool carries_non_relay_candidate(std::string_view text);
 /// May the server pass `text` from a player to another? A relay candidate (and an SDP with no address) always; anything else only when both players allow direct connections.
 bool signal_allowed(bool from_direct, bool to_direct, std::string_view text);
 
+/// The credentials that a player may be given in one match: the first ask, and one more for a page that was reloaded and took its seat back. A player's ask after that is answered as a server with no relay answers.
+inline constexpr uint32_t kMaxP2pCredentials = 2;
+
 /// What the server tells its players about its relay (set by main(): the secret never leaves the closure `credential`). `urls` empty: no relay (nobody is given a credential, nobody opens a channel).
 struct TurnSettings {
     std::vector<std::string> urls;
     /// base64(HMAC-SHA1(secret, username)): the credential that the relay checks (coturn's shared-secret mode)
     std::function<std::string(const std::string& username)> credential;
-    uint32_t ttl_s{3u * 3600u};             // a match is capped at two hours; the credential lasts three
+    uint32_t ttl_s{3u * 3600u};             // the longest a credential lives; a room asks for less (HostSession::Config::relay_ttl_s: its match's longest run and a margin)
     bool usable() const { return !urls.empty() && static_cast<bool>(credential); }
 };
 /// A username in coturn's shared-secret form: "<expiry unix time>:<label>" (the label is random, never anything that names a person)

@@ -1,0 +1,322 @@
+{
+ "note": "Mutants of ready up (network protocol 27, docs/READY_UP.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the rules of the lobby (the START that waits for Ready, the host who does not ready, a computer player and a game that are never asked, the marks that stay when the leader changes the plan and the ones that go with a link, a seat taken over and a new leader, the budget and the use of the room, who may send it), the codec of the message and of the Room's last byte in C++ and in the page's lobby_net.js, the page's pace, and the cards and the line under START (lobby_rules.js, lobby.html). Every mutant must be caught. Run from the checkout: python3 tools/mutate.py tests/data/ready_up_mutants.json --keep-going --jobs 1 --timeout 1800. tests/scripts/test_web_lobby_net.py runs the page's mutants (the ones that name a file of web/) in the quick tier on a copy of the files; the C++ ones need a build.",
+ "mutants": [
+  {
+   "id": "start_ignores_ready",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "start_possible() && everyone_ready()) {\n                    arm_start",
+   "new": "start_possible()) {\n                    arm_start",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "host_must_ready",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "room_.slots[seat].state == SlotState::Client && seat != room_.leader && person(seat)",
+   "new": "room_.slots[seat].state == SlotState::Client && person(seat)",
+   "build": [
+    "test_lobby",
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "a_game_must_ready",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "&& !guests_[seat].reserved && !in_game(seat);",
+   "new": "&& !guests_[seat].reserved;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "a_plan_change_clears_the_marks",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    if (!changed) return;\n    ++plan_changes_;\n    broadcast_room();",
+   "new": "    if (!changed) return;\n    ++plan_changes_;\n    for (Guest& g : guests_) g.ready = false;\n    broadcast_room();",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "a_dropped_link_keeps_the_mark",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    g.held = true;\n    if (!starting_.active) g.ready = false;                      // (protocol 27: a person who drops is not ready; a page that leaves for the game page, while the START waits, is)\n",
+   "new": "    g.held = true;\n",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "a_dropped_link_loses_the_mark_while_start_waits",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    g.held = true;\n    if (!starting_.active) g.ready = false;",
+   "new": "    g.held = true;\n    g.ready = false;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "a_seat_taken_over_keeps_the_mark",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    if (!starting_.active) g.ready = false;                      // (protocol 27: a person whose link ended, or a page that took the seat over, says Ready again; a START that waits keeps the marks)\n",
+   "new": "",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "a_new_leader_keeps_the_mark",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    if (best != kNoLeader) guests_[best].ready = false;           // (protocol 27: the leader does not ready: a person who comes to lead starts with no mark)\n",
+   "new": "",
+   "build": [
+    "test_lobby",
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.43 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "ready_heard_while_start_waits",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "if (phase_ == Phase::Room && !starting_.active && must_ready(seat)) {",
+   "new": "if (phase_ == Phase::Room && must_ready(seat)) {",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "the_leader_is_not_told_who_is_not_ready",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "start_possible()) notify(seat, not_ready_notice());",
+   "new": "start_possible()) {}",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "ready_said_again_is_a_change",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    if (guests_[seat].ready == want_ready) return;\n",
+   "new": "",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "the_mark_is_no_use_of_the_room",
+   "file": "include/ants_net/lobby.hpp",
+   "old": "visibility_acts_ + ready_changes_ + chat_.total()",
+   "new": "visibility_acts_ + chat_.total()",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "ready_without_a_budget",
+   "file": "include/ants_net/flood.hpp",
+   "old": "inline constexpr uint32_t kReadyBurst = 3;",
+   "new": "inline constexpr uint32_t kReadyBurst = 3000;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "a_game_may_send_ready",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    if (seat_ >= sim::MAX_PLAYERS || room_.slots[seat_].state != SlotState::Client || room_.seat_in_game(seat_)) return false;",
+   "new": "    if (seat_ >= sim::MAX_PLAYERS || room_.slots[seat_].state != SlotState::Client) return false;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "the_leader_may_send_ready",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "if (conn_ == nullptr || phase_ != Phase::InRoom || is_leader() || !room_.lobby() || room_.starting() || !conn_->is_open()) return false;        // (the leader's START is their ready",
+   "new": "if (conn_ == nullptr || phase_ != Phase::InRoom || !room_.lobby() || room_.starting() || !conn_->is_open()) return false;        // (the leader's START is their ready",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "codec_ready_value_two",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "    if (!r->done() || value > 1) return false;                         // exactly the type and 0 or 1\n    out.ready = value == 1;",
+   "new": "    if (!r->done() || value > 2) return false;                         // exactly the type and 0 or 1\n    out.ready = value == 1;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "codec_mark_for_the_leader",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "(!m.lobby() || m.slots[seat].state != SlotState::Client || seat == m.leader || m.seat_in_game(seat))",
+   "new": "(!m.lobby() || m.slots[seat].state != SlotState::Client || m.seat_in_game(seat))",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "codec_mark_for_a_game",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "(!m.lobby() || m.slots[seat].state != SlotState::Client || seat == m.leader || m.seat_in_game(seat))",
+   "new": "(!m.lobby() || m.slots[seat].state != SlotState::Client || seat == m.leader)",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "codec_mark_in_a_plain_room",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "(!m.lobby() || m.slots[seat].state != SlotState::Client || seat == m.leader || m.seat_in_game(seat))",
+   "new": "(m.slots[seat].state != SlotState::Client || seat == m.leader || m.seat_in_game(seat))",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "codec_mark_for_a_bot",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "(!m.lobby() || m.slots[seat].state != SlotState::Client || seat == m.leader || m.seat_in_game(seat))",
+   "new": "(!m.lobby() || m.slots[seat].state == SlotState::Empty || seat == m.leader || m.seat_in_game(seat))",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "codec_mask_above_the_seats",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "    if ((m.ready & ~((1u << sim::MAX_PLAYERS) - 1u)) != 0) return false;\n",
+   "new": "",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "page_host_must_ready",
+   "file": "web/front/lobby_net.js",
+   "old": "room.slots[seat].state === SLOT.Client && seat !== room.leader && ((room.inGame >> seat) & 1) === 0; }",
+   "new": "room.slots[seat].state === SLOT.Client && ((room.inGame >> seat) & 1) === 0; }",
+   "test": "node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_a_game_must_ready",
+   "file": "web/front/lobby_net.js",
+   "old": "seat !== room.leader && ((room.inGame >> seat) & 1) === 0; }",
+   "new": "seat !== room.leader; }",
+   "test": "node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_start_ignores_ready",
+   "file": "web/front/lobby_net.js",
+   "old": "r.starting || waitingFor(r).length > 0) return false;",
+   "new": "r.starting) return false;",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "page_the_leader_may_ready",
+   "file": "web/front/lobby_net.js",
+   "old": "r.you === 255 || !mustReady(r, r.you)) return false;",
+   "new": "r.you === 255) return false;",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "page_ready_while_starting",
+   "file": "web/front/lobby_net.js",
+   "old": "if (!this.canAct() || r.starting || typeof ready !== 'boolean'",
+   "new": "if (!this.canAct() || typeof ready !== 'boolean'",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "page_codec_mark_for_the_leader",
+   "file": "web/front/lobby_net.js",
+   "old": "q === m.leader || ((m.inGame >> q) & 1) !== 0)) return null;",
+   "new": "((m.inGame >> q) & 1) !== 0)) return null;",
+   "test": "node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_codec_mark_for_a_game",
+   "file": "web/front/lobby_net.js",
+   "old": "q === m.leader || ((m.inGame >> q) & 1) !== 0)) return null;",
+   "new": "q === m.leader)) return null;",
+   "test": "node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_no_ready_event",
+   "file": "web/front/lobby_net.js",
+   "old": "        if (prev.ready !== next.ready) events.push({ type: 'ready', mask: next.ready });\n",
+   "new": "",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "rules_start_ignores_ready",
+   "file": "web/front/lobby_rules.js",
+   "old": "startDisabled: g || busy || !!away || waiting.names.length > 0 || waiting.you,",
+   "new": "startDisabled: g || busy || !!away,",
+   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "rules_host_shows_no_ready",
+   "file": "web/front/lobby_rules.js",
+   "old": "                    if (s.leader) card.ready = { kind: 'chip', on: true, title: READY.hostReady };\n",
+   "new": "                    if (s.leader) { /* nothing */ }\n",
+   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "rules_a_bot_shows_no_ready",
+   "file": "web/front/lobby_rules.js",
+   "old": "if (s.kind === 'bot' && !busy) card.ready = { kind: 'chip', on: true, bot: true, title: READY.botReady };",
+   "new": "",
+   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "rules_the_host_has_a_switch",
+   "file": "web/front/lobby_rules.js",
+   "old": "                    if (s.leader) card.ready = { kind: 'chip', on: true, title: READY.hostReady };\n",
+   "new": "                    if (s.leader) card.ready = { kind: s.me ? 'button' : 'chip', on: true, title: READY.hostReady };\n",
+   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "rules_a_game_is_asked",
+   "file": "web/front/lobby_rules.js",
+   "old": "asked: s !== leader && !raw,",
+   "new": "asked: s !== leader,",
+   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "rules_marks_while_start_waits",
+   "file": "web/front/lobby_rules.js",
+   "old": "                if (!busy) {                                                                                                                              // (protocol 27",
+   "new": "                if (true) {                                                                                                                              // (protocol 27",
+   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "page_press_ready_sends_nothing",
+   "file": "web/lobby.html",
+   "old": "if (!client.setReady(!me.ready)) say('One moment, then press Ready again.');",
+   "new": "if (false) say('One moment, then press Ready again.');",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  }
+ ]
+}

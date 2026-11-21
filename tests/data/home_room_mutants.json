@@ -1,0 +1,162 @@
+{
+ "note": "Mutants of the room's tab of Home's chat box (web/home/roomchat.js and roomchat.css, the files of the room in the image check; docs/HOME_CHAT.md 'The Room tab') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_home_roomchat_check.js and the static checks of tests/scripts/test_web_home_room.py: the room that is in view (box open, page visible, its tab), the dot on the tab that has news and the one on the other, news that is cleared when it is read and not kept for the next room, a tab that is not chosen without a room, the keys, the strip and the body that show only with a room, the dock that gives its box away only for the room's tab, the room's chat moved and not copied, and the size of a tab.",
+ "baseline": {
+  "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
+ },
+ "mutants": [
+  {
+   "id": "room_in_view_needs_an_open_box",
+   "file": "web/home/roomchat.js",
+   "old": "return exists && current === 'room' && open() && !doc.hidden;",
+   "new": "return exists && current === 'room' && !doc.hidden;",
+   "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
+  },
+  {
+   "id": "room_in_view_needs_a_visible_page",
+   "file": "web/home/roomchat.js",
+   "old": "return exists && current === 'room' && open() && !doc.hidden;",
+   "new": "return exists && current === 'room' && open();",
+   "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
+  },
+  {
+   "id": "room_in_view_needs_the_room_tab",
+   "file": "web/home/roomchat.js",
+   "old": "return exists && current === 'room' && open() && !doc.hidden;",
+   "new": "return exists && open() && !doc.hidden;",
+   "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
+  },
+  {
+   "id": "other_tab_dot_shows_on_its_own_tab",
+   "file": "web/home/roomchat.js",
+   "old": "dots.global.hidden = !(exists && current === 'room' && pill && !pill.hidden);",
+   "new": "dots.global.hidden = !(exists && pill && !pill.hidden);",
+   "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
+  },
+  {
+   "id": "the_next_room_starts_with_old_news",
+   "file": "web/home/roomchat.js",
+   "old": "if (!exists) { current = 'global'; unread = 0; }",
+   "new": "if (!exists) { current = 'global'; }",
+   "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
+  },
+  {
+   "id": "the_next_room_starts_on_the_room_tab",
+   "file": "web/home/roomchat.js",
+   "old": "if (!exists) { current = 'global'; unread = 0; }",
+   "new": "if (!exists) { unread = 0; }",
+   "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
+  },
+  {
+   "id": "a_tab_is_chosen_with_no_room",
+   "file": "web/home/roomchat.js",
+   "old": "if (name === 'room' && !exists) return;",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
+  },
+  {
+   "id": "opening_the_tab_keeps_its_news",
+   "file": "web/home/roomchat.js",
+   "old": "if (seen()) unread = 0;\n            paint();\n            if (focus",
+   "new": "paint();\n            if (focus",
+   "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
+  },
+  {
+   "id": "the_page_that_comes_back_keeps_the_dot",
+   "file": "web/home/roomchat.js",
+   "old": "if (now === exists) { if (exists && seen() && unread) { unread = 0; paint(); } return; }",
+   "new": "if (now === exists) { return; }",
+   "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
+  },
+  {
+   "id": "right_goes_left",
+   "file": "web/home/roomchat.js",
+   "old": "select(k === 'ArrowLeft' || k === 'Home' ? 'global' : 'room', true);",
+   "new": "select(k === 'ArrowLeft' || k === 'Home' ? 'room' : 'global', true);",
+   "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
+  },
+  {
+   "id": "the_strip_shows_with_no_room",
+   "file": "web/home/roomchat.js",
+   "old": "strip.hidden = !exists;",
+   "new": "strip.hidden = false;",
+   "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
+  },
+  {
+   "id": "the_room_body_shows_on_the_other_tab",
+   "file": "web/home/roomchat.js",
+   "old": "body.hidden = !(exists && current === 'room');",
+   "new": "body.hidden = !exists;",
+   "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
+  },
+  {
+   "id": "the_dock_gives_the_box_away_on_both_tabs",
+   "file": "web/home/roomchat.js",
+   "old": "dock.away(exists && current === 'room');",
+   "new": "dock.away(exists);",
+   "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
+  },
+  {
+   "id": "every_tab_is_in_the_tab_order",
+   "file": "web/home/roomchat.js",
+   "old": "tabs[name].setAttribute('tabindex', name === current ? '0' : '-1');",
+   "new": "tabs[name].setAttribute('tabindex', '0');",
+   "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
+  },
+  {
+   "id": "news_is_taken_with_no_room",
+   "file": "web/home/roomchat.js",
+   "old": "if (!exists) return false;\n            if (seen()) return true;",
+   "new": "if (!exists) return true;\n            if (seen()) return true;",
+   "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
+  },
+  {
+   "id": "the_dot_is_not_named",
+   "file": "web/home/roomchat.js",
+   "old": "if (dots.room.hidden === false) tabs.room.setAttribute('aria-label', TEXT.room + ', ' + TEXT.news); else tabs.room.removeAttribute('aria-label');",
+   "new": "tabs.room.removeAttribute('aria-label');",
+   "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
+  },
+  {
+   "id": "the_rooms_chat_is_copied_not_moved",
+   "file": "web/home/roomchat.js",
+   "old": "        body.appendChild(chat);\n",
+   "new": "        body.appendChild(chat.cloneNode ? chat.cloneNode(true) : chat);\n",
+   "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
+  },
+  {
+   "id": "the_front_chat_tab_has_another_name",
+   "file": "web/home/roomchat.js",
+   "old": "global: 'Ants & Uncles'",
+   "new": "global: 'Global'",
+   "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
+  },
+  {
+   "id": "the_front_chat_has_no_dot",
+   "file": "web/home/roomchat.js",
+   "old": "dots.global.hidden = !(exists && current === 'room' && pill && !pill.hidden);",
+   "new": "dots.global.hidden = true;",
+   "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
+  },
+  {
+   "id": "the_tab_is_too_low",
+   "file": "web/home/roomchat.css",
+   "old": "min-height: 44px; padding: 4px 18px;",
+   "new": "min-height: 40px; padding: 4px 18px;",
+   "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
+  },
+  {
+   "id": "the_sites_chat_stays_under_the_room_tab",
+   "file": "web/home/roomchat.css",
+   "old": ".gc[data-rc=\"room\"] > .gc-body { display: none; }",
+   "new": ".gc[data-rc=\"room\"] > .gc-body { display: block; }",
+   "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
+  },
+  {
+   "id": "the_image_check_forgets_the_room_files",
+   "file": ".github/workflows/ci.yml",
+   "old": "home/room.css home/roomchat.js home/roomchat.css",
+   "new": "home/room.css home/roomchat.js",
+   "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
+  }
+ ]
+}
