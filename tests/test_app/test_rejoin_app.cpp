@@ -1045,7 +1045,7 @@ void run_menu_tests() {
         ASSERT_FALSE(output.text().find(rejoin_key_hex(key)) != std::string::npos);
     } TEST_END();
 
-    TEST_CASE("RA7.2 The Offer Is Only A Fresh Key Of A Server That The Menu Can Reach (An Entry Of More Than A Day, And The Browser's Entry, A URL, Are Not Offered); A Key That The Server Refuses (The Match Is Over) Comes Back To The First Panel With The Reason And The Button Is Gone; A Key That Was Let Go Of While The Menu Stood Open Says So At The Press") {
+    TEST_CASE("RA7.2 The Offer Is Only A Fresh Key Of A Server That The Menu Can Reach (An Entry Of More Than A Day, And An Unencrypted ws:// URL, Are Not Offered; A wss:// URL Is, The Menu Joins Such A Server Itself); A Key That The Server Refuses (The Match Is Over) Comes Back To The First Panel With The Reason And The Button Is Gone; A Key That Was Let Go Of While The Menu Stood Open Says So At The Press") {
         const Captured output;
         World w;
         ASSERT_TRUE(w.server.start(w.now));
@@ -1055,20 +1055,29 @@ void run_menu_tests() {
             std::ofstream out(path, std::ios::binary | std::ios::trunc);
             out << text;
         };
-        // not offered: three hours and a minute old, a URL
+        // not offered: three hours and a minute old, a URL that is not encrypted, a wss URL that is not in the written form (the host in capitals)
         {
             const fs::path dir = scratch_dir("ra72a");
-            write_file(dir / "rejoin.txt", key_line(server, "OLD-1", 0, key_of(1), now - 3 * 3600 * 1000 - 60 * 1000) + key_line("wss://play.example.org/game", "WEB-1", 1, key_of(2), now));
+            write_file(dir / "rejoin.txt", key_line(server, "OLD-1", 0, key_of(1), now - 3 * 3600 * 1000 - 60 * 1000) + key_line("ws://play.example.org/game", "WEB-1", 1, key_of(2), now) +
+                                               key_line("wss://Play.Example.org/game", "WEB-2", 2, key_of(7), now));
             Application& menu = w.start_menu_app(dir);
             ASSERT_FALSE(menu.start_menu().rejoin().has_value() || menu_has(menu, MenuId::Rejoin));
         }
-        // offered: the newest fresh one of a server that can be reached, of several
+        // offered: the newest fresh one of a server that can be reached, of several (a URL that is not encrypted is newer, and is no offer for this menu)
         {
             const fs::path dir = scratch_dir("ra72b");
-            write_file(dir / "rejoin.txt", key_line("wss://play.example.org/game", "WEB-1", 1, key_of(2), now) + key_line(server, "OLDER-1", 2, key_of(3), now - 120 * 1000) +
+            write_file(dir / "rejoin.txt", key_line("ws://play.example.org/game", "WEB-1", 1, key_of(2), now) + key_line(server, "OLDER-1", 2, key_of(3), now - 120 * 1000) +
                                                key_line(server, "NEWEST-1", 3, key_of(4), now - 60 * 1000));
             Application& menu = w.start_menu_app(dir);
-            ASSERT_TRUE(menu.start_menu().rejoin().has_value() && menu.start_menu().rejoin()->room == "NEWEST-1" && menu.start_menu().rejoin()->seat == 3);   // (the URL is newer, and is no offer for this menu)
+            ASSERT_TRUE(menu.start_menu().rejoin().has_value() && menu.start_menu().rejoin()->room == "NEWEST-1" && menu.start_menu().rejoin()->seat == 3);
+        }
+        // offered: a wss URL of the written form is a server of the encrypted door (what the game itself keeps for a match that it joined through wss), and the offer names that server
+        {
+            const fs::path dir = scratch_dir("ra72b2");
+            write_file(dir / "rejoin.txt", key_line("wss://play.example.org:8443/game", "SECURE-1", 1, key_of(8), now - 30 * 1000));
+            Application& menu = w.start_menu_app(dir);
+            ASSERT_TRUE(menu.start_menu().rejoin().has_value() && menu.start_menu().rejoin()->room == "SECURE-1" && menu.start_menu().rejoin()->seat == 1);
+            ASSERT_TRUE(menu.start_menu().rejoin()->server == (ServerAddress{"play.example.org", 8443, false, "/game"}));
         }
         // a key for a match that is over: the server has no such room
         {
