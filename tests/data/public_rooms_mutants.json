@@ -925,8 +925,8 @@
   {
    "id": "page_protocol_one_behind",
    "file": "web/front/lobby_net.js",
-   "old": "var PROTOCOL = 27;",
-   "new": "var PROTOCOL = 26;",
+   "old": "var PROTOCOL = 28;",
+   "new": "var PROTOCOL = 27;",
    "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
   },
   {
