@@ -135,7 +135,7 @@ async function main() {
         await page.waitForSelector('#players .pl-card', { timeout: 8000 }).catch(() => {});
         return { page, context };
     }
-    const showPlayers = async (page) => { if (await page.evaluate(() => innerWidth <= 700)) { await page.click('.htab.t-players'); await sleep(150); } };
+    const showPlayers = async (page) => { if (await page.evaluate(() => innerWidth <= 700 || innerHeight <= 500)) { await page.click('.htab.t-players'); await sleep(150); } };
     const openMenu = async (page) => { await page.click('.hbar .hlogin'); await page.waitForSelector('#gchat-login-slot:not([hidden])', { timeout: 3000 }).catch(() => {}); await settled(page); };
 
     // ---- 1 to 4: desktop, the pictures held back and then let through -----------------------------------------------------------------------------------------------------------------------------------------------

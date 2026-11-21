@@ -26,6 +26,20 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.20.2 - 2026-11-21 - Images in the chat
+
+**For players:**
+- **Images in the chat.** People with the Active Anters role, moderators and administrators can paste, drop or pick an image (or an animated GIF) in the global chat, with an optional caption; readers see a thumbnail that opens full size. GIFs play while on screen, and a switch (or your device's reduced-motion setting) stops them.
+- **Home on a phone held sideways.** Short windows now get the phone layout too, so the room fits without a cramped scrolling panel.
+
+**Fixes:**
+- Every image is checked and saved again by the site before anyone sees it, which removes hidden data such as a photo's location.
+
+**For operators:**
+- A new container, ants-img, converts images on a private network; the hub reaches it through ANTS_HUB_IMAGE_CONVERTER_URL (on by default; set it empty to turn images off). Who may post: ANTS_HUB_ROLE_IMAGES plus administrators and moderators; administrators take the right away with /noimages and give it back with /images (docs/HUB_IMAGES.md).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/88d22002...ea0bfcf6)
+
 ## v0.20.1 - 2026-11-21 - Look around during the countdown
 
 **For players:**

@@ -1,0 +1,27 @@
+# =============================================================================
+# The image converter (ants-img): the only place that decodes an image that somebody uploaded to the chat (docs/HUB_IMAGES.md). Python and Pillow, and nothing else.
+#   docker build -f Dockerfile.img -t ants-img .
+#   docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 16 --memory 768m --tmpfs /tmp ants-img
+# It listens on port 4050 inside the container and is NOT published: the chat hub (ants-hub) reaches it over a private network of the stack that has no other member and no way out. It holds no secret,
+# reads no variable but its port, mounts no volume and writes no file: it is given the bytes of an image and answers with the bytes of a new one (imgconv/convert.py).
+# No ANTS_BUILD_ID argument on purpose: the image depends on imgconv/ and nothing else.
+# =============================================================================
+FROM python:3.12-slim-bookworm
+
+RUN useradd --system --no-create-home --shell /usr/sbin/nologin img
+
+WORKDIR /app
+COPY imgconv/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir --only-binary=:all: -r /app/requirements.txt
+COPY imgconv/ /app/imgconv/
+RUN python -m compileall -q /app/imgconv
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 ANTS_IMG_PORT=4050 ANTS_IMG_HOST=0.0.0.0
+USER img
+EXPOSE 4050
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD ["python", "/app/imgconv/health.py"]
+
+WORKDIR /app/imgconv
+ENTRYPOINT ["python", "server.py"]

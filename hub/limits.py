@@ -124,6 +124,29 @@ class Limits:
     catalog_entries_max: int = 2000     # maps of that list that the hub reads (a longer list is not read at all)
     catalog_body_max: int = 524288      # what is read of the answer that holds that list (the rows of the real list are about 150 bytes: 2,000 maps are about 300 KB; the other calls read door_body_max)
 
+    image_upload_bytes: int = 4194304   # an uploaded image (docs/HUB_IMAGES.md): the body of POST /hub/img/up, 4 MiB at the most (nginx has the same number in front)
+    image_body_seconds: float = 30.0    # the whole body must be here this long after the request is let in (a slower upload is dropped)
+    image_convert_seconds: float = 12.0         # the hub's call to the converter, from the connection to the last byte read
+    image_connect_seconds: float = 2.0
+    image_reply_max: int = 1769472      # what is read of the converter's answer (1.5 MiB, a thumbnail and a line of JSON); more is not its answer
+    image_bodies_max: int = 2           # uploads whose body is being read at one time, for the whole hub (a body is held in memory: 4 MiB each)
+    image_queue_max: int = 4            # uploads that wait for the converter, which does one at a time ...
+    image_queue_seconds: float = 10.0   # ... and for this long at the most: then `busy`
+    image_burst: int = 3                # one account (across all its tabs) may upload this many at once ...
+    image_refill_seconds: float = 20.0  # ... then one every 20 seconds, ...
+    image_hour: int = 30                # ... 30 in an hour and ...
+    image_day: int = 100                # ... 100 in a day (each a budget that fills up again steadily)
+    image_pending_max: int = 3          # uploads of one account that no line has taken yet
+    image_pending_seconds: float = 600.0        # an upload that no line has taken is deleted after this long
+    image_files_max: int = 600          # images kept in all, posted and waiting ...
+    image_bytes_max: int = 314572800    # ... and their bytes (300 MiB); a new one is refused (`full`) while either is over
+    image_address_burst: int = 6        # POST /hub/img/up: for each client address a burst of 6, then one every 10 seconds (nginx has smaller numbers in front)
+    image_address_refill_seconds: float = 10.0
+    image_sweep_seconds: float = 30.0   # how often the files of images whose line is gone (and of uploads that waited too long) are deleted
+    image_scan_seconds: float = 3600.0  # how often the folder is read for files that have no row (a crash between a file and its row)
+    image_scan_files_max: int = 5000    # the most entries of the folder that one look reads
+    image_scan_age_seconds: float = 900.0       # a file that has no row is deleted only when it is older than this (an upload that is being written has none yet)
+
     @property
     def prune_from_bytes(self):
         return self.db_max_bytes * self.prune_from_percent // 100
@@ -211,6 +234,41 @@ class AccountLimits:
             del self.accounts[account]
         for account in [a for a, budget in self.budgets.items() if all(b.ready(now) and b.tokens >= b.burst for b in budget)]:
             del self.budgets[account]
+
+
+class UploadLimits:
+    """What one account may upload: a token bucket (a burst, then one every so often) and a budget for the hour and for the day, kept by the hub's own key of the account while they are not full again."""
+
+    def __init__(self, limits):
+        self.limits = limits
+        self.accounts = {}                       # key -> [bucket, hour, day]
+
+    def entry(self, key, now):
+        entry = self.accounts.get(key)
+        if entry is None:
+            lim = self.limits
+            entry = self.accounts[key] = [TokenBucket(lim.image_burst, lim.image_refill_seconds, now), TokenBucket(lim.image_hour, 3600.0 / lim.image_hour, now), TokenBucket(lim.image_day, 86400.0 / lim.image_day, now)]
+        return entry
+
+    def check(self, key, now):
+        """None when the account may upload now (and it is counted), else `quota` (its hour or its day is spent) or `rate`."""
+        bucket, hour, day = self.entry(key, now)
+        if not (hour.ready(now) and day.ready(now)):
+            return "quota"
+        if not bucket.take(now):
+            return "rate"
+        hour.take(now)
+        day.take(now)
+        return None
+
+    def refund(self, key):
+        """An upload that was refused after it was counted for a reason that is not the account's (the converter is busy or down): its tokens come back."""
+        for bucket in self.accounts.get(key, ()):
+            bucket.give_back()
+
+    def forget_idle(self, now):
+        for key in [k for k, e in self.accounts.items() if all(b.ready(now) and b.tokens >= b.burst for b in e)]:
+            del self.accounts[key]
 
 
 class RateByAddress:

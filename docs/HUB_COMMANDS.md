@@ -10,7 +10,7 @@ A line that starts with a single `/` is a command, and **a command is never a li
 |---|---|
 | everybody who is logged in | `/help`, `/ignore NAME`, `/unignore NAME` |
 | a moderator (the role comes from Discord: [Roles](HUB.md#roles)), and the above | `/mute NAME MINUTES`, `/unmute NAME`, `/del NUMBER`, `/kick NAME`, `/mutes` |
-| an administrator (the role, or the operator's account), and all the above | `/ban NAME [purge]`, `/unban NAME`, `/bans`, `/nopic NAME`, `/pic NAME`, `/bots ...` |
+| an administrator (the role, or the operator's account), and all the above | `/ban NAME [purge]`, `/unban NAME`, `/bans`, `/nopic NAME`, `/pic NAME`, `/noimages NAME`, `/images NAME`, `/bots ...` |
 | a reader | none: it cannot write, and it is sent no list |
 
 The moderators' words and `/nopic` and `/pic` are described in [Moderation](#moderation) (`/nopic` is the admin page's block of a person's Discord picture and `/pic` its lift: the same change, the same log row, the rank that `/ban` and `/unban` need); the others are below.
@@ -127,7 +127,7 @@ In the chat, an account whose role is `mod` or `admin` ([Roles](HUB.md#roles)) m
 |---|---|---|
 | `/mute username minutes` | mod, admin | the person cannot write for 1 to 10080 minutes; stored |
 | `/unmute username` | mod, admin | lifts the mute (`bad` if there is none) |
-| `/del id` | mod, admin | takes a line off every screen and out of the history; a line of one's own always may go (it is no power over a person and no entry of the log); a line of the hub's own may not |
+| `/del id` | mod, admin | takes a line off every screen and out of the history (a line with an image takes its files with it, and the log says `del_img`: [HUB_IMAGES.md](HUB_IMAGES.md#moderation-and-the-log)); a line of one's own always may go (it is no power over a person and no entry of the log); a line of the hub's own may not |
 | `/kick username` | mod, admin | closes the person's sockets and ends their login ([Kick](#kick)); the person must be in the chat |
 | `/ban username` | admin | the hub's ban ([Ban](#ban)); `bad` if the person is banned already |
 | `/unban username` | admin | lifts a ban: by the username, or by the name that the ban was made with when the person's profile is gone (the names that `/bans` shows) |
@@ -136,6 +136,8 @@ In the chat, an account whose role is `mod` or `admin` ([Roles](HUB.md#roles)) m
 | `/ban username purge` | admin | a ban that also deletes every line of that account written in the last 60 minutes, from every screen and from the history (the same deletions as `/del`, so the same bounded number of `del` frames, see `deleted_announce_max`); the same power check as `/ban`, and `bad` (nothing deleted) if the person is banned already |
 | `/nopic username` | admin | blocks the person's Discord picture on this site, as the admin page's "hide the picture" does ([HUB_PICTURES.md](HUB_PICTURES.md)): the same change, the same row of the log (`nopic`), the same power check as `/ban`; `bad` if it is blocked already |
 | `/pic username` | admin | lifts that block (the picture then stays off until the person turns it on); the same check as `/unban`; `bad` if it is not blocked |
+| `/noimages username` | admin | takes away the person's posting of images, whatever their Discord role says ([HUB_IMAGES.md](HUB_IMAGES.md#who-may-post)): the same power check as `/ban`; the row `noimages` of the log; `bad` if it is taken away already. Their images that are in the chat stay until deleted |
+| `/images username` | admin | gives it back (the Discord role counts again); the same check as `/unban`; the row `images`; `bad` if it was not taken away |
 
 **Naming the person.** Where a command takes a username it may take instead `#` and the number of one of the person's lines (`/mute #148 10`: the author of line 148) or `row:` and a row number of the Players list (`/kick row:7`: the person with that row now, who must have a socket open). Neither can be a username (a username has no `#` and no `:`), so a command that was typed before means what it meant. The same table of the powers and the same fresh check apply. A line that is deleted or gone is `bad`; a line of the hub's own is `power`; a row that nobody has now (the person left, or the number never existed), and a `/kick` of a person who is not here, are `who`. A mute or a ban made this way is kept under the person's **username** (for a person who is not here and has no profile any more: their reference, the 16 hex characters that the moderators' log uses, which `/unban` and `/unmute` take as a name), never under the `#148` text and never an id, so `/bans`, `/mutes`, `/unban` and `/unmute` show and take a name. If the lines of a `/ban username purge` cannot all be deleted (the database refuses), the ban is still done, the person is removed and the answer is `ok`; the lines can be taken off with `/del`.
 
