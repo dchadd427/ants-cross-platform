@@ -1,0 +1,430 @@
+{
+ "note": "Mutants of the images of Home's chat (web/home/pics.js, post.js and the image parts of chat.js; docs/HUB_IMAGES.md, 'The page') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_home_images_check.js (the two parts on a fake page of their own) and tests/scripts/web_home_images_dock_check.js (the real dock with a fake hub): the address of an image (the name, the type, the thumbnail's own file, a size that is missing), the animation (a hidden window, reduced motion, the reader's switch, a place off the screen, a still image that is watched, the switch kept and read), a file that is missing, the frame's size and the lazy loading, who is offered Delete and which delete goes out, the question before it, the viewer (Escape, Tab, the focus back, the link's referrer), the poster (the types it takes, the limit, the two headers, the address, the words of every answer of the hub, the submit that is the poster's and the dock does not see, a line that the hub refuses, the button's place, the phone's two rows, the size after the shrink, a paste and a drop, a GIF that is never drawn into a canvas), and the dock (who gets the poster, a line with only an image, the hub's own line, the words for a person who may not post, the echo that ends the wait, one delete at a time, a caption with markup or too long, a banned person).",
+ "baseline": [
+  {
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  }
+ ],
+ "mutants": [
+  {
+   "id": "name_may_be_upper_case",
+   "file": "web/home/pics.js",
+   "old": "NAME = /^[0-9a-f]{32}$/",
+   "new": "NAME = /^[0-9a-fA-F]{32}$/",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "name_may_be_any_length",
+   "file": "web/home/pics.js",
+   "old": "NAME = /^[0-9a-f]{32}$/",
+   "new": "NAME = /^[0-9a-f]+$/",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "svg_is_a_type_of_the_log",
+   "file": "web/home/pics.js",
+   "old": "TYPES = { jpg: 1, png: 1, gif: 1 }",
+   "new": "TYPES = { jpg: 1, png: 1, gif: 1, svg: 1 }",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_still_is_the_images_own_type",
+   "file": "web/home/pics.js",
+   "old": "(thumb ? '.t.jpg' : '.' + img.x)",
+   "new": "(thumb ? '.t.' + img.x : '.' + img.x)",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "an_image_with_no_size_is_good",
+   "file": "web/home/pics.js",
+   "old": "&& whole(img.tw, 400) && whole(img.th, 400) && whole(img.w, 8192) && whole(img.h, 8192); }",
+   "new": "; }",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "it_plays_in_a_hidden_window",
+   "file": "web/home/pics.js",
+   "old": "return on && !reduced && !doc.hidden;",
+   "new": "return on && !reduced;",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "it_plays_with_reduced_motion",
+   "file": "web/home/pics.js",
+   "old": "return on && !reduced && !doc.hidden;",
+   "new": "return on && !doc.hidden;",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "it_plays_with_the_switch_off",
+   "file": "web/home/pics.js",
+   "old": "return on && !reduced && !doc.hidden;",
+   "new": "return !reduced && !doc.hidden;",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "it_plays_off_the_screen",
+   "file": "web/home/pics.js",
+   "old": "many[i].visible = it.isIntersecting; show(many[i], plays() && it.isIntersecting);",
+   "new": "many[i].visible = it.isIntersecting; show(many[i], plays());",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "it_starts_moving_before_it_is_seen",
+   "file": "web/home/pics.js",
+   "old": "m.visible = false; show(m, false); seen.observe(m.node);",
+   "new": "m.visible = true; show(m, plays()); seen.observe(m.node);",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "a_still_image_is_watched",
+   "file": "web/home/pics.js",
+   "old": "if (img.a) watch({ img: img, node: im, visible: false, shown: '' });",
+   "new": "watch({ img: img, node: im, visible: false, shown: '' });",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "a_missing_file_can_be_pressed",
+   "file": "web/home/pics.js",
+   "old": "b.className += ' gc-nopic'; b.disabled = true;",
+   "new": "b.className += ' gc-nopic';",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_frame_has_no_height",
+   "file": "web/home/pics.js",
+   "old": "im.setAttribute('height', String(img.th)); ",
+   "new": "",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_picture_has_no_words_for_a_screen_reader",
+   "file": "web/home/pics.js",
+   "old": "still = e.text || TEXT.from + e.who;",
+   "new": "still = '';",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_log_loads_every_picture_at_once",
+   "file": "web/home/pics.js",
+   "old": "im.setAttribute('loading', 'lazy'); ",
+   "new": "",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "every_reader_may_delete",
+   "file": "web/home/pics.js",
+   "old": "if (line && (mine || staff)) {",
+   "new": "if (line) {",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_author_is_offered_the_staffs_word",
+   "file": "web/home/pics.js",
+   "old": "mine && !staff ? TEXT.delOwn : TEXT.del",
+   "new": "TEXT.del",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "delete_without_the_question",
+   "file": "web/home/pics.js",
+   "old": "no.addEventListener('click', normal);",
+   "new": "no.addEventListener('click', function () { yes.click(); });",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_author_deletes_by_the_staffs_command",
+   "file": "web/home/pics.js",
+   "old": "if (line && line.own && !staff) dock.delimg(e.id, done); else dock.command('/del ' + e.id, done);",
+   "new": "dock.command('/del ' + e.id, done);",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_staff_delete_is_the_authors",
+   "file": "web/home/pics.js",
+   "old": "if (line && line.own && !staff) dock.delimg(e.id, done); else dock.command('/del ' + e.id, done);",
+   "new": "if (line && line.own) dock.delimg(e.id, done); else dock.command('/del ' + e.id, done);",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_viewer_stays_after_the_delete",
+   "file": "web/home/pics.js",
+   "old": "if (code === 'ok') close(); else {",
+   "new": "if (code === 'ok') { yes.disabled = false; } else {",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_link_keeps_the_referrer",
+   "file": "web/home/pics.js",
+   "old": "'noopener noreferrer'",
+   "new": "'noopener'",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "escape_does_not_close_the_viewer",
+   "file": "web/home/pics.js",
+   "old": "if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); close(); return; }",
+   "new": "if (ev.key === 'Escape') { return; }",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_focus_does_not_go_back",
+   "file": "web/home/pics.js",
+   "old": "if (back !== false && focus && focus.focus) focus.focus();",
+   "new": "",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "tab_leaves_the_viewer",
+   "file": "web/home/pics.js",
+   "old": "ev.preventDefault(); all[next].focus();",
+   "new": "",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_reader_switch_is_not_kept",
+   "file": "web/home/pics.js",
+   "old": "store.setItem(KEY, on ? '1' : '0')",
+   "new": "store.setItem(KEY, '1')",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_reader_switch_is_not_read",
+   "file": "web/home/pics.js",
+   "old": "on = !store || store.getItem(KEY) !== '0';",
+   "new": "on = true;",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_viewer_does_not_rest_for_reduced_motion",
+   "file": "web/home/pics.js",
+   "old": "im.setAttribute('src', address(img, img.a && !plays()));",
+   "new": "im.setAttribute('src', address(img));",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "svg_is_taken",
+   "file": "web/home/post.js",
+   "old": "OK = /^image\\/(png|jpeg|webp|gif)$/",
+   "new": "OK = /^image\\/(png|jpeg|webp|gif|svg\\+xml)$/",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_limit_is_8_mb",
+   "file": "web/home/post.js",
+   "old": "bytes: 4 * 1024 * 1024,",
+   "new": "bytes: 8 * 1024 * 1024,",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_upload_has_no_header",
+   "file": "web/home/post.js",
+   "old": " req.setRequestHeader('X-Ants-Image', '1');",
+   "new": "",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_upload_is_not_octet_stream",
+   "file": "web/home/post.js",
+   "old": "req.setRequestHeader('Content-Type', 'application/octet-stream');",
+   "new": "req.setRequestHeader('Content-Type', 'image/png');",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_upload_goes_elsewhere",
+   "file": "web/home/post.js",
+   "old": "var PATH = '/hub/img/up',",
+   "new": "var PATH = '/hub/img/upload',",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "a_403_is_wrong",
+   "file": "web/home/post.js",
+   "old": "413: 'big', 415: 'not', 429: 'rate', 401: 'login', 403: 'images'",
+   "new": "413: 'big', 415: 'not', 429: 'rate', 401: 'login'",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_dock_sees_the_submit_too",
+   "file": "web/home/post.js",
+   "old": "ev.preventDefault(); ev.stopImmediatePropagation(); submit();",
+   "new": "ev.preventDefault(); submit();",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "send_without_an_image_is_taken",
+   "file": "web/home/post.js",
+   "old": "if (!pending || (ev.target && ev.target !== form)) return;",
+   "new": "if (ev.target && ev.target !== form) return;",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "a_refused_line_loses_the_image",
+   "file": "web/home/post.js",
+   "old": "if (code === 'ok') { field.value = ''; if (dock.grow) dock.grow(); clear(); return; }",
+   "new": "if (code === 'ok' || true) { field.value = ''; if (dock.grow) dock.grow(); clear(); return; }",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_button_is_after_the_microphone",
+   "file": "web/home/post.js",
+   "old": "tools.insertBefore(btn, mic || null);",
+   "new": "tools.appendChild(btn);",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "a_phone_has_one_row",
+   "file": "web/home/post.js",
+   "old": "(win.innerWidth || 0) <= 700 && (win.innerHeight || 0) >= 501",
+   "new": "(win.innerWidth || 0) <= 0 && (win.innerHeight || 0) >= 501",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_size_is_not_checked_after_the_shrink",
+   "file": "web/home/post.js",
+   "old": "if (blob.size > LIMIT.bytes) { refuse(file, 'big'); return; }",
+   "new": "",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "a_paste_of_an_image_is_also_typed",
+   "file": "web/home/post.js",
+   "old": "ev.preventDefault(); add(f);",
+   "new": "add(f);",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "a_drop_opens_the_file",
+   "file": "web/home/post.js",
+   "old": "ev.preventDefault(); depth = 0; overOn(false);",
+   "new": "depth = 0; overOn(false);",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "a_gif_is_said_to_be_clean",
+   "file": "web/home/post.js",
+   "old": "file.type === 'image/gif' ? TEXT.moving : TEXT.clean",
+   "new": "TEXT.clean",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "a_gif_is_shrunk_in_a_canvas",
+   "file": "web/home/post.js",
+   "old": "if (file.type === 'image/gif' || file.size <= LIMIT.shrink ||",
+   "new": "if (file.size <= LIMIT.shrink ||",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "a_photo_is_never_shrunk",
+   "file": "web/home/post.js",
+   "old": "file.size <= LIMIT.shrink || !win.createImageBitmap",
+   "new": "true || !win.createImageBitmap",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_canvas_is_over_2048",
+   "file": "web/home/post.js",
+   "old": "side: 2048 }",
+   "new": "side: 4096 }",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_dock_sends_for_a_person_who_may_not",
+   "file": "web/home/chat.js",
+   "old": ": you.img !== 'on' ? 'img' :",
+   "new": ":",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_poster_is_loaded_for_everybody",
+   "file": "web/home/chat.js",
+   "old": "|| !you || you.img !== 'on') return;",
+   "new": "|| !you) return;",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "any_name_is_a_name_of_an_image",
+   "file": "web/home/chat.js",
+   "old": "/^[0-9a-f]{32}$/.test(v.n) ? v : null; }",
+   "new": "/^[0-9a-f]+$/.test(v.n) ? v : null; }",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "a_line_with_only_an_image_is_dropped",
+   "file": "web/home/chat.js",
+   "old": "if (!shows(text) && !img) return null;",
+   "new": "if (!shows(text)) return null;",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_hubs_own_line_has_an_image",
+   "file": "web/home/chat.js",
+   "old": "var img = sys ? null : imgOf(m.img);",
+   "new": "var img = imgOf(m.img);",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "a_poster_is_told_off_for_a_paste",
+   "file": "web/home/chat.js",
+   "old": "if (!file || !you || you.img === 'on' || !you.img) return;",
+   "new": "if (!file || !you || !you.img) return;",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "a_person_without_the_right_is_not_told",
+   "file": "web/home/chat.js",
+   "old": "if (!file || !you || you.img === 'on' || !you.img) return;",
+   "new": "if (!file || !you || you.img === 'on') return;",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_words_of_off_and_role_are_swapped",
+   "file": "web/home/chat.js",
+   "old": "code = you.img === 'off' ? 'imgoff' : you.img === 'wait' ? 'imgwait' : 'imgrole';",
+   "new": "code = you.img === 'off' ? 'imgrole' : you.img === 'wait' ? 'imgwait' : 'imgoff';",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_echo_of_an_image_line_is_not_the_answer",
+   "file": "web/home/chat.js",
+   "old": "if (e.own && e.img) {",
+   "new": "if (false && e.own && e.img) {",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "two_deletes_at_a_time",
+   "file": "web/home/chat.js",
+   "old": "if (oldest(true) >= 0) { tell1(function () { done('rate'); }); return; }",
+   "new": "",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "a_caption_with_markup_goes",
+   "file": "web/home/chat.js",
+   "old": "/[<>]/.test(text) ? 'markup' : '';",
+   "new": "false ? 'markup' : '';",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "a_banned_person_sends_an_image",
+   "file": "web/home/chat.js",
+   "old": "removed === 'banned' ? 'banned' : you.img !== 'on'",
+   "new": "you.img !== 'on'",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "wait_is_not_a_state_of_you",
+   "file": "web/home/chat.js",
+   "old": " || y.img === 'wait' ?",
+   "new": " ?",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "a_long_caption_goes",
+   "file": "web/home/chat.js",
+   "old": "you.img !== 'on' ? 'img' : points(text) > LIMIT.line ? 'long'",
+   "new": "you.img !== 'on' ? 'img' : false ? 'long'",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  }
+ ]
+}
