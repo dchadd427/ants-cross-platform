@@ -764,6 +764,91 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
         with self.assertRaises(ValueError):
             base_ant.add_leg_flex_channels(sym, times, [0.0, 0.1])
 
+    def test_leg_rig_tracks_true_medial_hip_under_crouched_sway_and_heave(self):
+        from tools.ant_models import leg_rig
+
+        # Crouched Thief-scale stance where the forward knee sits higher than the medial hip socket.
+        sc, _ = base_ant.build_base_ant("hip_track_stress", crouch=0.132, leg_style="thief", include_idle=False)
+        info = leg_rig.leg_rig_info(sc)
+        self.assertEqual(len(info), 4)
+        for node, pivot, hip in info:
+            # True medial hip must sit deep near centerline (|x| < 0.04) and below knee peak (~0.25).
+            self.assertLess(abs(float(hip[0])), 0.04, f"{node} grabbed knee instead of medial hip: {hip}")
+            self.assertLess(float(hip[1]), 0.22, f"{node} hip_y too high (grabbed knee): {hip}")
+
+        # Stress test: Thief-scale +-0.050 sideways shift + +0.040 vertical heave + body roll/pitch.
+        xf_ub = sc.get_node_transform("upper_body")
+        bx, by, bz = xf_ub.translation
+        r0_ub = xf_ub.rotation
+        times = [0.0, 0.4, 0.8, 1.2, 1.6, 2.0, 2.4]
+        t_vals = [
+            (bx, by, bz),
+            (bx + 0.050, by - 0.025, bz + 0.015),
+            (bx + 0.020, by + 0.040, bz - 0.010),
+            (bx, by, bz),
+            (bx - 0.050, by - 0.025, bz + 0.015),
+            (bx - 0.020, by + 0.040, bz - 0.010),
+            (bx, by, bz),
+        ]
+        r_vals = [
+            r0_ub,
+            mesh_core.quat_mul(r0_ub, mesh_core.quat_from_euler_xyz(rx=0.06, rz=-0.10)),
+            mesh_core.quat_mul(r0_ub, mesh_core.quat_from_euler_xyz(rx=-0.05, rz=-0.04)),
+            r0_ub,
+            mesh_core.quat_mul(r0_ub, mesh_core.quat_from_euler_xyz(rx=0.06, rz=0.10)),
+            mesh_core.quat_mul(r0_ub, mesh_core.quat_from_euler_xyz(rx=-0.05, rz=0.04)),
+            r0_ub,
+        ]
+        sc.add_animation(
+            "Idle",
+            [
+                mesh_core.AnimationChannel("upper_body", "translation", times, t_vals),
+                mesh_core.AnimationChannel("upper_body", "rotation", times, r_vals),
+            ],
+            replace=True,
+        )
+        leg_rig.sync_leg_flex_to_clip(sc, "Idle")
+        clip = next(c for c in sc.animations if c.name == "Idle")
+        t_ch = next(ch for ch in clip.channels if ch.target_node == "upper_body" and ch.path == "translation")
+        r_ch = next(ch for ch in clip.channels if ch.target_node == "upper_body" and ch.path == "rotation")
+        by_node: dict = {}
+        for ch in clip.channels:
+            if ch.target_node in leg_rig.LEG_NODES:
+                by_node.setdefault(ch.target_node, {})[ch.path] = ch
+        self.assertEqual(set(by_node), set(leg_rig.LEG_NODES))
+
+        t0_ub = np.asarray(xf_ub.translation, dtype=np.float64)
+        for node, pivot, hip in info:
+            chans = by_node[node]
+            xf = sc.get_node_transform(node)
+            r0 = xf.rotation if xf is not None else (0.0, 0.0, 0.0, 1.0)
+            t0 = np.asarray(xf.translation if xf is not None else pivot, dtype=np.float64)
+            s0 = np.asarray(xf.scale if xf is not None else (1.0, 1.0, 1.0), dtype=np.float64)
+            local = np.vstack([p.positions for p in sc.get_node(node)]).astype(np.float64)
+            hip_loc = leg_rig._quat_rotate(leg_rig._quat_conj(r0), hip - t0) / s0
+            ub_hip_loc = leg_rig._quat_rotate(leg_rig._quat_conj(r0_ub), hip - t0_ub)
+            # Verify across BOTH exact keyframes and dense interpolated mid-frames.
+            for t_val in np.linspace(0.0, times[-1], 49):
+                tt_ub = np.asarray(leg_rig._sample(t_ch.times, t_ch.values, float(t_val), False), dtype=np.float64)
+                qq_ub = leg_rig._sample(r_ch.times, r_ch.values, float(t_val), True)
+                h_exp = tt_ub + leg_rig._quat_rotate(qq_ub, ub_hip_loc)
+                s_v = np.asarray(leg_rig._sample(chans["scale"].times, chans["scale"].values, float(t_val), False), dtype=np.float64)
+                q_v = leg_rig._sample(chans["rotation"].times, chans["rotation"].values, float(t_val), True)
+                t_v = np.asarray(leg_rig._sample(chans["translation"].times, chans["translation"].values, float(t_val), False), dtype=np.float64)
+                h_got = t_v + leg_rig._quat_rotate(q_v, hip_loc * s_v)
+                world_verts = t_v + leg_rig._quat_rotate(q_v, local * s_v)
+                self.assertLess(
+                    float(np.linalg.norm(h_got - h_exp)),
+                    0.008,
+                    f"{node} at t={t_val:.3f}: hip drifted {np.linalg.norm(h_got - h_exp):.5f}",
+                )
+                self.assertLess(
+                    abs(float(world_verts[:, 1].min())),
+                    0.003,
+                    f"{node} at t={t_val:.3f}: sole lifted/sank {world_verts[:, 1].min():.5f}",
+                )
+        gltf_writer.validate_glb(gltf_writer.scene_to_glb_bytes(sc))
+
     def test_base_ant_character_expression_api(self):
         # All brow styles build cleanly; "none" omits brow caps and invalid styles raise ValueError.
         for style in base_ant.BROW_STYLES:

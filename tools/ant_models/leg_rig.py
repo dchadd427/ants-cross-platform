@@ -88,8 +88,8 @@ def _add_leg(
     fwd = np.array([math.sin(yaw_s), 0.0, math.cos(yaw_s)], dtype=np.float64)
     lift = np.array([0.0, 1.0, 0.0], dtype=np.float64)
 
-    # Segment 1 (femur): hip socket -> muscular thigh -> forward-bent KNEE (>).
-    p_root = np.array([s * 0.044, p_hip[1] + 0.005, p_hip[2] * 0.70], dtype=np.float64)
+    # Segment 1 (femur): deep medial hip socket inside thorax_core -> muscular thigh -> forward KNEE (>).
+    p_root = np.array([s * 0.024, p_hip[1] + 0.006, p_hip[2] * 0.62], dtype=np.float64)
     femur_mid = 0.48 * p_hip + 0.52 * p_knee + np.array([s * 0.004, 0.016, 0.006])
     pre_knee = 0.18 * p_hip + 0.82 * p_knee + np.array([s * 0.002, 0.006, 0.004])
     # Segment 2 (tibia): KNEE (>) -> sweeping backward-down -> rearward-bent ANKLE (<).
@@ -215,8 +215,61 @@ def _sample(times: Sequence[float], values: Sequence[Sequence[float]], t: float,
     return tuple(float(c) for c in (1.0 - a) * v0 + a * v1)
 
 
+def _shortest_arc_quat(v_from: np.ndarray, v_to: np.ndarray) -> Quat:
+    """Exact unit quaternion rotating vector `v_from` onto `v_to` along the shortest great-circle arc."""
+    n0 = float(np.linalg.norm(v_from))
+    n1 = float(np.linalg.norm(v_to))
+    if n0 < 1e-12 or n1 < 1e-12:
+        return (0.0, 0.0, 0.0, 1.0)
+    u = v_from / n0
+    w = v_to / n1
+    dot = max(-1.0, min(1.0, float(np.dot(u, w))))
+    if dot > 1.0 - 1e-12:
+        return (0.0, 0.0, 0.0, 1.0)
+    if dot < -1.0 + 1e-12:
+        ref = np.array([1.0, 0.0, 0.0], dtype=np.float64) if abs(u[0]) < 0.9 else np.array([0.0, 1.0, 0.0], dtype=np.float64)
+        axis = np.cross(u, ref)
+        axis /= max(1e-12, float(np.linalg.norm(axis)))
+        return (float(axis[0]), float(axis[1]), float(axis[2]), 0.0)
+    c = np.cross(u, w)
+    q = np.array([c[0], c[1], c[2], 1.0 + dot], dtype=np.float64)
+    q /= max(1e-12, float(np.linalg.norm(q)))
+    return (float(q[0]), float(q[1]), float(q[2]), float(q[3]))
+
+
+def _solve_knee_scale(
+    hip_loc: np.ndarray,
+    v_rest_y: float,
+    target_vec: np.ndarray,
+    *,
+    knee_bow: float,
+    splay: float,
+) -> np.ndarray:
+    """Compute anisotropic knee-bend scale (sx, sy, sz) whose scaled hip vector matches `||target_vec||` exactly."""
+    d_len = max(1e-6, float(np.linalg.norm(target_vec)))
+    c_y = max(0.72, min(1.32, float(target_vec[1]) / max(0.05, float(v_rest_y))))
+    sx = max(0.72, min(1.45, 1.0 + splay * (1.0 - c_y)))
+    sz = max(0.62, min(1.70, 1.0 + knee_bow * (1.0 - c_y)))
+
+    hx, hy, hz = float(hip_loc[0]), float(hip_loc[1]), float(hip_loc[2])
+    rem = d_len * d_len - (sx * hx) ** 2 - (sz * hz) ** 2
+    if abs(hy) > 1e-5 and rem > (0.55 * abs(hy)) ** 2:
+        sy = math.sqrt(rem) / abs(hy)
+        if 0.62 <= sy <= 1.45:
+            return np.array([sx, sy, sz], dtype=np.float64)
+
+    # Extreme dip/stretch fallback: preserve knee-bow ratios while still hitting exact `||target_vec||`.
+    base = np.array([sx, c_y, sz], dtype=np.float64)
+    cur_len = max(1e-6, float(np.linalg.norm(base * hip_loc)))
+    return base * (d_len / cur_len)
+
+
 def leg_rig_info(scene: SceneBuilder) -> List[Tuple[str, np.ndarray, np.ndarray]]:
-    """Return `(node, foot_pivot_world, hip_world)` for every individual leg node present in `scene`."""
+    """Return `(node, foot_pivot_world, hip_world)` for every individual leg node present in `scene`.
+
+    Identifies the true medial hip socket (innermost vertex cluster in the upper half of each leg),
+    never the higher forward knee on crouched stances like Thief or Bomber.
+    """
     out: List[Tuple[str, np.ndarray, np.ndarray]] = []
     for node in LEG_NODES:
         parts = scene.get_node(node)
@@ -224,9 +277,18 @@ def leg_rig_info(scene: SceneBuilder) -> List[Tuple[str, np.ndarray, np.ndarray]
         if not parts or mat is None:
             continue
         pos = np.vstack([p.positions for p in parts]).astype(np.float64)
-        top = pos[int(np.argmax(pos[:, 1]))]
-        hip = (mat @ np.append(top, 1.0))[:3]
-        out.append((node, mat[:3, 3].astype(np.float64), hip))
+        world = (mat[:3, :3] @ pos.T).T + mat[:3, 3]
+        pivot = mat[:3, 3].astype(np.float64)
+        y_min = float(world[:, 1].min())
+        y_max = float(world[:, 1].max())
+        upper = world[world[:, 1] >= y_min + 0.45 * (y_max - y_min)]
+        if len(upper) == 0:
+            upper = world
+        side_sign = 1.0 if float(pivot[0]) >= 0.0 else -1.0
+        signed_x = side_sign * upper[:, 0]
+        medial = upper[signed_x <= float(signed_x.min()) + 0.030]
+        hip = medial.mean(axis=0) if len(medial) > 0 else upper[int(np.argmin(signed_x))]
+        out.append((node, pivot, hip))
     return out
 
 
@@ -243,32 +305,59 @@ def _flex_channels(
         offsets = per_leg.get(node)
         if not offsets:
             continue
-        h = max(0.05, float(hip[1] - pivot[1]))
-        hx, hz = float(hip[0] - pivot[0]), float(hip[2] - pivot[2])
         xf = scene.get_node_transform(node)
         r0 = xf.rotation if xf is not None else (0.0, 0.0, 0.0, 1.0)
         t0 = np.asarray(xf.translation if xf is not None else pivot, dtype=np.float64)
+        s0 = np.asarray(xf.scale if xf is not None else (1.0, 1.0, 1.0), dtype=np.float64)
         local = np.vstack([p.positions for p in scene.get_node(node)]).astype(np.float64)
-        sole = local[local[:, 1] <= float(local[:, 1].min()) + 0.002]
-        sole_rest = _quat_rotate(r0, sole)
+        y_loc_min = float(local[:, 1].min())
+        sole = local[local[:, 1] <= y_loc_min + 0.002]
+        foot_low = local[local[:, 1] <= y_loc_min + 0.024]
+        sole_rest = _quat_rotate(r0, sole * s0)
+        foot_rest_min_y = float(_quat_rotate(r0, foot_low * s0)[:, 1].min())
+        sole_rest_xz = sole_rest[:, [0, 2]].mean(axis=0)
+
+        # Rest hip vector in local unscaled space: `t0 + R(r0) @ (s0 * hip_loc) == hip`.
+        v_rest = hip - t0
+        hip_loc = _quat_rotate(_quat_conj(r0), v_rest) / np.where(np.abs(s0) > 1e-8, s0, 1.0)
+
         s_vals: List[Vec3] = []
         r_vals: List[Quat] = []
         t_vals: List[Vec3] = []
+        prev_q: Optional[Quat] = None
         for dx, dy, dz in offsets:
-            sy = max(0.80, min(1.20, 1.0 + dy / h))
-            sx = 1.0 + splay * (1.0 - sy)
-            sz = 1.0 + knee_bow * (1.0 - sy)
-            s_vals.append((sx, sy, sz))
-            # Tilt about the planted foot so the hip tracks the body exactly (cancelling the drift that
-            # the knee-bow scale adds to the hip), leaving only the knee/ankle bend visible.
-            rx = max(-0.12, min(0.12, (dz - (sz - 1.0) * hz) / h))
-            rz = max(-0.12, min(0.12, ((sx - 1.0) * hx - dx) / h))
-            q = quat_mul(r0, quat_from_euler_xyz(rx=rx, rz=rz))
-            r_vals.append(q)
-            # Re-plant the sole: lowest point exactly on Y = 0.0 and zero mean contact slide.
-            sole_now = _quat_rotate(q, sole * np.array([sx, sy, sz]))
-            slide = (sole_now - sole_rest).mean(axis=0)
-            t_vals.append((float(t0[0] - slide[0]), float(t0[1] - (sole_now[:, 1].min() - sole_rest[:, 1].min())), float(t0[2] - slide[2])))
+            h_target = hip + np.array([dx, dy, dz], dtype=np.float64)
+            t_cur = t0.copy()
+            s_cur = s0.copy()
+            q_cur = r0
+            # Two exact vector-tracking iterations: first solve at rest pivot to measure sole
+            # lift/recentering, then re-solve at the re-planted pivot so hip tracks `h_target` < 0.2 mm.
+            for step in range(2):
+                d_vec = h_target - t_cur
+                s_rel = _solve_knee_scale(hip_loc * s0, float(v_rest[1]), d_vec, knee_bow=knee_bow, splay=splay)
+                s_cur = s0 * s_rel
+                v_scaled = _quat_rotate(r0, hip_loc * s_cur)
+                q_arc = _shortest_arc_quat(v_scaled, d_vec)
+                q_cur = quat_mul(q_arc, r0)
+                if step == 0:
+                    sole_now = _quat_rotate(q_cur, sole * s_cur)
+                    foot_now = _quat_rotate(q_cur, foot_low * s_cur)
+                    dy_sole = float(foot_now[:, 1].min()) - foot_rest_min_y
+                    dxz_sole = sole_now[:, [0, 2]].mean(axis=0) - sole_rest_xz
+                    # Keep foot sole strictly grounded on Y = 0.0 with bounded tiny lateral recentering.
+                    shift_x = max(-0.0025, min(0.0025, float(dxz_sole[0])))
+                    shift_z = max(-0.0025, min(0.0025, float(dxz_sole[1])))
+                    t_cur = np.array([t0[0] - shift_x, t0[1] - dy_sole, t0[2] - shift_z], dtype=np.float64)
+            # Final sole Y micro-clamp (sub-0.1 mm adjustment so min_y == 0.00000 across all foot vertices).
+            foot_final = _quat_rotate(q_cur, foot_low * s_cur)
+            t_cur[1] = t0[1] - (float(foot_final[:, 1].min()) - foot_rest_min_y)
+
+            if prev_q is not None and sum(a * b for a, b in zip(prev_q, q_cur)) < 0.0:
+                q_cur = (-q_cur[0], -q_cur[1], -q_cur[2], -q_cur[3])
+            prev_q = q_cur
+            s_vals.append((float(s_cur[0]), float(s_cur[1]), float(s_cur[2])))
+            r_vals.append(q_cur)
+            t_vals.append((float(t_cur[0]), float(t_cur[1]), float(t_cur[2])))
         channels.append(AnimationChannel(node, "scale", list(times), s_vals))
         channels.append(AnimationChannel(node, "rotation", list(times), r_vals))
         channels.append(AnimationChannel(node, "translation", list(times), t_vals))
@@ -315,7 +404,7 @@ def sync_leg_flex_to_clip(
     body_node: str = "upper_body",
     knee_bow: float = 1.6,
     splay: float = 0.45,
-    weight_shift: float = 0.20,
+    weight_shift: float = 0.0,
 ) -> List[AnimationChannel]:
     """Derive per-leg knee flex from `clip_name`'s body translation + rotation and append it to that clip.
 
@@ -330,15 +419,29 @@ def sync_leg_flex_to_clip(
     r_ch = next((ch for ch in clip.channels if ch.target_node == body_node and ch.path == "rotation"), None)
     if t_ch is None and r_ch is None:
         return []
-    times = sorted(set(t_ch.times if t_ch is not None else []) | set(r_ch.times if r_ch is not None else []))
+    base_times = sorted(set(t_ch.times if t_ch is not None else []) | set(r_ch.times if r_ch is not None else []))
     xf = scene.get_node_transform(body_node)
     t0 = np.asarray(xf.translation if xf is not None else (0.0, 0.0, 0.0), dtype=np.float64)
     q0 = xf.rotation if xf is not None else (0.0, 0.0, 0.0, 1.0)
-    frames = []
-    for t in times:
-        tt = np.asarray(_sample(t_ch.times, t_ch.values, t, False), dtype=np.float64) if t_ch is not None else t0
-        qq = _sample(r_ch.times, r_ch.values, t, True) if r_ch is not None else q0
-        frames.append((tt, qq))
+
+    def _eval_body(t_val: float) -> Tuple[np.ndarray, Quat]:
+        tt = np.asarray(_sample(t_ch.times, t_ch.values, t_val, False), dtype=np.float64) if t_ch is not None else t0
+        qq = _sample(r_ch.times, r_ch.values, t_val, True) if r_ch is not None else q0
+        return tt, qq
+
+    # Insert one midpoint sample across any large body swing (> 0.025) so linear glTF TRS
+    # interpolation stays tightly locked to the moving hip arc between sparse keyframes.
+    times: List[float] = []
+    frames: List[Tuple[np.ndarray, Quat]] = []
+    for idx, t_val in enumerate(base_times):
+        cur_f = _eval_body(t_val)
+        if idx > 0 and float(np.linalg.norm(cur_f[0] - frames[-1][0])) > 0.025:
+            t_mid = round(0.5 * (times[-1] + t_val), 5)
+            if times[-1] < t_mid < t_val:
+                times.append(t_mid)
+                frames.append(_eval_body(t_mid))
+        times.append(t_val)
+        frames.append(cur_f)
 
     per_leg: Dict[str, List[Vec3]] = {}
     for node, pivot, hip in leg_rig_info(scene):
