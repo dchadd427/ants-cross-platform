@@ -195,14 +195,12 @@ def _thief_head_deform(pos: np.ndarray) -> np.ndarray:
     p[:, 2] += 0.006 * cheek
 
     lower = np.clip((-y - 0.018) / 0.148, 0.0, 1.0)
-    p[:, 0] *= 1.0 - 0.20 * (lower ** 1.38)
-    p[:, 2] *= 1.0 - 0.05 * (lower ** 1.38)
+    p[:, 0] *= 1.0 - 0.22 * (lower ** 1.38)
+    p[:, 2] *= 1.0 - 0.10 * (lower ** 1.38)
 
-    # Fuller protruding lower mouth / clypeus swell toward bottom-front (`#393`/`#403`)
-    # anchoring the lowered 1.08x mandibles cleanly below the eyes & folded cloth bandana.
-    clypeus = np.exp(-((x / 0.072) ** 2)) * np.exp(-(((y + 0.112) / 0.054) ** 2)) * front_mask
-    p[:, 2] += 0.024 * clypeus
-    p[:, 1] -= 0.026 * clypeus
+    # Clean, smooth, softly rounded lower jaw / chin (zero bulbous beak or double-chin lump!).
+    clypeus = np.exp(-((x / 0.048) ** 2)) * np.exp(-(((y + 0.092) / 0.038) ** 2)) * front_mask
+    p[:, 2] += 0.006 * clypeus
 
     # 5. Clean aerodynamic occipital taper behind the lower skull into the neck (`atst901` profile).
     rear_low = np.clip((-z - 0.01) / 0.15, 0.0, 1.0) * np.clip((-y + 0.02) / 0.16, 0.0, 1.0)
@@ -252,9 +250,9 @@ def _refit_thief_head(scene: SceneBuilder, anchors: dict) -> MeshPart:
     )
     cranium = _paint_thief_cranium_colors(cranium).translate(hx, hy, hz)
 
-    # Swap cranium inside `head`, keep Thief's bold 1.08x mandibles & mouth, and lower them cleanly
-    # below the eyes, eyelids, and folded bandana (`#403`: zero eye phasing, solid chin attachment!).
-    jaw_dy, jaw_dz = -0.036, +0.024
+    # Swap cranium inside `head`: stout, plump, shorter bean-mandibles (`1.04x W, 0.78x H, 0.80x L`)
+    # seated cleanly into the smooth lower cheek below eyes & bandana (`#412`), with a delicate mouth cleft (`#413`).
+    jaw_dy, jaw_dz = -0.018, +0.008
     head_parts = scene.get_node("head")
     new_head_parts: List[MeshPart] = []
     for p in head_parts:
@@ -264,8 +262,8 @@ def _refit_thief_head(scene: SceneBuilder, anchors: dict) -> MeshPart:
             mc = p.positions.mean(axis=0)
             new_head_parts.append(
                 p.translate(-float(mc[0]), -float(mc[1]), -float(mc[2]))
-                .scale(1.08, 1.08, 1.08)
-                .translate(float(mc[0]), float(mc[1]) + jaw_dy, float(mc[2]) + jaw_dz)
+                .scale(0.64, 0.58, 0.62)
+                .translate(float(mc[0]), float(mc[1]) + jaw_dy + 0.006, float(mc[2]) + jaw_dz - 0.003)
             )
         else:
             new_head_parts.append(p)
@@ -273,7 +271,7 @@ def _refit_thief_head(scene: SceneBuilder, anchors: dict) -> MeshPart:
 
     mand_parts = scene.get_node("mandibles")
     if mand_parts:
-        scene.nodes["mandibles"] = [p.scale(1.08, 1.08, 1.08).rotate_xyz(rx=10.0, degrees=True) for p in mand_parts]
+        scene.nodes["mandibles"] = [p.scale(1.04, 0.78, 0.80).rotate_xyz(rx=4.0, degrees=True) for p in mand_parts]
     mand_xf = scene.get_node_transform("mandibles")
     if mand_xf is not None:
         mx, my, mz = mand_xf.translation
@@ -817,8 +815,11 @@ def _add_knot_and_tails(scene: SceneBuilder, caster: _CraniumCaster) -> None:
         twist_deg=(8.0, -12.0),
         name="bandana_tail_lower",
     ).translate(-knot)
-    scene.add("bandana_tails", [tail_u, tail_l])
-    scene.set_node_transform("bandana_tails", translation=tuple(float(c) for c in knot))
+    knot_t = tuple(float(c) for c in knot)
+    scene.add("bandana_tails", tail_u)
+    scene.set_node_transform("bandana_tails", translation=knot_t)
+    scene.add("bandana_tail_lower", tail_l)
+    scene.set_node_transform("bandana_tail_lower", translation=knot_t)
 
 
 def _build_spherical_eyelid(name: str, r_outer: float, thickness: float, yaw_y: float) -> MeshPart:
@@ -1142,28 +1143,40 @@ def _add_thief_idle_animation(scene: SceneBuilder) -> None:
         )
     )
 
-    # Pleated bandana tails trail & flutter naturally with each snappy 160ms sideways weight shift.
-    tail_poses = [
-        (0.00, 0.00, 0.00),
-        (0.01, -0.02, +0.02),
-        (0.00, 0.00, 0.00),
-        (-0.03, -0.10, -0.07),
-        (-0.02, -0.08, -0.05),
-        (0.02, +0.05, +0.04),
-        (0.01, +0.02, -0.02),
-        (0.00, 0.00, 0.00),
-        (-0.03, +0.10, +0.07),
-        (0.00, 0.00, 0.00),
-    ]
-    tail_r0 = _rest_r("bandana_tails")
-    channels.append(
-        AnimationChannel(
-            "bandana_tails",
-            "rotation",
-            list(times),
-            [quat_mul(tail_r0, quat_from_euler_xyz(rx=rx, ry=ry, rz=rz)) for rx, ry, rz in tail_poses],
-        )
-    )
+    # Lively, expressive out-of-phase silk-cloth flutter on BOTH tied bandana tails (`#415`):
+    # snappy +-0.26..0.32 rad trailing whip on each 160ms hop + damped silk overshoot + staggered breeze ripple!
+    tail_tracks = {
+        "bandana_tails": [
+            (+0.04, +0.06, -0.05),
+            (-0.07, -0.09, +0.08),
+            (+0.03, +0.04, -0.03),
+            (-0.14, -0.28, +0.24),
+            (-0.10, -0.32, +0.20),
+            (+0.09, +0.18, -0.15),
+            (-0.05, -0.08, +0.09),
+            (+0.04, +0.06, -0.05),
+            (-0.13, +0.26, -0.24),
+            (+0.04, +0.06, -0.05),
+        ],
+        "bandana_tail_lower": [
+            (-0.05, -0.07, +0.06),
+            (+0.08, +0.09, -0.09),
+            (-0.04, -0.05, +0.04),
+            (-0.10, -0.22, +0.18),
+            (-0.16, -0.34, +0.28),
+            (+0.11, +0.21, -0.18),
+            (+0.07, +0.09, -0.08),
+            (-0.04, -0.06, +0.05),
+            (-0.15, +0.22, -0.28),
+            (-0.05, -0.07, +0.06),
+        ],
+    }
+    for tail_node, poses in tail_tracks.items():
+        if tail_node in scene.nodes and scene.get_node(tail_node):
+            tr0 = _rest_r(tail_node)
+            t_vals = [quat_mul(tr0, quat_from_euler_xyz(rx=rx, ry=ry, rz=rz)) for rx, ry, rz in poses]
+            t_vals[-1] = t_vals[0]
+            channels.append(AnimationChannel(tail_node, "rotation", list(times), t_vals))
 
     # Lively inertia-swaying antennae (`#365`): trail opposite each 160ms sideways hop (+-0.22 rad)
     # then whip with a springy overshoot settle and subtle left-vs-right phase individuality!
@@ -1247,7 +1260,7 @@ def build_thief(blink: float = 0.0, gaze: float = -1.0) -> SceneBuilder:
 
     # Parent Thief's canonical neutral head gear & eyes in 1:1 lockstep under tilted `head_group`
     # (matching `head`'s exact `-neck_center` local origin so zero drift occurs under stance_asymmetry!).
-    for head_child in ("eyes", "eye_ball_left", "eye_ball_right", "eyelid_left", "eyelid_right", "gear_bandana", "bandana_tails"):
+    for head_child in ("eyes", "eye_ball_left", "eye_ball_right", "eyelid_left", "eyelid_right", "gear_bandana", "bandana_tails", "bandana_tail_lower"):
         cur_xf = scene.get_node_transform(head_child)
         cur_t = np.asarray(cur_xf.translation, dtype=np.float64) if cur_xf is not None else np.zeros(3)
         scene.attach_world_node(head_child, "head_group", preserve_world_pose=False)

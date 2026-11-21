@@ -132,16 +132,15 @@ def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
         rx = p[:, 0] - hc[0]
         ry = p[:, 1] - hc[1]
         rz = p[:, 2] - hc[2]
-        # 1. Slim width-wise (`0.82x` X -> eyes span full head width like `ORIG agst301`) & depth-wise (`0.86x` Z).
+        # 1. Slim width-wise (`0.84x` X -> eyes span full head width like `ORIG agst301`) & depth-wise (`0.86x` Z).
         p[:, 0] = hc[0] + x_scale * rx
         p[:, 2] = hc[2] + z_scale * rz
-        # 2. Gentle crown lift (+0.010 Y) + smooth upper-back corner rounding (+0.016 Z tuck)
-        #    so the tilted-up occiput reads as a compact rounded ant cranium, never a rear cone!
-        up_w = _smoothstep(-0.010, 0.145, ry)
-        rear_w = _smoothstep(0.055, -0.095, rz)
+        # 2. Smoothly lower the tall forehead (~38 mm less crown height above the eyes, keeping a
+        #    cute rounded top arch — never flat) and gently round the upper-back occiput corner.
+        crown_t = np.clip((ry - 0.045) / 0.143, 0.0, 1.0)
         corner_w = _smoothstep(0.030, 0.145, ry) * _smoothstep(-0.020, -0.135, rz)
-        p[:, 1] += 0.010 * up_w * rear_w - 0.008 * corner_w
-        p[:, 2] += 0.016 * corner_w
+        p[:, 1] -= 0.038 * (crown_t ** 1.45) + 0.005 * corner_w
+        p[:, 2] += 0.014 * corner_w
         return p
 
     head_parts = scene.get_node("head")
