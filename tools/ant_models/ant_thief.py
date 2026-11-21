@@ -85,8 +85,10 @@ GAZE_ANGLE = 0.72
 _LID_REST_DROOP = 0.0
 _THIEF_BLINK_ANGLE = EYELID_CLOSED_ANGLE + 0.04
 
-# Low stealthy sneaking crouch calibrated directly against `atst301`/`atst201`/`atst901` (`#364`/`#366`).
-THIEF_CROUCH = 0.180
+# Low stealthy sneaking crouch (`0.215`, paired with `_THIEF_UNIFORM_SCALE` below to shorten
+# Thief's legs ~20% while keeping total world height unchanged at ~0.79).
+THIEF_CROUCH = 0.215
+_THIEF_UNIFORM_SCALE = 1.045
 
 # Nimble asymmetric rogue arm pose anchored cleanly at `core`'s narrow petite shoulders (±0.078, 0.456 - c, 0.014).
 _THIEF_ARM_LEFT = [
@@ -1091,12 +1093,13 @@ def _add_thief_idle_animation(scene: SceneBuilder) -> None:
         return xf.rotation if xf is not None else (0.0, 0.0, 0.0, 1.0)
 
     channels: List[AnimationChannel] = []
-    # Authentic `atst301` crouched weight-shift: slide +-0.050 in X with +0.022 center arc-hop lift
-    # and natural lean roll into the planted left/right leg (legs stay grounded at Y = 0.0).
+    # Authentic `atst301` crouched weight-shift: slide +-0.042 in X (proportional to the
+    # shorter crouched legs) with a coiled -0.006 hold settle, +0.020 center arc-hop lift,
+    # and natural lean roll into the planted left/right leg (feet stay glued at Y = 0.0).
     bx, by, bz = _rest_t("upper_body")
-    body_dxs = [-0.048, -0.050, -0.048, 0.000, +0.048, +0.050, +0.050, +0.048, 0.000, -0.048]
-    body_dys = [0.000, 0.007, 0.000, 0.022, 0.003, 0.000, 0.007, 0.000, 0.022, 0.000]
-    body_rolls = [+0.095, +0.100, +0.095, 0.000, -0.095, -0.100, -0.100, -0.095, 0.000, +0.095]
+    body_dxs = [-0.040, -0.042, -0.040, 0.000, +0.040, +0.042, +0.042, +0.040, 0.000, -0.040]
+    body_dys = [0.000, -0.006, 0.000, 0.020, 0.002, 0.000, -0.006, 0.000, 0.020, 0.000]
+    body_rolls = [+0.086, +0.090, +0.086, 0.000, -0.086, -0.090, -0.090, -0.086, 0.000, +0.086]
     body_yaws = [-0.030, -0.032, -0.030, 0.000, +0.030, +0.032, +0.032, +0.030, 0.000, -0.030]
     body_r0 = _rest_r("upper_body")
     channels.append(
@@ -1280,6 +1283,8 @@ def build_thief(blink: float = 0.0, gaze: float = -1.0) -> SceneBuilder:
             scale=ub_xf.scale,
         )
 
+    # Uniformly re-scale so deeper leg crouch keeps Thief's exact ~0.79 world height with shorter stouter legs.
+    scene.scale_all(_THIEF_UNIFORM_SCALE)
     scene.ground_to_y(0.0)
     _add_thief_idle_animation(scene)
     return scene
