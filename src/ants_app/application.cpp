@@ -351,6 +351,7 @@ bool Application::init(const ApplicationConfig& config) {
                 join_seat = kept->seat;
             }
         }
+        if (!config_.net_extra_ca_pem.empty()) net_->set_extra_trusted_ca_pem(config_.net_extra_ca_pem);
         const bool ok = host_role                   ? net_->host(config_.net_port, player_name, config_.net_loopback_only)
                         : !config_.net_url.empty() ? net_->join_url(config_.net_url, player_name, join_seat, config_.net_room, config_.net_token, join_key)
                                                    : net_->join(config_.net_address, config_.net_port, player_name, join_seat, config_.net_room, config_.net_token, join_key);
@@ -358,11 +359,15 @@ bool Application::init(const ApplicationConfig& config) {
 #if defined(__EMSCRIPTEN__)
             std::cerr << "[Application] Could not join " << config_.net_url << " (not a usable ws:// or wss:// address, or this browser has no WebSocket)" << std::endl;
 #else
-            std::cerr << "[Application] Could not join " << config_.net_url << ": --join-url works in the web build only, a native game joins with --join host[:port]" << std::endl;
+            std::cerr << "[Application] Could not join " << config_.net_url << ": " << (net_->join_refusal().empty() ? std::string("the link could not be made") : net_->join_refusal()) << std::endl;
 #endif
             return false;
         }
         if (!ok) {
+            if (!host_role && !net_->join_refusal().empty()) {
+                std::cerr << "[Application] Could not join " << config_.net_address << ":" << config_.net_port << ": " << net_->join_refusal() << std::endl;
+                return false;
+            }
             std::cerr << "[Application] Could not " << (host_role ? "open a room on port " : "reach the host at ")
                       << (host_role ? std::to_string(config_.net_port)
                                     : !config_.net_url.empty() ? config_.net_url : config_.net_address + ":" + std::to_string(config_.net_port))

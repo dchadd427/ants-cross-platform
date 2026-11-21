@@ -4,6 +4,7 @@
 // in-memory link of the tests. Nothing here blocks: the game polls it from its main loop (a WebAssembly build has no threads).
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace ants::net {
@@ -25,6 +26,8 @@ public:
     /// frame a second (a hidden tab) can tell a Pong that has just come from one that waited for the next frame. 0 for a transport that cannot: a native socket is read when
     /// the game polls it, so what it returns is as old as the frame that polls it is late (a frame of a window at 60 Hz: up to 16.7 ms).
     virtual uint32_t last_message_age_ms() const { return 0; }
+    /// Why a Failed connection failed, in words for a player, for a transport that can tell (the encrypted link says that a certificate was not trusted, for example); empty for one that cannot
+    virtual std::string failure_text() const { return std::string(); }
 };
 
 }  // namespace ants::net

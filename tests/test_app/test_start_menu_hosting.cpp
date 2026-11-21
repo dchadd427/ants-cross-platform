@@ -253,25 +253,46 @@ void run_start_menu_hosting_tests() {
         ASSERT_TRUE(index == 5);
     } TEST_END();
 
-    TEST_CASE("M5.1 Servers: HOST, HOST:PORT, IPv4, [IPv6] and [IPv6]:PORT are read (the port 4001 when none is given); anything else is refused with a reason; what the screen shows reads back") {
-        struct Good { const char* text; const char* host; uint16_t port; };
+    TEST_CASE("M5.1 Servers: wss://HOST[:PORT][/PATH] is the encrypted door; HOST[:PORT] is the wss door for a host of the Internet (443, /ws) and plain TCP (4001) for this machine or the local network; tcp:// forces plain TCP; anything else is refused with a reason, ws:// with its own; what the screen shows reads back") {
+        struct Good { const char* text; const char* host; uint16_t port; bool tcp; const char* path; };
         const Good good[] = {
-            {"beta.playants.org", "beta.playants.org", 4001}, {"beta.playants.org:4001", "beta.playants.org", 4001}, {"localhost:1", "localhost", 1},
-            {"127.0.0.1:65535", "127.0.0.1", 65535}, {"  example.org:80  ", "example.org", 80}, {"my_host-1.local", "my_host-1.local", 4001},
-            {"[::1]:4010", "::1", 4010}, {"[::1]", "::1", 4001}, {"::1", "::1", 4001}, {"fe80::1:2", "fe80::1:2", 4001}, {"a", "a", 4001},
+            {"beta.playants.org", "beta.playants.org", 443, false, "/ws"}, {"beta.playants.org:4001", "beta.playants.org", 4001, false, "/ws"}, {"beta.playants.org:8443", "beta.playants.org", 8443, false, "/ws"},
+            {"  example.org:80  ", "example.org", 80, false, "/ws"}, {"2001:db8::1", "2001:db8::1", 443, false, "/ws"}, {"[2606:4700::1111]:9", "2606:4700::1111", 9, false, "/ws"},
+            {"wss://beta.playants.org/ws", "beta.playants.org", 443, false, "/ws"}, {"WSS://Play.Example.org:8443/x/y?z=1", "play.example.org", 8443, false, "/x/y?z=1"}, {"wss://example.org", "example.org", 443, false, "/"},
+            {"wss://[2001:db8::7]:4443/ws", "2001:db8::7", 4443, false, "/ws"}, {"wss://localhost:9/ws", "localhost", 9, false, "/ws"},
+            {"localhost", "localhost", 4001, true, "/ws"}, {"localhost:1", "localhost", 1, true, "/ws"}, {"127.0.0.1:65535", "127.0.0.1", 65535, true, "/ws"}, {"192.168.1.20", "192.168.1.20", 4001, true, "/ws"},
+            {"10.0.0.5:4002", "10.0.0.5", 4002, true, "/ws"}, {"172.16.9.9", "172.16.9.9", 4001, true, "/ws"}, {"my_host-1.local", "my_host-1.local", 4001, true, "/ws"}, {"box.lan:7", "box.lan", 7, true, "/ws"},
+            {"[::1]:4010", "::1", 4010, true, "/ws"}, {"[::1]", "::1", 4001, true, "/ws"}, {"::1", "::1", 4001, true, "/ws"}, {"fe80::1:2", "fe80::1:2", 4001, true, "/ws"}, {"a", "a", 4001, true, "/ws"},
+            {"tcp://example.org:4001", "example.org", 4001, true, "/ws"}, {"tcp://example.org", "example.org", 4001, true, "/ws"}, {"TCP://203.0.113.9:5", "203.0.113.9", 5, true, "/ws"},
         };
         for (const Good& g : good) {
             ServerAddress s;
             std::string why;
             ASSERT_TRUE(parse_server(g.text, s, why));
-            ASSERT_TRUE(s.host == g.host && s.port == g.port);
+            ASSERT_TRUE(s.host == g.host && s.port == g.port && s.tcp == g.tcp);
+            if (!g.tcp) ASSERT_EQ(s.path, std::string(g.path));
             ServerAddress back;
             ASSERT_TRUE(parse_server(server_label(s), back, why) && back == s);            // the label is a server again
+            ASSERT_EQ(server_url(s).empty(), g.tcp);                                       // (a wss server has a URL, a plain one has none)
         }
-        ASSERT_EQ(server_label(ServerAddress{}), std::string("beta.playants.org:4001"));
-        ASSERT_EQ(server_label(ServerAddress{"::1", 4010}), std::string("[::1]:4010"));
+        ASSERT_EQ(server_label(ServerAddress{}), std::string("wss://beta.playants.org/ws"));
+        ASSERT_EQ(server_url(ServerAddress{}), std::string("wss://beta.playants.org/ws"));
+        ASSERT_EQ(server_display(ServerAddress{}), std::string("beta.playants.org"));
+        ASSERT_EQ(server_display(ServerAddress{"example.org", 8443}), std::string("example.org:8443"));
+        ASSERT_EQ(server_display(ServerAddress{"example.org", 443, false, "/play"}), std::string("example.org/play"));
+        ASSERT_EQ(server_label(ServerAddress{"::1", 4010, true}), std::string("[::1]:4010"));
+        ASSERT_EQ(server_label(ServerAddress{"192.168.1.20", 4001, true}), std::string("192.168.1.20:4001"));
+        ASSERT_EQ(server_label(ServerAddress{"example.org", 4001, true}), std::string("tcp://example.org:4001"));      // (a plain server of the Internet reads back as itself)
+        ASSERT_EQ(server_display(ServerAddress{"192.168.1.20", 4001, true}), std::string("192.168.1.20:4001"));
+        ServerAddress ws_plain;
+        std::string why_ws;
+        ServerAddress other;
+        std::string why_other;
+        ASSERT_FALSE(parse_server("ws://example.org/ws", ws_plain, why_ws));
+        ASSERT_FALSE(parse_server("ftp://example.org", other, why_other));
+        ASSERT_NE(why_ws, why_other);                                                      // (the refusal of an unencrypted WebSocket says that it is unencrypted)
         const char* bad[] = {"", "   ", "host:", "host:0", "host:65536", "host:99999999", "host:-1", "host:12a", "host name", "ho$t", ".host", "-host", "a..b", "[::1", "[::1]x",
-                             "[::1]:", "[host]:1", "[]", "http://x", "a:b:c:zz", "host:4001:1", "tab\thost", "[1:2]", "[abc]", "host:4294967297", "host:99999999999999999999", "host:4294967296", "host:1 2"};
+                             "[::1]:", "[host]:1", "[]", "http://x", "wss://", "wss://x:0/", "wss://x/a b", "ws://x", "tcp://", "tcp://x:0", "a:b:c:zz", "host:4001:1", "tab\thost", "[1:2]", "[abc]", "host:4294967297", "host:99999999999999999999", "host:4294967296", "host:1 2"};
         for (const char* text : bad) {
             ServerAddress s;
             std::string why;
@@ -644,7 +665,7 @@ void run_start_menu_hosting_tests() {
         ASSERT_TRUE(menu_for({}).start_menu);                                               // a native game started with nothing on the command line
         // the options that choose a mode: each skips the menu (today's start exactly)
         const std::vector<std::vector<std::string>> skipping = {
-            {"--map", "Original-Ants/Maps/TINY.LVL"}, {"--map-select"}, {"--play"}, {"--host"}, {"--host", "4002"}, {"--join", "127.0.0.1:4001"}, {"--join-url", "ws://x/ws"}, {"--room", "abc"},
+            {"--map", "Original-Ants/Maps/TINY.LVL"}, {"--map-select"}, {"--play"}, {"--host"}, {"--host", "4002"}, {"--join", "127.0.0.1:4001"}, {"--join-url", "wss://x/ws"}, {"--room", "abc"},
             {"--token", "t"}, {"--seat", "1"}, {"--bot", "1:easy"}, {"--alone"}, {"--headless"}, {"--screenshot", "x.png"}, {"--player", "1"}, {"-pnum:1"}, {"-pnum=2"}, {"--select-ant", "3"},
             {"--select-base", "1"}, {"--open-options"}, {"--scorecard"}};
         for (const auto& args : skipping) {
@@ -672,7 +693,7 @@ void run_start_menu_hosting_tests() {
         }
         // the menu comes first and chooses the match: an option that starts a match or a room at once cannot be combined with it
         for (const auto& args : std::vector<std::vector<std::string>>{{"--start-menu", "--map", "x.lvl"}, {"--start-menu", "--host"}, {"--start-menu", "--join", "h:1"},
-                                                                       {"--join-url", "ws://x", "--start-menu"}, {"--start-menu", "--open-options"}, {"--start-menu", "--scorecard"}}) {
+                                                                       {"--join-url", "wss://x", "--start-menu"}, {"--start-menu", "--open-options"}, {"--start-menu", "--scorecard"}}) {
             const ApplicationConfig c = menu_for(args);
             ASSERT_FALSE(c.startup_error.empty());
             ASSERT_TRUE(c.startup_error.find("--start-menu") != std::string::npos);
@@ -788,7 +809,7 @@ void run_start_menu_hosting_tests() {
         const std::string refusal_start = "--game-mode ";
         for (const auto& args : std::vector<std::vector<std::string>>{{"--replay", "x.antsrep", "--game-mode", "187"}, {"--game-mode", "187", "--replay", "x.antsrep"},
                                                                     {"--join", "127.0.0.1:4001", "--game-mode", "187"}, {"--game-mode", "187", "--join", "127.0.0.1:4001"},
-                                                                    {"--join-url", "ws://x/ws", "--game-mode", "187"}, {"--game-mode", "187", "--join-url", "ws://x/ws"},
+                                                                    {"--join-url", "wss://x/ws", "--game-mode", "187"}, {"--game-mode", "187", "--join-url", "wss://x/ws"},
                                                                     {"--room", "abc", "--game-mode", "187"}, {"--game-mode", "187", "--room", "abc"},
                                                                     {"--room-map", "tiny", "--game-mode", "187"}, {"--game-mode", "187", "--room-map", "tiny"},       // (the options of the room that a server makes when a join finds none: the room's rules are the creator's plan, not this word)
                                                                     {"--room-seats", "3", "--game-mode", "187"}, {"--game-mode", "187", "--room-seats", "3"},

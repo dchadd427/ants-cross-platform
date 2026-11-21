@@ -4,7 +4,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 
+#include "ants_net/address.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_sim/game_strings.hpp"
 #include "ants_sim/sim_engine.hpp"
@@ -151,14 +153,28 @@ sim::StartTeams offered_teams(const sim::StartTeams& stored, int players) {
 
 ButtonRect centred_button(int32_t y, int32_t h = kButtonH) { return ButtonRect{kButtonX, y, kButtonW, h}; }
 
-}  // anonymous namespace
-
 // ---- servers, codes, names --------------------------------------------------------------------------------------------------------------------------
 
+// A host that is this machine's or a local network's: an address of a private range (net::is_local_address), localhost, a name that ends in .local, .lan, .localdomain or .home.arpa, or a name of one word
+bool local_host(const std::string& host) {
+    if (net::is_local_address(host)) return true;
+    std::string lower = host;
+    for (char& c : lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    if (lower.find(':') != std::string::npos) return false;
+    if (lower == "localhost" || lower.find('.') == std::string::npos) return true;
+    for (const char* suffix : {".localhost", ".local", ".lan", ".localdomain", ".home.arpa"}) {
+        const size_t n = std::strlen(suffix);
+        if (lower.size() > n && lower.compare(lower.size() - n, n, suffix) == 0) return true;
+    }
+    return false;
+}
+
+}  // anonymous namespace
+
 bool parse_server(const std::string& text_in, ServerAddress& out, std::string& why) {
-    const std::string text = trim_blanks(text_in);
+    std::string text = trim_blanks(text_in);
     if (text.empty()) {
-        why = "The server is empty: write HOST or HOST:PORT, for example beta.playants.org:4001.";
+        why = "The server is empty: write HOST or wss://HOST/ws, for example wss://beta.playants.org/ws.";
         return false;
     }
     for (char c : text) {
@@ -166,6 +182,36 @@ bool parse_server(const std::string& text_in, ServerAddress& out, std::string& w
             why = "The server '" + text + "' holds a blank or a character that cannot be part of an address.";
             return false;
         }
+    }
+    std::string lower_head = text.substr(0, 6);
+    for (char& c : lower_head) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    if (lower_head == "wss://") {                                  // the encrypted door, written out
+        net::WssUrl url;
+        if (!net::parse_wss_url(text, url, why)) {
+            why = "The server '" + text + "': " + why;
+            return false;
+        }
+        out.host = url.host;
+        out.port = url.port;
+        out.tcp = false;
+        out.path = url.target;
+        return true;
+    }
+    if (lower_head.compare(0, 5, "ws://") == 0 || lower_head.compare(0, 4, "ws:/") == 0) {
+        why = "The server '" + text + "' is not encrypted: write wss://HOST/ws (the game sends no chat line or seat key over an unencrypted WebSocket).";
+        return false;
+    }
+    bool explicit_tcp = false;
+    if (lower_head.compare(0, 6, "tcp://") == 0) {
+        explicit_tcp = true;
+        text = text.substr(6);
+        if (text.empty()) {
+            why = "The server 'tcp://' has no host.";
+            return false;
+        }
+    } else if (text.find("://") != std::string::npos) {
+        why = "The server '" + text + "': write HOST, wss://HOST/ws or tcp://HOST:PORT.";
+        return false;
     }
     std::string host;
     std::string port_text;
@@ -218,7 +264,8 @@ bool parse_server(const std::string& text_in, ServerAddress& out, std::string& w
             }
         }
     }
-    uint16_t port = kDefaultServerPort;
+    const bool tcp = explicit_tcp || local_host(host);
+    uint16_t port = tcp ? kLocalServerPort : kDefaultServerPort;
     if (!port_text.empty()) {
         uint32_t value = 0;
         for (char c : port_text) {
@@ -236,12 +283,34 @@ bool parse_server(const std::string& text_in, ServerAddress& out, std::string& w
     }
     out.host = host;
     out.port = port;
+    out.tcp = tcp;
+    out.path = kDefaultServerPath;
     return true;
 }
 
-std::string server_label(const ServerAddress& server) {
+std::string server_url(const ServerAddress& server) {
+    if (server.tcp) return std::string();
+    net::WssUrl url;
+    url.host = server.host;
+    url.port = server.port;
+    url.target = server.path;
+    return net::wss_url_text(url);
+}
+
+std::string server_display(const ServerAddress& server) {
     const bool v6 = server.host.find(':') != std::string::npos;
-    return (v6 ? "[" + server.host + "]" : server.host) + ":" + std::to_string(server.port);
+    std::string out = v6 ? "[" + server.host + "]" : server.host;
+    if (server.tcp) return out + ":" + std::to_string(server.port);
+    if (server.port != kDefaultServerPort) out += ":" + std::to_string(server.port);
+    if (server.path != kDefaultServerPath) out += server.path;
+    return out;
+}
+
+std::string server_label(const ServerAddress& server) {
+    if (!server.tcp) return server_url(server);
+    const bool v6 = server.host.find(':') != std::string::npos;
+    const std::string plain = (v6 ? "[" + server.host + "]" : server.host) + ":" + std::to_string(server.port);
+    return local_host(server.host) ? plain : "tcp://" + plain;
 }
 
 const char* seat_choice_text(SeatChoice choice) noexcept {
@@ -689,7 +758,7 @@ void StartMenu::add_message(std::vector<MenuElement>& out, int32_t y, int32_t h,
 }
 
 void StartMenu::add_server_line(std::vector<MenuElement>& out, int32_t y) const {
-    MenuElement e = control(MenuId::None, MenuKind::Text, ButtonRect{kTextX, y, kTextW, 14}, "Server: " + server_label(server_), FontSize::Px12);
+    MenuElement e = control(MenuId::None, MenuKind::Text, ButtonRect{kTextX, y, kTextW, 14}, "Server: " + server_display(server_), FontSize::Px12);
     e.tone = MenuTone::Dim;
     e.centered = true;
     e.group = MenuGroup::Bottom;
@@ -1007,7 +1076,7 @@ void StartMenu::try_join() {
     if (!check_room_code(code_, clean_code, why)) return refuse(why, MenuId::Code);
     message_.clear();
     origin_ = MenuPanel::Join;
-    connecting_text_ = "Connecting to " + server_label(server_) + "...";
+    connecting_text_ = "Connecting to " + server_display(server_) + "...";
     go(MenuPanel::Connecting);
     request(MenuRequest::Type::Join);
     request_.name = clean_name;
@@ -1020,7 +1089,7 @@ void StartMenu::try_host() {
     if (!check_player_name(name_, clean_name, why)) return refuse(why, MenuId::HostName);
     message_.clear();
     origin_ = MenuPanel::Host;
-    connecting_text_ = "Connecting to " + server_label(server_) + "...";
+    connecting_text_ = "Connecting to " + server_display(server_) + "...";
     const int map = settings_.host_map;
     const int players = settings_.host_players;
     const net::FillPlan fill = host_fill();

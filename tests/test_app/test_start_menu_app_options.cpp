@@ -454,7 +454,7 @@ void run_start_menu_app_options_tests() {
             const auto slow = std::make_shared<Lookup>();
             for (const bool host : {false, true}) {
                 Application app;
-                ApplicationConfig cfg = menu_config("slow.example.org:4001", ini(temp, host ? "c2.ini" : "c1.ini"));
+                ApplicationConfig cfg = menu_config("tcp://slow.example.org:4001", ini(temp, host ? "c2.ini" : "c1.ini"));
                 cfg.host_resolver = lookup_of(slow);
                 ASSERT_TRUE(app.init(cfg));
                 if (host) menu_host(app, "Dave", 0, 0);
@@ -806,7 +806,7 @@ void run_start_menu_app_options_tests() {
             Application app;
             const auto lookup = std::make_shared<Lookup>();
             Hall hall{nullptr, &app, {}, nullptr, false};
-            ApplicationConfig cfg = menu_config("never.example.org:4001", ini(temp, "a.ini"));
+            ApplicationConfig cfg = menu_config("tcp://never.example.org:4001", ini(temp, "a.ini"));
             cfg.host_resolver = lookup_of(lookup);
             ASSERT_TRUE(app.init(cfg));
             menu_join(app, "Dave", "abc-1");
@@ -888,7 +888,7 @@ void run_start_menu_app_options_tests() {
         TempDir temp;
         {   // the system has no thread to give
             Application app;
-            ApplicationConfig cfg = menu_config("somewhere.example.org:4001", ini(temp, "a.ini"));
+            ApplicationConfig cfg = menu_config("tcp://somewhere.example.org:4001", ini(temp, "a.ini"));
             cfg.host_resolver = [](const std::string&, std::string&, std::string&) { return false; };
             cfg.host_launcher = [](std::function<void()>) { throw std::system_error(std::make_error_code(std::errc::resource_unavailable_try_again)); };
             ASSERT_TRUE(app.init(cfg));
