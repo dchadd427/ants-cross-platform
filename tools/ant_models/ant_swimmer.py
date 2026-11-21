@@ -53,12 +53,12 @@ except ImportError:
         torus_arc,
     )
 
-# Lowered right-arm grip starting at slim thorax shoulder (-0.078, 0.456, 0.014) holding horizontal beach shovel.
+# Sporty right-arm grip starting at slim thorax shoulder (-0.078, 0.456, 0.014) holding coplanar beach shovel.
 _SWIMMER_RIGHT_ARM: List[Tuple[float, float, float]] = [
     (-0.078, 0.456, 0.014),
-    (-0.178, 0.370, 0.018),
-    (-0.228, 0.292, 0.046),
-    (-0.240, 0.268, 0.066),
+    (-0.184, 0.382, 0.018),
+    (-0.236, 0.314, 0.046),
+    (-0.248, 0.296, 0.066),
 ]
 
 
@@ -730,10 +730,13 @@ def _build_shovel(
         cylinder(0.019, 0.030, neck_front_z - neck_back_z, radial_segs=18, bevel=0.005, axis="z", name="shovel_neck", material="gear_yellow_plastic")
         .scale(1.22, 0.78, 1.0)
         .translate(0.0, 0.004, 0.5 * (neck_back_z + neck_front_z))
+        .rotate_xyz(rz=-90.0, degrees=True)
     )
     parts.append(neck)
 
-    # 3. Wide flat-front square U-shaped sandbox scoop blade (`blade_w = 0.252`, ZERO pointed tip!).
+    # 3. Wide flat-front square U-shaped sandbox scoop blade (`blade_w = 0.252`, ZERO pointed tip!),
+    # rotated -90 deg around the shaft (+Z) so the flat blade width is 100% coplanar / parallel with
+    # the back D-handle crossbar in YZ (scoop bowl facing +X inward toward Swimmer, like a real shovel!).
     blade_w = 0.252
     blade_l = 0.246
     blade_start_z = neck_front_z - 0.016
@@ -774,10 +777,11 @@ def _build_shovel(
         _subdivided_slab(blade_w, 0.018, blade_l, bevel=0.005, nx=22, ny=4, nz=20, name="shovel_blade", material="gear_yellow_plastic")
         .deform(_sculpt_square_scoop)
         .translate(0.0, 0.0, blade_cz)
+        .rotate_xyz(rz=-90.0, degrees=True)
     )
     parts.append(blade_core)
 
-    # Molded central rear strengthening rib flaring cleanly from shaft neck into the rear heel.
+    # Molded central rear strengthening rib flaring cleanly from shaft neck into the rear heel (coplanar!).
     blade_spine = (
         lathe(
             [(0.023, 0.000), (0.017, 0.028), (0.010, 0.058), (0.000, 0.080)],
@@ -790,13 +794,14 @@ def _build_shovel(
         )
         .scale(1.15, 0.58, 1.0)
         .translate(0.0, 0.004, blade_start_z + 0.006)
+        .rotate_xyz(rz=-90.0, degrees=True)
     )
     parts.append(blade_spine)
 
-    # Clockwise inward bowl tilt (`rz = -30 deg` around +Z, tipping the concave dig bowl cleanly clockwise
-    # toward Swimmer's body in 301 S) while exposing the wide square scoop & clearing legs & flippers.
+    # Coplanar beach shovel carry (`rz = +32 deg` tilts the YZ-coplanar handle + scoop blade cleanly
+    # inward & upward toward Swimmer's body, matching asst301/201/901 while clearing legs, flippers & ground!).
     for part in parts:
-        placed = part.rotate_xyz(rx=10.0, ry=-12.0, rz=-30.0, degrees=True)
+        placed = part.rotate_xyz(rx=-2.0, ry=-8.0, rz=+32.0, degrees=True)
         scene.add("shovel", placed)
     scene.set_node_transform("shovel", translation=(grip_x, grip_y, grip_z))
 
@@ -1160,7 +1165,7 @@ def _add_swimmer_attack(scene: SceneBuilder, water_origin: Tuple[float, float, f
                 "arm_right",
                 "rotation",
                 list(times),
-                _quat_track(_rest_r("arm_right"), [(-0.96 * rx, 0.0, -0.14 * rx) for rx in body_rx]),
+                _quat_track(_rest_r("arm_right"), [(-1.08 * rx, 0.0, -0.14 * rx) for rx in body_rx]),
             )
         )
     if "arm_left" in scene.nodes:
