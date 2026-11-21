@@ -26,6 +26,16 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.20.3 - 2026-11-21 - Images in the chat can be posted
+
+**Fixes:**
+- Images in the chat can be posted: the chat service could not write its new images folder, so posting stayed off after v0.20.2.
+
+**For operators:**
+- The hub's image makes its /images folder its own, so a new or still-empty images volume is writable by the hub (no manual step on the host).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/bdc4b393...0f09b20b)
+
 ## v0.20.2 - 2026-11-21 - Images in the chat
 
 **For players:**
