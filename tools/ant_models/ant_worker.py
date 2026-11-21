@@ -116,8 +116,8 @@ def _smoothstep(edge0: float, edge1: float, val: np.ndarray) -> np.ndarray:
 
 def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
     """Refine Worker's side profile (`agst901`): slim front-to-back cranium depth (~0.86x Z)
-    while keeping eyes, concentric Blink eyelids, and mandibles flush-seated on the face,
-    and smoothly lifting the upper-rear occipital crown (+0.036 Y, -0.012 Z).
+    with a compact, smoothly rounded rear occiput (no backward cone under -26 deg chin-up tilt),
+    keeping eyes, concentric Blink eyelids, and mandibles flush-seated on the face.
     """
     hc = np.asarray(anchors["head_center"], dtype=np.float64)
     nc = np.asarray(anchors["neck_center"], dtype=np.float64)
@@ -130,12 +130,13 @@ def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
         rz = p[:, 2] - hc[2]
         # 1. Slimmer front-to-back head depth (`agst901` ~16 px deep vs 18.6 px raw).
         p[:, 2] = hc[2] + z_scale * rz
-        # 2. Smoothly lift upper-rear occipital crown while leaving front forehead/brows untouched.
-        up_w = _smoothstep(-0.015, 0.145, ry)
-        rear_w = _smoothstep(0.055, -0.105, rz)
-        w = up_w * rear_w
-        p[:, 1] += 0.036 * w
-        p[:, 2] -= 0.012 * w
+        # 2. Gentle crown lift (+0.010 Y) + smooth upper-back corner rounding (+0.015 Z tuck)
+        #    so the tilted-up occiput reads as a compact rounded ant cranium, never a rear cone!
+        up_w = _smoothstep(-0.010, 0.145, ry)
+        rear_w = _smoothstep(0.055, -0.095, rz)
+        corner_w = _smoothstep(0.030, 0.145, ry) * _smoothstep(-0.020, -0.135, rz)
+        p[:, 1] += 0.010 * up_w * rear_w - 0.008 * corner_w
+        p[:, 2] += 0.016 * corner_w
         return p
 
     head_parts = scene.get_node("head")
