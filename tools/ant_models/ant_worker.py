@@ -156,12 +156,13 @@ def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
     scene.nodes["head"] = new_head
 
     # Shift eyes & concentric Blink eyelids cleanly backward (`face_dz`) and subtly inward;
-    # flatten sclera Z depth (`0.78x`, less bulbous/round) and aim enlarged `1.24x` pupils
-    # directly at the `301 S (45°)` comparison camera (`rx=-0.22`, inward convergence `+-0.11`).
+    # flatten sclera Z depth (`0.78x`, less bulbous/round) and seat enlarged `1.24x` pupils
+    # cleanly in the lower half (`L +0.12, R +0.18`, inward `+-0.11`) with `ORIG agst301`'s
+    # bright white upper sclera crescent while still looking straight out at `301 S (45°)`.
     z_flat = 0.78
     eye_specs = {
-        "left": (0.94, 0.92, +0.15, -0.22, -0.11),
-        "right": (1.05, 1.18, -0.15, -0.22, +0.11),
+        "left": (0.94, 0.92, +0.15, +0.12, -0.11),
+        "right": (1.05, 1.18, -0.15, +0.18, +0.11),
     }
     if "eyes" in scene.nodes:
         new_eyes = []
