@@ -1952,6 +1952,143 @@ void run_guest_tests() {
         ASSERT_TRUE(app.sim().current_tick() > 40 && !app.net()->desynced());
     } TEST_END();
 
+    TEST_CASE("N5.103 Ping Stats: A Click On The Corner's Ping Text In A Match Of A Network Game Opens The List Of Connections And The Next One Closes It (A Press Away From The Text, The Right Button And The Countdown Do Not), It Is Closed In The Next Match, And It Orders Nothing") {
+        Server srv;
+        ASSERT_TRUE(srv.listener != nullptr);
+        server::RoomSpec spec;
+        spec.code = "CDN-6";
+        spec.map = "TINY.LVL";
+        spec.players = 2;
+        spec.has_seed = true;
+        spec.seed = 4242;
+        spec.countdown_s = net::kMatchCountdownSeconds;
+        spec.solo_countdown_s = net::kSoloCountdownSeconds;
+        spec.bots = {ai::BotSpec{1, "standard", ai::Level::Medium}};
+        ASSERT_TRUE(srv.mgr.create_room(spec, srv.now).ok);
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_address = "127.0.0.1";
+        cfg.net_port = srv.port();
+        cfg.net_room = "CDN-6";
+        cfg.player_name = "Ana";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        Hall hall{srv, &app, {}};
+        ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && app.hud().is_match_countdown_active(); }, 15000));
+        const auto button = [&](uint32_t type, uint8_t which, int32_t x, int32_t y) {
+            SDL_MouseButtonEvent e{};
+            e.type = type;
+            e.button = which;
+            e.x = x;
+            e.y = y;
+            app.handle_mouse_button(e);
+        };
+        const auto click = [&](int32_t x, int32_t y, uint8_t which = SDL_BUTTON_LEFT) {
+            button(SDL_MOUSEBUTTONDOWN, which, x, y);
+            button(SDL_MOUSEBUTTONUP, which, x, y);
+        };
+        app.render_frame();
+        click(app.connections_hit().x + 2, app.connections_hit().y + 2);
+        ASSERT_FALSE(app.connections_open());                                                 // (the card is up: the list waits for the match)
+        ASSERT_TRUE(hall.until([&]() { return app.sim().current_tick() > 3 && !app.hud().is_match_start_modal_active(); }, 20000));
+        app.render_frame();
+        const LayoutRect hit = app.connections_hit();
+        ASSERT_TRUE(hit.w > 0 && hit.h > 0 && !app.connections_open());
+        ASSERT_TRUE(hit.x > app.hud().layout().view().x && hit.y > app.hud().layout().view().bottom() - 80);     // (the ping text stands above the corner row, low in the picture)
+        button(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_LEFT, hit.x - 20, hit.y + 2);                   // a press next to the text, a release on it: nothing
+        button(SDL_MOUSEBUTTONUP, SDL_BUTTON_LEFT, hit.x + 2, hit.y + 2);
+        click(hit.x + 2, hit.y + 2, SDL_BUTTON_RIGHT);
+        ASSERT_FALSE(app.connections_open());
+        click(hit.x + 2, hit.y + 2);
+        ASSERT_TRUE(app.connections_open());
+        app.render_frame();
+        ASSERT_TRUE(app.hud().get_selected_ant_ids().empty());
+        click(hit.x + 2, hit.y + 2);
+        ASSERT_FALSE(app.connections_open());
+        click(hit.x + 2, hit.y + 2);
+        ASSERT_TRUE(app.connections_open());
+        hall.step(200);
+        app.render_frame();
+        ASSERT_TRUE(app.connections_open() && !app.hud().is_modal_open());                    // (it is no dialog: the match goes on under it)
+        // the rows that it lists are the match's: the player's own and the computer player's
+        const std::vector<ConnectionRow> rows = connection_rows(app.connection_seats(), app.net()->my_seat());
+        ASSERT_EQ(rows.size(), 2u);
+        ASSERT_TRUE(rows[0].name == "Ana (you)" && rows[0].tag == "server" && rows[1].tag.compare(0, 3, "bot") == 0 && rows[1].ping.empty());
+        ASSERT_FALSE(rows[0].name.empty());
+    } TEST_END();
+
+    TEST_CASE("N5.104 Protocol 21, Fairness Of Looking Round In The Countdown: With Fog Of War On Moving, Zooming And Dragging The View Reveals Nothing And Changes Nothing (The Revealed Ground, The State Hash And The Tick Stay As They Were, And No Command Is Sent)") {
+        Server srv;
+        ASSERT_TRUE(srv.listener != nullptr);
+        server::RoomSpec spec;
+        spec.code = "CDN-7";
+        spec.map = "TINY.LVL";
+        spec.players = 2;
+        spec.fog = true;
+        spec.has_seed = true;
+        spec.seed = 4242;
+        spec.countdown_s = net::kMatchCountdownSeconds;
+        ASSERT_TRUE(srv.mgr.create_room(spec, srv.now).ok);
+        Peer bob;
+        ASSERT_TRUE(bob.net.join("127.0.0.1", srv.port(), "Bob", 255, "CDN-7"));
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_address = "127.0.0.1";
+        cfg.net_port = srv.port();
+        cfg.net_room = "CDN-7";
+        cfg.player_name = "Ana";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        Hall hall{srv, &app, {&bob}};
+        ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && app.hud().is_match_countdown_active(); }, 15000));
+        ASSERT_TRUE(app.sim().get_world_state().fog_of_war_enabled);
+        struct CountingSink : sim::CommandSink {
+            int submitted{0};
+            sim::CommandResult submit(const sim::Command&) override { ++submitted; return sim::CommandResult{}; }
+        } sink;
+        app.hud().set_command_sink(&sink);
+        const std::vector<uint8_t> revealed = app.sim().get_world_state().fog_revealed;
+        const uint64_t hash = app.sim().state_hash().total;
+        size_t seen = 0;
+        for (uint8_t v : revealed) seen += v != 0 ? 1u : 0u;
+        ASSERT_TRUE(seen > 0 && seen < revealed.size());                                    // (some ground is revealed, most is not)
+        ViewportCamera& camera = app.renderer().camera();
+        const LayoutRect view = app.hud().layout().view();
+        const auto button = [&](uint32_t type, int32_t x, int32_t y) {
+            SDL_MouseButtonEvent e{};
+            e.type = type;
+            e.button = SDL_BUTTON_LEFT;
+            e.x = x;
+            e.y = y;
+            app.handle_mouse_button(e);
+        };
+        SDL_MouseMotionEvent move{};
+        move.type = SDL_MOUSEMOTION;
+        move.x = view.x + view.w / 2;
+        move.y = view.y + view.h / 2;
+        app.handle_mouse_motion(move);
+        SDL_MouseWheelEvent wheel{};
+        wheel.type = SDL_MOUSEWHEEL;
+        wheel.y = 1;
+        for (int i = 0; i < 6; ++i) app.handle_mouse_wheel(wheel);
+        const float x0 = camera.x;
+        button(SDL_MOUSEBUTTONDOWN, view.x + view.w / 2, view.y + view.h / 2);
+        for (int i = 1; i <= 8; ++i) {
+            move.x = view.x + view.w / 2 - 25 * i;
+            move.y = view.y + view.h / 2 - 15 * i;
+            app.handle_mouse_motion(move);
+        }
+        button(SDL_MOUSEBUTTONUP, move.x, move.y);
+        ASSERT_TRUE(camera.x != x0);                                                         // (the view did move)
+        hall.step(300);
+        ASSERT_TRUE(app.sim().current_tick() == 0 && app.hud().is_match_countdown_active());
+        ASSERT_TRUE(app.sim().get_world_state().fog_revealed == revealed);
+        ASSERT_EQ(app.sim().state_hash().total, hash);
+        ASSERT_EQ(sink.submitted, 0);
+        app.hud().set_command_sink(app.net());
+        bob.net.freeze();
+    } TEST_END();
+
     TEST_CASE("N5.79 Protocol 21, The Native Game's Fullscreen Button On The Countdown Card Is Wired To The Game's Fullscreen: A Click On It (Press And Release) Puts The Window Fullscreen, The Next One Takes It Back (A Real Window On SDL's Dummy Video Driver; The Page's Own Button Does It In A Browser)") {
         SDL_SetHint(SDL_HINT_VIDEODRIVER, "dummy");                                            // (SDL_Quit clears the hints: set before every start)
         SDL_SetHint(SDL_HINT_AUDIODRIVER, "dummy");

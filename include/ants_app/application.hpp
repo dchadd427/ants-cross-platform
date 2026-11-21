@@ -610,6 +610,7 @@ public:
     /// The list of connections of a match of a network game (connections_overlay.hpp): open or not, and the rectangle of the corner's "ping" text that opens and closes it (empty when the corner shows none)
     bool connections_open() const noexcept { return connections_open_; }
     const LayoutRect& connections_hit() const noexcept { return connections_hit_; }
+    std::array<CountdownSeat, 4> connection_seats() const;  // who plays and how this machine is connected to each (the card's rows, and the list's, in the match)
     /// The line that a match of the network shows at the top of the playfield right now (an empty text: nothing, and always for a game that is not a match of the network): the one that
     /// render_net_overlay draws, from what the network layer reports. Public for the tests (the seconds before the first turn of a match must say nothing)
     NetOverlayLine net_overlay_now() const;
@@ -913,7 +914,6 @@ private:
     bool handle_vote_mouse(const SDL_MouseButtonEvent& button);   // a click on a button of the vote block
     void render_latency_corner(int32_t version_x, int32_t text_y, const CornerPlate& plate);       // "ping NN ms" / "delay NN ms" next to the frame rate, in a room and a match of a network game
     void render_connections();                            // the list of connections over the map view of a match of a network game, when it is open (connections_overlay.hpp)
-    std::array<CountdownSeat, 4> connection_seats() const;  // who plays and how this machine is connected to each (the card's rows, in the match)
     bool handle_connections_mouse(const SDL_MouseButtonEvent& button);   // a press and a release on the corner's ping text open and close the list (nothing of it reaches the map)
     std::optional<LatencyCornerLayout> last_latency_layout_;                                         // where the last frame put the network's readout (none: it drew none)
     void apply_team_names(const std::array<std::string, 4>& names, uint8_t roster);   // simulation texts, HUD labels, results rows

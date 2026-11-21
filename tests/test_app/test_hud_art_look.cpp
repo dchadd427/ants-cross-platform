@@ -744,6 +744,48 @@ void test_windows_more(const assets::AssetArchive& arc, const Art& art) {
             }
             for (int32_t x = 100; x < 100 + w; ++x) below += px[(static_cast<size_t>(215) * 960u + static_cast<size_t>(x)) * 4u] == 219 ? 0 : 1;
             check(ink > 300 && below == 0, "the real renderer draws the sentence in the dialogs' ink on its baseline (and nothing 15 pixels below it)");
+            // the game's own face at any size (the countdown card writes in it at the card's scale)
+            check(rig.renderer.face_text_ready(), "the real renderer has the game's face");
+            const int32_t fw = rig.renderer.face_text_width("38 ms", 135);
+            check(fw > 15 && rig.renderer.face_text_width("38 ms", 270) > fw * 3 / 2 && rig.renderer.face_text_width("", 135) == 0, "the game's face: a larger size is wider (" + std::to_string(fw) + " at 13.5 pixels), no text no width");
+            rig.renderer.begin_frame();
+            rig.renderer.fill_rect(0, 0, 960, 540, assets::ColorRGBA{20, 20, 20, 255});
+            rig.renderer.draw_face_text("38 ms", 100, 300, assets::ColorRGBA{154, 240, 180, 255}, 135);
+            const std::vector<uint8_t> fpx = rig.read();
+            int lit = 0, under = 0;
+            for (int32_t y = 288; y < 301; ++y) {
+                for (int32_t x = 100; x < 100 + fw; ++x) lit += fpx[(static_cast<size_t>(y) * 960u + static_cast<size_t>(x)) * 4u + 1] > 150 ? 1 : 0;
+            }
+            for (int32_t x = 100; x < 100 + fw; ++x) under += fpx[(static_cast<size_t>(310) * 960u + static_cast<size_t>(x)) * 4u + 1] > 30 ? 1 : 0;
+            check(lit > 20 && under == 0, "the game's face: the line stands on its baseline in its color");
+            // the alpha scale: what is drawn under it keeps that share of its opacity
+            rig.renderer.begin_frame();
+            rig.renderer.fill_rect(0, 0, 960, 540, assets::ColorRGBA{0, 0, 0, 255});
+            rig.renderer.set_alpha_scale(128);
+            rig.renderer.fill_rect(10, 10, 20, 20, assets::ColorRGBA{200, 100, 50, 255});
+            rig.renderer.draw_face_text("38 ms", 100, 300, assets::ColorRGBA{200, 200, 200, 255}, 135);
+            rig.renderer.set_alpha_scale(255);
+            rig.renderer.fill_rect(40, 10, 20, 20, assets::ColorRGBA{200, 100, 50, 255});
+            const std::vector<uint8_t> apx = rig.read();
+            const auto at = [&](int32_t x, int32_t y, size_t c) { return static_cast<int>(apx[(static_cast<size_t>(y) * 960u + static_cast<size_t>(x)) * 4u + c]); };
+            check(std::abs(at(20, 20, 0) - 100) <= 2 && std::abs(at(20, 20, 1) - 50) <= 2 && at(50, 20, 0) == 200, "the alpha scale: a fill under 128 is half of itself over what is behind, after it is whole again");
+            int dim = 0;
+            for (int32_t x = 100; x < 100 + fw; ++x) dim += at(x, 296, 0) > 0 && at(x, 296, 0) <= 130 ? 1 : 0;
+            check(rig.renderer.alpha_scale() == 255 && dim > 0, "the alpha scale: the game's face is dimmed by it too");
+            // a sheet of the card's own choice: the 11 x 11 color square of the first seat drawn at 33 x 33 from the 3x sheet is the sheet's pixels, 3 to a pixel
+            const int32_t dot = art.find_sprite("cd_dot_0");
+            check(dot >= 0, "the color square is in the set");
+            if (dot >= 0) {
+                rig.renderer.begin_frame();
+                rig.renderer.fill_rect(0, 0, 960, 540, assets::ColorRGBA{255, 0, 255, 255});
+                rig.renderer.set_art_scale(3);
+                rig.renderer.draw_art(art, dot, 100, 100, 33, 33, 0, 0, 11, 11);
+                rig.renderer.set_art_scale(0);
+                const std::vector<uint8_t> dpx = rig.read();
+                const auto dc = [&](int32_t x, int32_t y, size_t c) { return static_cast<int>(dpx[(static_cast<size_t>(y) * 960u + static_cast<size_t>(x)) * 4u + c]); };
+                check(std::abs(dc(116, 116, 0) - 63) <= 2 && std::abs(dc(116, 116, 1) - 174) <= 2 && std::abs(dc(116, 116, 2) - 106) <= 2, "the card's sheet: the middle of the square is its color");
+                check(dc(101, 116, 0) < 60 && dc(101, 116, 1) < 60 && std::abs(dc(100 + 4, 116, 0) - 63) <= 2 && dc(100 + 2, 116, 0) < 60 && dc(100 + 36, 116, 0) == 255, "the card's sheet: a dark rim 3 pixels wide, then the color, and nothing outside the 33 x 33");
+            }
             rig.renderer.set_dialog_font_path(art_folder() + "/no_such_face.ttf");
             check(!rig.renderer.dialog_text_ready(), "a face that does not open: no face, the original's text is drawn");
         }

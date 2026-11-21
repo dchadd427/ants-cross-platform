@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <string>
 #include <vector>
+#include "ants_app/connections_overlay.hpp"
 #include "ants_app/fps_overlay.hpp"
 #include "ants_app/hud.hpp"
 #include "ants_app/latency_corner.hpp"
@@ -172,6 +173,7 @@ void test_held_keys_on_original_screens();
 void test_button_zones(const assets::AssetArchive& arc);
 void test_latency_corner(const assets::AssetArchive& arc);
 void test_net_overlay();
+void test_connections_overlay(const assets::AssetArchive& arc);
 void test_more_button_zones(const assets::AssetArchive& arc);
 void test_pedestal_chains(const assets::AssetArchive& arc);
 void test_pedestal_timeline(const assets::AssetArchive& arc);
