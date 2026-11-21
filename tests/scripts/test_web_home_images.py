@@ -146,7 +146,7 @@ class TheStyle(unittest.TestCase):
         self.assertRegex(self.pics, r"\.gv-scrim \{[^}]*position: fixed;[^}]*inset: 0;")
         self.assertRegex(self.pics, r"\.gv-img \{[^}]*max-width: 100%;[^}]*max-height: calc")
         self.assertRegex(self.pics, r"\.gc-thumb img \{[^}]*--mw: 180px; --mh: 104px;[^}]*aspect-ratio: var\(--tw\) / var\(--th\);")
-        self.assertRegex(self.pics, r"@media \(min-width: 701px\) \{[^@]*--mw: 144px; --mh: 81px;")
+        self.assertRegex(self.pics, r"@media \(min-width: 701px\) \{[^@]*--mw: 144px; --mh: var\(--img-mh, 81px\);")
 
 
 class TheWayIntoTheImage(unittest.TestCase):

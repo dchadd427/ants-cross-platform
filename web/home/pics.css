@@ -12,10 +12,10 @@
 .gc-thumb.gc-nopic svg { flex: none; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 @media (min-width: 701px) {       /* a window: the dock is a strip (about 100 px of log), so the picture stands after the words, on the line's own row, small */
     .gc-pic { display: inline-block; vertical-align: top; margin: 1px 0 3px 10px; }
-    .gc-thumb img { --mw: 144px; --mh: 81px; }
+    .gc-thumb img { --mw: 144px; --mh: var(--img-mh, 81px); }
 }
 @media (max-width: 700px) { .gc-thumb img { --mw: 100%; --mh: 150px; } .gc-pic { margin-top: 6px; } .gp-card .gp-th { width: 96px; height: 64px; } }
-@media (max-height: 500px) and (orientation: landscape) { .gc-thumb img { --mh: 84px; } }
+@media (max-height: 500px) and (orientation: landscape) { .gc-thumb img { --mh: min(84px, var(--img-mh, 84px)); } }
 
 /* ---- the picture opened full size: a box over the page (a sheet that fills the screen on a phone) ---- */
 .gv-scrim { position: fixed; z-index: 70; inset: 0; display: flex; align-items: center; justify-content: center; padding: 18px; box-sizing: border-box; background: rgba(2, 6, 8, .985); backdrop-filter: blur(6px); }

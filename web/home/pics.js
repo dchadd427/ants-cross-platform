@@ -54,6 +54,9 @@
         }
         function forget() { many = many.filter(function (m) { var live = m.node.isConnected !== false && !!m.node.parentNode; if (!live && seen) seen.unobserve(m.node); return live; }); }
         doc.addEventListener('visibilitychange', paint);
+        // the log of a window is a strip whose height follows the window's: a thumbnail is never higher than the log shows (at most 81 px, at least 44), so that a line with a picture is seen whole
+        function room() { var log = dock.log, h = log && log.clientHeight; if (h > 0 && log.style && log.style.setProperty) log.style.setProperty('--img-mh', Math.max(44, Math.min(81, h - 28)) + 'px'); }
+        if (win.addEventListener) win.addEventListener('resize', room);
 
         // ---- one line: the thumbnail, after the words
         function draw(r, e) {
@@ -70,7 +73,7 @@
             b.appendChild(im); if (img.a) b.appendChild(icon('M5 10V5h5M19 14v5h-5M5 5l5.5 5.5M19 19l-5.5-5.5', 'gc-zoom'));
             b.addEventListener('click', function () { open(e, b); });
             holder.appendChild(b); r.appendChild(holder);
-            forget();
+            forget(); room();
             if (img.a) watch({ img: img, node: im, visible: false, shown: '' });
         }
 
