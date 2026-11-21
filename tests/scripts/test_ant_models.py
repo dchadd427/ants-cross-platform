@@ -116,7 +116,6 @@ class MaterialsContract(unittest.TestCase):
         "gear_brass_trim",
         "bomb_charge",
         "bomb_cup_trim",
-        "leg_chitin",
     )
 
     def test_all_canonical_materials_present(self):

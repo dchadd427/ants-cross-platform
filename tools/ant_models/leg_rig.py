@@ -129,7 +129,7 @@ def _joint_collar(
         u_segs=14,
         v_segs=10,
         name=name,
-        material="leg_chitin",
+        material="chitin_team",
     ).deform(_place)
 
 
@@ -170,7 +170,7 @@ def _add_leg(
         radial_segs=12,
         cap_rings=2,
         name=f"leg_{label}_femur",
-        material="leg_chitin",
+        material="chitin_team",
     )
 
     # 2. Angular tapered exoskeleton tibia with pinched sub-knee neck, dorsal calf swell & distal ankle spur.
@@ -185,7 +185,7 @@ def _add_leg(
         radial_segs=12,
         cap_rings=2,
         name=f"leg_{label}_tibia",
-        material="leg_chitin",
+        material="chitin_team",
     )
 
     # 3. Sculpted armored exoskeleton knee-cap & ankle condyle joint collars wrapping the outer bends.
@@ -221,7 +221,7 @@ def _add_leg(
         radial_segs=12,
         cap_rings=3,
         name=f"leg_{label}_tarsus",
-        material="leg_chitin",
+        material="chitin_team",
     )
 
     # Seat only the underside contact patch flush on Y = 0.0 (organic grounded claw, never a flat ski).

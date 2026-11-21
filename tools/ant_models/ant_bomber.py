@@ -1175,14 +1175,14 @@ def _oriented_joint_armor(
 
 
 def _rebuild_bomber_legs(scene: SceneBuilder, crouch: float) -> None:
-    """Rebuild Bomber's 4 legs as segmented glossy dark-brown (`leg_chitin`) exoskeleton insect legs.
+    """Rebuild Bomber's 4 legs as segmented body-colored (`chitin_team`) exoskeleton insect legs.
 
     Sculpts pinched hip/knee/ankle joints, muscular spindle femurs, flared armored knee condyles and
     ankle collars, tapered angular tibias, and 2-segment pointed claw tarsi grounded on Y = 0.0 while
     preserving Bomber's narrow upright stance and zero leg-vs-leg / arm-vs-leg phasing.
     """
     c = float(crouch)
-    leg_mat = "leg_chitin"
+    leg_mat = "chitin_team"
     radii = [
         (0.027, 0.031), (0.017, 0.019), (0.029, 0.035), (0.034, 0.042), (0.027, 0.033), (0.022, 0.026),
         (0.0155, 0.018), (0.022, 0.027), (0.024, 0.030), (0.019, 0.024),

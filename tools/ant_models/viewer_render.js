@@ -338,7 +338,7 @@
   function matKindFor(mat) {
     const n = mat.name || "";
     if (n.startsWith("eye_") || n.startsWith("glass_") || (mat.metallic < 0.35 && mat.roughness < 0.22 && !mat.normalTex)) return 1;
-    if (n.startsWith("chitin_") || n === "leg_chitin") return 2;
+    if (n.startsWith("chitin_")) return 2;
     return 0;
   }
 

@@ -581,9 +581,9 @@ def _build_arms(scene: SceneBuilder) -> Tuple[np.ndarray, np.ndarray, np.ndarray
 
 
 def _sturdy_foot(name: str) -> MeshPart:
-    """Broad armored segmented dark insect claw-foot tapering cleanly to a pointed claw on Y = 0.0."""
+    """Broad armored segmented body-colored insect claw-foot tapering cleanly to a pointed claw on Y = 0.0."""
     prof = [(0.000, -0.042), (0.034, -0.028), (0.048, 0.004), (0.040, 0.046), (0.020, 0.082), (0.007, 0.098), (0.000, 0.104)]
-    foot = lathe(prof, radial_segs=14, cap_bottom=False, cap_top=False, axis="z", name=name, material="leg_chitin").scale(1.08, 0.72, 1.0)
+    foot = lathe(prof, radial_segs=14, cap_bottom=False, cap_top=False, axis="z", name=name, material="chitin_team").scale(1.08, 0.72, 1.0)
     foot = foot.deform(lambda p: np.column_stack([p[:, 0], np.maximum(p[:, 1], -0.018), p[:, 2]]))
     return foot.translate(0.0, -float(foot.bounds()[0][1]), 0.0)
 
@@ -607,7 +607,7 @@ def _build_flowing_leg(
         radial_segs=14,
         cap_rings=2,
         name=f"{node_name}_femur",
-        material="leg_chitin",
+        material="chitin_team",
     )
     # Segment 2: Pinched sub-knee neck -> muscular tapered tibia -> distal ankle spur -> pinched ankle neck.
     tib_pts = [p_knee, 0.84 * p_knee + 0.16 * p_t1, p_t1, 0.36 * p_t1 + 0.64 * p_ank, 0.14 * p_t1 + 0.86 * p_ank, p_ank, p_ft]
@@ -618,16 +618,16 @@ def _build_flowing_leg(
         radial_segs=14,
         cap_rings=2,
         name=f"{node_name}_tibia",
-        material="leg_chitin",
+        material="chitin_team",
     )
     # Sculpted armored knee-cap condyle & ankle joint collar wrapping the outer exoskeleton bends.
     bis_k = _normalize(-(p_f1 - p_knee) - (p_t1 - p_knee), fallback=(0.0, 0.0, -1.0))
     knee_cap = (
-        superellipsoid(0.046, 0.048, 0.052, e1=0.68, e2=0.74, u_segs=14, v_segs=10, name=f"{node_name}_knee_cap", material="leg_chitin")
+        superellipsoid(0.046, 0.048, 0.052, e1=0.68, e2=0.74, u_segs=14, v_segs=10, name=f"{node_name}_knee_cap", material="chitin_team")
         .translate(p_knee + 0.010 * bis_k)
     )
     ankle_cap = (
-        superellipsoid(0.035, 0.032, 0.038, e1=0.70, e2=0.74, u_segs=12, v_segs=8, name=f"{node_name}_ankle_cap", material="leg_chitin")
+        superellipsoid(0.035, 0.032, 0.038, e1=0.70, e2=0.74, u_segs=12, v_segs=8, name=f"{node_name}_ankle_cap", material="chitin_team")
         .translate(p_ank + np.array([0.0, 0.004, -0.004]))
     )
     yaw_s = side * foot_yaw
