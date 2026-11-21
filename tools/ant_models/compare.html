@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="viewer.css">
   <script src="viewer_gltf.js" defer></script>
   <script src="viewer_render.js" defer></script>
+  <script src="viewer_actions.js" defer></script>
   <script src="compare.js" defer></script>
   <script src="viewer_version.js" defer></script>
   <script src="viewer_status.js" defer></script>
@@ -101,8 +102,10 @@
       <div class="toolbar-group" role="group" aria-label="Animation action">
         <span class="group-label" aria-hidden="true">Action</span>
         <button type="button" data-action="idle" aria-pressed="true" title="Idle stance animation">Idle</button>
+        <button type="button" data-action="walk" aria-pressed="false" title="1998 walk cycle (W)">Walk</button>
         <button type="button" data-action="attack" aria-pressed="false" title="1998 attack sequence (A)">Attack</button>
         <button type="button" data-action="hit" aria-pressed="false" title="1998 get-hit knockback sequence (H)">Hit</button>
+        <select id="select-action" class="action-select" aria-label="All 1998 ant animations" title="Choose any 1998 shared or class-specific animation"></select>
       </div>
 
       <span class="toolbar-sep" role="separator" aria-orientation="vertical"></span>
