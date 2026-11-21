@@ -13,7 +13,7 @@ from typing import List, Tuple
 import numpy as np
 
 try:
-    from .base_ant import build_base_ant, sync_leg_flex_to_clip
+    from .base_ant import build_base_ant, sync_arm_idle_to_clip, sync_leg_flex_to_clip
     from .mesh_core import (
         AnimationChannel,
         AnimationClip,
@@ -33,7 +33,7 @@ try:
         torus_arc,
     )
 except ImportError:
-    from base_ant import build_base_ant, sync_leg_flex_to_clip  # type: ignore
+    from base_ant import build_base_ant, sync_arm_idle_to_clip, sync_leg_flex_to_clip  # type: ignore
     from mesh_core import (  # type: ignore
         AnimationChannel,
         AnimationClip,
@@ -538,7 +538,7 @@ def build_magnifying_glass(
 _build_magnifying_glass = build_magnifying_glass
 
 
-def _add_fire_idle(scene: SceneBuilder) -> AnimationClip:
+def _add_fire_idle(scene: SceneBuilder, *, hold_magnifying_glass: bool = False) -> AnimationClip:
     """Attach Fire's calm, composed 1.50s breathing bounce + gentle chin-up helmet nod Idle clip."""
     dur = 1.50
     n_steps = 16
@@ -600,6 +600,7 @@ def _add_fire_idle(scene: SceneBuilder) -> AnimationClip:
 
     clip = scene.add_animation("Idle", channels, replace=True)
     sync_leg_flex_to_clip(scene, "Idle")
+    sync_arm_idle_to_clip(scene, "Idle", left_scale=1.0, right_scale=0.6 if hold_magnifying_glass else 1.0)
     return clip
 
 
@@ -697,9 +698,14 @@ def build_fire(blink: float = 0.0, *, hold_magnifying_glass: bool = False) -> Sc
 
     if hold_magnifying_glass:
         build_magnifying_glass(scene, anchors["right_hand"], anchors["right_hand_dir"])
-        scene.attach_world_node("magnifying_glass", "upper_body", preserve_world_pose=False)
+        scene.set_node_parent("magnifying_glass", "forearm_right")
+        mg_xf = scene.get_node_transform("magnifying_glass")
+        er = anchors["elbow_right"]
+        if mg_xf is not None:
+            gx, gy, gz = mg_xf.translation
+            scene.set_node_transform("magnifying_glass", translation=(gx - er[0], gy - er[1], gz - er[2]))
 
-    _add_fire_idle(scene)
+    _add_fire_idle(scene, hold_magnifying_glass=hold_magnifying_glass)
     return scene
 
 

@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Tuple
 import numpy as np
 
 try:
-    from .base_ant import build_base_ant, sync_leg_flex_to_clip
+    from .base_ant import build_base_ant, sync_arm_idle_to_clip, sync_leg_flex_to_clip
     from .mesh_core import (
         AnimationChannel,
         AnimationClip,
@@ -33,7 +33,7 @@ try:
         torus_arc,
     )
 except ImportError:
-    from base_ant import build_base_ant, sync_leg_flex_to_clip  # type: ignore
+    from base_ant import build_base_ant, sync_arm_idle_to_clip, sync_leg_flex_to_clip  # type: ignore
     from mesh_core import (  # type: ignore
         AnimationChannel,
         AnimationClip,
@@ -56,9 +56,9 @@ except ImportError:
 # Lowered right-arm grip starting at slim thorax shoulder (-0.078, 0.456, 0.014) holding horizontal beach shovel.
 _SWIMMER_RIGHT_ARM: List[Tuple[float, float, float]] = [
     (-0.078, 0.456, 0.014),
-    (-0.164, 0.368, 0.018),
-    (-0.204, 0.282, 0.044),
-    (-0.214, 0.256, 0.062),
+    (-0.172, 0.370, 0.018),
+    (-0.220, 0.292, 0.044),
+    (-0.232, 0.268, 0.064),
 ]
 
 
@@ -675,8 +675,8 @@ def _build_shovel(
     """
     hx, hy, hz = right_hand
     dx, dy, dz = right_hand_dir
-    grip_x = hx + 0.020 * dx - 0.016
-    grip_y = hy + 0.020 * dy + 0.008
+    grip_x = hx + 0.020 * dx
+    grip_y = hy + 0.020 * dy
     grip_z = hz + 0.020 * dz
     parts: List[MeshPart] = []
 
@@ -963,6 +963,7 @@ def _add_swimmer_idle(scene: SceneBuilder) -> AnimationClip:
 
     clip = scene.add_animation("Idle", channels, replace=True)
     sync_leg_flex_to_clip(scene, "Idle")
+    sync_arm_idle_to_clip(scene, "Idle", left_scale=1.0, right_scale=0.55)
     return clip
 
 
@@ -1000,7 +1001,14 @@ def build_swimmer(blink: float = 0.0) -> SceneBuilder:
         if head_xf is not None:
             scene.set_node_transform(h_node, translation=head_xf.translation)
     scene.attach_world_node("scuba_tank", "upper_body", preserve_world_pose=False)
-    scene.attach_world_node("shovel", "upper_body", preserve_world_pose=False)
+    # Parent shovel directly onto forearm_right (pivoted at elbow_right) so the grip rides lockstep
+    # inside Swimmer's right pincer claws at rest and across every articulated Idle frame.
+    scene.set_node_parent("shovel", "forearm_right")
+    sh_xf = scene.get_node_transform("shovel")
+    er = anchors["elbow_right"]
+    if sh_xf is not None:
+        gx, gy, gz = sh_xf.translation
+        scene.set_node_transform("shovel", translation=(gx - er[0], gy - er[1], gz - er[2]))
     _add_swimmer_idle(scene)
     return scene
 
