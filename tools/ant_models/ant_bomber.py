@@ -121,30 +121,30 @@ def _build_aviator_cup(
     bore_r: float,
     lens_z: float,
 ) -> List[MeshPart]:
-    """Build one compact, sleek, forward-projecting copper-and-gold aviator goggle barrel (7 gold studs).
+    """Build one long, sleek, all-yellow metallic binocular 'can' goggle barrel (zero reddish copper).
 
-    Keeps a compact circle diameter sitting cleanly inside the head width while projecting neatly
-    forward so the twin barrels read crisply in 301 S, 201 SE, and 901 E with clear lenses.
+    Keeps a compact circle diameter sitting cleanly inside the head width while projecting boldly
+    forward like shiny metallic yellow tin cans (`abst201`/`abst901`) with rolled bead seams.
     """
     parts: List[MeshPart] = []
     tag = "left" if side_sign > 0 else "right"
 
     z_back = -0.022
-    z_copper_start = 0.006
-    z_rim_start = lens_z - 0.015
+    z_can_start = 0.006
+    z_rim_start = lens_z - 0.016
     z_rim_front = lens_z + 0.016
 
     r_in = bore_r
-    r_copper_out = bore_r + 0.0100
-    r_rim_out = bore_r + 0.0090
+    r_can_out = bore_r + 0.0095
+    r_rim_out = bore_r + 0.0105
 
     # 1. Snug dark rubber face cushion tucking neatly onto the orbital rim.
     cushion_prof = [
         (r_in + 0.001, z_back),
-        (r_copper_out - 0.0025, z_back - 0.002),
-        (r_copper_out + 0.0008, z_back + 0.014),
-        (r_copper_out, z_copper_start + 0.004),
-        (r_in + 0.001, z_copper_start + 0.004),
+        (r_can_out - 0.0025, z_back - 0.002),
+        (r_can_out + 0.0008, z_back + 0.014),
+        (r_can_out, z_can_start + 0.004),
+        (r_in + 0.001, z_can_start + 0.004),
     ]
     parts.append(
         _hollow_ring_lathe(
@@ -155,39 +155,42 @@ def _build_aviator_cup(
         )
     )
 
-    # 2. Sleek warm copper / orange-brass binocular barrel wall projecting cleanly forward.
-    z_mid = z_copper_start + 0.55 * (z_rim_start - z_copper_start)
-    copper_prof = [
-        (r_in, z_copper_start),
-        (r_copper_out - 0.0008, z_copper_start),
-        (r_copper_out + 0.0014, z_copper_start + 0.020),
-        (r_copper_out + 0.0016, z_mid),
-        (r_copper_out + 0.0008, z_rim_start + 0.004),
+    # 2. Long gleaming all-yellow metallic cylindrical 'can' barrel wall (`gear_gold_metal`, zero red/copper!).
+    z_mid = z_can_start + 0.50 * (z_rim_start - z_can_start)
+    can_prof = [
+        (r_in, z_can_start),
+        (r_can_out - 0.0006, z_can_start),
+        (r_can_out + 0.0006, z_can_start + 0.018),
+        (r_can_out + 0.0008, z_mid),
+        (r_can_out + 0.0006, z_rim_start + 0.004),
         (r_in, z_rim_start + 0.004),
     ]
     parts.append(
         _hollow_ring_lathe(
-            copper_prof,
+            can_prof,
             radial_segs=32,
             name=f"goggle_copper_ring_{tag}",
-            material="gear_brass_trim",
+            material="gear_gold_metal",
         )
     )
 
-    # Subtle mid-barrel metallic brass accent ring adding sculptural definition along the barrel.
-    mid_band = (
-        torus_arc(r_copper_out + 0.0008, 0.0024, u_segs=28, v_segs=8, plane="xy", name=f"goggle_mid_band_{tag}", material="gear_gold_metal")
-        .translate(0.0, 0.0, z_copper_start + 0.30 * (z_rim_start - z_copper_start))
-    )
-    parts.append(mid_band)
+    # Three crisp rolled tin-can metallic bead rings along the elongated yellow metallic barrel.
+    for b_idx, frac in enumerate((0.24, 0.52, 0.78)):
+        bz = z_can_start + frac * (z_rim_start - z_can_start)
+        bead_name = f"goggle_mid_band_{tag}" if b_idx == 1 else f"goggle_can_bead_{tag}_{b_idx}"
+        bead = (
+            torus_arc(r_can_out + 0.0008, 0.0024, u_segs=28, v_segs=8, plane="xy", name=bead_name, material="gear_gold_metal")
+            .translate(0.0, 0.0, bz)
+        )
+        parts.append(bead)
 
-    # 3. Crisp beveled bright yellow-gold front lens hood rim framing the recessed clear glass lens.
+    # 3. Crisp rolled bright yellow metallic front lens hood rim framing the recessed clear glass lens.
     rim_prof = [
         (r_in - 0.001, z_rim_start),
-        (r_rim_out - 0.0015, z_rim_start),
-        (r_rim_out + 0.0012, z_rim_start + 0.007),
-        (r_rim_out + 0.0008, z_rim_front - 0.005),
-        (r_rim_out - 0.0030, z_rim_front),
+        (r_rim_out - 0.0012, z_rim_start),
+        (r_rim_out + 0.0014, z_rim_start + 0.007),
+        (r_rim_out + 0.0010, z_rim_front - 0.005),
+        (r_rim_out - 0.0028, z_rim_front),
         (r_in + 0.0024, z_rim_front),
         (r_in - 0.001, z_rim_front - 0.004),
         (r_in - 0.001, z_rim_start + 0.004),
@@ -197,7 +200,7 @@ def _build_aviator_cup(
             rim_prof,
             radial_segs=32,
             name=f"goggle_front_rim_{tag}",
-            material="gear_gold",
+            material="gear_gold_metal",
         )
     )
 
@@ -208,22 +211,22 @@ def _build_aviator_cup(
     )
     parts.append(inner_gasket)
 
-    # 4. Thin see-through tinted optical glass lens seated inside the projecting front hood.
+    # 4. Thin see-through tinted optical glass lens seated inside the projecting front can rim.
     lens = (
         ellipsoid(r_in + 0.001, r_in + 0.001, 0.0055, u_segs=28, v_segs=14, name=f"goggle_lens_{tag}", material="glass_tinted")
         .translate(0.0, 0.0, lens_z)
     )
     parts.append(lens)
 
-    # 5. Seven crisp bright yellow-gold rivets studded around the projecting copper wall.
-    stud_r = r_copper_out + 0.0018
-    stud_z = z_mid + 0.010
+    # 5. Seven crisp metallic gold rivets studded around the forward half of the yellow metallic can.
+    stud_r = r_can_out + 0.0018
+    stud_z = z_can_start + 0.65 * (z_rim_start - z_can_start)
     for r_idx, ang_deg in enumerate((-26.0, 4.0, 34.0, 64.0, 94.0, 124.0, 154.0)):
         ang = math.radians(ang_deg)
         sx = side_sign * stud_r * math.sin(ang)
         sy = stud_r * math.cos(ang)
         rivet = (
-            sphere(0.0046, u_segs=10, v_segs=8, name=f"goggle_stud_{tag}_{r_idx}", material="gear_gold")
+            sphere(0.0044, u_segs=10, v_segs=8, name=f"goggle_stud_{tag}_{r_idx}", material="gear_gold_metal")
             .translate(sx, sy, stud_z)
         )
         parts.append(rivet)
@@ -239,14 +242,14 @@ def _build_goggles(
     eye_right: Tuple[float, float, float],
     closed_angle: float,
 ) -> None:
-    """Build compact, sleek, forward-projecting copper-and-gold aviator goggles & snug rear strap."""
+    """Build compact-diameter, long projecting all-yellow metallic 'can' goggles & snug rear strap."""
     hx, _, hz = head_center
     hrx, _, hrz = head_radii
     ey = 0.5 * (eye_left[1] + eye_right[1])
     ez = 0.5 * (eye_left[2] + eye_right[2])
 
-    pitch = -0.11
-    yaw_mag = 0.13
+    pitch = -0.10
+    yaw_mag = 0.11
     mount_dx = 0.0
     mount_dz = 0.001
 
@@ -257,15 +260,15 @@ def _build_goggles(
         goggle_yaw=yaw_mag,
         mount_offset=(mount_dx, 0.0, mount_dz),
     )
-    # Compact sleek circular barrels sitting cleanly inside Bomber's head width (abst301/201/901).
+    # Compact sleek circular diameter sitting cleanly inside head width + noticeably longer metallic cans!
     bore_r = max(0.058, max_lid_r + 0.0048)
-    lens_z = max(0.096, max_lid_z + 0.036)
+    lens_z = max(0.148, max_lid_z + 0.068)
 
     for side_sign, eye_pos in ((+1.0, eye_left), (-1.0, eye_right)):
         mount = (eye_pos[0] + side_sign * mount_dx, eye_pos[1], eye_pos[2] + mount_dz)
         for part in _build_aviator_cup(side_sign, bore_r=bore_r, lens_z=lens_z):
             placed = part.rotate_xyz(rx=pitch, ry=side_sign * yaw_mag).translate(*mount)
-            if part.name.startswith(("goggle_cushion_", "goggle_copper_ring_", "goggle_mid_band_")):
+            if part.name.startswith(("goggle_cushion_", "goggle_copper_ring_", "goggle_mid_band_", "goggle_can_bead_")):
                 def _clamp_nose_midline(pos: np.ndarray, s: float = side_sign) -> np.ndarray:
                     p = pos.copy()
                     if s > 0.0:
@@ -276,26 +279,26 @@ def _build_goggles(
                 placed = placed.deform(_clamp_nose_midline)
             scene.add("goggles", placed)
 
-    # Sleek copper nose bridge & gold center rivet joining the two compact projecting barrels cleanly.
-    bridge_z = ez + lens_z * 0.66
+    # Sleek all-yellow metallic nose bridge & gold center rivet joining the two long metallic cans cleanly.
+    bridge_z = ez + lens_z * 0.62
     bridge = (
-        rounded_box(0.030, 0.018, 0.022, bevel=0.005, segs=3, name="goggle_bridge", material="gear_brass_trim")
+        rounded_box(0.032, 0.018, 0.024, bevel=0.005, segs=3, name="goggle_bridge", material="gear_gold_metal")
         .translate(hx, ey + 0.009, bridge_z)
     )
     scene.add("goggles", bridge)
 
     bridge_stud = (
-        cylinder(0.0056, 0.0056, 0.008, radial_segs=14, bevel=0.0018, axis="z", name="goggle_bridge_stud", material="gear_gold")
-        .translate(hx, ey + 0.009, bridge_z + 0.011)
+        cylinder(0.0056, 0.0056, 0.008, radial_segs=14, bevel=0.0018, axis="z", name="goggle_bridge_stud", material="gear_gold_metal")
+        .translate(hx, ey + 0.009, bridge_z + 0.012)
     )
     scene.add("goggles", bridge_stud)
 
-    # Compact temple hinges & angled strap tabs bridging the sleek barrels smoothly into the rear head strap.
+    # Compact metallic gold temple clasps & thicker yellow strap tabs connecting the cans smoothly into the rear strap.
     rx_strap = hrx + 0.007
     rz_strap = hrz + 0.008
     for side_sign, tag, eye_pos in ((+1.0, "left", eye_left), (-1.0, "right", eye_right)):
         cup_side_x = eye_pos[0] + side_sign * (bore_r + 0.006)
-        cup_side_z = eye_pos[2] + 0.020
+        cup_side_z = eye_pos[2] + 0.024
         temple_x = hx + side_sign * (rx_strap * _spow(math.sin(math.radians(52.0)), 0.76))
         temple_z = hz + rz_strap * _spow(math.cos(math.radians(52.0)), 0.76)
         tab = curved_tube(
@@ -304,23 +307,23 @@ def _build_goggles(
                 (0.5 * (cup_side_x + temple_x) + side_sign * 0.012, ey + 0.004, 0.5 * (cup_side_z + temple_z) + 0.010),
                 (temple_x, ey + 0.005, temple_z),
             ],
-            (0.018, 0.009),
+            (0.022, 0.011),
             samples_per_seg=4,
             radial_segs=10,
             cap_rings=2,
             name=f"goggle_temple_tab_{tag}",
-            material="gear_dark",
+            material="gear_gold",
         )
         scene.add("goggles", tab)
 
         clasp = (
-            rounded_box(0.018, 0.030, 0.032, bevel=0.006, segs=3, name=f"goggle_clasp_{tag}", material="gear_brass_trim")
+            rounded_box(0.018, 0.034, 0.034, bevel=0.006, segs=3, name=f"goggle_clasp_{tag}", material="gear_gold_metal")
             .rotate_xyz(ry=side_sign * 0.36)
             .translate(temple_x - side_sign * 0.006, ey + 0.004, temple_z + 0.004)
         )
         scene.add("goggles", clasp)
 
-    # Snug dark rubber head strap hugging the compact flattened soft-cube cranium contour (e2=0.76).
+    # Bold thicker yellow head strap (~1.25x cross-section) hugging the flattened cranium contour (e2=0.76).
     strap_pts: List[Tuple[float, float, float]] = []
     n_arc = 28
     start_ang = math.radians(52.0)
@@ -334,19 +337,19 @@ def _build_goggles(
 
     strap = swept_tube(
         strap_pts,
-        (0.020, 0.0095),
+        (0.025, 0.012),
         radial_segs=12,
         cap_start=True,
         cap_end=True,
         closed=False,
         cap_rings=3,
         name="goggle_strap",
-        material="gear_dark",
+        material="gear_gold",
     )
     scene.add("goggles", strap)
 
     rear_buckle = (
-        rounded_box(0.052, 0.046, 0.018, bevel=0.006, segs=3, name="goggle_rear_buckle", material="gear_gold_metal")
+        rounded_box(0.056, 0.050, 0.020, bevel=0.006, segs=3, name="goggle_rear_buckle", material="gear_gold_metal")
         .translate(hx, ey + 0.013, hz - rz_strap - 0.002)
     )
     scene.add("goggles", rear_buckle)
@@ -449,16 +452,18 @@ def _build_cup_bomb(
     parts.append(socket)
 
     fdir = 1.0 if fuse_curve_x >= 0.0 else -1.0
-    fspan = max(0.32 * h, abs(fuse_curve_x))
+    fspan = max(0.68 * h, abs(fuse_curve_x) * 2.1)
+    # 2x longer braided white cord fuses with playful outward & rearward S-curve arcs (clear of antennae!).
     fuse_pts = [
         (0.0, 1.63 * h, 0.0),
-        (0.04 * fdir * fspan, 1.94 * h, 0.02 * h),
-        (0.45 * fdir * fspan, 2.24 * h, 0.04 * h),
-        (1.00 * fdir * fspan, 2.34 * h, 0.02 * h),
+        (0.10 * fdir * fspan, 2.08 * h, -0.08 * h),
+        (0.42 * fdir * fspan, 2.52 * h, -0.18 * h),
+        (0.78 * fdir * fspan, 2.84 * h, -0.22 * h),
+        (1.06 * fdir * fspan, 2.94 * h, -0.18 * h),
     ]
     fuse = curved_tube(
         fuse_pts,
-        [0.056 * h, 0.052 * h, 0.048 * h, 0.044 * h],
+        [0.056 * h, 0.052 * h, 0.048 * h, 0.044 * h, 0.040 * h],
         samples_per_seg=4,
         radial_segs=8,
         cap_rings=2,
@@ -467,7 +472,7 @@ def _build_cup_bomb(
     )
     parts.append(fuse)
 
-    tip_r = 0.095 * h if lit else 0.056 * h
+    tip_r = 0.095 * h if lit else 0.062 * h
     tip_mat = "gear_gold" if lit else "gear_dark"
     tip = sphere(tip_r, u_segs=10, v_segs=8, name=f"{prefix}_fuse_tip", material=tip_mat).translate(*fuse_pts[-1])
     parts.append(tip)
@@ -481,23 +486,50 @@ def _build_dynamite_pack(
     thorax_center: Tuple[float, float, float],
     head_back_z: float,
 ) -> None:
-    """Build sleek dorsal harness holding 4 compact upright riveted open-cup bombs."""
+    """Build Bomber's sculpted tan-leather tactical backpack physically holding 4 riveted cup-bombs."""
     bx, by, bz = back_anchor
     _, ty, tz = thorax_center
-    pack_y = by + 0.132
-    pack_z = min(bz - 0.052, head_back_z - 0.016)
+    pack_y = by + 0.112
+    pack_z = min(bz - 0.068, head_back_z - 0.028)
 
-    backplate = (
-        rounded_box(0.184, 0.168, 0.052, bevel=0.016, segs=3, name="pack_backplate", material="gear_dark")
-        .rotate_xyz(rx=-0.24)
-        .translate(bx, pack_y + 0.008, pack_z + 0.022)
+    # 1. Plump sculpted tan/brown canvas-leather main rucksack body flush against the dorsal carapace
+    # and extending solidly rearward to physically house & cradle all 4 cup-bombs (zero floating!).
+    pack_body = (
+        rounded_box(0.214, 0.194, 0.144, bevel=0.030, segs=4, name="pack_rucksack_body", material="prop_brown")
+        .rotate_xyz(rx=-0.30)
+        .translate(bx, pack_y + 0.012, pack_z - 0.052)
     )
-    scene.add("dynamite_pack", backplate)
+    scene.add("dynamite_pack", pack_body)
 
-    # Snug shoulder straps & chest belt conformed tightly to core's slim petite thorax (`max r=0.082`).
+    # Reinforced dark leather lower pack base pad (keeps tidy clearance above petiole/gaster).
+    pack_base = (
+        rounded_box(0.196, 0.052, 0.132, bevel=0.016, segs=3, name="pack_base_boot", material="gear_dark")
+        .rotate_xyz(rx=-0.30)
+        .translate(bx, pack_y - 0.072, pack_z - 0.026)
+    )
+    scene.add("dynamite_pack", pack_base)
+
+    # Sculpted rear flap / ordnance pouch on the back face of the backpack with a gleaming gold buckle.
+    rear_pouch = (
+        rounded_box(0.156, 0.104, 0.044, bevel=0.016, segs=3, name="pack_rear_pouch", material="prop_brown")
+        .rotate_xyz(rx=-0.30)
+        .translate(bx, pack_y - 0.008, pack_z - 0.118)
+    )
+    scene.add("dynamite_pack", rear_pouch)
+
+    # Side canvas holster pouches on left & right flanks of the rucksack physically cradling outer bombs 0 & 3.
+    for side_sign, tag in ((+1.0, "left"), (-1.0, "right")):
+        side_pouch = (
+            rounded_box(0.068, 0.118, 0.088, bevel=0.018, segs=3, name=f"pack_side_pouch_{tag}", material="prop_brown")
+            .rotate_xyz(rx=-0.30, rz=-side_sign * 0.24)
+            .translate(bx + side_sign * 0.106, pack_y + 0.024, pack_z - 0.064)
+        )
+        scene.add("dynamite_pack", side_pouch)
+
+    # Snug shoulder straps & chest belt routed cleanly from the backpack over Bomber's petite thorax.
     for side_sign, tag in ((+1.0, "left"), (-1.0, "right")):
         s_pts = [
-            (side_sign * 0.056, pack_y + 0.022, pack_z + 0.030),
+            (side_sign * 0.058, pack_y + 0.040, pack_z + 0.014),
             (side_sign * 0.066, ty + 0.106, tz - 0.026),
             (side_sign * 0.064, ty + 0.094, tz + 0.048),
             (side_sign * 0.058, ty + 0.026, tz + 0.094),
@@ -515,7 +547,7 @@ def _build_dynamite_pack(
         scene.add("dynamite_pack", s_strap)
 
         chest_buckle = (
-            rounded_box(0.024, 0.028, 0.016, bevel=0.0045, segs=2, name=f"harness_buckle_{tag}", material="gear_brass_trim")
+            rounded_box(0.024, 0.028, 0.016, bevel=0.0045, segs=2, name=f"harness_buckle_{tag}", material="gear_gold_metal")
             .rotate_xyz(rx=-0.16, ry=side_sign * 0.28)
             .translate(side_sign * 0.058, ty + 0.030, tz + 0.098)
         )
@@ -538,47 +570,50 @@ def _build_dynamite_pack(
     )
     scene.add("dynamite_pack", chest_belt)
 
-    rack_pts = [
-        (-0.158, pack_y + 0.054, pack_z - 0.080),
-        (-0.088, pack_y + 0.098, pack_z - 0.122),
-        (0.000, pack_y + 0.114, pack_z - 0.136),
-        (0.088, pack_y + 0.098, pack_z - 0.122),
-        (0.158, pack_y + 0.054, pack_z - 0.080),
-    ]
-    rack_strap = curved_tube(
-        rack_pts,
-        (0.018, 0.013),
-        samples_per_seg=5,
-        radial_segs=10,
-        cap_rings=2,
-        name="bomb_rack_strap",
-        material="gear_dark",
-    )
-    scene.add("dynamite_pack", rack_strap)
+    # Dark leather cinch straps wrapping tightly around the backpack & bombs with gleaming gold buckles!
+    for strap_idx, y_off, z_off in ((0, 0.044, -0.128), (1, -0.020, -0.132)):
+        c_pts = [
+            (-0.144, pack_y + y_off - 0.012, pack_z - 0.044),
+            (-0.118, pack_y + y_off + 0.008, pack_z + z_off + 0.024),
+            (0.000, pack_y + y_off + 0.016, pack_z + z_off),
+            (+0.118, pack_y + y_off + 0.008, pack_z + z_off + 0.024),
+            (+0.144, pack_y + y_off - 0.012, pack_z - 0.044),
+        ]
+        c_strap = curved_tube(
+            c_pts,
+            (0.015, 0.011),
+            samples_per_seg=4,
+            radial_segs=10,
+            cap_rings=2,
+            name=f"pack_cinch_strap_{strap_idx}",
+            material="gear_dark",
+        )
+        scene.add("dynamite_pack", c_strap)
 
     rack_buckle = (
-        rounded_box(0.048, 0.042, 0.022, bevel=0.007, segs=3, name="bomb_rack_buckle", material="gear_gold_metal")
-        .rotate_xyz(rx=-0.26)
-        .translate(0.0, pack_y + 0.114, pack_z - 0.144)
+        rounded_box(0.044, 0.038, 0.020, bevel=0.006, segs=3, name="bomb_rack_buckle", material="gear_gold_metal")
+        .rotate_xyz(rx=-0.30)
+        .translate(0.0, pack_y + 0.060, pack_z - 0.136)
     )
     scene.add("dynamite_pack", rack_buckle)
 
-    # Set back cleanly behind Bomber's lively chin-up pitched head, rear strap, and floppy antennae.
+    # Seat all 4 hot-magenta cup-bombs SOLIDLY INTO the top & side pockets of the tan backpack (zero floating!)
+    # with 2x longer braided fuses arching outward/upward with bright golden spark tips!
     pack_specs = (
-        (+18.0, -18.0, -0.112, 0.062, -0.088, 0.080, -0.026),
-        (+6.0, -23.0, -0.046, 0.140, -0.118, 0.084, -0.022),
-        (-6.0, -23.0, +0.046, 0.140, -0.118, 0.084, +0.022),
-        (-18.0, -18.0, +0.112, 0.062, -0.088, 0.080, +0.026),
+        (+20.0, -18.0, -0.110, 0.046, -0.072, 0.080, -0.034),
+        (+6.0, -21.0, -0.046, 0.088, -0.092, 0.084, -0.028),
+        (-6.0, -21.0, +0.046, 0.088, -0.092, 0.084, +0.028),
+        (-20.0, -18.0, +0.110, 0.046, -0.072, 0.080, +0.034),
     )
     for idx, (rz_deg, rx_deg, ox, oy, oz, cup_h, fuse_dx) in enumerate(pack_specs):
         holster = (
-            cylinder(0.45 * cup_h, 0.42 * cup_h, 0.032, radial_segs=14, bevel=0.005, axis="y", name=f"pack_holster_{idx}", material="gear_dark")
+            cylinder(0.50 * cup_h, 0.46 * cup_h, 0.048, radial_segs=16, bevel=0.006, axis="y", name=f"pack_holster_{idx}", material="gear_dark")
             .rotate_xyz(rx=rx_deg, rz=rz_deg, degrees=True)
             .translate(bx + ox, pack_y + oy, pack_z + oz)
         )
         scene.add("dynamite_pack", holster)
 
-        for part in _build_cup_bomb(f"pack_bomb_{idx}", cup_h, fuse_dx, lit=False, rivet_count=10):
+        for part in _build_cup_bomb(f"pack_bomb_{idx}", cup_h, fuse_dx, lit=True, rivet_count=10):
             placed = (
                 part.rotate_xyz(rx=rx_deg, rz=rz_deg, degrees=True)
                 .translate(bx + ox, pack_y + oy, pack_z + oz)

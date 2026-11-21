@@ -56,9 +56,9 @@ except ImportError:
 # Lowered right-arm grip starting at slim thorax shoulder (-0.078, 0.456, 0.014) holding horizontal beach shovel.
 _SWIMMER_RIGHT_ARM: List[Tuple[float, float, float]] = [
     (-0.078, 0.456, 0.014),
-    (-0.172, 0.370, 0.018),
-    (-0.220, 0.292, 0.044),
-    (-0.232, 0.268, 0.064),
+    (-0.178, 0.370, 0.018),
+    (-0.228, 0.292, 0.046),
+    (-0.240, 0.268, 0.066),
 ]
 
 
@@ -791,10 +791,10 @@ def _build_shovel(
     )
     parts.append(blade_spine)
 
-    # Low sporty bowl-up carry angle (`rz = 26 deg`) so the wide flat-front square scoop reads BROADLY
-    # from 301 S front 45 deg, 201 SE 45 deg, AND 901 E side 45 deg while clearing right leg & flippers.
+    # Clockwise inward bowl tilt (`rz = -30 deg` around +Z, tipping the concave dig bowl cleanly clockwise
+    # toward Swimmer's body in 301 S) while exposing the wide square scoop & clearing legs & flippers.
     for part in parts:
-        placed = part.rotate_xyz(rx=10.0, ry=-12.0, rz=26.0, degrees=True)
+        placed = part.rotate_xyz(rx=10.0, ry=-12.0, rz=-30.0, degrees=True)
         scene.add("shovel", placed)
     scene.set_node_transform("shovel", translation=(grip_x, grip_y, grip_z))
 
