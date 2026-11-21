@@ -10,6 +10,12 @@ const path = require('path');
 const modulePath = process.argv[2];
 if (!modulePath) { console.log('usage: web_lobby_client_check.js lobby_net.js'); process.exit(2); }
 const N = require(path.resolve(modulePath));
+// The protocol number as the C++ encoders wrote it into the Hello of the golden file (tests/data/lobby_messages.txt: a Hello is the type 1 and the number, two bytes little endian): the one number that this check holds the page to
+const GOLDEN_PROTOCOL = (() => {
+    const line = fs.readFileSync(path.join(__dirname, '..', 'data', 'lobby_messages.txt'), 'utf8').split('\n').find((l) => l.indexOf('hello page-no-block ') === 0);
+    const bytes = line.split(' ')[2];
+    return parseInt(bytes.slice(4, 6) + bytes.slice(2, 4), 16);
+})();
 
 let checks = 0;
 let failures = 0;
@@ -39,7 +45,7 @@ function room(seats, o) {
     const w = [12];
     for (const s of seats) { w.push(s[0]); str8(w, s[1]); w.push(20, 0, 0); }       // rtt 20 ms, no platform
     str8(w, o.map === undefined ? 'TREASURE.LVL' : o.map);
-    w.push(0, o.you === undefined ? 0 : o.you, o.leader === undefined ? 0 : o.leader, o.teamA === undefined ? 255 : o.teamA, o.teamB === undefined ? 255 : o.teamB, o.flags === undefined ? 3 : o.flags);
+    w.push(o.fog ? 1 : 0, o.you === undefined ? 0 : o.you, o.leader === undefined ? 0 : o.leader, o.teamA === undefined ? 255 : o.teamA, o.teamB === undefined ? 255 : o.teamB, o.flags === undefined ? 3 : o.flags);
     for (const k of (o.plan || [0, 0, 0, 0])) w.push(k);
     w.push(o.inGame || 0, o.mode || 0, o.ready || 0);                                 // (protocol 17: the game mode; protocol 27: the ready mask is the last byte)
     return Uint8Array.from(w);
@@ -199,16 +205,42 @@ const events = (c, name) => c.log.filter((e) => e[0] === name).map((e) => e[1]);
     w.last().receive(room([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0 }));
     const lastSent = () => w.last().sent[w.last().sent.length - 1];
     const none = { map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 };
-    check('a plan with no mode is the original\'s game: its last byte is 0', c.setPlan(none) && hex(lastSent()) === hex(N.encodePlan('', [0, 0, 0, 0], 255, 255)) && lastSent()[lastSent().length - 1] === 0);
-    check('... and so is mode 0', c.setPlan(Object.assign({}, none, { mode: 0 })) && hex(lastSent()) === hex(N.encodePlan('', [0, 0, 0, 0], 255, 255, 0)) && lastSent()[lastSent().length - 1] === 0);
-    check('mode 1 ("187") is the last byte of the plan, nothing else moves', c.setPlan(Object.assign({}, none, { mode: 1 })) && hex(lastSent()) === hex(N.encodePlan('', [0, 0, 0, 0], 255, 255, 1)) && lastSent()[lastSent().length - 1] === 1 &&
-          hex(lastSent().slice(0, lastSent().length - 1)) === hex(N.encodePlan('', [0, 0, 0, 0], 255, 255).slice(0, -1)));
+    const modeOf = () => lastSent()[lastSent().length - 2];                       // (protocol 28: the plan ends with the mode and the fog byte)
+    check('a plan with no mode is the original\'s game: its mode byte is 0', c.setPlan(none) && hex(lastSent()) === hex(N.encodePlan('', [0, 0, 0, 0], 255, 255, 0, false)) && modeOf() === 0);
+    check('... and so is mode 0', c.setPlan(Object.assign({}, none, { mode: 0 })) && hex(lastSent()) === hex(N.encodePlan('', [0, 0, 0, 0], 255, 255, 0, false)) && modeOf() === 0);
+    check('mode 1 ("187") is the byte before fog, nothing else moves', c.setPlan(Object.assign({}, none, { mode: 1 })) && hex(lastSent()) === hex(N.encodePlan('', [0, 0, 0, 0], 255, 255, 1, false)) && modeOf() === 1 &&
+          hex(lastSent().slice(0, lastSent().length - 2)) === hex(N.encodePlan('', [0, 0, 0, 0], 255, 255).slice(0, -2)));
     const count = w.last().sent.length;
     check('a mode that the codec does not know (2, 255, -1, 1.5, "1", null, NaN) is refused and sends nothing', [2, 255, -1, 1.5, '1', null, NaN].every((m) => c.setPlan(Object.assign({}, none, { mode: m })) === false) && w.last().sent.length === count);
     check('the room\'s mode is what the Room message says, and a plan of the page does not change what it shows', c.room.mode === 0);
     w.last().receive(room([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, mode: 1 }));
     check('a Room message of mode 1 is read with its mode', c.room.mode === 1);
-    check('a plan after it that names no mode asks for the original\'s game again (the page decides the mode with every plan)', c.setPlan(none) && lastSent()[lastSent().length - 1] === 0);
+    // protocol 28: Fog of War is the last byte of the plan; a plan that does not say it keeps the room's own (a click on a map or a team never switches it off), only the leader's page sends it, and never with a computer player
+    {
+        const fogOf = () => lastSent()[lastSent().length - 1];
+        const send = (plan) => { w.advance(400); w.last().receive(ping(1, 1)); return c.setPlan(plan); };       // (the page's pace for a plan is a burst of 5, then 3.2 a second: 0.4 s between the plans keeps every one of them; the server's ping keeps the link up)
+        w.last().receive(room([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, mode: 0, fog: false }));
+        check('fog: the room is clear, a plan that says nothing of fog sends 0', c.room.fog === false && send(none) && fogOf() === 0);
+        check('fog: { fog: true } sends 1 and nothing else moves', send(Object.assign({}, none, { fog: true })) && fogOf() === 1 && hex(lastSent()) === hex(N.encodePlan('', [0, 0, 0, 0], 255, 255, 0, true)));
+        w.last().receive(room([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, fog: true }));
+        check('fog: the room shows fog, a plan that says nothing of fog keeps it (sends 1)', c.room.fog === true && send(none) && fogOf() === 1 && send(Object.assign({}, none, { map: 'SMALL.LVL', teamA: 0, teamB: 1 })) && fogOf() === 1);
+        check('fog: { fog: false } switches it off (sends 0)', send(Object.assign({}, none, { fog: false })) && fogOf() === 0);
+        const plansSent = () => w.last().sent.filter((b) => b[0] === 32).length;       // (the answers to the server's pings are sent too)
+        const sentBefore = plansSent();
+        check('fog: with a computer player in the plan nothing is sent (the room would refuse the whole plan)', [1, 2, 3].every((k) => send(Object.assign({}, none, { kinds: [0, 0, k, 0], fog: true })) === false) && send(Object.assign({}, none, { kinds: [0, 0, 2, 0] })) === false && plansSent() === sentBefore);
+        check('fog: Open and Nobody colors with fog are sent', send(Object.assign({}, none, { kinds: [0, 4, 0, 4], fog: true })) && fogOf() === 1);
+        check('fog: bots without fog are sent once the room is clear', (() => { w.last().receive(room([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, fog: false })); return send(Object.assign({}, none, { kinds: [0, 0, 2, 0] })) && fogOf() === 0; })());
+        check('fog: what is no boolean is refused and sends nothing (1, "true", null, 2)', (() => { const n = plansSent(); return [1, 'true', null, 2].every((f) => send(Object.assign({}, none, { fog: f })) === false) && plansSent() === n; })());
+        // what changed between two Room messages: the leader's switch is an event that names the leader (so the room's chat can say "Hazel turned Fog of War on.")
+        const seen = [];
+        c.on('fog', (e) => seen.push(e));
+        w.last().receive(room([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, fog: true }));
+        w.last().receive(room([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, fog: true }));
+        w.last().receive(room([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0, fog: false }));
+        check('fog: one event for each change, with who leads and whether this page is the leader', JSON.stringify(seen) === JSON.stringify([{ type: 'fog', on: true, name: 'Priya', you: true }, { type: 'fog', on: false, name: 'Priya', you: false }]));
+        w.last().receive(room([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, fog: false }));
+    }
+    check('a plan after it that names no mode asks for the original\'s game again (the page decides the mode with every plan)', (w.advance(400), c.setPlan(none)) && modeOf() === 0);
 }
 
 // ---- a page that is not the leader ------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -445,7 +477,7 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
 // ---- a page that joins and never makes: join: true (a code that somebody typed) -----------------------------------------------------------------------------------------------------------------------
 // The Hello of a page that makes a lobby room carries the create block (the map, four seats, no team, the leader starts, a lobby); a page that was only given a code to join sends none, so that a code
 // with no room is answered NoSuchRoom instead of making one. The bytes are held to the lines that the C++ encoder wrote (tests/data/lobby_messages.txt, which web_lobby_net_check.js holds the codec
-// to) and to a Hello written out by hand here: type 1, protocol 27, the name, 0 and 255, the code, an empty second string, the key (zeros without one), 0, the platform, the client kind 1 (a page).
+// to) and to a Hello written out by hand here: type 1, the protocol's number, the name, 0 and 255, the code, an empty second string, the key (zeros without one), 0, the platform, the client kind 1 (a page).
 
 {
     const golden = {};
@@ -457,7 +489,7 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
     const block = (map) => [map.length].concat(Array.from(map, (ch) => ch.charCodeAt(0)), [4, 255, 255, 3]);        // the create block: the map, four seats, no team, leader starts + lobby
     const byHand = (name, code, o) => {
         o = o || {};
-        const w = [1, 27, 0];
+        const w = [1, GOLDEN_PROTOCOL & 255, GOLDEN_PROTOCOL >>> 8];
         str8(w, name);
         w.push(0, 0, 255);
         str8(w, code);
@@ -490,7 +522,7 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
     same('... with join: that line without its block (00 04 ffff 03)', hello(Object.assign({}, keyed, { join: true })).hex, golden['page-with-key'].slice(0, golden['page-with-key'].length - '0004ffff03'.length));
     same('... and the same written out by hand', hello(Object.assign({}, keyed, { join: true })).hex, hex(byHand('Sam', 'abc234', { key: seq(1), platform: N.PLATFORM_BROWSER | N.OS.Linux })));
     same('with no name and the code xx, join: the line of the C++ encoder that has no block (page-no-block)', hello({ join: true, name: '', code: 'xx' }).hex, golden['page-no-block']);
-    check('a Hello without a block has no key, no platform: zeros', /^011b000[0-9a-f]*$/.test(join.hex) && join.w.last().sent[0].slice(1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1, 1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1 + 16).every((b) => b === 0));
+    check('a Hello without a block has no key, no platform: zeros', new RegExp('^01' + N.PROTOCOL.toString(16).padStart(2, '0') + '000[0-9a-f]*$').test(join.hex) && join.w.last().sent[0].slice(1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1, 1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1 + 16).every((b) => b === 0));
 
     {   // the way back of a page that joined: every Hello it sends has the key and no block
         const w = world();
@@ -1184,8 +1216,8 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
         w.advance(10 * 60 * 1000);
         check('... and after ten minutes of rest the budget is full again, to its burst and no further', [0, 1, 2, 3, 4].filter(() => c.setPublic(true)).length === 2);
     }
-    {   // the codec knows the type: 41 is the last message, the flag is 8, the protocol is 27
-        check('PROTOCOL, MSG.Last and the Visibility encoder', N.PROTOCOL === 27 && N.MSG.Visibility === 35 && N.MSG.Last === 41 && hex(N.encodeVisibility(true)) === '2301' && hex(N.encodeVisibility(false)) === '2300' && hex(N.encodeVisibility(7)) === '2301');
+    {   // the codec knows the type: 41 is the last message, the flag is 8, the protocol is the one of the golden file
+        check('PROTOCOL, MSG.Last and the Visibility encoder', N.PROTOCOL === GOLDEN_PROTOCOL && N.MSG.Visibility === 35 && N.MSG.Last === 41 && hex(N.encodeVisibility(true)) === '2301' && hex(N.encodeVisibility(false)) === '2300' && hex(N.encodeVisibility(7)) === '2301');
     }
 }
 

@@ -1,0 +1,22 @@
+/* The Fog of War switch of the Room (front/room_fog.js): in the room's header beside Invite only | Public, its note with the room's notes, a guest's chip beside the other chip. The switch is the Direct connection switch
+   (front/lobby_direct.css and web/home/room.css: .dr-switch and .dr-knob); the colors are the page's own tokens. */
+.r-top .fogsw { display: inline-flex; align-items: center; margin: 0; flex: none; }
+.r-top .fogsw[hidden] { display: none; }
+.r-top .fogsw .dr-row { display: inline-flex; align-items: center; gap: 8px; }
+.r-top .fogsw .dr-label { font-size: 15px; }
+.fg-word { min-width: 24px; font-size: 14px; color: var(--cream); }
+.fogsw.is-on .fg-word { color: var(--gold); }
+.r-notes .fg-note { margin: 0; font-size: 13px; line-height: 1.3; color: var(--muted); }
+.r-notes .fg-note[hidden] { display: none; }
+.fg-chip { display: inline-block; margin-left: 12px; padding: 0 10px; font-size: 14px; line-height: 1.7; vertical-align: middle; color: var(--gold); background: #2a2208; border: 1px solid #6b5a14; border-radius: 3px; }       /* (the look of the room's own chip, web/home/games.css .vistag: this one comes with the page, that one with the Games list) */
+.fg-chip[hidden] { display: none; }
+.hl .vistag { order: 1; } .hl .fg-chip { order: 2; }
+@media (min-width: 1500px) and (min-height: 960px) { .r-top .fogsw .dr-label { font-size: 16px; } .r-notes .fg-note { font-size: 14px; } }
+@media (max-width: 700px) {
+    .r-top .fogsw { grid-area: fog; margin: 4px 0 0; }
+    .r-top .fogsw .dr-row { gap: 12px; }
+    .r-top .fogsw .dr-label { font-size: 17px; }
+    .fg-word { font-size: 16px; }
+    .r-top.has-fog { grid-template-areas: "hl acts" "vis vis" "fog fog" "code code"; }
+    .r-notes .fg-note { font-size: 14px; }
+}

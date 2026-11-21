@@ -83,6 +83,7 @@
     // The small lines of the system: the words of the page's toast for a person who comes ("Sam joined as Red."), and one for a person who goes
     function joinedText(name, seat, colors) { return name + ' joined as ' + colors[seat].name + '.'; }
     function leftText(name) { return name + ' left.'; }
+    function fogText(on, name) { return (name || 'The host') + ' turned Fog of War ' + (on ? 'on.' : 'off.'); }       // (protocol 28: the leader's switch; the room's chat says it to everybody, as it says who came and went)
     function toastText(who, text) { return who + ': ' + (text.length > TOAST_CHARS ? text.slice(0, TOAST_CHARS - 1) + '\u2026' : text); }
 
     // ---- the box ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -333,11 +334,12 @@
             c.on('chat', function (e) { if (c === current) hear(c, e); });
             c.on('joined', function (e) { if (c === current && e.seat !== c.seat) add('sys', -1, '', joinedText(e.name, e.seat, colors), false); });
             c.on('left', function (e) { if (c === current) add('sys', -1, '', leftText(e.name), false); });
+            c.on('fog', function (e) { if (c === current) add('sys', -1, '', fogText(e.on, e.name), false); });
             paint();
         }
         paint();
         return { attach: attach, clear: clear, lines: function () { return lines.slice(); } };
     }
 
-    return { MAX_LINE: MAX_LINE, MAX_LINES: MAX_LINES, PENDING_MS: PENDING_MS, TOAST_CHARS: TOAST_CHARS, TOAST_GAP: TOAST_GAP, TEXT: TEXT, cleanLine: cleanLine, sendable: sendable, peopleIn: peopleIn, stateOf: stateOf, nameOf: nameOf, joinedText: joinedText, leftText: leftText, toastText: toastText, mount: mount };
+    return { MAX_LINE: MAX_LINE, MAX_LINES: MAX_LINES, PENDING_MS: PENDING_MS, TOAST_CHARS: TOAST_CHARS, TOAST_GAP: TOAST_GAP, TEXT: TEXT, cleanLine: cleanLine, sendable: sendable, peopleIn: peopleIn, stateOf: stateOf, nameOf: nameOf, joinedText: joinedText, fogText: fogText, leftText: leftText, toastText: toastText, mount: mount };
 });

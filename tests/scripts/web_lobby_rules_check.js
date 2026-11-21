@@ -54,8 +54,8 @@ const N = require(path.join(path.dirname(path.resolve(rulesPath)), 'lobby_net.js
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 same('the library exports exactly these names (a new one needs a table here)', Object.keys(RAW).sort(), [
     'ACTS', 'CODE_CHARS', 'COLORS', 'DEFAULT_MAP_KEY', 'GRID', 'HINT', 'KINDS', 'MAPS', 'META', 'READY', 'TEXT',
-    'article', 'banner', 'codeText', 'communityName', 'hostName', 'levelWord', 'listOf', 'makeCode', 'mapByKey', 'mapOfFile', 'modelOf', 'moveOf', 'nameAt', 'nameCheck', 'nameOf', 'notBack', 'noticeKind', 'pairOf', 'pendingAfter',
-    'pingQuality', 'planWith', 'playing', 'pressSide', 'reconcileSides', 'shownOf', 'sideOpen', 'sideView', 'sidesFix', 'startNote', 'startsAlone', 'teamBytes', 'teamNeedsFix', 'teamsText', 'typedCode', 'validMapFile', 'viewOf', 'withMode'
+    'article', 'banner', 'botColors', 'codeText', 'communityName', 'hostName', 'kindsWithoutBots', 'levelWord', 'listOf', 'makeCode', 'mapByKey', 'mapOfFile', 'modelOf', 'moveOf', 'nameAt', 'nameCheck', 'nameOf', 'notBack', 'noticeKind', 'pairOf', 'pendingAfter', 'pendingFogAfter',
+    'pingQuality', 'planWith', 'playing', 'pressSide', 'reconcileSides', 'shownOf', 'sideOpen', 'sideView', 'sidesFix', 'startNote', 'startsAlone', 'teamBytes', 'teamNeedsFix', 'teamsText', 'typedCode', 'validMapFile', 'viewOf', 'withFog', 'withMode'
 ]);
 
 // The colors: the server's seats (Green 0, Red 1, Blue 2, Black 3); the cards lie Black, Green, Red, Blue
@@ -232,7 +232,7 @@ function mk(seats, o) {
     const w = [12];
     seats.forEach((s, i) => { w.push(s[0]); str8(w, s[1]); w.push(20, 0, o.platforms ? o.platforms[i] : 0); });
     str8(w, o.map === undefined ? 'TREASURE.LVL' : o.map);
-    w.push(0, o.you === undefined ? 0 : o.you, o.leader === undefined ? 0 : o.leader, o.teamA === undefined ? 255 : o.teamA, o.teamB === undefined ? 255 : o.teamB, o.starting ? 7 : 3);
+    w.push(o.fog ? 1 : 0, o.you === undefined ? 0 : o.you, o.leader === undefined ? 0 : o.leader, o.teamA === undefined ? 255 : o.teamA, o.teamB === undefined ? 255 : o.teamB, o.starting ? 7 : 3);
     for (const k of (o.plan || [0, 0, 0, 0])) w.push(k);
     w.push(o.inGame || 0, o.mode || 0, o.ready || 0);                                 // (protocol 17: the game mode; protocol 27: the ready mask is the last byte)
     const m = N.decode(Uint8Array.from(w));
@@ -275,19 +275,19 @@ const S12 = mk([O, P('Sam'), O, P('Priya')], { you: 1, leader: 1, plan: [0, 0, 2
 
 // ---- modelOf ----
 same('modelOf, picture 1: you alone at Green, the host', model(S1), {
-    you: 0, leader: 0, guest: false, starting: false, map: 'treasure', mapFile: 'TREASURE.LVL', mode: 0, sides: [0, 0, 0, 0],
+    you: 0, leader: 0, guest: false, starting: false, map: 'treasure', mapFile: 'TREASURE.LVL', mode: 0, fog: false, sides: [0, 0, 0, 0],
     slots: [person('Juniper', true, true), { kind: 'open' }, { kind: 'open' }, { kind: 'open' }]
 });
 same('modelOf, picture 5: a computer player where the plan says Medium, the team pair as switches', model(S5), {
-    you: 0, leader: 0, guest: false, starting: false, map: 'treasure', mapFile: 'TREASURE.LVL', mode: 0, sides: [1, 0, 1, 0],
+    you: 0, leader: 0, guest: false, starting: false, map: 'treasure', mapFile: 'TREASURE.LVL', mode: 0, fog: false, sides: [1, 0, 1, 0],
     slots: [person('Juniper', true, true), person('Sam', false, false, false, true), { kind: 'bot', level: 'medium' }, person('Priya', false, false, false, true)]
 });
 same('modelOf, picture 4: a guest in Black, an Easy and a Medium bot, the pair Green + Black', model(S4), {
-    you: 3, leader: 0, guest: true, starting: false, map: 'treasure', mapFile: 'TREASURE.LVL', mode: 0, sides: [1, 0, 0, 1],
+    you: 3, leader: 0, guest: true, starting: false, map: 'treasure', mapFile: 'TREASURE.LVL', mode: 0, fog: false, sides: [1, 0, 0, 1],
     slots: [person('Juniper', false, true), { kind: 'bot', level: 'easy' }, { kind: 'bot', level: 'medium' }, person('Sam', true)]
 });
 same('modelOf, picture 13b: START is pressed, a guest; the game of Juniper is open (not its own)', model(S13b), {
-    you: 1, leader: 0, guest: true, starting: true, map: 'treasure', mapFile: 'TREASURE.LVL', mode: 0, sides: [0, 0, 0, 0],
+    you: 1, leader: 0, guest: true, starting: true, map: 'treasure', mapFile: 'TREASURE.LVL', mode: 0, fog: false, sides: [0, 0, 0, 0],
     slots: [person('Juniper', false, true, true), person('Sam', true), { kind: 'bot', level: 'medium' }, person('Priya')]
 });
 same('modelOf, picture 13: the page\'s own bit never counts, the others\' do', [model(mk([P('Juniper'), P('Sam'), O, P('Priya')], { starting: true, inGame: 11 })).slots.filter((s) => s.kind === 'person').map((s) => s.ingame), model(S13).slots.filter((s) => s.kind === 'person').map((s) => s.ingame)], [[false, true, true], [false, true, false]]);
@@ -462,7 +462,7 @@ const M3 = (o) => model(mk([P('Juniper'), P('Sam'), P('Priya'), O], o));
 // 6. What the leader asks of the room: the plan (planWith) and a color moved or exchanged (moveOf)
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 const PW = (room, change) => R.planWith(room, model(room), change);
-const plan = (map, kinds, teamA, teamB, mode) => ({ map: map, kinds: kinds, teamA: teamA === undefined ? 255 : teamA, teamB: teamB === undefined ? 255 : teamB, mode: mode || 0 });   // (protocol 17: the room's own game mode goes back)
+const plan = (map, kinds, teamA, teamB, mode, fog) => ({ map: map, kinds: kinds, teamA: teamA === undefined ? 255 : teamA, teamB: teamB === undefined ? 255 : teamB, mode: mode || 0, fog: !!fog });   // (protocol 17: the room's own game mode goes back; protocol 28: so does its Fog of War)
 const T3 = mk([P('Juniper'), P('Sam'), P('Priya'), O]);                                                  // three persons: Green, Red, Blue; Black open
 const T3t = mk([P('Juniper'), P('Sam'), P('Priya'), O], { teamA: 0, teamB: 2 });
 const TWO = mk([P('Juniper'), P('Sam'), O, O]);
@@ -504,6 +504,34 @@ const BOTS = mk([P('Juniper'), P('Sam'), O, O], { plan: [0, 0, 2, 3], teamA: 0, 
     same('planWith: ' + label, got, want);
     check('planWith: ' + label + ' (the room\'s own plan is not changed, a new list of kinds goes out)', JSON.stringify(room) === before && got.kinds !== room.plan);
 });
+// ---- Fog of War (protocol 28): every plan carries the room's own, the leader's pick is pending until a Room says it, a plan never sets a bot with fog on, the question's bots are the planned ones ----
+{
+    const PWf = PW;
+    const clear = mk([P('Juniper'), P('Sam'), O, O]);
+    const fogged = mk([P('Juniper'), P('Sam'), O, O], { fog: true });
+    const botted = mk([P('Juniper'), P('Sam'), O, O], { plan: [0, 0, 2, 3] });
+    same('modelOf: Fog of War is the room\'s', [model(clear).fog, model(fogged).fog], [false, true]);
+    same('planWith: a plan that says nothing of fog carries the room\'s (off)', PWf(clear, { map: 'tiny' }).fog, false);
+    same('... and the room\'s (on): a click on a map, a color or the teams never switches it off', [PWf(fogged, { map: 'tiny' }).fog, PWf(fogged, { seat: 2, kind: 'open' }).fog, PWf(fogged, { sides: [0, 0, 0, 0] }).fog], [true, true, true]);
+    same('planWith: the switch is the change { fog: true } and { fog: false }', [PWf(clear, { fog: true }).fog, PWf(fogged, { fog: false }).fog], [true, false]);
+    same('planWith: the switch with the question\'s kinds: the bot colors open and fog on in one plan', PWf(botted, { fog: true, kinds: R.kindsWithoutBots(botted) }), plan('', [0, 0, 0, 0], undefined, undefined, 0, true));
+    same('planWith: a change of fog that is no boolean is none: the room\'s own goes back', [PWf(fogged, { fog: 0 }).fog, PWf(clear, { fog: 'true' }).fog, PWf(clear, { fog: 1 }).fog], [true, false, false]);
+    same('withFog: nothing pending gives the room itself', R.withFog(clear, -1), clear);
+    same('withFog: a pending pick is the room\'s fog in a copy (1 on, 0 off)', [R.withFog(clear, 1).fog, clear.fog, R.withFog(clear, 1) !== clear, R.withFog(fogged, 0).fog], [true, false, true, false]);
+    same('a second plan before the answer carries the pending fog', [PWf(R.withFog(clear, 1), { seat: 3, kind: 'nobody' }).fog, PWf(R.withFog(clear, 1), { map: 'tiny' }).fog, PWf(R.withFog(fogged, 0), { sides: [0, 0, 0, 0] }).fog], [true, true, false]);
+    same('with no pending fog the room\'s own goes back', PWf(R.withFog(clear, -1), { seat: 3, kind: 'nobody' }).fog, false);
+    same('pendingFogAfter: the room says it: cleared', [R.pendingFogAfter(1, fogged, model(fogged)), R.pendingFogAfter(0, clear, model(clear))], [-1, -1]);
+    same('pendingFogAfter: the room does not say it yet: kept', [R.pendingFogAfter(1, clear, model(clear)), R.pendingFogAfter(0, fogged, model(fogged))], [1, 0]);
+    same('pendingFogAfter: nothing pending stays none', R.pendingFogAfter(-1, clear, model(clear)), -1);
+    const guestRoom = mk([P('Juniper'), P('Sam'), O, O], { you: 1 });
+    same('pendingFogAfter: a guest (the lead moved) drops it', R.pendingFogAfter(1, guestRoom, model(guestRoom)), -1);
+    const starting = mk([P('Juniper'), P('Sam'), O, O], { starting: true });
+    same('pendingFogAfter: START pressed drops it', R.pendingFogAfter(1, starting, model(starting)), -1);
+    same('botColors: the colors that hold a planned computer player, by name, in the order of the colors', [R.botColors(model(botted)), R.botColors(model(clear)), R.botColors(model(mk([P('Juniper'), [B, 'Bot (Easy)'], O, O], { plan: [0, 0, 0, 1] })))], [['Blue', 'Black'], [], ['Red', 'Black']]);
+    same('botColors: Nobody and Open are no bots, and a color that a person holds is no bot whatever the plan says under it', R.botColors(model(mk([P('Juniper'), P('Sam'), O, O], { plan: [3, 3, 4, 0] }))), []);
+    same('kindsWithoutBots: Easy, Medium and Hard become Open, Open and Nobody stay, the list is new', [R.kindsWithoutBots(botted), R.kindsWithoutBots(mk([P('Juniper'), P('Sam'), O, O], { plan: [1, 4, 3, 0] })), R.kindsWithoutBots(botted) !== botted.plan], [[0, 0, 0, 0], [0, 4, 0, 0], true]);
+}
+
 {   // the team goes with a person who is moved: the room (the server) does it, and the plan that the leader's page sends next keeps the pair
     const before = mk([P('Juniper'), P('Sam'), P('Priya'), O], { teamA: 1, teamB: 2 });
     same('a person moves (Sam from Red to the open Black): the page asks the room to move him', R.moveOf(before, model(before), 1, 3), { op: 'move', from: 1, to: 3 });

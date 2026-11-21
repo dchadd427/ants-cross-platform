@@ -263,6 +263,23 @@ async function main() {
         check('the room, ' + at + ': the chat box has two tabs, Ants & Uncles and Room', JSON.stringify(tabs) === JSON.stringify(['Ants & Uncles', 'Room']), JSON.stringify(tabs));
         await hostPage.shot('room_' + at + '_host');
         await guestPage.shot('room_' + at + '_guest');
+        // Fog of War (docs/PLAY_IN_BROWSER.md "Fog of War"): the host presses the switch, is asked about the computer player, answers, and the room is still whole: it fits (nothing scrolls, nothing is cut off), the switch is in the header, and
+        // the guest's room, with its chip and its note, fits as well
+        await hostPage.press('#fg-switch');
+        await hostPage.waitFor('the question is asked', '(function () { var t = document.querySelector(".gtoast"); return !!t && !t.hidden && /Turn fog on/.test(t.textContent); })()', 6000);
+        await hostPage.eval('(function () { document.querySelector(".gtoast .btn").click(); })()');
+        await hostPage.waitFor('fog is on and the bot is open', 'document.getElementById("fg-switch").getAttribute("aria-checked") === "true" && document.querySelectorAll("#slots .k-bot").length === 0', 8000);
+        await guestPage.waitFor('the guest is told', '(function () { var c = document.querySelector(".fg-chip"); return !!c && !c.hidden && !!document.querySelector(".fg-note") && !document.querySelector(".fg-note").hidden; })()', 8000);
+        for (const page of [hostPage, guestPage]) await page.waitFor('the toasts have gone', '(function () { return [".gtoast", "#toast"].every(function (q) { var t = document.querySelector(q); return !t || t.hidden; }); })()', 12000);
+        await sleep(300);
+        const fm = await measure(hostPage), gm = await measure(guestPage);
+        for (const [who, mm2] of [['host', fm], ['guest', gm]]) {
+            check('the room with Fog of War on, ' + at + ', the ' + who + ': the page does not scroll, nothing in the room scrolls, nothing is cut off', mm2.noPageScroll && mm2.lobbyScroll <= 1 && mm2.cut.length === 0, JSON.stringify({ scroll: mm2.scroll, s: mm2.lobbyScroll, cut: mm2.cut }));
+        }
+        check('the room with Fog of War on, ' + at + ': the host\'s switch is in the header (above the colors) and at least 24 px each way, the note is under the link', await hostPage.eval('(function () { var s = document.getElementById("fg-switch").getBoundingClientRect(), c = document.querySelector("#slots li").getBoundingClientRect(), n = document.querySelector(".fg-note").getBoundingClientRect(); return s.width >= 24 && s.height >= 24 && s.bottom <= c.top && n.height > 0 && n.bottom <= c.top; })()'));
+        check('the room with Fog of War on, ' + at + ': START is in the window and 44 px high', fm.start && fm.start.h >= 44 && gm.start && gm.start.h >= 44, JSON.stringify({ h: fm.start, g: gm.start }));
+        await hostPage.shot('room_' + at + '_host_fog');
+        await guestPage.shot('room_' + at + '_guest_fog');
         await hostPage.press('.rc-tab', 'Room');
         await hostPage.waitFor('the room chat shows', '!document.getElementById("chat").hidden && document.querySelector(".rc-tab[aria-selected=true]").textContent.indexOf("Room") === 0', 3000);
         const mm = await measure(hostPage);

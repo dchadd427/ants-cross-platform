@@ -47,7 +47,7 @@ class ThePage(unittest.TestCase):
         self.assertIn('<span class="hl"><h2 id="room-h">Your room</h2><span class="modetag" id="mode-tag" hidden></span></span>', self.page)
 
     def test_the_scripts_and_the_stylesheet_are_loaded_in_their_places(self):
-        self.assertIn('<script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script>\n<script src="front/map_picker.js"></script>', self.page)
+        self.assertIn('<script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script><script src="front/room_fog.js"></script>\n<script src="front/map_picker.js"></script>', self.page)
         self.assertEqual(self.page.count('<link rel="stylesheet" href="front/game_type.css">'), 1)
         self.assertGreater(self.page.index('href="front/game_type.css"'), self.page.index("</style>"), "the sheet comes after the page's own style")
 
@@ -59,14 +59,14 @@ class ThePage(unittest.TestCase):
         self.assertIn("try { storage = window.localStorage; } catch (e)", self.page)       # (the page works without the storage)
 
     def test_a_new_room_starts_with_the_leaders_last_choice_and_a_rematch_or_a_joined_room_does_not(self):
-        self.assertIn("pendingMode = -1; if (e.created) { newRoom = true; backBar.remade(); }", self.page)       # (the strip is told, so that a test map is sent to the room that this page made again: rematch.js)
-        self.assertIn("if (newRoom) { if (room.leader !== room.you) newRoom = false; else if (!room.starting) { var want = Modes.wanted(storage, room.mode); if (want < 0 || client.setPlan(Rules.planWith(room, model, { mode: want }))) { newRoom = false; if (want >= 0) pendingMode = want; } } }", self.page)
+        self.assertIn("pendingMode = -1; pendingFog = -1; if (e.created) { newRoom = true; backBar.remade(); }", self.page)       # (the strip is told, so that a test map is sent to the room that this page made again: rematch.js)
+        self.assertIn("if (newRoom) { if (room.leader !== room.you) newRoom = false; else if (!room.starting) { var want = Modes.wanted(storage, room.mode); if (want < 0 || client.setPlan(Rules.planWith(Rules.withFog(room, pendingFog), model, { mode: want }))) { newRoom = false; if (want >= 0) pendingMode = want; } } }", self.page)
         self.assertEqual(self.page.count("newRoom = true"), 1, "only the room that this page made (the Welcome that says created) is new")
 
     def test_every_plan_the_page_sends_carries_the_pending_mode(self):
         self.assertIn("pendingMode = Rules.pendingAfter(pendingMode, room, model);", self.page)
         self.assertEqual(self.page.count("Rules.withMode(client.room, pendingMode)"), 1)
-        self.assertIn("Rules.planWith(Rules.withMode(room, pendingMode), model, { sides: [0, 0, 0, 0] })", self.page)
+        self.assertIn("Rules.planWith(Rules.withFog(Rules.withMode(room, pendingMode), pendingFog), model, { sides: [0, 0, 0, 0] })", self.page)
         self.assertEqual(len(re.findall(r"Rules\.planWith\(", self.page)), 3, "every plan is built with the pending mode, except the first plan of a new room, which sets it")
 
     def test_the_room_decides_what_the_control_and_the_tag_show(self):

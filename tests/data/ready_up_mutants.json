@@ -35,8 +35,8 @@
   {
    "id": "a_plan_change_clears_the_marks",
    "file": "src/ants_net/lobby.cpp",
-   "old": "    if (!changed) return;\n    ++plan_changes_;\n    broadcast_room();",
-   "new": "    if (!changed) return;\n    ++plan_changes_;\n    for (Guest& g : guests_) g.ready = false;\n    broadcast_room();",
+   "old": "    if (!changed) return true;\n    ++plan_changes_;\n    broadcast_room();",
+   "new": "    if (!changed) return true;\n    ++plan_changes_;\n    for (Guest& g : guests_) g.ready = false;\n    broadcast_room();",
    "build": [
     "test_lobby"
    ],

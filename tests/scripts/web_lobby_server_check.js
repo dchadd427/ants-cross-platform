@@ -99,7 +99,7 @@ function page(name, code, extra) {
     const c = new N.LobbyClient(Object.assign({ url: wsUrl, code: code, map: 'TINY.LVL', name: name, WebSocket: WS }, extra || {}));
     c.pageName = name;
     c.events = [];
-    for (const ev of ['status', 'welcome', 'joined', 'left', 'renamed', 'moved', 'swapped', 'host', 'plan', 'starting', 'games', 'notice', 'chat', 'gone', 'refused', 'removed', 'superseded']) {
+    for (const ev of ['status', 'welcome', 'joined', 'left', 'renamed', 'moved', 'swapped', 'host', 'plan', 'fog', 'starting', 'games', 'notice', 'chat', 'gone', 'refused', 'removed', 'superseded']) {
         c.on(ev, (data) => c.events.push({ ev: ev, data: data }));
     }
     c.count = (ev) => c.events.filter((e) => e.ev === ev).length;
@@ -178,6 +178,33 @@ const pressReady = (env) => { const button = env.$('slots').findAll((e) => e.tag
     });
 
     // ---- 2. the leader goes: the player who has been there the longest leads --------------------------------------------------------------------------------------------------------------------------
+    // ---- 1b. Fog of War (protocol 28): the plan carries it, the room shows it to the other page, and a plan with fog and a computer player is refused by the server (a plan that no honest page sends) -----------------------------------
+    await scenario('1b. Fog of War in the plan: the leader switches it, the other page sees it, a plan with fog and a bot is refused as a whole, bots are fine again when fog is off', async () => {
+        const A = page('Ada', code('fg1'));
+        const B = page('Bea', code('fg1'));
+        A.connect();
+        await step('the first page is welcomed to a room that its Hello made', () => online(A), 5000);
+        B.connect();
+        await step('the second page finds the room', () => online(B), 5000);
+        check('(fog is off in the room that a Hello made, for both pages)', A.room.fog === false && B.room.fog === false && A.isLeader() && !B.isLeader());
+        const none = (kinds, fog) => ({ map: '', kinds: kinds, teamA: N.NO_TEAM, teamB: N.NO_TEAM, fog: fog });
+        check('B (a guest) sends nothing for fog: only the leader\'s plan is sent', B.setPlan(none([0, 0, 0, 0], true)) === false);
+        check('A switches fog on with the plan', A.setPlan(none([0, 0, 0, 0], true)) === true);
+        await step('both pages see fog, and B is told who switched it', () => () => A.room.fog === true && B.room.fog === true && B.count('fog') === 1 && B.of('fog')[0].on === true && B.of('fog')[0].name === 'Ada' && B.of('fog')[0].you === false && A.of('fog')[0].you === true);
+        check('(a plan that says nothing of fog keeps it: A changes a color to Nobody and fog stays on)', A.setPlan({ map: '', kinds: [0, 0, 0, 4], teamA: N.NO_TEAM, teamB: N.NO_TEAM }) === true);
+        await step('(the plan is there, fog too)', () => () => A.room.plan.join() === '0,0,0,4' && B.room.plan.join() === '0,0,0,4' && A.room.fog === true && B.room.fog === true);
+        check('A sends a plan with fog and a Medium bot by hand (what no honest page sends): the server must refuse it as a whole', A.sendBytes(N.encodePlan('MEDIUM.LVL', [0, 2, 0, 4], N.NO_TEAM, N.NO_TEAM, 0, true)) === true);
+        await step('A, the leader alone, is told in the room\'s words', () => () => A.of('notice').some((e) => e.text === 'Bots cannot play with Fog of War.'));
+        await sleep(400);
+        check('(nothing of the plan was taken: the map, the colors and fog are as they were, and B was told nothing)', A.room.map === 'TINY.LVL' && A.room.plan.join() === '0,0,0,4' && A.room.fog === true && B.room.fog === true && B.room.plan.join() === '0,0,0,4' && B.count('notice') === 0, A.room.plan.join());
+        check('(the page itself sends nothing for a bot with fog: the plan is refused by the client)', A.setPlan(none([0, 2, 0, 4], true)) === false);
+        check('A switches fog off, with a Medium bot in the same plan', A.setPlan(none([0, 2, 0, 4], false)) === true);
+        await step('both pages see no fog and the bot', () => () => A.room.fog === false && B.room.fog === false && B.room.plan.join() === '0,2,0,4' && B.count('fog') === 2 && B.of('fog')[1].on === false);
+        check('(a Room that shows fog and a bot is no Room: A sets fog on again, with the bot still planned: refused by the page)', A.setPlan(none([0, 2, 0, 4], true)) === false);
+        await sleep(200);
+        check('(and nobody was dropped)', A.status === 'online' && B.status === 'online');
+    });
+
     await scenario('2. the leader goes: the player who has been there the longest leads', async () => {
         const A = page('Ada', code('b'));
         const B = page('Bea', code('b'));
