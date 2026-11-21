@@ -42,15 +42,15 @@ class Images:
         self.is_owner = is_owner
         self.key_of = key_of
         self.dir = cfg.image_dir
-        self.on = False
-        if cfg.image_converter_url:
-            try:
-                os.makedirs(self.dir, exist_ok=True)
-                self.on = os.access(self.dir, os.W_OK)
-            except OSError:
-                self.on = False
-            if not self.on:
-                log.event("warning", what="images_off_the_folder_cannot_be_written")
+        try:
+            if cfg.image_converter_url:
+                os.makedirs(self.dir, exist_ok=True)                 # (a hub with no converter does not make a folder of its own)
+            self.files = os.path.isdir(self.dir) and os.access(self.dir, os.W_OK)
+        except OSError:
+            self.files = False
+        self.on = bool(cfg.image_converter_url) and self.files       # (`files`: the folder is there and can be written, so the files of deleted lines are deleted, whether people may post or not; `on`: and they may)
+        if cfg.image_converter_url and not self.files:
+            log.event("warning", what="images_off_the_folder_cannot_be_written")
         self.blocked = set()                        # the references whose posting an administrator took away
         self.loaded = False                         # whether `blocked` was read (until it is, nobody but the operator's account may post: fail closed)
         self.seen = None                            # the store's counter of the flags when `blocked` was read
@@ -174,8 +174,9 @@ class Images:
         return gone
 
     def on_tick(self, now):
-        """The clock's work: the sweep every `image_sweep_seconds`, the scan every `image_scan_seconds`. A store that refuses is the caller's to log."""
-        if not self.on:
+        """The clock's work: the sweep every `image_sweep_seconds`, the scan every `image_scan_seconds`. A store that refuses is the caller's to log. It runs with the folder, not with the converter: switching
+        posting off must never stop the files of a deleted line from going."""
+        if not self.files:
             return
         if now >= self.next_sweep:
             self.next_sweep = now + self.limits.image_sweep_seconds

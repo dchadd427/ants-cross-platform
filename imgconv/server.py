@@ -21,17 +21,29 @@ import convert as convertmod
 MAX_BODY = 4 * 1024 * 1024
 WALL_SECONDS = 10.0                     # the child is killed after this long, whatever it is doing
 CPU_SECONDS = 8                         # ... and by the kernel after this much CPU
-MEMORY_BYTES = 1024 * 1024 * 1024       # address space of the child (the container's own memory limit is what really counts)
+WORKING_BYTES = 512 * 1024 * 1024       # what a conversion may take on top of the address space that its process has when it starts (a legal 24 megapixel image peaks at about 300 MB). The container has
+                                        # 768 MB (docker-compose.stack.yml: a test keeps the two apart), so a conversion that wants more gets a MemoryError and is `bad`, and the kernel's OOM killer is never asked
 READ_SECONDS = 15.0                     # a request that is not all there by then is dropped
+
+
+def address_space():
+    """The address space that this process has now, in bytes, or None where it cannot be read (only Linux, where the limit is kept, has /proc)."""
+    try:
+        with open("/proc/self/statm") as f:
+            return int(f.read().split()[0]) * os.sysconf("SC_PAGE_SIZE")
+    except (OSError, ValueError, IndexError, AttributeError):
+        return None
 
 
 def child(conn, data):
     """The conversion, in a process of its own: the limits first, then the decoder, then the answer through the pipe (a crash sends nothing, which the parent reads as `bad`)."""
     try:
         import resource
-        for which, value in ((resource.RLIMIT_CPU, CPU_SECONDS), (resource.RLIMIT_AS, MEMORY_BYTES)):
+        now = address_space()
+        for which, value in ((resource.RLIMIT_CPU, CPU_SECONDS), (resource.RLIMIT_AS, None if now is None else now + WORKING_BYTES)):
             try:
-                resource.setrlimit(which, (value, value))
+                if value is not None:
+                    resource.setrlimit(which, (value, value))
             except (ValueError, OSError):
                 pass                                    # (a platform without that limit: the container's own are what hold)
     except ImportError:

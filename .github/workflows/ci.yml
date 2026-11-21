@@ -651,12 +651,12 @@ jobs:
           docker rm -f ants-hub-check
           docker volume rm ants-hub-check-data
 
-      # The image converter's image (Dockerfile.img, docs/HUB_IMAGES.md): started the way the stack starts it (read only, no capabilities, no new privileges, 16 processes, 384 MB, one processor, a tmpfs for /tmp, no
+      # The image converter's image (Dockerfile.img, docs/HUB_IMAGES.md): started the way the stack starts it (read only, no capabilities, no new privileges, 16 processes, 768 MB, one processor, a tmpfs for /tmp, no
       # volume, no variable but its port): its health check must say healthy, and it must turn a small PNG that this step makes into a new image (the answer's first line says the type) and refuse a file that is not an image.
       - name: Build the image converter and start it with the stack's hardening
         run: |
           docker buildx build --load -f Dockerfile.img -t ants-img .
-          docker run -d --name ants-img-check --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 16 --memory 384m --cpus 1 --tmpfs /tmp --health-interval 2s --health-start-period 2s ants-img
+          docker run -d --name ants-img-check --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 16 --memory 768m --cpus 1 --tmpfs /tmp --health-interval 2s --health-start-period 2s ants-img
           ok=
           for i in $(seq 1 40); do
             [ "$(docker inspect --format '{{.State.Health.Status}}' ants-img-check)" = healthy ] && ok=1 && break
@@ -665,6 +665,10 @@ jobs:
           docker logs ants-img-check
           [ -n "$ok" ] || { docker rm -f ants-img-check; exit 1; }
           docker exec ants-img-check python -c "import http.client as h, struct, zlib; raw = b''.join(b'\x00' + b'\x10\x20\x30' * 8 for _ in range(8)); chunk = lambda t, d: struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t + d)); png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 8, 8, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b''); c = h.HTTPConnection('127.0.0.1', 4050); c.request('POST', '/convert', body=png); r = c.getresponse(); body = r.read(); assert r.status == 200 and body.startswith(b'{\"x\":\"png\"'), (r.status, body[:60]); c = h.HTTPConnection('127.0.0.1', 4050); c.request('POST', '/convert', body=b'<svg/>'); r = c.getresponse(); assert r.status == 422, r.status"
+          # the most that is let in: 4898 x 4898 is 23.99 megapixels of RGBA (96 MB of pixels), which the converter must turn into a new image inside the container's memory; the container must not have been killed
+          docker exec ants-img-check python -c "from PIL import Image; import http.client as h, io; im = Image.new('RGBA', (4898, 4898), (10, 20, 30, 128)); png = io.BytesIO(); im.save(png, 'PNG'); del im; c = h.HTTPConnection('127.0.0.1', 4050); c.request('POST', '/convert', body=png.getvalue()); r = c.getresponse(); body = r.read(); assert r.status == 200 and body.startswith(b'{\"x\":\"png\"'), (r.status, body[:60])"
+          [ "$(docker inspect --format '{{.State.OOMKilled}}' ants-img-check)" = false ]
+          [ "$(docker inspect --format '{{.State.Health.Status}}' ants-img-check)" = healthy ]
           docker rm -f ants-img-check
 
       # The stack file (docker-compose.stack.yml) must render.

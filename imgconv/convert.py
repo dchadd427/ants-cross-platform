@@ -69,7 +69,9 @@ def fresh(im):
 
 
 def has_alpha(im):
-    if im.mode in ("RGBA", "LA", "PA"):
+    if im.mode == "RGBA":
+        return im.getextrema()[3][0] < 255             # (no copy of the channel: a 24 megapixel image has 96 MB of pixels)
+    if im.mode in ("LA", "PA"):
         return im.getchannel("A").getextrema()[0] < 255
     return im.mode == "P" and "transparency" in im.info
 
@@ -102,21 +104,38 @@ def thumbnail(im):
     return jpeg_bytes(fresh(small), THUMB_QUALITY), small.size[0], small.size[1]
 
 
+def replaced(old, new):
+    """`new` in the place of `old`, whose pixels are let go at once when it was a copy (a 24 megapixel image has 96 MB of them, and the converter's container has little more than that to give)."""
+    if new is not old:
+        old.close()
+    return new
+
+
+def turned(im):
+    """The image in its real orientation: the EXIF orientation is applied only when it says something (a turn is a copy; no turn, no copy). The metadata that says it is dropped later."""
+    try:
+        if im.getexif().get(0x0112, 1) in (2, 3, 4, 5, 6, 7, 8):
+            return replaced(im, ImageOps.exif_transpose(im))
+    except Exception:
+        pass                                           # (an EXIF block that cannot be read says nothing of orientation: the pixels as they are)
+    return im
+
+
 def decode_still(im, kind):
-    """The first frame as an RGB or RGBA image of its real orientation, no larger than MAX_SIDE (a JPEG is decoded at a reduced scale first)."""
+    """The first frame as an RGB or RGBA image of its real orientation, no larger than MAX_SIDE (a JPEG is decoded at a reduced scale first). Each step lets go of the one before when it made a copy, so
+    that at most two full-size copies exist at one time (the least that a conversion needs); the original is closed here."""
     if kind == "jpeg":
         w, h = im.size
         im.draft("RGB", fit((w, h), MAX_SIDE))
     im.load()
-    try:
-        im = ImageOps.exif_transpose(im)               # (the orientation is applied now: the metadata that says it is dropped below)
-    except Exception:
-        pass                                           # (an EXIF block that cannot be read says nothing of orientation: the pixels as they are)
-    im = im.convert("RGBA") if has_alpha(im) or im.mode in ("RGBA", "LA", "PA", "P") else im.convert("RGB")
-    if im.mode == "RGBA" and not has_alpha(im):
-        im = im.convert("RGB")
+    im = turned(im)
+    mode = "RGBA" if has_alpha(im) else "RGB"
+    if im.mode != mode:
+        im = replaced(im, im.convert(mode))
+    if max(im.size) >= 2 * MAX_SIDE:
+        im = replaced(im, im.reduce(max(im.size) // MAX_SIDE))      # (a box average of whole pixels first: the resize below of a big RGBA image makes two more full-size copies of it, to premultiply the alpha)
     if max(im.size) > MAX_SIDE:
-        im = im.resize(fit(im.size, MAX_SIDE), Image.LANCZOS)
+        im = replaced(im, im.resize(fit(im.size, MAX_SIDE), Image.LANCZOS))
     return fresh(im)
 
 
@@ -154,6 +173,8 @@ def convert_animation(im):
     frames, durations, total, alpha = [], [], 0, False
     for index in range(frames_in):
         im.seek(index)
+        if im.size != (w, h):                          # (a frame that lies outside the screen of the file makes Pillow's canvas larger: the sizes that were checked above are not the ones that would be decoded)
+            raise ConvertError("pixels")
         duration = max(ANIM_MIN_FRAME_MS, int(im.info.get("duration") or 100))
         total += duration
         if total > ANIM_MS:

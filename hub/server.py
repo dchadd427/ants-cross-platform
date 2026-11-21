@@ -146,9 +146,10 @@ class Hub:
         self.port = self.server.sockets[0].getsockname()[1]
         self.ticker = asyncio.ensure_future(self.tick())
         self.chat.roles.start()
-        if self.images.on:
+        if self.images.files:
             try:
-                self.images.sync()                                         # (the flags are read before the first socket: until they are, nobody but the operator's account may post)
+                if self.images.on:
+                    self.images.sync()                                     # (the flags are read before the first socket: until they are, nobody but the operator's account may post)
                 self.images.sweep()                                        # (what a crash left: the files of the images whose lines are gone)
             except Exception as e:
                 self.images_trouble(self.clock(), e)
@@ -392,7 +393,7 @@ class Hub:
         try:                                             # (the flags that take posting of images away: read again when the counter says that they changed, here or in the command line; the pages of those accounts are told)
             if self.images.on:
                 self.chat.images_changed(self.images.sync())
-                self.images.on_tick(now)
+            self.images.on_tick(now)
         except Exception as e:
             self.images_trouble(now, e)
         try:                                             # (the count of people and the list of the front page, on their own: a bug in them never stops the retention below, and a failing purge never stops them)
