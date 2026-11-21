@@ -105,7 +105,10 @@ function reader(o) {
 function line(r, e) { const row = new El('div', r.p.doc); row.className = 'gc-line'; r.log.appendChild(row); r.api.draw(row, e); return row; }
 {
     const r = reader();
+    r.log.clientHeight = 85; r.log.style = { props: {}, setProperty(k, v) { this.props[k] = v; } };
     const row = line(r, { id: 7, who: 'maple', text: 'a map', at: 1, img: IMG() });
+    check('a thumbnail is never higher than the log shows: 85 px of log is 57 px at most, a tall log 81, a low one 44', r.log.style.props['--img-mh'] === '57px' && (r.log.clientHeight = 400, r.api.draw(row, { id: 7, who: 'm', text: '', img: IMG() }), r.log.style.props['--img-mh'] === '81px') && (r.log.clientHeight = 30, r.api.draw(row, { id: 7, who: 'm', text: '', img: IMG() }), r.log.style.props['--img-mh'] === '44px'), JSON.stringify(r.log.style.props));
+    r.log.clientHeight = 85; r.api.draw(row, { id: 7, who: 'm', text: '', img: IMG() });
     const b = byClass(row, 'gc-thumb')[0], im = b && b.querySelector('img');
     check('a thumbnail: a button in a span after the words, with an img of the still', !!b && b.tagName === 'button' && b.type === 'button' && !!im && im.getAttribute('src') === '/hub/img/' + NAME + '.t.jpg' && has(b.parentNode, 'gc-pic'));
     check('...the frame\'s own size (the log does not jump), lazy, async, not draggable, the caption for its alt', im.getAttribute('width') === '360' && im.getAttribute('height') === '203' && im.getAttribute('loading') === 'lazy' && im.getAttribute('decoding') === 'async' && im.getAttribute('alt') === 'a map' && im.getAttribute('draggable') === 'false');

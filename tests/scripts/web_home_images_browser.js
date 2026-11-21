@@ -151,6 +151,8 @@ async function main() {
         const page = await ctx.newPage();
         page.on('pageerror', (e) => errors.push(String(e && e.message || e)));
         await page.goto(origin + '/', { waitUntil: 'load' });
+        await page.waitForSelector('#gchat', { state: 'attached' });
+        if (page.viewportSize().width <= 700) await page.click('.htabs button:has-text("Chat")');                       // (a phone shows one screen at a time: its tab bar has the Chat)
         await page.waitForSelector('#gchat .gc-input', { state: 'visible', timeout: 15000 });
         await until('the dock is live and may write', () => page.evaluate(() => { const d = document.getElementById('gchat'); return d.getAttribute('data-state') === 'live' && !d.querySelector('.gc-form').hidden; }), 15000);
         if (wantPost) await until('the image button is there', () => page.$('#gchat .gt-pic'), 15000);

@@ -432,6 +432,13 @@
    "old": "im.style.setProperty('--tw', String(img.tw)); im.style.setProperty('--th', String(img.th));",
    "new": "",
    "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "a_thumbnail_is_higher_than_the_log",
+   "file": "web/home/pics.js",
+   "old": "Math.max(44, Math.min(81, h - 28))",
+   "new": "81",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
   }
  ]
 }
