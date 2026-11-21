@@ -7,22 +7,12 @@
     wrapAngleDeg, normalizeHex, resolveTeam, selectActionAnims, AntRenderer, installToolbarRovingTabindex,
   } = window.__antRender;
 
-  const RETRO_STEP_SEC = {
-    worker: 0.150,
-    combat: 0.125,
-    thief: 0.100,
-    bomber: 0.100,
-    swimmer: 0.150,
-    fire: 0.100,
+  const ACTION_META = {
+    idle: { clip: "Idle", label: "Idle", stepSec: { worker: 0.15, combat: 0.125, thief: 0.1, bomber: 0.1, swimmer: 0.15, fire: 0.1 } },
+    attack: { clip: "Attack", label: "Attack", stepSec: { worker: 0.07, combat: 0.09, thief: 0.06, bomber: 0.06, swimmer: 0.076, fire: 0.06 } },
+    hit: { clip: "Hit", label: "Hit", stepSec: { worker: 0.089, combat: 0.098, thief: 0.106, bomber: 0.111, swimmer: 0.117, fire: 0.1 } },
   };
-  const RETRO_ATTACK_STEP_SEC = {
-    worker: 0.070,
-    combat: 0.090,
-    thief: 0.060,
-    bomber: 0.060,
-    swimmer: 0.076,
-    fire: 0.060,
-  };
+  const validAction = (raw) => (raw && Object.prototype.hasOwnProperty.call(ACTION_META, raw) ? raw : null);
 
   const emptyScene = () => ({
     instances: [], target: [0, 0.55, 0], fitRadius: 0.9, halfWidth: 0.7,
@@ -79,8 +69,7 @@
     const initBlink = pBlink === "closed" ? "closed" : (pBlink === "open" ? "open" : (motionQuery.matches ? "open" : "auto"));
     const initIdle = fixedIdleTime !== null ? false : (pIdle === "0" || pIdle === "false" ? false : (pIdle === "1" || pIdle === "true" ? true
       : (!params.has("idle") && savedView && typeof savedView.idle === "boolean" ? savedView.idle : !motionQuery.matches)));
-    const initAction = pAction === "attack" || pAction === "idle" ? pAction
-      : (!params.has("action") && savedView && (savedView.action === "attack" || savedView.action === "idle") ? savedView.action : "idle");
+    const initAction = validAction(pAction) || (!params.has("action") && validAction(savedView && savedView.action)) || "idle";
 
     const preset = ANGLES[initAngle] || ANGLES["301"];
     const useSavedCam = !params.has("angle") && pYaw === null && savedView && Number.isFinite(savedView.yaw) && Number.isFinite(savedView.pitch) && Number.isFinite(savedView.zoom);
@@ -98,7 +87,8 @@
       modelCache: new Map(), customModel: null, scene: emptyScene(),
     };
     const activeTeam = () => resolveTeam(state.team, state.customColor);
-    const activeClipName = () => (state.action === "attack" ? "Attack" : "Idle");
+    const actionMeta = () => ACTION_META[state.action] || ACTION_META.idle;
+    const activeClipName = () => actionMeta().clip;
     window.__antViewerGetState = () => ({
       ant: state.ant === "custom" ? "" : state.ant,
       team: state.team, customColor: state.customColor, angle: state.angle, proj: state.cam.projection,
@@ -164,7 +154,7 @@
       if (TEAMS[state.team]) q.set("team", state.team);
       if (SHEET_ANGLES.includes(state.angle)) q.set("angle", state.angle);
       else if (state.angle === "custom") q.set("yaw", String(Math.round(state.cam.yaw)));
-      if (state.action === "attack") q.set("action", "attack");
+      if (state.action !== "idle") q.set("action", state.action);
       if (state.silhouette) q.set("silhouette", "1");
       if (state.retroFps) q.set("retrofps", "1");
       const qs = q.toString();
@@ -177,6 +167,7 @@
         hasBlinkAnim: state.scene.instances.some((inst) => inst.model.blinkInfo && inst.model.blinkInfo.hasBlink),
         idleAnims: state.scene.instances.flatMap((inst) => (inst.model.idleAnims || []).map((a) => a.name)),
         attackAnims: state.scene.instances.flatMap((inst) => (inst.model.attackAnims || []).map((a) => a.name)),
+        hitAnims: state.scene.instances.flatMap((inst) => (inst.model.hitAnims || []).map((a) => a.name)),
         textureCount: state.scene.instances.reduce((sum, inst) => sum + (inst.model.textureCount || 0), 0),
         hasVertexColors: state.scene.instances.some((inst) => Boolean(inst.model.hasVertexColors)),
         projection: state.cam.projection, yaw: Math.round(wrapAngleDeg(state.cam.yaw)), pitch: Math.round(state.cam.pitch),
@@ -370,29 +361,29 @@
     }
 
     function selectAction(next) {
-      const target = next === "attack" ? "attack" : "idle";
+      const target = validAction(next) || "idle";
       if (state.action === target) return;
       state.action = target;
       const multi = state.scene.instances.length > 1;
       const phaseStagger = [0.0, 0.14, 0.28, 0.09, 0.21, 0.34];
       state.scene.instances.forEach((inst, i) => { inst.idleTime = multi ? phaseStagger[i % phaseStagger.length] : 0; });
       updateUiState(); markDirty();
-      if (target === "attack") {
-        const anyAttack = state.scene.instances.some((inst) => selectActionAnims(inst.model, "Attack").matched);
-        announce(anyAttack ? "Action set to Attack." : "Action set to Attack (falling back to Idle — no 3D Attack clip yet).");
+      const meta = actionMeta();
+      if (target !== "idle") {
+        const anyMatched = state.scene.instances.some((inst) => selectActionAnims(inst.model, meta.clip).matched);
+        announce(anyMatched ? `Action set to ${meta.label}.` : `Action set to ${meta.label} (falling back to Idle — no 3D ${meta.label} clip yet).`);
       } else {
         announce("Action set to Idle.");
       }
     }
 
-    function toggleAction() { selectAction(state.action === "attack" ? "idle" : "attack"); }
+    function toggleAction(kind = "attack") { selectAction(state.action === kind ? "idle" : kind); }
 
     function toggleIdle() {
       state.idleAnim = !state.idleAnim;
       state.fixedIdleTime = null;
       updateUiState(); markDirty();
-      const label = state.action === "attack" ? "Attack" : "Idle";
-      announce(label + " animation " + (state.idleAnim ? "playing." : "paused."));
+      announce(actionMeta().label + " animation " + (state.idleAnim ? "playing." : "paused."));
     }
 
     function toggleSilhouette() {
@@ -404,19 +395,18 @@
       state.retroFps = !state.retroFps;
       updateUiState(); markDirty();
       if (!state.retroFps) { announce("1998 FPS off (smooth 60 fps playback)."); return; }
-      const steps = state.action === "attack" ? RETRO_ATTACK_STEP_SEC : RETRO_STEP_SEC;
-      const step = steps[state.ant];
+      const step = actionMeta().stepSec[state.ant];
       if (step) {
         const fps = (1 / step).toFixed(1).replace(/\.0$/, "");
         announce(`1998 FPS on (${ANT_LABELS[state.ant]} · ${fps} fps, ${Math.round(step * 1000)}ms step).`);
       } else {
-        announce(state.action === "attack" ? "1998 FPS on (11\u201317 fps attack cadence)." : "1998 FPS on (6.7\u201310 fps per class).");
+        announce(`1998 FPS on (${actionMeta().label} 1998 cadence).`);
       }
     }
 
     function withQuantizedTiming(fn) {
       if (!state.retroFps || state.fixedIdleTime !== null) return fn();
-      const stepTable = state.action === "attack" ? RETRO_ATTACK_STEP_SEC : RETRO_STEP_SEC;
+      const stepTable = actionMeta().stepSec;
       const saved = state.scene.instances.map((inst) => {
         const step = stepTable[inst.id] || 0.125;
         const origIdle = inst.idleTime || 0;
@@ -526,7 +516,8 @@
       else if (e.key === "ArrowDown") { state.cam.pitch = clamp(state.cam.pitch - sp, -10, 85); state.angle = "custom"; }
       else if (e.key === "+" || e.key === "=") state.cam.zoom = clamp(state.cam.zoom * 0.88, 0.35, 3.2);
       else if (e.key === "-" || e.key === "_") state.cam.zoom = clamp(state.cam.zoom * 1.14, 0.35, 3.2);
-      else if (e.key === "a" || e.key === "A") { e.preventDefault(); toggleAction(); return; }
+      else if (e.key === "a" || e.key === "A") { e.preventDefault(); toggleAction("attack"); return; }
+      else if (e.key === "h" || e.key === "H") { e.preventDefault(); toggleAction("hit"); return; }
       else if (e.key === "b" || e.key === "B") { e.preventDefault(); if (e.shiftKey) toggleBlinkHold(); else triggerBlink(); return; }
       else if (e.key === "i" || e.key === "I") { e.preventDefault(); toggleIdle(); return; }
       else if (e.key === "s" || e.key === "S") { e.preventDefault(); toggleSilhouette(); return; }
@@ -546,7 +537,8 @@
     document.addEventListener("keydown", (e) => {
       if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
       if (document.activeElement === stageCanvas) return;
-      if (e.key === "a" || e.key === "A") { e.preventDefault(); toggleAction(); }
+      if (e.key === "a" || e.key === "A") { e.preventDefault(); toggleAction("attack"); }
+      else if (e.key === "h" || e.key === "H") { e.preventDefault(); toggleAction("hit"); }
       else if (e.key === "s" || e.key === "S") { e.preventDefault(); toggleSilhouette(); }
       else if (e.key === "f" || e.key === "F") { e.preventDefault(); toggleRetroFps(); }
     });

@@ -358,6 +358,10 @@
       if (model.attackAnims && model.attackAnims.length) return { anims: model.attackAnims, matched: true };
       return { anims: model.idleAnims || [], matched: false };
     }
+    if (typeof clipName === "string" && /^hit$/i.test(clipName)) {
+      if (model.hitAnims && model.hitAnims.length) return { anims: model.hitAnims, matched: true };
+      return { anims: model.idleAnims || [], matched: false };
+    }
     const idle = model.idleAnims || [];
     return { anims: idle, matched: idle.length > 0 };
   }

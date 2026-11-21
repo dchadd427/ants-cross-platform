@@ -444,7 +444,8 @@
       || animations.find((a) => a.channels.some((c) => eyelidSet.has(c.nodeIndex))) || null;
     const nonBlinkAnims = animations.filter((a) => a !== blinkAnim && a.duration > 0 && a.channels.length > 0);
     const attackAnims = nonBlinkAnims.filter((a) => /attack/i.test(a.name));
-    const idleOnly = nonBlinkAnims.filter((a) => !attackAnims.includes(a));
+    const hitAnims = nonBlinkAnims.filter((a) => /^hit$/i.test(a.name) || /\bhit\b/i.test(a.name));
+    const idleOnly = nonBlinkAnims.filter((a) => !attackAnims.includes(a) && !hitAnims.includes(a));
     const idleAnims = idleOnly.length ? idleOnly : nonBlinkAnims;
     const blinkInfo = { anim: blinkAnim, eyelidNodes, closedTime: 0, startTime: 0, endTime: 0.24, hasBlink: Boolean(blinkAnim || eyelidNodes.length) };
     if (blinkAnim && blinkAnim.channels.length) {
@@ -464,7 +465,7 @@
     const isBlend = (dc) => (dc.prim.material.isTranslucent ? 1 : 0);
     drawCalls.sort((a, b) => isBlend(a) - isBlend(b));
     return {
-      drawCalls, nodeDefs, nodeOrder, baseWorldMats, animations, idleAnims, attackAnims, blinkInfo, bounds: { min, max },
+      drawCalls, nodeDefs, nodeOrder, baseWorldMats, animations, idleAnims, attackAnims, hitAnims, blinkInfo, bounds: { min, max },
       size: [max[0] - min[0], max[1] - min[1], max[2] - min[2]],
       center: [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5, (min[2] + max[2]) * 0.5],
       triCount, meshCount: uploadedMeshes.length, nodeCount, textureCount: ownedTextures.length, hasVertexColors,

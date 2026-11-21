@@ -40,10 +40,18 @@ ATTACK_PREFIXES: Tuple[Tuple[str, str], ...] = (
     ("swimmer", "asat"),
     ("fire", "afat"),
 )
+HIT_PREFIXES: Tuple[Tuple[str, str], ...] = (
+    ("worker", "aggh"),
+    ("combat", "acgh"),
+    ("thief", "atgh"),
+    ("bomber", "abgh"),
+    ("swimmer", "asgh"),
+    ("fire", "afgh"),
+)
 ANT_CLASSES: Tuple[str, ...] = tuple(cls for cls, _ in CLASS_PREFIXES)
 CANONICAL_ANGLES: Tuple[str, ...] = ("301", "201", "901", "801", "701")
 ORIGINAL_TEAMS: Tuple[str, ...] = ("green", "red", "blue", "black")
-ACTIONS: Tuple[str, ...] = ("idle", "attack")
+ACTIONS: Tuple[str, ...] = ("idle", "attack", "hit")
 
 
 def can_generate_orig_sprites(
@@ -253,10 +261,11 @@ def build_orig_sprites_bundle(
     anim_json: Path = DEFAULT_ANIM_JSON,
     classes: Sequence[Tuple[str, str]] = CLASS_PREFIXES,
     attack_classes: Optional[Sequence[Tuple[str, str]]] = None,
+    hit_classes: Optional[Sequence[Tuple[str, str]]] = None,
     angles: Sequence[str] = CANONICAL_ANGLES,
     teams: Sequence[str] = ORIGINAL_TEAMS,
 ) -> Dict[str, Any]:
-    """Build and return the deterministic 1998 sprite-sheet bundle dict (idle + attack)."""
+    """Build and return the deterministic 1998 sprite-sheet bundle dict (idle + attack + hit)."""
     artlib = _load_artlib()
     anims = _load_animations_by_name(anim_json)
     sprite_cache: Dict[Tuple[int, str], Any] = {}
@@ -268,6 +277,14 @@ def build_orig_sprites_bundle(
         )
     else:
         attack_pairs = attack_classes
+
+    if hit_classes is None:
+        hit_lookup = dict(HIT_PREFIXES)
+        hit_pairs: Sequence[Tuple[str, str]] = tuple(
+            (cls_name, hit_lookup.get(cls_name, prefix[:-2] + "gh")) for cls_name, prefix in classes
+        )
+    else:
+        hit_pairs = hit_classes
 
     idle_sprites, idle_world_foot_y = _build_action_sprites(
         anims=anims,
@@ -289,6 +306,17 @@ def build_orig_sprites_bundle(
         ref_world_foot_y=idle_world_foot_y,
         include_attack_aliases=True,
     )
+    hit_sprites, _ = _build_action_sprites(
+        anims=anims,
+        anim_json=anim_json,
+        class_prefixes=hit_pairs,
+        angles=angles,
+        teams=teams,
+        sprite_cache=sprite_cache,
+        artlib=artlib,
+        ref_world_foot_y=idle_world_foot_y,
+        include_attack_aliases=True,
+    )
 
     return {
         "schema_version": 1,
@@ -298,6 +326,7 @@ def build_orig_sprites_bundle(
         "teams": list(teams),
         "sprites": idle_sprites,
         "attack_sprites": attack_sprites,
+        "hit_sprites": hit_sprites,
     }
 
 
