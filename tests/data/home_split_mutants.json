@@ -161,8 +161,8 @@
   {
    "id": "the_css_size_works_on_a_phone",
    "file": "web/home/split.css",
-   "old": "@media (min-width: 701px) {\n    #home { --pl-w",
-   "new": "@media (min-width: 0px) {\n    #home { --pl-w",
+   "old": "@media (min-width: 701px) and (min-height: 501px) {\n    #home { --pl-w",
+   "new": "@media (min-width: 0px) and (min-height: 501px) {\n    #home { --pl-w",
    "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
   },
   {
@@ -199,6 +199,13 @@
    "old": "new win.MutationObserver(attach).observe(host, { childList: true })",
    "new": "new win.MutationObserver(attach)",
    "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "a_low_window_has_handles",
+   "file": "web/home/split.js",
+   "old": "var WIDE = '(min-width: 701px) and (min-height: 501px)';",
+   "new": "var WIDE = '(min-width: 701px)';",
+   "test": "node tests/scripts/web_home_split_check.js"
   }
  ]
 }

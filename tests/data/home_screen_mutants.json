@@ -1379,6 +1379,13 @@
    "old": "holds: function () { return !!client && !handing; },",
    "new": "holds: function () { return false; },",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "a_low_window_has_no_strip",
+   "file": "web/home/home.js",
+   "old": "var PHONE = '(max-width: 700px), (max-height: 500px)';",
+   "new": "var PHONE = '(max-width: 700px)';",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
   }
  ]
 }

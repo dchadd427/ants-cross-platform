@@ -170,6 +170,8 @@ REGISTRY = (
     Command("bans", 2, "", "list the people who are banned", GROUPS[2], None, parse_staff, run_staff),
     Command("nopic", 2, "NAME", "hide a person's Discord picture", GROUPS[2], None, parse_staff, run_staff),
     Command("pic", 2, "NAME", "show it again", GROUPS[2], None, parse_staff, run_staff),
+    Command("noimages", 2, "NAME", "stop a person posting images", GROUPS[2], None, parse_staff, run_staff),
+    Command("images", 2, "NAME", "let them post images again", GROUPS[2], None, parse_staff, run_staff),
     Command("bots", 2, "COUNT [every MINUTES] [map NAME]  |  status  |  stop", "start matches of computer players", GROUPS[2], "bots", parse_bots, run_bots),
 )
 TABLE = {c.word: c for c in REGISTRY}

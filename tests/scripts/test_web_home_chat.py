@@ -79,7 +79,7 @@ class ThePageAndTheOtherPages(unittest.TestCase):
                     naming_the_socket.add(rel)
         self.assertEqual(sorted(naming_the_dock), ["web/home/chat.css", "web/home/chat.js", "web/home/home.js"], "the front page's own script asks for the dock; no other page does")
         self.assertEqual(sorted(naming_the_socket), ["web/home/chat.js", "web/hub_here.js"], "only the dock's script knows the address of the hub's socket: a page that opens a socket to it is a page that has a chat")
-        self.assertEqual(sorted(naming_the_door), ["web/admin_page.js", "web/front/player_name.js", "web/home/chat.js", "web/hub_here.js"], "the other scripts that name the hub: the one that asks for the name to play under (its one page, GET /hub/me: tests/scripts/test_web_player_name.py) and the admin page, whose one link is the hub's Discord login (tests/scripts/test_web_admin.py)")
+        self.assertEqual(sorted(naming_the_door), ["web/admin_page.js", "web/front/player_name.js", "web/home/chat.js", "web/home/pics.js", "web/home/post.js", "web/hub_here.js"], "the other scripts that name the hub: the one that asks for the name to play under (its one page, GET /hub/me: tests/scripts/test_web_player_name.py), the admin page, whose one link is the hub's Discord login (tests/scripts/test_web_admin.py), and the two parts of the chat's images, which name the site's addresses of the images and of the upload (/hub/img/: tests/scripts/test_web_home_images.py)")
 
     def test_the_game_server_and_the_game_never_open_the_hub(self):
         for rel in (("web", "shell.html"), ("web", "front", "lobby_net.js"), ("web", "front", "lobby_chat.js")):
@@ -244,7 +244,7 @@ class TheStyle(unittest.TestCase):
         self.assertIn("#home { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;", self.home_css, "the column that the dock is a part of")
 
     def test_the_field_has_the_row_under_the_log_in_a_wide_window(self):
-        wide = re.search(r"@media \(min-width: 701px\), \(max-width: 700px\) and \(max-height: 500px\) \{(.*?)\n\}", self.css, re.S).group(1)
+        wide = re.search(r"@media \(min-width: 701px\), \(max-height: 500px\) \{(.*?)\n\}", self.css, re.S).group(1)
         self.assertIn("grid-template-columns: minmax(0, 1fr) auto;", wide)
         self.assertIn(".gc-form { grid-area: 3 / 1 / 4 / -1; }", wide)
         self.assertNotIn(".gc-slot", wide, "the account line is not in the panel any more (the chip's dropdown has it)")
@@ -252,12 +252,12 @@ class TheStyle(unittest.TestCase):
 
     def test_a_phone_has_the_chat_as_its_own_view_open_and_without_a_fold_and_a_short_window_opens_it_folded(self):
         self.assertIn("(win.innerWidth || 0) >= 701 && (win.innerHeight || 0) >= 601", read("web", "home", "chat.js"), "the script opens the panel for a window of 701 x 601 or more (home.js has the same limits)")
-        phone = re.search(r"@media \(max-width: 700px\) \{(.*?)\n\}", self.css, re.S).group(1)
+        phone = re.search(r"@media \(max-width: 700px\), \(max-height: 500px\) \{(.*?)\n\}", self.css, re.S).group(1)
         self.assertIn(".gc { flex: 1 1 auto; height: auto; min-height: 0; margin: 4px 12px 8px; overflow: hidden; }", phone, "the view fills the page between the bar and the strip")
         self.assertIn(".gc-fold { display: none; }", phone, "home.js opens it with its view and shuts it with the others: no fold to leave it shrunk")
         self.assertNotIn("--gc-min", self.css, "the panel is never put away for want of room: it is a part of the column, and the games take what is left")
         self.assertIn("@media (max-height: 500px) and (orientation: landscape) { .gc-line { font-size: 16px; } .gc-body { padding-bottom: 10px; } }", self.css)
-        self.assertIn("@media (max-width: 700px) and (max-height: 500px) { .gc-head { display: none; } .gc-form { margin-top: 6px; } .gc-body { padding-top: 6px; } .gc-log { padding: 2px 12px; gap: 2px; } .gc-input, .gc-send { min-height: 44px; } }", self.css, "a phone held sideways: the Chat view has about 150 px, the heading gives its place to the log (the account line stays, on the field's row) and nothing of the panel reaches over the strip")
+        self.assertIn("@media (max-height: 500px) { .gc-head { display: none; } .gc-form { margin-top: 6px; } .gc-body { padding-top: 6px; } .gc-log { padding: 2px 12px; gap: 2px; } .gc-input, .gc-send { min-height: 44px; } }", self.css, "a phone held sideways: the Chat view has about 150 px, the heading gives its place to the log (the account line stays, on the field's row) and nothing of the panel reaches over the strip")
 
     def test_the_header_stays_when_the_panel_is_folded_and_the_title_is_one_word_group(self):
         self.assertNotIn(".gc-short", self.css)
@@ -551,7 +551,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_chat_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
-    FILES = (["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/alert_core.js", "web/hub_here.js", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/talk.css", "web/home/players.css", "web/home/players.js", "web/home/cmds.js", "web/home/cmds.css", "tests/scripts/test_web_home_chat.py", "tests/scripts/test_hub_text.py", "tests/scripts/web_home_chat_check.js",
+    FILES = (["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/alert_core.js", "web/hub_here.js", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/talk.css", "web/home/players.css", "web/home/players.js", "web/home/cmds.js", "web/home/cmds.css", "web/home/pics.js", "web/home/pics.css", "web/home/post.js", "web/home/post.css", "tests/scripts/test_web_home_chat.py", "tests/scripts/test_hub_text.py", "tests/scripts/web_home_chat_check.js",
               "tests/scripts/web_home_chat_hub_check.js", "tests/scripts/web_page_harness.js", "tests/scripts/fake_hub.js", "tests/scripts/mini_websocket.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
               "docs/HOME_SCREEN.md", "docs/HOME_CHAT.md", "hub/__init__.py", "hub/text.py", "web/matches.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html", "web/admin_page.js"]
              + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")])

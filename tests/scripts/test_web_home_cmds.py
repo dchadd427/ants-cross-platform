@@ -70,7 +70,8 @@ class ThePageAndTheOtherPages(unittest.TestCase):
 
     def test_the_dock_asks_only_for_a_frame_that_has_a_row_and_only_once(self):
         js = code_of(read("web", "home", "chat.js"))
-        self.assertEqual(len(re.findall(r"env\.load\(", js)), 1, "one place asks")
+        self.assertEqual(sorted(re.findall(r"env\.load\('home/(\w+)'", js)), ["cmds", "pics", "post"], "three places ask, one for each part that the dock loads (the commands' helper, the images' reader and poster), each by name")
+        self.assertEqual(len(re.findall(r"env\.load\(", js)), 3)
         self.assertIn("else if (cmdsRows.length && !cmdsAsked && env.load) {", js, "a row, not asked before, and a page that has a loader")
         self.assertEqual(js.count("setCmds(["), 2, "a visitor that is nobody, and a login that ended: no rows")
 
@@ -162,7 +163,7 @@ class TheStyle(unittest.TestCase):
                 self.assertGreaterEqual(int(m.group(1)), 44, "%s has a height of %s" % (" ".join(selector.split()), m.group(1)))
 
     def test_a_phone_has_the_list_full_width_and_the_builder_as_a_sheet_from_the_bottom(self):
-        phone = re.search(r"@media \(max-width: 700px\) \{(.*?)\n\}", self.css, re.S).group(1)
+        phone = re.search(r"@media \(max-width: 700px\), \(max-height: 500px\) \{(.*?)\n\}", self.css, re.S).group(1)
         self.assertIn(".gh-pop { left: -6px; right: -6px; width: auto;", phone)
         self.assertIn(".gb { left: 0; right: 0; top: auto; bottom: 0; transform: none; width: auto; max-height: 94vh;", phone)
 

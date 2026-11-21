@@ -223,7 +223,8 @@ class TheWiring(unittest.TestCase):
                 if done.returncode != 0:
                     self.skipTest("docker compose is not available: " + done.stderr[:200])
                 mounts = json.loads(done.stdout)["services"]["ants-beta"]["volumes"]
-                self.assertEqual([(m["type"], m["source"], m["target"], m.get("read_only")) for m in mounts], [("bind", source, "/etc/nginx/ants-trusted-proxies.d/own.conf", True)], name)
+                images = [("volume", "ants-hub-images", "/srv/hub-img", True)] if name == "docker-compose.stack.yml" else []              # (the stack also mounts the volume of the chat's images, read only: the files that the hub writes and the site serves)
+                self.assertEqual([(m["type"], m["source"], m["target"], m.get("read_only")) for m in mounts], [("bind", source, "/etc/nginx/ants-trusted-proxies.d/own.conf", True)] + images, name)
 
     def test_the_documents_and_the_comments_do_not_say_that_the_list_is_empty_or_has_to_be_mounted(self):
         for path in (("docker", "nginx.conf"), ("Dockerfile",), ("docker-compose.stack.yml",), ("docs", "HUB.md"), ("docs", "SERVER.md"), ("docs", "MAP_SUBMISSIONS.md")):
