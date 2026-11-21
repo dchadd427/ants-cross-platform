@@ -16,42 +16,18 @@ Coordinate system (glTF 2.0 right-handed):
 """
 from __future__ import annotations
 
-from typing import Sequence
-
 import numpy as np
 
 try:
     from .base_ant import build_base_ant
-    from .mesh_core import SceneBuilder, superellipsoid, torus_arc
+    from .mesh_core import SceneBuilder, superellipsoid
 except ImportError:
     from base_ant import build_base_ant  # type: ignore
-    from mesh_core import SceneBuilder, superellipsoid, torus_arc  # type: ignore
-
-# Slightly poised flowing idle arms anchored cleanly at base_ant's shoulder (0.106, 0.478, 0.016).
-_WORKER_ARM_LEFT = [
-    (0.106, 0.478, 0.016),
-    (0.204, 0.436, 0.068),
-    (0.178, 0.388, 0.158),
-    (0.146, 0.382, 0.190),
-]
-_WORKER_ARM_RIGHT = [(-x, y, z) for x, y, z in _WORKER_ARM_LEFT]
-
-
-def _ring_across(center: Sequence[float], axis: Sequence[float], major_r: float, minor_r: float, name: str):
-    """Torus ring centered at `center` whose hole faces along `axis`."""
-    a = np.asarray(axis, dtype=np.float64)
-    a /= float(np.linalg.norm(a))
-    ref = np.array([0.0, 0.0, 1.0]) if abs(a[2]) < 0.9 else np.array([1.0, 0.0, 0.0])
-    x = np.cross(a, ref)
-    x /= float(np.linalg.norm(x))
-    z = np.cross(x, a)
-    mat = np.eye(4)
-    mat[:3, 0], mat[:3, 1], mat[:3, 2], mat[:3, 3] = x, a, z, np.asarray(center, dtype=np.float64)
-    return torus_arc(major_r, minor_r, u_segs=16, v_segs=8, plane="xz", name=name, material="chitin_dark").transform(mat)
+    from mesh_core import SceneBuilder, superellipsoid  # type: ignore
 
 
 def _add_carapace_details(scene: SceneBuilder, anchors: dict) -> None:
-    """Subtle smooth organic chitin accents fitted flush onto the petite slim base thorax and limbs."""
+    """Subtle smooth organic chitin accents fitted flush onto the petite slim base thorax."""
     # Petite curved breastplate crest hugging the slim chest carapace (`z_max ~ 0.096`).
     crest = (
         superellipsoid(0.042, 0.048, 0.018, e1=0.80, e2=0.84, u_segs=16, v_segs=12, name="chest_crest", material="chitin_team")
@@ -75,15 +51,55 @@ def _add_carapace_details(scene: SceneBuilder, anchors: dict) -> None:
     )
     scene.add_mirrored("worker_carapace", cap)
 
-    # Slim wrist cuffs anchored cleanly to each staggered contrapposto forearm right behind the claw hand.
-    for side in ("left", "right"):
-        hand = np.asarray(anchors[f"{side}_hand"], dtype=np.float64)
-        hdir = np.asarray(anchors[f"{side}_hand_dir"], dtype=np.float64)
-        scene.add("worker_cuffs", _ring_across(hand - 0.022 * hdir, hdir, 0.0145, 0.0044, f"wrist_cuff_{side}"))
-
     # Parent canonical world-authored accents under upper_body in lockstep with stance contrapposto & Idle.
+    # (Wrist cuffs now ride natively on `base_ant`'s articulated `forearm_left`/`forearm_right` nodes!)
     scene.attach_world_node("worker_carapace", "upper_body", preserve_world_pose=False)
-    scene.attach_world_node("worker_cuffs", "upper_body", preserve_world_pose=False)
+
+
+def _smoothstep(edge0: float, edge1: float, val: np.ndarray) -> np.ndarray:
+    t = np.clip((val - edge0) / (edge1 - edge0), 0.0, 1.0)
+    return t * t * (3.0 - 2.0 * t)
+
+
+def _lift_worker_rear_crown(scene: SceneBuilder, anchors: dict) -> None:
+    """Smoothly lift Worker's upper-rear occipital crown (+0.036 Y, -0.014 Z) while leaving
+    the front forehead, brows, eyes, and Blink eyelids at their exact original height (`agst901`).
+    """
+    hc = np.asarray(anchors["head_center"], dtype=np.float64)
+    nc = np.asarray(anchors["neck_center"], dtype=np.float64)
+
+    def _deform_crown(pos: np.ndarray) -> np.ndarray:
+        p = pos.copy()
+        ry = p[:, 1] - hc[1]
+        rz = p[:, 2] - hc[2]
+        up_w = _smoothstep(-0.015, 0.145, ry)
+        rear_w = _smoothstep(0.060, -0.105, rz)
+        w = up_w * rear_w
+        p[:, 1] += 0.036 * w
+        p[:, 2] -= 0.014 * w
+        return p
+
+    head_parts = scene.get_node("head")
+    scene.nodes["head"] = [
+        p.deform(_deform_crown) if p.name == "cranium" else p
+        for p in head_parts
+    ]
+
+    # Nudge both antenna sockets by the exact local crown delta so sockets stay flush-embedded.
+    for ant_node in ("antenna_left", "antenna_right"):
+        xf = scene.get_node_transform(ant_node)
+        if xf is None:
+            continue
+        base_canon = np.asarray(xf.translation, dtype=np.float64) + nc
+        sample = np.array([[base_canon[0], hc[1] + 0.185, base_canon[2]]], dtype=np.float64)
+        delta = _deform_crown(sample)[0] - sample[0]
+        tx, ty, tz = xf.translation
+        scene.set_node_transform(
+            ant_node,
+            translation=(tx, ty + float(delta[1]), tz + float(delta[2])),
+            rotation=xf.rotation,
+            scale=xf.scale,
+        )
 
 
 def build_worker(blink: float = 0.0) -> SceneBuilder:
@@ -107,6 +123,7 @@ def build_worker(blink: float = 0.0) -> SceneBuilder:
         right_arm_pose="idle",
         blink=blink,
     )
+    _lift_worker_rear_crown(scene, anchors)
     _add_carapace_details(scene, anchors)
     scene.ground_to_y(0.0)
     return scene

@@ -557,17 +557,18 @@ def _build_arms(scene: SceneBuilder) -> Tuple[np.ndarray, np.ndarray, np.ndarray
     sh_r, mid_r, el_r, wr_r, fi_r = pts_r
 
     # Both arms split seamlessly at elbows so right (-X) flexes bicep while left (+X) plants on hip!
-    # Athletic, defined upper arms (0.114) tapering to sleeker forearms (0.086) (~14% trimmer, zero ballooning).
+    # Clean smooth muscular upper arm (0.114) flowing into an organic sculpted muscular forearm
+    # (0.098 brachioradialis swell tapering cleanly to a 0.064 wrist — ZERO dark bands or rivets!).
     scene.add("left_upper_arm", [
         curved_tube([sh, mid, el], [0.094, 0.114, 0.090], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_upper_left", material="chitin_team"),
         sphere(0.088, u_segs=14, v_segs=10, name="elbow_joint_left", material="chitin_team").translate(el),
     ])
-    scene.add("left_forearm", curved_tube([el, wr, fi], [0.090, 0.086, 0.070], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_forearm_left", material="chitin_team"))
+    scene.add("left_forearm", curved_tube([el, 0.45 * el + 0.55 * wr, wr, fi], [0.090, 0.098, 0.072, 0.064], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_forearm_left", material="chitin_team"))
     scene.add("right_upper_arm", [
         curved_tube([sh_r, mid_r, el_r], [0.094, 0.114, 0.090], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_upper_right", material="chitin_team"),
         sphere(0.088, u_segs=14, v_segs=10, name="elbow_joint_right", material="chitin_team").translate(el_r),
     ])
-    scene.add("right_forearm", curved_tube([el_r, wr_r, fi_r], [0.090, 0.086, 0.070], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_forearm_right", material="chitin_team"))
+    scene.add("right_forearm", curved_tube([el_r, 0.45 * el_r + 0.55 * wr_r, wr_r, fi_r], [0.090, 0.098, 0.072, 0.064], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_forearm_right", material="chitin_team"))
 
     def _add_arm_pair(part: MeshPart, *, right_node: str) -> None:
         scene.add(right_node.replace("right_", "left_"), part)
@@ -577,51 +578,38 @@ def _build_arms(scene: SceneBuilder) -> Tuple[np.ndarray, np.ndarray, np.ndarray
     _add_arm_pair(superellipsoid(0.076, 0.108, 0.082, e1=0.78, e2=0.82, u_segs=14, v_segs=10, name="bicep_peak", material="chitin_team").rotate_xyz(rx=0.40, ry=-0.16, rz=0.38).translate(0.456, 0.514, 0.078), right_node="right_upper_arm")
     _add_arm_pair(superellipsoid(0.072, 0.100, 0.076, e1=0.80, e2=0.84, u_segs=12, v_segs=8, name="tricep_belly", material="chitin_team").rotate_xyz(rx=0.34, rz=0.40).translate(0.498, 0.520, -0.016), right_node="right_upper_arm")
 
-    # Sculpted outer forearm gauntlet shell + recessed dark armor seam cuffs & elbow cop.
-    gauntlet = (
-        superellipsoid(0.088, 0.086, 0.104, e1=0.76, e2=0.80, u_segs=16, v_segs=12, name="forearm_gauntlet", material="chitin_team")
-        .rotate_xyz(rx=0.58, ry=-0.38, rz=0.18)
-        .translate(0.478, 0.304, 0.162)
+    # Smooth organic brachioradialis upper-forearm muscle swell (glossy green chitin, zero bands/cuffs/rivets!).
+    forearm_muscle = (
+        superellipsoid(0.078, 0.076, 0.108, e1=0.82, e2=0.86, u_segs=16, v_segs=12, name="forearm_muscle", material="chitin_team")
+        .rotate_xyz(rx=0.62, ry=-0.42, rz=0.16)
+        .translate(0.482, 0.312, 0.156)
     )
-    _add_arm_pair(gauntlet, right_node="right_forearm")
-    _add_arm_pair(_ring_on_segment(mid, el, 0.64, 0.100, 0.0075, name="bracer_seam_0", material="chitin_dark"), right_node="right_upper_arm")
-    _add_arm_pair(_ring_on_segment(el, wr, 0.36, 0.092, 0.0080, name="gauntlet_seam_0", material="chitin_dark"), right_node="right_forearm")
-    _add_arm_pair(_ring_on_segment(el, wr, 0.72, 0.088, 0.0080, name="gauntlet_seam_1", material="chitin_dark"), right_node="right_forearm")
-    _add_arm_pair(_ring_on_segment(el, wr, 0.96, 0.080, 0.013, name="gauntlet_cuff", material="chitin_dark"), right_node="right_forearm")
+    _add_arm_pair(forearm_muscle, right_node="right_forearm")
 
-    elbow_cop = (
-        superellipsoid(0.056, 0.052, 0.032, e1=0.76, e2=0.82, u_segs=14, v_segs=10, name="elbow_cop", material="chitin_team")
-        .rotate_xyz(rx=0.42, ry=-0.32, rz=-0.26)
-        .translate(el + np.array([0.024, 0.008, -0.038]))
-    )
-    _add_arm_pair(elbow_cop, right_node="right_forearm")
-
-    mat, length = _axis_frame(el, wr)
-    for k in range(6):
-        ang = 2.0 * math.pi * k / 6.0 + 0.25
-        local_n = np.array([math.cos(ang), 0.0, math.sin(ang)])
-        local_p = local_n * 0.090 + np.array([0.0, 0.84 * length, 0.0])
-        world_p = (mat @ np.append(local_p, 1.0))[:3]
-        world_n = mat[:3, :3] @ local_n
-        _add_arm_pair(_rivet(world_p, world_n, f"gauntlet_rivet_{k}", radius=0.010), right_node="right_forearm")
-
-    # Sturdy dark clawed brawler fists held wide and low (clear above Y = 0.0).
+    # Bold, cohesive organic green brawler fists/pincer-hands (`chitin_team` back/outer knuckle shell
+    # & sculpted curled finger/thumb lobes with a subtle recessed `chitin_dark` inner palm crease,
+    # matching `acst301`/`acst201` powerful inward-curving fists cleanly in rest & flex!).
     _add_arm_pair(
-        superellipsoid(0.076, 0.072, 0.080, e1=0.68, e2=0.74, u_segs=16, v_segs=12, name="fist_palm", material="chitin_dark")
-        .rotate_xyz(rx=0.25, ry=-0.42, rz=0.12)
-        .translate(fi),
+        superellipsoid(0.074, 0.070, 0.086, e1=0.74, e2=0.78, u_segs=18, v_segs=14, name="fist_back", material="chitin_team")
+        .rotate_xyz(rx=0.28, ry=-0.48, rz=0.14)
+        .translate(fi + np.array([0.004, 0.002, 0.006])),
         right_node="right_forearm",
     )
-    claws = (
-        ((0.036, 0.040, 0.052), (0.014, 0.024, 0.108), (-0.022, -0.008, 0.114)),
-        ((0.040, -0.004, 0.058), (0.016, -0.020, 0.114), (-0.022, -0.046, 0.110)),
-        ((0.034, -0.046, 0.048), (0.012, -0.062, 0.098), (-0.020, -0.074, 0.092)),
+    _add_arm_pair(
+        superellipsoid(0.056, 0.056, 0.062, e1=0.78, e2=0.82, u_segs=14, v_segs=10, name="fist_palm_inner", material="chitin_dark")
+        .rotate_xyz(rx=0.25, ry=-0.48, rz=0.14)
+        .translate(fi + np.array([-0.022, -0.010, 0.020])),
+        right_node="right_forearm",
     )
-    for c_idx, ctrl in enumerate(claws):
+    # Chunky sculpted inward-curving brawler finger-pincer lobes & opposable thumb in `chitin_team`.
+    pincer_lobes = (
+        ("fist_finger_upper", [(0.032, 0.030, 0.044), (0.012, 0.016, 0.104), (-0.036, -0.006, 0.114)], [0.034, 0.036, 0.022]),
+        ("fist_finger_lower", [(0.028, -0.024, 0.040), (0.008, -0.040, 0.096), (-0.036, -0.056, 0.102)], [0.032, 0.034, 0.020]),
+        ("fist_thumb",        [(-0.036, 0.034, 0.024), (-0.068, 0.018, 0.072), (-0.046, -0.014, 0.098)], [0.030, 0.030, 0.020]),
+    )
+    for lobe_name, ctrl, rads in pincer_lobes:
         c_pts = [fi + np.asarray(c) for c in ctrl]
-        _add_arm_pair(curved_tube(c_pts, [0.026, 0.022, 0.010], samples_per_seg=3, radial_segs=10, cap_rings=2, name=f"fist_claw_{c_idx}", material="chitin_dark"), right_node="right_forearm")
-    thumb = [fi + np.array(c) for c in ((-0.048, 0.040, 0.026), (-0.074, 0.026, 0.074), (-0.046, -0.004, 0.104))]
-    _add_arm_pair(curved_tube(thumb, [0.026, 0.022, 0.010], samples_per_seg=3, radial_segs=10, cap_rings=2, name="fist_thumb", material="chitin_dark"), right_node="right_forearm")
+        _add_arm_pair(curved_tube(c_pts, rads, samples_per_seg=4, radial_segs=14, cap_rings=4, name=lobe_name, material="chitin_team"), right_node="right_forearm")
 
     # Sample exact right (-X) high upper bicep center & vertices so hot-magenta cloth wraps cleanly
     # high on the meaty upper bicep right below the deltoid scales (matching `acst301`/`acst901`).
