@@ -22,9 +22,11 @@ import numpy as np
 
 try:
     from .base_ant import build_base_ant, sync_leg_flex_to_clip
+    from .hit_clips import add_worker_hit
     from .mesh_core import AnimationChannel, SceneBuilder, quat_from_euler_xyz, quat_mul, superellipsoid
 except ImportError:
     from base_ant import build_base_ant, sync_leg_flex_to_clip  # type: ignore
+    from hit_clips import add_worker_hit  # type: ignore
     from mesh_core import AnimationChannel, SceneBuilder, quat_from_euler_xyz, quat_mul, superellipsoid  # type: ignore
 
 
@@ -492,6 +494,7 @@ def build_worker(blink: float = 0.0) -> SceneBuilder:
     scene.scale_all(0.97)
     scene.ground_to_y(0.0)
     _add_worker_attack_animation(scene)
+    add_worker_hit(scene)
     return scene
 
 

@@ -34,6 +34,7 @@ import numpy as np
 
 try:
     from .base_ant import EYELID_CLOSED_ANGLE, sync_leg_flex_to_clip
+    from .hit_clips import add_combat_hit
     from .mesh_core import (
         AnimationChannel,
         MeshPart,
@@ -57,6 +58,7 @@ try:
     )
 except ImportError:
     from base_ant import EYELID_CLOSED_ANGLE, sync_leg_flex_to_clip  # type: ignore
+    from hit_clips import add_combat_hit  # type: ignore
     from mesh_core import (  # type: ignore
         AnimationChannel,
         MeshPart,
@@ -1176,6 +1178,7 @@ def build_combat(blink: float = 0.0) -> SceneBuilder:
     # Sync all 4 individual grounded legs to Combat's final 0.80x Idle & Attack clips!
     sync_leg_flex_to_clip(scene, "Idle")
     sync_leg_flex_to_clip(scene, "Attack", swivel=0.0)
+    add_combat_hit(scene)
     return scene
 
 
