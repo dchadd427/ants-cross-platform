@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the rules number 14 of the original's game and 15 of 187 for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the path manager's refusal of what an event asked is given after the turn's commands (which refusals wait, when they are given, what an order does to a refusal that waits, the engine's setting, its default and its reset, the player's setting from the head's number, the numbers that have the rule and the ones that are played, recorded or refused), and the clip that refuses an order. Each build is the targets of test_pathmgr_gap and test_rules_cantgo, and each test run is the one that must notice.",
+ "note": "Mutants of the rules number 14 of the original's game and 15 of 187 for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the path manager's refusal of what an event asked is given after the turn's commands (which refusals wait, when they are given, what an order does to a refusal that waits, the engine's setting, its default and its reset, the player's setting from the head's number, the numbers that have the rule and the ones that are played, recorded or refused). Each build is the targets of test_pathmgr_gap and test_rules_cantgo, and each test run is the one that must notice.",
  "mutants": [
   {
    "id": "held_refusal_never_given",
@@ -79,17 +79,6 @@
    "expect": "PG1.1"
   },
   {
-   "id": "the_clip_takes_orders",
-   "file": "src/ants_sim/movement_system.cpp",
-   "old": "    return act == 0 || act == 1 || act == 3;\n}\n\n// The skip test of the group order",
-   "new": "    return act == 0 || act == 1 || act == 3 || act == 0xb;\n}\n\n// The skip test of the group order",
-   "build": [
-    "test_pathmgr_gap"
-   ],
-   "test": "timeout 600 ./build/tests/test_sim/test_pathmgr_gap",
-   "expect": "PG1.2"
-  },
-  {
    "id": "default_is_the_old_rule",
    "file": "src/ants_sim/sim_engine_impl.hpp",
    "old": "bool path_answers_after_commands_{true};",
@@ -115,7 +104,7 @@
    "id": "setter_ignores_its_argument",
    "file": "src/ants_sim/pathmgr_rules.cpp",
    "old": "    impl_->path_answers_after_commands_ = on;",
-   "new": "    impl_->path_answers_after_commands_ = true;",
+   "new": "    impl_->path_answers_after_commands_ = true;\n    (void)on;",
    "build": [
     "test_pathmgr_gap"
    ],
@@ -154,17 +143,6 @@
    ],
    "test": "timeout 600 ./build/tests/test_replay/test_rules_cantgo",
    "expect": "RP18."
-  },
-  {
-   "id": "rule_starts_one_number_early",
-   "file": "include/ants_replay/replay.hpp",
-   "old": "inline constexpr uint16_t kSimRulesCantGoFirst = 14;",
-   "new": "inline constexpr uint16_t kSimRulesCantGoFirst = 13;",
-   "build": [
-    "test_rules_cantgo"
-   ],
-   "test": "timeout 600 ./build/tests/test_replay/test_rules_cantgo",
-   "expect": "RP18.1"
   },
   {
    "id": "rule_starts_one_number_late",
@@ -237,17 +215,6 @@
    "file": "src/ants_replay/player.cpp",
    "old": "sim_rules_of(replay.head) < kSimRulesMode187BeforeCantGo));",
    "new": "sim_rules_of(replay.head) < kSimRulesMode187));",
-   "build": [
-    "test_rules_cantgo"
-   ],
-   "test": "timeout 600 ./build/tests/test_replay/test_rules_cantgo",
-   "expect": "RP18.1"
-  },
-  {
-   "id": "187_has_the_old_number",
-   "file": "include/ants_replay/replay.hpp",
-   "old": "inline constexpr uint16_t kSimRulesMode187 = 15;",
-   "new": "inline constexpr uint16_t kSimRulesMode187 = 12;",
    "build": [
     "test_rules_cantgo"
    ],

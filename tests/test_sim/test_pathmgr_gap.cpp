@@ -254,6 +254,8 @@ int main() {
             w.sim.tick();
             ASSERT_TRUE(copy.state_hash().total == w.sim.state_hash().total);
         }
+        SimulationEngine fresh;
+        ASSERT_TRUE(fresh.path_answers_after_commands());                                    // (an engine that nobody set up plays the rules of now)
         SimulationEngine old_rules;
         old_rules.set_game_mode(GameMode::HighestScore);
         ASSERT_TRUE(old_rules.path_answers_after_commands());                                      // the rule of a match played now
