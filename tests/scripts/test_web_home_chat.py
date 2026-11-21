@@ -244,7 +244,7 @@ class TheStyle(unittest.TestCase):
         self.assertIn("#home { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;", self.home_css, "the column that the dock is a part of")
 
     def test_the_field_has_the_row_under_the_log_in_a_wide_window(self):
-        wide = re.search(r"@media \(min-width: 701px\), \(max-width: 700px\) and \(max-height: 500px\) \{(.*?)\n\}", self.css, re.S).group(1)
+        wide = re.search(r"@media \(min-width: 701px\), \(max-height: 500px\) \{(.*?)\n\}", self.css, re.S).group(1)
         self.assertIn("grid-template-columns: minmax(0, 1fr) auto;", wide)
         self.assertIn(".gc-form { grid-area: 3 / 1 / 4 / -1; }", wide)
         self.assertNotIn(".gc-slot", wide, "the account line is not in the panel any more (the chip's dropdown has it)")
@@ -252,12 +252,12 @@ class TheStyle(unittest.TestCase):
 
     def test_a_phone_has_the_chat_as_its_own_view_open_and_without_a_fold_and_a_short_window_opens_it_folded(self):
         self.assertIn("(win.innerWidth || 0) >= 701 && (win.innerHeight || 0) >= 601", read("web", "home", "chat.js"), "the script opens the panel for a window of 701 x 601 or more (home.js has the same limits)")
-        phone = re.search(r"@media \(max-width: 700px\) \{(.*?)\n\}", self.css, re.S).group(1)
+        phone = re.search(r"@media \(max-width: 700px\), \(max-height: 500px\) \{(.*?)\n\}", self.css, re.S).group(1)
         self.assertIn(".gc { flex: 1 1 auto; height: auto; min-height: 0; margin: 4px 12px 8px; overflow: hidden; }", phone, "the view fills the page between the bar and the strip")
         self.assertIn(".gc-fold { display: none; }", phone, "home.js opens it with its view and shuts it with the others: no fold to leave it shrunk")
         self.assertNotIn("--gc-min", self.css, "the panel is never put away for want of room: it is a part of the column, and the games take what is left")
         self.assertIn("@media (max-height: 500px) and (orientation: landscape) { .gc-line { font-size: 16px; } .gc-body { padding-bottom: 10px; } }", self.css)
-        self.assertIn("@media (max-width: 700px) and (max-height: 500px) { .gc-head { display: none; } .gc-form { margin-top: 6px; } .gc-body { padding-top: 6px; } .gc-log { padding: 2px 12px; gap: 2px; } .gc-input, .gc-send { min-height: 44px; } }", self.css, "a phone held sideways: the Chat view has about 150 px, the heading gives its place to the log (the account line stays, on the field's row) and nothing of the panel reaches over the strip")
+        self.assertIn("@media (max-height: 500px) { .gc-head { display: none; } .gc-form { margin-top: 6px; } .gc-body { padding-top: 6px; } .gc-log { padding: 2px 12px; gap: 2px; } .gc-input, .gc-send { min-height: 44px; } }", self.css, "a phone held sideways: the Chat view has about 150 px, the heading gives its place to the log (the account line stays, on the field's row) and nothing of the panel reaches over the strip")
 
     def test_the_header_stays_when_the_panel_is_folded_and_the_title_is_one_word_group(self):
         self.assertNotIn(".gc-short", self.css)

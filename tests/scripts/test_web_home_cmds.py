@@ -162,7 +162,7 @@ class TheStyle(unittest.TestCase):
                 self.assertGreaterEqual(int(m.group(1)), 44, "%s has a height of %s" % (" ".join(selector.split()), m.group(1)))
 
     def test_a_phone_has_the_list_full_width_and_the_builder_as_a_sheet_from_the_bottom(self):
-        phone = re.search(r"@media \(max-width: 700px\) \{(.*?)\n\}", self.css, re.S).group(1)
+        phone = re.search(r"@media \(max-width: 700px\), \(max-height: 500px\) \{(.*?)\n\}", self.css, re.S).group(1)
         self.assertIn(".gh-pop { left: -6px; right: -6px; width: auto;", phone)
         self.assertIn(".gb { left: 0; right: 0; top: auto; bottom: 0; transform: none; width: auto; max-height: 94vh;", phone)
 
