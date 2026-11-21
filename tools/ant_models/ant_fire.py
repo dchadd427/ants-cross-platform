@@ -218,7 +218,7 @@ def _shield_z_curve(
     """Shared parametric recessed front-face Z curvature used identically by the shield & crimson 'A'."""
     u_y = np.clip((y + 0.5 * shield_h) / max(1e-6, shield_h), 0.0, 1.0)
     nx = x / max(1e-6, 0.5 * shield_w)
-    return -curve_depth * (nx * nx) - 0.016 * (u_y ** 1.75)
+    return -curve_depth * (nx * nx) - 0.026 * (u_y ** 1.65)
 
 
 def _build_option3_wide_shield(
@@ -227,10 +227,11 @@ def _build_option3_wide_shield(
     shield_depth: float,
     curve_depth: float,
 ) -> MeshPart:
-    """Build Option 3's proud framed vintage crest shield at Option 2's extra-wide front outline width.
+    """Build Option 3's proud tall firefighter front crest shield with raised molded border frame.
 
-    Uses a finely-subdivided watertight solid panel (`30x18x6`) with a continuous crisp raised beveled
-    molded border frame sculpted directly into the front face (zero detached border strips!).
+    Uses a finely-subdivided watertight solid panel (`30x24x6`) seated deeply into the front dome
+    across the lower/mid half (zero floating gap) while tapering smoothly into a sleek upright
+    crest plate rising proudly above the front dome crown.
     """
     half_w = 0.5 * shield_w
     half_h = 0.5 * shield_h
@@ -243,27 +244,30 @@ def _build_option3_wide_shield(
         uz = p[:, 2] / max(1e-6, half_d)  # [-1, +1]
         u_y = np.clip(0.5 * (uy + 1.0), 0.0, 1.0)
 
-        # Wide horizontal landscape shield matching `afst301`: near-vertical sides & gentle arched top.
-        taper = 1.0 - 0.055 * (u_y ** 1.35)
+        # Tall, proud firefighter front shield: bold lower width tapering gracefully into an arched top crest.
+        taper = 1.0 - 0.145 * (u_y ** 1.45)
         p[:, 0] *= taper
         nx = p[:, 0] / max(1e-6, half_w)
-        top_mask = np.clip((u_y - 0.45) / 0.55, 0.0, 1.0)
-        # Subtle vintage arch rising gently across the top rim while keeping a crisp landscape outline.
-        crest_arch = 0.010 * (1.0 - 1.45 * (nx * nx)) * top_mask
+        top_mask = np.clip((u_y - 0.40) / 0.60, 0.0, 1.0)
+        crest_arch = 0.020 * (1.0 - 1.35 * (nx * nx)) * top_mask
         p[:, 1] += crest_arch
 
-        # Subtle crisp raised molded perimeter border outline directly on the front face!
-        # Smooth super-elliptical distance to perimeter (`edge_d in [0, 1]`): recessed field inside 0.80,
-        # smooth raised +0.010 beveled border ridge around 0.80..1.0 on front face (`uz > 0.2`).
+        # Crisp uniform-width raised molded perimeter border sculpted directly onto the front face.
         edge_d = (np.abs(ux) ** 6.0 + np.abs(uy) ** 6.0) ** (1.0 / 6.0)
-        t_rim = np.clip((edge_d - 0.80) / 0.12, 0.0, 1.0)
+        t_rim = np.clip((edge_d - 0.82) / 0.11, 0.0, 1.0)
         rim_step = t_rim * t_rim * (3.0 - 2.0 * t_rim)
         front_mask = np.clip((uz - 0.20) / 0.55, 0.0, 1.0)
         border_relief = 0.010 * rim_step * front_mask
 
-        # Slightly lift rear-bottom edge so deep embedded back never pokes below front brow.
-        rear_bot = np.clip((-uz - 0.10) / 0.90, 0.0, 1.0) * np.clip((0.30 - u_y) / 0.30, 0.0, 1.0)
+        # Slightly lift rear-bottom edge so deep embedded back never pokes below front brow,
+        # and smoothly thin the rear face on the proud upper crest (`u_y > 0.50`) so side `901 E`
+        # reads as a sleek sculpted firefighter badge plate instead of a thick block.
+        rear_mask = np.clip((-uz - 0.05) / 0.95, 0.0, 1.0)
+        rear_bot = rear_mask * np.clip((0.26 - u_y) / 0.26, 0.0, 1.0)
         p[:, 1] += 0.014 * rear_bot
+        top_thin_t = np.clip((u_y - 0.48) / 0.52, 0.0, 1.0)
+        top_thin = top_thin_t * top_thin_t * (3.0 - 2.0 * top_thin_t)
+        p[:, 2] += 0.048 * top_thin * rear_mask
 
         p[:, 2] += _shield_z_curve(p[:, 0], p[:, 1], shield_w, shield_h, curve_depth) + border_relief
         return p
@@ -274,7 +278,7 @@ def _build_option3_wide_shield(
         shield_depth,
         bevel=0.015,
         nx=30,
-        ny=18,
+        ny=24,
         nz=6,
         name="helmet_front_billboard",
         material=_HAT_MAT,
@@ -287,9 +291,9 @@ def _build_giant_letter_a(
     shield_depth: float,
     curve_depth: float,
     *,
-    y_offset: float = -0.010,
+    y_offset: float = -0.004,
 ) -> List[MeshPart]:
-    """Build a bold wide crimson sans-serif 'A' embedded flush inside the framed yellow shield field.
+    """Build a bold, tall crimson sans-serif 'A' embedded flush inside the taller framed yellow shield.
 
     Back face embeds 0.006 inside the yellow shield front surface; front face stands +0.014 proud,
     conforming identically to `_shield_z_curve` with ZERO air gap and ZERO backing plaque.
@@ -297,27 +301,27 @@ def _build_giant_letter_a(
     parts: List[MeshPart] = []
     thickness = 0.020  # [-0.010, +0.010] -> shifted +0.004 => [-0.006 inside, +0.014 proud]
     front_z = 0.5 * shield_depth
-    stroke_w = 0.036
-    leg_len = 0.126
-    tilt_deg = 32.0
+    stroke_w = 0.043
+    leg_len = 0.198
+    tilt_deg = 26.0
 
     left_leg = (
-        _subdivided_rounded_box(stroke_w, leg_len, thickness, bevel=0.004, nx=6, ny=12, nz=4, name="letter_a_left", material="gear_accent")
+        _subdivided_rounded_box(stroke_w, leg_len, thickness, bevel=0.004, nx=6, ny=16, nz=4, name="letter_a_left", material="gear_accent")
         .rotate_xyz(rz=-tilt_deg, degrees=True)
-        .translate(-0.044, y_offset, 0.004)
+        .translate(-0.054, y_offset, 0.004)
     )
     right_leg = (
-        _subdivided_rounded_box(stroke_w, leg_len, thickness, bevel=0.004, nx=6, ny=12, nz=4, name="letter_a_right", material="gear_accent")
+        _subdivided_rounded_box(stroke_w, leg_len, thickness, bevel=0.004, nx=6, ny=16, nz=4, name="letter_a_right", material="gear_accent")
         .rotate_xyz(rz=+tilt_deg, degrees=True)
-        .translate(+0.044, y_offset, 0.004)
+        .translate(+0.054, y_offset, 0.004)
     )
     apex = (
-        _subdivided_rounded_box(0.052, 0.026, thickness, bevel=0.004, nx=8, ny=4, nz=4, name="letter_a_apex", material="gear_accent")
-        .translate(0.0, 0.046 + y_offset, 0.004)
+        _subdivided_rounded_box(0.058, 0.030, thickness, bevel=0.004, nx=8, ny=4, nz=4, name="letter_a_apex", material="gear_accent")
+        .translate(0.0, 0.082 + y_offset, 0.004)
     )
     crossbar = (
-        _subdivided_rounded_box(0.138, 0.026, thickness, bevel=0.004, nx=12, ny=4, nz=4, name="letter_a_bar", material="gear_accent")
-        .translate(0.0, -0.016 + y_offset, 0.004)
+        _subdivided_rounded_box(0.156, 0.032, thickness, bevel=0.004, nx=12, ny=4, nz=4, name="letter_a_bar", material="gear_accent")
+        .translate(0.0, -0.024 + y_offset, 0.004)
     )
     raw_parts = [left_leg, right_leg, apex, crossbar]
 
@@ -485,13 +489,13 @@ def _build_fire_helmet(
     )
     scene.add("fire_helmet", crest)
 
-    # 3. Wide, low-profile landscape front shield wrapping the front crown + flush wide crimson 'A' (`afst301`).
+    # 3. Proud, taller upright firefighter front shield wrapping the front crown + bigger crimson 'A' (`afst301`).
     shield_w = dome_rx * 1.98
-    shield_h = dome_ry * 0.70
+    shield_h = dome_ry * 1.06
     shield_depth = 0.086
     curve_depth = 0.132
-    shield_tilt_x = -8.5
-    shield_pos = (hx, shell_y + 0.128, shell_z + dome_rz - 0.024)
+    shield_tilt_x = -13.5
+    shield_pos = (hx, shell_y + 0.172, shell_z + dome_rz - 0.026)
 
     shield = (
         _build_option3_wide_shield(shield_w, shield_h, shield_depth, curve_depth)
@@ -500,8 +504,8 @@ def _build_fire_helmet(
     )
     scene.add("fire_helmet", shield)
 
-    # Bold wide crimson 'A' embedded 0.006 inside the framed landscape shield face & raised +0.014 proud!
-    for part in _build_giant_letter_a(shield_w, shield_h, shield_depth, curve_depth, y_offset=-0.005):
+    # Bold, taller crimson 'A' embedded 0.006 inside the framed shield face & raised +0.014 proud!
+    for part in _build_giant_letter_a(shield_w, shield_h, shield_depth, curve_depth, y_offset=-0.004):
         placed = part.rotate_xyz(rx=shield_tilt_x, degrees=True).translate(*shield_pos)
         scene.add("fire_helmet", placed)
 
