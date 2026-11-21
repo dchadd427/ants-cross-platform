@@ -182,9 +182,16 @@ async function main() {
         const card = await op.textContent('#gchat .gp-card');
         check('the card says it is ready, its name and that the details are removed', /Image ready to send/.test(card) && /photo\.png/.test(card) && /Location and camera details are removed/.test(card), card);
         await shot(op, '02_card_desktop', { x: 0, y: 380, width: 1280, height: 420 });
+        await rp.route('**/hub/img/*.t.jpg', (route) => setTimeout(() => route.continue(), 1500));                      // (the reader's file comes late: the box must be there before it)
+        const box = () => rp.evaluate(() => { const i = document.querySelector('#gchat .gc-thumb img'); if (!i) return null; const r = i.getBoundingClientRect(); return { w: r.width, h: r.height, done: i.complete && i.naturalWidth > 0 }; });
         await op.click('#gchat .gc-send');
+        const early = await until('the thumbnail\'s box is in the reader\'s log', box, 20000);
         await until('the thumbnail is in the owner\'s log', async () => (await thumbs(op)).length === 1 && (await thumbs(op))[0].w > 0, 20000);
         await until('the thumbnail is in the reader\'s log', async () => (await thumbs(rp)).length === 1 && (await thumbs(rp))[0].w > 0, 20000);
+        const late = await box();
+        check('the box of the thumbnail is there before its file and does not change when the file comes (the log does not jump)', !early.done && early.w > 1 && early.h > 1 && Math.abs(early.w - late.w) < 1 && Math.abs(early.h - late.h) < 1, JSON.stringify([early, late]));
+        check('...and it is the thumbnail\'s own shape (1200 x 800) within 144 x 81', late.w <= 144.5 && late.h <= 81.5 && Math.abs(late.w / late.h - 1.5) < 0.03, JSON.stringify(late));
+        await rp.unroute('**/hub/img/*.t.jpg');
         const [t1] = await thumbs(rp);
         check('the thumbnail is the hub\'s own file at the size that the hub reserved for it, with the caption for its alt', /^\/hub\/img\/[0-9a-f]{32}\.t\.jpg$/.test(t1.src) && String(t1.w) === t1.fw && String(t1.h) === t1.fh && t1.alt === 'the best spot', JSON.stringify(t1));
         check('the card is gone and the field is empty after the line came back', (await op.$('#gchat .gp-card')) === null && (await op.inputValue('#gchat .gc-input')) === '');

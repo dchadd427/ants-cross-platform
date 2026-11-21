@@ -425,6 +425,13 @@
    "old": "you.img !== 'on' ? 'img' : points(text) > LIMIT.line ? 'long' :",
    "new": "you.img !== 'on' ? 'img' : false ? 'long' :",
    "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_box_waits_for_the_file",
+   "file": "web/home/pics.js",
+   "old": "im.style.setProperty('--tw', String(img.tw)); im.style.setProperty('--th', String(img.th));",
+   "new": "",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
   }
  ]
 }

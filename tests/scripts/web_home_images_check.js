@@ -28,7 +28,7 @@ const IMG = (o) => Object.assign({ n: NAME, x: 'png', w: 1280, h: 720, tw: 360, 
 // ---- a small fake page --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 const writes = [];                                  // (every write of markup: none is allowed)
 class El {
-    constructor(tag, doc) { this.tagName = String(tag).toLowerCase(); this.doc = doc; this.children = []; this.parentNode = null; this.attrs = {}; this.listeners = {}; this.className = ''; this._text = ''; this.hidden = false; this.disabled = false; this.value = ''; this.checked = false; this.files = []; this.style = {}; }
+    constructor(tag, doc) { this.tagName = String(tag).toLowerCase(); this.doc = doc; this.children = []; this.parentNode = null; this.attrs = {}; this.listeners = {}; this.className = ''; this._text = ''; this.hidden = false; this.disabled = false; this.value = ''; this.checked = false; this.files = []; this.style = { props: {}, setProperty(k, v) { this.props[k] = v; } }; }
     set textContent(v) { this.children.forEach((c) => { c.parentNode = null; }); this.children = []; this._text = String(v); }
     get textContent() { return this._text + this.children.map((c) => c.textContent).join(''); }
     set innerHTML(v) { writes.push(String(v)); }
@@ -109,6 +109,7 @@ function line(r, e) { const row = new El('div', r.p.doc); row.className = 'gc-li
     const b = byClass(row, 'gc-thumb')[0], im = b && b.querySelector('img');
     check('a thumbnail: a button in a span after the words, with an img of the still', !!b && b.tagName === 'button' && b.type === 'button' && !!im && im.getAttribute('src') === '/hub/img/' + NAME + '.t.jpg' && has(b.parentNode, 'gc-pic'));
     check('...the frame\'s own size (the log does not jump), lazy, async, not draggable, the caption for its alt', im.getAttribute('width') === '360' && im.getAttribute('height') === '203' && im.getAttribute('loading') === 'lazy' && im.getAttribute('decoding') === 'async' && im.getAttribute('alt') === 'a map' && im.getAttribute('draggable') === 'false');
+    check('...and the box is made from the hub\'s sizes before the file has come (the log does not jump when it loads)', im.style.props['--tw'] === '360' && im.style.props['--th'] === '203');
     check('...a name for a screen reader that says what a press does', /Open the image/.test(b.getAttribute('aria-label')) && /a map/.test(b.getAttribute('aria-label')));
     const bare = line(r, { id: 8, who: 'pebble', text: '', img: IMG({ n: OTHER, x: 'jpg' }) });
     check('an image with no words: "Image from NAME" is its alt, and its name for a screen reader says who', byClass(bare, 'gc-thumb')[0].querySelector('img').getAttribute('alt') === 'Image from pebble' && /by pebble/.test(byClass(bare, 'gc-thumb')[0].getAttribute('aria-label')));

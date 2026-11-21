@@ -61,6 +61,7 @@
             if (!checked(img)) return;
             b.type = 'button'; b.setAttribute('aria-label', e.text ? TEXT.open + ': ' + e.text : TEXT.open + ' by ' + e.who);
             im = el('img'); im.setAttribute('alt', still); im.setAttribute('width', String(img.tw)); im.setAttribute('height', String(img.th)); im.setAttribute('loading', 'lazy'); im.setAttribute('decoding', 'async'); im.setAttribute('draggable', 'false');
+            if (im.style && im.style.setProperty) { im.style.setProperty('--tw', String(img.tw)); im.style.setProperty('--th', String(img.th)); }
             im.setAttribute('src', address(img, true));
             im.addEventListener('error', function () {
                 if (im.parentNode) im.parentNode.removeChild(im);
