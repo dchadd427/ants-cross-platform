@@ -231,9 +231,9 @@ void HUD::update(const sim::WorldState& world, uint32_t delta_ticks) {
         if (match_countdown_) {                           // the card is see-through while the view moves and solid a moment after it stopped
             if (card_rest_steps_ != UINT32_MAX) card_rest_steps_ = std::min<uint32_t>(card_rest_steps_ + delta_ticks, kCardRestSteps);
             const bool looking = card_rest_steps_ < kCardRestSteps;
-            const int32_t span = 255 - card_see_through_;
-            if (looking) card_opacity_ = std::max<int32_t>(card_see_through_, card_opacity_ - static_cast<int32_t>(delta_ticks) * (span / static_cast<int32_t>(kCardFadeOutSteps)));
-            else card_opacity_ = std::min<int32_t>(255, card_opacity_ + static_cast<int32_t>(delta_ticks) * ((span + static_cast<int32_t>(kCardFadeInSteps) - 1) / static_cast<int32_t>(kCardFadeInSteps)));
+            const int32_t steps = static_cast<int32_t>(std::min<uint32_t>(delta_ticks, 255));
+            if (looking) card_look_ = std::min<int32_t>(255, card_look_ + steps * ((255 + static_cast<int32_t>(kCardFadeOutSteps) - 1) / static_cast<int32_t>(kCardFadeOutSteps)));
+            else card_look_ = std::max<int32_t>(0, card_look_ - steps * ((255 + static_cast<int32_t>(kCardFadeInSteps) - 1) / static_cast<int32_t>(kCardFadeInSteps)));
         }
     }
     update_alliance_dialog(world);

@@ -11,6 +11,7 @@
 #include "ants_ai/bot_names.hpp"
 #include "ants_app/application.hpp"
 #include "ants_app/countdown_card.hpp"
+#include "ants_app/connections_overlay.hpp"
 #include "ants_app/latency_corner.hpp"
 #include "ants_app/net_overlay.hpp"
 #include "ants_app/page_layout.hpp"
@@ -106,6 +107,7 @@ void Application::begin_net_countdown(uint8_t seconds) {
         seats[seat].plays = (start.roster & (1u << seat)) != 0;
         seats[seat].name = start.names[seat];
         seats[seat].computer = seats[seat].plays && ai::is_reserved_bot_name(start.names[seat]);
+        seats[seat].shows_ping = seats[seat].plays && !seats[seat].computer;           // (a person's row says the round trip, or that there is none yet)
     }
     countdown_deadline_ms_ = net_time_ms_ + static_cast<double>(seconds) * 1000.0;
     countdown_status_shown_ = -1;
@@ -160,8 +162,12 @@ void Application::tick_net_countdown() {
     }
     const int64_t left = std::max<int64_t>(0, static_cast<int64_t>(std::ceil(countdown_deadline_ms_ - net_time_ms_)));
     hud_.set_match_countdown_left_ms(left);
-    if (net_ != nullptr) {                                   // protocol 26: how this machine is connected to each other person (the row's mark: relay, direct)
-        for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) hud_.set_countdown_link(seat, net_->peer_link(seat));
+    if (net_ != nullptr) {                                   // protocol 26: how this machine is connected to each other person (the row's mark: relay, direct) and the round trip over that channel; your own row is your ping to the server
+        for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+            const std::optional<uint32_t> own = net_->ping_ms();
+            const int32_t ms = seat == net_->my_seat() ? (own ? static_cast<int32_t>(std::min<uint32_t>(*own, 999u)) : -1) : net_->peer_rtt_ms(seat);
+            hud_.set_countdown_link(seat, net_->peer_link(seat), ms);
+        }
     }
     const int32_t shown = countdown_seconds_shown(left);
     if (shown != countdown_status_shown_) {                  // the status line lives 5 s: it is said again at every second
@@ -196,9 +202,10 @@ int Application::hud_probe(int what) const noexcept {
     }
 }
 
-// The countdown card for the page (ants_probe 60 - 65, web/countdown_button.js): 60: the seconds that the countdown has left, rounded up (-1 when no card is up), 61 - 64: the place of the Fullscreen
+// The countdown card for the page (ants_probe 60 - 69, web/countdown_button.js): 60: the seconds that the countdown has left, rounded up (-1 when no card is up), 61 - 64: the place of the Fullscreen
 // button on the card, x, y, width and height in the canvas's pixels (the page lays its own button over it), 65: the lines of the match's chat log (-1 outside a match: the browser check reads what the other
-// player said). Anything else: -1.
+// player said), 66: how much of itself the card's button part keeps while the player looks round the map (0 .. 255), 67: the card's bottom edge, 68: the bottom of what lies above the button (the rows,
+// the count) and 69: the card's width, in the canvas's pixels (the button keeps inside the card and clear of what lies above it). Anything else: -1.
 int Application::countdown_probe(int what) const noexcept {
     switch (what) {
         case 60: return countdown_seconds_left();
@@ -208,6 +215,9 @@ int Application::countdown_probe(int what) const noexcept {
         case 64: return web_countdown_button().h;
         case 65: return match_running() ? static_cast<int>(hud_.get_chat_log().size()) : -1;
         case 66: return hud_.is_match_countdown_active() ? hud_.countdown_card_opacity() : -1;
+        case 67: return hud_.is_match_countdown_active() ? hud_.countdown_card_bottom() + picture_.y : -1;
+        case 68: return hud_.is_match_countdown_active() ? hud_.countdown_content_bottom() + picture_.y : -1;
+        case 69: return hud_.is_match_countdown_active() ? hud_.countdown_card_width() : -1;
         default: return -1;
     }
 }
@@ -686,6 +696,48 @@ void Application::render_latency_corner(int32_t version_x, int32_t text_y, const
     readout.delay_ms = corner_delay_ms();
     last_latency_layout_ = latency_corner_layout(*renderer_, readout, version_x, text_y, *left_limit, plate);
     draw_latency_corner(*renderer_, readout, version_x, text_y, *left_limit, plate);
+    if (screen == CornerScreen::Match) {                                   // the ping text opens the list of connections (a few pixels of margin: a finger's tap)
+        const int32_t w = renderer_->get_text_width(ping_text(readout.ping_ms), FontSize::Px12);
+        connections_hit_ = LayoutRect{last_latency_layout_->ping_x - 4, last_latency_layout_->ping_y - 4, w + 8, font_cell_height(FontSize::Px12) + 8};
+    }
+}
+
+// Who plays the match and how this machine is connected to each, as the countdown card's rows hold it: your own number is your ping to the server, another person's the round trip over the channel
+std::array<CountdownSeat, 4> Application::connection_seats() const {
+    std::array<CountdownSeat, 4> seats{};
+    if (!network_active()) return seats;
+    const net::StartMsg& start = net_->start_info();
+    const std::optional<uint32_t> own = net_->ping_ms();
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        seats[seat].plays = (start.roster & (1u << seat)) != 0;
+        seats[seat].name = start.names[seat];
+        seats[seat].computer = seats[seat].plays && ai::is_reserved_bot_name(start.names[seat]);
+        seats[seat].shows_ping = seats[seat].plays && !seats[seat].computer;
+        seats[seat].link = net_->peer_link(seat);
+        seats[seat].ping_ms = seat == net_->my_seat() ? (own ? static_cast<int32_t>(std::min<uint32_t>(*own, 999u)) : -1) : net_->peer_rtt_ms(seat);
+    }
+    return seats;
+}
+
+// The list of connections (connections_overlay.hpp), over the map view of a match of a network game while it is open: a click on the corner's ping text opens and closes it
+void Application::render_connections() {
+    if (!connections_open_ || !renderer_ || !network_active() || state_ != AppState::Playing || scorecard_.is_open() || net_->phase() != net::NetGame::Phase::Playing) return;
+    const std::vector<ConnectionRow> rows = connection_rows(connection_seats(), net_->my_seat());
+    draw_connections(*renderer_, connections_layout(layout_.view(), rows.size()), rows);
+}
+
+bool Application::handle_connections_mouse(const SDL_MouseButtonEvent& button) {
+    if (button.button != SDL_BUTTON_LEFT) return false;
+    const bool there = network_active() && state_ == AppState::Playing && !scorecard_.is_open() && net_->phase() == net::NetGame::Phase::Playing && !hud_.is_modal_open() &&
+                       connections_hit_.w > 0 && connections_hit_.contains(button.x, button.y);
+    if (button.type == SDL_MOUSEBUTTONDOWN) {
+        connections_press_ = there;
+        return there;
+    }
+    if (!connections_press_) return false;
+    connections_press_ = false;
+    if (there) connections_open_ = !connections_open_;
+    return true;                                                         // (the release of a press that this took is nobody else's)
 }
 
 }  // namespace ants::app

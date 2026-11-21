@@ -37,6 +37,9 @@ int main(int argc, char* argv[]) {
     test_results_screen(arc);
     test_label_wrap();
     test_countdown_card(arc);
+    test_countdown_card_geometry();
+    test_countdown_classic_pings(arc);
+    test_countdown_look_around();
     test_alliance_dialog_layout(arc);
     test_alliance_answers(arc);
     std::printf("\nhud layout: %d checks, %d failures\n", g_checks, g_failures);

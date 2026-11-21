@@ -491,12 +491,14 @@ public:
         match_countdown_ = true;
         match_countdown_left_ms_ = ms_left;
         countdown_seats_ = seats;
-        card_opacity_ = 255;                                 // (solid until the view moves)
+        card_look_ = 0;                                      // (solid until the view moves)
         card_rest_steps_ = UINT32_MAX;
     }
-    /// Protocol 26: how this machine is connected to the person of `seat` now (the row's small word, countdown_tag)
-    void set_countdown_link(size_t seat, net::PeerLink link) noexcept {
-        if (seat < countdown_seats_.size()) countdown_seats_[seat].link = link;
+    /// Protocol 26: how this machine is connected to the person of `seat` now (the row's small word, countdown_tag), and the round trip that the row shows (-1: none yet)
+    void set_countdown_link(size_t seat, net::PeerLink link, int32_t ping_ms = -1) noexcept {
+        if (seat >= countdown_seats_.size()) return;
+        countdown_seats_[seat].link = link;
+        countdown_seats_[seat].ping_ms = ping_ms;
     }
     bool is_match_countdown_active() const noexcept { return show_match_start_modal_ && match_countdown_; }
     void set_match_countdown_left_ms(int64_t ms_left) noexcept { match_countdown_left_ms_ = ms_left; }
@@ -504,13 +506,23 @@ public:
     const std::array<CountdownSeat, 4>& countdown_seats() const noexcept { return countdown_seats_; }       // who the card lists (its rows, and so its line)
     /// Where the Fullscreen button is (the picture's pixels): the page's button is laid over this place on the web (ants_probe 61 - 64), the native game draws its own there and calls the function that
     /// set_on_fullscreen gave when it is clicked
-    LayoutRect countdown_button_rect() const noexcept { return countdown_card_layout(layout_.view()).button; }
+    LayoutRect countdown_button_rect() const noexcept { return card_new_look_ ? countdown_card_now().button : classic_countdown_layout(layout_.view()).button; }
+    /// For the page's button (ants_probe 67 - 69): the card's bottom edge, the bottom of what lies above the button (the rows, the count, the hint of the classic card) and the card's width, in the picture's pixels
+    int32_t countdown_card_bottom() const noexcept { return card_new_look_ ? countdown_card_now().card.bottom() : classic_countdown_layout(layout_.view()).card.bottom(); }
+    int32_t countdown_content_bottom() const noexcept {
+        if (!card_new_look_) return classic_countdown_layout(layout_.view()).hint_y + 20;                    // (the hint line: 18 px letters)
+        const LayoutRect c = countdown_card_now().content;
+        return c.bottom();
+    }
+    int32_t countdown_card_width() const noexcept { return card_new_look_ ? countdown_card_now().card.w : kClassicCardW; }
     void set_on_fullscreen(std::function<void()> fn) { on_fullscreen_ = std::move(fn); }
     /// The card is see-through while the view moves (the camera of the player: the edge scroll, the minimap, a drag, the wheel, two fingers) and solid again a moment after it stops. The application
-    /// says when the view moved (note_view_moved, once per frame at most); update() takes it from there in its steps of 50 ms. 255 is solid, kCardSeeThrough the see-through.
+    /// says when the view moved (note_view_moved, once per frame at most); update() takes it from there in its steps of 50 ms.
     void note_view_moved() noexcept { if (show_match_start_modal_ && match_countdown_) card_rest_steps_ = 0; }
-    int32_t countdown_card_opacity() const noexcept { return card_opacity_; }
-    void set_card_see_through(int32_t opacity) noexcept { card_see_through_ = opacity; }          // PROTOTYPE ONLY (the pictures of the levels): removed before the pull request
+    /// How see-through the card is now, 0 (solid) .. 255 (as see-through as it gets), and how much of itself the wells, the writing and the button keep at that moment (255: all of it; ants_probe 66, which
+    /// the page's own Fullscreen button follows)
+    int32_t countdown_card_look() const noexcept { return card_look_; }
+    int32_t countdown_card_opacity() const noexcept { return 255 - card_look_ * (255 - kCardFrontSeeThrough) / 255; }
     /// Is the view being dragged now (a press on the map that moves the view, during the countdown)
     bool is_looking() const noexcept { return look_dragging_; }
     /// The dialog's length in steps of 50 ms (a local game's dialog closes itself after this many)
@@ -520,6 +532,7 @@ public:
 
 private:
     void render_match_countdown(IRenderer& renderer, const assets::AssetArchive& assets);
+    CountdownCard countdown_card_now() const noexcept;            // the new card at this frame's scale and for the players that it lists
     bool handle_countdown_key(int32_t key, uint16_t mod, bool repeat);
     bool handle_countdown_mouse_down(int32_t x, int32_t y, uint8_t button);
     bool handle_countdown_mouse_up(int32_t x, int32_t y, bool left_release, bool fire_quit, bool fire_all, bool fire_team);
@@ -747,9 +760,10 @@ private:
     int32_t look_x_{0};                                  // (where the drag's last move was)
     int32_t look_y_{0};
     bool swallow_release_{false};                        // the card closed in a drag: the release of that button does nothing
-    int32_t card_opacity_{255};                          // how solid the card is drawn now (255: all of it)
-    int32_t card_see_through_{kCardSeeThrough};
+    int32_t card_look_{0};                               // how see-through the card is drawn now, 0 (solid) .. 255 (the most see-through)
     uint32_t card_rest_steps_{UINT32_MAX};               // 50 ms steps since the view last moved
+    bool card_new_look_{false};                          // the card was drawn in the new look at the last frame (its place is the new card's)
+    double card_output_scale_{1.0};                      // ... and the device pixels to a canvas pixel that it was drawn at
     std::function<void()> on_fullscreen_{nullptr};
 
     bool show_quit_dialog_{false};

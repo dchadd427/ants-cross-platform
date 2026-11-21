@@ -1851,6 +1851,107 @@ void run_guest_tests() {
         ASSERT_TRUE(app.sim().current_tick() > 40 && !app.net()->desynced());
     } TEST_END();
 
+    TEST_CASE("N5.102 Protocol 21, Looking Round In The Countdown: A Drag On The Map Moves The View, The Wheel Zooms It, The Minimap Moves It, Nothing Is Picked Or Ordered (No Command Reaches The Sink), The Card Is See-Through While The View Moves And Solid A Second After It Stops, And A Drag Still Held At The First Turn Is Nobody's Click") {
+        Server srv;
+        ASSERT_TRUE(srv.listener != nullptr);
+        server::RoomSpec spec;
+        spec.code = "CDN-5";
+        spec.map = "TINY.LVL";
+        spec.players = 2;
+        spec.has_seed = true;
+        spec.seed = 4242;
+        spec.countdown_s = net::kMatchCountdownSeconds;
+        spec.solo_countdown_s = net::kSoloCountdownSeconds;
+        spec.bots = {ai::BotSpec{1, "standard", ai::Level::Medium}};
+        ASSERT_TRUE(srv.mgr.create_room(spec, srv.now).ok);
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_address = "127.0.0.1";
+        cfg.net_port = srv.port();
+        cfg.net_room = "CDN-5";
+        cfg.player_name = "Ana";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        Hall hall{srv, &app, {}};
+        ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && app.hud().is_match_countdown_active(); }, 15000));
+        struct CountingSink : sim::CommandSink {
+            int submitted{0};
+            sim::CommandResult submit(const sim::Command&) override { ++submitted; return sim::CommandResult{}; }
+        } sink;
+        app.hud().set_command_sink(&sink);                                                   // (what the HUD orders goes here, and is counted)
+        ViewportCamera& camera = app.renderer().camera();
+        const LayoutRect view = app.hud().layout().view();
+        const auto button = [&](uint32_t type, int32_t x, int32_t y) {
+            SDL_MouseButtonEvent e{};
+            e.type = type;
+            e.button = SDL_BUTTON_LEFT;
+            e.x = x;
+            e.y = y;
+            app.handle_mouse_button(e);
+        };
+        const auto motion = [&](int32_t x, int32_t y) {
+            SDL_MouseMotionEvent e{};
+            e.type = SDL_MOUSEMOTION;
+            e.x = x;
+            e.y = y;
+            app.handle_mouse_motion(e);
+        };
+        const int32_t mx = view.x + view.w / 2;
+        const int32_t my = view.y + view.h / 2;
+        // the wheel zooms the view in (a small map lies whole in the view at the first level: it can be moved only when it is larger than the view)
+        const float zoom_before = camera.zoom;
+        SDL_MouseWheelEvent wheel{};
+        wheel.type = SDL_MOUSEWHEEL;
+        wheel.y = 1;
+        motion(mx, my);
+        for (int i = 0; i < 6; ++i) app.handle_mouse_wheel(wheel);
+        ASSERT_TRUE(camera.zoom > zoom_before);
+        camera.center_on(static_cast<int32_t>(app.sim().grid().width()) * 24, static_cast<int32_t>(app.sim().grid().height()) * 24, app.sim().grid().width(), app.sim().grid().height());
+        const float x0 = camera.x;
+        const float y0 = camera.y;
+        hall.step(1600);
+        ASSERT_EQ(app.hud().countdown_card_look(), 0);                                       // solid: nothing has moved the view since the zoom, a second and a half ago
+        // a drag on the map: the ground follows the pointer, the card turns see-through, nothing is picked or ordered
+        button(SDL_MOUSEBUTTONDOWN, mx, my);
+        motion(mx - 40, my - 30);
+        motion(mx - 80, my - 60);
+        hall.step(100);
+        ASSERT_TRUE(camera.x != x0 && camera.y != y0);
+        ASSERT_TRUE(app.hud().countdown_card_look() > 0 && app.hud().is_looking());
+        button(SDL_MOUSEBUTTONUP, mx - 80, my - 60);
+        ASSERT_FALSE(app.hud().is_looking());
+        ASSERT_TRUE(app.hud().get_selected_ant_ids().empty() && app.hud().get_selected_ant_id() == 0u && sink.submitted == 0);
+        // the card stays see-through for a second after the view stopped, then is solid again
+        hall.step(800);
+        ASSERT_TRUE(app.hud().countdown_card_look() == 255);
+        hall.step(1500);
+        ASSERT_EQ(app.hud().countdown_card_look(), 0);
+        // the minimap: the left button held on it moves the view to the pointer
+        const LayoutRect mini = app.hud().layout().minimap();
+        const float before_x = camera.x;
+        button(SDL_MOUSEBUTTONDOWN, mini.x + 3, mini.y + 3);
+        for (int i = 0; i < 4; ++i) app.run_frame_with_delta(0.05f);                         // (the view follows the held button at the INPUT task's 50 ms)
+        button(SDL_MOUSEBUTTONUP, mini.x + 3, mini.y + 3);
+        ASSERT_TRUE(camera.x != before_x);
+        ASSERT_TRUE(sink.submitted == 0 && app.hud().get_selected_ant_ids().empty());
+        // a drag that the first turn finds still held: its release is nobody's click (no selection, no order)
+        hall.step(2500);
+        button(SDL_MOUSEBUTTONDOWN, mx, my);
+        motion(mx + 10, my + 10);
+        uint32_t waited = 0;
+        while (app.sim().current_tick() == 0 && waited < 20000) {
+            ASSERT_TRUE(app.hud().is_match_countdown_active());
+            hall.step(10);
+            waited += 10;
+        }
+        ASSERT_TRUE(app.sim().current_tick() >= 1 && !app.hud().is_match_countdown_active());
+        button(SDL_MOUSEBUTTONUP, mx + 10, my + 10);
+        ASSERT_TRUE(sink.submitted == 0 && app.hud().get_selected_ant_ids().empty() && app.hud().get_selected_ant_id() == 0u);
+        app.hud().set_command_sink(app.net());
+        hall.step(3000);
+        ASSERT_TRUE(app.sim().current_tick() > 40 && !app.net()->desynced());
+    } TEST_END();
+
     TEST_CASE("N5.79 Protocol 21, The Native Game's Fullscreen Button On The Countdown Card Is Wired To The Game's Fullscreen: A Click On It (Press And Release) Puts The Window Fullscreen, The Next One Takes It Back (A Real Window On SDL's Dummy Video Driver; The Page's Own Button Does It In A Browser)") {
         SDL_SetHint(SDL_HINT_VIDEODRIVER, "dummy");                                            // (SDL_Quit clears the hints: set before every start)
         SDL_SetHint(SDL_HINT_AUDIODRIVER, "dummy");
