@@ -302,6 +302,19 @@ async function main() {
         await guestPage.press('#slots .rdy-btn');
         await hostPage.waitFor('START is off again', 'document.getElementById("start").disabled === true || document.getElementById("start").getAttribute("aria-disabled") === "true"', 5000);
         check('ready: when the guest takes the mark back, START is off again and the line names them', (await readyLine(hostPage)) === 'Waiting for Wren to ready up' && (await readySwitch(guestPage)).on === false);
+        // the games' list and the room: My room shows the games and the next press the room again (the room stays); Leave room asks, then brings the games' list back
+        await hostPage.press('.hmine .mine');
+        await hostPage.waitFor('the games\' list shows', 'document.body.getAttribute("data-screen") === "home"', 3000);
+        const shownGames = await measure(hostPage);
+        check('games and room: a press on My room shows the games\' list in the room\'s place (the page does not scroll), and My room is still there, no longer lit', shownGames.noPageScroll && shownGames.gamesShown && await hostPage.eval('(function () { var l = document.getElementById("lobby"), m = document.querySelector(".hmine .mine"); return getComputedStyle(l).display === "none" && m.getAttribute("aria-pressed") === "false" && !m.closest(".hmine").hidden; })()'), JSON.stringify({ g: shownGames.gamesShown, s: shownGames.scroll }));
+        await hostPage.shot('games_list_while_a_room_is_held');
+        await hostPage.press('.hmine .mine');
+        await hostPage.waitFor('the room shows again', 'document.body.getAttribute("data-screen") === "room"', 3000);
+        await hostPage.press('.leave');
+        await hostPage.waitFor('the card asks', '!!document.querySelector(".gconfirm")', 3000);
+        await hostPage.press('.gconfirm button', 'Leave room');
+        await hostPage.waitFor('the games\' list is back and the room is gone', 'document.body.getAttribute("data-screen") === "home" && document.querySelector(".hmine").hidden', 5000);
+        check('leaving the room (the question first, as with another person in it) shows the games\' list, and My room is gone', (await measure(hostPage)).gamesShown);
         await guestPage.close();
         await hostPage.close();
     }
