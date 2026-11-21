@@ -624,8 +624,8 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
         self.assertIn(idx_of["gaster_group"], doc_open["nodes"][idx_of["upper_body"]]["children"])
         self.assertIn(idx_of["eyelid_left"], doc_open["nodes"][idx_of["head_group"]]["children"])
 
-        # Geometric eyelid radial clearance: holds for symmetric (1.0/1.0), asymmetric (0.92/1.08),
-        # and vertically stretched eyes (eye_aspect_left/right) with non-zero eye_look across all 5 eye materials.
+        # Geometric ellipsoidal eyelid clearance across symmetric, asymmetric, and vertically stretched eyes
+        # with non-zero eye_look gaze across blink=0..1, plus zero forehead/temple protrusion at blink=0.
         eye_mats = ("eye_white", "eye_limbal", "eye_iris", "eye_pupil", "eye_catchlight")
         for sl, sr, al, ar, look in (
             (1.0, 1.0, 1.0, 1.0, (0.0, 0.0)),
@@ -633,7 +633,7 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
             (0.94, 1.05, 0.92, 1.18, (-0.12, 0.10)),
         ):
             for b_val in (0.0, 0.25, 0.5, 0.75, 1.0):
-                sc_b, a_b = base_ant.build_base_ant(
+                sc_b, _ = base_ant.build_base_ant(
                     f"clearance_{b_val}",
                     blink=b_val,
                     eye_scale_left=sl,
@@ -643,9 +643,20 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
                     eye_look=look,
                 )
                 w_parts = sc_b.world_parts()
-                for side_sign, lid_node, lid_name in ((1.0, "eyelid_left", "eyelid_left_shell"), (-1.0, "eyelid_right", "eyelid_right_shell")):
+                hm_inv = np.linalg.inv(sc_b.get_world_matrix("head_group"))
+                c_pos = next(p for p in w_parts if p.name == "cranium").positions.astype(np.float64)
+                c_loc = (hm_inv[:3, :3] @ c_pos.T).T + hm_inv[:3, 3]
+                hc = 0.5 * (c_loc.min(axis=0) + c_loc.max(axis=0))
+                c_rel = c_loc - hc
+                c_r = np.linalg.norm(c_rel, axis=1)
+                c_dir = c_rel / c_r[:, None]
+
+                for side_sign, lid_node, lid_name, s_side, a_side in (
+                    (1.0, "eyelid_left", "eyelid_left_shell", sl, al),
+                    (-1.0, "eyelid_right", "eyelid_right_shell", sr, ar),
+                ):
                     lid_m = sc_b.get_world_matrix(lid_node)
-                    pivot = lid_m[:3, 3].astype(np.float64) if lid_m is not None else np.zeros(3, dtype=np.float64)
+                    lid_m_inv = np.linalg.inv(lid_m)
                     eye_verts = np.vstack(
                         [
                             p.positions.astype(np.float64)
@@ -654,14 +665,37 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
                             and float(p.positions[:, 0].mean()) * side_sign > 0.0
                         ]
                     )
-                    r_eye_max = float(np.linalg.norm(eye_verts - pivot[None, :], axis=1).max())
-                    lid_verts = np.vstack([p.positions.astype(np.float64) for p in w_parts if p.name == lid_name])
-                    r_lid_inner = float(np.linalg.norm(lid_verts - pivot[None, :], axis=1).min())
+                    # Transform eye vertices into the eyelid's local un-yawed shell frame and verify
+                    # every vertex sits strictly inside the inner ellipsoid (r_x - thick, r_yz - thick).
+                    ev_lid = (lid_m_inv[:3, :3] @ eye_verts.T).T + lid_m_inv[:3, 3]
+                    cy, sy = math.cos(-side_sign * 0.15), math.sin(-side_sign * 0.15)
+                    ex1 = ev_lid[:, 0] * cy + ev_lid[:, 2] * sy
+                    ey1 = ev_lid[:, 1]
+                    ez1 = -ev_lid[:, 0] * sy + ev_lid[:, 2] * cy
+                    r_x, r_yz = base_ant._eyelid_radii(s_side, a_side)
+                    th = 0.0028 * s_side
+                    in_rx, in_ryz = r_x - th, r_yz - th
+                    ev_r = np.linalg.norm(ev_lid, axis=1)
+                    ell_norm = np.sqrt((ex1 / in_rx) ** 2 + (ey1 / in_ryz) ** 2 + (ez1 / in_ryz) ** 2)
+                    min_clr = float((ev_r * (1.0 / ell_norm - 1.0)).min())
                     self.assertGreaterEqual(
-                        r_lid_inner - r_eye_max,
-                        0.007,
-                        f"{lid_name} ({sl}/{sr}, aspect={al}/{ar}, look={look}) at blink={b_val}: clearance {r_lid_inner - r_eye_max:.5f} < 0.007",
+                        min_clr,
+                        0.0012,
+                        f"{lid_name} ({sl}/{sr}, aspect={al}/{ar}, look={look}) at blink={b_val}: clearance {min_clr:.5f} < 0.0012",
                     )
+                    if b_val == 0.0:
+                        # At blink=0, zero eyelid shell vertices may protrude past the smooth cranium.
+                        lid_w = next(p for p in w_parts if p.name == lid_name).positions.astype(np.float64)
+                        lid_h = (hm_inv[:3, :3] @ lid_w.T).T + hm_inv[:3, 3]
+                        l_rel = lid_h - hc
+                        l_r = np.linalg.norm(l_rel, axis=1)
+                        l_dir = l_rel / l_r[:, None]
+                        protrude = float((l_r - c_r[np.argmax(l_dir @ c_dir.T, axis=1)]).max())
+                        self.assertLessEqual(
+                            protrude,
+                            0.001,
+                            f"{lid_name} ({sl}/{sr}, aspect={al}/{ar}) protrudes {protrude:.4f} past cranium at blink=0",
+                        )
 
         # Vertical eye_aspect_right > eye_aspect_left makes the viewer-left (-X / right) sclera noticeably taller.
         sc_tall, anc_tall = base_ant.build_base_ant(

@@ -75,7 +75,8 @@ except ImportError:
 
 ArmPoseLike = Optional[Union[str, Sequence[Sequence[float]]]]
 
-EYELID_CLOSED_ANGLE = 1.98  # radians around local +X (~113 deg) from hidden open rest to fully sealed blink
+EYELID_CLOSED_ANGLE = 1.98  # shared legacy blink sweep exported for standalone rigs (Combat/Thief)
+_BASE_EYELID_CLOSED_ANGLE = 2.90  # base_ant sweep from forehead-hidden open rest (-1.68 rad) to full seal (+1.22 rad)
 BROW_STYLES: Tuple[str, ...] = ("curious", "sneaky", "eager", "wonder", "plucky", "none")
 
 # Per-class expressive brow curve profiles (scaled for Goldilocks smooth 1998 head):
@@ -283,36 +284,46 @@ def _build_head(scene: SceneBuilder, head_center: Tuple[float, float, float], he
     _build_mandibles(scene, head_center, head_tilt_x)
 
 
-def _eyelid_outer_radius(scale: float = 1.0, aspect: float = 1.0) -> float:
-    """Spherical outer radius of the upper eyelid shell, guaranteed >= +0.008 inner clearance."""
-    return (max(0.0725, 0.0710 * float(aspect)) + 0.0126) * float(scale)
+def _eyelid_radii(scale: float = 1.0, aspect: float = 1.0) -> Tuple[float, float]:
+    """Return `(r_x, r_yz)` outer ellipsoid radii of the upper eyelid shell.
 
-
-def _build_eyelid_shell(name: str, yaw_y: float, *, scale: float = 1.0, aspect: float = 1.0) -> MeshPart:
-    """Build a true spherical chitin_team upper eyelid shell in eye-local coordinates.
-
-    At scale=1.0, aspect=1.0, outer radius is 0.0851 with thickness 0.0036 -> constant
-    inner spherical radius 0.0815 everywhere around the eye pivot; for vertically stretched
-    eyes (`aspect > 1.0`), the spherical envelope expands proportionally to guarantee
-    >= +0.008 clearance across blink=0..1 and any eye_look gaze offset while staying
-    tucked invisibly behind the smooth forehead when open (`blink=0`).
+    `r_x` tracks the eye's actual horizontal width (not stretched by vertical `aspect`) so
+    taller asymmetric eyes never bulge out the cranium temple, while `r_yz` clears sclera,
+    pupil, and catchlight across blink=0..1 and any eye_look gaze offset.
     """
     s = float(scale)
     a = max(0.75, min(1.40, float(aspect)))
-    r_out = _eyelid_outer_radius(s, a)
-    open_rx = -1.16 - 0.28 * max(0.0, a - 1.0)
+    r_x = (0.0685 + 0.0055) * s
+    r_yz = (max(0.0715, 0.0710 * a) + 0.0062) * s
+    return r_x, r_yz
+
+
+def _eyelid_outer_radius(scale: float = 1.0, aspect: float = 1.0) -> float:
+    """Maximum outer sweep radius of the upper eyelid shell (`r_yz`)."""
+    return _eyelid_radii(scale, aspect)[1]
+
+
+def _build_eyelid_shell(name: str, yaw_y: float, *, scale: float = 1.0, aspect: float = 1.0) -> MeshPart:
+    """Build a snug ellipsoidal chitin_team upper eyelid shell in eye-local coordinates.
+
+    Tucked cleanly inside the smooth forehead/cranium at `blink=0` (`open_rx=-1.68`,
+    `start_phi=0.04`) with zero temple or brow protrusion, sweeping `_BASE_EYELID_CLOSED_ANGLE`
+    to seal 100% over the sclera at `blink=1.0`.
+    """
+    s = float(scale)
+    r_x, r_yz = _eyelid_radii(s, aspect)
     lid = hemisphere_shell(
-        r_out,
-        r_out,
-        r_out,
-        thickness=0.0036 * s,
-        start_phi=-0.15,
+        r_x,
+        r_yz,
+        r_yz,
+        thickness=0.0028 * s,
+        start_phi=0.04,
         u_segs=28,
         v_segs=12,
         name=name,
         material="chitin_team",
     )
-    return lid.rotate_xyz(rx=open_rx, ry=yaw_y)
+    return lid.rotate_xyz(rx=-1.68, ry=yaw_y)
 
 
 def _build_eyes(
@@ -354,7 +365,7 @@ def _build_eyes(
     eye_y_r = eye_y_base + 0.45 * 0.0710 * s_r * (a_r - 1.0)
 
     blink_clamped = max(0.0, min(1.0, float(blink)))
-    rest_rot = quat_from_axis_angle((1.0, 0.0, 0.0), blink_clamped * EYELID_CLOSED_ANGLE)
+    rest_rot = quat_from_axis_angle((1.0, 0.0, 0.0), blink_clamped * _BASE_EYELID_CLOSED_ANGLE)
 
     for side, tag, ex, ey, s, a, b_idx in (
         (1.0, "left", eye_x_l, eye_y_l, s_l, a_l, 0),
@@ -459,7 +470,7 @@ def _build_eyes(
                 ),
             )
 
-    scene.add_blink_animation(("eyelid_left", "eyelid_right"), closed_angle=EYELID_CLOSED_ANGLE, name="Blink")
+    scene.add_blink_animation(("eyelid_left", "eyelid_right"), closed_angle=_BASE_EYELID_CLOSED_ANGLE, name="Blink")
 
     return {
         "eye_left": (eye_x_l, eye_y_l, eye_z),
@@ -467,7 +478,7 @@ def _build_eyes(
         "eye_center": (0.0, 0.5 * (eye_y_l + eye_y_r), eye_z + 0.015),
         "eye_radius": 0.071 * max(s_l * max(1.0, a_l), s_r * max(1.0, a_r)),
         "eyelid_outer_radius": max(_eyelid_outer_radius(s_l, a_l), _eyelid_outer_radius(s_r, a_r)),
-        "eyelid_closed_angle": EYELID_CLOSED_ANGLE,
+        "eyelid_closed_angle": _BASE_EYELID_CLOSED_ANGLE,
     }
 
 
@@ -1087,7 +1098,7 @@ def build_base_ant(
         "eye_center": (0.0, 0.5 * (ey_l + ey_r), head_center[2] + 0.155),
         "eye_radius": 0.071 * max(s_l * max(1.0, a_l), s_r * max(1.0, a_r)),
         "eyelid_outer_radius": max(_eyelid_outer_radius(s_l, a_l), _eyelid_outer_radius(s_r, a_r)),
-        "eyelid_closed_angle": EYELID_CLOSED_ANGLE,
+        "eyelid_closed_angle": _BASE_EYELID_CLOSED_ANGLE,
     }
     if include_eyes:
         eye_anchors = _build_eyes(
