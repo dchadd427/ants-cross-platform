@@ -32,7 +32,7 @@ const row = (i, name, at) => ({ i, name, at: at || 'look' });
 const ROWS = [row(3, 'maple.leaf'), row(4, 'Clover', 'wait'), row(5, 'Pebble', 'wait'), row(6, 'Fern', 'wait'), row(7, 'juniper'), row(8, 'moss', 'play'), row(9, 'tess')];
 const WHO = { t: 'who', full: true, n: ROWS.length + 2, g: 2, more: 0, rows: ROWS };
 const HISTORY = [line(1, 'pebble', 'anyone up for Islands?'), line(2, 'moss', 'gg everyone, that last match was close'), line(3, 'tess', 'new map in the Map maker if anyone wants to try it'), line(4, 'pebble', 'which one?'), line(5, 'tess', 'Four Corners, it is small')];
-const PEOPLE = { dAwGy: 2, Dethcon: 1 };               // the two names of the room (a cookie tells the stand-in who a browser is: the login of the fake hub)
+const PEOPLE = { Hazel: 2, Wren: 1 };               // the two names of the room (a cookie tells the stand-in who a browser is: the login of the fake hub)
 
 let checks = 0, failures = 0;
 function check(label, ok, detail) {
@@ -221,11 +221,11 @@ const MEASURE = '(function () {' +
 const measure = (page) => page.eval(MEASURE);
 const text = (page, selector) => page.eval('(function () { var e = document.querySelector(' + JSON.stringify(selector) + '); return e ? e.textContent : null; })()');
 
-// a room of a host (dAwGy), a guest who joined by the link (Dethcon) and, when asked, a Medium computer player in the third color
+// a room of a host (Hazel), a guest who joined by the link (Wren) and, when asked, a Medium computer player in the third color
 async function makeRoom(chrome, site, w, h, bot) {
-    const hostPage = await open(chrome, site, 'dAwGy', [w, h]);
+    const hostPage = await open(chrome, site, 'Hazel', [w, h]);
     const link = await host(hostPage);
-    const guestPage = await open(chrome, site, 'Dethcon', [w, h], new URL(link).pathname + new URL(link).search);
+    const guestPage = await open(chrome, site, 'Wren', [w, h], new URL(link).pathname + new URL(link).search);
     await guestPage.waitFor('the name card', '!document.getElementById("name-step").hidden || document.body.getAttribute("data-screen") === "room"', 10000).catch(() => null);
     if (await guestPage.eval('!document.getElementById("name-step").hidden')) await guestPage.press('#name-step-go');
     try { await hostPage.waitFor('the guest is in', 'document.querySelectorAll("#slots .k-person").length === 2', 15000); } catch (e) { await hostPage.shot('fail_host'); await guestPage.shot('fail_guest'); console.log('guest errors: ' + JSON.stringify(guestPage.errors)); throw e; }
@@ -233,7 +233,8 @@ async function makeRoom(chrome, site, w, h, bot) {
         await hostPage.eval('(function () { var s = document.querySelector("select[data-mode]"); s.value = "medium"; s.dispatchEvent(new Event("change", { bubbles: true })); })()');
         await hostPage.waitFor('the bot sits', 'document.querySelectorAll("#slots .k-bot").length === 1', 8000);
     }
-    await sleep(400);
+    for (const page of [hostPage, guestPage]) await page.waitFor('the page\'s toast has gone (it is the picture\'s business: a toast hides the chat)', '(function () { return [".gtoast", "#toast"].every(function (q) { var t = document.querySelector(q); return !t || t.hidden; }); })()', 12000);
+    await sleep(300);
     return { hostPage, guestPage, link };
 }
 const chips = (page) => page.eval('[].map.call(document.querySelectorAll("#slots .rdy-chip"), function (e) { return e.textContent + (e.className.indexOf(" bot") !== -1 ? " (bot)" : ""); }).sort()');
@@ -276,7 +277,7 @@ async function main() {
         check('ready: the host has no Ready switch, the guest has one on their own card', (await readySwitch(hostPage)) === null && (await readySwitch(guestPage)) !== null);
         same('ready: the marks on the host\'s screen (the host and the computer player are Ready by themselves)', await chips(hostPage), ['Not ready', 'Ready', 'Ready (bot)']);
         const s1 = await startState(hostPage);
-        check('ready: START of the host is off, and the line says whose Ready it waits for', s1.off && (await readyLine(hostPage)) === 'Waiting for Dethcon to ready up', JSON.stringify({ s: s1, l: await readyLine(hostPage) }));
+        check('ready: START of the host is off, and the line says whose Ready it waits for', s1.off && (await readyLine(hostPage)) === 'Waiting for Wren to ready up', JSON.stringify({ s: s1, l: await readyLine(hostPage) }));
         const g1 = await startState(guestPage);
         check('ready: a guest\'s START waits for the host, and the line says that it waits for them', g1.off && /Waiting for/.test(g1.text) && (await readyLine(guestPage)) === 'Waiting for you to ready up', JSON.stringify({ s: g1, l: await readyLine(guestPage) }));
         await hostPage.shot('ready_host_waiting');
@@ -300,7 +301,7 @@ async function main() {
         // the guest takes the mark back
         await guestPage.press('#slots .rdy-btn');
         await hostPage.waitFor('START is off again', 'document.getElementById("start").disabled === true || document.getElementById("start").getAttribute("aria-disabled") === "true"', 5000);
-        check('ready: when the guest takes the mark back, START is off again and the line names them', (await readyLine(hostPage)) === 'Waiting for Dethcon to ready up' && (await readySwitch(guestPage)).on === false);
+        check('ready: when the guest takes the mark back, START is off again and the line names them', (await readyLine(hostPage)) === 'Waiting for Wren to ready up' && (await readySwitch(guestPage)).on === false);
         await guestPage.close();
         await hostPage.close();
     }
@@ -321,37 +322,52 @@ async function main() {
         await hostPage.close();
     }
 
-    // 4. a phone upright and held sideways: the strip has Room, Players and Chat; the Room view scrolls with START at its bottom; the Chat view has the two tabs
-    for (const phone of [['390x844', 390, 844], ['844x390', 844, 390]]) {
+    // 4. a phone upright (the strip has Room, Players and Chat; the Room view scrolls and START is in view at its end; the Chat view has the two tabs) and held sideways (844 px wide is a window of the desktop's layout:
+    //    the low-window rule, the room's panel scrolls inside itself, START in view at its end, the chat box folded to its header with both tabs, one press from open)
+    for (const phone of [['390x844', 390, 844, true], ['844x390', 844, 390, false]]) {
         const page = await chrome.newPage(phone[1], phone[2], true);
         await page.send('Network.enable');
-        await page.send('Network.setCookie', { name: 'who', value: 'dAwGy', url: site.url });
+        await page.send('Network.setCookie', { name: 'who', value: 'Hazel', url: site.url });
         await page.goto(site.url + '/');
         await page.waitFor('Home is lit', '(function () { var h = document.querySelector(".quick.host"), j = document.querySelector(".quick.join"); return !!h && !!j && !h.disabled && !j.disabled; })()', 15000);
         await host(page);
-        await sleep(500);
+        await page.waitFor('the page\'s toast has gone', '(function () { return [".gtoast", "#toast"].every(function (q) { var t = document.querySelector(q); return !t || t.hidden; }); })()', 12000);
+        await sleep(300);
         const at = phone[0];
-        const strip = await page.eval('[].map.call(document.querySelectorAll(".htab .name"), function (e) { return e.textContent; })');
-        check('phone ' + at + ': the strip is Room, Players, Chat', JSON.stringify(strip) === JSON.stringify(['Room', 'Players', 'Chat']), JSON.stringify(strip));
-        const view = await page.eval('(function () { var l = document.getElementById("lobby"), s = document.getElementById("start"), r = s.getBoundingClientRect(), t = document.querySelector(".htabs").getBoundingClientRect(), d = document.documentElement; return { page: d.scrollHeight <= innerHeight + 1 && d.scrollWidth <= innerWidth, scrolls: l.scrollHeight > l.clientHeight, startIn: r.top >= 0 && r.bottom <= t.top + 1 && r.height >= 44, startW: Math.round(r.width), strip: Math.round(t.height) }; })()');
-        check('phone ' + at + ': the page does not scroll, the Room view does, START is in the window above the strip', view.page && view.scrolls && view.startIn, JSON.stringify(view));
+        const view = await page.eval('(function () { var l = document.getElementById("lobby"), d = document.documentElement; return { page: d.scrollHeight <= innerHeight + 1 && d.scrollWidth <= innerWidth, scrolls: l.scrollHeight > l.clientHeight }; })()');
+        check('phone ' + at + ': the page does not scroll and the room\'s panel does', view.page && view.scrolls, JSON.stringify(view));
         await page.shot('phone_' + at + '_room_top');
         await page.eval('document.getElementById("lobby").scrollTop = 100000');
         await sleep(200);
-        const end = await page.eval('(function () { var s = document.getElementById("start").getBoundingClientRect(), t = document.querySelector(".htabs").getBoundingClientRect(); return s.top >= 0 && s.bottom <= t.top + 1; })()');
-        check('phone ' + at + ': at the end of the Room view START is still in the window', end);
+        const end = await page.eval('(function () { var s = document.getElementById("start").getBoundingClientRect(), t = document.querySelector(".htabs"), tr = t && t.getClientRects().length ? t.getBoundingClientRect() : null; return { in: s.top >= 0 && s.bottom <= (tr ? tr.top : innerHeight) + 1 && s.height >= 44, start: [Math.round(s.top), Math.round(s.bottom)], strip: tr ? Math.round(tr.top) : null }; })()');
+        check('phone ' + at + ': at the end of the room START is in the window' + (phone[3] ? ' above the strip' : ''), end.in, JSON.stringify(end));
         await page.shot('phone_' + at + '_room_end');
-        await page.press('.htab.t-chat');
+        if (phone[3]) {
+            const strip = await page.eval('[].map.call(document.querySelectorAll(".htab .name"), function (e) { return e.textContent; })');
+            check('phone ' + at + ': the strip is Room, Players, Chat', JSON.stringify(strip) === JSON.stringify(['Room', 'Players', 'Chat']), JSON.stringify(strip));
+            await page.press('.htab.t-chat');
+        } else {
+            const folded = await page.eval('document.getElementById("gchat").getAttribute("data-open")');
+            check('phone ' + at + ': the chat box is folded to its header, and its header has the two tabs', folded === 'false' && await page.eval('document.querySelectorAll(".rc-tab").length === 2'), folded);
+            await page.shot('phone_' + at + '_chat_folded');
+            await page.press('.rc-tab', 'Room');
+        }
         await sleep(300);
         const tabs = await page.eval('[].map.call(document.querySelectorAll(".rc-tab"), function (e) { var b = e.getBoundingClientRect(); return [e.textContent, Math.round(b.height), b.width > 0]; })');
-        check('phone ' + at + ': the Chat view has the two tabs, each 44 px high at least', tabs.length === 2 && tabs.every((t) => t[2] && t[1] >= 44), JSON.stringify(tabs));
+        check('phone ' + at + ': the chat has the two tabs, each 44 px high at least', tabs.length === 2 && tabs.every((t) => t[2] && t[1] >= 44), JSON.stringify(tabs));
+        if (phone[3]) await page.shot('phone_' + at + '_chat_open');
+        else check('phone ' + at + ': a press on the Room tab of the folded box opens the box with the room\'s chat', await page.eval('document.getElementById("gchat").getAttribute("data-open") === "true" && !document.getElementById("chat").hidden'));
+        await page.press('.rc-tab', 'Ants');
+        await sleep(300);
         await page.shot('phone_' + at + '_chat_global');
         await page.press('.rc-tab', 'Room');
         await sleep(300);
         await page.shot('phone_' + at + '_chat_room');
-        await page.press('.htab.t-players');
-        await sleep(300);
-        await page.shot('phone_' + at + '_players');
+        if (phone[3]) {
+            await page.press('.htab.t-players');
+            await sleep(300);
+            await page.shot('phone_' + at + '_players');
+        }
         await page.close();
     }
 }

@@ -24,5 +24,9 @@
     .rc-note { display: none; }
     .rc-body { padding: 0 12px 10px; }
 }
+@media (max-width: 700px) and (min-height: 501px) {       /* (a phone held upright: the header is a line of 36 px for the heading; with a room it holds the tabs, 44 px high, and under them the note of the Room tab) */
+    .gc[data-rc="global"] .gc-head, .gc[data-rc="room"] .gc-head { height: auto; flex-wrap: wrap; row-gap: 2px; padding: 6px 10px 4px 12px; }
+    .gc[data-rc="room"] .rc-note { display: block; flex: 1 1 100%; order: 3; margin: 0; text-align: left; }
+}
 @media (max-width: 700px) and (max-height: 500px) { .gc[data-rc="global"] .gc-head, .gc[data-rc="room"] .gc-head { display: flex; } }       /* (a phone held sideways: chat.css leaves the heading out; with a room the tabs are the way between the two chats) */
 @media (forced-colors: active) { .rc-tab[aria-selected="true"] { outline: 2px solid Highlight; } .rc-dot { background: Highlight; } }
