@@ -6,6 +6,7 @@ host that builds the production stack. These are settings with nothing to run (t
 shown to fail on a copy that breaks it:
 
   - every Dockerfile: each base image from outside (not an earlier stage) names a tag and a digest, `name:tag@sha256:...`
+  - the image converter's requirements: every package is pinned by version and by the hash of its files, and Dockerfile.img installs them with --require-hashes
   - .github/dependabot.yml: the converter's packages, the Dockerfiles' base images and the workflows' actions are updated weekly, grouped, against home-next, and every Dockerfile of the
     repository is in a folder that the file watches
 """
@@ -51,6 +52,25 @@ def unpinned_images(text):
     return found
 
 
+def unhashed_requirements(text):
+    """The entries of a pip requirements file that are not pinned by `==` and by at least one sha256 hash, and the lines that are options of pip (an index or a link that could serve another file)."""
+    entries, pending = [], ""
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.endswith("\\"):
+            pending += line[:-1] + " "
+            continue
+        entries.append(pending + line)
+        pending = ""
+    bad = []
+    for entry in entries:
+        if not re.match(r"^[A-Za-z0-9_.-]+==[0-9][A-Za-z0-9_.!+]* ", entry + " ") or not re.search(r"--hash=" + DIGEST, entry) or re.search(r"(^|\s)(-i|--index-url|--extra-index-url|--find-links|-f)\b", entry):
+            bad.append(re.match(r"[A-Za-z0-9_.-]+", entry).group(0))
+    return bad
+
+
 def problems_of_dependabot(config, dockerfile_paths=None):
     """What the Dependabot file lacks: an ecosystem, the weekly grouped updates against home-next, a folder that exists, or a Dockerfile in a folder that no entry watches."""
     problems = []
@@ -92,6 +112,26 @@ class TheBaseImages(unittest.TestCase):
         self.assertEqual(unpinned_images("FROM nginx:alpine@sha256:" + "a" * 63 + "\n"), ["nginx:alpine@sha256:" + "a" * 63])
         self.assertEqual(unpinned_images(pinned + "FROM runner AS second\nFROM second\n"), [], "the name of an earlier stage is not an image")
         self.assertEqual(unpinned_images(pinned + "FROM later AS second\n"), ["later"], "a name that no stage has yet is an image")
+
+
+class TheConvertersPackages(unittest.TestCase):
+    def test_every_package_is_pinned_by_version_and_by_hash_and_the_image_demands_the_hashes(self):
+        self.assertEqual(unhashed_requirements(read("imgconv", "requirements.txt")), [])
+        self.assertRegex(read("imgconv", "requirements.txt"), r"(?m)^Pillow==")
+        install = [l for l in read("Dockerfile.img").splitlines() if re.match(r"RUN pip install\b", l)]
+        self.assertEqual(len(install), 1)
+        self.assertIn("--require-hashes", install[0])
+        self.assertIn("--only-binary=:all:", install[0])
+
+    def test_the_check_finds_a_package_without_a_pin_or_a_hash_and_an_index_of_its_own(self):
+        good = "Pillow==1.2.3 \\\n    --hash=sha256:" + "b" * 64 + " \\\n    --hash=sha256:" + "c" * 64 + "\n"
+        self.assertEqual(unhashed_requirements("# a comment\n\n" + good), [])
+        self.assertEqual(unhashed_requirements("Pillow==1.2.3\n"), ["Pillow"])
+        self.assertEqual(unhashed_requirements("Pillow>=1.2.3 \\\n    --hash=sha256:" + "b" * 64 + "\n"), ["Pillow"])
+        self.assertEqual(unhashed_requirements("Pillow \\\n    --hash=sha256:" + "b" * 64 + "\n"), ["Pillow"])
+        self.assertEqual(unhashed_requirements("Pillow==1.2.3 \\\n    --hash=md5:" + "b" * 32 + "\n"), ["Pillow"])
+        self.assertEqual(unhashed_requirements(good + "other==2.0\n"), ["other"])
+        self.assertEqual(unhashed_requirements("Pillow==1.2.3 --extra-index-url https://example.invalid/simple --hash=sha256:" + "b" * 64 + "\n"), ["Pillow"])
 
 
 @unittest.skipUnless(yaml, "PyYAML is needed")

@@ -13,7 +13,7 @@ RUN useradd --system --no-create-home --shell /usr/sbin/nologin img
 
 WORKDIR /app
 COPY imgconv/requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir --only-binary=:all: -r /app/requirements.txt
+RUN pip install --no-cache-dir --only-binary=:all: --require-hashes -r /app/requirements.txt
 COPY imgconv/ /app/imgconv/
 RUN python -m compileall -q /app/imgconv
 
