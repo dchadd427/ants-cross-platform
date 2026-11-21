@@ -1068,16 +1068,17 @@ def _scale_bomber_head_and_tall_antennae(
     new_hr = (hrx * sx, hry * sy, hrz * sz)
     new_head_back_z = new_hc[2] - new_hr[2]
 
-    # 3. Seat sleek, tall, slicked-back (-Z) Bomber antennae flush ON the new flat cranium surface
-    # via exact ray-triangle crown sampling (zero floating gap or buried base!).
+    # 3. Seat bold, taller Bomber antennae flush ON the crown via exact ray-triangle surface sampling:
+    # smooth monotonic narrow-to-thick taper (ZERO pinched neck or spherical ball knob at the tip!),
+    # sweeping proudly up-and-back (`+Y/-Z`) cleanly clear of the 3 magenta bombs & curved fuses.
     ant_rads = [
-        (0.020, 0.020),
-        (0.017, 0.018),
-        (0.014, 0.015),
-        (0.016, 0.017),
-        (0.020, 0.022),
-        (0.023, 0.025),
-        (0.012, 0.014),
+        (0.015, 0.015),
+        (0.015, 0.015),
+        (0.019, 0.020),
+        (0.024, 0.025),
+        (0.029, 0.031),
+        (0.033, 0.035),
+        (0.035, 0.037),
     ]
     for side, tag, orig_key in ((+1.0, "left", "antenna_base_left"), (-1.0, "right", "antenna_base_right")):
         node_name = f"antenna_{tag}"
@@ -1091,29 +1092,29 @@ def _scale_bomber_head_and_tall_antennae(
         )
         by = surf_y - 0.002
         base_p = (bx, by, bz)
-        # Compact slicked-back Bomber antennae matching smaller head & abst301/abst201/abst901.
-        h_boost = 0.012 if side > 0 else -0.009
-        z_extra = -0.010 if side > 0 else +0.008
+        # Bolder ~1.30x longer Bomber antennae matching ORIG abst301/abst201/abst901/abst701.
+        h_boost = 0.014 if side > 0 else -0.010
+        z_extra = -0.008 if side > 0 else +0.006
         pts = [
             (bx - side * 0.003, by - 0.018, bz + 0.003),
             base_p,
-            (bx + side * 0.010, by + 0.088 + 0.35 * h_boost, bz - 0.020 + 0.3 * z_extra),
-            (bx + side * 0.019, by + 0.146 + 0.70 * h_boost, bz - 0.056 + 0.6 * z_extra),
-            (bx + side * 0.026, by + 0.172 + 0.95 * h_boost, bz - 0.094 + 0.9 * z_extra),
-            (bx + side * 0.030, by + 0.166 + h_boost, bz - 0.124 + z_extra),
-            (bx + side * 0.032, by + 0.148 + 0.90 * h_boost, bz - 0.142 + 1.1 * z_extra),
+            (bx + side * 0.014, by + 0.092 + 0.35 * h_boost, bz - 0.016 + 0.3 * z_extra),
+            (bx + side * 0.028, by + 0.172 + 0.70 * h_boost, bz - 0.048 + 0.6 * z_extra),
+            (bx + side * 0.040, by + 0.228 + 0.90 * h_boost, bz - 0.090 + 0.85 * z_extra),
+            (bx + side * 0.048, by + 0.252 + h_boost, bz - 0.128 + z_extra),
+            (bx + side * 0.052, by + 0.250 + 0.95 * h_boost, bz - 0.156 + 1.05 * z_extra),
         ]
         stalk = swept_tube(
             pts,
             ant_rads,
-            radial_segs=12,
+            radial_segs=14,
             smooth_subdiv=3,
-            cap_rings=3,
+            cap_rings=4,
             name=f"antenna_stalk_{tag}",
             material="chitin_dark",
         )
         sock = (
-            ellipsoid(0.022, 0.011, 0.022, u_segs=12, v_segs=8, name=f"antenna_socket_{tag}", material="chitin_dark")
+            ellipsoid(0.020, 0.010, 0.020, u_segs=12, v_segs=8, name=f"antenna_socket_{tag}", material="chitin_dark")
             .rotate_xyz(rx=-0.16, rz=-side * 0.14)
             .translate(*base_p)
         )
