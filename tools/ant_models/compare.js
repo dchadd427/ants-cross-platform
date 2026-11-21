@@ -91,6 +91,61 @@
     return pickOrigStep(entry, simTimeSec).frameIdx;
   }
 
+  function extractRestWorldVerts(model, offsetMat) {
+    const raw = model && model.rawBytes;
+    if (!raw || raw.byteLength < 28) return null;
+    try {
+      const dv = new DataView(raw);
+      if (dv.getUint32(0, true) !== 0x46546c67) return null;
+      const jsonLen = dv.getUint32(12, true);
+      const gltf = JSON.parse(new TextDecoder("utf-8").decode(new Uint8Array(raw, 20, jsonLen)));
+      const binOff = 20 + jsonLen;
+      if (binOff + 8 > raw.byteLength) return null;
+      const binLen = dv.getUint32(binOff, true);
+      const binStart = binOff + 8;
+      const nodes = gltf.nodes || [], meshes = gltf.meshes || [];
+      const accessors = gltf.accessors || [], views = gltf.bufferViews || [];
+      const chunks = [];
+      let totalFloats = 0;
+      for (let ni = 0; ni < nodes.length; ni++) {
+        const node = nodes[ni];
+        if (!node || node.mesh === undefined || !meshes[node.mesh]) continue;
+        const baseMat = model.baseWorldMats && model.baseWorldMats[ni];
+        if (!baseMat) continue;
+        const m = mat4Multiply(offsetMat, baseMat);
+        // Skip hidden rest-pose FX meshes scaled near zero (e.g. attack-only water/flame nodes).
+        if (Math.hypot(m[0], m[1], m[2]) < 1e-3 || Math.hypot(m[4], m[5], m[6]) < 1e-3) continue;
+        for (const prim of meshes[node.mesh].primitives || []) {
+          const accIdx = prim.attributes && prim.attributes.POSITION;
+          if (accIdx === undefined) continue;
+          const acc = accessors[accIdx], bv = acc && views[acc.bufferView];
+          if (!acc || !bv || acc.componentType !== 5126 || acc.type !== "VEC3") continue;
+          const stride = bv.byteStride || 12;
+          const start = binStart + (bv.byteOffset || 0) + (acc.byteOffset || 0);
+          if (start + (acc.count - 1) * stride + 12 > binStart + binLen) continue;
+          const pts = new Float32Array(acc.count * 3);
+          for (let k = 0; k < acc.count; k++) {
+            const pOff = start + k * stride;
+            const x = dv.getFloat32(pOff, true), y = dv.getFloat32(pOff + 4, true), z = dv.getFloat32(pOff + 8, true);
+            const o = k * 3;
+            pts[o] = m[0] * x + m[4] * y + m[8] * z + m[12];
+            pts[o + 1] = m[1] * x + m[5] * y + m[9] * z + m[13];
+            pts[o + 2] = m[2] * x + m[6] * y + m[10] * z + m[14];
+          }
+          chunks.push(pts);
+          totalFloats += pts.length;
+        }
+      }
+      if (!totalFloats) return null;
+      const merged = new Float32Array(totalFloats);
+      let cursor = 0;
+      for (const ch of chunks) { merged.set(ch, cursor); cursor += ch.length; }
+      return merged;
+    } catch (_) {
+      return null;
+    }
+  }
+
   function initCompare() {
     const toolbarEl = document.getElementById("compare-toolbar");
     const gridEl = document.getElementById("compare-grid");
@@ -103,6 +158,16 @@
     const soloAnimEl = document.getElementById("solo-anim");
     const soloOrigPill = document.getElementById("solo-orig-pill");
     const solo3dPill = document.getElementById("solo-3d-pill");
+    const soloHintEl = soloEl ? soloEl.querySelector(".solo-hint") : null;
+    if (soloHintEl) {
+      soloHintEl.textContent = "Drag: Synced 360\u00b0 Turn (Pitch locked 45\u00b0) \u00b7 Scroll/Pinch: Zoom \u00b7 Arrows: Turn \u00b7 R: Reset \u00b7 Esc: All 6";
+    }
+    if (solo3dCanvas) {
+      solo3dCanvas.setAttribute(
+        "aria-label",
+        "Live 3D ant model viewport locked to 45 degree isometric pitch with 1998 sprite. Drag horizontally to turn both ants together, scroll or pinch to zoom. Press Left or Right arrow keys to turn, plus or minus to zoom, R to reset to canonical angle, A to toggle Idle or Attack, I to pause or play, 1 through 8 for compass angles, or Escape to return to All 6."
+      );
+    }
     const btnBackAll = document.getElementById("btn-back-all");
     const btnSoloReset = document.getElementById("btn-solo-reset-angle");
     const btnPixelMode = document.getElementById("btn-pixel-mode");
@@ -225,6 +290,7 @@
       origImages: new Map(),
       models: new Map(),
       scenes: new Map(),
+      worldVerts: new Map(),
       spanCache: new Map(),
       workerSpan301: null,
       max3dRatio: 1.0,
@@ -410,7 +476,7 @@
         : comp.label;
       if (metaProj) {
         const modeBits = [
-          `Ortho ${Math.round(state.pitch)}\u00b0`,
+          `Ortho ${Math.round(CANONICAL_PITCH)}\u00b0 (Locked)`,
           state.pixelMode ? "1\u00d7 Pixel" : "Shared Ground",
         ];
         if (state.silhouette) modeBits.push("Silhouette");
@@ -574,23 +640,32 @@
       if (state.spanCache.size > 480) state.spanCache.clear();
       const sc = state.scenes.get(cls);
       if (!sc) return { vMin: -0.1, vMax: 1.0, span: 1.1 };
-      const inst = sc.instances[0];
       const p = rp * DEG, y = ry * DEG;
       const ux = -Math.sin(p) * Math.sin(y), uy = Math.cos(p), uz = -Math.sin(p) * Math.cos(y);
       let vMin = Infinity, vMax = -Infinity;
-      for (const dc of inst.model.drawCalls) {
-        const m = mat4Multiply(inst.offsetMat, dc.worldMat);
-        const lmin = dc.prim.localMin, lmax = dc.prim.localMax;
-        const cx = (lmin[0] + lmax[0]) * 0.5, cy = (lmin[1] + lmax[1]) * 0.5, cz = (lmin[2] + lmax[2]) * 0.5;
-        const hx = (lmax[0] - lmin[0]) * 0.5, hy = (lmax[1] - lmin[1]) * 0.5, hz = (lmax[2] - lmin[2]) * 0.5;
-        const wc = transformPoint(m, cx, cy, cz);
-        const d0 = (m[0] * ux + m[1] * uy + m[2] * uz) * hx;
-        const d1 = (m[4] * ux + m[5] * uy + m[6] * uz) * hy;
-        const d2 = (m[8] * ux + m[9] * uy + m[10] * uz) * hz;
-        const rad = Math.hypot(d0, d1, d2);
-        const vc = wc[0] * ux + wc[1] * uy + wc[2] * uz;
-        if (vc - rad < vMin) vMin = vc - rad;
-        if (vc + rad > vMax) vMax = vc + rad;
+      const pts = state.worldVerts.get(cls);
+      if (pts && pts.length >= 3) {
+        for (let i = 0; i < pts.length; i += 3) {
+          const v = pts[i] * ux + pts[i + 1] * uy + pts[i + 2] * uz;
+          if (v < vMin) vMin = v;
+          if (v > vMax) vMax = v;
+        }
+      } else {
+        const inst = sc.instances[0];
+        for (const dc of inst.model.drawCalls) {
+          const m = mat4Multiply(inst.offsetMat, dc.worldMat);
+          const lmin = dc.prim.localMin, lmax = dc.prim.localMax;
+          const cx = (lmin[0] + lmax[0]) * 0.5, cy = (lmin[1] + lmax[1]) * 0.5, cz = (lmin[2] + lmax[2]) * 0.5;
+          const hx = (lmax[0] - lmin[0]) * 0.5, hy = (lmax[1] - lmin[1]) * 0.5, hz = (lmax[2] - lmin[2]) * 0.5;
+          const wc = transformPoint(m, cx, cy, cz);
+          const d0 = Math.abs((m[0] * ux + m[1] * uy + m[2] * uz) * hx);
+          const d1 = Math.abs((m[4] * ux + m[5] * uy + m[6] * uz) * hy);
+          const d2 = Math.abs((m[8] * ux + m[9] * uy + m[10] * uz) * hz);
+          const rad = d0 + d1 + d2;
+          const vc = wc[0] * ux + wc[1] * uy + wc[2] * uz;
+          if (vc - rad < vMin) vMin = vc - rad;
+          if (vc + rad > vMax) vMax = vc + rad;
+        }
       }
       if (!Number.isFinite(vMin)) { vMin = 0; vMax = 1; }
       const res = { vMin, vMax, span: Math.max(0.25, vMax - vMin) };
@@ -827,7 +902,7 @@
           const lowGroundY = Math.min(lowH - 1, Math.max(1, Math.round(groundY / pxScale)));
           const lowGFrac = lowGroundY / lowH;
           const lowFixedHalfH = fixedHalfH * ((lowH * pxScale) / panelH);
-          const targetY = (span.vMin + lowFixedHalfH * (2 * lowGFrac - 1)) / Math.cos(anchorPitch * DEG);
+          const targetY = (span.vMin + lowFixedHalfH * cam.zoom * (2 * lowGFrac - 1)) / Math.cos(anchorPitch * DEG);
           ensureOffscreenSize(lowW, lowH);
           renderer.drawScene(sc, cam, {
             width: lowW,
@@ -861,7 +936,7 @@
 
         ensureOffscreenSize(panelW, panelH);
         const gFrac = groundY / panelH;
-        const targetY = (span.vMin + fixedHalfH * (2 * gFrac - 1)) / Math.cos(anchorPitch * DEG);
+        const targetY = (span.vMin + fixedHalfH * cam.zoom * (2 * gFrac - 1)) / Math.cos(anchorPitch * DEG);
         renderer.drawScene(sc, cam, {
           width: panelW,
           height: panelH,
@@ -973,6 +1048,8 @@
         state.models.set(cls, model);
         const yLift = Math.abs(model.bounds.min[1]) > 0.02 ? -model.bounds.min[1] : 0;
         const offsetMat = mat4Translate(-model.center[0], yLift, -model.center[2]);
+        const verts = extractRestWorldVerts(model, offsetMat);
+        if (verts) state.worldVerts.set(cls, verts);
         const inst = {
           id: cls,
           model,
@@ -1041,7 +1118,7 @@
         const totalDx = Math.abs(e.clientX - drag.startX);
         const totalDy = Math.abs(e.clientY - drag.startY);
         if (!drag.active) {
-          if (totalDy > 10 && totalDy > totalDx * 1.2) { drag = null; return; }
+          if (e.pointerType === "touch" && totalDy > 10 && totalDy > totalDx * 1.2) { drag = null; return; }
           if (totalDx <= 6) return;
           drag.active = true;
           try { el.setPointerCapture(e.pointerId); } catch (_) {}
@@ -1103,11 +1180,11 @@
     solo3dCanvas.addEventListener("pointermove", (e) => {
       const prev = pointers.get(e.pointerId);
       if (!prev) return;
-      const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
+      const dx = e.clientX - prev.x;
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pointers.size === 1) {
         state.yaw = wrapAngleDeg(state.yaw - dx * 0.45);
-        state.pitch = clamp(state.pitch + dy * 0.35, -10, 85);
+        state.pitch = CANONICAL_PITCH;
         updateUiState();
         markDirty();
       } else if (pointers.size === 2) {
@@ -1136,11 +1213,9 @@
     }, { passive: false });
 
     solo3dCanvas.addEventListener("keydown", (e) => {
-      const sy = e.shiftKey ? 4 : 12, sp = e.shiftKey ? 3 : 8;
+      const sy = e.shiftKey ? 4 : 12;
       if (e.key === "ArrowLeft") state.yaw = wrapAngleDeg(state.yaw + sy);
       else if (e.key === "ArrowRight") state.yaw = wrapAngleDeg(state.yaw - sy);
-      else if (e.key === "ArrowUp") state.pitch = clamp(state.pitch + sp, -10, 85);
-      else if (e.key === "ArrowDown") state.pitch = clamp(state.pitch - sp, -10, 85);
       else if (e.key === "+" || e.key === "=") state.zoom = clamp(state.zoom * 0.88, 0.45, 2.5);
       else if (e.key === "-" || e.key === "_") state.zoom = clamp(state.zoom * 1.14, 0.45, 2.5);
       else if (e.key === "r" || e.key === "R") {

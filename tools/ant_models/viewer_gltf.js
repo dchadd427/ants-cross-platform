@@ -55,14 +55,15 @@
 
   function mat3NormalFromMat4(m) {
     const a00 = m[0], a01 = m[1], a02 = m[2], a10 = m[4], a11 = m[5], a12 = m[6], a20 = m[8], a21 = m[9], a22 = m[10];
-    const b01 = a22 * a11 - a12 * a21, b11 = -a22 * a10 + a12 * a20, b21 = a21 * a10 - a11 * a20;
+    const b01 = a11 * a22 - a12 * a21, b11 = a12 * a20 - a10 * a22, b21 = a10 * a21 - a11 * a20;
     const det = a00 * b01 + a01 * b11 + a02 * b21;
     if (Math.abs(det) < 1e-8) return new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
     const inv = 1 / det;
+    // Column-major inverse-transpose (cofactor / det) so WebGL uniformMatrix3fv(..., false, ...) receives (M^-1)^T.
     return new Float32Array([
-      b01 * inv, (-a22 * a01 + a02 * a21) * inv, (a12 * a01 - a02 * a11) * inv,
-      b11 * inv, (a22 * a00 - a02 * a20) * inv, (-a12 * a00 + a02 * a10) * inv,
-      b21 * inv, (-a21 * a00 + a01 * a20) * inv, (a11 * a00 - a01 * a10) * inv,
+      b01 * inv, b11 * inv, b21 * inv,
+      (a21 * a02 - a22 * a01) * inv, (a22 * a00 - a20 * a02) * inv, (a20 * a01 - a21 * a00) * inv,
+      (a01 * a12 - a02 * a11) * inv, (a02 * a10 - a00 * a12) * inv, (a00 * a11 - a01 * a10) * inv,
     ]);
   }
 

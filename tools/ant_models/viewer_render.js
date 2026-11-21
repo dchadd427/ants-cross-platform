@@ -156,12 +156,12 @@
     vec3 env = mix(u_groundColor * 0.58, u_skyColor * 1.14, smoothstep(0.14, 0.90, clamp(R.y * 0.5 + 0.5, 0.0, 1.0)));
     float sharp = (1.0 - rough) * (1.0 - rough);
     float glintExp = mix(22.0, 220.0, sharp);
-    float keySoft = smoothstep(0.72, 0.97, dot(R, u_keyDir)) * 1.45 + pow(max(dot(R, u_keyDir), 0.0), glintExp) * 1.95 * sharp;
+    float keySoft = smoothstep(0.72, 0.97, dot(R, u_keyDir)) * 0.95 + pow(max(dot(R, u_keyDir), 0.0), glintExp) * 1.10 * sharp;
     float fillStrip = smoothstep(0.78, 0.98, dot(R, u_fillDir)) * 0.22;
-    float rimSoft = smoothstep(0.74, 0.97, dot(R, u_rimDir)) * 0.38 + pow(max(dot(R, u_rimDir), 0.0), glintExp * 0.7) * 0.45 * sharp;
+    float rimSoft = smoothstep(0.74, 0.97, dot(R, u_rimDir)) * 0.34 + pow(max(dot(R, u_rimDir), 0.0), glintExp * 0.7) * 0.40 * sharp;
     return env + vec3(1.0, 0.95, 0.87) * keySoft * sharp + vec3(0.64, 0.88, 1.0) * fillStrip * sharp + vec3(0.84, 0.96, 1.0) * rimSoft * sharp;
   }
-  vec3 evalLight(vec3 L, vec3 lCol, vec3 N, vec3 V, vec3 albedo, float met, float rough, vec3 F0, float coatW, float coatRough, inout vec3 specAcc) {
+  vec3 evalLight(vec3 L, vec3 lCol, vec3 N, vec3 V, vec3 albedo, float met, float rough, vec3 F0, float coatW, float coatRough, vec3 coatTint, inout vec3 specAcc) {
     float NoL = max(dot(N, L), 0.0);
     if (NoL <= 0.0) return vec3(0.0);
     vec3 H = normalize(V + L);
@@ -170,8 +170,8 @@
     vec3 spec = (D_GGX(NoH, max(rough * rough, 0.032)) * G_Smith(NoV, NoL, rough) * F) / (4.0 * NoV * NoL + 1e-4);
     vec3 diff = (vec3(1.0) - F) * (1.0 - met) * albedo / PI;
     float coatA = max(coatRough * coatRough, 0.018);
-    float coat = coatW * (D_GGX(NoH, coatA) * G_Smith(NoV, NoL, coatRough) * (0.06 + 0.94 * pow(1.0 - HoV, 5.0))) / (4.0 * NoV * NoL + 1e-4);
-    vec3 specTerm = (spec + vec3(coat)) * lCol * NoL;
+    float coat = coatW * (D_GGX(NoH, coatA) * G_Smith(NoV, NoL, coatRough) * (0.04 + 0.96 * pow(1.0 - HoV, 5.0))) / (4.0 * NoV * NoL + 1e-4);
+    vec3 specTerm = (spec + coatTint * coat) * lCol * NoL;
     specAcc += specTerm;
     return diff * lCol * NoL + specTerm;
   }
@@ -200,15 +200,16 @@
     }
     vec3 albedo = max(u_baseColor * baseSample.rgb * microCav, 0.0);
 
-    float coatW = u_matKind == 1 ? 0.34 * (1.0 - smoothstep(0.18, 0.42, rough)) : (u_matKind == 2 ? 0.72 : 0.0);
-    float coatR = u_matKind == 2 ? 0.17 : 0.16;
-    float keyCoat = u_matKind == 2 ? 1.42 : coatW;
+    float coatW = u_matKind == 1 ? 0.34 * (1.0 - smoothstep(0.18, 0.42, rough)) : (u_matKind == 2 ? 0.36 : 0.0);
+    float coatR = u_matKind == 2 ? 0.28 : 0.16;
+    float keyCoat = u_matKind == 2 ? 0.48 : coatW;
+    vec3 coatTint = u_matKind == 2 ? mix(vec3(1.0), clamp(albedo * 1.9 + vec3(0.24), 0.0, 1.0), 0.38) : vec3(1.0);
     float keyDot = max(dot(N, u_keyDir), 0.0);
-    float spotFocus = mix(0.40, 1.22, pow(keyDot, 1.35));
+    float spotFocus = mix(0.48, 1.12, pow(keyDot, 1.15));
     vec3 F0 = mix(vec3(0.045), albedo, met), specAcc = vec3(0.0);
-    vec3 Lo = evalLight(u_keyDir, vec3(1.0, 0.98, 0.95) * 2.75 * spotFocus, N, V, albedo, met, rough, F0, keyCoat, coatR, specAcc)
-            + evalLight(u_fillDir, vec3(0.84, 0.92, 1.0) * 0.24, N, V, albedo, met, rough, F0, coatW * 0.15, coatR, specAcc)
-            + evalLight(u_rimDir, vec3(0.88, 0.96, 1.0) * 0.46, N, V, albedo, met, rough, F0, coatW * 0.22, coatR, specAcc);
+    vec3 Lo = evalLight(u_keyDir, vec3(1.0, 0.98, 0.95) * 2.35 * spotFocus, N, V, albedo, met, rough, F0, keyCoat, coatR, coatTint, specAcc)
+            + evalLight(u_fillDir, vec3(0.84, 0.92, 1.0) * 0.28, N, V, albedo, met, rough, F0, coatW * 0.15, coatR, coatTint, specAcc)
+            + evalLight(u_rimDir, vec3(0.88, 0.96, 1.0) * 0.46, N, V, albedo, met, rough, F0, coatW * 0.20, coatR, coatTint, specAcc);
 
     vec3 bakedAo = clamp(v_color, 0.0, 1.0);
     vec3 aoSoft = mix(vec3(1.0), bakedAo, 0.72);
@@ -218,11 +219,11 @@
 
     vec3 R = reflect(-V, N); float NoV = max(dot(N, V), 0.0);
     float specOccl = clamp(pow(NoV + aoScalar, exp2(-16.0 * rough - 1.0)) - 1.0 + aoScalar, 0.0, 1.0);
-    vec3 ambDiff = mix(u_groundColor * 0.92, u_skyColor, N.y * 0.5 + 0.5) * albedo * (1.0 - met) * 0.18 * aoSoft * geoAo;
+    vec3 ambDiff = mix(u_groundColor * 0.94, u_skyColor, N.y * 0.5 + 0.5) * albedo * (1.0 - met) * 0.20 * aoSoft * geoAo;
     float envAtten = (1.0 - rough) * (1.0 - rough);
     vec3 F_env = F0 + (max(vec3(1.0 - rough), F0) - F0) * pow(1.0 - NoV, 5.0);
-    vec3 envSpec = studioEnv(R, rough) * F_env * mix(0.08, 0.80, envAtten) * mix(envAtten, 1.0, met) * specOccl * geoAo;
-    vec3 envCoat = studioEnv(R, coatR) * ((0.05 + 0.95 * pow(1.0 - NoV, 5.0)) * coatW) * (u_matKind == 2 ? 0.12 : 0.24) * specOccl;
+    vec3 envSpec = studioEnv(R, rough) * F_env * mix(0.08, 0.78, envAtten) * mix(envAtten, 1.0, met) * specOccl * geoAo;
+    vec3 envCoat = studioEnv(R, coatR) * coatTint * ((0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coatW) * (u_matKind == 2 ? 0.08 : 0.22) * specOccl;
 
     vec3 sssBounce = vec3(0.0);
     if (u_matKind == 2) {
@@ -232,8 +233,8 @@
     }
     float fresnelRim = pow(1.0 - NoV, 3.2) * smoothstep(-0.25, 0.72, N.y);
     float rimMask = mix(0.45, 1.0, clamp(dot(N, u_rimDir) * 0.55 + 0.55, 0.0, 1.0));
-    vec3 rimTint = mix(vec3(0.76, 0.92, 1.0), albedo * 1.45 + vec3(0.28, 0.36, 0.42), u_matKind == 2 ? 0.42 : 0.18);
-    vec3 rimGlow = rimTint * fresnelRim * rimMask * (u_matKind == 1 ? 0.24 : 0.16) * u_rimBoost * aoSoft * geoAo;
+    vec3 rimTint = mix(vec3(0.80, 0.92, 0.98), albedo * 1.55 + vec3(0.20, 0.26, 0.24), u_matKind == 2 ? 0.65 : 0.18);
+    vec3 rimGlow = rimTint * fresnelRim * rimMask * (u_matKind == 1 ? 0.24 : 0.15) * u_rimBoost * aoSoft * geoAo;
 
     vec3 outCol = linearToSrgb(acesFilm((Lo * directAo + ambDiff + envSpec + envCoat + sssBounce + rimGlow + u_emissive) * 1.02));
     float outAlpha = 1.0;
@@ -337,7 +338,7 @@
   function matKindFor(mat) {
     const n = mat.name || "";
     if (n.startsWith("eye_") || n.startsWith("glass_") || (mat.metallic < 0.35 && mat.roughness < 0.22 && !mat.normalTex)) return 1;
-    if (n.startsWith("chitin_")) return 2;
+    if (n.startsWith("chitin_") || n === "leg_chitin") return 2;
     return 0;
   }
 
@@ -489,7 +490,7 @@
         return [x / l, y / l, z / l];
       };
       return {
-        keyDir: basis(0.97, -0.16, -0.08),
+        keyDir: basis(0.90, 0.24, -0.24),
         fillDir: basis(0.56, -0.18, 0.80),
         rimDir: basis(-0.58, 0.68, 0.44),
       };
