@@ -36,9 +36,11 @@ try:
         swept_tube,
         torus_arc,
     )
+    from .ability_clips_special import add_thief_abilities
     from .hit_clips_special import add_thief_hit_animation
     from .thief_attack import add_thief_attack_animation, add_thief_whip_meshes, compact_thief_legs, scale_thief_head_assembly
 except ImportError:
+    from ability_clips_special import add_thief_abilities  # type: ignore
     from base_ant import EYELID_CLOSED_ANGLE, build_base_ant, sync_arm_idle_to_clip, sync_leg_flex_to_clip  # type: ignore
     from hit_clips_special import add_thief_hit_animation  # type: ignore
     from mesh_core import (  # type: ignore
@@ -1297,6 +1299,7 @@ def build_thief(blink: float = 0.0, gaze: float = -1.0) -> SceneBuilder:
     _add_thief_idle_animation(scene)
     add_thief_attack_animation(scene, GAZE_ANGLE)
     add_thief_hit_animation(scene)
+    add_thief_abilities(scene)
     return scene
 
 

@@ -32,8 +32,10 @@ try:
         swept_tube,
         torus_arc,
     )
+    from .ability_clips_swimmer import add_swimmer_abilities
     from .hit_clips_special import add_swimmer_hit_animation
 except ImportError:
+    from ability_clips_swimmer import add_swimmer_abilities  # type: ignore
     from base_ant import build_base_ant, sync_arm_idle_to_clip, sync_leg_flex_to_clip  # type: ignore
     from hit_clips_special import add_swimmer_hit_animation  # type: ignore
     from mesh_core import (  # type: ignore
@@ -1285,6 +1287,7 @@ def build_swimmer(blink: float = 0.0) -> SceneBuilder:
     _add_swimmer_idle(scene)
     _add_swimmer_attack(scene, water_origin)
     add_swimmer_hit_animation(scene)
+    add_swimmer_abilities(scene)
     return scene
 
 
