@@ -35,12 +35,14 @@ void Attendance::seat_humans(uint8_t mask, uint32_t now_ms) {
     pause_before_ms_ = 0;
     pause_real_before_ms_ = 0;
     pause_since_ms_ = now_ms;
+    playing_ = false;                                                                 // (the countdown hold applies until begin_play)
     owe_countdown_ = false;
     resuming_ = false;
     resume_since_ms_ = now_ms;
     resume_before_ms_ = 0;
     drops_by_vote_ = 0;
     drops_by_cap_ = 0;
+    drops_by_countdown_hold_ = 0;
     rejoins_ = 0;
     refused_ = 0;
     expired_ = 0;
@@ -49,6 +51,7 @@ void Attendance::seat_humans(uint8_t mask, uint32_t now_ms) {
 
 void Attendance::seat_restored(uint8_t humans, uint8_t dropped, uint32_t now_ms) {
     seat_humans(humans, now_ms);
+    playing_ = true;                                                  // (a restart is nobody's fault: the players have the restart's own grace, the countdown hold is not theirs to run out)
     for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
         if ((humans & (1u << s)) == 0) continue;
         Seat& seat = seats_[s];
@@ -130,7 +133,8 @@ uint32_t Attendance::held_ms(uint32_t now_ms) const noexcept {
 
 uint32_t Attendance::cap_left_ms(uint32_t now_ms) const noexcept {
     const uint32_t used = pause_ms(now_ms);
-    return used >= cfg_.max_pause_ms ? 0u : cfg_.max_pause_ms - used;
+    const uint32_t cap = countdown_hold_on() ? std::min(cfg_.max_pause_ms, cfg_.countdown_hold_ms) : cfg_.max_pause_ms;      // (a match that has not begun to play has the smaller limit)
+    return used >= cap ? 0u : cap - used;
 }
 
 uint16_t Attendance::cap_s(uint32_t now_ms) const noexcept {
@@ -353,9 +357,10 @@ std::vector<uint8_t> Attendance::update(uint32_t now_ms) {
         drops.push_back(subject);
     }
     if (cap_reached(now_ms)) {                                    // the match has no pause left: every seat that is not present is dropped, whatever progress a catch-up shows
+        const bool by_hold = pause_ms(now_ms) < cfg_.max_pause_ms;    // (the countdown hold ran out before the cap would have: it is told apart in the counters)
         for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
             if (!away_state(seats_[s].state)) continue;
-            ++drops_by_cap_;
+            ++(by_hold ? drops_by_countdown_hold_ : drops_by_cap_);
             drop_seat(s, now_ms);
             drops.push_back(s);
         }

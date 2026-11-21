@@ -573,7 +573,12 @@ void HostSession::update(uint32_t now_ms) {
             break;
         }
         stall_player_ = 255;
+        const bool first_turn = sequencer_.next_turn() == 0;
         const TurnMsg turn = sequencer_.seal();
+        if (first_turn) {                                    // the match plays from its first turn: the countdown hold (attendance.hpp) is over, the cap on the pauses is the limit from here on
+            attendance_.begin_play();
+            presence_dirty_ = true;                          // (the players are told once more: the seconds that Presence named last were the hold's, and a player whose link is lost later gives up by them)
+        }
         if (cfg_.hold_seats) log_.append(turn);              // before it is sent: the log is the match (a log that is full stops being usable, and a lost seat is dropped at once from then on)
         if (on_seal_) on_seal_(turn);                        // the restart record, also before it is sent: no client may run a turn that the record lacks (set_on_seal)
         broadcast(encode(turn));
