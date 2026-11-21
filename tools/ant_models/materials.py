@@ -126,9 +126,8 @@ _SPECS: Tuple[MaterialSpec, ...] = (
         name="gear_gold",
         base_color=(0.91, 0.67, 0.23, 1.0),
         metallic=0.08,
-        roughness=0.34,
-        texture_family="cloth",
-        normal_scale=0.14,
+        roughness=0.30,
+        texture_family=None,
     ),
     MaterialSpec(
         name="gear_gold_metal",
