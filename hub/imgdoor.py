@@ -139,7 +139,7 @@ class Converter:
             raise ConverterError("down")
         x, full, thumb = head["x"], whole(head["full"], self.limits.image_reply_max), whole(head["thumb"], self.limits.image_reply_max)
         sizes = [whole(head[k], SIDE_MAX if k in ("w", "h") else THUMB_SIDE_MAX) for k in ("w", "h", "tw", "th")]
-        if x not in SIGNATURES or None in sizes or full is None or thumb is None or type(head["anim"]) is not bool or type(head["still"]) is not bool or full + thumb != len(rest):
+        if type(x) is not str or x not in SIGNATURES or None in sizes or full is None or thumb is None or type(head["anim"]) is not bool or type(head["still"]) is not bool or full + thumb != len(rest):
             raise ConverterError("down")
         if head["anim"] != (x == "gif") or (head["anim"] and head["still"]):
             raise ConverterError("down")

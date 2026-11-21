@@ -447,6 +447,13 @@
    "old": "\"last\": None if last is None else max(0, int(store.clock() - last))}",
    "new": "\"last\": None}",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheUpload.test_the_status_says_how_long_ago_the_newest_image_was_kept_and_nothing_of_who"
+  },
+  {
+   "id": "a_type_that_is_not_a_string_crashes_the_reader",
+   "file": "hub/imgdoor.py",
+   "old": "        if type(x) is not str or x not in SIGNATURES or None in sizes or",
+   "new": "        if x not in SIGNATURES or None in sizes or",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheConverter.test_an_answer_that_is_not_exactly_the_converters_is_down_and_nothing_is_stored"
   }
  ]
 }
