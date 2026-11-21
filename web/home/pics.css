@@ -1,0 +1,45 @@
+/* The images in Home's chat for everybody who reads it (web/home/pics.js, docs/HUB_IMAGES.md), loaded with it when the first line with an image is drawn. A thumbnail stands after the words of its line (on a window: small,
+   because the dock's log is about 100 px high) or under them (on a phone); the viewer is a box over the page. Every target is at least 44 px. */
+/* ---- a picture in the log: the thumbnail under the line's words, in the text's own column ---- */
+.gc-pic { display: block; margin: 5px 0 3px; }
+.gc-thumb { position: relative; display: inline-block; max-width: 100%; margin: 0; padding: 0; font: inherit; line-height: 0; color: inherit; background: #0b1117; border: 2px solid #24574a; border-radius: 6px; box-shadow: 0 0 0 1px #000; cursor: zoom-in; overflow: hidden; }
+/* the picture's box is made from the sizes that the hub gave (--tw and --th, set by the script) before the file has come, so that the log does not jump when it loads: the thumbnail's own size, at most --mw wide and --mh high */
+.gc-thumb img { --mw: 180px; --mh: 104px; display: block; height: auto; aspect-ratio: var(--tw) / var(--th); width: min(calc(var(--tw) * 1px), var(--mw), calc(var(--mh) * var(--tw) / var(--th))); }
+.gc-thumb:hover { border-color: var(--gold); }
+.gc-thumb:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.gc-thumb .gc-zoom { position: absolute; right: 4px; bottom: 4px; width: 22px; height: 22px; padding: 3px; box-sizing: border-box; color: var(--cream); background: rgba(5, 9, 12, .78); border-radius: 4px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.gc-thumb.gc-nopic { display: inline-flex; align-items: center; gap: 8px; width: auto; height: 44px; padding: 0 14px; font-size: 14px; line-height: 1.3; color: #a8cfc0; background: #0e1c18; border-style: dashed; border-color: #2d4a40; cursor: default; }
+.gc-thumb.gc-nopic svg { flex: none; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+@media (min-width: 701px) {       /* a window: the dock is a strip (about 100 px of log), so the picture stands after the words, on the line's own row, small */
+    .gc-pic { display: inline-block; vertical-align: top; margin: 1px 0 3px 10px; }
+    .gc-thumb img { --mw: 144px; --mh: var(--img-mh, 81px); }
+}
+@media (max-width: 700px) { .gc-thumb img { --mw: 100%; --mh: 150px; } .gc-pic { margin-top: 6px; } .gp-card .gp-th { width: 96px; height: 64px; } }
+@media (max-height: 500px) and (orientation: landscape) { .gc-thumb img { --mh: min(84px, var(--img-mh, 84px)); } }
+
+/* ---- the picture opened full size: a box over the page (a sheet that fills the screen on a phone) ---- */
+.gv-scrim { position: fixed; z-index: 70; inset: 0; display: flex; align-items: center; justify-content: center; padding: 18px; box-sizing: border-box; background: rgba(2, 6, 8, .985); backdrop-filter: blur(6px); }
+.gv { display: flex; flex-direction: column; gap: 10px; max-width: min(96vw, 1180px); max-height: 100%; min-width: 0; color: var(--cream); }
+.gv-head { display: flex; align-items: flex-start; gap: 12px; }
+.gv-who { flex: 1 1 auto; min-width: 0; font-size: 17px; line-height: 1.35; overflow-wrap: anywhere; }
+.gv-who b { font-weight: 500; color: #9fe0b8; }
+.gv-who .gv-when { font-size: 13px; color: #8fb3a6; }
+.gv-who .gv-cap { display: block; margin-top: 2px; }
+.gv-x { flex: none; width: 46px; height: 46px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.gv-x svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+.gv-img { display: block; align-self: center; width: auto; height: auto; max-width: 100%; max-height: calc(100vh - 190px); object-fit: contain; background: #000; border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px #000; }
+.gv-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.gv-foot .gv-size { flex: 1 1 auto; font-size: 13px; color: #8fb3a6; }
+.gv-foot .btn { min-height: 46px; padding: 0 18px; }
+.gv-foot .gv-del { color: #ffd9d9; background: #8a2c2c; border-color: #b84a4a; }
+.gv-ask { flex: 1 1 100%; margin: 0; font-size: 16px; line-height: 1.35; }
+.gv-foot a.btn { display: inline-flex; align-items: center; text-decoration: none; }
+@media (max-width: 700px) {
+    .gv-scrim { padding: 10px 10px 14px; align-items: stretch; }
+    .gv { width: 100%; max-width: none; justify-content: center; }
+    .gv-img { max-height: calc(100vh - 230px); }
+    .gv-foot .btn { flex: 1 1 140px; justify-content: center; }
+}
+/* ---- the reader's switch for animation, a row of the account's dropdown (the picture switch's own classes) ---- */
+.gp-sw { margin-top: 6px; }
+@media (prefers-reduced-motion: reduce) { .gc-thumb, .gv-img { transition: none; } }
