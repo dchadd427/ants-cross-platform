@@ -5,7 +5,7 @@
   const { clamp, mat4Translate, mat4Multiply, transformPoint, parseGlb } = window.__antGltf;
   const {
     ANT_CLASSES, ANT_LABELS, TEAMS, ANGLES, SHEET_ANGLES, DEG,
-    wrapAngleDeg, AntRenderer, installToolbarRovingTabindex,
+    wrapAngleDeg, selectActionAnims, AntRenderer, installToolbarRovingTabindex,
   } = window.__antRender;
 
   const ORIGINAL_TEAMS = ["green", "red", "blue", "black"];
@@ -18,7 +18,16 @@
     swimmer: 0.150,
     fire: 0.100,
   };
+  const RETRO_ATTACK_STEP_SEC = {
+    worker: 0.070,
+    combat: 0.090,
+    thief: 0.060,
+    bomber: 0.060,
+    swimmer: 0.076,
+    fire: 0.060,
+  };
   const GROUND_FRAC = 0.87;
+  const ATTACK_GROUND_FRAC = 0.78;
   const CANONICAL_PITCH = ANGLES["301"].pitch;
   const RELOAD_STATE_KEY = "ants_viewer_reload_state_v1";
 
@@ -151,6 +160,7 @@
     const qYaw = params.has("yaw") && Number.isFinite(Number(params.get("yaw"))) ? wrapAngleDeg(Number(params.get("yaw"))) : null;
     const qSpeed = Number(params.get("speed"));
     const qIdle = params.get("idle");
+    const qAction = (params.get("action") || "").toLowerCase();
     const qPixel = params.get("pixel");
     const qSil = params.get("silhouette");
     const qRetro = params.get("retrofps");
@@ -176,6 +186,9 @@
     const initIdle = qIdle !== null
       ? qIdle !== "0"
       : (savedState && typeof savedState.idle === "boolean" ? savedState.idle : true);
+    const initAction = qAction === "attack" || qAction === "idle"
+      ? qAction
+      : (savedState && (savedState.action === "attack" || savedState.action === "idle") ? savedState.action : "idle");
     const initPixel = qPixel !== null
       ? (qPixel === "1" || qPixel.toLowerCase() === "true")
       : (savedState && typeof savedState.pixelMode === "boolean" ? savedState.pixelMode : false);
@@ -199,6 +212,7 @@
       pitch: CANONICAL_PITCH,
       zoom: 1.0,
       idle: initIdle,
+      action: initAction,
       pixelMode: initPixel,
       silhouette: initSil,
       retroFps: initRetro,
@@ -271,9 +285,24 @@
         q.set("yaw", String(Math.round(state.yaw)));
         q.set("proj", "ortho");
       }
+      if (state.action === "attack") q.set("action", "attack");
       if (state.silhouette) q.set("silhouette", "1");
       if (state.retroFps) q.set("retrofps", "1");
       studioTab.setAttribute("href", "viewer.html?" + q.toString());
+    }
+
+    function activeClipName() {
+      return state.action === "attack" ? "Attack" : "Idle";
+    }
+
+    function getOrigEntry(cls, angle) {
+      if (!state.origBundle) return null;
+      const map = state.action === "attack" && state.origBundle.attack_sprites
+        ? state.origBundle.attack_sprites
+        : state.origBundle.sprites;
+      return (map && map[cls] && map[cls][angle])
+        || (state.origBundle.sprites && state.origBundle.sprites[cls] && state.origBundle.sprites[cls][angle])
+        || null;
     }
 
     function syncDebugState() {
@@ -289,6 +318,7 @@
         yaw: Number(state.yaw.toFixed(1)),
         pitch: Number(state.pitch.toFixed(1)),
         idle: state.idle,
+        action: state.action,
         pixelMode: state.pixelMode,
         silhouette: state.silhouette,
         retroFps: state.retroFps,
@@ -310,6 +340,7 @@
       compassId: state.compass.id,
       yaw: state.yaw,
       idle: state.idle,
+      action: state.action,
       pixelMode: state.pixelMode,
       silhouette: state.silhouette,
       retroFps: state.retroFps,
@@ -317,18 +348,26 @@
     });
 
     function updateCycleLabels() {
+      const clipName = activeClipName();
       for (const cls of ANT_CLASSES) {
-        const origEntry = state.origBundle && state.origBundle.sprites[cls] && state.origBundle.sprites[cls][state.angle];
+        const origEntry = getOrigEntry(cls, state.angle);
         const model = state.models.get(cls);
         const origSec = origEntry ? origEntry.total_ms / 1000 : NaN;
-        const modelSec = model && model.idleAnims && model.idleAnims.length ? model.idleAnims[0].duration : NaN;
-        const text = `Orig ${formatSec(origSec)} \u00b7 3D ${formatSec(modelSec)}`;
+        const sel = selectActionAnims(model, clipName);
+        let text;
+        if (state.action === "attack" && model && !sel.matched) {
+          text = `Orig ${formatSec(origSec)} \u00b7 3D Idle (no Attack yet)`;
+        } else {
+          const modelSec = sel.anims.length ? sel.anims[0].duration : NaN;
+          text = `Orig ${formatSec(origSec)} \u00b7 3D ${formatSec(modelSec)}`;
+        }
         const cardCy = cardCycles.get(cls);
         if (cardCy) cardCy.textContent = text;
         if (state.ant === cls) {
           soloCycleEl.textContent = text;
           const flipTag = state.flipped ? " flip" : "";
-          soloAnimEl.textContent = origEntry ? `${origEntry.anim_name}${flipTag} (${origEntry.frame_count}f)` : "\u2014";
+          const stepCount = origEntry && Array.isArray(origEntry.steps) ? origEntry.steps.length : (origEntry ? origEntry.frame_count : 0);
+          soloAnimEl.textContent = origEntry ? `${origEntry.anim_name}${flipTag} (${stepCount}f)` : "\u2014";
         }
       }
     }
@@ -348,6 +387,9 @@
       });
       toolbarEl.querySelectorAll("button[data-angle]").forEach((b) => {
         b.setAttribute("aria-pressed", String(b.dataset.angle === comp.id));
+      });
+      toolbarEl.querySelectorAll("button[data-action]").forEach((b) => {
+        b.setAttribute("aria-pressed", String(b.dataset.action === state.action));
       });
       toolbarEl.querySelectorAll("button[data-speed]").forEach((b) => {
         b.setAttribute("aria-pressed", String(Number(b.dataset.speed) === state.speed));
@@ -374,7 +416,8 @@
         if (state.silhouette) modeBits.push("Silhouette");
         metaProj.textContent = modeBits.join(" \u00b7 ");
       }
-      metaPlay.textContent = `${state.idle ? "Playing" : "Paused"} \u00b7 ${state.speed}\u00d7${state.retroFps ? " \u00b7 1998 FPS" : ""}`;
+      const actionLabel = state.action === "attack" ? "Attack" : "Idle";
+      metaPlay.textContent = `${actionLabel} \u00b7 ${state.idle ? "Playing" : "Paused"} \u00b7 ${state.speed}\u00d7${state.retroFps ? " \u00b7 1998 FPS" : ""}`;
 
       const origCardLabel = comp.flip ? "1998 Orig \u00b7 flip" : "1998 Original";
       for (const pill of cardOrigPills) pill.textContent = origCardLabel;
@@ -436,11 +479,34 @@
       announce("Angle set to " + comp.full + ".");
     }
 
+    function selectAction(next) {
+      const target = next === "attack" ? "attack" : "idle";
+      if (state.action === target) return;
+      state.action = target;
+      state.simTime = 0;
+      updateUiState();
+      markDirty();
+      if (target === "attack") {
+        const checkIds = state.ant === "all" ? ANT_CLASSES : [state.ant];
+        const anyAttack = checkIds.some((id) => selectActionAnims(state.models.get(id), "Attack").matched);
+        announce(anyAttack
+          ? "Action set to Attack sequence."
+          : "Action set to 1998 Attack sequence (3D falls back to Idle until Attack clips are built).");
+      } else {
+        announce("Action set to Idle stance.");
+      }
+    }
+
+    function toggleAction() {
+      selectAction(state.action === "attack" ? "idle" : "attack");
+    }
+
     function toggleIdle() {
       state.idle = !state.idle;
       updateUiState();
       markDirty();
-      announce(state.idle ? `Idle playback resumed at ${state.speed}x.` : "Idle playback paused.");
+      const label = state.action === "attack" ? "Attack" : "Idle";
+      announce(state.idle ? `${label} playback resumed at ${state.speed}x.` : `${label} playback paused.`);
     }
 
     function togglePixelMode() {
@@ -565,10 +631,10 @@
     }
 
     function getOrigImage(cls, angle, team) {
-      const key = `${cls}:${angle}:${team}`;
+      const key = `${state.action}:${cls}:${angle}:${team}`;
       const existing = state.origImages.get(key);
       if (existing) return existing;
-      const entry = state.origBundle && state.origBundle.sprites[cls] && state.origBundle.sprites[cls][angle];
+      const entry = getOrigEntry(cls, angle);
       const uri = entry && entry.sheets && entry.sheets[team];
       if (!uri) return null;
       const rec = { img: new Image(), ready: false, failed: false };
@@ -581,7 +647,8 @@
     }
 
     function groundFracFor(panelW, panelH) {
-      return panelH > panelW * 1.35 ? 0.72 : GROUND_FRAC;
+      if (panelH > panelW * 1.35) return state.action === "attack" ? 0.68 : 0.72;
+      return state.action === "attack" ? ATTACK_GROUND_FRAC : GROUND_FRAC;
     }
 
     function computeScaleParams(panelW, panelH, dpr) {
@@ -664,14 +731,21 @@
     }
 
     function drawOrigSprite(ctx, cls, x0, panelW, groundY, pxScale) {
-      const entry = state.origBundle && state.origBundle.sprites[cls] && state.origBundle.sprites[cls][state.angle];
+      const entry = getOrigEntry(cls, state.angle);
       if (!entry) return;
       const rec = getOrigImage(cls, state.angle, state.team);
       if (!rec || !rec.ready) return;
       const frameIdx = pickOrigFrame(entry, state.simTime);
       const dw = entry.fw * pxScale;
       const dh = entry.fh * pxScale;
-      const dx = Math.round(x0 + (panelW - dw) * 0.5);
+      let dx = Math.round(x0 + (panelW - dw) * 0.5);
+      if (state.action === "attack" && Number.isFinite(entry.anchor_x)) {
+        const ax = entry.anchor_x * pxScale;
+        const rawX = state.flipped
+          ? Math.round(x0 + panelW * 0.5 + ax - dw)
+          : Math.round(x0 + panelW * 0.5 - ax);
+        dx = dw <= panelW - 4 ? clamp(rawX, x0 + 2, x0 + panelW - dw - 2) : Math.round(x0 + (panelW - dw) * 0.5);
+      }
       const dy = Math.round(groundY - entry.foot_y * pxScale);
       const shadowRx = Math.max(12, Math.min(panelW * 0.34, entry.vis_w * pxScale * 0.42));
       drawContactShadow(ctx, x0 + panelW * 0.5, groundY, shadowRx, Math.max(4, shadowRx * 0.22));
@@ -691,6 +765,9 @@
         sx = 0;
       }
       ctx.save();
+      ctx.beginPath();
+      ctx.rect(x0, 0, panelW, ctx.canvas.height);
+      ctx.clip();
       ctx.imageSmoothingEnabled = false;
       if (state.flipped) {
         ctx.translate(dx + dw, dy);
@@ -711,12 +788,13 @@
 
     function sampled3dTiming(cls) {
       if (!state.retroFps) return { idleTime: state.simTime, stepSec: 0 };
-      const origEntry = state.origBundle && state.origBundle.sprites[cls] && state.origBundle.sprites[cls][state.angle];
+      const origEntry = getOrigEntry(cls, state.angle);
       if (origEntry && Array.isArray(origEntry.steps) && origEntry.steps.length > 1 && origEntry.total_ms) {
         const st = pickOrigStep(origEntry, state.simTime);
         return { idleTime: st.quantizedSec, stepSec: st.stepDurSec };
       }
-      const step = RETRO_STEP_SEC[cls] || 0.125;
+      const stepTable = state.action === "attack" ? RETRO_ATTACK_STEP_SEC : RETRO_STEP_SEC;
+      const step = stepTable[cls] || 0.125;
       return { idleTime: Math.floor(state.simTime / step) * step, stepSec: step };
     }
 
@@ -760,6 +838,7 @@
             team: state.team,
             blinkMode: "auto",
             idleAnim: true,
+            clipName: activeClipName(),
             fixedIdleTime: timing.idleTime,
             silhouette: state.silhouette,
             overrideProj: "ortho",
@@ -792,6 +871,7 @@
           team: state.team,
           blinkMode: "auto",
           idleAnim: true,
+          clipName: activeClipName(),
           fixedIdleTime: timing.idleTime,
           silhouette: state.silhouette,
           overrideProj: "ortho",
@@ -841,7 +921,7 @@
         for (const cls of ANT_CLASSES) {
           const rec = cardCanvases.get(cls), sz = sizes.get(cls);
           if (!rec || !sz) continue;
-          const groundY = Math.round(sz.h * GROUND_FRAC);
+          const groundY = Math.round(sz.h * scParams.gFrac);
           const rightW = sz.w - sz.halfW;
           const halfHForCard = scParams.fixedHalfH * (sz.h / minH);
           drawStudioBackdrop(rec.ctx, sz.w, sz.h, groundY, true);
@@ -938,6 +1018,7 @@
       if (btn.dataset.ant) selectAnt(btn.dataset.ant);
       else if (btn.dataset.team) selectTeam(btn.dataset.team);
       else if (btn.dataset.angle) selectAngle(btn.dataset.angle);
+      else if (btn.dataset.action) selectAction(btn.dataset.action);
       else if (btn.dataset.speed) selectSpeed(Number(btn.dataset.speed));
       else if (btn === btnPixelMode) togglePixelMode();
       else if (btn === btnSilhouette) toggleSilhouette();
@@ -1080,6 +1161,9 @@
       if (e.key === "Escape" && state.ant !== "all") {
         e.preventDefault();
         selectAnt("all");
+      } else if (e.key === "a" || e.key === "A") {
+        e.preventDefault();
+        toggleAction();
       } else if (e.key === "i" || e.key === "I") {
         e.preventDefault();
         toggleIdle();

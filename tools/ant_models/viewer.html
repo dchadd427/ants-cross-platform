@@ -98,12 +98,20 @@
 
       <span class="toolbar-sep" role="separator" aria-orientation="vertical"></span>
 
+      <div class="toolbar-group" role="group" aria-label="Animation action">
+        <span class="group-label" aria-hidden="true">Action</span>
+        <button type="button" data-action="idle" aria-pressed="true" title="Idle stance animation (A to toggle)">Idle</button>
+        <button type="button" data-action="attack" aria-pressed="false" title="Attack animation sequence (A to toggle)">Attack</button>
+      </div>
+
+      <span class="toolbar-sep" role="separator" aria-orientation="vertical"></span>
+
       <div class="toolbar-group" role="group" aria-label="Projection and viewport options">
         <span class="group-label" aria-hidden="true">View</span>
         <button type="button" data-projection="ortho" aria-pressed="true" title="Orthographic isometric projection">Ortho</button>
         <button type="button" data-projection="persp" aria-pressed="false" title="Perspective studio lens">Persp</button>
         <button type="button" id="btn-turntable" aria-pressed="false" title="Slow studio turntable rotation">Turntable</button>
-        <button type="button" id="btn-idle" aria-pressed="true" title="Toggle idle animation loop (I)">Idle</button>
+        <button type="button" id="btn-idle" aria-pressed="true" title="Toggle animation playback loop (I)">Play</button>
         <button type="button" id="btn-sprite-scale" aria-pressed="true" title="Toggle 48px game-sprite scale inset">Sprite Scale</button>
         <button type="button" id="btn-silhouette" aria-pressed="false" title="Toggle high-contrast silhouette view (S)">Silhouette</button>
         <button type="button" id="btn-retro-fps" aria-pressed="false" title="Step ant animations at authentic 1998 per-class sprite FPS (F)">1998 FPS</button>
@@ -160,7 +168,7 @@
       </aside>
 
       <div class="controls-hint" aria-hidden="true">
-        Drag: Orbit &middot; Scroll/Pinch: Zoom &middot; Arrows: Orbit &middot; +/-: Zoom &middot; 1&ndash;5: Angles &middot; I: Idle &middot; B: Blink &middot; R: Reset
+        Drag: Orbit &middot; Scroll/Pinch: Zoom &middot; Arrows: Orbit &middot; +/-: Zoom &middot; 1&ndash;5: Angles &middot; A: Action &middot; I: Play &middot; B: Blink &middot; R: Reset
       </div>
     </main>
 

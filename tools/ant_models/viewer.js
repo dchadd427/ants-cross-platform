@@ -4,7 +4,7 @@
   const { clamp, mat4Translate, parseGlb } = window.__antGltf;
   const {
     ANT_CLASSES, ANT_LABELS, DEFAULT_CUSTOM_HEX, TEAMS, ANGLES, SHEET_ANGLES,
-    wrapAngleDeg, normalizeHex, resolveTeam, AntRenderer, installToolbarRovingTabindex,
+    wrapAngleDeg, normalizeHex, resolveTeam, selectActionAnims, AntRenderer, installToolbarRovingTabindex,
   } = window.__antRender;
 
   const RETRO_STEP_SEC = {
@@ -14,6 +14,14 @@
     bomber: 0.100,
     swimmer: 0.150,
     fire: 0.100,
+  };
+  const RETRO_ATTACK_STEP_SEC = {
+    worker: 0.070,
+    combat: 0.090,
+    thief: 0.060,
+    bomber: 0.060,
+    swimmer: 0.076,
+    fire: 0.060,
   };
 
   const emptyScene = () => ({
@@ -46,7 +54,7 @@
     const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     const params = new URLSearchParams(window.location.search), getP = (k) => (params.get(k) || "").toLowerCase();
     const pLineup = getP("lineup") === "1" || getP("lineup") === "true";
-    const pAnt = getP("ant"), pTeam = getP("team"), pColor = normalizeHex(params.get("color")), pAngle = getP("angle"), pProj = getP("proj"), pTurn = getP("turntable"), pBlink = getP("blink"), pIdle = getP("idle"), pSprite = getP("sprite"), pSil = getP("silhouette"), pRetro = getP("retrofps");
+    const pAnt = getP("ant"), pTeam = getP("team"), pColor = normalizeHex(params.get("color")), pAngle = getP("angle"), pProj = getP("proj"), pTurn = getP("turntable"), pBlink = getP("blink"), pIdle = getP("idle"), pAction = getP("action"), pSprite = getP("sprite"), pSil = getP("silhouette"), pRetro = getP("retrofps");
     const pIdleTimeRaw = params.get("idleTime"), fixedIdleTime = pIdleTimeRaw !== null && Number.isFinite(Number(pIdleTimeRaw)) ? Number(pIdleTimeRaw) : null;
     const pYaw = params.has("yaw") && Number.isFinite(Number(params.get("yaw"))) ? wrapAngleDeg(Number(params.get("yaw"))) : null;
     const pPitch = params.has("pitch") && Number.isFinite(Number(params.get("pitch"))) ? clamp(Number(params.get("pitch")), -10, 85) : null;
@@ -71,12 +79,14 @@
     const initBlink = pBlink === "closed" ? "closed" : (pBlink === "open" ? "open" : (motionQuery.matches ? "open" : "auto"));
     const initIdle = fixedIdleTime !== null ? false : (pIdle === "0" || pIdle === "false" ? false : (pIdle === "1" || pIdle === "true" ? true
       : (!params.has("idle") && savedView && typeof savedView.idle === "boolean" ? savedView.idle : !motionQuery.matches)));
+    const initAction = pAction === "attack" || pAction === "idle" ? pAction
+      : (!params.has("action") && savedView && (savedView.action === "attack" || savedView.action === "idle") ? savedView.action : "idle");
 
     const preset = ANGLES[initAngle] || ANGLES["301"];
     const useSavedCam = !params.has("angle") && pYaw === null && savedView && Number.isFinite(savedView.yaw) && Number.isFinite(savedView.pitch) && Number.isFinite(savedView.zoom);
     let pendingUpdatedVer = savedView && typeof savedView.updatedVersion === "string" ? savedView.updatedVersion : "";
     const state = {
-      ant: initAnt, customLabel: "", team: initTeam, customColor: initCustomColor, angle: initAngle, blinkMode: initBlink, idleAnim: initIdle, fixedIdleTime,
+      ant: initAnt, customLabel: "", team: initTeam, customColor: initCustomColor, angle: initAngle, blinkMode: initBlink, idleAnim: initIdle, action: initAction, fixedIdleTime,
       dark: darkQuery.matches, turntable: initTurn, spritePreview: initSprite, silhouette: initSil, retroFps: initRetro,
       cam: {
         yaw: pYaw !== null ? pYaw : (useSavedCam ? wrapAngleDeg(savedView.yaw) : preset.yaw),
@@ -88,10 +98,11 @@
       modelCache: new Map(), customModel: null, scene: emptyScene(),
     };
     const activeTeam = () => resolveTeam(state.team, state.customColor);
+    const activeClipName = () => (state.action === "attack" ? "Attack" : "Idle");
     window.__antViewerGetState = () => ({
       ant: state.ant === "custom" ? "" : state.ant,
       team: state.team, customColor: state.customColor, angle: state.angle, proj: state.cam.projection,
-      turntable: state.turntable, idle: state.idleAnim, sprite: state.spritePreview, silhouette: state.silhouette, retroFps: state.retroFps,
+      turntable: state.turntable, idle: state.idleAnim, action: state.action, sprite: state.spritePreview, silhouette: state.silhouette, retroFps: state.retroFps,
       yaw: state.cam.yaw, pitch: state.cam.pitch, zoom: state.cam.zoom,
     });
 
@@ -153,6 +164,7 @@
       if (TEAMS[state.team]) q.set("team", state.team);
       if (SHEET_ANGLES.includes(state.angle)) q.set("angle", state.angle);
       else if (state.angle === "custom") q.set("yaw", String(Math.round(state.cam.yaw)));
+      if (state.action === "attack") q.set("action", "attack");
       if (state.silhouette) q.set("silhouette", "1");
       if (state.retroFps) q.set("retrofps", "1");
       const qs = q.toString();
@@ -161,9 +173,10 @@
 
     function syncDebugState() {
       window.__antViewer = {
-        ready: state.ready, ant: state.ant, team: state.team, customColor: state.customColor, angle: state.angle, blink: state.blinkMode, idle: state.idleAnim, silhouette: state.silhouette, retroFps: state.retroFps,
+        ready: state.ready, ant: state.ant, team: state.team, customColor: state.customColor, angle: state.angle, blink: state.blinkMode, idle: state.idleAnim, action: state.action, silhouette: state.silhouette, retroFps: state.retroFps,
         hasBlinkAnim: state.scene.instances.some((inst) => inst.model.blinkInfo && inst.model.blinkInfo.hasBlink),
         idleAnims: state.scene.instances.flatMap((inst) => (inst.model.idleAnims || []).map((a) => a.name)),
+        attackAnims: state.scene.instances.flatMap((inst) => (inst.model.attackAnims || []).map((a) => a.name)),
         textureCount: state.scene.instances.reduce((sum, inst) => sum + (inst.model.textureCount || 0), 0),
         hasVertexColors: state.scene.instances.some((inst) => Boolean(inst.model.hasVertexColors)),
         projection: state.cam.projection, yaw: Math.round(wrapAngleDeg(state.cam.yaw)), pitch: Math.round(state.cam.pitch),
@@ -177,7 +190,7 @@
     }
 
     function updateUiState() {
-      for (const [attr, val] of [["ant", state.ant], ["team", state.team], ["angle", state.angle], ["projection", state.cam.projection]]) {
+      for (const [attr, val] of [["ant", state.ant], ["team", state.team], ["angle", state.angle], ["action", state.action], ["projection", state.cam.projection]]) {
         toolbarEl.querySelectorAll("button[data-" + attr + "]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset[attr] === val)));
       }
       if (colorInput && colorInput.value.toLowerCase() !== state.customColor) colorInput.value = state.customColor;
@@ -316,7 +329,7 @@
         const info = ANGLES[key], x = idx * size;
         const img = renderer.renderOffscreenPixels(size, size, state.scene, { yaw: info.yaw, pitch: info.pitch, zoom: 1, projection: "ortho" }, {
           transparent: true, showPlinth: false, dark: false, team: state.team, teamColors: teamObj, blinkMode: state.blinkMode,
-          idleAnim: state.idleAnim, fixedIdleTime: state.fixedIdleTime, overrideProj: "ortho",
+          idleAnim: state.idleAnim, clipName: activeClipName(), fixedIdleTime: state.fixedIdleTime, overrideProj: "ortho",
         });
         tCtx.putImageData(img, 0, 0); ctx.drawImage(tmp, x, 0);
         ctx.fillStyle = "rgba(20, 24, 31, 0.86)"; ctx.beginPath();
@@ -356,10 +369,30 @@
       updateUiState(); markDirty(); announce(state.blinkMode === "closed" ? "Eyelids held closed." : "Eyelids released.");
     }
 
+    function selectAction(next) {
+      const target = next === "attack" ? "attack" : "idle";
+      if (state.action === target) return;
+      state.action = target;
+      const multi = state.scene.instances.length > 1;
+      const phaseStagger = [0.0, 0.14, 0.28, 0.09, 0.21, 0.34];
+      state.scene.instances.forEach((inst, i) => { inst.idleTime = multi ? phaseStagger[i % phaseStagger.length] : 0; });
+      updateUiState(); markDirty();
+      if (target === "attack") {
+        const anyAttack = state.scene.instances.some((inst) => selectActionAnims(inst.model, "Attack").matched);
+        announce(anyAttack ? "Action set to Attack." : "Action set to Attack (falling back to Idle — no 3D Attack clip yet).");
+      } else {
+        announce("Action set to Idle.");
+      }
+    }
+
+    function toggleAction() { selectAction(state.action === "attack" ? "idle" : "attack"); }
+
     function toggleIdle() {
       state.idleAnim = !state.idleAnim;
       state.fixedIdleTime = null;
-      updateUiState(); markDirty(); announce("Idle animation " + (state.idleAnim ? "enabled." : "paused."));
+      updateUiState(); markDirty();
+      const label = state.action === "attack" ? "Attack" : "Idle";
+      announce(label + " animation " + (state.idleAnim ? "playing." : "paused."));
     }
 
     function toggleSilhouette() {
@@ -371,19 +404,21 @@
       state.retroFps = !state.retroFps;
       updateUiState(); markDirty();
       if (!state.retroFps) { announce("1998 FPS off (smooth 60 fps playback)."); return; }
-      const step = RETRO_STEP_SEC[state.ant];
+      const steps = state.action === "attack" ? RETRO_ATTACK_STEP_SEC : RETRO_STEP_SEC;
+      const step = steps[state.ant];
       if (step) {
         const fps = (1 / step).toFixed(1).replace(/\.0$/, "");
         announce(`1998 FPS on (${ANT_LABELS[state.ant]} · ${fps} fps, ${Math.round(step * 1000)}ms step).`);
       } else {
-        announce("1998 FPS on (6.7\u201310 fps per class).");
+        announce(state.action === "attack" ? "1998 FPS on (11\u201317 fps attack cadence)." : "1998 FPS on (6.7\u201310 fps per class).");
       }
     }
 
     function withQuantizedTiming(fn) {
       if (!state.retroFps || state.fixedIdleTime !== null) return fn();
+      const stepTable = state.action === "attack" ? RETRO_ATTACK_STEP_SEC : RETRO_STEP_SEC;
       const saved = state.scene.instances.map((inst) => {
-        const step = RETRO_STEP_SEC[inst.id] || 0.125;
+        const step = stepTable[inst.id] || 0.125;
         const origIdle = inst.idleTime || 0;
         inst.idleTime = Math.floor(origIdle / step) * step;
         let origBlink = null;
@@ -414,6 +449,7 @@
       }
       else if (btn.dataset.team && TEAMS[btn.dataset.team]) { state.team = btn.dataset.team; updateUiState(); markDirty(); announce("Team color set to " + TEAMS[state.team].label + "."); }
       else if (btn.dataset.angle) { setAnglePreset(btn.dataset.angle); announce("Camera set to " + ANGLES[btn.dataset.angle].full + "."); }
+      else if (btn.dataset.action) selectAction(btn.dataset.action);
       else if (btn.dataset.projection) { state.cam.projection = btn.dataset.projection === "ortho" ? "ortho" : "persp"; updateUiState(); markDirty(); announce("Projection set to " + (state.cam.projection === "ortho" ? "Orthographic." : "Perspective.")); }
       else if (btn.id === "btn-turntable") { state.turntable = !state.turntable; state.camTarget = null; updateUiState(); markDirty(false); announce("Turntable spin " + (state.turntable ? "enabled." : "paused.")); }
       else if (btn.id === "btn-idle") toggleIdle();
@@ -490,6 +526,7 @@
       else if (e.key === "ArrowDown") { state.cam.pitch = clamp(state.cam.pitch - sp, -10, 85); state.angle = "custom"; }
       else if (e.key === "+" || e.key === "=") state.cam.zoom = clamp(state.cam.zoom * 0.88, 0.35, 3.2);
       else if (e.key === "-" || e.key === "_") state.cam.zoom = clamp(state.cam.zoom * 1.14, 0.35, 3.2);
+      else if (e.key === "a" || e.key === "A") { e.preventDefault(); toggleAction(); return; }
       else if (e.key === "b" || e.key === "B") { e.preventDefault(); if (e.shiftKey) toggleBlinkHold(); else triggerBlink(); return; }
       else if (e.key === "i" || e.key === "I") { e.preventDefault(); toggleIdle(); return; }
       else if (e.key === "s" || e.key === "S") { e.preventDefault(); toggleSilhouette(); return; }
@@ -509,7 +546,8 @@
     document.addEventListener("keydown", (e) => {
       if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
       if (document.activeElement === stageCanvas) return;
-      if (e.key === "s" || e.key === "S") { e.preventDefault(); toggleSilhouette(); }
+      if (e.key === "a" || e.key === "A") { e.preventDefault(); toggleAction(); }
+      else if (e.key === "s" || e.key === "S") { e.preventDefault(); toggleSilhouette(); }
       else if (e.key === "f" || e.key === "F") { e.preventDefault(); toggleRetroFps(); }
     });
 
@@ -532,8 +570,9 @@
         if (now - state.lastSpriteTime > 80) state.spriteDirty = true;
       }
       if (state.idleAnim) {
+        const clipName = activeClipName();
         for (const inst of state.scene.instances) {
-          if (inst.model.idleAnims && inst.model.idleAnims.length) {
+          if (selectActionAnims(inst.model, clipName).anims.length) {
             inst.idleTime = (inst.idleTime || 0) + dt;
             state.dirty = true;
             if (now - state.lastSpriteTime > 65) state.spriteDirty = true;
@@ -559,7 +598,7 @@
         const [w, h] = renderer.resize();
         withQuantizedTiming(() => renderer.drawScene(state.scene, state.cam, {
           width: w, height: h, transparent: false, showPlinth: true, dark: state.dark, team: state.team, teamColors: activeTeam(),
-          blinkMode: state.blinkMode, idleAnim: state.idleAnim, fixedIdleTime: state.fixedIdleTime, silhouette: state.silhouette,
+          blinkMode: state.blinkMode, idleAnim: state.idleAnim, clipName: activeClipName(), fixedIdleTime: state.fixedIdleTime, silhouette: state.silhouette,
         }));
         state.dirty = false;
       }
@@ -570,7 +609,7 @@
           const spriteCam = { yaw: state.cam.yaw, pitch: state.cam.pitch, zoom: 1.0, projection: "ortho" };
           spriteCtx.putImageData(withQuantizedTiming(() => renderer.renderOffscreenPixels(spriteCanvas.width, spriteCanvas.height, state.scene, spriteCam, {
             transparent: true, showPlinth: false, dark: state.dark, team: state.team, teamColors: activeTeam(),
-            blinkMode: state.blinkMode, idleAnim: state.idleAnim, fixedIdleTime: state.fixedIdleTime, silhouette: state.silhouette, overrideProj: "ortho",
+            blinkMode: state.blinkMode, idleAnim: state.idleAnim, clipName: activeClipName(), fixedIdleTime: state.fixedIdleTime, silhouette: state.silhouette, overrideProj: "ortho",
           })), 0, 0);
         }
       }

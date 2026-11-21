@@ -351,15 +351,26 @@
     }
   }
 
+  function selectActionAnims(model, clipName) {
+    if (!model) return { anims: [], matched: false };
+    if (typeof clipName === "string" && /^attack$/i.test(clipName)) {
+      if (model.attackAnims && model.attackAnims.length) return { anims: model.attackAnims, matched: true };
+      return { anims: model.idleAnims || [], matched: false };
+    }
+    const idle = model.idleAnims || [];
+    return { anims: idle, matched: idle.length > 0 };
+  }
+
   function evaluateWorldMats(inst, opts) {
     const m = inst.model, bi = m.blinkInfo;
     const isClosed = opts.blinkMode === "closed", isPulsing = !isClosed && inst.blink && inst.blink.active;
-    const hasIdle = m.idleAnims && m.idleAnims.length > 0 && (opts.idleAnim || opts.fixedIdleTime !== null);
-    if (!hasIdle && (!bi || !bi.hasBlink || (!isClosed && !isPulsing))) return m.baseWorldMats;
+    const actionAnims = selectActionAnims(m, opts.clipName).anims;
+    const hasAction = actionAnims.length > 0 && (opts.idleAnim || opts.fixedIdleTime !== null);
+    if (!hasAction && (!bi || !bi.hasBlink || (!isClosed && !isPulsing))) return m.baseWorldMats;
 
     const overrides = new Map();
-    if (hasIdle) {
-      for (const anim of m.idleAnims) {
+    if (hasAction) {
+      for (const anim of actionAnims) {
         const rawT = opts.fixedIdleTime !== null ? opts.fixedIdleTime : (inst.idleTime || 0);
         applyAnimChannels(overrides, anim.channels, ((rawT % anim.duration) + anim.duration) % anim.duration);
       }
@@ -630,7 +641,7 @@
 
   window.__antRender = {
     ANT_CLASSES, ANT_LABELS, DEFAULT_CUSTOM_HEX, TEAMS, ANGLES, SHEET_ANGLES, DEG, STUDIO_PALETTE,
-    wrapAngleDeg, normalizeHex, deriveCustomTeam, resolveTeam, evaluateWorldMats, AntRenderer,
+    wrapAngleDeg, normalizeHex, deriveCustomTeam, resolveTeam, selectActionAnims, evaluateWorldMats, AntRenderer,
     installToolbarRovingTabindex,
   };
 })();
