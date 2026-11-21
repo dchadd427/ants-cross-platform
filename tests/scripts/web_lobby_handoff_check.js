@@ -42,8 +42,9 @@ async function pages(modulePath, wsUrl, code) {
     // the leader moves Bea to the empty color 2 before it asks for START: the seat that her game takes over is the one that her page was moved to, not the one it came in with
     if (!A.move(1, 2)) throw new Error('the leader could not move Bea');
     await until('Bea is in color 2', () => B.seat === 2 && B.room.you === 2 && A.room.slots[2].state === N.SLOT.Client && A.room.slots[1].state === N.SLOT.Empty);
-    A.setPlan({ map: '', kinds: [N.PLAN.Open, N.PLAN.Nobody, N.PLAN.Open, N.PLAN.Nobody], teamA: 255, teamB: 255 });      // (two persons and nobody else: no bot to wait for)
-    await until('the plan', () => B.room.plan[1] === N.PLAN.Nobody && B.room.plan[3] === N.PLAN.Nobody);
+    const fog = process.env.ANTS_HANDOFF_FOG === '1';                                                              // (network protocol 28: the second scenario plays with Fog of War)
+    A.setPlan({ map: '', kinds: [N.PLAN.Open, N.PLAN.Nobody, N.PLAN.Open, N.PLAN.Nobody], teamA: 255, teamB: 255, fog: fog });      // (two persons and nobody else: no bot to wait for)
+    await until('the plan', () => B.room.plan[1] === N.PLAN.Nobody && B.room.plan[3] === N.PLAN.Nobody && B.room.fog === fog);
     if (!B.setReady(true)) throw new Error('Bea could not say Ready');                 // (protocol 27: the leader's START waits for every other person to say it)
     await until('Bea is ready', () => ((A.room.ready >> 2) & 1) === 1);
     if (!A.start()) throw new Error('the leader could not ask for START');
@@ -90,13 +91,13 @@ async function main() {
     setTimeout(() => { console.log('FAIL the check ran out of time'); stopAll(); process.exit(1); }, Math.max(240000, 6 * waitMs)).unref();      // (no game and no page outlives a check that hangs)
 
     const RUN = Math.random().toString(36).slice(2, 4).padEnd(2, '0');
-    async function scenario(title, pagesGoFirst) {
+    async function scenario(title, pagesGoFirst, fog) {
         const code = 'ho' + RUN + title.slice(0, 2);
         const folder = path.join(work, 'handoff_' + title);
         fs.mkdirSync(folder, { recursive: true });
         // the pages
         const pagesLog = [];
-        const page = spawn(process.execPath, [__filename, '--pages', modulePath, wsUrl, code], { stdio: ['ignore', 'pipe', 'inherit'] });
+        const page = spawn(process.execPath, [__filename, '--pages', modulePath, wsUrl, code], { stdio: ['ignore', 'pipe', 'inherit'], env: Object.assign({}, process.env, { ANTS_HANDOFF_FOG: fog ? '1' : '0' }) });
         spawned.push(page);
         let keys = null;
         let carry = '';
@@ -152,6 +153,7 @@ async function main() {
         } catch (e) { check(title + ': both games took their seats over and the match started', false, e.message); }
         if (running !== null) {
             check(title + ': both games took their seats over and the match started (state running, START no longer waits)', running.starting === false && running.joined === 2);
+            check(title + ': the match is played ' + (fog ? 'with' : 'without') + ' Fog of War, as the leader\'s plan said (the room\'s status, and both games loaded it from the Start)', running.fog === !!fog, JSON.stringify(running.fog));
             check(title + ': the two people are Ada and Bea, in the seats that their pages had', JSON.stringify(running.players.map((p) => [p.seat, p.name])) === JSON.stringify([[keys.a.seat, 'Ada'], [keys.b.seat, 'Bea']]), JSON.stringify(running.players));
             // protocol 21: the server of this check counts down 8 s (--start-countdown-seconds 8) for a room of two people: it says so, and has sealed nothing when the match has just begun
             const countdownMs = (running.countdown_seconds || 0) * 1000;
@@ -181,8 +183,8 @@ async function main() {
         check(title + ': neither game reported an error', !/out of sync|failed|error|rejected|could not/i.test(logs), logs.split('\n').filter((l) => /out of sync|failed|error|rejected|could not/i.test(l)).slice(0, 3).join(' | '));
     }
 
-    await scenario('gone', true);
-    await scenario('superseded', false);
+    await scenario('gone', true, false);
+    await scenario('superseded', false, true);
     console.log('handoff to real games: ' + checks + ' checks, ' + failures + ' failed');
     process.exit(failures === 0 ? 0 : 1);
 }
