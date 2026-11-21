@@ -280,7 +280,10 @@ class TheConverterService(unittest.TestCase):
             env = {k: v for k, v in os.environ.items() if k != "ANTS_HUB_IMAGE_CONVERTER_URL"}
             if given is not None:
                 env["ANTS_HUB_IMAGE_CONVERTER_URL"] = given
-            done = subprocess.run(["docker", "compose", "-f", STACK, "config", "--format", "json"], capture_output=True, text=True, env=env)
+            try:
+                done = subprocess.run(["docker", "compose", "-f", STACK, "config", "--format", "json"], capture_output=True, text=True, env=env)
+            except OSError as e:                                                                                       # (no docker program at all: a machine that has none)
+                self.skipTest("docker is not available: %s" % e)
             if done.returncode != 0:
                 self.skipTest("docker compose is not available: " + done.stderr[:200])
             seen[label] = json.loads(done.stdout)["services"]["ants-hub"]["environment"].get("ANTS_HUB_IMAGE_CONVERTER_URL")
