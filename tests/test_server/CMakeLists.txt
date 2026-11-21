@@ -59,6 +59,31 @@ target_include_directories(test_rejoin PRIVATE
 add_test(NAME test_rejoin COMMAND test_rejoin)
 set_tests_properties(test_rejoin PROPERTIES COST 25)
 
+# The limits per network address (ants_server/address_limits.hpp, docs/ADDRESS_LIMITS.md): the windows, which address a connection counts under, and a real room manager at the door (a household that plays, a burst of
+# rooms, codes tried one after another, relay credentials, lobbies of a crowded address, the control interface's numbers)
+add_executable(test_address_limits
+    test_address_limits.cpp
+)
+
+target_link_libraries(test_address_limits PRIVATE
+    ants_server_core
+    ants_test_paths
+)
+
+target_include_directories(test_address_limits PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+# The program's own door (S3.362) is started as a child process, as test_server's S3.95 is: built with the test, its folder in the one tiny source that CMake generates for test_server. Not on Windows, where the test has no fork.
+if(NOT WIN32)
+    add_dependencies(test_address_limits ants_server)
+    target_sources(test_address_limits PRIVATE "${ANTS_GENERATED_DIR}/ants_server_binary.cpp")
+    target_compile_definitions(test_address_limits PRIVATE ANTS_HAS_SERVER_BINARY)
+endif()
+
+add_test(NAME test_address_limits COMMAND test_address_limits)
+set_tests_properties(test_address_limits PROPERTIES COST 20)
+
 # The store of the matches that the server keeps (ants_server/replay_store.hpp): the file names, the age and size limits, the free space, a folder that holds other things. No network and no match
 add_executable(test_replay_store
     test_replay_store.cpp

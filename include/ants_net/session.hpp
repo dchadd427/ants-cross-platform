@@ -167,6 +167,9 @@ public:
         std::function<bool(uint8_t*, size_t)> random_bytes;
         std::function<uint32_t()> unix_now;
         uint32_t relay_ttl_s{0};
+        /// Asked once for each credential that is about to be made, with the seat that asks: false answers the player as a server that has no relay answers (an empty list; the match is what it was). The server
+        /// gives its budget per address here (docs/ADDRESS_LIMITS.md); empty: no budget beyond the player's own kMaxP2pCredentials.
+        std::function<bool(uint8_t player)> relay_take;
         bool bot_hints{true};                                   // a computer player's order is sent to every player the moment the bot gives it, ahead of its turn (the turn is what counts)
     };
 

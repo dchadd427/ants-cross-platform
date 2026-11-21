@@ -1,0 +1,48 @@
+# Limits per address
+
+The game server limits how fast one network address can make rooms and how many rooms it holds open, how fast it connects, how fast it tries room codes, and how many relay credentials its players are given. The numbers are set well above what a household, a LAN party or a group behind one mobile carrier's address does, so that people who share an address play as they always did; what they stop is a program that makes rooms in a burst, holds rooms that nobody uses, tries codes one after another or collects credentials. Nothing is a ban: every limit is a window that slides (seconds, a minute, an hour), a refusal is polite, and a person who knows the code of a room joins it whatever the address has done. The server's page is [`SERVER.md`](SERVER.md); the network rules are in [`NETWORK_PORT.md`](NETWORK_PORT.md).
+
+## Which address is counted
+
+- An IPv4 address counts as it is; an IPv4-mapped IPv6 address as its IPv4 address; any other IPv6 address as its /64 (the machines of one person or one house share a /64).
+- A connection to the **TCP game port** counts under the address that the operating system reports for it.
+- A connection to the **WebSocket port** (browsers, through the site's nginx) counts under the `X-Client-Address` that nginx writes, and **only when the connection comes from a trusted proxy**: an address or network of `--trusted-proxies` (or the environment variable `ANTS_TRUSTED_PROXIES`; the option wins). Without either, the trusted proxies are the loopback address and the private networks (`127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `::1`, `fc00::/7`), which is where the site's nginx connects from in the stack; `none` trusts nobody. A connection from any other address counts as itself, whatever header it sends. The header is read only when it appears exactly once and holds one address.
+- A connection from a trusted proxy whose header is missing or is no address counts under **no address**, and nothing is limited for it: no limit is better than one that every visitor shares. The server logs how many proxy networks it trusts at its start.
+- Nothing about an address is written to the log, to a status or to a file; the counts below are numbers only.
+
+## The limits
+
+Every limit is an option (`--address-` and the key with `-` for `_`), a key of the control interface's `/limits`, and 0 switches it off. A value outside its range stops the server at its start. `--no-address-limits` switches all of them off.
+
+| Option (key) | Default | Range | What it limits |
+|---|---|---|---|
+| `--address-connections-per-second` (`connections_per_second`) | 20 | 1 - 1000 | New connections from one address in a second. The ones beyond are closed with no answer; a client tries again. |
+| `--address-rooms-per-minute` (`rooms_per_minute`) | 10 | 1 - 1000 | Rooms that one address makes (a lobby page's create block or a game's) in a minute. A window that slides: a burst of ten is allowed, then one more for each room that leaves the minute. With the defaults this is the limit that a burst meets first; the open rooms below bind when rooms are made steadily and kept. |
+| `--address-rooms-open` (`rooms_open`) | 16 | 1 - 255 | Rooms that one address made and that are still open: a waiting lobby, a public room, a match that runs. Sixteen is room for the many players who reach the server through one address of a mobile carrier, and for a house or a LAN party. A room that ended gives its place back. |
+| `--address-wrong-codes-per-minute` (`wrong_codes_per_minute`) | 30 | 1 - 10000 | Hellos for a room that does not exist that are answered at once, in a minute. See "Room codes" below. |
+| `--address-crowded-rooms` (`crowded_rooms`) | 8 | 1 - 255 | An address that holds more open rooms than this is crowded: its idle lobbies are closed sooner (below). |
+| `--address-crowded-idle-seconds` (`crowded_idle_seconds`) | 300 | 30 - 86400 | The seconds of quiet after which such a lobby is closed. |
+| `--address-relay-per-hour` (`relay_per_hour`) | 24 | 1 - 10000 | Relay credentials that the players of one address are given in an hour, over all their matches. See "Relay credentials" below. |
+
+Rooms of the control interface, and rooms that a restart brought back from their records, belong to no address and are never counted.
+
+## What a refusal looks like
+
+- **A room that is not made** (too many in the minute, or too many open): the Hello is answered `NoSuchRoom`, as for a server that has no place for one. The game and the front page word it as a refusal to make a room that asks the player to try again in a minute ("The server cannot make a room now: it is busy, or your network made many rooms. Try again in a minute."; the front page's banner says it in its own words, with the Try again button). Nothing else changes: the network protocol has no reason of its own for it, so one sentence covers a full server and a busy address. A reason that says exactly "too many rooms from your network" would be a new network protocol number.
+- **A connection that is too fast** is closed with no answer.
+- **Room codes.** A Hello for a room that exists is never counted, never held and never refused: a player who has the code joins. A Hello for a room that does not exist (a typing mistake, a link to a room that is over, a code that is tried) is answered at once while the address has made no more than `wrong_codes_per_minute` of them in the last minute; each one after that waits half a second longer than the one before it, up to five seconds, and is then answered the same `NoSuchRoom`. At most eight answers wait for one address (256 for all); a Hello that finds no place to wait is dropped without an answer, as a link that never completed is. A person who mistypes a code now and then never notices.
+- **Relay credentials.** A player who is over the hour's number is answered as a server that has no relay answers (an empty list): no channel is opened for that player, the match is what it was, and the others of the match are not affected. Each player is also given at most two credentials in one match, as before ([`P2P_HINTS.md`](P2P_HINTS.md)).
+
+## Crowded addresses and idle lobbies
+
+An address that holds more open rooms than `crowded_rooms` loses its waiting lobbies in which nobody has set anything up for `crowded_idle_seconds`: nobody has joined, moved a color, changed the plan or a name, removed a person or asked for START. A line of chat, a Ready mark and a page that repeats "public" are not set-up, so one of those every few minutes does not keep a room open. Such a lobby is closed as a lobby that gives its place up is (its people are dropped and their pages make a room again), one at a time, and an address is never taken below `crowded_rooms` rooms: what is left is what is used. An address with no more than `crowded_rooms` rooms is not touched by this. The idle time that applies to every lobby when the server has no place left is unchanged ([`SERVER.md`](SERVER.md#lobby-rooms)).
+
+## Seeing and changing the limits
+
+- `GET /stats` of the control interface has `address_limits` (the numbers in force), `address_refusals` (what was refused since the start: `connections`, `rooms_rate`, `rooms_open`, `wrong_codes_slowed`, `wrong_codes_dropped`, `relay`, `idle_closed`) and `addresses_tracked` (the addresses that are counted now: at most 4096; an address is forgotten once all its windows are empty, an hour at the longest).
+- `GET /limits` answers the numbers; `POST /limits` with a JSON object of keys (`{"rooms_open": 12}`) changes them at once, all or none. Nothing is kept: the next start has its options. An operator who sees the counts of refusals rise for ordinary use can raise a number here without a restart.
+- The server's log has a line at most once a minute that says how many of each kind were refused since the last line, and none when nothing was.
+
+## The tests
+
+`tests/test_server/test_address_limits.cpp` (`test_address_limits`, S3.350 - S3.362, with `tests/data/address_limits_mutants.json`, run by `tools/mutate.py`): the windows (the second, the minute, the hour; the edge of each; no address counts another's; 0 is off; an unknown address is never limited; the table of addresses is bounded); the options' ranges and keys; which address a connection counts under (the /64, the mapped IPv4 address, the trusted networks, the header read over a real socket); a household of four that hosts and plays two matches at once, joins a room as often as it likes and keeps eight quiet rooms (the crowded number); a burst of rooms from one address (twelve in a minute: ten made, two refused, another address unaffected, the window slides; then sixteen open and the seventeenth refused, a closed room gives its place back); codes tried one after another (the allowance, the waits, the bound, a right code answered at once in the same pass); connections in a second; relay credentials across matches (and an hour later); lobbies of a crowded address (chat does not keep one, a join does); the control interface's numbers; and the real `ants_server` with a WebSocket door behind a proxy that writes the address (two visitors, one proxy; a proxy that is not trusted; the variable and the option; no address; the options refused or taken).
