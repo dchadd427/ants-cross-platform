@@ -23,11 +23,27 @@ import numpy as np
 try:
     from .base_ant import build_base_ant, sync_leg_flex_to_clip
     from .hit_clips import add_worker_hit
-    from .mesh_core import AnimationChannel, SceneBuilder, quat_from_euler_xyz, quat_mul, superellipsoid
+    from .mesh_core import (
+        AnimationChannel,
+        SceneBuilder,
+        ellipsoid,
+        quat_from_euler_xyz,
+        quat_mul,
+        superellipsoid,
+        swept_tube,
+    )
 except ImportError:
     from base_ant import build_base_ant, sync_leg_flex_to_clip  # type: ignore
     from hit_clips import add_worker_hit  # type: ignore
-    from mesh_core import AnimationChannel, SceneBuilder, quat_from_euler_xyz, quat_mul, superellipsoid  # type: ignore
+    from mesh_core import (  # type: ignore
+        AnimationChannel,
+        SceneBuilder,
+        ellipsoid,
+        quat_from_euler_xyz,
+        quat_mul,
+        superellipsoid,
+        swept_tube,
+    )
 
 
 def _add_carapace_details(scene: SceneBuilder, anchors: dict) -> None:
@@ -118,24 +134,23 @@ def _smoothstep(edge0: float, edge1: float, val: np.ndarray) -> np.ndarray:
 
 
 def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
-    """Refine Worker's head (`agst301`/`agst901`): slim width-wise (`0.82x` X so eyes span right
-    to the outer edges of the head with zero wide cheek walls), slim front-to-back (`0.86x` Z),
-    compact smoothly rounded rear occiput, and flush-seated eyes, concentric eyelids, & mandibles.
+    """Refine Worker's head (`agst701`/`agst301`/`agst901`): authentic wide rounded skull (~45% H),
+    symmetric matched flattened eyes (`z_flat = 0.78`) with lower straight-ahead pupils (zero
+    cross-eye), close-set `#1` crusher mandibles, and wide outer-corner thick clubbed antennae.
     """
     hc = np.asarray(anchors["head_center"], dtype=np.float64)
     nc = np.asarray(anchors["neck_center"], dtype=np.float64)
-    x_scale = 0.84
+    x_scale = 1.10
     z_scale = 0.86
     face_dz = -0.022  # keeps front facial features flush on the 0.86x compressed cranium face
-    eye_in_left = 0.012
-    eye_in_right = 0.016  # slightly extra tuck on bigger viewer-left eye for <= 0 mm eyelid protrusion
+    eye_out = 0.006  # pairs with symmetric 1.08x eyes to span ~66% of the wide face like ORIG agst301
 
     def _deform_head(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
         rx = p[:, 0] - hc[0]
         ry = p[:, 1] - hc[1]
         rz = p[:, 2] - hc[2]
-        # 1. Slim width-wise (`0.84x` X -> eyes span full head width like `ORIG agst301`) & depth-wise (`0.86x` Z).
+        # 1. Wide rounded cranium (`1.10x` X -> ~45% of H matching `ORIG agst701`/`agst301`) & sleek depth (`0.86x` Z).
         p[:, 0] = hc[0] + x_scale * rx
         p[:, 2] = hc[2] + z_scale * rz
         # 2. Smoothly lower the tall forehead (~38 mm less crown height above the eyes, keeping a
@@ -148,29 +163,30 @@ def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
 
     head_parts = scene.get_node("head")
     new_head = []
+    deformed_cranium = None
     for p in head_parts:
         if p.name == "cranium":
-            new_head.append(p.deform(_deform_head))
+            deformed_cranium = p.deform(_deform_head)
+            new_head.append(deformed_cranium)
         elif p.name == "mouth_cleft":
-            new_head.append(p.scale(0.86, 1.0, 1.0).translate(0.0, 0.0, face_dz))
+            new_head.append(p.scale(0.96, 1.0, 1.0).translate(0.0, 0.0, face_dz))
         else:
             new_head.append(p)
     scene.nodes["head"] = new_head
 
-    # Shift eyes & concentric Blink eyelids cleanly backward (`face_dz`) and subtly inward;
-    # flatten sclera Z depth (`0.78x`, less bulbous/round) and seat enlarged `1.24x` pupils
-    # cleanly in the lower half (`L +0.12, R +0.18`, inward `+-0.11`) with `ORIG agst301`'s
-    # bright white upper sclera crescent while still looking straight out at `301 S (45°)`.
+    # Symmetric matched eyes & concentric Blink eyelids (`eye_scale=1.08`, `aspect=1.05` on BOTH sides):
+    # flatten sclera Z depth (`0.78x`, sleeker profile) and place enlarged `1.24x` conformal pupils
+    # at the exact same lower-half baseline (`gaze_rx=+0.13`, `gaze_ry=0.0` — zero cross-eye!).
     z_flat = 0.78
     eye_specs = {
-        "left": (0.94, 0.92, +0.15, +0.12, -0.11),
-        "right": (1.05, 1.18, -0.15, +0.18, +0.11),
+        "left": (1.08, 1.05, +0.15, +0.13, 0.0),
+        "right": (1.08, 1.05, -0.15, +0.13, 0.0),
     }
     if "eyes" in scene.nodes:
         new_eyes = []
         for p in scene.get_node("eyes"):
             tag = "left" if p.name.endswith("_left") else ("right" if p.name.endswith("_right") else "")
-            sx = -eye_in_left if tag == "left" else (+eye_in_right if tag == "right" else 0.0)
+            sx = +eye_out if tag == "left" else (-eye_out if tag == "right" else 0.0)
             if tag:
                 ec = anchors[f"eye_{tag}"]
                 s_e, a_e, yaw_e, gaze_rx, gaze_ry = eye_specs[tag]
@@ -186,8 +202,8 @@ def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
                         .translate(ec[0], ec[1], ec[2])
                     )
                 elif p.name.startswith(("limbal_", "iris_", "pupil_", "catchlight_")):
-                    # Transform into sclera-normalized unit sphere so enlargement & camera-aimed
-                    # gaze stay 100% conformal on the flatter ellipsoidal sclera (zero bleed-through!).
+                    # Transform into sclera-normalized unit sphere so enlargement & straight-ahead
+                    # lower gaze stay 100% conformal on the flatter ellipsoidal sclera (zero bleed-through!).
                     part = (
                         p.translate(-ec[0], -ec[1], -ec[2])
                         .rotate_xyz(ry=-yaw_e)
@@ -207,10 +223,10 @@ def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
                     )
             new_eyes.append(p.translate(sx, 0.0, face_dz))
         scene.nodes["eyes"] = new_eyes
-    for node_name, sx, x_trim in (("eyelid_left", -eye_in_left, 1.0), ("eyelid_right", +eye_in_right, 0.96)):
+    for node_name, sx in (("eyelid_left", +eye_out), ("eyelid_right", -eye_out)):
         if node_name in scene.nodes:
-            # Match eyelid contour gently to the flatter `0.78x` sclera while keeping full Blink=1.0 seal!
-            scene.nodes[node_name] = [p.scale(x_trim, 1.0, 0.92) for p in scene.get_node(node_name)]
+            # Match symmetric eyelids cleanly to the flatter `0.78x` sclera while keeping full Blink=1.0 seal!
+            scene.nodes[node_name] = [p.scale(1.0, 1.0, 0.92) for p in scene.get_node(node_name)]
         xf = scene.get_node_transform(node_name)
         if xf is not None:
             tx, ty, tz = xf.translation
@@ -244,21 +260,81 @@ def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
             scale=m_xf.scale,
         )
 
-    # Bring antenna bases inward onto the narrower 0.82x crown and nudge by exact local crown delta.
-    for ant_node in ("antenna_left", "antenna_right"):
+    # Rebuild Worker's wide-set outer-corner antennae (`~78%` head width apart, crisp `\ /` V-flare
+    # to `~112%` head width) with thicker overall shaft & plump clubbed tips (`ORIG agst701`/`agst301`).
+    cr_pts = deformed_cranium.positions.astype(np.float64) if deformed_cranium is not None else None
+    rads = [
+        (0.024, 0.024),
+        (0.022, 0.022),
+        (0.018, 0.019),
+        (0.022, 0.023),
+        (0.029, 0.030),
+        (0.034, 0.035),
+        (0.028, 0.029),
+    ]
+    for ant_node, tag, side in (("antenna_left", "left", +1.0), ("antenna_right", "right", -1.0)):
         xf = scene.get_node_transform(ant_node)
         if xf is None:
             continue
-        base_canon = np.asarray(xf.translation, dtype=np.float64) + nc
-        sample = np.array([[base_canon[0], hc[1] + 0.185, base_canon[2]]], dtype=np.float64)
-        delta = _deform_head(sample)[0] - sample[0]
-        tx, ty, tz = xf.translation
+        bx = side * 0.168
+        bz = float(hc[2]) + 0.010
+        by = float(hc[1]) + 0.106
+        if cr_pts is not None:
+            mask = (np.abs(cr_pts[:, 0] - bx) < 0.026) & (np.abs(cr_pts[:, 2] - bz) < 0.032) & (cr_pts[:, 1] > hc[1] + 0.04)
+            if np.any(mask):
+                by = float(np.percentile(cr_pts[mask, 1], 88)) - 0.006
+        lift = 0.010 if side > 0 else -0.006
+        curl_z = 0.006 if side > 0 else -0.008
+        # Socket-local coordinates so Idle/Attack/Hit animations pivot right at the outer crown corner!
+        pts = [
+            (-side * 0.016, -0.022, -0.004),
+            (0.0, 0.0, 0.0),
+            (side * 0.024, 0.054 + 0.4 * lift, 0.010 + 0.3 * curl_z),
+            (side * 0.042, 0.100 + 0.8 * lift, 0.024 + 0.6 * curl_z),
+            (side * 0.052, 0.124 + lift, 0.044 + 0.8 * curl_z),
+            (side * 0.056, 0.124 + lift, 0.062 + curl_z),
+            (side * 0.058, 0.112 + 0.9 * lift, 0.074 + curl_z),
+        ]
+        stalk = swept_tube(
+            pts,
+            rads,
+            radial_segs=12,
+            smooth_subdiv=3,
+            cap_rings=4,
+            name=f"antenna_stalk_{tag}",
+            material="chitin_dark",
+        )
+        sock = ellipsoid(0.026, 0.013, 0.026, u_segs=12, v_segs=8, name=f"antenna_socket_{tag}", material="chitin_dark").rotate_xyz(
+            rx=0.18, rz=-side * 0.50
+        )
+        scene.nodes[ant_node] = [stalk, sock]
         scene.set_node_transform(
             ant_node,
-            translation=(tx * 0.86, ty + float(delta[1]), tz + float(delta[2])),
+            translation=(bx - float(nc[0]), by - float(nc[1]), bz - float(nc[2])),
             rotation=xf.rotation,
             scale=xf.scale,
         )
+
+
+def _tuck_worker_legs(scene: SceneBuilder, sx_in: float = 0.85) -> None:
+    """Pull Worker's 4 legs cleanly ~15% closer together in X around the pelvis seam (`ORIG agst701`/`301`)."""
+    for node in ("leg_mid_left", "leg_mid_right", "leg_rear_left", "leg_rear_right"):
+        xf = scene.get_node_transform(node)
+        parts = scene.get_node(node)
+        if xf is None or not parts:
+            continue
+        tx, ty, tz = xf.translation
+        new_tx = tx * sx_in
+
+        def _narrow_x(pos: np.ndarray, px: float = tx, n_px: float = new_tx) -> np.ndarray:
+            p = pos.copy()
+            wx = p[:, 0] + px
+            w = np.clip((np.abs(wx) - 0.036) / 0.048, 0.0, 1.0)
+            p[:, 0] = wx * (1.0 - w + w * sx_in) - n_px
+            return p
+
+        scene.nodes[node] = [p.deform(_narrow_x) for p in parts]
+        scene.set_node_transform(node, translation=(new_tx, ty, tz), rotation=xf.rotation, scale=xf.scale)
 
 
 def _add_worker_attack_animation(scene: SceneBuilder) -> None:
@@ -474,14 +550,14 @@ def build_worker(blink: float = 0.0) -> SceneBuilder:
         include_brows=False,
         brow_style="none",
         head_pitch_deg=-13.5,
-        head_tilt_deg=4.5,
-        head_yaw_deg=-3.5,
+        head_tilt_deg=2.0,
+        head_yaw_deg=0.0,
         eye_look=(0.0, 0.0),
-        eye_scale_left=0.94,
-        eye_scale_right=1.05,
-        eye_aspect_left=0.92,
-        eye_aspect_right=1.18,
-        antenna_asymmetry=0.35,
+        eye_scale_left=1.08,
+        eye_scale_right=1.08,
+        eye_aspect_left=1.05,
+        eye_aspect_right=1.05,
+        antenna_asymmetry=0.18,
         stance_asymmetry=0.35,
         leg_style="worker",
         left_arm_pose="idle",
@@ -491,8 +567,10 @@ def build_worker(blink: float = 0.0) -> SceneBuilder:
     _sculpt_worker_head_profile(scene, anchors)
     _slim_worker_torso_and_tail(scene, anchors)
     _add_carapace_details(scene, anchors)
+    _tuck_worker_legs(scene, sx_in=0.85)
     scene.scale_all(0.97)
     scene.ground_to_y(0.0)
+    sync_leg_flex_to_clip(scene, "Idle")
     _add_worker_attack_animation(scene)
     add_worker_hit(scene)
     return scene
