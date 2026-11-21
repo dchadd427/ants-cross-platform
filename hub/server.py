@@ -10,7 +10,7 @@ import signal
 import sys
 import time
 
-from . import admindoor, chat as chatmod, config as configmod, gamedoor, http, limits as limitmod, roles as rolesmod, session as sessionmod, store as storemod, text as textrules, ws
+from . import admindoor, chat as chatmod, config as configmod, gamedoor, http, images as imagesmod, imgdoor, limits as limitmod, roles as rolesmod, session as sessionmod, store as storemod, text as textrules, ws
 from .log import Log
 
 WS_PATH = "/hub/ws"
@@ -131,6 +131,12 @@ class Hub:
         self.routes = getattr(sessions, "routes", None) or {}
         self.admin = admindoor.Door(self)                # (the admin page's door: hub/admindoor.py)
         self.chat.commands.is_owner = self.admin.is_owner
+        self.converter = imgdoor.Converter(cfg.image_converter_url, self.limits)       # (the images: hub/images.py says who may post and keeps the files, hub/imgdoor.py is the upload and the call to the converter)
+        self.images = imagesmod.Images(cfg, self.limits, store, self.chat.roles, clock, store.clock, log, self.chat.ref, self.admin.is_owner, self.chat.key_of)
+        self.chat.images = self.images
+        self.chat.roles.watch_images = self.images.on             # (a person's pages are told when their images' state changes: a first answer of Discord, a role that ran out)
+        self.image_door = imgdoor.Door(self)
+        self.next_images_log = float("-inf")
         self.chat.commands.door = gamedoor.GameDoor(cfg.game_admin_url, cfg.admin_gate_secret if cfg.admin_gate_on else "", self.limits, clock, store.clock, self.chat.ref, self.admin.is_owner)       # (`/bots`: hub/gamedoor.py)
         if hasattr(sessions, "attach"):
             sessions.attach(self)
@@ -140,6 +146,13 @@ class Hub:
         self.port = self.server.sockets[0].getsockname()[1]
         self.ticker = asyncio.ensure_future(self.tick())
         self.chat.roles.start()
+        if self.images.files:
+            try:
+                if self.images.on:
+                    self.images.sync()                                     # (the flags are read before the first socket: until they are, nobody but the operator's account may post)
+                self.images.sweep()                                        # (what a crash left: the files of the images whose lines are gone)
+            except Exception as e:
+                self.images_trouble(self.clock(), e)
         return self.port
 
     async def stop(self):
@@ -177,6 +190,8 @@ class Hub:
                 return writer.write(http.response(200, {"ok": True}))
             if request.split()[0].startswith(admindoor.ROUTE_PREFIX):             # (the place of the connection is kept until it is answered: a body that is promised and not sent holds a place, not a free one)
                 return await self.admin_page(request, reader, writer)
+            if request.split()[0] == imgdoor.UP_PATH:
+                return await self.image_page(request, reader, writer)
             route = self.routes.get(request.split()[0])
             if route is None and request.split()[0].startswith(PICTURE_PREFIX):
                 route = getattr(self.sessions, "picture_route", None)
@@ -223,6 +238,12 @@ class Hub:
         peername = writer.get_extra_info("peername")
         address = limitmod.address_key(request.headers.get("x-client-address"), peername[0] if peername else "")
         writer.write(await self.admin.serve(request, reader, address))
+
+    async def image_page(self, request, reader, writer):
+        """The upload of an image (hub/imgdoor.py): the body is read there, after the cheap checks; the answer ends the connection, and the place of the connection is kept until it is answered."""
+        peername = writer.get_extra_info("peername")
+        address = limitmod.address_key(request.headers.get("x-client-address"), peername[0] if peername else "")
+        writer.write(await self.image_door.serve(request, reader, address))
 
     async def upgrade(self, request, reader, writer):
         """Check the handshake and take the socket in: an HttpError says no; otherwise the 101 and the welcome are written and the Peer is returned."""
@@ -286,6 +307,12 @@ class Hub:
         if now >= self.next_command_log:
             self.next_command_log = now + 10.0
             self.log.event("error", kind=type(error).__name__, where="command")
+
+    def images_trouble(self, now, error):
+        """The images' work in the clock failed: one line in the log every ten seconds at the most (the class of the error, never its text)."""
+        if now >= self.next_images_log:
+            self.next_images_log = now + 10.0
+            self.log.event("error", kind=type(error).__name__, where="images")
 
     def pictures_trouble(self, now, error):
         """The pictures' look in the clock failed (the database refused): one line in the log every ten seconds at the most (the class of the error, never its text)."""
@@ -363,6 +390,12 @@ class Hub:
                 pictures.sync()
             except Exception as e:
                 self.pictures_trouble(now, e)
+        try:                                             # (the flags that take posting of images away: read again when the counter says that they changed, here or in the command line; the pages of those accounts are told)
+            if self.images.on:
+                self.chat.images_changed(self.images.sync())
+            self.images.on_tick(now)
+        except Exception as e:
+            self.images_trouble(now, e)
         try:                                             # (the count of people and the list of the front page, on their own: a bug in them never stops the retention below, and a failing purge never stops them)
             count = self.chat.presence.people()
             if count != self.online_shown and now - self.online_at >= self.limits.online_seconds:
@@ -380,6 +413,8 @@ class Hub:
             self.chat.pick_limits.forget_idle(now)
             self.chat.pics_limits.forget_idle(now)
             self.chat.wait_limits.forget_idle(now)
+            self.images.uploads.forget_idle(now)
+            self.image_door.forget_idle(now)
             self.chat.named_limits.forget_idle(now)
             self.chat.commands.forget_idle(now)
             self.admin.forget_idle(now)

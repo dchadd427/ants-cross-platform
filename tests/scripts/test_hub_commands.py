@@ -46,7 +46,7 @@ OWNER = session.Identity(OWNER_ID, "the.boss", False)
 UNKNOWN = {"t": "reply", "c": "unknown", "r": "unknown"}
 EVERYONE = ["/help", "/ignore", "/unignore"]
 MODERATORS = ["/mute", "/unmute", "/del", "/kick", "/mutes"]
-ADMINISTRATORS = ["/ban", "/unban", "/bans", "/nopic", "/pic", "/bots"]
+ADMINISTRATORS = ["/ban", "/unban", "/bans", "/nopic", "/pic", "/noimages", "/images", "/bots"]
 LIMITS = limitmod.Limits()
 FAST = dataclasses.replace(LIMITS, door_seconds=1.0, door_connect_seconds=0.5, roles_urgent_actor_burst=100)
 
@@ -86,7 +86,7 @@ class TheTable(unittest.TestCase):
         groups = {r["w"]: r["g"] for r in cmds.lines_for("admin")}
         self.assertEqual([groups[w] for w in EVERYONE], ["Everyone"] * 3)
         self.assertEqual([groups[w] for w in MODERATORS], ["Moderators"] * 5)
-        self.assertEqual([groups[w] for w in ADMINISTRATORS], ["Administrators"] * 6)
+        self.assertEqual([groups[w] for w in ADMINISTRATORS], ["Administrators"] * len(ADMINISTRATORS))
 
     def test_the_group_of_a_row_is_the_rank_that_the_table_of_powers_reads(self):
         rank_of_group = {"Everyone": 0, "Moderators": 1, "Administrators": 2}

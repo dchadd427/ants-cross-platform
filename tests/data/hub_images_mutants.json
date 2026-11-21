@@ -1,0 +1,501 @@
+{
+ "note": "Mutants of the chat's images (hub/images.py, hub/imgdoor.py, hub/roles.py, hub/chat.py, hub/commands.py, hub/store/sqlite.py, imgconv/, docker/nginx.conf, docker-compose.stack.yml), for tools/mutate.py (docs/WORKFLOW.md, docs/HUB_IMAGES.md): each breaks one rule of the product (who may post, the flag, the operator, the upload's ids, the caps, the converter's own checks, the re-encode, the deleting of files, the doors' headers, the walls of the stack), and a test must notice.",
+ "baseline": [
+  {
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images"
+  },
+  {
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheOrder"
+  },
+  {
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_img_converter.TheMetadata"
+  },
+  {
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_img"
+  },
+  {
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
+  },
+  {
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images.TheDeletes"
+  }
+ ],
+ "mutants": [
+  {
+   "id": "images_role_believed_for_ever",
+   "file": "hub/roles.py",
+   "old": "        if entry is None or entry.ok_at is None or self.clock() - entry.ok_at > self.grace:\n            return False\n        return entry.images or entry.role != NONE",
+   "new": "        if entry is None or entry.ok_at is None:\n            return False\n        return entry.images or entry.role != NONE",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheRole"
+  },
+  {
+   "id": "images_role_of_anybody_is_known",
+   "file": "hub/roles.py",
+   "old": "        return entry is not None and entry.ok_at is not None and self.clock() - entry.ok_at <= self.grace",
+   "new": "        return True",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheRole"
+  },
+  {
+   "id": "images_role_is_any_role_of_discord",
+   "file": "hub/roles.py",
+   "old": "        return bool(self.images_id) and self.images_id in data.get(\"roles\", ())",
+   "new": "        return bool(data.get(\"roles\"))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheRole"
+  },
+  {
+   "id": "images_flag_does_not_beat_the_role",
+   "file": "hub/images.py",
+   "old": "        if self.ref(account) in self.blocked:\n            return OFF\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images"
+  },
+  {
+   "id": "images_flag_blocks_the_operator",
+   "file": "hub/images.py",
+   "old": "        if self.is_owner(account):\n            return ON\n        if not self.loaded:",
+   "new": "        if not self.loaded:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images"
+  },
+  {
+   "id": "images_flags_unread_is_fail_open",
+   "file": "hub/images.py",
+   "old": "        if not self.loaded:\n            return WAIT\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images"
+  },
+  {
+   "id": "images_unknown_role_is_no_role",
+   "file": "hub/images.py",
+   "old": "        return ROLE if self.roles.knows(account) else WAIT",
+   "new": "        return ROLE",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images"
+  },
+  {
+   "id": "images_no_converter_still_on",
+   "file": "hub/images.py",
+   "old": "        if not self.on:\n            return None\n        if self.is_owner",
+   "new": "        if self.is_owner",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images"
+  },
+  {
+   "id": "images_moderator_may_take_posting_away",
+   "file": "hub/commands.py",
+   "old": "Command(\"noimages\", 2,",
+   "new": "Command(\"noimages\", 1,",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images"
+  },
+  {
+   "id": "images_moderator_may_give_posting_back",
+   "file": "hub/commands.py",
+   "old": "Command(\"images\", 2,",
+   "new": "Command(\"images\", 1,",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images"
+  },
+  {
+   "id": "images_administrator_may_act_on_an_administrator",
+   "file": "hub/chat.py",
+   "old": "    return RANK[target] < RANK[actor]",
+   "new": "    return RANK[target] <= RANK[actor]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images"
+  },
+  {
+   "id": "images_flag_lifted_by_forget_me",
+   "file": "hub/store/sqlite.py",
+   "old": "            self.db.execute(\"DELETE FROM profiles WHERE account = ?\", (account,))\n            if self.db.execute(\"DELETE FROM pictures",
+   "new": "            self.db.execute(\"DELETE FROM profiles WHERE account = ?\", (account,))\n            self.db.execute(\"DELETE FROM noimages WHERE ref = ?\", (self.ref(account),))\n            if self.db.execute(\"DELETE FROM pictures",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images"
+  },
+  {
+   "id": "images_say_without_the_right",
+   "file": "hub/chat.py",
+   "old": "            if self.images is None or not self.images.may_post(who.account_id):\n                return self.mistake(peer, \"img\")",
+   "new": "            if self.images is None:\n                return self.mistake(peer, \"img\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images"
+  },
+  {
+   "id": "images_upload_of_another_account_is_accepted",
+   "file": "hub/store/sqlite.py",
+   "old": "WHERE name = ? AND ref = ? AND line IS NULL AND at >= ?\"",
+   "new": "WHERE name = ? AND (ref = ? OR 1) AND line IS NULL AND at >= ?\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images"
+  },
+  {
+   "id": "images_upload_never_expires",
+   "file": "hub/store/sqlite.py",
+   "old": "at - IMAGE_PENDING_SECONDS)",
+   "new": "at - IMAGE_PENDING_SECONDS * 1000)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images"
+  },
+  {
+   "id": "images_command_with_an_image",
+   "file": "hub/chat.py",
+   "old": "            if img is not None:\n                return self.mistake(peer, \"bad\")                   # (an image has a caption, never a command)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images"
+  },
+  {
+   "id": "images_author_deletes_any_line",
+   "file": "hub/chat.py",
+   "old": "            if self.store.account_of_line(line_id) != who.account_id or self.store.image_of_line(line_id) is None:",
+   "new": "            if self.store.image_of_line(line_id) is None:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images"
+  },
+  {
+   "id": "images_file_stays_when_the_line_goes",
+   "file": "hub/images.py",
+   "old": "self.unlink(self.path(name, x)) & self.unlink(self.path(name, x, thumb=True))",
+   "new": "True",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images"
+  },
+  {
+   "id": "images_no_sweep_after_a_deletion",
+   "file": "hub/chat.py",
+   "old": "        self.sweep_images()                                        # (the files of their images go first: a page that is told that a line is gone never finds its file)",
+   "new": "        pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images"
+  },
+  {
+   "id": "images_deleted_line_keeps_its_file",
+   "file": "hub/store/sqlite.py",
+   "old": "WHERE l.id = i.line AND l.deleted = 0))\", (int(stale_before),))]",
+   "new": "WHERE l.id = i.line))\", (int(stale_before),))]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images"
+  },
+  {
+   "id": "images_waiting_upload_never_goes",
+   "file": "hub/store/sqlite.py",
+   "old": "WHERE (i.line IS NULL AND i.at < ?) OR",
+   "new": "WHERE (0 AND i.at < ?) OR",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images"
+  },
+  {
+   "id": "images_log_row_does_not_say_image",
+   "file": "hub/chat.py",
+   "old": "            kind = \"del_img\" if self.store.image_of_line(arg) is not None else \"del\"",
+   "new": "            kind = \"del\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images"
+  },
+  {
+   "id": "images_row_keeps_the_account_id",
+   "file": "hub/store/sqlite.py",
+   "old": "(name, self.ref(account), image.x, image.w",
+   "new": "(name, account, image.x, image.w",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images"
+  },
+  {
+   "id": "images_door_reads_the_body_before_the_role",
+   "file": "hub/imgdoor.py",
+   "old": "hub.store.muted_until(account) or not images.may_post(account):",
+   "new": "hub.store.muted_until(account):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheOrder"
+  },
+  {
+   "id": "images_door_site_not_checked",
+   "file": "hub/imgdoor.py",
+   "old": " and h.get(\"sec-fetch-site\") == \"same-origin\"",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheOrder"
+  },
+  {
+   "id": "images_door_header_not_needed",
+   "file": "hub/imgdoor.py",
+   "old": " or h.get(HEADER) != \"1\":",
+   "new": ":",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheOrder"
+  },
+  {
+   "id": "images_door_length_cap_removed",
+   "file": "hub/imgdoor.py",
+   "old": "        if length > hub.limits.image_upload_bytes:",
+   "new": "        if length > hub.limits.image_upload_bytes * 1000:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheOrder"
+  },
+  {
+   "id": "images_door_type_by_the_first_bytes_removed",
+   "file": "hub/imgdoor.py",
+   "old": "        if not body.startswith((b\"\\x89PNG\", b\"\\xff\\xd8\\xff\", b\"GIF8\", b\"RIFF\")):",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheOrder"
+  },
+  {
+   "id": "images_door_pending_cap_removed",
+   "file": "hub/imgdoor.py",
+   "old": "        if hub.store.pending_images(account) >= hub.limits.image_pending_max:",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheUpload"
+  },
+  {
+   "id": "images_door_role_not_looked_at_again",
+   "file": "hub/imgdoor.py",
+   "old": "        if not images.may_post(account):\n            return self.fail(403, \"images\")                    # (the role went",
+   "new": "        if False:\n            return self.fail(403, \"images\")                    # (the role went",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheRole"
+  },
+  {
+   "id": "images_door_token_not_given_back",
+   "file": "hub/imgdoor.py",
+   "old": "            images.uploads.refund(key)\n            return self.fail(status, code, {\"Retry-After\": retry} if retry else None)",
+   "new": "            return self.fail(status, code, {\"Retry-After\": retry} if retry else None)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheConverter"
+  },
+  {
+   "id": "images_reply_lengths_not_checked",
+   "file": "hub/imgdoor.py",
+   "old": " or full + thumb != len(rest):",
+   "new": " or False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheConverter"
+  },
+  {
+   "id": "images_reply_signatures_not_checked",
+   "file": "hub/imgdoor.py",
+   "old": "        if not (image.startswith(start) and image.endswith(end) and little.startswith(SIGNATURES[\"jpg\"][0]) and little.endswith(SIGNATURES[\"jpg\"][1])):",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheConverter"
+  },
+  {
+   "id": "images_reply_types_not_checked",
+   "file": "hub/imgdoor.py",
+   "old": "        if type(x) is not str or x not in SIGNATURES or None in sizes or",
+   "new": "        if None in sizes or",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheConverter"
+  },
+  {
+   "id": "images_reply_sizes_not_capped",
+   "file": "hub/imgdoor.py",
+   "old": "SIDE_MAX = 2048 ",
+   "new": "SIDE_MAX = 2048000 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheConverter"
+  },
+  {
+   "id": "images_reply_read_without_a_cap",
+   "file": "hub/imgdoor.py",
+   "old": "            if length > self.limits.image_reply_max:\n                raise ConverterError(\"down\")",
+   "new": "            if False:\n                raise ConverterError(\"down\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheConverter"
+  },
+  {
+   "id": "images_files_named_after_the_account",
+   "file": "hub/images.py",
+   "old": "        return secrets.token_hex(16)",
+   "new": "        return \"0\" * 32",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheUpload"
+  },
+  {
+   "id": "converter_metadata_kept",
+   "file": "imgconv/convert.py",
+   "old": "    return Image.frombytes(im.mode, im.size, im.tobytes())",
+   "new": "    return im",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_img_converter.TheMetadata"
+  },
+  {
+   "id": "converter_orientation_not_applied",
+   "file": "imgconv/convert.py",
+   "old": "            return replaced(im, ImageOps.exif_transpose(im))",
+   "new": "            return im",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_img_converter.TheMetadata"
+  },
+  {
+   "id": "converter_stores_what_was_uploaded",
+   "file": "imgconv/convert.py",
+   "old": "        x, full, kept = encode_still(base)\n        return Result(x, full, thumb,",
+   "new": "        x, full, kept = encode_still(base)\n        full = data\n        return Result(x, full, thumb,",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_img_converter.ThePolyglots"
+  },
+  {
+   "id": "converter_pixel_cap_removed",
+   "file": "imgconv/convert.py",
+   "old": "        if w < 1 or h < 1 or w * h > MAX_PIXELS:",
+   "new": "        if w < 1 or h < 1:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_img_converter.TheCaps"
+  },
+  {
+   "id": "converter_any_type_is_a_png",
+   "file": "imgconv/convert.py",
+   "old": "    if len(data) >= 12 and data[:4] == b\"RIFF\" and data[8:12] == b\"WEBP\":\n        return \"webp\"\n    return None",
+   "new": "    return \"png\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_img_converter.TheCaps"
+  },
+  {
+   "id": "converter_side_not_capped",
+   "file": "imgconv/convert.py",
+   "old": "    if max(im.size) > MAX_SIDE:",
+   "new": "    if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_img_converter.TheCaps"
+  },
+  {
+   "id": "converter_size_not_capped",
+   "file": "imgconv/convert.py",
+   "old": "            if len(data) <= FULL_MAX:\n                return \"png\", data, im",
+   "new": "            if True:\n                return \"png\", data, im",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_img_converter.TheCaps"
+  },
+  {
+   "id": "converter_animation_frames_not_capped",
+   "file": "imgconv/convert.py",
+   "old": "    if frames_in > ANIM_FRAMES:",
+   "new": "    if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_img_converter.TheAnimation"
+  },
+  {
+   "id": "converter_animation_length_not_capped",
+   "file": "imgconv/convert.py",
+   "old": "        if total > ANIM_MS:",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_img_converter.TheAnimation"
+  },
+  {
+   "id": "converter_animation_dropped",
+   "file": "imgconv/convert.py",
+   "old": "        if kind == \"gif\" and getattr(im, \"n_frames\", 1) > 1:",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_img_converter.TheAnimation"
+  },
+  {
+   "id": "converter_hang_not_killed",
+   "file": "imgconv/server.py",
+   "old": "        if process.is_alive():\n            process.kill()",
+   "new": "        if False:\n            process.kill()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_img_converter.TheServer"
+  },
+  {
+   "id": "images_site_may_write_the_volume",
+   "file": "docker-compose.stack.yml",
+   "old": "      - ants-hub-images:/srv/hub-img:ro",
+   "new": "      - ants-hub-images:/srv/hub-img",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "images_converter_network_has_a_way_out",
+   "file": "docker-compose.stack.yml",
+   "old": "  img-network:\n    internal: true",
+   "new": "  img-network:\n    internal: false",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "images_converter_has_a_volume",
+   "file": "docker-compose.stack.yml",
+   "old": "    cpus: 1\n    tmpfs:\n      - /tmp\n    logging:",
+   "new": "    cpus: 1\n    volumes:\n      - ants-hub-images:/images\n    tmpfs:\n      - /tmp\n    logging:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "images_files_without_nosniff",
+   "file": "docker/nginx.conf",
+   "old": "        add_header Cross-Origin-Resource-Policy \"same-origin\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;",
+   "new": "        add_header Cross-Origin-Resource-Policy \"same-origin\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_img"
+  },
+  {
+   "id": "images_files_may_run_something",
+   "file": "docker/nginx.conf",
+   "old": "        add_header Content-Security-Policy \"default-src 'none'; sandbox\" always;\n        add_header Cross-Origin-Resource-Policy",
+   "new": "        add_header Cross-Origin-Resource-Policy",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_img"
+  },
+  {
+   "id": "images_files_kept_by_a_shared_cache",
+   "file": "docker/nginx.conf",
+   "old": "\"private, no-cache\"",
+   "new": "\"private, max-age=3600\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_img"
+  },
+  {
+   "id": "images_files_any_site_may_embed",
+   "file": "docker/nginx.conf",
+   "old": "        add_header Cross-Origin-Resource-Policy \"same-origin\" always;\n        add_header Referrer-Policy \"no-referrer\" always;",
+   "new": "        add_header Cross-Origin-Resource-Policy \"cross-origin\" always;\n        add_header Referrer-Policy \"no-referrer\" always;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_img"
+  },
+  {
+   "id": "images_files_of_another_site_served",
+   "file": "docker/nginx.conf",
+   "old": "        if ($http_sec_fetch_site ~ \"^(cross-site|same-site)$\") { return 403; }\n        access_log off;\n        limit_req zone=ants_hub_img burst=240",
+   "new": "        access_log off;\n        limit_req zone=ants_hub_img burst=240",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_img"
+  },
+  {
+   "id": "images_upload_body_cap_raised",
+   "file": "docker/nginx.conf",
+   "old": "        limit_conn_status 429;\n        client_max_body_size 4m;",
+   "new": "        limit_conn_status 429;\n        client_max_body_size 400m;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_img"
+  },
+  {
+   "id": "images_upload_passes_the_whole_cookie",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header Cookie $hub_cookie_session;\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header X-Ants-Image",
+   "new": "        proxy_set_header Cookie $http_cookie;\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header X-Ants-Image",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_img"
+  },
+  {
+   "id": "images_upload_from_another_site",
+   "file": "docker/nginx.conf",
+   "old": "        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        limit_req zone=ants_hub_imgup",
+   "new": "        access_log off;\n        limit_req zone=ants_hub_imgup",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_img"
+  },
+  {
+   "id": "a_type_that_is_not_a_string_crashes_the_reader",
+   "file": "hub/imgdoor.py",
+   "old": "        if type(x) is not str or x not in SIGNATURES or None in sizes or",
+   "new": "        if x not in SIGNATURES or None in sizes or",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheConverter.test_an_answer_that_is_not_exactly_the_converters_is_down_and_nothing_is_stored"
+  },
+  {
+   "id": "images_empty_address_takes_the_default",
+   "file": "docker-compose.stack.yml",
+   "old": "${ANTS_HUB_IMAGE_CONVERTER_URL-http://ants-img:4050}",
+   "new": "${ANTS_HUB_IMAGE_CONVERTER_URL:-http://ants-img:4050}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack.TheConverterService"
+  },
+  {
+   "id": "converter_may_take_what_the_container_has",
+   "file": "imgconv/server.py",
+   "old": "WORKING_BYTES = 512 * 1024 * 1024",
+   "new": "WORKING_BYTES = 1024 * 1024 * 1024",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack.TheConverterService"
+  },
+  {
+   "id": "converter_gif_canvas_may_grow",
+   "file": "imgconv/convert.py",
+   "old": "        if im.size != (w, h):",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_img_converter.TheAnimation"
+  },
+  {
+   "id": "converter_turns_every_image_into_a_copy",
+   "file": "imgconv/convert.py",
+   "old": "if im.getexif().get(0x0112, 1) in (2, 3, 4, 5, 6, 7, 8):",
+   "new": "if True:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_img_converter.TheMemory"
+  },
+  {
+   "id": "images_off_stops_the_sweep_after_a_deletion",
+   "file": "hub/chat.py",
+   "old": "        if self.images is not None and self.images.files:\n            try:\n                self.images.sweep()",
+   "new": "        if self.images is not None and self.images.on:\n            try:\n                self.images.sweep()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images.TheDeletes"
+  },
+  {
+   "id": "images_off_stops_the_hourly_look",
+   "file": "hub/images.py",
+   "old": "        if not self.files:\n            return",
+   "new": "        if not self.on:\n            return",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images.TheDeletes"
+  },
+  {
+   "id": "images_off_stops_the_authors_delete",
+   "file": "hub/chat.py",
+   "old": "or self.images is None or not self.images.files:",
+   "new": "or self.images is None or not self.images.on:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images.TheDeletes"
+  },
+  {
+   "id": "images_off_makes_a_folder_of_its_own",
+   "file": "hub/images.py",
+   "old": "            if cfg.image_converter_url:\n                os.makedirs(self.dir, exist_ok=True)",
+   "new": "            if True:\n                os.makedirs(self.dir, exist_ok=True)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images.TheDeletes"
+  }
+ ]
+}

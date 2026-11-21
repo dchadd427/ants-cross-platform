@@ -125,10 +125,11 @@ jobs:
       - uses: actions/checkout@v7
 
       # python3-yaml: tests/scripts/test_ci_workflow.py reads this file with PyYAML (its checks of the legs are skipped without it, and a test fails on these machines when it is missing)
-      - name: Install SDL2, SDL2_ttf, ccache, Ninja, PyYAML
+      # python3-pil: tests/scripts/test_img_converter.py runs the image converter's real decoder (docs/HUB_IMAGES.md); this leg requires it (ANTS_REQUIRE_PILLOW below), a machine without it skips those tests
+      - name: Install SDL2, SDL2_ttf, ccache, Ninja, PyYAML, Pillow
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libsdl2-dev libsdl2-ttf-dev ccache ninja-build python3-yaml
+          sudo apt-get install -y --no-install-recommends libsdl2-dev libsdl2-ttf-dev ccache ninja-build python3-yaml python3-pil
 
       - name: Restore the compiler cache
         uses: actions/cache@v6
@@ -199,6 +200,7 @@ jobs:
         if: ${{ !cancelled() && matrix.part == 'python' }}
         env:
           SLICE: ${{ matrix.slice }}
+          ANTS_REQUIRE_PILLOW: "1"
         run: |
           status=0
           python3 tools/check_version_consistency.py || status=1
@@ -629,13 +631,13 @@ jobs:
           rm -rf /tmp/docker-cache/server && mv /tmp/docker-cache/server-new /tmp/docker-cache/server
           docker run --rm --entrypoint /usr/local/bin/ants_server ants-server --version
 
-      # The chat hub's image (Dockerfile.hub, docs/HUB.md): built the way the stacks build it, and started the way they start it (read only, no capabilities, no new privileges, 32 processes, 192 MB, a
+      # The chat hub's image (Dockerfile.hub, docs/HUB.md): built the way the stacks build it, and started the way they start it (read only, no capabilities, no new privileges, 32 processes, 256 MB, a
       # tmpfs for /tmp, a volume for the database): its health check must say healthy, its command line tool must open the database, and a socket from the wrong site must be refused. (No sixth
       # required check: this is a step of a leg of the Web job.)
       - name: Build the chat hub image and start it with the stack's hardening
         run: |
           docker buildx build --load -f Dockerfile.hub -t ants-hub .
-          docker run -d --name ants-hub-check --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 32 --memory 192m --tmpfs /tmp --health-interval 2s --health-start-period 2s -v ants-hub-check-data:/data \
+          docker run -d --name ants-hub-check --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 32 --memory 256m --tmpfs /tmp --health-interval 2s --health-start-period 2s -v ants-hub-check-data:/data \
             -e ANTS_HUB_PUBLIC_URL=https://chat.example.org ants-hub
           ok=
           for i in $(seq 1 40); do
@@ -648,6 +650,26 @@ jobs:
           docker exec ants-hub-check python -c "import http.client as h; c = h.HTTPConnection('127.0.0.1', 4040); c.request('GET', '/hub/ws', headers={'Origin': 'https://evil.example', 'Upgrade': 'websocket', 'Connection': 'Upgrade', 'Sec-WebSocket-Key': 'dGhlIHNhbXBsZSBub25jZQ==', 'Sec-WebSocket-Version': '13'}); r = c.getresponse(); print(r.status, r.read()); raise SystemExit(0 if r.status == 403 else 1)" || { docker rm -f ants-hub-check; exit 1; }
           docker rm -f ants-hub-check
           docker volume rm ants-hub-check-data
+
+      # The image converter's image (Dockerfile.img, docs/HUB_IMAGES.md): started the way the stack starts it (read only, no capabilities, no new privileges, 16 processes, 768 MB, one processor, a tmpfs for /tmp, no
+      # volume, no variable but its port): its health check must say healthy, and it must turn a small PNG that this step makes into a new image (the answer's first line says the type) and refuse a file that is not an image.
+      - name: Build the image converter and start it with the stack's hardening
+        run: |
+          docker buildx build --load -f Dockerfile.img -t ants-img .
+          docker run -d --name ants-img-check --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 16 --memory 768m --cpus 1 --tmpfs /tmp --health-interval 2s --health-start-period 2s ants-img
+          ok=
+          for i in $(seq 1 40); do
+            [ "$(docker inspect --format '{{.State.Health.Status}}' ants-img-check)" = healthy ] && ok=1 && break
+            sleep 2
+          done
+          docker logs ants-img-check
+          [ -n "$ok" ] || { docker rm -f ants-img-check; exit 1; }
+          docker exec ants-img-check python -c "import http.client as h, struct, zlib; raw = b''.join(b'\x00' + b'\x10\x20\x30' * 8 for _ in range(8)); chunk = lambda t, d: struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t + d)); png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 8, 8, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b''); c = h.HTTPConnection('127.0.0.1', 4050); c.request('POST', '/convert', body=png); r = c.getresponse(); body = r.read(); assert r.status == 200 and body.startswith(b'{\"x\":\"png\"'), (r.status, body[:60]); c = h.HTTPConnection('127.0.0.1', 4050); c.request('POST', '/convert', body=b'<svg/>'); r = c.getresponse(); assert r.status == 422, r.status"
+          # the most that is let in: 4898 x 4898 is 23.99 megapixels of RGBA (96 MB of pixels), which the converter must turn into a new image inside the container's memory; the container must not have been killed
+          docker exec ants-img-check python -c "from PIL import Image; import http.client as h, io; im = Image.new('RGBA', (4898, 4898), (10, 20, 30, 128)); png = io.BytesIO(); im.save(png, 'PNG'); del im; c = h.HTTPConnection('127.0.0.1', 4050); c.request('POST', '/convert', body=png.getvalue()); r = c.getresponse(); body = r.read(); assert r.status == 200 and body.startswith(b'{\"x\":\"png\"'), (r.status, body[:60])"
+          [ "$(docker inspect --format '{{.State.OOMKilled}}' ants-img-check)" = false ]
+          [ "$(docker inspect --format '{{.State.Health.Status}}' ants-img-check)" = healthy ]
+          docker rm -f ants-img-check
 
       # The stack file (docker-compose.stack.yml) must render.
       - name: Check the stack file

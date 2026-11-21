@@ -476,8 +476,8 @@
   {
    "id": "a_deletion_of_a_line_of_one_s_own_is_logged",
    "file": "hub/chat.py",
-   "old": "note=None if target == me.account_id else (by, \"del\", whom, str(arg))",
-   "new": "note=(by, \"del\", whom, str(arg))",
+   "old": "note=None if target == me.account_id else (by, kind, whom, str(arg))",
+   "new": "note=(by, kind, whom, str(arg))",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
   },
   {
@@ -560,8 +560,8 @@
   {
    "id": "forget_takes_the_log_away",
    "file": "hub/store/sqlite.py",
-   "old": "            self.db.execute(\"DELETE FROM lines WHERE account = ?\", (account,))\n            self.db.execute(\"UPDATE mutes SET name = '' WHERE account = ?\", (account,))",
-   "new": "            self.db.execute(\"DELETE FROM modlog\")\n            self.db.execute(\"DELETE FROM lines WHERE account = ?\", (account,))\n            self.db.execute(\"UPDATE mutes SET name = '' WHERE account = ?\", (account,))",
+   "old": "            self.db.execute(\"DELETE FROM lines WHERE account = ?\", (account,))\n",
+   "new": "            self.db.execute(\"DELETE FROM modlog\")\n            self.db.execute(\"DELETE FROM lines WHERE account = ?\", (account,))\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_store_contract"
   },
   {
