@@ -260,9 +260,9 @@ def _build_goggles(
         goggle_yaw=yaw_mag,
         mount_offset=(mount_dx, 0.0, mount_dz),
     )
-    # Compact sleek circular diameter sitting cleanly inside head width + noticeably longer metallic cans!
-    bore_r = max(0.058, max_lid_r + 0.0048)
-    lens_z = max(0.148, max_lid_z + 0.068)
+    # Compact sleek circular diameter scaled proportionally to Bomber's smaller head + long metallic cans!
+    bore_r = max(0.050, max_lid_r + 0.0044)
+    lens_z = max(0.128, max_lid_z + 0.058)
 
     for side_sign, eye_pos in ((+1.0, eye_left), (-1.0, eye_right)):
         mount = (eye_pos[0] + side_sign * mount_dx, eye_pos[1], eye_pos[2] + mount_dz)
@@ -282,33 +282,33 @@ def _build_goggles(
     # Sleek all-yellow metallic nose bridge & gold center rivet joining the two long metallic cans cleanly.
     bridge_z = ez + lens_z * 0.62
     bridge = (
-        rounded_box(0.032, 0.018, 0.024, bevel=0.005, segs=3, name="goggle_bridge", material="gear_gold_metal")
-        .translate(hx, ey + 0.009, bridge_z)
+        rounded_box(0.028, 0.016, 0.022, bevel=0.0045, segs=3, name="goggle_bridge", material="gear_gold_metal")
+        .translate(hx, ey + 0.008, bridge_z)
     )
     scene.add("goggles", bridge)
 
     bridge_stud = (
-        cylinder(0.0056, 0.0056, 0.008, radial_segs=14, bevel=0.0018, axis="z", name="goggle_bridge_stud", material="gear_gold_metal")
-        .translate(hx, ey + 0.009, bridge_z + 0.012)
+        cylinder(0.0050, 0.0050, 0.007, radial_segs=14, bevel=0.0016, axis="z", name="goggle_bridge_stud", material="gear_gold_metal")
+        .translate(hx, ey + 0.008, bridge_z + 0.011)
     )
     scene.add("goggles", bridge_stud)
 
-    # Compact metallic gold temple clasps & thicker yellow strap tabs connecting the cans smoothly into the rear strap.
-    rx_strap = hrx + 0.006
-    rz_strap = hrz + 0.007
-    strap_base_y = ey + 0.013
+    # Compact metallic gold temple clasps & yellow strap tabs connecting the cans smoothly into the rear strap.
+    rx_strap = hrx + 0.005
+    rz_strap = hrz + 0.006
+    strap_base_y = ey + 0.007
     for side_sign, tag, eye_pos in ((+1.0, "left", eye_left), (-1.0, "right", eye_right)):
-        cup_side_x = eye_pos[0] + side_sign * (bore_r + 0.006)
-        cup_side_z = eye_pos[2] + 0.024
+        cup_side_x = eye_pos[0] + side_sign * (bore_r + 0.005)
+        cup_side_z = eye_pos[2] + 0.020
         temple_x = hx + side_sign * (rx_strap * _spow(math.sin(math.radians(52.0)), 0.76))
         temple_z = hz + rz_strap * _spow(math.cos(math.radians(52.0)), 0.76)
         tab = curved_tube(
             [
-                (cup_side_x, ey + 0.011, cup_side_z),
-                (0.5 * (cup_side_x + temple_x) + side_sign * 0.012, ey + 0.012, 0.5 * (cup_side_z + temple_z) + 0.010),
+                (cup_side_x, ey + 0.006, cup_side_z),
+                (0.5 * (cup_side_x + temple_x) + side_sign * 0.010, ey + 0.007, 0.5 * (cup_side_z + temple_z) + 0.008),
                 (temple_x, strap_base_y, temple_z),
             ],
-            (0.022, 0.011),
+            (0.019, 0.0095),
             samples_per_seg=4,
             radial_segs=10,
             cap_rings=2,
@@ -318,13 +318,13 @@ def _build_goggles(
         scene.add("goggles", tab)
 
         clasp = (
-            rounded_box(0.018, 0.034, 0.034, bevel=0.006, segs=3, name=f"goggle_clasp_{tag}", material="gear_gold_metal")
+            rounded_box(0.016, 0.030, 0.030, bevel=0.005, segs=3, name=f"goggle_clasp_{tag}", material="gear_gold_metal")
             .rotate_xyz(ry=side_sign * 0.36)
-            .translate(temple_x - side_sign * 0.006, strap_base_y - 0.001, temple_z + 0.004)
+            .translate(temple_x - side_sign * 0.005, strap_base_y - 0.001, temple_z + 0.004)
         )
         scene.add("goggles", clasp)
 
-    # Bold thicker yellow head strap (~1.25x cross-section) hugging right below the flat-top cranium rim (e2=0.76).
+    # Bold yellow head strap hugging cleanly around Bomber's smaller head so the fuller crown rises naturally above it.
     strap_pts: List[Tuple[float, float, float]] = []
     n_arc = 28
     start_ang = math.radians(52.0)
@@ -333,12 +333,12 @@ def _build_goggles(
         ang = start_ang + (end_ang - start_ang) * (i / n_arc)
         sx = hx + rx_strap * _spow(math.sin(ang), 0.76)
         sz = hz + rz_strap * _spow(math.cos(ang), 0.76)
-        rear_lift = 0.010 * (0.5 * (1.0 - math.cos(ang)))
+        rear_lift = 0.006 * (0.5 * (1.0 - math.cos(ang)))
         strap_pts.append((sx, strap_base_y + rear_lift, sz))
 
     strap = swept_tube(
         strap_pts,
-        (0.025, 0.012),
+        (0.022, 0.0105),
         radial_segs=12,
         cap_start=True,
         cap_end=True,
@@ -350,8 +350,8 @@ def _build_goggles(
     scene.add("goggles", strap)
 
     rear_buckle = (
-        rounded_box(0.056, 0.050, 0.020, bevel=0.006, segs=3, name="goggle_rear_buckle", material="gear_gold_metal")
-        .translate(hx, strap_base_y + 0.010, hz - rz_strap - 0.002)
+        rounded_box(0.048, 0.044, 0.018, bevel=0.005, segs=3, name="goggle_rear_buckle", material="gear_gold_metal")
+        .translate(hx, strap_base_y + 0.006, hz - rz_strap - 0.002)
     )
     scene.add("goggles", rear_buckle)
 
@@ -911,7 +911,7 @@ def _add_bomber_attack(scene: SceneBuilder) -> AnimationClip:
             )
         )
     clip = scene.add_animation("Attack", channels, replace=True)
-    sync_leg_flex_to_clip(scene, "Attack", knee_bow=1.1, splay=0.30, swivel=0.25)
+    sync_leg_flex_to_clip(scene, "Attack", knee_bow=1.1, splay=0.25, swivel=0.0)
     return clip
 
 
@@ -964,8 +964,8 @@ def _scale_bomber_head_and_tall_antennae(
         if head_xf is not None
         else anchors["neck_center"]
     )
-    # Anchor scaling slightly below head center so the flatter skull stays seated flush on neck_joint.
-    piv = (hc[0], hc[1] - 0.052, hc[2])
+    # Anchor scaling near the neck base so Bomber's smaller head stays seated flush on neck_joint (zero gap).
+    piv = (hc[0], hc[1] - 0.125, hc[2])
     p_hg = (piv[0] - neck_pivot[0], piv[1] - neck_pivot[1], piv[2] - neck_pivot[2])
     sx = float(head_scale_xz)
     sy = float(head_scale_y)
@@ -986,13 +986,13 @@ def _scale_bomber_head_and_tall_antennae(
     new_eye_l = (raw_el[0] - eye_inward_dx, raw_el[1], raw_el[2])
     new_eye_r = (raw_er[0] + eye_inward_dx, raw_er[1], raw_er[2])
 
-    # 1. Scale `head` around `piv`, then apply a smooth superelliptic crown compression to `cranium`
-    # above eye/strap midline so Bomber keeps his compact low goggle-level silhouette while preserving
-    # a gentle, natural softly-rounded dome curve on top (matching abst901/abst301 without a table-flat top).
+    # 1. Scale `head` around `piv`, then apply a gentle superelliptic crown rounding to `cranium`
+    # so Bomber's smaller head keeps a natural, fuller softly-rounded dome emerging cleanly above the
+    # yellow goggle strap (matching ORIG abst301 & West view W / flipped abst901).
     ey_mid = 0.5 * (new_eye_l[1] + new_eye_r[1])
-    crown_start_y = ey_mid + 0.020
-    crown_cap_h = 0.082
-    crown_p = 2.15
+    crown_start_y = ey_mid + 0.018
+    crown_cap_h = 0.094
+    crown_p = 1.95
 
     def _flatten_crown(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
@@ -1057,13 +1057,13 @@ def _scale_bomber_head_and_tall_antennae(
     # 3. Seat sleek, tall, slicked-back (-Z) Bomber antennae flush ON the new flat cranium surface
     # via exact ray-triangle crown sampling (zero floating gap or buried base!).
     ant_rads = [
-        (0.023, 0.023),
-        (0.019, 0.020),
+        (0.020, 0.020),
+        (0.017, 0.018),
+        (0.014, 0.015),
         (0.016, 0.017),
-        (0.018, 0.019),
+        (0.020, 0.022),
         (0.023, 0.025),
-        (0.026, 0.028),
-        (0.014, 0.016),
+        (0.012, 0.014),
     ]
     for side, tag, orig_key in ((+1.0, "left", "antenna_base_left"), (-1.0, "right", "antenna_base_right")):
         node_name = f"antenna_{tag}"
@@ -1077,18 +1077,17 @@ def _scale_bomber_head_and_tall_antennae(
         )
         by = surf_y - 0.002
         base_p = (bx, by, bz)
-        # Compact ~28% shorter slicked-back Bomber antennae matching abst301/abst201/abst901
-        # (ending cleanly just above the magenta cup-bomb tips instead of towering way over the fuses!).
-        h_boost = 0.014 if side > 0 else -0.010
-        z_extra = -0.012 if side > 0 else +0.009
+        # Compact slicked-back Bomber antennae matching smaller head & abst301/abst201/abst901.
+        h_boost = 0.012 if side > 0 else -0.009
+        z_extra = -0.010 if side > 0 else +0.008
         pts = [
-            (bx - side * 0.004, by - 0.020, bz + 0.003),
+            (bx - side * 0.003, by - 0.018, bz + 0.003),
             base_p,
-            (bx + side * 0.012, by + 0.094 + 0.35 * h_boost, bz - 0.022 + 0.3 * z_extra),
-            (bx + side * 0.022, by + 0.156 + 0.70 * h_boost, bz - 0.062 + 0.6 * z_extra),
-            (bx + side * 0.030, by + 0.184 + 0.95 * h_boost, bz - 0.104 + 0.9 * z_extra),
-            (bx + side * 0.034, by + 0.178 + h_boost, bz - 0.138 + z_extra),
-            (bx + side * 0.037, by + 0.158 + 0.90 * h_boost, bz - 0.158 + 1.1 * z_extra),
+            (bx + side * 0.010, by + 0.088 + 0.35 * h_boost, bz - 0.020 + 0.3 * z_extra),
+            (bx + side * 0.019, by + 0.146 + 0.70 * h_boost, bz - 0.056 + 0.6 * z_extra),
+            (bx + side * 0.026, by + 0.172 + 0.95 * h_boost, bz - 0.094 + 0.9 * z_extra),
+            (bx + side * 0.030, by + 0.166 + h_boost, bz - 0.124 + z_extra),
+            (bx + side * 0.032, by + 0.148 + 0.90 * h_boost, bz - 0.142 + 1.1 * z_extra),
         ]
         stalk = swept_tube(
             pts,
@@ -1100,8 +1099,8 @@ def _scale_bomber_head_and_tall_antennae(
             material="chitin_dark",
         )
         sock = (
-            ellipsoid(0.025, 0.012, 0.025, u_segs=12, v_segs=8, name=f"antenna_socket_{tag}", material="chitin_dark")
-            .rotate_xyz(rx=-0.14, rz=-side * 0.12)
+            ellipsoid(0.022, 0.011, 0.022, u_segs=12, v_segs=8, name=f"antenna_socket_{tag}", material="chitin_dark")
+            .rotate_xyz(rx=-0.16, rz=-side * 0.14)
             .translate(*base_p)
         )
         scene.nodes[node_name] = [
@@ -1122,19 +1121,19 @@ def _bomber_arm_pose(side: int, crouch: float) -> List[Tuple[float, float, float
     dy_s = 0.010 if side >= 0 else -0.008
     dz_s = 0.010 if side >= 0 else -0.008
     return [
-        (s * 0.078, 0.456 - crouch, 0.014),
-        (s * 0.156, 0.422 - crouch + 0.5 * dy_s, 0.036 + 0.4 * dz_s),
-        (s * 0.126, 0.404 - crouch + 0.8 * dy_s, 0.144 + 0.8 * dz_s),
-        (s * 0.098, 0.400 - crouch + dy_s, 0.192 + dz_s),
+        (s * 0.074, 0.456 - crouch, 0.014),
+        (s * 0.138, 0.422 - crouch + 0.5 * dy_s, 0.038 + 0.4 * dz_s),
+        (s * 0.110, 0.404 - crouch + 0.8 * dy_s, 0.144 + 0.8 * dz_s),
+        (s * 0.088, 0.400 - crouch + dy_s, 0.190 + dz_s),
     ]
 
 
 def _rebuild_bomber_legs(scene: SceneBuilder, crouch: float) -> None:
-    """Rebuild Bomber's 4 legs in an upright, compact, cleanly separated stance with zero leg-vs-leg phasing.
+    """Rebuild Bomber's 4 legs in a narrow upright athletic stance (~17% tighter X-splay, zero phasing).
 
-    Keeps the mid legs strictly forward of Z=0 and the rear legs strictly rearward of Z=0 (zero Z-crossing
-    between mid ankle and rear knee!), seats medial hip roots cleanly inside the thorax without cross-midline
-    overlap, and matches the sturdy leg_rig cross-section radii with feet grounded solidly on Y = 0.0.
+    Matches ORIG abst301/abst701 narrow compact width while keeping mid legs strictly forward of Z=0
+    and rear legs strictly behind Z=0 (zero Z-crossing!), medial hip roots safely separated across X=0,
+    and feet grounded solidly on Y = 0.0.
     """
     c = float(crouch)
     radii = [
@@ -1146,25 +1145,25 @@ def _rebuild_bomber_legs(scene: SceneBuilder, crouch: float) -> None:
     specs = (
         # (label, side, hip_x, hip_y, hip_z, knee, ankle, foot, foot_yaw, root_z)
         (
-            "mid_left", +1, 0.074, 0.326 - c, +0.044,
-            (0.148, 0.214, +0.146), (0.144, 0.104, +0.076), (0.140, 0.0, +0.138), +0.18, +0.038,
+            "mid_left", +1, 0.062, 0.326 - c, +0.044,
+            (0.122, 0.214, +0.146), (0.118, 0.104, +0.076), (0.114, 0.0, +0.138), +0.15, +0.038,
         ),
         (
-            "mid_right", -1, 0.074, 0.326 - c, +0.044,
-            (0.144, 0.218, +0.140), (0.140, 0.106, +0.072), (0.136, 0.0, +0.132), -0.16, +0.038,
+            "mid_right", -1, 0.062, 0.326 - c, +0.044,
+            (0.118, 0.218, +0.140), (0.114, 0.106, +0.072), (0.110, 0.0, +0.132), -0.14, +0.038,
         ),
         (
-            "rear_left", +1, 0.072, 0.302 - c, -0.062,
-            (0.160, 0.194, -0.040), (0.156, 0.094, -0.132), (0.150, 0.0, -0.068), +0.24, -0.058,
+            "rear_left", +1, 0.060, 0.302 - c, -0.062,
+            (0.132, 0.194, -0.040), (0.128, 0.094, -0.132), (0.122, 0.0, -0.068), +0.20, -0.058,
         ),
         (
-            "rear_right", -1, 0.072, 0.302 - c, -0.062,
-            (0.156, 0.198, -0.046), (0.152, 0.096, -0.138), (0.146, 0.0, -0.074), -0.22, -0.058,
+            "rear_right", -1, 0.060, 0.302 - c, -0.062,
+            (0.128, 0.198, -0.046), (0.124, 0.096, -0.138), (0.118, 0.0, -0.074), -0.18, -0.058,
         ),
     )
     for label, side, hx, hy, hz, knee, ankle, foot, foot_yaw, root_z in specs:
         s = 1.0 if side >= 0 else -1.0
-        p_root = np.array([s * 0.046, hy + 0.006, root_z], dtype=np.float64)
+        p_root = np.array([s * 0.044, hy + 0.006, root_z], dtype=np.float64)
         p_hip = np.array([s * hx, hy, hz], dtype=np.float64)
         p_knee = np.array([s * knee[0], knee[1], knee[2]], dtype=np.float64)
         p_ankle = np.array([s * ankle[0], ankle[1], ankle[2]], dtype=np.float64)
@@ -1219,9 +1218,9 @@ def build_bomber(blink: float = 0.0) -> SceneBuilder:
         include_eyes=True,
         include_brows=False,
         brow_style="eager",
-        head_tilt_deg=-5.5,
-        head_yaw_deg=3.5,
-        head_pitch_deg=-16.0,
+        head_tilt_deg=-2.5,
+        head_yaw_deg=3.0,
+        head_pitch_deg=-14.0,
         eye_scale_left=0.78,
         eye_scale_right=0.78,
         eye_look=(-0.06, 0.04),
@@ -1238,8 +1237,8 @@ def build_bomber(blink: float = 0.0) -> SceneBuilder:
     head_c, head_r, eye_l, eye_r, head_back_z = _scale_bomber_head_and_tall_antennae(
         scene,
         anchors,
-        head_scale_xz=0.90,
-        head_scale_y=0.77,
+        head_scale_xz=0.77,
+        head_scale_y=0.74,
     )
     _build_goggles(
         scene,
@@ -1258,8 +1257,8 @@ def build_bomber(blink: float = 0.0) -> SceneBuilder:
     scene.attach_world_node("dynamite_pack", "upper_body", preserve_world_pose=False)
     _add_bomber_idle(scene)
     _add_bomber_attack(scene)
-    # Subtle uniform similarity scale so Bomber lands cleanly at ~0.88 total height with upright compact legs.
-    scene.scale_all(1.042)
+    # Uniform similarity scale so Bomber lands cleanly at ~0.86-0.88 total height with smaller head & narrow stance.
+    scene.scale_all(1.072)
     return scene
 
 
