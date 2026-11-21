@@ -198,10 +198,11 @@ def _thief_head_deform(pos: np.ndarray) -> np.ndarray:
     p[:, 0] *= 1.0 - 0.20 * (lower ** 1.38)
     p[:, 2] *= 1.0 - 0.05 * (lower ** 1.38)
 
-    # Fuller protruding lower mouth / clypeus swell toward bottom-front (`#393`, matching `atst301`).
-    clypeus = np.exp(-((x / 0.064) ** 2)) * np.exp(-(((y + 0.098) / 0.048) ** 2)) * front_mask
-    p[:, 2] += 0.022 * clypeus
-    p[:, 1] -= 0.014 * clypeus
+    # Fuller protruding lower mouth / clypeus swell toward bottom-front (`#393`/`#403`)
+    # anchoring the lowered 1.08x mandibles cleanly below the eyes & folded cloth bandana.
+    clypeus = np.exp(-((x / 0.072) ** 2)) * np.exp(-(((y + 0.112) / 0.054) ** 2)) * front_mask
+    p[:, 2] += 0.024 * clypeus
+    p[:, 1] -= 0.026 * clypeus
 
     # 5. Clean aerodynamic occipital taper behind the lower skull into the neck (`atst901` profile).
     rear_low = np.clip((-z - 0.01) / 0.15, 0.0, 1.0) * np.clip((-y + 0.02) / 0.16, 0.0, 1.0)
@@ -251,9 +252,9 @@ def _refit_thief_head(scene: SceneBuilder, anchors: dict) -> MeshPart:
     )
     cranium = _paint_thief_cranium_colors(cranium).translate(hx, hy, hz)
 
-    # Swap cranium inside `head`, scale Thief's mandibles & mouth up cleanly to ~1.08x proportional
-    # to his bigger `rx=0.206` head, and protrude them downward & forward toward bottom-front (`#393`).
-    jaw_dy, jaw_dz = 0.002, +0.028
+    # Swap cranium inside `head`, keep Thief's bold 1.08x mandibles & mouth, and lower them cleanly
+    # below the eyes, eyelids, and folded bandana (`#403`: zero eye phasing, solid chin attachment!).
+    jaw_dy, jaw_dz = -0.036, +0.024
     head_parts = scene.get_node("head")
     new_head_parts: List[MeshPart] = []
     for p in head_parts:
@@ -272,7 +273,7 @@ def _refit_thief_head(scene: SceneBuilder, anchors: dict) -> MeshPart:
 
     mand_parts = scene.get_node("mandibles")
     if mand_parts:
-        scene.nodes["mandibles"] = [p.scale(1.08, 1.08, 1.08) for p in mand_parts]
+        scene.nodes["mandibles"] = [p.scale(1.08, 1.08, 1.08).rotate_xyz(rx=10.0, degrees=True) for p in mand_parts]
     mand_xf = scene.get_node_transform("mandibles")
     if mand_xf is not None:
         mx, my, mz = mand_xf.translation

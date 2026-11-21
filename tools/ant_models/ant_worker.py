@@ -115,22 +115,27 @@ def _smoothstep(edge0: float, edge1: float, val: np.ndarray) -> np.ndarray:
 
 
 def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
-    """Refine Worker's side profile (`agst901`): slim front-to-back cranium depth (~0.86x Z)
-    with a compact, smoothly rounded rear occiput (no backward cone under -26 deg chin-up tilt),
-    keeping eyes, concentric Blink eyelids, and mandibles flush-seated on the face.
+    """Refine Worker's head (`agst301`/`agst901`): slim width-wise (`0.82x` X so eyes span right
+    to the outer edges of the head with zero wide cheek walls), slim front-to-back (`0.86x` Z),
+    compact smoothly rounded rear occiput, and flush-seated eyes, concentric eyelids, & mandibles.
     """
     hc = np.asarray(anchors["head_center"], dtype=np.float64)
     nc = np.asarray(anchors["neck_center"], dtype=np.float64)
+    x_scale = 0.84
     z_scale = 0.86
     face_dz = -0.022  # keeps front facial features flush on the 0.86x compressed cranium face
+    eye_in_left = 0.012
+    eye_in_right = 0.016  # slightly extra tuck on bigger viewer-left eye for <= 0 mm eyelid protrusion
 
     def _deform_head(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
+        rx = p[:, 0] - hc[0]
         ry = p[:, 1] - hc[1]
         rz = p[:, 2] - hc[2]
-        # 1. Slimmer front-to-back head depth (`agst901` ~16 px deep vs 18.6 px raw).
+        # 1. Slim width-wise (`0.82x` X -> eyes span full head width like `ORIG agst301`) & depth-wise (`0.86x` Z).
+        p[:, 0] = hc[0] + x_scale * rx
         p[:, 2] = hc[2] + z_scale * rz
-        # 2. Gentle crown lift (+0.010 Y) + smooth upper-back corner rounding (+0.015 Z tuck)
+        # 2. Gentle crown lift (+0.010 Y) + smooth upper-back corner rounding (+0.016 Z tuck)
         #    so the tilted-up occiput reads as a compact rounded ant cranium, never a rear cone!
         up_w = _smoothstep(-0.010, 0.145, ry)
         rear_w = _smoothstep(0.055, -0.095, rz)
@@ -145,26 +150,46 @@ def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
         if p.name == "cranium":
             new_head.append(p.deform(_deform_head))
         elif p.name == "mouth_cleft":
-            new_head.append(p.translate(0.0, 0.0, face_dz))
+            new_head.append(p.scale(0.86, 1.0, 1.0).translate(0.0, 0.0, face_dz))
         else:
             new_head.append(p)
     scene.nodes["head"] = new_head
 
-    # Shift eyes, concentric Blink eyelid pivots, and mandibles cleanly backward to sit flush!
+    # Shift eyes & concentric Blink eyelids cleanly backward (`face_dz`) and subtly inward
+    # so both eyes span right to the outer edges of the thin head with zero protruding cheek/eyelid!
     if "eyes" in scene.nodes:
-        scene.nodes["eyes"] = [p.translate(0.0, 0.0, face_dz) for p in scene.get_node("eyes")]
-    for node_name in ("eyelid_left", "eyelid_right", "mandibles"):
+        new_eyes = []
+        for p in scene.get_node("eyes"):
+            sx = -eye_in_left if p.name.endswith("_left") else (+eye_in_right if p.name.endswith("_right") else 0.0)
+            new_eyes.append(p.translate(sx, 0.0, face_dz))
+        scene.nodes["eyes"] = new_eyes
+    for node_name, sx, x_trim in (("eyelid_left", -eye_in_left, 1.0), ("eyelid_right", +eye_in_right, 0.96)):
+        if x_trim != 1.0 and node_name in scene.nodes:
+            scene.nodes[node_name] = [p.scale(x_trim, 1.0, 1.0) for p in scene.get_node(node_name)]
         xf = scene.get_node_transform(node_name)
         if xf is not None:
             tx, ty, tz = xf.translation
             scene.set_node_transform(
                 node_name,
-                translation=(tx, ty, tz + face_dz),
+                translation=(tx + sx, ty, tz + face_dz),
                 rotation=xf.rotation,
                 scale=xf.scale,
             )
 
-    # Nudge both antenna sockets by the exact local crown delta so sockets stay flush-embedded.
+    # Frame mandibles cleanly onto the slimmer 0.82x lower jaw.
+    if "mandibles" in scene.nodes:
+        scene.nodes["mandibles"] = [p.scale(0.88, 1.0, 1.0) for p in scene.get_node("mandibles")]
+    m_xf = scene.get_node_transform("mandibles")
+    if m_xf is not None:
+        tx, ty, tz = m_xf.translation
+        scene.set_node_transform(
+            "mandibles",
+            translation=(tx, ty, tz + face_dz),
+            rotation=m_xf.rotation,
+            scale=m_xf.scale,
+        )
+
+    # Bring antenna bases inward onto the narrower 0.82x crown and nudge by exact local crown delta.
     for ant_node in ("antenna_left", "antenna_right"):
         xf = scene.get_node_transform(ant_node)
         if xf is None:
@@ -175,7 +200,7 @@ def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
         tx, ty, tz = xf.translation
         scene.set_node_transform(
             ant_node,
-            translation=(tx, ty + float(delta[1]), tz + float(delta[2])),
+            translation=(tx * 0.86, ty + float(delta[1]), tz + float(delta[2])),
             rotation=xf.rotation,
             scale=xf.scale,
         )
