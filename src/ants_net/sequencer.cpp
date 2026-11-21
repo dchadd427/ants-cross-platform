@@ -10,7 +10,13 @@ constexpr bool hashed_turn(uint32_t turn) noexcept { return (uint64_t{turn} + 1)
 constexpr uint8_t bit(uint8_t seat) noexcept { return static_cast<uint8_t>(1u << seat); }
 }  // namespace
 
-Sequencer::Sequencer(Config config) : cfg_(config) {}
+namespace {
+constexpr uint32_t kMilli = 1000;                                  // the budget counts in thousandths of an order, so that its earnings (a few orders a second, one turn at a time) have no rounding
+}  // namespace
+
+Sequencer::Sequencer(Config config) : cfg_(config) {
+    budget_milli_.fill(cfg_.order_burst * kMilli);
+}
 
 void Sequencer::set_active(uint8_t player, bool active) {
     if (player >= sim::MAX_PLAYERS) return;
@@ -28,21 +34,32 @@ void Sequencer::set_active(uint8_t player, bool active) {
     }
 }
 
-bool Sequencer::submit(uint8_t player, sim::Command command) {
-    if (player >= sim::MAX_PLAYERS || !active_[player]) return false;
-    if (!sim::is_client_command(command.type)) return false;     // Drop and unknown types are not for clients
+Submit Sequencer::submit_checked(uint8_t player, sim::Command command) {
+    if (player >= sim::MAX_PLAYERS || !active_[player]) return Submit::Refused;
+    if (!sim::is_client_command(command.type)) return Submit::Refused;     // Drop and unknown types are not for clients
     command.issuer = player;                       // the connection decides who speaks, not the payload
+    if (vetter_ && !vetter_(player, command)) {    // nothing in it that the seat can order: the engine would do nothing with it, and it would only take room in the turn, the log and the recording
+        ++no_ants_[player];
+        return Submit::NoAnts;
+    }
+    const bool budgeted = cfg_.order_burst != 0 && cfg_.orders_per_second != 0;
+    if (budgeted && budget_milli_[player] < kMilli) {
+        ++over_budget_[player];
+        heavy_ = static_cast<uint8_t>(heavy_ | (1u << player));
+        return Submit::OverBudget;
+    }
     // A command that does not fit into the turn waits for the next ones, behind the commands of the same player that wait already (what was sent first is run first: a player
     // that has commands waiting has a full turn, so a new one never finds room in front of them). A burst that a stuck uplink delivers at last is carried into the turns that
     // follow; a peer with more waiting than the bound is a flood.
     if (queued_by_[player] < cfg_.max_commands_per_turn) {
         ++queued_by_[player];
         queue_.push_back(std::move(command));
-        return true;
+    } else {
+        if (carry_[player].size() >= cfg_.max_carried_commands) return Submit::Refused;
+        carry_[player].push_back(std::move(command));
     }
-    if (carry_[player].size() >= cfg_.max_carried_commands) return false;
-    carry_[player].push_back(std::move(command));
-    return true;
+    if (budgeted) budget_milli_[player] -= kMilli;
+    return Submit::Queued;
 }
 
 void Sequencer::submit_system(sim::Command command) {
@@ -61,6 +78,7 @@ void Sequencer::resume(uint32_t next_turn) {
     passed_ = 0;
     acked_.fill(0);
     joined_.fill(0);
+    budget_milli_.fill(cfg_.order_burst * kMilli);
     active_.fill(false);                             // the new host activates the peers that follow it, one by one
 }
 
@@ -222,6 +240,9 @@ uint8_t Sequencer::laggard() const noexcept {
 TurnMsg Sequencer::seal() {
     TurnMsg t;
     t.turn = next_turn_++;
+    const uint32_t earned = cfg_.orders_per_second * kMilli / kTurnsPerSecond;           // (a seat's budget earns what one turn is worth, up to its full store)
+    const uint32_t full = cfg_.order_burst * kMilli;
+    for (uint32_t& left : budget_milli_) left = std::min(full, left + earned);
     sim::canonical_order(queue_);
     t.commands = std::move(queue_);
     queue_.clear();

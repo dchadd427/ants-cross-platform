@@ -565,6 +565,13 @@ public:
     /// (`level_start`) draw it as the original does, rand() % 7 + 1, which is never North.
     uint32_t spawn_unit(uint8_t player_id, AntType type, TileCoord pos, bool level_start = false);
     AntUnit& get_unit(uint32_t ant_id);
+    /// How an ant stands to a player who gives it an order (apply_command keeps an ant for an order only when it is Own and not removed). Own: an ant of `player`, alive or dead (the table of ants only grows and an
+    /// ant never changes hands, so Own and Foreign never change). Foreign: an ant of another player. Unborn: no ant has this id (0, or an id that has not been handed out yet: a later tick may give it to anybody).
+    /// Const and outside the state hash: the host's sequencer asks it before it seals an order (net/sequencer.hpp, Sequencer::set_vetter).
+    enum class AntClaim : uint8_t { Unborn, Own, Foreign };
+    AntClaim ant_claim(uint32_t ant_id, uint8_t player) const noexcept;
+    /// The id that the next ant born gets (ids below it were handed out); the table of ants grows with it
+    uint32_t next_ant_id() const noexcept;
     /// The ant type getter FUN_0100f9cb(ant, 0): what the ant IS (see AntSnapshot::type); AntUnit::type is the field itself.
     AntType ant_type(const AntUnit& ant) const noexcept;
     void kill_unit(uint32_t ant_id);

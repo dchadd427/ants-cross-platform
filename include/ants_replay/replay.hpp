@@ -8,7 +8,8 @@
 //   file  := magic chunk*                  magic = 89 41 52 50 4C 0D 0A 1A (a transfer that changes line ends is noticed)
 //   chunk := tag[4] u32 length payload u32 crc32(tag + payload)       a tag whose first letter is UPPER case is critical (a reader that does not know it refuses the file), lower case is skipped
 //   HEAD  := u16 format_version, u16 engine_rules, then fields { varint id, varint length, bytes }; unknown ids are skipped (field 16: sim_rules, u16; field 17: the game mode, u8, written only when it is not 0 (the
-//            original's game) and then always with a sim_rules that only a mode of its own has (kSimRulesMode187), so that a build that skips field 17 refuses the file for its rules number)
+//            original's game) and then always with a sim_rules that only a mode of its own has (kSimRulesMode187), so that a build that skips field 17 refuses the file for its rules number; field 18: the seats whose orders
+//            went over their budget in this match, u8, a bit for each seat, written only when it is not 0: the "heavy order rate" mark, which changes nothing in the match)
 //   CMDS  := u32 first_turn, u32 count, then count records { varint gap, the command in its wire form (ants_sim/command.hpp, 8 + 4 n bytes) }
 //            gap = turns since the record before it (the first record: since first_turn); a chunk spans at most 30 s of game time and 4,096 commands
 //   hash  := u32 period, then u32 values: the low 32 bits of the state hash after period, 2 period, 3 period ... turns
@@ -160,6 +161,7 @@ struct Header {
     uint32_t seed{0};
     uint8_t roster{0};                                 // bit p: seat p takes part
     bool fog{false};
+    uint8_t heavy_orders{0};                           // head field 18, written only when it is not 0: the seats (a bit for each) that went over the budget of orders (net::Sequencer::Config::order_burst) at some time of the match: their orders beyond it were not sealed, so they are not in the file. Information only: nothing plays differently
     uint8_t mode{0};                                   // sim::GameMode as a byte (head field 17, written only when it is not 0): the rules the match was played by; set_mode() keeps it and sim_rules together
     std::array<std::string, sim::MAX_PLAYERS> names;   // printable ASCII, at most 32 characters (the game makes a '?' of any other); empty: the color word
     sim::StartTeams teams;                             // the teams that the match started with (applied before the first tick)

@@ -8,6 +8,7 @@ add_executable(test_lockstep
     test_lockstep_protocols.cpp
     test_lockstep_countdown.cpp
     test_lockstep_p2p.cpp
+    test_lockstep_orders.cpp
 )
 
 target_link_libraries(test_lockstep PRIVATE

@@ -1,0 +1,405 @@
+{
+ "note": "Mutants of what a seat may have sealed and of what follows from it, for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the sequencer's budget of orders and its vetter (src/ants_net/sequencer.cpp), the ants that an order may keep (HostSession::vet_ants), the mark of a heavy order rate in the room's status, the replay's head and the history, and the history record of a match whose recording could not be made. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/order_budget_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "budget_off",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "const bool budgeted = cfg_.order_burst != 0 && cfg_.orders_per_second != 0;",
+   "new": "const bool budgeted = false;",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "budget_not_charged",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "if (budgeted) budget_milli_[player] -= kMilli;",
+   "new": "if (false) budget_milli_[player] -= kMilli;",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "budget_partial_order_passes",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "if (budgeted && budget_milli_[player] < kMilli) {",
+   "new": "if (budgeted && budget_milli_[player] < 1) {",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "budget_earns_nothing",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "const uint32_t earned = cfg_.orders_per_second * kMilli / kTurnsPerSecond;",
+   "new": "const uint32_t earned = 0;",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "budget_earns_double",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "const uint32_t earned = cfg_.orders_per_second * kMilli / kTurnsPerSecond;",
+   "new": "const uint32_t earned = 2 * cfg_.orders_per_second * kMilli / kTurnsPerSecond;",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "budget_store_uncapped",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "for (uint32_t& left : budget_milli_) left = std::min(full, left + earned);",
+   "new": "for (uint32_t& left : budget_milli_) left = std::min(full + 100u * kMilli, left + earned);",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "burst_far_too_small",
+   "file": "include/ants_net/sequencer.hpp",
+   "old": "uint32_t order_burst = 512;",
+   "new": "uint32_t order_burst = 4;",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "rate_far_too_small",
+   "file": "include/ants_net/sequencer.hpp",
+   "old": "uint32_t orders_per_second = 8;",
+   "new": "uint32_t orders_per_second = 1;",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "seat_not_marked",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "        heavy_ = static_cast<uint8_t>(heavy_ | (1u << player));\n",
+   "new": "",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "over_budget_not_counted",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "        ++over_budget_[player];\n",
+   "new": "",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "over_budget_is_a_refusal",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "        return Submit::OverBudget;",
+   "new": "        return Submit::Refused;",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "no_ants_is_a_refusal",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "        return Submit::NoAnts;",
+   "new": "        return Submit::Refused;",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "no_ants_not_counted",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "        ++no_ants_[player];\n",
+   "new": "",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "vetter_not_asked",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "if (vetter_ && !vetter_(player, command)) {",
+   "new": "if (false) {",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "resume_keeps_the_budget",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "    joined_.fill(0);\n    budget_milli_.fill(cfg_.order_burst * kMilli);",
+   "new": "    joined_.fill(0);",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.59 S2.60 S2.61 S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "foreign_ants_kept",
+   "file": "src/ants_net/session.cpp",
+   "old": "        if (sim.ant_claim(id, player) == sim::SimulationEngine::AntClaim::Foreign) continue;\n",
+   "new": "        if (sim.ant_claim(id, player) == sim::SimulationEngine::AntClaim::Foreign && id == 0) continue;\n",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.62 S2.64; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "id_zero_kept",
+   "file": "src/ants_net/session.cpp",
+   "old": "        if (id == 0 || id >= horizon) continue;",
+   "new": "        if (id >= horizon) continue;",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.62 S2.64; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "far_ids_kept",
+   "file": "src/ants_net/session.cpp",
+   "old": "        if (id == 0 || id >= horizon) continue;",
+   "new": "        if (id == 0 || id >= horizon + 0x7FFFFFFFu) continue;",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.62 S2.64; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "next_ids_dropped",
+   "file": "src/ants_net/session.cpp",
+   "old": "const uint32_t horizon = sim.next_ant_id() + kAntIdsAhead;",
+   "new": "const uint32_t horizon = sim.next_ant_id() + (kAntIdsAhead - kAntIdsAhead);",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.62 S2.64; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "repeats_kept",
+   "file": "src/ants_net/session.cpp",
+   "old": "        if (std::find(kept.begin(), kept.end(), id) != kept.end()) continue;\n",
+   "new": "",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.62 S2.64; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "empty_order_kept",
+   "file": "src/ants_net/session.cpp",
+   "old": "    if (kept.empty()) return false;\n",
+   "new": "",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.62 S2.64; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "vetter_not_installed",
+   "file": "src/ants_net/session.cpp",
+   "old": "    sequencer_.set_vetter([this](uint8_t player, sim::Command& command) { return sim_ == nullptr || vet_ants(*sim_, player, command); });\n",
+   "new": "",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.62 S2.64; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "over_budget_is_a_violation",
+   "file": "src/ants_net/session.cpp",
+   "old": "if (sequencer_.submit_checked(player, std::move(m.command)) == Submit::Refused) violation(player);",
+   "new": "if (sequencer_.submit_checked(player, std::move(m.command)) != Submit::Queued) violation(player);",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.63; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "dead_own_ants_dropped",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "return u->player_id == player ? AntClaim::Own : AntClaim::Foreign;",
+   "new": "return (u->player_id == player && !u->removed) ? AntClaim::Own : AntClaim::Foreign;",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'for t in S2.62; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
+  },
+  {
+   "id": "mark_not_in_the_head",
+   "file": "src/ants_server/room.cpp",
+   "old": "        recorder->set_heavy_orders(static_cast<uint8_t>(session_->heavy_order_seats() & recorder->replay().head.roster));",
+   "new": "        (void)recorder;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.308 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "mark_not_in_the_status",
+   "file": "src/ants_server/room.cpp",
+   "old": "        s.heavy_order_seats = session_->heavy_order_seats();\n",
+   "new": "",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.308 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "counts_not_in_the_status",
+   "file": "src/ants_server/room.cpp",
+   "old": "            s.orders_over_budget[seat] = session_->orders_over_budget(seat);\n",
+   "new": "",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.308 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "mark_not_in_the_json",
+   "file": "src/ants_server/control.cpp",
+   "old": "    if (s.heavy_order_seats != 0) {",
+   "new": "    if (false) {",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.308 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "counts_in_the_list",
+   "file": "src/ants_server/control.cpp",
+   "old": "    if (!in_list) {                                                  // the orders that were not sealed, by seat",
+   "new": "    if (true) {                                                  // the orders that were not sealed, by seat",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.308 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "field_never_written",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "    if (h.heavy_orders != 0) put_byte_field(p, kFieldHeavyOrders, h.heavy_orders);",
+   "new": "",
+   "build": "test_replay_own_file",
+   "test": "timeout 600 env ANTS_TEST_FILTER=RP9.13 ./build/tests/test_replay/test_replay_own_file"
+  },
+  {
+   "id": "field_written_for_no_mark",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "    if (h.heavy_orders != 0) put_byte_field(p, kFieldHeavyOrders, h.heavy_orders);",
+   "new": "    put_byte_field(p, kFieldHeavyOrders, h.heavy_orders);",
+   "build": "test_replay_own_file",
+   "test": "timeout 600 env ANTS_TEST_FILTER=RP9.13 ./build/tests/test_replay/test_replay_own_file"
+  },
+  {
+   "id": "mark_of_a_seat_that_does_not_play",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "    } else if ((h.heavy_orders & ~h.roster) != 0) {",
+   "new": "    } else if (false) {",
+   "build": "test_replay_own_file",
+   "test": "timeout 600 env ANTS_TEST_FILTER=RP9.13 ./build/tests/test_replay/test_replay_own_file"
+  },
+  {
+   "id": "empty_field_read",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "if (length != 1 || bytes[0] == 0 || (bytes[0] >> sim::MAX_PLAYERS) != 0)",
+   "new": "if (length != 1 || (bytes[0] >> sim::MAX_PLAYERS) != 0)",
+   "build": "test_replay_own_file",
+   "test": "timeout 600 env ANTS_TEST_FILTER=RP9.13 ./build/tests/test_replay/test_replay_own_file"
+  },
+  {
+   "id": "seat_beyond_four_read",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "if (length != 1 || bytes[0] == 0 || (bytes[0] >> sim::MAX_PLAYERS) != 0)",
+   "new": "if (length != 1 || bytes[0] == 0)",
+   "build": "test_replay_own_file",
+   "test": "timeout 600 env ANTS_TEST_FILTER=RP9.13 ./build/tests/test_replay/test_replay_own_file"
+  },
+  {
+   "id": "field_not_read_back",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "                h.heavy_orders = bytes[0];\n",
+   "new": "",
+   "build": "test_replay_own_file",
+   "test": "timeout 600 env ANTS_TEST_FILTER=RP9.13 ./build/tests/test_replay/test_replay_own_file"
+  },
+  {
+   "id": "record_without_the_mark",
+   "file": "src/ants_server/history_record.cpp",
+   "old": "    rec.heavy_orders = static_cast<uint8_t>(replay.head.heavy_orders & replay.head.roster);",
+   "new": "    rec.heavy_orders = 0;",
+   "build": "test_history_record",
+   "test": "timeout 600 env ANTS_TEST_FILTER=HR9.2 ./build/tests/test_server/test_history_record"
+  },
+  {
+   "id": "record_with_a_seat_that_does_not_play",
+   "file": "src/ants_server/history_record.cpp",
+   "old": "    rec.heavy_orders = static_cast<uint8_t>(replay.head.heavy_orders & replay.head.roster);",
+   "new": "    rec.heavy_orders = replay.head.heavy_orders;",
+   "build": "test_history_record",
+   "test": "timeout 600 env ANTS_TEST_FILTER=HR9.2 ./build/tests/test_server/test_history_record"
+  },
+  {
+   "id": "marker_without_the_mark",
+   "file": "src/ants_server/history_details.cpp",
+   "old": "    d.set(\"heavy_orders\", heavy_seats(heavy_orders));\n",
+   "new": "",
+   "build": "test_history_record",
+   "test": "timeout 600 env ANTS_TEST_FILTER=HR9.2 ./build/tests/test_server/test_history_record"
+  },
+  {
+   "id": "plain_marker_changed",
+   "file": "src/ants_server/history_details.cpp",
+   "old": "    if (heavy_orders == 0) return \"{\\\"v\\\":1,\\\"n\\\":1}\";",
+   "new": "    if (heavy_orders == 0) return \"{\\\"v\\\":1,\\\"n\\\":2}\";",
+   "build": "test_history_record",
+   "test": "timeout 600 env ANTS_TEST_FILTER=HR9.2 ./build/tests/test_server/test_history_record"
+  },
+  {
+   "id": "details_without_the_mark",
+   "file": "src/ants_server/history_details.cpp",
+   "old": "    if (record.heavy_orders != 0) d.set(\"heavy_orders\", heavy_seats(record.heavy_orders));",
+   "new": "",
+   "build": "test_history_details",
+   "test": "timeout 900 env ANTS_TEST_FILTER=HD4.9 ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "backfill_loses_the_mark",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "            record.heavy_orders = static_cast<uint8_t>(rep.head.heavy_orders & rep.head.roster);        // (the mark that the head carries goes into the details with the rest)\n",
+   "new": "",
+   "build": "test_history_details",
+   "test": "timeout 900 env ANTS_TEST_FILTER=HD4.9 ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "feeder_marker_loses_the_mark",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "    if (record.details.empty()) record.details = history_details_marker(record.heavy_orders);",
+   "new": "    if (record.details.empty()) record.details = history_details_marker();",
+   "build": "test_history_details",
+   "test": "timeout 900 env ANTS_TEST_FILTER=HD4.9 ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "lost_match_not_handed_over",
+   "file": "src/ants_server/room.cpp",
+   "old": "            unrecorded_sink_(std::move(lost));",
+   "new": "            (void)lost;",
+   "build": "test_history_rooms",
+   "test": "timeout 900 env ANTS_TEST_FILTER=HR4.1 ./build/tests/test_server/test_history_rooms"
+  },
+  {
+   "id": "lost_match_not_put",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "    if (!history_->put(record, why)) history_->report(",
+   "new": "    if (false) history_->report(",
+   "build": "test_history_rooms",
+   "test": "timeout 900 env ANTS_TEST_FILTER=HR4.1 ./build/tests/test_server/test_history_rooms"
+  },
+  {
+   "id": "lost_match_id_starts_at_9998",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "for (unsigned number = 9999; number >= 9000; --number) {",
+   "new": "for (unsigned number = 9998; number >= 9000; --number) {",
+   "build": "test_history_rooms",
+   "test": "timeout 900 env ANTS_TEST_FILTER=HR4.1 ./build/tests/test_server/test_history_rooms"
+  },
+  {
+   "id": "lost_match_replaces_another",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "        if (!valid_history_id(candidate) || history_->knows(candidate)) continue;",
+   "new": "        if (!valid_history_id(candidate)) continue;",
+   "build": "test_history_rooms",
+   "test": "timeout 900 env ANTS_TEST_FILTER=HR4.1 ./build/tests/test_server/test_history_rooms"
+  },
+  {
+   "id": "lost_match_without_marker",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "    record.details = history_details_marker(record.heavy_orders);       // (the replay pass did not run: no stats, only the marker and the mark)",
+   "new": "    record.details.clear();",
+   "build": "test_history_rooms",
+   "test": "timeout 900 env ANTS_TEST_FILTER=HR4.1 ./build/tests/test_server/test_history_rooms"
+  },
+  {
+   "id": "lost_match_turns_zero",
+   "file": "src/ants_server/room.cpp",
+   "old": "            lost.outcome.turns = last_ticks_;",
+   "new": "            lost.outcome.turns = 0;",
+   "build": "test_history_rooms",
+   "test": "timeout 900 env ANTS_TEST_FILTER=HR4.1 ./build/tests/test_server/test_history_rooms"
+  },
+  {
+   "id": "lost_match_result_not_read",
+   "file": "src/ants_replay/player.cpp",
+   "old": "    out.result = engine.get_world_state().match_result;                 // (the engine's own make_match_result",
+   "new": "    out.result = sim::MatchResult{};                 // (the engine's own make_match_result",
+   "build": "test_history_rooms",
+   "test": "timeout 900 env ANTS_TEST_FILTER=HR4.1 ./build/tests/test_server/test_history_rooms"
+  },
+  {
+   "id": "recordings_pass_a_small_budget",
+   "file": "include/ants_net/sequencer.hpp",
+   "old": "uint32_t order_burst = 512;\n        uint32_t orders_per_second = 8;",
+   "new": "uint32_t order_burst = 2;\n        uint32_t orders_per_second = 1;",
+   "build": "test_replay_own_file",
+   "test": "timeout 600 env ANTS_TEST_FILTER=RP9.14 ./build/tests/test_replay/test_replay_own_file"
+  }
+ ]
+}

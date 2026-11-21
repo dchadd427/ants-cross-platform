@@ -13,8 +13,10 @@
 #include <vector>
 
 #include "../common/test_assert.hpp"
+#include "ants_ctl/json.hpp"
 #include "ants_replay/player.hpp"
 #include "ants_replay/replay.hpp"
+#include "ants_server/history_details.hpp"
 #include "ants_server/history_record.hpp"
 #include "ants_sim/game_mode.hpp"
 #include "ants_sim/match_stats.hpp"
@@ -72,6 +74,7 @@ struct Fake {
     sim::StartTeams teams;
     uint32_t turns{2400};
     bool over{true};
+    uint8_t heavy_orders{0};                                 // the head's mark of a heavy order rate
 
     Fake& seat(uint8_t s, int32_t score, uint32_t killed, uint32_t lost = 0, uint32_t hatched = 0) {
         n[s] = Num{score, killed, lost, hatched};
@@ -87,6 +90,7 @@ HistoryRecord record_of(const Fake& f) {
     rep.head.names = f.names;
     rep.head.teams = f.teams;
     rep.head.set_mode(f.mode);
+    rep.head.heavy_orders = f.heavy_orders;
     replay::Outcome out;
     out.ran = true;
     out.ok = true;
@@ -525,6 +529,22 @@ int main() {
         ASSERT_FALSE(valid_history_id("../ants-TINY-20261008-143209Z"));
         ASSERT_FALSE(valid_history_id("ants-TINY-20261008-143209"));
         ASSERT_EQ(history_recording_file("ants-TINY-20261008-143209Z"), std::string("ants-TINY-20261008-143209Z.antsrep"));
+    } TEST_END();
+
+    TEST_CASE("HR9.2 The head's mark of a heavy order rate is the record's, for the seats that play only; the marker of a match that was not counted carries it too, and the plain marker is what it was") {
+        Fake f;
+        f.seat(0, 10, 1).seat(1, 5, 0);
+        ASSERT_EQ(record_of(f).heavy_orders, 0);
+        f.heavy_orders = 0x02;
+        ASSERT_EQ(record_of(f).heavy_orders, 0x02);
+        f.heavy_orders = 0x0E;                                                       // (seats 2 and 3 do not play: they cannot have the mark)
+        ASSERT_EQ(record_of(f).heavy_orders, 0x02);
+        ASSERT_EQ(history_details_marker(), std::string("{\"v\":1,\"n\":1}"));
+        ASSERT_EQ(history_details_marker(0), history_details_marker());
+        ctl::JsonValue marker;
+        ASSERT_TRUE(ctl::parse_json(history_details_marker(0x05), marker, nullptr));
+        ASSERT_TRUE(marker.get("v").as_int_or(0) == 1 && marker.get("n").as_int_or(0) == 1);
+        ASSERT_TRUE(marker.get("heavy_orders").size() == 2 && marker.get("heavy_orders").at(0).as_int_or(-1) == 0 && marker.get("heavy_orders").at(1).as_int_or(-1) == 2);
     } TEST_END();
 
     std::cout << "\n" << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";

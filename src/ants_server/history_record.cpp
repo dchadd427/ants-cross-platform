@@ -126,6 +126,7 @@ HistoryRecord make_history_record(const std::string& id, int64_t ended_s, const 
     rec.turns = outcome.turns;
     rec.finished = outcome.match_over;
     rec.quitter = outcome.result.quitter < sim::MAX_PLAYERS ? static_cast<int>(outcome.result.quitter) : -1;
+    rec.heavy_orders = static_cast<uint8_t>(replay.head.heavy_orders & replay.head.roster);
     rec.mode = replay.head.mode == static_cast<uint8_t>(sim::GameMode::Kills187) ? kHistoryMode187 : kHistoryModeScore;
     const bool kills_only = rec.mode == kHistoryMode187;
 

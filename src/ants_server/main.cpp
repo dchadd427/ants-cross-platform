@@ -1056,6 +1056,12 @@ int main(int argc, char** argv) {
                        " refused by a budget";
             }
             if (s.drops_by_state > 0) held += ", " + std::to_string(s.drops_by_state) + " dropped for a state that differed from the referee's";
+            if (s.heavy_order_seats != 0) {                                                  // (a seat whose orders went over its budget: a count of the orders that were not sealed, per seat)
+                held += ", heavy order rate on seat";
+                for (size_t seat = 0; seat < 4; ++seat) {
+                    if ((s.heavy_order_seats & (1u << seat)) != 0) held += " " + std::to_string(seat) + " (" + std::to_string(s.orders_over_budget[seat]) + " orders not sealed)";
+                }
+            }
             if (s.replay_kept) held += ", kept as " + s.replay_file;                       // (the replay of the match: its file name is the map and the end time, no code and no name of a person)
             log("room " + s.code + " " + ants::server::room_state_name(s.state) + ": " + s.reason + " (map " + s.map + ", " + std::to_string(s.ticks) + " ticks" + held + ")");
             if (!o.results_dir.empty() && !demo) {

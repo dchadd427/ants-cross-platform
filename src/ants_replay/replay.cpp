@@ -26,6 +26,7 @@ constexpr uint32_t kFieldVenue = 14;
 constexpr uint32_t kFieldHashPeriod = 15;
 constexpr uint32_t kFieldSimRules = 16;               // optional (a reader that does not know it skips it)
 constexpr uint32_t kFieldMode = 17;                   // the game mode, one byte; written only when it is not 0 (a reader that does not know it skips it and refuses the file by its sim_rules, which is kSimRulesMode187 then)
+constexpr uint32_t kFieldHeavyOrders = 18;            // the seats that went over the budget of orders, one byte (a bit for each seat); written only when it is not 0 (a reader that does not know it skips it)
 
 const std::array<uint32_t, 256>& crc_table() {
     static const std::array<uint32_t, 256> table = [] {
@@ -110,6 +111,8 @@ bool valid_head(const Header& h, std::string& error) {
         error = "the head's teams name seats that do not play";
     } else if (h.recorder_seat != kNoSeat && h.recorder_seat >= sim::MAX_PLAYERS) {
         error = "the head's recorder seat does not exist";
+    } else if ((h.heavy_orders & ~h.roster) != 0) {
+        error = "the head marks a seat that does not play";
     } else if (h.hash_period == 0 || h.hash_period > kMaxTurns) {
         error = "the head's hash period is out of range";
     } else if (!sim::valid_game_mode(h.mode)) {
@@ -170,6 +173,7 @@ std::vector<uint8_t> head_payload(const Header& h) {
         put_u16(rules, h.sim_rules);
         put_field(p, kFieldSimRules, rules.data(), rules.size());
     }
+    if (h.heavy_orders != 0) put_byte_field(p, kFieldHeavyOrders, h.heavy_orders);      // (last, and only when a seat went over: every other file is what it was)
     return p;
 }
 
@@ -316,6 +320,10 @@ bool read_head(const uint8_t* payload, size_t size, Header& h, std::string& erro
                 if (length != 2 || !f.u16(h.sim_rules) || h.sim_rules == 0) { error = field + " has the wrong length or is 0"; return false; }
                 break;
             }
+            case kFieldHeavyOrders:
+                if (length != 1 || bytes[0] == 0 || (bytes[0] >> sim::MAX_PLAYERS) != 0) { error = field + " is not a set of seats"; return false; }
+                h.heavy_orders = bytes[0];
+                break;
             case kFieldMode:
                 if (length != 1 || bytes[0] == 0 || !sim::valid_game_mode(bytes[0])) { error = field + " is not a game mode that this build knows (the original's game has no field)"; return false; }
                 h.mode = bytes[0];

@@ -1,6 +1,10 @@
 // Tests of a replay file that a visitor opens on the website (docs/REPLAYS.md, "A file of your own"): the limit on the starting ants of a map that a file carries, whichever copy of the map is read (RP9.11), and the
-// recording kept in tests/data, which the browser checks open and which plays here to its last hash (RP9.12). The cases of a map that a file carries that come before these (RP9.1 to RP9.10) are in test_replay.cpp.
+// recording kept in tests/data, which the browser checks open and which plays here to its last hash (RP9.12). The mark of a heavy order rate in the head (RP9.13), and the recordings of tests/data
+// given to the host's sequencer once more, which seals every order of them as it was (RP9.14). The cases of a map that a file carries that come before these (RP9.1 to RP9.10) are in test_replay.cpp.
 #include "ants_net/netgame.hpp"
+#include "ants_net/sequencer.hpp"
+#include "ants_net/session.hpp"
+#include "ants_replay/recorder.hpp"
 #include "ants_replay/player.hpp"
 #include "ants_replay/replay.hpp"
 #include "ants_test_paths.hpp"
@@ -136,6 +140,101 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(load_map(replay.head, std::string(ORIGINAL_ASSETS_DIR) + "/Maps", level, error));
         const Outcome o = play(replay, level);
         ASSERT_TRUE(o.ok && o.ran && o.complete && o.hash == replay.final_hash && o.hashes_checked == 72);
+    } TEST_END();
+
+    TEST_CASE("RP9.13 The Head's Mark Of A Heavy Order Rate (Field 18, The Seats Whose Orders Went Over Their Budget): Written Only When A Seat Has It, Read Back, Refused For A Seat That Does Not Play Or A Field That Is Empty, Skipped By A Reader That Does Not Know It; A File Without It Is Byte For Byte What It Was") {
+        const std::vector<uint8_t> bytes = read_bytes(std::string(TEST_DATA_DIR) + "/replay_bots_tiny.antsrep");
+        Replay replay;
+        std::string error;
+        ASSERT_TRUE(decode(bytes.data(), bytes.size(), replay, error));
+        ASSERT_EQ(replay.head.heavy_orders, 0);
+        ASSERT_TRUE(encode(replay, error) == bytes);                                   // (no mark: the file is what it was, so every recording of honest play is)
+        Replay marked = replay;
+        marked.head.heavy_orders = 0x06;                                               // seats 1 and 2
+        const std::vector<uint8_t> with = encode(marked, error);
+        ASSERT_FALSE(with.empty());
+        ASSERT_TRUE(with.size() > bytes.size() && with.size() <= bytes.size() + 8);    // (the field: an id, a length, a byte)
+        Replay back;
+        ASSERT_TRUE(decode(with.data(), with.size(), back, error));
+        ASSERT_EQ(back.head.heavy_orders, 0x06);
+        ASSERT_TRUE(back.commands.size() == replay.commands.size() && back.final_hash == replay.final_hash);        // (the match is the same match)
+        Replay stranger = replay;
+        stranger.head.roster = 0x03;                                                   // a seat that does not play cannot have the mark
+        stranger.head.heavy_orders = 0x04;
+        ASSERT_TRUE(encode(stranger, error).empty() && contains(error, "does not play"));
+        stranger.head.heavy_orders = 0x00;
+        // a field with nothing in it, or a seat that does not exist, is refused with the field named; the head is the first chunk, so its length and its checksum are rewritten for the test
+        const auto refuse_with = [&](const std::vector<uint8_t>& field_bytes) {
+            const auto u32_at = [&](size_t at) { return static_cast<uint32_t>(with[at]) | (static_cast<uint32_t>(with[at + 1]) << 8) | (static_cast<uint32_t>(with[at + 2]) << 16) | (static_cast<uint32_t>(with[at + 3]) << 24); };
+            const auto put_u32 = [](std::vector<uint8_t>& out, uint32_t v) { for (int i = 0; i < 4; ++i) out.push_back(static_cast<uint8_t>((v >> (8 * i)) & 0xFF)); };
+            const uint32_t head_length = u32_at(12);                                   // (the magic is 8 bytes, then the tag HEAD, then the length)
+            std::vector<uint8_t> payload(with.begin() + 16, with.begin() + 16 + head_length);
+            payload.resize(payload.size() - 3);                                        // (field 18 is the last three bytes of the head)
+            payload.insert(payload.end(), field_bytes.begin(), field_bytes.end());
+            std::vector<uint8_t> checked = {'H', 'E', 'A', 'D'};
+            checked.insert(checked.end(), payload.begin(), payload.end());
+            std::vector<uint8_t> whole(with.begin(), with.begin() + 8);
+            whole.insert(whole.end(), {'H', 'E', 'A', 'D'});
+            put_u32(whole, static_cast<uint32_t>(payload.size()));
+            whole.insert(whole.end(), payload.begin(), payload.end());
+            put_u32(whole, crc32(checked.data(), checked.size()));
+            whole.insert(whole.end(), with.begin() + 16 + head_length + 4, with.end());        // (the chunks after the head)
+            Replay out;
+            std::string why;
+            const bool ok = decode(whole.data(), whole.size(), out, why);
+            return std::make_pair(ok, why);
+        };
+        ASSERT_TRUE(refuse_with({18, 1, 0x06}).first);                                 // (the helper rebuilds the head right: the same field read back)
+        const auto empty_field = refuse_with({18, 1, 0x00});
+        ASSERT_TRUE(!empty_field.first && contains(empty_field.second, "field 18"));
+        const auto beyond = refuse_with({18, 1, 0x30});
+        ASSERT_TRUE(!beyond.first && contains(beyond.second, "field 18"));
+        const auto longer = refuse_with({18, 2, 0x06, 0x00});
+        ASSERT_TRUE(!longer.first && contains(longer.second, "field 18"));
+        // the recorder carries the mark into the head it writes
+        Header head = replay.head;
+        head.heavy_orders = 0;
+        Recorder recorder(head);
+        recorder.set_heavy_orders(0x02);
+        ASSERT_EQ(recorder.replay().head.heavy_orders, 0x02);
+    } TEST_END();
+
+    // The recordings of tests/data are honest play (computer players of the hardest level among them). Given to the host's sequencer again, turn by turn, the engine of the match deciding what the host would ask
+    // of it, every order is taken, none is changed and none is over the budget: the turns that are sealed are the recorded ones.
+    TEST_CASE("RP9.14 The Orders Of The Recordings In tests/data, Given Once More To The Host's Sequencer Turn By Turn (Its Vetter Asking The Engine Of The Match), Are All Sealed As They Were: None Is Changed, None Is Dropped For The Budget, And The Turns Are The Recorded Ones") {
+        for (const char* name : {"replay_bots_tiny.antsrep", "replay_187_rules6.antsrep"}) {
+            const std::vector<uint8_t> bytes = read_bytes(std::string(TEST_DATA_DIR) + "/" + name);
+            ASSERT_FALSE(bytes.empty());
+            Replay replay;
+            std::string error;
+            ASSERT_TRUE(decode(bytes.data(), bytes.size(), replay, error));
+            assets::LevelData level;
+            ASSERT_TRUE(load_map(replay.head, std::string(ORIGINAL_ASSETS_DIR) + "/Maps", level, error));
+            net::Sequencer seq;
+            for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) seq.set_active(seat, (replay.head.roster >> seat) & 1u);
+            std::vector<sim::Command> given;
+            std::vector<sim::Command> sealed;
+            uint32_t changed = 0;
+            uint32_t refused = 0;
+            Hooks hooks;
+            hooks.before_command = [&](uint32_t, const sim::Command& c, sim::SimulationEngine& engine) {
+                sim::Command copy = c;
+                if (!net::HostSession::vet_ants(engine, c.issuer, copy) || copy != c) ++changed;
+                if (seq.submit_checked(c.issuer, copy) != net::Submit::Queued) ++refused;
+                given.push_back(c);
+            };
+            hooks.after_tick = [&](uint32_t, sim::SimulationEngine&) {
+                for (const sim::Command& c : seq.seal().commands) sealed.push_back(c);
+            };
+            const Outcome o = play(replay, level, hooks);
+            ASSERT_TRUE(o.ok);
+            for (const sim::Command& c : seq.seal().commands) sealed.push_back(c);       // (a Quit after the last tick)
+            ASSERT_TRUE(given.size() > 40);
+            ASSERT_EQ(changed, 0u);
+            ASSERT_EQ(refused, 0u);
+            ASSERT_EQ(seq.heavy_seats(), 0);
+            ASSERT_TRUE(sealed == given);
+        }
     } TEST_END();
 
     std::cout << "\n=======================================================\n"

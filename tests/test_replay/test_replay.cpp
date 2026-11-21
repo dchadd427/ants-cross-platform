@@ -2153,7 +2153,7 @@ int main(int argc, char* argv[]) {
         }
     } TEST_END();
 
-    TEST_CASE("RP7.6 A Reader That Does Not Know The Mode Refuses A Match Of Mode 187 By Its Rules Number: It Skips Field 17, Reads Field 16 As 2 And Plays Rules 1 Only; An Id That Nobody Knows Yet (18) Is Skipped By This Reader Too, In A File Of Either Mode") {
+    TEST_CASE("RP7.6 A Reader That Does Not Know The Mode Refuses A Match Of Mode 187 By Its Rules Number: It Skips Field 17, Reads Field 16 As 2 And Plays Rules 1 Only; An Id That Nobody Knows Yet (19) Is Skipped By This Reader Too, In A File Of Either Mode") {
         const Played p = play_scripted(tiny, 33, 120, 0x0F, sim::StartTeams{}, false, nullptr, k187);
         const Played original = play_scripted(tiny, 33, 120);
         // the reader of every release before the mode: it walks the fields, takes the ones it knows (here: the rules number, field 16) and skips the others, then plays only its own rules number
@@ -2173,9 +2173,9 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(!decoded(file_with_head(p, [&](std::vector<HeadField>& f) { drop_field(f, 17); })).ok);
         // an id that no build knows yet is skipped: the head still reads and the match plays, whichever mode it is
         for (const Played* base : {&p, &original}) {
-            const Decoded d = decoded(file_with_head(*base, [&](std::vector<HeadField>& f) { f.insert(f.begin() + 3, HeadField{18, {9, 9, 9}}); }));
+            const Decoded d = decoded(file_with_head(*base, [&](std::vector<HeadField>& f) { f.insert(f.begin() + 3, HeadField{19, {9, 9, 9}}); }));
             ASSERT_TRUE(d.ok && same(d.replay, base->replay));
-            const Decoded last = decoded(file_with_head(*base, [&](std::vector<HeadField>& f) { f.push_back(HeadField{18, {}}); f.push_back(HeadField{99, {1}}); }));
+            const Decoded last = decoded(file_with_head(*base, [&](std::vector<HeadField>& f) { f.push_back(HeadField{19, {}}); f.push_back(HeadField{99, {1}}); }));
             ASSERT_TRUE(last.ok && same(last.replay, base->replay) && plays_here(last.replay.head));
             const Outcome o = play(last.replay, tiny.level);
             ASSERT_TRUE(o.ok && o.hash == base->hash);
@@ -2239,7 +2239,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(legacy_rules == 12 && legacy_rules != kSimRules);
         ASSERT_TRUE(!decoded(file_with_head(p, [&](std::vector<HeadField>& f) { drop_field(f, 17); })).ok);
         ASSERT_TRUE(!decoded(file_with_head(p, [&](std::vector<HeadField>& f) { set_field(f, 16, {5, 0}); })).ok);
-        const Decoded unknown = decoded(file_with_head(p, [&](std::vector<HeadField>& f) { f.push_back(HeadField{18, {7}}); }));
+        const Decoded unknown = decoded(file_with_head(p, [&](std::vector<HeadField>& f) { f.push_back(HeadField{19, {7}}); }));
         ASSERT_TRUE(unknown.ok && same(unknown.replay, p.replay));
         o = play(unknown.replay, tiny.level);
         ASSERT_TRUE(o.ok && o.hash == p.hash);

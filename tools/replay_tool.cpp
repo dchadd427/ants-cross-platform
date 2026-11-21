@@ -133,6 +133,13 @@ void print_info(std::ostream& out, const Replay& r, size_t file_bytes, const std
     out << "Map:       " << h.map_name << " (hash " << hex64(h.map_hash) << "), seed " << h.seed << ", Fog of War " << (h.fog ? "on" : "off") << (h.mode != 0 ? std::string(", game mode ") + sim::game_mode_name(static_cast<sim::GameMode>(h.mode)) : std::string()) << "\n";
     out << "Seats:     " << seats_text(h) << "\n";
     out << "Teams:     " << teams_text(h) << "\n";
+    if (h.heavy_orders != 0) {
+        std::string who;
+        for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+            if ((h.heavy_orders & (1u << seat)) != 0) who += (who.empty() ? "" : ", ") + seat_label(h, seat);
+        }
+        out << "Heavy order rate: " << who << " (orders beyond the budget were not carried out and are not in the file)\n";
+    }
     out << "Length:    " << r.total_turns << " turns (" << format_time(r.total_turns) << ")" << (r.complete ? "" : ", INCOMPLETE: the recording stops here") << "\n";
     out << "Commands:  " << with_commas(r.commands.size()) << "\n";
     out << "Hashes:    " << r.hashes.size() << " (one every " << h.hash_period << " turns)\n";

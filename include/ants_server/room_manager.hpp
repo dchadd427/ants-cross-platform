@@ -330,6 +330,9 @@ public:
     uint64_t connections_refused() const noexcept { return refused_; }
 
 private:
+    /// A match that was played and could not be recorded (Room::set_unrecorded_sink): its record goes into the history from the referee's own numbers, under an id that no recording has or will have; the record's
+    /// recording is "removed" (there is none). Nothing happens without a history. A line in the log when the database refuses it.
+    void keep_unrecorded(UnrecordedMatch&& match);
     struct Pending {
         std::unique_ptr<net::Connection> connection;
         std::string address;

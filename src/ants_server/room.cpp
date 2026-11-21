@@ -309,6 +309,7 @@ void Room::build_session(uint32_t restart_vote_after_ms, uint32_t start_delay_ms
     hc.attendance.countdown_hold_ms = spec_.countdown_hold_ms;
     hc.attendance.max_catch_up_ms = spec_.max_catch_up_ms;
     hc.attendance.resume_countdown_ms = spec_.resume_countdown_ms;
+    hc.sequencer = spec_.sequencer;
     hc.max_log_bytes = spec_.max_log_bytes;
     hc.log_budget = log_budget_;
     hc.turn = turn_;                                              // protocol 26: the relay's credential for a player of a match of two or more people who asks (a room made without one gives none)
@@ -830,7 +831,7 @@ void Room::replay_begin(const net::StartMsg& start) {
     }
     head.teams = start.teams();
     head.recorder_seat = replay::kNoSeat;                        // (the server plays nobody)
-    recorder_ = std::make_unique<replay::Recorder>(std::move(head));
+    recorder_ = std::make_unique<replay::Recorder>(std::move(head), spec_.max_recording_bytes);
     session_->runner().set_on_executed([this](const net::TurnMsg& turn) {
         if (recorder_ != nullptr && sim_ != nullptr) recorder_->on_turn(turn, *sim_);
     });
@@ -857,7 +858,10 @@ void Room::replay_end() {
         return;
     }
     std::unique_ptr<replay::Recorder> recorder = std::move(recorder_);
-    if (session_ != nullptr) session_->runner().set_on_executed(nullptr);
+    if (session_ != nullptr) {
+        session_->runner().set_on_executed(nullptr);
+        recorder->set_heavy_orders(static_cast<uint8_t>(session_->heavy_order_seats() & recorder->replay().head.roster));       // (the mark of a seat whose orders went over its budget: the head says so, the match is what it was)
+    }
     const std::string kept = replay_store_ != nullptr && sim_ != nullptr ? replay_keep(*recorder) : std::string();
     live_end(kept);                                              // (the recorder goes at the end of this function: the live board lets go of it first)
 }
@@ -883,6 +887,13 @@ std::string Room::replay_keep(replay::Recorder& recorder) {
     if (bytes.empty()) {
         replay_note_ = "the match could not be written as a replay: " + error;
         replay_store_->report("room " + spec_.code + ": the match could not be written as a replay: " + error);
+        if (unrecorded_sink_ != nullptr) {                      // (the result is the referee's own, so the history has it all the same)
+            UnrecordedMatch lost;
+            lost.head = recorder.replay().head;
+            lost.outcome.turns = last_ticks_;
+            replay::take_result_of(lost.head.roster, *sim_, lost.outcome);
+            unrecorded_sink_(std::move(lost));
+        }
         return std::string();
     }
     const ReplaySave saved = replay_store_->save(bytes);
@@ -1313,6 +1324,11 @@ RoomStatus Room::status(uint32_t now_ms) const {
         s.drops_by_cap = a.drops_by_cap();
         s.drops_by_countdown_hold = a.drops_by_countdown_hold();
         s.drops_by_state = session_->diverged_drops();
+        s.heavy_order_seats = session_->heavy_order_seats();
+        for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+            s.orders_over_budget[seat] = session_->orders_over_budget(seat);
+            s.orders_without_ants[seat] = session_->orders_without_ants(seat);
+        }
         s.rejoins_refused = a.rejoins_refused();
         s.catch_up_expired = a.catch_up_expired();
         s.streamed_bytes = a.streamed_bytes();

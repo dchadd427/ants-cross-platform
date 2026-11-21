@@ -12,7 +12,9 @@
 //   combat                 {kills: [[..] x4] (killer row, victim column), ev: [[t, by or -1, of, type, drowned] ..] (the first kDetailsMaxEvents; ev_n says how many there were when more), dealt, taken (x4),
 //                           hp: [[..] x4] (the team of the damage row, the seat that lost the points), raids: [[t, thief, victim, points] ..] (capped likewise; raids_n), stolen, robbed (x4)}
 //   economy                {food: [[trips, points] x4], banked, hatch_cost, bombs_off (x4), taken: [[bomber, fire, thief, combat, swimmer] x4]}
-// A match that the pass could not count has the marker {"v":1,"n":1} (so that it is not tried again at every start); the page shows no stats for it.
+//   heavy_orders          [seat ..]  only when a seat's orders went over their budget in the match (the "heavy order rate" mark: net::Sequencer::Config::order_burst); the marker has it too
+// A match that the pass could not count has the marker {"v":1,"n":1} (so that it is not tried again at every start); the page shows no stats for it. A match that was played and has no recording (the file could not
+// be written) has the marker too: its numbers are the referee's own, kept in the record.
 // The text is at most kDetailsMaxBytes, always: when a very long match with many events is larger, the lists of events go first, then the points of the series get fewer, then combat and economy go;
 // a text that is still too long (a match of hours with numbers of ten digits) is the marker.
 
@@ -34,7 +36,7 @@ inline constexpr size_t kDetailsMaxEvents = 30;       // events in each list (ki
 /// The details of a counted match as JSON text; "" when the pass did not count it (`stats.ok` false). `record` supplies who won (for the comeback).
 std::string make_history_details(const replay::MatchStats& stats, const HistoryRecord& record);
 
-/// The text that stands for "the pass tried and could not count this match"
-std::string history_details_marker();
+/// The text that stands for "the pass tried and could not count this match" (`heavy_orders`: the seats with the mark of a heavy order rate, as in HistoryRecord; 0: none, and the text is the plain marker)
+std::string history_details_marker(uint8_t heavy_orders = 0);
 
 }  // namespace ants::server

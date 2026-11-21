@@ -6,11 +6,16 @@
 // the same tick. The sequencer also compares the state hashes the peers report against the host's own, and stalls sealing while a peer lags too far
 // behind (flow control), so nobody is left behind by more than a few seconds.
 //
+// What a seat may have sealed is limited here and nowhere else (docs/NETWORK_PORT.md, "The order budget"): a turn takes 64 commands of a seat, a seat has a budget of orders (a store that fills at a
+// steady pace: the clock is the sealed turns, 20 a second), and an order that names no ant that the seat could order is not sealed. What is over is dropped, counted and marked, never made a
+// violation and never put into a turn, so every machine runs the same turns.
+//
 // The class is pure logic without clock, sockets or simulation; the session glue (session.hpp) drives it.
 
 #include <array>
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <map>
 #include <set>
 #include <vector>
@@ -31,6 +36,14 @@ struct HashVerdict {
     uint8_t agree{0};                  ///< Drop: the seats (a bit for each) that report the referee's state for that turn
 };
 
+/// What became of a command that a seat handed in (Sequencer::submit_checked)
+enum class Submit : uint8_t {
+    Queued,        ///< it is in the next turn or waits for a later one
+    OverBudget,    ///< the seat has used up its budget of orders: dropped, counted, the seat is marked (Sequencer::heavy_seats)
+    NoAnts,        ///< the vetter says that the order names no ant that the seat can order: dropped and counted
+    Refused        ///< not a command that this seat may send (the seat is not at the table, a command that only the sequencer makes) or the seat has too many waiting: a client that sends one is at fault
+};
+
 class Sequencer {
 public:
     struct Config {
@@ -39,6 +52,13 @@ public:
         uint32_t max_carried_commands = 16 * 64;  // per peer: the commands that wait for a later turn (sixteen turns' worth at the default: a click on a big selection is up to 48 commands): a stuck uplink that is let go delivers
                                                   // all the orders of the player at once (15 a second for 5 s are 76), which are NOT a flood and must not cost the player its
                                                   // seat; beyond this many waiting commands a peer is refused
+        // The budget of orders of a seat: it holds `order_burst` orders and earns back `orders_per_second` of them every second of sealed turns (kTurnsPerSecond turns), and each command that is
+        // sealed takes one. The busiest second of the recordings that were measured (the repository's, the arena's hardest computer player among them) is 6 orders, the busiest ten seconds 30 and the busiest
+        // minute 110; a click on a huge selection is up to 48 commands (hud.hpp), a stuck uplink that is let go delivers 76 orders of a player who gave 15 a second, and ten of the biggest clicks (480) are what
+        // the carry was made for. So the store holds 512 and earns 8 a second: at most 520 orders in a second, 592 in ten seconds and 992 in a minute, far above what is played. 0 in either number: no budget
+        // (a test that wants none). A seat that goes over is marked in heavy_seats().
+        uint32_t order_burst = 512;
+        uint32_t orders_per_second = 8;
     };
 
     Sequencer() : Sequencer(Config{}) {}
@@ -48,11 +68,25 @@ public:
     void set_active(uint8_t player, bool active);
     bool is_active(uint8_t player) const noexcept { return player < sim::MAX_PLAYERS && active_[player]; }
 
-    /// A command of `player` for the next turn. The issuer is set to `player` whatever the payload says. False when the player is not active, the command is not one that a
-    /// client may send, or the peer already has max_carried_commands commands waiting beyond the max_commands_per_turn of this turn. A command that does not fit into the turn
+    /// The question that decides whether an order is sealed at all: asked for every command that a seat hands in, with the issuer set; it may take ants out of the command (and must say false when none is left).
+    /// The session gives the host's engine's answer (HostSession: ants that another player owns, ants that cannot exist yet and repeats are taken out: what the engine would not carry out anyway).
+    /// It must depend only on the state of the host: what is sealed is what every machine runs.
+    using Vetter = std::function<bool(uint8_t player, sim::Command& command)>;
+    void set_vetter(Vetter vetter) { vetter_ = std::move(vetter); }
+
+    /// A command of `player` for the next turn. The issuer is set to `player` whatever the payload says. Refused when the player is not active, the command is not one that a
+    /// client may send, or the peer already has max_carried_commands commands waiting beyond the max_commands_per_turn of this turn. NoAnts when the vetter turns it down, OverBudget when the
+    /// seat has no order left in its budget (Config::order_burst). A command that does not fit into the turn
     /// goes into one of the next turns (the first that has room for it, behind the older commands of the same player: the order in which a player sent its commands is kept).
     /// The sequencer alone decides which turn carries a command, so every machine runs the same turns.
-    bool submit(uint8_t player, sim::Command command);
+    Submit submit_checked(uint8_t player, sim::Command command);
+    /// submit_checked() as a yes or no: true when the command was queued
+    bool submit(uint8_t player, sim::Command command) { return submit_checked(player, std::move(command)) == Submit::Queued; }
+    /// Commands of `player` that were dropped because its budget was used up, and commands that were dropped because the vetter found no ant in them (for the whole match: they are never reset); the seats that
+    /// have gone over their budget at least once (a bit for each seat): the "heavy order rate" mark of the status, the replay's head and the history
+    uint32_t dropped_over_budget(uint8_t player) const noexcept { return player < sim::MAX_PLAYERS ? over_budget_[player] : 0u; }
+    uint32_t dropped_no_ants(uint8_t player) const noexcept { return player < sim::MAX_PLAYERS ? no_ants_[player] : 0u; }
+    uint8_t heavy_seats() const noexcept { return heavy_; }
     /// A command that the sequencer itself creates: the drop-out of a peer that left or fell silent (`command.issuer` is that peer). It goes into
     /// the next turn whatever the state of the peer, so that every machine drops the team at the same tick. Clients cannot send these (submit
     /// refuses every type that is not is_client_command).
@@ -113,6 +147,11 @@ private:
     std::array<uint32_t, sim::MAX_PLAYERS> queued_by_{};
     std::vector<sim::Command> queue_;
     std::array<std::deque<sim::Command>, sim::MAX_PLAYERS> carry_;   // per player: the commands beyond max_commands_per_turn, in the order they came
+    Vetter vetter_;
+    std::array<uint32_t, sim::MAX_PLAYERS> budget_milli_{};     // the orders that each seat has left, in thousandths: full at the start, one turn's earnings added at every seal
+    std::array<uint32_t, sim::MAX_PLAYERS> over_budget_{};
+    std::array<uint32_t, sim::MAX_PLAYERS> no_ants_{};
+    uint8_t heavy_{0};
     uint32_t next_turn_{0};
     uint8_t host_player_{255};
     std::map<uint32_t, std::array<sim::StateHash, sim::MAX_PLAYERS>> reports_;

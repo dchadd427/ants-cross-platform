@@ -1182,6 +1182,71 @@ int main() {
         ASSERT_TRUE(old.history.find(oid, got) && got.details == history_details_marker() && old.feeder.backfilled() == 1);
     } TEST_END();
 
+    TEST_CASE("HD4.9 A recording whose head marks a heavy order rate is counted with the mark in its details (the seats, in a list), a recording without the mark has no such key, and a recording that was read and cannot be played gets the marker with the mark") {
+        if (match_file(1).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        replay::Replay rep;
+        std::string why;
+        ASSERT_TRUE(replay::decode(match_file(1).data(), match_file(1).size(), rep, why));
+        int seat = 0;                                                                                  // the lowest seat that plays
+        while (((rep.head.roster >> seat) & 1) == 0) ++seat;
+        const uint8_t first = static_cast<uint8_t>(1u << seat);
+        ASSERT_EQ(rep.head.heavy_orders, 0);
+        Rig plain;
+        ASSERT_TRUE(plain.open());
+        const std::string plain_id = plain.keep(match_file(1));
+        plain.drain(8);
+        HistoryRecord got;
+        ASSERT_TRUE(plain.history.find(plain_id, got) && !got.details.empty() && !parse_text(got.details).has("heavy_orders"));
+        rep.head.heavy_orders = first;
+        std::vector<uint8_t> marked = replay::encode(rep, why);
+        ASSERT_FALSE(marked.empty());
+        Rig rig;
+        ASSERT_TRUE(rig.open());
+        const std::string id = rig.keep(marked);
+        rig.drain(8);
+        ASSERT_TRUE(rig.history.find(id, got) && rig.feeder.counted() == 1);
+        const ctl::JsonValue details = parse_text(got.details);
+        ASSERT_TRUE(details.get("heavy_orders").size() == 1 && details.get("heavy_orders").at(0).as_int_or(-1) == seat);
+        ASSERT_TRUE(details.has("over_time") && details.has("highlights"));                               // (the stats are all there)
+        ASSERT_TRUE(got.details.size() <= kDetailsMaxBytes);
+        // a marked recording whose details cannot be made (the maker gives none) is counted with the marker, and the marker keeps the mark
+        Rig no_stats;
+        ASSERT_TRUE(no_stats.open());
+        no_stats.feeder.set_details_maker([](const replay::MatchStats&, const HistoryRecord&) { return std::string(); });
+        const std::string no_stats_id = no_stats.keep(marked);
+        no_stats.drain(8);
+        ASSERT_TRUE(no_stats.history.find(no_stats_id, got) && got.details == history_details_marker(first));
+        // a record that has no details yet and whose recording is kept gets them from the recording, and the mark comes along
+        Rig later;
+        ASSERT_TRUE(later.open());
+        const std::string later_id = later.keep(marked);
+        HistoryRecord bare = got;
+        bare.id = later_id;
+        bare.details.clear();
+        ASSERT_TRUE(later.history.put(bare, why));
+        later.drain(8);
+        ASSERT_TRUE(later.history.find(later_id, got) && later.feeder.backfilled() == 1 && got.details != history_details_marker());
+        const ctl::JsonValue backfilled = parse_text(got.details);
+        ASSERT_TRUE(backfilled.get("heavy_orders").size() == 1 && backfilled.get("heavy_orders").at(0).as_int_or(-1) == seat && backfilled.has("over_time"));
+        // a record that has no details yet, whose recording is kept and does not play out here (a hash that differs), gets the marker, and the marker keeps the mark
+        ASSERT_FALSE(rep.hashes.empty());
+        rep.hashes[0] ^= 1u;
+        const std::vector<uint8_t> broken = replay::encode(rep, why);
+        ASSERT_FALSE(broken.empty());
+        Rig older;
+        ASSERT_TRUE(older.open());
+        const std::string oid = older.keep(broken);
+        HistoryRecord seed = got;
+        seed.id = oid;
+        seed.details.clear();
+        ASSERT_TRUE(older.history.put(seed, why));
+        older.drain(8);
+        ASSERT_TRUE(older.history.find(oid, got) && got.details == history_details_marker(first));
+    } TEST_END();
+
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     return g_test_failures == 0 ? 0 : 1;
 }
