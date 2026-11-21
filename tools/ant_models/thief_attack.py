@@ -1,13 +1,14 @@
-"""Authentic 1998 Thief Ant `atat` (720 ms) bandana-off bullwhip crack `"Attack"` clip & meshes.
+"""Authentic 1998 Thief Ant `atat` (720 ms) wide folded bandana cloth slap `"Attack"` clip & meshes.
 
 Split from `ant_thief.py` to stay well under per-file size limits and keep imports pure-stdlib safe.
 Choreographs all 12 original `atat301`/`atat901` frames (`[60, 40, 80, 60, 40, 40, 80, 80, 60, 80, 60, 40]` ms):
-- f0..f2 (0.00..0.10 s): right arm reaches up and peels the golden bandana off the brow
+- f0..f2 (0.00..0.10 s): right arm reaches up and peels the wide golden bandana off the brow
 - f3..f5 (0.18..0.28 s): worn bandana hides (`1e-4`), exposing Thief's bare green head while
-  `thief_whip_lasso` whips in a wide golden cloth crescent around his head into a loaded windup
-- f6..f7 (0.32..0.40 s): forward lunge & explosive `thief_whip_crack` S-curved cloth whip snapping
-  straight forward out of his right hand, then curling back on recoil
-- f8 (0.48 s): `thief_whip_lasso` whips cleanly back around the brow
+  `thief_whip_lasso` swings the wide folded golden bandana cloth off his head into a broad windup
+- f6 (0.32 s): forward lunge & wide flat-ribbed golden bandana (`thief_whip_crack` + twin knot tails)
+  slapping straight forward out of his right hand like a folded cloth towel slap
+- f7 (0.40 s): wide folded bandana curls upward & back on impact recoil (`thief_whip_recoil`)
+- f8 (0.48 s): wide folded bandana sweeps cleanly back around his brow (`thief_whip_lasso`)
 - f9..f11 (0.54..0.72 s): worn bandana snaps right back onto Thief's face and settles to rest
 """
 from __future__ import annotations
@@ -63,8 +64,9 @@ def _cloth_whip_ribbon(
     twist_deg: Tuple[float, float],
     *,
     name: str,
+    pleat_amp: float = 0.22,
 ) -> MeshPart:
-    """Build a closed, outward-verified glossy golden-satin cloth ribbon (`gear_gold`)."""
+    """Build a closed, outward-verified wide flat-folded pleated golden bandana cloth (`gear_gold`)."""
     pts = catmull_rom_spline([np.asarray(p, dtype=np.float64) for p in control_pts], samples_per_seg=6, closed=False)
     n = len(pts)
     u = np.linspace(0.0, 1.0, n)
@@ -73,10 +75,13 @@ def _cloth_whip_ribbon(
     twists = np.radians(np.linspace(twist_deg[0], twist_deg[1], n))
     tangents = np.array([_norm(pts[min(i + 1, n - 1)] - pts[max(i - 1, 0)]) for i in range(n)])
 
-    segs = 12
+    # Wide flat cloth cross-section with crisp longitudinal folded cloth pleats + hemmed borders.
+    segs = 16
     angs = np.linspace(0.0, 2.0 * math.pi, segs, endpoint=False)
-    cu = np.sign(np.cos(angs)) * (np.abs(np.cos(angs)) ** 0.72)
-    su = np.sign(np.sin(angs)) * (np.abs(np.sin(angs)) ** 0.72) + 0.12 * np.cos(2.0 * angs) * np.sin(angs)
+    cu = np.sign(np.cos(angs)) * (np.abs(np.cos(angs)) ** 0.56)
+    pleat = pleat_amp * np.cos(3.0 * angs) * np.sin(angs)
+    su = np.sign(np.sin(angs)) * (np.abs(np.sin(angs)) ** 0.62) + pleat
+    ring_lum = np.clip(0.93 + 0.06 * np.cos(3.0 * angs) * np.abs(np.sin(angs)) - 0.08 * (np.abs(np.cos(angs)) ** 2.4), 0.78, 1.0)
     hint = _norm(np.asarray(face_hint, dtype=np.float64))
 
     frames_w, frames_o, rings = [], [], []
@@ -118,61 +123,119 @@ def _cloth_whip_ribbon(
     b_last = 1 + (nr - 1) * segs
     tris.extend((end_idx, b_last + k, b_last + (k + 1) % segs) for k in range(segs))
     indices = np.asarray(tris, dtype=np.uint32).reshape(-1)
-    return MeshPart(name, "gear_gold", positions, recompute_smooth_normals(positions, indices), indices).ensure_outward()
+    part = MeshPart(name, "gear_gold", positions, recompute_smooth_normals(positions, indices), indices).ensure_outward()
+    lums = np.concatenate([[0.86], np.tile(ring_lum, nr), [0.86]]).astype(np.float32)
+    part.colors = np.column_stack([lums, lums, lums]).astype(np.float32)
+    return part
+
+
+def _add_twin_knot_tails(tip: Sequence[float], fwd: Sequence[float], spread: Sequence[float], lift: Sequence[float], prefix: str) -> List[MeshPart]:
+    """Build asymmetric pleated golden bandana knot-tails trailing off the swinging slap tip."""
+    p0 = np.asarray(tip, dtype=np.float64)
+    f = _norm(np.asarray(fwd, dtype=np.float64))
+    s = _norm(np.asarray(spread, dtype=np.float64))
+    u = _norm(np.asarray(lift, dtype=np.float64))
+    tails: List[MeshPart] = []
+    # Natural asymmetric cloth flaps (one longer sweeping flap + one shorter offset flap — never a symmetric fish tail).
+    specs = (
+        ("a", 1.00, +0.024, +0.022, 0.030, -14.0, +24.0),
+        ("b", 0.72, -0.044, -0.014, 0.024, +18.0, -20.0),
+    )
+    for tag, l_mul, s_off, up_m, max_w, tw0, tw1 in specs:
+        pts = [
+            p0 - 0.012 * f,
+            p0 + 0.034 * l_mul * f + 0.45 * s_off * s + 0.4 * up_m * u,
+            p0 + 0.078 * l_mul * f + 0.85 * s_off * s + 0.9 * up_m * u,
+            p0 + 0.112 * l_mul * f + 1.00 * s_off * s + 1.1 * up_m * u,
+        ]
+        tails.append(
+            _cloth_whip_ribbon(
+                pts,
+                half_widths=[0.016, max_w * 0.92, max_w, 0.008],
+                half_thicknesses=[0.006, 0.006, 0.005, 0.003],
+                face_hint=tuple(float(c) for c in u),
+                twist_deg=(tw0, tw1),
+                name=f"{prefix}_tail_{tag}",
+                pleat_amp=0.14,
+            )
+        )
+    return tails
 
 
 def add_thief_whip_meshes(scene: SceneBuilder, anchors: dict, *, head_scale: float = 1.0) -> None:
-    """Attach hidden (`1e-4` inside opaque thorax) golden cloth lasso & bullwhip crack meshes."""
+    """Attach hidden (`1e-4` inside opaque thorax) wide folded bandana cloth slap meshes."""
     tc = np.asarray(anchors["thorax_center"], dtype=np.float64)
     nc = np.asarray(anchors["neck_center"], dtype=np.float64)
     hc = np.asarray(anchors["head_center"], dtype=np.float64)
     hs = float(head_scale)
-    hy_rel = float((nc[1] - tc[1]) + hs * (hc[1] - nc[1])) - 0.006
+    hy_rel = float((nc[1] - tc[1]) + hs * (hc[1] - nc[1])) - 0.032
     hz_rel = float((nc[2] - tc[2]) + hs * (hc[2] - nc[2]))
-    rs = 0.5 * (1.0 + hs)  # keep lasso bold & proportional around the smaller head
+    rs = 0.5 * (1.0 + hs)
 
-    # 1. Sweeping 240-deg crescent cloth lasso wrapping dramatically around Thief's bare head (`f3..f5, f8`).
+    # 1. Wide folded golden bandana loop peeling off the head & winding into the slap (`f3..f5, f8`).
     lasso_pts = [
-        (-0.10 * rs, hy_rel - 0.10 * rs, hz_rel + 0.13 * rs),
-        (-0.26 * rs, hy_rel - 0.03 * rs, hz_rel + 0.11 * rs),
+        (-0.09 * rs, hy_rel - 0.09 * rs, hz_rel + 0.12 * rs),
+        (-0.26 * rs, hy_rel - 0.02 * rs, hz_rel + 0.10 * rs),
         (-0.30 * rs, hy_rel + 0.10 * rs, hz_rel - 0.04 * rs),
-        (-0.14 * rs, hy_rel + 0.20 * rs, hz_rel - 0.23 * rs),
-        (+0.14 * rs, hy_rel + 0.18 * rs, hz_rel - 0.22 * rs),
-        (+0.29 * rs, hy_rel + 0.06 * rs, hz_rel - 0.03 * rs),
-        (+0.23 * rs, hy_rel - 0.06 * rs, hz_rel + 0.14 * rs),
+        (-0.14 * rs, hy_rel + 0.18 * rs, hz_rel - 0.21 * rs),
+        (+0.15 * rs, hy_rel + 0.16 * rs, hz_rel - 0.20 * rs),
+        (+0.29 * rs, hy_rel + 0.05 * rs, hz_rel - 0.02 * rs),
+        (+0.21 * rs, hy_rel - 0.05 * rs, hz_rel + 0.14 * rs),
     ]
-    lasso = _cloth_whip_ribbon(
+    lasso_band = _cloth_whip_ribbon(
         lasso_pts,
-        half_widths=[0.017, 0.033, 0.044, 0.040, 0.038, 0.035, 0.015],
-        half_thicknesses=[0.008, 0.009, 0.009, 0.008, 0.008, 0.008, 0.005],
-        face_hint=(0.0, 0.88, 0.48),
-        twist_deg=(-20.0, 42.0),
+        half_widths=[0.026, 0.066, 0.084, 0.086, 0.080, 0.064, 0.028],
+        half_thicknesses=[0.009, 0.011, 0.011, 0.010, 0.010, 0.009, 0.007],
+        face_hint=(0.0, 0.72, 0.69),
+        twist_deg=(-16.0, 28.0),
         name="thief_whip_lasso_ribbon",
     )
-    scene.add("thief_whip_lasso", lasso, parent="upper_body")
+    lasso_tails = _add_twin_knot_tails(lasso_pts[-1], (-0.25, -0.35, 0.90), (0.85, 0.30, 0.42), (0.20, 0.92, 0.32), "thief_lasso")
+    scene.add("thief_whip_lasso", [lasso_band] + lasso_tails, parent="upper_body")
     scene.set_node_transform("thief_whip_lasso", translation=(0.0, 0.0, 0.0), scale=_HIDE_SCALE)
 
-    # 2. Snapping S-curved golden cloth bullwhip extending +0.46 Z forward from right hand (`f6..f7`).
-    #    Angled upward in upper_body local space to counterbalance Thief's +0.38 rad lunge lean so
-    #    the bullwhip cracks dead horizontal at waist/hand height cleanly above Y = 0.0!
+    # 2. Wide flat-ribbed folded golden bandana cloth SLAP (`f6`: bold cloth paddle + twin knot-tails
+    #    slapping straight forward-down out of right hand, matching `atat301 f6` & `atat901 f6`!).
     crack_pts = [
-        (-0.075, +0.08, +0.12),
-        (-0.048, +0.12, +0.23),
-        (+0.044, +0.16, +0.34),
-        (-0.046, +0.20, +0.45),
-        (+0.024, +0.23, +0.54),
-        (+0.004, +0.26, +0.60),
+        (-0.072, +0.085, +0.11),
+        (-0.046, +0.125, +0.22),
+        (-0.008, +0.165, +0.34),
+        (+0.020, +0.192, +0.45),
+        (+0.004, +0.195, +0.54),
     ]
-    crack = _cloth_whip_ribbon(
+    crack_band = _cloth_whip_ribbon(
         crack_pts,
-        half_widths=[0.018, 0.034, 0.046, 0.042, 0.028, 0.010],
-        half_thicknesses=[0.008, 0.009, 0.009, 0.008, 0.006, 0.004],
-        face_hint=(0.24, 0.96, 0.12),
-        twist_deg=(-15.0, 85.0),
+        half_widths=[0.024, 0.062, 0.092, 0.096, 0.068],
+        half_thicknesses=[0.009, 0.011, 0.011, 0.010, 0.008],
+        face_hint=(0.14, 0.98, -0.14),
+        twist_deg=(-16.0, 46.0),
         name="thief_whip_crack_ribbon",
     )
-    scene.add("thief_whip_crack", crack, parent="upper_body")
+    crack_tails = _add_twin_knot_tails(crack_pts[-1], (0.04, 0.14, 0.99), (0.98, 0.08, -0.06), (0.06, 0.98, -0.14), "thief_slap")
+    scene.add("thief_whip_crack", [crack_band] + crack_tails, parent="upper_body")
     scene.set_node_transform("thief_whip_crack", translation=(0.0, 0.0, 0.0), scale=_HIDE_SCALE)
+
+    # 3. Wide folded bandana U-curl rebound (`f7`: cloth folds upward & curls back on itself right
+    #    after slap impact, matching `atat301 f7` & `atat901 f7`!).
+    recoil_pts = [
+        (-0.072, +0.085, +0.11),
+        (-0.040, +0.105, +0.23),
+        (+0.018, +0.130, +0.35),
+        (+0.036, +0.225, +0.41),
+        (-0.010, +0.275, +0.33),
+        (-0.042, +0.240, +0.25),
+    ]
+    recoil_band = _cloth_whip_ribbon(
+        recoil_pts,
+        half_widths=[0.024, 0.058, 0.088, 0.094, 0.084, 0.042],
+        half_thicknesses=[0.009, 0.011, 0.011, 0.010, 0.009, 0.007],
+        face_hint=(0.18, 0.92, -0.34),
+        twist_deg=(-12.0, 22.0),
+        name="thief_whip_recoil_ribbon",
+    )
+    recoil_tails = _add_twin_knot_tails(recoil_pts[-1], (-0.42, -0.32, -0.85), (0.88, 0.18, -0.44), (0.14, 0.94, -0.32), "thief_recoil")
+    scene.add("thief_whip_recoil", [recoil_band] + recoil_tails, parent="upper_body")
+    scene.set_node_transform("thief_whip_recoil", translation=(0.0, 0.0, 0.0), scale=_HIDE_SCALE)
 
 
 def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
@@ -396,11 +459,11 @@ def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
                 "thief_whip_lasso",
                 [
                     (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
-                    (+0.18, +0.06, -0.12),   # f3: wide halo around both sides of bare head
-                    (+0.28, -0.68, +0.42),   # f4: fast overhead whirl
-                    (+0.46, -1.24, +0.62),   # f5: sweeping low-left windup arc
+                    (+0.18, +0.06, -0.08),   # f3: wide bandana peels off both sides of bare head
+                    (+0.38, -0.58, +0.40),   # f4: broad cloth loops wide around head
+                    (+0.78, -0.84, +0.30),   # f5: bold low-forward horizontal cloth windup!
                     (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
-                    (+0.14, +0.42, -0.24),   # f8: whips cleanly back around brow
+                    (+0.52, +3.04, -0.06),   # f8: wide bandana cups low across front cheeks/brow!
                     (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
                 ],
             )
@@ -409,8 +472,8 @@ def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
     if "thief_whip_crack" in scene.nodes:
         crack_vis = [
             _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE,
-            (1.00, 1.00, 1.02),      # f6: full explosive forward whip crack!
-            (1.06, 1.05, 0.84),      # f7: curled snapping tip rebound!
+            (1.00, 1.00, 1.04),      # f6: full explosive forward wide-bandana SLAP!
+            _HIDE_SCALE,             # f7 hands off cleanly to curled-back `thief_whip_recoil`!
             _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE,
         ]
         channels.append(AnimationChannel("thief_whip_crack", "scale", list(times), crack_vis, interpolation="STEP"))
@@ -420,20 +483,41 @@ def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
                 [
                     (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
                     (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
-                    (-0.06, +0.04, +0.06),   # f6: straight horizontal forward crack!
-                    (-0.14, +0.26, -0.34),   # f7: upward snap-back curl rebound!
+                    (-0.04, +0.04, -0.06),   # f6: bold flat-forward towel slap impact!
+                    (0.0, 0.0, 0.0),
                     (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
                 ],
             )
         )
         ct0 = _rest_t("thief_whip_crack")
-        crack_dzs = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, +0.020, -0.045, 0.0, 0.0, 0.0, 0.0, 0.0]
+        crack_dzs = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, +0.028, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         channels.append(
             AnimationChannel(
                 "thief_whip_crack",
                 "translation",
                 list(times),
                 [(ct0[0], ct0[1], ct0[2] + dz) for dz in crack_dzs],
+            )
+        )
+
+    if "thief_whip_recoil" in scene.nodes:
+        recoil_vis = [
+            _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE,
+            _HIDE_SCALE,
+            (1.02, 1.02, 1.00),      # f7: wide folded bandana U-curl snap-back rebound!
+            _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE, _HIDE_SCALE,
+        ]
+        channels.append(AnimationChannel("thief_whip_recoil", "scale", list(times), recoil_vis, interpolation="STEP"))
+        channels.append(
+            _rot_track(
+                "thief_whip_recoil",
+                [
+                    (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
+                    (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
+                    (0.0, 0.0, 0.0),
+                    (-0.08, +0.10, -0.14),   # f7: curled wide cloth rebound!
+                    (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
+                ],
             )
         )
 
