@@ -903,8 +903,8 @@
   {
    "id": "a_command_sends_another_text",
    "file": "web/home/chat.js",
-   "old": "try { sock.send(JSON.stringify({ t: 'say', text: entry.text })); }",
-   "new": "try { sock.send(JSON.stringify({ t: 'say', text: entry.text.replace('#', '') })); }",
+   "old": "sendHeld(entry, { t: 'say', text: entry.text });",
+   "new": "sendHeld(entry, { t: 'say', text: entry.text.replace('#', '') });",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
