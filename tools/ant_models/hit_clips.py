@@ -24,10 +24,12 @@ if np is not None:
         from .base_ant import EYELID_CLOSED_ANGLE, sync_leg_flex_to_clip
         from .leg_rig import LEG_NODES, _quat_conj, _quat_rotate, _shortest_arc_quat, _solve_knee_scale, leg_rig_info
         from .mesh_core import AnimationChannel, AnimationClip, SceneBuilder, quat_from_euler_xyz, quat_mul
+        from .shared_clips_loco import add_shared_loco_clips
     except ImportError:
         from base_ant import EYELID_CLOSED_ANGLE, sync_leg_flex_to_clip  # type: ignore
         from leg_rig import LEG_NODES, _quat_conj, _quat_rotate, _shortest_arc_quat, _solve_knee_scale, leg_rig_info  # type: ignore
         from mesh_core import AnimationChannel, AnimationClip, SceneBuilder, quat_from_euler_xyz, quat_mul  # type: ignore
+        from shared_clips_loco import add_shared_loco_clips  # type: ignore
 
 Vec3 = Tuple[float, float, float]
 Quat = Tuple[float, float, float, float]
@@ -374,7 +376,9 @@ def add_worker_hit(scene: SceneBuilder) -> AnimationClip:
         channels.append(AnimationChannel(ln, "rotation", list(times), _align_quats(leg_rs[ln])))
         channels.append(AnimationChannel(ln, "translation", list(times), leg_ts[ln]))
 
-    return scene.add_animation("Hit", channels, replace=True)
+    clip = scene.add_animation("Hit", channels, replace=True)
+    add_shared_loco_clips(scene, "worker")
+    return clip
 
 
 def add_combat_hit(scene: SceneBuilder) -> AnimationClip:
@@ -457,6 +461,7 @@ def add_combat_hit(scene: SceneBuilder) -> AnimationClip:
 
     clip = scene.add_animation("Hit", channels, replace=True)
     sync_leg_flex_to_clip(scene, "Hit", swivel=0.0)
+    add_shared_loco_clips(scene, "combat")
     return clip
 
 
@@ -520,6 +525,7 @@ def add_fire_hit(scene: SceneBuilder, *, hold_magnifying_glass: bool = False) ->
 
     clip = scene.add_animation("Hit", channels, replace=True)
     sync_leg_flex_to_clip(scene, "Hit", swivel=0.0)
+    add_shared_loco_clips(scene, "fire")
     return clip
 
 
