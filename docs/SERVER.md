@@ -7,7 +7,7 @@
 - A **room** is a host that plays nobody: it seals a turn every 50 ms, runs the match on its own engine as the **referee** and compares every client's state hash with its own. A seat whose state differs is told and dropped as a seat that quits is (its ants die, its alliance ends, a match of two ends with it as the quitter) and the others go on; the room fails only when no seat that is there agrees with the referee. A room is `waiting`, `loading`, `running`, `finished` or `failed`.
 - Rooms come from a lobby's backend, which makes them with the control interface, or from a public page that has no secret and makes **demo rooms** by itself ("Demo rooms" below).
 - The players' game windows start with `--join HOST:PORT --room CODE` ([`COMMAND_LINE.md`](COMMAND_LINE.md)); a browser joins through the site's `/ws`.
-- There are two doors: a TCP port for native clients, and a WebSocket port for browsers and Electron behind a reverse proxy that ends TLS. Each holds 64 waiting connections. A connection that does not say Hello within 10 s is closed. A Hello for another protocol, or for a room that does not exist, is rejected.
+- There are two doors: a TCP port for a LAN or development, and a WebSocket port for browsers, Electron and the desktop game behind a reverse proxy that ends TLS (the public site opens no TCP port). Each holds 64 waiting connections. A connection that does not say Hello within 10 s is closed. A Hello for another protocol, or for a room that does not exist, is rejected.
 - How a room's match starts, by itself when the seats are taken or earlier by the leader's START, is described in [`NETWORK_PORT.md`](NETWORK_PORT.md#protocol-7-the-rooms-leader-starts-early-the-first-player-of-a-servers-room).
 
 ## Starting a server
@@ -38,8 +38,8 @@ A later start does not print the secret again. With demo rooms, a line "public r
 |---|---|---|
 | `--maps DIR` | required | The folder of `.lvl` files that rooms may use. A room whose map is missing, invalid or does not load is refused. A folder that does not exist stops the server with status 2. The Docker image brings the six maps of the original game in `/maps`; a mounted folder replaces them. |
 | `--community-maps DIR` | none | A second folder of maps, the players' maps: the `.lvl` files of `Community-Maps/` with its `maps.json` and `previews.json` (the image has them in `/community-maps`, outside the volume at `/maps`). The lobby may choose every map of `--maps` and of this folder, and `GET /maps` lists them ("The list of maps"). The maps folder is asked first when both hold a name. A folder that does not exist stops the server with status 2. |
-| `--port N` | 4001 | TCP game port of native clients (0: none). This machine only unless `--public`. A server needs a game port: `--port 0` without `--ws-port` stops it with status 2. |
-| `--ws-port N` | 0 (none) | WebSocket port of browsers and Electron behind a reverse proxy that ends TLS. This machine only. It also answers the public status `GET /busy` and the site statistics `GET /stats` and `POST /stats/local` (below). |
+| `--port N` | 4001 | TCP game port for a LAN or development server (0: none; not encrypted, and neither compose file publishes it: the desktop game reaches a server on the Internet through `/ws` with wss; a LAN or development server publishes it with a line `- "4001:4001"` of its own). This machine only unless `--public`. A server needs a game port: `--port 0` without `--ws-port` stops it with status 2. |
+| `--ws-port N` | 0 (none) | WebSocket port of browsers, Electron and the desktop game behind a reverse proxy that ends TLS. This machine only. It also answers the public status `GET /busy` and the site statistics `GET /stats` and `POST /stats/local` (below). |
 | `--ctl-port N` | 0 (none) | Control interface: HTTP + JSON on this machine only, `Authorization: Bearer <secret>`. The secret comes from the environment variable `ANTS_SERVER_SECRET`; without it the server makes one ("The control secret"). |
 | `--public` | off | The TCP game port accepts other machines. |
 | `--ws-any-interface`, `--ctl-any-interface` | off | For containers only (a published port does not reach a program on the container's loopback address): listen on every interface and let the host's port mapping decide who may connect. |
@@ -393,7 +393,6 @@ Optional environment variables, set in the stack's "Environment variables" (they
 | `ANTS_PORT` | 19980 | The host port of the web page. |
 | `ANTS_WEB_BIND_PREFIX` | empty | In front of the host port of the web page: `127.0.0.1:` publishes it on the loopback address only. See ["Behind a reverse proxy"](#behind-a-reverse-proxy). |
 | `ANTS_TRUSTED_PROXIES_FILE` | none | The full path, on the host, of an existing file with your own list of reverse proxies (`set_real_ip_from` lines), for a proxy at a public address. It replaces the image's list: see ["Behind a reverse proxy"](#behind-a-reverse-proxy). |
-| `ANTS_SERVER_PORT` | 4001 | The host port of the game port: TCP only, and only native clients use it; the browser pages reach the server through `/ws` of the site. |
 | `ANTS_SERVER_WS_PORT`, `ANTS_SERVER_CTL_PORT` | 4002, 4010 | The host ports of the WebSocket port and the control interface, both on the host's loopback address only. |
 | `ANTS_BUILD_ID` | the commit of the clone's git files, else the UTC build time | The build id that the footer of the front page, the Menu of the other pages (the game page's included) and `ants_server --version` show. |
 

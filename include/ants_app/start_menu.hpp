@@ -39,22 +39,39 @@ namespace ants::app {
 
 // ---- what the menu remembers ---------------------------------------------------------------------------------------------------------------------------
 
-/// The game server that Join and Host use when nothing else is said (--server, the settings key `server`): the public beta server's TCP game port
+/// The game server that Join and Host use when nothing else is said (--server, the settings key `server`): the public beta server's encrypted door, wss://beta.playants.org/ws (the site's port 443). The
+/// desktop game talks to a server on the Internet through TLS only; plain TCP (the server's game port, 4001) is for a server on this machine or the local network.
 inline constexpr const char* kDefaultServerHost = "beta.playants.org";
-inline constexpr uint16_t kDefaultServerPort = 4001;
+inline constexpr uint16_t kDefaultServerPort = 443;
+inline constexpr const char* kDefaultServerPath = "/ws";
+inline constexpr uint16_t kLocalServerPort = 4001;
 
-/// A server as the menu writes it: host[:port]
+/// A server as the menu writes it: wss://host[:port][/path] (`tcp` false: the encrypted door, the default) or host[:port] of a server's plain TCP game port (`tcp` true)
 struct ServerAddress {
     std::string host{kDefaultServerHost};
     uint16_t port{kDefaultServerPort};
-    bool operator==(const ServerAddress& o) const noexcept { return host == o.host && port == o.port; }
+    bool tcp{false};                                           // plain TCP to a server on this machine or the local network (never to the Internet: NetGame::join refuses it)
+    std::string path{kDefaultServerPath};                      // the encrypted door's path (and query); not used for TCP
+    bool operator==(const ServerAddress& o) const noexcept { return host == o.host && port == o.port && tcp == o.tcp && (tcp || path == o.path); }
 };
 
-/// HOST, HOST:PORT, an IPv4 address, "[IPv6]" or "[IPv6]:PORT" (a bare IPv6 address without brackets has no port). A host is 1 - 253 letters, digits, '.', '-' and '_'; a port is
-/// 1 - 65535. False with the reason in `why` for anything else (the text of --server and of the settings key `server` goes through this).
+/// What a player may write for a server, and what it means:
+///   wss://HOST[:PORT][/PATH]  the encrypted door (443 and /ws unless said)
+///   HOST, HOST:PORT           a host name, an IPv4 address, "[IPv6]" or "[IPv6]:PORT" (a bare IPv6 address without brackets has no port). A server of this machine or the local network (an address of a
+///                             private range, localhost, a name that ends in .local or .lan, a name of one word) is plain TCP, port 4001 unless said; any other host is the encrypted door
+///                             wss://HOST[:PORT]/ws
+///   tcp://HOST[:PORT]         plain TCP whatever the host is (a connection to an address of the Internet is refused when it is made)
+/// A host is 1 - 253 letters, digits, '.', '-' and '_'; a port is 1 - 65535. False with the reason in `why` for anything else, and for ws:// (nothing is sent in the clear over a WebSocket). The text of
+/// --server and of the settings key `server` goes through this.
 bool parse_server(const std::string& text, ServerAddress& out, std::string& why);
-/// "host:port" ("[v6]:port" for an IPv6 address), what the screen shows and parse_server reads back
+/// The one written form that parse_server reads back as the same server: wss://host[:port]/path for the encrypted door, host:port ("[v6]:port" for an IPv6 address) for the plain TCP port of a local server,
+/// tcp://host:port for the plain TCP port of any other host. It is also what the rejoin keys call the server.
 std::string server_label(const ServerAddress& server);
+/// The wss URL of the encrypted door of `server`; empty for a plain TCP server
+std::string server_url(const ServerAddress& server);
+/// What the screens call the server in their lines ("Server: beta.playants.org", "Connecting to beta.playants.org..."): the host of an encrypted door that has the default port and path (the host with ":port" and
+/// the path when it has others), host:port for plain TCP. Not a key: server_label is the written form that names the server for the rejoin keys.
+std::string server_display(const ServerAddress& server);
 
 /// A match that this machine can take its seat in again: the first panel's "Rejoin your match (CODE)" (the newest key that the application's store holds for a server that the menu can reach: a
 /// room's code, the seat, and where the room is). The owner (Application::enter_start_menu) gives it; a menu that is given none has the panel it always had.

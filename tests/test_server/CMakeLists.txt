@@ -59,6 +59,24 @@ target_include_directories(test_rejoin PRIVATE
 add_test(NAME test_rejoin COMMAND test_rejoin)
 set_tests_properties(test_rejoin PROPERTIES COST 25)
 
+# The desktop game's encrypted link in a whole match (docs/NETWORK_PORT.md "The desktop game's encrypted link"): real NetGames join a real RoomManager through wss:// (TLS with the tests' own authority,
+# tests/common/tls_test_server.hpp), so it needs the server's library as test_rejoin does
+add_executable(test_wss_match
+    test_wss_match.cpp
+)
+
+target_link_libraries(test_wss_match PRIVATE
+    ants_server_core
+    ants_test_paths
+)
+
+target_include_directories(test_wss_match PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_wss_match COMMAND test_wss_match)
+set_tests_properties(test_wss_match PROPERTIES COST 25)
+
 # The store of the matches that the server keeps (ants_server/replay_store.hpp): the file names, the age and size limits, the free space, a folder that holds other things. No network and no match
 add_executable(test_replay_store
     test_replay_store.cpp
