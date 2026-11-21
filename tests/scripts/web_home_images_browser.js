@@ -270,6 +270,8 @@ async function main() {
         const phone = await context('owner', { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
         const pp = await tab(phone, true);
         check('on a phone held upright the box has two rows', await pp.evaluate(() => document.querySelector('#gchat .gc-form').className.indexOf('gp-two') >= 0));
+        const fit = await until('the thumbnail is in the phone\'s log', () => pp.evaluate(() => { const b = document.querySelector('#gchat .gc-thumb'), i = b && b.querySelector('img'); if (!i || !(i.complete && i.naturalWidth > 0)) return null; return { frame: b.clientWidth, img: i.getBoundingClientRect().width, h: i.getBoundingClientRect().height }; }), 20000).catch(() => null);
+        check('on a phone the thumbnail\'s frame is as wide as its picture (no empty band beside it) and the picture keeps its 150 px height limit', !!fit && Math.abs(fit.frame - fit.img) < 1 && fit.h <= 150.5, JSON.stringify(fit));
         await shot(pp, '08_in_the_log_phone');
         await pp.click('.hlogin');
         const phoneSwitch = await until('the account\'s menu has the reader\'s switch on a phone too', () => pp.$('#gchat-login-slot .gp-sw input'), 5000).catch(() => null);
