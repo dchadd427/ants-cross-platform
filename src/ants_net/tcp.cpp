@@ -336,6 +336,12 @@ TcpStream::~TcpStream() { close(); }
 
 void TcpStream::close() {
     if (fd_ >= 0) {
+        // What the peer has sent and nobody has read is read and thrown away first: closing a socket that holds unread bytes resets the connection (Windows does it always), and a reset takes with it the
+        // goodbye that this side has just written (a close frame, the TLS close notice), which the peer would otherwise read
+        uint8_t scratch[4096];
+        for (int i = 0; i < 16; ++i) {
+            if (::recv(static_cast<socket_t>(fd_), reinterpret_cast<char*>(scratch), static_cast<iolen_t>(sizeof(scratch)), 0) <= 0) break;
+        }
         close_socket(static_cast<socket_t>(fd_));
         fd_ = -1;
     }

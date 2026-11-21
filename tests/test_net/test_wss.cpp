@@ -726,10 +726,12 @@ int main() {
             ASSERT_TRUE(open_link(rig, link, rig.url(), trusting(rig.ca)));
             ASSERT_TRUE(run_until(rig, link, [&]() { return link.c->state() == Connection::State::Failed; }));
             ASSERT_TRUE(link.got.empty());
+#ifndef _WIN32                                                                                  // (the close frame is a farewell, best effort: a Windows kernel may drop what came before a reset, as test_ws says of the server's side)
             ASSERT_TRUE(run_until(rig, link, [&]() { return !door.frames_in.empty(); }));
             std::vector<std::pair<uint8_t, Bytes>> reply;
             ASSERT_TRUE(client_frames(door.frames_in, reply));
             ASSERT_TRUE(!reply.empty() && reply.back().first == 0x8);
+#endif
         }
     } TEST_END();
 

@@ -2,6 +2,7 @@
 #include "ants_app/net_overlay.hpp"
 #include "ants_app/version.hpp"
 #include "ants_ai/bot.hpp"
+#include "ants_net/address.hpp"
 #include <iostream>
 #include <algorithm>
 #include <cstdlib>
@@ -344,6 +345,13 @@ bool Application::init(const ApplicationConfig& config) {
         // newest entry of that server and room, or of the seat that --seat asks for. The key goes into the Hello only; the seat is the entry's, so that the key can be let go of by its seat.
         net::SeatKey join_key{};
         uint8_t join_seat = config_.net_seat;
+#ifndef __EMSCRIPTEN__
+        if (!host_role && !config_.net_url.empty()) {                                   // (a wss address as it was typed or configured, in the one written form that the key of a seat names the server by: wss_url_text)
+            net::WssUrl written;
+            std::string why;
+            if (net::parse_wss_url(config_.net_url, written, why)) config_.net_url = net::wss_url_text(written);
+        }
+#endif
         if (!host_role && !config_.net_room.empty() && rejoin_store_) {
             const std::string server = rejoin_server_text(config_.net_address, config_.net_port, config_.net_url);
             if (const std::optional<RejoinEntry> kept = rejoin_store_->find(server, config_.net_room, config_.net_seat)) {

@@ -914,7 +914,7 @@ void run_use_tests() {
         ASSERT_FALSE(output.text().find(rejoin_key_hex(key)) != std::string::npos);
     } TEST_END();
 
-    TEST_CASE("RA4.2 Which Key A Join Uses: The Newest Entry Of That Server And Room (With The Entry's Seat In The Hello, The Key Alone Never In The Address), Or Of The Seat That --seat Asks For; Another Room, Another Server, Another Seat, An Entry Of More Than A Day, And A Join Without A Room Use None") {
+    TEST_CASE("RA4.2 Which Key A Join Uses (Plain Or Through wss, Each Server By Its Own Written Name): The Newest Entry Of That Server And Room (With The Entry's Seat In The Hello, The Key Alone Never In The Address), Or Of The Seat That --seat Asks For; Another Room, Another Server, Another Seat, An Entry Of More Than A Day, And A Join Without A Room Use None") {
         struct Row {
             const char* what;
             std::vector<std::string> lines;          // the key file ({port} stands for the test server's port); times are minutes before now
@@ -922,12 +922,15 @@ void run_use_tests() {
             uint8_t seat;                            // --seat (255: not given)
             int expect_key;                          // the tag of the key that the Hello must show, 0: none
             int expect_seat;                         // the seat that the Hello asks for
+            bool wss = false;                        // the join is --join-url wss://127.0.0.1:{port}/ws (its link is the test's own: the Hello arrives over the framed link of the catcher, no TLS)
+            const char* url = nullptr;               // wss: the address as it is written in the configuration (default: the written form of the URL above)
         };
         const int64_t now = wall_clock_ms();
         const auto line = [&](const std::string& server, const std::string& room, unsigned seat, uint8_t tag, int64_t minutes_ago) {
             return key_line(server, room, seat, key_of(tag), now - minutes_ago * 60 * 1000);
         };
         const std::string me = "127.0.0.1:{port}";
+        const std::string wss_me = "wss://127.0.0.1:{port}/ws";
         const std::vector<Row> rows = {
             {"the entry of the room", {line(me, "ROOM-A", 1, 11, 5)}, "ROOM-A", 255, 11, 1},
             {"--seat that is the entry's seat", {line(me, "ROOM-A", 1, 11, 5)}, "ROOM-A", 1, 11, 1},
@@ -939,6 +942,15 @@ void run_use_tests() {
             {"two seats of the room: the newest", {line(me, "ROOM-A", 0, 21, 60), line(me, "ROOM-A", 3, 22, 10)}, "ROOM-A", 255, 22, 3},
             {"two seats of the room, --seat 0: the older", {line(me, "ROOM-A", 0, 21, 60), line(me, "ROOM-A", 3, 22, 10)}, "ROOM-A", 0, 21, 0},
             {"no room (a direct join)", {line(me, "ROOM-A", 1, 11, 5)}, "", 255, 0, -1},
+            // a join through the encrypted door names the server by its URL in the written form: its entries are the URL's, a plain entry of the same host and port is another server, and the other way round
+            {"wss: the entry of the room (the URL is the server)", {line(wss_me, "ROOM-A", 1, 11, 5)}, "ROOM-A", 255, 11, 1, true},
+            {"wss: --seat that is the entry's seat", {line(wss_me, "ROOM-A", 1, 11, 5)}, "ROOM-A", 1, 11, 1, true},
+            {"wss: the address as typed (capitals, port, no path ...) is the same server", {line(wss_me, "ROOM-A", 1, 11, 5)}, "ROOM-A", 255, 11, 1, true, "WSS://127.0.0.1:{port}/ws"},
+            {"wss: a plain entry of the same host and port is another server", {line(me, "ROOM-A", 1, 11, 5)}, "ROOM-A", 255, 0, -1, true},
+            {"wss: another path of the same host is another server", {line("wss://127.0.0.1:{port}/other", "ROOM-A", 1, 11, 5)}, "ROOM-A", 255, 0, -1, true},
+            {"wss: another room", {line(wss_me, "ROOM-A", 1, 11, 5)}, "ROOM-B", 255, 0, -1, true},
+            {"wss: an entry of three hours and a minute", {line(wss_me, "ROOM-A", 1, 11, 3 * 60 + 1)}, "ROOM-A", 255, 0, -1, true},
+            {"plain: a wss entry of the same host and port is another server", {line(wss_me, "ROOM-A", 1, 11, 5)}, "ROOM-A", 255, 0, -1},
         };
         for (const Row& row : rows) {
             HelloCatcher catcher;
@@ -961,6 +973,13 @@ void run_use_tests() {
             cfg.net_role = ApplicationConfig::NetRole::Join;
             cfg.net_address = "127.0.0.1";
             cfg.net_port = catcher.port();
+            if (row.wss) {
+                std::string url = row.url != nullptr ? row.url : "wss://127.0.0.1:{port}/ws";
+                url.replace(url.find("{port}"), 6, std::to_string(catcher.port()));
+                cfg.net_url = url;
+                const uint16_t catcher_port = catcher.port();
+                cfg.net_link_maker = [catcher_port]() -> std::unique_ptr<net::Connection> { return net::TcpConnection::connect("127.0.0.1", catcher_port); };
+            }
             cfg.net_room = row.room;
             cfg.net_seat = row.seat;
             cfg.player_name = "Ann";
