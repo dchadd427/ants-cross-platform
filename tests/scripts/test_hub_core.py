@@ -613,8 +613,9 @@ class TheModerators(WorldTest):
         self.assertIs(self.w.chat.welcome(impostor)["you"]["mod"], False)
         self.w.say(self.alice, "hi")
         self.w.say(impostor, "/mute alice 5")
-        self.assertEqual([m["text"] for m in self.reader.kinds("line")], ["hi"])           # (the command is not posted for everybody to read: it is refused)
-        self.assertEqual(impostor.codes(), ["bad"])
+        self.assertEqual([m["text"] for m in self.reader.kinds("line")], ["hi"])           # (the command is not posted for everybody to read: it is answered privately, as any word that is no command of theirs)
+        self.assertEqual(impostor.codes(), [])
+        self.assertEqual(impostor.kinds("reply"), [{"t": "reply", "c": "unknown", "r": "unknown"}])
         self.assertEqual(self.w.store.mutes(), [])
 
     def test_deleting_goes_on_working_after_old_lines_were_purged(self):
@@ -709,11 +710,15 @@ class TheModerators(WorldTest):
     def test_the_minutes_and_the_arguments_are_checked(self):
         self.w.say(self.alice, "hi")
         for command, code in (("/mute alice", "bad"), ("/mute alice 0", "bad"), ("/mute alice -5", "bad"), ("/mute alice 10081", "bad"), ("/mute alice x", "bad"), ("/mute alice 5 6", "bad"),
-                              ("/mute nobody 5", "who"), ("/mute", "bad"), ("/mute alice 1.5", "bad"), ("/mute alice 99999999999", "bad"), ("/ban alice", "power"), ("/del", "bad"),
-                              ("/del x", "bad"), ("/del 1 2", "bad"), ("/del 99", "bad"), ("/mute moddy 5", "power"), ("/", "bad")):
+                              ("/mute nobody 5", "who"), ("/mute", "bad"), ("/mute alice 1.5", "bad"), ("/mute alice 99999999999", "bad"), ("/del", "bad"),
+                              ("/del x", "bad"), ("/del 1 2", "bad"), ("/del 99", "bad"), ("/mute moddy 5", "power")):
             before = len(self.mod.codes())
             self.w.say(self.mod, command)
             self.assertEqual(self.mod.codes()[before:], [code], command)
+        for command in ("/ban alice", "/"):                                       # (a command above the moderator's rank, and a slash alone: the answer for a word that is no command of theirs, no `err`)
+            before = (len(self.mod.codes()), len(self.mod.kinds("reply")))
+            self.w.say(self.mod, command)
+            self.assertEqual((len(self.mod.codes()), self.mod.kinds("reply")[before[1]:]), (before[0], [{"t": "reply", "c": "unknown", "r": "unknown"}]), command)
         self.assertEqual(self.w.store.mutes(), [])
         self.w.say(self.mod, "/mute alice 10080")
         self.assertEqual(len(self.w.store.mutes()), 1)
@@ -779,8 +784,11 @@ class TheModerators(WorldTest):
         self.w.clock.now += 3
         self.w.say(self.bob, "/del 1")
         self.w.clock.now += 3
-        self.w.say(self.bob, "/shrug")                              # (any other line that starts with a slash is text)
-        self.assertEqual(self.bob.codes(), ["bad", "bad"])
+        self.w.say(self.bob, "/shrug")                              # (a word that is no command is answered in the same way, and is no text either)
+        self.w.clock.now += 3
+        self.w.say(self.bob, "//shrug")                             # (two slashes are a line that starts with one)
+        self.assertEqual(self.bob.codes(), [])
+        self.assertEqual(self.bob.kinds("reply"), [{"t": "reply", "c": "unknown", "r": "unknown"}] * 3)
         self.assertEqual([m["text"] for m in self.reader.kinds("line")], ["hi", "/shrug"])
         self.assertEqual(self.w.store.mutes(), [])
         self.assertEqual(self.reader.kinds("del"), [])

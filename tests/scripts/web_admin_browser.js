@@ -104,7 +104,7 @@ const BOT_ROTATION = { count: 1, every_s: 0, map: 'random:rotation', rules: 'ran
 function botMatch(id, name, rules, seats, teams, startedIso, extra) { return Object.assign({ id, name, rules, seats, teams, started: at(startedIso), live: id + '-live' }, extra); }
 function botsWorld() {
     return {
-        people: 14, total: 48, refuse: null, nextId: 40, nextSched: 4, maps: BOT_MAPS.slice(), rotation: null, waiting: [],
+        people: 14, total: 48, cap: 80, nextId: 40, nextSched: 4, maps: BOT_MAPS.slice(), rotation: null, queues: [],
         matches: [
             botMatch('m1', 'MEDIUM', 'highest-score', [{ seat: 0, level: 'hard' }, { seat: 2, level: 'medium' }, { seat: 3, level: 'hard' }], 'ffa', '2026-11-16T21:14:00Z', { schedule: 'Hourly rotation', live: 'MEDIUM-20261116-211400Z' }),
             botMatch('m2', 'TREASURE', '187', [{ seat: 0, level: 'hard' }, { seat: 1, level: 'hard' }, { seat: 2, level: 'medium' }, { seat: 3, level: 'easy' }], '03-12', '2026-11-16T21:16:00Z', { by: 'basil', live: 'TREASURE-20261116-211600Z' }),
@@ -127,12 +127,13 @@ function botsWorld() {
     };
 }
 function fullHouse() {
+    W.bots.cap = 8;                                                                                          // (every place that the server has: eight in this world)
     const seats = [{ seat: 0, level: 'hard' }, { seat: 1, level: 'medium' }];
     W.bots.matches = ['TINY', 'SMALL', 'MEDIUM', 'GAUNTLET', 'TREASURE', 'POPcOrN', 'HELLRAISER', 'Fight Island'].map((n, i) => botMatch('f' + i, n, i % 3 === 0 ? '187' : 'highest-score', seats, 'ffa', '2026-11-16T21:1' + (i % 10) + ':00Z', i % 2 ? { by: 'basil' } : { schedule: 'Evening swarm' }));
 }
 function botApi(req, p, json) {
     const B = W.bots;
-    if (p === '/admin/api/bot-matches' && req.method === 'GET') { json(200, { matches: B.matches, waiting: B.waiting, waiting_max: 32, cap: 8, places: { people: B.people, bots: B.matches.length, total: B.total, bots_max: 16 }, replays: true, untrusted: true, untrusted_fields: ['name', 'by', 'schedule'] }); return true; }
+    if (p === '/admin/api/bot-matches' && req.method === 'GET') { json(200, { matches: B.matches, queues: B.queues, cap: B.cap, queue_max: 10000, places: { people: B.people, bots: B.matches.length, total: B.total, bots_max: 160 }, busy: 31, gate: 40, replays: true, untrusted: true, untrusted_fields: ['name', 'by', 'schedule'] }); return true; }
     if (p === '/admin/api/bot-options') { json(200, { maps: B.maps, checking: 0, random_max_minutes: 30, untrusted: true, untrusted_fields: ['name'] }); return true; }
     if (p === '/admin/api/bot-rotation' && req.method === 'GET') {
         const lists = {}, defaults = {};
@@ -153,25 +154,22 @@ function botApi(req, p, json) {
         let m;
         W.posts.push(p);
         if (p === '/admin/api/bot-matches') {
-            if (B.refuse === 'busy') return json(409, { error: 'busy', people: B.people, total: B.total });
-            const free = 8 - B.matches.length;
-            if (body.count > free) return json(409, { error: 'cap', running: B.matches.length, asked: body.count, free });
             if (body.map === 'ISLANDS.LVL' && body.rules === '187') return json(409, { error: 'map_187' });
+            const waitingNow = B.queues.reduce((a, q) => a + q.remaining, 0);
+            if (waitingNow + body.count > 10000) return json(409, { error: 'queue_full', waiting: waitingNow, asked: body.count, max: 10000 });
             const names = ['SMALL', 'GAUNTLET', 'TREASURE', 'POPcOrN', 'MEDIUM', 'TINY'];
             const file = BOT_MAPS.filter((x) => x.file === body.map)[0];
             const spaced = body.every_s > 0 && body.count > 1;
-            const made = B.stopShort ? 1 : spaced ? 1 : body.count;
+            const made = Math.max(0, Math.min(spaced ? 1 : body.count, B.cap - B.matches.length));
             for (let i = 0; i < made; i++) B.matches.push(botMatch('n' + (B.nextId++), file ? file.name : names[i % names.length], body.rules === '187' ? '187' : 'highest-score', [{ seat: 0, level: 'hard' }, { seat: 2, level: 'hard' }], 'ffa', '2026-11-16T21:20:00Z', { by: 'basil', live: null }));
-            if (spaced) {                                                                                      // (the first starts now, the others wait: one every every_s seconds)
-                for (let i = 1; i < body.count; i++) B.waiting.push({ id: 'w' + (B.nextId++), name: file ? file.name : 'the rotation', what: Object.assign({}, body, { count: 1, every_s: 0 }), n: i + 1, of: body.count, at: at('2026-11-16T21:20:00Z') + i * body.every_s, held: false, by: 'basil' });
-                return json(200, { started: 1, asked: body.count, queued: body.count - 1, every_s: body.every_s });
-            }
-            return json(200, B.stopShort ? { started: made, asked: body.count, stopped_for: B.stopShort } : { started: body.count, asked: body.count });
+            const queued = body.count - made;
+            if (queued > 0) B.queues.push({ id: 'q' + (B.nextId++), name: file ? file.name : 'the rotation', what: body, total: body.count, remaining: queued, started: made, finished: 0, running: made, kept: 0, at: spaced ? at('2026-11-16T21:20:00Z') + body.every_s : 0, held: !spaced && made === 0, why: 'cap', by: 'basil' });
+            return json(200, Object.assign({ started: made, asked: body.count, queued }, spaced ? { every_s: body.every_s } : {}, made === 0 && queued ? { held: 'cap' } : {}));
         }
         if (p === '/admin/api/bot-rotation') { B.rotation = Object.assign({}, B.rotation || ROTATION_DEFAULTS, { [body.rules]: body.maps }); return json(200, { count: body.maps.length, changed: true }); }
         if (p === '/admin/api/bot-rotation/reset') { B.rotation = Object.assign({}, B.rotation || ROTATION_DEFAULTS, { [body.rules]: ROTATION_DEFAULTS[body.rules] }); return json(200, { count: ROTATION_DEFAULTS[body.rules].length, changed: true }); }
-        if (p === '/admin/api/bot-matches/stop-all') { const n = B.matches.length, d = B.waiting.length; B.matches = []; B.waiting = []; return json(200, { stopped: n, dropped: d }); }
-        if ((m = /^\/admin\/api\/bot-matches\/([A-Za-z0-9_-]+)\/stop$/.exec(p))) { B.matches = B.matches.filter((x) => x.id !== m[1]); B.waiting = B.waiting.filter((x) => x.id !== m[1]); return json(200, { stopped: 1 }); }
+        if (p === '/admin/api/bot-matches/stop-all') { const n = B.matches.length, d = B.queues.reduce((a, q) => a + q.remaining, 0); B.matches = []; B.queues = []; return json(200, { stopped: n, dropped: d }); }
+        if ((m = /^\/admin\/api\/bot-matches\/([A-Za-z0-9_-]+)\/stop$/.exec(p))) { const q = B.queues.filter((x) => x.id === m[1])[0], d = q ? q.remaining : 0; B.matches = B.matches.filter((x) => x.id !== m[1]); B.queues = B.queues.filter((x) => x.id !== m[1]); return json(200, q ? { stopped: 0, dropped: d } : { stopped: 1 }); }
         if (p === '/admin/api/bot-schedules' || (m = /^\/admin\/api\/bot-schedules\/(\d+)$/.exec(p))) {
             const cur = m ? B.schedules.filter((x) => x.id === +m[1])[0] : null;
             if (m && !cur) return json(404, { error: 'gone' });
@@ -284,7 +282,7 @@ const SCENES = [
 // ---- the section Bot matches: the scenes of the approved pictures (one subject each: `crop` is the selector of what is cut out of the page, `dialog` the question over it; `setup` changes the made-up world first)
 async function openBots(pg) {
     await openSection(pg, 'bots');
-    await pg.waitForSelector('.b-now .step');
+    await pg.waitForSelector('.b-now .cnt');
     await pg.waitForSelector('.b-run .meter');
     await pg.waitForSelector('.b-sched .blist, .b-sched .none');
 }
@@ -293,8 +291,7 @@ const chooseMap = async (pg, pre, query, name) => { await openMap(pg, pre); awai
 const addMapIn = async (pg, column) => { await pg.locator('.b-rot .rcol').nth(column).locator('.rfoot .btn.big').click(); await pg.waitForSelector('.mp-q'); await pg.waitForTimeout(120); };
 const chipOf = (pg, group, text) => pg.locator('[aria-labelledby="' + group + '-l"] button', { hasText: new RegExp('^' + text + '$') }).first().click();
 async function fillStart(pg) {                         // three matches, Fight Island, 187, four bots Hard Hard Medium Easy, a split of 1 and 2 against 3 and 4
-    const plus = pg.locator('.b-now .step button').nth(1);
-    await plus.click(); await plus.click();
+    await pg.fill('#now-count', '3');
     await chooseMap(pg, 'now', 'fight island', 'Fight Island');
     await chipOf(pg, 'now-rules', '187');
     await chipOf(pg, 'now-bots', '4');
@@ -306,13 +303,14 @@ const BOT_SCENES = [
     ['0_tabs', { who: 'admin', clip: ['.pt.apt', '.atabs', '.asel'], width: 1000 }, async (pg) => { await pg.waitForFunction(() => document.querySelectorAll('.atab .cnt').length === 2); await openBots(pg); }],
     ['1_start_now', { who: 'admin', crop: '.b-now' }, openBots],
     ['1b_start_now_filled_in', { who: 'admin', crop: '.b-now' }, async (pg) => { await openBots(pg); await fillStart(pg); }],
-    ['1c_start_now_done', { who: 'admin', crop: '.b-now' }, async (pg) => { await openBots(pg); await pg.locator('.b-now .step button').nth(1).click(); await pg.click('.b-now .startrow .btn'); await pg.waitForSelector('.b-now .msg.ok'); await pg.waitForTimeout(300); }],
-    ['1d_start_now_refused_people_busy', { who: 'admin', crop: '.b-now', setup: () => { W.bots.refuse = 'busy'; W.bots.people = 40; } }, async (pg) => { await openBots(pg); await pg.click('.b-now .startrow .btn'); await pg.waitForSelector('.b-now .msg.bad'); }],
-    ['1e_start_now_refused_over_the_limit', { who: 'admin', crop: '.b-now' }, async (pg) => { await openBots(pg); const plus = pg.locator('.b-now .step button').nth(1); for (let i = 0; i < 5; i++) await plus.click(); await pg.click('.b-now .startrow .btn'); await pg.waitForSelector('.b-now .msg.bad'); }],
-    ['1f_start_now_all_places_taken', { who: 'admin', crop: '.b-now', setup: fullHouse }, async (pg) => { await openBots(pg); await pg.waitForSelector('.b-now .msg.bad'); }],
+    ['1c_start_now_done', { who: 'admin', crop: '.b-now' }, async (pg) => { await openBots(pg); await pg.fill('#now-count', '2'); await pg.click('.b-now .startrow .btn'); await pg.waitForSelector('.b-now .msg.ok'); await pg.waitForTimeout(300); }],
+    ['1d_start_now_big_count', { who: 'admin', crop: '.b-now' }, async (pg) => { await openBots(pg); await pg.fill('#now-count', '1000'); await pg.waitForTimeout(150); }],
+    ['1e_start_now_count_too_big', { who: 'admin', crop: '.b-now' }, async (pg) => { await openBots(pg); await pg.fill('#now-count', '25000'); await pg.waitForTimeout(150); }],
+    ['1f_start_now_all_places_taken_start_stays_on', { who: 'admin', crop: '.b-now', setup: fullHouse }, openBots],
     ['1g_start_now_islands_in_187', { who: 'admin', crop: '.b-now' }, async (pg) => { await openBots(pg); await chooseMap(pg, 'now', 'islands', 'ISLANDS'); await chipOf(pg, 'now-rules', '187'); }],
     ['1h_start_now_long_map', { who: 'admin', crop: '.b-now' }, async (pg) => { await openBots(pg); await chooseMap(pg, 'now', 'ultimate', 'Ultimate Chess'); }],
-    ['1i_start_now_stopped_short', { who: 'admin', crop: '.b-now', setup: () => { W.bots.stopShort = 'budget'; } }, async (pg) => { await openBots(pg); await pg.locator('.b-now .step button').nth(1).click(); await pg.locator('.b-now .step button').nth(1).click(); await pg.click('.b-now .startrow .btn'); await pg.waitForSelector('.b-now .msg.ok'); await pg.waitForTimeout(300); }],
+    ['1i_start_now_a_big_batch_is_queued', { who: 'admin', crop: '.b-now' }, async (pg) => { await openBots(pg); await pg.fill('#now-count', '1000'); await pg.click('.b-now .startrow .btn'); await pg.waitForSelector('.b-now .msg.ok'); await pg.waitForTimeout(300); }],
+    ['1j_start_now_queue_full', { who: 'admin', crop: '.b-now', setup: () => { W.bots.queues = [{ id: 'q9', name: 'the rotation', what: {}, total: 9990, remaining: 9990, started: 0, finished: 0, running: 0, kept: 0, at: 0, held: true, why: 'cap', by: 'basil' }]; } }, async (pg) => { await openBots(pg); await pg.fill('#now-count', '100'); await pg.click('.b-now .startrow .btn'); await pg.waitForSelector('.b-now .msg.bad'); await pg.waitForTimeout(150); }],
     ['2_running', { who: 'admin', crop: '.b-run' }, openBots],
     ['2b_running_none', { who: 'admin', crop: '.b-run', setup: () => { W.bots.matches = []; } }, openBots],
     ['2c_running_all_places_taken', { who: 'admin', crop: '.b-run', setup: fullHouse }, openBots],
@@ -398,19 +396,19 @@ const BOT_SCENES = [
     // the staggered start: the field of Start now with five matches, and the Running list with the starts that wait
     ['s1_start_now_spacing_field', { who: 'admin', crop: '.b-now' }, async (pg) => {
         await openBots(pg);
-        const plus = pg.locator('.b-now .step button').nth(1);
-        for (let i = 0; i < 4; i++) await plus.click();
+        await pg.fill('#now-count', '5');
         await pg.locator('.b-now .minrow .chip', { hasText: /^3 min$/ }).click(); await pg.waitForTimeout(100);
     }],
-    ['s2_running_waiting_starts', { who: 'admin', crop: '.b-run', setup: () => {
+    ['s2_running_a_batch_with_a_spacing', { who: 'admin', crop: '.b-run', setup: () => {
         const B = W.bots, now = at('2026-11-16T21:20:00Z');
-        B.waiting = [
-            { id: 'w41', name: 'the rotation', what: { count: 1, every_s: 0, map: 'random:rotation', rules: 'random', bots: 'random', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'random', split: '' }, n: 2, of: 5, at: now + 180, held: false, by: 'basil' },
-            { id: 'w42', name: 'the rotation', what: { count: 1, every_s: 0, map: 'random:rotation', rules: 'random', bots: 'random', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'random', split: '' }, n: 3, of: 5, at: now + 360, held: false, by: 'basil' },
-            { id: 'w43', name: 'the rotation', what: { count: 1, every_s: 0, map: 'random:rotation', rules: 'random', bots: 'random', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'random', split: '' }, n: 4, of: 5, at: now + 540, held: false, by: 'basil' },
-            { id: 'w44', name: 'the rotation', what: { count: 1, every_s: 0, map: 'random:rotation', rules: 'random', bots: 'random', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'random', split: '' }, n: 5, of: 5, at: now + 720, held: false, by: 'basil' }
-        ];
+        B.queues = [{ id: 'q41', name: 'the rotation', what: { count: 5, every_s: 180, map: 'random:rotation', rules: 'random', bots: 'random', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'random', split: '' }, total: 5, remaining: 4, started: 1, finished: 0, running: 1, kept: 0, at: now + 180, held: false, by: 'basil' }];
         B.matches = B.matches.slice(0, 3);
+    } }, openBots],
+    ['q1_running_a_big_batch', { who: 'admin', crop: '.b-run', setup: () => {                  // (a big batch: 80 run at once, 648 wait, 312 are done and 30 are kept)
+        const B = W.bots, now = at('2026-11-16T21:20:00Z'), seats = [{ seat: 0, level: 'hard' }, { seat: 1, level: 'medium' }, { seat: 2, level: 'hard' }], names = ['TINY', 'SMALL', 'MEDIUM', 'GAUNTLET', 'TREASURE', 'POPcOrN', 'HELLRAISER', 'Bombz Away'];
+        B.cap = 80;
+        B.matches = []; for (let i = 0; i < 80; i++) B.matches.push(botMatch('b' + i, names[i % names.length], i % 3 === 0 ? '187' : 'highest-score', seats, 'ffa', '2026-11-16T21:1' + (i % 10) + ':00Z', { by: 'basil' }));
+        B.queues = [{ id: 'q1', name: 'the rotation', what: {}, total: 1000, remaining: 648, started: 352, finished: 312, running: 80, kept: 30, at: now + 4, held: false, by: 'basil' }];
     } }, openBots],
     // the spacing in a schedule: the field of its form, its row, and the starts that it lets wait
     ['p1_schedule_form_spacing_field', { who: 'admin', cropFn: { a: '.sform > .shead', b: '.sform .mapf', side: '.sform' } }, async (pg) => {
@@ -422,20 +420,19 @@ const BOT_SCENES = [
         await pg.locator('.sform .minrow .chip', { hasText: /^3 min$/ }).click(); await pg.waitForTimeout(100);
     }],
     ['p2_schedule_row_with_spacing', { who: 'admin', crop: '.b-sched', setup: () => { W.bots.schedules[1].what.every_s = 180; } }, openBots],
-    ['p3_running_waiting_starts_of_a_schedule', { who: 'admin', crop: '.b-run', setup: () => {
+    ['p3_running_a_batch_of_a_schedule', { who: 'admin', crop: '.b-run', setup: () => {
         const B = W.bots, now = at('2026-11-16T21:20:00Z');
-        const what = { count: 1, every_s: 0, map: 'random:rotation', rules: 'highest-score', bots: '4', levels: ['hard', 'hard', 'medium', 'medium'], teams: 'random', split: '' };
         B.matches = B.matches.slice(0, 3);
         B.matches[0] = Object.assign({}, B.matches[0], { schedule: 'Evening swarm' });
         delete B.matches[0].by;
-        B.waiting = [2, 3, 4].map((n) => ({ id: 'w5' + n, name: 'the rotation', what, n, of: 4, at: now + (n - 1) * 180, held: false, schedule: 'Evening swarm' }));
+        B.queues = [{ id: 'q52', name: 'the rotation', what: { count: 4, every_s: 180, map: 'random:rotation', rules: 'highest-score', bots: '4', levels: ['hard', 'hard', 'medium', 'medium'], teams: 'random', split: '' }, total: 4, remaining: 3, started: 1, finished: 0, running: 1, kept: 0, at: now + 180, held: false, schedule: 'Evening swarm' }];
     } }, openBots],
-    ['s2b_running_waiting_start_held', { who: 'admin', crop: '.b-run', setup: () => {
+    ['s2b_running_a_batch_that_waits_for_room', { who: 'admin', crop: '.b-run', setup: () => {
         const B = W.bots, now = at('2026-11-16T21:20:00Z');
         fullHouse();
-        B.waiting = [{ id: 'w41', name: 'TREASURE', what: { count: 1, every_s: 0, map: 'TREASURE.LVL', rules: '187', bots: '4', levels: ['hard', 'hard', 'hard', 'hard'], teams: 'ffa', split: '' }, n: 3, of: 4, at: now - 20, held: true, by: 'basil' },
-            { id: 'w42', name: 'TREASURE', what: { count: 1, every_s: 0, map: 'TREASURE.LVL', rules: '187', bots: '4', levels: ['hard', 'hard', 'hard', 'hard'], teams: 'ffa', split: '' }, n: 4, of: 4, at: now + 160, held: false, by: 'basil' }];
+        B.queues = [{ id: 'q41', name: 'TREASURE', what: { count: 4, every_s: 0, map: 'TREASURE.LVL', rules: '187', bots: '4', levels: ['hard', 'hard', 'hard', 'hard'], teams: 'ffa', split: '' }, total: 4, remaining: 2, started: 2, finished: 0, running: 2, kept: 0, at: now - 20, held: true, why: 'cap', by: 'basil' }];
     } }, openBots]
+
 ];
 // one subject cut out of the page: a desktop at 1x and a phone at 2x (never wider than 1000 px); the question is the window of a phone and its own box on a desktop
 async function shoot(pg, spec, file, sizeName) {

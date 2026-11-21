@@ -156,7 +156,7 @@ bool parse_schedule_patch(const ctl::JsonValue& body, bool create, BotSchedulePa
         }
     }
     if (create || body.has("what")) {
-        if (!parse_bot_what(body.get("what"), patch.what, error)) return false;
+        if (!parse_bot_what(body.get("what"), patch.what, error, kBotScheduleCountMax)) return false;
         patch.has_what = true;
     }
     out = std::move(patch);
@@ -253,7 +253,7 @@ bool BotScheduleStore::open(int64_t now_s, std::string& why) {
         row.next_run = st.column_int64(9);
         row.created_at = st.column_int64(10);
         ctl::JsonValue times, what;
-        bool good = ctl::parse_json(st.column_text(6), times, nullptr) && times.is_array() && ctl::parse_json(st.column_text(7), what, nullptr) && parse_bot_what(what, row.what, why);
+        bool good = ctl::parse_json(st.column_text(6), times, nullptr) && times.is_array() && ctl::parse_json(st.column_text(7), what, nullptr) && parse_bot_what(what, row.what, why, kBotScheduleCountMax);
         for (size_t i = 0; good && i < times.size(); ++i) {
             int minutes = 0;
             good = times.at(i).is_string() && parse_clock_time(times.at(i).str(), minutes);

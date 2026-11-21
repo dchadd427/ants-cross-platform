@@ -215,7 +215,7 @@ class NeverAPower(unittest.TestCase):
         w.roles.roles[ID_ADMIN] = "none"                   # (the role is gone: the line still says admin)
         w.clock.now += 5
         w.say(admin, "/kick plain.person")
-        self.assertEqual(admin.codes()[-1:], ["bad"], "a command from a person who holds no role is refused, whatever their old lines say")
+        self.assertEqual(admin.kinds("reply")[-1:], [{"t": "reply", "c": "unknown", "r": "unknown"}], "a command from a person who holds no role is not theirs, whatever their old lines say")
         self.assertFalse(none.kinds("bye"))
 
     def test_the_frames_hold_no_id(self):

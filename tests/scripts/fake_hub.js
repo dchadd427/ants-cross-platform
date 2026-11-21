@@ -12,6 +12,11 @@
 // A person may be named by `#<number>` (the author of that line: `hub.lines` keeps who wrote each line, from the history and from `say`) or `row:<number>` (the person of that row of the players list: `o.rows`, { number: name }),
 // `/ban who purge` also takes the person's lines of the last hour (the hub's own `del` frames are sent for the lines of `hub.lines` of that person), `/mutes` is answered the private `mutes` frame from `o.mutes` (after `o.mutesDelay` ms, if it is set), and a done `/del`
 // sends the `del` frame to every socket before the `ok`, as the hub does. A line that is not there is `bad`, a line of the hub's own is `power`, a row that is not there is `who`.
+// The commands (docs/HUB_COMMANDS.md): a line that starts with ONE slash is a command, never a line. The account is sent `{"t":"cmds","rows":[{w,a,d,g}...]}` after the welcome and again with every `you` (the rows of its role: everybody
+// /help /ignore /unignore, a moderator + /mute /unmute /del /kick /mutes, an administrator + /ban /unban /bans /nopic /pic /bots; `o.cmds: false` sends none, `o.cmdRows` gives other rows), and a word that is not in its rows (a
+// word that is no command, a command of a higher role, an empty `/`) is answered `{"t":"reply","c":"unknown","r":"unknown"}`. `/help` is answered `reply help list`; `/ignore NAME` and `/unignore NAME` `reply ... ok` (`n`: how many
+// are ignored; no name: `usage`); `/bots` as the hub reads it (a count of 1 to 10,000: `started`, `status`, `stop`: `stopped`, anything else: `bad_count` or `usage`; `o.botsReply(text)` may answer with a frame of its own), and
+// `o.replyRate: n` makes every command `reply rate` with `wait: n`. `//x` is posted as the ordinary line `/x`. `hub.slashed` keeps every command line that was sent.
 //   const hub = await startHub({ you: { name: 'maple.leaf', mod: false }, login: true, history: [line(1, 'pebble', 'hello')] });  hub.url; hub.say('pebble', 'hi'); hub.drop(); await hub.close();
 'use strict';
 const http = require('http');
@@ -27,9 +32,17 @@ function frame(opcode, payload) {                       // a server's frame: who
     return Buffer.concat([head, payload]);
 }
 
+const ROWS = [['/help', '', 'list your commands', 'Everyone'], ['/ignore', 'NAME', 'hide a person\u2019s lines', 'Everyone'], ['/unignore', 'NAME', 'show their lines again', 'Everyone'],
+    ['/mute', 'NAME MINUTES', 'stop a person writing for a while', 'Moderators'], ['/unmute', 'NAME', 'let a muted person write again', 'Moderators'], ['/del', 'NUMBER', 'take one line off every screen', 'Moderators'],
+    ['/kick', 'NAME', 'remove a person from the chat', 'Moderators'], ['/mutes', '', 'list the people who are muted', 'Moderators'],
+    ['/ban', 'NAME [purge]', 'ban a person from writing', 'Administrators'], ['/unban', 'NAME', 'lift a ban', 'Administrators'], ['/bans', '', 'list the people who are banned', 'Administrators'],
+    ['/nopic', 'NAME', 'hide a person\u2019s Discord picture', 'Administrators'], ['/pic', 'NAME', 'show it again', 'Administrators'], ['/bots', 'COUNT [every MINUTES] [map NAME]  |  status  |  stop', 'start matches of computer players', 'Administrators']];
+const ROWRANK = { Everyone: 1, Moderators: 2, Administrators: 3 }, GROUP = { none: 1, mod: 2, admin: 3 };
+const ROWS_OF_ROLE = (role) => ROWS.filter((r) => ROWRANK[r[3]] <= (GROUP[role] || 1)).map((r) => ({ w: r[0], a: r[1], d: r[2], g: r[3] }));
+
 function startHub(options) {
     const o = Object.assign({ you: null, login: false, history: [], online: 3, mode: 'normal', path: '/hub/ws' }, options);
-    const hub = { peers: [], received: [], upgrades: 0, nextId: 100, welcomes: 0, options: o, lines: {} };
+    const hub = { peers: [], received: [], upgrades: 0, nextId: 100, welcomes: 0, options: o, lines: {}, slashed: [], ignored: 0 };
     for (const l of o.history) if (l && typeof l.id === 'number') hub.lines[l.id] = { who: l.who, sys: l.sys === true };       // (who wrote each line: a command may name a person by the number of a line)
     const server = o.server || http.createServer((req, res) => { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('not here'); });       // (o.server: the upgrades of a server that is there already, a page's own, are taken: the page and the hub share one address)
     const writers = new Map();                          // peer -> { tokens, at, said }
@@ -47,10 +60,12 @@ function startHub(options) {
         socket.on('data', (data) => { peer.buffer = Buffer.concat([peer.buffer, data]); read(peer); });
         socket.on('close', () => { peer.open = false; hub.peers = hub.peers.filter((p) => p !== peer); writers.delete(peer); });
         socket.on('error', () => {});
-        if (o.mode === 'normal') { hub.welcomes++; hub.send(peer, welcome()); }
-        else if (o.mode === 'pieces') { hub.welcomes++; sendPieces(peer, Buffer.from(JSON.stringify(welcome()))); }
+        if (o.mode === 'normal') { hub.welcomes++; hub.send(peer, welcome()); sendCmds(peer); }
+        else if (o.mode === 'pieces') { hub.welcomes++; sendPieces(peer, Buffer.from(JSON.stringify(welcome()))); setTimeout(() => sendCmds(peer), 100); }
         // mode 'silent': nothing is ever said; any other mode ('garbage', ...) is up to the test: it says what it wants with hub.send and hub.raw
     });
+    const rowsOf = () => { const y = o.you; if (!y) return []; const role = y.role || (y.mod ? 'mod' : 'none'); return o.cmdRows || ROWS_OF_ROLE(role); };
+    function sendCmds(peer) { if (o.you && o.cmds !== false) hub.send(peer, { t: 'cmds', rows: rowsOf() }); }
     function sendPieces(peer, text) {                   // one text message in several frames of 700 bytes (the first has the opcode 1, the rest 0, the last has FIN)
         let at = 0;
         const next = () => {
@@ -108,7 +123,8 @@ function startHub(options) {
         }
         if (m.t !== 'say') { hub.send(peer, { t: 'err', code: 'bad' }); return; }
         if (!o.you) { hub.send(peer, { t: 'err', code: 'login' }); return; }
-        if (typeof m.text === 'string' && /^\/(mute|unmute|del|kick|ban|unban|bans|mutes)(\s|$)/i.test(m.text.trim())) { command(peer, m.text.trim()); return; }
+        if (typeof m.text === 'string' && /^\/(?!\/)/.test(m.text.trim())) { slash(peer, m.text.trim()); return; }
+        if (typeof m.text === 'string' && /^\s*\/\//.test(m.text)) m = Object.assign({}, m, { text: m.text.replace(/^\s*\/\//, '/') });       // (`//x` is the ordinary line `/x`, through every rule of a line)
         const w = writers.get(peer), now = Date.now();
         w.tokens = Math.min(10, w.tokens + (now - w.at) / 500); w.at = now;
         for (const [t, at] of w.said) if (now - at >= 30000) w.said.delete(t);
@@ -118,11 +134,31 @@ function startHub(options) {
         w.tokens -= 1; w.said.set(m.text, now);
         hub.say(o.you.name, m.text, o.you.mod, Object.assign(o.you.k ? { k: o.you.k } : {}, o.you.role === 'mod' || o.you.role === 'admin' ? { role: o.you.role } : {}));       // (a line says the role that its author has, as the hub's does)
     }
+    function slash(peer, text) {                         // a command line, as the registry of the hub reads it: the words of the account's own rows only
+        const parts = text.split(/\s+/), word = parts[0].toLowerCase(), reply = (r, extra) => hub.send(peer, Object.assign({ t: 'reply', c: word.slice(1), r }, extra));
+        hub.slashed.push(text);
+        if (!rowsOf().some((r) => r.w === word)) { hub.send(peer, { t: 'reply', c: 'unknown', r: 'unknown' }); return; }
+        if (o.replyRate) { reply('rate', { wait: o.replyRate }); return; }
+        if (word === '/help') { reply('list'); return; }
+        if (word === '/ignore' || word === '/unignore') { if (parts.length !== 2) { reply('usage'); return; } hub.ignored = Math.max(0, hub.ignored + (word === '/ignore' ? 1 : -1)); reply('ok', { n: hub.ignored }); return; }
+        if (word === '/bots') {
+            const custom = o.botsReply && o.botsReply(text);
+            if (custom) { hub.send(peer, custom); return; }
+            if (parts[1] === 'status') { hub.send(peer, { t: 'reply', c: 'bots', r: 'status', at_once: 80, running: 0, waiting: 0, busy: 0, queues: [] }); return; }
+            if (parts[1] === 'stop') { hub.send(peer, { t: 'reply', c: 'bots', r: 'stopped', stopped: 0, dropped: 0 }); return; }
+            if (!/^\d{1,5}$/.test(parts[1] || '') || Number(parts[1]) < 1 || Number(parts[1]) > 10000) { hub.send(peer, { t: 'reply', c: 'bots', r: parts[1] ? 'bad_count' : 'usage' }); return; }
+            const n = Number(parts[1]), now = Math.min(n, 80);
+            hub.send(peer, { t: 'reply', c: 'bots', r: 'started', asked: n, started: now, queued: n - now, at_once: 80 });
+            return;
+        }
+        command(peer, text);
+    }
     const RANK = { none: 0, mod: 1, admin: 2 }, NEEDS = { mute: 1, unmute: 1, del: 1, kick: 1, ban: 2, unban: 2, bans: 2, mutes: 1 }, ARGS = { mute: 2, unmute: 1, del: 1, kick: 1, ban: 1, unban: 1, bans: 0, mutes: 0 };
     function command(peer, text) {                      // a moderator's command, as the hub answers it
         const parts = text.split(/\s+/), word = parts[0].slice(1).toLowerCase(), mine = o.you.role || (o.you.mod ? 'mod' : 'none');
         const err = (code) => hub.send(peer, { t: 'err', code });
         hub.commands.push(text);
+        if (ARGS[word] === undefined) { hub.send(peer, { t: 'ok', c: word }); return; }       // (a word of the account's rows that has no other fake here: /nopic, /pic)
         const purge = word === 'ban' && parts.length === 3 && parts[2] === 'purge';
         if (mine === 'none' || (parts.length - 1 !== ARGS[word] && !purge)) { err('bad'); return; }
         if (RANK[mine] < NEEDS[word]) { err('power'); return; }
@@ -149,7 +185,7 @@ function startHub(options) {
         if (word === 'kick' || word === 'ban') hub.say('system', name + ' was ' + (word === 'kick' ? 'kicked' : 'banned') + '.', false, { k: '', sys: true });
     }
     hub.commands = [];
-    hub.you = (you) => { o.you = you; hub.broadcast({ t: 'you', you }); };
+    hub.you = (you) => { o.you = you; hub.broadcast({ t: 'you', you }); hub.peers.forEach(sendCmds); };
     hub.bye = (why) => { hub.broadcast({ t: 'bye', why }); if (why === 'kicked') o.you = null; hub.closeAll(1000); };
     hub.send = (peer, obj) => { if (peer.open) peer.socket.write(frame(1, Buffer.from(typeof obj === 'string' ? obj : JSON.stringify(obj)))); };
     hub.raw = (peer, buffer) => { if (peer.open) peer.socket.write(buffer); };
@@ -169,4 +205,6 @@ function startHub(options) {
     });
 }
 
-module.exports = { startHub, line, frame };
+// the rows of the `cmds` frame that the hub sends an account of that role ('none', 'mod', 'admin'): the one table of this fake
+const cmdRows = (role) => ROWS_OF_ROLE(role);
+module.exports = { startHub, line, frame, cmdRows };

@@ -64,6 +64,26 @@ size_t RoomManager::bot_match_count() const {
     return n;
 }
 
+bool RoomManager::bot_match_going(const std::string& code) const {
+    const auto it = rooms_.find(code);
+    if (it == rooms_.end()) return false;
+    const RoomState state = it->second->state();
+    return it->second->bots_only() && (state == RoomState::Waiting || state == RoomState::Loading || state == RoomState::Running);
+}
+
+int RoomManager::loop_busy_percent(uint32_t now_ms) {
+    return loop_load_ == nullptr ? 0 : static_cast<int>(loop_load_->share(now_ms) * 100.0 + 0.5);
+}
+
+size_t RoomManager::bot_kept_count() const {
+    size_t n = 0;
+    for (const auto& kv : rooms_) {
+        const RoomState state = kv.second->state();
+        if (kv.second->bots_only() && kv.second->keep_replay() && (state == RoomState::Waiting || state == RoomState::Loading || state == RoomState::Running)) ++n;
+    }
+    return n;
+}
+
 uint32_t RoomManager::bot_places() const {
     uint32_t places = 0;
     for (const auto& kv : rooms_) {
@@ -303,7 +323,7 @@ ai::Level bot_level_of(BotLevelChoice choice, std::mt19937& rng) {
 // normal speed (the maps' own time limits make it 6 to 20 minutes or more: its own guard is the longer of 25 minutes and the map's limit and five more), and ends by the rules or at its own time limit; the recording keeps it
 // like any other match (the 30 seconds, the store's limits), and the live list shows it. Limits: at most kBotMatchesMax of these rooms at once and kBotPlacesMax of the places together, and none while the matches of people
 // use most of the places (docs/SERVER_REPLAYS.md). The coin has no memory of the last match: two or three of a kind in a row come up as often as chance gives them.
-bool RoomManager::start_bot_match(uint32_t now_ms, const BotMatchSpec& choice, std::string& code, std::string& why, BotRefusal* refusal, uint8_t* mode) {
+bool RoomManager::start_bot_match(uint32_t now_ms, const BotMatchSpec& choice, std::string& code, std::string& why, BotRefusal* refusal, uint8_t* mode, bool* keep) {
     code.clear();
     if (refusal != nullptr) *refusal = BotRefusal::None;
     const auto refuse = [&](BotRefusal kind, std::string text) {
@@ -314,7 +334,7 @@ bool RoomManager::start_bot_match(uint32_t now_ms, const BotMatchSpec& choice, s
     if (replays_ == nullptr) return refuse(BotRefusal::NoReplays, "the server keeps no replays");
     if (bot_match_count() >= kBotMatchesMax) return refuse(BotRefusal::Cap, std::to_string(kBotMatchesMax) + " matches of computer players go already");
     if (people_busy()) return refuse(BotRefusal::PeopleBusy, places_words(public_places(), limits_.demo_rooms));
-    if (replays_->bot_saves_left() <= bot_match_count()) return refuse(BotRefusal::Budget, "the store keeps at most " + std::to_string(replays_->config().max_bot_saves_per_hour) + " recordings of matches of computer players an hour, and that many are kept or about to be: a match that would not be kept is not played");
+    if (loop_load_ != nullptr && loop_load_->share(now_ms) > kBotBusyGate) return refuse(BotRefusal::Busy, "the server loop was busy more than " + std::to_string(static_cast<int>(kBotBusyGate * 100.0 + 0.5)) + " percent of the last ten seconds");
     const bool named = choice.map != kBotMapRotation && choice.map != kBotMapOriginal && choice.map != kBotMapPlayers;
     if (named && choice.rules == BotRules::Kills187 && choice.map == kIslands) return refuse(BotRefusal::Islands187, "ISLANDS is not played in 187: its water joins no two hills, so nobody could be struck there");
     bool named_approved = false;
@@ -389,6 +409,7 @@ bool RoomManager::start_bot_match(uint32_t now_ms, const BotMatchSpec& choice, s
     const uint32_t weight = weights[picked];
     if (bot_places() + weight > kBotPlacesMax) return refuse(BotRefusal::Places, "the matches of computer players would take " + std::to_string(bot_places() + weight) + " of the " + std::to_string(kBotPlacesMax) + " places that they may have");
     spec.bots_only = true;
+    spec.keep_replay = replays_->bot_saves_left() > bot_kept_count();      // (a slot of the hour's budget is reserved for the match while it runs; without one it is played and not kept)
     spec.early_start = false;
     spec.reconnect = false;                                                // (it holds no seat, so no restart record: a server that stops ends it)
     spec.wait_ms = 30u * 1000u;
@@ -396,6 +417,7 @@ bool RoomManager::start_bot_match(uint32_t now_ms, const BotMatchSpec& choice, s
     spec.keep_ms = 30u * 1000u;
     spec.start_hold_ms = bot_gap_pending_ && !net::time_reached(now_ms, next_bot_start_ms_) ? next_bot_start_ms_ - now_ms : 0u;      // (one after another, kBotStartGapMs apart)
     const uint8_t made_mode = spec.mode;
+    const bool made_keep = spec.keep_replay;
     const uint32_t hold = spec.start_hold_ms;
     const CreateResult made = create_room(std::move(spec), now_ms);
     if (!made.ok) return refuse(BotRefusal::Failed, made.error);
@@ -403,6 +425,7 @@ bool RoomManager::start_bot_match(uint32_t now_ms, const BotMatchSpec& choice, s
     next_bot_start_ms_ = now_ms + hold + kBotStartGapMs;
     code = made.code;
     if (mode != nullptr) *mode = made_mode;
+    if (keep != nullptr) *keep = made_keep;
     return true;
 }
 

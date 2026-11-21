@@ -235,7 +235,7 @@ int main() {
             const char* code;
         } bad[] = {
             {"{\"count\":0,\"map\":\"random:rotation\",\"rules\":\"random\",\"bots\":\"2\",\"levels\":[],\"teams\":\"ffa\"}", "bad_count"},
-            {"{\"count\":9,\"map\":\"random:rotation\",\"rules\":\"random\",\"bots\":\"2\",\"levels\":[],\"teams\":\"ffa\"}", "bad_count"},
+            {"{\"count\":10001,\"map\":\"random:rotation\",\"rules\":\"random\",\"bots\":\"2\",\"levels\":[],\"teams\":\"ffa\"}", "bad_count"},
             {"{\"count\":\"2\",\"map\":\"random:rotation\",\"rules\":\"random\",\"bots\":\"2\",\"levels\":[],\"teams\":\"ffa\"}", "bad_count"},
             {"{\"count\":1,\"map\":\"random:nothing\",\"rules\":\"random\",\"bots\":\"2\",\"levels\":[],\"teams\":\"ffa\"}", "bad_map"},
             {"{\"count\":1,\"map\":\"../x.lvl\",\"rules\":\"random\",\"bots\":\"2\",\"levels\":[],\"teams\":\"ffa\"}", "bad_map"},
@@ -255,6 +255,14 @@ int main() {
             error.clear();
             ASSERT_FALSE(parse_bot_what(parsed(b.body), what, error));
             ASSERT_EQ(error, std::string(b.code));
+        }
+        {   // a batch of the page is 1 to 10,000; a schedule's is 1 to 8 (it is made again and again, with nobody to see it)
+            const std::string rest = ",\"map\":\"random:rotation\",\"rules\":\"random\",\"bots\":\"2\",\"levels\":[],\"teams\":\"ffa\"}";
+            ASSERT_TRUE(parse_bot_what(parsed("{\"count\":10000" + rest), what, error) && what.count == 10000u);
+            ASSERT_TRUE(parse_bot_what(parsed("{\"count\":8" + rest), what, error, kBotScheduleCountMax) && what.count == 8u);
+            error.clear();
+            ASSERT_FALSE(parse_bot_what(parsed("{\"count\":9" + rest), what, error, kBotScheduleCountMax));
+            ASSERT_EQ(error, std::string("bad_count"));
         }
         // the spacing of a batch (docs/SERVER_REPLAYS.md "Start one every X minutes"): left out it is 0, every match at once; else whole steps of 30 seconds from 0 to two hours; kept and worded as it came
         const std::string rest = ",\"map\":\"random:rotation\",\"rules\":\"random\",\"bots\":\"2\",\"levels\":[],\"teams\":\"ffa\"}";
