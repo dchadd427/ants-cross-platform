@@ -3,7 +3,7 @@
 //   1. the leader's switch: its place in the header, its state the Room message's and never the press's, the plan that a press sends (every byte, fog last), a press that is a double press, a guest who has none;
 //   2. everybody else: the guest's chip and the note under the link while fog is on (and nothing when it is off), the line of the room's chat when the leader switches it;
 //   3. computer players: the question that turning fog on asks (and what its button sends), the colors' menus with the three bot choices off while fog is on, a bot that a key picks anyway;
-//   4. every other plan of the page carries the room's fog (a map, a color, the teams), also before the room has answered the leader's own press (the pending pick);
+//   4. every other plan of the page carries the room's fog (a map, a color, the teams) and its game type (also when two colors swap their plans), also before the room has answered the leader's own pick (the pending pick);
 //   5. the Room that the server refuses to say (fog with a bot) and the server's refusal of a plan.
 // tests/scripts/test_web_room_fog.py runs this with node (the quick tier). usage: node web_room_fog_check.js web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
@@ -210,6 +210,45 @@ const advance = async (env, ms) => { await wait(env, ms); };
     env.$('slots').fire('change', { target: menus[0] });
     await flush();
     check('a room that says fog is off carries off in the next plan: nothing is held back that the room does not say', fogByte(lastPlan(sock)) === 0);
+}
+
+// two colors that nobody holds swap their plans: the plan that goes out says the room's game type and fog (it said no game type, so a room of 187 went back to Highest score at every swap)
+const gripOf = (env, seat) => find(env.root, 'grip').filter((e) => e.getAttribute('data-grip') === String(seat))[0];
+const swap = async (env, from, to) => {                                                             // (the keyboard's way: Enter on the dots of one color, then of the other)
+    for (const seat of [from, to]) env.$('slots').fire('click', { target: gripOf(env, seat), detail: 0, preventDefault() {} });
+    await flush();
+};
+{
+    const env = await page();
+    const sock = myRoom(env, ['Maya', 'Sage']);
+    room(sock, ['Maya', 'Sage'], { mode: 1, fog: true, plan: [0, 0, 0, 4] });
+    await flush();
+    const n = plansOf(sock).length;
+    await swap(env, 2, 3);
+    const sent = lastPlan(sock);
+    check('two unused colors swap: one plan, the two plans exchanged (Blue is nobody, Black is open), and the room\'s game type (187) and fog (on) with it', plansOf(sock).length === n + 1 && kindsOf(sent).join() === '0,0,4,0' && modeByte(sent) === 1 && fogByte(sent) === 1);
+}
+{   // the leader's picks that no Room has confirmed yet go with the swap too
+    const env = await page();
+    const sock = myRoom(env, ['Maya', 'Sage'], PRIVATE, { plan: [0, 0, 0, 4] });
+    await flush();
+    find(env.root, 'gt-opt').filter((e) => e.getAttribute('data-mode') === '1')[0].click();
+    press(env);
+    await flush();
+    check('the picks are sent: the game type 187 and fog on', modeByte(lastPlan(sock)) === 1 && fogByte(lastPlan(sock)) === 1);
+    await advance(env, 1500);
+    const n = plansOf(sock).length;
+    await swap(env, 2, 3);
+    const sent = lastPlan(sock);
+    check('a swap before the Room has answered carries the pending game type and fog, not the room\'s old ones (Highest score, off)', plansOf(sock).length === n + 1 && kindsOf(sent).join() === '0,0,4,0' && modeByte(sent) === 1 && fogByte(sent) === 1);
+}
+{   // a room of Highest score with fog off is what it was
+    const env = await page();
+    const sock = myRoom(env, ['Maya', 'Sage'], PRIVATE, { plan: [0, 0, 0, 4] });
+    await flush();
+    await swap(env, 2, 3);
+    const sent = lastPlan(sock);
+    check('a swap in a room of Highest score without fog sends mode 0 and fog off', kindsOf(sent).join() === '0,0,4,0' && modeByte(sent) === 0 && fogByte(sent) === 0);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

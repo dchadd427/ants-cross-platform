@@ -212,7 +212,7 @@
         if (m.lobby && !m.leaderStarts) return null;
         for (var p = 0; p < PLAYERS; p++) {
             if (m.plan[p] > PLAN.Nobody || (m.plan[p] !== 0 && !m.lobby)) return null;
-            if (m.fog === 1 && m.plan[p] >= PLAN.Easy && m.plan[p] <= PLAN.Hard) return null;       // (protocol 28: bots and Fog of War never mix)
+            if (m.fog === 1 && ((m.plan[p] >= PLAN.Easy && m.plan[p] <= PLAN.Hard) || slots[p].state === SLOT.Bot)) return null;       // (protocol 28: bots and Fog of War never mix: neither a color for a bot nor a bot in a seat)
             if (((m.inGame >> p) & 1) !== 0 && (!m.lobby || slots[p].state !== SLOT.Client)) return null;
             if (slots[p].state === SLOT.Empty && slots[p].name !== '' && (m.plan[p] < PLAN.Easy || m.plan[p] > PLAN.Hard || !/ \(bot(, (Easy|Medium|Hard))?\)$|^Bot \((Easy|Medium|Hard)\)$/.test(slots[p].name))) return null;       // (protocol 20: only a planned bot's label)
         }

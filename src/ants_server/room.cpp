@@ -687,7 +687,6 @@ RestartHead Room::make_head() const {
     h.map = map_.name;
     h.map_hash = map_.hash;
     h.players = spec_.players;
-    h.fog = lobby_.fog();                                        // (the room's own: a lobby room has the fog that its leader's plan chose, a room that was made with one has the spec's: protocol 28)
     h.early_start = spec_.early_start;
     h.public_room = spec_.public_room;
     h.wait_ms = spec_.wait_ms;
@@ -703,6 +702,7 @@ RestartHead Room::make_head() const {
     h.bots = bot_specs_;
     h.fill_mask = fill_seats_;
     h.start = lobby_.start_info();
+    h.fog = h.start.fog;                                         // (the Start's, so that the head and its Start agree, which the record's check insists on: a lobby room has the fog that its leader's plan chose and the spec's is off; protocol 28)
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) h.keys[seat] = lobby_.key_of(seat);
     return h;
 }

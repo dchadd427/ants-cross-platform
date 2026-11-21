@@ -1,5 +1,5 @@
 {
- "note": "Mutants of Fog of War in a lobby room's plan (network protocol 28, docs/PLAY_IN_BROWSER.md 'Fog of War') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the room's rules (only the leader's plan sets fog, a plan with fog and a computer player is refused as a whole and the leader is told, bots and fog never mix in a Room message, the rematch keeps fog, the list says it) and the page's (a plan that says nothing of fog keeps the room's, the switch is the leader's, the question that turning fog on asks, the bot choices of the menus, the tag of a card). Page mutants run their node checks; the others build test_lobby, test_lockstep and test_server first.",
+ "note": "Mutants of Fog of War in a lobby room's plan (network protocol 28, docs/PLAY_IN_BROWSER.md 'Fog of War') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the room's rules (only the leader's plan sets fog, a plan with fog and a computer player is refused as a whole and the leader is told, bots and fog never mix in a Room message, the rematch keeps fog, the list says it, the restart record's head and the live board say what the match's Start says) and the page's (a plan that says nothing of fog keeps the room's, the switch is the leader's, the question that turning fog on asks, the bot choices of the menus, the tag of a card, the exchange of two colors keeps the room's game type and fog). Page mutants run their node checks; the others build test_lobby, test_lockstep and test_server first.",
  "mutants": [
   {
    "id": "page_plan_without_fog_is_clear",
@@ -18,8 +18,15 @@
   {
    "id": "page_room_with_fog_and_bot_is_read",
    "file": "web/front/lobby_net.js",
-   "old": "if (m.fog === 1 && m.plan[p] >= PLAN.Easy && m.plan[p] <= PLAN.Hard) return null;",
+   "old": "if (m.fog === 1 && ((m.plan[p] >= PLAN.Easy && m.plan[p] <= PLAN.Hard) || slots[p].state === SLOT.Bot)) return null;",
    "new": "",
+   "test": "node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_room_with_fog_and_a_seated_bot_is_read",
+   "file": "web/front/lobby_net.js",
+   "old": "((m.plan[p] >= PLAN.Easy && m.plan[p] <= PLAN.Hard) || slots[p].state === SLOT.Bot)",
+   "new": "(m.plan[p] >= PLAN.Easy && m.plan[p] <= PLAN.Hard)",
    "test": "node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
   },
   {
@@ -139,6 +146,27 @@
    "file": "web/lobby.html",
    "old": "if (model && model.fog && /^(easy|medium|hard)$/.test(word)) { say(window.AntsRoomFog.TEXT.refusal); render(); return; }",
    "new": "",
+   "test": "node tests/scripts/web_room_fog_check.js web/lobby.html"
+  },
+  {
+   "id": "room_swap_drops_the_game_type",
+   "file": "web/lobby.html",
+   "old": "if (typeof meant.mode === 'number') plan.mode = meant.mode; ",
+   "new": "",
+   "test": "node tests/scripts/web_room_fog_check.js web/lobby.html"
+  },
+  {
+   "id": "room_swap_drops_the_pending_picks",
+   "file": "web/lobby.html",
+   "old": "var meant = Rules.withFog(Rules.withMode(room, pendingMode), pendingFog);",
+   "new": "var meant = room;",
+   "test": "node tests/scripts/web_room_fog_check.js web/lobby.html"
+  },
+  {
+   "id": "room_swap_drops_fog",
+   "file": "web/lobby.html",
+   "old": " plan.fog = meant.fog; return plan; }",
+   "new": " return plan; }",
    "test": "node tests/scripts/web_room_fog_check.js web/lobby.html"
   },
   {
@@ -279,7 +307,17 @@
   {
    "id": "codec_room_with_fog_and_a_bot_decodes",
    "file": "src/ants_net/protocol.cpp",
-   "old": "    if (fog == 1) {\n        for (const PlanKind kind : m.plan) {\n            if (plan_fill_level(kind) != FillLevel::None) return false;\n        }\n    }\n",
+   "old": "    if (fog == 1) {\n        for (const PlanKind kind : m.plan) {\n            if (plan_fill_level(kind) != FillLevel::None) return false;\n        }\n        for (const RoomMsg::Slot& slot : m.slots) {\n            if (slot.state == SlotState::Bot) return false;\n        }\n    }\n",
+   "new": "",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=N2.11 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "codec_room_with_fog_and_a_seated_bot_decodes",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "        for (const RoomMsg::Slot& slot : m.slots) {\n            if (slot.state == SlotState::Bot) return false;\n        }\n",
    "new": "",
    "build": [
     "test_lockstep"
@@ -332,6 +370,26 @@
    "file": "src/ants_server/control.cpp",
    "old": "        e.set(\"fog\", JsonValue::make_bool(l.fog));\n        e.set(\"people\", JsonValue::make_int(l.people));\n        e.set(\"bots\", JsonValue::make_int(l.bots));\n        e.set(\"free\", JsonValue::make_int(l.free_colors));\n        e.set(\"size\", JsonValue::make_int(l.size));\n        list.push_back",
    "new": "        e.set(\"people\", JsonValue::make_int(l.people));\n        e.set(\"bots\", JsonValue::make_int(l.bots));\n        e.set(\"free\", JsonValue::make_int(l.free_colors));\n        e.set(\"size\", JsonValue::make_int(l.size));\n        list.push_back",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.30 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "server_head_fog_from_spec",
+   "file": "src/ants_server/room.cpp",
+   "old": "h.fog = h.start.fog;",
+   "new": "h.fog = spec_.fog;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.310 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "server_replay_head_fog_from_spec",
+   "file": "src/ants_server/room.cpp",
+   "old": "head.fog = start.fog;",
+   "new": "head.fog = spec_.fog;",
    "build": [
     "test_server"
    ],

@@ -888,7 +888,7 @@
         var directSwitch = window.AntsLobbyDirect ? window.AntsLobbyDirect.create({ doc: document, host: $('direct'), storage: storage, rtc: !!window.RTCPeerConnection }) : null;      // (front/lobby_direct.js: protocol 26's switch, this player's own, off by default)
         var gameType = GameType.create({ doc: document, host: $('gtype'), modes: Modes, onChoose: function (id) { Modes.remember(storage, id); if (sendPlan({ mode: id })) pendingMode = id; else render(); } });      // (front/game_type.js)
         // ---- the Fog of War switch (front/room_fog.js; protocol 28): a plan with fog; with computer players planned the leader is asked first, and "Turn fog on" sets their colors to Open in the same plan ----
-        function withFogOf(plan, room) { plan.fog = Rules.withFog(room, pendingFog).fog; return plan; }       // (a plan that the page builds by another way keeps the room's fog, or the leader's pick that no Room has confirmed)
+        function withRulesOf(plan, room) { var meant = Rules.withFog(Rules.withMode(room, pendingMode), pendingFog); if (typeof meant.mode === 'number') plan.mode = meant.mode; plan.fog = meant.fog; return plan; }       // (a plan that the page builds by another way, the exchange of two colors, keeps the room's game type and fog, or the leader's picks that no Room has confirmed: a plan with no game type is Highest score)
         function setFog(on, kinds) {
             var change = { fog: on };
             if (kinds) change.kinds = kinds;
@@ -978,7 +978,7 @@
             var room = client.room, op = Rules.moveOf(room, model, from, to);
             if (!op) { render(); return; }
             if (op.op === 'move') client.move(op.from, op.to, guard);
-            else if (room.plan[from] !== room.plan[to] && client.setPlan(withFogOf(op.plan, room))) say(Rules.nameAt(model, to, false) + ' and ' + Rules.nameAt(model, from, false) + ' swapped colors.');
+            else if (room.plan[from] !== room.plan[to] && client.setPlan(withRulesOf(op.plan, room))) say(Rules.nameAt(model, to, false) + ' and ' + Rules.nameAt(model, from, false) + ' swapped colors.');
             render();
         }
         function tapSlot(i) {

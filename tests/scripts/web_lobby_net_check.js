@@ -238,6 +238,8 @@ check('welcome flags 3 is refused', N.decode(mutate('welcome-created', 19, 3)) =
     check('room: teams 0,255 are refused', N.decode((() => { const c = Uint8Array.from(room); c[L - 10] = 0; c[L - 9] = 255; return c; })()) === null);
     check('room: teams 1,3 are fine', N.decode((() => { const c = Uint8Array.from(room); c[L - 10] = 1; c[L - 9] = 3; return c; })()) !== null);
     check('room: fog = 2', N.decode(with_(L - 13, 2)) === null);
+    check('room: fog with a bot in a seat is refused, though no color is a bot (protocol 28)', N.decode((() => { const c = Uint8Array.from(room); c[L - 13] = 1; c[L - 5] = 4; return c; })()) === null);
+    check('room: the same room without fog is a room (a bot in seat 2, its color Nobody)', N.decode((() => { const c = Uint8Array.from(room); c[L - 5] = 4; return c; })()) !== null);
     check('room: the mode byte 1 (187) is fine and decodes as the mode', (N.decode(with_(L - 2, 1)) || {}).mode === 1);
     check('room: the mode byte 2 is refused', N.decode(with_(L - 2, 2)) === null);
     check('room: the mode byte 255 is refused', N.decode(with_(L - 2, 255)) === null);

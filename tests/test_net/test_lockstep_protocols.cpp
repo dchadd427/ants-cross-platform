@@ -2387,7 +2387,7 @@ void run_protocol16_tests() {
             ASSERT_TRUE(decode(encode(nolead), got));                                                                // (no leader: every person's mark may be shown)
         }
     } TEST_END();
-    TEST_CASE("N2.115 Protocol 28, Fog Of War: PlanMsg Ends With One More Byte, 0 Or 1 (Every Other Value, And A Plan Of Protocol 27 With No Such Byte, Is Refused); A Room Message Has The Byte Already And Is None When It Shows Fog Together With A Color For A Computer Player") {
+    TEST_CASE("N2.115 Protocol 28, Fog Of War: PlanMsg Ends With One More Byte, 0 Or 1 (Every Other Value, And A Plan Of Protocol 27 With No Such Byte, Is Refused); A Room Message Has The Byte Already And Is None When It Shows Fog Together With A Color For A Computer Player Or A Computer Player In A Seat") {
         ASSERT_EQ(kProtocolVersion, ants_test::kPinnedProtocol);
         PlanMsg m;
         m.map_name = "SMALL.LVL";
@@ -2443,6 +2443,15 @@ void run_protocol16_tests() {
                     with.fog = false;
                     ASSERT_TRUE(decode(encode(with), got) && !got.fog && got.plan[seat] == bot);              // (the same room without fog is a room: bots plan freely)
                 }
+            }
+            for (size_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {                                          // a computer player in a seat is no more a room with fog than a color for one (the colors say Open or Nobody here)
+                RoomMsg seated = room;
+                seated.leader = kNoLeader;                                                                    // (a bot never leads: a leader in the seat would make the room fail for that reason)
+                seated.slots[seat] = {SlotState::Bot, "Pip (bot, Hard)", 0};
+                seated.fog = true;
+                ASSERT_FALSE(decode(encode(seated), got));
+                seated.fog = false;
+                ASSERT_TRUE(decode(encode(seated), got) && !got.fog && got.slots[seat].state == SlotState::Bot);
             }
         }
     } TEST_END();

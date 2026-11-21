@@ -1113,6 +1113,65 @@ void run_persist_server_tests_4() {
         for (RClient* p : m) ASSERT_TRUE(!p->lost && !p->session->desynced() && p->sim.game_mode() == sim::GameMode::Kills187);
     } TEST_END();
 
+    TEST_CASE("S3.310 A Match Of A Lobby Room With Fog Of War Survives A Restart Of The Server (Protocol 28): The Record's Head And Its Start Both Say Fog (The Room Was Made By A Page, So Its Specification Has None And The Leader's Plan Chose It), The Restored Room Plays It Again From The Record With Fog And Says So, And Every Machine Is Back In The Same Match") {
+        ServerLimits limits;                                                                  // a server that offers the front page's lobbies
+        limits.demo_rooms = 4;
+        limits.demo_lobbies = 3;
+        limits.demo_map = "TINY.LVL";
+        limits.demo_maps = {"TINY.LVL", "SMALL.LVL", "GAUNTLET.LVL"};
+        PWorld w("persist-310", limits);
+        w.start_server(500);
+        const std::string code = "fog00310";
+        RClient& pia = w.connect_page("Pia", code, lobby_block_of());
+        RClient& bob = w.connect_page("Bob", code, lobby_block_of());
+        w.run(300);
+        ASSERT_TRUE(pia.lobby->is_leader() && !bob.lobby->is_leader());
+        net::PlanMsg plan;
+        plan.plan = {net::PlanKind::Open, net::PlanKind::Open, net::PlanKind::Nobody, net::PlanKind::Nobody};
+        plan.fog = true;
+        ASSERT_TRUE(pia.lobby->request_plan(plan));
+        bob.lobby->request_ready(true);                                                       // (protocol 27: the leader's START waits for the other pages' Ready)
+        w.run(300);
+        ASSERT_TRUE(w.status(code).fog && pia.lobby->room().fog);
+        ASSERT_TRUE(pia.lobby->request_start());
+        w.run(300);
+        ASSERT_TRUE(w.status(code).starting);
+        std::vector<RClient*> m;                                                              // the games take the seats over with the pages' keys, as the pages' own games do
+        m.push_back(&w.connect("Pia", code, 255, pia.lobby->key()));
+        m.push_back(&w.connect("Bob", code, 255, bob.lobby->key()));
+        for (RClient* g : m) g->record_hashes = true;
+        w.run(12000 + kPre);
+        RoomStatus s = w.status(code);
+        ASSERT_TRUE(s.state == RoomState::Running && s.reconnect && s.record_kept && s.fog && !s.restored);
+        for (RClient* g : m) ASSERT_TRUE(g->lobby->start_info().fog && g->sim.is_fog_of_war_enabled());
+        RestartLoaded rec = w.read_record(code);
+        ASSERT_TRUE(rec.ok() && !rec.torn && rec.head.fog && rec.head.start.fog);             // (the check of the record's head: its fog is the Start's)
+        for (const RestartCheck& c : rec.checks) {                                            // the checkpoints are the machines' own states: the referee's hash (an engine with fog) and the machines' agree
+            for (RClient* g : m) {
+                const auto at = g->hash_at.find(uint64_t{c.turn} + 1);
+                if (at != g->hash_at.end()) ASSERT_EQ(at->second, c.hash);
+            }
+        }
+        const uint32_t sealed_at_stop = s.turns;
+        w.stop_server(true);
+        w.run(3000);
+        rec = w.read_record(code);
+        ASSERT_TRUE(rec.ok() && rec.turns.size() == sealed_at_stop && rec.head.fog && rec.head.start.fog);
+        w.start_server(500);
+        ASSERT_EQ(w.report.items.size(), size_t{1});
+        ASSERT_TRUE(w.report.items[0].outcome == RestoreItem::Outcome::Restored && w.report.items[0].code == code && w.report.items[0].turns == sealed_at_stop);
+        s = w.status(code);
+        ASSERT_TRUE(s.state == RoomState::Running && s.restored && s.turns == sealed_at_stop && s.fog);
+        ASSERT_TRUE(status_to_json(s).get("fog").as_bool_or(false));
+        ASSERT_EQ(s.restored_hash, replay_hash(rec, rec.turns.size()));                       // the state that the room stands at is that of an independent replay of the record, made with fog
+        ASSERT_TRUE(w.until([&]() { return !w.status(code).paused; }, 90000));
+        ASSERT_TRUE(w.until([&]() { return m[0]->session->mode() == net::ClientSession::Mode::Normal && m[1]->session->mode() == net::ClientSession::Mode::Normal; }, 3000));
+        w.run(6000);
+        s = w.status(code);
+        ASSERT_TRUE(s.state == RoomState::Running && s.turns > sealed_at_stop + 100 && s.rejoins == 2 && s.fog);
+        for (RClient* g : m) ASSERT_TRUE(!g->lost && !g->session->desynced() && g->sim.is_fog_of_war_enabled());
+    } TEST_END();
+
     TEST_CASE("S3.94 A Match That Had Ended When The Server Stopped (Its Last Turn Was In The Record, The Room Had Not Finished Yet) Is Finished At The Restart With The Same Final State As The Match That Was Never Interrupted: The Result Rows, The Referee's Hash And The Report Of Its End Are There, Its Record Is Deleted, Nobody Is Waited For")  {
         PWorld w("persist-88");
         w.start_server(500);

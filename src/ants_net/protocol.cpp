@@ -525,10 +525,13 @@ bool decode(const uint8_t* data, size_t size, RoomMsg& out) {
         ai::BotLabel label;
         if (plan_fill_level(m.plan[seat]) == FillLevel::None || !ai::parse_bot_label(slot.name, label)) return false;
     }
-    // protocol 28: bots and Fog of War never mix: a room that shows fog and a color for a computer player is not a room that a server makes
+    // protocol 28: bots and Fog of War never mix: a room that shows fog and a color for a computer player, or a computer player in a seat, is not a room that a server makes
     if (fog == 1) {
         for (const PlanKind kind : m.plan) {
             if (plan_fill_level(kind) != FillLevel::None) return false;
+        }
+        for (const RoomMsg::Slot& slot : m.slots) {
+            if (slot.state == SlotState::Bot) return false;
         }
     }
     m.fog = fog == 1;

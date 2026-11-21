@@ -323,7 +323,27 @@ void run_lobby_room_tests() {
     } TEST_END();
 
     TEST_CASE("S3.308 Fog Of War Through A Real Lobby Room (Protocol 28): The Leader's Plan Sets It (The Status, The Control Interface And Every Page's Room Message Say It), A Guest's Plan Does Not, A Plan With Fog And A Computer Player Is Refused As A Whole And The Leader Is Told, The START Puts It Into The Start Of The Match, Every Engine Of The Match Has Fog, And The Match Is Recorded With It") {
+        const auto keep_replays = [](World& world, const char* tag) {            // (a server that keeps replays: only then does a room put its match on the board that the public door shows live)
+            ReplayConfig rc;
+            rc.dir = (fs::path(temp_dir_for(tag)) / "replays").string();
+            rc.game_version = "v0.0.0-test";
+            rc.build_id = "abc123";
+            rc.min_free_bytes = 0;
+            std::string why;
+            ASSERT_TRUE(world.mgr.enable_replays(rc, true, why));
+        };
+        const auto live_matches = [](World& world) {                             // the matches that the public door's /live shows now
+            ctl::HttpRequest rq;
+            rq.method = "GET";
+            rq.path = "/live";
+            const ctl::HttpResponse r = handle_public_replays(world.mgr, rq, 1000);
+            ctl::JsonValue v;
+            std::string why;
+            if (r.status != 200 || !ctl::parse_json(r.body, v, &why)) return size_t{9999};
+            return v.get("live").size();
+        };
         World w(lobby_limits());
+        keep_replays(w, "fog-live");
         Client& pia = w.connect_page("Pia", "fog00001", lobby_block_of());
         Client& bob = w.connect_page("Bob", "fog00001", lobby_block_of());
         const net::SeatKey key = pia.lobby->key();
@@ -370,8 +390,10 @@ void run_lobby_room_tests() {
             ASSERT_TRUE(game->lobby->start_info().fog);
             ASSERT_TRUE(game->sim.is_fog_of_war_enabled());
         }
+        ASSERT_EQ(live_matches(w), size_t{0});                                       // (a match with fog is not on the board that anybody can read while it runs: it would show the other sides; it is public when it is over)
         {   // a page that never switched fog starts a match without it
             World plain(lobby_limits());
+            keep_replays(plain, "fog-live-plain");
             Client& ann = plain.connect_page("Ann", "fog00003", lobby_block_of());
             const net::SeatKey ann_key = ann.lobby->key();
             ASSERT_TRUE(ann.lobby->request_plan(plan_msg({K::Open, K::Medium, K::Nobody, K::Nobody})));
@@ -383,6 +405,7 @@ void run_lobby_room_tests() {
             plain.run(3500);
             ASSERT_TRUE(plain.status("fog00003").state == RoomState::Running && !plain.status("fog00003").fog);
             ASSERT_TRUE(!ann_game.lobby->start_info().fog && !ann_game.sim.is_fog_of_war_enabled());
+            ASSERT_EQ(live_matches(plain), size_t{1});                               // (the same server shows its match: the board is there, fog is what keeps the other one off)
         }
     } TEST_END();
 
