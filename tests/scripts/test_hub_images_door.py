@@ -27,6 +27,7 @@ sys.path.insert(0, HERE)
 import fake_discord as fd  # noqa: E402
 import hub_client as hc  # noqa: E402
 import hub_rig  # noqa: E402
+import quick_http  # noqa: E402
 from test_hub_admin_door import DoorTest, NAMES as DOOR_NAMES, ADMIN as DOOR_ADMIN, MOD as DOOR_MOD, OWNER as DOOR_OWNER, TARGET as DOOR_TARGET, ADMIN2 as DOOR_ADMIN2, PLAIN as DOOR_PLAIN  # noqa: E402
 
 OWNER = fd.snowflake(910)
@@ -113,7 +114,7 @@ class FakeConverter:
                     pass                                  # (a hub that read what it wanted and hung up: an answer that is too big, a lie)
                 self.close_connection = True
 
-        self.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.httpd = quick_http.QuickThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.httpd.daemon_threads = True
         self.port = self.httpd.server_address[1]
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)

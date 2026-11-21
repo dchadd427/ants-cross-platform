@@ -252,7 +252,7 @@
   {
    "id": "a_deletion_is_not_logged",
    "file": "hub/admindoor.py",
-   "old": "if not store.delete_line(line, by, note=(by, \"del\", whom, str(line))):",
+   "old": "if not store.delete_line(line, by, note=(by, kind, whom, str(line))):",
    "new": "if not store.delete_line(line, by):",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
   },
@@ -273,8 +273,8 @@
   {
    "id": "a_deletion_stays_on_the_screens",
    "file": "hub/admindoor.py",
-   "old": "            chat.sync_deletions()\n        else:",
-   "new": "            pass\n        else:",
+   "old": "            chat.sync_deletions()\n        elif name in (\"noimages\", \"images\"):",
+   "new": "            pass\n        elif name in (\"noimages\", \"images\"):",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
   },
   {
