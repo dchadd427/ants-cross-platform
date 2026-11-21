@@ -26,6 +26,82 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.20.0 - 2026-11-20 - The room inside Home, Ready up
+
+**For players:**
+- **The room lives inside Home.** A room you host or join takes the place of the Games list, and the chat has two tabs, Ants & Uncles and Room, with a dot on the one that has something new. Home fits the window without scrolling from 1280x800 up.
+- **Ready up.** In a room, everyone except the host presses Ready; the host's START waits until all are ready and shows who is not.
+
+**Rules / network:** network protocol 27 (Ready up): a v0.19 game cannot join a v0.20 room.
+
+**Fixes:**
+- The "Leave the game?" box and the box that copies a recording's link no longer make the game's sound repeat loudly while they are open.
+- A match whose player lost their connection during the countdown no longer stays stuck before the first turn: after 60 s the missing seat is dropped and the match goes on.
+
+**For operators:**
+- The relay hands a credential only once a match with two or more people has begun, at most two per player, lasting as long as the match can plus 10 minutes; it listens and relays on ANTS_TURN_EXTERNAL_IP only (an address the machine must hold) and writes its pid file to a small memory folder.
+- New server option --countdown-hold-seconds (default 60; control key countdown_hold_seconds).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5cd7452b...faa0179c)
+
+## v0.19.3 - 2026-11-20 - Commands in the chat
+
+**For players:**
+- **Commands in the chat.** Type "/" to see the commands you can use, with a helper that fills them in. Everyone has /help, /ignore and /unignore. A mistyped command is answered only to you, and "//" at the start posts a line that begins with a slash.
+
+**For operators:**
+- Administrators can start computer-player matches from the chat with /bots (up to 10,000 in a queue, run 80 at a time with a load guard), see them with /bots status and end them with /bots stop. The hub reaches the game server through ANTS_HUB_GAME_ADMIN_URL (docs/HUB_COMMANDS.md).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0f2ebe70...9454806f)
+
+## v0.19.2 - 2026-11-20 - Invite only rooms, fewer stuck computer players
+
+**For players:**
+- **"Invite only" instead of "Private".** A room you keep to yourself shows in Open games, locked, and people join only with your link; the switch and every message now say so.
+- **Computer players on POPcOrN get stuck less.** Fewer seats end a match without a point, and they take more power-ups.
+
+**For operators:**
+- A schedule on the admin page can space its matches out ("Start one every X minutes"), like Start now.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/a89fd745...cd31da55)
+
+## v0.19.1 - 2026-11-20 - Numbers over the ants without a border
+
+**For players:**
+- **Health, damage and heal numbers have no black border.** The heal number now shows white digits with a green plus, so it reads on pale ground and over a green ant.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ceabe493...cf1bbe63)
+
+## v0.19.0 - 2026-11-20 - Smoother ants online, a direct-connection switch
+
+**For players:**
+- **Other players' ants move more smoothly online.** During a match your game hears the other players' orders a little earlier, through a relay, so their ants jump back into place less often. The server still decides everything, exactly as before.
+- **A "Direct connection" switch in the room**, off by default. With it on for both of you, the link skips the relay and can be faster for players near each other, but you can see each other's IP address. The countdown card shows "relay" or "direct" next to each player.
+- **Computer players' orders arrive early too,** so their ants are corrected less on your screen.
+
+**Rules / network:** network protocol 26: a v0.18 page or game cannot join a v0.19 match, so reload the page. The rules and the recordings are unchanged.
+
+**For operators:**
+- The relay (coturn) runs in the stack with `COMPOSE_PROFILES=relay` and the `ANTS_TURN_*` settings, including `ANTS_TURN_PORT` when another TURN server holds 3478 (docs/SERVER.md).
+- The admin page's Bot matches can use any map by name, an editable rotation, and "Start one every X minutes" (database migration 10).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/06f28456...fb4e3ef0)
+
+## v0.18.2 - 2026-11-19 - Private rooms show in Open games, locked
+
+**For players:**
+- **Private rooms show in Open games, locked.** You see the map, the host and the seats with a padlock and a PRIVATE tag; you can join only with the room's link. Quick join skips them. Matches in private rooms stay watchable as before.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/cd4ac593...0b39b23a)
+
+## v0.18.1 - 2026-11-19 - A note when a new version is out; computer players use the endgame
+
+**For players:**
+- **A note when a new version is out.** A strip at the top of Ants & Uncles, a room and the other pages offers Reload or Later, and "What's new" lists what changed since your last visit. Nothing shows during a match; it waits for the results.
+- **Computer players waste less time once the food is gone.** An idle Bomber or Swimmer fetches a Fire power-up, a Swimmer becomes the Thief for the last steals, hurt ants walk home to heal, and late fights need a clear advantage.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1b9ed00f...bdc50e13)
+
 ## v0.18.0 - 2026-11-19 - Dropped food can be taken only once
 
 **For players:**
@@ -447,56 +523,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/354be26a...bfbcbda8)
 
-## v0.12.151 - 2026-10-28 - Tests: the map submission checks no longer fail on a slow machine
+## Older versions (v0.12.151 and before)
 
-**For players:**
-- **No change for players or server owners.** The game, the server and the map files are as before.
-- **A test of the map submissions no longer fails on a slow, busy test machine.** It checks that a player can send a map, find it again and withdraw it. The server limits the time it spends checking maps, and on a loaded machine that time ran out in the middle of the test, so the server answered "busy" where the test expected "accepted". The tests now give that limit all the time they need, and a new test keeps the real "busy" answer covered: a send that takes longer than the limit closes the window, and the next window starts clean.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/308ce544...c7027eb3)
-
-## v0.12.150 - 2026-10-28 - Online rooms: at most 8,000 starting ants
-
-**For players:**
-- **Online rooms play at most 8,000 starting ants (all four colors added up).** Before, nothing limited the ants: a map with 40,000 ants passed the checker, and starting its match froze the whole server for about 11 seconds, with every room, the lobby and the health check, because setting the ants up takes time that grows with the square of their number. Now a map over 8,000 is refused before any ant is set up. A map that starts 8,000 ants or fewer, including the largest ones of the players (6,000 and 2,772 ants), plays online as before; none of the library's 540 maps starts more than 248.
-- **How you see the refusal.** The lobby tells the leader "This map starts too many ants to play online (8,000 at most): choose another map." and the room keeps its map. The map list marks the map "Too many ants to play online". In the Map Maker, **Play this map > With other players** says so and its button is off, and **Submit for approval** and test rooms get a sentence from the server. The map can still be opened, edited and saved, and played on your own computer or against bots.
-- **A match with many ants takes more of the server's places.** A match takes one place for every 10,000 cells of its map or every 400 starting ants, whichever is more: 2,400 ants take 6 places, 6,000 take 15 and 8,000 take 20 of the server's 48. A shipped map still takes one. So a 6,000-ant map now takes 15 of the 48 places (only 3 such matches at once; it took 3 before). Matches on a map above the cap are left out of the match history counts (only a recording made before the cap can be one). When a map needs more places than are free, the START waits as it does on any full server ("The server has no place for another match right now: try again in a minute.").
-
-**Rules / network:** none for the simulation and the network: network protocol 21, the simulation rules, the recordings and the map files are unchanged. One rule of online play is new, and a map that was accepted before can now be refused online: a room no longer plays a map that starts more than 8,000 ants.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/dd307dfd...bb58eaa2)
-## v0.12.149 - 2026-10-28 - On a phone the health numbers are bigger and outlined
-
-**For players:**
-- **On a phone the health numbers are bigger and outlined.** In the browser, "Show health as: Number" had digits 2 to 3 CSS pixels tall on a phone, too small to read. On a small screen they now grow (about 8 CSS pixels tall or more: three times as big on a phone held upright, twice on its side) and get a thin black outline about 1 CSS pixel wide. The desktop game, and the browser in a normal desktop window, are unchanged: the original's white digits, pixel for pixel.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ec8fa2fa...9ee59ee3)
-
-## v0.12.148 - 2026-10-28 - Map Maker: the editor starts with less code
-
-**For players:**
-- **No change for players.** The Map Maker looks and works as before, and a map you save or download is byte for byte what it was.
-- **The editor starts with less code.** Copy, Save as a new map, Start an Extended map / Make a Classic map and Crop to fit now load the first time you use one of them (two small scripts fetched at once, about 29 KB, 9 KB gzipped), so the Map Maker opens with about 7% less script. On a slow network that first dialog may take a moment (an estimate, not measured). If the scripts cannot load (no network), the page says so in plain words and asks again the next time.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2e45f112...67c5b473)
-
-## v0.12.147 - 2026-10-27 - Map Maker: each start ant faces its own way
-
-**For players:**
-- **Map Maker: each start ant now faces its own way.** Before, every starting ant on the map stood facing south. In the game each one starts facing one of seven directions picked at random when a match begins (never north), so the Map Maker now shows each ant facing one of those seven, for every ant type (worker, combat, thief, bomber, swimmer, fire) and team color.
-- **It is an example, not what the match will do.** The game picks the facings again for every match, so the map has none; the editor makes one up from each ant's cell (the same every time, so nothing jumps when you put other ants or pan), and the Ants box says so in one line. Nothing is saved in the map: the file is byte for byte what it was.
-- The page fetches 36 KB more of pictures when it opens (the extra standing ants), cached after the first visit. Map Maker v1.6.2.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/10bc34ae...6bd2e893)
-
-## Older versions (v0.12.146 and before)
-
-Every release before v0.12.147, and the long notes of v0.12.146 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.152, and the long notes of v0.12.151 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
