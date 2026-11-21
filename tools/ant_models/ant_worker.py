@@ -29,27 +29,27 @@ except ImportError:
 
 
 def _add_carapace_details(scene: SceneBuilder, anchors: dict) -> None:
-    """Subtle smooth organic chitin accents fitted flush onto Worker's slimmer 0.80x thorax."""
-    # Petite curved breastplate crest hugging the slimmer chest carapace (`z_max ~ 0.076`).
+    """Subtle smooth organic chitin accents fitted flush onto Worker's fuller 0.93x thorax."""
+    # Petite curved breastplate crest hugging the fuller chest carapace (`z_max ~ 0.088`).
     crest = (
-        superellipsoid(0.034, 0.046, 0.015, e1=0.80, e2=0.84, u_segs=16, v_segs=12, name="chest_crest", material="chitin_team")
+        superellipsoid(0.036, 0.048, 0.015, e1=0.80, e2=0.84, u_segs=16, v_segs=12, name="chest_crest", material="chitin_team")
         .rotate_xyz(rx=0.10)
-        .translate(0.0, 0.402, 0.062)
+        .translate(0.0, 0.402, 0.072)
     )
-    # Sleek dorsal pronotum ridge sitting flush atop the slimmer rear dorsal carapace (`z_min ~ -0.078`).
+    # Sleek dorsal pronotum ridge sitting flush atop the fuller rear dorsal carapace (`z_min ~ -0.090`).
     ridge = (
-        superellipsoid(0.029, 0.022, 0.028, e1=0.80, e2=0.84, u_segs=16, v_segs=10, name="dorsal_ridge", material="chitin_team")
+        superellipsoid(0.031, 0.024, 0.029, e1=0.80, e2=0.84, u_segs=16, v_segs=10, name="dorsal_ridge", material="chitin_team")
         .rotate_xyz(rx=-0.16)
-        .translate(0.0, 0.432, -0.058)
+        .translate(0.0, 0.432, -0.068)
     )
     scene.add("worker_carapace", [crest, ridge])
 
-    # Subtle curved team-colored shoulder fairings anchored cleanly onto the slimmer shoulders.
+    # Subtle curved team-colored shoulder fairings anchored cleanly onto the fuller shoulders.
     sh_l = anchors["shoulder_left"]
     cap = (
-        superellipsoid(0.020, 0.016, 0.019, e1=0.80, e2=0.84, u_segs=14, v_segs=10, name="shoulder_cap", material="chitin_team")
+        superellipsoid(0.021, 0.017, 0.020, e1=0.80, e2=0.84, u_segs=14, v_segs=10, name="shoulder_cap", material="chitin_team")
         .rotate_xyz(rz=-0.34)
-        .translate(sh_l[0] * 0.82, sh_l[1] + 0.006, sh_l[2] * 0.82)
+        .translate(sh_l[0] * 0.92, sh_l[1] + 0.006, sh_l[2] * 0.90)
     )
     scene.add_mirrored("worker_carapace", cap)
 
@@ -59,39 +59,38 @@ def _add_carapace_details(scene: SceneBuilder, anchors: dict) -> None:
 
 
 def _slim_worker_torso_and_tail(scene: SceneBuilder, anchors: dict) -> None:
-    """Slim Worker's thorax (~0.80x X/Z) and pointed gaster (~0.76x radial thickness) to match
-    `ORIG agst901`/`agst301`'s slender torso & tapered tail while keeping neck, petiole, arms,
-    and all 4 leg hip roots seamlessly embedded with zero gaps!
+    """Shape Worker's balanced thorax (~0.93x X/Z, 1.04x Y — fuller between head & gaster for
+    `ORIG agst701`) and sleek pointed gaster (~0.76x radial thickness) with seamless joints.
     """
     tc = np.asarray(anchors["thorax_center"], dtype=np.float64)
-    # 1. Slim thorax shell parts cleanly around `thorax_center` (keeping neck_joint & petiole seamless).
+    # 1. Shape thorax shell parts cleanly around `thorax_center` (keeping neck_joint & petiole seamless).
     slim_names = {"thorax_core", "chest_plate", "dorsal_plate", "thorax_seam"}
     new_body = []
     for p in scene.get_node("body"):
         if p.name in slim_names:
             new_body.append(
                 p.translate(-tc[0], -tc[1], -tc[2])
-                .scale(0.80, 1.0, 0.80)
+                .scale(0.93, 1.04, 0.93)
                 .translate(tc[0], tc[1], tc[2])
             )
         elif p.name == "neck_collar":
             new_body.append(
                 p.translate(-tc[0], -tc[1], -tc[2])
-                .scale(0.88, 1.0, 0.88)
+                .scale(0.95, 1.0, 0.95)
                 .translate(tc[0], tc[1], tc[2])
             )
         else:
             new_body.append(p)
     scene.nodes["body"] = new_body
 
-    # Tuck shoulder arm pivots gently inward (-12 mm X) so upper arms emerge flush from slimmer thorax.
+    # Seat shoulder arm pivots flush & slightly higher on the fuller 0.93x thorax (clean arm<->leg clearance).
     for arm_node, sign in (("arm_left", +1.0), ("arm_right", -1.0)):
         xf = scene.get_node_transform(arm_node)
         if xf is not None:
             tx, ty, tz = xf.translation
             scene.set_node_transform(
                 arm_node,
-                translation=(tx - sign * 0.012, ty, tz),
+                translation=(tx - sign * 0.007, ty + 0.010, tz),
                 rotation=xf.rotation,
                 scale=xf.scale,
             )
@@ -156,12 +155,41 @@ def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
             new_head.append(p)
     scene.nodes["head"] = new_head
 
-    # Shift eyes & concentric Blink eyelids cleanly backward (`face_dz`) and subtly inward
-    # so both eyes span right to the outer edges of the thin head with zero protruding cheek/eyelid!
+    # Shift eyes & concentric Blink eyelids cleanly backward (`face_dz`) and subtly inward;
+    # enlarge Worker's pupils ~25% and drop them conformally onto the lower half of each
+    # ellipsoidal sclera (`ORIG agst301`) with zero sclera bleed-through and full Blink sealing!
+    eye_specs = {
+        "left": (0.94, 0.92, +0.15, 0.36),
+        "right": (1.05, 1.18, -0.15, 0.42),
+    }
     if "eyes" in scene.nodes:
         new_eyes = []
         for p in scene.get_node("eyes"):
-            sx = -eye_in_left if p.name.endswith("_left") else (+eye_in_right if p.name.endswith("_right") else 0.0)
+            tag = "left" if p.name.endswith("_left") else ("right" if p.name.endswith("_right") else "")
+            sx = -eye_in_left if tag == "left" else (+eye_in_right if tag == "right" else 0.0)
+            if tag and p.name.startswith(("limbal_", "iris_", "pupil_", "catchlight_")):
+                ec = anchors[f"eye_{tag}"]
+                s_e, a_e, yaw_e, drop_rx = eye_specs[tag]
+                rx_s, ry_s, rz_s = 0.0678 * s_e, 0.0710 * s_e * a_e, 0.0646 * s_e
+                # Transform into eye-local sclera-normalized unit-sphere coordinates so rotation
+                # & enlargement follow the tall oval right sclera 100% conformally!
+                part = (
+                    p.translate(-ec[0], -ec[1], -ec[2])
+                    .rotate_xyz(ry=-yaw_e)
+                    .rotate_xyz(rx=+0.06)
+                    .scale(1.0 / rx_s, 1.0 / ry_s, 1.0 / rz_s)
+                )
+                if not p.name.startswith("catchlight_"):
+                    part = part.scale(1.24, 1.24, 1.03)
+                else:
+                    part = part.scale(1.0, 1.0, 1.02)
+                p = (
+                    part.rotate_xyz(rx=+drop_rx)
+                    .scale(rx_s, ry_s, rz_s)
+                    .rotate_xyz(rx=-0.06)
+                    .rotate_xyz(ry=+yaw_e)
+                    .translate(ec[0], ec[1], ec[2])
+                )
             new_eyes.append(p.translate(sx, 0.0, face_dz))
         scene.nodes["eyes"] = new_eyes
     for node_name, sx, x_trim in (("eyelid_left", -eye_in_left, 1.0), ("eyelid_right", +eye_in_right, 0.96)):
@@ -177,9 +205,21 @@ def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
                 scale=xf.scale,
             )
 
-    # Frame mandibles cleanly onto the slimmer 0.82x lower jaw.
+    # Enlarge & widen BOTH tusks cleanly (~1.30x wider than old 0.88x, ~1.15x fuller Y/Z)
+    # so bold chunky lobster-claw mandibles frame Worker's lower cheeks right beneath his eyes (`ORIG agst301`).
     if "mandibles" in scene.nodes:
-        scene.nodes["mandibles"] = [p.scale(0.88, 1.0, 1.0) for p in scene.get_node("mandibles")]
+        new_mands = []
+        for p in scene.get_node("mandibles"):
+            cx = float(p.positions[:, 0].mean())
+            side = 1.0 if cx >= 0.0 else -1.0
+            # Widen each individual tusk around its own X center (+28% wider vs 0.88x) & nudge subtly lower/outward.
+            part = (
+                p.translate(-cx, 0.0, 0.0)
+                .scale(1.22, 1.15, 1.14)
+                .translate(cx * 1.08 + side * 0.004, -0.004, 0.004)
+            )
+            new_mands.append(part)
+        scene.nodes["mandibles"] = new_mands
     m_xf = scene.get_node_transform("mandibles")
     if m_xf is not None:
         tx, ty, tz = m_xf.translation
@@ -422,7 +462,7 @@ def build_worker(blink: float = 0.0) -> SceneBuilder:
         head_pitch_deg=-13.5,
         head_tilt_deg=4.5,
         head_yaw_deg=-3.5,
-        eye_look=(0.06, 0.05),
+        eye_look=(0.06, 0.0),
         eye_scale_left=0.94,
         eye_scale_right=1.05,
         eye_aspect_left=0.92,
@@ -437,6 +477,7 @@ def build_worker(blink: float = 0.0) -> SceneBuilder:
     _sculpt_worker_head_profile(scene, anchors)
     _slim_worker_torso_and_tail(scene, anchors)
     _add_carapace_details(scene, anchors)
+    scene.scale_all(0.97)
     scene.ground_to_y(0.0)
     _add_worker_attack_animation(scene)
     return scene
