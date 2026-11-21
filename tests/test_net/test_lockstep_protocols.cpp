@@ -1274,7 +1274,7 @@ void run_protocol15_tests() {
         RoomMsg room;
         room.slots[0] = {SlotState::Client, "Ann", 30, static_cast<uint8_t>(kOsWindows)};
         room.slots[1] = {SlotState::Client, "Bob", 40, static_cast<uint8_t>(kOsAndroid | kPlatformBrowser)};
-        room.slots[2] = {SlotState::Bot, "Bot (Easy)", 0, 0};
+        room.slots[2] = {SlotState::Client, "Cat", 50, 0};                                                 // (a person who did not say: a room with fog has no computer player, N2.115)
         room.map_name = "TINY.LVL";
         room.fog = true;
         room.you = 1;
@@ -1358,9 +1358,12 @@ void run_protocol15_tests() {
         }
         // the leader of the room is still a person that holds a seat as a guest, whatever the new fields say
         {
-            std::vector<uint8_t> one = bytes;
-            one[end - 4] = 2;                                                                            // the leader's seat 2 is a bot
-            ASSERT_FALSE(decode(one, back));
+            RoomMsg with_bot = room;                                                                     // (no fog here: a room with fog has no computer player, N2.115)
+            with_bot.fog = false;
+            with_bot.slots[2] = {SlotState::Bot, "Bot (Easy)", 0, 0};
+            ASSERT_TRUE(decode(encode(with_bot), back));                                                 // (the leader is the guest of seat 0: a room)
+            with_bot.leader = 2;                                                                         // the leader's seat 2 is a bot
+            ASSERT_FALSE(decode(encode(with_bot), back));
         }
 
         // ---- the Start: the platforms of the seats are its last four bytes before the mode (protocol 17: the very last byte) ----
