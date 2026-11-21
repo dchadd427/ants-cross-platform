@@ -125,7 +125,7 @@
    "id": "credential_never_expires",
    "file": "src/ants_net/session.cpp",
    "old": "ice.expires = now + ttl;",
-   "new": "ice.expires = now + 4000000000u;",
+   "new": "ice.expires = now + 4000000000u + 0u * ttl;",
    "build": [
     "test_lockstep"
    ],
@@ -235,7 +235,7 @@
    "id": "credential_for_a_match_of_one_person",
    "file": "src/ants_net/session.cpp",
    "old": "seats_set_in(people_) >= 2 && ",
-   "new": "",
+   "new": "seats_set_in(people_) >= 1 && ",
    "build": [
     "test_lockstep"
    ],
@@ -305,7 +305,7 @@
    "id": "rooms_credential_has_no_limit",
    "file": "src/ants_server/room.cpp",
    "old": "hc.relay_ttl_s = spec_.run_ms / 1000u + (spec_.reconnect ? spec_.max_pause_ms / 1000u : 0u) + kRelayMarginS;",
-   "new": "hc.relay_ttl_s = 0u;",
+   "new": "hc.relay_ttl_s = 0u * kRelayMarginS;",
    "build": [
     "test_server"
    ],
