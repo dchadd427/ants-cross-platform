@@ -1053,6 +1053,8 @@ class TheIdIsLikeAPassword(DoorTest):
         blob = b"\n".join(texts).decode("utf-8", "replace")
         for account in EVERY_ID:
             self.assertNotIn(account, blob, "an id is somewhere that an id must never be")
+        for account in EVERY_ID:
+            blob = blob.replace(self.ref(account), "<ref>")                           # (a reference is a form that may be in an answer: 16 hex digits, which are all decimal one time in two thousand, and then look like a number as long as an id)
         self.assertNotRegex(blob, r"(?<![0-9a-f])[0-9]{15,}(?![0-9a-f])")
 
     def test_the_stores_modlog_and_picture_rows_hold_references_and_no_id(self):

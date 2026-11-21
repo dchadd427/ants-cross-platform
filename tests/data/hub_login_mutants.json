@@ -980,8 +980,8 @@
   {
    "id": "log_holds_the_client_id",
    "file": "hub/config.py",
-   "old": "\"min_account_days\": self.min_account_days}",
-   "new": "\"min_account_days\": self.min_account_days, \"id\": self.login_client_id}",
+   "old": "\"images_configured\": int(bool(self.image_converter_url))}",
+   "new": "\"images_configured\": int(bool(self.image_converter_url)), \"id\": self.login_client_id}",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheProcess"
   },
   {
@@ -1092,8 +1092,8 @@
   {
    "id": "line_write_error_cuts_the_socket",
    "file": "hub/chat.py",
-   "old": "        try:\n            entry = self.store.add_line(who.account_id, who.name, line, max(RANK[role], 1 if mod else 0))       # (the role that the author has now: what the line will say of it)\n        except StoreError as e:",
-   "new": "        try:\n            entry = self.store.add_line(who.account_id, who.name, line, max(RANK[role], 1 if mod else 0))       # (the role that the author has now: what the line will say of it)\n        except ZeroDivisionError as e:",
+   "old": "        except StoreError as e:\n            self.account_limits.refund(who.account_id, counted)",
+   "new": "        except ZeroDivisionError as e:\n            self.account_limits.refund(who.account_id, counted)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheDatabaseThatCannotBeUsed tests.scripts.test_hub_server.TheLockedDatabaseOnTheWire"
   },
   {
@@ -1120,7 +1120,7 @@
   {
    "id": "failed_line_costs_its_token",
    "file": "hub/chat.py",
-   "old": "            self.account_limits.refund(who.account_id, line)       # (the line was not kept: it did not cost a token, and the same text may be tried again)",
+   "old": "            self.account_limits.refund(who.account_id, counted)       # (the line was not kept: it did not cost a token, and the same text may be tried again)",
    "new": "            pass",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheDatabaseThatCannotBeUsed tests.scripts.test_hub_server.TheLockedDatabaseOnTheWire"
   },

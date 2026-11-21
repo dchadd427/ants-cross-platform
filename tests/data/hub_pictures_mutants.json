@@ -981,8 +981,8 @@
   {
    "id": "a_kick_or_a_ban_fails_when_the_look_is_refused",
    "file": "hub/chat.py",
-   "old": "            except StoreError as e:\n                if self.on_store_error:\n                    self.on_store_error(e)\n",
-   "new": "            except ZeroDivisionError as e:\n                pass\n",
+   "old": "            try:\n                self.pictures.sync()\n            except StoreError as e:\n                if self.on_store_error:\n                    self.on_store_error(e)\n",
+   "new": "            try:\n                self.pictures.sync()\n            except ZeroDivisionError as e:\n                pass\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheStoreRefusing"
   },
   {

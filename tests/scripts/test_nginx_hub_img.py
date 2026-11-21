@@ -63,7 +63,7 @@ GIF = b"GIF89amade-up gif;"
 
 class TheText(unittest.TestCase):
     def test_the_files_door_is_one_regular_expression_of_the_exact_shape_after_the_avatars_and_before_the_static_images(self):
-        here = 'location ~ "^/hub/img/(?<ants_img>[0-9a-f]+(?:\\.t)?\\.(?:jpg|png|gif))\\z" {'
+        here = 'location ~ "^/hub/img/(?P<ants_img>[0-9a-f]+(?:\\.t)?\\.(?:jpg|png|gif))\\z" {'
         self.assertEqual(SERVER.count(here), 1)
         self.assertEqual(SERVER.count("/hub/img/"), 2, "the two doors and nothing else name the folder")
         self.assertLess(SERVER.index('location ~ "^/hub/pic/'), SERVER.index(here), "the avatars' door stays the first regular expression of the file")

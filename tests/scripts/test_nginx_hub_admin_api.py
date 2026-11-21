@@ -394,7 +394,7 @@ class TheWholeWay(unittest.TestCase):
         for name in ("bans", "mutes", "hidden", "modlog", "status"):
             r = self.page(owner, "GET", name)
             self.assertEqual(r.status, 200, name)
-            self.assertIn("untrusted", r.json()) if name != "status" else self.assertEqual(sorted(r.json()), ["health", "last_picture", "store", "version"])
+            self.assertIn("untrusted", r.json()) if name != "status" else self.assertEqual(sorted(r.json()), ["health", "images", "last_picture", "store", "version"])
         self.assertEqual(self.page(owner, "POST", "mute", {"account": "terry.target", "minutes": 5}, token="0" * 64).json(), {"error": "csrf"}, "a token that is not this login's")
         r = self.page(owner, "POST", "mute", {"account": "terry.target", "minutes": 5}, token=token)
         self.assertEqual((r.status, sorted(r.json())), (200, ["ok", "until"]))
