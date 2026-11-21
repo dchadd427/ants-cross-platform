@@ -99,7 +99,7 @@ public:
     uint8_t started_mask_{0x0F};            // bit p: team p had an ant, an egg (187 now: an egg that could hatch) or a hatch when the match began (set by init and init_test_world): the teams that were really in the match; the last-side rule needs two of them
     bool last_side_rule_{true};             // the original's game only: the end rule of the rules number 8 (a recording of 5 plays without it: set_last_side_rule); 187 has its own end rule
     bool bite_skips_empty_record_{true};    // both modes: the bite of the rules numbers 13 and later takes its unit from the first object of the anchor that has one (a recording of 5 to 12 plays with the original's first object: set_bite_skips_empty_record)
-    bool path_answers_after_commands_{true};   // both modes: from the rules number 14 the refusal ("no path") of the path manager's run is given at the start of the next tick, after the turn's commands (a recording of 5 to 13 plays with it at once: set_path_answers_after_commands; pathmgr_rules.cpp)
+    bool path_answers_after_commands_{true};   // both modes: from the rules number 14 the answer of the path manager's run to a walk that an event asked for (a path, or "no path") is given at the start of the next tick, after the turn's commands (a recording of 5 to 13 plays with it at once: set_path_answers_after_commands; pathmgr_rules.cpp)
     bool fire_wall_as_original_{true};      // both modes: the loader of the rules numbers 9 and later (a recording of 5 to 8 plays with the remake's overlay on a named fire wall: set_fire_wall_as_original)
     bool hill_open_187_{false};             // 187 only: the rules of the recordings before the closed hill (set_hill_open_187); the original's game never reads it
     bool end_fix_187_{true};                // 187 only: the end rule of the rules number 11 (a recording of 6, 7 or 10 plays without it: set_end_fix_187); the original's game never reads it
@@ -444,9 +444,10 @@ public:
     TileAntIndex tile_ants_;         // derived from the ants' occ_tile (tile_ants.hpp): same size as occ_, never hashed
     AntEventHeap event_heap_;        // derived from the ants' timed events (event_heap.hpp, event_queue.cpp): never hashed, rebuilt by event_refresh
     std::array<PathManager, MAX_PLAYERS> path_managers_{};          // one PATHMGR per player machine
-    struct HeldAnswer {                                             // the refusal ("no path") of a run that ended a tick, given at the start of the next one (path_answers_after_commands_): at most one a team
+    struct HeldAnswer {                                             // the answer of a run that ended a tick, for a walk that an event asked for: given at the start of the next tick, after the turn's commands (path_answers_after_commands_); at most one a team
         bool present{false};
         uint32_t ant_id{0};
+        std::vector<TileCoord> path;                                // the path that the run found, empty when it found none ("Can't go there.")
     };
     std::array<HeldAnswer, MAX_PLAYERS> held_answers_{};
     std::unordered_map<uint32_t, uint32_t> path_request_serial_;    // ant id -> move_serial at request
@@ -457,9 +458,9 @@ public:
     // lifecycle / per tick
     void movement_reset();
     void movement_tick();
-    void pathmgr_run();                         // one run of each team's PATHMGR (delivers at most one path per team): at the end of movement_tick(); a refusal is given at once or held (pathmgr_rules.cpp)
-    void pathmgr_answer();                      // gives the refusals that the last tick's runs held (the start of movement_tick(), after the turn's commands)
-    void pathmgr_forget_answer(uint32_t ant_id);   // an order replaces the ant's request, and a refusal that is held for it
+    void pathmgr_run();                         // one run of each team's PATHMGR (delivers at most one answer per team): at the end of movement_tick(); the answer to what an event asked is given at once or held (pathmgr_rules.cpp)
+    void pathmgr_answer();                      // gives the answers that the last tick's runs held (the start of movement_tick(), after the turn's commands)
+    void pathmgr_forget_answer(uint32_t ant_id);   // an order replaces the ant's request, and the answer that is held for it
     void loco_sync(AntUnit& a);
     /// The clip of SetAction(idle) (FUN_0101ad02) for the ant `a` facing `dir` on a tile of the terrain class `terr`: the water clip on water, else the clip of the ant's type, direction and load
     movement::MotionClip idle_motion_clip(const AntUnit& a, uint8_t dir, int16_t terr) const;

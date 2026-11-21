@@ -59,7 +59,7 @@ inline std::vector<LibraryMap> library() {
 // The full state hash at the start and after every game second of a play of `level` (the four teams, the map sweep's scripted players and seeds): the entry k is the
 // state at tick 20 k (the last one at tick `ticks` when that is not a whole second, or where the match ended)
 // (`fire_wall_as_original` false plays the map by the loader of the rules numbers 5 to 8: a fire wall with a named dictionary entry also gets the remake's obstacle overlay; `path_answers_after_commands` false
-// plays it with the path manager's refusal given at once, as the rules numbers before 14 do)
+// plays it with the path manager's answers given at once, as the rules numbers before 14 do)
 inline std::vector<ants::sim::StateHash> play_hashes(const ants::assets::LevelData& level, uint32_t ticks, bool fire_wall_as_original = true, bool path_answers_after_commands = true) {
     ants::sim::SimulationEngine engine;
     engine.set_fire_wall_as_original(fire_wall_as_original);

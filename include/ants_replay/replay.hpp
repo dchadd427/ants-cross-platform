@@ -79,9 +79,9 @@ inline constexpr uint8_t kNoSeat = 255;
 /// The original's game is 13 now: a bite takes its unit from the first object of its food tile that still has one (SimulationEngine::set_bite_skips_empty_record, docs/GAME_REVERSE_ENGINEERING.md 5.40, "A lunchbox on
 /// the anchor of an emptied record"), so a lunchbox that falls on the anchor of an emptied pile or of an earlier lunchbox is eaten once; the original takes the first object whatever it holds, and a recording of 9 (or 8
 /// or 5) plays so. Game mode 187 kept 12 for it: it has no food on the ground (no pile of the map and, since 12, no lunchbox), so the rule changed none of its matches.
-/// The original's game is 14 now, and 187 is 15: the path manager's refusal ("no path") is given at the start of the next tick, after the turn's commands (SimulationEngine::set_path_answers_after_commands, docs/GAME_REVERSE_ENGINEERING.md 5.40,
-/// "The gap before the path manager's answer"), so that an ant that an event has just sent is idle with no path when the commands come, and takes an order, as the original takes a click between a GoTo and the manager's next run. It
-/// moves the plays of both modes, so each took a number: a recording of 13 (187's 12 and the numbers before them) plays with the refusal at once, at the end of the tick, as it always did.
+/// The original's game is 14 now, and 187 is 15: the path manager's answer to a walk that an event asked for, a path or "no path", is given at the start of the next tick, after the turn's commands (SimulationEngine::set_path_answers_after_commands,
+/// docs/GAME_REVERSE_ENGINEERING.md 5.40, "The gap before the path manager's answer"), so that an ant that an event has just sent is idle with no path when the commands come, and takes an order (a Stop is skipped), as the original takes
+/// a click between a GoTo and the manager's next run. It moves the plays of both modes, so each took a number: a recording of 13 (187's 12 and the numbers before them) plays with the answer at once, at the end of the tick, as it always did.
 inline constexpr uint16_t kSimRules = 14;
 inline constexpr uint16_t kSimRulesBeforeCantGo = 13;
 inline constexpr uint16_t kSimRulesBeforeEmptyRecord = 9;
@@ -93,8 +93,8 @@ inline constexpr uint16_t kSimRulesBeforeLastSide = 5;
 /// kSimRulesMode187Heal (6) is 187 as it was first released: the hill works, an ant that enters it is healed, an ant at 1 hp walks home and the waiting ring queues. kSimRulesMode187BeforeFireWall (7) is 187 with the hill
 /// closed: an ant cannot enter its hill (docs/GAMEPLAY.md, "187"). kSimRulesMode187BeforeEndFix (10) is the same with a fire wall of a map file loaded as the original loads it. kSimRulesMode187BeforeNoDrops (11) is the same, and
 /// the end rule counts the teams that began and a team that has only eggs that cannot hatch is not standing (SimulationEngine::set_end_fix_187). kSimRulesMode187BeforeCantGo (12) is the same, and nothing is put on the ground, no power-up from
-/// an ant of a special type that dies or that takes another and no lunchbox (SimulationEngine::set_no_drops_187). kSimRulesMode187 (15) is 187 now: the same, and the path manager's refusal is given after the turn's commands (kSimRulesCantGoFirst). This build plays all six: a file of 6 plays with the hill open (SimulationEngine::set_hill_open_187, replay::begin_match),
-/// a file of 6 or 7 with the old loader, a file of 6, 7 or 10 without the end-rule fixes, a file of 6, 7, 10 or 11 with the drops of the original's game, a file of 6 to 12 with the refusal at once, and a match is recorded under kSimRulesMode187 (sim_rules_for_mode).
+/// an ant of a special type that dies or that takes another and no lunchbox (SimulationEngine::set_no_drops_187). kSimRulesMode187 (15) is 187 now: the same, and the path manager's answer to what an event asked for is given after the turn's commands (kSimRulesCantGoFirst). This build plays all six: a file of 6 plays with the hill open (SimulationEngine::set_hill_open_187, replay::begin_match),
+/// a file of 6 or 7 with the old loader, a file of 6, 7 or 10 without the end-rule fixes, a file of 6, 7, 10 or 11 with the drops of the original's game, a file of 6 to 12 with the path manager's answer at once, and a match is recorded under kSimRulesMode187 (sim_rules_for_mode).
 /// The last-side rule (8) is the original's game's: 187 has its own end rule and never reads it. The loader knows no mode, so its change took one number of each mode (9 and 10), not one for both.
 inline constexpr uint16_t kSimRulesMode187Heal = 6;
 inline constexpr uint16_t kSimRulesMode187BeforeFireWall = 7;
@@ -108,7 +108,7 @@ inline constexpr uint16_t kSimRulesFireWallFirst = 9;
 /// The first number whose bite skips an emptied object of its food tile (SimulationEngine::set_bite_skips_empty_record): every number from here on has it; the numbers below it, 187's 12 included (it has no food on the
 /// ground, so it plays the same either way), take the first object of the tile whatever it holds, as the original does. replay::begin_match asks bite_skips_empty_record_rules.
 inline constexpr uint16_t kSimRulesEmptyRecordFirst = 13;
-/// The first number whose path manager gives its refusal after the turn's commands (SimulationEngine::set_path_answers_after_commands): every number from here on has it, in either mode (the original's 14, 187's 15); the numbers below it
+/// The first number whose path manager gives its answer to what an event asked for after the turn's commands (SimulationEngine::set_path_answers_after_commands): every number from here on has it, in either mode (the original's 14, 187's 15); the numbers below it
 /// (5 to 13, 187's 6, 7, 10, 11 and 12) give it at once. replay::begin_match asks path_answers_after_commands_rules.
 inline constexpr uint16_t kSimRulesCantGoFirst = 14;
 /// The newest number of the row, whichever mode it belongs to: a file of a higher number is a newer build's, one of a lower number that this build does not play is an older one's
@@ -168,7 +168,7 @@ constexpr bool bite_skips_empty_record_rules(uint16_t rules) noexcept {
     return rules >= kSimRulesEmptyRecordFirst;
 }
 
-/// Whether a match of the rules number `rules` gives the path manager's refusal after the turn's commands (SimulationEngine::set_path_answers_after_commands): every number from kSimRulesCantGoFirst on, in either mode
+/// Whether a match of the rules number `rules` gives the path manager's answer to what an event asked for after the turn's commands (SimulationEngine::set_path_answers_after_commands): every number from kSimRulesCantGoFirst on, in either mode
 constexpr bool path_answers_after_commands_rules(uint16_t rules) noexcept {
     return rules >= kSimRulesCantGoFirst;
 }

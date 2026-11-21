@@ -319,18 +319,19 @@ StateHash SimulationEngine::state_hash() const {
             });
         }
         std::vector<std::pair<uint32_t, uint32_t>> serials(e.path_request_serial_.begin(), e.path_request_serial_.end());
-        for (auto& s : serials) s.second &= 0x7FFFFFFFu;               // (the top bit says that an event asked, for the rules numbers 14 and later: it follows from when the request was made, and a refusal that it lets the engine hold is hashed below)
         std::sort(serials.begin(), serials.end());
         h.size(serials.size());
         for (const auto& s : serials) {
             h.u32(s.first);
             h.u32(s.second);
         }
-        for (uint8_t team = 0; team < MAX_PLAYERS; ++team) {      // a refusal that is held until after the next commands (rules numbers 14 and later; none, and no change to the hash, before)
+        for (uint8_t team = 0; team < MAX_PLAYERS; ++team) {      // an answer that is held until after the next commands (rules numbers 14 and later; none, and no change to the hash, before)
             const auto& held = e.held_answers_[team];
             if (!held.present) continue;
             h.u32(0xA0u + team);
             h.u32(held.ant_id);
+            h.size(held.path.size());
+            for (const TileCoord& t : held.path) h.tile(t);
         }
         out.paths = h.value();
     }

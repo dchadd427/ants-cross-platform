@@ -935,7 +935,7 @@ A bite takes its unit from the first object of its food tile that still has one,
 
 ## Protocol 28: nothing on the wire
 
-The path manager's refusal of a walk that an event asked for (the end of a can't-go clip, of a raid clip) is given at the start of the next tick, after the turn's commands, so that an ant that an event has just sent takes an order, as the original takes a click between a GoTo and the manager's next run (the original's game, rules number 14; 187, 15): [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) 5.40, "The gap before the path manager's answer"; the rules numbers: [`REPLAYS.md`](REPLAYS.md#the-file).
+The path manager's answer to a walk that an event asked for (the end of a can't-go clip, of a raid clip), a path or "no path", is given at the start of the next tick, after the turn's commands, so that an ant that an event has just sent takes an order and a Stop is skipped, as the original takes a click between a GoTo and the manager's next run (the original's game, rules number 14; 187, 15): [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) 5.40, "The gap before the path manager's answer"; the rules numbers: [`REPLAYS.md`](REPLAYS.md#the-file).
 
 ## Reconnect (protocol 10): a player whose connection is lost can come back
 

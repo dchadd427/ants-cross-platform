@@ -4,7 +4,7 @@
 //
 //   hash_ledger --out FILE [--extended] [--rules1 | --rules2] [--fire-wall-named] [--answers-at-end] [--only TEXT] [--ticks A,B,...]
 //
-// --answers-at-end plays every map with the path manager's refusal given at once, the rules numbers 5 to 13 (SimulationEngine::set_path_answers_after_commands): that ledger is the one of the build before the rules number 14, and its 540 lines are the base ledger of
+// --answers-at-end plays every map with the path manager's answers given at once, the rules numbers 5 to 13 (SimulationEngine::set_path_answers_after_commands): that ledger is the one of the build before the rules number 14, and its 540 lines are the base ledger of
 // main before the rules number 14, byte for byte; without it the ledger is the one of the rules of a match played now.
 // --fire-wall-named plays every map by the loader of the rules numbers 5 to 8 (a fire wall with a named dictionary entry also gets the remake's obstacle overlay,
 // Grid::init_from_level): that ledger is the one of the build before the rules number 9, and its 540 lines are the base ledger of main before the rules number 9, byte for byte; without it the ledger is the one of the rules number 9.

@@ -1448,7 +1448,7 @@ bool SimulationEngineImpl::go_to(AntUnit& a, TileCoord t, bool user_cmd, bool sp
     pathmgr_forget_answer(a.id);
     path_managers_[a.player_id < MAX_PLAYERS ? a.player_id : 0].request(
         a.id, cur, t, static_cast<uint16_t>(grid_.height()), static_cast<uint16_t>(grid_.width()), grid_.rules() == 0, grid_.rules() == 2);   // rules 1 and 2: the wall at row 90 is down; rules 2: the wide search (path_planner.hpp)
-    path_request_serial_[a.id] = a.move_serial | ((path_answers_after_commands_ && occ_in_tick_) ? kEventRequestBit : 0u);   // (an order of a command is made outside the tick scope, an event's inside it: only an event's request may have its refusal held)
+    path_request_serial_[a.id] = a.move_serial | ((path_answers_after_commands_ && occ_in_tick_) ? kEventRequestBit : 0u);   // (an order of a command is made outside the tick scope, an event's inside it: only an event's request may have its answer held)
     // Remake bookkeeping: player orders (and the ability orders, which the re-path gives again) report the resolved destination;
     // orders from remake systems keep the tile they asked for, so that repeating the same order is recognised as such.
     a.final_dest = (user_cmd || special) ? t : requested;
@@ -1579,10 +1579,11 @@ void SimulationEngineImpl::loco_sync(AntUnit& a) {
 }
 
 // PATHMGR (Ants.exe 0x1024786): one run per player every 50 ms; at most one path delivered per run. Rules 2: a search that has passed the original's limit gets a budget that grows with the map (PathManager::wide_budget), before that the original's 1,000; rules 0 and 1: 1,000.
-// The rules numbers 5 to 13 give the answer of a run at once. From the rules number 14 (docs/GAME_REVERSE_ENGINEERING.md 5.40, "The gap before the path manager's answer") the answer "no path" of a run that ends a tick is held and given at
-// the start of the next tick, after the turn's commands (pathmgr_answer): the original's task has a delay of 0 and a period of 50 ms (0x100e4ff), so its runs fall on the boundaries of the turns, and at a boundary the original
-// handles the waiting clicks before the scheduler's pass. A request that an event made during the tick (a clip end's GoTo) is therefore still unanswered while the commands of the next turn are applied: the ant is idle with no
-// path and takes the order. A path that is found is given at once as before: the ant stands idle for its first 250 ms, so an order takes it before and after the answer alike, and nothing else moves.
+// The rules numbers 5 to 13 give the answer of a run at once. From the rules number 14 (docs/GAME_REVERSE_ENGINEERING.md 5.40, "The gap before the path manager's answer") the answer of a run that ends a tick, for a walk that an
+// event asked for (a clip end's GoTo, an arrival, the hill queue), is held, a path that is found as well as "no path", and given at the start of the next tick, after the turn's commands (pathmgr_answer): the original's task has a
+// delay of 0 and a period of 50 ms (0x100e4ff), so its runs fall on the boundaries of the turns, and at a boundary the original handles the waiting clicks before the scheduler's pass. A walk that an event asked for is therefore still
+// unanswered while the commands of the next turn are applied: the ant is idle with no path and takes the order (an order replaces the request), and a Stop at that boundary finds no path and action 0 and is skipped (0x1028aef .. 0x1028b00),
+// so that the ant walks as soon as the answer comes. The answer to what a command asked for is given at the end of the tick as before.
 void SimulationEngineImpl::pathmgr_run() {
     for (uint8_t team = 0; team < MAX_PLAYERS; ++team) {
         auto delivery = path_managers_[team].run([this](uint32_t ant_id, TileCoord from, TileCoord to) -> uint32_t {
@@ -1592,25 +1593,25 @@ void SimulationEngineImpl::pathmgr_run() {
         }, grid_.rules() == 2 ? PathManager::wide_budget(grid_.height(), grid_.width()) : PathSearch::kDefaultBudget);
         if (!delivery) continue;
         const auto serial = path_request_serial_.find(delivery->ant_id);
-        if (path_answers_after_commands_ && delivery->path.empty() && serial != path_request_serial_.end() && (serial->second & kEventRequestBit) != 0u) {
-            held_answers_[team] = HeldAnswer{true, delivery->ant_id};          // (the refusal of what an event asked: the clip that it starts is what refuses the orders)
+        if (path_answers_after_commands_ && serial != path_request_serial_.end() && (serial->second & kEventRequestBit) != 0u) {
+            held_answers_[team] = HeldAnswer{true, delivery->ant_id, std::move(delivery->path)};   // (what an event asked for: the clip that a refusal starts is what refuses the orders, and a path that is found is what a Stop at the boundary does not stop)
         } else {
             deliver_path(delivery->ant_id, delivery->path);
         }
     }
 }
 
-// The refusals that the runs of the last tick held (the rules numbers 14 and later): given now, in the order of the teams, as the runs gave them before
+// The answers that the runs of the last tick held (the rules numbers 14 and later): given now, in the order of the teams, as the runs gave them before
 void SimulationEngineImpl::pathmgr_answer() {
     for (uint8_t team = 0; team < MAX_PLAYERS; ++team) {
         if (!held_answers_[team].present) continue;
-        const uint32_t ant_id = held_answers_[team].ant_id;
+        HeldAnswer held = std::move(held_answers_[team]);
         held_answers_[team] = HeldAnswer{};
-        deliver_path(ant_id, {});
+        deliver_path(held.ant_id, held.path);
     }
 }
 
-// An order replaces the ant's request, and with it a refusal that has not been given yet (the first request with the ant's number is removed, 0x10246f8 .. 0x102473b)
+// An order replaces the ant's request, and with it the answer that has not been given yet (the first request with the ant's number is removed, 0x10246f8 .. 0x102473b)
 void SimulationEngineImpl::pathmgr_forget_answer(uint32_t ant_id) {
     for (HeldAnswer& a : held_answers_) {
         if (a.present && a.ant_id == ant_id) a = HeldAnswer{};

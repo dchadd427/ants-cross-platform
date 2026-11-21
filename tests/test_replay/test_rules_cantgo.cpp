@@ -1,9 +1,9 @@
 // Tests of the rules number 14 of the original's game and 15 of 187 (ants_replay/replay.hpp, docs/REPLAYS.md "Which files play: sim_rules", docs/GAME_REVERSE_ENGINEERING.md 5.40, "The gap before the path manager's answer"): from
-// 14 (187: 15) the path manager's refusal ("no path") is given at the start of the next tick, after the turn's commands, so an ant that an event has just sent takes an order; the numbers before (5, 8, 9 and 13 of the original's game,
+// 14 (187: 15) the path manager's answer to a walk that an event asked for (a path, or "no path") is given at the start of the next tick, after the turn's commands, so an ant that an event has just sent takes an order and a Stop is skipped; the numbers before (5, 8, 9 and 13 of the original's game,
 // 6, 7, 10, 11 and 12 of 187) give it at once, as they always did. This build plays 5, 8, 9, 13 and 14 for the original's game and 6, 7, 10, 11, 12 and 15 for 187, and every number belongs to one mode.
 //   RP18.1  the numbers: what a build plays, which of them have the rule, what a head may say, what a match is recorded under, what a refusal says, how the player of a recording sets the engine up
 //   RP18.2  a recording under 13 on the match of cantgo_scenario.hpp (a thief that is shut out of its hill, ordered to a free tile every turn) plays to every hash and to the final hash that the build before the rule made of it,
-//           with the thief still on the raid tile at the end: no order met it between a clip and the manager's refusal
+//           with the thief still on the raid tile at the end: no order met it between a clip and the manager's answer
 //   RP18.3  the same match recorded under 14 is another match in which the thief walks away at the first turn that finds it without a path and stays on the free tile; each file is another match under the other number
 //   RP18.4  game mode 187 under 12 and 15: the same two plays by the rules of its numbers
 //   RP18.5  the engine copy and the rule: a copy of the engine in the middle of the match keeps the rule of its number and plays on to the same hash
@@ -133,10 +133,10 @@ sim::TileCoord thief_after_playing(const Replay& replay, const assets::LevelData
 }  // namespace
 
 int main() {
-    std::cout << "=== Rules number 14 of the original's game and 15 of 187: the path manager's refusal after the commands ===\n";
+    std::cout << "=== Rules number 14 of the original's game and 15 of 187: the path manager's answers after the commands ===\n";
     const assets::LevelData level = scenario::level();
 
-    TEST_CASE("RP18.1 The original's game is recorded under 14 and played under 5, 8, 9, 13 and 14; 187 under 15 and 6, 7, 10, 11, 12 and 15; only 14 and 15 give the path manager's refusal after the commands; a refusal names all eleven") {
+    TEST_CASE("RP18.1 The original's game is recorded under 14 and played under 5, 8, 9, 13 and 14; 187 under 15 and 6, 7, 10, 11, 12 and 15; only 14 and 15 give the path manager's answers after the commands; a refusal names all eleven") {
         ASSERT_TRUE(kSimRules == 14 && kSimRulesBeforeCantGo == 13 && kSimRulesCantGoFirst == 14 && kSimRulesBeforeEmptyRecord == 9 && kSimRulesBeforeFireWall == 8 && kSimRulesBeforeLastSide == 5);
         ASSERT_TRUE(kSimRulesMode187 == 15 && kSimRulesMode187BeforeCantGo == 12 && kSimRulesMode187BeforeNoDrops == 11 && kSimRulesMode187BeforeEndFix == 10 && kSimRulesMode187BeforeFireWall == 7 && kSimRulesMode187Heal == 6 && kSimRulesNewest == 15);
         ASSERT_TRUE(sim_rules_for_mode(0) == 14 && sim_rules_for_mode(1) == 15);

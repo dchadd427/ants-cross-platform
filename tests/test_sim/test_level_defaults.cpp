@@ -302,6 +302,7 @@ struct Lcg {
 // on a random tile, or a hatch. A team that has fewer points than a hatch costs is given them, as a player who has harvested would have them.
 std::vector<uint64_t> play_with_orders(const LevelData& level, uint8_t roster, uint32_t seed, const std::vector<uint32_t>& at) {
     SimulationEngine sim;
+    sim.set_path_answers_after_commands(false);                                          // (the pins are of the rules of the numbers 13 and before: the answers of the path manager given at once)
     sim.init(level, seed, roster);
     const int32_t width = static_cast<int32_t>(sim.grid().width());
     const int32_t height = static_cast<int32_t>(sim.grid().height());
@@ -523,7 +524,7 @@ int main() {
             LevelData level;
             ASSERT_TRUE(level.load_from_file(maps_dir() + pin.map + ".LVL"));
             SimulationEngine sim;
-            sim.set_path_answers_after_commands(false);                                      // (the pins are of the build before the default ant type existed: the rules of the numbers 13 and before, the refusal of the path manager given at once)
+            sim.set_path_answers_after_commands(false);                                      // (the pins are of the build before the default ant type existed: the rules of the numbers 13 and before, the answers of the path manager given at once)
             sim.init(level, 11, static_cast<uint8_t>(pin.roster));
             ASSERT_EQ(sim.grid().default_ant_tile(), kNoDefault);
             auto compare = [&](const char* when, uint64_t got, uint64_t want) {

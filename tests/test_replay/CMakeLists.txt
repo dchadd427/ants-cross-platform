@@ -158,7 +158,7 @@ target_include_directories(test_rules_empty_record PRIVATE
 
 add_test(NAME test_rules_empty_record COMMAND test_rules_empty_record)
 
-# The rules number 14 of the original's game and 15 of 187 (run_tests.sh suite 2.29.9): 13 and 12 still play from a recording with the path manager's answer given at once, 14 and 15 are what a match records now: the answer is given after the turn's commands.
+# The rules number 14 of the original's game and 15 of 187 (run_tests.sh suite 2.29.9): 13 and 12 still play from a recording with the path manager's answers given at once, 14 and 15 are what a match records now: the answer to a walk that an event asked for is given after the turn's commands.
 add_executable(test_rules_cantgo
     test_rules_cantgo.cpp
 )

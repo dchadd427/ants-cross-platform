@@ -1,8 +1,8 @@
 {
- "note": "Mutants of the rules number 14 of the original's game and 15 of 187 for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the path manager's refusal of what an event asked is given after the turn's commands (which refusals wait, when they are given, what an order does to a refusal that waits, the engine's setting, its default and its reset, the player's setting from the head's number, the numbers that have the rule and the ones that are played, recorded or refused). Each build is the targets of test_pathmgr_gap and test_rules_cantgo, and each test run is the one that must notice.",
+ "note": "Mutants of the rules number 14 of the original's game and 15 of 187 for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the path manager's answer to what an event asked for is given after the turn's commands (which answers wait, a path as well as a refusal, when they are given, what an order does to an answer that waits, the engine's setting, its default and its reset, the player's setting from the head's number, the numbers that have the rule and the ones that are played, recorded or refused). Each build is the targets of test_pathmgr_gap and test_rules_cantgo, and each test run is the one that must notice.",
  "mutants": [
   {
-   "id": "held_refusal_never_given",
+   "id": "held_answer_never_given",
    "file": "src/ants_sim/movement_system.cpp",
    "old": "    pathmgr_answer();                                       // (the rules numbers 14 and later:",
    "new": "    //pathmgr_answer();                                     // (the rules numbers 14 and later:",
@@ -13,10 +13,10 @@
    "expect": "PG1."
   },
   {
-   "id": "every_refusal_given_at_once",
+   "id": "every_answer_given_at_once",
    "file": "src/ants_sim/movement_system.cpp",
-   "old": "        if (path_answers_after_commands_ && delivery->path.empty() && serial != path_request_serial_.end()",
-   "new": "        if (false && path_answers_after_commands_ && delivery->path.empty() && serial != path_request_serial_.end()",
+   "old": "        if (path_answers_after_commands_ && serial != path_request_serial_.end()",
+   "new": "        if (false && path_answers_after_commands_ && serial != path_request_serial_.end()",
    "build": [
     "test_pathmgr_gap"
    ],
@@ -24,7 +24,29 @@
    "expect": "PG1.1"
   },
   {
-   "id": "a_command_s_refusal_is_held_too",
+   "id": "a_found_path_is_given_at_once",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "        if (path_answers_after_commands_ && serial != path_request_serial_.end()",
+   "new": "        if (path_answers_after_commands_ && delivery->path.empty() && serial != path_request_serial_.end()",
+   "build": [
+    "test_pathmgr_gap"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_pathmgr_gap",
+   "expect": "PG1.8"
+  },
+  {
+   "id": "a_held_path_is_given_as_no_path",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "        deliver_path(held.ant_id, held.path);",
+   "new": "        deliver_path(held.ant_id, {});",
+   "build": [
+    "test_pathmgr_gap"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_pathmgr_gap",
+   "expect": "PG1.8"
+  },
+  {
+   "id": "a_command_s_answer_is_held_too",
    "file": "src/ants_sim/movement_system.cpp",
    "old": "((path_answers_after_commands_ && occ_in_tick_) ? kEventRequestBit : 0u)",
    "new": "((path_answers_after_commands_) ? kEventRequestBit : 0u)",
@@ -46,7 +68,7 @@
    "expect": "PG1.1"
   },
   {
-   "id": "a_new_order_leaves_the_held_refusal",
+   "id": "a_new_order_leaves_the_held_answer",
    "file": "src/ants_sim/movement_system.cpp",
    "old": "    pathmgr_forget_answer(a.id);\n",
    "new": "",
@@ -57,7 +79,7 @@
    "expect": "PG1.1"
   },
   {
-   "id": "a_held_refusal_is_no_pending_request",
+   "id": "a_held_answer_is_no_pending_request",
    "file": "src/ants_sim/movement_system.cpp",
    "old": "        if (a.present && a.ant_id == ant_id) return true;        // (asked and not answered yet",
    "new": "        if (false && a.present && a.ant_id == ant_id) return true;        // (asked and not answered yet",

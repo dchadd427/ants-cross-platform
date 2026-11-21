@@ -449,7 +449,7 @@ target_include_directories(test_closed_hill_187 PRIVATE
 
 add_test(NAME test_closed_hill_187 COMMAND test_closed_hill_187)
 
-# The gap before the path manager's answer (rules number 14 of the original's game, 15 of 187): the manager runs at the start of a tick, after the turn's commands, so an ant that an event has just sent takes an order
+# The gap before the path manager's answer (rules number 14 of the original's game, 15 of 187): the answer of the manager's run to a walk that an event asked for is given at the start of the next tick, after the turn's commands, so an ant that an event has just sent takes an order and a Stop is skipped
 add_executable(test_pathmgr_gap
     test_pathmgr_gap.cpp
 )

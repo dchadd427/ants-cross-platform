@@ -1,15 +1,18 @@
 // The gap before the path manager's answer (rules number 14 of the original's game, 15 of 187; docs/GAME_REVERSE_ENGINEERING.md 5.40, "The gap before the path manager's answer"): the original's PATHMGR task has a delay of 0 and
 // a period of 50 ms, so its runs fall on the boundaries of the turns, and the clicks that wait are handled before a run; an ant that a GoTo has just sent (the end of a can't-go clip, of a raid clip) is idle with no path until
-// the next run and takes an order. The engine gives the refusal ("no path") of a run that ends a tick at the start of the next tick, after the turn's commands, so that the commands of a turn find such an ant; a path that
-// is found is given at once, as always (the ant stands idle for 250 ms, so an order takes it either way). With the refusal given at once (the rules numbers before 14) no command meets the ant.
+// the next run and takes an order, and a Stop at that boundary is skipped. The engine gives the answer of a run that ends a tick, for a walk that an event asked for, a path that is found as well as "no path", at the start of
+// the next tick, after the turn's commands, so that the commands of a turn find such an ant. The answer to what a command asked for is given at the end of the tick, as always. With every answer given at once (the rules numbers
+// before 14) no command ever meets the ant.
 //
 //   PG1.1  a thief with loot whose way home is shut off: the order that is given at the boundary after the can't-go clip's end is taken (one boundary of the 18 of a 900 ms cycle), and the thief walks to a reachable tile and stays there
 //   PG1.2  an ant in the can't-go clip refuses the order at every other boundary of the cycle, and the refusal changes nothing (the state hash, the clip's end)
 //   PG1.3  the loop of the rules before 14: no boundary of any cycle takes an order, the thief goes on in the clip and the request again and again
-//   PG1.4  a path that is found is given at the end of the tick in both rules, and the walk begins at the same time
+//   PG1.4  a path that is found for the order of a command is given at the end of the tick in both rules, and the walk begins at the same time
 //   PG1.5  a request that needs more than one slice has a gap of more than one boundary, and one that a slice answers has one
-//   PG1.7  the refusal of an order that a command gave is given at once, as it always was: the rule is for what an event asked
+//   PG1.7  the answer to an order that a command gave is given at once, as it always was: the rule is for what an event asked
 //   PG1.6  the engine copy and the rule: a copy made in the gap keeps the rule and the request, and plays on to the same hash as the engine it was made from; the setting is kept by init() and set_game_mode puts it back
+//   PG1.8  a path that is found for a walk that an event asked for (the raid clip's end sends the thief home) is given at the start of the next tick, after the turn's commands: a Stop at that boundary is skipped and the thief
+//          walks (the rules before 14: the path is given at the end of the tick, the Stop finds it and stops the thief), the walk begins at the same time either way, and a copy made at the boundary plays on to the same hash
 #include "ants_sim/game_strings.hpp"
 #include "ants_sim/sim_engine.hpp"
 
@@ -59,19 +62,21 @@ void ring(SimulationEngine& sim, TileCoord centre, int radius) {
 }
 
 // Team 0's thief has raided team 1's hill and holds the loot; team 0's hill (the entrance and tile42, the two goals of the loop) is in a ring of rocks, and the thief's own pocket (289 tiles) is shut off from the
-// rest of the map, so that the first slice of a search answers: the way home is refused, and the refusal comes at the first run of the manager after the request.
+// rest of the map, so that the first slice of a search answers: the way home is refused, and the refusal comes at the first run of the manager after the request. With home_shut false there are no rocks: the way home is found.
 struct Loop {
     SimulationEngine sim;
     uint32_t thief{0};
-    explicit Loop(bool at_tick_start = true, uint32_t seed = 11) {
+    explicit Loop(bool at_tick_start = true, uint32_t seed = 11, bool home_shut = true) {
         sim.init_test_world(60, 60, seed, 720000);
         sim.set_path_answers_after_commands(at_tick_start);
         sim.set_anthill(0, kHome0);
         sim.set_anthill(1, kHome1);
         sim.set_player_score(0, 0);
         sim.set_player_score(1, 120);
-        ring(sim, TileCoord{22, 22}, 6);
-        ring(sim, TileCoord{43, 43}, 9);
+        if (home_shut) {
+            ring(sim, TileCoord{22, 22}, 6);
+            ring(sim, TileCoord{43, 43}, 9);
+        }
         thief = sim.spawn_unit(0, AntType::Thief, TileCoord{43, 42});
         sim.start_thief_infiltration(thief, 1);
     }
@@ -88,6 +93,14 @@ Command move_order(uint32_t ant, TileCoord to) {
     c.issuer = 0;
     c.tile_x = static_cast<int16_t>(to.x);
     c.tile_y = static_cast<int16_t>(to.y);
+    c.ants = {ant};
+    return c;
+}
+
+Command stop_order(uint32_t ant) {
+    Command c;
+    c.type = CommandType::Stop;
+    c.issuer = 0;
     c.ants = {ant};
     return c;
 }
@@ -181,7 +194,7 @@ int main() {
         ASSERT_EQ(w.unit().pos.y, 42);
     } TEST_END();
 
-    TEST_CASE("PG1.4 A path that is found is given at the end of the tick in both rules, and the walk begins at the same time: the first step comes at 300 ms") {
+    TEST_CASE("PG1.4 A path that is found for the order of a command is given at the end of the tick in both rules, and the walk begins at the same time: the first step comes at 300 ms") {
         for (const bool at_start : {true, false}) {
             SimulationEngine sim;
             sim.init_test_world(40, 40, 3, 720000);
@@ -266,7 +279,7 @@ int main() {
         ASSERT_TRUE(old_rules.path_answers_after_commands());                                      // set_game_mode puts the setting back, as it does every rule
     } TEST_END();
 
-    TEST_CASE("PG1.7 The refusal of an order that a command gave is given at once: the can't-go clip shows after the tick, as it always did") {
+    TEST_CASE("PG1.7 The answer to an order that a command gave is given at once: the can't-go clip shows after the tick, as it always did") {
         SimulationEngine sim;
         sim.init_test_world(30, 30, 5, 720000);
         sim.set_anthill(0, TileCoord{2, 2});
@@ -278,6 +291,59 @@ int main() {
         ASSERT_TRUE(!sim.has_pending_path(worker));
         ASSERT_TRUE(sim.get_unit(worker).state == UnitState::CantGo);                       // at the end of the first tick, the path manager's first run
         ASSERT_TRUE(sim.has_news_event(0, strings::kCantGoThere));
+    } TEST_END();
+
+    TEST_CASE("PG1.8 A path that is found for a walk that an event asked for is given after the next commands: a Stop at that boundary is skipped and the thief walks (the rules before 14: it stops the thief)") {
+        int first_move_of[2] = {-1, -1};
+        for (const bool after_commands : {true, false}) {
+            // The raid clip's end sends the thief home (the event's GoTo), and the way is open: the path is found by the run that ends the same tick
+            Loop w(after_commands, 11, false);
+            w.run_to_raid_end();
+            ASSERT_TRUE(w.unit().is_holding());
+            ASSERT_TRUE(w.unit().state != UnitState::Infiltrating);
+            ASSERT_EQ(w.sim.has_pending_path(w.thief), after_commands);                      // asked and not answered yet: a bot sees the request that is still open (the rules before 14: answered at once)
+            ASSERT_EQ(w.unit().waypoints.empty(), after_commands);
+            // The walk begins at the same time in both rules: the same tick holds its first step (the answer is given at the same instant, 50 ms after the raid clip's end)
+            {
+                Loop same(after_commands, 11, false);
+                same.run_to_raid_end();
+                int first_move = -1;
+                for (int t = 1; t <= 40 && first_move < 0; ++t) {
+                    const int32_t x = same.unit().pixel_x, y = same.unit().pixel_y;
+                    same.sim.tick();
+                    if (same.unit().pixel_x != x || same.unit().pixel_y != y) first_move = t;
+                }
+                ASSERT_TRUE(first_move > 0);
+                first_move_of[after_commands ? 1 : 0] = first_move;
+            }
+            // A copy made at the boundary keeps the answer that is held and plays on to the same hash
+            SimulationEngine copy(w.sim);
+            ASSERT_TRUE(copy.state_hash().total == w.sim.state_hash().total);
+            // The Stop at that boundary, and what the next tick's path is: the way home that the event asked for (the Stop found no path and no action, and was skipped), or, under the rules before 14, the one-tile path
+            // that the Stop itself asked for (it replaced the way home that was there)
+            w.sim.apply_command(stop_order(w.thief));
+            copy.apply_command(stop_order(w.thief));
+            w.sim.tick();
+            copy.tick();
+            ASSERT_TRUE(copy.state_hash().total == w.sim.state_hash().total);
+            const std::vector<TileCoord>& way = w.unit().waypoints;
+            ASSERT_TRUE(!way.empty());
+            if (after_commands) {
+                ASSERT_TRUE(way.size() > 1);
+                ASSERT_EQ(way.back().x, kHome0.x + 1);                                       // the entrance of the thief's own hill
+                ASSERT_EQ(way.back().y, kHome0.y + 1);
+            } else {
+                ASSERT_EQ(way.size(), 1u);                                                   // the Stop took the way home and put the ant's own tile in its place
+                ASSERT_EQ(way.back().x, 43);
+                ASSERT_EQ(way.back().y, 42);
+            }
+            for (int t = 0; t < 120; ++t) {
+                w.sim.tick();
+                copy.tick();
+                ASSERT_TRUE(copy.state_hash().total == w.sim.state_hash().total);
+            }
+        }
+        ASSERT_EQ(first_move_of[1], first_move_of[0]);
     } TEST_END();
 
     std::cout << "\n=======================================================\n"

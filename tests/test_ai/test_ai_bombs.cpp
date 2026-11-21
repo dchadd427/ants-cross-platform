@@ -15,9 +15,10 @@
 //   AI51.10 the order that is given again at the waypoint of a power-up trip keeps its pick-up mark (the controller lets a move onto a power-up through only with it)
 //   AI51.11 a group that is sent round a bomb is never one command of more than 32 ants (the controller refuses a bigger one whole)
 //   AI51.12 the Hopeless rule applies only while another pile has food: when every pile is Hopeless the ants go to them as before
-//   AI51.9  whole matches on TREASURE (Hard, seeds 1 to 6, with and without the detour and the Bomber's route): fewer bombs walked into, and the score within 3 percent
+//   AI51.9  whole matches on TREASURE (Hard, seeds 1 to 24, with and without the detour and the Bomber's route): fewer bombs walked into, and the score within 3 percent
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <string>
 #include <vector>
@@ -452,12 +453,12 @@ void run_bombs_tests() {
         ASSERT_TRUE(apply_tune(p, "nohope", 1, err) && p.skip_hopeless);
     } TEST_END();
 
-    TEST_CASE("AI51.9 Whole Matches On TREASURE: Four Hard Standard Bots, Seeds 3 To 8, With The Detour And The Bomber's Route And Without Them (det=0, broute=0, The Bot As It Was): Fewer Bombs Walked Into, And The Score Does Not Fall") {
+    TEST_CASE("AI51.9 Whole Matches On TREASURE: Four Hard Standard Bots, Seeds 1 To 24, With The Detour And The Bomber's Route And Without Them (det=0, broute=0, The Bot As It Was): Fewer Bombs Walked Into, And The Score Falls By Less Than 3 Percent") {
         uint64_t blasts[2] = {0, 0};
         int64_t score[2] = {0, 0};
         uint64_t orders[2] = {0, 0};
         for (const bool on : {true, false}) {
-            for (uint32_t seed = 3; seed <= 8; ++seed) {                                          // (seeds 1 to 6 until the rules number 14: thieves that a refused walk shut in are freed by an order now, the matches changed, and these six are the next sample in which the claim holds)
+            for (uint32_t seed = 1; seed <= 24; ++seed) {                                         // (every seed of a fixed range, no pick: from the rules number 14 a window of six seeds swings between 94.9 and 100.8 percent of the score, 24 seeds are the sample that holds)
                 BlastCount count;
                 ArenaSpec spec;
                 spec.level = &level_of("TREASURE");
@@ -483,15 +484,18 @@ void run_bombs_tests() {
                 ASSERT_TRUE(r.error.empty());
                 ASSERT_TRUE(r.match_over);
                 blasts[on ? 0 : 1] += count.blasts;
+                int64_t seed_score = 0;
                 for (const ArenaSeatResult& seat : r.seats) {
+                    seed_score += seat.score;
                     score[on ? 0 : 1] += seat.score;
                     orders[on ? 0 : 1] += seat.orders;
                 }
+                std::printf("    [TREASURE seed %u, %s: %llu bombs walked into, score %lld]\n", seed, on ? "detour on" : "det=0 broute=0", static_cast<unsigned long long>(count.blasts), static_cast<long long>(seed_score));
             }
         }
         ASSERT_TRUE(orders[0] >= 3000 && orders[1] >= 3000);                                  // the matches were played
         ASSERT_TRUE(blasts[1] >= 20);                                                         // the bot as it was walks into plenty of them
         ASSERT_TRUE(blasts[0] < blasts[1]);
-        ASSERT_TRUE(score[0] * 100 >= score[1] * 97);                                         // (the same score within 3 percent)
+        ASSERT_TRUE(score[0] * 100 >= score[1] * 97);                                         // (the same score within 3 percent: under the rules number 14 the bots with the detour score 98.0 percent of the bot as it was over these 24 seeds, 191,630 against 195,490, and walk into 365 bombs against 423; the detour costs about 2 percent of the score)
     } TEST_END();
 }

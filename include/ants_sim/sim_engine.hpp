@@ -530,12 +530,13 @@ public:
     /// lunchbox). It is chosen after set_game_mode (which sets it back to the rule of a match played now) and before init(), which keeps it. The state hash does not carry it (the object that the ant bites does).
     void set_bite_skips_empty_record(bool on);
     bool bite_skips_empty_record() const noexcept;
-    /// The rules number of the recording that is being played (replay::kSimRulesBeforeCantGo, kSimRulesMode187BeforeCantGo and the numbers before them): with `on` (the default, the rules of a match played now) the refusal ("no path") of a path
-    /// manager's run that ends a tick is held and given at the START of the next tick, after the turn's commands, as the original's task (a delay of 0 and a period of 50 ms) runs on the turn boundaries and handles the waiting clicks
-    /// first; an ant that an event ordered in the tick before (the end of a can't-go clip, of a raid clip) is then still waiting for its path when the commands come, idle, and takes the order, which replaces its request and the
-    /// refusal that is held for it (docs/GAME_REVERSE_ENGINEERING.md 5.40); a path that is found is given at once, as always. With `on` unset the refusal is given at once too, at the end of the tick and before the next commands, and no command finds such an ant: a recording of 5 to 13
-    /// (187's 6, 7, 10, 11 and 12) plays so. The same for both game modes. It is chosen after set_game_mode (which sets it back to the rule of a match played now) and before init(), which keeps it. The state hash carries a held
-    /// refusal while there is one (so a match under the rule has other hashes at the ticks that end with a path refused).
+    /// The rules number of the recording that is being played (replay::kSimRulesBeforeCantGo, kSimRulesMode187BeforeCantGo and the numbers before them): with `on` (the default, the rules of a match played now) the answer of a path
+    /// manager's run that ends a tick, for a walk that an event asked for (the end of a can't-go clip or a raid clip, an arrival, the hill queue), a path that is found as well as "no path", is held and given at the START of the next
+    /// tick, after the turn's commands, as the original's task (a delay of 0 and a period of 50 ms) runs on the turn boundaries and handles the waiting clicks first; an ant that an event sent in the tick before is then still waiting
+    /// for its answer when the commands come, idle with no path, and takes an order, which replaces its request and the answer that is held for it, while a Stop is skipped (an ant with no path and action 0, 0x1028aef), so that the ant
+    /// walks (docs/GAME_REVERSE_ENGINEERING.md 5.40); the answer to a walk that a command asked for is given at once, as always. With `on` unset every answer is given at once too, at the end of the tick and before the next commands,
+    /// and no command finds such an ant: a recording of 5 to 13 (187's 6, 7, 10, 11 and 12) plays so. The same for both game modes. It is chosen after set_game_mode (which sets it back to the rule of a match played now) and before
+    /// init(), which keeps it. The state hash carries an answer that is held while there is one, and the mark of a request that an event made (so a match under the rule has other hashes at the ticks that end with such an answer).
     void set_path_answers_after_commands(bool on);
     bool path_answers_after_commands() const noexcept;
     /// Whether an ant of this match can enter its own hill: always in the original's game, in 187 only while the rule of the old recordings is set (set_hill_open_187)
