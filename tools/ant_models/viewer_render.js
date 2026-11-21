@@ -156,9 +156,9 @@
     vec3 env = mix(u_groundColor * 0.58, u_skyColor * 1.14, smoothstep(0.14, 0.90, clamp(R.y * 0.5 + 0.5, 0.0, 1.0)));
     float sharp = (1.0 - rough) * (1.0 - rough);
     float glintExp = mix(22.0, 220.0, sharp);
-    float keySoft = smoothstep(0.66, 0.96, dot(R, u_keyDir)) * 1.38 + pow(max(dot(R, u_keyDir), 0.0), glintExp) * 1.85 * sharp;
-    float fillStrip = smoothstep(0.76, 0.98, dot(R, u_fillDir)) * 0.52;
-    float rimSoft = smoothstep(0.70, 0.97, dot(R, u_rimDir)) * 0.88 + pow(max(dot(R, u_rimDir), 0.0), glintExp * 0.7) * 0.95 * sharp;
+    float keySoft = smoothstep(0.72, 0.97, dot(R, u_keyDir)) * 1.45 + pow(max(dot(R, u_keyDir), 0.0), glintExp) * 1.95 * sharp;
+    float fillStrip = smoothstep(0.78, 0.98, dot(R, u_fillDir)) * 0.22;
+    float rimSoft = smoothstep(0.74, 0.97, dot(R, u_rimDir)) * 0.38 + pow(max(dot(R, u_rimDir), 0.0), glintExp * 0.7) * 0.45 * sharp;
     return env + vec3(1.0, 0.95, 0.87) * keySoft * sharp + vec3(0.64, 0.88, 1.0) * fillStrip * sharp + vec3(0.84, 0.96, 1.0) * rimSoft * sharp;
   }
   vec3 evalLight(vec3 L, vec3 lCol, vec3 N, vec3 V, vec3 albedo, float met, float rough, vec3 F0, float coatW, float coatRough, inout vec3 specAcc) {
@@ -201,43 +201,45 @@
     vec3 albedo = max(u_baseColor * baseSample.rgb * microCav, 0.0);
 
     float coatW = u_matKind == 1 ? 0.34 * (1.0 - smoothstep(0.18, 0.42, rough)) : (u_matKind == 2 ? 0.72 : 0.0);
-    float coatR = u_matKind == 2 ? 0.19 : 0.16;
-    float keyCoat = u_matKind == 2 ? 1.18 : coatW;
+    float coatR = u_matKind == 2 ? 0.17 : 0.16;
+    float keyCoat = u_matKind == 2 ? 1.42 : coatW;
+    float keyDot = max(dot(N, u_keyDir), 0.0);
+    float spotFocus = mix(0.40, 1.22, pow(keyDot, 1.35));
     vec3 F0 = mix(vec3(0.045), albedo, met), specAcc = vec3(0.0);
-    vec3 Lo = evalLight(u_keyDir, vec3(1.0, 0.98, 0.95) * 1.88, N, V, albedo, met, rough, F0, keyCoat, coatR, specAcc)
-            + evalLight(u_fillDir, vec3(0.84, 0.92, 1.0) * 0.80, N, V, albedo, met, rough, F0, coatW * 0.35, coatR, specAcc)
-            + evalLight(u_rimDir, vec3(0.88, 0.96, 1.0) * 1.12, N, V, albedo, met, rough, F0, coatW * 0.45, coatR, specAcc);
+    vec3 Lo = evalLight(u_keyDir, vec3(1.0, 0.98, 0.95) * 2.75 * spotFocus, N, V, albedo, met, rough, F0, keyCoat, coatR, specAcc)
+            + evalLight(u_fillDir, vec3(0.84, 0.92, 1.0) * 0.24, N, V, albedo, met, rough, F0, coatW * 0.15, coatR, specAcc)
+            + evalLight(u_rimDir, vec3(0.88, 0.96, 1.0) * 0.46, N, V, albedo, met, rough, F0, coatW * 0.22, coatR, specAcc);
 
     vec3 bakedAo = clamp(v_color, 0.0, 1.0);
     vec3 aoSoft = mix(vec3(1.0), bakedAo, 0.72);
     float aoScalar = dot(aoSoft, vec3(0.2126, 0.7152, 0.0722)) * microCav;
     float geoAo = mix(0.84, 1.0, smoothstep(0.0, 0.24, v_worldPos.y)) * mix(0.82, 1.0, smoothstep(-0.42, 0.48, N.y));
-    vec3 directAo = mix(vec3(1.0), aoSoft, u_alpha < 0.99 ? 0.16 : 0.54);
+    vec3 directAo = mix(vec3(1.0), aoSoft, u_alpha < 0.99 ? 0.16 : 0.50);
 
     vec3 R = reflect(-V, N); float NoV = max(dot(N, V), 0.0);
     float specOccl = clamp(pow(NoV + aoScalar, exp2(-16.0 * rough - 1.0)) - 1.0 + aoScalar, 0.0, 1.0);
-    vec3 ambDiff = mix(u_groundColor * 1.06, u_skyColor, N.y * 0.5 + 0.5) * albedo * (1.0 - met) * 0.40 * aoSoft * geoAo;
+    vec3 ambDiff = mix(u_groundColor * 0.92, u_skyColor, N.y * 0.5 + 0.5) * albedo * (1.0 - met) * 0.18 * aoSoft * geoAo;
     float envAtten = (1.0 - rough) * (1.0 - rough);
     vec3 F_env = F0 + (max(vec3(1.0 - rough), F0) - F0) * pow(1.0 - NoV, 5.0);
-    vec3 envSpec = studioEnv(R, rough) * F_env * mix(0.16, 0.92, envAtten) * mix(envAtten, 1.0, met) * specOccl * geoAo;
-    vec3 envCoat = studioEnv(R, coatR) * ((0.05 + 0.95 * pow(1.0 - NoV, 5.0)) * coatW) * (u_matKind == 2 ? 0.24 : 0.36) * specOccl;
+    vec3 envSpec = studioEnv(R, rough) * F_env * mix(0.08, 0.80, envAtten) * mix(envAtten, 1.0, met) * specOccl * geoAo;
+    vec3 envCoat = studioEnv(R, coatR) * ((0.05 + 0.95 * pow(1.0 - NoV, 5.0)) * coatW) * (u_matKind == 2 ? 0.12 : 0.24) * specOccl;
 
     vec3 sssBounce = vec3(0.0);
     if (u_matKind == 2) {
-      float wrapKey = clamp((dot(N, u_keyDir) + 0.30) / 1.30, 0.0, 1.0);
-      float termBand = wrapKey * (1.0 - max(dot(N, u_keyDir), 0.0));
-      sssBounce = (albedo * vec3(1.14, 1.08, 0.94) + vec3(0.010, 0.010, 0.007)) * termBand * 0.34 * aoSoft * geoAo;
+      float wrapKey = clamp((dot(N, u_keyDir) + 0.22) / 1.22, 0.0, 1.0);
+      float termBand = wrapKey * (1.0 - keyDot);
+      sssBounce = (albedo * vec3(1.14, 1.08, 0.94) + vec3(0.008, 0.008, 0.006)) * termBand * 0.14 * aoSoft * geoAo;
     }
     float fresnelRim = pow(1.0 - NoV, 3.2) * smoothstep(-0.25, 0.72, N.y);
     float rimMask = mix(0.45, 1.0, clamp(dot(N, u_rimDir) * 0.55 + 0.55, 0.0, 1.0));
     vec3 rimTint = mix(vec3(0.76, 0.92, 1.0), albedo * 1.45 + vec3(0.28, 0.36, 0.42), u_matKind == 2 ? 0.42 : 0.18);
-    vec3 rimGlow = rimTint * fresnelRim * rimMask * (u_matKind == 1 ? 0.32 : (u_matKind == 2 ? 0.26 : 0.18)) * u_rimBoost * aoSoft * geoAo;
+    vec3 rimGlow = rimTint * fresnelRim * rimMask * (u_matKind == 1 ? 0.24 : 0.16) * u_rimBoost * aoSoft * geoAo;
 
-    vec3 outCol = linearToSrgb(acesFilm((Lo * directAo + ambDiff + envSpec + envCoat + sssBounce + rimGlow + u_emissive) * 0.94));
+    vec3 outCol = linearToSrgb(acesFilm((Lo * directAo + ambDiff + envSpec + envCoat + sssBounce + rimGlow + u_emissive) * 1.02));
     float outAlpha = 1.0;
     if (u_alpha < 0.99) {
       float baseA = clamp(u_alpha * baseSample.a, 0.0, 1.0);
-      float specLuma = dot(acesFilm((specAcc * directAo + envSpec + envCoat + rimGlow) * 0.94), vec3(0.2126, 0.7152, 0.0722));
+      float specLuma = dot(acesFilm((specAcc * directAo + envSpec + envCoat + rimGlow) * 1.02), vec3(0.2126, 0.7152, 0.0722));
       outAlpha = clamp(baseA + pow(1.0 - NoV, 3.0) * 0.44 + specLuma * 0.58, 0.0, 0.90);
     }
     fragColor = vec4(outCol, outAlpha);
@@ -476,9 +478,9 @@
         return [x / l, y / l, z / l];
       };
       return {
-        keyDir: basis(0.88, 0.42, -0.18),
-        fillDir: basis(0.68, -0.16, 0.72),
-        rimDir: basis(-0.55, 0.72, 0.42),
+        keyDir: basis(0.97, -0.16, -0.08),
+        fillDir: basis(0.56, -0.18, 0.80),
+        rimDir: basis(-0.58, 0.68, 0.44),
       };
     }
 
