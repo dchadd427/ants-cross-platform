@@ -31,8 +31,10 @@ try:
         swept_tube,
         torus_arc,
     )
+    from .ability_clips_special import add_bomber_abilities
     from .hit_clips_special import add_bomber_hit_animation
 except ImportError:
+    from ability_clips_special import add_bomber_abilities  # type: ignore
     from base_ant import build_base_ant, sync_arm_idle_to_clip, sync_leg_flex_to_clip  # type: ignore
     from hit_clips_special import add_bomber_hit_animation  # type: ignore
     from mesh_core import (  # type: ignore
@@ -1305,6 +1307,7 @@ def build_bomber(blink: float = 0.0) -> SceneBuilder:
     # Uniform similarity scale so Bomber lands cleanly at ~0.86-0.88 total height with smaller head & narrow stance.
     scene.scale_all(1.072)
     add_bomber_hit_animation(scene)
+    add_bomber_abilities(scene)
     return scene
 
 
