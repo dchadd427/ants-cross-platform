@@ -44,6 +44,8 @@ async function pages(modulePath, wsUrl, code) {
     await until('Bea is in color 2', () => B.seat === 2 && B.room.you === 2 && A.room.slots[2].state === N.SLOT.Client && A.room.slots[1].state === N.SLOT.Empty);
     A.setPlan({ map: '', kinds: [N.PLAN.Open, N.PLAN.Nobody, N.PLAN.Open, N.PLAN.Nobody], teamA: 255, teamB: 255 });      // (two persons and nobody else: no bot to wait for)
     await until('the plan', () => B.room.plan[1] === N.PLAN.Nobody && B.room.plan[3] === N.PLAN.Nobody);
+    if (!B.setReady(true)) throw new Error('Bea could not say Ready');                 // (protocol 27: the leader's START waits for every other person to say it)
+    await until('Bea is ready', () => ((A.room.ready >> 2) & 1) === 1);
     if (!A.start()) throw new Error('the leader could not ask for START');
     await until('START waits', () => A.room.starting && B.room.starting);
     console.log('READY ' + JSON.stringify({ a: { seat: A.seat, key: N.hexOf(A.key) }, b: { seat: B.seat, key: N.hexOf(B.key) } }));
