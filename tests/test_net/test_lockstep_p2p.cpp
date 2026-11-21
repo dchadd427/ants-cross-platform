@@ -213,7 +213,7 @@ void run_message_tests() {
         big[3] = static_cast<uint8_t>((kMaxSignalChars + 1) & 0xFF);
         big[4] = static_cast<uint8_t>((kMaxSignalChars + 1) >> 8);
         ASSERT_FALSE(decode(big, signal));
-        ASSERT_TRUE(MsgType::Signal == MsgType::Last && peek_type(encode(P2pConfigMsg{true})) == MsgType::P2pConfig);
+        ASSERT_TRUE(static_cast<int>(MsgType::Signal) == 40 && static_cast<int>(MsgType::Ready) == static_cast<int>(MsgType::Signal) + 1 && peek_type(encode(P2pConfigMsg{true})) == MsgType::P2pConfig);
     } TEST_END();
 }
 

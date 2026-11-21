@@ -16,10 +16,10 @@
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
-   "id": "home_button_leaves",
+   "id": "my_room_leaves",
    "file": "web/home/home.js",
-   "old": "var homeBtn = button('rhome', '', function () { show('home', 'push'); });",
-   "new": "var homeBtn = button('rhome', '', function () { page.leave(); show('home', 'push'); });",
+   "old": "show(screen === 'room' ? 'home' : 'room', 'push');",
+   "new": "page.leave(); show(screen === 'room' ? 'home' : 'room', 'push');",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -473,7 +473,7 @@
   {
    "id": "inert_does_nothing",
    "file": "web/home/home.js",
-   "old": "[bar, rbar, tabs, dock && dock.root, players && players.root].forEach(function (n) { if (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); } });",
+   "old": "[bar, racts, tabs, dock && dock.root, players && players.root].forEach(function (n) { if (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); } });",
    "new": "[bar].forEach(function (n) { if (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); } });",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
@@ -549,16 +549,16 @@
   },
   {
    "id": "room_hidden_on_the_room",
-   "file": "web/home/home.css",
-   "old": "body[data-screen=\"room\"] #home { display: none; }",
-   "new": "body[data-screen=\"room\"] #home { display: block; }",
+   "file": "web/home/room.css",
+   "old": "body[data-screen=\"room\"] .hmain .gdock { display: none; }",
+   "new": "body[data-screen=\"room\"] .hmain .gdock { display: block; }",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "room_shown_on_home",
-   "file": "web/home/home.css",
-   "old": "body[data-screen=\"home\"] main.wrap { display: none; }",
-   "new": "body[data-screen=\"home\"] main.wrap { display: block; }",
+   "file": "web/home/room.css",
+   "old": "body[data-screen=\"home\"] #lobby { display: none; }",
+   "new": "body[data-screen=\"home\"] #lobby { display: flex; }",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -571,8 +571,8 @@
   {
    "id": "home_scrolls",
    "file": "web/home/home.css",
-   "old": "body[data-screen=\"home\"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidden; }",
-   "new": "body[data-screen=\"home\"] .screen { height: 100vh; min-height: 0; overflow: hidden; }",
+   "old": "body .screen { flex: 1 1 auto; min-height: 0; overflow: hidden; }",
+   "new": "body .screen { height: 100vh; min-height: 0; overflow: hidden; }",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -585,8 +585,8 @@
   {
    "id": "home_body_is_not_a_column",
    "file": "web/home/home.css",
-   "old": "body[data-screen=\"home\"] { display: flex; flex-direction: column; height: 100vh; height: 100dvh; padding-bottom: env(safe-area-inset-bottom); overflow: hidden; }",
-   "new": "body[data-screen=\"home\"] { overflow: hidden; }",
+   "old": "body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; padding-bottom: env(safe-area-inset-bottom); overflow: hidden; }",
+   "new": "body { overflow: hidden; }",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -619,9 +619,9 @@
   },
   {
    "id": "room_bar_target_too_small",
-   "file": "web/home/home.css",
-   "old": ".rbar .btn { min-height: 46px;",
-   "new": ".rbar .btn { min-height: 38px;",
+   "file": "web/home/room.css",
+   "old": ".r-acts .btn { min-height: 44px;",
+   "new": ".r-acts .btn { min-height: 38px;",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -818,13 +818,6 @@
    "file": "web/home/home.js",
    "old": "function heading() { return el('h1', 'hbrand', TEXT.name); }",
    "new": "function heading() { return el('div', 'hbrand', TEXT.name); }",
-   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
-  },
-  {
-   "id": "the_chevron_is_read_out",
-   "file": "web/home/home.js",
-   "old": "chev.setAttribute('aria-hidden', 'true');",
-   "new": "",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -1124,8 +1117,8 @@
   {
    "id": "strip_takes_a_press_while_the_game_opens",
    "file": "web/home/home.js",
-   "old": "[bar, rbar, tabs, dock && dock.root, players && players.root].forEach(function (n) { if (n) { if (held || going)",
-   "new": "[bar, rbar, dock && dock.root, players && players.root].forEach(function (n) { if (n) { if (held || going)",
+   "old": "[bar, racts, tabs, dock && dock.root, players && players.root].forEach(function (n) { if (n) { if (held || going)",
+   "new": "[bar, racts, dock && dock.root, players && players.root].forEach(function (n) { if (n) { if (held || going)",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
   },
   {
@@ -1207,14 +1200,14 @@
   },
   {
    "id": "leave_room_face_not_red",
-   "file": "web/home/home.css",
+   "file": "web/home/room.css",
    "old": "background: var(--sheen) #9d0d17; border-color: var(--edge); box-shadow: var(--bevel), 3px 4px 0 #3b0d10;",
    "new": "background: #1b0f0d; border-color: var(--edge); box-shadow: inset 0 0 0 1px #6a4a42, 3px 4px 0 var(--shadow);",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
   },
   {
    "id": "leave_room_hover_not_lighter",
-   "file": "web/home/home.css",
+   "file": "web/home/room.css",
    "old": ".leave:hover { background-color: #b5222c; }",
    "new": ".leave:hover { background-color: #2a1713; }",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"

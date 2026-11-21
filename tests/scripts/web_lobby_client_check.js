@@ -1,4 +1,4 @@
-// Runs the lobby page's client of network protocol 26 (web/front/lobby_net.js, LobbyClient) without a browser, against a scripted server: the Hello it sends, the Welcome and Room messages it
+// Runs the lobby page's client of network protocol 27 (web/front/lobby_net.js, LobbyClient) without a browser, against a scripted server: the Hello it sends, the Welcome and Room messages it
 // takes in, the answers to the server's pings, what changed between two Room messages (joined, left, renamed, moved, swapped, a new host), the requests that only the leader may make and the
 // bytes they put on the wire (the guard of a color move is the room's seating hash), the way back with the key after a lost link (the waits grow, the link that says nothing is given up, a page
 // that comes back to the front tries at once), what each refusal means (the room is gone: made again without the key; removed; another window; full), and the entry that the game page reads.
@@ -41,7 +41,7 @@ function room(seats, o) {
     str8(w, o.map === undefined ? 'TREASURE.LVL' : o.map);
     w.push(0, o.you === undefined ? 0 : o.you, o.leader === undefined ? 0 : o.leader, o.teamA === undefined ? 255 : o.teamA, o.teamB === undefined ? 255 : o.teamB, o.flags === undefined ? 3 : o.flags);
     for (const k of (o.plan || [0, 0, 0, 0])) w.push(k);
-    w.push(o.inGame || 0, o.mode || 0);                                               // (protocol 17: the game mode is the last byte)
+    w.push(o.inGame || 0, o.mode || 0, o.ready || 0);                                 // (protocol 17: the game mode; protocol 27: the ready mask is the last byte)
     return Uint8Array.from(w);
 }
 // the independent builder agrees with the C++ bytes of one golden Room message (tests/data/lobby_messages.txt, room-lobby-alone-no-map)
@@ -88,7 +88,7 @@ function client(w, extra) {
     const opts = Object.assign({ url: 'wss://beta.example/ws', code: 'k7m2xq', map: 'TREASURE.LVL', name: 'Priya', WebSocket: w.WebSocket, setTimeout: w.setTimeout, clearTimeout: w.clearTimeout, now: w.now }, extra || {});
     const c = new N.LobbyClient(opts);
     c.log = [];
-    for (const ev of ['status', 'welcome', 'room', 'joined', 'left', 'renamed', 'moved', 'swapped', 'host', 'plan', 'starting', 'games', 'notice', 'chat', 'gone', 'refused', 'removed', 'superseded']) {
+    for (const ev of ['status', 'welcome', 'room', 'joined', 'left', 'renamed', 'moved', 'swapped', 'host', 'plan', 'starting', 'games', 'ready', 'notice', 'chat', 'gone', 'refused', 'removed', 'superseded']) {
         c.on(ev, (data) => c.log.push([ev, ev === 'room' ? undefined : (ev === 'welcome' ? { seat: data.seat, created: data.created, rejoin: data.rejoin } : data)]));
     }
     return c;
@@ -140,10 +140,13 @@ const events = (c, name) => c.log.filter((e) => e[0] === name).map((e) => e[1]);
     check('rename sends a Name', c.rename('Pri') && hex(w.last().sent[7]) === hex(N.encodeName('Pri')));
     check('rename refuses a name with a space at the end, an empty one and a long one', c.rename('Pri ') === false && c.rename('') === false && c.rename('x'.repeat(33)) === false);
     check('rename refuses a name that is a computer player\'s (a Name that the server would count as a violation): "Bot (x)", "Pip (bot)", "Pip (Bot, Hard)", "x ( bot , y )" (nothing is sent)', ['Bot (x)', 'Pip (bot)', 'Pip (Bot, Hard)', 'x ( bot , y )'].every((n) => c.rename(n) === false));
+    check('start is refused while a person has not said Ready: nothing is sent', c.start() === false && w.last().sent.length === 8);
+    w.last().receive(room([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, ready: 2 }));
+    same('a Ready that comes is an event with the marks', events(c, 'ready'), [{ type: 'ready', mask: 2 }]);
     check('start sends the fill levels and the teams of the room', c.start() && hex(w.last().sent[8]) === hex(N.encodeStartRequest([0, 0, 0, 0], 255, 255)));
     check('nothing else was sent', w.last().sent.length === 9);
     // a plan that bots fill: the StartRequest follows the room's plan
-    w.last().receive(room([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, plan: [0, 0, 2, 3], teamA: 0, teamB: 2 }));
+    w.last().receive(room([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, plan: [0, 0, 2, 3], teamA: 0, teamB: 2, ready: 2 }));
     check('a plan change is an event', events(c, 'plan').length === 1);
     check('start follows the plan of the room', c.start() && hex(w.last().sent[9]) === hex(N.encodeStartRequest([0, 0, N.FILL.Medium, N.FILL.Hard], 0, 2)));
     // the leader's START waits for the games: the event comes once, nothing can be moved or renamed
@@ -442,7 +445,7 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
 // ---- a page that joins and never makes: join: true (a code that somebody typed) -----------------------------------------------------------------------------------------------------------------------
 // The Hello of a page that makes a lobby room carries the create block (the map, four seats, no team, the leader starts, a lobby); a page that was only given a code to join sends none, so that a code
 // with no room is answered NoSuchRoom instead of making one. The bytes are held to the lines that the C++ encoder wrote (tests/data/lobby_messages.txt, which web_lobby_net_check.js holds the codec
-// to) and to a Hello written out by hand here: type 1, protocol 26, the name, 0 and 255, the code, an empty second string, the key (zeros without one), 0, the platform, the client kind 1 (a page).
+// to) and to a Hello written out by hand here: type 1, protocol 27, the name, 0 and 255, the code, an empty second string, the key (zeros without one), 0, the platform, the client kind 1 (a page).
 
 {
     const golden = {};
@@ -454,7 +457,7 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
     const block = (map) => [map.length].concat(Array.from(map, (ch) => ch.charCodeAt(0)), [4, 255, 255, 3]);        // the create block: the map, four seats, no team, leader starts + lobby
     const byHand = (name, code, o) => {
         o = o || {};
-        const w = [1, 26, 0];
+        const w = [1, 27, 0];
         str8(w, name);
         w.push(0, 0, 255);
         str8(w, code);
@@ -487,7 +490,7 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
     same('... with join: that line without its block (00 04 ffff 03)', hello(Object.assign({}, keyed, { join: true })).hex, golden['page-with-key'].slice(0, golden['page-with-key'].length - '0004ffff03'.length));
     same('... and the same written out by hand', hello(Object.assign({}, keyed, { join: true })).hex, hex(byHand('Sam', 'abc234', { key: seq(1), platform: N.PLATFORM_BROWSER | N.OS.Linux })));
     same('with no name and the code xx, join: the line of the C++ encoder that has no block (page-no-block)', hello({ join: true, name: '', code: 'xx' }).hex, golden['page-no-block']);
-    check('a Hello without a block has no key, no platform: zeros', /^011a000[0-9a-f]*$/.test(join.hex) && join.w.last().sent[0].slice(1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1, 1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1 + 16).every((b) => b === 0));
+    check('a Hello without a block has no key, no platform: zeros', /^011b000[0-9a-f]*$/.test(join.hex) && join.w.last().sent[0].slice(1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1, 1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1 + 16).every((b) => b === 0));
 
     {   // the way back of a page that joined: every Hello it sends has the key and no block
         const w = world();
@@ -1181,8 +1184,105 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
         w.advance(10 * 60 * 1000);
         check('... and after ten minutes of rest the budget is full again, to its burst and no further', [0, 1, 2, 3, 4].filter(() => c.setPublic(true)).length === 2);
     }
-    {   // the codec knows the type: 35 is the last message, the flag is 8, the protocol is 26
-        check('PROTOCOL, MSG.Last and the Visibility encoder', N.PROTOCOL === 26 && N.MSG.Visibility === 35 && N.MSG.Last === 35 && hex(N.encodeVisibility(true)) === '2301' && hex(N.encodeVisibility(false)) === '2300' && hex(N.encodeVisibility(7)) === '2301');
+    {   // the codec knows the type: 41 is the last message, the flag is 8, the protocol is 27
+        check('PROTOCOL, MSG.Last and the Visibility encoder', N.PROTOCOL === 27 && N.MSG.Visibility === 35 && N.MSG.Last === 41 && hex(N.encodeVisibility(true)) === '2301' && hex(N.encodeVisibility(false)) === '2300' && hex(N.encodeVisibility(7)) === '2301');
+    }
+}
+
+// ---- setReady (network protocol 27): a person who does not lead says that they are ready to start, or not; the leader's START waits for it ------------------------------------------------------------------------
+{
+    const golden = {};
+    for (const raw of fs.readFileSync(path.join(__dirname, '..', 'data', 'lobby_messages.txt'), 'utf8').split('\n')) {
+        const parts = raw.trim().split(/\s+/);
+        if (parts[0] === 'ready' && parts.length === 3) golden[parts[1]] = parts[2];
+    }
+    check('the golden file has the two Ready lines', golden['ready-yes'] === '2901' && golden['ready-no'] === '2900');
+    const seats = [[C, 'Priya'], [C, 'Sam'], [C, 'Cat'], [E, '']];
+    {   // a person who does not lead: the bytes are the C++ encoder's; the room says the marks back, and every Room message is read with them
+        const w = world();
+        const c = client(w, { silenceMs: 0 });
+        c.connect();
+        w.last().open();
+        w.last().receive(welcome(1, seq(0x30), 0));
+        check('before the first Room message nothing is sent', c.setReady(true) === false && w.last().sent.length === 1);
+        w.last().receive(room(seats, { you: 1, leader: 0 }));
+        check('a room that says no marks has none, and the person is one that the START waits for', c.room.ready === 0 && N.waitingFor(c.room).join() === '1,2');
+        const base = w.last().sent.length;
+        check('setReady(true) sends the Ready of the C++ encoder (ready)', c.setReady(true) === true && hex(w.last().sent[base]) === golden['ready-yes']);
+        w.last().receive(room(seats, { you: 1, leader: 0, ready: 2 }));
+        check('the Room message with the mark says ready, and the START waits for the other person only', c.room.ready === 2 && N.waitingFor(c.room).join() === '2' && events(c, 'ready').length === 1 && events(c, 'ready')[0].mask === 2);
+        w.advance(1250);
+        check('setReady(false) sends the Ready of the C++ encoder (not ready)', c.setReady(false) === true && hex(w.last().sent[base + 1]) === golden['ready-no']);
+        check('the page sends exactly the two messages, nothing else', w.last().sent.length === base + 2);
+        w.last().receive(room(seats, { you: 1, leader: 0, ready: 6 }));
+        check('every person ready: nobody is waited for, and the event carries the new marks', N.waitingFor(c.room).length === 0 && events(c, 'ready').length === 2 && events(c, 'ready')[1].mask === 6);
+        w.last().receive(room(seats, { you: 1, leader: 0, ready: 6, plan: [0, 0, 0, 3] }));
+        check('a Room message that changes only the plan changes no mark and says no Ready event', events(c, 'ready').length === 2);
+    }
+    {   // what a page does not send: a boolean only; a person who leads, whose game is open, in a room that is no lobby room, in a room whose START waits, or with the link down or left
+        const w = world();
+        const c = client(w, { silenceMs: 0 });
+        online(w, c, seats, { you: 1, leader: 0 });
+        const base = w.last().sent.length;
+        const bad = [['setReady()', () => c.setReady()], ['setReady(1)', () => c.setReady(1)], ['setReady(0)', () => c.setReady(0)], ['setReady("true")', () => c.setReady('true')], ['setReady(null)', () => c.setReady(null)], ['setReady({})', () => c.setReady({})], ['setReady(NaN)', () => c.setReady(NaN)]];
+        for (const [label, fn] of bad) {
+            const r = attempt(fn);
+            check(label + ' is false: no exception, nothing sent', r.value === false && !r.threw, JSON.stringify(r));
+        }
+        check('nothing was sent by any of them (and none of them spent the budget)', w.last().sent.length === base && c.setReady(true) === true && c.setReady(false) === true);
+        const x = world();
+        const lead = client(x, { silenceMs: 0 });
+        online(x, lead, seats, { you: 0, leader: 0 });
+        check('the leader does not ready: the START is their ready', lead.setReady(true) === false && lead.setReady(false) === false && x.last().sent.length === 1);
+        const g = world();
+        const game = client(g, { silenceMs: 0 });
+        online(g, game, seats, { you: 1, leader: 0, inGame: 2 });
+        check('a person whose game is open needs no Ready, and the room would not hear it', game.setReady(true) === false && g.last().sent.length === 1 && N.waitingFor(game.room).join() === '2');
+        const st = world();
+        const starting = client(st, { silenceMs: 0 });
+        online(st, starting, seats, { you: 1, leader: 0, flags: 7, inGame: 1 });
+        check('while the START waits nothing is sent', starting.setReady(true) === false && st.last().sent.length === 1);
+        const pl = world();
+        const plain = client(pl, { silenceMs: 0 });
+        online(pl, plain, seats, { you: 1, leader: 0, flags: 1 });
+        check('a room that is no lobby room has no Ready', plain.room.lobby === false && plain.setReady(true) === false && pl.last().sent.length === 1 && N.waitingFor(plain.room).length === 0);
+        const down = world();
+        const dropped = client(down, { silenceMs: 0 });
+        online(down, dropped, seats, { you: 1, leader: 0 });
+        down.last().drop();
+        check('while the link is down nothing is sent', dropped.status === 'offline' && dropped.setReady(true) === false);
+        const gone = world();
+        const left = client(gone, { silenceMs: 0 });
+        online(gone, left, seats, { you: 1, leader: 0 });
+        left.leave();
+        check('after leave() nothing is sent', left.setReady(true) === false);
+    }
+    {   // the leader's START waits for the persons who have not said Ready: nothing is sent, and the page says so by what the room shows
+        const w = world();
+        const c = client(w, { silenceMs: 0 });
+        online(w, c, seats, { you: 0, leader: 0 });
+        check('the leader\'s START is not sent while two persons have not said Ready', c.start() === false && w.last().sent.length === 1);
+        w.last().receive(room(seats, { you: 0, leader: 0, ready: 2 }));
+        check('... nor while one has not', c.start() === false && w.last().sent.length === 1);
+        w.last().receive(room(seats, { you: 0, leader: 0, ready: 6 }));
+        check('... and it is sent when every person has', c.start() === true && w.last().sent.length === 2);
+        const x = world();
+        const alone = client(x, { silenceMs: 0 });
+        online(x, alone, [[C, 'Priya'], [E, ''], [E, 'Bot (Hard)'], [E, '']], { you: 0, leader: 0, plan: [0, 0, 3, 0] });
+        check('a leader with nobody to wait for (a bot is always ready) starts at once', alone.start() === true && x.last().sent.length === 2);
+    }
+    {   // a page that sends too fast is held back a little under the server's budget (a burst of 2 where the server's is 3, then one every 1.25 s where the server's is a second); the replay through the server's bucket is below
+        const w = world();
+        const c = client(w, { silenceMs: 0 });
+        online(w, c, seats, { you: 1, leader: 0 });
+        const base = w.last().sent.length;
+        let ok = 0;
+        for (let i = 0; i < 8; i++) { if (c.setReady(i % 2 === 0)) ok++; }
+        check('ready: a burst of 2 (the server\'s is 3), then no more', ok === 2 && w.last().sent.length === base + 2);
+        w.advance(1249);
+        check('... not before 1.25 s are over', c.setReady(true) === false);
+        w.advance(1);
+        check('... one every 1.25 s then', c.setReady(true) === true && c.setReady(true) === false);
     }
 }
 
@@ -1196,10 +1296,10 @@ const FLOOD = (() => {
     try { text = fs.readFileSync(path.resolve(__dirname, '..', '..', 'include', 'ants_net', 'flood.hpp'), 'utf8'); } catch (e) { /* the check below says so */ }
     const number = (name) => { const m = new RegExp('inline constexpr uint32_t ' + name + ' = ([0-9]+);').exec(text); return m ? +m[1] : NaN; };
     return { move: [number('kSeatMoveBurst'), number('kSeatMovesPerSecond')], plan: [number('kPlanBurst'), number('kPlansPerSecond')], rename: [number('kNameBurst'), number('kNamesPerSecond')],
-             remove: [number('kRemoveBurst'), number('kRemovesPerSecond')], visibility: [number('kVisibilityBurst'), number('kVisibilityPerSecond')], chat: [number('kChatBurst'), number('kChatPerSecond')] };
+             remove: [number('kRemoveBurst'), number('kRemovesPerSecond')], visibility: [number('kVisibilityBurst'), number('kVisibilityPerSecond')], ready: [number('kReadyBurst'), number('kReadyPerSecond')], chat: [number('kChatBurst'), number('kChatPerSecond')] };
 })();
-const KINDS = ['move', 'plan', 'rename', 'remove', 'visibility', 'chat'];
-check('the server\'s limits can be read from include/ants_net/flood.hpp (a burst and a rate for each of the six kinds)', KINDS.every((k) => FLOOD[k].every((n) => Number.isInteger(n) && n > 0)), JSON.stringify(FLOOD));
+const KINDS = ['move', 'plan', 'rename', 'remove', 'visibility', 'ready', 'chat'];
+check('the server\'s limits can be read from include/ants_net/flood.hpp (a burst and a rate for each of the seven kinds)', KINDS.every((k) => FLOOD[k].every((n) => Number.isInteger(n) && n > 0)), JSON.stringify(FLOOD));
 // how many requests the server's bucket drops, for these moments (ms) of the page's requests and these delays (ms) of the link: MessageBudget::take with the kind's burst and rate (thousandths of a request, a
 // bucket that is full at the first request, a request that finds less than a whole one is DROPPED and still sets the clock); the link keeps the order of the requests (one is never handled before the one before it)
 const serverDrops = (kind, moments, delays) => {
@@ -1221,6 +1321,7 @@ const ASKS = {
     rename: (d, i) => d.rename('Name ' + i),
     remove: (d) => d.remove(1),
     visibility: (d, i) => d.setPublic(i % 2 === 0),
+    ready: (d, i) => d.setReady(i % 2 === 0),
     chat: (d, i) => d.say('line ' + i)
 };
 // the moments (ms) at which a page asks for `kind` when it asks at every millisecond in the given spans, as the client keeps its pace
@@ -1230,7 +1331,7 @@ const momentsOf = (kind, spans) => {
     if (momentsMemo[memo]) return momentsMemo[memo];
     const x = world();
     const d = client(x, { silenceMs: 0 });
-    online(x, d, [[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0 });
+    online(x, d, [[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: kind === 'ready' ? 1 : 0, leader: 0 });      // (a Ready is a person's who does not lead)
     const moments = [];
     for (let ms = 0; ms < spans[spans.length - 1][1]; ms++) {
         if (spans.some((s) => ms >= s[0] && ms < s[1])) for (let k = 0; k < 20 && ASKS[kind](d, moments.length); k++) moments.push(ms);

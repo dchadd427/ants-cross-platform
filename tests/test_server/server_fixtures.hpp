@@ -362,6 +362,14 @@ struct World {
         run(100);
         return c;
     }
+    // The pages of the lobby rooms that do not lead say Ready (protocol 27: a leader's START waits for it), and the world runs until the rooms have heard them. A leader, a game and a client of a room that is no lobby room are not
+    // asked (the client sends nothing for them), so this is safe to call before any START
+    void pages_ready(uint32_t ms = 100) {
+        for (auto& c : clients) {
+            if (c->lobby) c->lobby->request_ready(true);
+        }
+        run(ms);
+    }
     // A game that takes the seat of a page over (or of a game whose link was lost) with the seat's key, as the page's own game does
     Client& connect_game(const std::string& name, const std::string& room, const net::SeatKey& key, bool cannot_load = false, const std::string& map_folder = std::string()) {
         next_key = key;

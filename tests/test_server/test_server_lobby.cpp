@@ -195,6 +195,7 @@ void run_lobby_room_tests() {
             const net::SeatKey bob_key = bob.lobby->key();
             ASSERT_TRUE(!net::key_is_zero(pia_key) && !net::key_is_zero(bob_key) && pia_key != bob_key);
             ASSERT_TRUE(w.mgr.busy(w.now).matches == 0 && w.mgr.busy(w.now).players == 2);        // two people wait in a lobby: no match
+            w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
             ASSERT_TRUE(pia.lobby->request_start());
             w.run(300);
             RoomStatus s = w.status("strt0001");
@@ -231,7 +232,9 @@ void run_lobby_room_tests() {
             Client& pia = w.connect_page("Pia", "strt0002", lobby_block_of());
             w.connect_page("Bob", "strt0002", lobby_block_of());
             const net::SeatKey pia_key = pia.lobby->key();
+            w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
             ASSERT_TRUE(pia.lobby->request_start());
+            w.run(100);                                                                // (the START is heard before the game takes the seat over: it is sent on the page's link, which the game closes)
             Client& pia_game = w.connect_game("Pia", "strt0002", pia_key);                   // Pia's game comes, Bob's never does
             w.run(5000);
             ASSERT_TRUE(w.status("strt0002").starting);
@@ -253,6 +256,7 @@ void run_lobby_room_tests() {
         ASSERT_EQ(pia.lobby->room().slots[1].name, bn("bots0001", 1, "Medium"));
         ASSERT_EQ(pia.lobby->room().slots[3].name, bn("bots0001", 3, "Easy"));
         ASSERT_TRUE(pia.lobby->room().slots[0].state == net::SlotState::Client && pia.lobby->room().slots[2].name.empty());
+        w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
         ASSERT_TRUE(pia.lobby->request_start());                                          // one person is enough, with the plan's bots to make up the match
         w.run(300);
         ASSERT_TRUE(w.status("bots0001").starting);
@@ -289,6 +293,7 @@ void run_lobby_room_tests() {
         unknown.mode = static_cast<uint8_t>(sim::kLastGameMode + 1);
         ASSERT_FALSE(pia.lobby->request_plan(unknown));
         ASSERT_EQ(static_cast<int>(w.status("mode0001").mode), 1);
+        w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
         ASSERT_TRUE(pia.lobby->request_start());
         w.run(300);
         ASSERT_TRUE(w.status("mode0001").starting);
@@ -307,6 +312,7 @@ void run_lobby_room_tests() {
             const net::SeatKey ann_key = ann.lobby->key();
             ASSERT_TRUE(ann.lobby->request_plan(plan_msg({K::Open, K::Medium, K::Nobody, K::Nobody})));
             plain.run(300);
+            plain.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
             ASSERT_TRUE(ann.lobby->request_start());
             plain.run(300);
             Client& ann_game = plain.connect_game("Ann", "mode0003", ann_key);
@@ -448,6 +454,7 @@ void run_lobby_room_tests() {
             w.run(300);
             ASSERT_TRUE(static_cast<int>(w.status("t187l001").mode) == 1);
             ASSERT_TRUE(pia.lobby->room().mode == 1 && bob.lobby->room().mode == 1 && pia.lobby->room().teams() == sim::StartTeams({true, 0, 2}));
+            w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
             ASSERT_TRUE(pia.lobby->request_start());
             w.run(300);
             Client& pia_game = w.connect_game("Pia", "t187l001", pia_key);
@@ -578,6 +585,7 @@ void run_lobby_room_tests() {
             ASSERT_TRUE(pia.lobby->request_plan(plan_msg({K::Open, K::Medium, K::Nobody, K::Nobody}, net::kNoTeam, net::kNoTeam, "GONE.LVL")));
             w.run(300);
             ASSERT_EQ(w.status("refu0001").map, std::string("GONE.LVL"));
+            w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
             ASSERT_TRUE(pia.lobby->request_start());
             w.run(200);
             Client& game = w.connect_game("Pia", "refu0001", key);
@@ -612,6 +620,7 @@ void run_lobby_room_tests() {
             const net::SeatKey key = pia.lobby->key();
             ASSERT_TRUE(pia.lobby->request_plan(plan_msg({K::Open, K::Medium, K::Nobody, K::Nobody})));
             w.run(300);
+            w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
             ASSERT_TRUE(pia.lobby->request_start());
             w.run(200);
             Client& game = w.connect_game("Pia", "refu0002", key);
@@ -757,6 +766,7 @@ void run_lobby_room_tests() {
         Client& bob = w.connect_page("Bob", "page0001", lobby_block_of());
         const net::SeatKey pia_key = pia.lobby->key();
         const net::SeatKey bob_key = bob.lobby->key();
+        w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
         ASSERT_TRUE(pia.lobby->request_start());
         w.run(200);
         w.connect_game("Pia", "page0001", pia_key);
@@ -850,7 +860,9 @@ void run_lobby_room_tests() {
         Client& bob = w.connect_page("Bob", "retr0001", lobby_block_of());
         const net::SeatKey pia_key = pia.lobby->key();
         const net::SeatKey bob_key = bob.lobby->key();
+        w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
         ASSERT_TRUE(pia.lobby->request_start());
+        w.run(100);                                                                // (the START is heard before the game takes the seat over: it is sent on the page's link, which the game closes)
         Client& pia_game = w.connect_game("Pia", "retr0001", pia_key);
         Client& bob_game = w.connect_game("Bob", "retr0001", bob_key, true);              // Bob's game cannot load the map: every start is cancelled
         w.run(500);                                                                       // (the first start was cancelled at once; the pause of two seconds runs)
@@ -893,7 +905,9 @@ void run_lobby_room_tests() {
             Client& cat = f.connect_page("Cat", "retr0002", lobby_block_of());
             const net::SeatKey ann_key = ann.lobby->key();
             const net::SeatKey cat_key = cat.lobby->key();
+            f.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
             ASSERT_TRUE(ann.lobby->request_start());
+            f.run(100);                                                                // (the START is heard before the game takes the seat over: it is sent on the page's link, which the game closes)
             Client& ann_game = f.connect_game("Ann", "retr0002", ann_key);
             f.connect_game("Cat", "retr0002", cat_key, true);
             f.run(500);
@@ -938,6 +952,7 @@ void run_lobby_room_tests() {
         w.run(300);
         ASSERT_EQ(w.status("name0001").names[1], std::string("Robert"));
         // START: the pages go to the game page and their games take the seats with the keys, saying the name that a game knows by default; the seats keep the names that the room shows
+        w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
         ASSERT_TRUE(pia.lobby->request_start());
         w.run(300);
         Client& pia_game = w.connect_game("Player", "name0001", pia_key);
@@ -989,6 +1004,7 @@ void run_lobby_room_tests() {
             Client& cat = w.connect_page("Cat", "rem00002", lobby_block_of());
             const net::SeatKey pia_key = pia.lobby->key();
             const net::SeatKey cat_key = cat.lobby->key();
+            w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
             ASSERT_TRUE(pia.lobby->request_start());
             w.run(300);
             Client& pia_game = w.connect_game("Pia", "rem00002", pia_key);
@@ -1053,6 +1069,7 @@ void run_lobby_room_tests() {
                 ASSERT_TRUE(pia.lobby->request_plan(plan_msg({K::Open, K::Open, K::Open, K::Easy})));
                 w.run(300);
                 ASSERT_MSG(w.status("clk00001").names[1] == "Robert", "the rename" + at);
+                w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
                 ASSERT_TRUE(pia.lobby->request_start());
                 w.run(300);
                 w.connect_game("Pia", "clk00001", pia_key);
@@ -1067,7 +1084,9 @@ void run_lobby_room_tests() {
                 Client& bob = w.connect_page("Bob", "clk00002", lobby_block_of());
                 const net::SeatKey pia_key = pia.lobby->key();
                 const net::SeatKey bob_key = bob.lobby->key();
+                w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
                 ASSERT_TRUE(pia.lobby->request_start());
+                w.run(100);                                                                // (the START is heard before the game takes the seat over: it is sent on the page's link, which the game closes)
                 Client& pia_game = w.connect_game("Pia", "clk00002", pia_key);
                 Client& bob_game = w.connect_game("Bob", "clk00002", bob_key, true);
                 w.run(500);
@@ -1114,6 +1133,7 @@ void run_lobby_room_tests() {
             Client& bob = w.connect_page("Bob", "clk00010", lobby_block_of());
             const net::SeatKey pia_key = pia.lobby->key();
             const net::SeatKey bob_key = bob.lobby->key();
+            w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
             ASSERT_TRUE(pia.lobby->request_start());
             w.run(300);
             w.connect_game("Pia", "clk00010", pia_key);
@@ -1354,6 +1374,7 @@ void run_lobby_room_tests() {
             Client& bob = w.connect_page("Bob", "keep0001", lobby_block_of());
             const net::SeatKey pia_key = pia.lobby->key();
             const net::SeatKey bob_key = bob.lobby->key();
+            w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
             ASSERT_TRUE(pia.lobby->request_start());
             w.run(300);
             w.connect_game("Pia", "keep0001", pia_key);

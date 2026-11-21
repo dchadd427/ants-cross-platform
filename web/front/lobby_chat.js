@@ -199,7 +199,7 @@
             paint();
         }
         function inView() {
-            if (typeof opts.onScreen === 'function') return opts.onScreen();
+            if (typeof opts.onScreen === 'function') { var told = opts.onScreen(); if (typeof told === 'boolean') return told; }       // (the room's tab in the chat box says whether it shows; no answer: where the box is on the page)
             var r = host.getBoundingClientRect();
             var h = doc.defaultView && doc.defaultView.innerHeight ? doc.defaultView.innerHeight : 0;
             return r.bottom > 0 && r.top < h - STICKY;
