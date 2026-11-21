@@ -212,7 +212,7 @@ private:
 
 /// What the arena counts of the ants that are stuck (docs/BOT_UNSTUCK.md): per seat, from the engine's own state, looked at every 4th tick. An ant is STUCK when, for kStuckTicks (10 seconds) in a
 /// row, it has stood on one tile and was in a state that is going nowhere: it shows the can't-go clip, or it has an order (a walk, a pick-up, a harvest) and does not move, or it holds food or
-/// loot and has no order at all. An ant in a clip of its own work (a raid, a plant, a fire wall, a pick-up, a bite, the hill's entrance) or queueing for its hill (home_state) is not. The count is
+/// loot and has no order at all and stands more than 8 tiles from its own mound (the carriers that wait for the gate stand about it: a wait of 700 ticks is legitimate). An ant in a clip of its own work (a raid, a plant, a fire wall, a pick-up, a bite, the hill's entrance) or queueing for its hill (home_state) is not. The count is
 /// one for each ant and span, the ticks are the ant-ticks of the span past the 10 seconds; the first kMaxEpisodes spans are kept with what the ant was doing, to look at (a test hook, like the rest).
 class StuckTally {
 public:

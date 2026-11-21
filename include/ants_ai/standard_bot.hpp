@@ -151,6 +151,8 @@ public:
     const HealTask& heal() const noexcept { return heal_; }
     const PlugTask& plugs() const noexcept { return plugs_; }
     const RefusalMemory& refusals() const noexcept { return refusals_; }
+    /// The plug task for a lab that changes its parameters (AI57.6 looks at every tick)
+    PlugTask& plugs_for_labs() noexcept { return plugs_; }
     /// Whether the bot plays the gate goals on this map (Medium and Hard, a walled map that the island play does not own; known after the first look)
     bool gate_map() const noexcept { return tactics_.gate_map; }
     /// The gate goal for a lab that changes its parameters or cancels it (AI27)

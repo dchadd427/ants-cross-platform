@@ -359,6 +359,23 @@ void IdleTally::scan(sim::SimulationEngine& sim) {
     }
 }
 
+namespace {
+
+// Whether the tile is within kQueueTiles of the mound of the team's own hill: the carriers that wait for the gate stand about it, and a long queue reaches that far (a wait of 700 ticks is legitimate), so a
+// carrier with no order there is not counted as stuck
+constexpr int32_t kQueueTiles = 8;
+bool near_own_hill(const sim::SimulationEngine& sim, uint8_t team, int32_t x, int32_t y) {
+    for (const auto& ah : sim.grid().anthills()) {
+        if (ah.team_id != team) continue;
+        const int32_t bx = static_cast<int32_t>(ah.x);
+        const int32_t by = static_cast<int32_t>(ah.y);
+        if (x >= bx - kQueueTiles && x <= bx + 3 + kQueueTiles && y >= by - kQueueTiles && y <= by + 3 + kQueueTiles) return true;
+    }
+    return false;
+}
+
+}  // namespace
+
 void StuckTally::scan(sim::SimulationEngine& sim) {
     const uint64_t tick = sim.current_tick();
     if (tick % kPeriod != 0) return;
@@ -390,7 +407,7 @@ void StuckTally::scan(sim::SimulationEngine& sim) {
                 case sim::UnitState::Idle:
                 case sim::UnitState::GuardIdle:
                 case sim::UnitState::Swimming:
-                    nowhere = !queueing && (order != sim::AntUnit::kOrderNone || (carrier && u.waypoints.empty()));
+                    nowhere = !queueing && (order != sim::AntUnit::kOrderNone || (carrier && u.waypoints.empty() && !near_own_hill(sim, a.player_id, a.tile_x, a.tile_y)));
                     break;
                 default:
                     break;                                                         // (a clip of its own work, a fall, a stun, a death: not stuck)

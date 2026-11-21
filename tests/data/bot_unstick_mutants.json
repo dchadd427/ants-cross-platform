@@ -68,7 +68,7 @@
    "id": "plug_home_ant_first",
    "file": "src/ants_ai/plug_task.cpp",
    "old": "if (best != nullptr && (best_far != beyond ? best_far : cost >= best_cost)) continue;",
-   "new": "if (best != nullptr && cost >= best_cost) continue;",
+   "new": "if (best != nullptr && (best_far != beyond ? !best_far : cost >= best_cost)) continue;",
    "build": "test_ai",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI57.3 ' ./build/tests/test_ai/test_ai",
    "expect": "AI57.3"
@@ -157,8 +157,8 @@
   {
    "id": "rescue_any_wall",
    "file": "src/ants_ai/tactics.cpp",
-   "old": "            if (!h.present || h.raid != a.tile) continue;\n            for (const sim::TileCoord& e : east_tiles(h)) {\n                if (e == wall) return true;\n            }",
-   "new": "            if (!h.present || h.raid != a.tile) continue;\n            return true;",
+   "old": "                if (e == wall) return true;",
+   "new": "                if (e == wall || true) return true;",
    "build": "test_ai",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI57.9 ' ./build/tests/test_ai/test_ai",
    "expect": "AI57.9"
@@ -193,8 +193,17 @@
   {
    "id": "stuck_carrier_not_counted",
    "file": "src/ants_ai/arena.cpp",
-   "old": "nowhere = !queueing && (order != sim::AntUnit::kOrderNone || (carrier && u.waypoints.empty()));",
-   "new": "nowhere = !queueing && order != sim::AntUnit::kOrderNone;",
+   "old": "nowhere = !queueing && (order != sim::AntUnit::kOrderNone || (carrier && u.waypoints.empty() && !near_own_hill(sim, a.player_id, a.tile_x, a.tile_y)));",
+   "new": "nowhere = !queueing && (order != sim::AntUnit::kOrderNone || (carrier && false && u.waypoints.empty() && !near_own_hill(sim, a.player_id, a.tile_x, a.tile_y)));",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.8"
+  },
+  {
+   "id": "stuck_queue_carrier_counted",
+   "file": "src/ants_ai/arena.cpp",
+   "old": "(carrier && u.waypoints.empty() && !near_own_hill(sim, a.player_id, a.tile_x, a.tile_y))",
+   "new": "(carrier && u.waypoints.empty() && (!near_own_hill(sim, a.player_id, a.tile_x, a.tile_y) || true))",
    "build": "test_ai",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI57.8 ' ./build/tests/test_ai/test_ai",
    "expect": "AI57.8"

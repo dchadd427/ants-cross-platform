@@ -261,22 +261,42 @@ void run_unstick_tests() {
         ASSERT_TRUE(only.get_unit(thief).type == sim::AntType::Thief);
     } TEST_END();
 
-    TEST_CASE("AI57.6 The Plug Task And The Trip Task Do Not Send Two Ants To One Power-Up") {
-        sim::SimulationEngine sim;
-        plugged_field(sim, 1);                                                                // a Bomber power-up in the gap: the plan wants one for the bombs of its side
-        sim.spawn_unit(0, sim::AntType::Worker, TileCoord{40, 30});
-        sim.spawn_unit(0, sim::AntType::Worker, TileCoord{14, 30});
-        LevelPlan plan = plan_for(Level::Hard);
-        plan.plugs = true;
-        Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
-        rig.run(900);
-        uint32_t clicks = 0;
-        for (const auto& e : rig.sent) {
-            if (e.second.type == CommandType::GroupMove && e.second.ants.size() == 1 && e.second.tile_x == kWallX && e.second.tile_y == kGapY) ++clicks;
-        }
-        ASSERT_TRUE(clicks >= 1u && clicks <= 2u);                                            // the click, and at most the one that a lost order is asked again with
-        ASSERT_FALSE(sim.grid().has_powerup_at(TileCoord{kWallX, kGapY}));
-        ASSERT_EQ(count_type(sim, 0, sim::AntType::Bomber), 1u);                              // one ant took it
+    TEST_CASE("AI57.6 The Plug Task And The Trip Task Do Not Send Two Ants To One Power-Up, Whichever Of Them Was First") {
+        // a wall near the hill of team 0 with a gap that a Bomber power-up of the own side plugs (the Hard plan wants a Bomber for the own side's power-up: the trip task has its own reason to go there), an ant
+        // stranded behind the wall (the plug task's reason), and a worker of the hill's part far from the gap
+        const auto play = [&](bool plug_first) {
+            sim::SimulationEngine sim;
+            empty_field(sim, 12);
+            for (int y = 0; y < 60; ++y) {
+                if (y != 10) sim.set_terrain(14, y, sim::TERRAIN_OBSTACLE);
+            }
+            if (plug_first) sim.grid_mut().place_powerup(14, 10, 1);
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{22, 10});
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{6, 30});
+            LevelPlan plan = peace_plan(Level::Hard);
+            plan.plugs = true;
+            plan.refusal_memory = false;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            PlugTask::Params quick = rig.as<StandardBot>().plugs().params();
+            quick.first_look = 0;                                                              // (the plug task looks at every tick, so that it is the one that sees the power-up that appears at tick 100)
+            quick.look_ticks = 1;
+            rig.as<StandardBot>().plugs_for_labs().set_params(quick);
+            for (int t = 0; t < 700; ++t) {
+                if (!plug_first && t == 100) sim.grid_mut().place_powerup(14, 10, 1);              // (the power-up appears while the other task is looking: a dropped one)
+                rig.tick();
+            }
+            uint32_t clicks = 0;
+            for (const auto& e : rig.sent) {
+                if (e.second.type == CommandType::GroupMove && e.second.ants.size() == 1 && e.second.tile_x == 14 && e.second.tile_y == 10) ++clicks;
+            }
+            return std::make_pair(clicks, count_type(sim, 0, sim::AntType::Bomber));
+        };
+        const auto first = play(true);                                                        // the power-up is there at the start: the trip task goes first, the plug task finds an ant on its way
+        ASSERT_EQ(first.first, 1u);
+        ASSERT_EQ(first.second, 1u);
+        const auto later = play(false);                                                       // it appears at tick 100: the plug task goes first, the trip task finds an ant on its way
+        ASSERT_EQ(later.first, 1u);
+        ASSERT_EQ(later.second, 1u);
     } TEST_END();
 
     TEST_CASE("AI57.7 The Refusal Memory: A Click The Engine Refuses Twice Is Blocked, The First Refusal Blocks Nothing, And A Carrier Is Never Judged") {
@@ -328,10 +348,11 @@ void run_unstick_tests() {
         ASSERT_TRUE(memory.is_blocked(ant, CommandType::GroupMove, TileCoord{40, 30}, sim.current_tick() + memory.params().first_block_ticks + 5));   // longer than the first block
         // an ant that walks obeyed, and a carrier is not watched
         const uint32_t walker = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{20, 24});
-        const sim::Command w = command_of(CommandType::GroupMove, 0, {walker}, 26, 24);
+        look(2);                                                                              // (the memory sees where the new ant stands)
+        const sim::Command w = command_of(CommandType::GroupMove, 0, {walker}, 23, 24);
         sim.apply_command(w);
         memory.sent(w, sim.current_tick());
-        look(80);
+        look(150);                                                                            // (it arrives within the 40 ticks of the wait and stands there: it moved, so it obeyed)
         ASSERT_EQ(memory.refusals(), 3u);                                                     // (the walker was not refused)
         const uint32_t carrier = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{20, 28});
         sim.get_unit(carrier).pick_up_food(1, 25);
@@ -362,6 +383,8 @@ void run_unstick_tests() {
         const uint32_t carrier = sim.spawn_unit(2, sim::AntType::Worker, TileCoord{20, 40});
         sim.get_unit(carrier).pick_up_food(1, 25);                                            // (a bite in the hands, no order, no walk: the engine's walk home that ended at once)
         const uint32_t planter = sim.spawn_unit(3, sim::AntType::Bomber, TileCoord{44, 44});
+        const uint32_t queuer = sim.spawn_unit(3, sim::AntType::Worker, TileCoord{47, 48});         // a carrier idle at its own hill, where the carriers wait for the gate
+        sim.get_unit(queuer).pick_up_food(1, 25);
         sim.apply_command(command_of(CommandType::GroupSpecial, 0, {thief}, h1.entrance.x, h1.entrance.y));
         sim.apply_command(command_of(CommandType::GroupSpecial, 3, {planter}, 46, 46));
         StuckTally tally;
@@ -377,7 +400,7 @@ void run_unstick_tests() {
         ASSERT_TRUE(tally.seat(0).ticks > 400);                                               // ... that goes on
         ASSERT_EQ(tally.seat(2).ants, 1u);                                                    // the carrier with no order: one span
         ASSERT_EQ(tally.seat(2).carriers, 1u);
-        ASSERT_EQ(tally.seat(3).ants, 0u);                                                    // the bomber at work: none
+        ASSERT_EQ(tally.seat(3).ants, 0u);                                                    // the bomber at work, and the carrier that waits at its own hill: none
         ASSERT_TRUE(tally.episodes().size() >= 2);
     } TEST_END();
 
@@ -422,6 +445,26 @@ void run_unstick_tests() {
         ASSERT_TRUE(on.thief_ticks_in_loop < off.thief_ticks_in_loop);
         const Out other = play(true, false);                                                  // walls of a hole that shuts in nobody are not the Fire Ant's business
         ASSERT_EQ(other.walls_left, 3u);
+        // walls in front of another hole that shuts in nobody are left alone though the Fire Ant stands beside them and the shut-in Thief's walls are far away
+        {
+            sim::SimulationEngine sim;
+            empty_field(sim, 57);
+            const MapInfo probe(sim);
+            const HillInfo& h1 = probe.hill(1);
+            const HillInfo& h3 = probe.hill(3);
+            const uint32_t thief = sim.spawn_unit(0, sim::AntType::Thief, h1.raid);
+            sim.spawn_unit(0, sim::AntType::Fire, TileCoord{h3.origin.x + 8, h3.origin.y + 2});
+            for (const TileCoord& w : east_tiles(h1)) sim.set_fire_at(w, 3600);
+            for (const TileCoord& w : east_tiles(h3)) sim.set_fire_at(w, 3600);
+            sim.apply_command(command_of(CommandType::GroupMove, 0, {thief}, 20, 20));
+            LevelPlan plan = peace_plan(Level::Hard);
+            plan.plugs = false;
+            plan.refusal_memory = false;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(900);
+            ASSERT_EQ(walls_east(sim, h3.origin), 3u);                                        // the walls of the other hole stand
+            ASSERT_TRUE(walls_east(sim, h1.origin) <= 2u);                                    // the walls of the Thief's hole do not
+        }
         // no Fire Ant yet, a Fire power-up on the own side: a worker fetches it, and then puts the wall out
         sim::SimulationEngine sim;
         empty_field(sim, 56);
@@ -435,6 +478,8 @@ void run_unstick_tests() {
         LevelPlan plan = peace_plan(Level::Hard);
         plan.plugs = false;
         plan.refusal_memory = false;
+        plan.secure_side = false;                                                              // (nothing else wants the Fire power-up of the own side: the walled-in Thief is the reason)
+        plan.flower_fire = false;
         Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
         rig.run(1800);
         ASSERT_TRUE(count_type(sim, 0, sim::AntType::Fire) >= 1u);                            // the Fire power-up was taken for it
