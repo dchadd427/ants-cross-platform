@@ -804,7 +804,7 @@ void run_public_room_tests() {
             for (size_t i = 0; i < j.get("lobbies").size(); ++i) {
                 const ctl::JsonValue& e = j.get("lobbies").at(i);
                 if (e.has("code")) {
-                    ASSERT_TRUE(!e.has("private") && e.keys().size() == 9u && w.status(e.get("code").str()).lobby_public);
+                    ASSERT_TRUE(!e.has("private") && e.keys().size() == 10u && w.status(e.get("code").str()).lobby_public);
                     ++publics;
                 } else {
                     ASSERT_TRUE(e.get("private").as_bool_or(false) && e.keys() == want);
