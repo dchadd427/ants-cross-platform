@@ -2,12 +2,12 @@
 # The dedicated game server (ants_server): a headless program. It holds the six maps, and the picture maker ants_thumb with the game's archive (ants.chd), which draws the pictures of the players' maps
 # (docs/MAP_SUBMISSIONS.md, "Pictures"): the game's renderer on SDL's dummy video driver, so the image has SDL2 and SDL2_ttf (the libraries only) and no window system, sound or other game data.
 #   docker build -f Dockerfile.server -t ants-server .
-#   docker run --rm -v ants-results:/results -p 4001:4001 -p 127.0.0.1:4002:4002 -p 127.0.0.1:4010:4010 ants-server
+#   docker run --rm -v ants-results:/results -p 127.0.0.1:4002:4002 -p 127.0.0.1:4010:4010 ants-server
 # The control secret: pass -e ANTS_SERVER_SECRET=<a long random secret>, or leave it out: the server makes one the first time it starts, prints it once in its log
 # and keeps it in /results/control-secret (keep /results in a volume, so that the next start finds it).
 # The image holds the six maps of the original game in /maps, so a server runs at once, and the players' maps in /community-maps (the lobby may choose them, GET /maps lists them; a volume at /maps does not hide them). To use other maps (the .lvl files that rooms may use), mount a folder at /maps
 # (it replaces them): -v /path/to/maps:/maps:ro. The control interface (4010) and the WebSocket port (4002) are meant to be
-# reached from this machine only: publish them on 127.0.0.1 and let a reverse proxy (TLS) or the lobby's backend talk to them (the browser page and the desktop game both reach the game through the proxy's /ws). The TCP game port (4001) is not encrypted: publish it for a LAN or development server only, the public site does not.
+# reached from this machine only: publish them on 127.0.0.1 and let a reverse proxy (TLS) or the lobby's backend talk to them (the browser page and the desktop game both reach the game through the proxy's /ws). The TCP game port (4001) is not encrypted: publish it (-p 4001:4001) for a LAN or development server only, the public site does not.
 # The replay port (--replay-port, off unless a command gives it; docker-compose.stack.yml starts the server with 4020) is the read-only list and download of the kept matches: it needs no secret, so
 # do not publish it either: the site's nginx reaches it over the network of the stack, and its rate limits and its five-second cache of the list stand in front of it (docker/nginx.conf).
 # The test-map door (--test-map-port, off unless a command gives it; docker-compose.stack.yml starts the server with 4031) takes the Map Maker's draft maps (POST /test-maps) and nothing else: it is not published either.
