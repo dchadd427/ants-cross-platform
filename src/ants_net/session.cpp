@@ -83,6 +83,7 @@ void HostSession::start(uint32_t now_ms) {
         clients_[p].acked_seen = sequencer_.acked(p);
         humans = static_cast<uint8_t>(humans | bit(p));
     }
+    people_ = static_cast<uint8_t>(humans | (seatless() ? 0u : bit(cfg_.host_player)));
     attendance_.seat_humans(humans, now_ms);
     next_presence_ms_ = now_ms;
 }
@@ -118,6 +119,7 @@ void HostSession::resume(uint32_t now_ms, uint32_t resume_turn, uint8_t old_host
         }
         send_turns(s.conn, s.next_receive, resume_turn);
     }
+    people_ = following;
     // the old host and every seat of the roster that did not follow leave with the first turn (a seat that already dropped stays as it is)
     const uint8_t roster = sim_->roster_mask();
     if (old_host < sim::MAX_PLAYERS && old_host != cfg_.host_player) announce_drop(old_host);
@@ -146,6 +148,7 @@ void HostSession::start_restored(uint32_t now_ms, uint8_t humans, uint8_t droppe
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
         if (is_bot_seat(p)) sequencer_.set_active(p, true);        // a bot's seat is level with the match (the host acknowledges every turn for it)
     }
+    people_ = humans;
     attendance_.seat_restored(humans, dropped, now_ms);
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {   // a seat without a key can never be taken back: it is gone, as a lost link without a key is (its Drop is sealed after the pause)
         if ((humans & bit(p)) != 0 && (dropped & bit(p)) == 0 && key_is_zero(keys_[p]) && attendance_.dropped(p, now_ms)) announce_drop(p);
@@ -376,17 +379,25 @@ void HostSession::handle_message(uint8_t player, const std::vector<uint8_t>& msg
 // ---- hints and channels (protocol 26, p2p.hpp) -------------------------------------------------------------------------------------------------------
 
 namespace {
-constexpr uint32_t kMaxP2pConfigs = 16;       // a credential is made for each; a match may see a handful of reconnects
+constexpr uint32_t kMaxP2pConfigs = 16;       // the asks that a match may see (a page that was reloaded, a few reconnects); every ask after them is a violation
 constexpr uint32_t kMaxP2pSignals = 512;      // an offer, an answer and a few relay candidates per pair make a dozen; a page that sends more is not setting up a channel
+
+unsigned seats_set_in(uint8_t mask) noexcept {
+    unsigned n = 0;
+    for (; mask != 0; mask = static_cast<uint8_t>(mask & (mask - 1u))) ++n;
+    return n;
+}
 }  // namespace
 
-// A player says that it can open channels and whether it allows direct ones. It is given the relay's credential (a user name that holds its expiry and a random label, never a name or an account), when the
-// server has a relay; a server that has none says so with an empty list, and then nobody is ready: no channel is opened and the match is what it was.
+// A player says that it can open channels and whether it allows direct ones. It is given the relay's credential (a user name that holds its expiry and a random label, never a name or an account) when the
+// server has a relay, the match has begun and began with two or more people (a computer player's hints reach every player on the server's own connection: a match of one person has nobody to open a channel to),
+// and the player has not had kMaxP2pCredentials of them yet (people_ is empty until the match begins). Any other ask is answered as a server that has no relay answers, with an empty list: the player is not
+// ready, nothing opens and the match is what it was.
 void HostSession::handle_p2p_config(uint8_t player, const P2pConfigMsg& m) {
     Client& c = clients_[player];
     if (++c.p2p_configs > kMaxP2pConfigs) return violation(player);
     IceConfigMsg ice;
-    if (cfg_.turn != nullptr && cfg_.turn->usable() && cfg_.random_bytes) {
+    if (seats_set_in(people_) >= 2 && c.p2p_credentials < kMaxP2pCredentials && cfg_.turn != nullptr && cfg_.turn->usable() && cfg_.random_bytes) {
         uint8_t raw[8];
         if (cfg_.random_bytes(raw, sizeof(raw))) {
             static const char kHex[] = "0123456789abcdef";
@@ -396,11 +407,13 @@ void HostSession::handle_p2p_config(uint8_t player, const P2pConfigMsg& m) {
                 label.push_back(kHex[b & 15u]);
             }
             const uint32_t now = cfg_.unix_now ? cfg_.unix_now() : static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count());
-            ice.expires = now + cfg_.turn->ttl_s;
+            const uint32_t ttl = cfg_.relay_ttl_s != 0 && cfg_.relay_ttl_s < cfg_.turn->ttl_s ? cfg_.relay_ttl_s : cfg_.turn->ttl_s;
+            ice.expires = now + ttl;
             ice.username = turn_username(ice.expires, label);
             ice.credential = cfg_.turn->credential(ice.username);
             ice.urls = cfg_.turn->urls;
             if (ice.credential.empty()) ice = IceConfigMsg{};
+            else ++c.p2p_credentials;
         }
     }
     c.p2p_ready = !ice.urls.empty();

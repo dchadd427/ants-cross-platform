@@ -201,7 +201,8 @@ services:
 
   # The relay of the players' channels (docs/SERVER.md "The relay for the players' channels"): coturn, in shared-secret mode, for the browsers of the players of a match. Only with the profile `relay`
   # (COMPOSE_PROFILES=relay) and the three variables of the header (it exits at once without them): the stack deploys without them. Host networking: one public address, no port publishing (Docker publishes a range of 200 UDP ports one
-  # rule at a time, slowly), and the relay sees the players' real addresses. It is NOT behind the web page's proxy and listens on UDP and TCP ANTS_TURN_PORT (3478 unless set) and UDP 49160-49359 of this machine's own address, and on no other port (docker/turnserver.conf).
+  # rule at a time, slowly), and the relay sees the players' real addresses. It is NOT behind the web page's proxy and listens on UDP and TCP ANTS_TURN_PORT (3478 unless set) and sends from UDP 49160-49359, on the address ANTS_TURN_EXTERNAL_IP (an address of this machine; the entry point
+  # refuses any other) and on no other address or port (docker/turnserver.conf).
   # The image starts only with the capability to bind its port (the binary carries it); the process still runs as the user nobody. The configuration (docker/turnserver.conf) holds no secret: it comes on the
   # command line, where `$$` reaches the container as `$` and the image's entry point expands it, so the secret is not written into the command.
   ants-turn:
@@ -220,13 +221,15 @@ services:
     # (The image's entry point, docker/turn-entrypoint.sh, refuses to start unless all three are set, then expands `$` in the arguments below.)
     command: ["-c", "/etc/coturn/turnserver.conf", "--static-auth-secret=$$ANTS_TURN_SECRET", "--external-ip=$$ANTS_TURN_EXTERNAL_IP", "--realm=$$ANTS_TURN_HOST"]
     read_only: true
+    # the process id file (pidfile in docker/turnserver.conf) is the only file that the process writes
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=1m"]
     cap_drop: [ALL]
     cap_add: [NET_BIND_SERVICE]
     security_opt: ["no-new-privileges:true"]
     pids_limit: 64
     mem_limit: 256m
     healthcheck:
-      # (the entry point asks for a STUN binding on the same port that it listens on: ANTS_TURN_PORT)
+      # (the entry point asks for a STUN binding on the address and the port that it listens on: ANTS_TURN_EXTERNAL_IP and ANTS_TURN_PORT)
       test: ["CMD", "/usr/local/bin/ants-turn-entrypoint.sh", "--health"]
       interval: 60s
       timeout: 5s

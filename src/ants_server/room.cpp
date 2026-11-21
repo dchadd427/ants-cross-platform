@@ -17,6 +17,7 @@ namespace ants::server {
 
 namespace {
 constexpr uint32_t kMaxFailedStarts = 5;             // a room whose start is cancelled this many times (a client that cannot load the map, leavers) gives up
+constexpr uint32_t kRelayMarginS = 600;              // a relay credential outlasts the longest that its match can last by this much (the countdowns after a pause, a slow end)
 }  // namespace
 
 const char* room_state_name(RoomState state) noexcept {
@@ -310,7 +311,9 @@ void Room::build_session(uint32_t restart_vote_after_ms, uint32_t start_delay_ms
     hc.attendance.resume_countdown_ms = spec_.resume_countdown_ms;
     hc.max_log_bytes = spec_.max_log_bytes;
     hc.log_budget = log_budget_;
-    hc.turn = turn_;                                              // protocol 26: the relay's credential for each player who asks (a room made without one gives none)
+    hc.turn = turn_;                                              // protocol 26: the relay's credential for a player of a match of two or more people who asks (a room made without one gives none)
+    // a credential lives as long as the match can: its limit of play, the pauses that its seats may hold (a room that holds no seat has none) and a margin, never longer than the relay's own limit
+    hc.relay_ttl_s = spec_.run_ms / 1000u + (spec_.reconnect ? spec_.max_pause_ms / 1000u : 0u) + kRelayMarginS;
     hc.random_bytes = [](uint8_t* out, size_t n) { return random_bytes(out, n); };
     session_ = std::make_unique<net::HostSession>(*sim_, hc);
     session_->set_on_diverged([this](uint32_t turn, uint8_t differ, uint8_t agree) {       // (the line at the end of the room counts the drops; this one says when, and how many agreed)

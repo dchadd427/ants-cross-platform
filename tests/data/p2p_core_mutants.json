@@ -1,5 +1,5 @@
 {
- "note": "Mutants of protocol 26 (docs/P2P_HINTS.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the prediction's matching rule for a hint (where it goes, doubled and late hints, the order of a turn, confirmed, moved once, dropped, the limits), the server's session (the credential and its expiry, who is ready, the rule of the address and the violation, the sender's seat stamped by the connection, the limits, who is told, a computer player's hint at the tick of its turn), the wire (what each decoder refuses), the rule of the address in the text of a candidate, the relay's credential (RFC 2104, the expiry), the tick that a hint names (the phase of the server's seals: when it is known, what it learns from the orders that came back, where it is not trusted), and the game's side (a channel's seat, the server's hint, a relay with no address, the tick of a hint, the clock that the game gives the prediction, the mark), and the relay's one port (ants_net/turn.hpp make_turn_settings).",
+ "note": "Mutants of protocol 26 (docs/P2P_HINTS.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the prediction's matching rule for a hint (where it goes, doubled and late hints, the order of a turn, confirmed, moved once, dropped, the limits), the server's session (the credential and its expiry, who is given one: the people of a match of two or more, at most twice each, for no longer than the match can last, and the room's limit that sets it, who is ready, the rule of the address and the violation, the sender's seat stamped by the connection, the limits, who is told, a computer player's hint at the tick of its turn), the wire (what each decoder refuses), the rule of the address in the text of a candidate, the relay's credential (RFC 2104, the expiry), the tick that a hint names (the phase of the server's seals: when it is known, what it learns from the orders that came back, where it is not trusted), and the game's side (a channel's seat, the server's hint, a relay with no address, the tick of a hint, the clock that the game gives the prediction, the mark), and the relay's one port (ants_net/turn.hpp make_turn_settings).",
  "mutants": [
   {
    "id": "hint_that_came_after_its_turn_is_applied_again",
@@ -124,8 +124,8 @@
   {
    "id": "credential_never_expires",
    "file": "src/ants_net/session.cpp",
-   "old": "ice.expires = now + cfg_.turn->ttl_s;",
-   "new": "ice.expires = now + 4000000000u;",
+   "old": "ice.expires = now + ttl;",
+   "new": "ice.expires = now + 4000000000u + 0u * ttl;",
    "build": [
     "test_lockstep"
    ],
@@ -230,6 +230,116 @@
     "test_lockstep"
    ],
    "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "credential_for_a_match_of_one_person",
+   "file": "src/ants_net/session.cpp",
+   "old": "seats_set_in(people_) >= 2 && ",
+   "new": "seats_set_in(people_) >= 1 && ",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "computer_players_count_as_people",
+   "file": "src/ants_net/session.cpp",
+   "old": "people_ = static_cast<uint8_t>(humans | (seatless() ? 0u : bit(cfg_.host_player)));",
+   "new": "people_ = static_cast<uint8_t>(humans | bot_seats_ | (seatless() ? 0u : bit(cfg_.host_player)));",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "hosts_own_seat_is_no_person",
+   "file": "src/ants_net/session.cpp",
+   "old": "people_ = static_cast<uint8_t>(humans | (seatless() ? 0u : bit(cfg_.host_player)));",
+   "new": "people_ = static_cast<uint8_t>(humans);",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "credentials_for_a_player_are_not_limited",
+   "file": "src/ants_net/session.cpp",
+   "old": "c.p2p_credentials < kMaxP2pCredentials && ",
+   "new": "",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "credentials_for_a_player_are_not_counted",
+   "file": "src/ants_net/session.cpp",
+   "old": "else ++c.p2p_credentials;",
+   "new": "else {}",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "credential_ignores_the_rooms_limit",
+   "file": "src/ants_net/session.cpp",
+   "old": "const uint32_t ttl = cfg_.relay_ttl_s != 0 && cfg_.relay_ttl_s < cfg_.turn->ttl_s ? cfg_.relay_ttl_s : cfg_.turn->ttl_s;",
+   "new": "const uint32_t ttl = cfg_.turn->ttl_s;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "credential_outlasts_the_relays_limit",
+   "file": "src/ants_net/session.cpp",
+   "old": "const uint32_t ttl = cfg_.relay_ttl_s != 0 && cfg_.relay_ttl_s < cfg_.turn->ttl_s ? cfg_.relay_ttl_s : cfg_.turn->ttl_s;",
+   "new": "const uint32_t ttl = cfg_.relay_ttl_s != 0 ? cfg_.relay_ttl_s : cfg_.turn->ttl_s;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "rooms_credential_has_no_limit",
+   "file": "src/ants_server/room.cpp",
+   "old": "hc.relay_ttl_s = spec_.run_ms / 1000u + (spec_.reconnect ? spec_.max_pause_ms / 1000u : 0u) + kRelayMarginS;",
+   "new": "hc.relay_ttl_s = 0u * kRelayMarginS;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.305 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "rooms_credential_forgets_the_pauses",
+   "file": "src/ants_server/room.cpp",
+   "old": "hc.relay_ttl_s = spec_.run_ms / 1000u + (spec_.reconnect ? spec_.max_pause_ms / 1000u : 0u) + kRelayMarginS;",
+   "new": "hc.relay_ttl_s = spec_.run_ms / 1000u + kRelayMarginS;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.305 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "rooms_credential_counts_pauses_it_does_not_have",
+   "file": "src/ants_server/room.cpp",
+   "old": "hc.relay_ttl_s = spec_.run_ms / 1000u + (spec_.reconnect ? spec_.max_pause_ms / 1000u : 0u) + kRelayMarginS;",
+   "new": "hc.relay_ttl_s = spec_.run_ms / 1000u + spec_.max_pause_ms / 1000u + kRelayMarginS;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.305 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "rooms_credential_ends_before_the_limit_of_play",
+   "file": "src/ants_server/room.cpp",
+   "old": "hc.relay_ttl_s = spec_.run_ms / 1000u + (spec_.reconnect ? spec_.max_pause_ms / 1000u : 0u) + kRelayMarginS;",
+   "new": "hc.relay_ttl_s = (spec_.reconnect ? spec_.max_pause_ms / 1000u : 0u) + kRelayMarginS;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.305 timeout 900 ./build/tests/test_server/test_server"
   },
   {
    "id": "peers_name_a_player_who_has_left",
