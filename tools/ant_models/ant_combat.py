@@ -33,7 +33,7 @@ from typing import List, Sequence, Tuple
 import numpy as np
 
 try:
-    from .base_ant import EYELID_CLOSED_ANGLE
+    from .base_ant import EYELID_CLOSED_ANGLE, sync_leg_flex_to_clip
     from .mesh_core import (
         AnimationChannel,
         MeshPart,
@@ -56,7 +56,7 @@ try:
         torus_arc,
     )
 except ImportError:
-    from base_ant import EYELID_CLOSED_ANGLE  # type: ignore
+    from base_ant import EYELID_CLOSED_ANGLE, sync_leg_flex_to_clip  # type: ignore
     from mesh_core import (  # type: ignore
         AnimationChannel,
         MeshPart,
@@ -641,51 +641,81 @@ def _sturdy_foot(name: str) -> MeshPart:
     return foot.translate(0.0, -float(foot.bounds()[0][1]), 0.0)
 
 
-def _build_flowing_leg(scene: SceneBuilder, label: str, ctrl: Sequence[Vec3], foot_yaw: float) -> None:
-    """Digitigrade backwards-knee (`< \\`) muscular dark insect leg matching `acst901`/`acst801`."""
-    pts = [np.asarray(p, dtype=np.float64) for p in ctrl]
+def _build_flowing_leg(
+    scene: SceneBuilder,
+    node_name: str,
+    ctrl: Sequence[Vec3],
+    foot_yaw: float,
+    side: float,
+) -> None:
+    """One individual digitigrade backwards-knee (`< \\`) muscular dark insect leg pivoted at its planted foot."""
+    pts = [np.array([side * abs(p[0]), p[1], p[2]], dtype=np.float64) for p in ctrl]
     leg = curved_tube(
         pts,
-        [(0.052, 0.056), (0.048, 0.050), (0.044, 0.046), (0.036, 0.038), (0.032, 0.034)],
-        samples_per_seg=6,
+        [(0.056, 0.060), (0.052, 0.056), (0.048, 0.050), (0.044, 0.046), (0.036, 0.038), (0.032, 0.034)],
+        samples_per_seg=5,
         radial_segs=16,
         cap_rings=3,
-        name=f"leg_flow_{label}",
+        name=f"{node_name}_tube",
         material="chitin_dark",
     )
-    foot = _sturdy_foot(f"tarsus_{label}").rotate_xyz(ry=foot_yaw).translate(pts[-1][0], 0.0, pts[-1][2] + 0.008)
-    scene.add_mirrored("legs", leg)
-    scene.add_mirrored("legs", foot)
+    yaw_s = side * foot_yaw
+    foot_x = float(pts[-1][0])
+    foot_z = float(pts[-1][2] + 0.008)
+    foot = _sturdy_foot(f"{node_name}_tarsus").rotate_xyz(ry=yaw_s).translate(foot_x, 0.0, foot_z)
+    # Pivot cleanly on the ball of the planted foot at Y = 0.0 so knee-flex never lifts or slides the sole!
+    pivot = (foot_x + 0.016 * math.sin(yaw_s), 0.0, foot_z + 0.016 * math.cos(yaw_s))
+    leg_loc = leg.translate(-pivot[0], 0.0, -pivot[2])
+    foot_loc = foot.translate(-pivot[0], 0.0, -pivot[2])
+    scene.add(node_name, [leg_loc, foot_loc], parent="legs")
+    scene.set_node_transform(node_name, translation=pivot)
 
 
 def _build_legs(scene: SceneBuilder) -> None:
-    """Digitigrade backwards-knee dark insect legs sweeping sharply back to hocks then forward-down."""
-    # Mid/front pair: hip -> sweep out & back to backwards knee (<) -> angle forward-down (\) to foot.
-    _build_flowing_leg(
-        scene,
-        "mid",
-        [
-            (0.152, 0.312, +0.034),
-            (0.228, 0.284, -0.026),
-            (0.264, 0.228, -0.076),
-            (0.248, 0.118, +0.006),
-            (0.232, 0.032, +0.084),
-        ],
-        foot_yaw=0.20,
-    )
-    # Rear pair: rear hip -> sweep sharply back to backwards hock (<) under gaster -> forward-down (\) to foot.
-    _build_flowing_leg(
-        scene,
-        "rear",
-        [
-            (0.146, 0.292, -0.088),
-            (0.226, 0.268, -0.184),
-            (0.262, 0.214, -0.268),
-            (0.246, 0.110, -0.184),
-            (0.230, 0.032, -0.098),
-        ],
-        foot_yaw=0.16,
-    )
+    """4 individual digitigrade backwards-knee dark insect legs with organic non-mirrored brawler stance.
+
+    Hip roots start deeply inside `pelvis_core` (`|x| ~ 0.092`) and sit strictly higher than the
+    backwards knees so zero daylight gap ever opens during chest-heave & flex knee-bending.
+    """
+    scene.set_node_transform("legs", translation=(0.0, 0.0, 0.0))
+    # Subtle per-leg brawler stance individuality: (outward foot dx, foot stride dz, knee dy, knee dz, dyaw).
+    stance = {
+        "mid_left":   (+0.010, +0.020, -0.010, -0.010, +0.06),
+        "mid_right":  (-0.006, -0.016, +0.006, +0.006, -0.05),
+        "rear_left":  (-0.008, -0.014, +0.008, +0.006, -0.04),
+        "rear_right": (+0.012, +0.018, -0.010, -0.012, +0.07),
+    }
+    for side, tag in ((+1.0, "left"), (-1.0, "right")):
+        dx, dz, kdy, kdz, dyaw = stance[f"mid_{tag}"]
+        _build_flowing_leg(
+            scene,
+            f"leg_mid_{tag}",
+            [
+                (0.092, 0.318, +0.018),
+                (0.162, 0.308, +0.028 + 0.2 * dz),
+                (0.228 + 0.5 * dx, 0.280 + 0.4 * kdy, -0.028 + 0.5 * kdz),
+                (0.264 + 0.8 * dx, 0.226 + kdy, -0.078 + kdz + 0.4 * dz),
+                (0.248 + 0.9 * dx, 0.118 + 0.4 * kdy, +0.006 + 0.8 * dz),
+                (0.232 + dx, 0.032, +0.084 + dz),
+            ],
+            foot_yaw=0.20 + dyaw,
+            side=side,
+        )
+        dx, dz, kdy, kdz, dyaw = stance[f"rear_{tag}"]
+        _build_flowing_leg(
+            scene,
+            f"leg_rear_{tag}",
+            [
+                (0.092, 0.298, -0.086),
+                (0.158, 0.288, -0.094 + 0.2 * dz),
+                (0.226 + 0.5 * dx, 0.264 + 0.4 * kdy, -0.184 + 0.5 * kdz),
+                (0.262 + 0.8 * dx, 0.212 + kdy, -0.268 + kdz + 0.4 * dz),
+                (0.246 + 0.9 * dx, 0.110 + 0.4 * kdy, -0.184 + 0.8 * dz),
+                (0.230 + dx, 0.032, -0.098 + dz),
+            ],
+            foot_yaw=0.16 + dyaw,
+            side=side,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -731,80 +761,107 @@ def _conform_belt_to_torso(
 def _make_tactical_pouch(center: np.ndarray, width_dir: np.ndarray, out_n: np.ndarray, tangent: np.ndarray, label: str) -> List[MeshPart]:
     """One chunky rectangular quilted bright-yellow tactical utility pouch (`acst301`/`acst901`)."""
     mat = _frame(center, width_dir, out_n, tangent)
-    body = rounded_box(0.132, 0.048, 0.062, bevel=0.011, segs=1, name=f"tactical_pouch_{label}", material="gear_yellow_plastic").transform(mat)
-    flap = rounded_box(0.136, 0.017, 0.046, bevel=0.005, segs=1, name=f"pouch_flap_{label}", material="gear_yellow_plastic").translate(0.0, 0.020, -0.005).transform(mat)
-    crease = rounded_box(0.128, 0.008, 0.009, bevel=0.002, segs=1, name=f"pouch_seam_{label}", material="gear_gold").translate(0.0, 0.015, 0.018).transform(mat)
+    body = rounded_box(0.116, 0.042, 0.054, bevel=0.010, segs=1, name=f"tactical_pouch_{label}", material="gear_yellow_plastic").transform(mat)
+    flap = rounded_box(0.120, 0.015, 0.040, bevel=0.005, segs=1, name=f"pouch_flap_{label}", material="gear_yellow_plastic").translate(0.0, 0.018, -0.004).transform(mat)
+    crease = rounded_box(0.112, 0.007, 0.008, bevel=0.002, segs=1, name=f"pouch_seam_{label}", material="gear_gold").translate(0.0, 0.013, 0.015).transform(mat)
     return [body, flap, crease]
 
 
 def _build_bandoliers(scene: SceneBuilder, torso_verts: np.ndarray) -> None:
-    """Wide U-shaped / horseshoe all-yellow tactical pouch collar sweeping wide over BOTH shoulders,
-    curving cleanly beneath the chin across the chest (`acst301`), and meeting in a bold V on the back (`acst701`).
+    """Two full closed 3D diagonal crossed yellow tactical sashes forming an unmistakable X
+    across BOTH the front chest/lower torso AND the back, with rectangular yellow pouches and
+    front & rear yellow tactical X-junction clasps (zero black straps, zero cylindrical bullets).
     """
-    # Single continuous closed 3D horseshoe/V tactical harness loop matching `acst301`/`901`/`701`:
-    # wide over outer trapezius/shoulders -> U-collar across upper-mid chest -> V-meet across mid-back!
-    harness_ctrl = [
-        (0.000, 0.458, +0.268),   # bottom center of bold front U-collar below chin
-        (+0.155, 0.516, +0.236),  # wide front-left chest curve
-        (+0.258, 0.656, +0.136),  # sweeping wide up front-left shoulder
-        (+0.274, 0.816, -0.032),  # wide & clean over top of left shoulder/trapezius
-        (+0.232, 0.728, -0.226),  # sweeping down upper-left back
-        (+0.132, 0.580, -0.304),  # angling inward into rear V
-        (0.000, 0.486, -0.324),   # crisp rear back V-junction above gaster (`acst701`)
-        (-0.132, 0.580, -0.304),  # angling up-outward on right back
-        (-0.232, 0.728, -0.226),  # sweeping up upper-right back
-        (-0.274, 0.816, -0.032),  # wide & clean over top of right shoulder/trapezius
-        (-0.258, 0.656, +0.136),  # sweeping wide down front-right shoulder
-        (-0.155, 0.516, +0.236),  # wide front-right chest curve
+    # Strap 0: left shoulder (+X) -> front X-center -> right lower waist (-X) -> right flank
+    # -> lower-right back -> rear X-center -> upper-left back -> left shoulder.
+    strap0_ctrl = [
+        (+0.262, 0.812, -0.028),  # over top of left shoulder/trapezius (cleanly clear of pauldron_0)
+        (+0.240, 0.688, +0.132),  # upper front-left chest drop
+        (+0.132, 0.592, +0.236),  # diagonal across left pectoral toward front X-center
+        ( 0.000, 0.506, +0.262),  # FRONT X-JUNCTION CENTER on mid-chest
+        (-0.136, 0.418, +0.194),  # diagonal down across lower-right chest/ribs
+        (-0.204, 0.368, +0.068),  # wrapping right lower waist above mid-hip socket
+        (-0.206, 0.366, -0.098),  # right lower flank (inside flexing arms & above rear hip!)
+        (-0.144, 0.416, -0.246),  # lower-right back rising diagonally
+        ( 0.000, 0.520, -0.320),  # REAR X-JUNCTION CENTER on mid-back
+        (+0.148, 0.654, -0.268),  # diagonal up across upper-left back
+        (+0.236, 0.748, -0.172),  # sweeping over rear-left trapezius
     ]
-    pivot = np.array([0.0, 0.545, -0.028])
-    pts = catmull_rom_spline(np.asarray(harness_ctrl, dtype=np.float64), samples_per_seg=6, closed=True)
-    # Smooth continuous upward normal ramp over the wide shoulders so pouches sit cleanly flat on the collar!
-    out_n = np.array([
-        _normalize(p - pivot + np.array([0.0, 0.34 * max(0.0, min(1.0, (p[1] - 0.60) / 0.22)), 0.0]))
-        for p in pts
-    ])
-    pts = _conform_belt_to_torso(pts, out_n, torso_verts, pivot, clearance=0.012)
+    strap1_ctrl = [(-x, y, z) for (x, y, z) in strap0_ctrl]
+    pivot = np.array([0.0, 0.535, -0.028])
 
-    n_pts = len(pts)
-    scene.add(
-        "gear_bandolier",
-        _sculpted_ribbon_mesh(pts, out_n, np.full(n_pts, 0.084), np.full(n_pts, 0.014), closed=True, profile_segs=8, name="bandolier_strap_0", material="gear_gold"),
-    )
+    front_cross_pts: List[np.ndarray] = []
+    back_cross_pts: List[np.ndarray] = []
 
-    tangents = np.array([_normalize(pts[(i + 1) % n_pts] - pts[(i - 1) % n_pts]) for i in range(n_pts)])
-    surf_n = np.array([_normalize(o - np.dot(o, t) * t) for o, t in zip(out_n, tangents)])
+    for s_idx, ctrl in enumerate((strap0_ctrl, strap1_ctrl)):
+        pts = catmull_rom_spline(np.asarray(ctrl, dtype=np.float64), samples_per_seg=6, closed=True)
+        out_n = np.array([
+            _normalize(
+                p - pivot
+                + np.array([0.0, 0.36 * max(0.0, min(1.0, (p[1] - 0.62) / 0.20)), 0.0])
+                + np.array([0.0, -0.14 * max(0.0, min(1.0, (0.42 - p[1]) / 0.12)), 0.0])
+            )
+            for p in pts
+        ])
+        pts = _conform_belt_to_torso(pts, out_n, torso_verts, pivot, clearance=0.011)
+        # Subtle radial weave separation on Strap 1 across the front/back X crossings (zero z-fighting!).
+        if s_idx == 1:
+            cross_w = np.exp(-((pts[:, 0] / 0.085) ** 2)) * (np.abs(pts[:, 2]) > 0.15)
+            pts = pts + (0.0055 * cross_w)[:, None] * out_n
 
-    seg_lens = np.linalg.norm(np.roll(pts, -1, axis=0) - pts, axis=1)
-    cum = np.concatenate([[0.0], np.cumsum(seg_lens)])
-    total = float(cum[-1])
-    count = int(total / 0.082)
-    for k in range(count):
-        s = (k + 0.5) * total / count
-        i = int(np.searchsorted(cum, s, side="right") - 1) % n_pts
-        j = (i + 1) % n_pts
-        f = (s - cum[i]) / max(1e-8, float(seg_lens[i]))
-        p = (1.0 - f) * pts[i] + f * pts[j]
-        # Leave clean space for the rear V-junction clasp only (front U stays a continuous row of yellow pouches!)
-        if abs(p[0]) < 0.070 and p[2] < -0.22:
-            continue
-        t = _normalize((1.0 - f) * tangents[i] + f * tangents[j])
-        o = _normalize((1.0 - f) * surf_n[i] + f * surf_n[j])
-        w = _normalize(np.cross(o, t))
-        o = np.cross(t, w)
-        if np.dot(w, np.array([1.0 if p[0] >= 0.0 else -1.0, 0.20, 0.0])) < 0.0:
-            w = -w
-            t = -t
-        scene.add("gear_bandolier", _make_tactical_pouch(p + 0.024 * o, w, o, t, f"u_{k}"))
+        n_pts = len(pts)
+        scene.add(
+            "gear_bandolier",
+            _sculpted_ribbon_mesh(
+                pts,
+                out_n,
+                np.full(n_pts, 0.072),
+                np.full(n_pts, 0.013),
+                closed=True,
+                profile_segs=8,
+                name=f"bandolier_strap_{s_idx}",
+                material="gear_gold",
+            ),
+        )
 
-    # Clean yellow rear V-junction tactical clasp anchoring the harness smoothly across the back (`acst701`).
-    back_mask = pts[:, 2] < -0.20
-    back_sub = pts[back_mask]
-    back_pos = back_sub[int(np.argmin(np.abs(back_sub[:, 0])))] + np.array([0.0, 0.0, -0.022])
-    frame = rounded_box(0.144, 0.144, 0.036, bevel=0.012, segs=2, name="buckle_frame_back", material="gear_yellow_plastic").rotate_xyz(rx=-16.0, rz=45.0, degrees=True).translate(*back_pos)
-    recess = rounded_box(0.088, 0.088, 0.040, bevel=0.008, segs=1, name="buckle_recess_back", material="gear_gold").rotate_xyz(rx=-16.0, rz=45.0, degrees=True).translate(*back_pos)
-    boss = superellipsoid(0.036, 0.036, 0.022, e1=0.74, e2=0.74, u_segs=14, v_segs=8, name="buckle_boss_back", material="gear_yellow_plastic").rotate_xyz(rx=-16.0, degrees=True).translate(back_pos[0], back_pos[1], back_pos[2] - 0.018)
-    scene.add("gear_bandolier", [frame, recess, boss])
+        front_sub = pts[pts[:, 2] > 0.16]
+        back_sub = pts[pts[:, 2] < -0.20]
+        front_cross_pts.append(front_sub[int(np.argmin(np.abs(front_sub[:, 0])))])
+        back_cross_pts.append(back_sub[int(np.argmin(np.abs(back_sub[:, 0])))])
+
+        tangents = np.array([_normalize(pts[(i + 1) % n_pts] - pts[(i - 1) % n_pts]) for i in range(n_pts)])
+        surf_n = np.array([_normalize(o - np.dot(o, t) * t) for o, t in zip(out_n, tangents)])
+
+        seg_lens = np.linalg.norm(np.roll(pts, -1, axis=0) - pts, axis=1)
+        cum = np.concatenate([[0.0], np.cumsum(seg_lens)])
+        total = float(cum[-1])
+        count = int(total / 0.076)
+        for k in range(count):
+            s = (k + 0.5) * total / count
+            i = int(np.searchsorted(cum, s, side="right") - 1) % n_pts
+            j = (i + 1) % n_pts
+            f = (s - cum[i]) / max(1e-8, float(seg_lens[i]))
+            p = (1.0 - f) * pts[i] + f * pts[j]
+            # Leave clean room for the front AND rear yellow X-junction clasps.
+            if abs(p[0]) < 0.072 and (p[2] > 0.16 or p[2] < -0.20):
+                continue
+            t = _normalize((1.0 - f) * tangents[i] + f * tangents[j])
+            o = _normalize((1.0 - f) * surf_n[i] + f * surf_n[j])
+            w = _normalize(np.cross(o, t))
+            o = np.cross(t, w)
+            if np.dot(w, np.array([1.0 if p[0] >= 0.0 else -1.0, 0.20, 0.0])) < 0.0:
+                w = -w
+                t = -t
+            scene.add("gear_bandolier", _make_tactical_pouch(p + 0.021 * o, w, o, t, f"x{s_idx}_{k}"))
+
+    # Bold yellow tactical X-junction clasps anchoring the crossed sashes on BOTH front chest & back.
+    front_pos = 0.5 * (front_cross_pts[0] + front_cross_pts[1]) + np.array([0.0, 0.0, +0.020])
+    back_pos = 0.5 * (back_cross_pts[0] + back_cross_pts[1]) + np.array([0.0, 0.0, -0.020])
+    for side_tag, pos, rx_deg, z_sign in (("front", front_pos, 14.0, +1.0), ("back", back_pos, -14.0, -1.0)):
+        frame = rounded_box(0.136, 0.136, 0.036, bevel=0.012, segs=2, name=f"buckle_frame_{side_tag}", material="gear_yellow_plastic").rotate_xyz(rx=rx_deg, rz=45.0, degrees=True).translate(*pos)
+        recess = rounded_box(0.082, 0.082, 0.040, bevel=0.008, segs=1, name=f"buckle_recess_{side_tag}", material="gear_gold").rotate_xyz(rx=rx_deg, rz=45.0, degrees=True).translate(*pos)
+        boss = superellipsoid(0.034, 0.034, 0.020, e1=0.74, e2=0.74, u_segs=14, v_segs=8, name=f"buckle_boss_{side_tag}", material="gear_yellow_plastic").rotate_xyz(rx=rx_deg, degrees=True).translate(pos[0], pos[1], pos[2] + z_sign * 0.018)
+        scene.add("gear_bandolier", [frame, recess, boss])
 
 
 # ---------------------------------------------------------------------------
@@ -1068,6 +1125,8 @@ def build_combat(blink: float = 0.0) -> SceneBuilder:
     # for authentic proportions alongside Worker while preserving every sculpt detail and animation.
     scene.scale_all(0.80)
     scene.ground_to_y(0.0)
+    # Sync all 4 individual grounded legs to Combat's final 0.80x Idle bounce & flex clip!
+    sync_leg_flex_to_clip(scene, "Idle")
     return scene
 
 
