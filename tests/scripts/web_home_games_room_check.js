@@ -79,17 +79,16 @@ const OTHERS = ['Maya', 'Sage'];
     sock.receive(roomMessage([[E, ''], [C, 'Maya'], [E, ''], [E, '']], { you: 1, leader: 1, flags: PRIVATE }));
     check('a guest whose host went and who leads now (the room is private again) has the switch, in the state that the room says', visOf(env).hidden === false && tagOf(env).hidden === true && state(env) === 'true,false');
 }
-{   // the place of the switch: in the heading line on a wide window, under the invitation on a phone
+{   // the place of the switch: the same in every window (web/home/room.css lays the room out, a phone's too): in the heading line, and its line is the first of the room's notes
     const wide = await page({ options: { innerWidth: 1280 } });
     myRoom(wide, ['Maya']);
     const orderWide = wide.root.children.map((c) => c.id || classes(c)[0]);
     const narrow = await page({ options: { innerWidth: 390 } });
     myRoom(narrow, ['Maya']);
     const orderNarrow = narrow.root.children.map((c) => c.id || classes(c)[0]);
-    const at = (order, name) => order.indexOf(name);
-    check('on a phone the switch is placed right before the colors and its line right after it', at(orderNarrow, 'vis') === at(orderNarrow, 'slots') - 2 && at(orderNarrow, 'visnote') === at(orderNarrow, 'slots') - 1, JSON.stringify(orderNarrow));
-    check('on a wide window it is not (it is in the heading line, with its line under the heading)', at(orderWide, 'vis') !== at(orderWide, 'slots') - 2, JSON.stringify(orderWide));
-    check('(there is one switch, one chip and one line, however often the window is laid out again)', [orderWide, orderNarrow].every((o) => o.filter((n) => n === 'vis').length === 1 && o.filter((n) => n === 'vistag').length === 1 && o.filter((n) => n === 'visnote').length === 1));
+    check('the line of the switch is the first of the notes beside the link (#r-notes), on a wide window and on a phone alike', [wide, narrow].every((e) => noteOf(e).parent === e.$('r-notes') && e.$('r-notes').children[0] === noteOf(e)));
+    check('the switch is in the heading line (the one that holds the room\'s name), not among the notes, on a wide window and on a phone alike', [wide, narrow].every((e) => { const h = e.$('room-h'); return visOf(e).parent === (h.parent.parent || h.parent) && visOf(e).parent !== e.$('r-notes'); }));
+    check('(there is one switch, one chip and one line, however often the window is laid out again)', [orderWide, orderNarrow].every((o) => o.filter((n) => n === 'vis').length === 1 && o.filter((n) => n === 'vistag').length === 1) && [wide, narrow].every((e) => e.$('r-notes').children.filter((c) => classes(c).indexOf('visnote') !== -1).length === 1));
 }
 {   // the words: the setting is called "Invite only" (the maintainer's word), and nothing that a person reads about it says "link only" or "private" (web_home_games_check.js holds the same rule for the Games list)
     const RETIRED = /link only|\bprivate\b/i;
@@ -396,7 +395,7 @@ const OTHERS = ['Maya', 'Sage'];
     const sock = guestRoom(env, 'Pebble', PUBLIC);
     env.roomBar('rhome').click();
     tap(env.home('host'));
-    const rbar = env.root.children.filter((c) => classes(c).indexOf('rbar') !== -1)[0];
+    const rbar = env.$('r-acts');
     check('(the card is up, and the bar is inert behind it)', dialogOf(env) !== null && env.home('hbar').hasAttribute('inert'));
     sock.receive(roomMessage(seatsOf(['Pebble', 'Maya']), { you: 1, leader: 0, flags: STARTING }));
     check('START reaches the page: the card is gone, the hand-off goes, and both bars stay inert (the card gives back what it took before the hand-off holds them)', env.assigned.length === 1 && dialogOf(env) === null && env.home('hbar').hasAttribute('inert') && rbar.hasAttribute('inert'));

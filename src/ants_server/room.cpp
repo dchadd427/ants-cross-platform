@@ -17,6 +17,7 @@ namespace ants::server {
 
 namespace {
 constexpr uint32_t kMaxFailedStarts = 5;             // a room whose start is cancelled this many times (a client that cannot load the map, leavers) gives up
+constexpr uint32_t kRelayMarginS = 600;              // a relay credential outlasts the longest that its match can last by this much (the countdowns after a pause, a slow end)
 }  // namespace
 
 const char* room_state_name(RoomState state) noexcept {
@@ -305,11 +306,14 @@ void Room::build_session(uint32_t restart_vote_after_ms, uint32_t start_delay_ms
     hc.attendance.vote_after_ms = spec_.vote_after_ms;
     hc.attendance.restart_vote_after_ms = std::max(restart_vote_after_ms, spec_.vote_after_ms);      // (after a restart: never less than a lost link's time)
     hc.attendance.max_pause_ms = spec_.max_pause_ms;
+    hc.attendance.countdown_hold_ms = spec_.countdown_hold_ms;
     hc.attendance.max_catch_up_ms = spec_.max_catch_up_ms;
     hc.attendance.resume_countdown_ms = spec_.resume_countdown_ms;
     hc.max_log_bytes = spec_.max_log_bytes;
     hc.log_budget = log_budget_;
-    hc.turn = turn_;                                              // protocol 26: the relay's credential for each player who asks (a room made without one gives none)
+    hc.turn = turn_;                                              // protocol 26: the relay's credential for a player of a match of two or more people who asks (a room made without one gives none)
+    // a credential lives as long as the match can: its limit of play, the pauses that its seats may hold (a room that holds no seat has none) and a margin, never longer than the relay's own limit
+    hc.relay_ttl_s = spec_.run_ms / 1000u + (spec_.reconnect ? spec_.max_pause_ms / 1000u : 0u) + kRelayMarginS;
     hc.random_bytes = [](uint8_t* out, size_t n) { return random_bytes(out, n); };
     session_ = std::make_unique<net::HostSession>(*sim_, hc);
     session_->set_on_diverged([this](uint32_t turn, uint8_t differ, uint8_t agree) {       // (the line at the end of the room counts the drops; this one says when, and how many agreed)
@@ -1275,6 +1279,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
     s.resume_countdown_ms = spec_.resume_countdown_ms;
     s.countdown_s = spec_.countdown_s;
     s.solo_countdown_s = spec_.solo_countdown_s;
+    s.countdown_hold_ms = spec_.countdown_hold_ms;
     s.connections = static_cast<uint32_t>(connections_.size());
     const bool stale = !stale_path_.empty() && restart_store_ != nullptr && restart_store_->is_stale(stale_path_);
     s.record_kept = record_ != nullptr || stale;                // (a file that is still there is a record that a restart would use: never "not kept" while it is)
@@ -1307,6 +1312,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
         s.rejoins = a.rejoins();
         s.drops_by_vote = a.drops_by_vote();
         s.drops_by_cap = a.drops_by_cap();
+        s.drops_by_countdown_hold = a.drops_by_countdown_hold();
         s.drops_by_state = session_->diverged_drops();
         s.rejoins_refused = a.rejoins_refused();
         s.catch_up_expired = a.catch_up_expired();

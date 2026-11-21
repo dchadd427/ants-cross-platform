@@ -465,7 +465,8 @@ std::vector<uint8_t> encode(const RoomMsg& m) {
     w.u8(m.flags);
     for (const PlanKind kind : m.plan) w.u8(static_cast<uint8_t>(kind));
     w.u8(m.in_game);
-    w.u8(m.mode);                                                                       // (protocol 17: at the end)
+    w.u8(m.mode);                                                                       // (protocol 17)
+    w.u8(m.ready);                                                                      // (protocol 27: at the end)
     return out;
 }
 bool decode(const uint8_t* data, size_t size, RoomMsg& out) {
@@ -494,6 +495,7 @@ bool decode(const uint8_t* data, size_t size, RoomMsg& out) {
     for (uint8_t& kind : plan) kind = r->u8();
     m.in_game = r->u8();
     m.mode = r->u8();
+    m.ready = r->u8();
     // an empty map name = the host has not chosen a map yet
     if (!r->done() || fog > 1 || !sim::valid_game_mode(m.mode) || (!m.map_name.empty() && !valid_map_name(m.map_name)) || (m.you != 255 && m.you >= sim::MAX_PLAYERS)) return false;
     // the leader: nobody (255), or a seat that a person holds as a guest (a server's room has no host in a seat; a bot, an empty seat or the host of a LAN room never leads)
@@ -511,6 +513,11 @@ bool decode(const uint8_t* data, size_t size, RoomMsg& out) {
         if (m.seat_in_game(static_cast<uint8_t>(seat)) && (!m.lobby() || m.slots[seat].state != SlotState::Client)) return false;
     }
     if ((m.in_game & ~((1u << sim::MAX_PLAYERS) - 1u)) != 0) return false;
+    // protocol 27: a ready mark belongs to a lobby room's person who is a page (not a game: a game needs no Ready) and does not lead
+    if ((m.ready & ~((1u << sim::MAX_PLAYERS) - 1u)) != 0) return false;
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        if (m.seat_ready(seat) && (!m.lobby() || m.slots[seat].state != SlotState::Client || seat == m.leader || m.seat_in_game(seat))) return false;
+    }
     // protocol 20: an empty seat has no name, except the planned bot's in a lobby room (the color's plan is a bot level): then the name is that bot's label ("Pip (bot, Hard)")
     for (size_t seat = 0; seat < m.slots.size(); ++seat) {
         const RoomMsg::Slot& slot = m.slots[seat];
@@ -861,6 +868,19 @@ bool decode(const uint8_t* data, size_t size, VisibilityMsg& out) {
     const uint8_t value = r->u8();
     if (!r->done() || value > 1) return false;                         // exactly the type and 0 or 1
     out.is_public = value == 1;
+    return true;
+}
+
+std::vector<uint8_t> encode(const ReadyMsg& m) {
+    return {static_cast<uint8_t>(MsgType::Ready), static_cast<uint8_t>(m.ready ? 1 : 0)};
+}
+bool decode(const uint8_t* data, size_t size, ReadyMsg& out) {
+    ByteReader storage(nullptr, 0);
+    ByteReader* r = nullptr;
+    if (!open(data, size, MsgType::Ready, r, storage)) return false;
+    const uint8_t value = r->u8();
+    if (!r->done() || value > 1) return false;                         // exactly the type and 0 or 1
+    out.ready = value == 1;
     return true;
 }
 

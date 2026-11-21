@@ -86,6 +86,43 @@ SoloPlayed solo_room_played(uint32_t solo_countdown_s) {
     return out;
 }
 
+// A room of `people` who have all said Hello, whose match has begun (Running, the Begin delivered): the clients are the caller's, `begin` is the moment it began
+struct HeldBegin {
+    uint32_t begin{0};
+};
+
+HeldBegin wait_for_begin(RWorld& w, const char* code) {
+    HeldBegin out;
+    for (int i = 0; i < 600 && out.begin == 0; ++i) {
+        w.run(10);
+        if (w.status(code).state == RoomState::Running) out.begin = w.now;
+    }
+    w.run(300);                                                                       // (the Begin reaches every machine)
+    return out;
+}
+
+// The ticks that both machines ran, and the number of them at which their states are the same (0 when one of them differs anywhere: the caller asks for more than 20)
+size_t agree_on_ticks(const RClient& a, const RClient& b) {
+    size_t same = 0;
+    for (const auto& kv : a.hash_at) {
+        const auto other = b.hash_at.find(kv.first);
+        if (other == b.hash_at.end()) continue;
+        if (other->second != kv.second) return 0;
+        ++same;
+    }
+    return same;
+}
+
+// A room for `players` persons with the countdown of a server's room (30 s), the resume countdown of one (10 s) and `hold_ms` for the countdown hold; the persons give no orders (nothing is done in the wait)
+RoomSpec countdown_hold_spec(const char* code, uint8_t players, uint32_t hold_ms) {
+    RoomSpec spec = held_spec(code, players);
+    spec.countdown_s = net::kMatchCountdownSeconds;
+    spec.solo_countdown_s = net::kSoloCountdownSeconds;
+    spec.resume_countdown_ms = net::kResumeCountdownMs;
+    spec.countdown_hold_ms = hold_ms;
+    return spec;
+}
+
 }  // namespace
 
 void run_countdown_tests() {
@@ -316,5 +353,307 @@ void run_countdown_tests() {
         ASSERT_EQ(r.status, 201);
         ASSERT_EQ(parse(r).get("countdown_seconds").as_int_or(-1), 0);
         ASSERT_EQ(parse(r).get("solo_countdown_seconds").as_int_or(-1), 0);
+    } TEST_END();
+    TEST_CASE("S3.305 Protocol 21, The Countdown Hold Through The Manager: A Seat Lost In The Countdown Is Held At Most countdown_hold_ms (Here 20 s), The Status Says Who Is Missing, Then The Seat Is Dropped (drops_by_countdown_hold), The Resume Countdown Follows And The First Turn Carries The Drop; The Survivor Wins And The Dropped Machine Is Told; A Room With Nobody Else Ends \"everybody left\"; The Vote Goes On Sooner; A Spec With No Hold, And A Match That Plays, Keep The Seat")
+    {
+        {   // two people: Bob is cut 6 s into the countdown and never comes back
+            RWorld w;
+            ASSERT_TRUE(w.mgr.create_room(countdown_hold_spec("CH-1", 2, 20000), w.now).ok);
+            RClient& ann = w.connect("Ann", "CH-1");
+            RClient& bob = w.connect("Bob", "CH-1");
+            ann.orders = bob.orders = false;
+            const HeldBegin b = wait_for_begin(w, "CH-1");
+            ASSERT_TRUE(b.begin != 0);
+            const uint8_t bob_seat = bob.lobby->my_seat();
+            w.run(6000);
+            bob.reconnects = false;
+            w.cut(bob);
+            const uint32_t cut_at = w.now;
+            w.run(1500);
+            RoomStatus s = w.status("CH-1");
+            ASSERT_TRUE(s.state == RoomState::Running && s.paused && s.turns == 0);
+            ASSERT_TRUE(s.absent.size() == 1 && s.absent[0].name == "Bob" && !s.absent[0].catching_up);
+            ASSERT_EQ(s.countdown_hold_ms, 20000u);                                      // the status says what the room holds
+            w.run(17000);                                                                // 18.5 s after the cut: still held
+            s = w.status("CH-1");
+            ASSERT_TRUE(s.paused && s.absent.size() == 1 && s.drops_by_countdown_hold == 0);
+            uint32_t dropped_after_ms = 0;
+            for (int i = 0; i < 400 && dropped_after_ms == 0; ++i) {
+                w.run(10);
+                if (w.status("CH-1").drops_by_countdown_hold > 0) dropped_after_ms = w.now - cut_at;
+            }
+            ASSERT_TRUE(dropped_after_ms >= 20000 && dropped_after_ms <= 20100);        // the hold, to the 10 ms step of the manager
+            s = w.status("CH-1");
+            ASSERT_TRUE(s.drops_by_cap == 0 && s.drops_by_vote == 0 && s.absent.empty() && s.state == RoomState::Running);
+            ASSERT_TRUE(s.paused && s.resume_s > 0 && s.resume_s <= 10);                 // the resume countdown that follows any pause of 3 s or more
+            bob.reconnects = true;                                                       // Bob's machine finds a link: its seat is gone, and it is told so
+            w.run(1500);
+            ASSERT_TRUE(bob.lost && bob.was_rejected && bob.rejected == net::RejectReason::Dropped);
+            uint32_t first_turn_after_ms = 0;
+            for (int i = 0; i < 1500 && first_turn_after_ms == 0; ++i) {
+                w.run(10);
+                if (w.status("CH-1").turns > 0) first_turn_after_ms = w.now - cut_at;
+            }
+            ASSERT_TRUE(first_turn_after_ms >= 20000 + 10000 - 20 && first_turn_after_ms <= 20000 + 10000 + 200);      // the longest that a lost seat can hold the countdown: the hold and the resume countdown
+            w.run(3000);
+            s = w.status("CH-1");
+            ASSERT_TRUE(s.state == RoomState::Finished && s.reason == "the match ended");
+            ASSERT_TRUE(!s.rows.empty() && s.rows[0].name == "Ann" && s.rows[0].winner);        // Ann has won: the drop leaves her alone
+            ASSERT_TRUE(ann.sim.is_player_dropped(bob_seat) && ann.sim.is_match_over());
+        }
+        {   // one person with a computer player: nobody can vote, and nobody is held up either; the seat goes with the hold and the room ends
+            RWorld w;
+            RoomSpec spec = countdown_hold_spec("CH-2", 2, 20000);
+            spec.bots = {ai::BotSpec{1, "standard", ai::Level::Medium}};
+            ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+            RClient& ann = w.connect("Ann", "CH-2");
+            ann.orders = false;
+            ASSERT_TRUE(wait_for_begin(w, "CH-2").begin != 0);
+            w.run(4000);
+            ann.reconnects = false;
+            w.cut(ann);
+            const uint32_t cut_at = w.now;
+            w.run(10000);
+            RoomStatus s = w.status("CH-2");
+            ASSERT_TRUE(s.state == RoomState::Running && s.paused && s.vote_seat == 255 && s.turns == 0);      // held, and no vote to end it
+            uint32_t ended_after_ms = 0;
+            for (int i = 0; i < 1500 && ended_after_ms == 0; ++i) {
+                w.run(10);
+                if (w.status("CH-2").state != RoomState::Running) ended_after_ms = w.now - cut_at;
+            }
+            s = w.status("CH-2");
+            ASSERT_TRUE(s.state == RoomState::Finished && s.reason == "everybody left");
+            ASSERT_TRUE(ended_after_ms >= 20000 && ended_after_ms <= 20100);
+            ASSERT_TRUE(s.drops_by_countdown_hold == 1 && s.drops_by_cap == 0);
+        }
+        {   // a spec with no hold (a spec built by code): the seat is held for the cap, as before, and a vote of the others is the way out
+            RWorld w;
+            ASSERT_TRUE(w.mgr.create_room(countdown_hold_spec("CH-3", 2, 0), w.now).ok);
+            RClient& ann = w.connect("Ann", "CH-3");
+            RClient& bob = w.connect("Bob", "CH-3");
+            ann.orders = bob.orders = false;
+            ASSERT_TRUE(wait_for_begin(w, "CH-3").begin != 0);
+            const uint8_t bob_seat = bob.lobby->my_seat();
+            w.run(6000);
+            bob.reconnects = false;
+            w.cut(bob);
+            w.run(90000);                                                                // far beyond any hold
+            RoomStatus s = w.status("CH-3");
+            ASSERT_TRUE(s.state == RoomState::Running && s.paused && s.drops_by_countdown_hold == 0 && s.absent.size() == 1);
+            ASSERT_TRUE(s.vote_seat == bob_seat && s.voters == 1);
+            ASSERT_TRUE(ann.session->vote(bob_seat, true));
+            w.run(15000);
+            s = w.status("CH-3");
+            ASSERT_TRUE(s.drops_by_vote == 1 && s.drops_by_countdown_hold == 0);
+        }
+        {   // the vote goes on sooner: three people, the hold is the server's own 60 s, and two of them vote 31 s after the cut
+            RWorld w;
+            ASSERT_TRUE(w.mgr.create_room(countdown_hold_spec("CH-4", 3, net::kCountdownHoldMs), w.now).ok);
+            RClient& ann = w.connect("Ann", "CH-4");
+            RClient& bob = w.connect("Bob", "CH-4");
+            RClient& cat = w.connect("Cat", "CH-4");
+            ann.orders = bob.orders = cat.orders = false;
+            ASSERT_TRUE(wait_for_begin(w, "CH-4").begin != 0);
+            const uint8_t cat_seat = cat.lobby->my_seat();
+            w.run(2000);
+            cat.reconnects = false;
+            w.cut(cat);
+            const uint32_t cut_at = w.now;
+            w.run(31000);
+            RoomStatus s = w.status("CH-4");
+            ASSERT_TRUE(s.paused && s.vote_seat == cat_seat && s.voters == 2);
+            ASSERT_TRUE(ann.session->vote(cat_seat, true) && bob.session->vote(cat_seat, true));
+            w.run(500);
+            s = w.status("CH-4");
+            ASSERT_TRUE(s.drops_by_vote == 1 && s.drops_by_countdown_hold == 0 && s.absent.empty());
+            ASSERT_TRUE(w.now - cut_at < net::kCountdownHoldMs);                         // (well before the hold would have dropped the seat)
+            w.run(net::kResumeCountdownMs + 4000);
+            ASSERT_TRUE(w.status("CH-4").turns > 0 && w.status("CH-4").state == RoomState::Running);
+            ASSERT_TRUE(ann.sim.is_player_dropped(cat_seat) && bob.sim.is_player_dropped(cat_seat));
+        }
+        {   // once the match plays the hold does not apply: a seat that is lost after the first turn is held for the cap (and comes back after 35 s)
+            RWorld w;
+            ASSERT_TRUE(w.mgr.create_room(countdown_hold_spec("CH-5", 3, 20000), w.now).ok);
+            RClient& ann = w.connect("Ann", "CH-5");
+            RClient& bob = w.connect("Bob", "CH-5");
+            RClient& cat = w.connect("Cat", "CH-5");
+            ann.orders = bob.orders = cat.orders = false;
+            ASSERT_TRUE(wait_for_begin(w, "CH-5").begin != 0);
+            w.run(net::kMatchCountdownSeconds * 1000u);
+            ASSERT_TRUE(w.until([&]() { return w.status("CH-5").turns > 20; }, 5000));
+            cat.reconnects = false;
+            w.cut(cat);
+            w.run(35000);
+            RoomStatus s = w.status("CH-5");
+            ASSERT_TRUE(s.state == RoomState::Running && s.paused && s.absent.size() == 1 && s.drops_by_countdown_hold == 0);
+            cat.reconnects = true;
+            ASSERT_TRUE(w.until([&]() { return !w.status("CH-5").paused; }, 60000));
+            s = w.status("CH-5");
+            ASSERT_TRUE(s.rejoins == 1 && s.drops_by_countdown_hold == 0 && s.drops_by_cap == 0);
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.306 The Countdown Hold's Setting: 10 s .. 1 h In The Control Interface's \"countdown_hold_seconds\" (Refused Beyond, A Spec Built By Code Says 0: No Hold), The Server's --countdown-hold-seconds In RoomManager::default_spec (60 s), The Status Of One Room Says It And Counts Its Drops, The List Of Rooms Does Not")
+    {
+        ASSERT_EQ(RoomSpec().countdown_hold_ms, 0u);                                    // (a spec and the limits of a manager built by code have none)
+        ASSERT_EQ(ServerLimits().countdown_hold_ms, 0u);
+        ASSERT_EQ(net::kCountdownHoldMs, 60000u);                                       // the product's default: one minute
+        ServerLimits limits;
+        limits.countdown_hold_ms = net::kCountdownHoldMs;
+        RoomManager mgr{MapStore(maps_dir()), limits};
+        ASSERT_EQ(mgr.default_spec().countdown_hold_ms, net::kCountdownHoldMs);        // what the server was started with reaches the rooms that say nothing
+        const auto call = [&](const std::string& body) {
+            ctl::HttpRequest rq;
+            rq.method = "POST";
+            rq.path = "/rooms";
+            rq.body = body;
+            return handle_control(mgr, rq, 5000);
+        };
+        const auto parse = [](const ctl::HttpResponse& r) {
+            ctl::JsonValue v;
+            std::string why;
+            ctl::parse_json(r.body, v, &why);
+            return v;
+        };
+        ctl::HttpResponse r = call(R"({"map":"TINY.LVL","code":"CHS-1"})");
+        ASSERT_EQ(r.status, 201);
+        ASSERT_EQ(parse(r).get("countdown_hold_seconds").as_int_or(-1), 60);
+        ASSERT_EQ(parse(r).get("drops_by_countdown_hold").as_int_or(-1), 0);
+        r = call(R"({"map":"TINY.LVL","code":"CHS-2","countdown_hold_seconds":10})");     // the edges are good
+        ASSERT_EQ(r.status, 201);
+        ASSERT_EQ(parse(r).get("countdown_hold_seconds").as_int_or(-1), 10);
+        r = call(R"({"map":"TINY.LVL","code":"CHS-3","countdown_hold_seconds":3600})");
+        ASSERT_EQ(r.status, 201);
+        ASSERT_EQ(parse(r).get("countdown_hold_seconds").as_int_or(-1), 3600);
+        for (const char* bad : {R"("countdown_hold_seconds":9)", R"("countdown_hold_seconds":3601)", R"("countdown_hold_seconds":0)", R"("countdown_hold_seconds":-1)", R"("countdown_hold_seconds":"60")", R"("countdown_hold_seconds":60.5)", R"("countdown_hold_seconds":true)"}) {
+            r = call(std::string(R"({"map":"TINY.LVL",)") + bad + "}");
+            ASSERT_MSG(r.status == 400, bad);
+            ASSERT_MSG(parse(r).get("error").str() == "\"countdown_hold_seconds\" must be an integer from 10 to 3600", parse(r).get("error").str());
+        }
+        ASSERT_EQ(mgr.room_count(), size_t{3});
+        for (const uint32_t bad_ms : {1000u, 9999u, 3600001u}) {                        // (the manager checks it for every caller, not only the control interface's)
+            RoomSpec bad = spec_of("CHS-4", 2);
+            bad.countdown_hold_ms = bad_ms;
+            const CreateResult refused = mgr.create_room(bad, 5000);
+            ASSERT_TRUE(!refused.ok && refused.http_status == 400 && refused.error == "countdown_hold_seconds must be 10 to 3600");
+        }
+        {   // the list of rooms keeps its size: the setting and its counter are in the status of one room only
+            ctl::HttpRequest lq;
+            lq.method = "GET";
+            lq.path = "/rooms";
+            const ctl::HttpResponse listed = handle_control(mgr, lq, 5000);
+            ASSERT_EQ(listed.status, 200);
+            ASSERT_TRUE(listed.body.find("\"drops_by_cap\"") != std::string::npos && listed.body.find("countdown_hold_seconds") == std::string::npos && listed.body.find("drops_by_countdown_hold") == std::string::npos);
+        }
+        RoomManager plain{MapStore(maps_dir())};                                        // a manager with the library's limits: no hold for a room that does not ask
+        r = handle_control(plain, [&]() { ctl::HttpRequest rq; rq.method = "POST"; rq.path = "/rooms"; rq.body = R"({"map":"TINY.LVL","code":"CHS-5"})"; return rq; }(), 5000);
+        ASSERT_EQ(r.status, 201);
+        ASSERT_EQ(parse(r).get("countdown_hold_seconds").as_int_or(-1), 0);
+    } TEST_END();
+    TEST_CASE("S3.307 Protocol 21, A Soak Of Leave And Rejoin Cycles In The Countdown: 24 Rooms Of Three People In Each Of Which A Seat Is Cut At A Moment Of The Countdown That The Cycle Chooses And Never Comes Back, Comes Back In Time, Comes Back Late, Flaps, Leaves On Purpose, Or Two Seats Are Cut: No Room Is Held Longer Than The Hold And The Resume Countdown, A Seat That Came Back In Time Plays In Step, A Seat That Did Not Is Dropped At The Hold And Told So, The Machines That Stayed Agree With The Referee")
+    {
+        const uint32_t hold_ms = 20000;
+        const uint32_t resume_ms = net::kResumeCountdownMs;
+        size_t by_kind[6] = {0, 0, 0, 0, 0, 0};
+        for (int cycle = 0; cycle < 24; ++cycle) {
+            const int kind = cycle % 6;
+            const std::string code = "SK-" + std::to_string(cycle);
+            RWorld w;
+            ASSERT_TRUE(w.mgr.create_room(countdown_hold_spec(code.c_str(), 3, hold_ms), w.now).ok);
+            RClient* c[3] = {&w.connect("Ann", code), &w.connect("Bob", code), &w.connect("Cat", code)};
+            for (RClient* p : c) {
+                p->orders = false;
+                p->record_hashes = true;
+            }
+            const HeldBegin b = wait_for_begin(w, code.c_str());
+            ASSERT_TRUE(b.begin != 0);
+            const uint32_t cut_in_ms = 1000u + static_cast<uint32_t>(cycle * 4300) % 25000u;       // 1 s .. 26 s into the countdown, a different moment every cycle
+            while (w.now - b.begin < cut_in_ms) w.run(10);
+            RClient& victim = *c[1];
+            const uint8_t victim_seat = victim.lobby->my_seat();
+            bool dropped_by_hold = false;
+            bool back_in_time = false;
+            switch (kind) {
+                case 0:   // never back
+                    victim.reconnects = false;
+                    w.cut(victim);
+                    dropped_by_hold = true;
+                    break;
+                case 1:   // back after 8 s
+                    victim.reconnects = false;
+                    w.cut(victim);
+                    w.run(8000);
+                    victim.reconnects = true;
+                    back_in_time = true;
+                    break;
+                case 2:   // back after the hold and 3 s: too late
+                    victim.reconnects = false;
+                    w.cut(victim);
+                    w.run(hold_ms + 3000);
+                    victim.reconnects = true;
+                    dropped_by_hold = true;
+                    break;
+                case 3:   // flaps: cut, back after 2 s, cut again 4 s after the first cut, back 3 s later
+                    victim.reconnects = false;
+                    w.cut(victim);
+                    w.run(2000);
+                    victim.reconnects = true;
+                    w.run(2000);
+                    victim.reconnects = false;
+                    w.cut(victim);
+                    w.run(3000);
+                    victim.reconnects = true;
+                    back_in_time = true;
+                    break;
+                case 4:   // leaves on purpose: the seat is dropped at once and nobody waits for it, the countdown runs on
+                    ASSERT_TRUE(victim.session != nullptr);
+                    victim.session->leave();
+                    break;
+                default:  // two seats cut, Cat never comes back, Bob does after 5 s
+                    victim.reconnects = false;
+                    c[2]->reconnects = false;
+                    w.cut(victim);
+                    w.cut(*c[2]);
+                    w.run(5000);
+                    victim.reconnects = true;
+                    back_in_time = true;
+                    break;
+            }
+            uint32_t first_turn_at = 0;
+            for (int i = 0; i < 9000 && first_turn_at == 0; ++i) {
+                w.run(10);
+                if (w.status(code).turns > 0) first_turn_at = w.now - b.begin;
+            }
+            ASSERT_MSG(first_turn_at != 0, code);
+            ASSERT_MSG(first_turn_at <= 30000u + hold_ms + resume_ms + 2500u, code + " first turn after " + std::to_string(first_turn_at));      // held up by a seat for at most the hold and the resume countdown
+            if (kind == 4) ASSERT_MSG(first_turn_at >= 29900u && first_turn_at <= 30200u, code + " first turn after " + std::to_string(first_turn_at));      // a leaver holds nobody: the countdown is as long as ever
+            ASSERT_MSG(w.until([&]() { return !w.status(code).paused; }, 20000), code + " is held for good");           // (a seat that flapped lost its link again after the first turn: that pause is the cap's, and ends when the seat is back and its resume countdown is over)
+            w.run(6000);
+            const RoomStatus s = w.status(code);
+            ASSERT_MSG(s.state == RoomState::Running && !s.paused, code + " is still held or over: " + s.reason + " (state " + std::to_string(static_cast<int>(s.state)) + ", paused " + std::to_string(s.paused) + ", absent " + std::to_string(s.absent.size()) + ", resume " + std::to_string(s.resume_s) + ", turns " + std::to_string(s.turns) + ", vote seat " + std::to_string(s.vote_seat) + ", rejoins " + std::to_string(s.rejoins) + ", first turn after " + std::to_string(first_turn_at) + ")");
+            ASSERT_MSG(s.absent.empty(), code);
+            if (kind == 5) {                                                             // Cat's seat was dropped by the hold, Bob came back: the two that stayed run in step
+                ASSERT_MSG(s.drops_by_countdown_hold == 1 && s.rejoins >= 1, code);
+                ASSERT_MSG(c[0]->sim.is_player_dropped(c[2]->lobby->my_seat()) && !c[0]->sim.is_player_dropped(victim_seat), code);
+                ASSERT_MSG(agree_on_ticks(*c[0], victim) > 20, code);
+            } else if (dropped_by_hold) {
+                ASSERT_MSG(s.drops_by_countdown_hold == 1 && s.drops_by_cap == 0 && s.drops_by_vote == 0, code);
+                ASSERT_MSG(c[0]->sim.is_player_dropped(victim_seat) && c[2]->sim.is_player_dropped(victim_seat), code);
+                if (kind == 2) ASSERT_MSG(victim.lost && victim.was_rejected && victim.rejected == net::RejectReason::Dropped, code);      // the machine that came late is told
+            } else if (back_in_time) {
+                ASSERT_MSG(s.drops_by_countdown_hold == 0 && s.rejoins >= 1, code);
+                ASSERT_MSG(!c[0]->sim.is_player_dropped(victim_seat), code);
+            } else {
+                ASSERT_MSG(s.drops_by_countdown_hold == 0, code);
+            }
+            for (RClient* p : c) {
+                if (p->session && !p->lost) ASSERT_MSG(!p->session->desynced(), code);
+            }
+            ASSERT_TRUE(c[0]->session != nullptr && c[0]->sim.current_tick() > 20);
+            if (kind != 5) ASSERT_MSG(agree_on_ticks(*c[0], *c[2]) > 20, code);                               // the machines that stayed agree at every tick that both ran
+            ++by_kind[kind];
+            ASSERT_TRUE(w.mgr.close_room(code, w.now));
+        }
+        for (const size_t n : by_kind) ASSERT_EQ(n, size_t{4});
     } TEST_END();
 }

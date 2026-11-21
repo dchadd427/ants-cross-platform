@@ -931,6 +931,8 @@ A bite takes its unit from the first object of its food tile that still has one,
 
 ## Protocol 26: [`P2P_HINTS.md`](P2P_HINTS.md)
 
+## Protocol 27: [`READY_UP.md`](READY_UP.md)
+
 ## Reconnect (protocol 10): a player whose connection is lost can come back
 
 ### The behaviour that is decided
@@ -941,7 +943,7 @@ A bite takes its unit from the first object of its food tile that still has one,
 
 * **The seat comes back with its key** (issued with the Welcome of the seat, kept by the client: the web page in `localStorage`, the game in a file, release B) and is given the match from the server's turn log, executes it at once without drawing it, reports its state hash, and the server resumes when the hash agrees with its own.
 
-* **The others decide when to stop waiting.** After **30 s away in all** (the seat's total over the match, each loss counting at least 5 s) the connected players may vote "Keep waiting" / "Continue without `name`"; **more than half of the connected players** choosing "Continue" drops the seat (the existing `Drop`, sealed in one turn, the same tick everywhere; with two players the survivor wins, as the engine already does). **A seat that is lost three times within a minute FLAPS and is put to the vote at once, whatever its state** (missing, catching up, or back), with the votes kept across its returns. **There is no automatic drop for a seat's own time**: they wait as long as they want, within a **cap on the match's total paused time** (30 minutes by default, a room setting `max_pause_seconds`, 60 - 86,400; every pause counts at least 5 s, so a connection that flaps reaches it): **the cap is absolute: at the cap every seat that is not present is dropped**, one that is catching up and shows progress too. A key holder has budgets too (below). If every remaining player leaves, the room ends as it does today.
+* **The others decide when to stop waiting.** After **30 s away in all** (the seat's total over the match, each loss counting at least 5 s) the connected players may vote "Keep waiting" / "Continue without `name`"; **more than half of the connected players** choosing "Continue" drops the seat (the existing `Drop`, sealed in one turn, the same tick everywhere; with two players the survivor wins, as the engine already does). **A seat that is lost three times within a minute FLAPS and is put to the vote at once, whatever its state** (missing, catching up, or back), with the votes kept across its returns. **There is no automatic drop for a seat's own time** once the match plays: they wait as long as they want, within a **cap on the match's total paused time** (before the first turn the cap is a minute: [the countdown hold](MATCH_COUNTDOWN.md#how-long-a-seat-can-hold-the-countdown); otherwise 30 minutes by default, a room setting `max_pause_seconds`, 60 - 86,400; every pause counts at least 5 s, so a connection that flaps reaches it): **the cap is absolute: at the cap every seat that is not present is dropped**, one that is catching up and shows progress too. A key holder has budgets too (below). If every remaining player leaves, the room ends as it does today.
 
 ### The messages (protocol 10)
 

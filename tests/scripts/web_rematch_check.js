@@ -118,7 +118,7 @@ function welcome(player, key, flags) { return Uint8Array.from([2, player, 4].con
 function reject(reason) { return Uint8Array.from([3, reason]); }
 function str8(w, s) { w.push(s.length); for (let i = 0; i < s.length; i++) w.push(s.charCodeAt(i)); }
 const E = N.SLOT.Empty, C = N.SLOT.Client;
-// seats: four of [state, name]; o: { you, leader, starting, plan, inGame, platforms }
+// seats: four of [state, name]; o: { you, leader, starting, plan, inGame, platforms, ready }
 function roomBytes(seats, o) {
     o = o || {};
     const w = [12];
@@ -126,7 +126,7 @@ function roomBytes(seats, o) {
     str8(w, 'TREASURE.LVL');
     w.push(0, o.you === undefined ? 0 : o.you, o.leader === undefined ? 0 : o.leader, 255, 255, o.starting ? 7 : 3);
     for (const k of (o.plan || [0, 0, 0, 0])) w.push(k);
-    w.push(o.inGame || 0, 0);
+    w.push(o.inGame || 0, 0, o.ready || 0);
     return Uint8Array.from(w);
 }
 const room = (seats, o) => { const m = N.decode(roomBytes(seats, o)); if (m === null) throw new Error('the check built a Room message that the codec refuses'); return m; };

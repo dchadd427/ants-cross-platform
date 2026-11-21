@@ -201,6 +201,25 @@ class TheCheckIsNotVacuous(unittest.TestCase):
     def test_start_does_not_play_a_map_of_the_players_alone_again(self):
         self.must_fail("web/front/lobby_rules.js", "function startsAlone(model) { return playing(model).length === 1; }", "function startsAlone(model) { return playing(model).length === 1 && !model.mapFile; }")
 
+    # ---- ready up (protocol 27, docs/READY_UP.md): the cards and the line under START; the page's codec and pace have theirs in test_web_lobby_net.py, the rules of the room in tests/data/ready_up_mutants.json
+    def test_start_does_not_wait_for_ready(self):
+        self.must_fail("web/front/lobby_rules.js", "startDisabled: g || busy || !!away || waiting.names.length > 0 || waiting.you,", "startDisabled: g || busy || !!away,")
+
+    def test_the_host_shows_no_ready(self):
+        self.must_fail("web/front/lobby_rules.js", "                    if (s.leader) card.ready = { kind: 'chip', on: true, title: READY.hostReady };\n", "                    if (s.leader) { /* nothing */ }\n")
+
+    def test_a_computer_player_shows_no_ready(self):
+        self.must_fail("web/front/lobby_rules.js", "if (s.kind === 'bot' && !busy) card.ready = { kind: 'chip', on: true, bot: true, title: READY.botReady };", "")
+
+    def test_the_host_has_a_switch_of_their_own(self):
+        self.must_fail("web/front/lobby_rules.js", "                    if (s.leader) card.ready = { kind: 'chip', on: true, title: READY.hostReady };\n", "                    if (s.leader) card.ready = { kind: s.me ? 'button' : 'chip', on: true, title: READY.hostReady };\n")
+
+    def test_a_game_is_asked_for_ready(self):
+        self.must_fail("web/front/lobby_rules.js", "asked: s !== leader && !raw,", "asked: s !== leader,")
+
+    def test_the_marks_show_while_start_waits(self):
+        self.must_fail("web/front/lobby_rules.js", "                if (!busy) {                                                                                                                              // (protocol 27", "                if (true) {                                                                                                                              // (protocol 27")
+
     # ---- the name block that the pages carry (byte for byte the same in both) ----------------------------------------------------------------------------------------------------------------
     def test_the_name_block_of_the_lobby_page_changed(self):
         self.must_fail("web/lobby.html", "'A name has at most '", "'A name can have at most '")

@@ -1186,9 +1186,9 @@ async function codeBox(env) {
     const KEY_ENTRY = 'ants.rejoin.';
     const env = runLobby('', { 'ants.name': 'Maya', 'ants.rejoin.old-room.1': '{"k":"0f1e2d3c4b5a69788796a5b4c3d2e1f0","s":"wss://play.test/ws","t":' + (Date.now() - 600000) + '}' });
     check('before START: the way back to an older match is offered, and the page is waiting in its room', !env.$('rejoin').hidden);
-    const s = env.arrive({ key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']] });
+    const s = env.arrive({ key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { ready: 2 } });
     const code = helloRoom(s.sent[0]);
-    check('with another player in the room START is on, and says START!', env.$('start').disabled === false && env.$('start').textContent === 'START!');
+    check('with another player in the room, who said Ready, START is on, and says START!', env.$('start').disabled === false && env.$('start').textContent === 'START!');
     env.$('start').click();
     check('START asks the room (one StartRequest) and the page goes on waiting: nothing has moved yet', s.sent.length === 2 && s.sent[1][0] === NET0.MSG.StartRequest && env.assigned.length === 0 && Object.keys(env.storage.data).every((k) => k !== KEY_ENTRY + code + '.0'));
     s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
@@ -1233,11 +1233,45 @@ async function codeBox(env) {
     check('a name with < > & goes into that address encoded (a plain value in the query, never markup)', evil.assigned[0] === 'https://play.test/play?map=treasure&name=%3Cb%3Ex%3C%2Fb%3E%26y' && evil.param(evil.assigned[0], 'name') === '<b>x</b>&y', evil.assigned[0]);
 }
 
+// ---- 5.5d ready up (protocol 27, docs/READY_UP.md): a person's own switch on their card, the marks of the others, START that waits for them, and what the page sends
+{
+    const readyBtn = (env, seat) => env.inCard(seat, 'data-ready');
+    const marks = (env) => [0, 1, 2, 3].map((i) => env.card(i).findAll((e) => /\brdy-chip\b/.test(e.className)).map((c) => c.textContent + (/\bno\b/.test(c.className) ? '-' : '+')).join(''));
+    // the host's screen: Sam has not said it
+    const host = runLobby('', { 'ants.name': 'Maya' });
+    const hs = host.arrive({ key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']] });
+    check('the host has no switch of their own, and Sam\'s card says Not ready (the host\'s card says Ready by itself)', !readyBtn(host, 0) && !readyBtn(host, 1) && marks(host).slice(0, 2).join('|') === 'Ready+|Not ready-');
+    check('START is off and the line under it says whose Ready it waits for', host.$('start').disabled === true && host.$('start').textContent === 'START!' && host.$('ready-line').hidden === false && host.$('ready-line').textContent === 'Waiting for Sam to ready up' && !/\bok\b/.test(host.$('ready-line').className));
+    host.$('start').click();
+    check('a press on the START that is off sends nothing', hs.sent.length === 1 && host.assigned.length === 0);
+    hs.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, ready: 2 }));
+    check('Sam says Ready: his card says Ready, START is on and the line says that everybody is', marks(host).slice(0, 2).join('|') === 'Ready+|Ready+' && host.$('start').disabled === false && host.$('ready-line').textContent === 'Everyone is ready.' && /\bok\b/.test(host.$('ready-line').className));
+    hs.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, ready: 2, map: 'ISLANDS.LVL', plan: [0, 0, 1, 0], mode: 1 }));
+    check('the leader changes the map, a color and the game type: the marks stay, START stays on', marks(host).slice(0, 2).join('|') === 'Ready+|Ready+' && host.$('start').disabled === false);
+    const bot = marks(host)[2];
+    check('a computer player (the plan\'s Easy bot in Blue) shows Ready on its card, always', bot === 'Ready+' && host.card(2).findAll((e) => /\brdy-chip\b/.test(e.className) && /\bbot\b/.test(e.className)).length === 1);
+    // a guest's screen
+    const guest = runLobby('?room=k7m2xq', { 'ants.name': 'Sam' });
+    guest.$('name-step-go').click();
+    const gs = guest.arrive({ seat: 1, key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
+    const btn = readyBtn(guest, 1);
+    check('a guest has the switch on their own card: it says Ready up and is not pressed; START says that it waits for the host and the line says "Waiting for you to ready up"', !!btn && btn.textContent === 'Ready up' && btn.getAttribute('aria-pressed') === 'false' && btn.disabled !== true && guest.$('start').disabled === true && guest.$('start').textContent === 'Waiting for Maya' && guest.$('ready-line').textContent === 'Waiting for you to ready up');
+    const before = gs.sent.length;
+    guest.press(btn);
+    check('a press on Ready up sends one Ready (the C++ encoder\'s bytes: type 41, 1), and the card stays as the room last said (the room says the mark back)', gs.sent.length === before + 1 && hex(gs.sent[before]) === '2901' && readyBtn(guest, 1).getAttribute('aria-pressed') === 'false');
+    gs.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0, ready: 2 }));
+    check('the room says it: the switch is pressed and says Ready, the line says that everybody is ready, START is still the host\'s', readyBtn(guest, 1).getAttribute('aria-pressed') === 'true' && readyBtn(guest, 1).textContent === 'Ready' && guest.$('ready-line').textContent === 'Everyone is ready.' && guest.$('start').disabled === true);
+    guest.advance(1300);
+    guest.press(readyBtn(guest, 1));
+    check('a press on the pressed switch takes the mark back (Ready, 0)', hex(gs.sent[gs.sent.length - 1]) === '2900');
+    gs.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0, flags: 7, inGame: 1, ready: 2 }));
+    check('START is pressed: the switch is gone from the card (nothing is asked any more) and the line is empty', !readyBtn(guest, 1) && guest.$('ready-line').hidden === true);
+}
 // ---- 5.5c the rematch (front/rematch.js, docs/PLAY_IN_BROWSER.md "After a match"): the tab comes back from its match with the room's code and the key of its seat (the game page's hand-over in the
 // tab's session storage); the strip "Back from the match." at the top, the colors' words, the note under START, START that the room answers, the host who comes back
 {
     const roomChat = (text) => { const w = [9, 255, 0]; str8(w, text); return Uint8Array.from(w); };
-    const statOf = (env, seat) => { const p = env.card(seat).findAll((e) => /\bpstat\b/.test(e.className))[0]; return p ? [p.textContent, p.className] : null; };
+    const statOf = (env, seat) => { const p = env.card(seat).findAll((e) => /\bpstat\b/.test(e.className))[0]; return p ? [p.children.filter((c) => c.isText).map((c) => c.textContent).join('') || p.textContent, p.className] : null; };       // (the words of the line: the Ready mark in front of them is not one of them)
     const barOf = (env) => env.root.children.find((c) => c.className === 'backbar') || null;
     const handed = (name, w, t) => ({ 'ants.lobby': JSON.stringify({ c: 'k7m2xq', k: hex(KEY), n: name, o: 0 }), 'ants.back': JSON.stringify({ c: 'k7m2xq', t: t === undefined ? Date.now() - 5000 : t, m: 'TREASURE.LVL', p: ['Maya', 'Sam', '', ''], w: w }) });
     const env = runLobby('?room=k7m2xq', { 'ants.name': 'Maya' }, { session: handed('Maya', 'Maya won with 2,040.') });

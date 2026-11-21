@@ -44,6 +44,9 @@
 //   --max-catch-up-seconds N
 //                      the time that one absence may spend catching up in all, over all its attempts: then the catch-up fails, the seat is absent (the vote and the cap apply) and its key
 //                      is refused (10 - 3600, default 300; the control interface's "max_catch_up_seconds")
+//   --countdown-hold-seconds N
+//                      a match that has not begun to play (the countdown) is held at most this long in all for seats that are away: then every seat that is not present is dropped and the match goes on
+//                      without it (10 - 3600, default 60; the control interface's "countdown_hold_seconds")
 //   --resume-countdown-seconds N
 //                      after a pause of 3 s or more the match is held this long before it goes on (0 - 60, default 10, 0 = none; the control interface's "resume_countdown_seconds")
 //   --start-countdown-seconds N
@@ -208,6 +211,7 @@ struct Options {
     long max_pause_s{1800};
     long max_catch_up_s{300};
     long resume_countdown_s{10};
+    long countdown_hold_s{static_cast<long>(ants::net::kCountdownHoldMs / 1000u)};     // --countdown-hold-seconds
     long start_countdown_s{static_cast<long>(ants::net::kMatchCountdownSeconds)};     // --start-countdown-seconds (protocol 21)
     long solo_countdown_s{static_cast<long>(ants::net::kSoloCountdownSeconds)};       // --solo-countdown-seconds (a room of one person)
     long live_delay_s{static_cast<long>(ants::server::LiveBoard::kDefaultDelayS)};    // --live-delay-seconds (the public live door shows a match of two or more people this late)
@@ -249,7 +253,7 @@ void usage(FILE* to) {
                  "                    [--results-dir DIR] [--secret-file PATH] [--max-rooms N] [--community-maps DIR]\n"
                  "                    [--demo-rooms N --demo-map NAME [--demo-maps A.LVL,B.LVL,...] [--demo-lobbies N]]\n"
                  "                    [--reconnect | --no-reconnect] [--hold-vote-seconds 5-3600] [--max-pause-seconds 60-86400]\n"
-                 "                    [--max-catch-up-seconds 10-3600] [--resume-countdown-seconds 0-60] [--start-countdown-seconds 0-60] [--solo-countdown-seconds 0-60] [--live-delay-seconds 0-300] [--log-mb 1-256]\n"
+                 "                    [--max-catch-up-seconds 10-3600] [--resume-countdown-seconds 0-60] [--countdown-hold-seconds 10-3600] [--start-countdown-seconds 0-60] [--solo-countdown-seconds 0-60] [--live-delay-seconds 0-300] [--log-mb 1-256]\n"
                  "                    [--restart-dir DIR | --no-restart-records] [--restart-vote-seconds 30-3600] [--restart-budget-mb 1-4096]\n"
                  "                    [--replays-dir DIR | --no-replays] [--replay-demo] [--replays-days 1-3650] [--replays-max-mb 1-4096]\n"
                  "                    [--replay-port N] [--replay-any-interface] [--bot-match-every-min 0|5-1440] [--db FILE | --no-db] [--no-history]\n"
@@ -434,7 +438,7 @@ int main(int argc, char** argv) {
             o.turn_host = value("--turn-host");
         } else if (a == "--no-restart-records") {
             o.no_restart_records = true;
-        } else if (a == "--hold-vote-seconds" || a == "--max-pause-seconds" || a == "--max-catch-up-seconds" || a == "--resume-countdown-seconds" || a == "--start-countdown-seconds" || a == "--solo-countdown-seconds" || a == "--live-delay-seconds" || a == "--log-mb" || a == "--restart-vote-seconds" ||
+        } else if (a == "--hold-vote-seconds" || a == "--max-pause-seconds" || a == "--max-catch-up-seconds" || a == "--resume-countdown-seconds" || a == "--countdown-hold-seconds" || a == "--start-countdown-seconds" || a == "--solo-countdown-seconds" || a == "--live-delay-seconds" || a == "--log-mb" || a == "--restart-vote-seconds" ||
                    a == "--restart-budget-mb" || a == "--replays-days" || a == "--replays-max-mb") {
             const char* text = value(a.c_str());
             char* end = nullptr;
@@ -445,6 +449,7 @@ int main(int argc, char** argv) {
             else if (a == "--max-pause-seconds") { lo = 60; hi = 86400; target = &o.max_pause_s; }
             else if (a == "--max-catch-up-seconds") { lo = 10; hi = 3600; target = &o.max_catch_up_s; }
             else if (a == "--resume-countdown-seconds") { lo = 0; hi = 60; target = &o.resume_countdown_s; }
+            else if (a == "--countdown-hold-seconds") { lo = 10; hi = 3600; target = &o.countdown_hold_s; }
             else if (a == "--start-countdown-seconds") { lo = 0; hi = 60; target = &o.start_countdown_s; }
             else if (a == "--solo-countdown-seconds") { lo = 0; hi = 60; target = &o.solo_countdown_s; }
             else if (a == "--live-delay-seconds") { lo = 0; hi = static_cast<long>(ants::server::LiveBoard::kMaxDelayS); target = &o.live_delay_s; }
@@ -635,6 +640,7 @@ int main(int argc, char** argv) {
     limits.max_pause_ms = static_cast<uint32_t>(o.max_pause_s * 1000);
     limits.max_catch_up_ms = static_cast<uint32_t>(o.max_catch_up_s * 1000);
     limits.resume_countdown_ms = static_cast<uint32_t>(o.resume_countdown_s * 1000);
+    limits.countdown_hold_ms = static_cast<uint32_t>(o.countdown_hold_s * 1000);
     limits.countdown_s = static_cast<uint32_t>(o.start_countdown_s);
     limits.solo_countdown_s = static_cast<uint32_t>(o.solo_countdown_s);
     limits.live_delay_s = static_cast<uint32_t>(o.live_delay_s);
@@ -944,8 +950,8 @@ int main(int argc, char** argv) {
     }
     if (o.reconnect) {
         log("rooms hold the seat of a player whose connection is lost (the default; --no-reconnect turns it off): a vote after " + std::to_string(o.hold_vote_s) + " s away, the pauses of a match capped at " + std::to_string(o.max_pause_s) +
-            " s, a catch-up of at most " + std::to_string(o.max_catch_up_s) + " s per absence, a resume countdown of " + std::to_string(o.resume_countdown_s) + " s, a turn log of at most " +
-            std::to_string(o.log_mb) + " MiB per room");
+            " s, a match that has not begun to play held at most " + std::to_string(o.countdown_hold_s) + " s for seats that are away (--countdown-hold-seconds), a catch-up of at most " + std::to_string(o.max_catch_up_s) +
+            " s per absence, a resume countdown of " + std::to_string(o.resume_countdown_s) + " s, a turn log of at most " + std::to_string(o.log_mb) + " MiB per room");
     } else {
         log("rooms hold no seats (--no-reconnect): a player whose connection is lost is dropped at once, unless a room's specification says \"reconnect\": true");
     }
@@ -1046,7 +1052,7 @@ int main(int argc, char** argv) {
             if (demo && s.ticks == 0) continue;                    // a public room that nobody completed: no line, no file (a peer chooses these codes, nothing may pile up)
             std::string held;                                      // a room that held seats says what came of it (never a key)
             if (s.reconnect) {
-                held = ", paused " + std::to_string(s.paused_s) + " s, " + std::to_string(s.rejoins) + " back, dropped " + std::to_string(s.drops_by_vote) + " by vote and " + std::to_string(s.drops_by_cap) + " by the cap, " + std::to_string(s.rejoins_refused) +
+                held = ", paused " + std::to_string(s.paused_s) + " s, " + std::to_string(s.rejoins) + " back, dropped " + std::to_string(s.drops_by_vote) + " by vote and " + std::to_string(s.drops_by_cap) + " by the cap, " + std::to_string(s.drops_by_countdown_hold) + " by the countdown hold, " + std::to_string(s.rejoins_refused) +
                        " refused by a budget";
             }
             if (s.drops_by_state > 0) held += ", " + std::to_string(s.drops_by_state) + " dropped for a state that differed from the referee's";

@@ -10,6 +10,7 @@ add_executable(test_server
     test_server_rematch.cpp
     test_server_public.cpp
     test_server_countdown.cpp
+    test_server_relay.cpp
     test_server_online_limit.cpp
 )
 

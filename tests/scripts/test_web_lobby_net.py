@@ -128,7 +128,7 @@ class TheBudgetChecksAreNotVacuous(unittest.TestCase):
     def test_the_list_is_whole(self):
         ids = [m["id"] for m in self.spec["mutants"]]
         self.assertEqual(len(ids), len(set(ids)), "an id twice")
-        for kind in ("move", "plan", "rename", "remove"):
+        for kind in ("move", "plan", "rename", "remove", "ready"):
             for needed in ("at_the_servers_own_bucket", "burst_without_reserve", "rate_without_margin", "rate_a_little_fast", "rate_too_slow", "burst_of_one"):
                 self.assertIn("net_%s_%s" % (kind, needed), ids, "every kind needs the proof of its pace and its margin under the server's: " + kind)
         for needed in ("page_team_press_ignores_the_refusal", "page_team_press_keeps_the_press_that_the_pace_refused"):
@@ -169,7 +169,27 @@ class ThePublicRoomChecksAreNotVacuous(TheBudgetChecksAreNotVacuous):
     def test_the_list_is_whole(self):
         ids = [m["id"] for m in self.spec["mutants"]]
         self.assertEqual(len(ids), len(set(ids)), "an id twice")
-        for needed in ("page_protocol_still_25", "page_public_without_lobby", "page_setpublic_anybody", "page_setpublic_while_starting", "page_setpublic_at_the_servers_bucket", "page_setpublic_burst_without_reserve"):
+        for needed in ("page_protocol_one_behind", "page_public_without_lobby", "page_setpublic_anybody", "page_setpublic_while_starting", "page_setpublic_at_the_servers_bucket", "page_setpublic_burst_without_reserve"):
+            self.assertIn(needed, ids)
+
+
+@unittest.skipUnless(NODE, "node is not installed: the page's side of ready up was NOT run (tests/scripts/web_lobby_net_check.js, web_lobby_client_check.js, web_lobby_rules_check.js, web_name_check.js)")
+class TheReadyChecksAreNotVacuous(TheBudgetChecksAreNotVacuous):
+    """the mutants of ready up in the page (the ones of tests/data/ready_up_mutants.json that change a file of web/: the codec, the page's request and its START that waits, the cards and the line under START, the
+    press; the C++ ones need a build and are run by tools/mutate.py) on a COPY of the files, as the class above does for the paces; the same three tests run on this list."""
+
+    FILES = TheBudgetChecksAreNotVacuous.FILES + ("tests/scripts/web_lobby_net_check.js", "tests/scripts/web_lobby_rules_check.js", "web/home/roomchat.js", "web/home/roomchat.css", "web/home/room.css")
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        with open(os.path.join(REPO, "tests", "data", "ready_up_mutants.json"), encoding="utf-8") as f:
+            cls.spec = {"mutants": [m for m in json.load(f)["mutants"] if m["file"].startswith("web/") and "web_lobby_rules_check" not in m["test"]]}      # (the rules' own are run in test_web_lobby_rules.py)
+
+    def test_the_list_is_whole(self):
+        ids = [m["id"] for m in self.spec["mutants"]]
+        self.assertEqual(len(ids), len(set(ids)), "an id twice")
+        for needed in ("page_host_must_ready", "page_a_game_must_ready", "page_start_ignores_ready", "page_the_leader_may_ready", "page_codec_mark_for_the_leader", "page_press_ready_sends_nothing"):
             self.assertIn(needed, ids)
 
 

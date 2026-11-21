@@ -69,6 +69,7 @@ cleanup() {
     [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2> /dev/null
     for p in $CLIENT_PIDS $VICTIM_PIDS $LEAD_PIDS $FILL_PIDS $PLAN_PIDS $CHAT_PIDS $RC_PIDS $RR_PIDS $RP_PIDS; do kill -CONT "$p" 2> /dev/null; kill "$p" 2> /dev/null; done
     [ -n "$PROXY_PID" ] && kill "$PROXY_PID" 2> /dev/null
+    [ -n "$RH_PROXY_PID" ] && kill "$RH_PROXY_PID" 2> /dev/null
     stop_watchdog
     [ -n "$PORT_SLOT_DIR" ] && rm -rf "$PORT_SLOT_DIR"
     rm -rf "$WORK"
@@ -1150,9 +1151,9 @@ def answer_text(peer):
     m = peer.answer()
     return 'none' if m is None else 'welcome' if m[0] == 2 else 'reject-%d' % m[1]
 def created(m): return m is not None and (m[19] & 2) != 0                          # (the Welcome: type, player, players, the key, the flags)
-def lobby_room(peer):                                                              # the Room message ends with the flags, four plan bytes, the games and the game mode (protocol 17)
+def lobby_room(peer):                                                              # the Room message ends with the flags, four plan bytes, the games, the game mode (protocol 17) and the ready mask (protocol 27)
     m = peer.wait_for((12,), 3.0)
-    return m is not None and (m[-7] & 2) != 0
+    return m is not None and (m[-8] & 2) != 0
 out = {}
 a = Peer('Ada', 'lob00001', 1, LOBBY); wa = welcomed(a)
 out['page_makes_lobby'] = 'yes' if wa is not None and created(wa) and wa[1] == 0 and wa[3:19] != bytes(16) else 'no'
@@ -1194,10 +1195,10 @@ def wait_listed(wanted, secs):
         time.sleep(0.1)
         text = list_text()
     return text
-def sees_public(peer):                                                              # the last Room message that the peer read says public (the flags are 7 bytes from the end: flags, four plans, the games, the mode)
+def sees_public(peer):                                                              # the last Room message that the peer read says public (the flags are 8 bytes from the end: flags, four plans, the games, the mode, the ready mask)
     peer.wait_for((99,), 0.5)
     rooms = [m for m in peer.msgs if m[0] == 12]
-    return bool(rooms) and (rooms[-1][-7] & 8) != 0
+    return bool(rooms) and (rooms[-1][-8] & 8) != 0
 if lobbies()[0] == 200 and wa is not None and wb is not None and wc is not None:                  # (a server with the public door and the lobbies)
     out['list_private'] = list_text()
     b.sock.sendall(frame(bytes([35, 1])))                                               # Bea does not lead: nothing happens
@@ -1527,6 +1528,68 @@ check "the referee's clock runs again (ticks $RC_TC, $RC_TD three seconds later)
 check "the status keeps the counters: the pause lasted about 60 s, nobody came back, one seat dropped by the cap, none by a vote" "$([ "$(rc_field "$RC_CODE" paused_seconds)" -ge 59 ] && [ "$(rc_field "$RC_CODE" paused_seconds)" -le 65 ] && [ "$(rc_field "$RC_CODE" rejoins)" = "0" ] && [ "$(rc_field "$RC_CODE" drops_by_vote)" = "0" ]; echo $?)"
 check "the two clients that stayed saw no error" "$(grep -qiE 'out of sync|failed|error' "$WORK/h1.log" "$WORK/h2.log"; [ $? -ne 0 ]; echo $?)"
 check "the second room's two steady clients saw no error either" "$(grep -qiE 'out of sync|failed|error' "$WORK/s1.log" "$WORK/s2.log"; [ $? -ne 0 ]; echo $?)"
+# the countdown hold: a match that has not begun to play is held for a seat that is away at most the room's "countdown_hold_seconds" (10 s here; the server's own default is 60). A room of
+# two whose countdown is 20 s: Bob's link is cut 3 s in and never comes back, the room is held, drops the seat after 10 s (the counter of its own, not the cap's), waits out the resume
+# countdown, and its first turn carries the Drop: Ann, who stayed, wins. (docs/MATCH_COUNTDOWN.md, "How long a seat can hold the countdown")
+RH_CODE="E2E-HOLD2-$RANDOM"
+RH_PROXY_PORT="$(free_port)"
+python3 "$ROOT/tests/scripts/flaky_proxy.py" "$RH_PROXY_PORT" "$RC_PORT" 3600 > "$WORK/proxy_hold.log" 2>&1 &
+RH_PROXY_PID=$!
+RH_PROXY_UP=1
+for _ in $(seq 1 $((300 * TIME_SCALE))); do
+    if grep -q listening "$WORK/proxy_hold.log" 2> /dev/null; then RH_PROXY_UP=0; break; fi
+    kill -0 "$RH_PROXY_PID" 2> /dev/null || break
+    sleep 0.1
+done
+check "the proxy for the countdown hold's second player is listening" "$RH_PROXY_UP"
+RH_BODY="{\"map\":\"TINY.LVL\",\"players\":2,\"code\":\"$RH_CODE\",\"seed\":7,\"countdown_seconds\":20,\"countdown_hold_seconds\":10}"
+curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "$RH_BODY" "$RC_URL/rooms"
+check "the room says its countdown hold: 10 s" "$([ "$(rc_field "$RH_CODE" countdown_hold_seconds)" = "10" ]; echo $?)"
+"$GAME" --headless --no-lan --name HoldAnn --join "127.0.0.1:$RC_PORT" --room "$RH_CODE" --screenshot "$WORK/ha.png" --frames 4000000 > "$WORK/ha.log" 2>&1 &
+RH_PIDS="$!"
+"$GAME" --headless --no-lan --name HoldBob --join "127.0.0.1:$RH_PROXY_PORT" --room "$RH_CODE" --screenshot "$WORK/hb.png" --frames 4000000 > "$WORK/hb.log" 2>&1 &
+RH_PIDS="$RH_PIDS $!"
+RC_PIDS="$RC_PIDS $RH_PIDS"
+RH_RUNNING=1
+for _ in $(seq 1 $((450 * TIME_SCALE))); do
+    [ "$(rc_field "$RH_CODE" state)" = "running" ] && { RH_RUNNING=0; break; }
+    sleep 0.2
+done
+[ "$RH_RUNNING" = "0" ] || fail_note "countdown hold: the room $RH_CODE was not running after $((90 * TIME_SCALE)) s (state $(rc_field "$RH_CODE" state))"
+check "the room of the countdown hold runs (its two clients joined)" "$RH_RUNNING"
+check "... and it is in its countdown: no turn sealed yet" "$([ "$(rc_field "$RH_CODE" turns)" = "0" ]; echo $?)"
+sleep 3
+kill -USR1 "$RH_PROXY_PID"
+RH_CUT_AT="$(python3 -c 'import time; print(time.time())')"
+RH_PAUSED=1
+for _ in $(seq 1 100); do
+    [ "$(rc_field "$RH_CODE" paused)" = "true" ] && { RH_PAUSED=0; break; }
+    sleep 0.1
+done
+check "cutting Bob's link in the countdown pauses the room" "$RH_PAUSED"
+check "the status names the absent seat (HoldBob) and no turn has been sealed" "$(rc_field "$RH_CODE" absent | python3 -c 'import sys, json; a = json.load(sys.stdin); sys.exit(0 if len(a) == 1 and a[0]["name"] == "HoldBob" and a[0]["state"] == "absent" else 1)'; [ $? -eq 0 ] && [ "$(rc_field "$RH_CODE" turns)" = "0" ]; echo $?)"
+RH_HELD=1
+for _ in $(seq 1 300); do
+    [ "$(rc_field "$RH_CODE" drops_by_countdown_hold)" = "1" ] && { RH_HELD=0; break; }
+    sleep 0.1
+done
+RH_HELD_AFTER="$(python3 -c "import time; print(round(time.time() - $RH_CUT_AT, 1))")"
+check "the countdown hold drops the absent seat ($RH_HELD_AFTER s after the cut)" "$RH_HELD"
+check "... about 10 s after the cut (9 - 14 s), and not by the cap or a vote" "$(python3 -c "import sys; sys.exit(0 if 9 <= $RH_HELD_AFTER <= 14 else 1)" && [ "$(rc_field "$RH_CODE" drops_by_cap)" = "0" ] && [ "$(rc_field "$RH_CODE" drops_by_vote)" = "0" ]; echo $?)"
+RH_OVER=1
+for _ in $(seq 1 300); do
+    [ "$(rc_field "$RH_CODE" state)" = "finished" ] && { RH_OVER=0; break; }
+    sleep 0.2
+done
+RH_OVER_AFTER="$(python3 -c "import time; print(round(time.time() - $RH_CUT_AT, 1))")"
+check "the match goes on without the seat after the resume countdown (8 s here) and ends with the one who stayed ($RH_OVER_AFTER s after the cut)" "$RH_OVER"
+check "... no more than the hold and the resume countdown after the cut (at most 22 s)" "$(python3 -c "print(0 if $RH_OVER_AFTER <= 22 else 1)")"
+check "... the room's reason is the match's end, the winner is HoldAnn" "$([ "$(rc_field "$RH_CODE" reason)" = "the match ended" ] && curl -s -m 3 -H "Authorization: Bearer $SECRET" "$RC_URL/rooms/$RH_CODE" | grep -q '"winner":true'; echo $?)"
+check "the game of the player who stayed saw no error" "$(grep -qiE 'out of sync|failed|error' "$WORK/ha.log"; [ $? -ne 0 ]; echo $?)"
+stop_pids "the clients of the countdown hold" $RH_PIDS
+stop_pids "the proxy of the countdown hold (stopped with SIGTERM)" "$RH_PROXY_PID"
+RH_PROXY_PID=""
+code_of -X DELETE -H "Authorization: Bearer $SECRET" "$RC_URL/rooms/$RH_CODE" > /dev/null
 stop_pids "the clients of the reconnect part (one of them was stopped with SIGSTOP)" $RC_PIDS
 RC_PIDS=""
 code_of -X DELETE -H "Authorization: Bearer $SECRET" "$RC_URL/rooms/$RC_CODE" > /dev/null
