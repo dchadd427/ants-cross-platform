@@ -292,12 +292,12 @@ void run_lobby_ready_tests() {
             const std::vector<size_t> g = pages(room, {"Ann", "Bob"});
             const size_t bob = g[1];
             room.run(500);
-            for (uint32_t i = 0; i < kReadyBurst; ++i) room.guests[bob].client_end->send(encode(ReadyMsg{i % 2 == 0}));      // (true, false, true, false: the budget's whole burst)
-            room.run(10);
-            ASSERT_TRUE(all_show(room, "") && room.host.ready_changes() == kReadyBurst);
-            room.guests[bob].client_end->send(encode(ReadyMsg{true}));                       // (one beyond the burst, in the same instant: dropped)
-            room.run(10);
-            ASSERT_TRUE(all_show(room, "") && room.host.ready_changes() == kReadyBurst);
+            for (uint32_t i = 0; i < kReadyBurst; ++i) room.guests[bob].client_end->send(encode(ReadyMsg{i % 2 == 0}));      // (true, false, true: the budget's whole burst, ending Ready)
+            room.run(100);
+            ASSERT_TRUE(all_show(room, "1") && room.host.ready_changes() == kReadyBurst);
+            room.guests[bob].client_end->send(encode(ReadyMsg{false}));                      // (one beyond the burst, in the same instant: dropped, the mark stays)
+            room.run(100);
+            ASSERT_TRUE(all_show(room, "1") && room.host.ready_changes() == kReadyBurst);
             for (int i = 0; i < 200 && room.guests[bob].lobby->phase() == ClientLobby::Phase::InRoom; ++i) {
                 room.guests[bob].client_end->send(encode(ReadyMsg{true}));
                 room.run(10);

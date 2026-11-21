@@ -454,8 +454,8 @@
   {
    "id": "visibility_not_forgiven",
    "file": "src/ants_net/lobby.cpp",
-   "old": "&g.ignored_removes, &g.ignored_visibility}",
-   "new": "&g.ignored_removes}",
+   "old": "&g.ignored_removes, &g.ignored_visibility, &g.ignored_ready}",
+   "new": "&g.ignored_removes, &g.ignored_ready}",
    "build": [
     "test_lobby"
    ],
@@ -634,8 +634,8 @@
   {
    "id": "idle_visibility_not_activity",
    "file": "include/ants_net/lobby.hpp",
-   "old": "+ start_arms_ + visibility_acts_ + chat_.total())",
-   "new": "+ start_arms_ + chat_.total())",
+   "old": "+ start_arms_ + visibility_acts_ + ready_changes_ + chat_.total())",
+   "new": "+ start_arms_ + ready_changes_ + chat_.total())",
    "build": [
     "test_lobby"
    ],
@@ -797,8 +797,8 @@
   {
    "id": "codec_visibility_value_two",
    "file": "src/ants_net/protocol.cpp",
-   "old": "if (!r->done() || value > 1) return false;",
-   "new": "if (!r->done() || value > 2) return false;",
+   "old": "    if (!open(data, size, MsgType::Visibility, r, storage)) return false;\n    const uint8_t value = r->u8();\n    if (!r->done() || value > 1) return false;",
+   "new": "    if (!open(data, size, MsgType::Visibility, r, storage)) return false;\n    const uint8_t value = r->u8();\n    if (!r->done() || value > 2) return false;",
    "build": [
     "test_lockstep",
     "test_lobby"
@@ -808,8 +808,8 @@
   {
    "id": "codec_visibility_trailing_byte",
    "file": "src/ants_net/protocol.cpp",
-   "old": "if (!r->done() || value > 1) return false;",
-   "new": "if (value > 1) return false;",
+   "old": "    if (!open(data, size, MsgType::Visibility, r, storage)) return false;\n    const uint8_t value = r->u8();\n    if (!r->done() || value > 1) return false;",
+   "new": "    if (!open(data, size, MsgType::Visibility, r, storage)) return false;\n    const uint8_t value = r->u8();\n    if (value > 1) return false;",
    "build": [
     "test_lockstep",
     "test_lobby"
@@ -841,7 +841,7 @@
   {
    "id": "codec_last_type_is_remove",
    "file": "include/ants_net/protocol.hpp",
-   "old": "    Last = Signal\n",
+   "old": "    Last = Ready\n",
    "new": "    Last = Remove\n",
    "build": [
     "test_lockstep",

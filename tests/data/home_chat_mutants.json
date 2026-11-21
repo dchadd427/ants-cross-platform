@@ -1395,17 +1395,10 @@
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "dock_loaded_for_the_room_too",
-   "file": "web/home/home.js",
-   "old": "if (name === 'home') wantDock();",
-   "new": "wantDock();",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
    "id": "dock_never_loaded",
    "file": "web/home/home.js",
-   "old": "if (name === 'home') wantDock();",
-   "new": "",
+   "old": "            wantDock();\n            dockShown();",
+   "new": "            dockShown();",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -1451,24 +1444,24 @@
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "dock_told_it_is_always_home",
+   "id": "dock_hidden_while_the_room_shows",
    "file": "web/home/home.js",
-   "old": "dock.shown(screen === 'home')",
-   "new": "dock.shown(true)",
+   "old": "dock.shown(true)",
+   "new": "dock.shown(screen === 'home')",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "dock_not_told_when_the_screen_changes",
    "file": "web/home/home.js",
-   "old": "if (name === 'home') wantDock();\n            dockShown();",
-   "new": "if (name === 'home') wantDock();",
+   "old": "            wantDock();\n            dockShown();",
+   "new": "            wantDock();",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "dock_told_with_no_guard",
    "file": "web/home/home.js",
-   "old": "try { if (dock) dock.shown(screen === 'home'); } catch (e) { /* the dock is its own */ }",
-   "new": "if (dock) dock.shown(screen === 'home');",
+   "old": "try { if (dock) dock.shown(true); } catch (e) { /* the dock is its own */ }",
+   "new": "if (dock) dock.shown(true);",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {

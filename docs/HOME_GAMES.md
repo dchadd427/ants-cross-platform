@@ -1,6 +1,6 @@
 # Home's games: the Games list, Quick join, Quick host and the public Room
 
-Part of [Home and the Room](HOME_SCREEN.md), the front page's two screens. The chat dock, emoji and voice and the login are in [Home's chat](HOME_CHAT.md).
+Part of [Home and the Room](HOME_SCREEN.md), the front page, with the room inside it (the room takes this list's place while the page shows it). The chat dock, emoji and voice and the login are in [Home's chat](HOME_CHAT.md).
 
 ## Games, Quick join, Quick host and the public Room
 

@@ -95,9 +95,9 @@ class TheLoaderInHome(unittest.TestCase):
         self.assertIn("var CHAT = { script: 'home/chat.js', style: 'home/chat.css' };", self.js)
         self.assertEqual(sorted(set(re.findall(r"home/chat\.\w+", code_of(self.js)))), ["home/chat.css", "home/chat.js"])
 
-    def test_it_waits_for_the_first_paint_and_only_for_home(self):
+    def test_it_waits_for_the_first_paint_and_asks_when_the_first_screen_shows(self):
         self.assertIn("if (typeof win.requestAnimationFrame === 'function') win.requestAnimationFrame(function () { setTimeout(load, 0); }); else setTimeout(load, 0);", self.js, "after the frame that paints, not before")
-        self.assertIn("if (name === 'home') wantDock();", self.js, "a link to a room shows the Room: no chat until Home shows")
+        self.assertIn("sync();\n            wantDock();\n            dockShown();", self.js, "the Room is inside Home: a link to a room has the chat too, when the first screen shows")
         self.assertEqual(self.js.count("wantDock();"), 1, "one call, where a screen is shown")
         self.assertIn("if (asked) return;\n            asked = true;", self.js, "once")
 
@@ -108,7 +108,7 @@ class TheLoaderInHome(unittest.TestCase):
         self.assertIn("css.onload = mountDock;", self.js)
         self.assertIn("js.src = CHAT.script; js.async = true; js.onload = mountDock;", self.js, "async: the script never holds the page")
         self.assertIn("} catch (e) { /* no chat */ }", self.js)
-        self.assertIn("function dockShown() { try { if (dock) dock.shown(screen === 'home'); } catch (e) { /* the dock is its own */ } }", self.js)
+        self.assertIn("function dockShown() { try { if (dock) dock.shown(true); } catch (e) { /* the dock is its own */ } }", self.js)
         self.assertEqual(self.js.count("dockShown();"), 2, "after the mount, and where the screen changes")
 
     def test_it_makes_a_link_and_a_script_and_never_writes_markup(self):
