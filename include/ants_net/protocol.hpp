@@ -567,7 +567,7 @@ struct VisibilityMsg {
 struct ReadyMsg {
     bool ready{false};
 };
-/// Where a guest accepts connections from the other guests (the host fills it from the address it saw and the port the guest announced)
+/// Where a guest accepts connections from the other guests (a host that holds a seat fills it from the address it saw and the port the guest announced; a dedicated server's room fills none)
 struct Endpoint {
     std::string address;
     uint16_t port{0};
@@ -581,7 +581,7 @@ struct StartMsg {
     uint8_t roster{0};            // bit p: seat p takes part
     std::array<std::string, sim::MAX_PLAYERS> names;
     std::array<uint8_t, sim::MAX_PLAYERS> platforms{};   // protocol 15: what each person of the roster runs on (valid_platform), 0 for a seat that is not in the roster, a bot, or a player who did not say
-    std::array<Endpoint, sim::MAX_PLAYERS> endpoints;   // guests: how the other guests reach this seat (host migration); the host's seat is empty
+    std::array<Endpoint, sim::MAX_PLAYERS> endpoints;   // guests: how the other guests reach this seat (host migration); the host's seat is empty, and so is every seat of a dedicated server's room (it has no host that plays)
     uint8_t team_a{kNoTeam};      // protocol 13: the teams the match starts with: both kNoTeam (free for all) or the pair that sim::plan_start_teams accepts for `roster` (the decoder refuses anything else);
     uint8_t team_b{kNoTeam};      // every engine calls sim::apply_start_teams(teams()) right after init() and before its first tick
     uint8_t mode{0};              // protocol 17 (the last byte): the rules of the match, sim::GameMode as a byte (the decoder refuses a byte above sim::kLastGameMode); every engine calls set_game_mode(mode) BEFORE init()

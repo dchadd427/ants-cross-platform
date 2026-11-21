@@ -223,7 +223,10 @@ bool NetGame::join(const std::string& address, uint16_t port, const std::string&
     if (numeric.empty()) return false;
     auto conn = link_maker_ ? link_maker_() : TcpConnection::connect(numeric, port);       // (the tests make the link themselves: set_link_maker_for_test)
     if (!conn) return false;
-    auto peer_listener = TcpListener::listen(0, false);                 // where the other guests reach us during the match (host migration)
+    // Where the other guests reach us during the match: only a room on a local network (or a direct host, which has no room code) has a use for it, because there a guest takes over from a host that
+    // plays (host migration). A server's room has a code, the server relays everything and takes over from nobody: no listener is opened and no port is announced.
+    std::unique_ptr<TcpListener> peer_listener;
+    if (room.empty()) peer_listener = TcpListener::listen(0, false);
     const uint16_t peer_port = peer_listener ? peer_listener->port() : uint16_t{0};
     target_ = JoinTarget{address, numeric, port, std::string(), name, want_seat, room, token};        // (the way back of a server's room makes its links from this)
     begin_client(std::move(conn), peer_port, key);

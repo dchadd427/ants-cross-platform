@@ -2054,6 +2054,55 @@ void run_way_back_tests() {
         ASSERT_EQ(looks, 5u);
         ASSERT_TRUE(w.status("RJ-LIVE").state == RoomState::Running && w.status("RJ-LIVE").rejoins == 1);
     } TEST_END();
+
+    TEST_CASE("RJ1.30 A Game That Plays Through A Server Keeps No Door Open For The Other Players And Tells The Server No Port (The Server Relays Everything): Neither Machine Has A Port For Guests, The Start Of Each Names Nobody, A Machine From Nothing Is Given A Start That Names Nobody Either; A Game On The Local Network Still Opens One And The Host Names It To The Others (The Links Of Host Migration)") {
+        const auto names_nobody = [](const NetGame& n) {
+            for (const net::Endpoint& e : n.start_info().endpoints) {
+                if (!e.address.empty() || e.port != 0) return false;
+            }
+            return true;
+        };
+        {   // a server's room
+            World w("rj-noaddr");
+            ASSERT_TRUE(w.server.start(w.now));
+            ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-30"), w.server_now()).ok);
+            Machine& a = w.join("Ann", "RJ-30");
+            Machine& b = w.join("Bob", "RJ-30");
+            ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}); }, 12000 + kPre));
+            ASSERT_TRUE(a.net.peer_port() == 0 && b.net.peer_port() == 0);
+            ASSERT_TRUE(names_nobody(a.net) && names_nobody(b.net));
+            ASSERT_EQ(a.net.start_info().roster, 0x03);
+            w.run(2000);
+            const uint8_t seat = b.net.my_seat();
+            const net::SeatKey key = w.server.read_record("RJ-30").head.keys[seat];
+            ASSERT_FALSE(net::key_is_zero(key));
+            w.machines.erase(w.machines.begin() + 1);                                    // Bob's game is gone: its links with it
+            ASSERT_TRUE(w.run_until([&]() { return w.status("RJ-30").paused; }, 3000));
+            Machine& b2 = w.add_machine("Bob");                                          // a game that starts from nothing but the key
+            ASSERT_TRUE(b2.net.join("127.0.0.1", w.server.port(), "Bob", seat, "RJ-30", "", key));
+            ASSERT_TRUE(w.run_until([&]() { return b2.net.phase() == NetGame::Phase::Playing && !w.status("RJ-30").paused; }, 30000));
+            ASSERT_EQ(b2.count(NetGame::Event::Type::StartRequested), size_t{1});         // (it was given the Start)
+            ASSERT_EQ(b2.net.start_info().roster, 0x03);
+            ASSERT_EQ(b2.net.peer_port(), 0);
+            ASSERT_TRUE(names_nobody(b2.net));
+        }
+        {   // a room on the local network: the guest keeps its door open and the host passes the port on
+            World w;
+            Machine& host = w.add_machine("Alice");
+            ASSERT_TRUE(host.net.host(0, "Alice", true));
+            host.net.set_map("TINY.LVL");
+            Machine& guest = w.add_machine("Bob");
+            ASSERT_TRUE(guest.net.join("127.0.0.1", host.net.listen_port(), "Bob"));
+            ASSERT_TRUE(w.run_until([&]() { return host.net.can_start(); }, 8000));
+            ASSERT_TRUE(guest.net.peer_port() != 0);
+            uint64_t hash = 0;
+            ASSERT_TRUE(net::hash_file(maps_dir() + "TINY.LVL", hash));
+            ASSERT_TRUE(host.net.start_match(8, hash));
+            ASSERT_TRUE(w.run_until([&]() { return w.running({&host, &guest}); }, 12000 + kPre));
+            ASSERT_TRUE((host.net.start_info().endpoints[1] == net::Endpoint{"127.0.0.1", guest.net.peer_port()}));
+            ASSERT_TRUE((guest.net.start_info().endpoints[1] == host.net.start_info().endpoints[1]));
+        }
+    } TEST_END();
 }
 
 int main() {

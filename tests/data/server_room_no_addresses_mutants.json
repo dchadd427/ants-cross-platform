@@ -1,0 +1,131 @@
+{
+ "note": "Mutants of what a dedicated server's room says about where its players can be reached, for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): a server's room sends no address or port of any player (the Start of the lobby, the Start that a machine from nothing is given, the Start in a restart record), a game that plays through a server opens no listener for the other players, and a game on the local network still opens one and is named to the others. Against test_lobby (N4.5c), test_server (S3.99 for the Start of a room's machines and the record, S3.99b for every message that the server sends), test_rejoin (RJ1.30) and test_netgame (N3.9, host migration). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/server_room_no_addresses_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "start_names_the_guests_of_every_room_lobby",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "const bool guests_link = cfg_.host_seat < sim::MAX_PLAYERS;",
+   "new": "const bool guests_link = true;",
+   "build": "test_lobby",
+   "test": "ANTS_TEST_FILTER=N4.5c timeout 600 ./build/tests/test_net/test_lobby",
+   "expect": "N4.5c"
+  },
+  {
+   "id": "start_names_the_guests_of_every_room_server_start",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "const bool guests_link = cfg_.host_seat < sim::MAX_PLAYERS;",
+   "new": "const bool guests_link = true;",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER='S3.99 A Server' timeout 900 ./build/tests/test_server/test_server",
+   "expect": "S3.99 A Server"
+  },
+  {
+   "id": "start_names_the_guests_of_every_room_server_messages",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "const bool guests_link = cfg_.host_seat < sim::MAX_PLAYERS;",
+   "new": "const bool guests_link = true;",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.99b timeout 900 ./build/tests/test_server/test_server",
+   "expect": "S3.99b"
+  },
+  {
+   "id": "start_names_the_guests_of_no_room_lobby",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "const bool guests_link = cfg_.host_seat < sim::MAX_PLAYERS;",
+   "new": "const bool guests_link = false;",
+   "build": "test_lobby",
+   "test": "ANTS_TEST_FILTER=N4.5c timeout 600 ./build/tests/test_net/test_lobby",
+   "expect": "N4.5c"
+  },
+  {
+   "id": "start_names_the_guests_of_no_room_lan_game",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "const bool guests_link = cfg_.host_seat < sim::MAX_PLAYERS;",
+   "new": "const bool guests_link = false;",
+   "build": "test_netgame",
+   "test": "ANTS_TEST_FILTER=\"N3.9 Host Migration\" timeout 600 ./build/tests/test_net/test_netgame",
+   "expect": "N3.9"
+  },
+  {
+   "id": "game_opens_a_listener_for_a_server_room_too",
+   "file": "src/ants_net/netgame.cpp",
+   "old": "if (room.empty()) peer_listener = TcpListener::listen(0, false);",
+   "new": "peer_listener = TcpListener::listen(0, false);",
+   "build": "test_rejoin",
+   "test": "ANTS_TEST_FILTER=RJ1.30 timeout 900 ./build/tests/test_server/test_rejoin",
+   "expect": "RJ1.30"
+  },
+  {
+   "id": "game_opens_a_listener_only_for_a_server_room",
+   "file": "src/ants_net/netgame.cpp",
+   "old": "if (room.empty()) peer_listener = TcpListener::listen(0, false);",
+   "new": "if (!room.empty()) peer_listener = TcpListener::listen(0, false);",
+   "build": "test_rejoin",
+   "test": "ANTS_TEST_FILTER=RJ1.30 timeout 900 ./build/tests/test_server/test_rejoin",
+   "expect": "RJ1.30"
+  },
+  {
+   "id": "game_opens_no_listener_on_the_local_network",
+   "file": "src/ants_net/netgame.cpp",
+   "old": "if (room.empty()) peer_listener = TcpListener::listen(0, false);",
+   "new": "if (false) peer_listener = TcpListener::listen(0, false);",
+   "build": "test_netgame",
+   "test": "ANTS_TEST_FILTER=\"N3.9 Host Migration\" timeout 600 ./build/tests/test_net/test_netgame",
+   "expect": "N3.9"
+  },
+  {
+   "id": "the_start_of_a_way_back_names_a_machine_start",
+   "file": "src/ants_net/session.cpp",
+   "old": "conn->send(encode(rejoin_start_));",
+   "new": "{ StartMsg named = rejoin_start_; named.endpoints[0] = Endpoint{\"198.51.100.9\", 4000}; conn->send(encode(named)); }",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER='S3.99 A Server' timeout 900 ./build/tests/test_server/test_server",
+   "expect": "S3.99 A Server"
+  },
+  {
+   "id": "the_start_of_a_way_back_names_a_machine_messages",
+   "file": "src/ants_net/session.cpp",
+   "old": "conn->send(encode(rejoin_start_));",
+   "new": "{ StartMsg named = rejoin_start_; named.endpoints[0] = Endpoint{\"198.51.100.9\", 4000}; conn->send(encode(named)); }",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.99b timeout 900 ./build/tests/test_server/test_server",
+   "expect": "S3.99b"
+  },
+  {
+   "id": "the_start_of_a_way_back_names_a_machine_native",
+   "file": "src/ants_net/session.cpp",
+   "old": "conn->send(encode(rejoin_start_));",
+   "new": "{ StartMsg named = rejoin_start_; named.endpoints[0] = Endpoint{\"198.51.100.9\", 4000}; conn->send(encode(named)); }",
+   "build": "test_rejoin",
+   "test": "ANTS_TEST_FILTER=RJ1.30 timeout 900 ./build/tests/test_server/test_rejoin",
+   "expect": "RJ1.30"
+  },
+  {
+   "id": "the_start_in_a_record_names_a_machine_start",
+   "file": "src/ants_server/room.cpp",
+   "old": "h.start = lobby_.start_info();",
+   "new": "h.start = lobby_.start_info();\n    h.start.endpoints[0] = net::Endpoint{\"198.51.100.9\", 4000};",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER='S3.99 A Server' timeout 900 ./build/tests/test_server/test_server",
+   "expect": "S3.99 A Server"
+  },
+  {
+   "id": "the_start_in_a_record_names_a_machine_messages",
+   "file": "src/ants_server/room.cpp",
+   "old": "h.start = lobby_.start_info();",
+   "new": "h.start = lobby_.start_info();\n    h.start.endpoints[0] = net::Endpoint{\"198.51.100.9\", 4000};",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.99b timeout 900 ./build/tests/test_server/test_server",
+   "expect": "S3.99b"
+  },
+  {
+   "id": "a_name_in_the_room_carries_the_address",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "room_.slots[seat].name = human_name(hello.name, \"Player \" + std::to_string(static_cast<unsigned>(seat) + 1u));",
+   "new": "room_.slots[seat].name = human_name(hello.name + p.address, \"Player \" + std::to_string(static_cast<unsigned>(seat) + 1u));",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.99b timeout 900 ./build/tests/test_server/test_server",
+   "expect": "S3.99b"
+  }
+ ]
+}
