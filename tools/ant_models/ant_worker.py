@@ -174,22 +174,24 @@ def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
             new_head.append(p)
     scene.nodes["head"] = new_head
 
-    # Symmetric matched eyes & concentric Blink eyelids (`eye_scale=1.08`, `aspect=1.05` on BOTH sides):
-    # flatten sclera Z depth (`0.78x`, sleeker profile) and place enlarged `1.24x` conformal pupils
-    # at the exact same lower-half baseline (`gaze_rx=+0.13`, `gaze_ry=0.0` — zero cross-eye!).
+    # Asymmetric `ORIG agst301` eyes on the wide cranium: viewer-left (`-X`, `right`, 7x6 px) is
+    # ~1.32x taller than viewer-right (`+X`, `left`, 5x7 px) at virtually the same width, lifted
+    # `+0.010` so both eyes share a level lower baseline (`y=18`) with ZERO cross-eye (`gaze_ry=0.0`)!
     z_flat = 0.78
+    eye_dy_right = 0.010
     eye_specs = {
-        "left": (1.08, 1.05, +0.15, +0.13, 0.0),
-        "right": (1.08, 1.05, -0.15, +0.13, 0.0),
+        "left": (1.05, 0.94, +0.15, +0.13, 0.0, 1.24),
+        "right": (1.03, 1.28, -0.15, +0.11, 0.0, 1.28),
     }
     if "eyes" in scene.nodes:
         new_eyes = []
         for p in scene.get_node("eyes"):
             tag = "left" if p.name.endswith("_left") else ("right" if p.name.endswith("_right") else "")
             sx = +eye_out if tag == "left" else (-eye_out if tag == "right" else 0.0)
+            sy = eye_dy_right if tag == "right" else 0.0
             if tag:
                 ec = anchors[f"eye_{tag}"]
-                s_e, a_e, yaw_e, gaze_rx, gaze_ry = eye_specs[tag]
+                s_e, a_e, yaw_e, gaze_rx, gaze_ry, p_scale = eye_specs[tag]
                 rx_s, ry_s, rz_s = 0.0678 * s_e, 0.0710 * s_e * a_e, 0.0646 * s_e
                 if p.name.startswith(("sclera_", "eye_socket_rim_")):
                     p = (
@@ -211,7 +213,7 @@ def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
                         .scale(1.0 / rx_s, 1.0 / ry_s, 1.0 / rz_s)
                     )
                     if not p.name.startswith("catchlight_"):
-                        part = part.scale(1.24, 1.24, 1.03)
+                        part = part.scale(p_scale, p_scale, 1.03)
                     else:
                         part = part.scale(1.0, 1.0, 1.02)
                     p = (
@@ -221,18 +223,18 @@ def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
                         .rotate_xyz(ry=+yaw_e)
                         .translate(ec[0], ec[1], ec[2])
                     )
-            new_eyes.append(p.translate(sx, 0.0, face_dz))
+            new_eyes.append(p.translate(sx, sy, face_dz))
         scene.nodes["eyes"] = new_eyes
-    for node_name, sx in (("eyelid_left", +eye_out), ("eyelid_right", -eye_out)):
+    for node_name, sx, sy in (("eyelid_left", +eye_out, 0.0), ("eyelid_right", -eye_out, eye_dy_right)):
         if node_name in scene.nodes:
-            # Match symmetric eyelids cleanly to the flatter `0.78x` sclera while keeping full Blink=1.0 seal!
+            # Match eyelids cleanly to the flatter `0.78x` sclera while keeping full Blink=1.0 seal!
             scene.nodes[node_name] = [p.scale(1.0, 1.0, 0.92) for p in scene.get_node(node_name)]
         xf = scene.get_node_transform(node_name)
         if xf is not None:
             tx, ty, tz = xf.translation
             scene.set_node_transform(
                 node_name,
-                translation=(tx + sx, ty, tz + face_dz),
+                translation=(tx + sx, ty + sy, tz + face_dz),
                 rotation=xf.rotation,
                 scale=xf.scale,
             )
@@ -553,10 +555,10 @@ def build_worker(blink: float = 0.0) -> SceneBuilder:
         head_tilt_deg=2.0,
         head_yaw_deg=0.0,
         eye_look=(0.0, 0.0),
-        eye_scale_left=1.08,
-        eye_scale_right=1.08,
-        eye_aspect_left=1.05,
-        eye_aspect_right=1.05,
+        eye_scale_left=1.05,
+        eye_scale_right=1.03,
+        eye_aspect_left=0.94,
+        eye_aspect_right=1.28,
         antenna_asymmetry=0.18,
         stance_asymmetry=0.35,
         leg_style="worker",
