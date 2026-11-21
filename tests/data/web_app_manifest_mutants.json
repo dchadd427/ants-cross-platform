@@ -95,21 +95,21 @@
   {
    "id": "icon_file_not_there",
    "file": "web/manifest.webmanifest",
-   "old": "/app/icon-512.png?v=58a2f181",
-   "new": "/app/icon-513.png?v=58a2f181",
+   "old": "/app/icon-512.png?v=940d4e6a",
+   "new": "/app/icon-513.png?v=940d4e6a",
    "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
   },
   {
    "id": "icon_digits_stale",
    "file": "web/manifest.webmanifest",
-   "old": "/app/icon-512.png?v=58a2f181",
+   "old": "/app/icon-512.png?v=940d4e6a",
    "new": "/app/icon-512.png?v=00000000",
    "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
   },
   {
    "id": "icon_192_dropped",
    "file": "web/manifest.webmanifest",
-   "old": "    {\"src\": \"/app/icon-192.png?v=646fc7cf\", \"sizes\": \"192x192\", \"type\": \"image/png\", \"purpose\": \"any\"},\n",
+   "old": "    {\"src\": \"/app/icon-192.png?v=6c84ccc4\", \"sizes\": \"192x192\", \"type\": \"image/png\", \"purpose\": \"any\"},\n",
    "new": "",
    "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
   },
@@ -144,7 +144,7 @@
   {
    "id": "icons_budget_too_small",
    "file": "tools/size_limits.py",
-   "old": "APP_ICONS_BUDGET = 4_700",
+   "old": "APP_ICONS_BUDGET = 6_500",
    "new": "APP_ICONS_BUDGET = 3_000",
    "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
   },
@@ -242,29 +242,29 @@
   {
    "id": "favicon_digits_stale",
    "file": "web/lobby.html",
-   "old": "/favicon.png?v=f34bea03",
+   "old": "/favicon.png?v=9ea2152a",
    "new": "/favicon.png?v=f34bea04",
    "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
   },
   {
    "id": "favicon_link_without_digits",
    "file": "web/match.html",
-   "old": "/favicon.ico?v=e2d196f0",
+   "old": "/favicon.ico?v=67dc022d",
    "new": "/favicon.ico",
    "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
   },
   {
    "id": "favicon_budget_too_small",
    "file": "tools/size_limits.py",
-   "old": "FAVICON_BUDGET = 1_650",
+   "old": "FAVICON_BUDGET = 2_300",
    "new": "FAVICON_BUDGET = 900",
    "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
   },
   {
    "id": "icon_tool_color_changed",
    "file": "tools/make_app_icons.py",
-   "old": "\"W\": (0xFB, 0xFF, 0xF7)",
-   "new": "\"W\": (0xFB, 0xFF, 0xF6)",
+   "old": "\"W\": (0xFF, 0xFF, 0xFF)",
+   "new": "\"W\": (0xFF, 0xFF, 0xFE)",
    "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
   }
  ]

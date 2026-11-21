@@ -154,7 +154,7 @@ class TheManifest(unittest.TestCase):
         self.assertTrue({"192x192", "512x512"} <= plain)
         masked = [i for i in icons if "maskable" in i.get("purpose", "")]
         self.assertEqual(len(masked), 1)
-        self.assertEqual(masked[0]["purpose"], "maskable")                           # (not "any maskable": the plain icon has corners and a frame, the maskable one is orange to every edge)
+        self.assertEqual(masked[0]["purpose"], "maskable")                           # (not "any maskable": the plain icon has rounded corners, the maskable one is the dark tile to every edge)
         self.assertEqual(masked[0]["sizes"], "512x512")
         self.assertEqual(masked[0]["src"].split("?")[0], "/app/icon-maskable-512.png")
 
@@ -209,14 +209,14 @@ FAVICON_LINKS = re.compile(r'<link rel="(?:shortcut )?icon"[^>]*href="(/favicon\
 
 
 class TheFavicon(unittest.TestCase):
-    def test_the_tab_icon_is_a_32_pixel_png_with_transparency_and_an_ico_of_three_sizes(self):
+    def test_the_tab_icon_is_a_32_pixel_png_with_transparency_and_an_ico_of_the_original_size_and_its_double(self):
         width, height, transparent = png("web/favicon.png")
         self.assertEqual((width, height, transparent), (32, 32, True))
         ico = raw("web", "favicon.ico")
         reserved, kind, count = struct.unpack("<HHH", ico[:6])
         self.assertEqual((reserved, kind), (0, 1))
         sizes = sorted((ico[6 + 16 * i] or 256) for i in range(count))
-        self.assertEqual(sizes, [16, 32, 48])
+        self.assertEqual(sizes, [32, 64])                                          # (the original's icon has only 32 x 32; 64 is it at 2 px a cell, and a 16 would not be a whole-number zoom)
 
     def test_every_page_with_a_tab_icon_links_it_with_the_digits_of_its_file_and_names_no_other_file(self):
         pages = {name: read(*name.split("/")) for name in PAGES + ["web/admin.html"]}
