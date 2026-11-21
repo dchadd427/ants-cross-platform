@@ -139,24 +139,25 @@ def _subdivided_rounded_box(
 
 
 def _brim_radial_and_y(theta: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Compute Option 3 traditional swept firefighter brim: flatter front/sides with gentle side curl & rear neck-guard."""
+    """Compute Option 3 traditional swept firefighter brim: wider upturned sides & plump rounded-oval rear tail."""
     cos_t = np.cos(theta)
     sin_t = np.sin(theta)
     front_w = np.clip(cos_t, 0.0, 1.0) ** 1.35
     side_w = sin_t * sin_t
-    # Strictly zero across front & sides (cos_t >= 0) so the angled rear neck-guard never pulls the
-    # side brims downward; smoothly ramps C^1 into the traditional firefighter rear neck-guard.
-    rear_w = np.clip(-cos_t, 0.0, 1.0) ** 1.45
+    # Broad flat-topped C^1 rear lobe `s^2 * (2 - s^2)` (strictly zero across front & sides so the rear
+    # neck-guard never pulls side brims down, and broadly plump across theta=135..225 deg so `701 N`
+    # forms a smooth rounded firefighter U-oval matching `afst701` instead of a pointy V-beak!).
+    s_rear = np.clip(-cos_t, 0.0, 1.0)
+    rear_w = (s_rear * s_rear) * (2.0 - s_rear * s_rear)
 
-    # Snug front visor + crisp flat side flare sweeping cleanly into the angled rear neck-guard (Z_min ~ -0.31).
-    x_flare = 0.24 * front_w + 0.26 * side_w + 0.27 * rear_w
-    z_flare = 0.30 * front_w + 0.16 * side_w + 0.48 * rear_w
-    y_shift = -0.004 * front_w + 0.012 * side_w * (1.0 - 0.80 * rear_w) - 0.102 * rear_w
+    x_flare = 0.24 * front_w + 0.37 * side_w + 0.25 * rear_w
+    z_flare = 0.30 * front_w + 0.16 * side_w + 0.60 * rear_w
+    y_shift = -0.004 * front_w + 0.014 * side_w * (1.0 - 0.80 * rear_w) - 0.124 * rear_w
     return x_flare, z_flare, y_shift
 
 
 def _helmet_shell_deform_bounds(pos: np.ndarray, y_min: float, y_max: float) -> np.ndarray:
-    """Apply Option 3 deeply-fluted vintage ribbed dome + flatter brim with subtle upward side-edge curl."""
+    """Apply Option 3 deeply-fluted vintage ribbed dome + upturned side brims & plump oval rear neck-guard."""
     p = pos.copy()
     x, y, z = p[:, 0], p[:, 1], p[:, 2]
 
@@ -181,13 +182,14 @@ def _helmet_shell_deform_bounds(pos: np.ndarray, y_min: float, y_max: float) -> 
     p[:, 0] = x * flute_scale * (1.0 + brim * x_flare)
     p[:, 2] = z * flute_scale * (1.0 + brim * z_flare)
 
-    rear_w = np.clip(-cos_t, 0.0, 1.0) ** 1.45
-    flatten_lift = 0.036 * (1.0 - 0.55 * rear_w) * (brim_t ** 1.35)
+    s_rear = np.clip(-cos_t, 0.0, 1.0)
+    rear_w = (s_rear * s_rear) * (2.0 - s_rear * s_rear)
+    flatten_lift = 0.036 * (1.0 - 0.65 * rear_w) * (brim_t ** 1.35)
     edge_mask = np.clip(1.0 - h / 0.07, 0.0, 1.0) ** 2.0
     front_lip_curl = 0.004 * np.clip(cos_t, 0.0, 1.0) * edge_mask
-    # Crisp, tasteful upward turn-up along the outer left & right side edges matching afst301.
-    side_edge_mask = np.clip(1.0 - h / 0.11, 0.0, 1.0) ** 2.0
-    side_curl = 0.024 * (sin_t * sin_t) * (1.0 - 0.85 * rear_w) * side_edge_mask
+    # Crisp, tasteful upward tilt along the outer left & right side brims matching afst301.
+    side_edge_mask = np.clip(1.0 - h / 0.15, 0.0, 1.0) ** 1.75
+    side_curl = 0.045 * (sin_t * sin_t) * (1.0 - 0.85 * rear_w) * side_edge_mask
     # Subtle vintage flute relief along dome height too so top ridges pop under overhead 45 deg lighting.
     flute_y = 0.010 * flute_mask * (lobe - 0.5)
     p[:, 1] = y + flatten_lift + brim * y_shift + front_lip_curl + side_curl + flute_y
@@ -395,11 +397,11 @@ def _build_fire_helmet(
     # (`p_out[:u_segs]`, `p_in[:u_segs]`, `p_lip` -> max_outside <= 5 mm proud, 0.000 mm drift!).
     n_out = (len(dome.positions) - u_segs) // 2
     rim_mid = 0.5 * (dome.positions[:u_segs] + dome.positions[n_out : n_out + u_segs])
-    rim_center = 0.72 * rim_mid + 0.28 * dome.positions[-u_segs:]
+    rim_center = 0.76 * rim_mid + 0.24 * dome.positions[-u_segs:]
     lip_pts = [(float(pt[0]), float(pt[1]), float(pt[2])) for pt in rim_center]
     brim_lip = swept_tube(
         lip_pts,
-        0.0102,
+        0.0098,
         radial_segs=10,
         closed=True,
         name="helmet_brim_lip",

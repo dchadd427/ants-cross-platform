@@ -8,7 +8,7 @@ Coordinate system (glTF 2.0 right-handed):
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -799,8 +799,69 @@ def _build_shovel(
     scene.set_node_transform("shovel", translation=(grip_x, grip_y, grip_z))
 
 
-def _build_clubbed_antennae(scene: SceneBuilder, anchors: Dict[str, Any]) -> None:
-    """Replace base thin antennae with chunky bulbous-clubbed Swimmer antennae clearing the +X snorkel."""
+def _cranium_top_y_at(cranium: MeshPart, x: float, z: float, fallback_y: float) -> float:
+    """Return the exact upper-surface Y of `cranium` at `(x, z)` via vertical ray-triangle intersection."""
+    pos = cranium.positions.astype(np.float64)
+    tris = pos[cranium.indices.reshape(-1, 3)]
+    v0, v1, v2 = tris[:, 0], tris[:, 1], tris[:, 2]
+    ax, az = v0[:, 0], v0[:, 2]
+    bx, bz = v1[:, 0], v1[:, 2]
+    cx, cz = v2[:, 0], v2[:, 2]
+    det = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz)
+    valid = np.abs(det) > 1e-12
+    safe_det = np.where(valid, det, 1.0)
+    w0 = ((bz - cz) * (x - cx) + (cx - bx) * (z - cz)) / safe_det
+    w1 = ((cz - az) * (x - cx) + (ax - cx) * (z - cz)) / safe_det
+    w2 = 1.0 - w0 - w1
+    hits = valid & (w0 >= -1e-6) & (w1 >= -1e-6) & (w2 >= -1e-6)
+    if not np.any(hits):
+        return fallback_y
+    hit_y = w0[hits] * v0[hits, 1] + w1[hits] * v1[hits, 1] + w2[hits] * v2[hits, 1]
+    return float(hit_y.max())
+
+
+def _trim_swimmer_crown(scene: SceneBuilder, anchors: Dict[str, Any]) -> Optional[MeshPart]:
+    """Apply a smooth C^3 superelliptic crown trim to Swimmer's cranium matching `asst301`/`asst901`.
+
+    Compresses the excess upper forehead dome cleanly down so the green skull top sits compact and
+    sleek right behind/level with the top rim of the yellow oval scuba mask, while leaving the lower
+    cranium, eye sockets, tucked blink=0 eyelids, rubber mask skirt contact, and rear strap untouched.
+    """
+    if "head" not in scene.nodes:
+        return None
+    ey_mid = 0.5 * (float(anchors["eye_left"][1]) + float(anchors["eye_right"][1]))
+    crown_start_y = ey_mid + 0.028
+    crown_cap_h = 0.106
+    crown_p = 2.6
+
+    def _flatten_crown(pos: np.ndarray) -> np.ndarray:
+        p = pos.copy()
+        dy = p[:, 1] - crown_start_y
+        above = dy > 0.0
+        if np.any(above):
+            s = dy[above] / crown_cap_h
+            p[above, 1] = crown_start_y + crown_cap_h * s / ((1.0 + s ** crown_p) ** (1.0 / crown_p))
+        return p
+
+    cranium_part: Optional[MeshPart] = None
+    rebuilt_head: List[MeshPart] = []
+    for part in scene.nodes["head"]:
+        if part.name == "cranium":
+            trimmed = part.deform(_flatten_crown)
+            cranium_part = trimmed
+            rebuilt_head.append(trimmed)
+        else:
+            rebuilt_head.append(part)
+    scene.nodes["head"] = rebuilt_head
+    return cranium_part
+
+
+def _build_clubbed_antennae(
+    scene: SceneBuilder,
+    anchors: Dict[str, Any],
+    cranium: Optional[MeshPart] = None,
+) -> None:
+    """Replace base thin antennae with chunky bulbous-clubbed Swimmer antennae seated flush on the trimmed crown."""
     head_xf = scene.get_node_transform("head")
     neck_pivot = (
         (-head_xf.translation[0], -head_xf.translation[1], -head_xf.translation[2])
@@ -819,19 +880,27 @@ def _build_clubbed_antennae(scene: SceneBuilder, anchors: Dict[str, Any]) -> Non
     ]
     for side, tag, orig_key in ((+1.0, "left", "antenna_base_left"), (-1.0, "right", "antenna_base_right")):
         node_name = f"antenna_{tag}"
-        base_p = anchors[orig_key]
-        bx, by, bz = base_p
+        orig_bx, orig_by, orig_bz = anchors[orig_key]
+        bx = orig_bx
+        bz = orig_bz - 0.008
+        surf_y = (
+            _cranium_top_y_at(cranium, bx, bz, orig_by - 0.048)
+            if cranium is not None
+            else orig_by
+        )
+        by = surf_y - 0.002
+        base_p = (bx, by, bz)
         # Keep +X (left) antenna arching cleanly inboard/upward away from the tall +X yellow snorkel!
         out_x = 0.018 if side > 0 else 0.034
         h_off = 0.008 if side > 0 else -0.006
         pts = [
-            (bx - side * 0.004, by - 0.016, bz - 0.004),
+            (bx - side * 0.004, by - 0.018, bz - 0.004),
             base_p,
-            (bx + side * (0.40 * out_x), by + 0.068 + 0.4 * h_off, bz + 0.018),
-            (bx + side * (0.75 * out_x), by + 0.128 + 0.8 * h_off, bz + 0.044),
-            (bx + side * (0.95 * out_x), by + 0.148 + h_off, bz + 0.082),
-            (bx + side * (1.05 * out_x), by + 0.132 + h_off, bz + 0.114),
-            (bx + side * (1.08 * out_x), by + 0.112 + h_off, bz + 0.128),
+            (bx + side * (0.40 * out_x), by + 0.072 + 0.4 * h_off, bz + 0.016),
+            (bx + side * (0.75 * out_x), by + 0.132 + 0.8 * h_off, bz + 0.042),
+            (bx + side * (0.95 * out_x), by + 0.152 + h_off, bz + 0.078),
+            (bx + side * (1.05 * out_x), by + 0.136 + h_off, bz + 0.110),
+            (bx + side * (1.08 * out_x), by + 0.116 + h_off, bz + 0.124),
         ]
         stalk = swept_tube(
             pts,
@@ -844,7 +913,7 @@ def _build_clubbed_antennae(scene: SceneBuilder, anchors: Dict[str, Any]) -> Non
         )
         sock = (
             ellipsoid(0.022, 0.011, 0.022, u_segs=12, v_segs=8, name=f"antenna_socket_{tag}", material="chitin_dark")
-            .rotate_xyz(rx=0.16, rz=-side * 0.22)
+            .rotate_xyz(rx=0.06, rz=-side * 0.12)
             .translate(*base_p)
         )
         scene.nodes[node_name] = [
@@ -988,7 +1057,8 @@ def build_swimmer(blink: float = 0.0) -> SceneBuilder:
         blink=blink,
     )
     closed_angle = float(anchors.get("eyelid_closed_angle", 1.80))
-    _build_clubbed_antennae(scene, anchors)
+    trimmed_cranium = _trim_swimmer_crown(scene, anchors)
+    _build_clubbed_antennae(scene, anchors, cranium=trimmed_cranium)
     clip_anchor = _build_scuba_mask(scene, anchors["head_center"], anchors["head_radii"], anchors["eye_left"], closed_angle)
     _build_snorkel(scene, anchors["head_center"], anchors["head_top"], clip_anchor)
     _build_scuba_tank(scene, anchors["back_anchor"], anchors["thorax_center"])
