@@ -121,11 +121,11 @@ def _add_leg(
     tibia_mid = 0.48 * p_knee + 0.52 * p_ankle + np.array([s * 0.004, 0.0, -0.004])
     pre_ankle = 0.16 * p_knee + 0.84 * p_ankle + np.array([s * 0.002, 0.004, -0.005])
     # Segment 3 (tarsus): ANKLE (<) -> angling forward-down -> planted tapered claw tip on Y = 0.
-    post_ankle = 0.80 * p_ankle + 0.20 * (p_foot + 0.018 * lift) + np.array([0.0, -0.005, -0.003])
-    tarsus_mid = 0.42 * p_ankle + 0.58 * (p_foot + 0.014 * lift)
-    tarsus_heel = p_foot + 0.014 * lift - 0.006 * fwd
-    tarsus_ball = p_foot + 0.010 * lift + 0.018 * fwd
-    tarsus_tip = p_foot + 0.0055 * lift + 0.044 * fwd
+    post_ankle = 0.80 * p_ankle + 0.20 * (p_foot + 0.020 * lift) + np.array([0.0, -0.005, -0.003])
+    tarsus_mid = 0.42 * p_ankle + 0.58 * (p_foot + 0.017 * lift)
+    tarsus_heel = p_foot + 0.0165 * lift - 0.006 * fwd
+    tarsus_ball = p_foot + 0.0135 * lift + 0.018 * fwd
+    tarsus_tip = p_foot + 0.0075 * lift + 0.044 * fwd
 
     leg_tube = curved_tube(
         [
@@ -134,9 +134,9 @@ def _add_leg(
             post_ankle, tarsus_mid, tarsus_heel, tarsus_ball, tarsus_tip,
         ],
         [
-            (0.028, 0.032), (0.026, 0.030), (0.029, 0.035), (0.024, 0.028), (0.022, 0.025),
-            (0.020, 0.024), (0.019, 0.022), (0.017, 0.020), (0.016, 0.019),
-            (0.015, 0.017), (0.014, 0.016), (0.014, 0.013), (0.011, 0.010), (0.0055, 0.0045),
+            (0.033, 0.037), (0.031, 0.036), (0.035, 0.041), (0.029, 0.034), (0.027, 0.031),
+            (0.025, 0.029), (0.024, 0.028), (0.022, 0.026), (0.021, 0.025),
+            (0.0195, 0.022), (0.0185, 0.021), (0.018, 0.0165), (0.015, 0.014), (0.0085, 0.0075),
         ],
         samples_per_seg=3,
         radial_segs=12,
@@ -270,21 +270,13 @@ def _solve_knee_scale(
     splay: float,
     flex_bias: float = 0.0,
 ) -> np.ndarray:
-    """Compute anisotropic knee-bend scale (sx, sy, sz) whose scaled hip vector matches `||target_vec||` exactly."""
+    """Compute smooth anisotropic knee-bend scale (sx, sy, sz) hitting exact `||target_vec||`."""
     d_len = max(1e-6, float(np.linalg.norm(target_vec)))
     c_y = max(0.72, min(1.32, float(target_vec[1]) / max(0.05, float(v_rest_y))))
     drive = (1.0 - c_y) + float(flex_bias)
     sx = max(0.72, min(1.45, 1.0 + splay * drive))
     sz = max(0.62, min(1.75, 1.0 + knee_bow * drive))
-
-    hx, hy, hz = float(hip_loc[0]), float(hip_loc[1]), float(hip_loc[2])
-    rem = d_len * d_len - (sx * hx) ** 2 - (sz * hz) ** 2
-    if abs(hy) > 1e-5 and rem > (0.55 * abs(hy)) ** 2:
-        sy = math.sqrt(rem) / abs(hy)
-        if 0.62 <= sy <= 1.45:
-            return np.array([sx, sy, sz], dtype=np.float64)
-
-    # Extreme dip/stretch fallback: preserve knee-bow ratios while still hitting exact `||target_vec||`.
+    # Smoothly normalize anisotropic knee-bow ratios to match ||target_vec|| identically (zero branch cliff).
     base = np.array([sx, c_y, sz], dtype=np.float64)
     cur_len = max(1e-6, float(np.linalg.norm(base * hip_loc)))
     return base * (d_len / cur_len)
@@ -370,10 +362,10 @@ def _flex_channels(
             t_cur = t0.copy()
             s_cur = s0.copy()
             q_cur = r0
-            # Two exact vector-tracking iterations: solve per-leg knee-bend scale + shortest-arc
-            # rotation + exact hip-preserving swivel twist around normalize(d_vec), then re-seat
-            # the sole on Y = 0.0 and refine once for sub-mm hip closure.
-            for step in range(2):
+            # Damped fixed-point vector-tracking iterations: converge sole re-planting + knee-bend
+            # scale + shortest-arc + hip-preserving swivel twist to sub-mm hip & sole closure even
+            # on deeply crouched stances like Thief.
+            for step in range(6):
                 d_vec = h_target - t_cur
                 s_rel = _solve_knee_scale(
                     hip_loc * s0,
@@ -391,7 +383,7 @@ def _flex_channels(
                     q_cur = quat_mul(q_tw, quat_mul(q_arc, r0))
                 else:
                     q_cur = quat_mul(q_arc, r0)
-                if step == 0:
+                if step < 5:
                     sole_now = _quat_rotate(q_cur, sole * s_cur)
                     foot_now = _quat_rotate(q_cur, foot_low * s_cur)
                     dy_sole = float(foot_now[:, 1].min()) - foot_rest_min_y
@@ -399,7 +391,8 @@ def _flex_channels(
                     # Keep foot sole strictly grounded on Y = 0.0 with bounded tiny lateral recentering.
                     shift_x = max(-0.0025, min(0.0025, float(dxz_sole[0])))
                     shift_z = max(-0.0025, min(0.0025, float(dxz_sole[1])))
-                    t_cur = np.array([t0[0] - shift_x, t0[1] - dy_sole, t0[2] - shift_z], dtype=np.float64)
+                    t_next = np.array([t0[0] - shift_x, t0[1] - dy_sole, t0[2] - shift_z], dtype=np.float64)
+                    t_cur = 0.55 * t_next + 0.45 * t_cur
             # Final sole Y micro-clamp (sub-0.1 mm adjustment so min_y == 0.00000 across all foot vertices).
             foot_final = _quat_rotate(q_cur, foot_low * s_cur)
             t_cur[1] = t0[1] - (float(foot_final[:, 1].min()) - foot_rest_min_y)
@@ -491,10 +484,10 @@ def sync_leg_flex_to_clip(
         qq = _sample(r_ch.times, r_ch.values, t_val, True) if r_ch is not None else q0
         return tt, qq
 
-    # Ensure dense enough sampling (>= 16 segments/cycle & subdividing any swing > 0.025) so
+    # Ensure dense enough sampling (>= 24 segments/cycle & subdividing any swing > 0.025) so
     # staggered knee-swivel harmonics and big body arcs track smoothly with sub-mm hip error.
     dur = max(1e-6, float(base_times[-1]) - float(base_times[0])) if len(base_times) >= 2 else 1.0
-    max_dt = dur / 16.0
+    max_dt = dur / 24.0
     times: List[float] = []
     frames: List[Tuple[np.ndarray, Quat]] = []
     for idx, t_val in enumerate(base_times):
