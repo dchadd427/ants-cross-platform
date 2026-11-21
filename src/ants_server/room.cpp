@@ -305,6 +305,7 @@ void Room::build_session(uint32_t restart_vote_after_ms, uint32_t start_delay_ms
     hc.attendance.vote_after_ms = spec_.vote_after_ms;
     hc.attendance.restart_vote_after_ms = std::max(restart_vote_after_ms, spec_.vote_after_ms);      // (after a restart: never less than a lost link's time)
     hc.attendance.max_pause_ms = spec_.max_pause_ms;
+    hc.attendance.countdown_hold_ms = spec_.countdown_hold_ms;
     hc.attendance.max_catch_up_ms = spec_.max_catch_up_ms;
     hc.attendance.resume_countdown_ms = spec_.resume_countdown_ms;
     hc.max_log_bytes = spec_.max_log_bytes;
@@ -1275,6 +1276,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
     s.resume_countdown_ms = spec_.resume_countdown_ms;
     s.countdown_s = spec_.countdown_s;
     s.solo_countdown_s = spec_.solo_countdown_s;
+    s.countdown_hold_ms = spec_.countdown_hold_ms;
     s.connections = static_cast<uint32_t>(connections_.size());
     const bool stale = !stale_path_.empty() && restart_store_ != nullptr && restart_store_->is_stale(stale_path_);
     s.record_kept = record_ != nullptr || stale;                // (a file that is still there is a record that a restart would use: never "not kept" while it is)
@@ -1307,6 +1309,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
         s.rejoins = a.rejoins();
         s.drops_by_vote = a.drops_by_vote();
         s.drops_by_cap = a.drops_by_cap();
+        s.drops_by_countdown_hold = a.drops_by_countdown_hold();
         s.drops_by_state = session_->diverged_drops();
         s.rejoins_refused = a.rejoins_refused();
         s.catch_up_expired = a.catch_up_expired();

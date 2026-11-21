@@ -151,6 +151,10 @@ struct RoomSpec {
     /// The seconds that a room of exactly one person holds the first turn (the same card, a shorter count): 0 .. net::kMaxCountdownSeconds, 0 = the plain 5 s dialog. A spec built by code says 0; the server's rooms
     /// start from RoomManager::default_spec() (--solo-countdown-seconds, default 10; the control key "solo_countdown_seconds"). A room whose countdown_s is 0 never counts down, whatever this says.
     uint32_t solo_countdown_s{0};
+    /// The most that the match is held, in all, for seats that are away while it has not begun to play (the countdown, and the pauses that a loss there causes): 10 s .. 1 h, or 0 for no such limit (the cap
+    /// on the pauses is then the only one). At the limit every seat that is not present is dropped and the match goes on without it (net::Attendance::Config::countdown_hold_ms). A spec built by code says 0;
+    /// the server's rooms start from RoomManager::default_spec() (--countdown-hold-seconds, default net::kCountdownHoldMs = 60 s; the control key "countdown_hold_seconds").
+    uint32_t countdown_hold_ms{0};
 };
 
 /// The bounds of the room's reconnect settings (the control interface refuses others, RoomManager::create_room too)
@@ -161,6 +165,8 @@ inline constexpr uint32_t kMaxMaxPauseMs = 86400u * 1000u;
 inline constexpr uint32_t kMinCatchUpMs = 10u * 1000u;
 inline constexpr uint32_t kMaxCatchUpLimitMs = 3600u * 1000u;
 inline constexpr uint32_t kMaxResumeCountdownMs = 60u * 1000u;
+inline constexpr uint32_t kMinCountdownHoldMs = 10u * 1000u;
+inline constexpr uint32_t kMaxCountdownHoldMs = 3600u * 1000u;
 inline constexpr size_t kMinLogBytes = 1024;
 inline constexpr size_t kMaxLogBytes = size_t{1} << 30;
 
@@ -270,6 +276,7 @@ struct RoomStatus {
     uint32_t resume_countdown_ms{0};
     uint32_t countdown_s{0};                // protocol 21: the seconds that the room holds the first turn when two or more people play (0: none)
     uint32_t solo_countdown_s{0};           // ... and when exactly one person plays (the shorter of this and countdown_s; 0: the plain 5 s dialog)
+    uint32_t countdown_hold_ms{0};          // ... and the most that a match that has not begun to play is held for seats that are away (0: no such limit)
     uint8_t resume_s{0};                    // the countdown that follows a pause is running: the seconds that are left (0: none)
     bool paused{false};                     // the match waits for a seat (running rooms only)
     struct Absent {
@@ -287,6 +294,7 @@ struct RoomStatus {
     uint32_t rejoins{0};                    // seats that came back and were verified
     uint32_t drops_by_vote{0};              // seats dropped because the players voted to go on without them
     uint32_t drops_by_cap{0};               // seats dropped because the match's pauses used up max_pause_ms
+    uint32_t drops_by_countdown_hold{0};    // seats dropped because the match, which had not begun to play, was held for them as long as countdown_hold_ms
     uint32_t drops_by_state{0};             // seats dropped because their state differed from the referee's (the others went on; any room, held seats or not)
     uint32_t rejoins_refused{0};            // Hellos with a key that were refused for a budget (the absence's catch-up time, twelve attempts a minute, three times the log's size in ten minutes)
     uint32_t catch_up_expired{0};           // absences whose catch-up time ran out

@@ -1,0 +1,212 @@
+{
+ "note": "Mutants of the countdown hold (docs/MATCH_COUNTDOWN.md, 'How long a seat can hold the countdown'; docs/SERVER.md, --countdown-hold-seconds) for tools/mutate.py: the most that a match that has not begun to play is held, in all, for seats that are away (the nearer of the hold and the cap, until the first turn is sealed), then every seat that is not present is dropped; the default of a minute; a match that plays, a restored match and a spec without a hold are exempt; the setting's range and its status keys. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/countdown_hold_mutants.json --keep-going --jobs 1 --timeout 1500. Every mutant must be caught: each breaks one rule of those pages. The soak S3.307 (24 rooms, leave and rejoin cycles) is run on the unmutated tree only: it is long, and S3.305 and S2.58 hold each rule.",
+ "baseline": [
+  {
+   "build": [
+    "test_lockstep",
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER='N2.114 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER='S2.58 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER='S3.305 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER='S3.306 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_server/test_server"
+  }
+ ],
+ "mutants": [
+  {
+   "id": "hold_never_applies",
+   "file": "src/ants_net/attendance.cpp",
+   "old": "const uint32_t cap = countdown_hold_on() ? std::min(cfg_.max_pause_ms, cfg_.countdown_hold_ms) : cfg_.max_pause_ms;",
+   "new": "const uint32_t cap = cfg_.max_pause_ms;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER='N2.114 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER='S2.58 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_net/test_lockstep",
+   "expect": "N2.114"
+  },
+  {
+   "id": "hold_is_the_longer_of_the_two",
+   "file": "src/ants_net/attendance.cpp",
+   "old": "std::min(cfg_.max_pause_ms, cfg_.countdown_hold_ms) : cfg_.max_pause_ms;",
+   "new": "std::max(cfg_.max_pause_ms, cfg_.countdown_hold_ms) : cfg_.max_pause_ms;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER='N2.114 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER='S2.58 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_net/test_lockstep",
+   "expect": "N2.114"
+  },
+  {
+   "id": "hold_one_millisecond_longer",
+   "file": "src/ants_net/attendance.cpp",
+   "old": "std::min(cfg_.max_pause_ms, cfg_.countdown_hold_ms) : cfg_.max_pause_ms;",
+   "new": "std::min(cfg_.max_pause_ms, cfg_.countdown_hold_ms + 1u) : cfg_.max_pause_ms;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER='N2.114 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER='S2.58 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_net/test_lockstep",
+   "expect": "N2.114"
+  },
+  {
+   "id": "hold_goes_on_in_play",
+   "file": "include/ants_net/attendance.hpp",
+   "old": "bool countdown_hold_on() const noexcept { return !playing_ && cfg_.countdown_hold_ms != 0; }",
+   "new": "bool countdown_hold_on() const noexcept { return cfg_.countdown_hold_ms != 0; }",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER='N2.114 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER='S2.58 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_net/test_lockstep",
+   "expect": "N2.114"
+  },
+  {
+   "id": "first_turn_does_not_end_hold",
+   "file": "src/ants_net/session.cpp",
+   "old": "            attendance_.begin_play();\n",
+   "new": "",
+   "build": [
+    "test_lockstep",
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER='N2.114 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER='S2.58 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER='S3.305 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER='S3.306 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "begin_play_does_nothing",
+   "file": "include/ants_net/attendance.hpp",
+   "old": "void begin_play() noexcept { playing_ = true; }",
+   "new": "void begin_play() noexcept {}",
+   "build": [
+    "test_lockstep",
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER='N2.114 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER='S2.58 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER='S3.305 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER='S3.306 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "restored_match_is_held_to_the_hold",
+   "file": "src/ants_net/attendance.cpp",
+   "old": "    playing_ = true;                                                  // (a restart is nobody's fault",
+   "new": "    // playing_ = true;                                               // (a restart is nobody's fault",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER='N2.114 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER='S2.58 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_net/test_lockstep",
+   "expect": "N2.114"
+  },
+  {
+   "id": "new_match_keeps_playing_flag",
+   "file": "src/ants_net/attendance.cpp",
+   "old": "    playing_ = false;                                                                 // (the countdown hold applies until begin_play)",
+   "new": "    // playing_ = false;                                                              // (the countdown hold applies until begin_play)",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER='N2.114 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER='S2.58 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_net/test_lockstep",
+   "expect": "N2.114"
+  },
+  {
+   "id": "hold_drops_counted_as_cap",
+   "file": "src/ants_net/attendance.cpp",
+   "old": "++(by_hold ? drops_by_countdown_hold_ : drops_by_cap_);",
+   "new": "++drops_by_cap_;",
+   "build": [
+    "test_lockstep",
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER='N2.114 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER='S2.58 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER='S3.305 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER='S3.306 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "cap_drops_counted_as_hold",
+   "file": "src/ants_net/attendance.cpp",
+   "old": "const bool by_hold = pause_ms(now_ms) < cfg_.max_pause_ms;",
+   "new": "const bool by_hold = true;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER='N2.114 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER='S2.58 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_net/test_lockstep",
+   "expect": "N2.114"
+  },
+  {
+   "id": "room_ignores_the_setting",
+   "file": "src/ants_server/room.cpp",
+   "old": "    hc.attendance.countdown_hold_ms = spec_.countdown_hold_ms;",
+   "new": "    hc.attendance.countdown_hold_ms = 0;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER='S3.305 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER='S3.306 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_server/test_server",
+   "expect": "S3.305"
+  },
+  {
+   "id": "default_spec_forgets_the_hold",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "    spec.countdown_hold_ms = limits_.countdown_hold_ms;\n",
+   "new": "",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER='S3.305 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER='S3.306 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_server/test_server",
+   "expect": "S3.306"
+  },
+  {
+   "id": "manager_accepts_any_hold",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "if (spec.countdown_hold_ms != 0 && (spec.countdown_hold_ms < kMinCountdownHoldMs",
+   "new": "if (false && (spec.countdown_hold_ms < kMinCountdownHoldMs",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER='S3.305 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER='S3.306 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_server/test_server",
+   "expect": "S3.306"
+  },
+  {
+   "id": "control_accepts_a_hold_of_one_second",
+   "file": "src/ants_server/control.cpp",
+   "old": "number(\"countdown_hold_seconds\", kMinCountdownHoldMs / 1000, kMaxCountdownHoldMs / 1000, hold_s)",
+   "new": "number(\"countdown_hold_seconds\", 0, kMaxCountdownHoldMs / 1000, hold_s)",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER='S3.305 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER='S3.306 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_server/test_server",
+   "expect": "S3.306"
+  },
+  {
+   "id": "status_shows_no_hold",
+   "file": "src/ants_server/control.cpp",
+   "old": "JsonValue::make_int(s.countdown_hold_ms / 1000));      // (nor this one",
+   "new": "JsonValue::make_int(0));      // (nor this one",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER='S3.305 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER='S3.306 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_server/test_server",
+   "expect": "S3.306"
+  },
+  {
+   "id": "status_never_counts_the_drops",
+   "file": "src/ants_server/room.cpp",
+   "old": "        s.drops_by_countdown_hold = a.drops_by_countdown_hold();\n",
+   "new": "",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER='S3.305 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER='S3.306 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_server/test_server",
+   "expect": "S3.305"
+  },
+  {
+   "id": "default_hold_is_two_minutes",
+   "file": "include/ants_net/attendance.hpp",
+   "old": "inline constexpr uint32_t kCountdownHoldMs = 60u * 1000u;",
+   "new": "inline constexpr uint32_t kCountdownHoldMs = 120u * 1000u;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER='S3.305 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER='S3.306 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_server/test_server",
+   "expect": "S3.306"
+  },
+  {
+   "id": "no_presence_at_the_first_turn",
+   "file": "src/ants_net/session.cpp",
+   "old": "            presence_dirty_ = true;                          // (the players are told once more: the seconds that Presence named last were the hold's, and a player whose link is lost later gives up by them)\n",
+   "new": "",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER='S2.58 ' perl -e 'alarm shift; exec @ARGV' 900 ./build/tests/test_net/test_lockstep",
+   "expect": "S2.58"
+  }
+ ]
+}

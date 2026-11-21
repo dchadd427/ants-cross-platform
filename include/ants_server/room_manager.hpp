@@ -92,6 +92,7 @@ struct ServerLimits {
     uint32_t resume_countdown_ms{net::kResumeCountdownMs};          // the match is held this long after a pause of 3 s or more (--resume-countdown-seconds; 0: none)
     uint32_t countdown_s{0};                                        // protocol 21: the seconds that a room with two or more people holds the first turn (--start-countdown-seconds, 0 - 60; the ants_server default is net::kMatchCountdownSeconds, a Limits made by code has none)
     uint32_t solo_countdown_s{0};                                   // the seconds that a room of exactly one person holds the first turn (--solo-countdown-seconds, 0 - 60; the ants_server default is net::kSoloCountdownSeconds, a Limits made by code has none)
+    uint32_t countdown_hold_ms{0};                                  // the most that a match that has not begun to play is held, in all, for seats that are away (--countdown-hold-seconds, 10 - 3600; the ants_server default is net::kCountdownHoldMs, a Limits made by code has none)
     uint32_t live_delay_s{LiveBoard::kDefaultDelayS};                // the seconds that the public live door shows a match with two or more people late (--live-delay-seconds, 0 - 300; 0: as it is; live_board.hpp)
     size_t room_log_bytes{net::TurnLog::kDefaultMaxBytes};          // the limit of one room's turn log (16 MiB)
     uint64_t log_budget_bytes{256ull * 1024ull * 1024ull};          // the memory that all the rooms' logs may take together; a log that cannot grow is not kept (its room drops a lost seat at once)

@@ -49,6 +49,7 @@ A later start does not print the secret again. With demo rooms, a line "public r
 | `--reconnect`, `--no-reconnect` | on | Rooms hold the seat of a player whose connection is lost ("Reconnect"). A room's own `"reconnect"` overrides it, and demo rooms follow it. On by default since v0.6.0. `--no-reconnect` turns it off: a lost player is dropped at once, and no restart record is kept except for a room that asks for `"reconnect": true`. The last of the two options wins. |
 | `--hold-vote-seconds N` | 30 | The others may vote on going on without a seat once it has been away N seconds in all (5 - 3600). |
 | `--max-pause-seconds N` | 1800 | The cap on a match's total paused time: at the cap every seat that is not present is dropped (60 - 86400). A demo room takes the smaller of this and 10 minutes. |
+| `--countdown-hold-seconds N` | 60 | The most that a match that has not begun to play (the countdown) is held, in all, for seats that are away: then every seat that is not present is dropped and the match goes on without it (10 - 3600). The vote still goes on sooner; [`MATCH_COUNTDOWN.md`](MATCH_COUNTDOWN.md#how-long-a-seat-can-hold-the-countdown). |
 | `--max-catch-up-seconds N` | 300 | The time that one absence may spend catching up, over all its attempts: then the catch-up fails, the seat is absent (the vote and the cap apply) and its key is refused (10 - 3600). |
 | `--resume-countdown-seconds N` | 10 | After a pause of 3 s or more the match is held this long before it goes on; the players are told the seconds (0 - 60, 0 = none). |
 | `--start-countdown-seconds N` | 30 | A room with two or more people (not the computer players) holds the first turn of its match this long, with the chat open, instead of the 5 s "Get ready" dialog; the Begin tells the seconds (network protocol 21; 0 - 60, 0 = none). One person alone holds it `--solo-countdown-seconds` (default 10): [`MATCH_COUNTDOWN.md`](MATCH_COUNTDOWN.md). |
@@ -175,12 +176,13 @@ The body of `POST /rooms` is a JSON object, and only `map` is required:
 | `reconnect` | the server's setting (on unless `--no-reconnect`) | Whether the room holds the seat of a player whose connection is lost ("Reconnect"). |
 | `hold_vote_seconds` | 30 | 5 - 3600, as `--hold-vote-seconds`. |
 | `max_pause_seconds` | 1800 | 60 - 86400, as `--max-pause-seconds`. |
+| `countdown_hold_seconds` | 60 | 10 - 3600, as `--countdown-hold-seconds`. |
 | `max_catch_up_seconds` | 300 | 10 - 3600, as `--max-catch-up-seconds`. |
 | `resume_countdown_seconds` | 10 | 0 - 60, as `--resume-countdown-seconds`. |
 | `countdown_seconds` | 30 | 0 - 60, as `--start-countdown-seconds`. |
 | `record` | true | Whether the match is kept as a replay when the server keeps replays ("Replays"). `false`: this room's match is not. (The room's status has an object of the same name, `record`: that one is about the restart record.) |
 
-When the body leaves a key out, the five reconnect keys take what the server was started with (`--reconnect` or `--no-reconnect`, and the four numbers); the table shows the defaults of a server started without those options. Any other key is left to the table's default.
+When the body leaves a key out, the six reconnect keys take what the server was started with (`--reconnect` or `--no-reconnect`, and the five numbers); the table shows the defaults of a server started without those options. Any other key is left to the table's default.
 
 * **The room's specification** (`POST /rooms`, `RoomSpec::bots`): `"bots": [{"seat": 2, "bot": "medium"}]`, `bot` being what `--bot` takes after the seat (`easy`, `medium`, `hard`, `idle`, `worker`, `KIND:LEVEL`, and a pinned style of the standard bot: `LEVEL:STYLE` or `standard:LEVEL:STYLE`, e.g. `hard:raider`; the styles are `aggressive`, `economic`, `raider` and `defensive`, a Hard bot plays the first and the third only); a mistake is a 400 that names the key (an entry that is not an object with a seat 0 - 3 and a bot, a bot that does not parse (a style on the worker or the idle bot, or one that the level may not play, names `style`), a seat twice, **no seat left for a person** (at least one of the room's players must be a person), **bots with Fog of War**). The bots sit in the room from the start, count towards `players` and are shown like the fill's; a person who asks for their seat gets the first free one; a room whose people have all come starts by itself, a leader's START with no fill starts the people and the bots that are there.
 
@@ -202,11 +204,12 @@ When the body leaves a key out, the five reconnect keys take what the server was
 | `ticks`, `turns`, `age_seconds` | How far the match has run, and how old the room is. |
 | `state_hash` | A finished room: the referee's state at `ticks`, as 16 hex digits. |
 | `result` | A finished room: `quitter` and the rows of the results screen (`names`, `seats`, `score`, `lost`, `killed`, `hatched`, `winner`; an alliance is one row). |
-| `reconnect`, `hold_vote_seconds`, `max_pause_seconds`, `max_catch_up_seconds`, `resume_countdown_seconds`, `countdown_seconds` | The room's own settings. |
+| `reconnect`, `hold_vote_seconds`, `max_pause_seconds`, `max_catch_up_seconds`, `resume_countdown_seconds`, `countdown_seconds` | The room's own settings. The status of one room has `countdown_hold_seconds` too (not the list). |
 | `paused`, `resume_seconds` | `paused` says that the match is held: a seat is missing, or the countdown after a pause runs. `resume_seconds` is what is left of that countdown. |
 | `absent` | The seats that are missing, longest away first: `[{"seat", "name", "state", "away_seconds", "progress"}]`. `state` is `absent` or `catching_up`, and `away_seconds` is the seat's total time away. |
 | `vote` | `{"seat", "continue", "voters"}`, or null. |
 | `paused_seconds`, `rejoins`, `drops_by_vote`, `drops_by_cap`, `rejoins_refused`, `catch_up_expired`, `streamed_bytes` | What the pauses of the match came to. Never a key. |
+| `drops_by_countdown_hold` | The seats dropped because the match was held for them as long as `countdown_hold_seconds` before it began to play (the status of one room, not the list). |
 | `drops_by_state` | The seats dropped because their state differed from the referee's (a room that holds seats or not). The log has a line when it happens: the room, the turn, how many seats differed and how many agreed. |
 | `log` | `{"turns", "bytes", "usable"}`: the turn log that a returning player is given. |
 | `record` | `{"kept", "stale", "bytes", "note"}`: whether a restart of the server would bring this match back, and why not when it would not. |
@@ -270,6 +273,7 @@ A room that holds seats gives each player a **key** in its Welcome and holds the
 
 - The match is **paused for everybody**: nothing is sealed, chat is relayed, and commands are discarded without a violation. The room's status says so (`paused`, and `absent`: who, and how long away in all, `away_seconds`).
 - The player comes back with its key. A Hello for a running match that shows a key goes to the room, instead of being refused (`MatchRunning`, "The match has already started."). The player is given the turns it lacks from the server's log, runs them at once without drawing them and says its state hash; the referee compares it with its own, and the match resumes.
+- **A match that has not begun to play is held for a seat at most `--countdown-hold-seconds` (60 s)**, a limit of its own that is smaller than the cap on the pauses and ends with the first turn: a seat that is lost in the countdown and has not come back by then is dropped like one that the cap drops, and the others go on without it ([`MATCH_COUNTDOWN.md`](MATCH_COUNTDOWN.md#how-long-a-seat-can-hold-the-countdown)). A match that plays, and one that a restart of the server brought back, keep the cap alone.
 - How the others vote on a seat that is away, and how the cap on the pauses drops the seats that have not come back, are described in [`NETWORK_PORT.md`](NETWORK_PORT.md#the-behaviour-that-is-decided) ("Reconnect (protocol 10)").
 - A key is bounded, so that nobody can hold a room or the server's bandwidth with one: the catch-up time of an absence (`--max-catch-up-seconds`), twelve accepted Hellos a minute from one seat, and the turn log that is streamed to a seat (three times the log's size in ten minutes, at least 1 MiB). Beyond a bound the answer is `RejoinFailed`, and the seat stays held (the vote and the cap apply). The log itself has a limit (`--log-mb`; all the rooms together may hold 256 MiB): a room whose log cannot grow any more drops a lost seat at once, as a room that holds no seats does.
 - How the key is kept secret, and which door is encrypted, are described in [`NETWORK_PORT.md`](NETWORK_PORT.md#the-native-door-and-the-key).
