@@ -247,6 +247,7 @@ def _build_goggles(
     eye_left: Tuple[float, float, float],
     eye_right: Tuple[float, float, float],
     closed_angle: float,
+    head_back_z: Optional[float] = None,
 ) -> None:
     """Build compact-diameter, long projecting all-yellow metallic 'can' goggles & snug rear strap."""
     hx, _, hz = head_center
@@ -330,16 +331,20 @@ def _build_goggles(
         )
         scene.add("goggles", clasp)
 
-    # Bold yellow head strap hugging cleanly around Bomber's smaller head so the fuller crown rises naturally above it.
+    # Bold yellow head strap hugging flush around Bomber's slimmed rear occiput (zero floating gap!).
+    rz_back_strap = (hz - head_back_z + 0.004) if head_back_z is not None else rz_strap
     strap_pts: List[Tuple[float, float, float]] = []
     n_arc = 28
     start_ang = math.radians(52.0)
     end_ang = math.radians(308.0)
     for i in range(n_arc + 1):
         ang = start_ang + (end_ang - start_ang) * (i / n_arc)
-        sx = hx + rx_strap * _spow(math.sin(ang), 0.76)
-        sz = hz + rz_strap * _spow(math.cos(ang), 0.76)
-        rear_lift = 0.006 * (0.5 * (1.0 - math.cos(ang)))
+        ca = math.cos(ang)
+        rx_cur = rx_strap * (1.0 - 0.10 * (abs(ca) ** 1.4)) if ca < 0.0 else rx_strap
+        rz_cur = rz_back_strap if ca < 0.0 else rz_strap
+        sx = hx + rx_cur * _spow(math.sin(ang), 0.76)
+        sz = hz + rz_cur * _spow(ca, 0.76)
+        rear_lift = 0.006 * (0.5 * (1.0 - ca))
         strap_pts.append((sx, strap_base_y + rear_lift, sz))
 
     strap = swept_tube(
@@ -357,7 +362,7 @@ def _build_goggles(
 
     rear_buckle = (
         rounded_box(0.048, 0.044, 0.018, bevel=0.005, segs=3, name="goggle_rear_buckle", material="gear_gold_metal")
-        .translate(hx, strap_base_y + 0.006, hz - rz_strap - 0.002)
+        .translate(hx, strap_base_y + 0.006, hz - rz_back_strap - 0.002)
     )
     scene.add("goggles", rear_buckle)
 
@@ -1002,9 +1007,10 @@ def _scale_bomber_head_and_tall_antennae(
     new_eye_l = (raw_el[0] - eye_inward_dx, raw_el[1], raw_el[2])
     new_eye_r = (raw_er[0] + eye_inward_dx, raw_er[1], raw_er[2])
 
-    # 1. Scale `head` around `piv`, then apply a gentle superelliptic crown rounding to `cranium`
-    # so Bomber's smaller head keeps a natural, fuller softly-rounded dome emerging cleanly above the
-    # yellow goggle strap (matching ORIG abst301 & West view W / flipped abst901).
+    # 1. Scale `head` around `piv`, apply soft crown rounding, and tuck ONLY the rear occiput (`-Z`)
+    # smoothly inward (~0.77x rear depth with subtle rear lateral taper, front face 100% untouched!).
+    new_hc = _scale_pt_aniso(hc)
+    new_hr = (hrx * sx, hry * sy, hrz * sz)
     ey_mid = 0.5 * (new_eye_l[1] + new_eye_r[1])
     crown_start_y = ey_mid + 0.018
     crown_cap_h = 0.094
@@ -1017,6 +1023,13 @@ def _scale_bomber_head_and_tall_antennae(
         if np.any(above):
             s = dy[above] / crown_cap_h
             p[above, 1] = crown_start_y + crown_cap_h * s / ((1.0 + s ** crown_p) ** (1.0 / crown_p))
+        dz = p[:, 2] - new_hc[2]
+        rear = dz < 0.0
+        if np.any(rear):
+            t_back = np.clip(-dz[rear] / max(1e-5, new_hr[2]), 0.0, 1.0)
+            p[rear, 2] = new_hc[2] + dz[rear] * (1.0 - 0.23 * (t_back ** 0.85))
+            p[rear, 0] = new_hc[0] + (p[rear, 0] - new_hc[0]) * (1.0 - 0.10 * (t_back ** 1.4))
+            p[rear, 1] -= 0.010 * (t_back ** 1.5)
         return p
 
     cranium_part: Optional[MeshPart] = None
@@ -1066,21 +1079,19 @@ def _scale_bomber_head_and_tall_antennae(
                 ),
             )
 
-    new_hc = _scale_pt_aniso(hc)
-    new_hr = (hrx * sx, hry * sy, hrz * sz)
-    new_head_back_z = new_hc[2] - new_hr[2]
+    new_head_back_z = float(cranium_part.positions[:, 2].min()) if cranium_part is not None else (new_hc[2] - new_hr[2])
 
-    # 3. Seat bold, taller Bomber antennae flush ON the crown via exact ray-triangle surface sampling:
+    # 3. Seat bold, slightly shorter Bomber antennae flush ON the crown via exact ray-triangle sampling:
     # smooth monotonic narrow-to-thick taper (ZERO pinched neck or spherical ball knob at the tip!),
-    # sweeping proudly up-and-back (`+Y/-Z`) cleanly clear of the 3 magenta bombs & curved fuses.
+    # sweeping cleanly up-and-back (`+Y/-Z`) well clear of the 3 magenta bombs & curved fuses.
     ant_rads = [
         (0.015, 0.015),
         (0.015, 0.015),
         (0.019, 0.020),
-        (0.024, 0.025),
-        (0.029, 0.031),
+        (0.023, 0.024),
+        (0.028, 0.030),
+        (0.031, 0.033),
         (0.033, 0.035),
-        (0.035, 0.037),
     ]
     for side, tag, orig_key in ((+1.0, "left", "antenna_base_left"), (-1.0, "right", "antenna_base_right")):
         node_name = f"antenna_{tag}"
@@ -1094,17 +1105,17 @@ def _scale_bomber_head_and_tall_antennae(
         )
         by = surf_y - 0.002
         base_p = (bx, by, bz)
-        # Bolder ~1.30x longer Bomber antennae matching ORIG abst301/abst201/abst901/abst701.
-        h_boost = 0.014 if side > 0 else -0.010
-        z_extra = -0.008 if side > 0 else +0.006
+        # Slightly shorter (~-16%) small-to-thick flared antennae matching ORIG abst301/201/901/701.
+        h_boost = 0.012 if side > 0 else -0.008
+        z_extra = -0.007 if side > 0 else +0.005
         pts = [
             (bx - side * 0.003, by - 0.018, bz + 0.003),
             base_p,
-            (bx + side * 0.014, by + 0.092 + 0.35 * h_boost, bz - 0.016 + 0.3 * z_extra),
-            (bx + side * 0.028, by + 0.172 + 0.70 * h_boost, bz - 0.048 + 0.6 * z_extra),
-            (bx + side * 0.040, by + 0.228 + 0.90 * h_boost, bz - 0.090 + 0.85 * z_extra),
-            (bx + side * 0.048, by + 0.252 + h_boost, bz - 0.128 + z_extra),
-            (bx + side * 0.052, by + 0.250 + 0.95 * h_boost, bz - 0.156 + 1.05 * z_extra),
+            (bx + side * 0.012, by + 0.078 + 0.35 * h_boost, bz - 0.014 + 0.3 * z_extra),
+            (bx + side * 0.024, by + 0.144 + 0.70 * h_boost, bz - 0.040 + 0.6 * z_extra),
+            (bx + side * 0.034, by + 0.190 + 0.90 * h_boost, bz - 0.075 + 0.85 * z_extra),
+            (bx + side * 0.041, by + 0.210 + h_boost, bz - 0.107 + z_extra),
+            (bx + side * 0.044, by + 0.207 + 0.95 * h_boost, bz - 0.130 + 1.05 * z_extra),
         ]
         stalk = swept_tube(
             pts,
@@ -1294,6 +1305,7 @@ def build_bomber(blink: float = 0.0) -> SceneBuilder:
         eye_l,
         eye_r,
         float(anchors.get("eyelid_closed_angle", 1.80)),
+        head_back_z=head_back_z,
     )
     _build_dynamite_pack(scene, anchors["back_anchor"], anchors["thorax_center"], head_back_z)
 
