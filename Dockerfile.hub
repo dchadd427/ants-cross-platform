@@ -16,8 +16,10 @@
 # =============================================================================
 FROM python:3.12-slim-bookworm
 
+# /data and /images belong to the user: Docker gives a new, empty named volume the owner of the folder it is mounted on, so the hub can write its
+# database and the chat's images there (without it a new volume is root's, and the hub turns images off: images_off_the_folder_cannot_be_written)
 RUN useradd --system --no-create-home --shell /usr/sbin/nologin hub && \
-    mkdir -p /data /app && chown hub /data
+    mkdir -p /data /images /app && chown hub /data /images
 
 WORKDIR /app
 COPY hub/ /app/hub/

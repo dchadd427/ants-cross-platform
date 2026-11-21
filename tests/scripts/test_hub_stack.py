@@ -72,6 +72,18 @@ class TheImage(unittest.TestCase):
         self.assertRegex(self.code, r"mkdir -p /data .*chown hub /data")
         self.assertIn("ANTS_HUB_DB=/data/hub.db", self.code)
 
+    def test_the_images_folder_belongs_to_the_user_so_that_a_new_volume_is_writable(self):
+        # the stack mounts the images' volume where the hub's own default says (hub/config.py), and the image makes that folder the user's
+        from hub import config as hub_config
+        folder = hub_config.Config().image_dir
+        self.assertEqual(folder, "/images")
+        made = re.search(r"mkdir -p ([^&\n]*)&& chown hub ([^\n\\]*)", self.code)
+        self.assertIsNotNone(made)
+        self.assertIn(folder, made.group(1).split())
+        self.assertIn(folder, made.group(2).split())
+        stack = read(os.path.join(REPO, "docker-compose.stack.yml"))
+        self.assertIn("ants-hub-images:" + folder + "\n", stack)
+
     def test_it_copies_the_code_and_nothing_else_and_makes_the_bytecode_while_it_can_write(self):
         copies = re.findall(r"(?m)^COPY (.*)$", self.code)
         self.assertEqual(copies, ["hub/ /app/hub/"])
