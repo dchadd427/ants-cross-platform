@@ -6,13 +6,9 @@
     ANT_CLASSES, ANT_LABELS, DEFAULT_CUSTOM_HEX, TEAMS, ANGLES, SHEET_ANGLES,
     wrapAngleDeg, normalizeHex, resolveTeam, selectActionAnims, AntRenderer, installToolbarRovingTabindex,
   } = window.__antRender;
-
-  const ACTION_META = {
-    idle: { clip: "Idle", label: "Idle", stepSec: { worker: 0.15, combat: 0.125, thief: 0.1, bomber: 0.1, swimmer: 0.15, fire: 0.1 } },
-    attack: { clip: "Attack", label: "Attack", stepSec: { worker: 0.07, combat: 0.09, thief: 0.06, bomber: 0.06, swimmer: 0.076, fire: 0.06 } },
-    hit: { clip: "Hit", label: "Hit", stepSec: { worker: 0.089, combat: 0.098, thief: 0.106, bomber: 0.111, swimmer: 0.117, fire: 0.1 } },
-  };
-  const validAction = (raw) => (raw && Object.prototype.hasOwnProperty.call(ACTION_META, raw) ? raw : null);
+  const {
+    QUICK_ACTIONS, validAction, getAction, actionSupportsClass, stepSecFor, populateActionSelect,
+  } = window.__antActions;
 
   const emptyScene = () => ({
     instances: [], target: [0, 0.55, 0], fitRadius: 0.9, halfWidth: 0.7,
@@ -26,6 +22,7 @@
     const spriteCanvas = $("sprite-canvas"), spriteCtx = spriteCanvas.getContext("2d");
     const emptyOverlay = $("empty-overlay"), fileInput = $("glb-file-input");
     const colorInput = $("input-team-color"), customSwatch = $("swatch-custom");
+    const actionSelect = $("select-action");
     const compareTab = $("tab-compare");
     if (!("focusGroup" in HTMLElement.prototype)) installToolbarRovingTabindex(toolbarEl);
 
@@ -87,7 +84,7 @@
       modelCache: new Map(), customModel: null, scene: emptyScene(),
     };
     const activeTeam = () => resolveTeam(state.team, state.customColor);
-    const actionMeta = () => ACTION_META[state.action] || ACTION_META.idle;
+    const actionMeta = () => getAction(state.action);
     const activeClipName = () => actionMeta().clip;
     window.__antViewerGetState = () => ({
       ant: state.ant === "custom" ? "" : state.ant,
@@ -183,6 +180,22 @@
     function updateUiState() {
       for (const [attr, val] of [["ant", state.ant], ["team", state.team], ["angle", state.angle], ["action", state.action], ["projection", state.cam.projection]]) {
         toolbarEl.querySelectorAll("button[data-" + attr + "]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset[attr] === val)));
+      }
+      if (actionSelect) {
+        populateActionSelect(actionSelect, {
+          activeAction: state.action,
+          activeAnt: state.ant,
+          allowUnavailable: false,
+          hasClipFn: (act) => {
+            if (state.scene.instances.some((inst) => selectActionAnims(inst.model, act.clip).matched)) return true;
+            if (act.group === "class" && act.classes && act.classes.length === 1) {
+              const cached = state.modelCache.get(act.classes[0]);
+              return cached ? selectActionAnims(cached, act.clip).matched : false;
+            }
+            return false;
+          },
+        });
+        actionSelect.dataset.extended = String(!QUICK_ACTIONS.includes(state.action));
       }
       if (colorInput && colorInput.value.toLowerCase() !== state.customColor) colorInput.value = state.customColor;
       if (customSwatch) customSwatch.style.backgroundColor = state.customColor;
@@ -362,16 +375,21 @@
 
     function selectAction(next) {
       const target = validAction(next) || "idle";
+      const meta = getAction(target);
+      if (meta.group === "class" && meta.classes && meta.classes.length === 1 && ANT_CLASSES.includes(state.ant) && !actionSupportsClass(target, state.ant)) {
+        state.action = target;
+        selectAnt(meta.classes[0]);
+        return;
+      }
       if (state.action === target) return;
       state.action = target;
       const multi = state.scene.instances.length > 1;
       const phaseStagger = [0.0, 0.14, 0.28, 0.09, 0.21, 0.34];
       state.scene.instances.forEach((inst, i) => { inst.idleTime = multi ? phaseStagger[i % phaseStagger.length] : 0; });
       updateUiState(); markDirty();
-      const meta = actionMeta();
       if (target !== "idle") {
         const anyMatched = state.scene.instances.some((inst) => selectActionAnims(inst.model, meta.clip).matched);
-        announce(anyMatched ? `Action set to ${meta.label}.` : `Action set to ${meta.label} (falling back to Idle — no 3D ${meta.label} clip yet).`);
+        announce(anyMatched ? `Action set to ${meta.label}.` : `Action set to ${meta.label} (falling back to Idle — 3D ${meta.label} clip coming soon).`);
       } else {
         announce("Action set to Idle.");
       }
@@ -395,7 +413,7 @@
       state.retroFps = !state.retroFps;
       updateUiState(); markDirty();
       if (!state.retroFps) { announce("1998 FPS off (smooth 60 fps playback)."); return; }
-      const step = actionMeta().stepSec[state.ant];
+      const step = ANT_CLASSES.includes(state.ant) ? stepSecFor(state.action, state.ant) : 0;
       if (step) {
         const fps = (1 / step).toFixed(1).replace(/\.0$/, "");
         announce(`1998 FPS on (${ANT_LABELS[state.ant]} · ${fps} fps, ${Math.round(step * 1000)}ms step).`);
@@ -406,9 +424,8 @@
 
     function withQuantizedTiming(fn) {
       if (!state.retroFps || state.fixedIdleTime !== null) return fn();
-      const stepTable = actionMeta().stepSec;
       const saved = state.scene.instances.map((inst) => {
-        const step = stepTable[inst.id] || 0.125;
+        const step = stepSecFor(state.action, inst.id);
         const origIdle = inst.idleTime || 0;
         inst.idleTime = Math.floor(origIdle / step) * step;
         let origBlink = null;
@@ -453,6 +470,10 @@
       else if (btn.id === "btn-reset-view") { const key = ANGLES[state.angle] ? state.angle : "301"; setAnglePreset(key); announce("View reset to " + ANGLES[key].full + "."); }
       else if (btn.id === "btn-load-glb") fileInput.click();
     });
+
+    if (actionSelect) {
+      actionSelect.addEventListener("change", () => selectAction(actionSelect.value));
+    }
 
     if (colorInput) {
       const applyPickedColor = () => {
@@ -516,6 +537,7 @@
       else if (e.key === "ArrowDown") { state.cam.pitch = clamp(state.cam.pitch - sp, -10, 85); state.angle = "custom"; }
       else if (e.key === "+" || e.key === "=") state.cam.zoom = clamp(state.cam.zoom * 0.88, 0.35, 3.2);
       else if (e.key === "-" || e.key === "_") state.cam.zoom = clamp(state.cam.zoom * 1.14, 0.35, 3.2);
+      else if (e.key === "w" || e.key === "W") { e.preventDefault(); toggleAction("walk"); return; }
       else if (e.key === "a" || e.key === "A") { e.preventDefault(); toggleAction("attack"); return; }
       else if (e.key === "h" || e.key === "H") { e.preventDefault(); toggleAction("hit"); return; }
       else if (e.key === "b" || e.key === "B") { e.preventDefault(); if (e.shiftKey) toggleBlinkHold(); else triggerBlink(); return; }
@@ -537,7 +559,8 @@
     document.addEventListener("keydown", (e) => {
       if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
       if (document.activeElement === stageCanvas) return;
-      if (e.key === "a" || e.key === "A") { e.preventDefault(); toggleAction("attack"); }
+      if (e.key === "w" || e.key === "W") { e.preventDefault(); toggleAction("walk"); }
+      else if (e.key === "a" || e.key === "A") { e.preventDefault(); toggleAction("attack"); }
       else if (e.key === "h" || e.key === "H") { e.preventDefault(); toggleAction("hit"); }
       else if (e.key === "s" || e.key === "S") { e.preventDefault(); toggleSilhouette(); }
       else if (e.key === "f" || e.key === "F") { e.preventDefault(); toggleRetroFps(); }

@@ -354,12 +354,12 @@
 
   function selectActionAnims(model, clipName) {
     if (!model) return { anims: [], matched: false };
-    if (typeof clipName === "string" && /^attack$/i.test(clipName)) {
-      if (model.attackAnims && model.attackAnims.length) return { anims: model.attackAnims, matched: true };
-      return { anims: model.idleAnims || [], matched: false };
-    }
-    if (typeof clipName === "string" && /^hit$/i.test(clipName)) {
-      if (model.hitAnims && model.hitAnims.length) return { anims: model.hitAnims, matched: true };
+    const key = typeof clipName === "string" && clipName.trim() ? clipName.trim().toLowerCase() : "idle";
+    if (key !== "idle") {
+      const exact = model.animsByName && model.animsByName.get(key);
+      if (exact && exact.length) return { anims: exact, matched: true };
+      if (key === "attack" && model.attackAnims && model.attackAnims.length) return { anims: model.attackAnims, matched: true };
+      if (key === "hit" && model.hitAnims && model.hitAnims.length) return { anims: model.hitAnims, matched: true };
       return { anims: model.idleAnims || [], matched: false };
     }
     const idle = model.idleAnims || [];
@@ -624,7 +624,7 @@
 
   // --- Toolbar Roving-Tabindex Fallback (ONLY when native focusGroup is unsupported) ---
   function installToolbarRovingTabindex(toolbarEl) {
-    const sel = "button:not(:disabled), input.team-color-input:not(:disabled)";
+    const sel = "button:not(:disabled), input.team-color-input:not(:disabled), select.action-select:not(:disabled)";
     const getItems = () => Array.from(toolbarEl.querySelectorAll(sel));
     const init = getItems();
     if (!init.length) return;

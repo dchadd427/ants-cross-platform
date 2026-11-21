@@ -279,7 +279,31 @@ body {
   font-weight: 600;
 }
 
+.toolbar select.action-select {
+  color-scheme: light dark;
+  min-inline-size: 132px;
+  max-inline-size: 210px;
+  min-block-size: 32px;
+  padding: 3px 26px 3px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--ink-primary);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.toolbar select.action-select[data-extended="true"] {
+  background: var(--bg-pressed);
+  border-color: var(--border-pressed);
+  color: var(--ink-pressed);
+  font-weight: 600;
+}
+
 .toolbar button:focus-visible,
+.toolbar select.action-select:focus-visible,
 .team-color-input:focus-visible,
 #stage:focus-visible {
   outline: 2px solid var(--focus-ring);
@@ -310,6 +334,7 @@ body {
 
 @media (hover: hover) {
   .toolbar button:hover,
+  .toolbar select.action-select:hover,
   .team-color-input:hover,
   .solo-btn:hover,
   .card-focus-btn:hover,
@@ -353,7 +378,8 @@ body {
 }
 
 @media (pointer: coarse) {
-  .toolbar button {
+  .toolbar button,
+  .toolbar select.action-select {
     min-inline-size: 44px;
     min-block-size: 44px;
     padding: 6px 12px;
@@ -1240,6 +1266,7 @@ body {
   }
 
   .toolbar button:focus-visible,
+  .toolbar select.action-select:focus-visible,
   .team-color-input:focus-visible,
   .view-tab:focus-visible,
   .solo-btn:focus-visible,

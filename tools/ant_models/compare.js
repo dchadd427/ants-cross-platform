@@ -2,20 +2,18 @@
 (function () {
   "use strict";
 
-  const { clamp, mat4Translate, mat4Multiply, transformPoint, parseGlb } = window.__antGltf;
+  const { clamp, mat4Translate, mat4Multiply, transformPoint, parseGlb, extractRestWorldVerts } = window.__antGltf;
   const {
     ANT_CLASSES, ANT_LABELS, TEAMS, ANGLES, SHEET_ANGLES, DEG,
     wrapAngleDeg, selectActionAnims, AntRenderer, installToolbarRovingTabindex,
   } = window.__antRender;
+  const {
+    QUICK_ACTIONS, validAction, getAction, actionSupportsClass,
+    stepSecFor, nearestAvailableAngle, populateActionSelect,
+  } = window.__antActions;
 
   const ORIGINAL_TEAMS = ["green", "red", "blue", "black"];
   const SPEEDS = [0.5, 1, 1.5];
-  const ACTION_META = {
-    idle: { clip: "Idle", label: "Idle", key: "sprites", groundFrac: 0.87, tallFrac: 0.72, stepSec: { worker: 0.15, combat: 0.125, thief: 0.1, bomber: 0.1, swimmer: 0.15, fire: 0.1 } },
-    attack: { clip: "Attack", label: "Attack", key: "attack_sprites", groundFrac: 0.78, tallFrac: 0.68, stepSec: { worker: 0.07, combat: 0.09, thief: 0.06, bomber: 0.06, swimmer: 0.076, fire: 0.06 } },
-    hit: { clip: "Hit", label: "Hit", key: "hit_sprites", groundFrac: 0.80, tallFrac: 0.69, stepSec: { worker: 0.089, combat: 0.098, thief: 0.106, bomber: 0.111, swimmer: 0.117, fire: 0.1 } },
-  };
-  const validAction = (raw) => (raw && Object.prototype.hasOwnProperty.call(ACTION_META, raw) ? raw : null);
   const CANONICAL_PITCH = ANGLES["301"].pitch;
   const RELOAD_STATE_KEY = "ants_viewer_reload_state_v1";
 
@@ -79,61 +77,6 @@
     return pickOrigStep(entry, simTimeSec).frameIdx;
   }
 
-  function extractRestWorldVerts(model, offsetMat) {
-    const raw = model && model.rawBytes;
-    if (!raw || raw.byteLength < 28) return null;
-    try {
-      const dv = new DataView(raw);
-      if (dv.getUint32(0, true) !== 0x46546c67) return null;
-      const jsonLen = dv.getUint32(12, true);
-      const gltf = JSON.parse(new TextDecoder("utf-8").decode(new Uint8Array(raw, 20, jsonLen)));
-      const binOff = 20 + jsonLen;
-      if (binOff + 8 > raw.byteLength) return null;
-      const binLen = dv.getUint32(binOff, true);
-      const binStart = binOff + 8;
-      const nodes = gltf.nodes || [], meshes = gltf.meshes || [];
-      const accessors = gltf.accessors || [], views = gltf.bufferViews || [];
-      const chunks = [];
-      let totalFloats = 0;
-      for (let ni = 0; ni < nodes.length; ni++) {
-        const node = nodes[ni];
-        if (!node || node.mesh === undefined || !meshes[node.mesh]) continue;
-        const baseMat = model.baseWorldMats && model.baseWorldMats[ni];
-        if (!baseMat) continue;
-        const m = mat4Multiply(offsetMat, baseMat);
-        // Skip hidden rest-pose FX meshes scaled near zero (e.g. attack-only water/flame nodes).
-        if (Math.hypot(m[0], m[1], m[2]) < 1e-3 || Math.hypot(m[4], m[5], m[6]) < 1e-3) continue;
-        for (const prim of meshes[node.mesh].primitives || []) {
-          const accIdx = prim.attributes && prim.attributes.POSITION;
-          if (accIdx === undefined) continue;
-          const acc = accessors[accIdx], bv = acc && views[acc.bufferView];
-          if (!acc || !bv || acc.componentType !== 5126 || acc.type !== "VEC3") continue;
-          const stride = bv.byteStride || 12;
-          const start = binStart + (bv.byteOffset || 0) + (acc.byteOffset || 0);
-          if (start + (acc.count - 1) * stride + 12 > binStart + binLen) continue;
-          const pts = new Float32Array(acc.count * 3);
-          for (let k = 0; k < acc.count; k++) {
-            const pOff = start + k * stride;
-            const x = dv.getFloat32(pOff, true), y = dv.getFloat32(pOff + 4, true), z = dv.getFloat32(pOff + 8, true);
-            const o = k * 3;
-            pts[o] = m[0] * x + m[4] * y + m[8] * z + m[12];
-            pts[o + 1] = m[1] * x + m[5] * y + m[9] * z + m[13];
-            pts[o + 2] = m[2] * x + m[6] * y + m[10] * z + m[14];
-          }
-          chunks.push(pts);
-          totalFloats += pts.length;
-        }
-      }
-      if (!totalFloats) return null;
-      const merged = new Float32Array(totalFloats);
-      let cursor = 0;
-      for (const ch of chunks) { merged.set(ch, cursor); cursor += ch.length; }
-      return merged;
-    } catch (_) {
-      return null;
-    }
-  }
-
   function initCompare() {
     const toolbarEl = document.getElementById("compare-toolbar");
     const gridEl = document.getElementById("compare-grid");
@@ -163,6 +106,7 @@
     const btnRetroFps = document.getElementById("btn-retro-fps");
     const btnIdle = document.getElementById("btn-idle");
     const btnSyncReset = document.getElementById("btn-sync-reset");
+    const actionSelect = document.getElementById("select-action");
     const studioTab = document.getElementById("tab-studio");
     const statusEl = document.getElementById("status-region");
     const emptyOverlay = document.getElementById("compare-empty");
@@ -179,7 +123,7 @@
 
     const cardCanvases = new Map();
     const cardCycles = new Map();
-    const cardOrigPills = [];
+    const cardOrigPills = new Map();
     const card3dPills = [];
     for (const cls of ANT_CLASSES) {
       const cv = gridEl.querySelector(`[data-canvas-ant="${cls}"]`);
@@ -187,7 +131,7 @@
       const cy = gridEl.querySelector(`[data-cycle-for="${cls}"]`);
       if (cy) cardCycles.set(cls, cy);
       const lPill = gridEl.querySelector(`[data-card-ant="${cls}"] .compare-pill-left`);
-      if (lPill) cardOrigPills.push(lPill);
+      if (lPill) cardOrigPills.set(cls, lPill);
       const rPill = gridEl.querySelector(`[data-card-ant="${cls}"] .compare-pill-right`);
       if (rPill) card3dPills.push(rPill);
     }
@@ -273,6 +217,8 @@
       soloOrbited: false,
       origBundle: null,
       origMetrics: null,
+      extraBundles: new Map(),
+      extraPending: new Map(),
       origImages: new Map(),
       models: new Map(),
       scenes: new Map(),
@@ -343,15 +289,57 @@
       studioTab.setAttribute("href", "viewer.html?" + q.toString());
     }
 
-    const actionMeta = () => ACTION_META[state.action] || ACTION_META.idle;
+    const actionMeta = () => getAction(state.action);
     const activeClipName = () => actionMeta().clip;
 
-    function getOrigEntry(cls, angle) {
-      if (!state.origBundle) return null;
-      const map = state.origBundle[actionMeta().key] || state.origBundle.sprites;
-      return (map && map[cls] && map[cls][angle])
-        || (state.origBundle.sprites && state.origBundle.sprites[cls] && state.origBundle.sprites[cls][angle])
-        || null;
+    function ensureExtraBundle(cls) {
+      if (state.extraBundles.has(cls) || state.extraPending.has(cls)) return;
+      const p = fetch(`models/orig_sprites_extra_${encodeURIComponent(cls)}.json`, { cache: "no-cache" })
+        .then((res) => (res.ok ? res.json() : null))
+        .catch(() => null)
+        .then((bundle) => {
+          state.extraPending.delete(cls);
+          state.extraBundles.set(cls, bundle || { actions: {} });
+          updateUiState();
+          markDirty();
+        });
+      state.extraPending.set(cls, p);
+    }
+
+    function ensureActiveExtras() {
+      const meta = actionMeta();
+      if (!meta.extra) return;
+      const targets = state.ant === "all" ? ANT_CLASSES : [state.ant];
+      for (const cls of targets) {
+        if (actionSupportsClass(state.action, cls)) ensureExtraBundle(cls);
+      }
+    }
+
+    function resolveOrig(cls, angle) {
+      const meta = actionMeta();
+      const idleEntry = state.origBundle && state.origBundle.sprites && state.origBundle.sprites[cls] && state.origBundle.sprites[cls][angle];
+      if (!meta.extra) {
+        const map = state.origBundle && (state.origBundle[meta.coreKey] || state.origBundle.sprites);
+        const entry = (map && map[cls] && map[cls][angle]) || idleEntry || null;
+        return { entry, actionKey: state.action, angle, canFlip: true, hint: "", loading: false, na: false };
+      }
+      if (!actionSupportsClass(state.action, cls)) {
+        return { entry: idleEntry || null, actionKey: "idle", angle, canFlip: true, hint: "", loading: false, na: true };
+      }
+      const extra = state.extraBundles.get(cls);
+      if (!extra) {
+        ensureExtraBundle(cls);
+        return { entry: idleEntry || null, actionKey: "idle", angle, canFlip: true, hint: "", loading: true, na: false };
+      }
+      const actObj = extra.actions && extra.actions[state.action];
+      if (!actObj || !actObj.angles) {
+        return { entry: idleEntry || null, actionKey: "idle", angle, canFlip: true, hint: "", loading: false, na: true };
+      }
+      const mapped = nearestAvailableAngle(angle, actObj.available_angles, meta.angleHint);
+      const entry = actObj.angles[mapped.angle] || idleEntry || null;
+      const canFlip = actObj.available_angles.length > 1 && mapped.angle !== "301" && mapped.angle !== "701";
+      const hint = mapped.exact && (!state.flipped || canFlip) ? "" : (mapped.hint || meta.angleHint || "");
+      return { entry, actionKey: state.action, angle: mapped.angle, canFlip, hint, loading: false, na: false };
     }
 
     function syncDebugState() {
@@ -399,24 +387,34 @@
     function updateCycleLabels() {
       const meta = actionMeta();
       for (const cls of ANT_CLASSES) {
-        const origEntry = getOrigEntry(cls, state.angle);
+        const res = resolveOrig(cls, state.angle);
+        const origEntry = res.entry;
         const model = state.models.get(cls);
         const origSec = origEntry ? origEntry.total_ms / 1000 : NaN;
-        const sel = selectActionAnims(model, meta.clip);
+        const sel = selectActionAnims(model, res.na ? "Idle" : meta.clip);
         let text;
-        if (state.action !== "idle" && model && !sel.matched) {
-          text = `Orig ${formatSec(origSec)} \u00b7 3D Idle (no ${meta.label} yet)`;
+        if (res.na) {
+          text = `N/A (${meta.label}) \u00b7 Idle`;
+        } else if (res.loading) {
+          text = `Loading 1998 ${meta.label}\u2026`;
+        } else if (state.action !== "idle" && model && !sel.matched) {
+          text = `Orig ${formatSec(origSec)} \u00b7 3D Idle (building\u2026)`;
         } else {
           const modelSec = sel.anims.length ? sel.anims[0].duration : NaN;
           text = `Orig ${formatSec(origSec)} \u00b7 3D ${formatSec(modelSec)}`;
         }
         const cardCy = cardCycles.get(cls);
         if (cardCy) cardCy.textContent = text;
+        const lPill = cardOrigPills.get(cls);
+        if (lPill) {
+          lPill.textContent = res.hint || ((state.flipped && res.canFlip) ? "1998 Orig \u00b7 flip" : "1998 Original");
+        }
         if (state.ant === cls) {
           soloCycleEl.textContent = text;
-          const flipTag = state.flipped ? " flip" : "";
+          const flipTag = state.flipped && res.canFlip ? " flip" : "";
+          const hintTag = res.hint ? ` \u00b7 ${res.hint}` : "";
           const stepCount = origEntry && Array.isArray(origEntry.steps) ? origEntry.steps.length : (origEntry ? origEntry.frame_count : 0);
-          soloAnimEl.textContent = origEntry ? `${origEntry.anim_name}${flipTag} (${stepCount}f)` : "\u2014";
+          soloAnimEl.textContent = origEntry ? `${origEntry.anim_name}${flipTag} (${stepCount}f)${hintTag}` : "\u2014";
         }
       }
     }
@@ -440,6 +438,18 @@
       toolbarEl.querySelectorAll("button[data-action]").forEach((b) => {
         b.setAttribute("aria-pressed", String(b.dataset.action === state.action));
       });
+      if (actionSelect) {
+        populateActionSelect(actionSelect, {
+          activeAction: state.action,
+          activeAnt: state.ant === "all" ? "" : state.ant,
+          allowUnavailable: true,
+          hasClipFn: (act) => {
+            const ids = state.ant === "all" ? ANT_CLASSES : [state.ant];
+            return ids.some((id) => actionSupportsClass(act.id, id) && selectActionAnims(state.models.get(id), act.clip).matched);
+          },
+        });
+        actionSelect.dataset.extended = String(!QUICK_ACTIONS.includes(state.action));
+      }
       toolbarEl.querySelectorAll("button[data-speed]").forEach((b) => {
         b.setAttribute("aria-pressed", String(Number(b.dataset.speed) === state.speed));
       });
@@ -467,8 +477,6 @@
       }
       metaPlay.textContent = `${actionMeta().label} \u00b7 ${state.idle ? "Playing" : "Paused"} \u00b7 ${state.speed}\u00d7${state.retroFps ? " \u00b7 1998 FPS" : ""}`;
 
-      const origCardLabel = comp.flip ? "1998 Orig \u00b7 flip" : "1998 Original";
-      for (const pill of cardOrigPills) pill.textContent = origCardLabel;
       const base3d = state.pixelMode ? "Live 3D \u00b7 1\u00d7" : "Live 3D";
       const card3dLabel = offYaw || comp.flip ? `${base3d} \u00b7 ${yawDisp}\u00b0` : base3d;
       for (const pill of card3dPills) pill.textContent = card3dLabel;
@@ -529,18 +537,23 @@
 
     function selectAction(next) {
       const target = validAction(next) || "idle";
-      if (state.action === target) return;
+      const meta = getAction(target);
+      if (state.ant !== "all" && meta.group === "class" && meta.classes && meta.classes.length === 1 && !actionSupportsClass(target, state.ant)) {
+        state.ant = meta.classes[0];
+      }
+      const changed = state.action !== target;
       state.action = target;
       state.simTime = 0;
+      ensureActiveExtras();
       updateUiState();
       markDirty();
-      const meta = actionMeta();
+      if (!changed) return;
       if (target !== "idle") {
         const checkIds = state.ant === "all" ? ANT_CLASSES : [state.ant];
-        const anyMatched = checkIds.some((id) => selectActionAnims(state.models.get(id), meta.clip).matched);
+        const anyMatched = checkIds.some((id) => actionSupportsClass(target, id) && selectActionAnims(state.models.get(id), meta.clip).matched);
         announce(anyMatched
           ? `Action set to ${meta.label} sequence.`
-          : `Action set to 1998 ${meta.label} sequence (3D falls back to Idle until ${meta.label} clips are built).`);
+          : `Previewing 1998 ${meta.label} (3D clip building\u2026).`);
       } else {
         announce("Action set to Idle stance.");
       }
@@ -580,7 +593,7 @@
         announce("1998 FPS off (smooth 60 fps 3D playback).");
         return;
       }
-      const step = actionMeta().stepSec[state.ant];
+      const step = state.ant !== "all" ? stepSecFor(state.action, state.ant) : 0;
       if (step) {
         const fps = (1 / step).toFixed(1).replace(/\.0$/, "");
         announce(`1998 FPS on (${ANT_LABELS[state.ant]} \u00b7 ${fps} fps, ${Math.round(step * 1000)}ms step).`);
@@ -688,12 +701,12 @@
       return { maxW, maxAbove, maxBelow, workerVisH: w301 ? w301.vis_h : 34 };
     }
 
-    function getOrigImage(cls, angle, team) {
-      const key = `${state.action}:${cls}:${angle}:${team}`;
+    function getOrigImage(res, cls, team) {
+      if (!res || !res.entry) return null;
+      const key = `${res.actionKey}:${cls}:${res.angle}:${team}`;
       const existing = state.origImages.get(key);
       if (existing) return existing;
-      const entry = getOrigEntry(cls, angle);
-      const uri = entry && entry.sheets && entry.sheets[team];
+      const uri = res.entry.sheets && res.entry.sheets[team];
       if (!uri) return null;
       const rec = { img: new Image(), ready: false, failed: false };
       rec.img.decoding = "async";
@@ -789,17 +802,19 @@
     }
 
     function drawOrigSprite(ctx, cls, x0, panelW, groundY, pxScale) {
-      const entry = getOrigEntry(cls, state.angle);
+      const res = resolveOrig(cls, state.angle);
+      const entry = res.entry;
       if (!entry) return;
-      const rec = getOrigImage(cls, state.angle, state.team);
+      const rec = getOrigImage(res, cls, state.team);
       if (!rec || !rec.ready) return;
+      const doFlip = state.flipped && res.canFlip;
       const frameIdx = pickOrigFrame(entry, state.simTime);
       const dw = entry.fw * pxScale;
       const dh = entry.fh * pxScale;
       let dx = Math.round(x0 + (panelW - dw) * 0.5);
-      if (state.action !== "idle" && Number.isFinite(entry.anchor_x)) {
+      if (res.actionKey !== "idle" && Number.isFinite(entry.anchor_x)) {
         const ax = entry.anchor_x * pxScale;
-        const rawX = state.flipped
+        const rawX = doFlip
           ? Math.round(x0 + panelW * 0.5 + ax - dw)
           : Math.round(x0 + panelW * 0.5 - ax);
         dx = dw <= panelW - 4 ? clamp(rawX, x0 + 2, x0 + panelW - dw - 2) : Math.round(x0 + (panelW - dw) * 0.5);
@@ -827,7 +842,7 @@
       ctx.rect(x0, 0, panelW, ctx.canvas.height);
       ctx.clip();
       ctx.imageSmoothingEnabled = false;
-      if (state.flipped) {
+      if (doFlip) {
         ctx.translate(dx + dw, dy);
         ctx.scale(-1, 1);
         ctx.drawImage(srcImg, sx, 0, entry.fw, entry.fh, 0, 0, dw, dh);
@@ -846,12 +861,12 @@
 
     function sampled3dTiming(cls) {
       if (!state.retroFps) return { idleTime: state.simTime, stepSec: 0 };
-      const origEntry = getOrigEntry(cls, state.angle);
+      const origEntry = resolveOrig(cls, state.angle).entry;
       if (origEntry && Array.isArray(origEntry.steps) && origEntry.steps.length > 1 && origEntry.total_ms) {
         const st = pickOrigStep(origEntry, state.simTime);
         return { idleTime: st.quantizedSec, stepSec: st.stepDurSec };
       }
-      const step = actionMeta().stepSec[cls] || 0.125;
+      const step = stepSecFor(state.action, cls);
       return { idleTime: Math.floor(state.simTime / step) * step, stepSec: step };
     }
 
@@ -994,9 +1009,12 @@
           state.lastPxScaleLabel = scParams.scaleText;
           metaScale.textContent = `Worker-locked \u00b7 ${scParams.scaleText} pixel scale`;
         }
-        soloOrigPill.textContent = state.flipped
-          ? `1998 Original \u00b7 flip \u00b7 ${scParams.scaleText}`
-          : `1998 Original \u00b7 ${scParams.scaleText}`;
+        const soloRes = resolveOrig(state.ant, state.angle);
+        soloOrigPill.textContent = soloRes.hint
+          ? `${soloRes.hint} \u00b7 ${scParams.scaleText}`
+          : (state.flipped && soloRes.canFlip
+            ? `1998 Original \u00b7 flip \u00b7 ${scParams.scaleText}`
+            : `1998 Original \u00b7 ${scParams.scaleText}`);
 
         const gOrig = Math.round(oh * scParams.gFrac);
         drawStudioBackdrop(soloOrigCtx, ow, oh, gOrig, false);
@@ -1065,6 +1083,7 @@
         announce("Asset load failed: " + state.error);
       } else {
         emptyOverlay.hidden = true;
+        updateUiState();
         announce("Loaded all 6 1998 sprites and live 3D ant models.");
       }
       syncDebugState();
@@ -1085,6 +1104,7 @@
       else if (btn === btnIdle) toggleIdle();
       else if (btn === btnSyncReset) syncReset();
     });
+    if (actionSelect) actionSelect.addEventListener("change", () => selectAction(actionSelect.value));
 
     let suppressStageClickUntil = 0;
     function attachHorizontalDrag(el, matchFn, sensitivity) {
@@ -1218,6 +1238,9 @@
       if (e.key === "Escape" && state.ant !== "all") {
         e.preventDefault();
         selectAnt("all");
+      } else if (e.key === "w" || e.key === "W") {
+        e.preventDefault();
+        toggleAction("walk");
       } else if (e.key === "a" || e.key === "A") {
         e.preventDefault();
         toggleAction("attack");
@@ -1292,6 +1315,7 @@
       requestAnimationFrame(frame);
     }
 
+    ensureActiveExtras();
     updateUiState();
     loadAssets();
     requestAnimationFrame(frame);

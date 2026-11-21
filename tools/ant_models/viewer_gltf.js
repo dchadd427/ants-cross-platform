@@ -443,10 +443,17 @@
     const blinkAnim = animations.find((a) => /blink/i.test(a.name))
       || animations.find((a) => a.channels.some((c) => eyelidSet.has(c.nodeIndex))) || null;
     const nonBlinkAnims = animations.filter((a) => a !== blinkAnim && a.duration > 0 && a.channels.length > 0);
-    const attackAnims = nonBlinkAnims.filter((a) => /attack/i.test(a.name));
-    const hitAnims = nonBlinkAnims.filter((a) => /^hit$/i.test(a.name) || /\bhit\b/i.test(a.name));
-    const idleOnly = nonBlinkAnims.filter((a) => !attackAnims.includes(a) && !hitAnims.includes(a));
-    const idleAnims = idleOnly.length ? idleOnly : nonBlinkAnims;
+    const animsByName = new Map();
+    for (const a of nonBlinkAnims) {
+      const k = (a.name || "").trim().toLowerCase();
+      if (!k) continue;
+      if (!animsByName.has(k)) animsByName.set(k, []);
+      animsByName.get(k).push(a);
+    }
+    const attackAnims = animsByName.get("attack") || nonBlinkAnims.filter((a) => /attack/i.test(a.name));
+    const hitAnims = animsByName.get("hit") || nonBlinkAnims.filter((a) => /^hit$/i.test(a.name) || /\bhit\b/i.test(a.name));
+    const idleExact = animsByName.get("idle") || nonBlinkAnims.filter((a) => /idle/i.test(a.name));
+    const idleAnims = idleExact.length ? idleExact : (nonBlinkAnims.length ? [nonBlinkAnims[0]] : []);
     const blinkInfo = { anim: blinkAnim, eyelidNodes, closedTime: 0, startTime: 0, endTime: 0.24, hasBlink: Boolean(blinkAnim || eyelidNodes.length) };
     if (blinkAnim && blinkAnim.channels.length) {
       const refCh = blinkAnim.channels.find((c) => c.path === "rotation") || blinkAnim.channels[0], times = refCh.times;
@@ -465,7 +472,7 @@
     const isBlend = (dc) => (dc.prim.material.isTranslucent ? 1 : 0);
     drawCalls.sort((a, b) => isBlend(a) - isBlend(b));
     return {
-      drawCalls, nodeDefs, nodeOrder, baseWorldMats, animations, idleAnims, attackAnims, hitAnims, blinkInfo, bounds: { min, max },
+      drawCalls, nodeDefs, nodeOrder, baseWorldMats, animations, animsByName, idleAnims, attackAnims, hitAnims, blinkInfo, bounds: { min, max },
       size: [max[0] - min[0], max[1] - min[1], max[2] - min[2]],
       center: [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5, (min[2] + max[2]) * 0.5],
       triCount, meshCount: uploadedMeshes.length, nodeCount, textureCount: ownedTextures.length, hasVertexColors,
@@ -477,9 +484,64 @@
     };
   }
 
+  function extractRestWorldVerts(model, offsetMat) {
+    const raw = model && model.rawBytes;
+    if (!raw || raw.byteLength < 28) return null;
+    try {
+      const dv = new DataView(raw);
+      if (dv.getUint32(0, true) !== 0x46546c67) return null;
+      const jsonLen = dv.getUint32(12, true);
+      const gltf = JSON.parse(new TextDecoder("utf-8").decode(new Uint8Array(raw, 20, jsonLen)));
+      const binOff = 20 + jsonLen;
+      if (binOff + 8 > raw.byteLength) return null;
+      const binLen = dv.getUint32(binOff, true);
+      const binStart = binOff + 8;
+      const nodes = gltf.nodes || [], meshes = gltf.meshes || [];
+      const accessors = gltf.accessors || [], views = gltf.bufferViews || [];
+      const chunks = [];
+      let totalFloats = 0;
+      for (let ni = 0; ni < nodes.length; ni++) {
+        const node = nodes[ni];
+        if (!node || node.mesh === undefined || !meshes[node.mesh]) continue;
+        const baseMat = model.baseWorldMats && model.baseWorldMats[ni];
+        if (!baseMat) continue;
+        const m = mat4Multiply(offsetMat, baseMat);
+        // Skip hidden rest-pose FX meshes scaled near zero (e.g. attack-only water/flame nodes).
+        if (Math.hypot(m[0], m[1], m[2]) < 1e-3 || Math.hypot(m[4], m[5], m[6]) < 1e-3) continue;
+        for (const prim of meshes[node.mesh].primitives || []) {
+          const accIdx = prim.attributes && prim.attributes.POSITION;
+          if (accIdx === undefined) continue;
+          const acc = accessors[accIdx], bv = acc && views[acc.bufferView];
+          if (!acc || !bv || acc.componentType !== 5126 || acc.type !== "VEC3") continue;
+          const stride = bv.byteStride || 12;
+          const start = binStart + (bv.byteOffset || 0) + (acc.byteOffset || 0);
+          if (start + (acc.count - 1) * stride + 12 > binStart + binLen) continue;
+          const pts = new Float32Array(acc.count * 3);
+          for (let k = 0; k < acc.count; k++) {
+            const pOff = start + k * stride;
+            const x = dv.getFloat32(pOff, true), y = dv.getFloat32(pOff + 4, true), z = dv.getFloat32(pOff + 8, true);
+            const o = k * 3;
+            pts[o] = m[0] * x + m[4] * y + m[8] * z + m[12];
+            pts[o + 1] = m[1] * x + m[5] * y + m[9] * z + m[13];
+            pts[o + 2] = m[2] * x + m[6] * y + m[10] * z + m[14];
+          }
+          chunks.push(pts);
+          totalFloats += pts.length;
+        }
+      }
+      if (!totalFloats) return null;
+      const merged = new Float32Array(totalFloats);
+      let cursor = 0;
+      for (const ch of chunks) { merged.set(ch, cursor); cursor += ch.length; }
+      return merged;
+    } catch (_) {
+      return null;
+    }
+  }
+
   window.__antGltf = {
     clamp, mat4Identity, mat4Translate, mat4Multiply, mat4FromTRS, mat4LookAt, mat4Perspective, mat4Ortho,
     mat3DetFromMat4, mat3NormalFromMat4, transformPoint, quatSlerp, quatMul, quatAngle, sampleChannel,
-    uploadBuffer, createFallbackTextures, parseGlb,
+    uploadBuffer, createFallbackTextures, parseGlb, extractRestWorldVerts,
   };
 })();
