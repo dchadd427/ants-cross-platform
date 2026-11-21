@@ -652,6 +652,82 @@ def _add_fire_idle(scene: SceneBuilder, *, hold_magnifying_glass: bool = False) 
     return clip
 
 
+def _add_fire_attack(scene: SceneBuilder, *, hold_magnifying_glass: bool = False) -> AnimationClip:
+    """Authentic `afat` 0.36s (6-frame [60x6]ms) rear-up windup into fluted-helmet battering-ram headbutt."""
+
+    def _rest_t(node: str) -> Tuple[float, float, float]:
+        xf = scene.get_node_transform(node)
+        return xf.translation if xf is not None else (0.0, 0.0, 0.0)
+
+    def _rest_r(node: str) -> Tuple[float, float, float, float]:
+        xf = scene.get_node_transform(node)
+        return xf.rotation if xf is not None else (0.0, 0.0, 0.0, 1.0)
+
+    def _align_quats(qs: List[Tuple[float, float, float, float]]) -> List[Tuple[float, float, float, float]]:
+        out = [qs[0]]
+        for q in qs[1:]:
+            if sum(a * b for a, b in zip(out[-1], q)) < 0.0:
+                q = (-q[0], -q[1], -q[2], -q[3])
+            out.append(q)
+        return out
+
+    # (t, dy, dz, ub_rx, head_rx, gaster_rx, arm_back_ry, arm_lift_rz, arm_pitch_rx, elbow_rx, jaw_rx)
+    # f0-f3: rear tall & lean back lifting the 'A' shield; f4-f5: +1.16 rad battering-ram helmet slam!
+    rows = [
+        (0.00, 0.000, 0.000, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00),
+        (0.06, 0.018, -0.010, -0.09, -0.07, 0.08, 0.14, 0.08, 0.06, -0.10, 0.03),
+        (0.12, 0.032, -0.022, -0.17, -0.13, 0.15, 0.28, 0.16, 0.12, -0.20, 0.06),
+        (0.18, 0.038, -0.028, -0.21, -0.16, 0.19, 0.36, 0.22, 0.16, -0.26, 0.08),
+        (0.24, -0.036, 0.058, 1.14, 0.14, -0.24, 0.68, 0.88, -0.22, -0.55, -0.08),
+        (0.30, -0.026, 0.044, 0.98, 0.09, -0.18, 0.56, 0.74, -0.16, -0.45, -0.05),
+        (0.36, 0.000, 0.000, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00),
+    ]
+    times = [round(r[0], 4) for r in rows]
+    bx, by, bz = _rest_t("upper_body")
+    r0_b = _rest_r("upper_body")
+    r0_h = _rest_r("head_group")
+    channels: List[AnimationChannel] = [
+        AnimationChannel("upper_body", "translation", list(times), [(bx, by + r[1], bz + r[2]) for r in rows]),
+        AnimationChannel("upper_body", "rotation", list(times), _align_quats([quat_mul(r0_b, quat_from_euler_xyz(rx=r[3])) for r in rows])),
+        AnimationChannel("head_group", "rotation", list(times), _align_quats([quat_mul(r0_h, quat_from_euler_xyz(rx=r[4])) for r in rows])),
+    ]
+    if "gaster_group" in scene.nodes:
+        r0_g = _rest_r("gaster_group")
+        channels.append(AnimationChannel("gaster_group", "rotation", list(times), _align_quats([quat_mul(r0_g, quat_from_euler_xyz(rx=r[5])) for r in rows])))
+    for side_tag, sign, scale in (("left", +1.0, 1.0), ("right", -1.0, 0.55 if hold_magnifying_glass else 1.0)):
+        arm_n, fore_n = f"arm_{side_tag}", f"forearm_{side_tag}"
+        if arm_n in scene.nodes and scene.get_node(arm_n):
+            r0_a = _rest_r(arm_n)
+            channels.append(
+                AnimationChannel(
+                    arm_n,
+                    "rotation",
+                    list(times),
+                    _align_quats([
+                        quat_mul(r0_a, quat_from_euler_xyz(rx=scale * r[8], ry=sign * scale * r[6], rz=sign * scale * r[7]))
+                        for r in rows
+                    ]),
+                )
+            )
+        if fore_n in scene.nodes and scene.get_node(fore_n):
+            r0_f = _rest_r(fore_n)
+            channels.append(
+                AnimationChannel(
+                    fore_n,
+                    "rotation",
+                    list(times),
+                    _align_quats([quat_mul(r0_f, quat_from_euler_xyz(rx=scale * r[9])) for r in rows]),
+                )
+            )
+    if "mandibles" in scene.nodes and scene.get_node("mandibles"):
+        r0_j = _rest_r("mandibles")
+        channels.append(AnimationChannel("mandibles", "rotation", list(times), _align_quats([quat_mul(r0_j, quat_from_euler_xyz(rx=r[10])) for r in rows])))
+
+    clip = scene.add_animation("Attack", channels, replace=True)
+    sync_leg_flex_to_clip(scene, "Attack", swivel=0.0)
+    return clip
+
+
 def _scale_fire_head(
     scene: SceneBuilder,
     anchors: dict,
@@ -754,6 +830,7 @@ def build_fire(blink: float = 0.0, *, hold_magnifying_glass: bool = False) -> Sc
             scene.set_node_transform("magnifying_glass", translation=(gx - er[0], gy - er[1], gz - er[2]))
 
     _add_fire_idle(scene, hold_magnifying_glass=hold_magnifying_glass)
+    _add_fire_attack(scene, hold_magnifying_glass=hold_magnifying_glass)
     return scene
 
 

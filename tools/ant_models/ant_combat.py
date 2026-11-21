@@ -1015,6 +1015,75 @@ def _add_combat_idle_animation(scene: SceneBuilder) -> None:
     ], replace=True)
 
 
+def _add_combat_attack_animation(scene: SceneBuilder) -> None:
+    """Authentic `acat` 0.54s (6-frame [80,100,60,80,100,120]ms) cross-chest windup into wide haymaker spread."""
+    q_id = (0.0, 0.0, 0.0, 1.0)
+    sh_l = np.array(ARM_PTS_LEFT[0], dtype=np.float64)
+    el_l = np.array(ARM_PTS_LEFT[2], dtype=np.float64)
+    fi_l = np.array(ARM_PTS_LEFT[4], dtype=np.float64)
+    sh_r = np.array([-ARM_PTS_LEFT[0][0], ARM_PTS_LEFT[0][1], ARM_PTS_LEFT[0][2]])
+    el_r = np.array([-ARM_PTS_LEFT[2][0], ARM_PTS_LEFT[2][1], ARM_PTS_LEFT[2][2]])
+    fi_r = np.array([-ARM_PTS_LEFT[4][0], ARM_PTS_LEFT[4][1], ARM_PTS_LEFT[4][2]])
+
+    def _aim_arm(
+        sh: np.ndarray,
+        el: np.ndarray,
+        fi: np.ndarray,
+        u_dir: Tuple[float, float, float],
+        f_dir: Tuple[float, float, float],
+    ) -> Tuple[Tuple[float, float, float, float], Tuple[float, float, float, float]]:
+        q_sh = _quat_shortest_arc(el - sh, np.asarray(u_dir, dtype=np.float64))
+        r_sh = _quat_rot_mat(q_sh)
+        q_el = _quat_shortest_arc(fi - el, r_sh.T @ np.asarray(f_dir, dtype=np.float64))
+        return q_sh, q_el
+
+    def _align_quats(qs: List[Tuple[float, float, float, float]]) -> List[Tuple[float, float, float, float]]:
+        out = [qs[0]]
+        for q in qs[1:]:
+            if sum(a * b for a, b in zip(out[-1], q)) < 0.0:
+                q = (-q[0], -q[1], -q[2], -q[3])
+            out.append(q)
+        return out
+
+    # Cross-chest coiled windup poses (L slightly higher than R so massive gauntlets never collide!).
+    lsh_f1, lel_f1 = _aim_arm(sh_l, el_l, fi_l, (0.20, -0.52, 0.83), (-0.82, 0.22, 0.53))
+    rsh_f1, rel_f1 = _aim_arm(sh_r, el_r, fi_r, (-0.20, -0.64, 0.74), (0.82, -0.16, 0.55))
+    lsh_f2, lel_f2 = _aim_arm(sh_l, el_l, fi_l, (0.12, -0.54, 0.83), (-0.88, 0.24, 0.41))
+    rsh_f2, rel_f2 = _aim_arm(sh_r, el_r, fi_r, (-0.12, -0.66, 0.74), (0.88, -0.18, 0.44))
+    # Explosive double-arm haymaker fling wide outward & high (`acat301`/`acat901` f3-f4) + follow-through (f5).
+    lsh_f3, lel_f3 = _aim_arm(sh_l, el_l, fi_l, (0.88, 0.34, 0.33), (0.92, 0.28, 0.26))
+    rsh_f3, rel_f3 = _aim_arm(sh_r, el_r, fi_r, (-0.88, 0.38, 0.28), (-0.92, 0.32, 0.22))
+    lsh_f4, lel_f4 = _aim_arm(sh_l, el_l, fi_l, (0.86, 0.46, -0.22), (0.82, 0.44, -0.37))
+    rsh_f4, rel_f4 = _aim_arm(sh_r, el_r, fi_r, (-0.86, 0.48, -0.22), (-0.82, 0.46, -0.37))
+    lsh_f5, lel_f5 = _aim_arm(sh_l, el_l, fi_l, (0.92, 0.06, 0.39), (0.84, -0.16, 0.52))
+    rsh_f5, rel_f5 = _aim_arm(sh_r, el_r, fi_r, (-0.92, 0.08, 0.39), (-0.84, -0.14, 0.52))
+
+    # (t, dy, dz, ub_rx, head_q, lsh_q, lel_q, rsh_q, rel_q, gaster_rx)
+    rows = [
+        (0.00, 0.000, 0.000, 0.00, q_id, q_id, q_id, q_id, q_id, 0.00),
+        (0.08, -0.028, 0.025, 0.30, quat_from_euler_xyz(rx=-0.16, ry=-0.06), lsh_f1, lel_f1, rsh_f1, rel_f1, -0.12),
+        (0.18, -0.038, 0.032, 0.36, quat_from_euler_xyz(rx=-0.22, ry=0.06), lsh_f2, lel_f2, rsh_f2, rel_f2, -0.16),
+        (0.24, 0.028, 0.090, 0.04, quat_from_euler_xyz(rx=-0.14, ry=-0.04), lsh_f3, lel_f3, rsh_f3, rel_f3, 0.20),
+        (0.32, 0.038, 0.078, -0.06, quat_from_euler_xyz(rx=-0.20), lsh_f4, lel_f4, rsh_f4, rel_f4, 0.24),
+        (0.42, 0.012, 0.036, 0.05, quat_from_euler_xyz(rx=-0.06), lsh_f5, lel_f5, rsh_f5, rel_f5, 0.10),
+        (0.54, 0.000, 0.000, 0.00, q_id, q_id, q_id, q_id, q_id, 0.00),
+    ]
+    times = [round(r[0], 4) for r in rows]
+    bx, by, bz = scene.get_node_transform("upper_body").translation
+    ub_r0 = scene.get_node_transform("upper_body").rotation
+    hd_r0 = scene.get_node_transform("head_group").rotation
+    scene.add_animation("Attack", [
+        AnimationChannel("upper_body", "translation", list(times), [(bx, by + r[1], bz + r[2]) for r in rows]),
+        AnimationChannel("upper_body", "rotation", list(times), _align_quats([quat_mul(ub_r0, quat_from_euler_xyz(rx=r[3])) for r in rows])),
+        AnimationChannel("head_group", "rotation", list(times), _align_quats([quat_mul(hd_r0, r[4]) for r in rows])),
+        AnimationChannel("left_arm_group", "rotation", list(times), _align_quats([r[5] for r in rows])),
+        AnimationChannel("left_forearm_group", "rotation", list(times), _align_quats([r[6] for r in rows])),
+        AnimationChannel("right_arm_group", "rotation", list(times), _align_quats([r[7] for r in rows])),
+        AnimationChannel("right_forearm_group", "rotation", list(times), _align_quats([r[8] for r in rows])),
+        AnimationChannel("gaster_group", "rotation", list(times), _align_quats([quat_from_euler_xyz(rx=r[9]) for r in rows])),
+    ], replace=True)
+
+
 def build_combat(blink: float = 0.0) -> SceneBuilder:
     """Build the low, wide, rounded hunched armored Combat Ant (`blink` in [0, 1])."""
     scene = SceneBuilder(name="ant_combat")
@@ -1069,12 +1138,14 @@ def build_combat(blink: float = 0.0) -> SceneBuilder:
 
     scene.ground_to_y(0.0)
     _add_combat_idle_animation(scene)
-    # Uniformly scale Combat Ant down to 0.80x (geometry, node pivots, and Idle heave translations)
+    _add_combat_attack_animation(scene)
+    # Uniformly scale Combat Ant down to 0.80x (geometry, node pivots, and Idle/Attack heave translations)
     # for authentic proportions alongside Worker while preserving every sculpt detail and animation.
     scene.scale_all(0.80)
     scene.ground_to_y(0.0)
-    # Sync all 4 individual grounded legs to Combat's final 0.80x Idle bounce & flex clip!
+    # Sync all 4 individual grounded legs to Combat's final 0.80x Idle & Attack clips!
     sync_leg_flex_to_clip(scene, "Idle")
+    sync_leg_flex_to_clip(scene, "Attack", swivel=0.0)
     return scene
 
 

@@ -44,10 +44,10 @@ LEG_STYLES: Tuple[str, ...] = ("natural", "worker", "thief", "bomber", "swimmer"
 # Per-leg organic Idle motion personality (non-lockstep variation):
 # node -> (knee_bow_mult, splay_mult, phase_rad, swivel_amp_rad)
 _LEG_VARIATION: Dict[str, Tuple[float, float, float, float]] = {
-    "leg_mid_left": (1.25, 0.90, 0.00, 0.085),
-    "leg_mid_right": (1.80, 1.15, 1.55, 0.105),
-    "leg_rear_left": (1.50, 1.05, 2.95, 0.095),
-    "leg_rear_right": (2.00, 1.25, 4.45, 0.110),
+    "leg_mid_left": (1.25, 0.90, 0.00, 0.068),
+    "leg_mid_right": (1.80, 1.15, 1.55, 0.084),
+    "leg_rear_left": (1.50, 1.05, 2.95, 0.076),
+    "leg_rear_right": (2.00, 1.25, 4.45, 0.088),
 }
 
 # Per-leg organic offsets for the canonical "natural" stance (left = +X):
@@ -185,16 +185,16 @@ def build_legs(
     for side, tag, dz in ((+1, "left", 0.014 * sa), (-1, "right", -0.012 * sa)):
         for kind in ("mid", "rear"):
             if kind == "mid":
-                hip = (0.068, 0.326 - c, 0.014)
-                knee = (0.158 + 0.15 * c, 0.296 - 0.54 * c, 0.118 + 0.14 * c + 0.5 * dz)
-                ankle = (0.156 + 0.10 * c, mid_ankle_y, 0.008 - 0.12 * c + 0.5 * dz)
-                foot = (0.152 + 0.08 * c, 0.0, 0.094 + dz)
+                hip = (0.068, 0.326 - c, 0.033)
+                knee = (0.158 + 0.15 * c, 0.296 - 0.54 * c, 0.130 + 0.14 * c + 0.5 * dz)
+                ankle = (0.156 + 0.10 * c, mid_ankle_y, 0.038 - 0.12 * c + 0.5 * dz)
+                foot = (0.152 + 0.08 * c, 0.0, 0.102 + dz)
                 yaw = 0.18
             else:
-                hip = (0.066, 0.302 - c, -0.048)
-                knee = (0.168 + 0.15 * c, 0.278 - 0.54 * c, 0.022 + 0.12 * c + 0.4 * dz)
-                ankle = (0.168 + 0.10 * c, rear_ankle_y, -0.098 - 0.12 * c + 0.4 * dz)
-                foot = (0.160 + 0.08 * c, 0.0, -0.028 + 0.7 * dz)
+                hip = (0.066, 0.302 - c, -0.070)
+                knee = (0.178 + 0.15 * c, 0.278 - 0.54 * c, -0.030 + 0.12 * c + 0.4 * dz)
+                ankle = (0.178 + 0.10 * c, rear_ankle_y, -0.124 - 0.12 * c + 0.4 * dz)
+                foot = (0.168 + 0.08 * c, 0.0, -0.048 + 0.7 * dz)
                 yaw = 0.26
             label = f"{kind}_{tag}"
             fdx, fdz, kdy, kdz, adz, dyaw = offs[label]
@@ -496,7 +496,9 @@ def sync_leg_flex_to_clip(
             t_prev = times[-1]
             dt = float(t_val) - t_prev
             jump = float(np.linalg.norm(cur_f[0] - frames[-1][0]))
-            n_sub = max(1, int(math.ceil(dt / max_dt)), 2 if jump > 0.025 else 1)
+            q_dot = min(1.0, abs(sum(a * b for a, b in zip(cur_f[1], frames[-1][1]))))
+            ang_jump = 2.0 * math.acos(q_dot)
+            n_sub = max(1, int(math.ceil(dt / max_dt)), 2 if jump > 0.025 else 1, int(math.ceil(ang_jump / 0.22)))
             for s_i in range(1, n_sub):
                 t_mid = round(t_prev + dt * (s_i / n_sub), 5)
                 if t_prev < t_mid < float(t_val):
