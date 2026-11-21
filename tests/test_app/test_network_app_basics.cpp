@@ -37,10 +37,18 @@ void run_command_line_tests() {
         args = {"ants", "--join", "host"};
         ASSERT_EQ(Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st)).net_url, "");
         ASSERT_EQ(Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st)).net_address, "host");
-        {                                                                                  // a native NetGame cannot join through a WebSocket (it joins with TCP)
+        args = {"ants", "--join-url", "WSS://Play.Example.org:443/ws?x=1", "--room", "ROOM-42"};              // the one written form: what the rejoin keys call the server
+        ASSERT_EQ(Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st)).net_url, "wss://play.example.org/ws?x=1");
+        for (const char* bad : {"ws://play.example.org/ws", "http://play.example.org/ws", "play.example.org", "wss://", "wss://play.example.org:0/ws"}) {      // the desktop game speaks the encrypted door only
+            args = {"ants", "--join-url", bad, "--room", "ROOM-42"};
+            c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+            ASSERT_FALSE(c.startup_error.empty());
+        }
+        {                                                                                  // a native NetGame joins through wss:// only, and says why it did not
             ants::sim::SimulationEngine sim;
             ants::net::NetGame game(sim);
-            ASSERT_FALSE(game.join_url("wss://play.example.org/ws", "Web"));
+            ASSERT_FALSE(game.join_url("ws://play.example.org/ws", "Web"));
+            ASSERT_FALSE(game.join_refusal().empty());
             ASSERT_FALSE(game.active());
         }
         args = {"ants", "--room", "no spaces allowed"};                                  // not a room code: ignored
@@ -372,7 +380,7 @@ void run_bot_tests() {
         {   // a room takes --teams too (protocol 13: it is the choice of the START that this machine leads; changed on purpose: protocol 12 refused it with "--teams is for a game on this computer"),
             // whatever the order of the options; ffa is the default of a room too
             for (const std::vector<std::string>& line : {std::vector<std::string>{"ants", "--teams", "0+1", "--host"}, std::vector<std::string>{"ants", "--host", "--teams", "0+1"},
-                                                          std::vector<std::string>{"ants", "--join", "127.0.0.1", "--teams", "0+1"}, std::vector<std::string>{"ants", "--teams", "0+1", "--join-url", "ws://example.test/ws"}}) {
+                                                          std::vector<std::string>{"ants", "--join", "127.0.0.1", "--teams", "0+1"}, std::vector<std::string>{"ants", "--teams", "0+1", "--join-url", "wss://example.test/ws"}}) {
                 const ApplicationConfig c = parsed(line);
                 ASSERT_TRUE(c.startup_error.empty() && c.teams.set && c.teams.a == 0 && c.teams.b == 1 && c.net_role != ApplicationConfig::NetRole::None);
             }

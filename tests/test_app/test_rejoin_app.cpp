@@ -914,7 +914,7 @@ void run_use_tests() {
         ASSERT_FALSE(output.text().find(rejoin_key_hex(key)) != std::string::npos);
     } TEST_END();
 
-    TEST_CASE("RA4.2 Which Key A Join Uses: The Newest Entry Of That Server And Room (With The Entry's Seat In The Hello, The Key Alone Never In The Address), Or Of The Seat That --seat Asks For; Another Room, Another Server, Another Seat, An Entry Of More Than A Day, And A Join Without A Room Use None") {
+    TEST_CASE("RA4.2 Which Key A Join Uses (Plain Or Through wss, Each Server By Its Own Written Name): The Newest Entry Of That Server And Room (With The Entry's Seat In The Hello, The Key Alone Never In The Address), Or Of The Seat That --seat Asks For; Another Room, Another Server, Another Seat, An Entry Of More Than A Day, And A Join Without A Room Use None") {
         struct Row {
             const char* what;
             std::vector<std::string> lines;          // the key file ({port} stands for the test server's port); times are minutes before now
@@ -922,12 +922,15 @@ void run_use_tests() {
             uint8_t seat;                            // --seat (255: not given)
             int expect_key;                          // the tag of the key that the Hello must show, 0: none
             int expect_seat;                         // the seat that the Hello asks for
+            bool wss = false;                        // the join is --join-url wss://127.0.0.1:{port}/ws (its link is the test's own: the Hello arrives over the framed link of the catcher, no TLS)
+            const char* url = nullptr;               // wss: the address as it is written in the configuration (default: the written form of the URL above)
         };
         const int64_t now = wall_clock_ms();
         const auto line = [&](const std::string& server, const std::string& room, unsigned seat, uint8_t tag, int64_t minutes_ago) {
             return key_line(server, room, seat, key_of(tag), now - minutes_ago * 60 * 1000);
         };
         const std::string me = "127.0.0.1:{port}";
+        const std::string wss_me = "wss://127.0.0.1:{port}/ws";
         const std::vector<Row> rows = {
             {"the entry of the room", {line(me, "ROOM-A", 1, 11, 5)}, "ROOM-A", 255, 11, 1},
             {"--seat that is the entry's seat", {line(me, "ROOM-A", 1, 11, 5)}, "ROOM-A", 1, 11, 1},
@@ -939,6 +942,15 @@ void run_use_tests() {
             {"two seats of the room: the newest", {line(me, "ROOM-A", 0, 21, 60), line(me, "ROOM-A", 3, 22, 10)}, "ROOM-A", 255, 22, 3},
             {"two seats of the room, --seat 0: the older", {line(me, "ROOM-A", 0, 21, 60), line(me, "ROOM-A", 3, 22, 10)}, "ROOM-A", 0, 21, 0},
             {"no room (a direct join)", {line(me, "ROOM-A", 1, 11, 5)}, "", 255, 0, -1},
+            // a join through the encrypted door names the server by its URL in the written form: its entries are the URL's, a plain entry of the same host and port is another server, and the other way round
+            {"wss: the entry of the room (the URL is the server)", {line(wss_me, "ROOM-A", 1, 11, 5)}, "ROOM-A", 255, 11, 1, true},
+            {"wss: --seat that is the entry's seat", {line(wss_me, "ROOM-A", 1, 11, 5)}, "ROOM-A", 1, 11, 1, true},
+            {"wss: the address as typed (capitals, port, no path ...) is the same server", {line(wss_me, "ROOM-A", 1, 11, 5)}, "ROOM-A", 255, 11, 1, true, "WSS://127.0.0.1:{port}/ws"},
+            {"wss: a plain entry of the same host and port is another server", {line(me, "ROOM-A", 1, 11, 5)}, "ROOM-A", 255, 0, -1, true},
+            {"wss: another path of the same host is another server", {line("wss://127.0.0.1:{port}/other", "ROOM-A", 1, 11, 5)}, "ROOM-A", 255, 0, -1, true},
+            {"wss: another room", {line(wss_me, "ROOM-A", 1, 11, 5)}, "ROOM-B", 255, 0, -1, true},
+            {"wss: an entry of three hours and a minute", {line(wss_me, "ROOM-A", 1, 11, 3 * 60 + 1)}, "ROOM-A", 255, 0, -1, true},
+            {"plain: a wss entry of the same host and port is another server", {line(wss_me, "ROOM-A", 1, 11, 5)}, "ROOM-A", 255, 0, -1},
         };
         for (const Row& row : rows) {
             HelloCatcher catcher;
@@ -961,6 +973,13 @@ void run_use_tests() {
             cfg.net_role = ApplicationConfig::NetRole::Join;
             cfg.net_address = "127.0.0.1";
             cfg.net_port = catcher.port();
+            if (row.wss) {
+                std::string url = row.url != nullptr ? row.url : "wss://127.0.0.1:{port}/ws";
+                url.replace(url.find("{port}"), 6, std::to_string(catcher.port()));
+                cfg.net_url = url;
+                const uint16_t catcher_port = catcher.port();
+                cfg.net_link_maker = [catcher_port]() -> std::unique_ptr<net::Connection> { return net::TcpConnection::connect("127.0.0.1", catcher_port); };
+            }
             cfg.net_room = row.room;
             cfg.net_seat = row.seat;
             cfg.player_name = "Ann";
@@ -1045,7 +1064,7 @@ void run_menu_tests() {
         ASSERT_FALSE(output.text().find(rejoin_key_hex(key)) != std::string::npos);
     } TEST_END();
 
-    TEST_CASE("RA7.2 The Offer Is Only A Fresh Key Of A Server That The Menu Can Reach (An Entry Of More Than A Day, And The Browser's Entry, A URL, Are Not Offered); A Key That The Server Refuses (The Match Is Over) Comes Back To The First Panel With The Reason And The Button Is Gone; A Key That Was Let Go Of While The Menu Stood Open Says So At The Press") {
+    TEST_CASE("RA7.2 The Offer Is Only A Fresh Key Of A Server That The Menu Can Reach (An Entry Of More Than A Day, And An Unencrypted ws:// URL, Are Not Offered; A wss:// URL Is, The Menu Joins Such A Server Itself); A Key That The Server Refuses (The Match Is Over) Comes Back To The First Panel With The Reason And The Button Is Gone; A Key That Was Let Go Of While The Menu Stood Open Says So At The Press") {
         const Captured output;
         World w;
         ASSERT_TRUE(w.server.start(w.now));
@@ -1055,20 +1074,29 @@ void run_menu_tests() {
             std::ofstream out(path, std::ios::binary | std::ios::trunc);
             out << text;
         };
-        // not offered: three hours and a minute old, a URL
+        // not offered: three hours and a minute old, a URL that is not encrypted, a wss URL that is not in the written form (the host in capitals)
         {
             const fs::path dir = scratch_dir("ra72a");
-            write_file(dir / "rejoin.txt", key_line(server, "OLD-1", 0, key_of(1), now - 3 * 3600 * 1000 - 60 * 1000) + key_line("wss://play.example.org/game", "WEB-1", 1, key_of(2), now));
+            write_file(dir / "rejoin.txt", key_line(server, "OLD-1", 0, key_of(1), now - 3 * 3600 * 1000 - 60 * 1000) + key_line("ws://play.example.org/game", "WEB-1", 1, key_of(2), now) +
+                                               key_line("wss://Play.Example.org/game", "WEB-2", 2, key_of(7), now));
             Application& menu = w.start_menu_app(dir);
             ASSERT_FALSE(menu.start_menu().rejoin().has_value() || menu_has(menu, MenuId::Rejoin));
         }
-        // offered: the newest fresh one of a server that can be reached, of several
+        // offered: the newest fresh one of a server that can be reached, of several (a URL that is not encrypted is newer, and is no offer for this menu)
         {
             const fs::path dir = scratch_dir("ra72b");
-            write_file(dir / "rejoin.txt", key_line("wss://play.example.org/game", "WEB-1", 1, key_of(2), now) + key_line(server, "OLDER-1", 2, key_of(3), now - 120 * 1000) +
+            write_file(dir / "rejoin.txt", key_line("ws://play.example.org/game", "WEB-1", 1, key_of(2), now) + key_line(server, "OLDER-1", 2, key_of(3), now - 120 * 1000) +
                                                key_line(server, "NEWEST-1", 3, key_of(4), now - 60 * 1000));
             Application& menu = w.start_menu_app(dir);
-            ASSERT_TRUE(menu.start_menu().rejoin().has_value() && menu.start_menu().rejoin()->room == "NEWEST-1" && menu.start_menu().rejoin()->seat == 3);   // (the URL is newer, and is no offer for this menu)
+            ASSERT_TRUE(menu.start_menu().rejoin().has_value() && menu.start_menu().rejoin()->room == "NEWEST-1" && menu.start_menu().rejoin()->seat == 3);
+        }
+        // offered: a wss URL of the written form is a server of the encrypted door (what the game itself keeps for a match that it joined through wss), and the offer names that server
+        {
+            const fs::path dir = scratch_dir("ra72b2");
+            write_file(dir / "rejoin.txt", key_line("wss://play.example.org:8443/game", "SECURE-1", 1, key_of(8), now - 30 * 1000));
+            Application& menu = w.start_menu_app(dir);
+            ASSERT_TRUE(menu.start_menu().rejoin().has_value() && menu.start_menu().rejoin()->room == "SECURE-1" && menu.start_menu().rejoin()->seat == 1);
+            ASSERT_TRUE(menu.start_menu().rejoin()->server == (ServerAddress{"play.example.org", 8443, false, "/game"}));
         }
         // a key for a match that is over: the server has no such room
         {

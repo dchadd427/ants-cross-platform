@@ -36,6 +36,12 @@ artwork, sounds, music and maps are not covered by it: they belong to their copy
 - What: SQLite 3.53.4, <https://www.sqlite.org/>, by D. Richard Hipp and the SQLite developers.
 - Licence: public domain. The author disclaims copyright to the source code (the blessing at the top of `sqlite3.h`); <https://www.sqlite.org/copyright.html>.
 
+### Mbed TLS (TLS and X.509 library)
+
+- Where: `third_party/mbedtls/` (a subset of the release, unchanged: `README.md` there names the version, the source, the hash and the files). Built as the static library `ants_mbedtls` and linked by the game, the network library and the tests (not by the web build, which has the browser's TLS; the game server's program links the library through the network library but does not use it, since it leaves TLS to its proxy).
+- What: Mbed TLS 4.1.2 with TF-PSA-Crypto, <https://github.com/Mbed-TLS/mbedtls>, by the Mbed TLS Contributors (Trusted Firmware project).
+- Licence: Apache License 2.0 (this project uses the Apache-2.0 option of the dual licence "Apache-2.0 OR GPL-2.0-or-later"). The full text is in `third_party/mbedtls/LICENSE`.
+
 ### Libre Franklin (font)
 
 - Where: `Original-Ants/LibreFranklin-Medium.ttf` (the labels) and `Original-Ants/LibreFranklin-Black.ttf` (the numbers over the world and the scores), with their licence in

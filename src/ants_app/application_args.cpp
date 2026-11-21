@@ -9,6 +9,7 @@
 
 #include "ants_app/application.hpp"
 #include "ants_ai/bot.hpp"
+#include "ants_net/address.hpp"
 
 namespace ants::app {
 
@@ -138,7 +139,16 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
         } else if (std::strcmp(argv[i], "--join-url") == 0 && i + 1 < argc) {
             cfg.net_role = ApplicationConfig::NetRole::Join;
             mode_given = true;
-            cfg.net_url = argv[++i];                                           // ws:// or wss://: through a game server's WebSocket door
+            cfg.net_url = argv[++i];                                           // through a game server's WebSocket door: wss:// (the web build also takes ws://)
+#ifndef __EMSCRIPTEN__
+            net::WssUrl parsed_url;                                            // the desktop game speaks the encrypted door only; the one written form is what the rejoin keys call the server
+            std::string url_why;
+            if (!net::parse_wss_url(cfg.net_url, parsed_url, url_why)) {
+                if (cfg.startup_error.empty()) cfg.startup_error = "--join-url " + cfg.net_url + ": " + url_why;
+            } else {
+                cfg.net_url = net::wss_url_text(parsed_url);
+            }
+#endif
         } else if (std::strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
             long long port = 0;
             if (whole_number(argv[++i], 0, 65535, port)) cfg.net_port = static_cast<uint16_t>(port);
@@ -243,11 +253,11 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             cfg.display_index = std::max(-1, std::atoi(argv[++i]));
         } else if (std::strcmp(argv[i], "--audio-focus") == 0) {
             cfg.audio_follows_focus = true;
-        } else if (std::strcmp(argv[i], "--server") == 0) {                    // the game server of the start menu's Join and Host: HOST[:PORT]
+        } else if (std::strcmp(argv[i], "--server") == 0) {                    // the game server of the start menu's Join and Host: wss://HOST[/PATH] or HOST[:PORT]
             ServerAddress parsed;
             std::string why;
             if (i + 1 >= argc) {
-                if (cfg.startup_error.empty()) cfg.startup_error = "--server needs HOST[:PORT], e.g. --server beta.playants.org:4001";
+                if (cfg.startup_error.empty()) cfg.startup_error = "--server needs HOST[:PORT] or wss://HOST/ws, e.g. --server wss://beta.playants.org/ws";
             } else {
                 cfg.server = argv[++i];
                 if (!parse_server(cfg.server, parsed, why) && cfg.startup_error.empty()) cfg.startup_error = "--server " + cfg.server + ": " + why;

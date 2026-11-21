@@ -6,6 +6,8 @@ How to build and start Ants from source on macOS, Linux and Windows, how to buil
 
 The game needs a C++17 compiler, CMake 3.16 or newer, and SDL2 and SDL2_ttf. Only the game and the application's test programs need SDL: `-DANTS_BUILD_APP=OFF` leaves them out and builds the dedicated server and the other tests without it (see "Manual CMake Build"). `ccache` and Ninja are optional.
 
+The desktop game's encrypted link to a game server (TLS, [`NETWORK_PORT.md`](NETWORK_PORT.md#protocol-6-the-websocket-transport-and-the-pieces-of-the-dedicated-server-v0081) "The desktop game's encrypted link") needs nothing to install: Mbed TLS is in the repository (`third_party/mbedtls/`, built as the static library `ants_mbedtls` by every native build, about 10 seconds the first time; its `README.md` names the version, the source and the hash). It checks the server's certificate against the system's trusted roots, which it reads from the system: the Security framework on macOS (opened when the roots are read, not linked), the Windows certificate stores (the game links `crypt32`), and the bundle file of the distribution on Linux (`/etc/ssl/certs/ca-certificates.crt` and the other usual places; a minimal Linux image needs its `ca-certificates` package).
+
 The project is developed on macOS and on Windows 11 (Visual Studio 2022 Build Tools). CI builds every pull request on Linux (GCC), macOS (Apple clang) and Windows (MSVC 2022 and 2026) with `-DANTS_WERROR=ON` (every warning is an error) and runs the tests there, except that a pull request of documents, web pages and their tests only skips macOS and Windows ([`WORKFLOW.md`](WORKFLOW.md#light-checks-for-web-and-document-pull-requests)); every push to `main` runs all of it. It also builds the web image and the server image. The compilers and the SDL2 versions of each job are in the table of [`TESTING.md`](TESTING.md#continuous-integration); what to install on your own machine is in the sections below.
 
 ### macOS
@@ -57,7 +59,7 @@ That is for Debian-based systems such as Ubuntu; other distributions need the sa
 - **CMake** 3.16 or newer. The generator `Visual Studio 17 2022` needs CMake 3.21 or newer.
 - **x64 only**: the SDL2 packages that CMake downloads are the x64 ones.
 - **SDL2 and SDL2_ttf**: nothing to install. When CMake does not find them itself, the configure downloads the Visual C++ packages (SDL2 2.30.12, SDL2_ttf 2.22.0) from GitHub into the build folder (it needs internet access). The build copies `SDL2.dll` and `SDL2_ttf.dll` next to `ants.exe`.
-- The game also links the Windows libraries `ws2_32` and `winmm`; both come with Windows.
+- The game also links the Windows libraries `ws2_32`, `crypt32` (the system's certificate stores, for the encrypted link) and `winmm`; all come with Windows.
 - Run `start_game.bat` to build and launch, or use the commands under "Manual CMake Build".
 
 ## Building and Running Locally
