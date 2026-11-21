@@ -54,22 +54,23 @@ except ImportError:
     )
 
 _HAT_MAT = "gear_yellow_plastic"
+_FIRE_CROUCH = 0.055
 
 # Confident, open, alert idle firefighter arms poised slightly outward at his sides (never cowering/hugging chest!).
 _FIRE_LEFT_ARM_IDLE: List[Tuple[float, float, float]] = [
-    (0.078, 0.456, 0.014),
-    (0.168, 0.418, 0.044),
-    (0.178, 0.376, 0.104),
-    (0.154, 0.362, 0.160),
+    (0.078, 0.456 - _FIRE_CROUCH, 0.014),
+    (0.168, 0.418 - _FIRE_CROUCH, 0.044),
+    (0.178, 0.376 - _FIRE_CROUCH, 0.104),
+    (0.154, 0.362 - _FIRE_CROUCH, 0.160),
 ]
 _FIRE_RIGHT_ARM_IDLE: List[Tuple[float, float, float]] = [(-x, y, z) for x, y, z in _FIRE_LEFT_ARM_IDLE]
 
 # Optional right-arm pose when `hold_magnifying_glass=True` (kept for Fire's fire-starting animation).
 _FIRE_RIGHT_ARM: List[Tuple[float, float, float]] = [
-    (-0.078, 0.456, 0.014),
-    (-0.184, 0.422, 0.068),
-    (-0.194, 0.464, 0.168),
-    (-0.182, 0.494, 0.222),
+    (-0.078, 0.456 - _FIRE_CROUCH, 0.014),
+    (-0.184, 0.422 - _FIRE_CROUCH, 0.068),
+    (-0.194, 0.464 - _FIRE_CROUCH, 0.168),
+    (-0.182, 0.494 - _FIRE_CROUCH, 0.222),
 ]
 
 
@@ -240,23 +241,23 @@ def _build_option3_wide_shield(
         uz = p[:, 2] / max(1e-6, half_d)  # [-1, +1]
         u_y = np.clip(0.5 * (uy + 1.0), 0.0, 1.0)
 
-        # Option 2 wide flat base + Option 3 gentle inward taper & proud arched vintage crest top!
-        taper = 1.0 - 0.14 * (u_y ** 1.35)
+        # Wide horizontal landscape shield matching `afst301`: near-vertical sides & gentle arched top.
+        taper = 1.0 - 0.055 * (u_y ** 1.35)
         p[:, 0] *= taper
         nx = p[:, 0] / max(1e-6, half_w)
         top_mask = np.clip((u_y - 0.45) / 0.55, 0.0, 1.0)
-        # Proud arched crown crest rising gracefully at x=0 and arching cleanly toward outer corners.
-        crest_arch = 0.016 * (1.0 - 1.55 * (nx * nx)) * top_mask
+        # Subtle vintage arch rising gently across the top rim while keeping a crisp landscape outline.
+        crest_arch = 0.010 * (1.0 - 1.45 * (nx * nx)) * top_mask
         p[:, 1] += crest_arch
 
-        # Subtle crisp raised molded Option 3 perimeter border outline directly on the front face!
-        # Smooth super-elliptical distance to perimeter (`edge_d in [0, 1]`): recessed field inside 0.78,
-        # smooth raised +0.011 beveled border ridge around 0.78..1.0 on front face (`uz > 0.2`).
+        # Subtle crisp raised molded perimeter border outline directly on the front face!
+        # Smooth super-elliptical distance to perimeter (`edge_d in [0, 1]`): recessed field inside 0.80,
+        # smooth raised +0.010 beveled border ridge around 0.80..1.0 on front face (`uz > 0.2`).
         edge_d = (np.abs(ux) ** 6.0 + np.abs(uy) ** 6.0) ** (1.0 / 6.0)
-        t_rim = np.clip((edge_d - 0.76) / 0.14, 0.0, 1.0)
+        t_rim = np.clip((edge_d - 0.80) / 0.12, 0.0, 1.0)
         rim_step = t_rim * t_rim * (3.0 - 2.0 * t_rim)
         front_mask = np.clip((uz - 0.20) / 0.55, 0.0, 1.0)
-        border_relief = 0.011 * rim_step * front_mask
+        border_relief = 0.010 * rim_step * front_mask
 
         # Slightly lift rear-bottom edge so deep embedded back never pokes below front brow.
         rear_bot = np.clip((-uz - 0.10) / 0.90, 0.0, 1.0) * np.clip((0.30 - u_y) / 0.30, 0.0, 1.0)
@@ -295,26 +296,26 @@ def _build_giant_letter_a(
     thickness = 0.020  # [-0.010, +0.010] -> shifted +0.004 => [-0.006 inside, +0.014 proud]
     front_z = 0.5 * shield_depth
     stroke_w = 0.036
-    leg_len = 0.158
-    tilt_deg = 22.8
+    leg_len = 0.126
+    tilt_deg = 32.0
 
     left_leg = (
         _subdivided_rounded_box(stroke_w, leg_len, thickness, bevel=0.004, nx=6, ny=12, nz=4, name="letter_a_left", material="gear_accent")
         .rotate_xyz(rz=-tilt_deg, degrees=True)
-        .translate(-0.035, y_offset, 0.004)
+        .translate(-0.044, y_offset, 0.004)
     )
     right_leg = (
         _subdivided_rounded_box(stroke_w, leg_len, thickness, bevel=0.004, nx=6, ny=12, nz=4, name="letter_a_right", material="gear_accent")
         .rotate_xyz(rz=+tilt_deg, degrees=True)
-        .translate(+0.035, y_offset, 0.004)
+        .translate(+0.044, y_offset, 0.004)
     )
     apex = (
-        _subdivided_rounded_box(0.046, 0.030, thickness, bevel=0.004, nx=8, ny=4, nz=4, name="letter_a_apex", material="gear_accent")
-        .translate(0.0, 0.061 + y_offset, 0.004)
+        _subdivided_rounded_box(0.052, 0.026, thickness, bevel=0.004, nx=8, ny=4, nz=4, name="letter_a_apex", material="gear_accent")
+        .translate(0.0, 0.046 + y_offset, 0.004)
     )
     crossbar = (
-        _subdivided_rounded_box(0.108, 0.028, thickness, bevel=0.004, nx=12, ny=4, nz=4, name="letter_a_bar", material="gear_accent")
-        .translate(0.0, -0.022 + y_offset, 0.004)
+        _subdivided_rounded_box(0.138, 0.026, thickness, bevel=0.004, nx=12, ny=4, nz=4, name="letter_a_bar", material="gear_accent")
+        .translate(0.0, -0.016 + y_offset, 0.004)
     )
     raw_parts = [left_leg, right_leg, apex, crossbar]
 
@@ -368,9 +369,9 @@ def _build_fire_helmet(
     # Seat the yellow brim snugly above his cute eyes while preserving clean blink clearance (~9+ mm across blink=0..1).
     shell_y = max(eyelid_top_y - 0.031, head_top[1] - 0.136)
     shell_z = hz - 0.008
-    # Sleek longitudinal firefighter dome (W <= D) proportioned cleanly above Fire's 0.95x head (matching afst301..701).
+    # Sleek longitudinal firefighter dome (W <= D), slightly lower crown so fluted ribs peek cleanly above the landscape shield.
     dome_rx = max(hrx + 0.022, orig_hrx + 0.010)
-    dome_ry = max(0.284, (head_top[1] - shell_y) + 0.144)
+    dome_ry = max(0.258, (head_top[1] - shell_y) + 0.120)
     dome_rz = max(hrz + 0.044, orig_hrz + 0.028)
 
     # 1. Option 3 deeply-fluted vintage ribbed dome + traditional swept firefighter brim (80x32 high-res!).
@@ -482,13 +483,13 @@ def _build_fire_helmet(
     )
     scene.add("fire_helmet", crest)
 
-    # 3. Option 3's proud vintage framed front shield proportioned to the sleeker dome + flush crimson 'A'.
-    shield_w = dome_rx * 1.62
-    shield_h = dome_ry * 0.86
-    shield_depth = 0.100
-    curve_depth = 0.080
+    # 3. Wide, low-profile landscape front shield wrapping the front crown + flush wide crimson 'A' (`afst301`).
+    shield_w = dome_rx * 1.98
+    shield_h = dome_ry * 0.70
+    shield_depth = 0.086
+    curve_depth = 0.132
     shield_tilt_x = -8.5
-    shield_pos = (hx, shell_y + 0.170, shell_z + dome_rz - 0.034)
+    shield_pos = (hx, shell_y + 0.128, shell_z + dome_rz - 0.024)
 
     shield = (
         _build_option3_wide_shield(shield_w, shield_h, shield_depth, curve_depth)
@@ -497,8 +498,8 @@ def _build_fire_helmet(
     )
     scene.add("fire_helmet", shield)
 
-    # Bold wide crimson 'A' embedded 0.006 inside the framed yellow shield face & raised +0.014 proud!
-    for part in _build_giant_letter_a(shield_w, shield_h, shield_depth, curve_depth, y_offset=-0.010):
+    # Bold wide crimson 'A' embedded 0.006 inside the framed landscape shield face & raised +0.014 proud!
+    for part in _build_giant_letter_a(shield_w, shield_h, shield_depth, curve_depth, y_offset=-0.005):
         placed = part.rotate_xyz(rx=shield_tilt_x, degrees=True).translate(*shield_pos)
         scene.add("fire_helmet", placed)
 
@@ -825,6 +826,7 @@ def build_fire(blink: float = 0.0, *, hold_magnifying_glass: bool = False) -> Sc
         eye_look=(0.04, 0.06),
         stance_asymmetry=0.18,
         leg_style="fire",
+        crouch=_FIRE_CROUCH,
         include_idle=False,
         left_arm_pose=_FIRE_LEFT_ARM_IDLE,
         right_arm_pose=_FIRE_RIGHT_ARM if hold_magnifying_glass else _FIRE_RIGHT_ARM_IDLE,
