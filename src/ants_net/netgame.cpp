@@ -64,7 +64,13 @@ namespace {
 namespace str = ants::sim::strings;
 
 #ifndef __EMSCRIPTEN__
-constexpr uint32_t kPeerLinkTimeoutMs = 20000;             // a link between guests that is not made in this time is given up
+constexpr uint32_t kPeerLinkTimeoutMs = 20000;             // a link that this machine makes to another guest is given up when it is not made in this time
+constexpr uint32_t kPeerHelloTimeoutMs = 5000;             // a connection to this machine's listener that has not said PeerHello by then is closed
+constexpr size_t kMaxPendingInbound = 8;                   // connections to the listener that have not said PeerHello yet (three guests at most are honest): more are closed at once
+
+// The guests of a match link up to take over from a host that plays (host migration), and only a room on the local network or a direct host (no room code) has such a host. A server's room has a
+// code, the server relays everything and takes over from nobody: its guests open no listener, announce no port, dial no endpoint and take no connection.
+bool guests_link(const std::string& room) { return room.empty(); }
 
 // The address of "a.b.c.d:port" or "[v6]:port" without the port and the brackets
 std::string host_part(const std::string& peer) {
@@ -223,10 +229,8 @@ bool NetGame::join(const std::string& address, uint16_t port, const std::string&
     if (numeric.empty()) return false;
     auto conn = link_maker_ ? link_maker_() : TcpConnection::connect(numeric, port);       // (the tests make the link themselves: set_link_maker_for_test)
     if (!conn) return false;
-    // Where the other guests reach us during the match: only a room on a local network (or a direct host, which has no room code) has a use for it, because there a guest takes over from a host that
-    // plays (host migration). A server's room has a code, the server relays everything and takes over from nobody: no listener is opened and no port is announced.
-    std::unique_ptr<TcpListener> peer_listener;
-    if (room.empty()) peer_listener = TcpListener::listen(0, false);
+    std::unique_ptr<TcpListener> peer_listener;                         // where the other guests reach us during the match (host migration)
+    if (guests_link(room)) peer_listener = TcpListener::listen(0, false);
     const uint16_t peer_port = peer_listener ? peer_listener->port() : uint16_t{0};
     target_ = JoinTarget{address, numeric, port, std::string(), name, want_seat, room, token};        // (the way back of a server's room makes its links from this)
     begin_client(std::move(conn), peer_port, key);
@@ -1101,7 +1105,8 @@ void NetGame::begin_peer_links() {
 #ifndef __EMSCRIPTEN__
     if (!transport_) return;
     close_peer_links();
-    uint8_t host = kNoSeat;                                      // (a dedicated server's room has no Host slot and no endpoints: no links are made)
+    if (!guests_link(target_.room)) return;                      // (a server's room: whatever the Start names, no link is made)
+    uint8_t host = kNoSeat;
     for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
         if (room_.slots[s].state == SlotState::Host) host = s;
     }
@@ -1134,7 +1139,16 @@ void NetGame::pump_peers() {
     if (!transport_) return;
     Transport& t = *transport_;
     if (t.peer_listener) {
-        while (auto conn = t.peer_listener->accept()) t.pending_peers.push_back(Transport::PendingPeer{std::move(conn), 255, true, now_});
+        size_t waiting = 0;
+        for (const Transport::PendingPeer& p : t.pending_peers) waiting += p.inbound ? 1u : 0u;
+        while (auto conn = t.peer_listener->accept()) {          // (every connection is taken off the listener; the ones beyond the limit are closed at once)
+            if (waiting >= kMaxPendingInbound) {
+                conn->close();
+                continue;
+            }
+            t.pending_peers.push_back(Transport::PendingPeer{std::move(conn), 255, true, now_});
+            ++waiting;
+        }
     }
     const bool know_roster = phase_ == Phase::Loading || phase_ == Phase::Playing;      // an inbound link is judged by the roster, which arrives with Start
     for (size_t i = 0; i < t.pending_peers.size();) {
@@ -1157,7 +1171,7 @@ void NetGame::pump_peers() {
                 if (!made) p.conn->close();
             } else if (!p.conn->is_open() && p.conn->state() != Connection::State::Connecting) {
                 done = true;
-            } else if (now_ - p.since_ms > kPeerLinkTimeoutMs) {
+            } else if (now_ - p.since_ms > kPeerHelloTimeoutMs) {
                 p.conn->close();
                 done = true;
             }

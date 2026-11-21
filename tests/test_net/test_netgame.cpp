@@ -647,6 +647,47 @@ void run_migration_tests() {
         t.run(3000);
         ASSERT_TRUE(all_equal(t));
     } TEST_END();
+
+    TEST_CASE("N3.12b Host Migration: A Guest's Port Keeps At Most 8 Connections That Have Said Nothing And Gives Each Of Them 5 s: Twenty Silent Strangers Leave 8 Open At Once And None After 5 s, The Link Of The Guests Is Not Touched And The Match Does Not Notice") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 2));
+        Machine& host = *t.machines[0];
+        host.net.set_map("SMALL.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(8, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
+        t.run(2000);
+        Machine& carol = *t.machines[2];
+        std::vector<std::unique_ptr<TcpConnection>> strangers;
+        for (int i = 0; i < 20; ++i) {
+            strangers.push_back(TcpConnection::connect("127.0.0.1", carol.net.peer_port()));
+            ASSERT_TRUE(strangers.back() != nullptr);
+        }
+        const auto open_strangers = [&]() {
+            size_t open = 0;
+            for (auto& s : strangers) {
+                std::vector<uint8_t> nothing;
+                s->poll(nothing);
+                open += s->is_open() ? 1u : 0u;
+            }
+            return open;
+        };
+        ASSERT_TRUE(t.run_until([&]() { return open_strangers() <= 8; }, 3000));        // (the ones beyond the eighth are closed as they are taken off the listener)
+        t.run(500);
+        ASSERT_TRUE(open_strangers() >= 1 && open_strangers() <= 8);                     // (the eight that wait have not been given up yet)
+        t.run(5500);
+        ASSERT_EQ(open_strangers(), size_t{0});                                          // (nothing came in 5 s)
+        t.run(2000);
+        for (auto& m : t.machines) {
+            ASSERT_FALSE(m->net.electing());
+            ASSERT_FALSE(m->saw(NetGame::Event::Type::HostChanged));
+            ASSERT_FALSE(m->net.desynced());
+        }
+        host.net.freeze();
+        t.run(3000);
+        ASSERT_TRUE(all_equal(t));
+    } TEST_END();
 }
 
 // A client that is refused: every reason of a Reject ends the join with its own text on the screen

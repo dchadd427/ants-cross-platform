@@ -2103,6 +2103,58 @@ void run_way_back_tests() {
             ASSERT_TRUE((guest.net.start_info().endpoints[1] == host.net.start_info().endpoints[1]));
         }
     } TEST_END();
+
+    TEST_CASE("RJ1.31 A Game In A Server's Room Makes No Link To Another Guest, Whatever The Start Names (A Start That Names A Machine Is No Reason To Dial It) And Has No Port For One; The Same Start In A Room On The Local Network Is Dialed, And That Game Has A Port") {
+        const auto play = [&](const std::string& room, bool& dialed, uint16_t& own_port) {
+            World w;
+            ASSERT_TRUE(w.server.start(w.now));
+            std::unique_ptr<net::TcpListener> named = net::TcpListener::listen(0, true);      // the machine that the Start names for seat 1
+            ASSERT_TRUE(named != nullptr);
+            net::WelcomeMsg welcome;
+            welcome.player = 0;
+            welcome.players = sim::MAX_PLAYERS;
+            net::RoomMsg msg;
+            msg.you = 0;
+            msg.map_name = "TINY.LVL";
+            msg.slots[0].state = net::SlotState::Client;
+            msg.slots[0].name = "Ann";
+            msg.slots[1].state = net::SlotState::Client;
+            msg.slots[1].name = "Bob";
+            w.server.door = Server::Door::Scripted;
+            w.server.script_messages = {net::encode(welcome), net::encode(msg)};
+            Machine& m = w.add_machine("Ann");
+            m.orders = false;
+            ASSERT_TRUE(m.net.join("127.0.0.1", w.server.port(), "Ann", 0, room));
+            ASSERT_TRUE(w.run_until([&]() { return m.net.phase() == NetGame::Phase::Room; }, 5000));
+            own_port = m.net.peer_port();
+            uint64_t hash = 0;
+            ASSERT_TRUE(net::hash_file(maps_dir() + "TINY.LVL", hash));
+            net::StartMsg start;
+            start.seed = 8;
+            start.map_name = "TINY.LVL";
+            start.map_hash = hash;
+            start.roster = 0x03;
+            start.names[0] = "Ann";
+            start.names[1] = "Bob";
+            start.endpoints[1] = net::Endpoint{"127.0.0.1", named->port()};
+            ASSERT_TRUE(w.server.scripted_send(net::encode(start)));
+            ASSERT_TRUE(w.run_until([&]() { return w.server.scripted_heard(net::MsgType::Loaded); }, 5000));
+            for (int i = 0; i < 300 && !dialed; ++i) {                                   // (3 s of game time, with the kernel given a moment each step)
+                dialed = named->accept() != nullptr;
+                if (!dialed) w.run(10);
+            }
+        };
+        bool dialed_by_server_game = false;
+        uint16_t port_of_server_game = 1;
+        play("RJ-31", dialed_by_server_game, port_of_server_game);
+        ASSERT_FALSE(dialed_by_server_game);
+        ASSERT_EQ(port_of_server_game, 0);
+        bool dialed_by_lan_game = false;
+        uint16_t port_of_lan_game = 0;
+        play("", dialed_by_lan_game, port_of_lan_game);
+        ASSERT_TRUE(dialed_by_lan_game);
+        ASSERT_TRUE(port_of_lan_game != 0);
+    } TEST_END();
 }
 
 int main() {

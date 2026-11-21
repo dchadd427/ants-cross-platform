@@ -1,5 +1,5 @@
 {
- "note": "Mutants of what a dedicated server's room says about where its players can be reached, for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): a server's room sends no address or port of any player (the Start of the lobby, the Start that a machine from nothing is given, the Start in a restart record), a game that plays through a server opens no listener for the other players, and a game on the local network still opens one and is named to the others. Against test_lobby (N4.5c), test_server (S3.99 for the Start of a room's machines and the record, S3.99b for every message that the server sends), test_rejoin (RJ1.30) and test_netgame (N3.9, host migration). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/server_room_no_addresses_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "note": "Mutants of what a dedicated server's room says about where its players can be reached, for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): a server's room sends no address or port of any player (the Start of the lobby, the Start that a machine from nothing is given, the Start in a restart record), a game that plays through a server opens no listener for the other players, and a game on the local network still opens one and is named to the others. A guest's session with migration off ignores what another guest says over a link, a game in a server's room dials no endpoint, and the listener of a game on the local network keeps at most 8 silent connections for 5 s each. Against test_lobby (N4.5c), test_server (S3.99 for the Start of a room's machines and the record, S3.99b for every message that the server sends), test_rejoin (RJ1.30) and test_netgame (N3.9, host migration; N3.12b, the listener), test_lockstep (N2.34b) and test_rejoin (RJ1.31). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/server_room_no_addresses_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
  "mutants": [
   {
    "id": "start_names_the_guests_of_every_room_lobby",
@@ -49,7 +49,7 @@
   {
    "id": "game_opens_a_listener_for_a_server_room_too",
    "file": "src/ants_net/netgame.cpp",
-   "old": "if (room.empty()) peer_listener = TcpListener::listen(0, false);",
+   "old": "if (guests_link(room)) peer_listener = TcpListener::listen(0, false);",
    "new": "peer_listener = TcpListener::listen(0, false);",
    "build": "test_rejoin",
    "test": "ANTS_TEST_FILTER=RJ1.30 timeout 900 ./build/tests/test_server/test_rejoin",
@@ -58,8 +58,8 @@
   {
    "id": "game_opens_a_listener_only_for_a_server_room",
    "file": "src/ants_net/netgame.cpp",
-   "old": "if (room.empty()) peer_listener = TcpListener::listen(0, false);",
-   "new": "if (!room.empty()) peer_listener = TcpListener::listen(0, false);",
+   "old": "if (guests_link(room)) peer_listener = TcpListener::listen(0, false);",
+   "new": "if (!guests_link(room)) peer_listener = TcpListener::listen(0, false);",
    "build": "test_rejoin",
    "test": "ANTS_TEST_FILTER=RJ1.30 timeout 900 ./build/tests/test_server/test_rejoin",
    "expect": "RJ1.30"
@@ -67,7 +67,7 @@
   {
    "id": "game_opens_no_listener_on_the_local_network",
    "file": "src/ants_net/netgame.cpp",
-   "old": "if (room.empty()) peer_listener = TcpListener::listen(0, false);",
+   "old": "if (guests_link(room)) peer_listener = TcpListener::listen(0, false);",
    "new": "if (false) peer_listener = TcpListener::listen(0, false);",
    "build": "test_netgame",
    "test": "ANTS_TEST_FILTER=\"N3.9 Host Migration\" timeout 600 ./build/tests/test_net/test_netgame",
@@ -126,6 +126,69 @@
    "build": "test_server",
    "test": "ANTS_TEST_FILTER=S3.99b timeout 900 ./build/tests/test_server/test_server",
    "expect": "S3.99b"
+  },
+  {
+   "id": "session_with_migration_off_hears_a_guest",
+   "file": "src/ants_net/session_client.cpp",
+   "old": "if (!cfg_.migration) return;",
+   "new": "if (false) return;",
+   "build": "test_lockstep",
+   "test": "ANTS_TEST_FILTER=N2.34b timeout 600 ./build/tests/test_net/test_lockstep",
+   "expect": "N2.34b"
+  },
+  {
+   "id": "server_room_dials_the_endpoints_of_a_start",
+   "file": "src/ants_net/netgame.cpp",
+   "old": "if (!guests_link(target_.room)) return;",
+   "new": "if (false) return;",
+   "build": "test_rejoin",
+   "test": "ANTS_TEST_FILTER=RJ1.31 timeout 900 ./build/tests/test_server/test_rejoin",
+   "expect": "RJ1.31"
+  },
+  {
+   "id": "lan_game_dials_nobody",
+   "file": "src/ants_net/netgame.cpp",
+   "old": "if (!guests_link(target_.room)) return;",
+   "new": "if (true) return;",
+   "build": "test_rejoin",
+   "test": "ANTS_TEST_FILTER=RJ1.31 timeout 900 ./build/tests/test_server/test_rejoin",
+   "expect": "RJ1.31"
+  },
+  {
+   "id": "lan_game_dials_nobody_migration",
+   "file": "src/ants_net/netgame.cpp",
+   "old": "if (!guests_link(target_.room)) return;",
+   "new": "if (true) return;",
+   "build": "test_netgame",
+   "test": "ANTS_TEST_FILTER=\"N3.9 Host Migration\" timeout 600 ./build/tests/test_net/test_netgame",
+   "expect": "N3.9"
+  },
+  {
+   "id": "listener_keeps_any_number_of_silent_connections",
+   "file": "src/ants_net/netgame.cpp",
+   "old": "constexpr size_t kMaxPendingInbound = 8;",
+   "new": "constexpr size_t kMaxPendingInbound = 1000;",
+   "build": "test_netgame",
+   "test": "ANTS_TEST_FILTER=N3.12b timeout 600 ./build/tests/test_net/test_netgame",
+   "expect": "N3.12b"
+  },
+  {
+   "id": "listener_keeps_no_connection",
+   "file": "src/ants_net/netgame.cpp",
+   "old": "constexpr size_t kMaxPendingInbound = 8;",
+   "new": "constexpr size_t kMaxPendingInbound = 0;",
+   "build": "test_netgame",
+   "test": "ANTS_TEST_FILTER=\"N3.9 Host Migration\" timeout 600 ./build/tests/test_net/test_netgame",
+   "expect": "N3.9"
+  },
+  {
+   "id": "listener_waits_20_s_for_a_hello",
+   "file": "src/ants_net/netgame.cpp",
+   "old": "constexpr uint32_t kPeerHelloTimeoutMs = 5000;",
+   "new": "constexpr uint32_t kPeerHelloTimeoutMs = 20000;",
+   "build": "test_netgame",
+   "test": "ANTS_TEST_FILTER=N3.12b timeout 600 ./build/tests/test_net/test_netgame",
+   "expect": "N3.12b"
   }
  ]
 }
