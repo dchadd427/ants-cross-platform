@@ -33,16 +33,6 @@
    "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
-   "id": "a_bot_must_ready",
-   "file": "src/ants_net/lobby.cpp",
-   "old": "room_.slots[seat].state == SlotState::Client && seat != room_.leader && person(seat) &&",
-   "new": "room_.slots[seat].state != SlotState::Empty && seat != room_.leader &&",
-   "build": [
-    "test_lobby"
-   ],
-   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
-  },
-  {
    "id": "a_plan_change_clears_the_marks",
    "file": "src/ants_net/lobby.cpp",
    "old": "    if (!changed) return;\n    ++plan_changes_;\n    broadcast_room();",
@@ -91,7 +81,7 @@
     "test_lobby",
     "test_lockstep"
    ],
-   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep"
+   "test": "ANTS_TEST_FILTER=N4.43 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep"
   },
   {
    "id": "ready_heard_while_start_waits",

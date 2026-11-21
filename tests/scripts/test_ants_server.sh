@@ -1150,9 +1150,9 @@ def answer_text(peer):
     m = peer.answer()
     return 'none' if m is None else 'welcome' if m[0] == 2 else 'reject-%d' % m[1]
 def created(m): return m is not None and (m[19] & 2) != 0                          # (the Welcome: type, player, players, the key, the flags)
-def lobby_room(peer):                                                              # the Room message ends with the flags, four plan bytes, the games and the game mode (protocol 17)
+def lobby_room(peer):                                                              # the Room message ends with the flags, four plan bytes, the games, the game mode (protocol 17) and the ready mask (protocol 27)
     m = peer.wait_for((12,), 3.0)
-    return m is not None and (m[-7] & 2) != 0
+    return m is not None and (m[-8] & 2) != 0
 out = {}
 a = Peer('Ada', 'lob00001', 1, LOBBY); wa = welcomed(a)
 out['page_makes_lobby'] = 'yes' if wa is not None and created(wa) and wa[1] == 0 and wa[3:19] != bytes(16) else 'no'
@@ -1194,10 +1194,10 @@ def wait_listed(wanted, secs):
         time.sleep(0.1)
         text = list_text()
     return text
-def sees_public(peer):                                                              # the last Room message that the peer read says public (the flags are 7 bytes from the end: flags, four plans, the games, the mode)
+def sees_public(peer):                                                              # the last Room message that the peer read says public (the flags are 8 bytes from the end: flags, four plans, the games, the mode, the ready mask)
     peer.wait_for((99,), 0.5)
     rooms = [m for m in peer.msgs if m[0] == 12]
-    return bool(rooms) and (rooms[-1][-7] & 8) != 0
+    return bool(rooms) and (rooms[-1][-8] & 8) != 0
 if lobbies()[0] == 200 and wa is not None and wb is not None and wc is not None:                  # (a server with the public door and the lobbies)
     out['list_private'] = list_text()
     b.sock.sendall(frame(bytes([35, 1])))                                               # Bea does not lead: nothing happens
