@@ -26,6 +26,20 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.20.1 - 2026-11-21 - Look around during the countdown
+
+**For players:**
+- **Look around during the countdown.** Before a match begins you can move the view (drag the map, the minimap, the edge, the wheel or a finger); the card turns see-through while the view moves. Nothing can be selected or ordered yet, and Fog of War shows nothing new.
+- **A new countdown card** with each player's connection: one number per player in its color of quality; click the ping in the corner for the list of connections.
+
+**Fixes:**
+- In a server's room the desktop game no longer shares its network address with the other players or opens a port for them.
+
+**For operators:**
+- The desktop game's listener for host migration in a LAN game takes at most 8 waiting connections, each for 5 s.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ee60e4bf...1a591c31)
+
 ## v0.20.0 - 2026-11-20 - The room inside Home, Ready up
 
 **For players:**
@@ -496,33 +510,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/7fa87f91...6b936a10)
 
-## v0.13.0 - 2026-11-02 - Home, public rooms, the games list and the chat
+## Older versions (v0.13.0 and before)
 
-**For players:**
-- **A new front page: Home and the Room.** Home is a top bar over a stand-in picture with **Quick host**, **Quick join**, **My room**, **Games** and the Menu; the Room is the room page under a slim bar with **Home** and **Leave room** (it asks first when other people are in the room). Going between the two is instant and keeps your seat, and a plain visit makes no room until you press My room. [Home and the Room](docs/HOME_SCREEN.md)
-- **Public rooms.** The host switches the Room **Private** (link only) or **Public** (listed in Open games). Every new room is private; it is private again when another person leads, and a public room that nobody used for 30 minutes goes private by itself (the host gets a one-tap **Make it public**). **Quick host** makes your room public in one press, and makes the room first if you have none.
-- **The Games list** shows the open games, best first: host, map, seats, bots and **Join**, with **Join by code** at the bottom. A room is on it only while a newcomer could join; your own public room is its first row, tagged **Yours** (nothing to press), and counts on the button. **Quick join** takes the best open game for you, trying up to three, with a **Cancel**; a refused Join costs you nothing, your own room is kept until the new one welcomes you.
-- **A global chat** in the lower-left corner of Home (a strip along the bottom on a phone). Everybody can read it; to write you log in. It runs in its own container (`ants-hub`), so the site and the games work while it is off, and it keeps lines for 7 days. [The chat hub](docs/HUB.md)
-- **Log in with Discord** to write in the chat. It asks for your Discord id and username only and keeps nothing else; **Log out** and **Forget me** (deletes your lines) are in the chat. A Discord account under 7 days old cannot write. Login works once the site's operator has set up the Discord application; until then the chat is read-only for everybody.
-- **Everybody needs the new version.** A game or page of v0.12 cannot join a v0.13 server: reload the page.
-
-**Rules / network:** network protocol 22 (was 21): one new message, Visibility (type 35: the host makes a lobby room public or private), and one new Room flag, public; a v0.12 game cannot play with a v0.13 one ([public rooms](docs/PUBLIC_ROOMS.md)). One rule fix: the layer-2 id 38 is no bridge any more, as in the original (a water tile that holds it stays water: only a swimmer can enter it, and anyone else put there drowns). No shipped or community map holds it and every state hash of the library is unchanged, so recordings play as before (rules number 5); only a player's own map that holds id 38 plays differently from v0.12. **If you run a server:** the public door (`--replay-port`) answers `GET /lobbies` and the status of a lobby room has `"public"`; the site's nginx passes `/lobbies`, `/hub/ws` and the login's pages; the stack has a new container `ants-hub` and its volume (the staging stack gets its own, `ants-hub-staging` with the volume `ants-staging-hub-data`), with the `ANTS_HUB_*` settings, and the chat and the login must not go live behind a reverse proxy before `docker/trusted-proxies.conf` names it ([the chat hub](docs/HUB.md#behind-a-reverse-proxy)).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/354be26a...57c6f8ae)
-
-## v0.12.152 - 2026-10-29 - Map Maker: a Bridge chip, and a hint for a bridge that is not on water
-
-**For players:**
-- **The Map Maker has a Bridge to put on a map.** In Objects, after the Fire wall and before the four bombs, there is a new chip with the game's own picture of a finished bridge. Tap to put one piece, drag for a line of pieces; the name shows under the chip when it is chosen, and Pick up calls it "Bridge".
-- **A plain hint when a bridge is not on water.** A bridge needs water under it. While the Bridge chip is chosen, the line under the palette says how many pieces of the map stand on ground that is not water: "Bridge · 2 pieces are on dry ground. A bridge needs water under it." It counts again after every step, Undo and Redo, and when you open a map. It is only a hint: the map still saves, downloads and passes the check. A phone has no such line.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only). Map Maker v1.7.0.
-
-**Fixes:**
-- On a desktop window under 741 pixels high (1280 x 720 with scrollbars that take room) the Objects column was too tall for its 31 chips and cut off the name line: there the chips are 2 pixels shorter and the rows and tool buttons 1 pixel closer. Taller windows and phones look as before.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/354be26a...bfbcbda8)
-
-## Older versions (v0.12.151 and before)
-
-Every release before v0.12.152, and the long notes of v0.12.151 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.13.1, and the long notes of v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
