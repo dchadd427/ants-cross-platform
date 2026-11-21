@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Tuple
 import numpy as np
 
 try:
-    from .base_ant import build_base_ant
+    from .base_ant import build_base_ant, sync_leg_flex_to_clip
     from .mesh_core import (
         AnimationChannel,
         AnimationClip,
@@ -30,7 +30,7 @@ try:
         torus_arc,
     )
 except ImportError:
-    from base_ant import build_base_ant  # type: ignore
+    from base_ant import build_base_ant, sync_leg_flex_to_clip  # type: ignore
     from mesh_core import (  # type: ignore
         AnimationChannel,
         AnimationClip,
@@ -806,7 +806,9 @@ def _add_swimmer_idle(scene: SceneBuilder) -> AnimationClip:
         m_r[-1] = m_r[0]
         channels.append(AnimationChannel("mandibles", "rotation", list(times), m_r))
 
-    return scene.add_animation("Idle", channels, replace=True)
+    clip = scene.add_animation("Idle", channels, replace=True)
+    sync_leg_flex_to_clip(scene, "Idle")
+    return clip
 
 
 def build_swimmer(blink: float = 0.0) -> SceneBuilder:
@@ -823,6 +825,7 @@ def build_swimmer(blink: float = 0.0) -> SceneBuilder:
         eye_look=(0.04, 0.10),
         antenna_asymmetry=0.30,
         stance_asymmetry=0.25,
+        leg_style="swimmer",
         include_idle=False,
         left_arm_pose="idle",
         right_arm_pose=_SWIMMER_RIGHT_ARM,

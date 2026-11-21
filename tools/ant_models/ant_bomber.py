@@ -13,7 +13,7 @@ from typing import List, Tuple
 import numpy as np
 
 try:
-    from .base_ant import build_base_ant
+    from .base_ant import build_base_ant, sync_leg_flex_to_clip
     from .mesh_core import (
         AnimationChannel,
         AnimationClip,
@@ -31,7 +31,7 @@ try:
         torus_arc,
     )
 except ImportError:
-    from base_ant import build_base_ant  # type: ignore
+    from base_ant import build_base_ant, sync_leg_flex_to_clip  # type: ignore
     from mesh_core import (  # type: ignore
         AnimationChannel,
         AnimationClip,
@@ -654,7 +654,9 @@ def _add_bomber_idle(scene: SceneBuilder) -> AnimationClip:
         ]
         m_r[-1] = m_r[0]
         channels.append(AnimationChannel("mandibles", "rotation", list(times), m_r))
-    return scene.add_animation("Idle", channels, replace=True)
+    clip = scene.add_animation("Idle", channels, replace=True)
+    sync_leg_flex_to_clip(scene, "Idle")
+    return clip
 
 
 def _scale_bomber_head_and_tall_antennae(
@@ -788,6 +790,7 @@ def build_bomber(blink: float = 0.0) -> SceneBuilder:
         eye_look=(-0.06, 0.04),
         antenna_asymmetry=0.45,
         stance_asymmetry=0.40,
+        leg_style="bomber",
         include_idle=False,
         crouch=0.12,
         left_arm_pose="idle",
