@@ -156,45 +156,58 @@ def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
     scene.nodes["head"] = new_head
 
     # Shift eyes & concentric Blink eyelids cleanly backward (`face_dz`) and subtly inward;
-    # enlarge Worker's pupils ~25% and drop them conformally onto the lower half of each
-    # ellipsoidal sclera (`ORIG agst301`) with zero sclera bleed-through and full Blink sealing!
+    # flatten sclera Z depth (`0.78x`, less bulbous/round) and aim enlarged `1.24x` pupils
+    # directly at the `301 S (45°)` comparison camera (`rx=-0.22`, inward convergence `+-0.11`).
+    z_flat = 0.78
     eye_specs = {
-        "left": (0.94, 0.92, +0.15, 0.36),
-        "right": (1.05, 1.18, -0.15, 0.42),
+        "left": (0.94, 0.92, +0.15, -0.22, -0.11),
+        "right": (1.05, 1.18, -0.15, -0.22, +0.11),
     }
     if "eyes" in scene.nodes:
         new_eyes = []
         for p in scene.get_node("eyes"):
             tag = "left" if p.name.endswith("_left") else ("right" if p.name.endswith("_right") else "")
             sx = -eye_in_left if tag == "left" else (+eye_in_right if tag == "right" else 0.0)
-            if tag and p.name.startswith(("limbal_", "iris_", "pupil_", "catchlight_")):
+            if tag:
                 ec = anchors[f"eye_{tag}"]
-                s_e, a_e, yaw_e, drop_rx = eye_specs[tag]
+                s_e, a_e, yaw_e, gaze_rx, gaze_ry = eye_specs[tag]
                 rx_s, ry_s, rz_s = 0.0678 * s_e, 0.0710 * s_e * a_e, 0.0646 * s_e
-                # Transform into eye-local sclera-normalized unit-sphere coordinates so rotation
-                # & enlargement follow the tall oval right sclera 100% conformally!
-                part = (
-                    p.translate(-ec[0], -ec[1], -ec[2])
-                    .rotate_xyz(ry=-yaw_e)
-                    .rotate_xyz(rx=+0.06)
-                    .scale(1.0 / rx_s, 1.0 / ry_s, 1.0 / rz_s)
-                )
-                if not p.name.startswith("catchlight_"):
-                    part = part.scale(1.24, 1.24, 1.03)
-                else:
-                    part = part.scale(1.0, 1.0, 1.02)
-                p = (
-                    part.rotate_xyz(rx=+drop_rx)
-                    .scale(rx_s, ry_s, rz_s)
-                    .rotate_xyz(rx=-0.06)
-                    .rotate_xyz(ry=+yaw_e)
-                    .translate(ec[0], ec[1], ec[2])
-                )
+                if p.name.startswith(("sclera_", "eye_socket_rim_")):
+                    p = (
+                        p.translate(-ec[0], -ec[1], -ec[2])
+                        .rotate_xyz(ry=-yaw_e)
+                        .rotate_xyz(rx=+0.06)
+                        .scale(1.0, 1.0, z_flat)
+                        .rotate_xyz(rx=-0.06)
+                        .rotate_xyz(ry=+yaw_e)
+                        .translate(ec[0], ec[1], ec[2])
+                    )
+                elif p.name.startswith(("limbal_", "iris_", "pupil_", "catchlight_")):
+                    # Transform into sclera-normalized unit sphere so enlargement & camera-aimed
+                    # gaze stay 100% conformal on the flatter ellipsoidal sclera (zero bleed-through!).
+                    part = (
+                        p.translate(-ec[0], -ec[1], -ec[2])
+                        .rotate_xyz(ry=-yaw_e)
+                        .rotate_xyz(rx=+0.06)
+                        .scale(1.0 / rx_s, 1.0 / ry_s, 1.0 / rz_s)
+                    )
+                    if not p.name.startswith("catchlight_"):
+                        part = part.scale(1.24, 1.24, 1.03)
+                    else:
+                        part = part.scale(1.0, 1.0, 1.02)
+                    p = (
+                        part.rotate_xyz(rx=gaze_rx, ry=gaze_ry)
+                        .scale(rx_s, ry_s, rz_s * z_flat)
+                        .rotate_xyz(rx=-0.06)
+                        .rotate_xyz(ry=+yaw_e)
+                        .translate(ec[0], ec[1], ec[2])
+                    )
             new_eyes.append(p.translate(sx, 0.0, face_dz))
         scene.nodes["eyes"] = new_eyes
     for node_name, sx, x_trim in (("eyelid_left", -eye_in_left, 1.0), ("eyelid_right", +eye_in_right, 0.96)):
-        if x_trim != 1.0 and node_name in scene.nodes:
-            scene.nodes[node_name] = [p.scale(x_trim, 1.0, 1.0) for p in scene.get_node(node_name)]
+        if node_name in scene.nodes:
+            # Match eyelid contour gently to the flatter `0.78x` sclera while keeping full Blink=1.0 seal!
+            scene.nodes[node_name] = [p.scale(x_trim, 1.0, 0.92) for p in scene.get_node(node_name)]
         xf = scene.get_node_transform(node_name)
         if xf is not None:
             tx, ty, tz = xf.translation
@@ -460,7 +473,7 @@ def build_worker(blink: float = 0.0) -> SceneBuilder:
         head_pitch_deg=-13.5,
         head_tilt_deg=4.5,
         head_yaw_deg=-3.5,
-        eye_look=(0.06, 0.0),
+        eye_look=(0.0, 0.0),
         eye_scale_left=0.94,
         eye_scale_right=1.05,
         eye_aspect_left=0.92,
