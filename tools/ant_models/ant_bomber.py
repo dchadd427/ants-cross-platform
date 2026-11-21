@@ -262,9 +262,9 @@ def _build_goggles(
         goggle_yaw=yaw_mag,
         mount_offset=(mount_dx, 0.0, mount_dz),
     )
-    # Compact sleek circular diameter scaled proportionally to Bomber's smaller head + long metallic cans!
-    bore_r = max(0.050, max_lid_r + 0.0044)
-    lens_z = max(0.128, max_lid_z + 0.058)
+    # Compact sleek circular diameter scaled to Bomber's narrow sleek head + long metallic cans!
+    bore_r = max(0.045, max_lid_r + 0.0042)
+    lens_z = max(0.124, max_lid_z + 0.056)
 
     for side_sign, eye_pos in ((+1.0, eye_left), (-1.0, eye_right)):
         mount = (eye_pos[0] + side_sign * mount_dx, eye_pos[1], eye_pos[2] + mount_dz)
@@ -281,10 +281,10 @@ def _build_goggles(
                 placed = placed.deform(_clamp_nose_midline)
             scene.add("goggles", placed)
 
-    # Sleek all-yellow metallic nose bridge & gold center rivet joining the two long metallic cans cleanly.
+    # Sleek all-yellow metallic nose bridge & gold center rivet joining the two closely-set cans cleanly.
     bridge_z = ez + lens_z * 0.62
     bridge = (
-        rounded_box(0.028, 0.016, 0.022, bevel=0.0045, segs=3, name="goggle_bridge", material="gear_gold_metal")
+        rounded_box(0.022, 0.015, 0.020, bevel=0.004, segs=3, name="goggle_bridge", material="gear_gold_metal")
         .translate(hx, ey + 0.008, bridge_z)
     )
     scene.add("goggles", bridge)
@@ -942,9 +942,10 @@ def _scale_bomber_head_and_tall_antennae(
     scene: SceneBuilder,
     anchors: dict,
     *,
-    head_scale_xz: float = 0.90,
+    head_scale_x: float = 0.64,
     head_scale_y: float = 0.77,
-    eye_inward_dx: float = -0.004,
+    head_scale_z: float = 0.79,
+    eye_inward_dx: float = 0.002,
 ) -> Tuple[
     Tuple[float, float, float],
     Tuple[float, float, float],
@@ -952,11 +953,11 @@ def _scale_bomber_head_and_tall_antennae(
     Tuple[float, float, float],
     float,
 ]:
-    """Flatten Bomber's cranium into a sleek goggle-level flat top while keeping eyes spherical & antennae flush.
+    """Sculpt Bomber's sleek narrow vertical-oval cranium (`sx=0.64, sy=0.77, sz=0.79`) with flush antennae.
 
-    Matches `abst301`/`abst901`: sleek C^3 flat-topped skull sitting nearly level with the top rim of the
-    yellow goggles (zero tall green dome above the goggles), uniformly spherical eyes & tucked eyelids
-    (zero blink=0 forehead protrusion), and bold slicked-back antennae seated flush on the flat top.
+    Matches `abst301`/`abst901`/`abst701`: sleek narrow head fitting snugly above the two closely-set
+    yellow goggles (NOT wide horizontally), softly-domed top crown, spherical eyes & tucked eyelids
+    (zero blink=0 forehead/temple protrusion), and compact antennae seated flush on the crown.
     """
     hc = anchors["head_center"]
     hrx, hry, hrz = anchors["head_radii"]
@@ -966,13 +967,13 @@ def _scale_bomber_head_and_tall_antennae(
         if head_xf is not None
         else anchors["neck_center"]
     )
-    # Anchor scaling near the neck base so Bomber's smaller head stays seated flush on neck_joint (zero gap).
+    # Anchor scaling near the neck base so Bomber's sleek narrow head stays seated flush on neck_joint.
     piv = (hc[0], hc[1] - 0.125, hc[2])
     p_hg = (piv[0] - neck_pivot[0], piv[1] - neck_pivot[1], piv[2] - neck_pivot[2])
-    sx = float(head_scale_xz)
+    sx = float(head_scale_x)
     sy = float(head_scale_y)
-    sz = float(head_scale_xz)
-    s_uni = float(head_scale_xz)
+    sz = float(head_scale_z)
+    s_uni = float(head_scale_x)
 
     def _scale_pt_aniso(pt: Tuple[float, float, float]) -> Tuple[float, float, float]:
         return (
@@ -1252,8 +1253,8 @@ def build_bomber(blink: float = 0.0) -> SceneBuilder:
         head_tilt_deg=-2.5,
         head_yaw_deg=3.0,
         head_pitch_deg=-14.0,
-        eye_scale_left=0.78,
-        eye_scale_right=0.78,
+        eye_scale_left=0.88,
+        eye_scale_right=0.88,
         eye_look=(-0.06, 0.04),
         antenna_asymmetry=0.45,
         stance_asymmetry=0.40,
@@ -1268,8 +1269,9 @@ def build_bomber(blink: float = 0.0) -> SceneBuilder:
     head_c, head_r, eye_l, eye_r, head_back_z = _scale_bomber_head_and_tall_antennae(
         scene,
         anchors,
-        head_scale_xz=0.77,
-        head_scale_y=0.74,
+        head_scale_x=0.64,
+        head_scale_y=0.77,
+        head_scale_z=0.79,
     )
     _build_goggles(
         scene,
