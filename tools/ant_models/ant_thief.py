@@ -36,7 +36,7 @@ try:
         swept_tube,
         torus_arc,
     )
-    from .thief_attack import add_thief_attack_animation, add_thief_whip_meshes
+    from .thief_attack import add_thief_attack_animation, add_thief_whip_meshes, compact_thief_legs, scale_thief_head_assembly
 except ImportError:
     from base_ant import EYELID_CLOSED_ANGLE, build_base_ant, sync_arm_idle_to_clip, sync_leg_flex_to_clip  # type: ignore
     from mesh_core import (  # type: ignore
@@ -58,7 +58,7 @@ except ImportError:
         swept_tube,
         torus_arc,
     )
-    from thief_attack import add_thief_attack_animation, add_thief_whip_meshes  # type: ignore
+    from thief_attack import add_thief_attack_animation, add_thief_whip_meshes, compact_thief_legs, scale_thief_head_assembly  # type: ignore
 
 # Hard shifty lookout gaze (+-0.72 rad = +-41.2 deg): black pupils tuck ALL THE WAY flush
 # into the far-left & far-right eye corners (zero white sliver past the pupil on the gaze side,
@@ -70,25 +70,26 @@ GAZE_ANGLE = 0.72
 _LID_REST_DROOP = 0.0
 _THIEF_BLINK_ANGLE = EYELID_CLOSED_ANGLE + 0.04
 
-# Low stealthy sneaking crouch (`0.215`, paired with `_THIEF_UNIFORM_SCALE` below to shorten
-# Thief's legs ~20% while keeping total world height unchanged at ~0.79).
-THIEF_CROUCH = 0.215
-_THIEF_UNIFORM_SCALE = 1.055
+# Compact athletic sneaking stance (`0.138`, paired with `_THIEF_HEAD_SCALE = 0.81` and
+# `_THIEF_UNIFORM_SCALE = 0.96` so Thief matches `ORIG atst901`/`atst701`/`atst301` head-to-body
+# ratio and compact tucked legs at ~0.78 world height!).
+THIEF_CROUCH = 0.138
+_THIEF_HEAD_SCALE = 0.81
+_THIEF_UNIFORM_SCALE = 1.032
 _KNOT_THETA = math.radians(78.0)
 
-# Nimble asymmetric rogue arm pose anchored cleanly at `core`'s narrow petite shoulders (±0.078, 0.456 - c, 0.014),
-# tucked high & snug in front of the chest cleanly clear above & medial to the crouched thickened knees.
+# Nimble forward-reaching sneaky rogue arms matching `ORIG atst901`/`atst301`, cleanly above knees.
 _THIEF_ARM_LEFT = [
     (0.078, 0.456 - THIEF_CROUCH, 0.014),
-    (0.104, 0.486 - THIEF_CROUCH, 0.080),
-    (0.088, 0.502 - THIEF_CROUCH, 0.152),
-    (0.066, 0.512 - THIEF_CROUCH, 0.180),
+    (0.112, 0.454 - THIEF_CROUCH, 0.084),
+    (0.094, 0.454 - THIEF_CROUCH, 0.156),
+    (0.070, 0.462 - THIEF_CROUCH, 0.184),
 ]
 _THIEF_ARM_RIGHT = [
     (-0.078, 0.456 - THIEF_CROUCH, 0.014),
-    (-0.106, 0.480 - THIEF_CROUCH, 0.070),
-    (-0.090, 0.486 - THIEF_CROUCH, 0.144),
-    (-0.068, 0.494 - THIEF_CROUCH, 0.172),
+    (-0.114, 0.450 - THIEF_CROUCH, 0.074),
+    (-0.096, 0.440 - THIEF_CROUCH, 0.148),
+    (-0.072, 0.446 - THIEF_CROUCH, 0.176),
 ]
 
 _U_SEGS = 72
@@ -972,7 +973,7 @@ def _add_rogue_strap_and_loot_pouch(scene: SceneBuilder, anchors: dict) -> None:
 
     # Compact cinched canvas/brown loot pouch slung neatly on the slim right-back flank (-X, -Z)
     # clear above the crouched gaster and digitigrade backwards-knee rear leg.
-    pouch_ctr = np.array([-0.084, 0.404 + dy_c, -0.104])
+    pouch_ctr = np.array([-0.084, 0.418 + dy_c, -0.104])
     pouch_prof = [
         (0.000, -0.052),
         (0.028, -0.048),
@@ -1202,34 +1203,6 @@ def _add_thief_idle_animation(scene: SceneBuilder) -> None:
     sync_arm_idle_to_clip(scene, "Idle")
 
 
-def _separate_thief_legs(scene: SceneBuilder) -> None:
-    """Widen Z spacing between crouched thickened mid & rear legs outside pelvis (zero phasing)."""
-    # Left pair starts ~22 mm closer in Z under `leg_style="thief"`, so give left extra Z spread
-    # while keeping `leg_rear_right` cleanly clear of the right-back loot pouch.
-    leg_dzs = (
-        ("leg_mid_left", +0.064),
-        ("leg_mid_right", +0.044),
-        ("leg_rear_left", -0.064),
-        ("leg_rear_right", -0.028),
-    )
-    for node, dz in leg_dzs:
-        xf = scene.get_node_transform(node)
-        parts = scene.get_node(node)
-        if xf is None or not parts:
-            continue
-        tx, ty, tz = xf.translation
-
-        def _shift_z(pos: np.ndarray, piv_x: float = tx, delta_z: float = dz) -> np.ndarray:
-            p = pos.copy()
-            # Smoothly ramp from 0 at medial hip root (|x| <= 0.036) to 1 outside pelvis (|x| >= 0.086).
-            w = np.clip((np.abs(p[:, 0] + piv_x) - 0.036) / 0.050, 0.0, 1.0)
-            p[:, 2] += (w - 1.0) * delta_z
-            return p
-
-        scene.nodes[node] = [p.deform(_shift_z) for p in parts]
-        scene.set_node_transform(node, translation=(tx, ty, tz + dz), rotation=xf.rotation, scale=xf.scale)
-
-
 def build_thief(blink: float = 0.0, gaze: float = -1.0) -> SceneBuilder:
     """Build the sly, mischievous Rogue Bandit Thief Ant.
 
@@ -1285,21 +1258,37 @@ def build_thief(blink: float = 0.0, gaze: float = -1.0) -> SceneBuilder:
             scale=cur_xf.scale if cur_xf is not None else (1.0, 1.0, 1.0),
         )
     scene.attach_world_node("gear_rogue", "upper_body", preserve_world_pose=False)
-    add_thief_whip_meshes(scene, anchors)
+    scale_thief_head_assembly(scene, _THIEF_HEAD_SCALE)
+    add_thief_whip_meshes(scene, anchors, head_scale=_THIEF_HEAD_SCALE)
 
-    # Sneaky hunched forward torso lean (+0.22 rad ~ +12.6 deg) + gentle forward head tuck (+3 deg)
-    # -> combined ~15.6 deg forward burglar lean so Thief sits low & reveals both shifty eyes cleanly at 45 deg!
+    # Sleek horizontal pointed gaster matching `ORIG atst901`'s crisp rearward dart silhouette.
+    gp = anchors["gaster_pivot"]
+    if "gaster" in scene.nodes:
+        scene.nodes["gaster"] = [
+            p.translate(-gp[0], -gp[1], -gp[2]).scale(0.88, 0.88, 1.07).translate(gp[0], gp[1], gp[2])
+            for p in scene.get_node("gaster")
+        ]
+    gg_xf = scene.get_node_transform("gaster_group")
+    if gg_xf is not None:
+        scene.set_node_transform(
+            "gaster_group",
+            translation=gg_xf.translation,
+            rotation=quat_mul(gg_xf.rotation, quat_from_euler_xyz(rx=+0.15)),
+            scale=gg_xf.scale,
+        )
+
+    # Clean athletic sneaky forward lean (+0.16 rad) so Thief sits poised & reveals both shifty eyes at 45 deg!
     ub_xf = scene.get_node_transform("upper_body")
     if ub_xf is not None:
         scene.set_node_transform(
             "upper_body",
             translation=ub_xf.translation,
-            rotation=quat_mul(ub_xf.rotation, quat_from_euler_xyz(rx=0.22)),
+            rotation=quat_mul(ub_xf.rotation, quat_from_euler_xyz(rx=0.16)),
             scale=ub_xf.scale,
         )
 
-    # Separate thickened crouched mid/rear legs in Z, then uniformly scale to preserve ~0.79 height.
-    _separate_thief_legs(scene)
+    # Tuck legs compactly underneath torso, then scale uniformly so final height lands ~0.78!
+    compact_thief_legs(scene)
     scene.scale_all(_THIEF_UNIFORM_SCALE)
     scene.ground_to_y(0.0)
     _add_thief_idle_animation(scene)

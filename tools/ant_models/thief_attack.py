@@ -121,27 +121,30 @@ def _cloth_whip_ribbon(
     return MeshPart(name, "gear_gold", positions, recompute_smooth_normals(positions, indices), indices).ensure_outward()
 
 
-def add_thief_whip_meshes(scene: SceneBuilder, anchors: dict) -> None:
+def add_thief_whip_meshes(scene: SceneBuilder, anchors: dict, *, head_scale: float = 1.0) -> None:
     """Attach hidden (`1e-4` inside opaque thorax) golden cloth lasso & bullwhip crack meshes."""
     tc = np.asarray(anchors["thorax_center"], dtype=np.float64)
+    nc = np.asarray(anchors["neck_center"], dtype=np.float64)
     hc = np.asarray(anchors["head_center"], dtype=np.float64)
-    hy_rel = float(hc[1] - tc[1])
-    hz_rel = float(hc[2] - tc[2])
+    hs = float(head_scale)
+    hy_rel = float((nc[1] - tc[1]) + hs * (hc[1] - nc[1])) - 0.006
+    hz_rel = float((nc[2] - tc[2]) + hs * (hc[2] - nc[2]))
+    rs = 0.5 * (1.0 + hs)  # keep lasso bold & proportional around the smaller head
 
     # 1. Sweeping 240-deg crescent cloth lasso wrapping dramatically around Thief's bare head (`f3..f5, f8`).
     lasso_pts = [
-        (-0.10, hy_rel - 0.11, hz_rel + 0.14),
-        (-0.27, hy_rel - 0.04, hz_rel + 0.12),
-        (-0.31, hy_rel + 0.10, hz_rel - 0.04),
-        (-0.14, hy_rel + 0.21, hz_rel - 0.24),
-        (+0.14, hy_rel + 0.19, hz_rel - 0.23),
-        (+0.30, hy_rel + 0.06, hz_rel - 0.03),
-        (+0.24, hy_rel - 0.07, hz_rel + 0.15),
+        (-0.10 * rs, hy_rel - 0.10 * rs, hz_rel + 0.13 * rs),
+        (-0.26 * rs, hy_rel - 0.03 * rs, hz_rel + 0.11 * rs),
+        (-0.30 * rs, hy_rel + 0.10 * rs, hz_rel - 0.04 * rs),
+        (-0.14 * rs, hy_rel + 0.20 * rs, hz_rel - 0.23 * rs),
+        (+0.14 * rs, hy_rel + 0.18 * rs, hz_rel - 0.22 * rs),
+        (+0.29 * rs, hy_rel + 0.06 * rs, hz_rel - 0.03 * rs),
+        (+0.23 * rs, hy_rel - 0.06 * rs, hz_rel + 0.14 * rs),
     ]
     lasso = _cloth_whip_ribbon(
         lasso_pts,
-        half_widths=[0.018, 0.036, 0.048, 0.044, 0.042, 0.038, 0.016],
-        half_thicknesses=[0.008, 0.010, 0.010, 0.009, 0.009, 0.008, 0.005],
+        half_widths=[0.017, 0.033, 0.044, 0.040, 0.038, 0.035, 0.015],
+        half_thicknesses=[0.008, 0.009, 0.009, 0.008, 0.008, 0.008, 0.005],
         face_hint=(0.0, 0.88, 0.48),
         twist_deg=(-20.0, 42.0),
         name="thief_whip_lasso_ribbon",
@@ -150,15 +153,15 @@ def add_thief_whip_meshes(scene: SceneBuilder, anchors: dict) -> None:
     scene.set_node_transform("thief_whip_lasso", translation=(0.0, 0.0, 0.0), scale=_HIDE_SCALE)
 
     # 2. Snapping S-curved golden cloth bullwhip extending +0.46 Z forward from right hand (`f6..f7`).
-    #    Angled upward in upper_body local space to counterbalance Thief's +0.44 rad lunge lean so
+    #    Angled upward in upper_body local space to counterbalance Thief's +0.38 rad lunge lean so
     #    the bullwhip cracks dead horizontal at waist/hand height cleanly above Y = 0.0!
     crack_pts = [
-        (-0.075, +0.12, +0.12),
-        (-0.048, +0.16, +0.23),
-        (+0.044, +0.21, +0.34),
-        (-0.046, +0.25, +0.45),
-        (+0.024, +0.29, +0.54),
-        (+0.004, +0.33, +0.60),
+        (-0.075, +0.08, +0.12),
+        (-0.048, +0.12, +0.23),
+        (+0.044, +0.16, +0.34),
+        (-0.046, +0.20, +0.45),
+        (+0.024, +0.23, +0.54),
+        (+0.004, +0.26, +0.60),
     ]
     crack = _cloth_whip_ribbon(
         crack_pts,
@@ -465,4 +468,56 @@ def add_thief_attack_animation(scene: SceneBuilder, gaze_angle: float) -> None:
     sync_leg_flex_to_clip(scene, "Attack")
 
 
-__all__ = ["add_thief_attack_animation", "add_thief_whip_meshes"]
+def scale_thief_head_assembly(scene: SceneBuilder, scale: float) -> None:
+    """Cohesively scale Thief's head subtree around `head_group` neck pivot (zero neck gap)."""
+    head_nodes = (
+        "head", "mandibles", "antennae", "antenna_left", "antenna_right",
+        "eyes", "eye_ball_left", "eye_ball_right", "eyelid_left", "eyelid_right",
+        "bandana_worn_group", "gear_bandana", "bandana_tails", "bandana_tail_lower",
+    )
+    tail_boost = 1.12
+    for node in head_nodes:
+        s_mesh = scale * tail_boost if node in ("bandana_tails", "bandana_tail_lower") else scale
+        parts = scene.get_node(node)
+        if parts:
+            scene.nodes[node] = [p.scale(s_mesh) for p in parts]
+        xf = scene.get_node_transform(node)
+        if xf is not None:
+            tx, ty, tz = xf.translation
+            scene.set_node_transform(node, translation=(tx * scale, ty * scale, tz * scale), rotation=xf.rotation, scale=xf.scale)
+    hg_xf = scene.get_node_transform("head_group")
+    if hg_xf is not None:
+        hx, hy, hz = hg_xf.translation
+        scene.set_node_transform("head_group", translation=(hx, hy - 0.006, hz), rotation=hg_xf.rotation, scale=hg_xf.scale)
+
+
+def compact_thief_legs(scene: SceneBuilder) -> None:
+    """Tuck Thief's legs compactly underneath his body in Z & target-clamped X (`ORIG atst901`/`atst701`)."""
+    leg_nodes = ("leg_mid_left", "leg_mid_right", "leg_rear_left", "leg_rear_right")
+    cur_x = max(abs(scene.get_node_transform(n).translation[0]) for n in leg_nodes if scene.get_node_transform(n))
+    sx_out = min(1.0, 0.144 / max(1e-4, cur_x))
+    sz_out = 0.87
+    z_ctr = -0.014
+    for node in leg_nodes:
+        xf = scene.get_node_transform(node)
+        parts = scene.get_node(node)
+        if xf is None or not parts:
+            continue
+        tx, ty, tz = xf.translation
+        new_tx = tx * sx_out
+        new_tz = z_ctr + (tz - z_ctr) * sz_out
+
+        def _tuck(pos: "np.ndarray", px: float = tx, pz: float = tz, n_px: float = new_tx, n_pz: float = new_tz) -> "np.ndarray":
+            p = pos.copy()
+            wx = p[:, 0] + px
+            wz = p[:, 2] + pz
+            w = np.clip((np.abs(wx) - 0.042) / 0.055, 0.0, 1.0)
+            p[:, 0] = wx * (1.0 - w + w * sx_out) - n_px
+            p[:, 2] = wz * (1.0 - w) + (z_ctr + (wz - z_ctr) * sz_out) * w - n_pz
+            return p
+
+        scene.nodes[node] = [p.deform(_tuck) for p in parts]
+        scene.set_node_transform(node, translation=(new_tx, ty, new_tz), rotation=xf.rotation, scale=xf.scale)
+
+
+__all__ = ["add_thief_attack_animation", "add_thief_whip_meshes", "compact_thief_legs", "scale_thief_head_assembly"]
