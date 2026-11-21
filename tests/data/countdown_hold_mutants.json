@@ -102,7 +102,7 @@
    "id": "hold_drops_counted_as_cap",
    "file": "src/ants_net/attendance.cpp",
    "old": "++(by_hold ? drops_by_countdown_hold_ : drops_by_cap_);",
-   "new": "++drops_by_cap_;",
+   "new": "++(by_hold ? drops_by_cap_ : drops_by_cap_);",
    "build": [
     "test_lockstep",
     "test_server"
