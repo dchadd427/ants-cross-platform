@@ -218,57 +218,58 @@ def _paint_cranium_colors(cranium: MeshPart) -> MeshPart:
 
 
 def _build_mandibles(scene: SceneBuilder, head_center: Tuple[float, float, float], head_tilt_x: float) -> None:
-    """Build plump, smooth rounded bean/teardrop lobster-claw mandibles ('tusks') tucked warmly under the eyes."""
+    """Build close-together #1 Fat Crusher lobster-claw mandibles with subtle claw point & 3 crusher-molar knobs."""
     _, hy, hz = head_center
 
-    # Compact, chubby rounded bean/teardrop tusks emerging right beneath each eye,
-    # angling cleanly forward-and-downward and curving gently inward toward blunt tips
-    # (single smooth bean in side profile + cute rounded inner scallops from front 3/4,
-    # aligned directly over agst301 & agst901 pixel landmarks).
+    # Dual fat lobster-claw-end crusher mandibles rooted snugly under the cheeks and curving horizontally
+    # inward across the mouth (~14-16 mm inner tip gap): fat plump outer crusher dome, subtle refined
+    # inward claw point, and 3 crisp rounded crusher-molar knobs lining the upper-inner biting seam.
     claw_pts = [
-        (0.074, hy - 0.080, hz + 0.122),
-        (0.088, hy - 0.116, hz + 0.168),
-        (0.074, hy - 0.150, hz + 0.194),
-        (0.048, hy - 0.164, hz + 0.200),
+        (0.080, hy - 0.094, hz + 0.106),
+        (0.086, hy - 0.118, hz + 0.152),
+        (0.062, hy - 0.136, hz + 0.180),
+        (0.032, hy - 0.146, hz + 0.186),
+        (0.014, hy - 0.148, hz + 0.182),
     ]
     claw_rads = [
-        (0.030, 0.032),
-        (0.042, 0.045),
-        (0.038, 0.040),
-        (0.024, 0.025),
+        (0.028, 0.030),
+        (0.039, 0.042),
+        (0.032, 0.034),
+        (0.018, 0.019),
+        (0.0065, 0.0065),
     ]
     claw_main = curved_tube(
         claw_pts,
         claw_rads,
         samples_per_seg=4,
-        radial_segs=16,
+        radial_segs=18,
         cap_rings=4,
         name="mandible_claw",
         material="chitin_team",
     )
 
-    # Two soft, chubby rounded inner pincer scallops nestled strictly on the medial (-X)
-    # inner curve so the side silhouette stays one single clean plump bean.
-    nub_upper = (
-        ellipsoid(0.015, 0.014, 0.014, u_segs=12, v_segs=8, name="mandible_lobe_upper", material="chitin_team")
-        .translate(0.052, hy - 0.124, hz + 0.172)
-    )
-    nub_lower = (
-        ellipsoid(0.013, 0.013, 0.013, u_segs=12, v_segs=8, name="mandible_lobe_lower", material="chitin_team")
-        .translate(0.044, hy - 0.146, hz + 0.188)
-    )
+    # Three distinct rounded lobster crusher-molar knobs standing cleanly proud along the inner biting seam.
+    molars = [
+        superellipsoid(rx, ry, rz, e1=0.68, e2=0.72, u_segs=12, v_segs=8, name=f"mandible_molar_{m_idx}", material="chitin_team")
+        .translate(mx, my, mz)
+        for m_idx, (mx, my, mz, rx, ry, rz) in enumerate((
+            (0.052, hy - 0.108, hz + 0.154, 0.0115, 0.0125, 0.0115),
+            (0.039, hy - 0.118, hz + 0.172, 0.0105, 0.0115, 0.0105),
+            (0.026, hy - 0.129, hz + 0.181, 0.0088, 0.0095, 0.0088),
+        ))
+    ]
 
-    parts_left = [claw_main, nub_upper, nub_lower]
+    parts_left = [claw_main, *molars]
     if abs(head_tilt_x) > 1e-6:
         parts_left = [p.translate(0.0, -hy, -hz).rotate_xyz(rx=head_tilt_x).translate(0.0, hy, hz) for p in parts_left]
-    jaw_hinge = (0.0, hy - 0.116, hz + 0.118)
+    jaw_hinge = (0.0, hy - 0.122, hz + 0.114)
     for p in parts_left:
         scene.add_mirrored("mandibles", p.translate(-jaw_hinge[0], -jaw_hinge[1], -jaw_hinge[2]))
     scene.set_node_transform("mandibles", translation=jaw_hinge)
 
     mouth_cleft = (
-        ellipsoid(0.034, 0.018, 0.024, u_segs=14, v_segs=8, name="mouth_cleft", material="chitin_dark")
-        .translate(0.0, hy - 0.130, hz + 0.132)
+        ellipsoid(0.032, 0.018, 0.022, u_segs=14, v_segs=8, name="mouth_cleft", material="chitin_dark")
+        .translate(0.0, hy - 0.132, hz + 0.126)
     )
     scene.add("head", mouth_cleft)
 

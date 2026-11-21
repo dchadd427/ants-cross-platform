@@ -444,29 +444,30 @@ def _sculpt_head(scene: SceneBuilder, blink: float) -> None:
     scene.add_mirrored(
         "head",
         ellipsoid(0.040, 0.036, 0.034, u_segs=14, v_segs=10, name="mandible_socket", material="chitin_dark")
-        .translate(0.094, hy - 0.114, hz + 0.116),
+        .translate(0.092, hy - 0.122, hz + 0.112),
     )
-    # Plump, chunky rounded lobster-claw pods (blunt rounded mitten tips, zero skinny tusks!).
+    # Close-together #1 Fat Crusher lobster-claw mandibles (fat bulbous dome curving horizontally inward to a subtle point!).
     jaw = curved_tube(
         [
-            (0.092, hy - 0.112, hz + 0.120),
-            (0.106, hy - 0.138, hz + 0.172),
-            (0.086, hy - 0.156, hz + 0.214),
-            (0.052, hy - 0.160, hz + 0.228),
+            (0.092, hy - 0.122, hz + 0.114),
+            (0.100, hy - 0.140, hz + 0.164),
+            (0.074, hy - 0.156, hz + 0.200),
+            (0.038, hy - 0.162, hz + 0.212),
+            (0.018, hy - 0.162, hz + 0.210),
         ],
-        [(0.036, 0.038), (0.048, 0.046), (0.044, 0.040), (0.032, 0.030)],
+        [(0.036, 0.038), (0.050, 0.048), (0.040, 0.038), (0.023, 0.021), (0.0085, 0.0080)],
         samples_per_seg=4,
-        radial_segs=14,
+        radial_segs=16,
         cap_rings=4,
         name="mandible_claw",
         material="chitin_team",
     )
     scene.add_mirrored("head", jaw)
-    # Small crisp rounded pale/off-white inner pincer bite teeth clearly visible along the inner-front claw edge.
+    # Three chunky rounded crusher-molar knobs lining the upper-inner biting seam across Combat's grin.
     for t_idx, (tx, ty, tz, rx, ry, rz, yaw_deg) in enumerate((
-        (0.060, hy - 0.132, hz + 0.194, 0.012, 0.010, 0.012, 22.0),
-        (0.049, hy - 0.140, hz + 0.214, 0.013, 0.010, 0.012, 10.0),
-        (0.034, hy - 0.147, hz + 0.229, 0.012, 0.010, 0.011, -8.0),
+        (0.062, hy - 0.124, hz + 0.172, 0.015, 0.014, 0.014, 24.0),
+        (0.046, hy - 0.135, hz + 0.194, 0.014, 0.013, 0.014, 10.0),
+        (0.030, hy - 0.145, hz + 0.207, 0.012, 0.011, 0.012, -8.0),
     )):
         tooth = (
             superellipsoid(rx, ry, rz, e1=0.68, e2=0.72, u_segs=12, v_segs=8, name=f"mandible_tooth_{t_idx}", material="fuse_white")
@@ -583,9 +584,9 @@ def _build_arms(scene: SceneBuilder) -> Tuple[np.ndarray, np.ndarray, np.ndarray
 
 
 def _sturdy_foot(name: str) -> MeshPart:
-    """Broad sturdy armored dark insect claw-foot resting flat on Y = 0.0."""
-    prof = [(0.000, -0.042), (0.032, -0.030), (0.046, 0.004), (0.040, 0.046), (0.022, 0.080), (0.000, 0.096)]
-    foot = lathe(prof, radial_segs=14, cap_bottom=False, cap_top=False, axis="z", name=name, material="leg_chitin").scale(1.12, 0.72, 1.0)
+    """Broad armored segmented dark insect claw-foot tapering cleanly to a pointed claw on Y = 0.0."""
+    prof = [(0.000, -0.042), (0.034, -0.028), (0.048, 0.004), (0.040, 0.046), (0.020, 0.082), (0.007, 0.098), (0.000, 0.104)]
+    foot = lathe(prof, radial_segs=14, cap_bottom=False, cap_top=False, axis="z", name=name, material="leg_chitin").scale(1.08, 0.72, 1.0)
     foot = foot.deform(lambda p: np.column_stack([p[:, 0], np.maximum(p[:, 1], -0.018), p[:, 2]]))
     return foot.translate(0.0, -float(foot.bounds()[0][1]), 0.0)
 
@@ -597,16 +598,40 @@ def _build_flowing_leg(
     foot_yaw: float,
     side: float,
 ) -> None:
-    """One individual digitigrade backwards-knee (`< \\`) muscular dark insect leg pivoted at its planted foot."""
+    """One segmented armored exoskeleton backwards-knee (`< \\`) insect leg pivoted at its planted foot."""
     pts = [np.array([side * abs(p[0]), p[1], p[2]], dtype=np.float64) for p in ctrl]
-    leg = curved_tube(
-        pts,
-        [(0.056, 0.060), (0.052, 0.056), (0.048, 0.050), (0.044, 0.046), (0.036, 0.038), (0.032, 0.034)],
-        samples_per_seg=5,
-        radial_segs=16,
-        cap_rings=3,
-        name=f"{node_name}_tube",
+    # Segment 1: Hip -> pinched trochanter -> swollen muscular spindle femur -> pinched knee neck.
+    p_hip, p_f1, p_knee, p_t1, p_ank, p_ft = pts[0], pts[1], pts[2], pts[3], pts[4], pts[5]
+    fem_pts = [p_hip, 0.62 * p_hip + 0.38 * p_f1, p_f1, 0.42 * p_f1 + 0.58 * p_knee, 0.14 * p_f1 + 0.86 * p_knee, p_knee]
+    femur = curved_tube(
+        fem_pts,
+        [(0.048, 0.052), (0.032, 0.036), (0.060, 0.066), (0.052, 0.058), (0.029, 0.033), (0.034, 0.038)],
+        samples_per_seg=3,
+        radial_segs=14,
+        cap_rings=2,
+        name=f"{node_name}_femur",
         material="leg_chitin",
+    )
+    # Segment 2: Pinched sub-knee neck -> muscular tapered tibia -> distal ankle spur -> pinched ankle neck.
+    tib_pts = [p_knee, 0.84 * p_knee + 0.16 * p_t1, p_t1, 0.36 * p_t1 + 0.64 * p_ank, 0.14 * p_t1 + 0.86 * p_ank, p_ank, p_ft]
+    tibia = curved_tube(
+        tib_pts,
+        [(0.032, 0.036), (0.026, 0.030), (0.048, 0.054), (0.034, 0.038), (0.042, 0.046), (0.025, 0.028), (0.028, 0.030)],
+        samples_per_seg=3,
+        radial_segs=14,
+        cap_rings=2,
+        name=f"{node_name}_tibia",
+        material="leg_chitin",
+    )
+    # Sculpted armored knee-cap condyle & ankle joint collar wrapping the outer exoskeleton bends.
+    bis_k = _normalize(-(p_f1 - p_knee) - (p_t1 - p_knee), fallback=(0.0, 0.0, -1.0))
+    knee_cap = (
+        superellipsoid(0.046, 0.048, 0.052, e1=0.68, e2=0.74, u_segs=14, v_segs=10, name=f"{node_name}_knee_cap", material="leg_chitin")
+        .translate(p_knee + 0.010 * bis_k)
+    )
+    ankle_cap = (
+        superellipsoid(0.035, 0.032, 0.038, e1=0.70, e2=0.74, u_segs=12, v_segs=8, name=f"{node_name}_ankle_cap", material="leg_chitin")
+        .translate(p_ank + np.array([0.0, 0.004, -0.004]))
     )
     yaw_s = side * foot_yaw
     foot_x = float(pts[-1][0])
@@ -614,9 +639,8 @@ def _build_flowing_leg(
     foot = _sturdy_foot(f"{node_name}_tarsus").rotate_xyz(ry=yaw_s).translate(foot_x, 0.0, foot_z)
     # Pivot cleanly on the ball of the planted foot at Y = 0.0 so knee-flex never lifts or slides the sole!
     pivot = (foot_x + 0.016 * math.sin(yaw_s), 0.0, foot_z + 0.016 * math.cos(yaw_s))
-    leg_loc = leg.translate(-pivot[0], 0.0, -pivot[2])
-    foot_loc = foot.translate(-pivot[0], 0.0, -pivot[2])
-    scene.add(node_name, [leg_loc, foot_loc], parent="legs")
+    parts_loc = [part.translate(-pivot[0], 0.0, -pivot[2]) for part in (femur, knee_cap, tibia, ankle_cap, foot)]
+    scene.add(node_name, parts_loc, parent="legs")
     scene.set_node_transform(node_name, translation=pivot)
 
 
@@ -1019,7 +1043,7 @@ def _add_combat_idle_animation(scene: SceneBuilder) -> None:
 
 
 def _add_combat_attack_animation(scene: SceneBuilder) -> None:
-    """Authentic `acat` 0.54s (6-frame [80,100,60,80,100,120]ms) cross-chest windup into wide haymaker spread."""
+    """Authentic `acat` 0.54s (6-frame [80,100,60,80,100,120]ms) asymmetric sweeping brawler arm slap."""
     q_id = (0.0, 0.0, 0.0, 1.0)
     sh_l = np.array(ARM_PTS_LEFT[0], dtype=np.float64)
     el_l = np.array(ARM_PTS_LEFT[2], dtype=np.float64)
@@ -1048,28 +1072,34 @@ def _add_combat_attack_animation(scene: SceneBuilder) -> None:
             out.append(q)
         return out
 
-    # Cross-chest coiled windup poses (L slightly higher than R so massive gauntlets never collide!).
-    lsh_f1, lel_f1 = _aim_arm(sh_l, el_l, fi_l, (0.20, -0.52, 0.83), (-0.82, 0.22, 0.53))
-    rsh_f1, rel_f1 = _aim_arm(sh_r, el_r, fi_r, (-0.20, -0.64, 0.74), (0.82, -0.16, 0.55))
-    lsh_f2, lel_f2 = _aim_arm(sh_l, el_l, fi_l, (0.12, -0.54, 0.83), (-0.88, 0.24, 0.41))
-    rsh_f2, rel_f2 = _aim_arm(sh_r, el_r, fi_r, (-0.16, -0.62, 0.77), (0.86, -0.16, 0.48))
-    # Explosive double-arm haymaker fling wide outward & high (`acat301`/`acat901` f3-f4) + follow-through (f5).
-    lsh_f3, lel_f3 = _aim_arm(sh_l, el_l, fi_l, (0.88, 0.34, 0.33), (0.92, 0.28, 0.26))
-    rsh_f3, rel_f3 = _aim_arm(sh_r, el_r, fi_r, (-0.88, 0.38, 0.28), (-0.92, 0.32, 0.22))
-    lsh_f4, lel_f4 = _aim_arm(sh_l, el_l, fi_l, (0.86, 0.46, -0.22), (0.82, 0.44, -0.37))
-    rsh_f4, rel_f4 = _aim_arm(sh_r, el_r, fi_r, (-0.86, 0.48, -0.22), (-0.82, 0.46, -0.37))
-    lsh_f5, lel_f5 = _aim_arm(sh_l, el_l, fi_l, (0.92, 0.06, 0.39), (0.84, -0.16, 0.52))
-    rsh_f5, rel_f5 = _aim_arm(sh_r, el_r, fi_r, (-0.92, 0.08, 0.39), (-0.84, -0.14, 0.52))
+    # f1-f2: Massive left arm (+X, viewer-right in 301 S) sweeps hard across chest/belly toward viewer-left (-X)
+    # while right arm (-X, magenta bow) braces back/down as counterweight (`acat301` f1-f2).
+    lsh_f1, lel_f1 = _aim_arm(sh_l, el_l, fi_l, (0.00, -0.48, 0.88), (-0.78, -0.24, 0.58))
+    rsh_f1, rel_f1 = _aim_arm(sh_r, el_r, fi_r, (-0.70, -0.48, -0.53), (-0.64, -0.58, -0.50))
+    lsh_f2, lel_f2 = _aim_arm(sh_l, el_l, fi_l, (-0.08, -0.50, 0.86), (-0.82, -0.32, 0.48))
+    rsh_f2, rel_f2 = _aim_arm(sh_r, el_r, fi_r, (-0.76, -0.40, -0.51), (-0.70, -0.50, -0.51))
+    # Mid-slap strike pass (`0.21s`): sweeping arm whips straight forward (+Z) across target, never cutting torso!
+    lsh_mid, lel_mid = _aim_arm(sh_l, el_l, fi_l, (0.38, -0.06, 0.92), (0.32, -0.04, 0.95))
+    rsh_mid, rel_mid = _aim_arm(sh_r, el_r, fi_r, (-0.86, -0.04, -0.51), (-0.82, -0.26, -0.51))
+    # f3-f4: WHAM! Explosive counter-twist whipping slapping arm WIDE & HIGH out to viewer-right (`acat301`/`901` f3-f4).
+    lsh_f3, lel_f3 = _aim_arm(sh_l, el_l, fi_l, (0.86, 0.28, 0.43), (0.92, 0.20, 0.34))
+    rsh_f3, rel_f3 = _aim_arm(sh_r, el_r, fi_r, (-0.88, 0.14, -0.45), (-0.84, -0.22, -0.50))
+    lsh_f4, lel_f4 = _aim_arm(sh_l, el_l, fi_l, (0.90, 0.44, -0.06), (0.92, 0.38, -0.10))
+    rsh_f4, rel_f4 = _aim_arm(sh_r, el_r, fi_r, (-0.68, -0.60, -0.42), (-0.42, -0.82, 0.38))
+    # f5: Asymmetric wide follow-through stretching far right while counterweight arm tucks back (`acat301` f5).
+    lsh_f5, lel_f5 = _aim_arm(sh_l, el_l, fi_l, (0.94, 0.16, 0.30), (0.92, -0.08, 0.38))
+    rsh_f5, rel_f5 = _aim_arm(sh_r, el_r, fi_r, (-0.54, -0.78, 0.31), (-0.34, -0.72, 0.60))
 
-    # (t, dy, dz, ub_rx, head_q, lsh_q, lel_q, rsh_q, rel_q, gaster_rx)
+    # (t, dy, dz, ub_rx, ub_ry, head_q, lsh_q, lel_q, rsh_q, rel_q, gaster_rx)
     rows = [
-        (0.00, 0.000, 0.000, 0.00, q_id, q_id, q_id, q_id, q_id, 0.00),
-        (0.08, -0.028, 0.025, 0.30, quat_from_euler_xyz(rx=-0.16, ry=-0.06), lsh_f1, lel_f1, rsh_f1, rel_f1, -0.12),
-        (0.18, -0.038, 0.032, 0.36, quat_from_euler_xyz(rx=-0.22, ry=0.06), lsh_f2, lel_f2, rsh_f2, rel_f2, -0.16),
-        (0.24, 0.028, 0.090, 0.04, quat_from_euler_xyz(rx=-0.14, ry=-0.04), lsh_f3, lel_f3, rsh_f3, rel_f3, 0.20),
-        (0.32, 0.038, 0.078, -0.06, quat_from_euler_xyz(rx=-0.20), lsh_f4, lel_f4, rsh_f4, rel_f4, 0.24),
-        (0.42, 0.012, 0.036, 0.05, quat_from_euler_xyz(rx=-0.06), lsh_f5, lel_f5, rsh_f5, rel_f5, 0.10),
-        (0.54, 0.000, 0.000, 0.00, q_id, q_id, q_id, q_id, q_id, 0.00),
+        (0.00, 0.000, 0.000, 0.00, 0.00, q_id, q_id, q_id, q_id, q_id, 0.00),
+        (0.08, -0.022, 0.018, 0.24, -0.32, quat_from_euler_xyz(rx=-0.14, ry=0.24), lsh_f1, lel_f1, rsh_f1, rel_f1, -0.10),
+        (0.18, -0.032, 0.024, 0.30, -0.40, quat_from_euler_xyz(rx=-0.18, ry=0.30), lsh_f2, lel_f2, rsh_f2, rel_f2, -0.14),
+        (0.21, 0.004, 0.064, 0.16, 0.00, quat_from_euler_xyz(rx=-0.14, ry=0.00), lsh_mid, lel_mid, rsh_mid, rel_mid, 0.06),
+        (0.24, 0.024, 0.082, 0.08, 0.30, quat_from_euler_xyz(rx=-0.12, ry=-0.22), lsh_f3, lel_f3, rsh_f3, rel_f3, 0.18),
+        (0.32, 0.032, 0.068, 0.00, 0.38, quat_from_euler_xyz(rx=-0.14, ry=-0.28), lsh_f4, lel_f4, rsh_f4, rel_f4, 0.20),
+        (0.42, 0.012, 0.030, 0.06, 0.22, quat_from_euler_xyz(rx=-0.06, ry=-0.14), lsh_f5, lel_f5, rsh_f5, rel_f5, 0.10),
+        (0.54, 0.000, 0.000, 0.00, 0.00, q_id, q_id, q_id, q_id, q_id, 0.00),
     ]
     times = [round(r[0], 4) for r in rows]
     bx, by, bz = scene.get_node_transform("upper_body").translation
@@ -1077,13 +1107,13 @@ def _add_combat_attack_animation(scene: SceneBuilder) -> None:
     hd_r0 = scene.get_node_transform("head_group").rotation
     scene.add_animation("Attack", [
         AnimationChannel("upper_body", "translation", list(times), [(bx, by + r[1], bz + r[2]) for r in rows]),
-        AnimationChannel("upper_body", "rotation", list(times), _align_quats([quat_mul(ub_r0, quat_from_euler_xyz(rx=r[3])) for r in rows])),
-        AnimationChannel("head_group", "rotation", list(times), _align_quats([quat_mul(hd_r0, r[4]) for r in rows])),
-        AnimationChannel("left_arm_group", "rotation", list(times), _align_quats([r[5] for r in rows])),
-        AnimationChannel("left_forearm_group", "rotation", list(times), _align_quats([r[6] for r in rows])),
-        AnimationChannel("right_arm_group", "rotation", list(times), _align_quats([r[7] for r in rows])),
-        AnimationChannel("right_forearm_group", "rotation", list(times), _align_quats([r[8] for r in rows])),
-        AnimationChannel("gaster_group", "rotation", list(times), _align_quats([quat_from_euler_xyz(rx=r[9]) for r in rows])),
+        AnimationChannel("upper_body", "rotation", list(times), _align_quats([quat_mul(ub_r0, quat_from_euler_xyz(rx=r[3], ry=r[4])) for r in rows])),
+        AnimationChannel("head_group", "rotation", list(times), _align_quats([quat_mul(hd_r0, r[5]) for r in rows])),
+        AnimationChannel("left_arm_group", "rotation", list(times), _align_quats([r[6] for r in rows])),
+        AnimationChannel("left_forearm_group", "rotation", list(times), _align_quats([r[7] for r in rows])),
+        AnimationChannel("right_arm_group", "rotation", list(times), _align_quats([r[8] for r in rows])),
+        AnimationChannel("right_forearm_group", "rotation", list(times), _align_quats([r[9] for r in rows])),
+        AnimationChannel("gaster_group", "rotation", list(times), _align_quats([quat_from_euler_xyz(rx=r[10]) for r in rows])),
     ], replace=True)
 
 
