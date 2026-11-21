@@ -13,7 +13,7 @@ from typing import List, Tuple
 import numpy as np
 
 try:
-    from .base_ant import build_base_ant, sync_leg_flex_to_clip
+    from .base_ant import build_base_ant, sync_arm_idle_to_clip, sync_leg_flex_to_clip
     from .mesh_core import (
         AnimationChannel,
         AnimationClip,
@@ -31,7 +31,7 @@ try:
         torus_arc,
     )
 except ImportError:
-    from base_ant import build_base_ant, sync_leg_flex_to_clip  # type: ignore
+    from base_ant import build_base_ant, sync_arm_idle_to_clip, sync_leg_flex_to_clip  # type: ignore
     from mesh_core import (  # type: ignore
         AnimationChannel,
         AnimationClip,
@@ -679,6 +679,7 @@ def _add_bomber_idle(scene: SceneBuilder) -> AnimationClip:
         channels.append(AnimationChannel("mandibles", "rotation", list(times), m_r))
     clip = scene.add_animation("Idle", channels, replace=True)
     sync_leg_flex_to_clip(scene, "Idle")
+    sync_arm_idle_to_clip(scene, "Idle")
     return clip
 
 
