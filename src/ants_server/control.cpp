@@ -647,6 +647,46 @@ ctl::HttpResponse handle_public_replays(const RoomManager& rooms, const ctl::Htt
     return public_replays_response(rooms.replay_store(), request);
 }
 
+// The limits per address (address_limits.hpp): the numbers in force by their keys, and what the limits refused. Never an address.
+namespace {
+
+JsonValue address_limits_json(const AddressLimits& limits) {
+    JsonValue o = JsonValue::make_object();
+    for (const AddressLimitField& f : kAddressLimitFields) o.set(f.key, JsonValue::make_int(static_cast<int64_t>(limits.*f.member)));
+    return o;
+}
+
+JsonValue address_refusals_json(const AddressRefusals& r) {
+    JsonValue o = JsonValue::make_object();
+    o.set("connections", JsonValue::make_int(static_cast<int64_t>(r.connections)));
+    o.set("rooms_rate", JsonValue::make_int(static_cast<int64_t>(r.rooms_rate)));
+    o.set("rooms_open", JsonValue::make_int(static_cast<int64_t>(r.rooms_open)));
+    o.set("wrong_codes_slowed", JsonValue::make_int(static_cast<int64_t>(r.wrong_codes_slowed)));
+    o.set("wrong_codes_dropped", JsonValue::make_int(static_cast<int64_t>(r.wrong_codes_dropped)));
+    o.set("relay", JsonValue::make_int(static_cast<int64_t>(r.relay)));
+    o.set("idle_closed", JsonValue::make_int(static_cast<int64_t>(r.idle_closed)));
+    return o;
+}
+
+// GET /limits answers the numbers; POST /limits takes a JSON object of keys (any of them, 0 or a number in the key's range) and changes them at once, all or none. Nothing is kept: the next start has its options.
+ctl::HttpResponse handle_limits(RoomManager& rooms, const ctl::HttpRequest& request) {
+    if (request.method == "GET") return json_response(200, address_limits_json(rooms.address_limits()));
+    if (request.method != "POST") return error_response(405, "method not allowed");
+    JsonValue body;
+    std::string why;
+    if (request.body.empty() || !ctl::parse_json(request.body, body, &why)) return error_response(400, request.body.empty() ? "a JSON body is required" : "bad JSON: " + why);
+    if (!body.is_object() || body.size() == 0) return error_response(400, "a JSON object of limits is required");
+    AddressLimits next = rooms.address_limits();
+    for (size_t i = 0; i < body.size(); ++i) {
+        if (!body.at(i).is_int()) return error_response(400, body.key_at(i) + " must be a whole number");
+        if (!set_address_limit(next, body.key_at(i), body.at(i).as_int_or(-1), why)) return error_response(400, why);
+    }
+    rooms.set_address_limits(next);
+    return json_response(200, address_limits_json(rooms.address_limits()));
+}
+
+}  // namespace
+
 ctl::HttpResponse handle_control(RoomManager& rooms, const ctl::HttpRequest& request, uint32_t now_ms) {
     const std::string& path = request.path;
     if (path == "/rooms") {
@@ -682,8 +722,12 @@ ctl::HttpResponse handle_control(RoomManager& rooms, const ctl::HttpRequest& req
         o.set("refused", JsonValue::make_int(static_cast<int64_t>(rooms.connections_refused())));
         o.set("log_bytes", JsonValue::make_int(static_cast<int64_t>(rooms.log_bytes())));                 // the turn logs of all the rooms (reconnect), and what they may take together
         o.set("log_budget_bytes", JsonValue::make_int(static_cast<int64_t>(rooms.log_budget_bytes())));
+        o.set("address_limits", address_limits_json(rooms.address_limits()));                          // (the limits per address in force, and what they refused since the start; docs/ADDRESS_LIMITS.md)
+        o.set("address_refusals", address_refusals_json(rooms.address_refusals()));
+        o.set("addresses_tracked", JsonValue::make_int(static_cast<int64_t>(rooms.addresses_tracked())));
         return json_response(200, o);
     }
+    if (path == "/limits") return handle_limits(rooms, request);
     static const std::string kPrefix = "/rooms/";
     if (path.compare(0, kPrefix.size(), kPrefix) == 0) {
         const std::string code = path.substr(kPrefix.size());

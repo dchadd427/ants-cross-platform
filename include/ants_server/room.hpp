@@ -103,6 +103,9 @@ struct RoomSpec {
     /// Protocol 15: a room that a visitor's create block made (RoomManager::make_public_room). The server counts these against its public-room cap (--demo-rooms), gives them the short pause cap and
     /// ends the one that has been abandoned the longest when a new one needs the place; a room that the control interface made is not one.
     bool public_room{false};
+    /// The address that a visitor's create block made the room from, as the limits count it (address_limits.hpp; "" for a room of the control interface, one that was restored from a record, and a server that
+    /// counts nothing). Kept in memory for the limits per address alone: never in a status, a record, a replay or the log.
+    std::string creator;
     /// Protocol 15: the room does not start by itself when every seat is taken: only its leader's START starts the match (the leader can arrange the seats first). It needs a leader, so it is
     /// for a room with `early_start` (a room that has none ignores it).
     bool leader_starts{false};
@@ -441,6 +444,14 @@ public:
     /// How long nothing has been done in a waiting lobby room (HostLobby::activity: a ping that is answered is nothing), 0 for every other room and for one that a Hello has reached since its last pass. The manager gives
     /// the place of an idle lobby up when it needs it (never otherwise: a person may sit in a lobby for as long as they like). It stops growing at kMaxIdleMs.
     uint32_t idle_ms(uint32_t now_ms) const noexcept { return lobby_waiting() && !arrived_ ? now_ms - active_ms_ : 0u; }
+    /// The same, counting only what sets a room up (HostLobby::setup_activity: a person joins, a color moves, the plan or a name changes, a person is removed, a START is asked for), so that a line of chat or a
+    /// Ready mark does not make a room "used" (the early close of a crowded address's lobbies: docs/ADDRESS_LIMITS.md)
+    uint32_t quiet_ms(uint32_t now_ms) const noexcept { return lobby_waiting() && !arrived_ ? now_ms - setup_ms_ : 0u; }
+    /// The address that made the room (RoomSpec::creator); "" when none
+    const std::string& creator() const noexcept { return spec_.creator; }
+    /// The server's budget of relay credentials per address (docs/ADDRESS_LIMITS.md): asked with the address of the seat that wants a credential ("" when the room does not know it), once for each
+    /// credential about to be made; false answers the player as a server that has no relay. Set it right after the room is made; empty: no budget.
+    void set_relay_gate(std::function<bool(const std::string& address)> gate) { relay_gate_ = std::move(gate); }
     /// The owner forgets the room at once, without a word in the log or a result file (the server needs the place of a lobby that nobody is in): its clients are dropped
     void forget(uint32_t now_ms);
     /// The rematch (see the paragraph "Lobby rooms" above): a lobby room whose match its rules ended has the plan and the persons of that match to give, once (take_rematch). Nothing for any other room, for a
@@ -545,6 +556,9 @@ private:
     bool arrived_{false};                    // a lobby room: a connection was given to it since its last pass (its Hello is read in the next one: empty_ is stale until then)
     uint32_t seen_activity_{0};              // a lobby room: HostLobby::activity() at the last pass, and since when it is what it is
     uint32_t active_ms_{0};
+    uint32_t seen_setup_{0};                 // ... the same for HostLobby::setup_activity()
+    uint32_t setup_ms_{0};
+    std::function<bool(const std::string& address)> relay_gate_;      // the server's budget of relay credentials per address (set_relay_gate)
     uint32_t empty_since_ms_{0};
     bool forgotten_{false};                  // the owner forgot the room (forget): it is expired at once
     bool ended_by_rules_{false};             // the rematch: the match ended by its rules (every machine has its results screen), not by a leaver, a failure or the owner

@@ -45,6 +45,8 @@ services:
     # command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--replay-demo", "--replay-port", "4020"]
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}
+      # the reverse proxies whose X-Client-Address the WebSocket door believes for its limits per address (docs/ADDRESS_LIMITS.md; empty: the private networks, where the site's nginx connects from)
+      ANTS_TRUSTED_PROXIES: ${ANTS_TRUSTED_PROXIES:-}
     volumes:
       - ${ANTS_MAPS_DIR:-ants-maps}:/maps:ro
       - ants-server-results:/results
