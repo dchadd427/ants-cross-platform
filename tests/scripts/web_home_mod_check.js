@@ -509,6 +509,12 @@ function rig(o) {
     const l = rig({ history: [line(148, 'Clover', 'x'.repeat(2000), { u: 'clover.4782' })] });
     l.open(148);
     check('a very long line is cut for the quote (the style sheet keeps three lines of it)', one(l.box(), 'gm-quote').textContent.length <= Pure.LIMIT.quote);
+    const p = rig({ history: [line(148, 'Clover', '', { u: 'clover.4782', img: { n: 'a'.repeat(32), x: 'jpg' } })] });
+    p.open(148);
+    const pq = one(p.box(), 'gm-quote');
+    check('a line that is only an image: the quote says so instead of an empty box', pq !== null && pq.textContent.trim() !== '' && p.box().getAttribute('aria-describedby') === 'gm-quote');
+    p.press('Delete this line');
+    check('... and so does the question before it is deleted', one(p.box(), 'gm-qt') !== null && one(p.box(), 'gm-qt').textContent === pq.textContent);
     const w = rig({ history: [line(148, '<b>Clover</b>', '<i>hi</i> & <script>x</script>', { u: 'clover.4782' })] });
     w.open(148); w.press('Delete this line');
     check('names and words with markup characters in them are text (nothing is made of them but text)', w.env.innerHTMLWrites.length === 0 && one(w.box(), 'gm-qt').textContent === '<i>hi</i> & <script>x</script>' && w.box().findAll((e) => e.tagName === 'b' || e.tagName === 'i' || e.tagName === 'script').filter((e) => e.textContent.indexOf('Clover') === 0 && e.tagName === 'b' && cls(e.parent).indexOf('gm-at') === -1).length === 0);
