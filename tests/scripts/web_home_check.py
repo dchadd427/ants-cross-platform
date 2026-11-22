@@ -6,7 +6,7 @@ numbers, shown as `k7m 2xq`; a link, ?room=<code>, to send on), four color cards
 Nobody; players are dragged between colors), the map, the picture's shape (Picture: a dropdown of the seven shapes of the table, the one nearest the screen until a pick) and START! at its side, and the footer with the version and the links. A visitor who
 opens somebody's link, or types a code into Join by code (the Games list of Home), is asked for a name first. START hands every browser that is in the room to the game page, which takes its seat with the key that the lobby page
 wrote to the browser's storage; START with nobody else in the match plays a game on this computer. Needs a running web page that has nginx's routes (the web image of this tree: `docker build -t ants-beta .`,
-run it on a port), a Chromium-based browser and Python 3, and, because the check presses My room (a plain visit is Home and makes no room), the site's /ws leading to a game server: --ws-port is the port that it leads to, and the check starts the
+run it on a port), a Chromium-based browser and Python 3, and, because the check hosts a private room (a plain visit is Home and makes no room), the site's /ws leading to a game server: --ws-port is the port that it leads to, and the check starts the
 native `ants_server` of this tree there (as web_rejoin_check.py does). The DevTools protocol is spoken with the client of web_hidden_check.py, standard library only. Each part opens the site in a throwaway
 headless browser (its own profile and port; nothing of yours is touched), the parts with several people in one browser each. Parts:
 
@@ -26,7 +26,7 @@ headless browser (its own profile and port; nothing of yours is touched), the pa
   * play     START with a bot in every other color takes THIS tab to the game page (no new tab): the arguments are the site's door, the room's code, the seat, the name and the shape and nothing else (the server holds the
              plan), the address keeps the code and the shape, the key of the seat is in the browser, and the match starts by itself (no START of the player's, the "Get ready" dialog closes by itself); the server's status
              lists the three bots (Bot (Medium), seats 1 - 3) and the player, the bots' scores, which the HUD shows at the bottom, rise from 0; the game page's Menu link asks first and, with Yes, goes back to the front page
-             in the same tab, which opens on Home: My room there makes a room again for the same name;
+             in the same tab, which opens on Home: hosting there makes a room again for the same name;
   * solo     START with nobody else in the match (every other color Nobody) takes THIS tab to the game page of a game on this computer, a game for one (the map, --alone and the name, no room, no bot): the match runs
              with its one colony and only that: Red, Blue and Black have no hill, no ants and no eggs, at Green; Classic 4:3, chosen under Screen, reaches that game (and with nothing chosen the page hands on no shape at all: the game page picks its own, 16:10 at 1440 x 900);
   * leave    Leave game: a game on this computer against one bot (in each shape of the picture) played to its results with the quit dialog (Ctrl+Q, Yes), and a click on the results' Leave Game button takes THIS tab back
@@ -59,7 +59,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import web_aspect_check as aspect                                            # noqa: E402
 import web_rejoin_check as rejoin                                            # noqa: E402  (its Server: the site's game server of this tree; its Player: a person's own browser)
 from web_aspect_check import Browser, NotReachable, Tab                    # noqa: E402
-from web_front_room import press_my_room                                     # noqa: E402
+from web_front_room import host_a_private_room                                     # noqa: E402
 
 # The browsers of this check are a 1440 x 900 screen unless a part says otherwise: a first visit starts in the shape nearest to it (web/shapes.js, firstVisit; web_aspect_check.py's oracle),
 # and the front page hands a shape on to the game only when the player picked one.
@@ -241,8 +241,8 @@ def lobby_of(t):
 
 def seated(t):
     """The page is in its room: the room has welcomed it (the colors are not greyed out) and a person sits in a color. A plain visit opens on Home and makes no room (docs/HOME_SCREEN.md): the first
-    time that this asks about a page that holds no room, it presses My room, as a person does (web_front_room.py)."""
-    press_my_room(t.ev)
+    time that this asks about a page that holds no room, it hosts a private room, as a person does (web_front_room.py)."""
+    host_a_private_room(t.ev)
     return bool(t.ev("!document.body.classList.contains('offline') && !!document.querySelector('#slots li.k-person')"))
 
 
@@ -463,7 +463,7 @@ def main():
                 time.sleep(settle + 0.5)
 
         def clear_storage():
-            """The site's storage of this tab emptied (a page of the site that holds no room: My room makes one and the page keeps its key in the tab's session storage)."""
+            """The site's storage of this tab emptied (a page of the site that holds no room: hosting makes one and the page keeps its key in the tab's session storage)."""
             tab.open(web + "changelog", wait=False)
             time.sleep(1.0)
             tab.ev("try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} 1")
@@ -580,7 +580,7 @@ def main():
 
         # ------------------------------------------------------------------------------------------------------------------------------------------------------------
         if wanted("front") and not can_play:
-            note("front: left out (no game server: give --ws-port; My room makes a room)")
+            note("front: left out (no game server: give --ws-port; hosting makes a room)")
         if wanted("front") and can_play:
             print("[web home] the front page: a first visit")
             clear_storage()
@@ -735,7 +735,8 @@ def main():
             wait_for(lambda: open_name_card(tab), 5)
             click_on(tab, "#name-step-own")
             check(not open_name_card(tab) and lobby()["code"] == st["code"] and lobby()["heading"] == "Your room", "\"Start a room of my own instead\" closes the card and the page's own room stays")
-            real_click(".hchip.mine")
+            tab.ev("history.back(); 1")
+            wait_for(lambda: value("document.body.getAttribute('data-screen')") == "home", 5)
 
             # the footer
             check("Version" in info["footer"] and "@@" not in info["footer"] and "build" in info["footer"] and re.match(r"^\d+\.\d+\.\d+", info["version"][0]) is not None and info["version"][1] != "",
@@ -1396,7 +1397,7 @@ def main():
                         front_ready()
                         remembered = lobby()
                         check(code_of(remembered) != code and card_of(remembered, "green")["name"] == "Bob" and remembered["map"] == "treasure" and tab.ev("localStorage.getItem('ants.name')") == "Bob" and not remembered["guest"],
-                              "menu: the front page (Home), after My room, makes a room again, a new code (%s), for the same name, and the map is Treasure (%s)" % (code_of(remembered), card_of(remembered, "green")["name"]))
+                              "menu: the front page (Home), after hosting, makes a room again, a new code (%s), for the same name, and the map is Treasure (%s)" % (code_of(remembered), card_of(remembered, "green")["name"]))
                         note("the front page after the Menu of a match that goes on: rejoin line %s (%r)" % ("shown" if remembered["rejoin"] else "not shown", tab.ev("document.getElementById('rejoin-note').textContent")))
             else:
                 check(False, "the game page of the room is ready")

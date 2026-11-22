@@ -4,12 +4,14 @@
 // also after a failure.
 //   1. at 1920 x 1080, 1600 x 900, 1366 x 768 and 1280 x 800: a host makes a room (Quick host, Invite only), a guest joins by the link, a Medium bot sits in the third color: the page does not scroll (the document is no taller or wider than
 //      the window), the room panel holds everything (nothing inside it scrolls, nothing is cut off), every control of the room is in the window, and the chat dock is under it with the room's tab: a line of the room is in the room's tab, a line of
-//      Home's chat in the other; the games' list is not drawn, the players' list is;
-//   2. Ready: the guest has Ready up on their own card, the host has none; START of the host is off with the line "Waiting for <guest> to ready up" until the guest presses Ready, then it is on and the line says that everyone is ready; the host
+//      Home's chat in the other; the games' list is not drawn, the players' list is. The Rules sheet: for the host it is in the window with Done reachable, the page behind it takes no press and the switches work (who can join, Fog of War,
+//      Direct connection); for the guest it shows what the host set and takes no press on the first two; Done gives the focus back to the Rules button. The room with Fog of War on fits too, and START is 44 px high;
+//   2. Ready: the guest's big button is their READY, the host has START; START of the host is off with the line that names whose Ready it waits for until the guest presses READY, then it is on and the line says that everyone is ready; the host
 //      changes the map and the marks stay; the guest takes the mark back and START is off again; the bot and the host show Ready by themselves; a guest's START says that it waits for the host;
 //   3. a window lower than the room needs (1366 x 650): the page does not scroll, the room's panel scrolls inside itself and START stays in view;
-//   4. the phone layout (up to 700 px wide or up to 500 px high): upright (390 x 844), held sideways (844 x 390, 932 x 430) and a wide, low window (1366 x 450): the strip has Room, Players and Chat; the Room view scrolls with START at its
-//      bottom, the Chat view has the two tabs and a field in the window, the Players view has the list, no handle of the splitters is drawn;
+//   4. the phone layout (up to 700 px wide or up to 500 px high): upright (390 x 844), held sideways (844 x 390, 932 x 430) and a wide, low window (1366 x 450): the strip has Room, Players and Chat; the Room view fits or scrolls inside itself with
+//      START at its end above the strip; every button of the room is 44 px each way (36 held sideways); the whole row of an open color is the target of its menu, and the menu is in the window with five choices of 44 px; the Rules sheet is in the
+//      window with Done reachable; the Chat view has the two tabs and a field in the window, the Players view has the list, no handle of the splitters is drawn;
 //   --shots DIR writes the pictures of every scene (room_*.png).
 // usage: node web_room_in_home_browser.js --server PATH/ants_server --maps PATH/Original-Ants/Maps [--shots DIR]     (exit 0: every check holds; every failure is printed)
 'use strict';
@@ -204,8 +206,8 @@ async function host(page) {
     await page.press('.quick.host');
     await page.waitFor('the card asks', '!!document.querySelector(".gconfirm")', 5000);
     await page.press('.gconfirm button', 'Invite only');
-    await page.waitFor('the room is shown', 'document.body.getAttribute("data-screen") === "room" && document.querySelectorAll("#slots > li").length === 4 && !!document.getElementById("link").value', 15000);
-    return page.eval('document.getElementById("link").value');
+    await page.waitFor('the room is shown', 'document.body.getAttribute("data-screen") === "room" && document.querySelectorAll("#slots > li").length === 4 && document.getElementById("code").textContent.length > 0', 15000);
+    return page.eval('location.origin + "/?room=" + document.getElementById("code").textContent.replace(/\\s/g, "")');       // (the link that Share gives: there is no field of it on the page)
 }
 // everything that the page shows of the room, measured (nothing is read from the markup's words, only from what the browser laid out)
 const MEASURE = '(function () {' +
@@ -220,6 +222,10 @@ const MEASURE = '(function () {' +
     ' dock: r(dock), dockShown: vis(dock), players: r(pl), playersShown: vis(pl), gamesShown: vis(games), start: r(document.getElementById("start")), startShown: vis(document.getElementById("start")), screen: body.getAttribute("data-screen") };' +
     '})()';
 const measure = (page) => page.eval(MEASURE);
+const SHEET = '(function () { var b = document.getElementById("rules-box").getBoundingClientRect(), d = document.getElementById("rules-done").getBoundingClientRect(), shown = !document.getElementById("rules").hidden && b.width > 0;' +
+    ' var sw = function (id) { var e = document.getElementById(id); return e ? { off: !!e.disabled, on: e.getAttribute("aria-checked") === "true", w: Math.round(e.getBoundingClientRect().width), h: Math.round(e.getBoundingClientRect().height) } : null; };' +
+    ' return { shown: shown, fits: b.left >= 0 && b.right <= innerWidth + 0.5 && b.top >= 0 && b.bottom <= innerHeight + 0.5, done: d.width > 0 && d.bottom <= innerHeight && d.top >= 0, noScroll: document.documentElement.scrollWidth <= innerWidth, vis: [].map.call(document.querySelectorAll(".vbtn"), function (e) { return { text: e.textContent, off: !!e.disabled, on: e.getAttribute("aria-pressed") === "true" }; }), fog: sw("fg-switch"), direct: sw("dr-switch"), state: document.getElementById("rules-state").textContent, pageInert: document.getElementById("lobby").hasAttribute("inert") }; })()';
+// the Rules sheet as the browser laid it out (it is a card over the page; a sheet from the bottom on a phone)
 const text = (page, selector) => page.eval('(function () { var e = document.querySelector(' + JSON.stringify(selector) + '); return e ? e.textContent : null; })()');
 
 // a room of a host (Hazel), a guest who joined by the link (Wren) and, when asked, a Medium computer player in the third color
@@ -231,7 +237,8 @@ async function makeRoom(chrome, site, w, h, bot, mobile) {
     if (await guestPage.eval('!document.getElementById("name-step").hidden')) await guestPage.press('#name-step-go');
     try { await hostPage.waitFor('the guest is in', 'document.querySelectorAll("#slots .k-person").length === 2', 15000); } catch (e) { await hostPage.shot('fail_host'); await guestPage.shot('fail_guest'); console.log('guest errors: ' + JSON.stringify(guestPage.errors)); throw e; }
     if (bot) {
-        await hostPage.eval('(function () { var s = document.querySelector("select[data-mode]"); s.value = "medium"; s.dispatchEvent(new Event("change", { bubbles: true })); })()');
+        await hostPage.press('.mode');
+        await hostPage.press('.sm-item', 'Medium bot');
         await hostPage.waitFor('the bot sits', 'document.querySelectorAll("#slots .k-bot").length === 1', 8000);
     }
     for (const page of [hostPage, guestPage]) await page.waitFor('the page\'s toast has gone (it is the picture\'s business: a toast hides the chat)', '(function () { return [".gtoast", "#toast"].every(function (q) { var t = document.querySelector(q); return !t || t.hidden; }); })()', 12000);
@@ -239,9 +246,9 @@ async function makeRoom(chrome, site, w, h, bot, mobile) {
     return { hostPage, guestPage, link };
 }
 const chips = (page) => page.eval('[].map.call(document.querySelectorAll("#slots .rdy-chip"), function (e) { return e.textContent + (e.className.indexOf(" bot") !== -1 ? " (bot)" : ""); }).sort()');
-const readyLine = (page) => page.eval('(function () { var e = document.getElementById("ready-line"); return e && !e.hidden ? e.textContent : ""; })()');
+const readyLine = (page) => page.eval('document.getElementById("go-status").textContent');
 const startState = (page) => page.eval('(function () { var e = document.getElementById("start"); return { off: !!e.disabled || e.getAttribute("aria-disabled") === "true", text: e.textContent }; })()');
-const readySwitch = (page) => page.eval('(function () { var e = document.querySelector("#slots .rdy-btn"); return e ? { on: e.getAttribute("aria-pressed") === "true", text: e.textContent } : null; })()');
+const readySwitch = (page) => page.eval('(function () { var e = document.getElementById("start"); return e.getAttribute("aria-pressed") === null ? null : { on: e.getAttribute("aria-pressed") === "true", text: e.textContent }; })()');       // (a guest's big button is their Ready, a switch; the host's is START, no switch)
 
 async function main() {
     const server = await startServer();
@@ -263,20 +270,35 @@ async function main() {
         check('the room, ' + at + ': the chat box has two tabs, Ants & Uncles and Room', JSON.stringify(tabs) === JSON.stringify(['Ants & Uncles', 'Room']), JSON.stringify(tabs));
         await hostPage.shot('room_' + at + '_host');
         await guestPage.shot('room_' + at + '_guest');
-        // Fog of War (docs/PLAY_IN_BROWSER.md "Fog of War"): the host presses the switch, is asked about the computer player, answers, and the room is still whole: it fits (nothing scrolls, nothing is cut off), the switch is in the header, and
-        // the guest's room, with its chip and its note, fits as well
+        // The Rules sheet (docs/PLAY_IN_BROWSER.md "Your room"): a card over the page that holds who can join, Fog of War and Direct connection. The host's controls work; a guest reads them, and Direct connection is theirs.
+        await hostPage.press('#rules-open');
+        await hostPage.waitFor('the sheet opens', '!document.getElementById("rules").hidden', 3000);
+        const hs = await hostPage.eval(SHEET);
+        check('the Rules sheet, ' + at + ', the host: it is in the window with Done reachable, the page behind it takes no press, the switches work (who can join, Fog of War, Direct connection)', hs.shown && hs.fits && hs.done && hs.noScroll && hs.pageInert && hs.vis.length === 2 && hs.vis.every((v) => !v.off) && hs.fog && !hs.fog.off && hs.direct && !hs.direct.off && hs.fog.w >= 40 && hs.fog.h >= 24, JSON.stringify(hs));
+        check('the Rules sheet, ' + at + ': the host\'s room is invite only (the room was made so), and the button says so', hs.vis.find((v) => v.text === 'Invite only').on === true && /Invite only/.test(hs.state), JSON.stringify(hs.state));
+        await hostPage.press('.vbtn', 'Public');
+        await hostPage.waitFor('the room is public', '/^Public/.test(document.getElementById("rules-state").textContent)', 5000);
+        check('the Rules sheet, ' + at + ': Public makes the room public (the Rules button says Public, Public is the lit button)', (await hostPage.eval(SHEET)).vis.find((v) => v.text === 'Public').on === true);
+        await hostPage.shot('rules_' + at + '_host');
         await hostPage.press('#fg-switch');
         await hostPage.waitFor('the question is asked', '(function () { var t = document.querySelector(".gtoast"); return !!t && !t.hidden && /Turn fog on/.test(t.textContent); })()', 6000);
         await hostPage.eval('(function () { document.querySelector(".gtoast .btn").click(); })()');
         await hostPage.waitFor('fog is on and the bot is open', 'document.getElementById("fg-switch").getAttribute("aria-checked") === "true" && document.querySelectorAll("#slots .k-bot").length === 0', 8000);
-        await guestPage.waitFor('the guest is told', '(function () { var c = document.querySelector(".fg-chip"); return !!c && !c.hidden && !!document.querySelector(".fg-note") && !document.querySelector(".fg-note").hidden; })()', 8000);
+        await guestPage.press('#rules-open');
+        await guestPage.waitFor('the sheet opens', '!document.getElementById("rules").hidden', 3000);
+        await guestPage.waitFor('the guest is told that fog is on', 'document.getElementById("fg-switch").getAttribute("aria-checked") === "true" && /Fog/.test(document.getElementById("rules-state").textContent)', 8000);
+        const gs0 = await guestPage.eval(SHEET);
+        check('the Rules sheet, ' + at + ', the guest: it reads the room (who can join and Fog of War show what the host set, and take no press) and Direct connection is the guest\'s own', gs0.shown && gs0.fits && gs0.done && gs0.vis.every((v) => v.off) && gs0.vis.find((v) => v.text === 'Public').on === true && gs0.fog.off && gs0.fog.on === true && !gs0.direct.off, JSON.stringify(gs0));
+        await guestPage.shot('rules_' + at + '_guest');
+        await hostPage.press('#rules-done');
+        await guestPage.press('#rules-done');
+        check('the Rules sheet, ' + at + ': Done closes it and gives the focus back to the Rules button', await hostPage.eval('document.getElementById("rules").hidden && document.activeElement === document.getElementById("rules-open") && !document.getElementById("lobby").hasAttribute("inert")'));
         for (const page of [hostPage, guestPage]) await page.waitFor('the toasts have gone', '(function () { return [".gtoast", "#toast"].every(function (q) { var t = document.querySelector(q); return !t || t.hidden; }); })()', 12000);
         await sleep(300);
         const fm = await measure(hostPage), gm = await measure(guestPage);
         for (const [who, mm2] of [['host', fm], ['guest', gm]]) {
             check('the room with Fog of War on, ' + at + ', the ' + who + ': the page does not scroll, nothing in the room scrolls, nothing is cut off', mm2.noPageScroll && mm2.lobbyScroll <= 1 && mm2.cut.length === 0, JSON.stringify({ scroll: mm2.scroll, s: mm2.lobbyScroll, cut: mm2.cut }));
         }
-        check('the room with Fog of War on, ' + at + ': the host\'s switch is in the header (above the colors) and at least 24 px each way, the note is under the link', await hostPage.eval('(function () { var s = document.getElementById("fg-switch").getBoundingClientRect(), c = document.querySelector("#slots li").getBoundingClientRect(), n = document.querySelector(".fg-note").getBoundingClientRect(); return s.width >= 24 && s.height >= 24 && s.bottom <= c.top && n.height > 0 && n.bottom <= c.top; })()'));
         check('the room with Fog of War on, ' + at + ': START is in the window and 44 px high', fm.start && fm.start.h >= 44 && gm.start && gm.start.h >= 44, JSON.stringify({ h: fm.start, g: gm.start }));
         await hostPage.shot('room_' + at + '_host_fog');
         await guestPage.shot('room_' + at + '_guest_fog');
@@ -292,20 +314,20 @@ async function main() {
     // 2. Ready up (docs/READY_UP.md), at 1366 x 768
     {
         const { hostPage, guestPage } = await makeRoom(chrome, site, 1366, 768, true);
-        check('ready: the host has no Ready switch, the guest has one on their own card', (await readySwitch(hostPage)) === null && (await readySwitch(guestPage)) !== null);
+        check('ready: the host\'s big button is START (no switch), the guest\'s is their READY (a switch)', (await readySwitch(hostPage)) === null && (await readySwitch(guestPage)) !== null);
         same('ready: the marks on the host\'s screen (the host and the computer player are Ready by themselves)', await chips(hostPage), ['Not ready', 'Ready', 'Ready (bot)']);
         const s1 = await startState(hostPage);
         check('ready: START of the host is off, and the line says whose Ready it waits for', s1.off && (await readyLine(hostPage)) === 'Waiting for Wren to ready up', JSON.stringify({ s: s1, l: await readyLine(hostPage) }));
         const g1 = await startState(guestPage);
-        check('ready: a guest\'s START waits for the host, and the line says that it waits for them', g1.off && /Waiting for/.test(g1.text) && (await readyLine(guestPage)) === 'Waiting for you to ready up', JSON.stringify({ s: g1, l: await readyLine(guestPage) }));
+        check('ready: a guest\'s big button says READY and is on, and the line says that the host starts', !g1.off && g1.text === 'READY' && (await readyLine(guestPage)) === 'Hazel starts the match.', JSON.stringify({ s: g1, l: await readyLine(guestPage) }));
         await hostPage.shot('ready_host_waiting');
         await guestPage.shot('ready_guest_not_ready');
         // a START that the page sends too early is refused by the server all the same: the page's own button is off, so the check is in the C++ tests (tests/test_net/test_lobby_ready.cpp)
-        await guestPage.press('#slots .rdy-btn');
-        await hostPage.waitFor('the host sees everybody ready', 'document.getElementById("ready-line").textContent === "Everyone is ready."', 5000);
+        await guestPage.press('#start');
+        await hostPage.waitFor('the host sees everybody ready', 'document.getElementById("go-status").textContent === "Everyone is ready."', 5000);
         const s2 = await startState(hostPage);
         check('ready: when the guest has pressed Ready, START of the host is on and the line says so', !s2.off, JSON.stringify(s2));
-        check('ready: the guest\'s switch is lit', (await readySwitch(guestPage)).on === true);
+        check('ready: the guest\'s READY is pressed', (await readySwitch(guestPage)).on === true);
         same('ready: the marks, all Ready', await chips(hostPage), ['Ready', 'Ready', 'Ready (bot)']);
         await hostPage.shot('ready_host_all_ready');
         await guestPage.shot('ready_guest_ready');
@@ -317,22 +339,23 @@ async function main() {
         await sleep(300);
         check('ready: a changed game type leaves the marks as they were', (await readySwitch(guestPage)).on === true && !(await startState(hostPage)).off && (await readyLine(hostPage)) === 'Everyone is ready.');
         // the guest takes the mark back
-        await guestPage.press('#slots .rdy-btn');
+        await guestPage.press('#start');
         await hostPage.waitFor('START is off again', 'document.getElementById("start").disabled === true || document.getElementById("start").getAttribute("aria-disabled") === "true"', 5000);
         check('ready: when the guest takes the mark back, START is off again and the line names them', (await readyLine(hostPage)) === 'Waiting for Wren to ready up' && (await readySwitch(guestPage)).on === false);
-        // the games' list and the room: My room shows the games and the next press the room again (the room stays); Leave room asks, then brings the games' list back
-        await hostPage.press('.hmine .mine');
+        // the games' list and the room: the Menu's Home shows the games' list (the room stays), Back shows the room again; Leave asks, then brings the games' list back
+        await hostPage.press('.hmenu');
+        await hostPage.press('.hmenubox .mitem', 'Home');
         await hostPage.waitFor('the games\' list shows', 'document.body.getAttribute("data-screen") === "home"', 3000);
         const shownGames = await measure(hostPage);
-        check('games and room: a press on My room shows the games\' list in the room\'s place (the page does not scroll), and My room is still there, no longer lit', shownGames.noPageScroll && shownGames.gamesShown && await hostPage.eval('(function () { var l = document.getElementById("lobby"), m = document.querySelector(".hmine .mine"); return getComputedStyle(l).display === "none" && m.getAttribute("aria-pressed") === "false" && !m.closest(".hmine").hidden; })()'), JSON.stringify({ g: shownGames.gamesShown, s: shownGames.scroll }));
+        check('games and room: Home shows the games\' list in the room\'s place (the page does not scroll), and the room is still held', shownGames.noPageScroll && shownGames.gamesShown && await hostPage.eval('document.getElementById("lobby").getClientRects().length === 0 && !!document.querySelector(".hbar .quick.hist")'));
         await hostPage.shot('games_list_while_a_room_is_held');
-        await hostPage.press('.hmine .mine');
+        await hostPage.eval('history.back()');
         await hostPage.waitFor('the room shows again', 'document.body.getAttribute("data-screen") === "room"', 3000);
         await hostPage.press('.leave');
         await hostPage.waitFor('the card asks', '!!document.querySelector(".gconfirm")', 3000);
         await hostPage.press('.gconfirm button', 'Leave room');
-        await hostPage.waitFor('the games\' list is back and the room is gone', 'document.body.getAttribute("data-screen") === "home" && document.querySelector(".hmine").hidden', 5000);
-        check('leaving the room (the question first, as with another person in it) shows the games\' list, and My room is gone', (await measure(hostPage)).gamesShown);
+        await hostPage.waitFor('the games\' list is back', 'document.body.getAttribute("data-screen") === "home"', 5000);
+        check('leaving the room (the question first, as with another person in it) shows the games\' list', (await measure(hostPage)).gamesShown);
         await guestPage.close();
         await hostPage.close();
     }
@@ -372,9 +395,27 @@ async function main() {
         // a room of three (the host, a guest who joined by the link, a Medium computer player): the cards are the fullest
         const { hostPage: page, guestPage } = await makeRoom(chrome, site, phone[1], phone[2], true, phone[3]);
         const view = await page.eval('(function () { var l = document.getElementById("lobby"), d = document.documentElement; return { page: d.scrollHeight <= innerHeight + 1 && d.scrollWidth <= innerWidth, scrolls: l.scrollHeight > l.clientHeight }; })()');
-        check('phone ' + at + ': the page does not scroll' + (phone[2] < 600 ? ' and the room\'s panel does' : ''), view.page && (phone[2] >= 600 || view.scrolls), JSON.stringify(view));
-        const fingers = await page.eval('[].filter.call(document.querySelectorAll("#lobby button, #lobby select, #lobby .rm"), function (e) { var b = e.getBoundingClientRect(); return b.width > 0 && getComputedStyle(e).visibility !== "hidden" && (b.height < (e.classList.contains("rm") ? 40 : 44) - 0.5 || b.width < 44 - 0.5); }).map(function (e) { var b = e.getBoundingClientRect(); return (e.className || e.tagName) + " " + Math.round(b.width) + "x" + Math.round(b.height); })');
-        check('phone ' + at + ': every button and menu of the room is 44 px each way or more (Remove: 40 high)', fingers.length === 0, JSON.stringify(fingers));
+        check('phone ' + at + ': the page does not scroll (the room fits, or its panel scrolls inside itself)', view.page, JSON.stringify(view));
+        const finger = phone[2] >= 600 ? 44 : 36;       // (held upright every button is 44 px each way; held sideways the header's buttons are as drawn, 36 px, with the rows 40 and START 50)
+        const fingers = await page.eval('[].filter.call(document.querySelectorAll("#lobby button:not(.mode), #lobby .rm"), function (e) { var b = e.getBoundingClientRect(); return b.width > 0 && getComputedStyle(e).visibility !== "hidden" && (b.height < (e.classList.contains("rm") ? 40 : ' + finger + ') - 0.5 || b.width < ' + finger + ' - 0.5); }).map(function (e) { var b = e.getBoundingClientRect(); return (e.className || e.tagName) + " " + Math.round(b.width) + "x" + Math.round(b.height); })');
+        check('phone ' + at + ': every button of the room is ' + finger + ' px each way or more (Remove: 40 high)', fingers.length === 0, JSON.stringify(fingers));
+        const rows = await page.eval('[].map.call(document.querySelectorAll("#slots .slot.k-open, #slots .slot.k-bot"), function (li) { var b = li.getBoundingClientRect(), e = document.elementFromPoint(b.left + b.width / 2, b.top + Math.min(b.height / 2, 22)); return !!e && !!e.closest(".mode") && b.height >= ' + (finger - 4) + '; })');
+        check('phone ' + at + ': the whole row of an open color or a computer player is the target of its menu (a press at its middle reaches the button), and the row is ' + (finger - 4) + ' px high or more', rows.length >= 1 && rows.every(Boolean), JSON.stringify(rows));
+        await page.eval('(function () { window.__log = []; ["click", "scroll", "resize", "pointerdown"].forEach(function (t) { window.addEventListener(t, function (e) { window.__log.push(t + ":" + (e.target && (e.target.className || e.target.id || e.target.nodeName))); }, true); }); })()');
+        await page.press('#slots .slot.k-open');
+        await page.waitFor('the color\'s menu opens', '(function () { var m = document.querySelector(".sm-menu"); return !!m && !m.hidden && m.getClientRects().length > 0; })()', 3000).catch(async (e) => { console.log('log: ' + JSON.stringify(await page.eval('window.__log'))); console.log('menu state: ' + JSON.stringify(await page.eval('(function () { var m = document.querySelector(".sm-menu"), li = document.querySelector("#slots .slot.k-open"), b = li.getBoundingClientRect(), at = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2); return { menu: !!m, hidden: m && m.hidden, rects: m && m.getClientRects().length, row: [b.left, b.top, b.width, b.height], at: at && (at.className || at.tagName), vw: innerWidth, vh: innerHeight }; })()'))); throw e; });
+        const menu = await page.eval('(function () { var b = document.querySelector(".sm-menu").getBoundingClientRect(), items = [].map.call(document.querySelectorAll(".sm-item"), function (e) { return Math.round(e.getBoundingClientRect().height); }); return { fits: b.left >= 0 && b.right <= innerWidth + 0.5 && b.top >= 0 && b.bottom <= innerHeight + 0.5, items: items }; })()');
+        check('phone ' + at + ': the menu of a color is in the window with five choices of 44 px or more', menu.fits && menu.items.length === 5 && menu.items.every((h) => h >= 44), JSON.stringify(menu));
+        await page.shot('phone_' + at + '_seat_menu');
+        await page.press('.sm-item', 'Open');
+        await sleep(150);
+        await page.press('#rules-open');
+        await page.waitFor('the Rules sheet opens', '!document.getElementById("rules").hidden', 3000);
+        const sh = await page.eval(SHEET);
+        check('phone ' + at + ': the Rules sheet is in the window (nothing scrolls sideways), Done is reachable, the switches are 44 px high or more, and the page behind it takes no press', sh.shown && sh.fits && sh.done && sh.noScroll && sh.pageInert && sh.fog && sh.fog.h >= 36 && sh.direct && sh.direct.h >= 36, JSON.stringify(sh));
+        await page.shot('phone_' + at + '_rules');
+        await page.press('#rules-done');
+        await page.waitFor('the sheet closes', 'document.getElementById("rules").hidden', 3000);
         await page.shot('phone_' + at + '_room_top');
         await page.eval('document.getElementById("lobby").scrollTop = 100000');
         await sleep(200);
@@ -386,7 +427,7 @@ async function main() {
         await page.press('.htab.t-chat');
         await sleep(300);
         const chat = await page.eval('(function () { var vis = function (q) { var e = document.querySelector(q); return !!e && e.getClientRects().length > 0; }, t = document.querySelector(".htabs").getBoundingClientRect(), f = document.querySelector("#gchat .gc-input, #gchat textarea"), b = f ? f.getBoundingClientRect() : null, send = document.querySelector("#gchat .gc-send"), sb = send ? send.getBoundingClientRect() : null;' +
-            ' return { open: document.getElementById("gchat").getAttribute("data-open"), room: vis("#lobby"), field: b ? [Math.round(b.top), Math.round(b.bottom), Math.round(b.height)] : null, send: sb ? Math.round(sb.height) : null, strip: Math.round(t.top), tabs: [].map.call(document.querySelectorAll(".rc-tab"), function (e) { var r = e.getBoundingClientRect(); return [e.textContent, Math.round(r.height), r.width > 0]; }) }; })()');
+            ' return { open: document.getElementById("gchat").getAttribute("data-open"), room: vis("#lobby"), field: b ? [Math.round(b.top), Math.round(b.bottom), Math.round(b.height)] : null, send: sb ? Math.round(sb.height) : null, strip: Math.round(t.top), tabs: [].map.call(document.querySelectorAll(".rc-tab"), function (e) { var r = e.getBoundingClientRect(), mid = r.left + r.width / 2, above = document.elementFromPoint(mid, r.top - 3), below = document.elementFromPoint(mid, r.bottom + 3); return [e.textContent, Math.round(r.height), r.width > 0, !!above && e.contains(above), !!below && e.contains(below)]; }) }; })()');       // (a tab\'s press area reaches 3 px past the drawn tab, each way)
         check('phone ' + at + ': the chat view is open with the room hidden, the field and Send (44 px or more) are in the window above the strip, and the two tabs are 44 px or more', chat.open === 'true' && !chat.room && chat.field && chat.field[0] >= 0 && chat.field[1] <= chat.strip && chat.field[2] >= 44 && chat.send >= 44 && chat.tabs.length === 2 && chat.tabs.every((t) => t[2] && t[1] >= 44), JSON.stringify(chat));
         await page.shot('phone_' + at + '_chat_open');
         await page.press('.rc-tab', 'Ants');

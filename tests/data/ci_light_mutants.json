@@ -83,8 +83,8 @@
   {
    "id": "the_map_picker_is_light",
    "file": "tools/ci_light.sh",
-   "old": " | web/front/room_fog.js | web/front/map_picker.js) return 1 ;;",
-   "new": " | web/front/room_fog.js) return 1 ;;",
+   "old": " | web/front/room_fog.js | web/front/room_sheet.js | web/front/seat_menu.js | web/front/map_picker.js) return 1 ;;",
+   "new": " | web/front/room_fog.js | web/front/room_sheet.js | web/front/seat_menu.js) return 1 ;;",
    "test": "python3 tests/scripts/test_ci_light.py",
    "expect": "test_a_page_that_the_skipped_jobs_read_makes_a_pull_request_full_whatever_else_it_changes"
   },

@@ -50,8 +50,8 @@
         title: 'Open games', loading: 'Looking for games…', off: 'Games list is off right now', offHint: 'Join by code still works.', none: 'none waiting',
         emptyTitle: 'No open games right now.', emptyLine: 'Rooms show up here when their host switches them to Public.', hostOne: 'Host one!', quickHost: 'Quick host', quickJoin: 'Quick join',
         legendPlayer: 'player', legendBot: 'bot', legendOpen: 'open seat', code: 'Join by code', haveCode: 'Have a code?', closeCode: 'Close', codePlaceholder: 'Room code, like k7m 2xq', join: 'Join',
-        private: 'Invite only', privateSub: 'locked', public: 'Public', publicSub: 'listed', publicWide: ' in Open games', publicRoom: 'Public room', privateRoom: 'Invite-only room', visLabel: 'Who can join this room',
-        noteHow: 'Others see it in Open games, locked, with your name and map. People join only with your link.', noteListed: 'Listed. Anyone on the front page can join from Open games. The link works too.', noteWait: 'One moment, then press again.',
+        private: 'Invite only', public: 'Public', privateRoom: 'Invite-only room', visLabel: 'Who can join this room',
+        noteHow: 'Invite-only rooms show locked in Open games. Only people with the link can join.', noteListed: 'Public rooms are listed in Open games. The link always works.', noteWait: 'One moment, then press again.',
         ok: 'OK', makePublic: 'Make it public', rejoin: 'Rejoin', stay: 'Stay here', keepPrivate: 'Keep it invite only', hostTitle: 'Host a game', hostLine: 'Who can join? A public room shows in Open games, and anyone can join it. An invite-only room shows there locked; people join only with your link.', hostPublic: 'Public room', hostPrivate: 'Invite only', leaveJoin: 'Leave and join', leaveHost: 'Leave and host', cancel: 'Cancel', reload: 'Reload', best: 'BEST', yours: 'Yours', live: ' · updates live', finding: 'Finding a game…', looking: 'Looking for open games…', roomOpening: 'Opening the room…', goRoom: 'Go to the room', leaveRoom: 'Leave room', notNow: 'Not now',
         noneLine: 'Nobody is waiting for a player. Host one, and others can join you.', noneYours: 'Your room goes public with its map and your friends in it.', noneNew: 'A new room opens for you, and it goes public.', joiningCode: 'Joining the room…', joinFirst: ' Wait for it, or cancel it in the list.', opening: 'The game is opening. If it does not, reload this page.',
         already: 'Your room is already public.', running: 'Your match is running.', idle: 'Your room went invite only after 30 minutes. Make it public again?',
@@ -246,32 +246,26 @@
             notice('running', TEXT.running, 'warn', rejoinOffered() ? [{ text: TEXT.rejoin, run: function () { doc.getElementById('rejoin-go').click(); } }] : []);
         }
 
-        // ---- the Public | Invite only switch of the Room's card (a guest reads it; the leader changes it) ----
-        var visBox = el('div', 'vis'), visPrivate = el('button', 'btn vbtn'), visPublic = el('button', 'btn vbtn'), visTag = el('span', 'vistag'), visNote = el('p', 'visnote');
-        visBox.setAttribute('role', 'group'); visBox.setAttribute('aria-label', TEXT.visLabel); visBox.hidden = true; visTag.hidden = true; visNote.hidden = true; visNote.setAttribute('role', 'status');
+        // ---- the Public | Invite only switch in the Room's Rules sheet (a guest reads it; the leader changes it) ----
+        var visBox = el('div', 'vis'), visPrivate = el('button', 'btn vbtn', TEXT.private), visPublic = el('button', 'btn vbtn', TEXT.public), visNote = el('p', 'visnote');
+        visBox.setAttribute('role', 'group'); visBox.setAttribute('aria-label', TEXT.visLabel); visBox.hidden = true; visNote.hidden = true; visNote.setAttribute('role', 'status');
         [visPrivate, visPublic].forEach(function (b) { b.type = 'button'; visBox.appendChild(b); });
-        visPrivate.appendChild(el('b', '', TEXT.private)); visPrivate.appendChild(el('small', '', TEXT.privateSub));
-        visPublic.appendChild(el('b', '', TEXT.public));
-        (function () { var s = el('small', '', TEXT.publicSub); s.appendChild(el('span', 'vwide', TEXT.publicWide)); visPublic.appendChild(s); })();
         visPrivate.addEventListener('click', guard(function () { choose(false); }));
         visPublic.addEventListener('click', guard(function () { choose(true); }));
-        function placeVis() {                              // the switch in the room's heading line (before the code) and its note with the room's other notes (web/home/room.css lays both out, a phone's too)
-            var h = doc.getElementById('room-h'), notes = doc.getElementById('r-notes'), head = h && ((h.parentNode && h.parentNode.parentNode) || h.parentNode);
-            if (!head) return;
-            head.insertBefore(visBox, (head.querySelector && (head.querySelector('.fogsw') || head.querySelector('.code'))) || null);       // (before the Fog of War switch of front/room_fog.js, which is before the code)
-            if (notes) notes.insertBefore(visNote, notes.firstChild || null);
-        }
-        (function () { var h = doc.getElementById('room-h'); if (h && h.parentNode) h.parentNode.appendChild(visTag); placeVis(); })();
+        (function () {                                     // the switch and its note stand in the sheet's row (web/lobby.html #r-vis; web/home/room.css lays it out)
+            var row = doc.getElementById('r-vis');
+            if (!row) return;
+            row.appendChild(visBox); row.appendChild(visNote);
+        })();
         function paintVis() {
             var c = client(), room = c && c.room;
-            visBox.hidden = visTag.hidden = visNote.hidden = true;
+            visBox.hidden = visNote.hidden = true;
             if (!room || !room.lobby) return;
-            if (!c.isLeader()) { visTag.textContent = room.isPublic ? TEXT.publicRoom : TEXT.privateRoom; visTag.hidden = false; return; }
-            var can = c.canAct() && !room.starting && !locked;
+            var lead = c.isLeader(), can = lead && c.canAct() && !room.starting && !locked;
             visPrivate.setAttribute('aria-pressed', String(!room.isPublic)); visPublic.setAttribute('aria-pressed', String(room.isPublic));
             visPrivate.disabled = visPublic.disabled = !can;
             visBox.hidden = false;
-            visNote.textContent = hint || (room.isPublic ? TEXT.noteListed : TEXT.noteHow);
+            visNote.textContent = (lead && hint) || (room.isPublic ? TEXT.noteListed : TEXT.noteHow);
             visNote.hidden = false;
         }
         function lock() { locked = true; if (lockTimer !== null) cancel(lockTimer); lockTimer = later(guard(function () { lockTimer = null; locked = false; hint = ''; paintVis(); }), RETRY_MS); }
@@ -365,14 +359,14 @@
             if (++pending.tries <= 3) later(guard(function () { var k = client(); if (pending && k === c) doPending(k); }), RETRY_MS);
             else endPending();
         }
-        function startHost() {                             // a room of the page's own (My room's machinery), then Visibility(public) when the room is ready
+        function startHost() {                             // a room of the page's own (through make()), then Visibility(public) when the room is ready
             startPending();
             page.make();
             pending.forClient = client();
             track(client());
             ctl.show('room', 'push');
         }
-        function startPrivate() {                          // a private room of the page's own (the first press of My room, as it was): the page makes it and the Room shows
+        function startPrivate() {                          // a private room of the page's own: the page makes it and the Room shows
             page.make();
             track(client());
             ctl.show('room', 'push');
@@ -570,7 +564,7 @@
             if (best || yours) top.appendChild(el('span', yours ? 'gyours' : 'gbest', yours ? TEXT.yours : TEXT.best));       // (beside the map's name; a narrow row wraps it under)
             text.appendChild(top); text.appendChild(line); li.appendChild(pic); li.appendChild(text);
             if (lock) {
-                var pad = el('span', 'glockbox'), tell = el('span', 'sr', 'Invite-only room, cannot join. ' + (lock === 'yours' ? 'Yours. ' : '') + possessive(row.host) + ' room, ' + row.mapName + ', ' + seats.count + ' seats taken, ' + seats.bots + '.');
+                var pad = el('span', 'glockbox'), tell = el('span', 'sr', TEXT.privateRoom + ', cannot join. ' + (lock === 'yours' ? 'Yours. ' : '') + possessive(row.host) + ' room, ' + row.mapName + ', ' + seats.count + ' seats taken, ' + seats.bots + '.');
                 pad.setAttribute('aria-hidden', 'true'); li.appendChild(pad); li.appendChild(tell);
             } else if (onList && !yours) {
                 var b = button('gjoin', TEXT.join, guard(function () { joinRow(row); }));
@@ -942,7 +936,7 @@
 
         function sync() { track(client()); paintVis(); armRefresh(); paintPill(); if (holdsRoom()) matches = true; liveLens.forEach(function (l) { markWatch(l.link, l.id); }); if (isOpen) { paintList(); place(); } }
         function shown(name) {
-            if (name === 'room') { closeAll(); placeVis(); scheduleLive(); } else { poll(); pollLive(); }
+            if (name === 'room') { closeAll(); scheduleLive(); } else { poll(); pollLive(); }
             sync();
             schedule();
         }

@@ -316,8 +316,14 @@ function runLobby(search, stored, options) {
     win.AntsGameModes = loadFront('game_modes.js', scope).AntsGameModes;
     win.AntsGameType = loadFront('game_type.js', scope).AntsGameType;
     win.AntsRoomFog = loadFront('room_fog.js', scope).AntsRoomFog;
+    win.AntsRoomSheet = loadFront('room_sheet.js', scope).AntsRoomSheet;
+    win.AntsSeatMenu = loadFront('seat_menu.js', scope).AntsSeatMenu;
     if (options.picker) { win.AntsMapPicker = loadFront('map_picker.js', scope).AntsMapPicker; win.AbortController = AbortController; win.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} }); }
-    if (!options.noHome) win.AntsHome = loadFile('home/home.js', scope).AntsHome;
+    if (!options.noHome) {
+        win.AntsHome = loadFile('home/home.js', scope).AntsHome;
+        const realMount = win.AntsHome.mount;
+        win.AntsHome = Object.assign({}, win.AntsHome, { mount: (e) => { const api = realMount(e); env.homeApi = api; env.pageBridge = e.page; return api; } });       // (the page's own Home and the bridge that it gave it: env.makeRoom below)
+    }
     const nav = { userAgent: options.ua || 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36', platform: 'Linux x86_64' };
     if (options.clipboard !== false) nav.clipboard = { writeText(t) { env.copied.push(t); return { then() {} }; } };       // (options.clipboard: false is a browser without the clipboard's own API: the copy command is used)
     // options.share: a browser that has navigator.share (true: it takes the data; 'throws': it throws; 'rejects': the person closes the sheet, a promise that fails)
@@ -376,12 +382,16 @@ function runLobby(search, stored, options) {
     // Home: the buttons that home.js makes (it builds its own markup), by their class
     // (the games list's own handle, the button with its count, is made but not placed in the bar: Home has no Games button; a lookup that finds nothing in the tree finds it among the made elements)
     env.home = (cls) => env.$('home').findAll((e) => String(e.className).split(/\s+/).indexOf(cls) !== -1)[0] || (cls === 'games' ? made.find((e) => String(e.className).split(/\s+/).indexOf(cls) !== -1) : null) || null;
-    // The Room is inside Home: it has no bar of its own. Its controls, by the names that the checks have for them: 'rhome' is My room (pressed while the Room shows it brings the games' list back, the room stays), 'leave' the Leave room
+    // The Room is inside Home: it has no bar of its own. Its controls, by the names that the checks have for them: 'rhome' changes the screen between the Room and Home (the room stays: there is no button of the bar for it any more), 'leave' the Leave room
     // button of the room's header, 'hmenu' Home's Menu button
-    env.roomBar = (cls) => (cls === 'rhome' ? env.home('mine') : env.home(cls) || env.root.findAll((e) => String(e.className).split(/\s+/).indexOf(cls) !== -1)[0] || null);       // (the tree is flat: the room's header is not under Home's div)
+    env.holdsRoom = () => !!env.pageBridge.info().client;       // (the page holds a room: made, joined or taken back)
+    env.toggleRoom = () => env.homeApi.show(env.screen() === 'room' ? 'home' : 'room', 'push');       // (the screens, as Quick host, the Menu's Home and Back change them: there is no button of the bar for it any more)
+    env.roomBar = (cls) => (cls === 'rhome' ? { click: () => env.toggleRoom() } : env.home(cls) || env.root.findAll((e) => String(e.className).split(/\s+/).indexOf(cls) !== -1)[0] || null);       // (the tree is flat: the room's header is not under Home's div)
     env.screen = () => env.body.getAttribute('data-screen');
     env.dumpAll = () => [...Object.values(env.elements), ...env.root.children, env.body].flatMap((e) => e.all()).map((e) => e.textContent + '|' + JSON.stringify(e.attributes) + '|' + e.value).join('\n') + env.innerHTMLWrites.join('') + JSON.stringify(env.replaced) + JSON.stringify(env.assigned);
-    if (!options.stayHome && env.screen() === 'home' && env.sockets.length === 0) env.home('mine').click();       // (a plain visit is Home and makes no room: the tests that need one press My room, as a person does)
+    // A plain visit is Home and makes no room: the tests that need one make it as Quick host does when its question is answered (the page's own make() and the Room shown), without the question and without the Games list's part
+    env.makeRoom = () => { if (!env.pageBridge.info().client) env.pageBridge.make(); env.homeApi.show('room', 'push'); };
+    if (!options.stayHome && env.screen() === 'home' && env.sockets.length === 0) env.makeRoom();
     return env;
 }
 

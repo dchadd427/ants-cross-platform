@@ -619,8 +619,8 @@ function bringPlayers(env) {
     check('a list from the hub shows (the chat dock\'s count says the same number, 2 here now)', box.hidden === false && one(box, 'pl-count').textContent === '2' && one(home.children[4], 'gc-on').textContent === '2 here now');
     env.advance(10);
     check('the page does not ask for the list again (the same two files)', filesOf(env, 'players').length === 2);
-    env.home('mine').click();
-    env.roomBar('rhome').click();
+    env.makeRoom();
+    env.toggleRoom();
     env.advance(10);
     check('Home shown again asks for nothing more', filesOf(env, 'players').length === 2 && filesOf(env, 'chat').length === 2);
 }
@@ -632,7 +632,7 @@ function bringPlayers(env) {
     hubFor(broken); broken.advance(0); bringChat(broken);
     broken.win.AntsHomePlayers = { mount() { throw new Error('a list that breaks'); } };
     filesOf(broken, 'players').forEach((n) => { if (n.onload) n.onload(); });
-    check('a list that throws when it mounts: Home goes on (My room still makes the room, the dock is there)', broken.$('home').children[4].id === 'gchat' && (broken.home('mine').click(), broken.sockets.length === 1) && broken.screen() === 'room');
+    check('a list that throws when it mounts: Home goes on (the page still makes a room, the dock is there)', broken.$('home').children[4].id === 'gchat' && (broken.makeRoom(), broken.sockets.length === 1) && broken.screen() === 'room');
     const seen = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
     hubFor(seen); seen.advance(0); bringChat(seen);
     let given = null;
@@ -653,13 +653,13 @@ function bringPlayers(env) {
     const yard = env.$('home').children.find((c) => c.id === 'hmain');
     const box = yard.children.find((c) => cls(c).indexOf('pl-root') !== -1);
     check('(the list is there and takes presses)', !!box && !box.hasAttribute('inert'));
-    env.home('mine').click();
+    env.makeRoom();
     env.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']] });
     env.$('change-map').click();
     check('a dialog over the page makes the list inert with the bars and the dock', box.hasAttribute('inert') && env.home('hbar').hasAttribute('inert'));
     const late = runLobby('', { 'ants.name': 'Sam' }, { stayHome: true });
     hubFor(late); late.advance(0); bringChat(late);
-    late.home('mine').click();
+    late.makeRoom();
     const sock = late.arrive({ key: KEY, seats: [[C, 'Sam'], [E, ''], [E, ''], [E, '']] });
     sock.receive(roomMessage([[C, 'Sam'], [C, 'Maya'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
     bringPlayers(late);

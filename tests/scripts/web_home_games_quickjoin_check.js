@@ -77,9 +77,9 @@ const press = async (env) => { tap(env.home('join')); await flush(); };
     check('the page behind the card takes no key or tap (Home\'s bar, the Room, the strips)', env.home('hbar').hasAttribute('inert') && env.$('lobby').hasAttribute('inert') && env.$('banner').hasAttribute('inert'));
     check('the card is the body\'s (over both screens), full over the window', card(env).parent.parent.parent === env.body || card(env).parent.parent === env.body);
     const probe = env.last();
-    check('while the page only looks for a game it holds no room: My room is not there', env.home('mine').hidden === true);
+    check('while the page only looks for a game it holds no room', env.holdsRoom() === false);
     welcomeOf(probe, 1, ['Pebble', 'Maya'], PRIVATE);
-    check('the room that the page joined is its room: My room is there, with its count (a joined room is a room)', env.home('mine').hidden === false);
+    check('the room that the page joined is its room: the page holds it (a joined room is a room)', env.holdsRoom() === true);
     check('the room welcomes the page: the card says "Joined Pebble’s room" with the room as it is now (4 of 4, one more person), "Opening the room…", a bar and the button "Go to the room"; the Home screen shows still',
           title(env) === 'Joined Pebble’s room' && lineOf(env) === 'Opening the room…' && textOf(first(first(card(env), 'gitem'), 'gcount')) === '4/4' && textOf(act(env, 'gyes')) === 'Go to the room' && !!first(card(env), 'gbar') && env.screen() === 'home'
           && !!first(card(env), 'gmark') && first(card(env), 'gmark').className.indexOf('check') !== -1);
@@ -118,7 +118,7 @@ const press = async (env) => { tap(env.home('join')); await flush(); };
     check('the card "Joined Pebble’s room" is described by "Opening the room…", and the page tells it: "Joined Pebble’s room."', title(env) === 'Joined Pebble’s room' && readOf(env) === 'Opening the room…' && toldOf(env) === 'Joined Pebble’s room.');
     await wait(env, 1600);
     check('... the card closes by itself with no toast, and what was told stays (a screen reader has read it; nothing visible is added)', card(env) === null && env.screen() === 'room' && toastOf(env).hidden === true && toldOf(env) === 'Joined Pebble’s room.');
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await press(env);
     check('the next press empties the line (the same words told again are heard again), and the question is described by its line', toldOf(env) === '' && title(env) === 'Leave Pebble’s room?' && /^You are in Pebble’s room\./.test(readOf(env)));
     const none = await withRooms([]);
@@ -145,7 +145,7 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
 {
     const env = await withRooms(ROWS);
     const own = myRoom(env, ['Maya']);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await wait(env, 1500);
     await press(env);
     const codes = [];
@@ -217,12 +217,12 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     check('Not now takes the card away and changes nothing (the focus is back on Quick join)', card(env) === null && env.sockets.length === 0 && env.screen() === 'home' && env.focused === env.home('join'));
     await press(env);
     tap(act(env, 'gyes'));
-    check('Host one! asks nothing more (it promises a public room: no Host a game card) and is Quick host: a room of the page\'s own is made (My room\'s machinery) and the Room shows, and My room is there: a hosted room is a room', card(env) === null && env.sockets.length === 1 && env.screen() === 'room' && env.home('mine').hidden === false);
+    check('Host one! asks nothing more (it promises a public room: no Host a game card) and is Quick host: a room of the page\'s own is made and the Room shows, and the page holds it: a hosted room is a room', card(env) === null && env.sockets.length === 1 && env.screen() === 'room' && env.holdsRoom());
 }
 {
     const env = await withRooms([]);
     const sock = myRoom(env, ['Maya']);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await wait(env, 1500);
     await press(env);
     tap(act(env, 'gyes'));
@@ -241,14 +241,14 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     const own = myRoom(env, ['Maya']);
     const ownCode = helloRoom(own.sent[0]);
     env.site.body = listOf([row(ownCode, 'Maya', { people: 1, free: 3, age: 999 }), BEST]);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await wait(env, 1500);
     await press(env);
     check('the page\'s own room is in the list (a public room of its own) and is left out: the room that is asked for is the other one, whatever the order', askedFor(env.last()) === 'p4n8dz' && env.sockets.length === 2);
     const alone = await withRooms([]);
     const mine = myRoom(alone, ['Maya']);
     alone.site.body = listOf([row(helloRoom(mine.sent[0]), 'Maya', { people: 1, free: 3 })]);
-    alone.roomBar('rhome').click();
+    alone.toggleRoom();
     await wait(alone, 1500);
     await press(alone);
     check('a list that holds nothing but the own room is an empty list', title(alone) === 'No open games right now.' && alone.sockets.length === 1);
@@ -314,7 +314,7 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
 {   // the cards: the buttons of a question side by side, the answers of a card with one button or a stack under each other
     const env = await withRooms(ROWS);
     const own = myRoom(env, ['Maya', 'Sage']);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await wait(env, 1500);
     await press(env);
     check('the two answers of a question stand side by side (one row: no "solo" row)', find(card(env), 'gcbtns').length === 1 && !find(card(env), 'gcbtns').some((b) => classes(b).indexOf('solo') !== -1));
@@ -334,7 +334,7 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     const env = await withRooms(ROWS);
     const own = myRoom(env, ['Maya']);
     const ownCode = helloRoom(own.sent[0]);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await wait(env, 1500);
     await press(env);
     check('alone in the own room: nothing is asked, the second client goes, and the own room is kept (no Leave, the socket open) until the other welcomes the page', card(env) !== null && title(env) === 'Finding a game…' && leaves(own) === 0 && !own.closed && env.sockets.length === 2);
@@ -348,7 +348,7 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
 {
     const env = await withRooms(ROWS);
     const own = myRoom(env, ['Maya', 'Sage']);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await wait(env, 1500);
     await press(env);
     check('with another person in the own room Quick join asks first, in the approved card: "Leave your room?", "Sage is in your room. If you go, Sage becomes the host.", the best room with its BEST tag, "Leave and join" and "Stay here" (which has the focus), and nothing was opened',
@@ -368,7 +368,7 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
 {
     const env = await withRooms(ROWS, { search: '?room=zzz999', options: { stayHome: false } });
     const sock = guestRoom(env, 'Zed', PRIVATE);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await wait(env, 1500);
     await press(env);
     check('as a guest of somebody else\'s room Quick join asks too ("Leave Zed’s room?", the way back by the link)', title(env) === 'Leave Zed’s room?' && /come back by its link/.test(lineOf(env)) && leaves(sock) === 0);
@@ -382,16 +382,16 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     const env = await withRooms(ROWS);
     const own = myRoom(env, ['Maya']);
     const ownCode = helloRoom(own.sent[0]);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await wait(env, 1500);
     await press(env);
     env.last().open();
     check('(a try is waiting)', title(env) === 'Finding a game…' && env.screen() === 'home');
     tap(act(env, 'gstay')); await wait(env, 800); tap(act(env, 'gstay'));
-    env.home('mine').click();
-    check('a try that is given up leaves the own room where it was: My room shows it, with its code, and the seat was never dropped (no Leave, the socket open)', card(env) === null && env.screen() === 'room' && env.$('code').textContent === grouped(ownCode) && leaves(own) === 0 && !own.closed);
-    env.roomBar('rhome').click();
-    env.home('mine').click();
+    env.makeRoom();
+    check('a try that is given up leaves the own room where it was: the Room shows it, with its code, and the seat was never dropped (no Leave, the socket open)', card(env) === null && env.screen() === 'room' && env.$('code').textContent === grouped(ownCode) && leaves(own) === 0 && !own.closed);
+    env.toggleRoom();
+    env.makeRoom();
     check('... Home and back again does not drop it either', env.screen() === 'room' && leaves(own) === 0 && !own.closed);
 }
 
@@ -401,7 +401,7 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
 {
     const env = await withRooms(ROWS);
     const own = myRoom(env, ['Maya']);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await wait(env, 1500);
     await press(env);
     const probe = env.last().open();
@@ -447,7 +447,7 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
 {   // START and the stalled hand-off
     const env = await withRooms(ROWS);
     const own = myRoom(env, OTHERS_OF(['Maya', 'Sage']));
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await wait(env, 1500);
     await press(env);
     check('(the question is up)', title(env) === 'Leave your room?');
@@ -464,7 +464,7 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     const env = await withRooms(ROWS);
     const own = myRoom(env, ['Maya']);
     env.$('start').click();
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     const before = env.sockets.length;
     tap(env.home('join'));
     await flush();
@@ -473,7 +473,7 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
 {   // a match that runs
     const env = await withRooms(ROWS);
     const sock = myRoom(env, ['Maya', 'Sage'], STARTING, null, true);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await wait(env, 1500);
     await press(env);
     check('START that waits (the match is on its way): Quick join says "Your match is running." and opens nothing', card(env) === null && toastTextOf(env) === 'Your match is running.' && env.sockets.length === 1);
@@ -551,7 +551,7 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     tap(act(env, 'gyes'));
     check('... and leaves when it says so', leaves(guest) === 1 && env.screen() === 'home');
     const bots = await withRooms(ROWS);
-    bots.home('mine').click();
+    bots.makeRoom();
     const bs = bots.arrive({ key: KEY, seats: [[C, 'Maya'], [NET0.SLOT.Bot, 'Easy'], [E, ''], [E, '']], room: { flags: PRIVATE } });
     bots.roomBar('leave').click();
     check('a computer player is no person to ask about: Leave room leaves at once', card(bots) === null && leaves(bs) === 1);
@@ -573,56 +573,50 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
 
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// 8. The X beside My room (Home's bar)
+// 8. Leave (the room's header): at once when alone, a question when somebody else is in the room
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
-    const none = await withRooms(ROWS);
-    check('with no room the X is not there (it hides with My room: no place in the bar)', none.home('minex').parent.hidden === true && none.home('mine').hidden === true);
     const env = await withRooms(ROWS);
     const sock = myRoom(env, ['Maya']);
-    env.roomBar('rhome').click();
-    const x = env.home('minex');
-    check('with a room the X shows on My room\'s corner: a button named "Leave my room" (label and tooltip), not disabled', env.screen() === 'home' && x.parent.hidden === false && x.getAttribute('aria-label') === 'Leave my room' && x.getAttribute('title') === 'Leave my room' && x.disabled === false && x.tagName.toLowerCase() === 'button');
-    check('... it is a button of its own next to the pill in the same box, not inside My room', x.parent === env.home('mine').parent && !find(env.home('mine'), 'minex').length);
-    x.click();
+    const leave = env.roomBar('leave');
+    check('the room has a button that says Leave, a plain button, not disabled', env.screen() === 'room' && leave.textContent === 'Leave' && leave.disabled === false && leave.tagName.toLowerCase() === 'button' && leave.parent === env.$('r-acts'));
+    leave.click();
     await flush();
-    check('the X, alone in the room, leaves at once (no card): one Leave, the socket closed, no seat kept in the session, Home stays', card(env) === null && leaves(sock) === 1 && sock.closed && env.screen() === 'home' && env.session.data['ants.lobby'] === undefined);
-    check('... My room and the X are gone, and the toast says "You left the room."', env.home('mine').hidden === true && env.home('minex').parent.hidden === true && toastTextOf(env) === 'You left the room.');
-    check('... the focus is on a button that is there (not on the X that went)', env.focused !== null && env.focused !== x && !env.focused.hidden);
+    check('Leave, alone in the room, leaves at once (no card): one Leave, the socket closed, no seat kept in the session, Home shows', card(env) === null && leaves(sock) === 1 && sock.closed && env.screen() === 'home' && env.session.data['ants.lobby'] === undefined);
+    check('... the page holds no room, and the toast says "You left the room."', env.holdsRoom() === false && toastTextOf(env) === 'You left the room.');
+    check('... the focus is on a button that is there (not on the Leave that went)', env.focused !== null && env.focused !== leave && !env.focused.hidden);
 }
 {
     const env = await withRooms(ROWS);
     const sock = myRoom(env, ['Maya', 'Sage']);
-    env.roomBar('rhome').click();
-    const x = env.home('minex');
-    x.click();
-    check('the X with another person in the room asks first, in the card of the other questions ("Leave your room?", "Sage becomes the host"); nothing was left', title(env) === 'Leave your room?' && /Sage becomes the host/.test(lineOf(env)) && textOf(act(env, 'gyes')) === 'Leave room' && leaves(sock) === 0 && !sock.closed);
+    const leave = env.roomBar('leave');
+    leave.click();
+    check('Leave with another person in the room asks first, in the card of the other questions ("Leave your room?", "Sage becomes the host"); nothing was left', title(env) === 'Leave your room?' && /Sage becomes the host/.test(lineOf(env)) && textOf(act(env, 'gyes')) === 'Leave room' && leaves(sock) === 0 && !sock.closed);
     tap(act(env, 'gstay'));
-    check('"Stay here" keeps the room: no Leave, My room and the X still there, the focus is back on the X, no toast', card(env) === null && leaves(sock) === 0 && env.home('mine').hidden === false && env.focused === x && toastTextOf(env) !== 'You left the room.');
-    x.click();
+    check('"Stay here" keeps the room: no Leave, the room is still held, the focus is back on Leave, no toast', card(env) === null && leaves(sock) === 0 && env.holdsRoom() && env.focused === leave && toastTextOf(env) !== 'You left the room.');
+    leave.click();
     pressEscape(env);
-    check('Escape is "Stay here"', card(env) === null && leaves(sock) === 0 && env.home('mine').hidden === false);
-    x.click();
+    check('Escape is "Stay here"', card(env) === null && leaves(sock) === 0 && env.holdsRoom());
+    leave.click();
     tap(act(env, 'gyes'));
     await flush();
-    check('"Leave room" leaves: one Leave, the socket closed, the session forgets the seat, My room and the X go, and the toast says so', leaves(sock) === 1 && sock.closed && env.session.data['ants.lobby'] === undefined && env.home('mine').hidden === true && toastTextOf(env) === 'You left the room.');
+    check('"Leave room" leaves: one Leave, the socket closed, the session forgets the seat, and the toast says so', leaves(sock) === 1 && sock.closed && env.session.data['ants.lobby'] === undefined && !env.holdsRoom() && toastTextOf(env) === 'You left the room.');
 }
-{   // keyboard: the X is a real button (Enter and Space press it); touch: a tap is a click
+{   // touch: a tap is a click
     const env = await withRooms(ROWS);
     const sock = myRoom(env, ['Maya']);
-    env.roomBar('rhome').click();
-    tap(env.home('minex'));
+    tap(env.roomBar('leave'));
     await flush();
-    check('a tap on the X leaves (alone: at once)', leaves(sock) === 1 && env.screen() === 'home');
+    check('a tap on Leave leaves (alone: at once)', leaves(sock) === 1 && env.screen() === 'home');
 }
-{   // the hand-off is stalled: the X stays off like Leave room
+{   // the hand-off is stalled: Leave stays off
     const env = await withRooms(ROWS);
     const own = myRoom(env, ['Maya', 'Sage'], PRIVATE);
     own.receive(roomMessage(seatsOf(['Maya', 'Sage']), { you: 0, leader: 0, flags: STARTING }));
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await wait(env, 16000);
-    env.home('minex').click();
-    check('the X stays off on a page whose hand-off did not come (it never asks, it never leaves)', card(env) === null && leaves(own) === 0 && env.home('minex').disabled === true);
+    env.roomBar('leave').click();
+    check('Leave stays off on a page whose hand-off did not come (it never asks, it never leaves)', card(env) === null && leaves(own) === 0 && env.roomBar('leave').disabled === true);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -663,7 +657,7 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     const env = await withRooms([]);
     myRoom(env, ['Maya']);
     env.site.body = listOf([locked('Maya', { map: 'TREASURE.LVL', people: 1, free: 3 })]);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await wait(env, 31000);
     await press(env);
     same('only the own private room is in the list: the card says that nobody is waiting and nothing about locked rooms', [title(env), find(card(env), 'gcline').map(textOf)], ['No open games right now.', ['Nobody is waiting for a player. Host one, and others can join you.']]);

@@ -1034,12 +1034,12 @@ function bring(env) {                                     // the two files arriv
     check('... then it is the last child of Home\'s div, one socket to the hub is opened, and the game\'s own socket is not touched', env.$('home').children.length === 5 && env.$('home').children[4].id === 'gchat' && hub.length === 1 && hub[0].url === 'wss://play.test/hub/ws' && env.sockets.length === 0);
     const dock = env.$('home').children[4];
     check('Home\'s own parts are where they were (the bar, the body, the card, the strip)', env.$('home').children.slice(0, 4).map((c) => c.tagName).join() === 'header,main,div,nav' && dock.getAttribute('data-open') === 'true');
-    env.home('mine').click();
-    check('My room still makes the room (the page\'s own socket), and the Room shows: the dock is told (it is on the screen beside the Room, as beside the games)', env.sockets.length === 1 && env.screen() === 'room' && hub.length === 1);
+    env.makeRoom();
+    check('the page still makes a room (its own socket), and the Room shows: the dock is told (it is on the screen beside the Room, as beside the games)', env.sockets.length === 1 && env.screen() === 'room' && hub.length === 1);
     hub[0].readyState = 1; hub[0].onmessage({ data: JSON.stringify(W({ you: YOU, history: HISTORY })) });
     hub[0].onmessage({ data: JSON.stringify(L(40, 'a', 'on the Room')) });
     check('a line that comes while the Room shows is read (the dock lies beside the Room), and the link stays', one(dock, 'gc-unread').hidden === true && hub.length === 1);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     check('the games\' list again: the dock is read, the link is the same one', one(dock, 'gc-unread').hidden === true && hub.length === 1);
     env.advance(10);
     check('show(home) again does not load the dock a second time', fresh(env).length === 2 && env.$('home').children.length === 5);
@@ -1049,14 +1049,14 @@ function bring(env) {                                     // the two files arriv
     hubFor(env); env.advance(0); bring(env);
     const root = env.$('home').children[4];
     check('(the dock is there and takes presses)', root.id === 'gchat' && !root.hasAttribute('inert'));
-    env.home('mine').click();
+    env.makeRoom();
     env.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']] });
     env.$('change-map').click();
     check('the map list is a dialog: the dock is inert with the bars, the Room and the strips behind it', root.hasAttribute('inert') && env.home('hbar').hasAttribute('inert') && env.$('lobby').hasAttribute('inert'));
     const late = runLobby('', { 'ants.name': 'Sam' }, { stayHome: true });
     hubFor(late); late.advance(0);
     late.win.AntsHomeChat = H.loadFile('home/chat.js', late.scope).AntsHomeChat;
-    const hold = late.home('mine'); hold.click();
+    late.makeRoom();
     const sock = late.arrive({ key: KEY, seats: [[C, 'Sam'], [E, ''], [E, ''], [E, '']] });
     sock.receive(roomMessage([[C, 'Sam'], [C, 'Maya'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
     fresh(late).forEach((n) => n.onload());
@@ -1071,7 +1071,7 @@ function bring(env) {                                     // the two files arriv
     check('a page that opens on the Room asks for the chat too: the dock is on the screen beside the Room (its style and its script)', fresh(env).length === 2);
     env.$('name-step-go').click();
     env.arrive({ seat: 1, key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     env.advance(10);
     check('... pressing Home shows it, and then the dock is asked for, once', fresh(env).length === 2);
 }
@@ -1080,11 +1080,11 @@ function bring(env) {                                     // the two files arriv
     hubFor(down, { throws: true });
     down.advance(0); bring(down);
     check('a hub that cannot be opened: the dock says "Chat is offline"; Home is whole', down.$('home').children[4].id === 'gchat' && one(down.$('home').children[4], 'gc-note').textContent === 'Chat is offline' && down.screen() === 'home');
-    down.home('mine').click();
+    down.makeRoom();
     const s = down.arrive({ key: KEY, seats: [[C, 'Sam'], [E, ''], [E, ''], [E, '']] });
-    down.roomBar('rhome').click();
+    down.toggleRoom();
     s.receive(roomMessage([[C, 'Sam'], [C, 'Maya'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
-    check('... My room, the room, Home and START that hands off to the game are as without the chat', down.assigned.length === 1 && down.$('home').children[2].hidden === false && !!down.storage.data['ants.rejoin.' + H.helloRoom(s.sent[0]) + '.0']);
+    check('... a room, Home and START that hands off to the game are as without the chat', down.assigned.length === 1 && down.$('home').children[2].hidden === false && !!down.storage.data['ants.rejoin.' + H.helloRoom(s.sent[0]) + '.0']);
     const garbage = runLobby('', { 'ants.name': 'Sam' }, { stayHome: true });
     const hub = hubFor(garbage);
     garbage.advance(0); bring(garbage);
@@ -1092,13 +1092,13 @@ function bring(env) {                                     // the two files arriv
     const give = (f) => { if (hub[hub.length - 1].onmessage) hub[hub.length - 1].onmessage({ data: f }); };       // (a socket that the dock let go hears nothing more)
     ['x', '{', '{"t":"line"}'].concat(Array.from({ length: 16 }, () => '\u0000\u0001')).forEach(give);
     give('x'.repeat(5e6));
-    check('a hub that sends garbage and a frame of 5 MB: no throw, the page works (My room makes its room)', (garbage.home('mine').click(), garbage.sockets.length === 1 && garbage.screen() === 'room'));
+    check('a hub that sends garbage and a frame of 5 MB: no throw, the page works (the page makes its room)', (garbage.makeRoom(), garbage.sockets.length === 1 && garbage.screen() === 'room'));
     const broken = runLobby('', { 'ants.name': 'Sam' }, { stayHome: true });
     broken.advance(0);
     broken.win.AntsHomeChat = { mount() { throw new Error('a dock that breaks'); } };
     let threw = false;
     try { fresh(broken).forEach((n) => n.onload()); } catch (e) { threw = true; }
-    broken.home('mine').click(); broken.roomBar('rhome').click();
+    broken.makeRoom(); broken.toggleRoom();
     check('a dock whose mount throws is nothing: no throw into the page, Home and the Room go on', !threw && broken.screen() === 'home' && broken.sockets.length === 1);
     const odd = runLobby('', { 'ants.name': 'Sam' }, { stayHome: true });
     odd.advance(0);
@@ -1106,11 +1106,11 @@ function bring(env) {                                     // the two files arriv
     odd.win.AntsHomeChat = { mount() { return { shown() { if (++told > 1) throw new Error('a dock that breaks later'); } }; } };
     fresh(odd).forEach((n) => n.onload());
     let oddThrew = false;
-    try { odd.home('mine').click(); odd.roomBar('rhome').click(); } catch (e) { oddThrew = true; }
+    try { odd.makeRoom(); odd.toggleRoom(); } catch (e) { oddThrew = true; }
     check('a dock that breaks when it is told which screen shows (after it was mounted well) is nothing: Home and the Room go on, and each screen is told to it', !oddThrew && odd.screen() === 'home' && odd.sockets.length === 1 && told >= 3, told);
     const lone = runLobby('', { 'ants.name': 'Sam' }, { stayHome: true });
     lone.advance(0); fresh(lone).forEach((n) => n.onload());
-    lone.home('mine').click();
+    lone.makeRoom();
     check('a script that came without the dock\'s global (a page whose chat.js was cut) is nothing as well', lone.screen() === 'room');
     const late = runLobby('', { 'ants.name': 'Sam' }, { stayHome: true });
     hubFor(late);

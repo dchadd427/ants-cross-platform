@@ -1,0 +1,13 @@
+/* The choice of a color on the Room (front/seat_menu.js): a short menu under the color's button, drawn by the page. The chosen item has a check mark and the gold plate; an item that is off (the bots with Fog of War) is dim; Closed has a line above it.
+   Every item is 44 px high on a phone. The colors are the page's own tokens (:root of web/lobby.html). */
+.sm-menu { position: fixed; z-index: 63; min-width: 190px; padding: 6px; list-style: none; color: var(--cream); background: #0a1216; border: 2px solid var(--frame-hi); border-radius: 8px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 var(--shadow); }
+.sm-menu[hidden] { display: none; }
+.sm-item { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 12px 0 10px; font-size: 16px; cursor: pointer; border-radius: 5px; }
+.sm-item::before { content: ""; flex: none; width: 6px; height: 11px; margin: -3px 4px 0 2px; border: solid transparent; border-width: 0 2.5px 2.5px 0; transform: rotate(40deg); }
+.sm-item.active { background: #13302a; }
+.sm-item.sel { color: var(--gold); background: #123a2a; } .sm-item.sel::before { border-color: #44e08a; }
+.sm-item.off { opacity: .45; cursor: default; }
+.sm-item:focus-visible { outline: 3px solid var(--gold); outline-offset: -3px; }
+.sm-item:last-child { margin-top: 4px; border-top: 1px solid #16302a; border-radius: 0 0 5px 5px; }
+.sm-line { margin-left: auto; font-size: 12px; color: var(--muted); }
+@media (max-width: 700px), (max-height: 500px) { .sm-item { min-height: 44px; font-size: 18px; } .sm-menu { min-width: 220px; } }

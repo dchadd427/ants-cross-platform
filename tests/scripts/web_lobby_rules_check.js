@@ -55,7 +55,7 @@ const N = require(path.join(path.dirname(path.resolve(rulesPath)), 'lobby_net.js
 same('the library exports exactly these names (a new one needs a table here)', Object.keys(RAW).sort(), [
     'ACTS', 'CODE_CHARS', 'COLORS', 'DEFAULT_MAP_KEY', 'GRID', 'HINT', 'KINDS', 'MAPS', 'META', 'READY', 'TEXT',
     'article', 'banner', 'botColors', 'codeText', 'communityName', 'hostName', 'kindsWithoutBots', 'levelWord', 'listOf', 'makeCode', 'mapByKey', 'mapOfFile', 'modelOf', 'moveOf', 'nameAt', 'nameCheck', 'nameOf', 'notBack', 'noticeKind', 'pairOf', 'pendingAfter', 'pendingFogAfter',
-    'pingQuality', 'planWith', 'playing', 'pressSide', 'reconcileSides', 'shownOf', 'sideOpen', 'sideView', 'sidesFix', 'startNote', 'startsAlone', 'teamBytes', 'teamNeedsFix', 'teamsText', 'typedCode', 'validMapFile', 'viewOf', 'withFog', 'withMode'
+    'pingQuality', 'planWith', 'playing', 'pressSide', 'reconcileSides', 'shownOf', 'sideOpen', 'sideView', 'sidesFix', 'startNote', 'startsAlone', 'statusOf', 'teamBytes', 'teamNeedsFix', 'teamsText', 'typedCode', 'validMapFile', 'viewOf', 'withFog', 'withMode'
 ]);
 
 // The colors: the server's seats (Green 0, Red 1, Blue 2, Black 3); the cards lie Black, Green, Red, Blue
@@ -226,13 +226,13 @@ const E = N.SLOT.Empty, C = N.SLOT.Client, B = N.SLOT.Bot;
 const P = (name) => [C, name];
 const O = [E, ''];
 function str8(w, s) { w.push(s.length); for (let i = 0; i < s.length; i++) w.push(s.charCodeAt(i)); }
-// seats: four of [state, name]; o: { map, you, leader, teamA, teamB, starting, plan, inGame, ready (the mask of the persons who said Ready), platforms (the platform byte of each seat: 0, not told, when none is given) }
+// seats: four of [state, name]; o: { map, you, leader, teamA, teamB, starting, public (the room is listed in Open games), fog, plan, inGame, ready (the mask of the persons who said Ready), platforms (the platform byte of each seat: 0, not told, when none is given) }
 function mk(seats, o) {
     o = o || {};
     const w = [12];
     seats.forEach((s, i) => { w.push(s[0]); str8(w, s[1]); w.push(20, 0, o.platforms ? o.platforms[i] : 0); });
     str8(w, o.map === undefined ? 'TREASURE.LVL' : o.map);
-    w.push(o.fog ? 1 : 0, o.you === undefined ? 0 : o.you, o.leader === undefined ? 0 : o.leader, o.teamA === undefined ? 255 : o.teamA, o.teamB === undefined ? 255 : o.teamB, o.starting ? 7 : 3);
+    w.push(o.fog ? 1 : 0, o.you === undefined ? 0 : o.you, o.leader === undefined ? 0 : o.leader, o.teamA === undefined ? 255 : o.teamA, o.teamB === undefined ? 255 : o.teamB, (o.starting ? 7 : 3) | (o.public ? 8 : 0));
     for (const k of (o.plan || [0, 0, 0, 0])) w.push(k);
     w.push(o.inGame || 0, o.mode || 0, o.ready || 0);                                 // (protocol 17: the game mode; protocol 27: the ready mask is the last byte)
     const m = N.decode(Uint8Array.from(w));
@@ -275,19 +275,19 @@ const S12 = mk([O, P('Sam'), O, P('Priya')], { you: 1, leader: 1, plan: [0, 0, 2
 
 // ---- modelOf ----
 same('modelOf, picture 1: you alone at Green, the host', model(S1), {
-    you: 0, leader: 0, guest: false, starting: false, map: 'treasure', mapFile: 'TREASURE.LVL', mode: 0, fog: false, sides: [0, 0, 0, 0],
+    you: 0, leader: 0, guest: false, starting: false, map: 'treasure', mapFile: 'TREASURE.LVL', mode: 0, fog: false, isPublic: false, sides: [0, 0, 0, 0],
     slots: [person('Juniper', true, true), { kind: 'open' }, { kind: 'open' }, { kind: 'open' }]
 });
 same('modelOf, picture 5: a computer player where the plan says Medium, the team pair as switches', model(S5), {
-    you: 0, leader: 0, guest: false, starting: false, map: 'treasure', mapFile: 'TREASURE.LVL', mode: 0, fog: false, sides: [1, 0, 1, 0],
+    you: 0, leader: 0, guest: false, starting: false, map: 'treasure', mapFile: 'TREASURE.LVL', mode: 0, fog: false, isPublic: false, sides: [1, 0, 1, 0],
     slots: [person('Juniper', true, true), person('Sam', false, false, false, true), { kind: 'bot', level: 'medium' }, person('Priya', false, false, false, true)]
 });
 same('modelOf, picture 4: a guest in Black, an Easy and a Medium bot, the pair Green + Black', model(S4), {
-    you: 3, leader: 0, guest: true, starting: false, map: 'treasure', mapFile: 'TREASURE.LVL', mode: 0, fog: false, sides: [1, 0, 0, 1],
+    you: 3, leader: 0, guest: true, starting: false, map: 'treasure', mapFile: 'TREASURE.LVL', mode: 0, fog: false, isPublic: false, sides: [1, 0, 0, 1],
     slots: [person('Juniper', false, true), { kind: 'bot', level: 'easy' }, { kind: 'bot', level: 'medium' }, person('Sam', true)]
 });
 same('modelOf, picture 13b: START is pressed, a guest; the game of Juniper is open (not its own)', model(S13b), {
-    you: 1, leader: 0, guest: true, starting: true, map: 'treasure', mapFile: 'TREASURE.LVL', mode: 0, fog: false, sides: [0, 0, 0, 0],
+    you: 1, leader: 0, guest: true, starting: true, map: 'treasure', mapFile: 'TREASURE.LVL', mode: 0, fog: false, isPublic: false, sides: [0, 0, 0, 0],
     slots: [person('Juniper', false, true, true), person('Sam', true), { kind: 'bot', level: 'medium' }, person('Priya')]
 });
 same('modelOf, picture 13: the page\'s own bit never counts, the others\' do', [model(mk([P('Juniper'), P('Sam'), O, P('Priya')], { starting: true, inGame: 11 })).slots.filter((s) => s.kind === 'person').map((s) => s.ingame), model(S13).slots.filter((s) => s.kind === 'person').map((s) => s.ingame)], [[false, true, true], [false, true, false]]);
@@ -587,10 +587,7 @@ const view = (room, o) => R.viewOf(model(room), ctx(o));
     const hostCard = R.viewOf(mb, ctx({})).cards.filter((c) => c.seat === 1)[0];
     same('the leader\'s card of that color keeps its level switch and shows the name', [hostCard.mode, hostCard.who.map((w) => w.text), hostCard.label], ['hard', ['Pip (bot, Hard)'], 'Red: Pip (bot, Hard)']);
     const SL0 = mk([P('Juniper'), [E, ''], O, O], { you: 0, leader: 0, plan: [0, 2, 0, 0] });
-    same('the START line tells the named bots by their names, the leader\'s and the guest\'s alike', [view(SB, {}).side.plan, view(SG, {}).side.plan], [
-        'You, Pip (bot, Hard) and Wren (bot, Easy) play on Treasure. Black is open and stays empty unless a player joins first.',
-        'Juniper starts the match when everybody is in. Juniper, you and Pip (bot, Hard) play on Treasure.']);
-    same('... and a room without names keeps "a Medium bot"', view(SL0, {}).side.plan, 'You and a Medium bot play on Treasure. Blue and Black are open and stay empty unless a player joins first.');
+    same('the line under START counts the colors that play, whoever they are (a named bot is one), and a guest is told who starts', [view(SB, {}).side.status, view(SG, {}).side.status], ['3 of 4 in. ' + FREE, 'Juniper starts the match.']);
     const SL = mk([P('Juniper'), [E, ''], [3, 'Bot (Hard)'], O], { you: 0, leader: 0, plan: [0, 2, 0, 0] });
     same('a room without names (or the legacy "Bot (Hard)") shows the level as before', [R.modelOf(SL).slots[1], R.modelOf(SL).slots[2]], [{ kind: 'bot', level: 'medium' }, { kind: 'bot', level: 'medium' }]);
     const refused = (seats, o) => { try { mk(seats, o); return false; } catch (e) { return true; } };
@@ -608,20 +605,17 @@ function show(c) {
     return o;
 }
 const seatName = ['Green', 'Red', 'Blue', 'Black'];
-const youHost = (seat, extra, name) => Object.assign({ seat: seat, color: seatName[seat], kind: 'person', who: [(name || 'Juniper') + '/nm', 'You/you'], stat: 'Host. You start the match.', ready: 'chip:on', grip: true, label: seatName[seat] + ': ' + (name || 'Juniper') + ', you, host' }, extra || {});
-const sam = (seat, extra) => Object.assign({ seat: seat, color: seatName[seat], kind: 'person', who: ['Sam/nm'], stat: 'In the room', ready: 'chip:on', remove: true, grip: true, label: seatName[seat] + ': Sam' }, extra || {});
-const priya = (seat, extra) => Object.assign({ seat: seat, color: seatName[seat], kind: 'person', who: ['Priya/nm'], stat: 'In the room', ready: 'chip:on', remove: true, grip: true, label: seatName[seat] + ': Priya' }, extra || {});
-const open = (seat, extra) => Object.assign({ seat: seat, color: seatName[seat], kind: 'open', who: [], stat: 'Takes the next player who joins.', mode: 'open', grip: true, label: seatName[seat] + ': open' }, extra || {});
-const bot = (seat, level, extra) => Object.assign({ seat: seat, color: seatName[seat], kind: 'bot', who: [], stat: 'Computer player', ready: 'chip:on:bot', mode: level, grip: true, label: seatName[seat] + ': bot' }, extra || {});
-const NOTE_INVITE = 'Players who open this link take the next free color.';
-const NOTE_DRAG = 'Drag a player onto another color to move them. A color that is taken swaps places.';
-const NOTE_WAIT = 'Waiting for players. Drag a player onto another color to move them.';
+const youHost = (seat, extra, name) => Object.assign({ seat: seat, color: seatName[seat], kind: 'person', who: [(name || 'Juniper') + '/nm', 'You/you', 'Host/htag'], stat: '', ready: 'chip:on', grip: true, label: seatName[seat] + ': ' + (name || 'Juniper') + ', you, host' }, extra || {});
+const sam = (seat, extra) => Object.assign({ seat: seat, color: seatName[seat], kind: 'person', who: ['Sam/nm'], stat: '', ready: 'chip:on', remove: true, grip: true, label: seatName[seat] + ': Sam' }, extra || {});
+const priya = (seat, extra) => Object.assign({ seat: seat, color: seatName[seat], kind: 'person', who: ['Priya/nm'], stat: '', ready: 'chip:on', remove: true, grip: true, label: seatName[seat] + ': Priya' }, extra || {});
+const open = (seat, extra) => Object.assign({ seat: seat, color: seatName[seat], kind: 'open', who: [], stat: '', mode: 'open', grip: true, label: seatName[seat] + ': open' }, extra || {});
+const bot = (seat, level, extra) => Object.assign({ seat: seat, color: seatName[seat], kind: 'bot', who: [], stat: '', ready: 'chip:on:bot', mode: level, grip: true, label: seatName[seat] + ': bot' }, extra || {});
 const TREASURE = { mapKey: 'treasure', mapName: 'Treasure', mapInfo: 'One person\'s trash... (12 min)' };
-const side = (o) => Object.assign({ mapDisabled: false, startDisabled: false, startBusy: false, startLabel: 'START!', note: '', readyLine: '', readyOk: false }, TREASURE, o);
-const EVERYONE = { readyLine: 'Everyone is ready.', readyOk: true };           // (protocol 27: the line under START of a room in which every person who must say it has)
+const side = (o) => Object.assign({ mapDisabled: false, startDisabled: false, startBusy: false, startLabel: 'START!', startPressed: null, status: '', statusTone: '' }, TREASURE, o);
+const EVERYONE = { status: 'Everyone is ready.', statusTone: 'ok' };           // (protocol 27: the line under START of a room in which every person who must say it has)
+const ALONE = { status: '1 of 4 in. Open colors stay empty if nobody joins.' }, ALL_IN = { status: 'Opening the game for everybody. The match begins as soon as all of you are in.' };
 function expectView(label, v, want) {
     same(label + ': the four cards, in seat order', v.cards.map(show), want.cards);
-    same(label + ': the notes', v.notes, want.notes);
     same(label + ': the map\'s side', v.side, want.side);
     same(label + ': the heading and the state', { heading: v.heading, guest: v.guest, busy: v.busy, ro: v.ro, offline: v.offline, removing: v.removing }, Object.assign({ heading: 'Your room', guest: false, busy: false, ro: false, offline: false, removing: -1 }, want.top));
     same(label + ': the switches and the colors that play', { sides: v.sides, play: v.play }, { sides: want.sides || [0, 0, 0, 0], play: want.play });
@@ -629,118 +623,107 @@ function expectView(label, v, want) {
 const lit = (v) => v.cards.map((c) => c.teams.map((t) => (t.pressed ? '+' : '-') + t.side + (t.disabled ? 'x' : '')).join(' '));
 
 // picture 1: you alone, three colors open
-expectView('picture 1 (you alone)', view(S1), {
-    cards: [youHost(0), open(1), open(2), open(3)], play: [0],
-    notes: { invite: NOTE_INVITE, slots: NOTE_WAIT, teams: '', teamsWarn: false },
-    side: side({ plan: 'A game for one. Red, Blue and Black are open and stay empty unless a player joins first.', planShort: 'You · Treasure · 3 open' })
-});
+expectView('picture 1 (you alone)', view(S1), { cards: [youHost(0), open(1), open(2), open(3)], play: [0], side: side(ALONE) });
 // picture 2: Sam in Red, a Medium bot in Blue, Black open: Team 1 and Team 2 under the three colors that play
 expectView('picture 2 (three play)', view(S2), {
     cards: [youHost(0, { teams: '-1 -2' }), sam(1, { teams: '-1 -2' }), bot(2, 'medium', { teams: '-1 -2' }), open(3)], play: [0, 1, 2],
-    notes: { invite: NOTE_INVITE, slots: NOTE_DRAG, teams: FREE, teamsWarn: false },
-    side: side({ ...EVERYONE, plan: 'You, Sam and a Medium bot play on Treasure. Black is open and stays empty unless a player joins first.', planShort: 'You, Sam and Medium bot · Treasure · 1 open' })
+    side: side(EVERYONE)
 });
-// picture 6 (the phone) shows the same room: the four cards are one column in the order of the picture, the line under START is the short one
+// picture 6 (the phone) shows the same room: the four cards are one column in the order of the picture
 same('picture 6 (phone): the cards lie Black, Green, Red, Blue, so the column reads an open Black, then the host (Green), Sam, the bot', R.GRID.map((seat) => view(S2).cards[seat]).map((c) => c.color.name + ':' + c.kind), ['Black:open', 'Green:person', 'Red:person', 'Blue:bot']);
-same('picture 6 (phone): the line under START', view(S2).side.planShort, 'You, Sam and Medium bot · Treasure · 1 open');
 // picture 3: dragging; the dots and then a color (the tap way): the question in the line, a word on each card
 {
     const v = view(S2, { picked: 1 });
-    same('picture 3 (tap way, Sam picked): every card says what a tap does, the line says what to do', [v.cards.map((c) => c.drop), v.notes.slots], [['Tap to put Sam here', 'Tap to put Sam here', 'Tap to put Sam here', 'Tap to put Sam here'], 'Now tap the color where Sam goes (tap the same player again to let go).']);
+    same('picture 3 (tap way, Sam picked): every card says what a tap does, the line says what to do', [v.cards.map((c) => c.drop), v.side.status], [['Tap to put Sam here', 'Tap to put Sam here', 'Tap to put Sam here', 'Tap to put Sam here'], 'Now tap the color where Sam goes (tap the same player again to let go).']);
     same('picture 3 (tap way): nothing else changes on the cards', v.cards.map((c) => { const s = show(c); delete s.drop; return s; }), view(S2).cards.map(show));
-    same('picture 3 (a drag): the cards carry no word of the tap way, the line is the drag line (the words Move here / Swap places are the page\'s own)', [view(S2).cards.map((c) => c.drop), view(S2).notes.slots], [['', '', '', ''], NOTE_DRAG]);
+    same('picture 3 (a drag): the cards carry no word of the tap way and the line is the room\'s own (the words Move here / Swap places are the page\'s own)', [view(S2).cards.map((c) => c.drop), view(S2).side.status], [['', '', '', ''], EVERYONE.status]);
     same('picture 3 (tap way): what each kind of color is called when it is the one that was picked', [0, 2, 3].map((i) => view(S2, { picked: i }).cards[0].drop), ['Tap to put Juniper here', 'Tap to put Medium bot here', 'Tap to put the open Black here']);
-    same('picture 3 (tap way): the line names the one that was picked (a computer player, an open color)', [2, 3].map((i) => view(S2, { picked: i }).notes.slots), ['Now tap the color where Medium bot goes (tap the same player again to let go).', 'Now tap the color where the open Black goes (tap the same player again to let go).']);
-    same('a picked color that is none (-1, nothing): the drag line', [view(S2, { picked: -1 }).notes.slots, R.viewOf(model(S2), { sides: [0, 0, 0, 0] }).notes.slots], [NOTE_DRAG, NOTE_DRAG]);
+    same('picture 3 (tap way): the line names the one that was picked (a computer player, an open color)', [2, 3].map((i) => view(S2, { picked: i }).side.status), ['Now tap the color where Medium bot goes (tap the same player again to let go).', 'Now tap the color where the open Black goes (tap the same player again to let go).']);
+    same('a picked color that is none (-1, nothing): the room\'s own line', [view(S2, { picked: -1 }).side.status, R.viewOf(model(S2), { sides: [0, 0, 0, 0] }).side.status], [EVERYONE.status, EVERYONE.status]);
+    same('a guest is never asked to tap a color: the line says who starts', view(S4, { picked: 1 }).side.status.indexOf('Now tap'), -1);
 }
 // picture 5: Green + Blue against Red + Black; the pressed buttons are lit, the other team shows lit on the other two, a full button is dashed
 expectView('picture 5 (teams set)', view(S5, { sides: [1, 0, 1, 0] }), {
     cards: [youHost(0, { teams: '+1 -2x' }), sam(1, { teams: '-1x +2' }), bot(2, 'medium', { teams: '+1 -2x' }), priya(3, { teams: '-1x +2' })], play: [0, 1, 2, 3], sides: [1, 0, 1, 0],
-    notes: { invite: NOTE_INVITE, slots: NOTE_DRAG, teams: 'Teams: Green + Blue against Red + Black.', teamsWarn: false },
-    side: side({ ...EVERYONE, plan: 'You, Sam, a Medium bot and Priya play on Treasure.', planShort: 'You, Sam, Medium bot and Priya · Treasure' })
+    side: side(EVERYONE)
 });
 // picture 5b: a third color pressed on Team 1: the press is refused and the line says why (the page puts the refusal into the context)
 {
     const pressed = R.pressSide([1, 0, 1, 0], ALL, 1, 1);
     same('picture 5b: the press of Red on Team 1 is refused with the words of the picture', pressed, { sides: [1, 0, 1, 0], refusal: 'Team 1 has two colors already. Press one of them to take it off first.' });
     const v = view(S5, { sides: pressed.sides, refusal: pressed.refusal });
-    same('picture 5b: the line under the colors is the refusal, in the warning color; the teams stay as they were', [v.notes.teams, v.notes.teamsWarn, v.cards.map((c) => c.teams.map((t) => (t.pressed ? '+' : '-') + t.side).join(' '))], ['Team 1 has two colors already. Press one of them to take it off first.', true, ['+1 -2', '-1 +2', '+1 -2', '-1 +2']]);
-    same('a refusal that is empty is no warning', [view(S5, { sides: [1, 0, 1, 0], refusal: '' }).notes.teamsWarn, view(S5, { sides: [1, 0, 1, 0], refusal: undefined }).notes.teamsWarn], [false, false]);
+    same('picture 5b: the line under START is the refusal, in the warning tone; the teams stay as they were', [v.side.status, v.side.statusTone, v.cards.map((c) => c.teams.map((t) => (t.pressed ? '+' : '-') + t.side).join(' '))], ['Team 1 has two colors already. Press one of them to take it off first.', 'warn', ['+1 -2', '-1 +2', '+1 -2', '-1 +2']]);
+    same('a refusal that is empty is no warning', [view(S5, { sides: [1, 0, 1, 0], refusal: '' }).side.statusTone, view(S5, { sides: [1, 0, 1, 0], refusal: undefined }).side.statusTone], ['ok', 'ok']);
 }
 // the leader's own press of one button (a room cannot hold it): lit alone, the others may still take it
 expectView('one button pressed alone', view(S14, { sides: [1, 0, 0, 0] }), {
     cards: [youHost(0, { teams: '+1 -2' }), sam(1, { teams: '-1 -2' }), bot(2, 'medium', { teams: '-1 -2' }), priya(3, { teams: '-1 -2' })], play: [0, 1, 2, 3], sides: [1, 0, 0, 0],
-    notes: { invite: NOTE_INVITE, slots: NOTE_DRAG, teams: FREE, teamsWarn: false },
-    side: side({ ...EVERYONE, plan: 'You, Sam, a Medium bot and Priya play on Treasure.', planShort: 'You, Sam, Medium bot and Priya · Treasure' })
+    side: side(EVERYONE)
 });
 // picture 14 (and 13 before START): four play, no teams
-same('picture 14: four play, no teams: the line is free for all and every color has both buttons, none lit or dashed', [view(S14).notes.teams, lit(view(S14))], [FREE, ['-1 -2', '-1 -2', '-1 -2', '-1 -2']]);
+same('picture 14: four play, no teams: every color has both buttons, none lit or dashed', lit(view(S14)), ['-1 -2', '-1 -2', '-1 -2', '-1 -2']);
+same('... the line says who START waits for before anything else, and the count and the teams only when nobody is waited for', [view(mk([P('Juniper'), P('Sam'), P('Priya'), O], { you: 0, leader: 0, ready: 0 })).side.status, view(mk([P('Juniper'), [E, 'Pip (bot, Hard)'], [E, 'Wren (bot, Easy)'], O], { you: 0, leader: 0, plan: [0, 3, 1, 0] })).side.status], ['Waiting for Sam and Priya to ready up', '3 of 4 in. ' + FREE]);
 // picture 12: Juniper left, Sam leads from Red
 expectView('picture 12 (the host left)', view(S12), {
     cards: [open(0), youHost(1, { teams: '-1 -2' }, 'Sam'), bot(2, 'medium', { teams: '-1 -2' }), priya(3, { teams: '-1 -2' })], play: [1, 2, 3],
-    notes: { invite: NOTE_INVITE, slots: NOTE_DRAG, teams: FREE, teamsWarn: false },
-    side: side({ ...EVERYONE, plan: 'You, a Medium bot and Priya play on Treasure. Green is open and stays empty unless a player joins first.', planShort: 'You, Medium bot and Priya · Treasure · 1 open' })
+    side: side(EVERYONE)
 });
-// picture 4: Sam's screen: the teams are read-only tabs, nothing can be pressed, dragged or set; START waits for the host
+// picture 4: Sam's screen: the teams are read-only tabs, nothing can be pressed, dragged or set; the big button is Sam's Ready
 expectView('picture 4 (a player\'s screen)', view(S4), {
     cards: [
-        { seat: 0, color: 'Green', kind: 'person', who: ['Juniper/nm', 'Host/you'], stat: 'Starts the match.', ready: 'chip:on', tab: 'Team 1', label: 'Green: Juniper, host' },
-        { seat: 1, color: 'Red', kind: 'bot', who: ['Easy bot/'], stat: 'Computer player', ready: 'chip:on:bot', tab: 'Team 2', label: 'Red: Easy bot' },
-        { seat: 2, color: 'Blue', kind: 'bot', who: ['Medium bot/'], stat: 'Computer player', ready: 'chip:on:bot', tab: 'Team 2', label: 'Blue: Medium bot' },
-        { seat: 3, color: 'Black', kind: 'person', who: ['Sam/nm', 'You/you'], stat: 'Waiting for the host to start.', ready: 'button:off', tab: 'Team 1', label: 'Black: Sam, you' }
+        { seat: 0, color: 'Green', kind: 'person', who: ['Juniper/nm', 'Host/htag'], stat: '', ready: 'chip:on', tab: 'Team 1', label: 'Green: Juniper, host' },
+        { seat: 1, color: 'Red', kind: 'bot', who: ['Easy bot/'], stat: '', ready: 'chip:on:bot', tab: 'Team 2', label: 'Red: Easy bot' },
+        { seat: 2, color: 'Blue', kind: 'bot', who: ['Medium bot/'], stat: '', ready: 'chip:on:bot', tab: 'Team 2', label: 'Blue: Medium bot' },
+        { seat: 3, color: 'Black', kind: 'person', who: ['Sam/nm', 'You/you'], stat: '', ready: 'button:off', tab: 'Team 1', label: 'Black: Sam, you' }
     ], play: [0, 1, 2, 3], sides: [1, 0, 0, 1],
     top: { heading: 'Juniper’s room', guest: true, ro: true },
-    notes: { invite: NOTE_INVITE, slots: 'Juniper arranges the colors and starts the match.', teams: 'Teams: Green + Black against Red + Blue.', teamsWarn: false },
-    side: side({ mapDisabled: true, startDisabled: true, startLabel: 'Waiting for Juniper', readyLine: 'Waiting for you to ready up', plan: 'Juniper starts the match when everybody is in. Juniper, an Easy bot, a Medium bot and you play on Treasure.', planShort: 'Juniper starts the match' })
+    side: side({ mapDisabled: true, startLabel: 'READY', startPressed: false, status: 'Juniper starts the match. Teams: Green + Black against Red + Blue.' })
 });
 same('picture 4: the leader\'s own switches do not show on a player\'s screen, the room\'s do', view(S4, { sides: [2, 2, 0, 0] }).cards.map((c) => c.tab), ['Team 1', 'Team 2', 'Team 2', 'Team 1']);
 // picture 13: START is pressed (the host's screen): the room is frozen, each player is opening the game or in it
 expectView('picture 13 (START pressed, the host)', view(S13), {
     cards: [
-        { seat: 0, color: 'Green', kind: 'person', who: ['Juniper/nm', 'You/you'], stat: 'Opening the game…', statCls: 'pstat wait', label: 'Green: Juniper, you, host' },
+        { seat: 0, color: 'Green', kind: 'person', who: ['Juniper/nm', 'You/you', 'Host/htag'], stat: 'Opening the game…', statCls: 'pstat wait', label: 'Green: Juniper, you, host' },
         { seat: 1, color: 'Red', kind: 'person', who: ['Sam/nm'], stat: 'In the game', statCls: 'pstat in', label: 'Red: Sam' },
-        { seat: 2, color: 'Blue', kind: 'bot', who: ['Medium bot/'], stat: 'Computer player', label: 'Blue: Medium bot' },
+        { seat: 2, color: 'Blue', kind: 'bot', who: ['Medium bot/'], stat: '', label: 'Blue: Medium bot' },
         { seat: 3, color: 'Black', kind: 'person', who: ['Priya/nm'], stat: 'Opening the game…', statCls: 'pstat wait', label: 'Black: Priya' }
     ], play: [0, 1, 2, 3],
     top: { busy: true, ro: true },
-    notes: { invite: 'New players cannot join while the game opens.', slots: 'The match begins as soon as all of you are in the game.', teams: FREE, teamsWarn: false },
-    side: side({ mapDisabled: true, startDisabled: true, startBusy: true, startLabel: 'Getting ready…', plan: 'Opening the game for everybody. The match begins as soon as all of you are in.', planShort: 'Opening the game for everybody' })
+    side: side({ mapDisabled: true, startDisabled: true, startBusy: true, startLabel: 'Getting ready…', ...ALL_IN })
 });
 // picture 13b: the same on Sam's phone
 expectView('picture 13b (START pressed, a player)', view(S13b), {
     cards: [
-        { seat: 0, color: 'Green', kind: 'person', who: ['Juniper/nm', 'Host/you'], stat: 'In the game', statCls: 'pstat in', label: 'Green: Juniper, host' },
+        { seat: 0, color: 'Green', kind: 'person', who: ['Juniper/nm', 'Host/htag'], stat: 'In the game', statCls: 'pstat in', label: 'Green: Juniper, host' },
         { seat: 1, color: 'Red', kind: 'person', who: ['Sam/nm', 'You/you'], stat: 'Opening the game…', statCls: 'pstat wait', label: 'Red: Sam, you' },
-        { seat: 2, color: 'Blue', kind: 'bot', who: ['Medium bot/'], stat: 'Computer player', label: 'Blue: Medium bot' },
+        { seat: 2, color: 'Blue', kind: 'bot', who: ['Medium bot/'], stat: '', label: 'Blue: Medium bot' },
         { seat: 3, color: 'Black', kind: 'person', who: ['Priya/nm'], stat: 'Opening the game…', statCls: 'pstat wait', label: 'Black: Priya' }
     ], play: [0, 1, 2, 3],
     top: { heading: 'Juniper’s room', guest: true, busy: true, ro: true },
-    notes: { invite: 'New players cannot join while the game opens.', slots: 'The match begins as soon as all of you are in the game.', teams: '', teamsWarn: false },
-    side: side({ mapDisabled: true, startDisabled: true, startBusy: true, startLabel: 'Getting ready…', plan: 'Juniper pressed START. Opening the game for everybody. The match begins as soon as all of you are in.', planShort: 'Juniper pressed START' })
+    side: side({ mapDisabled: true, startDisabled: true, startBusy: true, startLabel: 'Getting ready…', status: 'Juniper pressed START. ' + ALL_IN.status })
 });
 same('START is pressed: a pair that is in the room shows as read-only tabs on the host\'s frozen cards, too', view(mk([P('Juniper'), P('Sam'), O, P('Priya')], { plan: [0, 0, 2, 0], starting: true, teamA: 0, teamB: 2 }), { sides: [1, 0, 1, 0] }).cards.map((c) => c.tab), ['Team 1', 'Team 2', 'Team 1', 'Team 2']);
 // picture 15b: the connection dropped (the host's screen): the room goes grey and read-only, START says Reconnecting
 expectView('picture 15b (the connection is lost)', view(S14, { offline: 'lost' }), {
     cards: [
-        { seat: 0, color: 'Green', kind: 'person', who: ['Juniper/nm', 'You/you'], stat: 'Host. You start the match.', ready: 'chip:on', label: 'Green: Juniper, you, host' },
-        { seat: 1, color: 'Red', kind: 'person', who: ['Sam/nm'], stat: 'In the room', ready: 'chip:on', label: 'Red: Sam' },
-        { seat: 2, color: 'Blue', kind: 'bot', who: ['Medium bot/'], stat: 'Computer player', ready: 'chip:on:bot', label: 'Blue: Medium bot' },
-        { seat: 3, color: 'Black', kind: 'person', who: ['Priya/nm'], stat: 'In the room', ready: 'chip:on', label: 'Black: Priya' }
+        { seat: 0, color: 'Green', kind: 'person', who: ['Juniper/nm', 'You/you', 'Host/htag'], stat: '', ready: 'chip:on', label: 'Green: Juniper, you, host' },
+        { seat: 1, color: 'Red', kind: 'person', who: ['Sam/nm'], stat: '', ready: 'chip:on', label: 'Red: Sam' },
+        { seat: 2, color: 'Blue', kind: 'bot', who: ['Medium bot/'], stat: '', ready: 'chip:on:bot', label: 'Blue: Medium bot' },
+        { seat: 3, color: 'Black', kind: 'person', who: ['Priya/nm'], stat: '', ready: 'chip:on', label: 'Black: Priya' }
     ], play: [0, 1, 2, 3],
     top: { ro: true, offline: 'lost' },
-    notes: { invite: NOTE_INVITE, slots: 'Your color is kept for a minute while the page gets you back in.', teams: FREE, teamsWarn: false },
-    side: side({ mapDisabled: true, startDisabled: true, startLabel: 'Reconnecting…', plan: 'START comes back as soon as you are in.', planShort: 'Getting you back in' })
+    side: side({ mapDisabled: true, startDisabled: true, startLabel: 'Reconnecting…', status: 'START comes back as soon as you are in.', statusTone: 'warn' })
 });
 same('the connection is lost on a player\'s screen: START says Reconnecting', view(S4, { offline: 'lost' }).side.startLabel, 'Reconnecting…');
 // picture 16: the page that waits for a name (a room of nobody: four open colors, nothing to press)
 {
     const blank = R.modelOf({ slots: ALL.map(() => ({ state: 0, name: '', rtt: 0, platform: 0 })), plan: [0, 0, 0, 0], map: 'TREASURE.LVL', you: 0, leader: 0, teamA: 255, teamB: 255, inGame: 0, starting: false });
     const v = R.viewOf(blank, ctx({ offline: 'join' }));
-    same('picture 16 (joining a room): four open colors, nothing to press, no names, START off',
-        [v.heading, v.cards.map((c) => [c.kind, c.who.map((w) => w.text), c.stat, c.grip, c.mode, !!c.teams, c.remove]), v.notes, v.side.startLabel, v.side.startDisabled, v.side.mapDisabled, v.side.plan, v.side.planShort],
-        ['Joining a room', ALL.map(() => ['open', ['Open'], 'Takes the next player who joins.', false, '', false, false]), { invite: NOTE_INVITE, slots: '', teams: '', teamsWarn: false }, 'START!', true, true, '', '']);
+    same('picture 16 (joining a room): four open colors, nothing to press, no names, START off, no line',
+        [v.heading, v.cards.map((c) => [c.kind, c.who.map((w) => w.text), c.stat, c.grip, c.mode, !!c.teams, c.remove]), v.side.startLabel, v.side.startDisabled, v.side.mapDisabled, v.side.status],
+        ['Joining a room', ALL.map(() => ['open', ['Open'], '', false, '', false, false]), 'START!', true, true, '']);
     const none = R.viewOf(blank, ctx({ offline: 'none' }));
-    same('a page with no room (the server refused, or cannot be reached): no line of its own, START off, "No room yet"', [none.heading, none.notes.slots, none.side.startLabel, none.side.startDisabled, none.side.plan, none.side.planShort], ['Your room', '', 'START!', true, 'There is no room yet.', 'No room yet']);
+    same('a page with no room (the server refused, or cannot be reached): START off and the line says that there is no room yet', [none.heading, none.side.startLabel, none.side.startDisabled, none.side.status], ['Your room', 'START!', true, 'There is no room yet.']);
 }
 // picture 17: the host's Remove buttons and the question
 {
@@ -759,27 +742,25 @@ check('no card has a pencil: nobody types a name on the web', [view(S14), view(S
 // the grips (the dots: drag a player onto another color) and the drop-downs are the host's, while the room is open
 same('only the host of an open room can drag (grips) and set the colors (drop-downs): a player, START, a lost link have none', [view(S2), view(S4), view(S13), view(S2, { offline: 'lost' }), view(S2, { offline: 'none' })].map((v) => [v.cards.filter((c) => c.grip).length, v.cards.filter((c) => c.mode).length]), [[4, 2], [0, 0], [0, 0], [0, 0], [0, 0]]);
 
-// ---- the map's side: who plays and what an open color does ----
+// ---- the line under START: who is in, and what an open color does ----
 [
-    // [label, room, context, the line under START, the short line (a phone)]
-    ['alone, three colors open (picture 1)', S1, {}, 'A game for one. Red, Blue and Black are open and stay empty unless a player joins first.', 'You · Treasure · 3 open'],
-    ['alone, two open (one is Nobody)', mk([P('Juniper'), O, O, O], { plan: [0, 0, 4, 0] }), {}, 'A game for one. Red and Black are open and stay empty unless a player joins first.', 'You · Treasure · 2 open'],
-    ['alone, one open', mk([P('Juniper'), O, O, O], { plan: [0, 4, 4, 0] }), {}, 'A game for one. Black is open and stays empty unless a player joins first.', 'You · Treasure · 1 open'],
-    ['alone, nobody else may come', mk([P('Juniper'), O, O, O], { plan: [0, 4, 4, 4] }), {}, 'A game for one: only your colony is on the map.', 'You · Treasure'],
-    ['you and an Easy bot: an Easy, never a Easy', mk([P('Juniper'), O, O, O], { plan: [0, 1, 0, 4] }), {}, 'You and an Easy bot play on Treasure. Blue is open and stays empty unless a player joins first.', 'You and Easy bot · Treasure · 1 open'],
-    ['a Hard bot and a Medium bot', mk([P('Juniper'), O, O, O], { plan: [0, 3, 2, 4] }), {}, 'You, a Hard bot and a Medium bot play on Treasure.', 'You, Hard bot and Medium bot · Treasure'],
-    ['another map, two open', mk([P('Juniper'), P('Sam'), O, O], { map: 'ISLANDS.LVL' }), {}, 'You and Sam play on Islands. Blue and Black are open and stay empty unless a player joins first.', 'You and Sam · Islands · 2 open'],
-    ['the room has no map yet: Treasure, the default', mk([P('Juniper'), P('Sam'), P('Priya'), P('Leo')], { map: '' }), {}, 'You, Sam, Priya and Leo play on Treasure.', 'You, Sam, Priya and Leo · Treasure'],
-    ['a player\'s screen: the host starts it (no line about open colors)', mk([P('Juniper'), P('Sam'), O, O], { you: 1 }), {}, 'Juniper starts the match when everybody is in. Juniper and you play on Treasure.', 'Juniper starts the match'],
-    ['a player\'s screen, a room of four', mk([P('Juniper'), P('Sam'), P('Priya'), P('Leo')], { you: 2 }), {}, 'Juniper starts the match when everybody is in. Juniper, Sam, you and Leo play on Treasure.', 'Juniper starts the match'],
-    ['the host pressed START (a player\'s screen)', mk([P('Juniper'), P('Sam'), O, O], { you: 1, starting: true }), {}, 'Juniper pressed START. Opening the game for everybody. The match begins as soon as all of you are in.', 'Juniper pressed START'],
-    ['the connection is lost, a player\'s screen', mk([P('Juniper'), P('Sam'), O, O], { you: 1 }), { offline: 'lost' }, 'START comes back as soon as you are in.', 'Getting you back in'],
-    ['no room', S1, { offline: 'none' }, 'There is no room yet.', 'No room yet'],
-    ['joining a room', S1, { offline: 'join' }, '', '']
-].forEach(([label, room, o, plan, short]) => {
-    const v = view(room, o);
-    same('the map\'s side, ' + label + ': the line under START', v.side.plan, plan);
-    same('the map\'s side, ' + label + ': the short line', v.side.planShort, short);
+    // [label, room, context, the line under START]
+    ['alone, three colors open (picture 1)', S1, {}, '1 of 4 in. Open colors stay empty if nobody joins.'],
+    ['alone, two open (one is closed)', mk([P('Juniper'), O, O, O], { plan: [0, 0, 4, 0] }), {}, '1 of 3 in. Open colors stay empty if nobody joins.'],
+    ['alone, one open', mk([P('Juniper'), O, O, O], { plan: [0, 4, 4, 0] }), {}, '1 of 2 in. Open colors stay empty if nobody joins.'],
+    ['alone, nobody else may come: a game for one', mk([P('Juniper'), O, O, O], { plan: [0, 4, 4, 4] }), {}, 'A game for one.'],
+    ['you and an Easy bot', mk([P('Juniper'), O, O, O], { plan: [0, 1, 0, 4] }), {}, '2 of 3 in. Open colors stay empty if nobody joins.'],
+    ['a Hard bot and a Medium bot: three play, nothing is open, the teams are told instead', mk([P('Juniper'), O, O, O], { plan: [0, 3, 2, 4] }), {}, '3 of 3 in. ' + FREE],
+    ['another person who has not said Ready: START waits for them', mk([P('Juniper'), P('Sam'), O, O], { map: 'ISLANDS.LVL' }), {}, 'Waiting for Sam to ready up'],
+    ['three persons who have not: counted', mk([P('Juniper'), P('Sam'), P('Priya'), P('Leo')], { map: '' }), {}, 'Waiting for 3 players to ready up'],
+    ['a player\'s screen: the host starts it', mk([P('Juniper'), P('Sam'), O, O], { you: 1 }), {}, 'Juniper starts the match.'],
+    ['a player\'s screen, a room of four', mk([P('Juniper'), P('Sam'), P('Priya'), P('Leo')], { you: 2 }), {}, 'Juniper starts the match.'],
+    ['the host pressed START (a player\'s screen)', mk([P('Juniper'), P('Sam'), O, O], { you: 1, starting: true }), {}, 'Juniper pressed START. Opening the game for everybody. The match begins as soon as all of you are in.'],
+    ['the connection is lost, a player\'s screen', mk([P('Juniper'), P('Sam'), O, O], { you: 1 }), { offline: 'lost' }, 'START comes back as soon as you are in.'],
+    ['no room', S1, { offline: 'none' }, 'There is no room yet.'],
+    ['joining a room', S1, { offline: 'join' }, '']
+].forEach(([label, room, o, status]) => {
+    same('the line under START, ' + label, view(room, o).side.status, status);
 });
 R.MAPS.forEach((m) => {
     const s = view(mk([P('Juniper'), O, O, O], { map: m.file })).side;
@@ -791,12 +772,10 @@ R.MAPS.forEach((m) => {
     same('a map of the players has no key in the model but keeps its file', [model(room).map, model(room).mapFile], ['', 'Bomb Island.lvl']);
     const bare = view(room).side;
     same('the side of a map of the players shows its file name without the ending while nothing else is known', [bare.mapKey, bare.mapName, bare.mapInfo, bare.mapFile, bare.mapThumb], ['', 'Bomb Island', 'A map of the players', 'Bomb Island.lvl', '']);
-    same('alone on a map of the players, the line under START is the same as for an original: a game for one (nobody has to add a computer player)', [bare.plan, bare.planShort], ['A game for one. Red, Blue and Black are open and stay empty unless a player joins first.', 'You · Bomb Island · 3 open']);
-    same('and it is the line of an original alone, word for word, apart from the map\'s name', [bare.plan, bare.planShort], [view(mk([P('Juniper'), O, O, O], { map: 'TREASURE.LVL' })).side.plan, view(mk([P('Juniper'), O, O, O], { map: 'TREASURE.LVL' })).side.planShort.replace('Treasure', 'Bomb Island')]);
+    same('alone on a map of the players, the line under START is the line of an original alone (nobody has to add a computer player)', bare.status, view(mk([P('Juniper'), O, O, O], { map: 'TREASURE.LVL' })).side.status);
     check('START is on for a person alone on a map of the players, and the page plays it as a game for one', !bare.startDisabled && R.startsAlone(model(room)));
     const withBot = view(mk([P('Juniper'), O, O, O], { map: 'Bomb Island.lvl', plan: [0, 2, 0, 0] })).side;
-    check('with a computer player it names the map as ever', /play on Bomb Island\./.test(withBot.plan) && /Bomb Island/.test(withBot.planShort), withBot.plan);
-    check('an original alone is still a game for one', /^A game for one/.test(view(mk([P('Juniper'), O, O, O], { map: 'TREASURE.LVL' })).side.plan));
+    same('with a computer player it counts it', withBot.status, '2 of 4 in. Open colors stay empty if nobody joins.');
     const known = R.sideView(model(room), Object.assign(ctx(), { community: (f) => (f === 'Bomb Island.lvl' ? { name: 'Bomb Island', info: 'by perfect_chaos (10 min)', thumb: '/maps/previews/Bomb%20Island.webp' } : null) }), R.playing(model(room)));
     same('the side of a map of the players with the list known', [known.mapName, known.mapInfo, known.mapThumb], ['Bomb Island', 'by perfect_chaos (10 min)', '/maps/previews/Bomb%20Island.webp']);
     check('an original has no mapFile in its side', view(mk([P('Juniper'), O, O, O], { map: 'TREASURE.LVL' })).side.mapFile === undefined);
@@ -812,38 +791,50 @@ R.MAPS.forEach((m) => {
         R.communityName('Popcorn Remix~test-a1b2c3d4.lvl'), R.communityName('!!!!!!~Water Maze~.lvl'), R.communityName('Popcorn ~test-a1b2c3d4 ~test-0badf00d.lvl')],
         ['Popcorn Remix', 'Popcorn Remix', 'Popcorn Remix ~test-a1b2c3d', 'Popcorn Remix ~test-a1b2c3d4e', 'Popcorn Remix~test-a1b2c3d4', '!!!!!!~Water Maze~', 'Popcorn ~test-a1b2c3d4']);
 }
+{
+    const NONE = { text: '', ok: false }, line = (text, ok) => ({ text: text, ok: ok });
+    const st = (room, o, play, away, host, ready, missing) => { const m = model(room); return R.statusOf(m, ctx(o), play || R.playing(m), away || false, host || 'Juniper', ready || NONE, missing || ''); };
+    same('statusOf: what matters most comes first: START on its way, no room, a color that was tapped, a refusal, a person who is not back, whose Ready START waits for, then who is in',
+        [st(mk([P('Juniper'), P('Sam'), O, O], { starting: true }), { picked: 1, refusal: 'No.' }, null, false, 'Juniper', line('Waiting for Sam to ready up', false), 'START waits.').text.indexOf('Opening the game'),
+            st(S2, { picked: 1, refusal: 'No.' }, null, 'none').text, st(S2, { picked: 1, refusal: 'No.' }).text.indexOf('Now tap'), st(S2, { refusal: 'No.' }, null, false, 'Juniper', line('Waiting for Sam to ready up', false), 'START waits.').text,
+            st(S2, {}, null, false, 'Juniper', line('Waiting for Sam to ready up', false), 'START waits.').text, st(S2, {}, null, false, 'Juniper', line('Waiting for Sam to ready up', false)).text, st(S1, {}).text],
+        [0, 'There is no room yet.', 0, 'No.', 'START waits.', 'Waiting for Sam to ready up', '1 of 4 in. Open colors stay empty if nobody joins.']);
+    same('statusOf: a player is told who starts, whatever is waited for, and only the host is told a refusal or asked to tap a color', [st(S4, { picked: 1, refusal: 'No.' }, null, false, 'Juniper', line('Waiting for you to ready up', false), 'START waits.').text, st(S4, {}, null, 'lost').tone], ['Juniper starts the match. Teams: Green + Black against Red + Blue.', 'warn']);
+}
+same('the Rules button says who can join, and Fog while it is on', [view(S1).rules.state, view(mk([P('Juniper'), O, O, O], { public: true })).rules.state, view(mk([P('Juniper'), O, O, O], { public: true, fog: true })).rules.state, view(mk([P('Juniper'), O, O, O], { fog: true })).rules.state], ['Invite only', 'Public', 'Public \u00b7 Fog', 'Invite only \u00b7 Fog']);
+same('a player reads a color that the host closed as Closed, an open one as Open, a computer player by its level', view(mk([P('Juniper'), P('Sam'), O, O], { you: 1, plan: [0, 0, 1, 4] })).cards.map((c) => c.who.map((w) => w.text).join('+')), ['Juniper+Host', 'Sam+You', 'Easy bot', 'Closed']);
 same('the map\'s side asked directly is the same as inside viewOf', R.sideView(model(S2), ctx(), R.playing(model(S2))), view(S2).side);
-same('START waits for the host: "Waiting for" and the name of the host', [view(S4).side.startLabel, view(mk([P('Zed'), P('Sam'), O, O], { you: 1 })).side.startLabel], ['Waiting for Juniper', 'Waiting for Zed']);
+same('a player whom START does not ask (a game of the desktop) has the big button off: "Waiting for" and the name of the host', [view(mk([P('Juniper'), P('Sam'), O, O], { you: 1, inGame: 2, platforms: [0, 1, 0, 0] })).side.startLabel, view(mk([P('Zed'), P('Sam'), O, O], { you: 1, inGame: 2, platforms: [0, 1, 0, 0] })).side.startLabel], ['Waiting for Juniper', 'Waiting for Zed']);
 same('START of a page that has no room is off (like the map)', [view(S1, { offline: 'none' }).side.startDisabled, view(S1, { offline: 'none' }).side.mapDisabled, view(S1, { offline: 'none' }).side.startBusy], [true, true, false]);
 
 // ---- ready up (protocol 27, docs/READY_UP.md): the marks on the cards, the switch of one's own, and the line under START ----
 {
-    const line = (room, o) => { const v = view(room, o); return [v.side.readyLine, v.side.readyOk, v.side.startDisabled, v.side.startLabel]; };
+    const line = (room, o) => { const v = view(room, o); return [v.side.status, v.side.statusTone === 'ok', v.side.startDisabled, v.side.startLabel]; };
     const four = (ready, you) => mk([P('Juniper'), P('Sam'), P('Priya'), P('Leo')], { you: you === undefined ? 0 : you, leader: 0, ready: ready });
     // the host's screen: START waits for whoever has not said it, by name (one or two), by number (three), and says so when everybody has
     same('the host: nobody is ready, three persons are asked: START is off, the line counts them', line(four(0)), ['Waiting for 3 players to ready up', false, true, 'START!']);
     same('the host: Priya and Leo are not', line(four(2)), ['Waiting for Priya and Leo to ready up', false, true, 'START!']);
     same('the host: only Leo is not', line(four(6)), ['Waiting for Leo to ready up', false, true, 'START!']);
     same('the host: every person has: START is on and the line says so', line(four(14)), ['Everyone is ready.', true, false, 'START!']);
-    same('the host alone with a computer player (nobody is asked): no line, START is on', line(mk([P('Juniper'), O, [E, 'Pip (bot, Hard)'], O], { plan: [0, 0, 3, 0] })), ['', false, false, 'START!']);
-    same('the host alone: no line, START is on', line(S1), ['', false, false, 'START!']);
+    same('the host alone with a computer player (nobody is asked): the count line, START is on', line(mk([P('Juniper'), O, [E, 'Pip (bot, Hard)'], O], { plan: [0, 0, 3, 0] })), ['2 of 4 in. Open colors stay empty if nobody joins.', false, false, 'START!']);
+    same('the host alone: the count line, START is on', line(S1), ['1 of 4 in. Open colors stay empty if nobody joins.', false, false, 'START!']);
     // the cards of the host's screen: the host and the computer player show Ready by themselves, the others their mark
     const hv = view(four(6)).cards;
     same('the host\'s screen: the marks of the cards (the host and the bot show Ready, Sam and Priya said it, Leo did not)', hv.map((c) => c.ready && [c.kind, c.ready.kind, c.ready.on]),
         [['person', 'chip', true], ['person', 'chip', true], ['person', 'chip', true], ['person', 'chip', false]]);
     // a guest's screen: the person's own card has the switch, the others the marks; START is the host's
     const gv = (ready) => view(four(ready, 1));
-    same('a guest who has not pressed Ready, and nobody else is left: a switch that is off on their own card, START is off and the line says "Waiting for you to ready up"', [gv(12).cards[1].ready, line(four(12, 1))],
-        [{ kind: 'button', on: false }, ['Waiting for you to ready up', false, true, 'Waiting for Juniper']]);
-    same('a guest who has: the switch is on, the line names whoever is left (one, then several)', [gv(2).cards[1].ready, line(four(2, 1))[0], line(four(2, 1))[1]], [{ kind: 'button', on: true }, 'Waiting for Priya and Leo to ready up', false]);
-    same('... and when everybody has, the guest is told so (START is still the host\'s)', line(four(14, 1)), ['Everyone is ready.', true, true, 'Waiting for Juniper']);
-    same('a guest who has not and one other: both are named, the guest first, as "you"', [line(four(8, 1))[0], line(four(4, 1))[0], line(four(0, 1))[0]], ['Waiting for you and Priya to ready up', 'Waiting for you and Leo to ready up', 'Waiting for you and 2 others to ready up']);
+    same('a guest who has not pressed Ready: a mark that is off on their own card, and the big button is their Ready (on, not pressed); the line says who starts', [gv(12).cards[1].ready, line(four(12, 1)), gv(12).side.startPressed, gv(12).side.startDisabled],
+        [{ kind: 'button', on: false }, ['Juniper starts the match.', false, false, 'READY'], false, false]);
+    same('a guest who has: the mark is on and the big button is pressed', [gv(2).cards[1].ready, gv(2).side.startPressed, gv(2).side.startLabel], [{ kind: 'button', on: true }, true, 'READY']);
+    same('a guest is never told whom the others wait for (the big button is theirs, START is the host\'s): the line is the same whoever is ready', [14, 8, 4, 0].map((m) => line(four(m, 1))[0]), ['Juniper starts the match.', 'Juniper starts the match.', 'Juniper starts the match.', 'Juniper starts the match.']);
+    same('a guest whom nothing asks (a game of the desktop) has the big button off, as the host\'s START is theirs to wait for', (() => { const v = view(mk([P('Juniper'), P('Sam'), O, O], { you: 1, inGame: 2, platforms: [0, 1, 0, 0] })); return [v.side.startDisabled, v.side.startLabel, v.side.startPressed]; })(), [true, 'Waiting for Juniper', null]);
     same('the switch is off (nothing to press) while the page has no link', view(four(0, 1), { offline: 'lost' }).cards[1].ready, { kind: 'button', on: false, off: true });
     // the others: no marks while START waits, a game needs none, a person on the results screen has none, and the room that is joined says nothing
-    same('START is pressed: no card has a mark or a switch and the line is empty', [view(mk([P('Juniper'), P('Sam'), O, O], { starting: true, ready: 2 })).cards.map((c) => c.ready), view(mk([P('Juniper'), P('Sam'), O, O], { starting: true, ready: 2 })).side.readyLine], [[null, null, null, null], '']);
-    same('a game of the desktop in the room (the room counts the seat as a game; it says its platform): a mark that is always on, nobody is asked, so no line', [view(mk([P('Juniper'), P('Sam'), O, O], { inGame: 2, platforms: [0, 1, 0, 0] })).cards[1].ready, line(mk([P('Juniper'), P('Sam'), O, O], { inGame: 2, platforms: [0, 1, 0, 0] }))[0]], [{ kind: 'chip', on: true, title: 'Joined from the game: no Ready needed' }, '']);
-    same('the room that has no link yet: no line', line(S2, { offline: 'none' })[0], '');
-    same('the words of ready up are the table of the page', [R.READY.button, R.READY.buttonOn, R.READY.chip, R.READY.chipOff, R.READY.allReady], ['Ready up', 'Ready', 'Ready', 'Not ready', 'Everyone is ready.']);
+    same('START is pressed: no card has a mark or a switch and the line is empty', [view(mk([P('Juniper'), P('Sam'), O, O], { starting: true, ready: 2 })).cards.map((c) => c.ready), view(mk([P('Juniper'), P('Sam'), O, O], { starting: true, ready: 2 })).side.status.indexOf('Waiting for')], [[null, null, null, null], -1]);
+    same('a game of the desktop in the room (the room counts the seat as a game; it says its platform): a mark that is always on, nobody is asked, so no line', [view(mk([P('Juniper'), P('Sam'), O, O], { inGame: 2, platforms: [0, 1, 0, 0] })).cards[1].ready, line(mk([P('Juniper'), P('Sam'), O, O], { inGame: 2, platforms: [0, 1, 0, 0] }))[0]], [{ kind: 'chip', on: true, title: 'Joined from the game: no Ready needed' }, '2 of 4 in. Open colors stay empty if nobody joins.']);
+    same('the room that has no link yet: the line says so', line(S2, { offline: 'none' })[0], 'There is no room yet.');
+    same('the words of ready up are the table of the page', [R.READY.big, R.READY.chip, R.READY.chipOff, R.READY.allReady], ['READY', 'Ready', 'Not ready', 'Everyone is ready.']);
 }
 // ---- picture R2: the lobby after the match (the rematch: web/front/rematch.js, docs/SERVER.md "Lobby rooms"). The server opened the room again with a seat reserved for each person of the match; a reserved
 // seat is a person whom the room counts as a game before START (the bit of Room.in_game): their game page shows the results. The page that came back from the match knows its people (ctx.back). ----
@@ -852,48 +843,47 @@ same('START of a page that has no room is off (like the map)', [view(S1, { offli
     const R2 = mk([P('Maple'), P('Sam'), P('Juniper'), P('Pip')], { you: 0, leader: 0, inGame: 4, ready: 10 });                  // Maple (Green) leads, Sam and Pip are back, Juniper (Blue) is still on the results screen
     const NOTE_R2 = 'START waits for Juniper. You can wait, or press Remove on their color to start without them.';
     const backIn = { stat: 'Back in the room', statCls: 'pstat back' }, onResults = { stat: 'Still on the results screen…', statCls: 'pstat away' };
-    const guestOf = (seat, name, extra) => Object.assign({ seat: seat, color: seatName[seat], kind: 'person', who: [name + '/nm'], stat: 'In the room', ready: 'chip:on', remove: true, grip: true, label: seatName[seat] + ': ' + name, teams: '-1 -2' }, extra || {});
+    const guestOf = (seat, name, extra) => Object.assign({ seat: seat, color: seatName[seat], kind: 'person', who: [name + '/nm'], stat: '', ready: 'chip:on', remove: true, grip: true, label: seatName[seat] + ': ' + name, teams: '-1 -2' }, extra || {});
     const juniper = (extra) => { const c = guestOf(2, 'Juniper', extra); delete c.ready; return c; };       // (a person on the results screen has no Ready: they are not asked, and their seat waits for their return)
     expectView('picture R2 (the host is back, Juniper is still on the results screen)', view(R2, { back: BACK }), {
         cards: [youHost(0, { teams: '-1 -2' }, 'Maple'), guestOf(1, 'Sam', backIn), juniper(onResults), guestOf(3, 'Pip', backIn)], play: [0, 1, 2, 3],
-        notes: { invite: NOTE_INVITE, slots: NOTE_DRAG, teams: FREE, teamsWarn: false },
-        side: side({ ...EVERYONE, plan: 'You, Sam, Juniper and Pip play on Treasure.', planShort: 'You, Sam, Juniper and Pip · Treasure', note: NOTE_R2 })
+        side: side({ status: NOTE_R2, statusTone: 'warn' })
     });
     same('picture R2: Juniper is the one who is not back (a press of START goes to the room, which says whom it waits for: the strip "notback")', R.notBack(model(R2), ctx({ back: BACK })), [2]);
     const two = mk([P('Maple'), P('Sam'), P('Juniper'), P('Pip')], { you: 0, leader: 0, inGame: 12 });
-    same('two who are not back: both are named, the note says "their colors"', [R.notBack(model(two), ctx({ back: BACK })), view(two, { back: BACK }).side.note],
+    same('two who are not back: both are named, the note says "their colors"', [R.notBack(model(two), ctx({ back: BACK })), view(two, { back: BACK }).side.status],
         [[2, 3], 'START waits for Juniper and Pip. You can wait, or press Remove on their colors to start without them.']);
     same('startNote of nobody, one, two and three names', [R.startNote([]), R.startNote(['A']), R.startNote(['A', 'B']), R.startNote(['A', 'B', 'C'])], ['',
         'START waits for A. You can wait, or press Remove on their color to start without them.', 'START waits for A and B. You can wait, or press Remove on their colors to start without them.',
         'START waits for A, B and C. You can wait, or press Remove on their colors to start without them.']);
     const all = mk([P('Maple'), P('Sam'), P('Juniper'), P('Pip')], { you: 0, leader: 0, inGame: 0 });
-    same('everybody is back: every other person is "Back in the room", nothing is waited for', [view(all, { back: BACK }).cards.map((c) => c.stat), view(all, { back: BACK }).side.note, R.notBack(model(all), ctx({ back: BACK }))],
-        [['Host. You start the match.', 'Back in the room', 'Back in the room', 'Back in the room'], '', []]);
+    same('everybody is back: every other person is "Back in the room", nothing is waited for', [view(all, { back: BACK }).cards.map((c) => c.stat), view(all, { back: BACK }).side.status, R.notBack(model(all), ctx({ back: BACK }))],
+        [['', 'Back in the room', 'Back in the room', 'Back in the room'], 'Waiting for 3 players to ready up', []]);
     // Sam's screen (a player): the host's card is the host's, his own is his; Juniper is still on the results screen; a player is told nothing under START and START is the host's
     const sams = mk([P('Maple'), P('Sam'), P('Juniper'), P('Pip')], { you: 1, leader: 0, inGame: 4 });
     same('picture R2 on Sam\'s screen: the host, Sam himself, Juniper on the results screen, Pip back', view(sams, { back: BACK }).cards.map((c) => [c.stat, c.statCls]),
-        [['Starts the match.', 'pstat'], ['Waiting for the host to start.', 'pstat'], ['Still on the results screen…', 'pstat away'], ['Back in the room', 'pstat back']]);
-    same('... a player has no note under START (START is the host\'s)', view(sams, { back: BACK }).side.note, '');
+        [['', 'pstat'], ['', 'pstat'], ['Still on the results screen…', 'pstat away'], ['Back in the room', 'pstat back']]);
+    same('... a player has no note under START (START is the host\'s): the line says who starts', view(sams, { back: BACK }).side.status, 'Maple starts the match.');
     // Sam came back first and leads until Maple, the host of the match, is back (the room's rule: the earliest of the match who is back leads)
     const first = mk([P('Maple'), P('Sam'), O, O], { you: 1, leader: 1, inGame: 1 });
-    same('the first one back leads: Maple (the host of the match) is still on the results screen, START waits for her', [view(first, { back: BACK }).cards.map((c) => c.stat), view(first, { back: BACK }).side.note],
-        [['Still on the results screen…', 'Host. You start the match.', 'Takes the next player who joins.', 'Takes the next player who joins.'], 'START waits for Maple. You can wait, or press Remove on their color to start without them.']);
+    same('the first one back leads: Maple (the host of the match) is still on the results screen, START waits for her', [view(first, { back: BACK }).cards.map((c) => c.stat), view(first, { back: BACK }).side.status],
+        [['Still on the results screen…', '', '', ''], 'START waits for Maple. You can wait, or press Remove on their color to start without them.']);
     // what is not the match's: a page that did not come back from it, a person who was not in it, START pressed, no link
-    same('a page that did not come back from the match (no ctx.back) shows the room as ever: no "back", no note (the room says whom START waits for)', [view(R2).cards.map(show), view(R2).side.note, R.notBack(model(R2), ctx())],
-        [[youHost(0, { teams: '-1 -2' }, 'Maple'), guestOf(1, 'Sam'), juniper(), guestOf(3, 'Pip')], '', []]);
+    same('a page that did not come back from the match (no ctx.back) shows the room as ever: no "back", no note (the room says whom START waits for)', [view(R2).cards.map(show), view(R2).side.status, R.notBack(model(R2), ctx())],
+        [[youHost(0, { teams: '-1 -2' }, 'Maple'), guestOf(1, 'Sam'), juniper(), guestOf(3, 'Pip')], 'Everyone is ready.', []]);
     const leo = mk([P('Maple'), P('Sam'), P('Juniper'), P('Leo')], { you: 0, leader: 0, inGame: 12 });
     same('a person who was not in the match (Leo, who joined after it) is "In the room" even when the room counts their seat as a game (a game of the desktop): only the match\'s people are waited for',
-        [view(leo, { back: BACK }).cards.map((c) => c.stat), R.notBack(model(leo), ctx({ back: BACK })), view(leo, { back: BACK }).side.note], [['Host. You start the match.', 'Back in the room', 'Still on the results screen…', 'In the room'], [2], NOTE_R2]);
+        [view(leo, { back: BACK }).cards.map((c) => c.stat), R.notBack(model(leo), ctx({ back: BACK })), view(leo, { back: BACK }).side.status], [['', 'Back in the room', 'Still on the results screen…', ''], [2], NOTE_R2]);
     const pressed = mk([P('Maple'), P('Sam'), P('Juniper'), P('Pip')], { you: 0, leader: 0, inGame: 4, starting: true });
-    same('START is pressed (everybody was back): the colors say whose game is open, nothing is waited for', [view(pressed, { back: BACK }).cards.map((c) => c.stat), view(pressed, { back: BACK }).side.note, R.notBack(model(pressed), ctx({ back: BACK }))],
-        [['Opening the game…', 'Opening the game…', 'In the game', 'Opening the game…'], '', []]);
-    same('the link is lost or there is no room: no note under START (START is off)', ['lost', 'none'].map((o) => view(R2, { back: BACK, offline: o }).side.note), ['', '']);
-    same('the page\'s own color is never "back" or "on the results screen", whatever the bit says (the page\'s own bit never counts)', view(mk([P('Maple'), P('Sam'), O, O], { you: 1, leader: 0, inGame: 2 }), { back: BACK }).cards[1].stat, 'Waiting for the host to start.');
+    same('START is pressed (everybody was back): the colors say whose game is open, nothing is waited for', [view(pressed, { back: BACK }).cards.map((c) => c.stat), view(pressed, { back: BACK }).side.status.indexOf('START waits'), R.notBack(model(pressed), ctx({ back: BACK }))],
+        [['Opening the game…', 'Opening the game…', 'In the game', 'Opening the game…'], -1, []]);
+    same('the link is lost or there is no room: no note about who is not back (START is off)', ['lost', 'none'].map((o) => view(R2, { back: BACK, offline: o }).side.status.indexOf('START waits')), [-1, -1]);
+    same('the page\'s own color is never "back" or "on the results screen", whatever the bit says (the page\'s own bit never counts)', view(mk([P('Maple'), P('Sam'), O, O], { you: 1, leader: 0, inGame: 2 }), { back: BACK }).cards[1].stat, '');
     // the server keeps a seat only for a game in a browser (protocol 15's platform byte; a game that did not say is given one too): a game of the desktop of the match (Pip, Windows) joined the room by the
     // code like anybody, so the room counts it as a game and it is back; Juniper's results screen runs in a browser (Linux) and is not back
     const desk = mk([P('Maple'), P('Sam'), P('Juniper'), P('Pip')], { you: 0, leader: 0, inGame: 12, platforms: [0x16, 0x13, 0x13, 0x01] });
-    same('a game of the desktop is back, a game in a browser before START is on the results screen', [view(desk, { back: BACK }).cards.map((c) => c.stat), R.notBack(model(desk), ctx({ back: BACK })), view(desk, { back: BACK }).side.note],
-        [['Host. You start the match.', 'Back in the room', 'Still on the results screen…', 'Back in the room'], [2], NOTE_R2]);
+    same('a game of the desktop is back, a game in a browser before START is on the results screen', [view(desk, { back: BACK }).cards.map((c) => c.stat), R.notBack(model(desk), ctx({ back: BACK })), view(desk, { back: BACK }).side.status],
+        [['', 'Back in the room', 'Still on the results screen…', 'Back in the room'], [2], NOTE_R2]);
     same('modelOf: on the results screen is a person whom the room counts as a game before START, in a browser or not told; not a game of the desktop (Windows, macOS, Linux, Android, iOS, other), not while START waits',
         [model(desk).slots.map((x) => !!x.results), [1, 2, 3, 4, 5, 6].map((os) => !!model(mk([P('A'), P('B'), O, O], { inGame: 2, platforms: [0, os, 0, 0] })).slots[1].results),
             [0, 0x11, 0x14, 0x16].map((p) => !!model(mk([P('A'), P('B'), O, O], { inGame: 2, platforms: [0, p, 0, 0] })).slots[1].results), !!model(mk([P('A'), P('B'), O, O], { inGame: 2, starting: true })).slots[1].results],
@@ -907,8 +897,8 @@ same('START of a page that has no room is off (like the map)', [view(S1, { offli
     const room = mk([P(NAME_A), P(NAME_B), P(NAME_C), O], { you: 1 });
     const v = view(room);
     same('names go through as they are: no markup is made, no letter is changed, nothing is cut', [v.cards[0].who[0].text, v.cards[1].who[0].text, v.cards[2].who[0].text], [NAME_A, NAME_B, NAME_C]);
-    same('... in the heading, the labels and the lines', [v.heading, v.cards[0].label, v.cards[1].label, v.side.startLabel, v.side.plan === NAME_A + ' starts the match when everybody is in. ' + NAME_A + ', you and ' + NAME_C + ' play on Treasure.', v.notes.slots],
-        [NAME_A + '’s room', 'Green: ' + NAME_A + ', host', 'Red: ' + NAME_B + ', you', 'Waiting for ' + NAME_A, true, NAME_A + ' arranges the colors and starts the match.']);
+    same('... in the heading, the labels and the lines', [v.heading, v.cards[0].label, v.cards[1].label, v.side.startLabel, v.side.status],
+        [NAME_A + '’s room', 'Green: ' + NAME_A + ', host', 'Red: ' + NAME_B + ', you', 'READY', NAME_A + ' starts the match.']);
     same('... in the question about a color that is picked', R.viewOf(model(mk([P(NAME_A), P(NAME_B), O, O])), ctx({ picked: 1 })).cards[0].drop, 'Tap to put ' + NAME_B + ' here');
 }
 same('the page does not change the room it is shown or the switches it is given', (() => { const m = model(S5), c = ctx({ sides: [1, 0, 1, 0] }), a = JSON.stringify([m, c]); R.viewOf(m, c); return JSON.stringify([m, c]) === a; })(), true);
@@ -1083,13 +1073,15 @@ for (let i = 0; i < 700; i++) {
         holds('viewOf: a read-only card shows its team as a tab, only when it has one', v.cards.every((c, s) => c.tab === (ro && can && play.indexOf(s) >= 0 && shown[s] ? 'Team ' + shown[s] : '')), Dv);
         holds('viewOf: a person\'s card shows the name as it is, every label starts with the color', v.cards.every((c, s) => (m.slots[s].kind !== 'person' || c.who[0].text === m.slots[s].name) && c.label.indexOf(R.COLORS[s].name + ': ') === 0), Dv);
         holds('viewOf: a card says what a tap does only while a color is picked', v.cards.every((c) => (o.picked >= 0 ? c.drop.indexOf('Tap to put ') === 0 : c.drop === '')), Dv);
-        holds('viewOf: the warning line is the refusal that the page has, in the warning color', v.notes.teamsWarn === (o.refusal !== '') && (o.refusal === '' || v.notes.teams === o.refusal), Dv);
+        holds('viewOf: the line under START is the refusal that the page has, in the warning tone, on the host\'s screen that is not picking a color', ro || o.picked >= 0 || o.refusal === '' || (v.side.status === o.refusal && v.side.statusTone === 'warn'), Dv);
         const unready = m.slots.some((x) => x.kind === 'person' && x.asked && !x.ready) && !m.starting;
         holds('viewOf: START and the map are off for a player, while START waits and without a room; START waits ("Getting ready") only after START', v.side.mapDisabled === ro && v.side.startBusy === m.starting && (v.side.startLabel === 'Getting ready…') === m.starting, Dv);
-        holds('viewOf: START is off for a player, while START waits, without a room and while a person whom it asks has not said Ready (protocol 27), and on for the host of a room in which every person has', v.side.startDisabled === (ro || (unready && !offline)), Dv);
-        holds('viewOf: the line under START is empty while START waits and without a room, or when nobody is asked; else it says whose Ready it waits for, or that everybody is ready', (v.side.readyLine === '') === (m.starting || !!offline || !m.slots.some((x) => x.kind === 'person' && x.asked)) && (v.side.readyOk === (v.side.readyLine === 'Everyone is ready.')) && (!unready || offline || v.side.readyLine.indexOf('Waiting for ') === 0), Dv);
+        const mine = m.slots[m.you], asks = m.guest && !m.starting && !offline && !!mine && mine.kind === 'person' && mine.asked;
+        holds('viewOf: START is off for the host while START waits, without a room and while a person whom it asks has not said Ready (protocol 27), and on for the host of a room in which every person has; a player\'s big button is on only while it is their Ready to say', v.side.startDisabled === (m.guest ? !asks : (m.starting || !!offline || unready)), Dv);
+        holds('viewOf: the host who is waiting for a person (not picking a color, nothing refused, nobody missing from a match) is told whose Ready it waits for, and when everybody has said it, so', m.guest || m.starting || !!offline || o.picked >= 0 || o.refusal !== '' || !m.slots.some((x) => x.kind === 'person' && x.asked) || (unready ? v.side.status.indexOf('Waiting for ') === 0 && v.side.statusTone === '' : v.side.status === 'Everyone is ready.' && v.side.statusTone === 'ok'), Dv);
+        holds('viewOf: a person whom START asks has the big button as their Ready (pressed when they said it), else it is off and says whom it waits for; the host\'s is START', m.guest && !m.starting && !offline ? (m.slots[m.you].asked ? v.side.startLabel === 'READY' && v.side.startPressed === m.slots[m.you].ready && !v.side.startDisabled : v.side.startPressed === null && v.side.startDisabled) : v.side.startPressed === null, Dv);
         holds('viewOf: while START is not pressed the host shows Ready by itself, a computer player is always Ready, a person whom START asks has a switch (their own card) or a mark (the others\'), and a game of another person has a mark; none of them while START waits', v.cards.every((c, s) => { const x = m.slots[s], r = c.ready; if (m.starting) return r === null; if (x.kind === 'bot') return !!r && r.kind === 'chip' && r.on && r.bot === true; if (x.kind !== 'person') return r === null; if (x.leader) return !!r && r.kind === 'chip' && r.on; if (x.asked) return !!r && r.kind === (x.me ? 'button' : 'chip') && r.on === x.ready; return r === null || (r.kind === 'chip' && r.on); }), Dv);
-        holds('viewOf: the lines of the side are text, and there is one unless the page is joining', typeof v.side.plan === 'string' && typeof v.side.planShort === 'string' && (offline === 'join' || (v.side.plan !== '' && v.side.planShort !== '')), Dv);
+        holds('viewOf: the line under START is text, and there is one unless the page is joining', typeof v.side.status === 'string' && (offline === 'join' || v.side.status !== ''), Dv);
         holds('viewOf: the heading is "Joining a room" while joining, the host\'s room for a player, else "Your room"', v.heading === (offline === 'join' ? 'Joining a room' : m.guest ? R.hostName(m) + '’s room' : 'Your room'), Dv);
     }
     // the presses

@@ -115,7 +115,7 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
 // The mark of Ready (protocol 27, docs/READY_UP.md): the START of a leader waits for every person who is not the leader to say it, and the room shows the mark to everybody
 const readyOf = (viewer, who) => { const at = viewer.seatOf(who); return at >= 0 && viewer.room && ((viewer.room.ready >> at) & 1) === 1; };
 // The page of the harness (the real front page) presses the Ready up switch on its own card
-const pressReady = (env) => { const button = env.$('slots').findAll((e) => e.tagName === 'button' && e.hasAttribute('data-ready'))[0]; if (button) button.click(); return !!button; };
+const pressReady = (env) => { const button = env.$('start'), can = !button.disabled && button.getAttribute('aria-pressed') === 'false'; if (can) button.click(); return can; };       // (a guest's big button is their Ready)
 
 (async () => {
     // ---- 1. two pages in one lobby: the code makes the room, and the same link joins it ---------------------------------------------------------------------------------------------------------------
@@ -322,7 +322,7 @@ const pressReady = (env) => { const button = env.$('slots').findAll((e) => e.tag
         A.ws.close();
         await step('the room holds Ada\'s seat: Bea sees her, and she still leads', () => () => names(B) === 'Ada|Bea|-|-' && B.room.leader === 0 && !B.isLeader());
         const back = harness.runLobby('', { 'ants.lobbyseat': note }, { me: login('Ada'), WebSocket: ToTheServer, realTime: true, stayHome: true });
-        await step('the page that opens within a minute takes the seat back: My room is there on Home and the session holds the seat', () => () => !back.home('mine').hidden && !!back.session.data['ants.lobby'] && JSON.parse(back.session.data['ants.lobby']).k === N.hexOf(A.key), 8000);
+        await step('the page that opens within a minute takes the seat back: the page holds the room on Home and the session holds the seat', () => () => back.holdsRoom() && !!back.session.data['ants.lobby'] && JSON.parse(back.session.data['ants.lobby']).k === N.hexOf(A.key), 8000);
         check('... it is Ada\'s seat 0 again and she leads: the room has two people, Bea heard of nobody joining or leaving, no strip, and the note is gone', names(B) === 'Ada|Bea|-|-' && B.room.leader === 0 && B.count('joined') === 0 && B.count('left') === 0 && words(back) === '' && !('ants.lobbyseat' in back.storage.data) && JSON.parse(back.session.data['ants.lobby']).o === 1, names(B) + ' ' + B.count('joined') + ' ' + words(back));
         for (const ws of sockets) { try { ws.close(); } catch (e) { /* closed already */ } }
         sockets.length = 0;
@@ -611,13 +611,13 @@ const pressReady = (env) => { const button = env.$('slots').findAll((e) => e.tag
         const env = harness.runLobby('?room=' + room, {}, { me: login('Bea'), WebSocket: ToTheServer, realTime: true });
         check('a link opens the page on the Room, behind the name card', env.screen() === 'room' && !env.$('name-step').hidden && pageSockets.length === 0);
         env.$('name-step-go').click();
-        await step('the page joins by the link: the real room welcomes it as seat 1 and it waits for Ada', () => () => A.seatOf('Bea') === 1 && env.$('start').textContent === 'Waiting for Ada', 5000);
-        env.roomBar('rhome').click();
+        await step('the page joins by the link: the real room welcomes it as seat 1 and it waits for Ada', () => () => A.seatOf('Bea') === 1 && env.$('start').textContent === 'READY', 5000);
+        env.toggleRoom();
         check('Bea presses Home: Home shows and the room is not touched (one socket, Ada heard nobody leave)', env.screen() === 'home' && pageSockets.length === 1 && A.count('left') === 0);
         check('the leader moves Bea to color 2 and plans for the two of them (no bot to wait for)', A.move(1, 2) === true);
         await step('... Bea is in color 2', () => () => A.seatOf('Bea') === 2);
         check('(the plan)', A.setPlan({ map: '', kinds: [N.PLAN.Open, N.PLAN.Nobody, N.PLAN.Open, N.PLAN.Nobody], teamA: N.NO_TEAM, teamB: N.NO_TEAM }) === true);
-        await step('Home follows what the room says: My room counts the two colors that play of the two that are in the match', () => () => env.home('mine').children[1].textContent === '2/2' && env.home('mine').getAttribute('aria-label') === 'My room, 2 of 2');
+        await step('Home follows what the room says: the page holds the room and its line says who starts', () => () => env.holdsRoom() && env.$('go-status').textContent === 'Ada starts the match.');
         await sleep(2500);
         check('2.5 seconds on Home: the page answered the server\'s pings, and Bea is still in her color (no hold, no drop)', A.count('left') === 0 && A.room.slots[2].state === N.SLOT.Client && A.room.slots[2].name === 'Bea' && pageSockets.length === 1 && env.screen() === 'home');
         check('Bea presses Ready up on her own card (the page is on Home: the room is still the page\'s)', pressReady(env) === true);
@@ -670,7 +670,7 @@ const pressReady = (env) => { const button = env.$('slots').findAll((e) => e.tag
         check('... and the real list says two people', (await listed()).lobbies.find((x) => x.code === room).people === 2);
         const priv = A.root.findAll((n) => String(n.className).split(/\s+/).indexOf('vbtn') !== -1 && n.getAttribute('aria-pressed') === 'false')[0];
         priv.click();
-        await step('the host presses Invite only: the guest\'s chip says so', () => () => B.root.findAll((n) => String(n.className).split(/\s+/).indexOf('vistag') !== -1)[0].textContent === GT.privateRoom, 8000);
+        await step('the host presses Invite only: the guest\'s Rules button says so', () => () => B.$('rules-state').textContent === 'Invite only', 8000);
         check('... and the real list has lost the room', (await listed()).lobbies.every((x) => x.code !== room));
         for (const ws of sockets) { try { ws.close(); } catch (e) { /* closed already */ } }
     });
@@ -730,13 +730,13 @@ const pressReady = (env) => { const button = env.$('slots').findAll((e) => e.tag
         // two: another person in the page's own room: the question, then the Welcome of the other room lets the old one go
         const C = onPage('Qjcee');
         await step('a second page lights Quick join', () => lit(C), 5000);
-        C.home('mine').click();
+        C.makeRoom();
         await step('it makes a room of its own', () => () => C.screen() === 'room' && C.$('code').textContent.length > 0, 8000);
         const own = C.$('code').textContent.replace(' ', '');
         const D = hostOf('Qjdee', own);
         await step('another person joins the room of that page', () => online(D), 5000);
         await step('... and the page sees it', () => () => C.$('slots').textContent.indexOf('Qjdee') !== -1, 8000);
-        C.roomBar('rhome').click();
+        C.toggleRoom();
         await step('Home again, with its list: the room of the first host is there, with a free color', () => () => C.home('games').children[1].textContent === '1', 8000);
         C.home('join').click();
         await step('Quick join asks first ("Leave your room?", "Qjdee is in your room…", the room of the first host with its BEST tag), and nothing is left yet', () => () => cardTitle(C) === 'Leave your room?' && /Qjdee is in your room/.test(inCard(C, 'gcline').textContent) && !!inCard(C, 'gbest') && seats(D) === 2, 8000);
@@ -849,10 +849,10 @@ const pressReady = (env) => { const button = env.$('slots').findAll((e) => e.tag
         await step('Ada makes the room', () => online(A));
         const env = harness.runLobby('?room=' + room, {}, { me: login('Bea'), WebSocket: ToTheServer, realTime: true });
         env.$('name-step-go').click();
-        await step('Bea joins by the link', () => () => A.seatOf('Bea') === 1 && env.$('start').textContent === 'Waiting for Ada', 5000);
-        env.roomBar('rhome').click();
+        await step('Bea joins by the link', () => () => A.seatOf('Bea') === 1 && env.$('start').textContent === 'READY', 5000);
+        env.toggleRoom();
         check('(Bea goes Home, Ada plans for two)', env.screen() === 'home' && A.setPlan({ map: '', kinds: [N.PLAN.Open, N.PLAN.Open, N.PLAN.Nobody, N.PLAN.Nobody], teamA: N.NO_TEAM, teamB: N.NO_TEAM }) === true);
-        await step('... the plan is in (My room says 2/2)', () => () => env.home('mine').children[1].textContent === '2/2');
+        await step('... the plan is in (the line says who starts)', () => () => env.$('go-status').textContent === 'Ada starts the match.');
         check('Bea presses Ready up on her own card', pressReady(env) === true);
         await step('... Ada is shown that Bea is ready', () => () => readyOf(A, 'Bea'));
         check('Ada presses START', A.start() === true);
@@ -863,7 +863,7 @@ const pressReady = (env) => { const button = env.$('slots').findAll((e) => e.tag
         check('5 s later Home still says "Opening the game…", the bars are inert, and no strip says that anything is wrong', env.$('home').children[2].hidden === false && env.home('hbar').hasAttribute('inert') && env.$('banner').hidden === true);
         await step('at 15 s the strip says that the game is slow to open, with a Reload button', () => () => env.$('banner').hidden === false && env.$('banner-text').textContent === STALLED, 15000);
         check('... not before 14.5 s, and Home takes presses again with Leave room off', Date.now() - t0 >= 14500 && env.$('home').children[2].hidden === true && !env.home('hbar').hasAttribute('inert') && env.roomBar('leave').disabled === true && env.$('banner-x').textContent === 'Reload');
-        env.home('mine').click();
+        env.makeRoom();
         env.roomBar('leave').click();
         await sleep(800);
         check('Leave room pressed on the stalled page sends no Leave: Ada has heard nobody leave, the page\'s socket is open, Bea has her color', A.count('left') === 0 && A.seatOf('Bea') === 1 && pageSockets.length === 1 && pageSockets[0].readyState === 1 && A.room.starting === true);

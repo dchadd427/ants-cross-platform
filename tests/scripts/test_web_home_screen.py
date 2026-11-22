@@ -11,7 +11,7 @@ at its cap.
   - the style: which screen shows what, every target at least 44 px, nothing loaded from another site, the pictures are data;
   - the body of Home (the grid that the games and the players list mount into) and the phone's strip: no Yard, no stand-in, no site label read;
   - the way into the image: the Dockerfile, the local web build and the CI's list of the image's files carry the folder;
-  - the code RUNS in the fake browser of tests/scripts/web_page_harness.js (node, when it is installed: tests/scripts/web_home_screen_check.js: a plain visit, My room, Home, Back and Forward, a link, a reload,
+  - the code RUNS in the fake browser of tests/scripts/web_page_harness.js (node, when it is installed: tests/scripts/web_home_screen_check.js: a plain visit, a room that the page makes, Home, Back and Forward, a link, a reload,
     Leave room, START while a guest sits on Home, the strips, the Menu);
   - tests/data/home_screen_mutants.json changes one thing at a time in a COPY of the files (the room left on Home, the hand-off ignored while Home is up, Back, a reload on Home, ...): the checks must then
     fail (the last class of this file; tools/mutate.py runs the same list).
@@ -88,15 +88,15 @@ class ThePage(unittest.TestCase):
 
     def test_a_plain_visit_makes_no_room(self):
         run = run_function(self.page, "runLobby")
-        self.assertNotRegex(run, r"else \{\s*connect\(\{ code: newCode\(\)", "the old last branch (no seat, no link: a room of its own) is gone: My room (the page's make()) makes it")
+        self.assertNotRegex(run, r"else \{\s*connect\(\{ code: newCode\(\)", "the old last branch (no seat, no link: a room of its own) is gone: the page's make() makes it")
         self.assertEqual(run.count("newCode()"), 1, "the only room that runLobby makes is the one of a test room that is ready")
         self.assertIn("Home.start(test || wantedCode, stored);", run)
         self.assertIn("connect({ code: stored.code, key: stored.key, name: stored.name || myName(), own: stored.own });", run, "a tab that holds a seat takes it back, also on Home")
-        self.assertIn("make: function () { connect({ code: newCode(), name: myName(), own: true }); }", self.page, "My room makes the room, a private one with a new code")
+        self.assertIn("make: function () { connect({ code: newCode(), name: myName(), own: true }); }", self.page, "make() makes the room, a private one with a new code")
 
     def test_the_page_calls_home_where_the_room_changes_the_hand_off_starts_and_a_dialog_opens(self):
         page = self.page
-        self.assertIn("            Home.sync();\n        }\n        function paintCard", page, "render() ends with Home's look at the room (the count of My room)")
+        self.assertIn("            Home.sync();\n        }\n        function paintCard", page, "render() ends with Home's look at the room (the Rules button and the code)")
         self.assertIn("handing = true; Home.opening();", page, "the hand-off to the game says it on Home, in the same breath as it starts")
         self.assertIn("Home.inert(on); }", page, "the dialog of the map list makes Home's bars inert too")
         self.assertIn("window.history.replaceState(window.history.state, '', window.location.pathname.replace(/^\\/+/, '/') + (Home.screen() === 'room' ? '#room' : ''))", page, "stripping the room's code from the address keeps the screen's entry and names the screen that is up")
@@ -134,8 +134,8 @@ class ThePage(unittest.TestCase):
         self.assertNotRegex(paragraph, r"(?i)\bprivate\b|link only", "the setting is called Invite only")
         self.assertNotIn("<p>Press My room and your room", self.page, "the list opens from the Room too, where there is no Quick host to press")
         check = read("tests", "scripts", "web_home_check.py")
-        self.assertNotIn("the front page makes a room again", check, "a plain visit of the front page makes no room: My room does")
-        self.assertIn("the front page (Home), after My room, makes a room again", check)
+        self.assertNotIn("the front page makes a room again", check, "a plain visit of the front page makes no room: hosting does")
+        self.assertIn("the front page (Home), after hosting, makes a room again", check)
 
     def test_the_coffee_picture_of_the_footer_that_is_not_shown_on_home_is_lazy(self):
         self.assertRegex(self.page, r'<img src="https://cdn\.buymeacoffee\.com/[^"]*" alt="Buy Me a Coffee" width="217" height="61" crossorigin="anonymous" loading="lazy">')
@@ -158,7 +158,7 @@ class TheFolder(unittest.TestCase):
     def test_a_hand_off_that_does_not_come_is_given_up_after_15_seconds(self):
         js = read("web", "home", "home.js")
         self.assertIn("var OPENING_MS = 15000, GIVE_UP_MS = 60000;", js)
-        self.assertIn("goingTimer = null; going = false; stalled = true; opening.hidden = true; leave.disabled = mineX.disabled = true; leave.setAttribute('aria-disabled', 'true'); mineX.setAttribute('aria-disabled', 'true'); inert(held);", js, "the card goes, Home is free, Leave room stays off (the seat may still be the game's), and what a dialog holds stays held")
+        self.assertIn("goingTimer = null; going = false; stalled = true; opening.hidden = true; leave.disabled = true; leave.setAttribute('aria-disabled', 'true'); inert(held);", js, "the card goes, Home is free, Leave room stays off (the seat may still be the game's), and what a dialog holds stays held")
         self.assertIn("try { if (page.stalled) page.stalled(words); } catch (e) { /* what the page says is its own */ }", js, "the page says that the game is slow to open, and a minute after START that it did not")
         self.assertIn("failTimer = setTimeout(function () { failTimer = null; tell(TEXT.failed); }, GIVE_UP_MS - OPENING_MS);", js, "the wording of a failure comes a minute after START, not at 15 s")
         self.assertIn("if (failTimer !== null) clearTimeout(failTimer);", js, "a second hand-off starts both times again")
@@ -200,7 +200,7 @@ class TheStyle(unittest.TestCase):
         self.assertRegex(css, r'body \.screen \{ flex: 1 1 auto; min-height: 0; overflow: hidden; \}')
 
     def test_leave_room_is_red_like_leave_game_with_the_stamped_look(self):
-        self.assertIn(".leave { color: var(--cream); background: var(--sheen) #9d0d17; border-color: var(--edge); box-shadow: var(--bevel), 3px 4px 0 #3b0d10; }", self.room, "the red face, the weave, the double frame and a darker red shadow")
+        self.assertIn(".leave { color: var(--cream); background: var(--sheen) #9d0d17; border-color: var(--edge); box-shadow: var(--bevel-sm), 2px 3px 0 #3b0d10; }", self.room, "the red face, the weave, the double frame and a darker red shadow")
         self.assertIn(".leave:hover { background-color: #b5222c; }", self.room, "a lighter red under the cream words (5.6 to 1)")
         self.assertNotRegex(self.room, r"\.leave[^{]*\{[^}]*(transform|text-shadow|#1b0f0d)", "the press, the words' shadow and forced colors are .btn's")
 
@@ -222,9 +222,10 @@ class TheStyle(unittest.TestCase):
         for selector, body in self.room_rules:                                       # (the room: a mouse has smaller Team and Remove buttons and level boxes, as the approved pictures draw them; these are the ones that keep a finger's size)
             for m in re.finditer(r"min-height: (\d+)px", body):
                 room_heights.setdefault(selector.strip(), []).append(int(m.group(1)))
-        for selector in (".r-acts .btn", ".invite .btn", ".change", ".gt-combo", ".go .btn.big"):
+        for selector in (".r-acts .btn", ".mapcard .change", ".go .btn.big"):
             self.assertIn(selector, room_heights, selector)
-            self.assertGreaterEqual(min(room_heights[selector]), 44, selector)
+            self.assertGreaterEqual(max(room_heights[selector]), 44, selector + " is a finger's size on a phone held upright (as the approved pictures draw it: lower with a mouse and held sideways)")
+        self.assertGreaterEqual(min(room_heights[".go .btn.big"]), 44, "START is a full touch target everywhere")
         for selector, values in heights.items():
             for value in values:
                 self.assertGreaterEqual(value, 44, "%s has a min-height of %d" % (selector, value))
@@ -355,7 +356,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_screen_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
     FILES = ["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/alert_core.js", "web/front/player_name.js", "web/home/home.js", "web/home/home.css", "web/home/room.css", "web/home/roomchat.js", "web/home/roomchat.css", "web/home/chat.js", "web/home/chat.css", "web/home/games.js", "web/home/alerts.js", "web/home/alerts.css", "web/home/games.css", "web/home/players.js", "web/home/players.css", "web/home/talk.js", "web/home/talk.css", "web/home/mod.js", "web/home/mod.css", "web/home/split.js", "web/home/split.css", "web/home/cmds.js", "web/home/cmds.css", "web/home/pics.js", "web/home/pics.css", "web/home/post.js", "web/home/post.css", "web/home/vp.js", "web/shapes.js", "tests/scripts/test_web_home_screen.py", "tests/scripts/web_home_screen_check.js", "tests/scripts/web_page_harness.js",
-             "tests/scripts/web_home_check.py", "tests/scripts/fake_media.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml", "docker/nginx.conf", "docs/PLAY_IN_BROWSER.md"] + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "room_fog.js", "map_picker.js", "map_maker_link.js")]
+             "tests/scripts/web_home_check.py", "tests/scripts/fake_media.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml", "docker/nginx.conf", "docs/PLAY_IN_BROWSER.md"] + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "room_fog.js", "room_sheet.js", "seat_menu.js", "map_picker.js", "map_maker_link.js")]
 
     SPEC = "home_screen_mutants.json"
 

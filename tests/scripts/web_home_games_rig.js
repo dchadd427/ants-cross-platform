@@ -102,10 +102,10 @@ const visibilities = (sock) => sock.sent.filter((b) => b[0] === 35).map((b) => b
 const leaves = (sock) => sock.sent.filter((b) => b[0] === NET0.MSG.Leave).length;
 const seatsOf = (names) => [[C, names[0]], [names[1] ? C : E, names[1] || ''], [names[2] ? C : E, names[2] || ''], [names[3] ? C : E, names[3] || '']];
 const PUBLIC = 11, PRIVATE = 3, STARTING = 15;                                         // the Room's flags: lobby + the leader starts (3), + public (8), + START waits (4)
-// the page makes its room (My room), the server welcomes it: the socket of the room, with its seats as the server says them
+// the page makes its room (as Quick host does after its question), the server welcomes it: the socket of the room, with its seats as the server says them
 // (zero: a seat with no key, as the server gives a seat that the game page does not take over: START then makes no hand-off, so the page stays and its Room can be looked at while START waits)
 function myRoom(env, names, flags, o, zero) {
-    env.home('mine').click();
+    env.makeRoom();
     const sock = env.arrive(Object.assign({ key: KEY, seats: seatsOf(names || ['Maya']), room: Object.assign({ flags: flags === undefined ? PRIVATE : flags }, o || {}) }, zero ? { key: new Uint8Array(16), flags: 0 } : {}));
     return sock;
 }

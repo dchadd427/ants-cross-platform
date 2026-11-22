@@ -1479,13 +1479,6 @@
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "fold_button_is_small",
-   "file": "web/home/chat.css",
-   "old": "min-width: 46px; min-height: 46px; padding: 0; }",
-   "new": "min-width: 30px; min-height: 30px; padding: 0; }",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
    "id": "send_is_short",
    "file": "web/home/chat.css",
    "old": ".gc-send { min-height: 48px; }",
@@ -1495,8 +1488,8 @@
   {
    "id": "header_is_short",
    "file": "web/home/chat.css",
-   "old": "gap: 10px; min-height: 50px;",
-   "new": "gap: 10px; min-height: 30px;",
+   "old": "gap: 8px; min-height: 38px;",
+   "new": "gap: 8px; min-height: 30px;",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {

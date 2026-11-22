@@ -192,18 +192,42 @@ class TheCheckIsNotVacuous(unittest.TestCase):
         self.must_fail("web/front/lobby_rules.js", "!(ms >= 0)", "!(ms > 0)")
 
     # ---- a person alone on a map of the players starts like one alone on an original (a game for one: no computer player asked for)
-    def test_alone_on_a_map_of_the_players_asks_for_a_computer_player_again(self):
-        self.must_fail("web/front/lobby_rules.js", "var text = names.length === 1 ? 'A game for one'", "var text = names.length === 1 && !file ? 'A game for one'")
+    def test_a_person_with_nobody_else_coming_is_not_told_that_it_is_a_game_for_one(self):
+        self.must_fail("web/front/lobby_rules.js", "if (play.length === 1 && size === 1) return { text: 'A game for one.', tone: '' };", "if (false) return { text: 'A game for one.', tone: '' };")
 
-    def test_the_short_line_alone_on_a_map_of_the_players_says_what_it_needs_again(self):
-        self.must_fail("web/front/lobby_rules.js", ": g ? host + ' starts the match' : listOf(short)", ": g ? host + ' starts the match' : names.length === 1 && file ? 'Needs a computer player' : listOf(short)")
+    def test_the_line_does_not_say_that_open_colors_stay_empty(self):
+        self.must_fail("web/front/lobby_rules.js", "(play.length >= 3 ? teams : open ? 'Open colors stay empty if nobody joins.' : '')", "(play.length >= 3 ? teams : '')")
 
     def test_start_does_not_play_a_map_of_the_players_alone_again(self):
         self.must_fail("web/front/lobby_rules.js", "function startsAlone(model) { return playing(model).length === 1; }", "function startsAlone(model) { return playing(model).length === 1 && !model.mapFile; }")
 
     # ---- ready up (protocol 27, docs/READY_UP.md): the cards and the line under START; the page's codec and pace have theirs in test_web_lobby_net.py, the rules of the room in tests/data/ready_up_mutants.json
     def test_start_does_not_wait_for_ready(self):
-        self.must_fail("web/front/lobby_rules.js", "startDisabled: g || busy || !!away || waiting.names.length > 0 || waiting.you,", "startDisabled: g || busy || !!away,")
+        self.must_fail("web/front/lobby_rules.js", "startDisabled: g ? !asks : busy || !!away || waiting.names.length > 0 || waiting.you,", "startDisabled: g ? !asks : busy || !!away,")
+
+    def test_a_player_whom_start_asks_has_no_ready_on_the_big_button(self):
+        self.must_fail("web/front/lobby_rules.js", "asks = g && !!me && me.kind === 'person' && me.asked && !busy && !away;", "asks = false;")
+
+    def test_a_player_is_told_to_tap_a_color(self):
+        self.must_fail("web/front/lobby_rules.js", "if (!g && picked >= 0) return", "if (picked >= 0) return")
+
+    def test_a_player_is_told_a_refusal_of_the_hosts_teams(self):
+        self.must_fail("web/front/lobby_rules.js", "if (!g && ctx.refusal) return", "if (ctx.refusal) return")
+
+    def test_a_player_is_told_whom_the_host_waits_for(self):
+        self.must_fail("web/front/lobby_rules.js", "if (line.text && !g) return", "if (line.text) return")
+
+    def test_the_host_is_told_who_is_not_back_before_whose_ready_is_waited_for(self):
+        self.must_fail("web/front/lobby_rules.js", "        if (!g && missing) return { text: missing, tone: 'warn' };\n        if (line.text && !g)", "        if (line.text && !g) return { text: line.text, tone: line.ok ? 'ok' : '' };\n        if (!g && missing) return { text: missing, tone: 'warn' };\n        if (false)")
+
+    def test_the_rules_button_does_not_say_fog(self):
+        self.must_fail("web/front/lobby_rules.js", "(model.fog ? ' · Fog' : '')", "''")
+
+    def test_a_closed_color_is_not_called_closed_to_a_player(self):
+        self.must_fail("web/front/lobby_rules.js", "s.kind === 'open' ? 'Open' : 'Closed'", "s.kind === 'open' ? 'Open' : 'Nobody'")
+
+    def test_the_host_is_not_marked_as_the_host(self):
+        self.must_fail("web/front/lobby_rules.js", "if (s.leader) card.who.push({ text: 'Host', cls: 'htag' });", "")
 
     def test_the_host_shows_no_ready(self):
         self.must_fail("web/front/lobby_rules.js", "                    if (s.leader) card.ready = { kind: 'chip', on: true, title: READY.hostReady };\n", "                    if (s.leader) { /* nothing */ }\n")

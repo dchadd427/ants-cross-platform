@@ -2,7 +2,7 @@
 // One page, one WebSocket: the page's client, model and session storage are never touched here, so Games <-> Room is a class on <body> (data-screen, home.css) and one render(): no request, the seat is never dropped. Text and properties only, never markup. ES5:
 // a page gets AntsHome, node gets module.exports (tests/scripts/web_home_screen_check.js).
 //   * Home is "/", the Room "/#room" (pushState: Back goes to Home); a link ("?room=CODE") opens the Room; the page writes no history until a button is pressed.
-//   * A plain visit makes no room (Quick host makes one; My room is there only while the page holds a room, and it shows the room in the games' place, and the games again when it is pressed once more). Quick host and Games are lit by games.js, which loads after the first paint. START reaches a guest on Home as on the Room: Home says so.
+//   * A plain visit makes no room (Quick host makes one, and shows the room again while the page holds one). The bar has Quick host, Quick join and Match history (a link to the matches). Quick host and Games are lit by games.js, which loads after the first paint. START reaches a guest on Home as on the Room: Home says so.
 (function (root, factory) {
     var api = factory();
     if (typeof module === 'object' && module.exports) module.exports = api;
@@ -17,7 +17,7 @@
     var OPENING_MS = 15000, GIVE_UP_MS = 60000;          // a hand-off that is still here after the first has been slow: Home takes presses again, and says so; after the second the page says that it did not come
     var GAMES = 'home/games';                            // the Games list, Quick host and the Room's switch (games.js, games.css): loaded once, after the first paint
     var TEXT = {
-        name: 'Ants!', quickHost: 'Quick host', quickJoin: 'Quick join', mine: 'My room', games: 'Games', room: 'Room', menu: 'Menu', login: 'Log in', leave: 'Leave room', leaveMine: 'Leave my room', opening: 'Opening the game…', left: 'You left the room.',
+        name: 'Ants!', quickHost: 'Quick host', quickJoin: 'Quick join', history: 'Match history', games: 'Games', room: 'Room', menu: 'Menu', login: 'Log in', leave: 'Leave', opening: 'Opening the game…', left: 'You left the room.',
         slow: 'The game is slow to open. Reload this page to get your seat back.', failed: 'The game did not open. Reload this page to get your seat back.',
         players: 'Players', chat: 'Chat', views: 'Home views'
     };
@@ -28,17 +28,6 @@
     var PHONE = '(max-width: 700px), (max-height: 500px)';
 
     // ---- the pure parts ----
-    // "3/4": the colors that play (a person or a computer player) of the colors that are not out of the match, from the page's model; null before the room has told its plan
-    function countOf(model) {
-        if (!model || !model.slots || model.slots.length !== 4) return null;
-        var people = 0, size = 0;
-        for (var i = 0; i < 4; i++) {
-            var kind = model.slots[i].kind;
-            if (kind !== 'nobody') size++;
-            if (kind === 'person' || kind === 'bot') people++;
-        }
-        return { people: people, size: size };
-    }
     // The screen that an address and a history entry name: the entry that this script wrote (state.ants), else the hash. 'room' only when the page has a room to show.
     function screenOf(state, hash, hasRoom) {
         var named = state && typeof state === 'object' && (state[STATE_KEY] === 'room' || state[STATE_KEY] === 'home') ? state[STATE_KEY] : hash === HASH ? 'room' : 'home';
@@ -121,19 +110,14 @@
         // Home: the top bar, the body and the card that says that the game is opening
         var bar = el('header', 'hbar');
         var quickHost = stub('quick host', TEXT.quickHost), quickJoin = stub('quick join', TEXT.quickJoin);
-        var mine = button('hchip mine', '', function () { openRoom(); });
-        mine.setAttribute('aria-pressed', 'false');
-        var mineName = el('span', 'name', TEXT.mine), minePill = el('span', 'pill'); minePill.hidden = true;
-        mine.appendChild(mineName); mine.appendChild(minePill); mine.hidden = true;       // (My room is there only while the page holds a room: sync() shows it)
-        var mineX = button('minex', '', function () { leaveFrom(mineX); });        // the round X badge on My room's corner: it leaves the room as the Room's Leave room does (a room with other people in it is asked about first)
-        mineX.setAttribute('aria-label', TEXT.leaveMine); mineX.setAttribute('title', TEXT.leaveMine); mineX.appendChild(el('i', 'cross'));
-        var mineBox = el('div', 'hmine'); mineBox.hidden = true; mineBox.appendChild(mine); mineBox.appendChild(mineX);
+        var histLink = el('a', 'btn quick hist', TEXT.history);       // (Match history: the page of the matches; a link, in a new tab while the page holds a room: marks())
+        histLink.href = '/matches';
         var gamesBtn = stub('hchip games', ''), gamesPill = el('span', 'pill');       // (no Games button in the bar: the games list is always on Home, and a phone's strip has Games. The button and its count stay as the list's own handle and are not placed in the page)
         gamesPill.hidden = true; gamesBtn.appendChild(el('span', 'name', TEXT.games)); gamesBtn.appendChild(gamesPill);
         var right = el('div', 'hright'), login = button('hlogin', TEXT.login); login.hidden = true;       // (the login chip: the chat dock fills it and shows it where the hub offers a login)
         var menuHome = menuButton();
         right.appendChild(login); right.appendChild(menuHome);
-        [heading(), quickHost, quickJoin, mineBox, right].forEach(function (n) { bar.appendChild(n); });
+        [heading(), quickHost, quickJoin, histLink, right].forEach(function (n) { bar.appendChild(n); });
         var main = el('main', 'hmain'); main.id = 'hmain';       // the games list and the players list mount here, side by side; the chat dock comes after it
         var tabs = el('nav', 'htabs'), tab = 'games', tabBtns = {}; tabs.setAttribute('aria-label', TEXT.views);
         TABS.forEach(function (t) {
@@ -145,7 +129,7 @@
 
         // The Room: its Leave room button, in the room's own header (the page's markup has the place: #r-acts), and the room itself in Home's body
         var leave = button('leave', TEXT.leave, function () { leaveFrom(leave); });
-        function leaveFrom(opener) {                        // Leave room (the Room's button and the X beside My room): at once when alone, else the list asks first; then Home says that the room was left
+        function leaveFrom(opener) {                        // Leave (the Room's button): at once when alone, else the list asks first; then Home says that the room was left
             if (stalled) return;
             var go = function () { page.leave(); show('home', 'push'); gamesCall('said', TEXT.left); if (screen === 'home' && (!doc.activeElement || doc.activeElement === doc.body || doc.activeElement === opener)) away().focus(); };
             if (!asking(go, opener)) go();
@@ -170,7 +154,7 @@
         function marks() {
             var room = false;
             try { room = !!(page.holds && page.holds()); } catch (e) { room = false; }
-            [matchesItem, doc.getElementById('watch-top'), doc.getElementById('watch-link')].forEach(function (a) { if (a) newTab(a, room); });
+            [matchesItem, histLink, doc.getElementById('watch-top'), doc.getElementById('watch-link')].forEach(function (a) { if (a) newTab(a, room); });
         }
         function buildMenu() {
             menuBox = el('nav', 'hmenubox'); menuBox.setAttribute('aria-label', TEXT.menu);
@@ -274,24 +258,14 @@
             gamesCall('shown', name);
             if (how !== 'first') {
                 try { win.scrollTo(0, 0); } catch (e) { /* no scrolling here */ }
-                var next = mine.hidden ? away() : mine;
+                var next = away();
                 if (next.focus) next.focus();
             }
         }
-        function openRoom() {                               // My room: the first press makes the room and shows it; a press while the room shows brings the games back (the room stays), and the next shows the room again
-            if (!page.info().client) page.make();
-            show(screen === 'room' ? 'home' : 'room', 'push');
-        }
-        function away() { return !quickHost.disabled ? quickHost : menuHome; }       // (where the focus goes when My room is not there: the first button that takes a press)
+        function away() { return !quickHost.disabled ? quickHost : menuHome; }       // (where the focus goes when a screen changes under it: the first button that takes a press)
         function sync() {
-            var info = page.info(), n = info.client ? countOf(info.model) : null;
-            mine.hidden = mineBox.hidden = !info.client;
-            mine.setAttribute('aria-pressed', screen === 'room' && info.client ? 'true' : 'false');
+            var info = page.info();
             tabBtns.games.name.textContent = screen === 'room' && info.client ? TEXT.room : TEXT.games;
-            if (mine.hidden && (doc.activeElement === mine || doc.activeElement === mineX)) away().focus();       // (the room ended under the focus: it goes to Quick host, not to nowhere)
-            minePill.textContent = n ? n.people + '/' + n.size : '';
-            minePill.hidden = !n;
-            mine.setAttribute('aria-label', n ? TEXT.mine + ', ' + n.people + ' of ' + n.size : TEXT.mine);
             marks();
             gamesCall('sync');
             if (roomChat) roomChat.sync();
@@ -343,7 +317,7 @@
             if (failTimer !== null) clearTimeout(failTimer);
             failTimer = null;
             goingTimer = setTimeout(function () {                // not here yet: Home takes presses again, but the seat may still be the game's, so Leave room stays off, and the page says so
-                goingTimer = null; going = false; stalled = true; opening.hidden = true; leave.disabled = mineX.disabled = true; leave.setAttribute('aria-disabled', 'true'); mineX.setAttribute('aria-disabled', 'true'); inert(held);
+                goingTimer = null; going = false; stalled = true; opening.hidden = true; leave.disabled = true; leave.setAttribute('aria-disabled', 'true'); inert(held);
                 tell(TEXT.slow);
                 failTimer = setTimeout(function () { failTimer = null; tell(TEXT.failed); }, GIVE_UP_MS - OPENING_MS);
             }, OPENING_MS);
@@ -430,5 +404,5 @@
             tell: function (kind, text, tone, actions) { try { return !!games && games.told(kind, text, tone, actions) === true; } catch (e) { return false; } } }; // (the Room's Fog of War question)
     }
 
-    return { HASH: HASH, TEXT: TEXT, MENU_MAIN: MENU_MAIN, MENU_SMALL: MENU_SMALL, countOf: countOf, fitHeight: fitHeight, heightGuard: heightGuard, readout: readout, screenOf: screenOf, firstScreen: firstScreen, mount: mount };
+    return { HASH: HASH, TEXT: TEXT, MENU_MAIN: MENU_MAIN, MENU_SMALL: MENU_SMALL, fitHeight: fitHeight, heightGuard: heightGuard, readout: readout, screenOf: screenOf, firstScreen: firstScreen, mount: mount };
 });

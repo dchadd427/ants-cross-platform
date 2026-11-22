@@ -100,7 +100,7 @@
         if (room.teamA !== NO_TEAM && room.teamB !== NO_TEAM && room.teamA < PLAYERS && room.teamB < PLAYERS) { out[room.teamA] = 1; out[room.teamB] = 1; }
         return out;
     }
-    // The room as the page shows it: { you, leader (-1: none), guest, starting, map (key or ''), mapFile, mode (the game type's number: 0 when the room says none), fog (protocol 28: Fog of War), slots: [{ kind: person | open | bot | nobody, ... }], sides }.
+    // The room as the page shows it: { you, leader (-1: none), guest, starting, map (key or ''), mapFile, mode (the game type's number: 0 when the room says none), fog (protocol 28: Fog of War), isPublic (the room is listed in Open games), slots: [{ kind: person | open | bot | nobody, ... }], sides }.
     // A person also says whether the START asks for their Ready (asked) and whether they said it (ready).
     // A color that a person holds shows the person; any other shows what the leader's plan says (the plan of a color that a person holds is what comes back when the person leaves).
     // A person whom the room counts as a game before any START, whose game runs in a browser (or did not say), is on the results screen of the match: the seat that the server keeps for them in the rematch
@@ -122,7 +122,7 @@
             } else slots.push({ kind: plan === 4 ? 'nobody' : 'open' });
         }
         var m = mapOfFile(room.map);
-        return { you: room.you, leader: leader, guest: room.you !== leader, starting: !!room.starting, map: m ? m.key : '', mapFile: room.map, slots: slots, sides: sidesOfRoom(room), mode: typeof room.mode === 'number' ? room.mode : 0, fog: !!room.fog };
+        return { you: room.you, leader: leader, guest: room.you !== leader, starting: !!room.starting, map: m ? m.key : '', mapFile: room.map, slots: slots, sides: sidesOfRoom(room), mode: typeof room.mode === 'number' ? room.mode : 0, fog: !!room.fog, isPublic: !!room.isPublic };
     }
     function playing(model) {
         var out = [];
@@ -300,7 +300,7 @@
     var READY = {
         hostReady: 'Pressing START is the host’s Ready', gameReady: 'Joined from the game: no Ready needed', botReady: 'Computer players are always ready',
         waitFor: 'Waiting for ', toReadyUp: ' to ready up', waitYou: 'Waiting for you to ready up', waitYouAnd: 'Waiting for you and ', allReady: 'Everyone is ready.',
-        button: 'Ready up', buttonOn: 'Ready', chip: 'Ready', chipOff: 'Not ready'
+        big: 'READY', chip: 'Ready', chipOff: 'Not ready'
     };
     // The persons whom the START waits for (protocol 27): { names: those who have not said Ready, you: this page's own person is one of them, any: somebody is asked at all }
     function waitingOn(model) {
@@ -340,10 +340,8 @@
             var card = { seat: i, color: c, kind: s.kind, who: [], mode: '', stat: '', statCls: 'pstat', remove: false, ask: false, grip: !ro, tab: '', teams: null, label: '', drop: '', ready: null };
             if (human) {
                 card.who.push({ text: s.name, cls: 'nm' });
-                if (s.leader && s.me) { card.who.push({ text: 'You', cls: 'you' }); card.stat = 'Host. You start the match.'; }
-                else if (s.leader) { card.who.push({ text: 'Host', cls: 'you' }); card.stat = 'Starts the match.'; }
-                else if (s.me) { card.who.push({ text: 'You', cls: 'you' }); card.stat = 'Waiting for the host to start.'; }
-                else card.stat = 'In the room';
+                if (s.me) card.who.push({ text: 'You', cls: 'you' });
+                if (s.leader) card.who.push({ text: 'Host', cls: 'htag' });
                 if (!ro && !s.me && !s.leader) { card.remove = removing !== i; card.ask = removing === i; }
                 if (busy) { card.stat = s.ingame ? 'In the game' : 'Opening the game…'; card.statCls += s.ingame ? ' in' : ' wait'; }      // START is pressed: whose game is open already
 
@@ -357,10 +355,9 @@
                     else if (!s.results) card.ready = { kind: 'chip', on: true, title: READY.gameReady };
                 }
             } else {
-                card.stat = s.kind === 'bot' ? 'Computer player' : s.kind === 'open' ? 'Takes the next player who joins.' : 'Stays out of the match.';
                 if (s.kind === 'bot' && !busy) card.ready = { kind: 'chip', on: true, bot: true, title: READY.botReady };                                 // (protocol 27: a computer player is always ready)
                 var word = s.kind === 'bot' ? s.level : s.kind;
-                if (ro) card.who.push({ text: s.kind === 'bot' ? (s.name || levelWord(s.level) + ' bot') : s.kind === 'open' ? 'Open' : 'Nobody', cls: '' });
+                if (ro) card.who.push({ text: s.kind === 'bot' ? (s.name || levelWord(s.level) + ' bot') : s.kind === 'open' ? 'Open' : 'Closed', cls: '' });
 
                 else { card.mode = word; if (s.kind === 'bot' && s.name) card.who.push({ text: s.name, cls: 'nm' }); }
             }
@@ -372,17 +369,25 @@
             card.drop = picked >= 0 ? 'Tap to put ' + nameOf(model, picked) + ' here' : '';
             cards.push(card);
         }
-        var others = model.slots.some(function (x) { return x.kind === 'person' && !x.me; });
-        var notes = {
-            invite: busy ? 'New players cannot join while the game opens.' : 'Players who open this link take the next free color.',
-            slots: busy ? 'The match begins as soon as all of you are in the game.' : off === 'lost' ? 'Your color is kept for a minute while the page gets you back in.' : off ? ''
-                : g ? hostName(model) + ' arranges the colors and starts the match.'
-                : picked >= 0 ? 'Now tap the color where ' + nameOf(model, picked) + ' goes (tap the same player again to let go).'
-                : others ? 'Drag a player onto another color to move them. A color that is taken swaps places.' : 'Waiting for players. Drag a player onto another color to move them.',
-            teams: ctx.refusal || teamsText(sides, play, g),
-            teamsWarn: !!ctx.refusal
-        };
-        return { guest: g, busy: busy, ro: ro, offline: off, heading: off === 'join' ? 'Joining a room' : g ? hostName(model) + '’s room' : 'Your room', cards: cards, notes: notes, removing: removing, sides: sides, play: play, side: sideView(model, ctx, play) };
+        return { guest: g, busy: busy, ro: ro, offline: off, heading: off === 'join' ? 'Joining a room' : g ? hostName(model) + '’s room' : 'Your room', cards: cards, removing: removing, sides: sides, play: play, side: sideView(model, ctx, play),
+            rules: { state: (model.isPublic ? 'Public' : 'Invite only') + (model.fog ? ' · Fog' : '') } };
+    }
+    // The one line under the big button: what is happening now, the thing that matters most first. START that is on its way, no room, a color that was tapped (the leader's), a refused team, whose Ready START waits for,
+    // who is not back from the match; else who is in (a guest: who starts). tone: '' (plain), 'ok' (everybody is ready) or 'warn' (a refused press, a wait that the leader can end)
+    function statusOf(model, ctx, play, away, host, line, missing) {
+        var g = model.guest, picked = ctx.picked === undefined ? -1 : ctx.picked, sides = sidesFix(g ? model.sides : ctx.sides, play), teams = teamsText(sides, play, g), open = 0, size = 0;
+        if (model.starting) return { text: (g ? host + ' pressed START. ' : '') + 'Opening the game for everybody. The match begins as soon as all of you are in.', tone: '' };
+        if (away === 'lost') return { text: 'START comes back as soon as you are in.', tone: 'warn' };
+        if (away === 'join') return { text: '', tone: '' };
+        if (away) return { text: 'There is no room yet.', tone: '' };
+        if (!g && picked >= 0) return { text: 'Now tap the color where ' + nameOf(model, picked) + ' goes (tap the same player again to let go).', tone: '' };
+        if (!g && ctx.refusal) return { text: ctx.refusal, tone: 'warn' };
+        if (!g && missing) return { text: missing, tone: 'warn' };
+        if (line.text && !g) return { text: line.text, tone: line.ok ? 'ok' : '' };        // (a guest has the big button for it: the line says who starts)
+        model.slots.forEach(function (x) { if (x.kind === 'open') open++; if (x.kind !== 'nobody') size++; });
+        if (g) return { text: host + ' starts the match.' + (teams ? ' ' + teams : ''), tone: '' };
+        if (play.length === 1 && size === 1) return { text: 'A game for one.', tone: '' };
+        return { text: play.length + ' of ' + size + ' in. ' + (play.length >= 3 ? teams : open ? 'Open colors stay empty if nobody joins.' : ''), tone: '' };
     }
     // The map's side: the map, START and the line under it (who plays, and what an open color does)
     function sideView(model, ctx, play) {
@@ -391,28 +396,12 @@
         if (!o && !file) o = mapByKey(DEFAULT_MAP_KEY);
         var c = file && ctx.community ? ctx.community(file) : null;      // a map of the players: what the picker's list knows of it (name, Map Info line, picture), else only its file name
         var m = o ? { key: o.key, name: o.name, info: o.info } : { key: '', name: c && c.name || communityName(file), info: c && c.info || 'A map of the players' };
-        var names = [], open = [], short = [];
-        model.slots.forEach(function (s, i) {
-            if (s.kind === 'person') {
-                var me = s.me;
-                names.push(me ? 'you' : s.name); short.push(me ? 'You' : s.name);
-            } else if (s.kind === 'bot') { names.push(s.name || article(s.level) + levelWord(s.level) + ' bot'); short.push(s.name || levelWord(s.level) + ' bot'); }      // (protocol 20: a bot the room has named is told by its name)
-            else if (s.kind === 'open') open.push(COLORS[i].name);
-        });
-        var list = listOf(names); list = list.charAt(0).toUpperCase() + list.slice(1);
-        var text = names.length === 1 ? 'A game for one' + (open.length ? '.' : ': only your colony is on the map.') : list + ' play on ' + m.name + '.';
-        if (open.length) text += ' ' + listOf(open) + (open.length > 1 ? ' are open and stay empty' : ' is open and stays empty') + ' unless a player joins first.';
-        var host = hostName(model);
-        var label = busy ? 'Getting ready…' : away === 'lost' ? 'Reconnecting…' : away ? 'START!' : g ? 'Waiting for ' + host : 'START!';
-        var plan = busy ? (g ? host + ' pressed START. ' : '') + 'Opening the game for everybody. The match begins as soon as all of you are in.'
-            : away === 'lost' ? 'START comes back as soon as you are in.' : away === 'join' ? '' : away ? 'There is no room yet.'
-            : g ? host + ' starts the match when everybody is in. ' + (names.length > 1 ? list + ' play on ' + m.name + '.' : '') : text;
-        var shortText = busy ? (g ? host + ' pressed START' : 'Opening the game for everybody') : away === 'lost' ? 'Getting you back in' : away === 'join' ? '' : away ? 'No room yet'
-            : g ? host + ' starts the match' : listOf(short) + ' · ' + m.name + (open.length ? ' · ' + open.length + ' open' : '');
+        var host = hostName(model), me = model.slots[model.you], asks = g && !!me && me.kind === 'person' && me.asked && !busy && !away;      // (a guest whom the START asks for has the big button as their Ready: protocol 27)
+        var label = busy ? 'Getting ready…' : away === 'lost' ? 'Reconnecting…' : away ? 'START!' : g ? (asks ? READY.big : 'Waiting for ' + host) : 'START!';
         var waiting = waitingOn(model), line = away ? { text: '', ok: false } : readyLine(model);
-        var out = { mapKey: m.key, mapName: m.name, mapInfo: m.info, mapDisabled: g || busy || !!away, startDisabled: g || busy || !!away || waiting.names.length > 0 || waiting.you, startBusy: busy, startLabel: label, plan: plan, planShort: shortText,
-            readyLine: line.text, readyOk: line.ok,
-            note: g || away ? '' : startNote(notBack(model, ctx).map(function (s) { return model.slots[s].name; })) };
+        var say = statusOf(model, ctx, play, away, host, line, startNote(notBack(model, ctx).map(function (x) { return model.slots[x].name; })));
+        var out = { mapKey: m.key, mapName: m.name, mapInfo: m.info, mapDisabled: g || busy || !!away, startDisabled: g ? !asks : busy || !!away || waiting.names.length > 0 || waiting.you, startBusy: busy, startLabel: label, startPressed: asks ? !!me.ready : null,
+            status: say.text, statusTone: say.tone };
         if (file) { out.mapFile = file; out.mapThumb = c && c.thumb || ''; }       // (a map of the players: the page paints its picture and name from these)
         return out;
     }
@@ -494,6 +483,6 @@
         levelWord: levelWord, article: article, listOf: listOf, modelOf: modelOf, playing: playing, hostName: hostName, nameOf: nameOf, nameAt: nameAt,
         sidesFix: sidesFix, pairOf: pairOf, shownOf: shownOf, sideOpen: sideOpen, pressSide: pressSide, teamBytes: teamBytes, teamsText: teamsText, reconcileSides: reconcileSides,
         planWith: planWith, withMode: withMode, pendingAfter: pendingAfter, withFog: withFog, pendingFogAfter: pendingFogAfter, botColors: botColors, kindsWithoutBots: kindsWithoutBots, teamNeedsFix: teamNeedsFix, moveOf: moveOf, startsAlone: startsAlone, viewOf: viewOf, sideView: sideView, noticeKind: noticeKind, banner: banner,
-        notBack: notBack, startNote: startNote, pingQuality: pingQuality
+        notBack: notBack, startNote: startNote, statusOf: statusOf, pingQuality: pingQuality
     };
 });

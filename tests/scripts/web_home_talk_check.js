@@ -722,7 +722,7 @@ function bring(env, file, name) {
     filesOf(env, 'talk')[0].onload();
     check('...then the buttons stand in the dock\'s form, and the page\'s own parts are where they were', cls(form).indexOf('gt-on') !== -1 && byClass(form, 'gt-emoji').length === 1 && byClass(form, 'gt-mic').length === 1 && env.$('home').children.length === 5);
     env.advance(10);
-    env.home('mine').click(); env.roomBar('rhome').click();
+    env.makeRoom(); env.toggleRoom();
     env.advance(10);
     check('Home shown again asks for nothing more', filesOf(env, 'talk').length === 2 && byClass(form, 'gt-emoji').length === 1);
 }
@@ -734,7 +734,7 @@ function bring(env, file, name) {
     hubFor(broken); broken.advance(0); bring(broken, 'chat', 'AntsHomeChat'); broken.advance(0);
     broken.win.AntsHomeTalk = { mount() { throw new Error('buttons that break'); } };
     filesOf(broken, 'talk').forEach((n) => { if (n.onload) n.onload(); });
-    check('buttons that throw when they mount: Home goes on (My room still makes the room, the dock is there)', broken.$('home').children[4].id === 'gchat' && (broken.home('mine').click(), broken.sockets.length === 1) && broken.screen() === 'room');
+    check('buttons that throw when they mount: Home goes on (the page still makes a room, the dock is there)', broken.$('home').children[4].id === 'gchat' && (broken.makeRoom(), broken.sockets.length === 1) && broken.screen() === 'room');
     const none = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
     hubFor(none); none.advance(0); bring(none, 'chat', 'AntsHomeChat'); none.advance(0);
     filesOf(none, 'talk').forEach((n) => { if (n.onload) n.onload(); });

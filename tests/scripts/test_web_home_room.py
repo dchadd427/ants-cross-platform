@@ -81,9 +81,13 @@ class TheStyle(unittest.TestCase):
     def declarations(self, selector_part):
         return [body for sel, body in self.rules if selector_part in sel]
 
-    def test_every_tab_is_44_px_high_at_least(self):
-        heights = [int(h) for body in self.declarations(".rc-tab") for h in re.findall(r"min-height:\s*(\d+)px", body)]
-        self.assertTrue(heights and min(heights) >= 44, heights)
+    def test_every_tab_has_a_press_area_of_44_px_a_phones_tab_is_44_px_high(self):
+        css = re.sub(r"/\*.*?\*/", "", read("web", "home", "roomchat.css"), flags=re.S)
+        heights = [int(h) for body in self.declarations(".rc-tab") for h in re.findall(r"min-height:\s*(\d+)px", body)]       # (the drawn tab: 36 px with a mouse, 44 px on a phone, where the rule that says so comes last)
+        extra = [int(t) + int(b) for t, b in re.findall(r"\.rc-tab::before \{[^}]*top:\s*-(\d+)px;[^}]*bottom:\s*-(\d+)px", css)]
+        self.assertTrue(heights and extra, (heights, extra))
+        self.assertGreaterEqual(min(heights) + extra[0], 44, "a tab with a mouse: the drawn tab and the press area around it")
+        self.assertGreaterEqual(heights[-1], 44, "a tab on a phone is 44 px high")
 
     def test_the_sites_chat_gives_its_place_to_the_rooms_while_the_room_tab_shows(self):
         hidden = [body for sel, body in self.rules if 'data-rc="room"' in sel and "> .gc-body" in sel]

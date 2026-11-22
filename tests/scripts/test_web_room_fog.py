@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """The Room's "Fog of War" switch (web/front/room_fog.js, web/lobby.html, docs/PLAY_IN_BROWSER.md "Fog of War"; network protocol 28; run by ./run_tests.sh --fast and by CI).
 
-The leader of a lobby room switches Fog of War on and off in the room's header; the plan that the page sends carries it (the last byte), a guest sees a chip and the note, a room with computer players is asked first
+The leader of a lobby room switches Fog of War on and off in the Rules sheet; the plan that the page sends carries it (the last byte), a guest reads the switch and the Rules button says Fog, a room with computer players is asked first
 (the Games list's own notice, with a button), and the colors' menus have their bot choices off while fog is on. What this file checks:
 
   - the code RUNS in the fake browser of tests/scripts/web_page_harness.js (tests/scripts/web_room_fog_check.js: the switch, the plan bytes, the guest, the question, the menus, the pending pick);
-  - the files, where no run can look: the page has the markup of the switch's note, loads the script and the sheet in their places, and the sheet is the last of the page's own;
+  - the files, where no run can look: the page loads the script in its place and makes the switch once;
   - tests/data/room_fog_mutants.json changes one thing at a time in a COPY of the files: the node checks must then fail (the last class of this file runs the page's mutants, those that need only node;
     tools/mutate.py runs the whole list, with the C++ ones: `python3 tools/mutate.py tests/data/room_fog_mutants.json --keep-going --jobs 1`).
 """
@@ -28,18 +28,13 @@ def read(*parts):
 
 
 class ThePage(unittest.TestCase):
-    def test_the_front_page_loads_the_script_and_the_sheet_once_and_makes_the_switch_in_the_header(self):
+    def test_the_front_page_loads_the_script_once_and_makes_the_switch_in_the_sheets_fog_row(self):
         page = read("web", "lobby.html")
         self.assertEqual(page.count('<script src="front/room_fog.js"></script>'), 1)
-        self.assertEqual(page.count('href="front/room_fog.css"'), 1)
+        self.assertNotIn('room_fog.css', page, "the switch is the Direct connection switch of front/lobby_direct.css, in a row of the Rules sheet: it has no sheet of its own")
         self.assertLess(page.index("front/game_type.js"), page.index("front/room_fog.js"), "the script comes after the game type's, before the page's own code")
         self.assertLess(page.index("front/room_fog.js"), page.index("AntsRoomFog.create"))
         self.assertEqual(len(re.findall(r"AntsRoomFog\.create\(", page)), 1, "the switch is made once")
-
-    def test_the_sheet_names_no_color_that_the_page_does_not_have(self):
-        css = read("web", "front", "room_fog.css")
-        for token in re.findall(r"var\(--([a-z-]+)\)", css):
-            self.assertIn("--" + token + ":", read("web", "lobby.html"), "the sheet uses a token of the page's own: --" + token)
 
     def test_the_script_is_es5_and_puts_no_text_into_markup(self):
         code = read("web", "front", "room_fog.js")

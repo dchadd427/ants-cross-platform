@@ -8,7 +8,7 @@
 //   4. web/lobby.html (the front page, the lobby: a room on the game server, protocol 16) read from the file: its scripts, its ids, the name card's wiring, a name only ever as text (textContent, a value, an
 //      attribute, encodeURIComponent in an address), no field for a name and no pencil, and the links that are made for somebody else (no name in them);
 //   5. web/lobby.html as a whole, run with the fake browser of tests/scripts/web_page_harness.js (a small fake of the DOM, the page's real scripts and a scripted server and hub): a plain visit is Home and makes
-//      no room; My room makes one under the login's name or the guest name (Hello's name, room, key and the session storage that keeps them), a name that this browser remembered from earlier typing is ignored,
+//      no room; a room that the page makes is under the login's name or the guest name (Hello's name, room, key and the session storage that keeps them), a name that this browser remembered from earlier typing is ignored,
 //      a login that is made to fit, a hub that does not answer (the limit), a log out without a reload, a seat that is held keeps its name, a link of somebody else's room (?room=) and a typed code (Join by code,
 //      in the Games list) ask first with the card and send nothing before it, START hands the seat to the game page (ants.rejoin.<room>.<seat>; no leave()), the Rejoin strip, and the line of numbers in the
 //      footer. What a fake DOM cannot say (the look, the phone widths, the pointer, the real focus and the real WebSocket) is the job of the browser checks (web_home_check.py and the web_lobby_*_check.js
@@ -446,15 +446,17 @@ same('a game here asks for the person\'s own name (nameless) when its address na
 const path = require('path');
 // the fake browser, in tests/scripts/web_page_harness.js (the page's own markup and scripts, a fake DOM, a scripted game server): runLobby(search, stored, options) and the messages of a game server
 const H = require('./web_page_harness.js')(lobbyPath);
+const assignedNone = (e) => e.assigned.length === 0;
+const linkOf = (e) => { e.$('share').click(); return e.copied[e.copied.length - 1]; };       // (the link that Share gives: there is no field of it on the page)
 const { lobbyDir, lobbyMarkup, lobbyScripts, lobbyScript, RULES0, NET0, CHAT0, GUEST, hex, E, C, str8, KEY, welcome, reject, roomMessage, helloBytes, helloName, helloRoom, CODE, grouped, BLOCK_PARAMS, blockText, noBlockOf, THROWS, runLobby } = H;
 {
-    same('the page loads its scripts (the alerts, the seat-key reader, the update notice, the direct-connection switch, the rules, the network client, the chat box, the rematch\'s strip, the map list, the shapes, the file fetcher, the Home screen) and then runs its own', lobbyScripts.map((m) => { const s = /src="([^"]*)"/.exec(m[1]); return s ? s[1] : 'inline'; }), ['alert_core.js', 'rejoin_key.js', 'update_notice.js', 'front/lobby_direct.js', 'front/map_maker_link.js', 'front/lobby_rules.js', 'front/lobby_net.js', 'front/player_name.js', 'front/lobby_chat.js', 'front/rematch.js', 'front/game_modes.js', 'front/game_type.js', 'front/room_fog.js', 'front/map_picker.js', 'shapes.js', 'map_files.js', 'home/home.js', 'inline']);
+    same('the page loads its scripts (the alerts, the seat-key reader, the update notice, the direct-connection switch, the rules, the network client, the chat box, the rematch\'s strip, the Rules sheet, the color\'s menu, the map list, the shapes, the file fetcher, the Home screen) and then runs its own', lobbyScripts.map((m) => { const s = /src="([^"]*)"/.exec(m[1]); return s ? s[1] : 'inline'; }), ['alert_core.js', 'rejoin_key.js', 'update_notice.js', 'front/lobby_direct.js', 'front/map_maker_link.js', 'front/lobby_rules.js', 'front/lobby_net.js', 'front/player_name.js', 'front/lobby_chat.js', 'front/rematch.js', 'front/game_modes.js', 'front/game_type.js', 'front/room_fog.js', 'front/room_sheet.js', 'front/seat_menu.js', 'front/map_picker.js', 'shapes.js', 'map_files.js', 'home/home.js', 'inline']);
     const markupIds = [...lobbyMarkup.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
     check('no id is used twice in the markup', new Set(markupIds).size === markupIds.length, markupIds.filter((id, i) => markupIds.indexOf(id) !== i).join(','));
     const asked = new Set([...lobbyScript.matchAll(/\$\('([\w-]+)'\)/g), ...lobbyScript.matchAll(/freshNode\('([\w-]+)'\)/g), ...lobbyScript.matchAll(/getElementById\('([\w-]+)'\)/g)].map((m) => m[1]));
     const missing = [...asked].filter((id) => markupIds.indexOf(id) === -1);
     check('every id that the script asks for is in the markup (' + asked.size + ' of them)', missing.length === 0, missing.join(','));
-    for (const id of ['name-step', 'name-step-title', 'name-step-input', 'name-step-go', 'name-step-msg', 'name-step-hint', 'who-notice', 'name-step-own', 'rejoin', 'rejoin-note', 'rejoin-go', 'link', 'copy', 'slots', 'start', 'banner', 'banner-text', 'stats', 'stats-live', 'stats-played'])
+    for (const id of ['name-step', 'name-step-title', 'name-step-input', 'name-step-go', 'name-step-msg', 'name-step-hint', 'who-notice', 'name-step-own', 'rejoin', 'rejoin-note', 'rejoin-go', 'share', 'rules-open', 'rules', 'slots', 'start', 'banner', 'banner-text', 'stats', 'stats-live', 'stats-played'])
         check('the page has #' + id + ' once', lobbyMarkup.split('id="' + id + '"').length === 2);
     for (const gone of ['more', 'morebox', 'more-here', 'more-windows', 'room-panel', 'sync', 'grid', 'frames-note', 'any-link', 'seat-rows', 'play-tab', 'all-here', 'all-windows', 'new-room', 'room-code', 'room-map'])
         check('the test room\'s #' + gone + ' is gone with "More ways to play"', lobbyMarkup.indexOf('id="' + gone + '"') === -1);
@@ -480,7 +482,6 @@ const { lobbyDir, lobbyMarkup, lobbyScripts, lobbyScript, RULES0, NET0, CHAT0, G
     check('nothing in the script makes markup from text', !/\.innerHTML\s*[+]?=|\.outerHTML|insertAdjacentHTML|document\.write/.test(lobbyScript));
     // What goes into an address: a link that is made for somebody else carries the room and no name; the addresses of this page's own games and the way back carry the name that this page's person chose
     check('the link of the room is the page\'s own address with the plain code and nothing else (no name, no key): ?room=<code>', /function roomLink\(\) \{ return window\.location\.origin \+ window\.location\.pathname\.replace\(\/\^\\\/\+\/, '\/'\) \+ '\?room=' \+ encodeURIComponent\(client \? client\.code : ''\); \}/.test(lobbyScript));
-    check('the Copy button, the Share sheet and the link field all give that link', /copyButton\(\$\('copy'\), roomLink\);/.test(lobbyScript) && /navigator\.share\(\{ url: roomLink\(\) \}\)/.test(lobbyScript) && /if \(\$\('link'\)\.value !== roomLink\(\)\) \$\('link'\)\.value = roomLink\(\);/.test(lobbyScript));
     check('the page has no test room: no game address of its own for a seat, no frame of the game page, no window, no sync between pages', ['gameUrl', 'testRoom', 'runTestRoom', 'iframe', 'embed=1', 'window.open', 'BroadcastChannel', 'ants-sync', 'legacyRoom', 'play=here'].every((word) => lobbyScript.indexOf(word) === -1), ['gameUrl', 'testRoom', 'runTestRoom', 'iframe', 'embed=1', 'window.open', 'BroadcastChannel', 'ants-sync', 'legacyRoom', 'play=here'].filter((word) => lobbyScript.indexOf(word) !== -1).join(','));
 }
 
@@ -494,20 +495,20 @@ check('the three scripts of front/ give the page its globals', !!RULES0 && !!NET
 
 const keysOf = (env) => Object.keys(env.storage.data).filter((k) => k !== 'ants.guest');         // (the keys of the browser's storage but the guest name's, which a page that made a room under it has kept)
 
-// ---- 5.1 the plain visit: the page opens on Home and makes no room; My room makes it (under a guest name for a visitor who is not logged in); nothing is asked first
-// (the checks of Home itself are in tests/scripts/web_home_screen_check.js; here and below runLobby presses My room for a plain visit, as a person does, so that the room's own checks have a room)
+// ---- 5.1 the plain visit: the page opens on Home and makes no room; a room that the page makes is made (under a guest name for a visitor who is not logged in); nothing is asked first
+// (the checks of Home itself are in tests/scripts/web_home_screen_check.js; here and below runLobby makes a room for a plain visit, as Quick host does, so that the room's own checks have a room)
 {
     const home = runLobby('', {}, { stayHome: true });
     check('a plain visit asks nothing first: no name card, no banner; Home is up and the room is there behind it, and no room is made (no socket)', home.$('name-step').hidden && home.$('banner').hidden && !home.$('lobby').hidden && home.screen() === 'home' && home.sockets.length === 0);
-    home.home('mine').click();
-    same('My room makes the room on the game server: one socket, to this site\'s /ws', home.sockets.map((s) => s.url), ['wss://play.test/ws']);
+    home.makeRoom();
+    same('the page\'s room is made on the game server: one socket, to this site\'s /ws', home.sockets.map((s) => s.url), ['wss://play.test/ws']);
     const env = runLobby('', {});
     check('the room is up for the checks below: no card, no strip, no banner', env.$('name-step').hidden && env.$('rejoin').hidden && env.$('banner').hidden && !env.$('lobby').hidden);
     same('... it is made on the game server at once: one socket, to this site\'s /ws', env.sockets.map((s) => s.url), ['wss://play.test/ws']);
     const hello = env.last().open().sent[0];
     const code = helloRoom(hello);
     check('... the Hello makes the room: a new code of six characters, the guest name of a visitor who is not logged in, no key, the lobby block', CODE.test(code) && helloName(hello) === GUEST && hex(hello) === hex(helloBytes(GUEST, code)), hex(hello));
-    check('... the invitation is the page\'s address and ?room=<code>: no name, no key, no seat (whoever opens it is asked), and the code is shown in two groups of three', env.$('link').value === 'https://play.test/?room=' + code && env.$('code').textContent === grouped(code), env.$('link').value);
+    check('... the invitation is the page\'s address and ?room=<code>: no name, no key, no seat (whoever opens it is asked), and the code is shown in two groups of three', linkOf(env) === 'https://play.test/?room=' + code && env.$('code').textContent === grouped(code), linkOf(env));
 }
 for (const [what, stored] of [['a remembered name', 'Maya'], ['a remembered name with blanks at its ends', '  Maya  '], ['a name that looks like markup', '<b>Hi</b> & "you"'], ['a remembered name that the rules refuse (a computer player\'s)', 'Bot (x)'], ['one with an accent', 'Zo\u00eb'], ['one of 33 characters', 'a'.repeat(33)], ['an empty one', '']]) {
     const env = runLobby('', { 'ants.name': stored });
@@ -648,7 +649,7 @@ const SESSION = (room, own) => ({ 'ants.lobby': JSON.stringify({ c: room, k: hex
         const env = runLobby('', { 'ants.lobbyseat': note('k7m2xq') });
         const hello = env.last().open().sent[0];
         check('a page that opens at once after another went takes its seat back: a Hello with the key, the code and the name that the seat had, and no card', hex(hello) === hex(helloBytes('Maya', 'k7m2xq', { key: KEY })) && env.$('name-step').hidden && env.sockets.length === 1);
-        check('... it opens on Home (a seat that is taken back in the background), with My room there', env.screen() === 'home' && !env.home('mine').hidden);
+        check('... it opens on Home (a seat that is taken back in the background), with the room held', env.screen() === 'home' && env.holdsRoom());
         env.arrive({ key: KEY, flags: 0, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 0, leader: 0 } });
         check('... the room welcomes it as the seat of the key: no strip, it leads, the tab\'s session keeps the seat, and the note is gone (the seat is this page\'s)', words(env) === '' && JSON.parse(env.session.data['ants.lobby']).k === hex(KEY) && JSON.parse(env.session.data['ants.lobby']).o === 1 && !('ants.lobbyseat' in env.storage.data));
     }
@@ -680,10 +681,10 @@ const SESSION = (room, own) => ({ 'ants.lobby': JSON.stringify({ c: room, k: hex
     {
         const env = runLobby('', { 'ants.lobbyseat': note('k7m2xq') });
         env.arrive({ key: KEY, flags: 0, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']], room: { you: 0, leader: 0 } });
-        env.home('minex').click();
-        check('a page that took a seat back and gives it up (Leave my room) is no longer that room\'s: no session and no note', !('ants.lobby' in env.session.data) && !('ants.lobbyseat' in env.storage.data));
+        env.roomBar('leave').click();
+        check('a page that took a seat back and gives it up (Leave) is no longer that room\'s: no session and no note', !('ants.lobby' in env.session.data) && !('ants.lobbyseat' in env.storage.data));
         const early = runLobby('', { 'ants.lobbyseat': note('k7m2xq'), 'ants.lobby.unrelated': '1' }, { session: SESSION('k7m2xq', 1) });
-        early.home('minex').click();
+        early.roomBar('leave').click();
         check('... also before the room has welcomed it: the seat is given up, and so is the note of that room (a page that opens next does not take a seat that was given up); nothing else of the storage is touched', !('ants.lobby' in early.session.data) && !('ants.lobbyseat' in early.storage.data) && early.storage.data['ants.lobby.unrelated'] === '1');
     }
 }
@@ -698,8 +699,8 @@ const afterIt = () => new Promise((resolve) => setImmediate(resolve));
     const env = runLobby('', {}, options);
     same('the page asks for the login when it opens: one request, a GET of the site\'s own page for it, with the cookie of this site and no cache (and it is none of the site\'s other requests)', [env.meFetches.length, env.meFetches[0].url, env.meFetches[0].init.credentials, env.meFetches[0].init.cache, env.meFetches[0].init.method, env.fetches.some((f) => f.url === '/hub/me')], [1, '/hub/me', 'same-origin', 'no-store', undefined, false]);
     check('... and makes no room for it: Home is up and no socket is open', env.sockets.length === 0 && env.screen() === 'home');
-    env.home('mine').click();
-    check('My room asks again (a login may have ended since: a log out leaves the page where it is)', env.meFetches.length === 2 && env.sockets.length === 1);
+    env.makeRoom();
+    check('a room asks again (a login may have ended since: a log out leaves the page where it is)', env.meFetches.length === 2 && env.sockets.length === 1);
     const hello = env.last().open().sent[0];
     check('a visitor who is logged in plays under the login\'s name: the Hello has it', helloName(hello) === 'maya' && hex(hello) === hex(helloBytes('maya', helloRoom(hello))), hex(hello));
     check('... and no guest name is made or kept for a person who never needs one', Object.keys(env.storage.data).length === 0);
@@ -729,28 +730,28 @@ for (const [what, me] of [['a hub where nobody is logged in', 'guest'], ['a site
 {   // a log out without a reload: the chat leaves the page where it is, and the next room is a guest's
     const options = { me: MAYA, stayHome: true };
     const env = runLobby('', {}, options);
-    env.home('mine').click();
+    env.makeRoom();
     const s = env.arrive();
     same('the first room is the login\'s', helloName(s.sent[0]), 'maya');
     env.roomBar('leave').click();
     options.me = 'guest';
-    env.home('mine').click();
+    env.makeRoom();
     const second = env.last().open().sent[0];
     check('after a log out with no reload the next room is a guest\'s: the guest name that this browser keeps, and the old name is nowhere in it', helloName(second) === GUEST && hex(second) === hex(helloBytes(GUEST, helloRoom(second))));
     const asked = env.meFetches.length;
     env.roomBar('leave').click();
     options.me = MAYA;
-    env.home('mine').click();
+    env.makeRoom();
     check('... a login that came without a reload (in another tab) is asked for at the next room: the room is the login\'s, not the cached guest\'s', env.meFetches.length === asked + 1 && helloName(env.last().open().sent[0]) === 'maya');
 }
-{   // the page opened while nobody was logged in, the person logged in without a reload (the chat says so): the next room (Quick host and My room make it) is the login's, never the cached guest's
+{   // the page opened while nobody was logged in, the person logged in without a reload (the chat says so): the next room (Quick host makes it) is the login's, never the cached guest's
     const options = { me: 'guest', stayHome: true };
     const env = runLobby('', {}, options);
-    env.home('mine').click();
+    env.makeRoom();
     same('the first room of a guest is a guest\'s', helloName(env.last().open().sent[0]), GUEST);
     env.roomBar('leave').click();
     options.me = MAYA;
-    env.home('mine').click();
+    env.makeRoom();
     check('the person logged in meanwhile: the next room asks the hub again and plays under the login\'s name', env.sockets.length === 2 && helloName(env.last().open().sent[0]) === 'maya');
 }
 {   // a page that comes back from the browser's memory is loaded again (its own pageshow), which asks the hub anew; a seat asks the hub at every room
@@ -760,7 +761,7 @@ for (const [what, me] of [['a hub where nobody is logged in', 'guest'], ['a site
     env.win.listeners.pageshow.forEach((fn) => fn({ persisted: true }));
     check('... the reload is what asks the hub anew', env.reloads === 1);
     options.me = MAYA;
-    env.home('mine').click();
+    env.makeRoom();
     await afterIt();
     check('a room made after a long idle is the login\'s', helloName(env.last().open().sent[0]) === 'maya');
 }
@@ -771,12 +772,12 @@ check('takeBack plays under the login\'s name when the person is logged in now, 
     const hello = env.last().open().sent[0];
     check('a reload of the tab with a seat in a room: the Hello is the seat\'s own name ("Sam"), with its key, though the login is another; nothing waits for the hub', hex(hello) === hex(helloBytes('Sam', 'k7m2xq', { key: KEY })) && env.sockets.length === 1);
 }
-{   // a person who presses My room before the hub has answered waits for it, at most a short time
+{   // a person who makes a room before the hub has answered waits for it, at most a short time
     const late = [];
     const options = { me: () => new Promise((resolve) => { late.push(resolve); }), stayHome: true };
     const env = runLobby('', {}, options);
-    env.home('mine').click();
-    check('My room before the hub has answered: the Room is there, and no socket is opened yet (the name is not known)', env.sockets.length === 0 && env.screen() === 'room' && late.length === 1);
+    env.makeRoom();
+    check('a room made before the hub has answered: the Room is there, and no socket is opened yet (the name is not known)', env.sockets.length === 0 && env.screen() === 'room' && late.length === 1);
     env.advance(1999);
     check('... it waits', env.sockets.length === 0);
     late[0](answer(MAYA));
@@ -787,7 +788,7 @@ check('takeBack plays under the login\'s name when the person is logged in now, 
     const late = [];
     const options = { me: () => new Promise((resolve) => { late.push(resolve); }), stayHome: true };
     const env = runLobby('', {}, options);
-    env.home('mine').click();
+    env.makeRoom();
     env.advance(2000);
     check('an answer that does not come in time: the room goes on as a guest (a socket, the guest name)', env.sockets.length === 1 && helloName(env.last().open().sent[0]) === GUEST);
     late[0](answer(MAYA));
@@ -795,7 +796,7 @@ check('takeBack plays under the login\'s name when the person is logged in now, 
     check('... and the late answer changes nothing: no second socket, the same name', env.sockets.length === 1 && helloName(env.last().sent[0]) === GUEST && late.length === 1);
     env.arrive();
     env.roomBar('leave').click();
-    env.home('mine').click();
+    env.makeRoom();
     check('... the next room asks again, and a login that comes in time is the login\'s', late.length === 2 && env.sockets.length === 1);
     late[1](answer(MAYA));
     await afterIt();
@@ -803,7 +804,7 @@ check('takeBack plays under the login\'s name when the person is logged in now, 
 }
 {   // a hub that does not answer at all: the page does not wait for more than the limit
     const env = runLobby('', {}, { me: 'hang', stayHome: true });
-    env.home('mine').click();
+    env.makeRoom();
     env.advance(1999);
     check('a hub that never answers: nothing connects before the limit', env.sockets.length === 0);
     env.advance(1);
@@ -887,18 +888,29 @@ for (const [what, me, shown] of [['a hub where nobody is logged in', 'guest', tr
     const env = runLobby('', {});
     const s = env.arrive({ seat: 1, key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
     check('a player\'s screen has no pencil on the own card, no field for a name and no Remove button anywhere', env.$('slots').findAll((e) => e.hasAttribute('data-edit') || e.hasAttribute('data-remove') || e.tagName === 'input').length === 0);
-    same('... the room is named after the host, and START waits for the host', [env.$('room-h').textContent, env.$('start').disabled, env.$('start').textContent], ['Maya\u2019s room', true, 'Waiting for Maya']);
+    same('... the room is named after the host, and the big button is the guest\'s Ready (START is the host\'s)', [env.$('room-h').textContent, env.$('start').disabled, env.$('start').textContent], ['Maya\u2019s room', false, 'READY']);
 }
-{   // the link, the Copy button and the Share sheet carry the room and nothing of the player
-    const env = runLobby('', { 'ants.name': 'Maya' }, { share: true });
+{   // the link that Share gives (copied, or handed to the share sheet of a phone) carries the room and nothing of the player
+    const env = runLobby('', { 'ants.name': 'Maya' }, {});
     env.arrive({ key: KEY });
     const code = env.$('code').textContent.replace(' ', '');
-    env.$('copy').click();
-    same('Copy link copies the invitation: the page\'s address and ?room=<code>', env.copied, ['https://play.test/?room=' + code]);
-    check('... the Share button is there on a browser that can share, and shares the same link only', env.$('share').hidden === false && (env.$('share').click(), env.shared.length === 1 && JSON.stringify(env.shared[0]) === JSON.stringify({ url: 'https://play.test/?room=' + code })));
-    check('... the field holds it (a name is never in it)', env.$('link').value === 'https://play.test/?room=' + code && env.param(env.$('link').value, 'name') === null);
-    const plain = runLobby('', {});
-    check('a browser that cannot share has no Share button', plain.$('share').hidden === true);
+    env.$('share').click();
+    same('Share copies the invitation: the page\'s address and ?room=<code>', env.copied, ['https://play.test/?room=' + code]);
+    check('... a name is never in it', env.param(env.copied[0], 'name') === null && env.shared.length === 0);
+    check('... and the button says so for a moment, then says Share again', env.$('share-t').textContent === 'Copied!' || env.$('share-t').textContent === 'Share');
+    const phone = runLobby('', { 'ants.name': 'Maya' }, { share: true, win: { matchMedia: () => ({ matches: true }) } });
+    phone.arrive({ key: KEY });
+    const pc = phone.$('code').textContent.replace(' ', '');
+    phone.$('share').click();
+    check('on a phone that can share, Share hands the same link to the share sheet and copies nothing', phone.shared.length === 1 && JSON.stringify(phone.shared[0]) === JSON.stringify({ url: 'https://play.test/?room=' + pc }) && phone.copied.length === 0);
+    const desk = runLobby('', { 'ants.name': 'Maya' }, { share: true });
+    desk.arrive({ key: KEY });
+    desk.$('share').click();
+    check('on a window that is not a phone the link is copied even where the browser can share', desk.shared.length === 0 && desk.copied.length === 1);
+    const plain = runLobby('', { 'ants.name': 'Maya' }, { win: { matchMedia: () => ({ matches: true }) } });
+    plain.arrive({ key: KEY });
+    plain.$('share').click();
+    check('a phone whose browser cannot share copies the link too', plain.shared.length === 0 && plain.copied.length === 1);
 }
 
 // ---- 5.2c the chat box (front/lobby_chat.js, tests/scripts/web_lobby_chat_check.js): the page mounts it once and gives it every client; it is there when the room is a lobby, a line goes out as a Chat message at the
@@ -954,21 +966,21 @@ for (const [what, me, shown] of [['a hub where nobody is logged in', 'guest', tr
     const plans = () => s.sent.filter((b) => b[0] === 32);
     const button = (seat, side) => env.$('slots').querySelector('[data-seat="' + seat + '"][data-side="' + side + '"]');
     const lit = (seat, side) => button(seat, side).getAttribute('aria-pressed') === 'true';
-    check('the leader of three has the two team buttons on every color, and the room has no teams', button(0, 1) !== null && button(1, 1) !== null && button(2, 2) !== null && !lit(0, 1) && !lit(1, 1) && /Free for all/.test(env.$('teams-note').textContent));
-    const level = env.$('slots').querySelector('[data-mode="3"]');
-    for (let i = 0; i < 8; i++) { level.value = i % 2 ? 'medium' : 'easy'; env.$('slots').fire('change', { target: level }); }
+    check('the leader of three has the two team buttons on every color, and the room has no teams', button(0, 1) !== null && button(1, 1) !== null && button(2, 2) !== null && !lit(0, 1) && !lit(1, 1));
+    const choose = (seat, word) => { env.press(env.$('slots').querySelector('[data-mode="' + seat + '"]')); env.body.findAll((e) => e.getAttribute('data-word') === word)[0].click(); };       // (the color's button opens its menu; an item of it is the choice)
+    for (let i = 0; i < 8; i++) choose(3, i % 2 ? 'medium' : 'easy');
     check('the open color\'s level changed 8 times in a row sends 5 plans: the plan budget of the page is empty', plans().length === 5, String(plans().length));
     env.press(button(0, 1));
     check('a team button pressed alone is the page\'s own (a pair is what the room holds): lit, nothing sent', lit(0, 1) && plans().length === 5);
     env.press(button(1, 1));
     check('the second button makes a pair, which the page\'s pace refuses: no plan goes out', plans().length === 5);
-    check('... and the screen shows the ROOM\'s teams (none), not a pair that the room never got: Sam\'s button is not lit and the line under the colors does not name a team', !lit(1, 1) && !/^Teams:/.test(env.$('teams-note').textContent), 'Sam lit: ' + lit(1, 1) + ', "' + env.$('teams-note').textContent + '"');
+    check('... and the screen shows the ROOM\'s teams (none), not a pair that the room never got: Sam\'s button is not lit and the line under START does not name a team', !lit(1, 1) && !/^Teams:/.test(env.$('go-status').textContent), 'Sam lit: ' + lit(1, 1) + ', "' + env.$('go-status').textContent + '"');
     check('... the button that was pressed alone before stays as it was (the page\'s own)', lit(0, 1));
     // the room's teams are the truth: a room that has a pair shows it, also after a press that the pace refused (a press that clears the teams)
     s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [C, 'Tess'], [E, '']], { you: 0, leader: 0, teamA: 0, teamB: 1 }));
-    check('a room with a pair shows it: Green and Red on Team 1', lit(0, 1) && lit(1, 1) && /^Teams: Green \+ Red against Blue/.test(env.$('teams-note').textContent), env.$('teams-note').textContent);
+    check('a room with a pair shows it: Green and Red on Team 1', lit(0, 1) && lit(1, 1));
     env.press(button(1, 1));
-    check('a press that would clear the teams is refused by the pace too: nothing goes out and the screen still shows the room\'s pair', plans().length === 5 && lit(0, 1) && lit(1, 1) && /^Teams: Green \+ Red against Blue/.test(env.$('teams-note').textContent), 'plans ' + plans().length + ', "' + env.$('teams-note').textContent + '"');
+    check('a press that would clear the teams is refused by the pace too: nothing goes out and the screen still shows the room\'s pair', plans().length === 5 && lit(0, 1) && lit(1, 1), 'plans ' + plans().length);
 }
 
 // ---- 5.3 the name card of a link that somebody sent (?room=): asked first, every time; nothing connects before the button
@@ -1105,7 +1117,7 @@ async function codeBox(env) {
     const env = runLobby('', {}, { lazy: true });
     const own = env.arrive({ key: KEY });
     const ownCode = helloRoom(own.sent[0]);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     const box = await codeBox(env);
     check('Join by code is in the Games list: a field (empty, with the cursor in the list) and a button', box.input.value === '' && box.go.textContent === 'Join' && box.hint.textContent === '');
     for (const [what, typed, why] of [['nothing', '', 'Type or paste the code first.'], ['a line of blanks', '   \n', 'Type or paste the code first.'], ['text that is no code', 'not a code!', 'A room code has letters and numbers only, like k7m 2xq.'], ['a path', 'k7m2/xq', 'A room code has letters and numbers only, like k7m 2xq.'],
@@ -1128,7 +1140,7 @@ async function codeBox(env) {
     env.$('name-step-go').click();
     const probe = env.last();
     check('Join looks at the room: a second socket, with the Hello of a page that only joins (no lobby block: a code with no room is answered "no such room", never made), under the guest name that the card showed (what is written into the read-only field changes nothing)', env.sockets.length === 2 && env.$('name-step').hidden && hex(probe.open().sent[0]) === hex(helloBytes(GUEST, 'k7m2xq', { join: true })), hex(probe.sent[0] || []));
-    check('... the page\'s own room stays while it looks: no Leave, the socket open, the code and the link still the own room\'s', !own.closed && own.sent.length === 1 && env.$('code').textContent === grouped(ownCode) && env.$('link').value === 'https://play.test/?room=' + ownCode && !('ants.name' in env.storage.data));
+    check('... the page\'s own room stays while it looks: no Leave, the socket open, the code and the link still the own room\'s', !own.closed && own.sent.length === 1 && env.$('code').textContent === grouped(ownCode) && linkOf(env) === 'https://play.test/?room=' + ownCode && !('ants.name' in env.storage.data));
     probe.receive(reject(6));
     check('a room that does not exist: the box says so, and the own room is as it was', box.hint.textContent === 'There is no room with that code. Check it, or ask the host to send the link again.' && !own.closed && env.$('code').textContent === grouped(ownCode) && env.innerHTMLWrites.length === 0);
 }
@@ -1136,7 +1148,7 @@ async function codeBox(env) {
     const typedJoin = async (typed) => {
         const e = runLobby('', {}, { lazy: true });
         e.arrive({ key: KEY });
-        e.roomBar('rhome').click();
+        e.toggleRoom();
         const box = await codeBox(e);
         box.input.value = typed;
         box.go.click();
@@ -1165,7 +1177,7 @@ async function codeBox(env) {
     const p = ok.last().open();
     p.receive(welcome(1, Uint8Array.from(Array.from({ length: 16 }, (_, i) => 0x60 + i)), 0));
     p.receive(roomMessage([[C, 'Maya'], [C, 'Zed'], [E, ''], [E, '']], { you: 1, leader: 0 }));
-    check('a room that takes the player: the page leaves its own room (a Leave on the old socket, which closes) and shows that room: the code, the host\'s name, the link to it', ownSocket.sent.length === 2 && ownSocket.sent[1][0] === NET0.MSG.Leave && ownSocket.closed && ok.$('code').textContent === 'k7m 2xq' && ok.$('room-h').textContent === 'Maya’s room' && ok.$('link').value === 'https://play.test/?room=k7m2xq' && ok.box.input.value === '');
+    check('a room that takes the player: the page leaves its own room (a Leave on the old socket, which closes) and shows that room: the code, the host\'s name, the link to it', ownSocket.sent.length === 2 && ownSocket.sent[1][0] === NET0.MSG.Leave && ownSocket.closed && ok.$('code').textContent === 'k7m 2xq' && ok.$('room-h').textContent === 'Maya’s room' && linkOf(ok) === 'https://play.test/?room=k7m2xq' && ok.box.input.value === '');
     same('... and this tab keeps that room (session storage), not the old one: the code, the key, the name, and that the page did not make it', JSON.parse(ok.session.data['ants.lobby']), { c: 'k7m2xq', k: hex(Uint8Array.from(Array.from({ length: 16 }, (_, i) => 0x60 + i))), n: 'Zed', o: 0 });
     p.receive(reject(6));
     const asked = ok.last().open();
@@ -1173,7 +1185,7 @@ async function codeBox(env) {
     check('a typed code whose room is lost later (a restart): the Hello that asks again has no block, and its NoSuchRoom is the busy strip, not the card of a link (only a link\'s first Hello is told "no room with that code")', ok.sockets.length === 3 && hex(ok.sockets[2].sent[0]) === hex(helloBytes('Zed', 'k7m2xq', { join: true })) && !ok.$('banner').hidden && ok.$('banner-x').textContent === 'Try again' && ok.$('name-step').hidden);
     const away = runLobby('', {}, { lazy: true });
     away.arrive({ key: KEY });
-    away.roomBar('rhome').click();
+    away.toggleRoom();
     const awayBox = await codeBox(away);
     awayBox.input.value = 'k7m2xq';
     awayBox.go.click();
@@ -1235,37 +1247,37 @@ async function codeBox(env) {
 
 // ---- 5.5d ready up (protocol 27, docs/READY_UP.md): a person's own switch on their card, the marks of the others, START that waits for them, and what the page sends
 {
-    const readyBtn = (env, seat) => env.inCard(seat, 'data-ready');
     const marks = (env) => [0, 1, 2, 3].map((i) => env.card(i).findAll((e) => /\brdy-chip\b/.test(e.className)).map((c) => c.textContent + (/\bno\b/.test(c.className) ? '-' : '+')).join(''));
+    const say = (env) => env.$('go-status');
     // the host's screen: Sam has not said it
     const host = runLobby('', { 'ants.name': 'Maya' });
     const hs = host.arrive({ key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']] });
-    check('the host has no switch of their own, and Sam\'s card says Not ready (the host\'s card says Ready by itself)', !readyBtn(host, 0) && !readyBtn(host, 1) && marks(host).slice(0, 2).join('|') === 'Ready+|Not ready-');
-    check('START is off and the line under it says whose Ready it waits for', host.$('start').disabled === true && host.$('start').textContent === 'START!' && host.$('ready-line').hidden === false && host.$('ready-line').textContent === 'Waiting for Sam to ready up' && !/\bok\b/.test(host.$('ready-line').className));
+    check('the host has no Ready of their own (the big button is START), and Sam\'s card says Not ready (the host\'s card says Ready by itself)', host.$('start').textContent === 'START!' && host.$('start').getAttribute('aria-pressed') === null && marks(host).slice(0, 2).join('|') === 'Ready+|Not ready-');
+    check('START is off and the line under it says whose Ready it waits for', host.$('start').disabled === true && say(host).textContent === 'Waiting for Sam to ready up' && !/\bok\b/.test(say(host).className));
     host.$('start').click();
     check('a press on the START that is off sends nothing', hs.sent.length === 1 && host.assigned.length === 0);
     hs.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, ready: 2 }));
-    check('Sam says Ready: his card says Ready, START is on and the line says that everybody is', marks(host).slice(0, 2).join('|') === 'Ready+|Ready+' && host.$('start').disabled === false && host.$('ready-line').textContent === 'Everyone is ready.' && /\bok\b/.test(host.$('ready-line').className));
+    check('Sam says Ready: his card says Ready, START is on and the line says that everybody is', marks(host).slice(0, 2).join('|') === 'Ready+|Ready+' && host.$('start').disabled === false && say(host).textContent === 'Everyone is ready.' && /\bok\b/.test(say(host).className));
     hs.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, ready: 2, map: 'ISLANDS.LVL', plan: [0, 0, 1, 0], mode: 1 }));
     check('the leader changes the map, a color and the game type: the marks stay, START stays on', marks(host).slice(0, 2).join('|') === 'Ready+|Ready+' && host.$('start').disabled === false);
     const bot = marks(host)[2];
     check('a computer player (the plan\'s Easy bot in Blue) shows Ready on its card, always', bot === 'Ready+' && host.card(2).findAll((e) => /\brdy-chip\b/.test(e.className) && /\bbot\b/.test(e.className)).length === 1);
-    // a guest's screen
+    // a guest's screen: the big button is their Ready
     const guest = runLobby('?room=k7m2xq', { 'ants.name': 'Sam' });
     guest.$('name-step-go').click();
     const gs = guest.arrive({ seat: 1, key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
-    const btn = readyBtn(guest, 1);
-    check('a guest has the switch on their own card: it says Ready up and is not pressed; START says that it waits for the host and the line says "Waiting for you to ready up"', !!btn && btn.textContent === 'Ready up' && btn.getAttribute('aria-pressed') === 'false' && btn.disabled !== true && guest.$('start').disabled === true && guest.$('start').textContent === 'Waiting for Maya' && guest.$('ready-line').textContent === 'Waiting for you to ready up');
+    const big = guest.$('start');
+    check('a guest\'s big button says READY and is not pressed (it is a switch: pressed is ready); the card says Not ready, and the line says who starts', big.textContent === 'READY' && big.getAttribute('aria-pressed') === 'false' && big.disabled !== true && marks(guest)[1] === 'Not ready-' && say(guest).textContent === 'Maya starts the match.');
     const before = gs.sent.length;
-    guest.press(btn);
-    check('a press on Ready up sends one Ready (the C++ encoder\'s bytes: type 41, 1), and the card stays as the room last said (the room says the mark back)', gs.sent.length === before + 1 && hex(gs.sent[before]) === '2901' && readyBtn(guest, 1).getAttribute('aria-pressed') === 'false');
+    big.click();
+    check('a press on READY sends one Ready (the C++ encoder\'s bytes: type 41, 1), and the page stays as the room last said (the room says the mark back)', gs.sent.length === before + 1 && hex(gs.sent[before]) === '2901' && big.getAttribute('aria-pressed') === 'false' && assignedNone(guest));
     gs.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0, ready: 2 }));
-    check('the room says it: the switch is pressed and says Ready, the line says that everybody is ready, START is still the host\'s', readyBtn(guest, 1).getAttribute('aria-pressed') === 'true' && readyBtn(guest, 1).textContent === 'Ready' && guest.$('ready-line').textContent === 'Everyone is ready.' && guest.$('start').disabled === true);
+    check('the room says it: the button is pressed, the card says Ready, and START is still the host\'s (nothing starts)', big.getAttribute('aria-pressed') === 'true' && big.textContent === 'READY' && marks(guest)[1] === 'Ready+' && assignedNone(guest));
     guest.advance(1300);
-    guest.press(readyBtn(guest, 1));
-    check('a press on the pressed switch takes the mark back (Ready, 0)', hex(gs.sent[gs.sent.length - 1]) === '2900');
+    big.click();
+    check('a press on the pressed button takes the mark back (Ready, 0)', hex(gs.sent[gs.sent.length - 1]) === '2900');
     gs.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0, flags: 7, inGame: 1, ready: 2 }));
-    check('START is pressed: the switch is gone from the card (nothing is asked any more) and the line is empty', !readyBtn(guest, 1) && guest.$('ready-line').hidden === true);
+    check('START is pressed: the button is off (nothing is asked any more) and is no switch', big.disabled === true && big.getAttribute('aria-pressed') === null && marks(guest)[1] === '');
 }
 // ---- 5.5c the rematch (front/rematch.js, docs/PLAY_IN_BROWSER.md "After a match"): the tab comes back from its match with the room's code and the key of its seat (the game page's hand-over in the
 // tab's session storage); the strip "Back from the match." at the top, the colors' words, the note under START, START that the room answers, the host who comes back
@@ -1283,14 +1295,14 @@ async function codeBox(env) {
     s.receive(welcome(0, KEY, 0));
     s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, inGame: 2 }));
     same('Sam is still on the results screen: his color says so (picture R2)', statOf(env, 1), ['Still on the results screen…', 'pstat away']);
-    check('... and the note under START says that START waits for him', !env.$('start-note').hidden && env.$('start-note').textContent === 'START waits for Sam. You can wait, or press Remove on their color to start without them.');
+    check('... and the line under START says that START waits for him', env.$('go-status').textContent === 'START waits for Sam. You can wait, or press Remove on their color to start without them.' && /\bwarn\b/.test(env.$('go-status').className));
     env.$('start').click();
     check('START goes to the room as ever (the room decides)', s.sent[s.sent.length - 1][0] === NET0.MSG.StartRequest);
     s.receive(roomChat('Sam is not back from the match yet.'));
     check('the room\'s answer is the gold strip of a START that waits', !env.$('banner').hidden && /\bwarn\b/.test(env.$('banner').className)
           && env.$('banner-text').textContent === 'Sam is not back from the match yet. START waits for them: wait, or press Remove on their color to start without them.');
     s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, inGame: 0 }));
-    same('Sam is back: "Back in the room", and nothing is waited for', [statOf(env, 1), env.$('start-note').hidden], [['Back in the room', 'pstat back'], true]);
+    same('Sam is back: "Back in the room", and nothing is waited for', [statOf(env, 1), /START waits/.test(env.$('go-status').textContent)], [['Back in the room', 'pstat back'], false]);
     s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
     check('START: the page goes to the game page, and the match that it came back from is let go of (the strip goes, the entry too)', env.assigned.length === 1 && bar.hidden && env.session.data['ants.back'] === undefined);
 }
@@ -1299,10 +1311,10 @@ async function codeBox(env) {
     const s = env.last().open();
     s.receive(welcome(1, KEY, 0));
     s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 1, inGame: 1 }));
-    check('the first one back leads while the host of the match is on the results screen (no winner: the strip says the rest)', env.$('start').disabled === false && env.$('start-note').textContent === 'START waits for Maya. You can wait, or press Remove on their color to start without them.'
+    check('the first one back leads while the host of the match is on the results screen (no winner: the strip says the rest)', env.$('start').disabled === false && env.$('go-status').textContent === 'START waits for Maya. You can wait, or press Remove on their color to start without them.'
           && env.root.children.find((c) => c.className === 'backbar').textContent === 'Back from the match. Same room, same colors, same map.Stats and replay');
     s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0, inGame: 0 }));
-    check('Maya is back and leads again: Sam reads so (not that somebody left)', env.$('banner-text').textContent === 'Maya is back, and is the host again.' && env.$('start').disabled === true);
+    check('Maya is back and leads again: Sam reads so (not that somebody left)', env.$('banner-text').textContent === 'Maya is back, and is the host again.' && env.$('start').textContent === 'READY');
 }
 {   // a match that is not this room's, or too old, shows nothing; another room that the page goes to lets it go
     const old = runLobby('?room=k7m2xq', { 'ants.name': 'Maya' }, { session: { 'ants.lobby': JSON.stringify({ c: 'k7m2xq', k: hex(KEY), n: 'Maya', o: 0 }), 'ants.back': JSON.stringify({ c: 'k7m2xq', t: Date.now() - 3 * 3600 * 1000 - 60000, m: 'TREASURE.LVL', p: ['Maya', 'Sam', '', ''], w: '' }) } });
@@ -1465,7 +1477,7 @@ for (const [what, you, want] of [['a computer player\'s name as the display name
     check('... Join plays under it: the Hello has that name', link.sockets.length === 1 && helloName(link.last().open().sent[0]) === want);
     const typed = runLobby('', {}, { lazy: true, me });
     typed.arrive();
-    typed.roomBar('rhome').click();
+    typed.toggleRoom();
     const typedBox = await codeBox(typed);
     typedBox.input.value = 'ABC-1';
     typedBox.go.click();

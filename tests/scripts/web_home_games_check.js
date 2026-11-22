@@ -103,9 +103,9 @@ const LIBRARY = /^\/maps\/previews\/(?:[A-Za-z0-9_~-]|%(?!2F|5C|00)[0-9A-F]{2})(
 }
 for (const [what, lazy] of [['never comes', false], ['fails to load', 'script']]) {
     const env = await page({ options: { lazy } });
-    check('a script that ' + what + ' leaves Quick host and Games disabled, asks nothing of /lobbies, and the page as it was (My room makes a room, Home and the Room work)', env.home('host').disabled && env.home('games').disabled && env.site.calls.length === 0);
-    env.home('mine').click();
-    check('... (My room still makes the room and shows it)', env.sockets.length === 1 && env.screen() === 'room');
+    check('a script that ' + what + ' leaves Quick host and Games disabled, asks nothing of /lobbies, and the page as it was (the page makes a room, Home and the Room work)', env.home('host').disabled && env.home('games').disabled && env.site.calls.length === 0);
+    env.makeRoom();
+    check('... (the page still makes a room and shows it)', env.sockets.length === 1 && env.screen() === 'room');
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -145,11 +145,11 @@ for (const [what, lazy] of [['never comes', false], ['fails to load', 'script']]
     check('... and the tab that is back looks at once', env.looks() === before + 1);
     await wait(env, 30000);
     check('... and goes on every 30 s', env.looks() === before + 2);
-    env.home('mine').click();
+    env.makeRoom();
     const onRoom = env.looks();
     await wait(env, 100000);
     check('while the Room shows (the count is not on screen) nothing is asked either', env.screen() === 'room' && env.looks() === onRoom);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await flush();
     check('Home back: a look at once, then the rhythm again', env.looks() === onRoom + 1);
     await wait(env, 30000);
@@ -274,7 +274,7 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     check('Games again closes it', pop.hidden === true);
     tap(env.home('games'));
     await flush();
-    env.home('mine').click();
+    env.makeRoom();
     check('the Room shows: the popover is put away (the screen that has the Games button is not there)', env.screen() === 'room' && pop.hidden === true);
     check('no markup was written into the page by any of this, and no row has a link', env.innerHTMLWrites.length === 0 && find(env.$('home'), 'gitem').every((li) => li.findAll((e) => e.tagName === 'a' || e.hasAttribute('href')).length === 0));
 }
@@ -296,7 +296,7 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     const sock = myRoom(env, ['Maya']);
     const code = helloRoom(sock.sent[0]);
     site.body = listOf([row(code, 'Maya', {}), row('abc234', 'Clover')]);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await flush();
     await wait(env, 30000);
     check('the page\'s own room (by its code) counts: the button says 2', pillOf(env).textContent === '2' && env.home('games').getAttribute('aria-label') === 'Games, 2 open');
@@ -411,10 +411,10 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     check('six comings and goings of the tab in one moment make one look at most', env.looks() <= base + 1, env.looks() + ' looks, ' + base + ' before');
     await wait(env, 1000);
     const again = env.looks();
-    env.home('mine').click();
-    env.roomBar('rhome').click();
-    env.home('mine').click();
-    env.roomBar('rhome').click();
+    env.makeRoom();
+    env.toggleRoom();
+    env.makeRoom();
+    env.toggleRoom();
     await flush();
     check('... and so do the toggles between Home and the Room', env.looks() <= again + 1, env.looks() + ' looks, ' + again + ' before');
     check('... and the look comes when its second is over (nothing is lost)', (await wait(env, 1000), env.looks() >= again + 1 || env.looks() === again));
@@ -446,7 +446,7 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     check('the list is looked at every 5 s while Home shows, without any press (the pace of an open list), and the same rows stay (the same nodes)', env.site.times.slice(0, 3).join() === '0,5000,10000' && rowsOf(env).length === 3);
     tap(joinOf(rowsOf(env)[0]));
     check('Join in the docked list is the popover\'s Join: a second client that only joins, with the room of the row', env.sockets.length === 1 && hex(env.last().sent[0] || env.last().open().sent[0]) === hex(helloBytes(GUEST, 'c1v3rr', { join: true })));
-    env.home('mine').click();
+    env.makeRoom();
     const onRoom = env.looks();
     await wait(env, 20000);
     check('while the Room shows nothing is asked (the list is not on screen)', env.screen() === 'room' && env.looks() === onRoom);
@@ -749,7 +749,7 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     const alike = [['Mara', {}], ['Maya', { map: 'TINY.LVL' }], ['Maya', { mode: '187' }], ['Maya', { people: 2, free: 2 }], ['Maya', { bots: 1, free: 2 }], ['Maya', { free: 2, size: 3 }]];       // (each is Maya's room but for one thing)
     const body = (looks) => listOf([row('abc234', 'Clover')].concat(looks.map(([h, o]) => locked(h, Object.assign({}, own, o))), [locked('Maya', own)]));
     site.body = body(alike.slice(0, 5));
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await flush();
     await wait(env, 30000);
     tap(env.home('games'));
@@ -773,11 +773,11 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
 {   // a room of the page's own with one person, a computer player, a color that is Nobody's and a free color, in mode 187: the seats and the mode are read from the Room message as the server counts them (a color that is Nobody's is no color of the match)
     const site = fakeSite();
     const env = await page({ site });
-    env.home('mine').click();
+    env.makeRoom();
     env.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']], room: { flags: PRIVATE, plan: [0, 0, 2, 4], mode: 1, map: 'ISLANDS.LVL' } });
     const base = { map: 'ISLANDS.LVL', mode: '187', people: 1, bots: 1, free: 1, size: 3 };
     site.body = listOf([locked('Maya', Object.assign({}, base, { mode: 'highest-score' })), locked('Maya', Object.assign({}, base, { people: 2, size: 4 })), locked('Maya', Object.assign({}, base, { bots: 0, size: 2 })), locked('Maya', Object.assign({}, base, { free: 2, size: 4 })), locked('Maya', base)]);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await flush();
     await wait(env, 30000);
     tap(env.home('games'));
@@ -790,7 +790,7 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     const env = await page({ site, search: '?room=k7m2xq', options: { stayHome: false } });
     guestRoom(env, 'Hana');
     site.body = listOf([locked('Hana', { map: 'TREASURE.LVL', people: 2, free: 2 }), locked('Maya', { map: 'TREASURE.LVL', people: 2, free: 2 })]);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await flush();
     await wait(env, 30000);
     tap(env.home('games'));
@@ -802,7 +802,7 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     const env = await page({ site });
     const sock = myRoom(env, ['Maya'], PUBLIC);
     site.body = listOf([row(helloRoom(sock.sent[0]), 'Maya', { people: 1, free: 3 }), locked('Maya', { map: 'TREASURE.LVL', people: 1, free: 3 })]);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await flush();
     await wait(env, 30000);
     tap(env.home('games'));
