@@ -38,6 +38,14 @@
     }
   }
 
+  function isLocalDevHost() {
+    const h = (window.location.hostname || "").toLowerCase();
+    if (!h || h === "localhost" || h === "127.0.0.1" || h === "::1" || h === "[::1]" || h.endsWith(".local")) {
+      return true;
+    }
+    return /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.)/.test(h);
+  }
+
   function initVersionWatcher() {
     if (window.location.protocol !== "http:" && window.location.protocol !== "https:") return;
 
@@ -47,7 +55,8 @@
 
     const params = new URLSearchParams(window.location.search);
     const pollParam = (params.get("poll") || "").toLowerCase();
-    const pollingEnabled = pollParam !== "0" && pollParam !== "false";
+    const forcePoll = pollParam === "1" || pollParam === "true";
+    const pollingEnabled = (isLocalDevHost() || forcePoll) && pollParam !== "0" && pollParam !== "false";
 
     let initial = null;
     let inFlight = false;
@@ -64,7 +73,8 @@
     }
 
     async function fetchManifest() {
-      const resp = await fetch("models/manifest.json?t=" + Date.now(), { cache: "no-store" });
+      const url = pollingEnabled ? ("models/manifest.json?t=" + Date.now()) : "models/manifest.json";
+      const resp = await fetch(url, { cache: pollingEnabled ? "no-store" : "no-cache" });
       if (!resp.ok) return null;
       return parseManifest(await resp.json());
     }

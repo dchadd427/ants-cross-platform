@@ -988,6 +988,9 @@ body {
 }
 
 /* Live Status Pill & Native <dialog> Drawer */
+.status-pill-btn[hidden] {
+  display: none;
+}
 .status-pill-btn {
   appearance: none;
   display: inline-flex;

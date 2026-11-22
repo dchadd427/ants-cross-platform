@@ -97,7 +97,7 @@ class TheText(unittest.TestCase):
             self.assertNotIn(word, CONF)
 
     def test_the_two_page_blocks_take_the_headers_of_a_page_from_the_maps_and_the_map_maker_and_the_admin_page_keep_their_own(self):
-        for words in ("^~ /asset_catalog/", "~* \\.(html|css|js)$"):
+        for words in ("^~ /asset_catalog/", "^~ /test_3d/", "~* \\.(html|css|js)$"):
             block = dict(locations())[words]
             for header, variable in (("Content-Security-Policy", "$ants_csp"), ("X-Frame-Options", "$ants_frame_options"), ("Referrer-Policy", "$ants_referrer_policy"), ("Permissions-Policy", "$ants_permissions_policy")):
                 self.assertIn("add_header %s %s always;" % (header, variable), block, words)
@@ -404,6 +404,11 @@ LIVE_ROWS = [
     ("the asset catalog", "GET", "/asset_catalog/", (), 200, "page"),
     ("the asset catalog's file", "GET", "/asset_catalog/index.html", (), 200, "page"),
     ("the asset catalog's data script", "GET", "/asset_catalog/catalog_data.js", (), 200, "plain"),
+    ("the 3D viewer redirect", "GET", "/test_3d", (), 302, "plain"),
+    ("the 3D viewer", "GET", "/test_3d/", (), 200, "page"),
+    ("the 3D viewer studio page", "GET", "/test_3d/viewer.html", (), 200, "page"),
+    ("the 3D viewer script", "GET", "/test_3d/compare.js", (), 200, "plain"),
+    ("the 3D viewer manifest", "GET", "/test_3d/models/manifest.json", (), 200, "plain"),
     ("the map maker", "GET", "/mapmaker", (), 200, "mapmaker"),
     ("the map maker, old address", "GET", "/mapmaker.html", (), 302, "plain"),
     ("the admin page", "GET", "/admin", (), 200, "admin"),
@@ -484,8 +489,8 @@ WHATS_NEW = '{"version":"1.2.0","releases":[{"version":"1.2.0","date":"2026-01-0
 def docroot_files():
     page = "<!doctype html><html><head><title>%s</title></head><body>" + "<p>a stand-in page of the site, long enough to be compressed on its way</p>" * 40 + "</body></html>\n"
     big = (b"ANTS " + bytes(range(32, 120))) * 4000
-    files = {name: page % name for name in ("lobby.html", "index.html", "play.html", "matches.html", "match.html", "legal.html", "changelog.html", "mapmaker.html", "admin.html", "asset_catalog/index.html")}
-    files.update({"front/classic.css": "body { color: #222; }\n" * 80, "front/big.css": ".a { color: red; }\n" * 400, "shapes.js": "var shapes = 1;\n" * 80, "home/home.js": "var home = 1;\n" * 80, "asset_catalog/catalog_data.js": "var data = 1;\n" * 80,
+    files = {name: page % name for name in ("lobby.html", "index.html", "play.html", "matches.html", "match.html", "legal.html", "changelog.html", "mapmaker.html", "admin.html", "asset_catalog/index.html", "test_3d/compare.html", "test_3d/viewer.html")}
+    files.update({"front/classic.css": "body { color: #222; }\n" * 80, "front/big.css": ".a { color: red; }\n" * 400, "shapes.js": "var shapes = 1;\n" * 80, "home/home.js": "var home = 1;\n" * 80, "asset_catalog/catalog_data.js": "var data = 1;\n" * 80, "test_3d/compare.js": "var cmp = 1;\n" * 80, "test_3d/models/manifest.json": '{"version":"v-test"}',
                   "front/logo.png": "\x89PNG stand-in", "manifest.webmanifest": stats.read("web", "manifest.webmanifest"), "whats_new.json": WHATS_NEW, "app/icon-192.png": "\x89PNG stand-in", "app/apple-touch-icon.png": "\x89PNG stand-in", "favicon.png": "\x89PNG stand-in", "favicon.ico": "ico stand-in", "front/click.wav": "RIFF stand-in", "mapmaker_atlas/atlas.json": '{"v":1}', "mapmaker_atlas/ground.png": "\x89PNG stand-in",
                   "asset_catalog/sprites/s1.png": "\x89PNG stand-in", "asset_catalog/sounds/a.wav": "RIFF stand-in", "lvl_core.wasm": "\0asm stand-in", "index.js": big[:50000], "index.wasm": big[:120000], "index.data": big})
     return files

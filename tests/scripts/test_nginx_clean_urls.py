@@ -42,7 +42,7 @@ PAGES = [("/play", "play.html"), ("/changelog", "changelog.html"), ("/legal", "l
 # every path that the file hands to the game server, the chat hub or the admin page, and one under each prefix: none of them may be a page
 OTHER_PATHS = ["/ws", "/busy", "/stats", "/stats/local", "/replays", "/replays/x.antsrep", "/live", "/live/R-20260101-000000Z", "/lobbies", "/history", "/history/deaths", "/history/x", "/maps", "/maps/all", "/maps/files/A.LVL",
                "/maps/previews/a.webp", "/submissions", "/submissions/abc", "/test-maps", "/admin", "/admin/", "/admin/api/me", "/admin/api/", "/hub/ws", "/hub/login", "/hub/callback", "/hub/me", "/hub/logout", "/hub/forget",
-               "/sprites/a.png", "/sounds/a.wav", "/asset_catalog/", "/asset_catalog/index.html", "/mapmaker_atlas/atlas.json", "/favicon.ico", "/favicon.png", "/catalog", "/viewer", "/front/classic.css", "/home/home.js",
+               "/sprites/a.png", "/sounds/a.wav", "/asset_catalog/", "/asset_catalog/index.html", "/test_3d", "/test_3d/", "/test_3d/compare.html", "/mapmaker_atlas/atlas.json", "/favicon.ico", "/favicon.png", "/catalog", "/viewer", "/front/classic.css", "/home/home.js",
                "/index.wasm", "/index.data", "/index.js", "/lvl_core.wasm"]
 
 

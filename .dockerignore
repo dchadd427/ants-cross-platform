@@ -9,6 +9,8 @@ build_*
 dist
 tests
 docs
+!docs/chd_table4_animations.json
+tools/ant_models/models
 Original-Ants/*.exe
 Original-Ants/*.dll
 Original-Ants/ddraw.ini

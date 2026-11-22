@@ -12,6 +12,14 @@
     return node;
   }
 
+  function isLocalDevHost() {
+    const h = (window.location.hostname || "").toLowerCase();
+    if (!h || h === "localhost" || h === "127.0.0.1" || h === "::1" || h === "[::1]" || h.endsWith(".local")) {
+      return true;
+    }
+    return /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.)/.test(h);
+  }
+
   function initStatusPanel() {
     const btn = document.getElementById("btn-status");
     const labelEl = document.getElementById("status-btn-label");
@@ -19,15 +27,19 @@
     if (!btn || !dialog) return;
 
     const params = new URLSearchParams(window.location.search);
-    const pollEnabled = params.get("poll") !== "0" && window.location.protocol !== "file:";
-    const canFetch = window.location.protocol !== "file:";
+    const pollParam = (params.get("poll") || "").toLowerCase();
+    const forcePoll = pollParam === "1" || pollParam === "true";
+    const localHost = isLocalDevHost();
+    const pollEnabled = (localHost || forcePoll) && pollParam !== "0" && pollParam !== "false" && window.location.protocol !== "file:";
+    const canFetch = (localHost || forcePoll) && window.location.protocol !== "file:";
 
     let timerId = null;
     let lastRaw = "";
     let latestData = null;
     let available = false;
     let loaded = false;
-    let missing = false;
+    let missing = !canFetch;
+    btn.hidden = true;
 
     function syncDebug() {
       const inProg = latestData && Array.isArray(latestData.in_progress) ? latestData.in_progress.length : 0;
@@ -154,6 +166,7 @@
           missing = true;
           available = false;
           loaded = true;
+          btn.hidden = true;
           stopPolling();
           updateButton();
           if (dialog.open) renderDialog();
@@ -175,6 +188,7 @@
         lastRaw = raw;
         latestData = parsed;
         available = true;
+        btn.hidden = false;
         updateButton();
         if (dialog.open) renderDialog();
       } catch (_) {
