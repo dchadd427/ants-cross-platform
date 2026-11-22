@@ -147,6 +147,7 @@ The options of the build (`-D` when CMake configures; CMake does not read them f
 ### Running the Game
 
 - macOS and Linux: `./build/src/ants_app/ants`. Windows: `start_game.bat`, or `build\src\ants_app\Release\ants.exe`.
+- The window and the Dock show the original game's icon, and on Windows `ants.exe` carries it as its file icon ([`INSTALL_AS_APP.md`](INSTALL_AS_APP.md#the-icons), "The desktop game's icon").
 - With no options the game opens the start menu; an option that chooses a mode, such as `--map-select`, skips it ([`CONTROLS.md`](CONTROLS.md#which-command-lines-show-the-menu)).
 - A check without a window: a headless run of 60 frames that saves a screenshot (a BMP) and exits ([`COMMAND_LINE.md`](COMMAND_LINE.md#testing-headless-and-screenshots)):
   ```bash

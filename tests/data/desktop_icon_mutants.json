@@ -1,0 +1,29 @@
+{
+ "note": "Mutants of the desktop game's window icon (src/ants_app/app_icon.cpp, the call in application.cpp; docs/INSTALL_AS_APP.md, 'The desktop game's icon') for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout: python3 tools/mutate.py tests/data/desktop_icon_mutants.json --keep-going --jobs 1. Both are caught by test_app_icon, which reads the surface back through SDL and asks the application whether it gave its window the icon.",
+ "baseline": [
+  {
+   "build": "test_app_icon",
+   "test": "./build/tests/test_app/test_app_icon"
+  }
+ ],
+ "mutants": [
+  {
+   "id": "channel_masks_swapped",
+   "file": "src/ants_app/app_icon.cpp",
+   "old": "32, SDL_PIXELFORMAT_RGBA32);",
+   "new": "32, SDL_PIXELFORMAT_ABGR32);",
+   "build": "test_app_icon",
+   "test": "./build/tests/test_app/test_app_icon",
+   "expect": "FAIL [surface]"
+  },
+  {
+   "id": "window_not_given_the_icon",
+   "file": "src/ants_app/application.cpp",
+   "old": "window_icon_set_ = app_icon::set_window_icon(window_);",
+   "new": "window_icon_set_ = false;",
+   "build": "test_app_icon",
+   "test": "./build/tests/test_app/test_app_icon",
+   "expect": "FAIL [window]"
+  }
+ ]
+}
