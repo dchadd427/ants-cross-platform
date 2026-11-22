@@ -574,9 +574,9 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
                     return_hop_ = GateInfo::best_hop_between(gates_, view.grid(), hop.to_comp, gates_.home(), hop_choice(view));
                 }
                 if (return_hop_.bombs == 0) {
-                    bool others_bomb = false;
-                    for (const BombView& b : view.bombs()) others_bomb = others_bomb || b.owner != context.seat;
-                    if (others_bomb) return;                                             // every hop is shut by a bomb of another team at this look: wait for one of them to go off (the step timer ends the attempt)
+                    bool shut = false;
+                    for (const BombView& b : view.bombs()) shut = shut || (b.owner != context.seat && gates_.bomb_beside(b.tile, hop.to_comp));
+                    if (shut) return;                                                    // every hop is shut by a bomb of another team on or beside the vault at this look: wait for one of them to go off (the step timer ends the attempt); a bomb elsewhere shuts none
                     fail(context, "stranded");
                     return;
                 }
@@ -589,8 +589,7 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
                 }
                 if (ret_bomb) {
                     if (ant.tile == return_hop_.from) {
-                        send(context, false, return_hop_.bomb);
-                        ++hops_ordered_;
+                        if (send(context, false, return_hop_.bomb)) ++hops_ordered_;
                     } else if (!tile_blocked(context, return_hop_.from)) {
                         send(context, false, return_hop_.from);
                     }
@@ -629,9 +628,10 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
     }
     if (bomb_here) {
         if (ant.tile == hop.from) {
-            send(context, false, hop.bomb);
-            ++hops_ordered_;
-            thrown_ = true;
+            if (send(context, false, hop.bomb)) {                                          // (a throw order that the gap held back is not a throw ordered)
+                ++hops_ordered_;
+                thrown_ = true;
+            }
         } else if (!tile_blocked(context, hop.from)) {
             send(context, false, hop.from);
         }
@@ -641,7 +641,7 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
             return;
         }
         if (shore_pile && ant.hp < 9 && context.map.hill(context.seat).present) {
-            context.orders.move({ant_}, context.map.hill(context.seat).entrance);
+            send(context, false, context.map.hill(context.seat).entrance);
             last_order_ = now;
             return;
         }
@@ -667,15 +667,16 @@ void GateGoalTask::succeed(TaskContext& context) {
 }
 
 // One order of the hop's chain (a walk, or a plant: a special order onto the bomb tile). The next step of the chain follows after `step_gap` ticks; the same order again (it did not work, or the ant
-// stands where it stood) waits for `order_gap`: the bot's stall detector counts equal orders.
-void GateGoalTask::send(TaskContext& context, bool special, sim::TileCoord tile) {
+// stands where it stood) waits for `order_gap`: the bot's stall detector counts equal orders. True when the order was given.
+bool GateGoalTask::send(TaskContext& context, bool special, sim::TileCoord tile) {
     const uint64_t now = context.view.tick();
     const uint64_t key = (special ? uint64_t{1} << 40 : uint64_t{0}) | (static_cast<uint64_t>(tile.y) << 20) | static_cast<uint64_t>(tile.x);
-    if (key == last_key_ && now < last_sent_ + params_.order_gap) return;
+    if (key == last_key_ && now < last_sent_ + params_.order_gap) return false;
     last_key_ = key;
     last_sent_ = now;
     if (special) context.orders.special(ant_, tile);
     else context.orders.move({ant_}, tile);
+    return true;
 }
 
 // The hop of the goal is shut by a bomb of another team: the goal is planned again at the next look on the grid as it is (the planner leaves out a plant tile or a standing tile that holds a bomb).

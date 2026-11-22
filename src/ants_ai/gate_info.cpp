@@ -92,6 +92,15 @@ bool GateInfo::hop_shut(const BombHop& hop, const HopChoice& choice) noexcept {
     return diagonal && (taken(sim::TileCoord{hop.from.x, hop.bomb.y}) || taken(sim::TileCoord{hop.bomb.x, hop.from.y}));
 }
 
+bool GateInfo::bomb_beside(sim::TileCoord bomb, int32_t comp) const noexcept {
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            if (component(sim::TileCoord{bomb.x + dx, bomb.y + dy}) == comp) return true;
+        }
+    }
+    return false;
+}
+
 BombHop GateInfo::best_hop_into(const std::vector<int32_t>& comps, const HopChoice& choice) const {
     BombHop best;
     for (const BombHop& hop : hops_) {

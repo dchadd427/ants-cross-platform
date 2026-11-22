@@ -127,6 +127,8 @@ public:
     static BombHop best_hop_between(const GateInfo& gates, const sim::Grid& grid, int32_t from_comp, int32_t to_comp, const HopChoice& choice = HopChoice{});
     /// The best hop of hops() (those that leave the home component) that lands in one of `comps` (bombs == 0 when none does): the fewest bombs, then the one that `choice` prefers
     BombHop best_hop_into(const std::vector<int32_t>& comps, const HopChoice& choice = HopChoice{}) const;
+    /// Whether a bomb on `bomb` lies on or beside a tile of component `comp` (the eight tiles round it): a bomb that can shut a hop that leaves that component, as against one far away
+    bool bomb_beside(sim::TileCoord bomb, int32_t comp) const noexcept;
     /// Whether an ant of `choice.occupied` stands on a tile that the hop needs
     static bool hop_shut(const BombHop& hop, const HopChoice& choice) noexcept;
     /// The best map-bomb chain triggered by stepping 1 tile from `from` onto an adjacent map bomb that lands on safe ground in `to_comp` (bombs == 0 when none exists).

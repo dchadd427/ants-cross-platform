@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the gate play for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_walls_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. The tests are AI26.4 and AI27.6 - AI27.18 of suite 2.20.",
+ "note": "Mutants of the gate play for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_walls_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. The tests are AI26.4 and AI27.6 - AI27.20 of suite 2.20.",
  "defaults": {
   "build": "test_ai"
  },
@@ -401,6 +401,38 @@
    "new": "(ally_side && !(tactics_.gate_map && !ally_reaches(v, c.map, p.tile) && false))",
    "test": "timeout 900 env ANTS_TEST_FILTER=AI27.18 ./build/tests/test_ai/test_ai",
    "expect": "AI27.18"
+  },
+  {
+   "id": "ally_reaches_never",
+   "file": "src/ants_ai/standard_tasks_powerup.cpp",
+   "old": "                if (map.component(ally, sim::TileCoord{power_up.x + dx, power_up.y + dy}) == at) return true;",
+   "new": "                if (false && map.component(ally, sim::TileCoord{power_up.x + dx, power_up.y + dy}) == at) return true;",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI27.19 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.19"
+  },
+  {
+   "id": "ally_in_mound_cannot_reach",
+   "file": "src/ants_ai/standard_tasks_powerup.cpp",
+   "old": "            if (!inside) continue;\n",
+   "new": "            if (!inside || true) continue;\n",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI27.19 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.19"
+  },
+  {
+   "id": "stranded_never_waits",
+   "file": "src/ants_ai/gate_task.cpp",
+   "old": "                    if (shut) return;",
+   "new": "                    if (false && shut) return;",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI27.20 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.20"
+  },
+  {
+   "id": "stranded_waits_for_any_bomb",
+   "file": "src/ants_ai/gate_task.cpp",
+   "old": "shut = shut || (b.owner != context.seat && gates_.bomb_beside(b.tile, hop.to_comp));",
+   "new": "shut = shut || b.owner != context.seat;",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI27.20 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.20"
   }
  ]
 }

@@ -31,8 +31,14 @@ bool ally_reaches(const BotView& view, const MapInfo& map, sim::TileCoord power_
     if (ally >= sim::MAX_PLAYERS) return false;
     for (const AntView& a : view.others()) {
         if (a.team != ally) continue;
-        const int32_t at = map.component(ally, a.tile);
-        if (at < 0) continue;
+        int32_t at = map.component(ally, a.tile);
+        if (at < 0) {                                                                      // an ant of the ally inside its mound (it is banking) walks out into the hill's own part of the map
+            const HillInfo& hill = map.hill(ally);
+            const bool inside = hill.present && a.tile.x >= hill.origin.x && a.tile.x < hill.origin.x + 4 && a.tile.y >= hill.origin.y && a.tile.y < hill.origin.y + 4;
+            if (!inside) continue;
+            at = map.hill_component(ally);
+            if (at < 0) continue;
+        }
         for (int dy = -1; dy <= 1; ++dy) {
             for (int dx = -1; dx <= 1; ++dx) {
                 if (map.component(ally, sim::TileCoord{power_up.x + dx, power_up.y + dy}) == at) return true;

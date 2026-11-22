@@ -84,7 +84,7 @@ private:
     void succeed(TaskContext& context);
     void fail(TaskContext& context, const char* why);
     void replan(TaskContext& context);
-    void send(TaskContext& context, bool special, sim::TileCoord tile);
+    bool send(TaskContext& context, bool special, sim::TileCoord tile);
     bool may_order(uint64_t now) const noexcept { return last_order_ == 0 || now >= last_order_ + params_.order_gap; }
     bool may_step(uint64_t now) const noexcept { return last_order_ == 0 || now >= last_order_ + params_.step_gap; }
     bool tile_blocked(TaskContext& context, sim::TileCoord tile);
