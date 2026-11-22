@@ -497,6 +497,6 @@ void run_bombs_tests() {
         ASSERT_TRUE(orders[0] >= 3000 && orders[1] >= 3000);                                  // the matches were played
         ASSERT_TRUE(blasts[1] >= 20);                                                         // the bot as it was walks into plenty of them
         ASSERT_TRUE(blasts[0] < blasts[1]);
-        ASSERT_TRUE(score[0] * 100 >= score[1] * 97);                                         // (the same score within 3 percent: under the rules number 14 the shipped bots with the detour score 98.7 percent of the bot as it was over these 24 seeds, 179,005 against 181,375, and walk into 385 bombs against 446; with the unstick batch off they scored 98.0 percent (191,630 against 195,490): 24 seeds swing about 2 percent, and over seeds 25 to 120 the same bots score 100.2 and 100.0 percent)
+        ASSERT_TRUE(score[0] * 100 >= score[1] * 97);                                         // (the same score within 3 percent: under the rules number 14 the shipped bots with the detour score 100.0 percent of the bot as it was over these 24 seeds, 194,800 against 194,875, and walk into 403 bombs against 454; with the unstick batch off they scored 98.0 percent (191,630 against 195,490): 24 seeds swing about 2 percent, and over seeds 25 to 120 the same bots score 100.3 percent)
     } TEST_END();
 }

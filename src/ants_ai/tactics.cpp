@@ -745,22 +745,29 @@ bool reachable_by(const MapInfo& map, uint8_t team, sim::TileCoord tile) noexcep
     return false;
 }
 
-bool has_shut_in_thief(const BotView& view, const MapInfo& map) noexcept {
+void note_shut_in_thieves(Tactics& tactics, const BotView& view, const MapInfo& map) {
+    const uint64_t now = view.tick();
+    tactics.shut_in.clear();
     for (const AntView& a : view.mine()) {
-        if (a.type != sim::AntType::Thief || a.state != sim::UnitState::CantGo) continue;
-        for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
-            if (map.hill(t).present && map.hill(t).raid == a.tile) return true;
+        if (a.type != sim::AntType::Thief || !(a.holding || a.carried_points > 0)) continue;
+        bool on_raid_tile = false;
+        for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) on_raid_tile = on_raid_tile || (map.hill(t).present && map.hill(t).raid == a.tile);
+        if (!on_raid_tile) continue;
+        auto seen = tactics.shut_seen.find(a.id);
+        if (a.state == sim::UnitState::CantGo) {
+            if (seen == tactics.shut_seen.end() || now > seen->second.second + 60u) seen = tactics.shut_seen.insert_or_assign(a.id, std::make_pair(now, now)).first;
+            seen->second.second = now;
         }
+        if (seen != tactics.shut_seen.end() && now <= seen->second.second + 60u && now >= seen->second.first + tactics.plan.rescue_after) tactics.shut_in.push_back(a.tile);
     }
-    return false;
+    for (auto it = tactics.shut_seen.begin(); it != tactics.shut_seen.end();) it = now > it->second.second + 60u ? tactics.shut_seen.erase(it) : std::next(it);
 }
 
-bool shuts_in_own_thief(const BotView& view, const MapInfo& map, sim::TileCoord wall) noexcept {
-    for (const AntView& a : view.mine()) {
-        if (a.type != sim::AntType::Thief || a.state != sim::UnitState::CantGo) continue;
+bool shuts_in_own_thief(const std::vector<sim::TileCoord>& shut_in, const MapInfo& map, sim::TileCoord wall) noexcept {
+    for (const sim::TileCoord& tile : shut_in) {
         for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
             const HillInfo& h = map.hill(t);
-            if (!h.present || h.raid != a.tile) continue;
+            if (!h.present || h.raid != tile) continue;
             for (const sim::TileCoord& e : east_tiles(h)) {
                 if (e == wall) return true;
             }

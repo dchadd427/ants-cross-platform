@@ -134,8 +134,9 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     }
     tactics_.gone = plan.gone && view.game_mode() == sim::GameMode::HighestScore && no_work_since_ != 0 && !fallback && now >= no_work_since_ + plan.gone_wait && view.ticks_left() > 300;       // (the game type 187 has no food by its rules: its brawl is its own)
     const bool gate_breaching = tactics_.gate_map && !tactics_.gate_beside && !fallback && !gate_goals_.exhausted() && !any_reachable_pile && now < kBreachTicks && (view.score() == 0 || gate_goals_.phase() != GateGoalTask::Phase::Idle);
+    if (plan.rescue_thief) note_shut_in_thieves(tactics_, view, *map);                       // (the Thieves that are walled in, for the Fire Ant's wish and its walls)
     tactics_.wall_demand = !gate_breaching && wall_demand(tactics_, view, *map);
-    if (tactics_.wall_demand || (plan.rescue_thief && !gate_breaching && has_shut_in_thief(view, *map))) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = 1;       // (a Fire Ant puts out the walls that shut in an own Thief)
+    if (tactics_.wall_demand || (plan.rescue_thief && !gate_breaching && !tactics_.shut_in.empty())) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = 1;       // (a Fire Ant puts out the walls that shut in an own Thief)
     uint8_t present = 0;
     for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) present = static_cast<uint8_t>(present | (view.rows()[t].present ? 1u << t : 0u));
     if (plan.secure_side && !gate_breaching) {                    // the power-ups of the own side are taken early: an enemy that steals the Fire can wall the piles in, the Bomber can mine the base, the Thief can raid twice

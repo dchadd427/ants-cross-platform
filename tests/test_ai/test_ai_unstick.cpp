@@ -8,7 +8,8 @@
 //   AI57.5  the plug task and the trip task do not send two ants to one power-up
 //   AI57.6  the refusal memory: a click that the engine refuses twice is blocked, longer after the third, and the first refusal blocks nothing; a carrier at the gate is never judged
 //   AI57.7  the stuck tally counts a thief in the can't-go loop and a carrier with no order once the span is 10 seconds old, an ant at work never, and play_match reports it
-//   AI57.8  a Thief that raided and was walled in on the raid tile is freed by an own Fire Ant, which puts a wall of the hole out; a wall that shuts in nobody is not its business; with the rule off the thief stays
+//   AI57.8  a Thief that raided and was walled in on the raid tile is freed by an own Fire Ant, which puts a wall of the hole out; a wall that shuts in nobody is not its business, nor is a Thief that holds nothing, a wall that burns out within 200 ticks
+//           or a hole with an ant of another team beside its walls; with the rule off the thief stays
 //   AI57.9  whole matches: on the map of the power-ups that plug the ways the bots strand fewer ants and refuse fewer orders than the bots without the rules (unstick=0), and the match replays
 //   AI57.10 the click of a person who sees a Thief in the loop: a Thief that shows the engine's can't-go clip is clicked onto an ordinary tile of its part again and again (a volley, each click paid for) and walks
 //           away under the rules number 14, and is sent home when a walk opens; under the rules before 14, with the rule off, or below Hard it stays
@@ -353,6 +354,7 @@ void run_unstick_tests() {
             const HillInfo& h1 = probe.hill(1);
             const std::array<TileCoord, 3> walls = east_tiles(h1);
             const uint32_t thief = sim.spawn_unit(0, sim::AntType::Thief, trapped ? h1.raid : TileCoord{30, 40});
+            sim.get_unit(thief).steal_points(50);                                                  // (it holds the loot of its raid)
             sim.spawn_unit(0, sim::AntType::Fire, TileCoord{30, 10});
             for (const TileCoord& w : walls) sim.set_fire_at(w, 3600);
             sim.apply_command(command_of(CommandType::GroupMove, 0, {thief}, 20, 20));            // (the thief tries to leave: the clip, and the engine's loop)
@@ -389,6 +391,7 @@ void run_unstick_tests() {
             const HillInfo& h1 = probe.hill(1);
             const HillInfo& h3 = probe.hill(3);
             const uint32_t thief = sim.spawn_unit(0, sim::AntType::Thief, h1.raid);
+            sim.get_unit(thief).steal_points(50);                                                  // (it holds the loot of its raid)
             sim.spawn_unit(0, sim::AntType::Fire, TileCoord{h3.origin.x + 8, h3.origin.y + 2});
             for (const TileCoord& w : east_tiles(h1)) sim.set_fire_at(w, 3600);
             for (const TileCoord& w : east_tiles(h3)) sim.set_fire_at(w, 3600);
@@ -401,12 +404,34 @@ void run_unstick_tests() {
             ASSERT_EQ(walls_east(sim, h3.origin), 3u);                                        // the walls of the other hole stand
             ASSERT_TRUE(walls_east(sim, h1.origin) <= 2u);                                    // the walls of the Thief's hole do not
         }
+        // a Thief that holds nothing, or whose wall burns out within the 200 ticks that make a Thief walled in, is not the Fire Ant's business: no wall is ordered out
+        for (const int variant : {0, 1, 2, 3}) {                                               // 0: no loot, 1: the wall burns out after 120 ticks, 2: the premise (loot, a wall that stands): the walls are ordered out, 3: the same with an enemy ant beside the walls
+            sim::SimulationEngine sim;
+            empty_field(sim, 59);
+            const MapInfo probe(sim);
+            const HillInfo& h1 = probe.hill(1);
+            const uint32_t thief = sim.spawn_unit(0, sim::AntType::Thief, h1.raid);
+            if (variant != 0) sim.get_unit(thief).steal_points(50);
+            if (variant == 3) sim.spawn_unit(1, sim::AntType::Worker, TileCoord{h1.raid.x + 4, h1.raid.y + 3});      // (an ant of the hole's team beside the walls: the Fire Ant that walks there is lost with the loot)
+            sim.spawn_unit(0, sim::AntType::Fire, TileCoord{30, 10});
+            for (const TileCoord& w : east_tiles(h1)) sim.set_fire_at(w, variant == 1 ? 120 : 3600);
+            sim.apply_command(command_of(CommandType::GroupMove, 0, {thief}, 20, 20));
+            LevelPlan plan = peace_plan(Level::Hard);
+            plan.plugs = false;
+            plan.refusal_memory = false;
+            plan.free_thief = false;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(500);
+            if (variant == 2) ASSERT_TRUE(rig.proposed_count(CommandType::GroupSpecial) >= 1);
+            else ASSERT_EQ(rig.proposed_count(CommandType::GroupSpecial), 0u);
+        }
         // no Fire Ant yet, a Fire power-up on the own side: a worker fetches it, and then puts the wall out
         sim::SimulationEngine sim;
         empty_field(sim, 56);
         const MapInfo probe(sim);
         const HillInfo& h1 = probe.hill(1);
         const uint32_t thief = sim.spawn_unit(0, sim::AntType::Thief, h1.raid);
+            sim.get_unit(thief).steal_points(50);                                                  // (it holds the loot of its raid)
         sim.grid_mut().place_powerup(16, 12, 2);
         for (const int dx : {0, 1, 2}) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + dx, 10});
         for (const TileCoord& w : east_tiles(h1)) sim.set_fire_at(w, 3600);

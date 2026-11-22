@@ -133,6 +133,8 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "refmem") return flag(p.refusal_memory);                              // a click that was refused twice is not given again for a while (0: the bot as it was; docs/BOT_UNSTUCK.md)
     if (key == "rescue") return flag(p.rescue_thief);                                // the Fire Ant puts out the walls that shut in an own Thief (0: the bot as it was; docs/BOT_UNSTUCK.md)
     if (key == "freethief") return flag(p.free_thief);                              // the Thief in the can't-go loop is clicked away at the tick the engine takes it (0: the bot as it was; docs/BOT_UNSTUCK.md)
+    if (key == "rescueguard") { p.rescue_guard = static_cast<uint32_t>(v); return true; }
+    if (key == "rescueafter") { p.rescue_after = static_cast<uint32_t>(v); return true; }
     if (key == "plugs") return flag(p.plugs);                                       // the power-ups that plug a way are taken (0: the bot as it was; docs/BOT_UNSTUCK.md)
     if (key == "sabotage") return flag(p.sabotage);
     if (key == "fireextra") { p.fire_extra = static_cast<uint32_t>(v); return true; }

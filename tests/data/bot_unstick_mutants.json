@@ -112,8 +112,8 @@
   {
    "id": "rescue_wall_not_harm",
    "file": "src/ants_ai/standard_tasks_build.cpp",
-   "old": "    if (plan.rescue_thief && shuts_in_own_thief(view, map, tile)) return 1;",
-   "new": "",
+   "old": "    if (plan.rescue_thief && shut_in != nullptr && shuts_in_own_thief(*shut_in, map, tile)) {",
+   "new": "    if (plan.rescue_thief && shut_in != nullptr && shuts_in_own_thief(*shut_in, map, tile) && false) {",
    "build": "test_ai",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI57.8 ' ./build/tests/test_ai/test_ai",
    "expect": "AI57.8"
@@ -130,7 +130,7 @@
   {
    "id": "rescue_no_fire_wanted",
    "file": "src/ants_ai/standard_bot.cpp",
-   "old": "|| (plan.rescue_thief && !gate_breaching && has_shut_in_thief(view, *map))",
+   "old": "|| (plan.rescue_thief && !gate_breaching && !tactics_.shut_in.empty())",
    "new": "",
    "build": "test_ai",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI57.8 ' ./build/tests/test_ai/test_ai",
@@ -342,6 +342,33 @@
    "build": "test_ai",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI57.10 ' ./build/tests/test_ai/test_ai",
    "expect": "AI57.10"
+  },
+  {
+   "id": "rescue_no_persistence",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": " && now >= seen->second.first + tactics.plan.rescue_after) tactics.shut_in.push_back(a.tile);",
+   "new": ") tactics.shut_in.push_back(a.tile);",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.8"
+  },
+  {
+   "id": "rescue_unloaded_thief",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "if (a.type != sim::AntType::Thief || !(a.holding || a.carried_points > 0)) continue;",
+   "new": "if (a.type != sim::AntType::Thief) continue;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.8"
+  },
+  {
+   "id": "rescue_guard_ignored",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "if (plan.rescue_guard != 0 && e.hp > 0 && e.tile.chebyshev_dist(tile) <= static_cast<int32_t>(plan.rescue_guard)) return 0;",
+   "new": "if (plan.rescue_guard != 0 && e.hp > 0 && e.tile.chebyshev_dist(tile) <= static_cast<int32_t>(plan.rescue_guard) && false) return 0;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.8"
   }
  ]
 }
