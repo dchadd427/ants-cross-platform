@@ -371,10 +371,13 @@ async function main() {
             await crowd(r, PICTURE, 4);
             const page = await openPage(r, SIZES[0], '1000_maple');
             await listShows(page, 'clover');
-            await page.evaluate(() => document.querySelector('.hchip.mine').click());
+            await page.waitForSelector('.hbar .quick.host:not([disabled])', { timeout: 15000 });
+            await page.evaluate(() => document.querySelector('.hbar .quick.host').click());       // (Quick host asks who can join; Invite only makes the page's own room and shows it)
+            await page.waitForSelector('.gcbtns button', { timeout: 5000 });
+            await page.evaluate(() => Array.from(document.querySelectorAll('.gcbtns button')).filter((b) => /^Invite only$/.test(b.textContent.trim()))[0].click());
             await sleep(300);
-            check('the Room shows: the list is not on it (Home is hidden with it)', await page.evaluate(() => document.body.getAttribute('data-screen') === 'room' && !document.getElementById('players').getClientRects().length));
-            await page.click('.rhome');
+            check('the Room shows: the list stays beside it (the same list, narrower), and the Games list is not drawn', await page.evaluate(() => { const g = document.querySelector('.glist'), p = document.getElementById('players'); return document.body.getAttribute('data-screen') === 'room' && p.getClientRects().length > 0 && p.textContent.indexOf('clover') !== -1 && (!g || !g.getClientRects().length); }));
+            await page.click('.hbar .hmenu'); await page.click('.hmenubox a.mitem[aria-current="page"]');       // (the Menu's Home: the Room has no bar of its own)
             await sleep(300);
             check('Home again: the list is there, the same one', await page.evaluate(() => document.body.getAttribute('data-screen') === 'home' && document.getElementById('players').getClientRects().length > 0 && document.getElementById('players').textContent.indexOf('clover') !== -1));
             await page.context().close();

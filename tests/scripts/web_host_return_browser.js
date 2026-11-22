@@ -8,7 +8,7 @@
 //   0c. Matches (the Menu's link): the same tab with no room; with a room a NEW tab, whose Home closes it (also on the page that the tab's own Menu led to) and leaves the room's tab as it was; a Matches page
 //      that a front page tab with no room of its own went to by a plain link is not such a tab (Home loads the front page there at once);
 //   1. the host leaves the front page for the list of matches (the same tab: the browser's own Back, a typed address) and is back within the minute that the room holds a seat: the same seat and the same lead, no strip, nobody joined or left;
-//   2. the host leaves the front page for the list of matches and the person opens the site in a NEW tab within the minute: the new tab takes the same seat back (My room, the lead, no Join in the list for a room
+//   2. the host leaves the front page for the list of matches and the person opens the site in a NEW tab within the minute: the new tab takes the same seat back (the room held, the lead, no Join in the list for a room
 //      that is the person's own, "Yours"), and the room still has two people, not three;
 //   3. the host is away for more than the minute: the guest leads, and the page that comes back says that the seat ended and names the host, is a guest in that room and has no claim to lead it
 //      (this part and the 66 s of part 0 take about 150 seconds together: the room's hold is a minute and is not a setting).
@@ -107,12 +107,12 @@ function serve(server) {
 }
 
 const listed = async (server) => JSON.parse((await get(server.ports.door, '/lobbies')).body).lobbies;
-// What a front page shows of its room: the screen, My room, the heading, the strip, the cards' labels, the tab's saved room and the Games list's own words
+// What a front page shows of its room: the screen, whether the page holds the room, the heading, the strip, the cards' labels, the tab's saved room and the Games list's own words
 const snap = (page) => page.evaluate(() => {
-    const mine = document.querySelector('.hbar .mine');
+    const code = document.getElementById('code'), held = !!code && /\S/.test(code.textContent) && document.querySelectorAll('#slots li.k-person').length >= 1;       // (the page holds a room: its rows have a person in them; Home has no button for it)
     const session = (() => { try { return JSON.parse(sessionStorage.getItem('ants.lobby')); } catch (e) { return null; } })();
     return {
-        screen: document.body.getAttribute('data-screen'), mine: mine && !mine.hidden ? mine.textContent : null, heading: document.getElementById('room-h').textContent,
+        screen: document.body.getAttribute('data-screen'), held: held, heading: document.getElementById('room-h').textContent,
         banner: document.getElementById('banner').hidden ? '' : document.getElementById('banner-text').textContent, slots: Array.from(document.querySelectorAll('#slots li')).map((li) => li.getAttribute('aria-label')),
         code: session && session.c, own: session && session.o, join: document.querySelectorAll('.gjoin').length, yours: /Yours/.test((document.querySelector('#hmain') || { textContent: '' }).textContent)
     };
@@ -161,14 +161,14 @@ async function main() {
             const plain = await hostCtx.newPage(); watch(plain);
             await plain.goto(site.url + '/', { waitUntil: 'load' });
             await plain.waitForSelector('.hbar', { timeout: 8000 });
-            const attrs = (page) => page.evaluate(() => ['watch-top', 'watch-link'].map((id) => { const a = document.getElementById(id); return [a.getAttribute('href'), a.getAttribute('target'), a.getAttribute('rel')]; }));
-            check('0. with no room (a plain visit is Home) the links to the matches are plain links: no target', JSON.stringify(await attrs(plain)) === JSON.stringify([['/matches', null, null], ['/matches', null, null]]), JSON.stringify(await attrs(plain)));
+            const attrs = (page) => page.evaluate(() => [document.getElementById('watch-top'), document.getElementById('watch-link'), document.querySelector('.hbar .quick.hist')].map((a) => [a.getAttribute('href'), a.getAttribute('target'), a.getAttribute('rel')]));
+            check('0. with no room (a plain visit is Home) the links to the matches are plain links: no target', JSON.stringify(await attrs(plain)) === JSON.stringify([['/matches', null, null], ['/matches', null, null], ['/matches', null, null]]), JSON.stringify(await attrs(plain)));
             await plain.close();
             const A = await host(hostCtx, site); watch(A.page);
             const B = await guest(guestCtx, site, A.code); watch(B);
             const guestBefore = await snap(B);
-            check('0. a page that holds a room: the links to the matches open in a new tab (_blank, noopener noreferrer)', JSON.stringify(await attrs(A.page)) === JSON.stringify([['/matches', '_blank', 'noopener noreferrer'], ['/matches', '_blank', 'noopener noreferrer']]), JSON.stringify(await attrs(A.page)));
-            await A.page.click('.rbar .hmenu');                                              // (the masthead's and the footer's links are not drawn on the Room: the Menu's Matches is the way)
+            check('0. a page that holds a room: the links to the matches open in a new tab (_blank, noopener noreferrer)', JSON.stringify(await attrs(A.page)) === JSON.stringify([['/matches', '_blank', 'noopener noreferrer'], ['/matches', '_blank', 'noopener noreferrer'], ['/matches', '_blank', 'noopener noreferrer']]), JSON.stringify(await attrs(A.page)));
+            await A.page.click('.hbar .hmenu');                                              // (the masthead's and the footer's links are not drawn on the Room: the Menu's Matches is the way)
             const item = A.page.locator('.hmenubox a.mitem', { hasText: 'Matches' });
             check('0. the Menu\'s Matches item opens in a new tab too', (await item.getAttribute('target')) === '_blank' && (await item.getAttribute('rel')) === 'noopener noreferrer');
             const [tab] = await Promise.all([hostCtx.waitForEvent('page'), item.click()]);
@@ -197,7 +197,7 @@ async function main() {
             await plain.close();
             const A = await host(ctx, site); watch(A.page);
             await A.page.evaluate(() => { window.__same = 'the room\'s own page'; });
-            await A.page.click('.rbar .rhome');                                              // (Home: the screen with the Games list)
+            await A.page.click('.hbar .hmenu'); await A.page.click('.hmenubox a.mitem[aria-current="page"]');                                              // (Home: the screen with the Games list)
             await A.page.waitForSelector('.gdock .gwatch', { timeout: 15000 });
             await sleep(400);
             check('0b. with a room Watch is a new tab with no opener (_blank, noopener)', JSON.stringify(await attrs(A.page)) === JSON.stringify(['/play?live=TREASURE-20261109-120000Z', '_blank', 'noopener']), JSON.stringify(await attrs(A.page)));
@@ -221,7 +221,7 @@ async function main() {
             await side2.waitForSelector('.hbar', { timeout: 8000 });
             await sleep(2500);
             const back = await snap(side2);
-            check('0b. with the room\'s tab gone Home goes on as a link in the watch tab, and that front page takes the seat back (My room, "Your room")', ctx.pages().length === 1 && back.mine !== null && back.heading === 'Your room', JSON.stringify(back));
+            check('0b. with the room\'s tab gone Home goes on as a link in the watch tab, and that front page takes the seat back (the room is held, "Your room")', ctx.pages().length === 1 && back.held && back.heading === 'Your room', JSON.stringify(back));
             site.setLive(null);
             await ctx.close();
         }
@@ -244,7 +244,7 @@ async function main() {
             await plain.close();
             const A = await host(ctx, site); watch(A.page);
             await A.page.evaluate(() => { window.__same = 'the room\'s own page'; });
-            await A.page.click('.rbar .rhome');
+            await A.page.click('.hbar .hmenu'); await A.page.click('.hmenubox a.mitem[aria-current="page"]');
             await sleep(400);
             const inRoom = await matchesLink(A.page, '.hbar');
             const [tab] = await Promise.all([ctx.waitForEvent('page'), inRoom.click()]);
@@ -294,7 +294,7 @@ async function main() {
             await A.page.goto(site.url + '/', { waitUntil: 'load' });
             await settle(A.page);
             const back = await snap(A.page), seen = await snap(B);
-            check('1. the host comes back to the front page after 5 seconds: My room is there with its two colors, the room is "Your room", the host leads again', back.mine !== null && back.heading === 'Your room' && back.slots.some((l) => /you, host$/.test(l)), JSON.stringify(back));
+            check('1. the host comes back to the front page after 5 seconds: the page holds the room with its two colors, the room is "Your room", the host leads again', back.held && back.heading === 'Your room' && back.slots.some((l) => /you, host$/.test(l)), JSON.stringify(back));
             check('1. ... and says nothing about a seat that ended (no strip), and the room has two people', back.banner === '' && people(back) === 2 && (await listed(server)).every((x) => x.code !== A.code || x.people === 2), JSON.stringify(back));
             check('1. ... the guest sees the same room as before: the same host, the same two people, no strip', JSON.stringify(seen.slots) === JSON.stringify(guestBefore.slots) && seen.banner === '' && seen.heading === guestBefore.heading, JSON.stringify(seen));
             await hostCtx.close(); await guestCtx.close();
@@ -310,7 +310,7 @@ async function main() {
             await fresh.goto(site.url + '/', { waitUntil: 'load' });
             await settle(fresh);
             const back = await snap(fresh), seen = await snap(B), list = await listed(server);
-            check('2. the new tab takes the seat that the first page left: My room is there, the room is "Your room", the host leads', back.mine !== null && back.heading === 'Your room' && back.slots.some((l) => /you, host$/.test(l)) && back.code === A.code, JSON.stringify(back));
+            check('2. the new tab takes the seat that the first page left: the page holds the room, the room is "Your room", the host leads', back.held && back.heading === 'Your room' && back.slots.some((l) => /you, host$/.test(l)) && back.code === A.code, JSON.stringify(back));
             check('2. ... it does not offer to Join the room (the room is the person\'s own, "Yours"), and there is no strip', back.join === 0 && back.yours === true && back.banner === '', JSON.stringify(back));
             check('2. ... the room has two people, not three: the real list says so, and the guest saw nobody join or leave', list.filter((x) => x.code === A.code).every((x) => x.people === 2) && people(back) === 2 && JSON.stringify(seen.slots) === JSON.stringify(guestBefore.slots), JSON.stringify(list));
             await hostCtx.close(); await guestCtx.close();

@@ -62,6 +62,8 @@ NATIVE_READS = {
     "tests/scripts/web_fill_check.js": "test_ants_server.sh",
     "tests/scripts/web_lobby_server_check.js": "test_ants_server.sh",
     "tests/scripts/web_lobby_handoff_check.js": "test_ants_server.sh",
+    "tests/scripts/web_lobby_four_colors_check.js": "test_ants_server.sh",
+    "tests/scripts/web_home_games_rig.js": "test_ants_server.sh: web_lobby_four_colors_check.js",
     "tests/scripts/web_page_harness.js": "test_ants_server.sh: web_lobby_server_check.js",
 }
 FULL = ["VERSION", "CMakeLists.txt", "cmake/x.cmake", "src/ants_sim/a.cpp", "include/ants_sim/a.hpp", "tools/ci_light.sh", "tools/mutate.py", "hub/server.py", "Dockerfile", "Dockerfile.server",
@@ -511,7 +513,7 @@ class TheSkippedJobsReadNoLightFile(unittest.TestCase):
         with open(os.path.join(HERE, "web_page_harness.js"), encoding="utf-8") as f:
             harness = f.read()
         found |= harness_reads(harness)
-        for name in ("web_lobby_server_check.js", "web_lobby_handoff_check.js", "web_fill_check.js"):         # (the node checks that the script suite runs, and what they load)
+        for name in ("web_lobby_server_check.js", "web_lobby_handoff_check.js", "web_fill_check.js", "web_lobby_four_colors_check.js"):         # (the node checks that the script suite runs, and what they load)
             with open(os.path.join(HERE, name), encoding="utf-8") as f:
                 text = f.read()
             found |= {"web/" + n for n in re.findall(r"path\.join\(webDir, '([^']+)'\)", text)}

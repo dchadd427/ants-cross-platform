@@ -213,12 +213,14 @@
         function rectOf(sel) { var n = doc.querySelector && doc.querySelector(sel), r = n && n.getBoundingClientRect && n.getBoundingClientRect(); return r && r.height ? r : null; }
         function placeToast() {                            // above what is at the bottom: the chat (a phone's Chat view: its field), the strip of views, the Room's START bar; never into the bar at the top
             if (toast.parentNode !== doc.body) doc.body.appendChild(toast);
-            var h = win.innerHeight || 0, bar = rectOf('.hbar'), r = rectOf('#gchat') || rectOf('.htabs'), y = null, up;
+            var h = win.innerHeight || 0, bar = rectOf('.hbar'), r = rectOf('#gchat') || rectOf('.htabs'), y = null, go, up;
             if (r) y = rectOf('#hmain') ? r.top : (rectOf('.gc-form') || { top: r.bottom - 6 }).top;
             else if (win.innerWidth <= 700 && (r = rectOf('.go'))) y = r.top;
+            if (y !== null && win.innerWidth <= 700 && (go = rectOf('.go')) && go.top < y) y = go.top;       // (the Room's START bar stands above the strip of views: the toast goes above it)
             if (y === null || toast.hidden) { toast.style.bottom = ''; return; }
             up = h - y + 10;
             if (bar && toast.offsetHeight && h - up - toast.offsetHeight < bar.bottom + 2) up = h - bar.bottom - 2 - toast.offsetHeight;
+            if (up < 8) up = 8;       // (no room between the bar and the strip: the toast stays in the window, over the bar's lower edge, and its question can be answered)
             toast.style.bottom = Math.round(up) + 'px';
         }
         placeToast();

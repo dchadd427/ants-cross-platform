@@ -4,7 +4,7 @@
 // that shares the page's address, as nginx's /hub/ws does. It looks at what no fake DOM can: the places and sizes of the dock at 390 x 844 (a phone), 844 x 390 (a phone held sideways) and 1280 x 800 (a desktop) next to
 // the approved pictures, that nothing scrolls sideways, that every target is 44 px, that the dock covers none of the bar, that the dock comes after the first paint, that the page asks for its two files and for
 // nothing else, that no other page of the site opens a hub socket, the real WebSocket against the fake hub (read only, a writer, the two names and the switch between them, the hub's pace, untrusted text, a hub that goes and comes back, a hub that is not
-// there, a site with no /hub/ws), and the Room bar at 320 to 389 px (no logo, Home and Leave room in reach).
+// there, a site with no /hub/ws), and the Room's header at 320 to 389 px (Share, Rules and Leave in reach).
 //
 //   node tests/scripts/web_home_chat_browser.js [--shots DIR]      (CHROME=/path/to/chromium names a browser; as root it runs with --no-sandbox)
 //
@@ -58,6 +58,12 @@ async function main() {
     let browser;
     try { browser = await playwright.chromium.launch(launch); } catch (e) { console.log('SKIP: no browser could be started (' + String(e.message).split('\n')[0] + '): the chat dock was NOT run in a browser'); await hub.close(); site.server.close(); process.exit(0); }
     const errors = [];
+    const goHome = async (page) => { await page.click('.hbar .hmenu'); await page.click('.hmenubox a.mitem[aria-current="page"]'); };       // (the Menu's Home: the Room has no bar of its own and the top bar no button for it)
+    const hostPrivate = async (page) => {       // (Quick host asks who can join; Invite only makes the page's own room and shows it)
+        await page.evaluate(() => document.querySelector('.hbar .quick.host').click());
+        await page.waitForSelector('.gcbtns button', { timeout: 5000 });
+        await page.evaluate(() => Array.from(document.querySelectorAll('.gcbtns button')).filter((b) => /^Invite only$/.test(b.textContent.trim()))[0].click());
+    };
     async function open(size, query, o) {
         const context = await browser.newContext({ viewport: { width: SIZES[size] ? SIZES[size][0] : size[0], height: SIZES[size] ? SIZES[size][1] : size[1] }, deviceScaleFactor: 1 });
         const page = await context.newPage();
@@ -163,11 +169,11 @@ async function main() {
         await context.addInitScript((port) => { try { localStorage.setItem('ants.rejoin.abcdef.0', JSON.stringify({ k: '0f1e2d3c4b5a69788796a5b4c3d2e1f0', s: 'ws://127.0.0.1:' + port + '/ws', t: Date.now() })); } catch (e) { /* no storage */ } }, hub.port);
         const page = await context.newPage();
         page.on('pageerror', (e) => errors.push(String(e && e.message || e)));
-        await page.goto(site.url + '/', { waitUntil: 'load' });
-        await page.waitForSelector('#gchat', { timeout: 5000 });
-        await page.evaluate(() => document.querySelector('.hbar .mine').click());       // (My room: the game server is not there: the notice strip)
+        await page.goto(site.url + '/?room=abcdef', { waitUntil: 'load' });
+        await page.evaluate(() => { const b = document.getElementById('name-step-go'); if (b) b.click(); });       // (a link to a room: the game server is not there: the notice strip)
         await page.waitForFunction(() => !document.getElementById('banner').hidden, null, { timeout: 15000 });
-        await page.evaluate(() => document.querySelector('.rbar .rhome').click());
+        await goHome(page);
+        await page.waitForSelector('#gchat', { state: 'attached', timeout: 5000 });
         await page.waitForFunction(() => document.body.getAttribute('data-screen') === 'home', null, { timeout: 5000 });
         if ((await state(page)) === 'live/false' || (await state(page)) === 'offline/false' || (await state(page)) === 'connecting/false') await page.evaluate(() => document.querySelector('#gchat .gc-head').click());
         await settled(page);
@@ -317,11 +323,12 @@ async function main() {
     {
         hub.set({ mode: 'off' });
         const { page, context } = await open('desktop');
-        check('a site whose /hub/ws is answered 503: "Chat is offline", Home is whole (the bar, the Yard), no page error', (await waitState(page, 'offline/true')) && (await dockText(page, '.gc-note')) === 'Chat is offline' && (await page.evaluate(() => !!document.querySelector('.hbar .mine') && !!document.querySelector('#yard'))) && errors.length === 0);
+        check('a site whose /hub/ws is answered 503: "Chat is offline", Home is whole (the bar, the body), no page error', (await waitState(page, 'offline/true')) && (await dockText(page, '.gc-note')) === 'Chat is offline' && (await page.evaluate(() => !!document.querySelector('.hbar .quick.host') && !!document.querySelector('#hmain'))) && errors.length === 0);
         await shot(page, 'offline', 'desktop');
-        await page.evaluate(() => document.querySelector('.hbar .mine').click());
-        check('... and My room still shows the Room (the page\'s own socket is another one)', (await page.getAttribute('body', 'data-screen')) === 'room');
-        await page.click('.rbar .rhome');
+        await hostPrivate(page);
+        await page.waitForFunction(() => document.body.getAttribute('data-screen') === 'room', null, { timeout: 5000 });
+        check('... and a room that Quick host makes still shows the Room (the page\'s own socket is another one)', (await page.getAttribute('body', 'data-screen')) === 'room');
+        await goHome(page);
         check('... and Home again: the dock is still there', (await page.getAttribute('body', 'data-screen')) === 'home' && (await state(page)) !== null);
         await context.close();
         const phone = await open('phone');
@@ -349,15 +356,17 @@ async function main() {
         await room.context.close();
     }
 
-    // ---- the Room's bar at the narrow widths ----
+    // ---- the Room's header at the narrow widths ----
     {
         for (const width of [320, 339, 340, 360, 389]) {
             const { page, context } = await open([width, 700], '/?room=abcdef', { wait: false });
             await sleep(300);
             await page.evaluate(() => { const b = document.getElementById('name-step-go'); if (b) b.click(); });
             await sleep(300);
-            const bar = await page.evaluate(() => { const h = document.querySelector('.rbar h1'); const r = (e) => { const b = e.getBoundingClientRect(); return [b.left, b.right]; }; return { pictures: document.querySelectorAll('.rbar img').length, name: h.textContent, h1: h.tagName, home: r(document.querySelector('.rbar .rhome')), leave: r(document.querySelector('.rbar .leave')), sideways: document.documentElement.scrollWidth > window.innerWidth }; });
-            check('the Room\'s bar at ' + width + ' px: no picture, an h1 that says Ants!, Home and Leave room inside the window, nothing scrolls sideways', bar.pictures === 0 && bar.name === 'Ants!' && bar.h1 === 'H1' && !bar.sideways && bar.home[0] >= 0 && bar.home[1] <= bar.leave[0] && bar.leave[1] <= width, JSON.stringify(bar));
+            const bar = await page.evaluate(() => { const r = (e) => { if (!e || !e.getClientRects().length) return null; const b = e.getBoundingClientRect(); return [b.left, b.right, b.top, b.bottom]; }; const h = document.getElementById('room-h'); return { pictures: document.querySelectorAll('.r-top img').length, name: h ? h.textContent : '', h2: h ? h.tagName : '', share: r(document.getElementById('share')), rules: r(document.getElementById('rules-open')), leave: r(document.querySelector('.r-acts .leave')), sideways: document.documentElement.scrollWidth > window.innerWidth }; });
+            const inside = (q) => !!q && q[0] >= 0 && q[1] <= width;
+            const apart = (a, b) => a[1] <= b[0] + 0.5 || b[1] <= a[0] + 0.5 || a[3] <= b[2] + 0.5 || b[3] <= a[2] + 0.5;
+            check('the Room\'s header at ' + width + ' px: no picture, an h2 that names the room, Share, Rules and Leave inside the window and over no other, nothing scrolls sideways', bar.pictures === 0 && bar.h2 === 'H2' && bar.name.length > 0 && !bar.sideways && inside(bar.share) && inside(bar.rules) && inside(bar.leave) && apart(bar.share, bar.rules) && apart(bar.rules, bar.leave) && apart(bar.share, bar.leave), JSON.stringify(bar));
             if (width === 320 || width === 360) { if (shotsAt) { fs.mkdirSync(shotsAt, { recursive: true }); await page.screenshot({ path: path.join(shotsAt, 'dock7_room_bar_' + width + '.png') }); } }
             await context.close();
         }

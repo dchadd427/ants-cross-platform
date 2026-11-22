@@ -9,7 +9,7 @@
 //   4. the page never asks the browser for anything: no permission is requested, no service worker is registered, the permission is still "default".
 //   5. the bell in the top bar (a site with a fake chat hub, so that the visitor is logged in or not): for a logged in visitor the dot (not set up), the plain bell (on), the struck bell (blocked by the browser),
 //      the arrow of an iPhone that has not installed the app, none where the browser has no notifications; the plain bell for a visitor who is not logged in; at 320, 390, 721, 1000 and 1280 px wide, with and without
-//      a room held: the bell and Quick host, Quick join, My room, the account button and the Menu's button lie inside the window and none is over another, every target is 44 px or more; the bell stands right
+//      a room held: the bell and Quick host, Quick join, Match history, the account button and the Menu's button lie inside the window and none is over another, every target is 44 px or more; the bell stands right
 //      beside the Menu's button (one gap to its left, the same top and height) for a visitor who is logged in or not, with or without a room, at those widths and held sideways, and the account button comes before
 //      the bell; a press opens the sheet, the dot goes for good (also after a reload) once the sheet has been opened, and no press and no load asks the browser for anything.
 //   --shots DIR takes the pictures of the build (alerts_*.png).
@@ -45,6 +45,7 @@ let checks = 0;
 let failures = 0;
 function check(label, ok, detail) { checks++; if (!ok) { failures++; console.log('FAIL ' + label + (detail === undefined ? '' : ' (' + detail + ')')); } }
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const goHome = async (page) => { await page.click('.hbar .hmenu'); await page.click('.hmenubox a.mitem[aria-current="page"]'); };       // (the Menu's Home: the Room has no bar of its own and the top bar has no button for it)
 async function until(label, fn, ms) {
     const end = Date.now() + (ms || 10000);
     for (;;) {
@@ -158,7 +159,7 @@ const over = (a, b) => a && b && a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b
             await until('the host card', () => page.evaluate(() => !!document.querySelector('.gshade .gyes')));
             await page.evaluate(() => document.querySelector('.gshade .gyes').click());
             await until('the Room', () => page.evaluate(() => document.body.dataset.screen === 'room' && document.getElementById('code') && document.getElementById('code').textContent.length > 3));
-            await page.click('.rbar .rhome');
+            await goHome(page);
             await until('Home', () => page.evaluate(() => document.body.dataset.screen === 'home'));
             await sleep(300);
             await fetch(origin + '/__seat?seat=1&kind=bot&name=' + encodeURIComponent('Pip (bot, Easy)'));
@@ -176,7 +177,7 @@ const over = (a, b) => a && b && a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b
             await shot(page, name + '_join');
             await page.click('.al-toast .btn');
             check(label('Open shows the Room'), await page.evaluate(() => document.body.dataset.screen === 'room') && !(await box(page, '.al-toast')));
-            await page.click('.rbar .rhome');
+            await goHome(page);
             await fetch(origin + '/__seat?seat=2&kind=empty');
             await sleep(300);
             await page.evaluate(() => { document.querySelectorAll('.al-toast, #toast').forEach((e) => { e.hidden = true; }); });       // (the page's own "Sam left." is up for a moment)
@@ -237,7 +238,7 @@ const over = (a, b) => a && b && a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b
         }
         const controls = (page) => page.evaluate(() => {
             const out = {};
-            [['host', '.hbar .quick.host'], ['join', '.hbar .quick.join'], ['mine', '.hbar .hmine .mine'], ['bell', '.hbar .al-bell'], ['chip', '.hbar .hlogin'], ['menu', '.hbar .hmenu']].forEach(([k, sel]) => { const e = document.querySelector(sel); if (e && e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden') { const q = e.getBoundingClientRect(); out[k] = { l: q.left, t: q.top, r: q.right, b: q.bottom, w: q.width, h: q.height }; } });
+            [['host', '.hbar .quick.host'], ['join', '.hbar .quick.join'], ['hist', '.hbar .quick.hist'], ['bell', '.hbar .al-bell'], ['chip', '.hbar .hlogin'], ['menu', '.hbar .hmenu']].forEach(([k, sel]) => { const e = document.querySelector(sel); if (e && e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden') { const q = e.getBoundingClientRect(); out[k] = { l: q.left, t: q.top, r: q.right, b: q.bottom, w: q.width, h: q.height }; } });
             return out;
         });
         const clash = (c) => { const names = Object.keys(c), bad = []; for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) if (over(c[names[i]], c[names[j]])) bad.push(names[i] + '/' + names[j]); return bad; };
@@ -258,16 +259,16 @@ const bellState = (page) => page.evaluate(() => { const b = document.querySelect
             check(label('the bell stands right beside the Menu\'s button (one gap to its left, same top and height), the account button before the bell'), BESIDE(c, await gapOf(page)), JSON.stringify([c.chip, c.bell, c.menu, await gapOf(page)]));
             check(label('the Menu\'s button has no dot of its own'), st.menuDot === false, JSON.stringify(st));
             await shot(page, 'bell_' + name + '_off');
-            // a room held: My room joins the row
+            // a room held: Match history stays in the row
             await page.click('.hbar .quick.host');
             await until('the host card', () => page.evaluate(() => !!document.querySelector('.gshade .gyes')));
             await page.evaluate(() => document.querySelector('.gshade .gyes').click());
             await until('the Room', () => page.evaluate(() => document.body.dataset.screen === 'room' && document.getElementById('code') && document.getElementById('code').textContent.length > 3));
-            await page.click('.rbar .rhome');
-            await until('Home', () => page.evaluate(() => document.body.dataset.screen === 'home' && !!document.querySelector('.hbar .hmine .mine') && document.querySelector('.hbar .hmine .mine').getClientRects().length > 0));
+            await goHome(page);
+            await until('Home', () => page.evaluate(() => document.body.dataset.screen === 'home'));
             await sleep(300);
             c = await controls(page); st = await bellState(page);
-            check(label('with a room held: My room, Quick host, Quick join, the account button and the Menu are inside the window and none is over another (or over the bell)'), !!c.mine && [c.host, c.join, c.menu, c.chip, c.mine].every((r) => r && r.l >= -0.5 && r.r <= w + 0.5 && r.t >= -0.5 && r.b <= h + 0.5) && clash(c).length === 0, clash(c).join() + ' ' + JSON.stringify(c));
+            check(label('with a room held: Quick host, Quick join, Match history, the account button and the Menu are inside the window and none is over another (or over the bell)'), !!c.hist && [c.host, c.join, c.hist, c.menu, c.chip].every((r) => r && r.l >= -0.5 && r.r <= w + 0.5 && r.t >= -0.5 && r.b <= h + 0.5) && clash(c).length === 0, clash(c).join() + ' ' + JSON.stringify(c));
             check(label('with a room held the last button of the group is still at the right edge'), last(c).r >= w - 36 && last(c).r <= w, JSON.stringify(last(c)));
             check(label('a room held: the bell keeps its place right beside the Menu\'s button, and both are targets of 44 px'), BESIDE(c, await gapOf(page)) && c.bell.w >= 44 && c.bell.h >= 44 && c.menu.w >= 44 && c.menu.h >= 44, JSON.stringify([c.bell, c.menu, await gapOf(page)]));
             check(label('a room held: the Menu\'s button has no dot of its own'), st.menuDot === false, JSON.stringify(st));
@@ -305,11 +306,11 @@ const bellState = (page) => page.evaluate(() => { const b = document.querySelect
                 await until('the host card', () => page.evaluate(() => !!document.querySelector('.gshade .gyes')));
                 await page.evaluate(() => document.querySelector('.gshade .gyes').click());
                 await until('the Room', () => page.evaluate(() => document.body.dataset.screen === 'room' && document.getElementById('code') && document.getElementById('code').textContent.length > 3));
-                await page.click('.rbar .rhome');
-                await until('Home', () => page.evaluate(() => document.body.dataset.screen === 'home' && !!document.querySelector('.hbar .hmine .mine') && document.querySelector('.hbar .hmine .mine').getClientRects().length > 0));
+                await goHome(page);
+                await until('Home', () => page.evaluate(() => document.body.dataset.screen === 'home'));
                 await sleep(300);
                 c = await controls(page);
-                check('bell place ' + name + ', ' + who + ', a room held: right beside the Menu\'s button, one gap to its left, the same top and height, My room and the others inside the window and over no other', BESIDE(c, await gapOf(page)) && !!c.mine && c.menu.r >= w - 36 && c.menu.r <= w && clash(c).length === 0 && [c.host, c.join, c.menu, c.bell, c.mine].every((r) => r && r.l >= -0.5 && r.r <= w + 0.5 && r.t >= -0.5 && r.b <= h + 0.5), JSON.stringify([c, await gapOf(page)]));
+                check('bell place ' + name + ', ' + who + ', a room held: right beside the Menu\'s button, one gap to its left, the same top and height, Match history and the others inside the window and over no other', BESIDE(c, await gapOf(page)) && !!c.hist && c.menu.r >= w - 36 && c.menu.r <= w && clash(c).length === 0 && [c.host, c.join, c.hist, c.menu, c.bell].every((r) => r && r.l >= -0.5 && r.r <= w + 0.5 && r.t >= -0.5 && r.b <= h + 0.5), JSON.stringify([c, await gapOf(page)]));
                 await shot(page, 'place_' + name + '_' + (who === 'not logged in' ? 'out' : who === 'logged in' ? 'in' : 'long') + '_room');
                 await context.close();
             }
