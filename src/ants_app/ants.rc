@@ -1,0 +1,3 @@
+// The Windows program file's icon: the original game's icon, in the sizes that Explorer, the taskbar and the title bar ask for (ants.ico, written by tools/make_app_icons.py).
+// Resource 1 is the one that SDL's window class loads for the window, and the lowest number is the one that Explorer shows for the file.
+1 ICON "ants.ico"

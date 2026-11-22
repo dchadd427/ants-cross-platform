@@ -240,8 +240,9 @@ class TheFavicon(unittest.TestCase):
 @unittest.skipUnless(Image, "Pillow is needed")
 class TheIconTool(unittest.TestCase):
     def test_check_passes_and_the_tool_writes_the_committed_pictures_again(self):
-        with tempfile.TemporaryDirectory() as app, tempfile.TemporaryDirectory() as fav:
-            done = subprocess.run([sys.executable, "-I", os.path.join(REPO, "tools", "make_app_icons.py"), "--out", app, "--favicon-dir", fav, "--check"], capture_output=True, text=True, timeout=300)
+        with tempfile.TemporaryDirectory() as app, tempfile.TemporaryDirectory() as fav, tempfile.TemporaryDirectory() as desktop:      # (the desktop game's two files: tests/scripts/test_desktop_icon.py)
+            done = subprocess.run([sys.executable, "-I", os.path.join(REPO, "tools", "make_app_icons.py"), "--out", app, "--favicon-dir", fav, "--desktop-dir", desktop, "--check"],
+                                  capture_output=True, text=True, timeout=300)
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
             self.assertEqual(sorted(os.listdir(app)), sorted(ICON_FILES))
             self.assertEqual(sorted(os.listdir(fav)), ["favicon.ico", "favicon.png"])
