@@ -273,29 +273,29 @@
   {
    "id": "budget_the_hour_is_not_looked_at",
    "file": "hub/limits.py",
-   "old": "if not (hour.ready(now) and day.ready(now)):",
-   "new": "if not day.ready(now):",
+   "old": "hour, day = self.budget(account, now)\n        if not (hour.ready(now) and day.ready(now)):",
+   "new": "hour, day = self.budget(account, now)\n        if not day.ready(now):",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheBudgetsOfAnAccount tests.scripts.test_hub_room.TheChatTellsQuota tests.scripts.test_hub_room.TheBusiestChat"
   },
   {
    "id": "budget_the_day_is_not_looked_at",
    "file": "hub/limits.py",
-   "old": "if not (hour.ready(now) and day.ready(now)):",
-   "new": "if not hour.ready(now):",
+   "old": "hour, day = self.budget(account, now)\n        if not (hour.ready(now) and day.ready(now)):",
+   "new": "hour, day = self.budget(account, now)\n        if not hour.ready(now):",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheBudgetsOfAnAccount tests.scripts.test_hub_room.TheChatTellsQuota tests.scripts.test_hub_room.TheBusiestChat"
   },
   {
    "id": "budget_is_spent_by_a_line_that_the_pace_refused",
    "file": "hub/limits.py",
-   "old": "        if not bucket.take(now):\n            return \"rate\"\n        hour.take(now)\n        day.take(now)\n",
-   "new": "        hour.take(now)\n        day.take(now)\n        if not bucket.take(now):\n            return \"rate\"\n",
+   "old": "        if not bucket.take(now):\n            return \"rate\"\n        hour.take(now)\n        day.take(now)\n        said[text] = now",
+   "new": "        hour.take(now)\n        day.take(now)\n        if not bucket.take(now):\n            return \"rate\"\n        said[text] = now",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheBudgetsOfAnAccount tests.scripts.test_hub_room.TheChatTellsQuota tests.scripts.test_hub_room.TheBusiestChat"
   },
   {
    "id": "budget_is_not_spent_by_a_line_that_is_said",
    "file": "hub/limits.py",
-   "old": "        hour.take(now)\n        day.take(now)\n",
-   "new": "",
+   "old": "        hour.take(now)\n        day.take(now)\n        said[text] = now",
+   "new": "        said[text] = now",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheBudgetsOfAnAccount tests.scripts.test_hub_room.TheChatTellsQuota tests.scripts.test_hub_room.TheBusiestChat"
   },
   {

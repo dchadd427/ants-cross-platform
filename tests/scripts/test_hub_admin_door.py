@@ -952,7 +952,7 @@ class TheChanges(DoorTest):
     def test_the_status_is_numbers_for_the_store_the_health_of_the_roles_the_last_picture_and_the_program(self):
         self.line()
         body = self.get("status").json()
-        self.assertEqual(sorted(body), ["health", "last_picture", "store", "version"])
+        self.assertEqual(sorted(body), ["health", "images", "last_picture", "store", "version"])
         store = body["store"]
         self.assertEqual(sorted(store), ["blocked", "bytes", "free", "limit", "lines", "log", "off", "oldest", "picture_bytes", "picture_bytes_max", "pictures", "pictures_max"])
         self.assertEqual((store["limit"], store["lines"], store["pictures"], store["off"], store["blocked"]), (self.rig.limits.db_max_bytes, 1, 0, 0, 0))
@@ -1053,6 +1053,8 @@ class TheIdIsLikeAPassword(DoorTest):
         blob = b"\n".join(texts).decode("utf-8", "replace")
         for account in EVERY_ID:
             self.assertNotIn(account, blob, "an id is somewhere that an id must never be")
+        for account in EVERY_ID:
+            blob = blob.replace(self.ref(account), "<ref>")                           # (a reference is a form that may be in an answer: 16 hex digits, which are all decimal one time in two thousand, and then look like a number as long as an id)
         self.assertNotRegex(blob, r"(?<![0-9a-f])[0-9]{15,}(?![0-9a-f])")
 
     def test_the_stores_modlog_and_picture_rows_hold_references_and_no_id(self):

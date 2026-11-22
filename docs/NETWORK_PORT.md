@@ -45,8 +45,8 @@ In the original the machine that picked the map can drop out while the others pl
 already runs the whole simulation and holds the same state. What moves is sealing turns, the reference hash, the chat relay and the drop decisions. Code: `include/ants_net/session.hpp` /
 `src/ants_net/session.cpp` (`HostSession::resume`) and `session_client.cpp` (`ClientSession` election state machine, `promote_to_host`), `protocol.hpp` (the wire messages and the protocol version, `kProtocolVersion`; the rule that moves it is under "Protocol version 9"), `netgame.cpp` (the TCP mesh and the events).
 
-1. **Peer links.** While the map loads every guest connects to the guests above its own seat (one link per pair; the ones below connect to it). A guest listens on an ephemeral port that it announces in
-   `Hello.listen_port`; the host passes what it saw (the guest's address and that port) to everybody in `Start.endpoints`. An inbound link starts with `PeerHello{seat}` and is accepted only from a lower seat of the
+1. **Peer links.** While the map loads every guest connects to the guests above its own seat (one link per pair; the ones below connect to it). A guest of a game on the local network (a host that plays, no room code) listens on an ephemeral port that it announces in
+   `Hello.listen_port`; the host passes what it saw (the guest's address and that port) to everybody in `Start.endpoints`. A dedicated server's room has no host that plays and takes over from nobody: its Start (the live one, the one of a rejoin, the one in a record) has all four endpoints empty, whatever a Hello says, and a game that joins it (it has a room code) opens no listener, announces port 0, dials no endpoint and ignores every election message (`ClientSession::Config::migration` off). An inbound link starts with `PeerHello{seat}` (it has 5 s to say it, at most 8 connections wait at once, the others are closed) and is accepted only from a lower seat of the
    roster, once per seat, and only from the address the host reported for that seat; everything else is closed. The links carry a ping every second (`peer_silence_ms` = 5 s tells "alive") and, when the host goes,
    the election. The sessions only need a `Connection*` per seat (`ClientSession::set_peer`), so any other transport would plug in the same way (the WebRTC mesh that was planned here was dropped).
 
@@ -932,6 +932,10 @@ A bite takes its unit from the first object of its food tile that still has one,
 ## Protocol 26: [`P2P_HINTS.md`](P2P_HINTS.md)
 
 ## Protocol 27: [`READY_UP.md`](READY_UP.md)
+
+## Protocol 28: nothing on the wire
+
+The path manager's answer to a walk that an event asked for (the end of a can't-go clip, of a raid clip), a path or "no path", is given at the start of the next tick, after the turn's commands, so that an ant that an event has just sent takes an order and a Stop is skipped, as the original takes a click between a GoTo and the manager's next run (the original's game, rules number 14; 187, 15): [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) 5.40, "The gap before the path manager's answer"; the rules numbers: [`REPLAYS.md`](REPLAYS.md#the-file).
 
 ## Reconnect (protocol 10): a player whose connection is lost can come back
 

@@ -215,8 +215,8 @@ button { font: inherit; color: inherit; }
 
 @media (max-width: 900px) {
     .adm .cgrid, .adm .sgrid { grid-template-columns: minmax(0, 1fr); }
-    .adm .cgrid .cc { display: contents; }                                /* one column: the form, then the two lists, the picture box last */
-    .adm .p-form { order: 1; } .adm .p-banned { order: 2; } .adm .p-muted { order: 3; } .adm .p-pics { order: 4; }
+    .adm .cgrid .cc { display: contents; }                                /* one column: the form, then the two lists, the picture boxes last */
+    .adm .p-form { order: 1; } .adm .p-banned { order: 2; } .adm .p-muted { order: 3; } .adm .p-pics { order: 4; } .adm .p-noimg { order: 5; }
 }
 @media (max-width: 600px) {
     .adm .wrap { padding: 14px 16px calc(24px + env(safe-area-inset-bottom, 0px)); }

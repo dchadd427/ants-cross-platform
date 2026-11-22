@@ -196,8 +196,8 @@
   {
    "id": "rate_limit_removed",
    "file": "hub/limits.py",
-   "old": "if not bucket.take(now):",
-   "new": "if False:",
+   "old": "hour, day = self.budget(account, now)\n        if not (hour.ready(now) and day.ready(now)):\n            return \"quota\"\n        if not bucket.take(now):",
+   "new": "hour, day = self.budget(account, now)\n        if not (hour.ready(now) and day.ready(now)):\n            return \"quota\"\n        if False:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -469,8 +469,8 @@
   {
    "id": "line_never_says_mod",
    "file": "hub/chat.py",
-   "old": "entry = self.store.add_line(who.account_id, who.name, line, max(RANK[role], 1 if mod else 0))",
-   "new": "entry = self.store.add_line(who.account_id, who.name, line, False)",
+   "old": "entry = self.store.add_line(who.account_id, who.name, line, max(RANK[role], 1 if mod else 0), **({} if img is None else {\"image\": img}))",
+   "new": "entry = self.store.add_line(who.account_id, who.name, line, False, **({} if img is None else {\"image\": img}))",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -539,8 +539,8 @@
   {
    "id": "deleted_lines_in_the_history",
    "file": "hub/store/sqlite.py",
-   "old": "WHERE deleted = 0 AND at >= ? AND id > COALESCE",
-   "new": "WHERE at >= ? AND id > COALESCE",
+   "old": "WHERE l.deleted = 0 AND l.at >= ? AND l.id > COALESCE",
+   "new": "WHERE l.at >= ? AND l.id > COALESCE",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -595,8 +595,8 @@
   {
    "id": "admin_del_deletes_nothing",
    "file": "hub/admin.py",
-   "old": "            if not store.delete_line(args.line_id, BY, note=(TERMINAL, \"del\", ref(store, author) if author else \"\", str(args.line_id))):",
-   "new": "            if False:",
+   "old": "if not store.delete_line(args.line_id, BY, note=(TERMINAL, kind, ref(store, author) if author else \"\", str(args.line_id))):",
+   "new": "if False:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -1106,8 +1106,8 @@
   {
    "id": "stack_hub_more_processes",
    "file": "docker-compose.stack.yml",
-   "old": "    pids_limit: 32\n    mem_limit: 192m",
-   "new": "    pids_limit: 256\n    mem_limit: 192m",
+   "old": "    pids_limit: 32\n    mem_limit: 256m",
+   "new": "    pids_limit: 256\n    mem_limit: 256m",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
   },
   {
@@ -1127,8 +1127,8 @@
   {
    "id": "stack_hub_turns_on_the_test_login",
    "file": "docker-compose.stack.yml",
-   "old": "      ANTS_HUB_GAME_ADMIN_URL: ${ANTS_HUB_GAME_ADMIN_URL:-}\n    volumes:\n      - ants-hub-data:/data",
-   "new": "      ANTS_HUB_GAME_ADMIN_URL: ${ANTS_HUB_GAME_ADMIN_URL:-}\n      ANTS_HUB_TEST_LOGIN: \"1\"\n    volumes:\n      - ants-hub-data:/data",
+   "old": "      ANTS_HUB_IMAGE_DIR: /images\n    volumes:\n      - ants-hub-data:/data",
+   "new": "      ANTS_HUB_IMAGE_DIR: /images\n      ANTS_HUB_TEST_LOGIN: \"1\"\n    volumes:\n      - ants-hub-data:/data",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
   },
   {
@@ -1379,8 +1379,8 @@
   {
    "id": "account_counted_before_the_shared_limit",
    "file": "hub/chat.py",
-   "old": "        if not self.global_limit.ready(now) or full:\n            return self.mistake(peer, \"rate\", count=False)         # (the hub is busy or full: a client that tries again is not misbehaving)\n        why = self.account_limits.check(who.account_id, line, now)         # (this check is the last: it is the one that counts the line as said)\n        if why == \"quota\":\n            return self.mistake(peer, \"quota\", count=False)        # (the hour's or the day's lines are said: not a mistake, and the page tells it calmly)\n        if why:\n            return self.mistake(peer, \"rate\")\n",
-   "new": "        why = self.account_limits.check(who.account_id, line, now)\n        if why == \"quota\":\n            return self.mistake(peer, \"quota\", count=False)\n        if why:\n            return self.mistake(peer, \"rate\")\n        if not self.global_limit.ready(now) or full:\n            return self.mistake(peer, \"rate\", count=False)\n",
+   "old": "        if not self.global_limit.ready(now) or full:\n            return self.mistake(peer, \"rate\", count=False)         # (the hub is busy or full: a client that tries again is not misbehaving)\n        counted = line if img is None else \"\\0\" + img                     # (two images with no words are no duplicates of each other)\n        why = self.account_limits.check(who.account_id, counted, now)         # (this check is the last: it is the one that counts the line as said)\n        if why == \"quota\":\n            return self.mistake(peer, \"quota\", count=False)        # (the hour's or the day's lines are said: not a mistake, and the page tells it calmly)\n        if why:\n            return self.mistake(peer, \"rate\")\n",
+   "new": "        counted = line if img is None else \"\\0\" + img                     # (two images with no words are no duplicates of each other)\n        why = self.account_limits.check(who.account_id, counted, now)\n        if why == \"quota\":\n            return self.mistake(peer, \"quota\", count=False)\n        if why:\n            return self.mistake(peer, \"rate\")\n        if not self.global_limit.ready(now) or full:\n            return self.mistake(peer, \"rate\", count=False)\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -1414,8 +1414,8 @@
   {
    "id": "rate_limit_keyed_by_name",
    "file": "hub/chat.py",
-   "old": "self.account_limits.check(who.account_id, line, now)",
-   "new": "self.account_limits.check(who.name, line, now)",
+   "old": "self.account_limits.check(who.account_id, counted, now)",
+   "new": "self.account_limits.check(who.name, counted, now)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -1995,8 +1995,8 @@
   {
    "id": "store_a_line_counts_as_a_restriction",
    "file": "hub/store/sqlite.py",
-   "old": "        at = int(self.clock())\n        mark = 2 if mod == 2 else 1 if mod else 0       # (the column `mod` holds the author's role: 0 none, 1 moderator, 2 administrator; an earlier hub reads any of them as true, so a rollback shows the line as a moderator's: no schema step)\n        with self.transaction():\n            cur = self.db.execute(\"INSERT INTO lines",
-   "new": "        at = int(self.clock())\n        mark = 2 if mod == 2 else 1 if mod else 0       # (the column `mod` holds the author's role: 0 none, 1 moderator, 2 administrator; an earlier hub reads any of them as true, so a rollback shows the line as a moderator's: no schema step)\n        with self.transaction():\n            self.count_restriction()\n            cur = self.db.execute(\"INSERT INTO lines",
+   "old": "            cur = self.db.execute(\"INSERT INTO lines (at, account, name, text, mod) VALUES (?, ?, ?, ?, ?)\", (at, account, name, text, mark))",
+   "new": "            self.count_restriction()\n            cur = self.db.execute(\"INSERT INTO lines (at, account, name, text, mod) VALUES (?, ?, ?, ?, ?)\", (at, account, name, text, mark))",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract"
   },
   {

@@ -678,7 +678,7 @@ void Room::update(uint32_t now_ms) {
 // Restart records (restart_record.hpp)
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-// What a record's head holds: the room as it is, the match that is being started (the start message without the addresses of the clients: the record is no place for them) and the keys that the lobby
+// What a record's head holds: the room as it is, the match that is being started (the start message, which a server's room sends with no address or port of any client) and the keys that the lobby
 // gave out (secrets: they are in this file and nowhere else)
 RestartHead Room::make_head() const {
     RestartHead h;
@@ -703,7 +703,6 @@ RestartHead Room::make_head() const {
     h.bots = bot_specs_;
     h.fill_mask = fill_seats_;
     h.start = lobby_.start_info();
-    for (net::Endpoint& e : h.start.endpoints) e = net::Endpoint{};      // (how the other clients reach a client: its address, which the record has no business keeping)
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) h.keys[seat] = lobby_.key_of(seat);
     return h;
 }

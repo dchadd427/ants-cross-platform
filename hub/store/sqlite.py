@@ -11,11 +11,12 @@ import os
 import sqlite3
 import time
 
-from .base import MAX_LINES, PICKS, PICTURE_DAYS, PICTURE_NAME, PROFILE_DAYS, PUBLIC, SHOW_BLOCKED, SHOW_OFF, SHOW_ON, Action, Line, Profile, StoreBase, StoreError, Usage, check_note
+from .base import IMAGE_NAME, IMAGE_TYPES, MAX_LINES, NOIMAGES_MAX, PICKS, PICTURE_DAYS, PICTURE_NAME, PROFILE_DAYS, PUBLIC, SHOW_BLOCKED, SHOW_OFF, SHOW_ON, Action, Image, ImageGone, Line, Profile, StoreBase, StoreError, Usage, check_note
 from ..pseudo import reference
 
 SCHEMA = 4
 PICTURE_MARKS = 100000                              # the rows of a person's `off` that are kept in all (the ones written longest ago go first)
+IMAGE_PENDING_SECONDS = 600                         # an upload that no line has taken is deleted after this long (hub/images.py says the same)
 TRIM_ROWS = 8                                       # the most lines that a new line takes out: one is the rule, a few make up for a limit that was lowered
 
 
@@ -114,6 +115,21 @@ class Store(StoreBase):
                 CREATE INDEX IF NOT EXISTS pictures_at ON pictures (at);
                 COMMIT;""")
 
+        # (the images and the flags that take posting away are additive tables as well: an older hub never looks at them; docs/HUB_IMAGES.md)
+        if self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'images'").fetchone() is None:
+            self.db.executescript("""
+                BEGIN;
+                CREATE TABLE IF NOT EXISTS images (name TEXT PRIMARY KEY, ref TEXT NOT NULL, line INTEGER, x TEXT NOT NULL, w INTEGER NOT NULL, h INTEGER NOT NULL, tw INTEGER NOT NULL, th INTEGER NOT NULL,
+                                                   anim INTEGER NOT NULL DEFAULT 0, bytes INTEGER NOT NULL, at INTEGER NOT NULL);
+                CREATE INDEX IF NOT EXISTS images_line ON images (line);
+                CREATE INDEX IF NOT EXISTS images_ref ON images (ref);
+                COMMIT;""")
+        if self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'noimages'").fetchone() is None:
+            self.db.executescript("""
+                BEGIN;
+                CREATE TABLE IF NOT EXISTS noimages (ref TEXT PRIMARY KEY, at INTEGER NOT NULL, by TEXT NOT NULL);
+                COMMIT;""")
+
     def close(self):
         self.db.close()
 
@@ -130,22 +146,31 @@ class Store(StoreBase):
 
     # ---- lines ----------------------------------------------------------------------------------------------------------------------------
 
-    def add_line(self, account, name, text, mod):
+    def add_line(self, account, name, text, mod, image=None):
         at = int(self.clock())
+        picture = None
         mark = 2 if mod == 2 else 1 if mod else 0       # (the column `mod` holds the author's role: 0 none, 1 moderator, 2 administrator; an earlier hub reads any of them as true, so a rollback shows the line as a moderator's: no schema step)
         with self.transaction():
+            if image is not None:
+                row = self.db.execute("SELECT x, w, h, tw, th, anim FROM images WHERE name = ? AND ref = ? AND line IS NULL AND at >= ?", (image, self.ref(account), at - IMAGE_PENDING_SECONDS)).fetchone() if isinstance(image, str) and IMAGE_NAME.match(image) else None
+                if row is None:
+                    raise ImageGone()
+                picture = Image(image, row[0], row[1], row[2], row[3], row[4], bool(row[5]))
             cur = self.db.execute("INSERT INTO lines (at, account, name, text, mod) VALUES (?, ?, ?, ?, ?)", (at, account, name, text, mark))
+            if image is not None:
+                self.db.execute("UPDATE images SET line = ? WHERE name = ?", (cur.lastrowid, image))
             over = self.db.execute("DELETE FROM lines WHERE id IN (SELECT id FROM lines WHERE id <= (SELECT id FROM lines ORDER BY id DESC LIMIT 1 OFFSET ?) ORDER BY id LIMIT ?)",
                                    (self.max_lines, TRIM_ROWS)).rowcount      # (a few rows: a file that holds a long backlog is cut down by the purge, a chunk at a time, never by one chat line)
         if over:
             self.unsettled = True                   # (the lines past the newest max_lines are in the log file until it is cut: the hub's clock cuts it at its next look)
-        return Line(cur.lastrowid, at, account, name, text, mark)
+        return Line(cur.lastrowid, at, account, name, text, mark, picture)
 
     def recent_lines(self, count):
         """The last `count` lines that are not deleted, not past their time and among the newest `max_lines` kept, oldest first."""
-        rows = self.db.execute("SELECT id, at, account, name, text, mod FROM lines WHERE deleted = 0 AND at >= ? AND id > COALESCE((SELECT id FROM lines ORDER BY id DESC LIMIT 1 OFFSET ?), 0) "
-                               "ORDER BY id DESC LIMIT ?", (int(self.clock()) - self.retention, self.max_lines, count)).fetchall()
-        return [Line(*r) for r in reversed(rows)]
+        rows = self.db.execute("SELECT l.id, l.at, l.account, l.name, l.text, l.mod, i.name, i.x, i.w, i.h, i.tw, i.th, i.anim FROM lines l LEFT JOIN images i ON i.line = l.id "
+                               "WHERE l.deleted = 0 AND l.at >= ? AND l.id > COALESCE((SELECT id FROM lines ORDER BY id DESC LIMIT 1 OFFSET ?), 0) "
+                               "ORDER BY l.id DESC LIMIT ?", (int(self.clock()) - self.retention, self.max_lines, count)).fetchall()
+        return [Line(*r[:6], Image(*r[6:12], bool(r[12])) if r[6] is not None else None) for r in reversed(rows)]
 
     def account_of_line(self, line_id):
         row = self.db.execute("SELECT account FROM lines WHERE id = ? AND deleted = 0", (line_id,)).fetchone()
@@ -332,6 +357,7 @@ class Store(StoreBase):
             if self.db.execute("DELETE FROM pictures WHERE ref = ? AND show != ?", (self.ref(account), SHOW_BLOCKED)).rowcount:      # (a block stays, as a ban does, and holds no picture)
                 self.count_picture_change()
             self.db.execute("DELETE FROM lines WHERE account = ?", (account,))
+            self.db.execute("UPDATE images SET at = 0 WHERE ref = ? AND line IS NULL", (self.ref(account),))        # (an upload that waits is stale now: the hub's sweep deletes its files, as it does for the images of the lines that went)
             self.db.execute("UPDATE mutes SET name = '' WHERE account = ?", (account,))
             self.db.execute("UPDATE bans SET name = '' WHERE account = ?", (account,))
         try:
@@ -378,6 +404,82 @@ class Store(StoreBase):
     def account_of_username(self, username):
         rows = self.db.execute("SELECT account FROM profiles WHERE username = ? LIMIT 2", (username,)).fetchall()
         return rows[0][0] if len(rows) == 1 else None
+
+    # ---- images ---------------------------------------------------------------------------------------------------------------------------
+
+    max_noimages = NOIMAGES_MAX
+
+    def add_image(self, account, name, image, nbytes):
+        if not (isinstance(name, str) and IMAGE_NAME.match(name) and image.x in IMAGE_TYPES and isinstance(nbytes, int) and nbytes > 0):
+            raise ValueError("not an image")
+        with self.transaction():
+            self.db.execute("INSERT INTO images (name, ref, line, x, w, h, tw, th, anim, bytes, at) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            (name, self.ref(account), image.x, image.w, image.h, image.tw, image.th, 1 if image.anim else 0, nbytes, int(self.clock())))
+
+    def pending_images(self, account):
+        return self.db.execute("SELECT COUNT(*) FROM images WHERE ref = ? AND line IS NULL AND at >= ?", (self.ref(account), int(self.clock()) - IMAGE_PENDING_SECONDS)).fetchone()[0]
+
+    def image_of_line(self, line_id):
+        row = self.db.execute("SELECT i.name, i.x, i.w, i.h, i.tw, i.th, i.anim FROM images i JOIN lines l ON l.id = i.line WHERE l.id = ? AND l.deleted = 0", (line_id,)).fetchone()
+        return Image(*row[:6], bool(row[6])) if row else None
+
+    def images_gone(self, stale_before):
+        return [tuple(r) for r in self.db.execute(
+            "SELECT i.name, i.x FROM images i WHERE (i.line IS NULL AND i.at < ?) OR (i.line IS NOT NULL AND NOT EXISTS (SELECT 1 FROM lines l WHERE l.id = i.line AND l.deleted = 0))", (int(stale_before),))]
+
+    def drop_images(self, names):
+        names = list(names)
+        if not names:
+            return
+        with self.transaction():
+            self.db.executemany("DELETE FROM images WHERE name = ?", [(n,) for n in names])
+        self.unsettled = True                      # (the rows that went are in the log file until the hub's clock cuts it)
+
+    def image_usage(self):
+        return tuple(self.db.execute("SELECT COUNT(*), COALESCE(SUM(bytes), 0) FROM images").fetchone())
+
+    def image_names(self):
+        return {r[0] for r in self.db.execute("SELECT name FROM images")}
+
+    def last_image_at(self):
+        at = self.db.execute("SELECT MAX(at) FROM images").fetchone()[0]
+        return None if at is None else int(at)
+
+    def count_noimages_change(self):
+        """Inside a transaction that changed a flag: one more on the counter that last_noimages_change() reads."""
+        self.db.execute("INSERT OR IGNORE INTO meta (k, v) VALUES ('noimg_seq', 0)")
+        self.db.execute("UPDATE meta SET v = v + 1 WHERE k = 'noimg_seq'")
+
+    def set_flag(self, ref, on, by, note):
+        with self.transaction():
+            if on:
+                changed = self.db.execute("INSERT OR IGNORE INTO noimages (ref, at, by) VALUES (?, ?, ?)", (ref, int(self.clock()), by)).rowcount == 1
+                if changed:
+                    self.db.execute("DELETE FROM noimages WHERE ref IN (SELECT ref FROM noimages ORDER BY at DESC, rowid DESC LIMIT -1 OFFSET ?)", (self.max_noimages,))
+            else:
+                changed = self.db.execute("DELETE FROM noimages WHERE ref = ?", (ref,)).rowcount == 1
+            if changed:
+                self.count_noimages_change()
+                self.write_note(note)
+            return changed
+
+    def set_noimages(self, account, on, by, note=None):
+        return self.set_flag(self.ref(account), on, by, note)
+
+    def set_noimages_by_reference(self, reference, on, by, note=None):
+        if on is False and self.noimages_state_by_reference(reference) is False:
+            return None
+        return self.set_flag(reference, on, by, note)
+
+    def noimages_marks(self):
+        return {ref: (at, by) for ref, at, by in self.db.execute("SELECT ref, at, by FROM noimages")}
+
+    def noimages_state_by_reference(self, reference):
+        return self.db.execute("SELECT 1 FROM noimages WHERE ref = ?", (reference,)).fetchone() is not None
+
+    def last_noimages_change(self):
+        row = self.db.execute("SELECT v FROM meta WHERE k = 'noimg_seq'").fetchone()
+        return row[0] if row else 0
 
     # ---- pictures -------------------------------------------------------------------------------------------------------------------------
 

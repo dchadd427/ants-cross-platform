@@ -37,6 +37,7 @@ class Config:
     discord_guild: str = dataclasses.field(default="", repr=False)          # the Discord server whose roles count
     role_admin: str = dataclasses.field(default="", repr=False)             # the role that makes an administrator
     role_mod: str = dataclasses.field(default="", repr=False)               # the role that makes a moderator
+    role_images: str = dataclasses.field(default="", repr=False)            # the role that lets a person post images (docs/HUB_IMAGES.md): its id is only in the stack's environment, never printed
     role_recheck_seconds: int = RECHECK_SECONDS
     owner: str = dataclasses.field(default="", repr=False)                  # one account id that is always an administrator, whatever Discord says (or does not)
     test_login: bool = False
@@ -48,6 +49,8 @@ class Config:
     admin_gate_given: bool = False                                          # whether the setting was there at all (a value that is there and is no good is said at the start; one that is absent is said as well, differently)
     discord_test_url: str = ""                                              # TESTS ONLY: where the fake Discord of the tests listens (a loopback address, refused for any other)
     game_admin_url: str = ""                                                # where the game server's admin door is, `http://host:port` (hub/gamedoor.py: `/bots`); "" is none, and `/bots` answers `off`
+    image_converter_url: str = ""                                           # where the image converter is, `http://host:port` (hub/imgdoor.py); "" is none, and images are off for everybody
+    image_dir: str = "/images"                                              # the folder of the images' files (the volume that the site's web server reads, read only)
 
     @property
     def login_on(self):
@@ -61,18 +64,19 @@ class Config:
 
     @property
     def roles_on(self):
-        """Whether the roles are asked of Discord: the bot's token, the server and at least one of the two roles."""
-        return bool(self.discord_bot_token and self.discord_guild and (self.role_admin or self.role_mod))
+        """Whether the roles are asked of Discord: the bot's token, the server and at least one of the three roles."""
+        return bool(self.discord_bot_token and self.discord_guild and (self.role_admin or self.role_mod or self.role_images))
 
     @property
     def roles_partial(self):
         """Some of the roles' settings are given, but not enough to switch them on."""
-        return not self.roles_on and bool(self.discord_bot_token or self.discord_guild or self.role_admin or self.role_mod)
+        return not self.roles_on and bool(self.discord_bot_token or self.discord_guild or self.role_admin or self.role_mod or self.role_images)
 
     def summary(self):
         """Safe to log: no secret, no account id, no address."""
         return {"port": self.port, "origin": self.origin or "none", "roles_configured": int(self.roles_on), "owner": int(bool(self.owner)), "recheck": self.role_recheck_seconds,
-                "test_login": int(self.test_login), "login_configured": int(self.login_on), "min_account_days": self.min_account_days}
+                "test_login": int(self.test_login), "login_configured": int(self.login_on), "min_account_days": self.min_account_days,
+                "role_images_configured": int(bool(self.role_images)), "images_configured": int(bool(self.image_converter_url))}
 
 
 def parse_origin(url):
@@ -124,6 +128,14 @@ def parse_game_admin_url(url):
     return "http://%s:%d" % (found.group(1), int(found.group(2)))
 
 
+def parse_converter_url(url):
+    """'http://ants-img:4050' (the same shape as the game server's address) for the image converter, else a ConfigError that never says the value."""
+    found = GAME_ADMIN_URL.match(url.strip())
+    if not found or not 1 <= int(found.group(2)) <= 65535:
+        raise ConfigError("ANTS_HUB_IMAGE_CONVERTER_URL must be like http://ants-img:4050 (http, a host name or address of letters, digits, dots and dashes, and a port from 1 to 65535, nothing else)")
+    return "http://%s:%d" % (found.group(1), int(found.group(2)))
+
+
 def load(env):
     try:
         port = int(env.get("ANTS_HUB_PORT", "4040"))
@@ -143,14 +155,14 @@ def load(env):
     cfg.admin_gate_sample = gate == SAMPLE_GATE_KEY
     cfg.admin_gate_secret = gate if GATE_SECRET.match(gate) and len(set(gate)) >= GATE_DISTINCT and not cfg.admin_gate_sample else ""        # (a short, malformed or sample key never stops the hub: the door stays shut and the start says so)
     cfg.discord_bot_token, cfg.discord_guild = env.get("ANTS_HUB_DISCORD_BOT_TOKEN", "").strip(), env.get("ANTS_HUB_DISCORD_GUILD", "").strip()
-    cfg.role_admin, cfg.role_mod, cfg.owner = (env.get(name, "").strip() for name in ("ANTS_HUB_ROLE_ADMIN", "ANTS_HUB_ROLE_MOD", "ANTS_HUB_OWNER"))
+    cfg.role_admin, cfg.role_mod, cfg.role_images, cfg.owner = (env.get(name, "").strip() for name in ("ANTS_HUB_ROLE_ADMIN", "ANTS_HUB_ROLE_MOD", "ANTS_HUB_ROLE_IMAGES", "ANTS_HUB_OWNER"))
     if cfg.discord_bot_token and not BOT_TOKEN.match(cfg.discord_bot_token):
         raise ConfigError("ANTS_HUB_DISCORD_BOT_TOKEN must be one word of 30 to 200 letters, digits, dots, dashes and underscores")
-    for name, value in (("ANTS_HUB_DISCORD_GUILD", cfg.discord_guild), ("ANTS_HUB_ROLE_ADMIN", cfg.role_admin), ("ANTS_HUB_ROLE_MOD", cfg.role_mod)):
+    for name, value in (("ANTS_HUB_DISCORD_GUILD", cfg.discord_guild), ("ANTS_HUB_ROLE_ADMIN", cfg.role_admin), ("ANTS_HUB_ROLE_MOD", cfg.role_mod), ("ANTS_HUB_ROLE_IMAGES", cfg.role_images)):
         if value and not SNOWFLAKE.match(value):
             raise ConfigError("%s must be a Discord id (digits only)" % name)
-    if cfg.role_admin and cfg.role_admin == cfg.role_mod:
-        raise ConfigError("ANTS_HUB_ROLE_ADMIN and ANTS_HUB_ROLE_MOD must be two different roles")
+    if (cfg.role_admin and cfg.role_admin == cfg.role_mod) or (cfg.role_images and cfg.role_images in (cfg.role_admin, cfg.role_mod)):
+        raise ConfigError("ANTS_HUB_ROLE_ADMIN, ANTS_HUB_ROLE_MOD and ANTS_HUB_ROLE_IMAGES must be different roles")
     if cfg.owner and not ACCOUNT_ID.match(cfg.owner):
         raise ConfigError("ANTS_HUB_OWNER must be an account id (digits only)")
     try:
@@ -175,4 +187,7 @@ def load(env):
         raise ConfigError("ANTS_HUB_TEST_LOGIN=1 and the Discord login cannot both be on")
     if env.get("ANTS_HUB_GAME_ADMIN_URL", "").strip():
         cfg.game_admin_url = parse_game_admin_url(env["ANTS_HUB_GAME_ADMIN_URL"])
+    if env.get("ANTS_HUB_IMAGE_CONVERTER_URL", "").strip():
+        cfg.image_converter_url = parse_converter_url(env["ANTS_HUB_IMAGE_CONVERTER_URL"])
+    cfg.image_dir = env.get("ANTS_HUB_IMAGE_DIR", "").strip() or cfg.image_dir
     return cfg

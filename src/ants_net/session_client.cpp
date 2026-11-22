@@ -227,6 +227,7 @@ void ClientSession::poll_peers(uint32_t now_ms) {
 }
 
 void ClientSession::handle_peer_message(uint8_t seat, const std::vector<uint8_t>& msg, uint32_t now_ms) {
+    if (!cfg_.migration) return;                     // a dedicated server's room: nobody takes over from the server and nobody is asked for turns, so a word from another guest changes nothing
     switch (peek_type(msg)) {
         case MsgType::Ping: {
             PingMsg p;

@@ -9,7 +9,7 @@
     'use strict';
 
     var KEY = 'ants.home.split.v1';                     // {"p": the players' width, "c": the chat's height}, in px
-    var WIDE = '(min-width: 701px)';
+    var WIDE = '(min-width: 701px) and (min-height: 501px)';
     var PAD = 24, GAP = 14;                             // px: the body's side padding and the gap between the panels (home.css)
     var SIDE_MIN = 240, CHAT_MIN = 120, CHAT_SHARE = 0.7;
     var STEP = 16, BIG = 64;
@@ -56,7 +56,7 @@
                 if (want.p === null && want.c === null) s.removeItem(KEY); else s.setItem(KEY, JSON.stringify(want));
             } catch (e) { /* the sizes are not kept: they still hold for this visit */ }
         }
-        function wide() { try { return win.matchMedia ? !!win.matchMedia(WIDE).matches : (win.innerWidth || 0) >= 701; } catch (e) { return true; } }
+        function wide() { try { return win.matchMedia ? !!win.matchMedia(WIDE).matches : (win.innerWidth || 0) >= 701 && (win.innerHeight || 600) >= 501; } catch (e) { return true; } }
         function bodyHeight() { var bar = host.querySelector ? host.querySelector('.hbar') : null; return (host.clientHeight || 0) - (bar ? bar.offsetHeight || 0 : 0); }
         function limits(kind) { return kind === 'x' ? sideLimits(main.clientWidth || 0) : chatLimits(bodyHeight()); }
         function current(kind) {

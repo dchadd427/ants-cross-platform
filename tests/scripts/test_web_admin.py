@@ -268,5 +268,16 @@ class TheOnlyWayIsTheTypedAddress(unittest.TestCase):
             self.assertNotIn(word, shell)
 
 
+class TheChatSectionOnAPhone(unittest.TestCase):
+    def test_every_panel_of_the_chat_section_has_its_own_place_when_the_page_is_one_column(self):
+        script, css = read("web", "admin_page.js"), read("web", "admin.css")
+        chat = script[script.index("function renderChat(host)"):script.index("// ---- the section \"Log\"")]
+        panels = re.findall(r"\.className \+= ' (p-[a-z]+)'", chat)
+        self.assertEqual(sorted(panels), ["p-banned", "p-form", "p-muted", "p-noimg", "p-pics"])
+        places = {name: int(n) for name, n in re.findall(r"\.adm \.(p-[a-z]+) \{ order: (\d+); \}", css)}
+        self.assertEqual(sorted(places), sorted(panels), "a panel without an order would come first on a phone")
+        self.assertEqual(len(set(places.values())), len(places), "two panels with one place")
+        self.assertEqual(max(places, key=places.get), "p-noimg", "the box for image posting comes last")
+
 if __name__ == "__main__":
     unittest.main()

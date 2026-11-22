@@ -222,7 +222,7 @@
             put(pop, [top, list, foot]);
             var chosen = shown[sel];
             if (chosen) field.setAttribute('aria-activedescendant', POP + '-' + sel); else field.removeAttribute('aria-activedescendant');
-            var bx = dock.root.getBoundingClientRect(), f = form.getBoundingClientRect(), phone = (win.innerWidth || 1000) <= 700;
+            var bx = dock.root.getBoundingClientRect(), f = form.getBoundingClientRect(), phone = (win.innerWidth || 1000) <= 700 || (win.innerHeight || 1000) <= 500;
             pop.style.maxHeight = Math.max(150, Math.min(440, phone ? f.top - bx.top - 14 : f.top - 10)) + 'px';
             var s = pop.querySelector('[aria-selected="true"]');
             if (s && s.scrollIntoView) s.scrollIntoView({ block: 'nearest' });

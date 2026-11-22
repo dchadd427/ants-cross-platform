@@ -123,9 +123,11 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     same('with the site label "staging" the order of Home is the same, and there is no Yard and no stand-in', env.$('home').children.map((c) => c.tagName + '#' + (c.id || classes(c)[0])), ['header#hbar', 'main#hmain', 'div#hopen', 'nav#htabs']);
     check('... the body is as empty as on the live site (it holds the room\'s panel only)', env.$('home').children[1].children.length === 1 && !/Yard will live|reserved: |yant/.test(env.dumpAll()));
 }
-{   // the phone's strip (a window up to 700 px wide): the chat is open only on its own view, the counts follow the lists, and a wide window ignores the strip
-    const watchers = [], opens = [], phone = { on: true };
-    const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, win: { matchMedia: (q) => ({ matches: q === '(max-width: 700px)' ? phone.on : false }), MutationObserver: function (fn) { this.observe = (node) => watchers.push({ node, fn }); } } });
+{   // the phone's strip (a window up to 700 px wide or up to 500 px high): the chat is open only on its own view, the counts follow the lists, and a wide, tall window ignores the strip
+    const watchers = [], opens = [], size = { w: 390, h: 844 };
+    // the fake window answers a media query as a browser does, against the size that the check sets (fake_media.js)
+    const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, win: { matchMedia: (q) => ({ matches: require('./fake_media.js').matches(q, size.w, size.h) }), MutationObserver: function (fn) { this.observe = (node) => watchers.push({ node, fn }); } } });
+    const at = (w, h) => { size.w = w; size.h = h; env.win.innerWidth = w; env.win.innerHeight = h; };
     const strip = env.$('home').children[3], pill = (i) => strip.children[i].children[1];
     check('the strip watches the Games button\'s count (and only that one until the players list is there)', watchers.length === 1 && watchers[0].node === env.home('games').children[1]);
     env.home('games').children[1].textContent = '7'; env.home('games').children[1].hidden = false; watchers[0].fn();
@@ -140,21 +142,27 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     strip.children[2].click();
     strip.children[1].click(); strip.children[2].click(); strip.children[0].click();
     same('Chat opens it, any other view shuts it', opens, [false, true, false, true, false]);
-    phone.on = false;
+    at(1280, 800);
     strip.children[2].click(); strip.children[0].click();
     same('a wide window shows all three and leaves the dock as it is (the views are only the strip\'s)', opens, [false, true, false, true, false]);
     const resize = () => (env.win.listeners.resize || []).forEach((f) => f({}));
-    phone.on = false; resize(); phone.on = true; resize();
+    at(1280, 800); resize(); at(390, 844); resize();
     same('a window that becomes wide opens the dock (it is 800 px high), and one that becomes a phone\'s width shuts it again (the view is Games)', opens.slice(5), [true, false]);
-    env.win.innerHeight = 500; phone.on = false; resize();
-    same('... but a wide window that is only 500 px high leaves it shut (a press on its header opens it)', opens.slice(7), [false]);
+    at(1280, 600); resize();
+    same('... but a wide window that is only 600 px high leaves it shut (a press on its header opens it)', opens.slice(7), [false]);
     resize();
     same('... and a resize that changes nothing does nothing', opens.length, 8);
-    phone.on = true; env.win.innerHeight = 800; resize(); strip.children[0].click(); const before = opens.length;
+    at(390, 844); resize(); strip.children[0].click(); const before = opens.length;
     env.home('hlogin').click();
     check('on a phone a press on the login chip leaves the view and the dock alone (the chip opens its own dropdown: the Chat view is not shown for it, and the dock is not opened or shut by it)', env.$('home').getAttribute('data-tab') === 'games' && strip.children[0].getAttribute('aria-pressed') === 'true' && opens.length === before);
-    phone.on = false; env.home('hlogin').click();
+    at(1280, 800); env.home('hlogin').click();
     check('... and in a wide window too', env.$('home').getAttribute('data-tab') === 'games' && opens.length === before);
+    resize(); at(844, 390); resize();
+    same('a window that is held sideways (844 x 390: wider than 700 px, 500 px high) is a phone too: from a wide one the dock opens, and in the phone it is shut again for the Games view', opens.slice(before), [true, false]);
+    const held = opens.length; strip.children[2].click(); strip.children[0].click();
+    same('... and its strip works: Chat opens the dock, Games shuts it', opens.slice(held), [true, false]);
+    at(1366, 500); resize(); strip.children[2].click();
+    same('a wide window that is 500 px high is a phone as well (501 and more is not: the check above at 600)', opens.slice(held + 2), [true]);
     const count = env.home('games').children[1];
     for (const [text, want] of [['7', '7'], ['99', '99'], ['50+', '50+'], ['100', '99+'], ['226', '99+'], ['500+', '99+']]) { count.textContent = text; count.hidden = false; watchers[0].fn(); same('the strip shows ' + text + ' as ' + want + ' (three digits or more: 99+, like the old bar badge; the strip is a third of 320 px)', pill(0).textContent, want); }
 }

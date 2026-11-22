@@ -109,7 +109,7 @@ const GEOM = () => {
             for (const [name, w, h, touch] of SIZES) {
                 const { context, page } = await open(origin, w, h, touch);
                 await page.waitForSelector('.gdock .glive', { timeout: 15000 });
-                const phone = w <= 700;
+                const phone = w <= 700 || h <= 500;
                 if (phone) { await page.click('.htab.t-games').catch(() => {}); await sleep(200); }
                 await sleep(300);
                 const g = await page.evaluate(GEOM);
@@ -170,7 +170,7 @@ const GEOM = () => {
             const { site, state, origin } = await startSite(mode);
             for (const [name, w, h, touch] of [SIZES[0], SIZES[4]]) {
                 const { context, page } = await open(origin, w, h, touch);
-                if (w <= 700) { await page.click('.htab.t-games').catch(() => {}); }
+                if (w <= 700 || h <= 500) { await page.click('.htab.t-games').catch(() => {}); }
                 await sleep(1500);
                 const g = await page.evaluate(() => ({ rows: document.querySelectorAll('.gdock .glive').length, box: Array.from(document.querySelectorAll('.glivebox')).some((b) => b.getClientRects().length),
                     cards: document.querySelectorAll('.gdock .glist:not(.glivelist) .gitem').length, note: !!document.querySelector('.gpnote') && !document.querySelector('.gpnote').hidden, toast: !!document.querySelector('.gtoast') && !document.querySelector('.gtoast').hidden, head: document.querySelector('.gdock .gpcount').textContent }));
@@ -187,7 +187,7 @@ const GEOM = () => {
                 const { site, origin } = await startSite(opts.mode || 'busy', opts);
                 for (const [name, w, h, touch] of SHOW) {
                     const { context, page } = await open(origin, w, h, touch).catch(async () => { const c = await browser.newContext({ viewport: { width: w, height: h }, hasTouch: touch }); const pg = await c.newPage(); await pg.goto(origin + '/', { waitUntil: 'load' }); return { context: c, page: pg }; });
-                    if (w <= 700) { await page.click('.htab.t-games').catch(() => {}); }
+                    if (w <= 700 || h <= 500) { await page.click('.htab.t-games').catch(() => {}); }
                     await sleep(1500);
                     const g = await page.evaluate(() => {
                         const q = (e) => e && e.getClientRects().length ? e.getBoundingClientRect() : null;

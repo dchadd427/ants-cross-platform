@@ -250,7 +250,7 @@ function rig(o) {
     const u = rig({ noMod: true });
     same('you(): the name and the role (nothing else)', u.dock.you(), { name: 'Me', role: 'admin' });
     same('line(id): a copy of a person\'s line, with the role it says and whether it is one\'s own (no account key)', [u.dock.line(148), u.dock.line(150).own, u.dock.line(147).sys, u.dock.line(999), u.dock.line(null)],
-        [{ id: 148, who: 'Clover', text: 'FREE ant gold!!! see my page', role: 'none', sys: false, u: 'clover.4782', own: false }, true, true, null, null]);
+        [{ id: 148, who: 'Clover', text: 'FREE ant gold!!! see my page', role: 'none', sys: false, u: 'clover.4782', img: false, own: false }, true, true, null, null]);
     check('line(id) is a copy: changing it changes nothing', (() => { const l = u.dock.line(148); l.text = 'x'; return u.dock.line(148).text === 'FREE ant gold!!! see my page'; })());
     u.dock.note('Done: a thing.');
     same('note(text): one private line, in the log, for this visitor', u.privates(), ['Done: a thing.']);

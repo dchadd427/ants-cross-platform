@@ -1,6 +1,8 @@
 """Who is a moderator or an administrator (docs/HUB.md, "Roles"): the answer comes from Discord and from nothing a client says. The site's own Discord server has two roles; the hub asks, with
 the bot's token, `GET /guilds/<server>/members/<account>` (hub/discord.py `member`) and reads the `roles` of the answer: the administrator's role makes `admin` (also for a person who holds both),
-the moderator's role makes `mod`, and a person who is not in the server, or holds neither, is `none`. The account in `ANTS_HUB_OWNER` is always `admin`, without a call.
+the moderator's role makes `mod`, and a person who is not in the server, or holds neither, is `none`. The account in `ANTS_HUB_OWNER` is always `admin`, without a call. A third role, the images' (`ANTS_HUB_ROLE_IMAGES`, docs/HUB_IMAGES.md), is read from the same answer: `images_of` says whether
+Discord lets the person post images (that role, the moderator's or the administrator's), with the same belief, the same grace and the same failing closed as the other two (the images' own flag
+and the converter are the images' to check, hub/images.py).
 
 All of it is memory, for the people who have a socket open and not for long after (`Roles.entries`: one small entry for each, at most `roles_entries_max`); nothing goes to the database. The
 lookups are made by one task, one at a time, at about two a second (a token bucket) and by Discord's own rate-limit headers; the event loop is never held, and no call waits for longer than
@@ -52,7 +54,7 @@ class Entries(dict):
 class Entry:
     """What is known of one person who is here: the role that Discord last said, when, when to ask again, and the role that the pages were last told."""
 
-    __slots__ = ("role", "ok_at", "due", "fails", "new", "seen", "shown", "lost_at", "nick", "display")
+    __slots__ = ("role", "ok_at", "due", "fails", "new", "seen", "shown", "lost_at", "nick", "display", "images", "shown_images")
 
     def __repr__(self):
         return "<Entry>"                        # (no field: none of them is for a log, and the dictionary that holds it is keyed by the account)
@@ -68,13 +70,15 @@ class Entry:
         self.lost_at = None
         self.nick = ""                          # the person's nickname in the server as the last member answer said it, made fit to show (text.clean_shown), or '' (none, not usable, not a member)
         self.display = None                     # the person's Discord display name as that same answer said it, made fit to show, or '' for none; None when the answer did not say
+        self.images = False                     # whether that answer says that the person holds the images' role
+        self.shown_images = (False, False)      # what the pages were last told of the images: whether the person may post, and whether their role was known (`role` and `wait` are told apart by it)
 
 
 class Roles:
     def __init__(self, cfg, limits, clock, log, client=None, rng=random.random):
         self.on = cfg.roles_on
         self.owner = cfg.owner
-        self.guild, self.admin_id, self.mod_id = cfg.discord_guild, cfg.role_admin, cfg.role_mod
+        self.guild, self.admin_id, self.mod_id, self.images_id = cfg.discord_guild, cfg.role_admin, cfg.role_mod, cfg.role_images
         self._token = cfg.discord_bot_token
         self.limits = limits
         self.clock = clock
@@ -92,6 +96,7 @@ class Roles:
         self.bucket = TokenBucket(limits.roles_burst, limits.roles_refill_seconds, clock())
         self.pause_until = float("-inf")        # no call before this (a refused token, server or access)
         self.hold_until = float("-inf")         # no call before this (Discord said wait)
+        self.watch_images = False               # the hub sets it when it has images: only then is a change of the images' state (a person's first answer, a role that ran out) told to the pages
         self.down = False
         self.problem = (None, None)             # (kind, HTTP status) of the last refusal of the token, the server or the access (the admin page's Status says them; no account, no id)
         self.next_log = float("-inf")
@@ -116,6 +121,23 @@ class Roles:
         if entry is None or entry.ok_at is None or self.clock() - entry.ok_at > self.grace:
             return NONE
         return entry.role
+
+    def images_of(self, account):
+        """Whether Discord lets the account post images now: the owner account, a moderator, an administrator, or a holder of the images' role, on an answer that is not past its interval and its grace;
+        nothing after that, and nothing for an account that is not known (the same belief as `role_of`, and no I/O)."""
+        if self.owner and account == self.owner:
+            return True
+        entry = self.entries.get(account)
+        if entry is None or entry.ok_at is None or self.clock() - entry.ok_at > self.grace:
+            return False
+        return entry.images or entry.role != NONE
+
+    def knows(self, account):
+        """Whether the account's role is known now (the owner's always is; anybody else's on an answer within the belief): what tells `no role` from `not known just now`."""
+        if self.owner and account == self.owner:
+            return True
+        entry = self.entries.get(account)
+        return entry is not None and entry.ok_at is not None and self.clock() - entry.ok_at <= self.grace
 
     def fresh(self, accounts):
         """Whether the role of every one of `accounts` was answered by Discord within the last `roles_action_fresh_seconds` (the owner account, which needs no answer, and any account when the roles are
@@ -241,11 +263,11 @@ class Roles:
 
     def settle(self, account, entry, now):
         """If the role that the person holds now is not the one that the pages were told, tell them (a live `you` frame, by the chat)."""
-        current = self.role_of(account)
-        if current != entry.shown:
+        current, images = self.role_of(account), (self.images_of(account), self.knows(account)) if self.watch_images else (False, False)
+        if current != entry.shown or images != entry.shown_images:
             if entry.shown != NONE and current == NONE:
                 entry.lost_at = now
-            entry.shown = current
+            entry.shown, entry.shown_images = current, images
             self.changed(account)
 
     # ---- the worker ------------------------------------------------------------------------------------------------------------------------
@@ -344,8 +366,10 @@ class Roles:
         if type(code) is not int:
             code = None
         absent = False
+        images = False
         if status == 200:
             role = self.role_in(data, account)
+            images = role is not None and self.images_in(data)
         elif status == 404 and code in (NOT_A_MEMBER, UNKNOWN_USER):
             role = NONE
             absent = code == NOT_A_MEMBER
@@ -370,7 +394,7 @@ class Roles:
             return False
         entry = self.entries.get(account)
         if entry is not None:
-            entry.role, entry.ok_at, entry.fails, entry.new = role, now, 0, False
+            entry.role, entry.ok_at, entry.fails, entry.new, entry.images = role, now, 0, False, images
             entry.due = now + self.jittered(self.interval)
             self.settle(account, entry, now)
         if self.down:
@@ -422,6 +446,10 @@ class Roles:
             return MOD
         return NONE
 
+    def images_in(self, data):
+        """Whether a member object (already checked by `role_in`) holds the images' role."""
+        return bool(self.images_id) and self.images_id in data.get("roles", ())
+
     def failed(self, account, kind):
         """A check that gave no answer (down, slow, garbage): the person keeps what they have until the grace runs out, and is asked again soon, then at the normal pace."""
         now = self.clock()
@@ -450,6 +478,7 @@ class Roles:
         for account, entry in list(self.entries.items()):
             entry.ok_at = None
             entry.role = NONE
+            entry.images = False
             entry.due = self.pause_until
             entry.new = True
             self.settle(account, entry, now)

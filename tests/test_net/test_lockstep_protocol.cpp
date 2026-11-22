@@ -3,7 +3,7 @@
 
 void run_protocol_tests() {
     TEST_CASE("N2.1 Protocol: Every Message Round-Trips And Trailing Or Missing Bytes Are Rejected") {
-        ASSERT_EQ(kProtocolVersion, 27);                                 // 7: the room leader's START; 8: turns of 50 ms, one tick each, the adaptive buffer and the Lag message (type 25); 9: the community-map rules; 10: keys, presence, votes and the catch-up stream (types 26 - 30); 11: the leader's START carries a fill level, chat in the waiting room; 12: the match clock waits for the start dialog (the first turn is sealed kMatchStartDelayMs after the match began, a dialog ends with the first turn that executes: no message changed); 13: a level for each seat of the fill and the teams (StartRequest is seven bytes, Start ends with the two team bytes); 14: the leader moves the colors (SeatMove, type 31, three bytes); 15: a room is made by its first Hello's create block, the platform byte (Hello, Room slots, Start), the room's teams and rules in the Room message; 16: lobby rooms (the Hello's client kind, the create block's kCreateLobby, the Welcome's kWelcomeCreated, the Room message's plan and games, the PlanMsg, type 32; 17: the game mode, one byte at the end of the Start, Room and Plan messages)
+        ASSERT_EQ(kProtocolVersion, 28);                                 // 7: the room leader's START; 8: turns of 50 ms, one tick each, the adaptive buffer and the Lag message (type 25); 9: the community-map rules; 10: keys, presence, votes and the catch-up stream (types 26 - 30); 11: the leader's START carries a fill level, chat in the waiting room; 12: the match clock waits for the start dialog (the first turn is sealed kMatchStartDelayMs after the match began, a dialog ends with the first turn that executes: no message changed); 13: a level for each seat of the fill and the teams (StartRequest is seven bytes, Start ends with the two team bytes); 14: the leader moves the colors (SeatMove, type 31, three bytes); 15: a room is made by its first Hello's create block, the platform byte (Hello, Room slots, Start), the room's teams and rules in the Room message; 16: lobby rooms (the Hello's client kind, the create block's kCreateLobby, the Welcome's kWelcomeCreated, the Room message's plan and games, the PlanMsg, type 32; 17: the game mode, one byte at the end of the Start, Room and Plan messages)
         ASSERT_TRUE(kTurnMs == 50 && kTicksPerTurn == 1 && kTurnsPerSecond == 20 && kHashEveryTurns == 20);     // a hash every 20 ticks, one second, as before
         ASSERT_TRUE(turns_for_ms(0) == 0 && turns_for_ms(1) == 1 && turns_for_ms(50) == 1 && turns_for_ms(51) == 2 && turns_for_ms(3000) == 60);
         ASSERT_EQ(static_cast<int>(MsgType::Last), static_cast<int>(MsgType::Ready));
@@ -564,7 +564,7 @@ void run_protocol_tests() {
 
     TEST_CASE("N2.40 Protocol 10: Keys In Hello And Welcome, Three More Rejections, Presence (With The Resume Countdown), Vote, CatchUp, TurnBatch And CaughtUp: Numbers, Layouts Byte By Byte, Every Truncation, Every Range Rule, The Batch Encoders Agree") {
         // ---- the numbers ----
-        ASSERT_EQ(kProtocolVersion, 27);                                 // (the layouts of protocol 10 below are still the layouts of protocols 11 to 17: 11 and 13 changed the StartRequest (13 the Start too), 12 no message, 14 added the SeatMove; 15 changed the Hello, the Room and the Start, and 16 the Hello, the Welcome's flags, the Room and added the PlanMsg, and 17 the mode byte at the end of the Room, the Start and the PlanMsg, which this test reads where it says so)
+        ASSERT_EQ(kProtocolVersion, 28);                                 // (the layouts of protocol 10 below are still the layouts of protocols 11 to 17: 11 and 13 changed the StartRequest (13 the Start too), 12 no message, 14 added the SeatMove; 15 changed the Hello, the Room and the Start, and 16 the Hello, the Welcome's flags, the Room and added the PlanMsg, and 17 the mode byte at the end of the Room, the Start and the PlanMsg, which this test reads where it says so)
         ASSERT_TRUE(static_cast<int>(MsgType::Presence) == 26 && static_cast<int>(MsgType::Vote) == 27 && static_cast<int>(MsgType::CatchUp) == 28 &&
                     static_cast<int>(MsgType::TurnBatch) == 29 && static_cast<int>(MsgType::CaughtUp) == 30 && static_cast<int>(MsgType::SeatMove) == 31 && static_cast<int>(MsgType::Plan) == 32 && static_cast<int>(MsgType::Name) == 33 && static_cast<int>(MsgType::Remove) == 34 && static_cast<int>(MsgType::Visibility) == 35 && static_cast<int>(MsgType::Hint) == 36 && static_cast<int>(MsgType::Signal) == 40 && static_cast<int>(MsgType::Ready) == 41 && static_cast<int>(MsgType::Last) == 41);
         ASSERT_TRUE(static_cast<int>(RejectReason::Dropped) == 7 && static_cast<int>(RejectReason::RejoinFailed) == 8 && static_cast<int>(RejectReason::Superseded) == 9);
@@ -2277,6 +2277,53 @@ void run_migration_tests() {
         bool command_seen = false;
         for (const auto& m : drain(peer1.first)) command_seen = command_seen || peek_type(m) == MsgType::Command;
         ASSERT_TRUE(command_seen);                                           // commands go to the new host now
+    } TEST_END();
+
+    TEST_CASE("N2.34b Host Migration Is Off In A Dedicated Server's Room: What Another Guest Says Over A Link (A Proposal, An Accept, A Refusal, A Resume, A Request For Turns) Is Not Heard, While The Server Is Quiet And While The Machine Is On Its Way Back To It: The Server's Link Stays The Host Link, Nothing Is Answered, And The Way Back Goes On (N2.34 Has The Same Words Move A Session Whose Host Plays)") {
+        const auto peer_words = []() {
+            return std::vector<std::vector<uint8_t>>{encode(ProposeMsg{1, 0}), encode(AcceptMsg{1, 0, 0}), encode(RefuseMsg{1, 0}), encode(ResumeMsg{1, 0, 0xFFFFFF}), encode(RequestMsg{0})};
+        };
+        const auto answered_nothing = [](Connection* end) {                  // (the machine pings its links; that is all that it says to a guest)
+            std::vector<uint8_t> m;
+            while (end->poll(m)) {
+                if (peek_type(m) != MsgType::Ping) return false;
+            }
+            return true;
+        };
+        {   // the server is quiet for longer than a host is called alive, and shorter than it is called gone
+            LoneSession L;
+            auto peer = L.net.connect({5, 0});                               // the link to seat 0
+            L.s->set_peer(0, peer.second);
+            L.first().pong = true;
+            L.step(1500);
+            L.first().pong = false;
+            L.step(2600);
+            ASSERT_EQ(L.s->mode(), ClientSession::Mode::Normal);
+            for (const auto& word : peer_words()) peer.first->send(word);
+            L.step(300);
+            ASSERT_EQ(L.s->mode(), ClientSession::Mode::Normal);
+            ASSERT_FALSE(L.s->electing());
+            ASSERT_EQ(L.s->host_seat(), kNoSeat);
+            ASSERT_TRUE(L.first().cli->is_open());                           // (an election closes the link to the old host)
+            ASSERT_TRUE(answered_nothing(peer.first));
+        }
+        {   // the server link is lost: the machine is on its way back, and a guest's proposal does not take it over
+            LoneSession L;
+            auto peer = L.net.connect({5, 0});
+            L.s->set_peer(0, peer.second);
+            L.step(100);
+            L.lose_link();
+            ASSERT_EQ(L.s->mode(), ClientSession::Mode::Reconnecting);
+            for (const auto& word : peer_words()) peer.first->send(word);
+            L.step(300);
+            ASSERT_EQ(L.s->mode(), ClientSession::Mode::Reconnecting);
+            ASSERT_EQ(L.s->host_seat(), kNoSeat);
+            ASSERT_TRUE(L.s->wants_connection(L.now));
+            ASSERT_TRUE(answered_nothing(peer.first));
+            L.attach_new();                                                  // the way back goes on to the server
+            L.step(100);
+            ASSERT_EQ(L.s->mode(), ClientSession::Mode::Rejoining);
+        }
     } TEST_END();
 
     TEST_CASE("N2.35 Host Migration: 20000 Garbage Messages On The Links Between Guests Change Nothing While The Host Lives") {
