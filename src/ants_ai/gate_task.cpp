@@ -9,6 +9,15 @@ namespace {
 
 uint64_t mix(uint64_t h, uint64_t v) noexcept { return (h ^ v) * 1099511628211ull; }
 
+// Whether a bomb of ANOTHER seat (an ally's or an enemy's, a mine too) lies on the tile. A special order onto a tile with a bomb is a defuse whoever's the bomb is, never a plant, so the plant order
+// must not go there; an ally's bomb is a wall for the ant that would stand on it and an enemy's goes off under it, so a hop whose plant tile or whose standing tile holds one is not a hop that works.
+bool foreign_bomb_on(const BotView& view, sim::TileCoord tile) noexcept {
+    for (const BombView& b : view.bombs()) {
+        if (b.tile == tile && b.owner != view.seat()) return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 // What the ants of the gate goal come from: the own Fire ants and Bombers with the side of the walls they stand on, and the power-ups on the map by tile and kind. A change of it is a reason to look again
@@ -356,6 +365,10 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
     }
     bool bomb_here = false;
     for (const BombView& b : view.bombs()) bomb_here = bomb_here || (b.tile == hop.bomb && b.owner == context.seat);
+    if (!landed_ && !thrown_ && (foreign_bomb_on(view, hop.bomb) || foreign_bomb_on(view, hop.from))) {   // another team's bomb on the plant tile or the tile to step from (HELLRAISER's vault: two allies hopped from the same tile and each defused the other's bomb): another hop
+        replan(context);
+        return;
+    }
     if (!landed_ && bomb_here != seen_bomb_) {
         progress_ = now;
         if (bomb_here) ++plants_;
@@ -554,10 +567,16 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
                     last_order_ = now;
                     return;
                 }
-                if (return_hop_.bombs == 0) {
-                    return_hop_ = GateInfo::best_hop_between(gates_, view.grid(), hop.to_comp, gates_.home());
+                if (return_hop_.bombs > 0 && (foreign_bomb_on(view, return_hop_.bomb) || foreign_bomb_on(view, return_hop_.from))) {
+                    return_hop_ = BombHop{};                                             // (another hop: the way back is planned on the grid and the ants as they are now)
                 }
                 if (return_hop_.bombs == 0) {
+                    return_hop_ = GateInfo::best_hop_between(gates_, view.grid(), hop.to_comp, gates_.home(), hop_choice(view));
+                }
+                if (return_hop_.bombs == 0) {
+                    bool others_bomb = false;
+                    for (const BombView& b : view.bombs()) others_bomb = others_bomb || b.owner != context.seat;
+                    if (others_bomb) return;                                             // every hop is shut by a bomb of another team at this look: wait for one of them to go off (the step timer ends the attempt)
                     fail(context, "stranded");
                     return;
                 }
@@ -635,6 +654,7 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
 void GateGoalTask::succeed(TaskContext& context) {
     ++done_;
     failures_ = 0;
+    replans_ = 0;
     context.ledger.release_all(id());                                                      // (the ant of the goal and the ants that were sent aside)
     ant_ = 0;
     goal_ = GateGoal{};
@@ -642,6 +662,25 @@ void GateGoalTask::succeed(TaskContext& context) {
     island_target_ = sim::TileCoord{-1, -1};
     finished_ = done_ >= params_.goals_max;
     phase_ = finished_ ? Phase::Exhausted : Phase::Idle;
+    next_plan_ = context.view.tick() + 20u;
+    signature_known_ = false;
+}
+
+// The hop of the goal is shut by a bomb of another team: the goal is planned again at the next look on the grid as it is (the planner leaves out a plant tile or a standing tile that holds a bomb).
+// Not an attempt given up; at most `replans_max` between two goals done.
+void GateGoalTask::replan(TaskContext& context) {
+    ++replans_total_;
+    if (++replans_ > params_.replans_max) {
+        replans_ = 0;
+        fail(context, "blocked");
+        return;
+    }
+    context.ledger.release_all(id());
+    ant_ = 0;
+    goal_ = GateGoal{};
+    return_hop_ = BombHop{};
+    island_target_ = sim::TileCoord{-1, -1};
+    phase_ = Phase::Idle;
     next_plan_ = context.view.tick() + 20u;
     signature_known_ = false;
 }

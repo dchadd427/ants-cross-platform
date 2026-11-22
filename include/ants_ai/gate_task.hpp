@@ -36,10 +36,11 @@ public:
         uint32_t hop_bombs{3};               // the most bombs of a hop chain
         uint32_t min_ticks_left{2400};       // no attempt starts with less than this left on the clock
         uint32_t look_every{200};            // the goal is chosen again this often while nothing is under way
-        uint32_t order_gap{120};             // no second order to one ant within this many ticks (the bot's stall detector counts equal orders)
+        uint32_t order_gap{40};              // no second order to one ant within this many ticks (the bot's stall detector counts equal orders)
         uint32_t pause_ticks{100};           // the pause after an attempt that was given up
         uint32_t revivals_max{2};            // times a task that ran out of attempts starts afresh because a source of its ant appeared (a new Bomber or Fire ant, a power-up of the kind)
         uint32_t goals_max{8};               // goals done in a match (a map that keeps making gates is left alone after this many)
+        uint32_t replans_max{12};            // hops dropped for another (a bomb of another team on a tile of the hop) between two goals done, then the attempt is given up
     };
     enum class Phase : uint8_t { Idle, Fetch, Act, Exhausted };
 
@@ -67,6 +68,7 @@ public:
     uint32_t extinguishes() const noexcept { return extinguishes_; }
     uint32_t defuses() const noexcept { return defuses_; }
     uint32_t revivals() const noexcept { return revivals_; }
+    uint32_t replans() const noexcept { return replans_total_; }
     /// Why the last attempt was given up ("step", "attempt", "clock", "ant", "stranded", "hurt"); empty before one was
     const char* last_failure() const noexcept { return why_; }
     bool exhausted() const noexcept { return phase_ == Phase::Exhausted; }
@@ -80,6 +82,7 @@ private:
     void act_hop(TaskContext& context, const AntView& ant);
     void succeed(TaskContext& context);
     void fail(TaskContext& context, const char* why);
+    void replan(TaskContext& context);
     bool may_order(uint64_t now) const noexcept { return last_order_ == 0 || now >= last_order_ + params_.order_gap; }
     bool tile_blocked(TaskContext& context, sim::TileCoord tile);
     uint64_t signature(const TaskContext& context) const;
@@ -119,6 +122,8 @@ private:
     bool finished_{false};                   // goals_max goals are done: nothing more is tried
     uint64_t exhausted_sources_{0};          // the sources (typed ants and power-ups of the hill's side) when the attempts ran out
     uint32_t revivals_{0};                   // times the task started afresh because a source appeared (at most `revivals_max`)
+    uint32_t replans_{0};                    // hops dropped for another since the last goal was done: a bomb of another team on the tile to plant on or to step from
+    uint32_t replans_total_{0};
 };
 
 }  // namespace ants::ai

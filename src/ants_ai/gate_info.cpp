@@ -40,24 +40,86 @@ std::vector<sim::TileCoord> around(const std::vector<sim::TileCoord>& cells, int
     return out;
 }
 
+// How far from the nearest of `punchers` a hop stays, in tiles (Chebyshev), at most kSafeFar: the tile the Bomber stands on to plant and to step, the plant tile and the tile it lands on (a Combat
+// Ant that comes within three tiles of a Bomber punches it): a hop that no Combat Ant reaches at either end is as good as any
+constexpr int32_t kSafeFar = 6;
+int32_t hop_clearance(const BombHop& hop, const std::vector<sim::TileCoord>& punchers) noexcept {
+    int32_t d = kSafeFar;
+    for (const sim::TileCoord& a : punchers) {
+        for (const sim::TileCoord& t : {hop.from, hop.bomb, hop.land()}) d = std::min(d, std::max(std::abs(a.x - t.x), std::abs(a.y - t.y)));
+    }
+    return d;
+}
+
+// A Combat Ant punches what comes within three tiles of it: a hop that stays four tiles from every one of them is safe
+constexpr int32_t kSafeClearance = 4;
+
+// The squared distance between two tiles
+int32_t dist2(sim::TileCoord a, sim::TileCoord b) noexcept { return (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y); }
+
+// Of two hops with the same number of bombs, whether `a` is preferred to `b`: the one that is not shut by an ant; the one whose throw does not depend on a power-up that is still there (`firm`);
+// the one that no Combat Ant of another team reaches; the one whose plant tile
+// is nearer to the Bomber's own hill than to its ally's (two allies that plant in one small vault do not plant on the same tile: an order onto a tile that holds a bomb is a defuse); the one
+// that is planted from the tile it steps from (a step along a row or a column: no walk between the plant and the throw, over a floor that another team's bombs may have been planted on);
+// the one that is farther from the Combat Ants (up to kSafeFar tiles); the one that lands nearer to `choice.near`
+bool hop_preferred(const BombHop& a, const BombHop& b, const HopChoice& choice) noexcept {
+    const bool shut_a = GateInfo::hop_shut(a, choice);
+    const bool shut_b = GateInfo::hop_shut(b, choice);
+    if (shut_a != shut_b) return !shut_a;
+    if (a.firm != b.firm) return a.firm;
+    const int32_t ca = choice.punchers.empty() ? kSafeFar : hop_clearance(a, choice.punchers);
+    const int32_t cb = choice.punchers.empty() ? kSafeFar : hop_clearance(b, choice.punchers);
+    if ((ca >= kSafeClearance) != (cb >= kSafeClearance)) return ca >= kSafeClearance;
+    if (choice.near.x >= 0 && choice.ally_near.x >= 0) {
+        const bool mine_a = dist2(a.bomb, choice.near) <= dist2(a.bomb, choice.ally_near);
+        const bool mine_b = dist2(b.bomb, choice.near) <= dist2(b.bomb, choice.ally_near);
+        if (mine_a != mine_b) return mine_a;
+    }
+    const bool straight_a = a.from.x == a.bomb.x || a.from.y == a.bomb.y;
+    const bool straight_b = b.from.x == b.bomb.x || b.from.y == b.bomb.y;
+    if (straight_a != straight_b) return straight_a;
+    if (ca != cb) return ca > cb;
+    return choice.near.x >= 0 && dist2(a.land(), choice.near) < dist2(b.land(), choice.near);
+}
+
 }  // namespace
 
-BombHop GateInfo::simulate(const sim::Grid& grid, sim::TileCoord bomb, uint8_t facing) {
+bool GateInfo::hop_shut(const BombHop& hop, const HopChoice& choice) noexcept {
+    if (choice.occupied.empty()) return false;
+    const auto taken = [&](sim::TileCoord t) { return std::find(choice.occupied.begin(), choice.occupied.end(), t) != choice.occupied.end(); };
+    if (taken(hop.bomb) || taken(hop.from)) return true;
+    const bool diagonal = hop.from.x != hop.bomb.x && hop.from.y != hop.bomb.y;
+    return diagonal && (taken(sim::TileCoord{hop.from.x, hop.bomb.y}) || taken(sim::TileCoord{hop.bomb.x, hop.from.y}));
+}
+
+BombHop GateInfo::best_hop_into(const std::vector<int32_t>& comps, const HopChoice& choice) const {
+    BombHop best;
+    for (const BombHop& hop : hops_) {
+        if (std::find(comps.begin(), comps.end(), hop.to_comp) == comps.end()) continue;
+        if (best.bombs == 0 || hop.bombs < best.bombs || (hop.bombs == best.bombs && hop_preferred(hop, best, choice))) best = hop;
+    }
+    return best;
+}
+
+namespace {
+
+// The throw rule of GateInfo::simulate; `free_power_ups`: a tile with a power-up on it accepts the landing, as it does once the power-up is taken
+BombHop simulate_throw(const sim::Grid& grid, sim::TileCoord bomb, uint8_t facing, bool free_power_ups) {
     BombHop h;
     h.bomb = bomb;
     h.facing = facing;
     sim::TileCoord at = bomb;
     int face = facing % 8;
     bool decided = false;
-    for (int n = 0; n < kMaxChain; ++n) {
+    for (int n = 0; n < GateInfo::kMaxChain; ++n) {
         ++h.bombs;
         const int start = (face + 4) % 8;                                       // pick_landing: the direction opposite the facing, then the next ones clockwise
         sim::TileCoord land{-1, -1};
         int dir = -1;
         for (int i = 0; i < 8 && dir < 0; ++i) {
             const int d = (start + i) % 8;
-            const sim::TileCoord k = step_in(at, d, kFlightRange);
-            if (flight_landing_ok(grid, k)) {
+            const sim::TileCoord k = step_in(at, d, GateInfo::kFlightRange);
+            if (flight_landing_ok(grid, k) || (free_power_ups && grid.in_bounds(k) && grid.has_powerup_at(k))) {
                 land = k;
                 dir = d;
             }
@@ -82,10 +144,18 @@ BombHop GateInfo::simulate(const sim::Grid& grid, sim::TileCoord bomb, uint8_t f
         else if (grid.terrain_class_at(last) == sim::movement::kTerrainWater) h.end = HopEnd::Water;
         else h.end = HopEnd::Ground;
     }
-    h.hp = kBombHp * h.bombs + (h.end == HopEnd::Fire ? 1 : 0);
+    h.hp = GateInfo::kBombHp * h.bombs + (h.end == HopEnd::Fire ? 1 : 0);
     int32_t p = 100;
-    for (int32_t i = 0; i < h.bombs; ++i) p = p * (100 - kDudPercent) / 100;
+    for (int32_t i = 0; i < h.bombs; ++i) p = p * (100 - GateInfo::kDudPercent) / 100;
     h.fly_percent = p;
+    return h;
+}
+
+}  // namespace
+
+BombHop GateInfo::simulate(const sim::Grid& grid, sim::TileCoord bomb, uint8_t facing) {
+    BombHop h = simulate_throw(grid, bomb, facing, false);
+    h.firm = simulate_throw(grid, bomb, facing, true).land() == h.land();
     return h;
 }
 
@@ -389,7 +459,7 @@ GateInfo GateInfo::analyse(const MapInfo& map, const sim::Grid& grid, uint8_t te
     return out;
 }
 
-BombHop GateInfo::best_hop_between(const GateInfo& gates, const sim::Grid& grid, int32_t from_comp, int32_t to_comp) {
+BombHop GateInfo::best_hop_between(const GateInfo& gates, const sim::Grid& grid, int32_t from_comp, int32_t to_comp, const HopChoice& choice) {
     BombHop best;
     if (gates.empty() || from_comp < 0 || to_comp < 0 || from_comp == to_comp) return best;
     const int w = gates.w_;
@@ -411,7 +481,7 @@ BombHop GateInfo::best_hop_between(const GateInfo& gates, const sim::Grid& grid,
                 hop.from_comp = from_comp;
                 hop.to_comp = gates.component(hop.land());
                 if (hop.to_comp != to_comp) continue;
-                if (best.bombs == 0 || hop.bombs < best.bombs) best = std::move(hop);
+                if (best.bombs == 0 || hop.bombs < best.bombs || (hop.bombs == best.bombs && hop_preferred(hop, best, choice))) best = std::move(hop);
             }
         }
     }

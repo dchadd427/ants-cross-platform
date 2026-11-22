@@ -61,6 +61,7 @@ struct BombHop {
     int32_t bombs{0};                    // bombs that go off: the planted one and each bomb the chain lands on (a Stuck chain counts the one that burned the ant)
     int32_t hp{0};                       // hit points lost: 2 per bomb, and 1 more for HopEnd::Fire
     int32_t fly_percent{0};              // the chance that none of the bombs is a dud (80 percent each, truncated per bomb)
+    bool firm{true};                     // the throw lands on the same tile whether or not the power-ups on the map are taken (a power-up tile refuses a landing, so a throw that passes one over lands elsewhere once it is taken)
     sim::TileCoord land() const noexcept { return lands.empty() ? bomb : lands.back(); }
 };
 
@@ -98,6 +99,21 @@ struct GateTarget {
     uint8_t passes{0};                   // kPassFireAnt | kPassDefuse | kPassHop
 };
 
+/// What breaks a tie between hops of the same number of bombs (all of it optional, empty: the first hop in the scan). The vault of HELLRAISER is five tiles across and four teams' Bombers hop
+/// from it: a hop is only as good as the ground around it is free.
+struct HopChoice {
+    /// Tiles that an ant stands on that is not the Bomber's own (an enemy's or an ally's): a hop that needs one of them (the plant tile, the tile to step from, and for a diagonal step the two
+    /// tiles at its sides, which the engine's path does not cut across) is chosen last
+    std::vector<sim::TileCoord> occupied;
+    /// The Combat Ants of other teams: they punch whatever comes within three tiles of them (and throw it four tiles back for 2 hit points), so of the hops with the same number of bombs the one
+    /// whose standing tile, plant tile and landing tile are all farthest from them is chosen (up to six tiles: farther is as good)
+    std::vector<sim::TileCoord> punchers;
+    /// The Bomber's own hill: of hops as clear as each other the one that lands nearest to it is chosen (the shortest way home from the landing; not set: the first in the scan)
+    sim::TileCoord near{-1, -1};
+    /// The hill of the Bomber's ally, when it has one: a hop whose plant tile is nearer to `near` than to this one comes first, so that two allies do not plant on the same tile
+    sim::TileCoord ally_near{-1, -1};
+};
+
 class GateInfo {
 public:
     GateInfo() = default;
@@ -107,8 +123,12 @@ public:
     /// The throw rule on its own: a bomb planted on `bomb` and an ant that steps onto it with `facing`, on the map `grid` shows. Components are not known to it (from_comp and to_comp are -1,
     /// `end` is Ground for any landing that is neither water nor fire). The engine's own rule (see the top); the conformance test holds it against the simulation on every tile.
     static BombHop simulate(const sim::Grid& grid, sim::TileCoord bomb, uint8_t facing);
-    /// The best planted-bomb hop from component `from_comp` that lands on safe ground in component `to_comp` (bombs == 0 when none exists).
-    static BombHop best_hop_between(const GateInfo& gates, const sim::Grid& grid, int32_t from_comp, int32_t to_comp);
+    /// The best planted-bomb hop from component `from_comp` that lands on safe ground in component `to_comp` (bombs == 0 when none exists): the fewest bombs, then the one that `choice` prefers.
+    static BombHop best_hop_between(const GateInfo& gates, const sim::Grid& grid, int32_t from_comp, int32_t to_comp, const HopChoice& choice = HopChoice{});
+    /// The best hop of hops() (those that leave the home component) that lands in one of `comps` (bombs == 0 when none does): the fewest bombs, then the one that `choice` prefers
+    BombHop best_hop_into(const std::vector<int32_t>& comps, const HopChoice& choice = HopChoice{}) const;
+    /// Whether an ant of `choice.occupied` stands on a tile that the hop needs
+    static bool hop_shut(const BombHop& hop, const HopChoice& choice) noexcept;
     /// The best map-bomb chain triggered by stepping 1 tile from `from` onto an adjacent map bomb that lands on safe ground in `to_comp` (bombs == 0 when none exists).
     static BombHop best_map_bomb_bounce(const GateInfo& gates, const sim::Grid& grid, sim::TileCoord from, int32_t to_comp);
 
