@@ -903,8 +903,8 @@
   {
    "id": "client_address_header_ignored",
    "file": "hub/server.py",
-   "old": "address = limitmod.address_key(h.get(\"x-client-address\"), peername[0] if peername else \"\")\n        if not self.per_address.try_add(address):",
-   "new": "address = limitmod.address_key(None, peername[0] if peername else \"\")\n        if not self.per_address.try_add(address):",
+   "old": "return limitmod.address_key(None if self.converter.speaks_for_nobody(peer) else headers.get(\"x-client-address\"), peer)",
+   "new": "return limitmod.address_key(None, peer)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
   },
   {
@@ -2565,6 +2565,13 @@
    "old": "            self.chat.pick_limits.forget_idle(now)\n",
    "new": "",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "a_request_from_the_converters_address_names_a_visitor_by_its_header",
+   "file": "hub/server.py",
+   "old": "None if self.converter.speaks_for_nobody(peer) else headers.get(\"x-client-address\")",
+   "new": "headers.get(\"x-client-address\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server.TheSocketLimits tests.scripts.test_hub_images_door.TheConvertersNetwork"
   }
  ]
 }

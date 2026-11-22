@@ -213,6 +213,52 @@ void run_command_line_tests() {
         ApplicationConfig none = headless_config();
         ASSERT_TRUE(none.player_name.empty());
     } TEST_END();
+
+    TEST_CASE("N5.1c Command Line: A Number That Is No Number Is A Startup Error That Names The Option, Not An Exception That Ends The Program; A Seed Or A Port Out Of Range Is One Too; The Good Numbers Are Kept") {
+        std::vector<std::string> args;
+        std::vector<char*> st;
+        struct Bad {
+            std::vector<std::string> options;
+            const char* named;
+        };
+        const std::vector<Bad> bad = {
+            {{"--seed", "abc"}, "--seed"}, {{"--seed", "-1"}, "--seed"}, {{"--seed", "4294967296"}, "--seed"}, {{"--seed", "99999999999999999999"}, "--seed"}, {{"--seed", ""}, "--seed"},
+            {{"--frames", "x"}, "--frames"}, {{"--frames", "1.5"}, "--frames"}, {{"--frames", "-2"}, "--frames"}, {{"--select-ant", "ant"}, "--select-ant"}, {{"--select-base", "9999999999"}, "--select-base"},
+            {{"--player", "1000"}, "--player"}, {{"--player", "-3"}, "--player"}, {{"--player", "two"}, "--player"}, {{"--host", "4002x"}, "--host"}, {{"--host", "70000"}, "--host"},
+            {{"--join", "play.example.org:"}, "--join"}, {{"--join", "play.example.org:port"}, "--join"}, {{"--join", "play.example.org:0"}, "--join"}, {{"--join", "play.example.org:65536"}, "--join"},
+            {{"--port", "http"}, "--port"}, {{"--port", "65536"}, "--port"}, {{"--port", " 80"}, "--port"}, {{"--lan-port", "-1"}, "--lan-port"}};
+        for (const Bad& b : bad) {
+            args = {"ants"};
+            args.insert(args.end(), b.options.begin(), b.options.end());
+            const ApplicationConfig c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));          // (it returns: nothing is thrown)
+            ASSERT_TRUE(c.startup_error.find(b.named) != std::string::npos && c.startup_error.find("needs") != std::string::npos);
+        }
+        // the first refusal is the one that is reported, and the program does not start with it
+        args = {"ants", "--seed", "x", "--port", "y", "--headless"};
+        ApplicationConfig c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.startup_error.find("--seed") != std::string::npos && c.startup_error.find("--port") == std::string::npos);
+        {
+            Application app;
+            ASSERT_FALSE(app.init(c));
+        }
+        // the numbers that are good are kept, at their edges too
+        args = {"ants", "--seed", "4294967295", "--frames", "0", "--player", "255", "--port", "65535", "--lan-port", "0", "--select-ant", "-1", "--select-base", "3"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.startup_error.empty());
+        ASSERT_EQ(c.random_seed, 4294967295u);
+        ASSERT_EQ(c.screenshot_frames, 0);
+        ASSERT_EQ(c.local_player_id, 255);
+        ASSERT_EQ(c.net_port, 65535);
+        ASSERT_EQ(c.lan_port, 0);
+        ASSERT_EQ(c.select_ant_id, -1);
+        ASSERT_EQ(c.select_base_team, 3);
+        args = {"ants", "--join", "play.example.org:4002", "--seed", "0"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.startup_error.empty() && c.net_address == "play.example.org" && c.net_port == 4002 && c.random_seed == 0u);
+        args = {"ants", "--host", "4003"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.startup_error.empty() && c.net_port == 4003);
+    } TEST_END();
 }
 
 namespace {

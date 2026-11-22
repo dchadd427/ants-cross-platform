@@ -186,6 +186,9 @@ static socket_t start_connecting(const std::string& host, uint16_t port, std::st
 
 // Whether a connecting socket has finished: Connecting (still), Open, or Failed (the connection was refused or timed out)
 static TcpStream::State connect_progress(socket_t s) {
+#ifndef _WIN32
+    if (s >= FD_SETSIZE) return TcpStream::State::Failed;            // (select() cannot hold a descriptor of 1024 or more, and FD_SET would write past the set: such a connection fails, as one that could not be made would)
+#endif
     fd_set wset;
     fd_set eset;
     FD_ZERO(&wset);

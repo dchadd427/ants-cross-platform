@@ -286,6 +286,16 @@ class TheSocketLimits(RigTest):
         self.clients.append(refused)
         self.assertEqual(refused.status.split()[1], "429")
 
+    def test_nobody_at_the_converters_address_names_a_visitor(self):
+        """The converter's network has no visitor, so a request from the converter's own address is counted under that address, whatever X-Client-Address says (the rig's converter is its own address, 127.0.0.1,
+        as a container's would be a 172 address): the fourth socket is refused although each says another visitor."""
+        self.rig.call(self.rig.hub.converter.remember, "127.0.0.1")
+        for n in range(3):
+            self.connect(headers={"X-Client-Address": "203.0.113.%d" % (n + 1)})
+        refused = hc.Client(self.rig.port, headers={"X-Client-Address": "203.0.113.99"})
+        self.clients.append(refused)
+        self.assertEqual(refused.status.split()[1], "429")
+
     def test_a_garbage_address_falls_back_to_the_peer(self):
         for _ in range(3):
             self.connect(headers={"X-Client-Address": "not an address"})

@@ -330,8 +330,8 @@
   {
    "id": "a_push_does_not_cancel_the_older_run",
    "file": ".github/workflows/ci.yml",
-   "old": "cancel-in-progress: true\n\npermissions:",
-   "new": "cancel-in-progress: false\n\npermissions:",
+   "old": "cancel-in-progress: true",
+   "new": "cancel-in-progress: false",
    "test": "python3 tests/scripts/test_ci_workflow.py"
   },
   {
