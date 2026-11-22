@@ -175,15 +175,32 @@ void run_order_tests() {
         ASSERT_TRUE(seq.submit_checked(2, cmd(CommandType::Hatch, 2)) == Submit::Refused);
         ASSERT_TRUE(seq.submit_checked(1, cmd(CommandType::Drop, 1)) == Submit::Refused);
         ASSERT_EQ(seq.dropped_over_budget(2), 0u);
-        // a host that resumes starts every seat's stores again (and its first Quit is free again)
+        // a host that resumes starts every seat's stores again (and its first Quit is free again): the orders and the control commands are used up (56 group orders and 8 Hatch a turn) and a Quit is sent ...
         Sequencer moved;
         moved.set_active(1, true);
         Model before;
-        Fate used = run_against_model(moved, before, 1, 300, [](uint32_t) { std::vector<Command> o; for (int i = 0; i < 64; ++i) o.push_back(group_move(1, 1)); return o; });
+        Fate used = run_against_model(moved, before, 1, 300, [](uint32_t turn) {
+            std::vector<Command> o;
+            for (int i = 0; i < 56; ++i) o.push_back(group_move(1, 1));
+            for (int i = 0; i < 8; ++i) o.push_back(cmd(CommandType::Hatch, 1));
+            if (turn == 299) o.push_back(cmd(CommandType::Quit, 1));
+            return o;
+        });
         ASSERT_TRUE(used.dropped > 0 && used.disagreed == 0);
         moved.resume(500);
         moved.set_active(1, true);
+        // ... and after the resume the control store holds its 512 again, and when it is used up again the seat's first Quit is free again
         Model fresh;
+        used = run_against_model(moved, fresh, 1, 25, [](uint32_t turn) {
+            std::vector<Command> o;
+            if (turn < 24) {
+                for (int i = 0; i < 64; ++i) o.push_back(cmd(CommandType::Hatch, 1));
+            } else {
+                o.push_back(cmd(CommandType::Quit, 1));
+            }
+            return o;
+        });
+        ASSERT_TRUE(used.disagreed == 0 && used.taken >= 512u + 1u);
         used = run_against_model(moved, fresh, 1, 120, [](uint32_t) { std::vector<Command> o; for (int i = 0; i < 64; ++i) o.push_back(group_move(1, 1)); return o; });
         ASSERT_TRUE(used.disagreed == 0 && used.taken >= 6144u);
     } TEST_END();
@@ -285,7 +302,7 @@ void run_order_tests() {
             Sequencer seq;
             seq.set_active(1, true);
             Model model;
-            const Fate fate = run_against_model(seq, model, 1, 100, [](uint32_t) { std::vector<Command> o; for (int i = 0; i < 64; ++i) o.push_back(cmd(CommandType::Hatch, 1)); return o; });
+            const Fate fate = run_against_model(seq, model, 1, 500, [](uint32_t turn) { std::vector<Command> o; if (turn >= 400) for (int i = 0; i < 64; ++i) o.push_back(cmd(CommandType::Hatch, 1)); return o; });     // (20 s of rest first: the store does not grow past its 512)
             ASSERT_EQ(fate.disagreed, 0u);
             ASSERT_TRUE(fate.taken >= 551 && fate.taken <= 552);                                  // 512 and the 99 turns that seal before the last of them, 8 a second
             ASSERT_EQ(seq.heavy_seats(), 1u << 1);

@@ -437,7 +437,7 @@
    "id": "control_store_not_refilled",
    "file": "src/ants_net/sequencer.cpp",
    "old": "for (uint32_t& left : control_milli_) left = std::min(full_control, left + earned_control);",
-   "new": "for (uint32_t& left : control_milli_) left = std::min(full_control, left);",
+   "new": "for (uint32_t& left : control_milli_) left = std::min(full_control, left + 0u * earned_control);",
    "build": "test_lockstep",
    "test": "timeout 900 sh -c 'for t in S2.59 S2.61 S2.67 S2.60 S2.62 S2.63 S2.66; do ANTS_TEST_FILTER=$t ./build/tests/test_net/test_lockstep || exit 1; done'"
   },
