@@ -694,5 +694,65 @@ class TheCheckIsNotVacuous(unittest.TestCase):
         self.must_fail("web/shell.html", "button.textContent = gone ? 'Menu' : 'Reload';", "button.textContent = gone ? 'Menu' : 'Retry';")
 
 
+@unittest.skipUnless(shutil.which("node"), "node is not installed: the Room's four colors were NOT run (tests/scripts/web_lobby_four_colors_check.js)")
+class TheFourColors(unittest.TestCase):
+    """the Room's four colors, RUN in the fake browser of tests/scripts/web_page_harness.js (tests/scripts/web_lobby_four_colors_check.js: the cards in the order of the hills, the host's own color, the menu of a free color with
+    Closed for Nobody and the plan that each choice sends, the Team buttons, Remove, a closed color, and a guest's page that reads who starts the match and has no menu): the page as it is, and a copy of it with ONE thing changed,
+    which must fail"""
+    CHECK = os.path.join(REPO, "tests", "scripts", "web_lobby_four_colors_check.js")
+
+    def run_check(self, folder):
+        return subprocess.run([shutil.which("node"), os.path.join(folder, "tests", "scripts", "web_lobby_four_colors_check.js"), os.path.join(folder, "web", "lobby.html")], capture_output=True, text=True, timeout=120, cwd=folder)
+
+    def test_the_page_passes(self):
+        done = self.run_check(REPO)
+        self.assertEqual(done.returncode, 0, done.stdout[-3000:] + done.stderr[-2000:])
+        self.assertRegex(done.stdout, r"\d+ checks, 0 failed")
+
+    def must_fail(self, relative, old, new):
+        with tempfile.TemporaryDirectory() as folder:
+            shutil.copytree(os.path.join(REPO, "web"), os.path.join(folder, "web"), ignore=shutil.ignore_patterns("*.png", "*.webp", "*.ttf", "*.wasm", "*.data", "__pycache__"))
+            shutil.copytree(os.path.join(REPO, "tests", "scripts"), os.path.join(folder, "tests", "scripts"), ignore=shutil.ignore_patterns("__pycache__"))
+            path = os.path.join(folder, *relative.split("/"))
+            with open(path, encoding="utf-8", newline="") as f:
+                text = f.read()
+            self.assertEqual(text.count(old), 1, "%s has %d of %r" % (relative, text.count(old), old[:60]))
+            with open(path, "w", encoding="utf-8", newline="") as f:
+                f.write(text.replace(old, new))
+            done = self.run_check(folder)
+        self.assertNotEqual(done.returncode, 0, "the check did not see %r changed to %r in %s" % (old[:50], new[:50], relative))
+
+    def test_the_colors_lie_in_another_order(self):
+        self.must_fail("web/front/lobby_rules.js", "var GRID = [3, 0, 1, 2];", "var GRID = [0, 1, 2, 3];")
+
+    def test_the_host_is_not_named(self):
+        self.must_fail("web/front/lobby_rules.js", "(s.leader && s.me ? ', you, host' : s.leader ? ', host' : s.me ? ', you' : '')", "(s.me ? ', you' : '')")
+
+    def test_nobody_is_not_called_closed(self):
+        self.must_fail("web/front/seat_menu.js", "name: 'Closed', line: 'stays empty'", "name: 'Nobody', line: 'stays empty'")
+        self.must_fail("web/front/lobby_rules.js", "s.kind === 'open' ? 'Open' : 'Closed'", "s.kind === 'open' ? 'Open' : 'Nobody'")
+
+    def test_a_guest_has_the_menu_of_a_color(self):
+        self.must_fail("web/front/lobby_rules.js", "if (ro) card.who.push({ text: s.kind === 'bot' ?", "if (false) card.who.push({ text: s.kind === 'bot' ?")
+
+    def test_a_guest_has_remove(self):
+        self.must_fail("web/front/lobby_rules.js", "if (!ro && !s.me && !s.leader) { card.remove = removing !== i;", "if (!s.me && !s.leader) { card.remove = removing !== i;")
+
+    def test_the_host_has_no_team_buttons(self):
+        self.must_fail("web/front/lobby_rules.js", "else card.teams = [1, 2].map(", "else card.teams = null; [1, 2].map(")
+
+    def test_the_team_buttons_are_not_named(self):
+        self.must_fail("web/lobby.html", "b.setAttribute('aria-label', 'Team ' + t.side + ' for ' + c.name);", "b.setAttribute('aria-label', 'Side ' + t.side + ' for ' + c.name);")
+
+    def test_remove_is_not_named(self):
+        self.must_fail("web/lobby.html", "rm.setAttribute('aria-label', 'Remove ' + card.who[0].text + ' from the room');", "rm.setAttribute('aria-label', 'Drop ' + card.who[0].text + ' from the room');")
+
+    def test_a_guest_is_not_told_who_starts(self):
+        self.must_fail("web/front/lobby_rules.js", "text: host + ' starts the match.'", "text: 'The match starts.'")
+
+    def test_the_guests_big_button_is_not_ready(self):
+        self.must_fail("web/front/lobby_rules.js", "big: 'READY', chip: 'Ready'", "big: 'WAIT', chip: 'Ready'")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -182,18 +182,22 @@ rate_text() { echo "${1%% *}, $(echo "$1" | cut -d' ' -f2) ticks in $(echo "$1" 
 cd "$ROOT"
 # ---- part options: the pages' own texts and nginx.conf, and the command-line options of ants_server (a bad option is refused at once, a good one starts it) -------
 if part_enabled options; then
-# the lobby tells the players what the room's host can do (protocol 7: the first player in the room leads it and starts the match with whoever is in): on the host's own color, in the line that the others read, in
-# and in "How it works"
-check "web/lobby.html and web/front/lobby_rules.js say what the host can do: the host's color says 'Host. You start the match.', the others read that the host starts the match when everybody is in, and How it works says that the host starts the match with whoever is in" "$(grep -qF 'Host. You start the match.' "$ROOT/web/front/lobby_rules.js" && grep -qF 'starts the match when everybody is in.' "$ROOT/web/front/lobby_rules.js" && grep -qF 'The host starts the match with whoever is in.' "$ROOT/web/lobby.html"; echo $?)"
-# bots fill the empty seats (protocol 11, a level for each seat and the room's teams since protocol 13): the lobby has a card for each of the four colors; the host gives a free color to Open, an Easy, Medium or Hard bot or
-# Nobody with a select, presses Team 1 or Team 2 under a player, and every change goes to the room as a plan (the room tells everybody, so nothing is remembered by the page); the links that START hands to the game
-# carry the plan as ?fill=<plan> (and &start=<people>), validated, and the game page turns exactly those texts into --fill-bots, --teams and --start-when (and nothing else: an address cannot put another word on the command line)
+# the lobby tells the players what the room's host can do (protocol 7: the first player in the room leads it and starts the match with whoever is in), and has a card for each of the four colors (bots fill the empty seats,
+# protocol 11, a level for each seat and the room's teams since protocol 13): the host gives a free color to Open, an Easy, Medium or Hard bot or Closed (the plan's Nobody) from the color's menu, presses Team 1 or Team 2 under a
+# player, and every change goes to the room as a plan (the room tells everybody, so nothing is remembered by the page). The page is RUN, not read: tests/scripts/web_lobby_four_colors_check.js plays the host's page and a guest's
+# in the fake browser of tests/scripts/web_page_harness.js against a scripted room (the mutants of test_web_lobby.py TheFourColors prove that it sees what it guards)
+# the links that START hands to the game carry the plan as ?fill=<plan> (and &start=<people>), validated, and the game page turns exactly those texts into --fill-bots, --teams and --start-when (and nothing else: an address
+# cannot put another word on the command line)
 FOUR_PAGE="$ROOT/web/lobby.html"
 SHELL_PAGE="$ROOT/web/shell.html"
-FILL_FORM=1
-if grep -qF "[['open', 'Open'], ['easy', 'Easy bot'], ['medium', 'Medium bot'], ['hard', 'Hard bot'], ['nobody', 'Nobody']]" "$FOUR_PAGE" && grep -qF "'Team ' + t.side" "$FOUR_PAGE" && grep -qF "client.setPlan(" "$FOUR_PAGE" \
-    && grep -qF "var GRID = [3, 0, 1, 2];" "$ROOT/web/front/lobby_rules.js" && grep -qF "data-remove" "$FOUR_PAGE"; then FILL_FORM=0; fi
-check 'web/lobby.html has a card for each of the four colors (Black, Green, Red, Blue in the order of the hills) with Open, Easy bot, Medium bot, Hard bot and Nobody for a free color, the Team 1 and Team 2 buttons, Remove, and sends every change to the room as a plan' "$FILL_FORM"
+if command -v node > /dev/null 2>&1; then
+    FOUR_RUN="$(node "$ROOT/tests/scripts/web_lobby_four_colors_check.js" "$FOUR_PAGE" 2>&1)"
+    FOUR_RUN_RC=$?
+    [ "$FOUR_RUN_RC" -ne 0 ] && echo "$FOUR_RUN" | sed 's/^/    /'
+    check "web/lobby.html, run with node: the host's color says You and Host and the others read who starts the match, a guest's big button is READY, there is a card for each of the four colors (Black, Green, Red, Blue in the order of the hills) with Open, Easy bot, Medium bot, Hard bot and Closed for a free color, the Team 1 and Team 2 buttons and Remove for the host, none of them for a guest, and every change goes to the room as a plan" "$FOUR_RUN_RC"
+else
+    echo "  SKIP: node is not installed: the Room's four colors were NOT run (tests/scripts/web_lobby_four_colors_check.js)"
+fi
 FILL_SHELL=1
 if grep -qF "out.args.push('--fill-bots', fill)" "$SHELL_PAGE" && grep -qF "var fill = antsFillPlanArg(q.get('fill'));" "$SHELL_PAGE" && grep -qF "out.args.push('--teams', teams)" "$SHELL_PAGE" && grep -qF "var teams = antsTeamsArg(q.get('teams'));" "$SHELL_PAGE" \
     && grep -qF "out.args.push('--start-when', start)" "$SHELL_PAGE" && grep -qF "var start = antsStartArg(q.get('start'));" "$SHELL_PAGE"; then FILL_SHELL=0; fi
