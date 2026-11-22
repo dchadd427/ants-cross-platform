@@ -547,7 +547,7 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
         }
         if (goal_.gate == GateKind::Sealed) {
             if (gates_.component(ant.tile) != gates_.home()) {
-                if (!ant.idle() || !may_order(now)) return;
+                if (!ant.idle() || !may_step(now)) return;
                 if (!ant.holding) {
                     const PileInfo* pile = context.map.pile(goal_.target);
                     sim::TileCoord food_cell{-1, -1};
@@ -563,7 +563,7 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
                         fail(context, "step");
                         return;
                     }
-                    context.orders.move({ant_}, food_cell);
+                    send(context, false, food_cell);
                     last_order_ = now;
                     return;
                 }
@@ -589,18 +589,18 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
                 }
                 if (ret_bomb) {
                     if (ant.tile == return_hop_.from) {
-                        context.orders.move({ant_}, return_hop_.bomb);
+                        send(context, false, return_hop_.bomb);
                         ++hops_ordered_;
                     } else if (!tile_blocked(context, return_hop_.from)) {
-                        context.orders.move({ant_}, return_hop_.from);
+                        send(context, false, return_hop_.from);
                     }
                 } else {
                     if (ant.hp < std::min<int32_t>(10, 2 * return_hop_.bombs + 1)) {
                         fail(context, "hurt");
                         return;
                     }
-                    if (ant.tile == return_hop_.bomb) context.orders.move({ant_}, return_hop_.from);
-                    else if (!tile_blocked(context, return_hop_.bomb)) context.orders.special(ant_, return_hop_.bomb);
+                    if (ant.tile == return_hop_.bomb) send(context, false, return_hop_.from);
+                    else if (!tile_blocked(context, return_hop_.bomb)) send(context, true, return_hop_.bomb);
                 }
                 last_order_ = now;
                 return;
@@ -619,7 +619,7 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
         succeed(context);
         return;
     }
-    if (!ant.idle() || !may_order(now)) return;                                           // walking, planting, thrown or stunned: wait for it
+    if (!ant.idle() || !may_step(now)) return;                                            // walking, planting, thrown or stunned: wait for it
     const int32_t at = context.map.component(context.seat, ant.tile);                    // the walkers' components of the map analysis (fire walls shut, bombs walked into)
     const int32_t at_from = context.map.component(context.seat, hop.from);
     const bool same_side = (gates_.home() >= 0 && gates_.component(ant.tile) == gates_.home()) || (at < 0 || at_from < 0 || at == at_from);
@@ -629,11 +629,11 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
     }
     if (bomb_here) {
         if (ant.tile == hop.from) {
-            context.orders.move({ant_}, hop.bomb);
+            send(context, false, hop.bomb);
             ++hops_ordered_;
             thrown_ = true;
         } else if (!tile_blocked(context, hop.from)) {
-            context.orders.move({ant_}, hop.from);
+            send(context, false, hop.from);
         }
     } else {
         if (ant.hp < std::min<int32_t>(10, 2 * hop.bombs + 1)) {                          // a dud cost two hit points: too hurt for the chain
@@ -645,8 +645,8 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
             last_order_ = now;
             return;
         }
-        if (ant.tile == hop.bomb) context.orders.move({ant_}, hop.from);                  // a plant needs the tile empty: off it after a dud
-        else if (!tile_blocked(context, hop.bomb)) context.orders.special(ant_, hop.bomb);
+        if (ant.tile == hop.bomb) send(context, false, hop.from);                         // a plant needs the tile empty: off it after a dud
+        else if (!tile_blocked(context, hop.bomb)) send(context, true, hop.bomb);
     }
     last_order_ = now;
 }
@@ -664,6 +664,18 @@ void GateGoalTask::succeed(TaskContext& context) {
     phase_ = finished_ ? Phase::Exhausted : Phase::Idle;
     next_plan_ = context.view.tick() + 20u;
     signature_known_ = false;
+}
+
+// One order of the hop's chain (a walk, or a plant: a special order onto the bomb tile). The next step of the chain follows after `step_gap` ticks; the same order again (it did not work, or the ant
+// stands where it stood) waits for `order_gap`: the bot's stall detector counts equal orders.
+void GateGoalTask::send(TaskContext& context, bool special, sim::TileCoord tile) {
+    const uint64_t now = context.view.tick();
+    const uint64_t key = (special ? uint64_t{1} << 40 : uint64_t{0}) | (static_cast<uint64_t>(tile.y) << 20) | static_cast<uint64_t>(tile.x);
+    if (key == last_key_ && now < last_sent_ + params_.order_gap) return;
+    last_key_ = key;
+    last_sent_ = now;
+    if (special) context.orders.special(ant_, tile);
+    else context.orders.move({ant_}, tile);
 }
 
 // The hop of the goal is shut by a bomb of another team: the goal is planned again at the next look on the grid as it is (the planner leaves out a plant tile or a standing tile that holds a bomb).
