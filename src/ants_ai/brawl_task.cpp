@@ -23,6 +23,20 @@ const AntView* find_ant(const std::vector<AntView>& ants, uint32_t id) noexcept 
 
 bool ally_of(const BotView& v, uint8_t team) noexcept { return v.ally() < sim::MAX_PLAYERS && team == v.ally(); }
 
+// The next arrangement of tour[1..] in lexicographic order (the first seat stays where it is; the tour has at least three seats), false after the last one: what std::next_permutation does there. It is
+// written with indices because GCC 14 reads std's reversal of a vector of bytes as a write before the vector's start (-Wstringop-overflow, an error under -DANTS_WERROR=ON).
+bool next_arrangement(std::vector<uint8_t>& tour) noexcept {
+    const size_t last = tour.size() - 1;
+    size_t i = last;
+    while (i > 1 && tour[i - 1] >= tour[i]) --i;                          // the tail from i on is the last arrangement of its places
+    if (i <= 1) return false;
+    size_t j = last;
+    while (tour[j] <= tour[i - 1]) --j;
+    std::swap(tour[i - 1], tour[j]);
+    for (size_t lo = i, hi = last; lo < hi; ++lo, --hi) std::swap(tour[lo], tour[hi]);
+    return true;
+}
+
 }  // namespace
 
 bool BrawlTask::pending(const Job& job, const Profile& profile, uint64_t now) const noexcept {
@@ -58,7 +72,7 @@ std::vector<uint8_t> BrawlTask::ring_of(const BotView& v, const MapInfo& map) {
             best_cost = cost;
             best = tour;
         }
-    } while (std::next_permutation(tour.begin() + 1, tour.end()));
+    } while (next_arrangement(tour));
     return best;
 }
 
