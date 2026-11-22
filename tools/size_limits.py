@@ -72,10 +72,10 @@ ROOM_BUDGET, ROOM_GZIP_BUDGET = 38_000, 11_200       # room.css, roomchat.js and
 ALERTS_BUDGET, ALERTS_GZIP_BUDGET = 25_000, 8_300   # alerts.js and alerts.css: the alerts sheet, the join alert and the bell of Home
 ALERT_CORE_BUDGET, ALERT_CORE_GZIP_BUDGET = 13_000, 4_400   # web/alert_core.js: the switches, the tab alert and the sound table that the front page and the game page share
 SCRIPT_BUDGET, SCRIPT_GZIP_BUDGET = 13_000, 4_500       # player_name.js
-# the installable web app (web/app/, web/manifest.webmanifest): the four icons together (measured 4,260 bytes), and the manifest (measured 1,166, revalidated on every visit)
-APP_ICONS_BUDGET = 4_700
-# the browser-tab icon (web/favicon.png 285 bytes + web/favicon.ico 1,212 bytes)
-FAVICON_BUDGET = 1_650
+# the installable web app (web/app/, web/manifest.webmanifest): the four icons together (measured 5,922 bytes: the original game's icon, 12 colors and fine detail), and the manifest (measured 1,166, revalidated on every visit)
+APP_ICONS_BUDGET = 6_500
+# the browser-tab icon (web/favicon.png 527 bytes + web/favicon.ico 1,530 bytes: the original game's icon at 32 and 64 px)
+FAVICON_BUDGET = 2_300
 APP_MANIFEST_BUDGET = 1_300
 # the game page's part of the bar (web/game_bar.js and web/game_bar.css together)
 GAME_BAR_BUDGET, GAME_BAR_GZIP_BUDGET = 12_800, 4_250
