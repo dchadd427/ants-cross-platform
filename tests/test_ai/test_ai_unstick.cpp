@@ -10,8 +10,8 @@
 //   AI57.7  the stuck tally counts a thief in the can't-go loop and a carrier with no order once the span is 10 seconds old, an ant at work never, and play_match reports it
 //   AI57.8  a Thief that raided and was walled in on the raid tile is freed by an own Fire Ant, which puts a wall of the hole out; a wall that shuts in nobody is not its business; with the rule off the thief stays
 //   AI57.9  whole matches: on the map of the power-ups that plug the ways the bots strand fewer ants and refuse fewer orders than the bots without the rules (unstick=0), and the match replays
-//   AI57.10 the boundary click: a Thief in the engine's can't-go loop with a pocket of its own is clicked onto an ordinary tile at the one tick of the cycle at which the engine takes it (rules number 14), and sent home
-//           when a walk opens; under the rules before 14, with the rule off, or at Easy the loop goes on
+//   AI57.10 the click of a person who sees a Thief in the loop: a Thief that shows the engine's can't-go clip is clicked onto an ordinary tile of its part again and again (a volley, each click paid for) and walks
+//           away under the rules number 14, and is sent home when a walk opens; under the rules before 14, with the rule off, or below Hard it stays
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -475,8 +475,8 @@ void run_unstick_tests() {
         ASSERT_TRUE(refused_on * orders_off < refused_off * orders_on);                       // the share of refused orders falls
     } TEST_END();
 
-    TEST_CASE("AI57.10 The Boundary Click: A Thief In The Engine's Can't-Go Loop Is Clicked Off The Raid Tile At The Tick The Engine Takes It, And Sent Home When A Walk Opens; Under The Rules Before 14, With The Rule Off, Or At Easy It Stays In The Loop") {
-        ASSERT_TRUE(plan_for(Level::Hard).free_thief && plan_for(Level::Medium).free_thief && !plan_for(Level::Easy).free_thief);
+    TEST_CASE("AI57.10 The Click Of A Person Who Sees A Thief In The Loop: A Thief That Shows The Engine's Can't-Go Clip Is Clicked Onto An Ordinary Tile Again And Again (A Volley, Each Click Paid For), Frees Itself Under The Rules Number 14 And Is Sent Home When A Walk Opens; Under The Rules Before 14, With The Rule Off, Or Below Hard It Stays In The Loop") {
+        ASSERT_TRUE(plan_for(Level::Hard).free_thief && !plan_for(Level::Medium).free_thief && !plan_for(Level::Easy).free_thief);
         {
             LevelPlan p = plan_for(Level::Hard);
             without_unstick_batch(p);                                                         // (the bot as it was: the batch's switch is one of them)
@@ -487,23 +487,28 @@ void run_unstick_tests() {
             bool free{false};
             uint32_t loop_ticks{0};
             uint32_t released{0};
-            uint32_t released_shut{0};                                                        // the commands the bot gave while the way home was shut
-            int32_t score{0};
-            uint32_t proposed{0};
+            uint32_t volleys{0};
+            uint32_t clicks{0};
             uint32_t freed{0};
+            uint32_t misses{0};
             uint32_t homeward{0};
             uint32_t homeward_shut{0};                                                        // the clicks onto the entrance while no walk home existed
+            int32_t score{0};
             TileCoord target{-1, -1};                                                         // the tile of the first click that left
         };
-        const auto play = [&](bool after_commands, bool rule, bool open_later, bool shut_home = true, int open_at = -1) -> Out {
-            LoopWorld w(after_commands, 11, shut_home);
+        // `delayed`: the arena's sink (three ticks, turns of two); `shift`: ticks before the raid, which moves the whole cycle (its phase and parity); `lead`: ticks of the loop before the bot looks; `open_at`: the rocks go at that tick (a refusal that ends by itself)
+        const auto play = [&](bool after_commands, bool rule, bool open_later, bool shut_home, int open_at, bool delayed, uint32_t shift, int ticks, uint32_t lead = 0) -> Out {
+            LoopWorld w(after_commands, 11, shut_home, shift);
             w.run_to_raid_end();
+            for (uint32_t t = 0; t < lead; ++t) w.sim.tick();                                // (the bot comes to the loop this many ticks after it began: another phase of the cycle for its first volley)
             LevelPlan plan = peace_plan(Level::Hard);
             plan.plugs = false;
             plan.refusal_memory = false;
             plan.rescue_thief = false;
             plan.free_thief = rule;
-            RecordingSink sink(w.sim, true);
+            RecordingSink direct(w.sim, true);
+            ApplyingSink lagged(w.sim, 3, true);
+            sim::CommandSink& sink = delayed ? static_cast<sim::CommandSink&>(lagged) : static_cast<sim::CommandSink&>(direct);
             BotController c(w.sim, 3);
             c.set_start_hold(0);
             BotSpec spec;
@@ -516,63 +521,128 @@ void run_unstick_tests() {
             Out out;
             if (!c.add(spec, std::move(bot), sink, why)) return out;
             out.ok = true;
-            for (int t = 0; t < 500; ++t) {
-                if (t == open_at) w.open_rocks();                                             // (a refusal that ends by itself: the wall burns out)
-                w.sim.tick();
-                c.on_tick(w.sim);
-                w.sim.clear_news_events();
-                w.sim.clear_audio_events();
-                if (w.unit().state == sim::UnitState::CantGo) ++out.loop_ticks;
-            }
-            out.free = !w.on_raid_tile();
-            out.homeward_shut = raw->free_thief().homeward();
-            out.released_shut = c.stats(0).released;
-            out.score = w.sim.get_player_score(0);
-            if (!sink.log.empty()) out.target = TileCoord{sink.log[0].second.tile_x, sink.log[0].second.tile_y};
-            if (open_later) {                                                                 // the rings go (the walls burn out, the enemy's wall is down): a walk home exists
-                w.open_rocks();
-                for (int t = 0; t < 900; ++t) {
+            const auto run = [&](int n, int open_tick) {
+                for (int t = 0; t < n; ++t) {
+                    if (t == open_tick) w.open_rocks();                                       // (a refusal that ends by itself: the wall burns out)
                     w.sim.tick();
+                    if (delayed) lagged.flush();
                     c.on_tick(w.sim);
                     w.sim.clear_news_events();
                     w.sim.clear_audio_events();
+                    if (w.unit().state == sim::UnitState::CantGo) ++out.loop_ticks;
                 }
+            };
+            run(ticks, open_at);
+            out.free = !w.on_raid_tile();
+            out.homeward_shut = raw->free_thief().homeward();
+            out.score = w.sim.get_player_score(0);
+            const std::vector<std::pair<uint64_t, Command>>& log = direct.log;
+            if (!delayed && !log.empty()) out.target = TileCoord{log[0].second.tile_x, log[0].second.tile_y};
+            if (open_later) {                                                                 // the rings go (the walls burn out, the enemy's wall is down): a walk home exists
+                w.open_rocks();
+                run(900, -1);
                 out.score = w.sim.get_player_score(0);
             }
             out.released = c.stats(0).released;
-            out.proposed = raw->free_thief().proposed();
+            out.volleys = raw->free_thief().volleys();
+            out.clicks = raw->free_thief().clicks();
             out.freed = raw->free_thief().freed();
+            out.misses = raw->free_thief().misses();
             out.homeward = raw->free_thief().homeward();
             return out;
         };
-        const Out on = play(true, true, true);
-        ASSERT_TRUE(on.ok);
-        ASSERT_TRUE(on.free);                                                                 // the thief left the raid tile ...
-        ASSERT_TRUE(on.loop_ticks < 120);                                                     // ... after a few cycles of the loop (the rule waits for two looks, and the controller for the tick)
-        ASSERT_TRUE(on.proposed >= 1 && on.freed >= 1);
-        ASSERT_EQ(on.homeward_shut, 0u);                                                      // (no click onto the entrance while no walk exists: it would be refused)
-        ASSERT_TRUE(on.target.chebyshev_dist(kLoopHome0) <= 16);                              // the tile of the pocket that is nearest to the own hill ...
-        ASSERT_FALSE(on.target.x >= 39 && on.target.x <= 44 && on.target.y >= 39 && on.target.y <= 44);   // ... and not one of the hill's tiles, where the loop would go on
-        ASSERT_TRUE(on.homeward >= 1);                                                        // when the walk home exists it is clicked onto the entrance
-        ASSERT_TRUE(on.score >= 50);                                                          // and the loot is banked: the steal is complete (the Thief raids again, the hole being open: 50 points a raid)
-        ASSERT_EQ(on.released_shut, 1u);                                                      // (one click paid for while the way was shut: the boundary click; the way home is the second)
-        const Out open = play(true, true, false, false);                                      // a Thief whose way home is open is never clicked away: the engine's walk takes it home and the loot is banked
-        ASSERT_EQ(open.proposed, 0u);
+        // (a) a sink that applies at once, six phases of the cycle for the first volley: the thief is freed in most of them within 1,000 ticks (a volley of eight clicks reaches eight of the eighteen ticks of the cycle,
+        // and every miss starts the next volley at another phase), is never clicked onto a tile of a hill, banks when the way home opens, and every click is a command of the bucket
+        uint32_t freed_at_once = 0;
+        for (uint32_t lead = 0; lead < 18; lead += 3) {
+            const Out on = play(true, true, true, true, -1, false, 0, 1000, lead);
+            ASSERT_TRUE(on.ok);
+            ASSERT_TRUE(on.volleys >= 1);
+            ASSERT_TRUE(on.clicks <= 8u * on.volleys);                                        // (each click is a command that was paid for: no more than the volleys' eight)
+            ASSERT_EQ(on.homeward_shut, 0u);                                                  // (no click onto the entrance while no walk exists: it would be refused)
+            ASSERT_FALSE(on.target.x >= 39 && on.target.x <= 44 && on.target.y >= 39 && on.target.y <= 44);   // (and not onto one of the hill's tiles, where the loop would go on)
+            ASSERT_TRUE(on.target.chebyshev_dist(kLoopHome0) <= 16);                          // the tile of the pocket that is nearest to the own hill
+            if (on.free) {
+                ++freed_at_once;
+                ASSERT_TRUE(on.freed >= 1 && on.loop_ticks < 900);
+                ASSERT_TRUE(on.homeward >= 1);                                                // when the walk home exists it is clicked onto the entrance
+                ASSERT_TRUE(on.score >= 50);                                                  // and the loot is banked: the steal is complete (the Thief raids again, the hole being open: 50 points a raid)
+            }
+        }
+        ASSERT_TRUE(freed_at_once >= 4);
+        // (b) the arena's sink (three ticks, turns of two): the clicks are applied on even ticks only, and the cycle of 18 keeps the parity of its moments, so the Thieves of one parity are freed and the others never are
+        uint32_t freed_delayed = 0;
+        for (uint32_t shift = 0; shift < 6; ++shift) {
+            const Out on = play(true, true, false, true, -1, true, shift, 1500);
+            ASSERT_TRUE(on.ok);
+            freed_delayed += on.free ? 1u : 0u;
+        }
+        ASSERT_TRUE(freed_delayed >= 1 && freed_delayed <= 3);
+        // (c) the rules before 14: no tick takes a click. The thief stays, every volley is a miss, and the wait doubles (200, 400, 800 ticks): four volleys in 2,400 ticks, thirty-two clicks at most
+        const Out before = play(false, true, false, true, -1, false, 0, 2400);
+        ASSERT_TRUE(before.ok);
+        ASSERT_FALSE(before.free);
+        ASSERT_TRUE(before.loop_ticks > 2000);
+        ASSERT_TRUE(before.volleys >= 3 && before.volleys <= 5);
+        ASSERT_EQ(before.freed, 0u);
+        ASSERT_TRUE(before.misses + 1 >= before.volleys && before.misses <= before.volleys);
+        ASSERT_TRUE(before.released <= 8u * before.volleys);
+        const Out long_run = play(false, true, false, true, -1, false, 0, 6000);              // a Thief that no click ever frees is given six volleys in a match and no more
+        ASSERT_TRUE(long_run.ok);
+        ASSERT_EQ(long_run.volleys, 6u);
+        // (d) the rule off: the bot as it was; a refusal that ends by itself within 40 ticks is no loop; a way home that is open means no loop at all
+        const Out off = play(true, false, false, true, -1, false, 0, 600);
+        ASSERT_TRUE(off.ok);
+        ASSERT_FALSE(off.free);
+        ASSERT_TRUE(off.loop_ticks > 500);
+        ASSERT_EQ(off.volleys, 0u);
+        ASSERT_EQ(off.released, 0u);
+        const Out transient = play(true, true, false, true, 25, false, 0, 500);
+        ASSERT_TRUE(transient.ok);
+        ASSERT_EQ(transient.volleys, 0u);
+        ASSERT_TRUE(transient.score >= 50);
+        const Out open = play(true, true, false, false, -1, false, 0, 500);
+        ASSERT_TRUE(open.ok);
+        ASSERT_EQ(open.volleys, 0u);
         ASSERT_TRUE(open.loop_ticks == 0);
         ASSERT_TRUE(open.score >= 50 && open.score % 50 == 0);                                // (a Thief whose way home is open banks the loot at once, and raids again)
-        const Out transient = play(true, true, false, true, 25);                              // the wall burns out after 25 ticks: the thief walks home by itself, and no click is proposed for a refusal that was not a loop
-        ASSERT_TRUE(transient.ok);
-        ASSERT_EQ(transient.proposed, 0u);
-        ASSERT_TRUE(transient.score >= 50);
-        const Out before = play(false, true, false);                                          // the rules before 14: no tick takes the click
-        ASSERT_FALSE(before.free);
-        ASSERT_TRUE(before.loop_ticks > 400);
-        ASSERT_EQ(before.released, 0u);                                                       // (and the click that never has its tick costs nothing)
-        const Out off = play(true, false, false);                                             // the rule off: the bot as it was
-        ASSERT_TRUE(open.ok && before.ok && off.ok);
-        ASSERT_FALSE(off.free);
-        ASSERT_TRUE(off.loop_ticks > 400);
-        ASSERT_EQ(off.proposed, 0u);
+        // a Thief that shows the loop at its own gate (the ring of fire round it keeps it out: the queue row is one of the special tiles) is the gate's, not the task's: no volley
+        {
+            sim::SimulationEngine sim;
+            sim.init_test_world(60, 60, 13, 720000);
+            sim.set_anthill(0, kLoopHome0);
+            sim.set_anthill(1, kLoopHome1);
+            rocks_ring(sim, TileCoord{22, 22}, 6);
+            rocks_ring(sim, TileCoord{24, 24}, 1);                                              // (the waiting tile of the hill, where the engine sends an ant that stands on a special tile: walled in, no walk to it)
+            const uint32_t thief = sim.spawn_unit(0, sim::AntType::Thief, TileCoord{21, 19});
+            sim.get_unit(thief).steal_points(50);
+            sim.apply_command(command_of(CommandType::GroupMove, 0, {thief}, 40, 40));          // (outside the ring: refused, and the engine's loop begins on the special tile)
+            LevelPlan plan = peace_plan(Level::Hard);
+            plan.plugs = false;
+            plan.refusal_memory = false;
+            plan.rescue_thief = false;
+            RecordingSink sink(sim, true);
+            BotController c(sim, 3);
+            c.set_start_hold(0);
+            BotSpec spec;
+            spec.seat = 0;
+            spec.kind = "standard";
+            spec.level = Level::Hard;
+            auto bot = std::make_unique<StandardBot>(plan);
+            const StandardBot* raw = bot.get();
+            std::string why;
+            ASSERT_TRUE(c.add(spec, std::move(bot), sink, why));
+            uint32_t in_clip = 0;
+            for (int t = 0; t < 400; ++t) {
+                sim.tick();
+                c.on_tick(sim);
+                sim.clear_news_events();
+                sim.clear_audio_events();
+                if (sim.get_unit(thief).state == sim::UnitState::CantGo) ++in_clip;
+            }
+            ASSERT_TRUE(in_clip > 200);                                                       // (the premise: it says it again and again)
+            ASSERT_EQ(raw->free_thief().volleys(), 0u);
+        }
         // a Thief with loot that stands idle and was never clicked away is not sent home by the task: it is not the task's
         {
             sim::SimulationEngine sim;
@@ -601,9 +671,9 @@ void run_unstick_tests() {
                 sim.clear_audio_events();
             }
             ASSERT_EQ(raw->free_thief().homeward(), 0u);
-            ASSERT_EQ(raw->free_thief().proposed(), 0u);
+            ASSERT_EQ(raw->free_thief().volleys(), 0u);
         }
-        // a Thief whose part of the map holds no tile that is not a tile of a hill has no tile to be clicked to: nothing is proposed (the walls are the Fire Ant's business, AI57.8). Two such parts: the raid tile
+        // a Thief whose part of the map holds no tile that is not a tile of a hill has no tile to be clicked to: nothing is given (the walls are the Fire Ant's business, AI57.8). Two such parts: the raid tile
         // alone (the mound and a ring of rocks round it), and the raid tile with the column of the walls and the row above the mound, which are walkable but are tiles of the hill
         for (const TileCoord centre : {TileCoord{41, 41}, TileCoord{42, 41}}) {
             LoopWorld w(true, 12, false);
@@ -631,7 +701,7 @@ void run_unstick_tests() {
                 w.sim.clear_news_events();
                 w.sim.clear_audio_events();
             }
-            ASSERT_EQ(raw->free_thief().proposed(), 0u);
+            ASSERT_EQ(raw->free_thief().volleys(), 0u);
             ASSERT_EQ(c.stats(0).released, 0u);
         }
     } TEST_END();

@@ -2,7 +2,7 @@
 
 // The engine's can't-go loop as a world (docs/GAME_REVERSE_ENGINEERING.md 5.40; the same world as tests/test_sim/test_pathmgr_gap.cpp): two hills on a 60 x 60 field, a Thief of team 0 that has raided the hill of
 // team 1 and holds the loot, the entrance of the hill of team 0 shut in by a ring of rocks (no walk home), and the Thief's own part of the map a pocket of its own (so that the first slice of the path manager's search
-// answers: the refusal comes at the first run after the request and the cycle is the 18 ticks of the original's 900 ms). Used by the controller's tests of the boundary click and by AI57.10.
+// answers: the refusal comes at the first run after the request and the cycle is the 18 ticks of the original's 900 ms). Used by AI57.10.
 
 #include <algorithm>
 #include <cstdint>

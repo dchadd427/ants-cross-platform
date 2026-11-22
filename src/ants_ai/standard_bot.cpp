@@ -225,7 +225,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     thief_guard_.step(context);                                                               // (after the fights and the heals: an enemy Thief that comes for the own hole is met by the nearest free fighters; nothing when the plan has none)
     if (plan.rush || rush_.active()) rush_.step(context);                                   // (when the plan has no rush the task only gives back what it held)
     if (!gate_breaching) walls_.step(context);
-    if (plan.free_thief) free_thief_.step(context);                                         // (a Thief in the can't-go loop is clicked away at the engine's tick; a free one with loot is sent home when a walk exists)
+    if (plan.free_thief) free_thief_.step(context);                                         // (a Thief that shows the can't-go loop is clicked again and again, a volley; a free one with loot is sent home when a walk exists)
     if (plan.plugs && !fallback) plugs_.step(context);                                      // (before the trips: its tile is not theirs, and the ants of the far part are free for it)
     powerups_.step(context);
     bombs_.step(context);

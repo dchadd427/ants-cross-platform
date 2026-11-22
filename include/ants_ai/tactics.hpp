@@ -281,8 +281,9 @@ struct LevelPlan {
                                          // ablation refmem=0: the bot as it was)
     bool rescue_thief{true};             // a wall that shuts in an own Thief on the raid tile of a hole is one that harms the economy: the Fire Ant puts it out (and the plan wants a Fire Ant for it); false, the ablation
                                          // rescue=0: the bot as it was (docs/BOT_UNSTUCK.md)
-    bool free_thief{true};               // a Thief with loot in the engine's can't-go loop on a raid tile (no walk home) is clicked onto an ordinary tile at the one tick of each cycle at which the engine takes the click (FreeThiefTask,
-                                         // Orders::boundary_move, docs/BOT_UNSTUCK.md, "The boundary click"; Easy has none; false, the ablation freethief=0: the bot as it was)
+    bool free_thief{true};               // a Thief with loot that shows the engine's can't-go loop is clicked onto an ordinary tile again and again, a volley of plain moves a few ticks apart, each paid from the budget (FreeThiefTask,
+                                         // Orders::volley, docs/BOT_UNSTUCK.md, "The click of a person who sees a Thief in the loop"; Hard's: the volley is eight tokens, more than the budget of the others can spare; false, the ablation
+                                         // freethief=0: the bot as it was)
     bool plugs{true};                    // a power-up that plugs the way between the own hill and an ant or a pile of the seat is taken by one ant, which opens it (PlugTask, docs/BOT_UNSTUCK.md; false, the ablation plugs=0:
                                          // the bot as it was)
     // the stall detector (StandardBot, docs/BOTS.md; 0 switches a trigger off): stall_ticks without a point, or repeat_limit equal orders within repeat_window with nothing banked, send the seat to the

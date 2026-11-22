@@ -449,7 +449,7 @@ void BombDetour::apply(const BotView& view, const LevelPlan& plan, const Profile
 
     // 1. the orders of this look
     for (Intent& in : intents) {
-        if (!walking_type(in.command.type) || in.command.ants.empty() || in.chain != 0) {
+        if (!walking_type(in.command.type) || in.command.ants.empty() || in.chain != 0 || in.volley) {
             result.push_back(std::move(in));
             continue;
         }

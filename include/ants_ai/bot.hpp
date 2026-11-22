@@ -59,8 +59,8 @@ inline constexpr uint32_t kHudAntCap = 24;
 /// The follow-up lane (Intent::follow_up) is for an ant that is in a fight: every ant of the click must have had an attack click released within this many ticks (10 s)
 inline constexpr uint32_t kFollowUpWindow = 200;
 
-/// How long a boundary click (Intent::boundary) waits for its moment: 90 ticks (4.5 s), five cycles of the can't-go loop (18 ticks), enough to learn the cycle from two of its moments and to hit the next
-inline constexpr uint32_t kBoundaryTtlTicks = 90;
+/// The longest a volley click (Intent::volley) is put off after the look's release time: 6 seconds, beyond which a look sees what became of the click and decides again
+inline constexpr uint32_t kVolleyMaxLater = 120;
 
 /// Everything that makes a level. Times are simulation ticks of 50 ms, rates are thousandths of a command per second.
 struct Profile {
@@ -132,6 +132,11 @@ struct Intent {
     /// A FOLLOW-UP CLICK (Orders::attack with `follow_up`, docs/BOT_FIGHT.md, "Hits without pauses"): the next attack click of an ant that is in a fight, which the controller releases Profile::follow_up_reaction ticks after the look instead of the
     /// reaction delay, when the profile has the lane and every ant of the intent had an attack click released within kFollowUpWindow ticks. It still costs a token of the budget and leaves in its own order for each ant.
     bool follow_up{false};
+    /// A VOLLEY CLICK (Orders::volley, docs/BOT_UNSTUCK.md, "The click of a person who sees a Thief in the loop"): one of the plain moves of ONE ant that a look decides to give a few ticks apart, as a person clicks again and
+    /// again at an ant that does not move. The controller releases it `later` ticks AFTER the release time of the look (so never sooner than the reaction time lets any click of the look leave); every click is an order of its own,
+    /// paid from the bucket and held back by it, dropped after Profile::intent_ttl like any other, and the walk round a bomb leaves it alone.
+    bool volley{false};
+    uint32_t later{0};
     /// A TIMED CHAIN (Orders::chain, docs/BOTS.md "Timed clicks"): the intents of one chain have the same `chain` number (not 0) and `step` 0, 1, 2, ... The controller releases step 0 like any intent (the
     /// reaction time, the budget); every later step is released at the first tick at which the sink would APPLY it between `gap_lo` and `gap_hi` ticks after the step before was applied, and never
     /// otherwise: a step that would be applied later is dropped with the rest of its chain (Fate::Expired). A chain the first step of which never leaves leaves no step.
@@ -139,12 +144,6 @@ struct Intent {
     uint32_t step{0};
     uint32_t gap_lo{0};
     uint32_t gap_hi{0};
-    /// A BOUNDARY CLICK (Orders::boundary_move, docs/BOT_UNSTUCK.md, "The boundary click"): ONE ant's plain click for the one moment at which the engine takes it from an ant that an event of the engine sent on a walk (a
-    /// clip's end: from the rules number 14 the path manager's answer to such a walk is given after the commands of the next turn, and an order that comes first replaces it). The controller does not release it by the clock of
-    /// the look: it watches the ant tick by tick (the engine's own question, "would this order be taken and has the ant a walk that nobody has answered yet"), learns the cycle of the moments from two of them and releases the click
-    /// at the tick at which the sink applies it at one, within kBoundaryTtlTicks of the look, else it is Expired. It costs one token, as a chain's step does (the bucket may go into debt), and skips the reaction delay, the
-    /// queue and the cool-down: it is the click that a person gives who sees the clip end and clicks again and again until the ant walks.
-    bool boundary{false};
 };
 
 /// One click of a timed chain: the tile, whether it is a planned pick-up (the tile holds a power-up), and for every step but the first the ticks between the moment the step before is applied and the
@@ -168,8 +167,9 @@ public:
     void attack(const std::vector<uint32_t>& ants, sim::TileCoord tile, Priority priority = Priority::Urgent, bool follow_up = false);
     /// A planned pick-up: ONE ant is clicked onto the tile of a power-up (a plain GroupMove, the click that takes it when the ant arrives). Nothing else may name a power-up tile.
     void pick_up(uint32_t ant, sim::TileCoord tile, Priority priority = Priority::Normal);
-    /// A boundary click (Intent::boundary): ONE ant's plain click that leaves at the moment the engine takes it from an ant in the can't-go loop. Proposing it again for the same ant replaces the older one.
-    void boundary_move(uint32_t ant, sim::TileCoord tile, Priority priority = Priority::Urgent);
+    /// A volley: ONE ant is clicked onto `tile` once for every entry of `later` (ticks after the look's release time, 0 for the first, at most kVolleyMaxLater); each click is a plain move that is paid for and leaves
+    /// in its own time (Intent::volley). A person who sees an ant stand in its can't-go clip clicks it again and again until it walks.
+    void volley(uint32_t ant, sim::TileCoord tile, const std::vector<uint32_t>& later, Priority priority = Priority::Urgent);
     /// The clicks of ONE ant at moments that are counted from the moment the click before is APPLIED (the sink's own tick of it, CommandSink::applied_at): a person who clicks again the moment the ant
     /// stands on a tile. What the controller does with them is in Intent (chain). The first step is an ordinary click (the reaction delay, the queue, the budget); every later one skips those but is paid for all the same: it leaves at its moment even when the bucket is empty, and the bucket goes into debt, which holds back the ordinary orders afterwards.
     void chain(uint32_t ant, const std::vector<ChainStep>& steps, Priority priority = Priority::Urgent);

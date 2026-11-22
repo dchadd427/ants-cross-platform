@@ -68,22 +68,11 @@ sim::TileCoord FreeThiefTask::free_tile(const TaskContext& c, const AntView& thi
     return best;
 }
 
-void FreeThiefTask::on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) {
-    if (command.type != sim::CommandType::GroupMove || command.ants.size() != 1) return;
+void FreeThiefTask::on_command(const sim::Command& command, Bot::Fate fate, uint64_t) {
+    if (fate != Bot::Fate::Sent || command.type != sim::CommandType::GroupMove || command.ants.size() != 1) return;
     const auto it = recs_.find(command.ants[0]);
-    if (it == recs_.end()) return;
-    Rec& r = it->second;
-    if (r.armed_until == 0 || r.target.x != command.tile_x || r.target.y != command.tile_y) return;     // (not the click this task proposed)
-    r.armed_until = 0;
-    if (fate == Bot::Fate::Sent) {
-        ++sent_;
-        r.sent = tick;
-        r.misses = 0;
-        r.next_try = tick + params_.retry_ticks;
-    } else {
-        ++r.misses;
-        r.next_try = tick + std::min<uint64_t>(static_cast<uint64_t>(params_.retry_ticks) << std::min<uint32_t>(r.misses, 8u), params_.max_retry_ticks);
-    }
+    if (it == recs_.end() || it->second.volley_at == kNone || it->second.target.x != command.tile_x || it->second.target.y != command.tile_y) return;     // (not a click of this task's volley)
+    ++clicks_;
 }
 
 void FreeThiefTask::step(TaskContext& c) {
@@ -101,11 +90,12 @@ void FreeThiefTask::step(TaskContext& c) {
     for (const AntView& a : v.mine()) {
         if (a.type != sim::AntType::Thief || !loaded(a)) continue;
         Rec& r = recs_[a.id];
-        if (a.state == sim::UnitState::Walking) {
-            if (r.sent != kNone) {                                                      // the click left and the Thief walks: it was taken
+        if (a.state == sim::UnitState::Walking && !v.has_pending_path(a.id)) {                 // (a Thief that shows Walking while its walk is still being asked for has not walked yet: the one tick of each cycle between two clips)
+            if (r.volley_at != kNone) {                                                 // a volley was given and the Thief walks: it was taken
                 ++freed_;
-                r.sent = kNone;
+                r.volley_at = kNone;
                 r.freed = true;
+                r.misses = 0;
             }
             r.looks = 0;
             continue;
@@ -117,33 +107,42 @@ void FreeThiefTask::step(TaskContext& c) {
         } else if (now > r.last_cantgo + 60u) {
             r.looks = 0;                                                                // (it has not shown the clip for a while: no loop)
         }
+        if (r.volley_at != kNone && now >= r.volley_at + params_.judge_ticks) {         // the volley has had its time: a Thief that still showed the clip 30 ticks after it began was not freed
+            if (r.last_cantgo >= r.volley_at + params_.judge_ticks - 10u) {
+                ++r.misses;
+                ++misses_;
+                r.next_try = now + std::min<uint64_t>(static_cast<uint64_t>(params_.retry_ticks) << std::min<uint32_t>(r.misses - 1u, 8u), params_.max_retry_ticks);
+            }
+            r.volley_at = kNone;
+        }
+        const bool far = a.tile.chebyshev_dist(own.entrance) >= static_cast<int32_t>(params_.far_tiles);
         const bool trapped = r.looks >= params_.trap_looks && now >= r.streak + params_.trap_ticks;
         if (trapped) {
-            // in the loop: the click for the one tick of the cycle at which the engine takes it
-            if (r.armed_until <= now && now >= r.next_try) {
+            // in the loop: what a person does, a click again and again onto a tile where the Thief can go
+            if (r.volley_at == kNone && now >= r.next_try && far && r.volleys_given < params_.max_volleys) {
                 const sim::TileCoord tile = free_tile(c, a);
                 if (tile.x >= 0) {
-                    c.orders.boundary_move(a.id, tile, Priority::Urgent);
-                    r.armed_until = now + kBoundaryTtlTicks;
+                    c.orders.volley(a.id, tile, params_.volley, Priority::Urgent);
+                    r.volley_at = now;
                     r.target = tile;
-                    ++proposed_;
-                    last_thief_ = a.id;
-                    last_target_ = tile;
+                    ++r.volleys_given;
+                    ++volleys_;
                 } else {
                     r.next_try = now + params_.max_retry_ticks;                         // (no tile: nothing to click to, the walls have to go)
                 }
             }
             continue;
         }
-        // a Thief that the click freed and that stands idle with its loot: a walk home that exists now is clicked, as the economy clicks a carrier that waits
-        if (r.freed && a.state == sim::UnitState::Idle && !v.has_pending_path(a.id) && now >= r.home_after && !near_hill(c.map, a.tile)) {
+        // a Thief that a volley freed and that stands idle with its loot: a walk home that exists now is clicked, as the economy clicks a carrier that waits
+        if (r.freed && a.state == sim::UnitState::Idle && !v.has_pending_path(a.id) && now >= r.home_after && far && r.homes_given < params_.max_homes && !near_hill(c.map, a.tile)) {
             if (!joined_made) {
                 joined = c.map.field_now(v.grid(), c.seat, v.walk_context());
                 joined_made = true;
             }
             if (c.map.reaches_hill(joined, a.tile, a.type)) {
                 c.orders.move({a.id}, own.entrance, Priority::Normal);
-                r.home_after = now + params_.home_cooldown_ticks;
+                r.home_after = now + (static_cast<uint64_t>(params_.home_cooldown_ticks) << std::min<uint32_t>(r.homes_given, 4u));
+                ++r.homes_given;
                 ++homeward_;
             }
         }

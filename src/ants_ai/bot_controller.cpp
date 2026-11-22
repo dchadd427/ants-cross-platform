@@ -15,8 +15,6 @@ namespace {
 constexpr int64_t kToken = 1000;                // one command, in thousandths of a command
 constexpr uint32_t kTicksPerSecond = 20;        // the refill is per second, the controller runs per tick (50 ms)
 constexpr uint64_t kNever = std::numeric_limits<uint64_t>::max();     // the release time of a step of a timed chain after the first: it leaves by the rules of its chain
-constexpr uint64_t kBoundaryMinPeriod = 4;      // two moments of a boundary click's ant closer than this are one (a search of several slices keeps several ticks open): they are not a cycle
-constexpr uint64_t kBoundaryMaxPeriod = 200;
 
 bool is_rejection(sim::CommandResult::Status status) noexcept {
     using S = sim::CommandResult::Status;
@@ -60,11 +58,6 @@ const BotController::SeatStats& BotController::stats(uint8_t seat) const noexcep
 size_t BotController::pending(uint8_t seat) const noexcept {
     const Seat* s = find(seat);
     return s != nullptr ? s->queue.size() : 0u;
-}
-
-int64_t BotController::tokens_milli(uint8_t seat) const noexcept {
-    const Seat* s = find(seat);
-    return s != nullptr ? s->tokens_milli : 0;
 }
 
 Bot* BotController::bot(uint8_t seat) noexcept {
@@ -131,7 +124,6 @@ void BotController::on_tick(const sim::SimulationEngine& sim) {
         if (sim.is_player_dropped(s.seat)) {                       // the team is out of the match: its bot has nothing left to say
             s.queue.clear();
             s.chains.clear();
-            s.boundaries.clear();
             continue;
         }
         if (tick >= s.next_decision) decide(sim, s, tick);
@@ -152,7 +144,7 @@ bool BotController::allowed(const sim::SimulationEngine& sim, const Seat& s, con
     }
     if (c.type == CommandType::GroupSpecial && c.ants.size() != 1) return false;           // the HUD sends a special order for one selected ant only
     if (in.pickup && (c.type != CommandType::GroupMove || c.ants.size() != 1)) return false;   // a planned pick-up is ONE ant's plain click (never a group, never an attack or a special order)
-    if (in.boundary && (c.type != CommandType::GroupMove || c.ants.size() != 1 || in.pickup || in.chain != 0 || in.follow_up)) return false;   // a boundary click is ONE ant's plain move (never a group, a pick-up, a chain's click or an attack)
+    if (in.volley && (c.type != CommandType::GroupMove || c.ants.size() != 1 || in.pickup || in.chain != 0 || in.follow_up)) return false;   // a volley click is ONE ant's plain move (never a group, a pick-up, a chain's click or an attack)
     if (sim::is_group_order(c.type)) {
         if (!sim.grid().in_bounds(c.tile_x, c.tile_y)) return false;
         const sim::TileCoord tile{c.tile_x, c.tile_y};
@@ -231,24 +223,6 @@ void BotController::decide(const sim::SimulationEngine& sim, Seat& s, uint64_t t
             s.bot->on_command(in.command, Bot::Fate::Filtered, tick);                       // the bot is told, or a task would propose the same refused click at every look
             continue;
         }
-        if (in.boundary) {                                                                  // a boundary click: it waits for the engine's moment, not for a release time (allowed() saw to the rest: one ant, a plain move)
-            for (size_t i = 0; i < s.queue.size(); ++i) {
-                if (s.queue[i].boundary && s.queue[i].command.ants == in.command.ants) {          // a newer one for the same ant replaces the older, and keeps what the seat learned of the ant
-                    s.queue.erase(s.queue.begin() + static_cast<std::ptrdiff_t>(i));
-                    break;
-                }
-            }
-            Pending p;
-            p.command = in.command;
-            p.priority = in.priority;
-            p.release = kNever;
-            p.expires = tick + kBoundaryTtlTicks;
-            p.seq = s.next_seq++;
-            p.boundary = true;
-            s.queue.push_back(std::move(p));
-            ++s.stats.intents;
-            continue;
-        }
         if (later) {                                                                        // a step after the first: no release time, the chain says when
             Pending p;
             p.command = in.command;
@@ -275,7 +249,7 @@ void BotController::decide(const sim::SimulationEngine& sim, Seat& s, uint64_t t
             s.last_release = release;
             release_drawn = true;
         }
-        const uint64_t at = lane ? follow_up_release(s, in.command.ants, tick) : release;
+        const uint64_t at = (lane ? follow_up_release(s, in.command.ants, tick) : release) + (in.volley ? std::min<uint32_t>(in.later, kVolleyMaxLater) : 0u);   // (a volley click: later than the look's own time, never sooner)
         const size_t total = in.command.ants.size();
         const size_t step = sim::has_ant_list(in.command.type) ? cap : std::max<size_t>(total, 1u);
         for (size_t from = 0; from < std::max<size_t>(total, 1u); from += step) {
@@ -347,7 +321,6 @@ void BotController::release(const sim::SimulationEngine& sim, Seat& s, uint64_t 
     }
     if (s.queue.empty()) {
         s.chains.clear();                                                               // (a chain with no step in the queue is over)
-        s.boundaries.clear();                                                           // (and so is the watch of a boundary click)
         return;
     }
 
@@ -359,7 +332,6 @@ void BotController::release(const sim::SimulationEngine& sim, Seat& s, uint64_t 
         }
         sim::Command gone = std::move(s.queue[i].command);
         if (s.queue[i].chain != 0 && s.queue[i].step == 0) s.chains[s.queue[i].chain].state = Chain::State::Broken;           // (the first step never left: the others do not)
-        if (s.queue[i].boundary) s.boundaries.erase(gone.ants[0]);                       // (the watch of its ant is over)
         s.queue.erase(s.queue.begin() + static_cast<std::ptrdiff_t>(i));
         ++s.stats.expired;
         s.bot->on_command(gone, Bot::Fate::Expired, tick);
@@ -436,7 +408,6 @@ void BotController::release(const sim::SimulationEngine& sim, Seat& s, uint64_t 
     // 2c. the steps of the timed chains that are under way, before the other orders of this tick: the sink keeps the order in which they come, and an order that was submitted first
     // is the first that the engine finds a path for
     release_timed(sim, s, tick);
-    release_boundaries(sim, s, tick);
 
     // 3. release what is due and paid for: the highest priority first, first come first served inside a class, except that the first click of a timed chain goes before the others of its class
     // (the engine finds paths in the order in which the orders reach it, one a tick: an order that was sent first would start the walk of the chain's ant a tick late and the second click would
@@ -469,7 +440,6 @@ void BotController::release(const sim::SimulationEngine& sim, Seat& s, uint64_t 
             for (const uint32_t id : c.ants) s.last_attack[id] = tick;
         }
         break_chains_of(s, c.ants, chain, tick);                                        // (the later click of a person wins: a chain that is under way for the ant is over)
-        drop_boundary_of(s, c.ants, tick);                                              // (and so is a boundary click that waits for the ant)
         const uint64_t applies = s.sink->applied_at(tick);
         const sim::CommandResult result = s.sink->submit(c);
         ++s.stats.released;
@@ -480,60 +450,6 @@ void BotController::release(const sim::SimulationEngine& sim, Seat& s, uint64_t 
             ch.applied = applies;
         }
         s.bot->on_command(c, Bot::Fate::Sent, tick);
-    }
-}
-
-// A boundary click waits for the moment at which the engine takes it (docs/BOT_UNSTUCK.md, "The boundary click"). The moment: the ant has a walk that was asked for and has not been answered, and an order given now
-// would be taken (the engine's own questions, SimulationEngine::has_pending_path and predict_order_ack: in the can't-go loop it is the one tick of the cycle between two clips, 5.40 of the reverse-engineering notes). A sink that
-// applies at once (applied_at(now) == now) lets the click leave at the first such tick; a sink with a delay needs the cycle: two moments, at least kBoundaryMinPeriod ticks apart, give its length, and the click leaves at
-// the tick at which the sink applies it on a moment that the cycle predicts (never, when its turns miss every one of them: it expires and costs nothing). Paid as a chain's step is, whatever the bucket holds.
-void BotController::release_boundaries(const sim::SimulationEngine& sim, Seat& s, uint64_t tick) {
-    for (size_t i = 0; i < s.queue.size();) {
-        if (!s.queue[i].boundary) {
-            ++i;
-            continue;
-        }
-        const uint32_t ant = s.queue[i].command.ants[0];
-        sim::Command probe = s.queue[i].command;
-        probe.issuer = s.seat;
-        const bool takes = sim.has_pending_path(ant) && sim.predict_order_ack(probe) == ant;
-        Boundary& b = s.boundaries[ant];
-        if (takes && (b.last == kNever || tick >= b.last + kBoundaryMinPeriod)) {
-            if (b.last != kNever && tick - b.last <= kBoundaryMaxPeriod) b.period = tick - b.last;
-            b.last = tick;
-        }
-        const uint64_t applies = s.sink->applied_at(tick);
-        const bool hit = applies == tick ? takes : (b.period != 0 && b.last != kNever && applies > b.last && (applies - b.last) % b.period == 0);
-        if (!hit) {
-            ++i;
-            continue;
-        }
-        sim::Command c = std::move(s.queue[i].command);
-        s.queue.erase(s.queue.begin() + static_cast<std::ptrdiff_t>(i));
-        c.issuer = s.seat;
-        s.tokens_milli -= kToken;
-        s.last_order[ant] = tick;
-        break_chains_of(s, c.ants, 0, tick);
-        const sim::CommandResult result = s.sink->submit(c);
-        ++s.stats.released;
-        if (is_rejection(result.status)) ++s.stats.rejected;
-        s.boundaries.erase(ant);
-        s.bot->on_command(c, Bot::Fate::Sent, tick);
-    }
-}
-
-// An ordinary order that names an ant leaves with it the boundary click that waits for the ant (the later click of a person wins)
-void BotController::drop_boundary_of(Seat& s, const std::vector<uint32_t>& ants, uint64_t tick) {
-    for (size_t i = 0; i < s.queue.size();) {
-        if (!s.queue[i].boundary || std::find(ants.begin(), ants.end(), s.queue[i].command.ants[0]) == ants.end()) {
-            ++i;
-            continue;
-        }
-        sim::Command gone = std::move(s.queue[i].command);
-        s.queue.erase(s.queue.begin() + static_cast<std::ptrdiff_t>(i));
-        s.boundaries.erase(gone.ants[0]);
-        ++s.stats.superseded;
-        s.bot->on_command(gone, Bot::Fate::Superseded, tick);
     }
 }
 
