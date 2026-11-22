@@ -13,7 +13,7 @@
 # The test-map door (--test-map-port, off unless a command gives it; docker-compose.stack.yml starts the server with 4031) takes the Map Maker's draft maps (POST /test-maps) and nothing else: it is not published either.
 # =============================================================================
 # The base image is pinned by tag and digest: the digest is what is pulled, the tag is for the reader and for Dependabot (.github/dependabot.yml), which raises the pair to a newer one in a pull request that CI builds.
-FROM debian:12-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc AS builder
+FROM debian:13-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS builder
 
 # ccache makes a compile of unchanged sources a copy of the last result (CMakeLists.txt finds it by itself); its folder is a BuildKit cache mount, kept by the host between builds and never part of
 # the image. The mounts (`RUN --mount=type=cache`) need BuildKit (Docker 23 and later builds with it; docs/BUILD_AND_RUN.md says how to switch it on and what the old builder says).
@@ -68,7 +68,7 @@ RUN BUILD_ID="$(sh /src/docker/resolve_build_id.sh "${ANTS_BUILD_ID}" /src/gitin
 # The runtime image: the program and nothing else, run by an unprivileged user
 # =============================================================================
 # The same pinned base image as the builder's.
-FROM debian:12-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc AS runner
+FROM debian:13-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS runner
 
 # (libsdl2-2.0-0 and libsdl2-ttf-2.0-0: what ants_thumb needs to run, about 28 MB with the libraries they pull in)
 RUN apt-get update && \
