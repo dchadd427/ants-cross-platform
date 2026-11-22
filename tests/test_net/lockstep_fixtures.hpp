@@ -1015,3 +1015,4 @@ void run_protocol21_tests();
 void run_restart_tests();
 void run_reconnect_session_tests_2();
 void run_p2p_tests();
+void run_order_tests();

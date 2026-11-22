@@ -1106,7 +1106,9 @@ void run_reconnect_tests() {
         std::streambuf* old_cerr = std::cerr.rdbuf(captured.rdbuf());
         {
             RWorld w;
-            ASSERT_TRUE(w.mgr.create_room(held_spec("M-1", 3), w.now).ok);
+            RoomSpec big_log = held_spec("M-1", 3);
+            big_log.sequencer.orders_per_second = 0;                                   // (a log of this size is made of more orders than a seat may have sealed: the budget of orders is S2.59's, here it is off)
+            ASSERT_TRUE(w.mgr.create_room(big_log, w.now).ok);
             RClient& a = w.connect("Ann", "M-1");
             RClient& b = w.connect("Bob", "M-1");
             RClient& c = w.connect("Cat", "M-1");
@@ -1194,6 +1196,7 @@ void run_reconnect_tests() {
         for (int i = 0; i < 16; ++i) {
             RoomSpec s = held_spec("H" + std::to_string(i), 2);
             s.max_log_bytes = 256 * 1024;
+            s.sequencer.orders_per_second = 0;                                         // (logs of this size are made of more orders than a seat may have sealed: the budget of orders is S2.59's, here it is off)
             ASSERT_TRUE(w.mgr.create_room(s, w.now).ok);
         }
         std::vector<RClient*> hostile;

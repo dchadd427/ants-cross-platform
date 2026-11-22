@@ -8,6 +8,7 @@ add_executable(test_lockstep
     test_lockstep_protocols.cpp
     test_lockstep_countdown.cpp
     test_lockstep_p2p.cpp
+    test_lockstep_orders.cpp
 )
 
 target_link_libraries(test_lockstep PRIVATE
@@ -185,3 +186,20 @@ target_include_directories(test_prediction_hints PRIVATE
 
 add_test(NAME test_prediction_hints COMMAND test_prediction_hints)
 set_tests_properties(test_prediction_hints PROPERTIES COST 20)
+
+# The desktop game's encrypted link (ants_net/wss.hpp over tls.hpp): the pure parts, and the link over real sockets against a TLS terminator with the tests' own certificates (tests/common/tls_test_server.hpp)
+add_executable(test_wss
+    test_wss.cpp
+)
+
+target_link_libraries(test_wss PRIVATE
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_wss PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_wss COMMAND test_wss)

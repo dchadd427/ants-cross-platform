@@ -9,6 +9,15 @@ namespace {
 
 uint64_t mix(uint64_t h, uint64_t v) noexcept { return (h ^ v) * 1099511628211ull; }
 
+// Whether a bomb of ANOTHER seat (an ally's or an enemy's, a mine too) lies on the tile. A special order onto a tile with a bomb is a defuse whoever's the bomb is, never a plant, so the plant order
+// must not go there; an ally's bomb is a wall for the ant that would stand on it and an enemy's goes off under it, so a hop whose plant tile or whose standing tile holds one is not a hop that works.
+bool foreign_bomb_on(const BotView& view, sim::TileCoord tile) noexcept {
+    for (const BombView& b : view.bombs()) {
+        if (b.tile == tile && b.owner != view.seat()) return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 // What the ants of the gate goal come from: the own Fire ants and Bombers with the side of the walls they stand on, and the power-ups on the map by tile and kind. A change of it is a reason to look again
@@ -356,6 +365,10 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
     }
     bool bomb_here = false;
     for (const BombView& b : view.bombs()) bomb_here = bomb_here || (b.tile == hop.bomb && b.owner == context.seat);
+    if (!landed_ && !thrown_ && (foreign_bomb_on(view, hop.bomb) || foreign_bomb_on(view, hop.from))) {   // another team's bomb on the plant tile or the tile to step from (HELLRAISER's vault: two allies hopped from the same tile and each defused the other's bomb): another hop
+        replan(context);
+        return;
+    }
     if (!landed_ && bomb_here != seen_bomb_) {
         progress_ = now;
         if (bomb_here) ++plants_;
@@ -534,7 +547,7 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
         }
         if (goal_.gate == GateKind::Sealed) {
             if (gates_.component(ant.tile) != gates_.home()) {
-                if (!ant.idle() || !may_order(now)) return;
+                if (!ant.idle() || !may_step(now)) return;
                 if (!ant.holding) {
                     const PileInfo* pile = context.map.pile(goal_.target);
                     sim::TileCoord food_cell{-1, -1};
@@ -550,14 +563,20 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
                         fail(context, "step");
                         return;
                     }
-                    context.orders.move({ant_}, food_cell);
+                    send(context, false, food_cell);
                     last_order_ = now;
                     return;
                 }
-                if (return_hop_.bombs == 0) {
-                    return_hop_ = GateInfo::best_hop_between(gates_, view.grid(), hop.to_comp, gates_.home());
+                if (return_hop_.bombs > 0 && (foreign_bomb_on(view, return_hop_.bomb) || foreign_bomb_on(view, return_hop_.from))) {
+                    return_hop_ = BombHop{};                                             // (another hop: the way back is planned on the grid and the ants as they are now)
                 }
                 if (return_hop_.bombs == 0) {
+                    return_hop_ = GateInfo::best_hop_between(gates_, view.grid(), hop.to_comp, gates_.home(), hop_choice(view));
+                }
+                if (return_hop_.bombs == 0) {
+                    bool shut = false;
+                    for (const BombView& b : view.bombs()) shut = shut || (b.owner != context.seat && gates_.bomb_beside(b.tile, hop.to_comp));
+                    if (shut) return;                                                    // every hop is shut by a bomb of another team on or beside the vault at this look: wait for one of them to go off (the step timer ends the attempt); a bomb elsewhere shuts none
                     fail(context, "stranded");
                     return;
                 }
@@ -570,18 +589,17 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
                 }
                 if (ret_bomb) {
                     if (ant.tile == return_hop_.from) {
-                        context.orders.move({ant_}, return_hop_.bomb);
-                        ++hops_ordered_;
+                        if (send(context, false, return_hop_.bomb)) ++hops_ordered_;
                     } else if (!tile_blocked(context, return_hop_.from)) {
-                        context.orders.move({ant_}, return_hop_.from);
+                        send(context, false, return_hop_.from);
                     }
                 } else {
                     if (ant.hp < std::min<int32_t>(10, 2 * return_hop_.bombs + 1)) {
                         fail(context, "hurt");
                         return;
                     }
-                    if (ant.tile == return_hop_.bomb) context.orders.move({ant_}, return_hop_.from);
-                    else if (!tile_blocked(context, return_hop_.bomb)) context.orders.special(ant_, return_hop_.bomb);
+                    if (ant.tile == return_hop_.bomb) send(context, false, return_hop_.from);
+                    else if (!tile_blocked(context, return_hop_.bomb)) send(context, true, return_hop_.bomb);
                 }
                 last_order_ = now;
                 return;
@@ -600,7 +618,7 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
         succeed(context);
         return;
     }
-    if (!ant.idle() || !may_order(now)) return;                                           // walking, planting, thrown or stunned: wait for it
+    if (!ant.idle() || !may_step(now)) return;                                            // walking, planting, thrown or stunned: wait for it
     const int32_t at = context.map.component(context.seat, ant.tile);                    // the walkers' components of the map analysis (fire walls shut, bombs walked into)
     const int32_t at_from = context.map.component(context.seat, hop.from);
     const bool same_side = (gates_.home() >= 0 && gates_.component(ant.tile) == gates_.home()) || (at < 0 || at_from < 0 || at == at_from);
@@ -610,11 +628,12 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
     }
     if (bomb_here) {
         if (ant.tile == hop.from) {
-            context.orders.move({ant_}, hop.bomb);
-            ++hops_ordered_;
-            thrown_ = true;
+            if (send(context, false, hop.bomb)) {                                          // (a throw order that the gap held back is not a throw ordered)
+                ++hops_ordered_;
+                thrown_ = true;
+            }
         } else if (!tile_blocked(context, hop.from)) {
-            context.orders.move({ant_}, hop.from);
+            send(context, false, hop.from);
         }
     } else {
         if (ant.hp < std::min<int32_t>(10, 2 * hop.bombs + 1)) {                          // a dud cost two hit points: too hurt for the chain
@@ -622,12 +641,12 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
             return;
         }
         if (shore_pile && ant.hp < 9 && context.map.hill(context.seat).present) {
-            context.orders.move({ant_}, context.map.hill(context.seat).entrance);
+            send(context, false, context.map.hill(context.seat).entrance);
             last_order_ = now;
             return;
         }
-        if (ant.tile == hop.bomb) context.orders.move({ant_}, hop.from);                  // a plant needs the tile empty: off it after a dud
-        else if (!tile_blocked(context, hop.bomb)) context.orders.special(ant_, hop.bomb);
+        if (ant.tile == hop.bomb) send(context, false, hop.from);                         // a plant needs the tile empty: off it after a dud
+        else if (!tile_blocked(context, hop.bomb)) send(context, true, hop.bomb);
     }
     last_order_ = now;
 }
@@ -635,6 +654,7 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
 void GateGoalTask::succeed(TaskContext& context) {
     ++done_;
     failures_ = 0;
+    replans_ = 0;
     context.ledger.release_all(id());                                                      // (the ant of the goal and the ants that were sent aside)
     ant_ = 0;
     goal_ = GateGoal{};
@@ -642,6 +662,38 @@ void GateGoalTask::succeed(TaskContext& context) {
     island_target_ = sim::TileCoord{-1, -1};
     finished_ = done_ >= params_.goals_max;
     phase_ = finished_ ? Phase::Exhausted : Phase::Idle;
+    next_plan_ = context.view.tick() + 20u;
+    signature_known_ = false;
+}
+
+// One order of the hop's chain (a walk, or a plant: a special order onto the bomb tile). The next step of the chain follows after `step_gap` ticks; the same order again (it did not work, or the ant
+// stands where it stood) waits for `order_gap`: the bot's stall detector counts equal orders. True when the order was given.
+bool GateGoalTask::send(TaskContext& context, bool special, sim::TileCoord tile) {
+    const uint64_t now = context.view.tick();
+    const uint64_t key = (special ? uint64_t{1} << 40 : uint64_t{0}) | (static_cast<uint64_t>(tile.y) << 20) | static_cast<uint64_t>(tile.x);
+    if (key == last_key_ && now < last_sent_ + params_.order_gap) return false;
+    last_key_ = key;
+    last_sent_ = now;
+    if (special) context.orders.special(ant_, tile);
+    else context.orders.move({ant_}, tile);
+    return true;
+}
+
+// The hop of the goal is shut by a bomb of another team: the goal is planned again at the next look on the grid as it is (the planner leaves out a plant tile or a standing tile that holds a bomb).
+// Not an attempt given up; at most `replans_max` between two goals done.
+void GateGoalTask::replan(TaskContext& context) {
+    ++replans_total_;
+    if (++replans_ > params_.replans_max) {
+        replans_ = 0;
+        fail(context, "blocked");
+        return;
+    }
+    context.ledger.release_all(id());
+    ant_ = 0;
+    goal_ = GateGoal{};
+    return_hop_ = BombHop{};
+    island_target_ = sim::TileCoord{-1, -1};
+    phase_ = Phase::Idle;
     next_plan_ = context.view.tick() + 20u;
     signature_known_ = false;
 }

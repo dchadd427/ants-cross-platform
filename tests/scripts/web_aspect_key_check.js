@@ -68,6 +68,7 @@ function makeWindow(search, storage, answerToConfirm, screen, inner, framed, ori
         innerHeight: inner ? inner[1] : undefined,
         parent: framed ? {} : undefined,                                            // (a page in a frame has another window above it)
         localStorage: storage,
+        sessionStorage: { getItem: () => new URLSearchParams(search).get('name'), removeItem() {} },     // (every address of this check was made by the front page of this tab: it vouches for the name that the address carries)
         confirm(question) { win.asked.push(question); return answerToConfirm; },
     };
     if (orient) {                                                                    // (how the device says which way it is held; the page's order is the screen's orientation, window.orientation, the media query)

@@ -1292,7 +1292,7 @@ int main() {
         ASSERT_EQ(store.readable_count(), store.count());
     } TEST_END();
 
-    // ---- a replay that carries its map (the chunk tmap) is a file of up to 2 MiB --------------------------------------------------
+    // ---- a replay that carries its map (the chunk tmap) is a file of up to 17 MiB --------------------------------------------------
 
     TEST_CASE("RS10.1 A Replay Of 1.5 MiB That Carries Its Map Is Kept, Listed As Readable, Read Back Byte For Byte And Found Again When The Store Is Opened Anew; Every Cap Is Counted In Bytes Of What Is In The File") {
         Fixture f;
@@ -1300,7 +1300,7 @@ int main() {
         std::string why;
         ASSERT_TRUE(store.prepare(why));
         const std::vector<uint8_t> big = make_file_with_map(replay::kMaxEmbeddedMapBytes, 3 * 512 * 1024);
-        ASSERT_TRUE(big.size() >= 3 * 512 * 1024 && big.size() < 3 * 512 * 1024 + 20000 && big.size() > replay::kMaxFileBytes);
+        ASSERT_TRUE(big.size() >= 3 * 512 * 1024 && big.size() < 3 * 512 * 1024 + 20000 && big.size() > replay::kMaxEmbeddedMapBytes);
         const ReplaySave saved = store.save(big);
         ASSERT_TRUE(saved.kept && saved.bytes == big.size());
         ASSERT_TRUE(store.count() == 1 && store.readable_count() == 1 && store.list().at(0).readable && store.list().at(0).bytes == big.size());
@@ -1312,12 +1312,12 @@ int main() {
         ASSERT_TRUE(again.prepare(why));
         ASSERT_TRUE(again.count() == 1 && again.list().at(0).readable && again.list().at(0).bytes == big.size());
         ASSERT_TRUE(again.read(saved.file, read) && read == big);
-        // the longest there can be: a map of 1 MiB and a match of 1 MiB
+        // the longest there can be: a map of 1 MiB and a match of 16 MiB
         const std::vector<uint8_t> small_map = make_file_with_map(1000, 0, 2);
         ASSERT_FALSE(small_map.empty());
         const std::vector<uint8_t> longest = with_filler_chunk(make_file_with_map(replay::kMaxEmbeddedMapBytes, 0, 3), 1);
         ASSERT_TRUE(longest.size() < replay::kMaxFileBytesWithMap);
-        // a match part of exactly 1 MiB beside a map of 1000 bytes is kept; one byte more is not
+        // a match part of exactly 16 MiB beside a map of 1000 bytes is kept; one byte more is not
         const std::vector<uint8_t> base = make_file_with_map(1000, 0, 4);
         const size_t map_chunk = 1000 + replay::kChunkFrameBytes;
         const size_t filler = replay::kMaxFileBytes + map_chunk - base.size() - replay::kChunkFrameBytes;
@@ -1327,20 +1327,20 @@ int main() {
         const std::vector<uint8_t> over = with_filler_chunk(base, filler + 1);
         const ReplaySave refused = again.save(over);
         ASSERT_TRUE(!refused.kept && contains(refused.note, "KiB"));
-        // a file past 2 MiB is refused before it is read
+        // a file past 17 MiB is refused before it is read
         std::vector<uint8_t> past = exact;
         past.resize(replay::kMaxFileBytesWithMap + 1, 0);
         ASSERT_FALSE(again.save(past).kept);
         ASSERT_EQ(again.count(), size_t{2});
     } TEST_END();
 
-    TEST_CASE("RS10.2 A File Past The Longest A Replay Can Be Is Listed As Unreadable; A Match Over 1 MiB Is Unreadable Whatever Its Size In All") {
+    TEST_CASE("RS10.2 A File Past The Longest A Replay Can Be Is Listed As Unreadable; A Match Over 16 MiB Is Unreadable Whatever Its Size In All") {
         Fixture f;
         fs::create_directories(f.dir);
         const std::string name = "ants-TREASURE-20261008-143209Z.antsrep";
         write_file(f.dir / name, std::vector<uint8_t>(replay::kMaxFileBytesWithMap + 1, 0x41));
         const std::string second = "ants-TREASURE-20261008-143210Z.antsrep";
-        const std::vector<uint8_t> match = with_filler_chunk(make_file("TREASURE.LVL", 700, true, 0, 5), replay::kMaxFileBytes);        // a match of 1 MiB and some, with no map of its own
+        const std::vector<uint8_t> match = with_filler_chunk(make_file("TREASURE.LVL", 700, true, 0, 5), replay::kMaxFileBytes);        // a match of 16 MiB and some, with no map of its own
         ASSERT_TRUE(match.size() > replay::kMaxFileBytes && match.size() < replay::kMaxFileBytesWithMap);
         write_file(f.dir / second, match);
         ReplayStore store(f.config());

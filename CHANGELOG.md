@@ -26,6 +26,23 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.20.4 - 2026-11-21 - Encrypted desktop joins, fairer limits, the original icon
+
+**For players:**
+- The site's icons are the original game's own icon, on a dark tile on a phone's home screen.
+- Computer players on HELLRAISER and maps like it no longer stall: allies stop defusing each other's bombs and Bombers stop blocking each other.
+- The desktop game joins online games over an encrypted connection (wss), with the site's certificate checked.
+- A big match is no longer lost from Matches: a recording can be up to 16 MB.
+- A picture in the chat has a frame as wide as the picture on a phone.
+
+**For operators:**
+- Orders are limited per seat (a large allowance for armies, a small one for other commands); a failed recording names the seat that sent the most.
+- Limits per network address: 16 open rooms, 10 new rooms a minute, slower room-code guessing; `ANTS_TRUSTED_PROXIES` names the proxies whose address header is believed.
+- The stack files no longer publish the unencrypted TCP game port 4001.
+- Images are pinned by digest, Pillow 13.0.0 by hash, and Dependabot watches home-next.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/e615bc78...33515c3d)
+
 ## v0.20.3 - 2026-11-21 - Images in the chat can be posted
 
 **Fixes:**

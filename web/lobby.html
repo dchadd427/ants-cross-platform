@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Ants (1998)@@SITE_TITLE@@</title>
-    <link rel="icon" type="image/png" href="/favicon.png?v=f34bea03">
+    <link rel="icon" type="image/png" href="/favicon.png?v=9ea2152a">
     <link rel="manifest" href="/manifest.webmanifest">
     <meta name="theme-color" content="#2b5f43">
-    <link rel="apple-touch-icon" href="/app/apple-touch-icon.png?v=4fbefb68">
+    <link rel="apple-touch-icon" href="/app/apple-touch-icon.png?v=82bef672">
     <meta name="apple-mobile-web-app-title" content="Ants!">
     <link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>
     <style>
@@ -271,18 +271,29 @@
         // isShape(text) says whether a text names one (an address, a remembered value), aspectQuery(shape) is the `&aspect=` part of a hand-off to the game (only a pick goes in it: see `pickedShape` below).
         function isShape(text) { return AntsShapes.parse(text) !== null; }
         function aspectQuery(shape) { return isShape(shape) ? '&aspect=' + shape : ''; }
+        // VOUCH_BEGIN (tests/scripts/web_name_check.js runs this block)
+        // The game page believes the `name` of an address only when this tab's front page vouches for it: the name is kept in this tab's storage just before the tab is taken to the game page, which takes it out once
+        // (web/shell.html, ANTS_PAGE.vouched). A link that somebody else wrote has no such entry, so its name is not the game's and the page asks for one, as for any shared link.
+        function vouchName(win, name) { try { win.sessionStorage.setItem('ants.joinas', String(name)); } catch (e) { /* no storage: the game page asks for the name */ } }
+        // VOUCH_END
         // SHAPES_END
         // NAME_BEGIN (tests/scripts/web_name_check.js runs this block; web/lobby.html and web/shell.html carry the same text)
         // THE PLAYER'S NAME is not typed on the web: a person who is logged in with Discord plays under the login's name, anybody else under a guest name (front/player_name.js). The game takes printable ASCII only, the blanks at
-        // both ends cut off, at most 32 characters, and nothing that starts with "Bot (" or ends with "(bot)" or "(bot, ...)" (blanks and case ignored: a computer player is always shown as one): the rules of the desktop game's
+        // both ends cut off, at most 32 characters, and nothing that reads as a computer player's label: "Bot (...)", "Pip (bot)", "Pip (bot, Hard)" (blanks, signs between the letters and case ignored: a computer player is always shown as one, and a person never): the rules of the desktop game's
         // start menu (check_player_name in src/ants_app/start_menu.cpp). nameCheck(text) is { ok: true, name } or { ok: false, why }. A name is only ever shown as text and put into a link with encodeURIComponent, never markup.
         var NAME_MAX = 32;
+        // A name that reads as a computer player's label (ai::is_reserved_bot_name; the name is printable ASCII here): the word bot first and a bracket after it ("Bot (Hard)"), or a bracket, the word bot and then a sign or a blank
+        // ("Pip (bot, Hard)", "Pip [bot]", "Pip (bot) x"); case, blanks and signs between the letters are looked through, and 0 reads as o; the letters are one after the other or each pair parted ("b o t", not "Bo T"), and a word that is parted is one only when no letter follows its blanks ("(b o t h)" is a name).
+        function readsAsBot(name) {
+            var s = name.toLowerCase().replace(/0/g, 'o');
+            return /^[^a-z0-9()\[\]{}<>]*(?:bot|b[^a-z0-9()\[\]{}<>]+o[^a-z0-9()\[\]{}<>]+t)[^a-z0-9()\[\]{}<>]*[(\[{<]/.test(s) || /[(\[{<][^a-z0-9()\[\]{}<>]*(?:bot(?=[^a-z0-9])|b[^a-z0-9()\[\]{}<>]+o[^a-z0-9()\[\]{}<>]+t(?=[^a-z0-9])(?! +[a-z0-9]))/.test(s);
+        }
         function nameCheck(text) {
             var raw = typeof text === 'string' ? text.replace(/[\t\r\n]/g, '') : '';
             if (/[^\x20-\x7e]/.test(raw)) return { ok: false, why: 'A name can hold printable ASCII characters only: letters, digits and signs without accents.' };
             var name = raw.replace(/^ +/, '').replace(/ +$/, '');
             if (name.length > NAME_MAX) return { ok: false, why: 'A name has at most ' + NAME_MAX + ' characters.' };
-            if (/^bot\(|\(bot(,[^()]+)?\)$/.test(name.replace(/ /g, '').toLowerCase())) return { ok: false, why: 'A name like "Bot (...)" or "Pip (bot)" is for computer players. Please choose another name.' };
+            if (readsAsBot(name)) return { ok: false, why: 'A name like "Bot (...)" or "Pip (bot)" is for computer players. Please choose another name.' };
             return { ok: true, name: name };
         }
         // THE WORDS under the name on the card: whose name it is; where a login changes it (the chat menu's switch, when the hub says that there is another name); why a login plays under the username (its shown name did not fit)
@@ -383,6 +394,7 @@
         }
         $('rejoin-go').addEventListener('click', function () {
             if (!rejoinOffered) return;
+            vouchName(window, '');
             window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, '', pickedShape), window.location.href).href);
         });
         window.addEventListener('storage', function () { showRejoin(); });
@@ -737,6 +749,7 @@
             try { window.localStorage.setItem(entry.name, entry.text); } catch (e) { /* the key is not kept: the game page can take the seat for this load only, and a reload of it cannot take the seat back */ }
             var seat = client.seat, code = client.code, name = client.name;
             forgetSession(); leaveBack();              // (Back from the match makes a room again: this one is the match's now)
+            vouchName(window, name);
             window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, pickedShape), window.location.href).href);
         }
         function stalled(words) {                     // Home's 15 s are up and the hand-off is still here (and again when a minute is up, with other words): this page's room is frozen (a page on its way takes no message) and its seat may still be the game's, so say it, with the Reload that gets the seat back ("Rejoin it")
@@ -930,6 +943,7 @@
         function startAlone() {
             var address = soloAddress(model, client.name, pickedShape); if (!address) { say('This map cannot be played alone: the game does not take its file name. Choose another map.'); return; }
             handing = true; client.leave(); forgetSession();
+            vouchName(window, client.name || 'Player');
             window.location.assign(new URL(address, window.location.href).href);
         }
 

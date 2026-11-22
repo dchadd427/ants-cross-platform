@@ -7,8 +7,10 @@ add_library(ants_server_core STATIC
     bot_matches.cpp
     pacific_time.cpp
     online_limits.cpp
+    address_limits.cpp
     room.cpp
     room_manager.cpp
+    room_manager_limits.cpp
     room_manager_bots.cpp
     control.cpp
     control_history.cpp

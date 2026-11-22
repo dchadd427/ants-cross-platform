@@ -155,7 +155,7 @@
         if ((u.protocol !== 'http:' && u.protocol !== 'https:') || !u.hostname || u.hostname.indexOf('.') < 1 || u.username || u.password || /\s/.test(String(u))) return null;
         return { url: String(u), host: u.hostname };
     }
-    function shorten(typed) { return typed.length > TEXT.linkCut ? pairs(typed.slice(0, 30)) + '\u2026' + pairs(typed.slice(-17)) : typed; }
+    function shorten(typed, host) { return typed.length > TEXT.linkCut ? host + '/\u2026' + pairs(typed.slice(-17)) : typed; }
     function partsOf(text) {                                             // a line as [{ s } text, { s, href, host, title } link]: at most five links, the rest is text
         var out = [], at = 0, links = 0, m, typed, k, link;
         LINKRE.lastIndex = 0;
@@ -163,7 +163,7 @@
             typed = trimLink(m[2]); link = linkOf(typed); k = m.index + m[1].length;
             if (!link) continue;
             if (k > at) out.push({ s: text.slice(at, k) });
-            out.push({ s: shorten(typed), url: link.url, title: (/[^\x00-\x7f]/.test(typed) ? link.host + ' ' : '') + link.url });
+            out.push({ s: shorten(typed, link.host), url: link.url, title: (/[^\x00-\x7f]/.test(typed) ? link.host + ' ' : '') + link.url });
             at = k + typed.length; links++;
             LINKRE.lastIndex = at;
         }

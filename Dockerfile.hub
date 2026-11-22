@@ -14,7 +14,8 @@
 # earlier version does not start on it. Moderation: docker exec ants-hub python -m hub.admin list
 # No ANTS_BUILD_ID argument on purpose: the image depends on hub/ and nothing else, so a deploy that changes nothing in hub/ builds the same image and the chat is not restarted.
 # =============================================================================
-FROM python:3.12-slim-bookworm
+# The base image is pinned by tag and digest: the digest is what is pulled, the tag is for the reader and for Dependabot (.github/dependabot.yml), which raises the pair to a newer one in a pull request that CI builds.
+FROM python:3.12-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df
 
 # /data and /images belong to the user: Docker gives a new, empty named volume the owner of the folder it is mounted on, so the hub can write its
 # database and the chat's images there (without it a new volume is root's, and the hub turns images off: images_off_the_folder_cannot_be_written)

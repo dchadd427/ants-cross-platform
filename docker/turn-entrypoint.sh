@@ -5,7 +5,9 @@
 #   - refuses to start unless the secret, the public address and the name are set (an empty secret would be a key that everybody knows), and refuses a name that carries a port: the port is ANTS_TURN_PORT only;
 #   - refuses an address that is not an IPv4 address of this machine (host networking: its own interfaces), because the relay listens on that address and sends from it, and on no other interface: with an address
 #     that is not the machine's own, coturn would run and answer nobody;
-#   - then hands over to the image's own entry point, which expands `$` in the arguments (the compose file gives them as `$ANTS_TURN_SECRET` and so on: the secret is not written into the command).
+#   - writes the shared secret into a configuration file of its own, readable by the relay's user only, on the memory file system that the stack mounts at /tmp (docker/turnserver.conf plus one line), and has
+#     coturn read that file: on the command line the secret would be in the process list of the machine, which any user of it can read (host networking: the relay's processes are the machine's);
+#   - then hands over to the image's own entry point, which expands `$` in the arguments (the compose file gives them as `$ANTS_TURN_HOST` and so on).
 # The list of the machine's addresses is read from the kernel; the test (tests/scripts/test_turn_relay.py) points that path at a file of its own.
 port="${ANTS_TURN_PORT:-3478}"
 case "$port" in
@@ -36,5 +38,12 @@ fi
 case "$ANTS_TURN_HOST" in
     *:*) echo "ants-turn: ANTS_TURN_HOST is the name only; the port is ANTS_TURN_PORT" >&2; exit 1 ;;
 esac
+# a blank, a tab or a line break in the secret would be cut or read as another line of the file (the secret is what the game server signs the credentials with: both ends must have the same bytes)
+case "$ANTS_TURN_SECRET" in
+    *[[:space:]]*) echo "ants-turn: ANTS_TURN_SECRET must hold no blank, tab or line break" >&2; exit 1 ;;
+esac
 ants_turn_address "$ANTS_TURN_EXTERNAL_IP" || { echo "ants-turn: ANTS_TURN_EXTERNAL_IP must be an IPv4 address of this machine (the relay listens on it and on no other address)" >&2; exit 1; }
-exec /usr/local/bin/docker-entrypoint.sh "$@" "--listening-port=$port" "--listening-ip=$ANTS_TURN_EXTERNAL_IP" "--relay-ip=$ANTS_TURN_EXTERNAL_IP"
+# The configuration that coturn reads: the repository's file and the secret, in a new file that nobody but this user may read (`umask 077`; a file that was there is removed first, so that its permissions are not kept).
+conf=/tmp/ants-turnserver.conf
+( umask 077 && rm -f "$conf" && cat /etc/coturn/turnserver.conf > "$conf" && printf 'static-auth-secret=%s\n' "$ANTS_TURN_SECRET" >> "$conf" ) || { echo "ants-turn: the configuration could not be written to $conf" >&2; exit 1; }
+exec /usr/local/bin/docker-entrypoint.sh -c "$conf" "$@" "--listening-port=$port" "--listening-ip=$ANTS_TURN_EXTERNAL_IP" "--relay-ip=$ANTS_TURN_EXTERNAL_IP"

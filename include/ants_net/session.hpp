@@ -167,6 +167,9 @@ public:
         std::function<bool(uint8_t*, size_t)> random_bytes;
         std::function<uint32_t()> unix_now;
         uint32_t relay_ttl_s{0};
+        /// Asked once for each credential that is about to be made, with the seat that asks: false answers the player as a server that has no relay answers (an empty list; the match is what it was). The server
+        /// gives its budget per address here (docs/ADDRESS_LIMITS.md); empty: no budget beyond the player's own kMaxP2pCredentials.
+        std::function<bool(uint8_t player)> relay_take;
         bool bot_hints{true};                                   // a computer player's order is sent to every player the moment the bot gives it, ahead of its turn (the turn is what counts)
     };
 
@@ -230,6 +233,14 @@ public:
     /// The seats of a dedicated server that were dropped for a state that differs from the referee's (the others went on)
     uint32_t diverged_drops() const noexcept { return diverged_drops_; }
     uint32_t turns_sealed() const noexcept { return sequencer_.next_turn(); }
+    /// The orders of a seat that were not sealed: over its budget (Sequencer::Config::order_burst), and naming no ant that the seat can order. And the seats that went over their budget at least once ("heavy order
+    /// rate"): the status, the replay's head and the history say so. A seat is never dropped for either: its orders are not carried out, the others' are.
+    uint32_t orders_over_budget(uint8_t seat) const noexcept { return sequencer_.dropped_over_budget(seat); }
+    uint32_t orders_without_ants(uint8_t seat) const noexcept { return sequencer_.dropped_no_ants(seat); }
+    uint8_t heavy_order_seats() const noexcept { return sequencer_.heavy_seats(); }
+    /// The sequencer's question of an order that names ants (see the definition): what `sim`, the host's engine, would not carry out is taken out of `command` (an ant of another player, an id that no ant has and none
+    /// is about to have, an ant named twice); false when no ant is left. An ant of `player` is kept whether it is alive or dead, so nothing that a person plays is changed. A command without an ant list is let through.
+    static bool vet_ants(const sim::SimulationEngine& sim, uint8_t player, sim::Command& command);
     /// True while a host with a seat has stopped sealing because a peer is more than 3 s behind (a host without a seat never waits)
     bool waiting() const noexcept { return started_ && !seatless() && !sequencer_.can_seal(); }
     uint8_t laggard() const noexcept { return seatless() ? uint8_t{255} : sequencer_.laggard(); }

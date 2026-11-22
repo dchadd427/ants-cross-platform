@@ -140,6 +140,13 @@
 // permissions of its folder), so a container needs no setup: the secret is printed once, the moment it is made (before anything else can stop the server); later it is read
 // from the file (docker exec <container> cat /results/control-secret). A secret in the environment wins. A file that exists is used as it is (secret.hpp).
 
+//   --address-connections-per-second N, --address-rooms-per-minute N, --address-rooms-open N, --address-wrong-codes-per-minute N, --address-crowded-rooms N, --address-crowded-idle-seconds N, --address-relay-per-hour N
+//                      the limits per network address (docs/ADDRESS_LIMITS.md; each takes 0 to switch it off, and the control interface's GET and POST /limits show and change them by the same names with
+//                      '_'): connections in a second, rooms made in a minute, rooms open at once, answers at once to Hellos for rooms that do not exist in a minute, and the open rooms above which an address's idle
+//                      lobbies are closed after the idle seconds, relay credentials in an hour. They are ON by default (20, 10, 16, 30, 8, 300, 24); --no-address-limits switches all of them off
+//   --trusted-proxies LIST
+//                      the reverse proxies whose X-Client-Address the WebSocket door believes: addresses and networks separated by commas ("10.0.0.0/8,2001:db8::/32"; "none": nobody). Without the option the
+//                      environment variable ANTS_TRUSTED_PROXIES, and without that the loopback address and the private networks, which is where the site's own proxy connects from
 #include <algorithm>
 #include <iostream>
 #include <atomic>
@@ -162,6 +169,7 @@
 #include "ants_net/turn.hpp"
 #include "ants_net/ws.hpp"
 #include "ants_net/protocol.hpp"
+#include "ants_server/address_limits.hpp"
 #include "ants_server/admin_audit.hpp"
 #include "ants_server/bot_matches.hpp"
 #include "ants_server/bot_rotation.hpp"
@@ -245,6 +253,10 @@ struct Options {
     std::string picture_program;               // --map-picture-program (empty: no pictures of the players' maps)
     std::string picture_archive;               // --map-picture-archive
     std::string pictures_dir;                  // --map-pictures-dir (empty: the folder "map-pictures" in the results folder)
+    ants::server::AddressLimits address_limits{ants::server::AddressLimits::standard()};      // --address-* (docs/ADDRESS_LIMITS.md)
+    bool no_address_limits{false};             // --no-address-limits
+    std::string trusted_proxies;               // --trusted-proxies (empty and not given: ANTS_TRUSTED_PROXIES, else the private networks)
+    bool trusted_proxies_given{false};
 };
 
 void usage(FILE* to) {
@@ -260,6 +272,8 @@ void usage(FILE* to) {
                  "                    [--submit-port N] [--submit-any-interface] [--submissions-dir DIR] [--submit-max-waiting N] [--submit-per-address N] [--submit-ignore-client-header]\n"
                  "                    [--test-map-port N] [--test-map-any-interface] [--test-maps-dir DIR] [--test-map-ignore-client-header]\n"
                  "                    [--map-picture-program PATH --map-picture-archive FILE [--map-pictures-dir DIR]] [--turn-host HOST[:PORT]]\n"
+                 "                    [--no-address-limits | --address-connections-per-second N --address-rooms-per-minute N --address-rooms-open N --address-wrong-codes-per-minute N\n"
+                 "                     --address-crowded-rooms N --address-crowded-idle-seconds N --address-relay-per-hour N] [--trusted-proxies LIST]\n"
                  "  the control interface takes its secret from the environment variable ANTS_SERVER_SECRET; without it the server makes one and keeps it\n"
                  "  in --secret-file (default: control-secret in --results-dir); the relay's secret (--turn-host) from ANTS_TURN_SECRET, its port from ANTS_TURN_PORT\n");
 }
@@ -274,6 +288,10 @@ bool parse_port(const char* text, uint16_t& out) {
 
 // The address of a peer without its port ("10.0.0.5:51234" -> "10.0.0.5")
 std::string host_part(const std::string& peer) {
+    if (!peer.empty() && peer[0] == '[') {                           // ("[2001:db8::1]:51234": an IPv6 address is in brackets)
+        const size_t close = peer.find(']');
+        return close == std::string::npos ? peer : peer.substr(1, close - 1);
+    }
     const size_t colon = peer.rfind(':');
     return colon == std::string::npos ? peer : peer.substr(0, colon);
 }
@@ -329,6 +347,26 @@ int main(int argc, char** argv) {
         } else if (a == "--test-map-port") {
             if (!parse_port(value("--test-map-port"), o.test_map_port)) {
                 std::fprintf(stderr, "--test-map-port takes a port number (0 - 65535)\n");
+                return 2;
+            }
+        } else if (a == "--no-address-limits") {
+            o.no_address_limits = true;
+        } else if (a == "--trusted-proxies") {
+            o.trusted_proxies = value("--trusted-proxies");
+            o.trusted_proxies_given = true;
+        } else if (a.compare(0, 10, "--address-") == 0) {              // (one option for each limit of kAddressLimitFields: its key with '-' for '_')
+            std::string key = a.substr(10);
+            for (char& c : key) c = c == '-' ? '_' : c;
+            const char* text = value(a.c_str());
+            char* end = nullptr;
+            const long long n = std::strtoll(text, &end, 10);
+            std::string why;
+            if (end == text || *end != '\0') {
+                std::fprintf(stderr, "%s takes a whole number (0 switches the limit off)\n", a.c_str());
+                return 2;
+            }
+            if (!ants::server::set_address_limit(o.address_limits, key, n, why)) {
+                std::fprintf(stderr, "%s: %s\n", a.c_str(), why.c_str());
                 return 2;
             }
         } else if (a == "--test-map-any-interface") {
@@ -655,6 +693,17 @@ int main(int argc, char** argv) {
     }
     log(limits.turn != nullptr ? "players' channels: on (relay " + limits.turn->urls.front().substr(5) + "; each player of a match is handed a short-lived credential for it; hints go between them ahead of the turns)"
                                : std::string("players' channels: off (no relay: --turn-host or ANTS_TURN_HOST (the port: its :PORT or ANTS_TURN_PORT, 3478 otherwise), and ANTS_TURN_SECRET)"));
+    limits.address = o.no_address_limits ? ants::server::AddressLimits() : o.address_limits;
+    ants::server::TrustedProxies proxies = ants::server::TrustedProxies::standard();
+    {                                                                 // the proxies whose X-Client-Address the WebSocket door believes: the option, else ANTS_TRUSTED_PROXIES, else the private networks
+        const char* env = std::getenv("ANTS_TRUSTED_PROXIES");
+        const std::string list = o.trusted_proxies_given ? o.trusted_proxies : std::string(env != nullptr ? env : "");
+        std::string why;
+        if (list.find_first_not_of(" \t\r\n,") != std::string::npos && !ants::server::TrustedProxies::parse(list, proxies, why)) {
+            std::fprintf(stderr, "%s: %s\n", o.trusted_proxies_given ? "--trusted-proxies" : "ANTS_TRUSTED_PROXIES", why.c_str());
+            return 2;
+        }
+    }
     ants::server::MapStore store{o.maps_dir, o.community_maps_dir};
     {
         std::vector<std::string> map_notes;
@@ -690,6 +739,14 @@ int main(int argc, char** argv) {
                                     : std::string("lobby rooms off") + (o.demo_lobbies_given ? " (--demo-lobbies 0)" : !o.reconnect ? " (--no-reconnect)" : " (--max-rooms leaves no place for them beside --demo-rooms)"));
     }
 
+    if (o.no_address_limits) {
+        log("limits per address: off (--no-address-limits)");
+    } else {
+        std::string numbers;
+        for (const ants::server::AddressLimitField& f : ants::server::kAddressLimitFields) numbers += (numbers.empty() ? "" : ", ") + std::string(f.key) + " " + std::to_string(limits.address.*f.member);
+        log("limits per address: " + numbers + " (0: no limit; docs/ADDRESS_LIMITS.md)");
+    }
+    if (ws) log("the WebSocket door believes X-Client-Address from " + std::to_string(proxies.size()) + " trusted proxy network(s) (--trusted-proxies, ANTS_TRUSTED_PROXIES); a connection from any other address counts as itself");
     if (ws) {                                                    // GET /busy on the WebSocket port: how many matches run, no name, no code, no secret
         ws->set_status("/busy", [&rooms]() {
             const ants::server::BusyCounts b = rooms.busy(now_ms());
@@ -1009,7 +1066,7 @@ int main(int argc, char** argv) {
             for (int i = 0; i < 32; ++i) {
                 auto c = ws->accept();
                 if (!c) break;
-                const std::string address = host_part(c->peer());
+                const std::string address = ants::server::door_address(host_part(c->peer()), c->client_address(), proxies);      // (the proxy's word only from a trusted proxy)
                 rooms.add_connection(std::move(c), address, now);
             }
         }
@@ -1056,6 +1113,12 @@ int main(int argc, char** argv) {
                        " refused by a budget";
             }
             if (s.drops_by_state > 0) held += ", " + std::to_string(s.drops_by_state) + " dropped for a state that differed from the referee's";
+            if (s.heavy_order_seats != 0) {                                                  // (a seat whose orders went over its budget: a count of the orders that were not sealed, per seat)
+                held += ", heavy order rate on seat";
+                for (size_t seat = 0; seat < 4; ++seat) {
+                    if ((s.heavy_order_seats & (1u << seat)) != 0) held += " " + std::to_string(seat) + " (" + std::to_string(s.orders_over_budget[seat]) + " orders not sealed)";
+                }
+            }
             if (s.replay_kept) held += ", kept as " + s.replay_file;                       // (the replay of the match: its file name is the map and the end time, no code and no name of a person)
             log("room " + s.code + " " + ants::server::room_state_name(s.state) + ": " + s.reason + " (map " + s.map + ", " + std::to_string(s.ticks) + " ticks" + held + ")");
             if (!o.results_dir.empty() && !demo) {

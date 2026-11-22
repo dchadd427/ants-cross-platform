@@ -62,7 +62,7 @@ class TheImage(unittest.TestCase):
         cls.code = code(cls.text)
 
     def test_it_is_slim_python_and_runs_as_a_user_that_is_not_root(self):
-        self.assertRegex(self.code, r"(?m)^FROM python:3\.\d+-slim-\w+\s*$")
+        self.assertRegex(self.code, r"(?m)^FROM python:3\.\d+-slim-\w+(@sha256:[0-9a-f]{64})?\s*$")
         self.assertRegex(self.code, r"(?m)^USER hub\s*$")
         self.assertRegex(self.code, r"useradd --system .*--shell /usr/sbin/nologin hub")
         self.assertLess(self.code.index("useradd"), self.code.index("USER hub"))
@@ -198,7 +198,7 @@ class TheServices(unittest.TestCase):
         for line in ("read_only: true", "cap_drop: [ALL]", 'security_opt: ["no-new-privileges:true"]', "pids_limit: 64"):
             self.assertIn(line, service(text, "ants-server"))
         ports = [int(m.group(1) or m.group(2)) for m in re.finditer(r'(?m)^\s+- "(?:\$\{ANTS_WEB_BIND_PREFIX:-\})?(?:127\.0\.0\.1:)?(?:\$\{[A-Z_]+:-(\d+)\}|(\d+)):\d+"\s*$', code(text))]
-        self.assertEqual(sorted(ports), [4001, 4002, 4010, 19980])
+        self.assertEqual(sorted(ports), [4002, 4010, 19980])             # (the site's page, and the server's WebSocket port and control port on the loopback address: the TCP game port 4001 is not encrypted and is published by no stack file)
 
     def test_the_game_servers_service_is_not_changed_by_the_hub(self):
         for name, text in self.files.items():
@@ -315,7 +315,7 @@ class TheConverterService(unittest.TestCase):
         self.assertRegex(docker, r"(?m)^USER img$")
         self.assertIn("HEALTHCHECK", docker)
         self.assertNotIn("ANTS_BUILD_ID", "\n".join(l for l in docker.splitlines() if not l.lstrip().startswith("#")))
-        self.assertRegex(read(os.path.join(REPO, "imgconv", "requirements.txt")), r"(?m)^Pillow==[0-9]+\.[0-9]+\.[0-9]+$")
+        self.assertRegex(read(os.path.join(REPO, "imgconv", "requirements.txt")), r"(?m)^Pillow==[0-9]+\.[0-9]+\.[0-9]+ \\$")
 
     def test_the_hub_does_not_import_the_converter_or_pillow(self):
         for name in os.listdir(os.path.join(REPO, "hub")):

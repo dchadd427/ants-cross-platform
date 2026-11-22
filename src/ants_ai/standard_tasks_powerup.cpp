@@ -25,6 +25,29 @@ bool usable_for_powerup(const BotView& view, const AntView& a, bool typed_ok = f
     return view.powerup_at(a.tile) == nullptr;
 }
 
+// Whether an ant of the seat's ally can walk to a tile beside the power-up (the ally's own start ants may stand in another quadrant than its hill)
+bool ally_reaches(const BotView& view, const MapInfo& map, sim::TileCoord power_up) {
+    const uint8_t ally = view.ally();
+    if (ally >= sim::MAX_PLAYERS) return false;
+    for (const AntView& a : view.others()) {
+        if (a.team != ally) continue;
+        int32_t at = map.component(ally, a.tile);
+        if (at < 0) {                                                                      // an ant of the ally inside its mound (it is banking) walks out into the hill's own part of the map
+            const HillInfo& hill = map.hill(ally);
+            const bool inside = hill.present && a.tile.x >= hill.origin.x && a.tile.x < hill.origin.x + 4 && a.tile.y >= hill.origin.y && a.tile.y < hill.origin.y + 4;
+            if (!inside) continue;
+            at = map.hill_component(ally);
+            if (at < 0) continue;
+        }
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                if (map.component(ally, sim::TileCoord{power_up.x + dx, power_up.y + dy}) == at) return true;
+            }
+        }
+    }
+    return false;
+}
+
 }  // namespace
 
 // An idle typed ant that may be sent for a power-up of `kind` (docs/BOT_GONE.md): a Thief for the steals of the food-gone batch (an idle Swimmer: the ferry is over; the Fire Ant is the keeper of the walls against the thieves, the Bomber lays the mines), or the Fire power-up
@@ -113,7 +136,8 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
         if (p.kind != kind || p.standing_ant != 0 || tile_blacklisted(p.tile, now)) continue;
         if (kind == sim::AntType::Thief && is_link_flower(p.tile)) continue;       // (a Thief of the strip: nothing uses it there)
         const int side = power_up_side(c.map, p.tile, present);
-        if (side >= 0 && side != c.seat && (!(tactics_.plan.steals || tactics_.gate_map) || (v.ally() < sim::MAX_PLAYERS && side == v.ally()))) continue;       // another side's power-up is a theft: Hard's alone (and a gate map's: the start ants of a walled map stand beside the power-ups of the hill that cannot reach them), and never the ally's
+        const bool ally_side = v.ally() < sim::MAX_PLAYERS && side == v.ally();
+        if (side >= 0 && side != c.seat && (!(tactics_.plan.steals || tactics_.gate_map) || (ally_side && !(tactics_.gate_map && !ally_reaches(v, c.map, p.tile))))) continue;       // another side's power-up is a theft: Hard's alone (and a gate map's: the start ants of a walled map stand beside the power-ups of the hill that cannot reach them), and never the ally's (except, on a gate map, one that no ant of the ally can walk to: the start ants of two allies stand in each other's quadrants of HELLRAISER, and the one power-up they can reach lies on the ally's side)
         bool taken = false;
         for (const auto& t : takes_) taken = taken || t.second.tile == p.tile;
         if (!taken) cands.push_back(Cand{&p, side});
