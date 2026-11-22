@@ -30,6 +30,8 @@
 //   follow-up lane  the next attack click of an ant that is in a fight (Intent::follow_up, the bot asks for it) leaves Profile::follow_up_reaction ticks after the look (Hard 4, Medium and Easy none: 0) instead of
 //                   the reaction delay, when every ant of it had an attack click released within kFollowUpWindow ticks, and never before an older click that names one of its ants. It costs a token and leaves in the
 //                   priority order like any command: only the delay is the shorter (docs/BOT_FIGHT.md, "Hits without pauses")
+//   boundary click  one ant's click (Intent::boundary) for the moment the engine takes it from an ant in the can't-go loop (docs/BOT_UNSTUCK.md): it is not released by the clock of the look but by the
+//                   engine's moment, watched every tick, at most kBoundaryTtlTicks after the look; it costs a token (the bucket may go into debt) and leaves no earlier than the ant has been seen to take one
 //   timed chains    the clicks of a chain (Orders::chain: one ant, a few clicks, each at a moment counted from the moment the click before is APPLIED) are not released by the clock of the
 //                   decision: the first leaves like any order, every later one at the first tick at which the sink (CommandSink::applied_at) would apply it inside its window, and never
 //                   outside it (a click that would be late is dropped with the rest of the chain: Fate::Expired). They skip the reaction delay, the queue and the cool-down, as the
@@ -108,6 +110,8 @@ public:
     const SeatStats& stats(uint8_t seat) const noexcept;
     /// Commands of the seat that wait for their time or for a token
     size_t pending(uint8_t seat) const noexcept;
+    /// What the seat's bucket holds, in thousandths of a command (negative while a timed click's debt is paid back): for the tests of the budget
+    int64_t tokens_milli(uint8_t seat) const noexcept;
     /// The analysis of the match's map, made when the controller was created (the start of the match); the bots get it through BotContext and BotView::map()
     const MapInfo& map() const noexcept { return map_; }
     /// The bot of a seat (null when none): for the tests
@@ -126,6 +130,12 @@ private:
         uint32_t step{0};
         uint32_t gap_lo{0};
         uint32_t gap_hi{0};
+        bool boundary{false};            // a boundary click (Intent::boundary): no release time, the engine's moment says when
+    };
+    /// What a seat has learned of the moments at which an ant takes a boundary click (the can't-go loop's cycle): the tick of the last one and the ticks between the last two
+    struct Boundary {
+        uint64_t last{~uint64_t{0}};
+        uint64_t period{0};
     };
     /// The state of a timed chain of a seat
     struct Chain {
@@ -151,6 +161,7 @@ private:
         std::map<uint32_t, uint64_t> last_order;        // ant -> tick of the last order released for it
         std::map<uint32_t, uint64_t> last_attack;       // ant -> tick of the last attack click released for it (the follow-up lane: a fight that is going on)
         std::map<uint32_t, Chain> chains;               // the timed chains that have steps in the queue or are Live (by seat-wide number)
+        std::map<uint32_t, Boundary> boundaries;        // ant -> the moments seen while a boundary click waits for it (cleared when none waits)
         uint32_t chain_base{0};
         SeatStats stats;
     };
@@ -165,6 +176,8 @@ private:
     void release(const sim::SimulationEngine& sim, Seat& s, uint64_t tick);
     void release_timed(const sim::SimulationEngine& sim, Seat& s, uint64_t tick);
     void drop_chain(Seat& s, uint32_t chain, Bot::Fate fate, uint64_t tick);
+    void release_boundaries(const sim::SimulationEngine& sim, Seat& s, uint64_t tick);
+    void drop_boundary_of(Seat& s, const std::vector<uint32_t>& ants, uint64_t tick);
     void break_chains_of(Seat& s, const std::vector<uint32_t>& ants, uint32_t except, uint64_t tick);
 
     const sim::SimulationEngine* sim_;

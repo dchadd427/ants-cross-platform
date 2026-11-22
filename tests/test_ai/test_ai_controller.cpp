@@ -1,6 +1,6 @@
 // Tests of the controller that stands between a bot and the door of a person: schedule, reaction delay, budget, time to live, priorities, ants that died,
 // splitting, the rules of the HUD, the issuer, the anti-thrash cool-down, and above all that a controller whose bots only read changes nothing (AI2.3 .. AI2.16); AI2.21: a refused
-// click has a fate (Bot::Fate::Filtered); AI2.23 .. AI2.28: timed chains (Orders::chain, CommandSink::applied_at).
+// click has a fate (Bot::Fate::Filtered); AI2.23 .. AI2.28: timed chains (Orders::chain, CommandSink::applied_at); AI2.29 and AI2.30: the boundary click (Orders::boundary_move).
 #include "ai_test.hpp"
 
 #include <algorithm>
@@ -8,6 +8,7 @@
 #include <tuple>
 
 #include "ants_ai/idle_bot.hpp"
+#include "loop_fixture.hpp"
 
 using namespace ai_test;
 using namespace ants;
@@ -1623,5 +1624,141 @@ void run_controller_tests() {
             ASSERT_EQ(c.pending(0), 0u);
         }
     } TEST_END();
+
+    TEST_CASE("AI2.29 A Boundary Click Leaves At The Moment The Engine Takes It: A Sink That Applies At Once Frees A Thief In The Can't-Go Loop At The First Moment, A Sink With A Delay At A Moment Its Turns Reach, And When Its Turns Miss Every Moment Nothing Is Sent (Expired, Nothing Paid)") {
+        const TileCoord target{47, 42};
+        {   // a sink that applies at once: the first moment of the cycle (one tick in 18)
+            LoopWorld w;
+            w.run_to_raid_end();
+            ASSERT_TRUE(w.on_raid_tile() && w.unit().is_holding());
+            RecordingSink sink(w.sim, true);
+            BotController c(w.sim, 7);
+            c.set_start_hold(0);
+            bool proposed = false;
+            uint64_t proposed_at = 0;
+            ScriptBot* bot = seat_script(c, w.sim, spec_of(0, Level::Hard), sink, [&](const BotView& v, Orders& o) {
+                if (proposed) return;
+                proposed = true;
+                proposed_at = v.tick();
+                o.boundary_move(w.thief, target);
+            });
+            ASSERT_TRUE(bot != nullptr);
+            run_ticks(w.sim, c, 3);
+            ASSERT_EQ(c.pending(0), 1u);                                                                      // (it waits: the clock of the look releases nothing)
+            ASSERT_TRUE(sink.log.empty() || w.sim.has_pending_path(w.thief));
+            int64_t before = c.tokens_milli(0);
+            int64_t paid = 0;
+            for (int t = 0; t < 60; ++t) {
+                const size_t released = sink.log.size();
+                run_ticks(w.sim, c, 1);
+                if (sink.log.size() > released) paid = before - c.tokens_milli(0);                          // (the bucket at the tick before and at the tick the click left)
+                before = c.tokens_milli(0);
+            }
+            ASSERT_TRUE(paid >= 800);                                                                         // it costs a token, as a chain's step does
+            ASSERT_EQ(sink.log.size(), 1u);
+            ASSERT_TRUE(sink.log[0].first >= proposed_at && sink.log[0].first - proposed_at <= 18u);          // one cycle at most
+            ASSERT_TRUE(sink.log[0].second.type == CommandType::GroupMove && sink.log[0].second.issuer == 0 && sink.log[0].second.ants == std::vector<uint32_t>{w.thief});
+            ASSERT_FALSE(w.on_raid_tile());                                                                   // the engine took it: the thief walked off the raid tile
+            ASSERT_EQ(bot->count(Bot::Fate::Sent), 1u);
+            ASSERT_EQ(bot->count(Bot::Fate::Expired), 0u);
+            ASSERT_EQ(c.stats(0).released, 1u);
+            ASSERT_EQ(c.pending(0), 0u);
+        }
+        {   // the same click in the rules before 14: no moment exists, the click expires after kBoundaryTtlTicks and the thief stays
+            LoopWorld w(false);
+            w.run_to_raid_end();
+            RecordingSink sink(w.sim, true);
+            BotController c(w.sim, 7);
+            c.set_start_hold(0);
+            bool proposed = false;
+            ScriptBot* bot = seat_script(c, w.sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
+                if (proposed) return;
+                proposed = true;
+                o.boundary_move(w.thief, target);
+            });
+            ASSERT_TRUE(bot != nullptr);
+            run_ticks(w.sim, c, kBoundaryTtlTicks + 10);
+            ASSERT_TRUE(sink.log.empty());
+            ASSERT_EQ(bot->count(Bot::Fate::Expired), 1u);
+            ASSERT_EQ(c.stats(0).released, 0u);
+            ASSERT_TRUE(w.on_raid_tile());
+        }
+        {   // a sink with a delay (a room, the arena: three ticks, turns of two): the cycle is learned from two moments and the click is applied at a third; the turns reach every other cycle's parity
+            int freed = 0;
+            int expired = 0;
+            for (uint32_t shift = 0; shift < 2; ++shift) {
+                LoopWorld w(true, 11, true, shift);
+                w.run_to_raid_end();
+                ApplyingSink sink(w.sim, 3, true);
+                BotController c(w.sim, 7);
+                c.set_start_hold(0);
+                bool proposed = false;
+                ScriptBot* bot = seat_script(c, w.sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
+                    if (proposed) return;
+                    proposed = true;
+                    o.boundary_move(w.thief, target);
+                });
+                ASSERT_TRUE(bot != nullptr);
+                for (uint32_t t = 0; t < kBoundaryTtlTicks + 40; ++t) {
+                    w.sim.tick();
+                    sink.flush();
+                    c.on_tick(w.sim);
+                }
+                if (!w.on_raid_tile()) {
+                    ++freed;
+                    ASSERT_EQ(sink.log.size(), 1u);
+                    ASSERT_EQ(sink.log[0].applied % 2, 0u);
+                    ASSERT_EQ(bot->count(Bot::Fate::Sent), 1u);
+                } else {
+                    ++expired;
+                    ASSERT_TRUE(sink.log.empty());                                                            // (nothing was sent: no turn of this sink falls on a moment of this cycle)
+                    ASSERT_EQ(bot->count(Bot::Fate::Expired), 1u);
+                    ASSERT_EQ(c.stats(0).released, 0u);
+                }
+            }
+            ASSERT_EQ(freed, 1);                                                                              // the cycle of 18 ticks keeps the parity of its moments: one of the two shifts of the raid is even
+            ASSERT_EQ(expired, 1);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI2.30 A Boundary Click Is One Ant's Plain Move That A Newer One Replaces, That An Ordinary Order For The Ant Supersedes, That Expires With Nothing Paid When The Ant Never Has A Moment, And That The Filter Refuses As A Group, A Pick-Up Or A Click Off The Map") {
+        sim::SimulationEngine sim;
+        build_world(sim, 5);
+        RecordingSink sink(sim, true);
+        BotController c(sim, 5);
+        c.set_start_hold(0);
+        const std::vector<uint32_t> mine = ants_of(sim, 0);
+        ASSERT_TRUE(mine.size() >= 3);
+        int look = 0;
+        ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
+            ++look;
+            if (look == 1) {
+                o.boundary_move(mine[0], tc(20, 20));
+                o.boundary_move(mine[1], tc(21, 20));
+            } else if (look == 2) {
+                o.boundary_move(mine[0], tc(22, 20));                                                           // replaces the first click of mine[0] (nobody is told: it is the same wish, newer)
+                o.move({mine[1]}, tc(25, 25));                                                                    // an ordinary order for mine[1]: its boundary click is superseded
+                o.move({mine[0], mine[1]}, tc(26, 26));
+                o.edit().back().boundary = true;                                                                // (a group: refused by the filter)
+                o.boundary_move(mine[2], tc(-5, 20));                                                           // (off the map: refused)
+                o.pick_up(mine[2], tc(20, 20));
+                o.edit().back().boundary = true;                                                                // (a pick-up: refused)
+            }
+        });
+        ASSERT_TRUE(bot != nullptr);
+        run_ticks(sim, c, 2 * level_ticks(Level::Hard) + 1);
+        ASSERT_TRUE(look >= 2);
+        ASSERT_EQ(bot->count(Bot::Fate::Filtered), 3u);
+        run_ticks(sim, c, 30);
+        ASSERT_EQ(bot->count(Bot::Fate::Superseded), 1u);                                                       // mine[1]'s boundary click left the queue when its ordinary order did
+        ASSERT_TRUE(sink.log.size() == 1u && sink.log[0].second.ants == std::vector<uint32_t>{mine[1]} && sink.log[0].second.tile_x == 25);
+        ASSERT_EQ(c.pending(0), 1u);                                                                              // mine[0]'s (the newer one) waits
+        run_ticks(sim, c, kBoundaryTtlTicks + 5);
+        ASSERT_EQ(c.pending(0), 0u);
+        ASSERT_EQ(bot->count(Bot::Fate::Expired), 1u);
+        ASSERT_EQ(bot->count(Bot::Fate::Sent), 1u);
+        ASSERT_EQ(c.stats(0).released, 1u);                                                                       // nothing was paid for the click that never had its moment
+    } TEST_END();
+
 
 }

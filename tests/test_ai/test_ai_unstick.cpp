@@ -10,6 +10,8 @@
 //   AI57.7  the stuck tally counts a thief in the can't-go loop and a carrier with no order once the span is 10 seconds old, an ant at work never, and play_match reports it
 //   AI57.8  a Thief that raided and was walled in on the raid tile is freed by an own Fire Ant, which puts a wall of the hole out; a wall that shuts in nobody is not its business; with the rule off the thief stays
 //   AI57.9  whole matches: on the map of the power-ups that plug the ways the bots strand fewer ants and refuse fewer orders than the bots without the rules (unstick=0), and the match replays
+//   AI57.10 the boundary click: a Thief in the engine's can't-go loop with a pocket of its own is clicked onto an ordinary tile at the one tick of the cycle at which the engine takes it (rules number 14), and sent home
+//           when a walk opens; under the rules before 14, with the rule off, or at Easy the loop goes on
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -20,6 +22,7 @@
 #include "ants_ai/refusal_memory.hpp"
 #include "ants_ai/standard_bot.hpp"
 #include "b41_helpers.hpp"
+#include "loop_fixture.hpp"
 
 namespace {
 
@@ -440,6 +443,7 @@ void run_unstick_tests() {
                     plan.plugs = rules;
                     plan.refusal_memory = rules;
                     plan.rescue_thief = rules;
+                    plan.free_thief = rules;
                 }));
             };
             return std::make_pair(play_match(spec), spec);
@@ -469,5 +473,165 @@ void run_unstick_tests() {
         ASSERT_TRUE(looping_off > 0);                                                         // (the premise: the bots without the rules strand thieves on this map)
         ASSERT_TRUE(looping_on < looping_off);
         ASSERT_TRUE(refused_on * orders_off < refused_off * orders_on);                       // the share of refused orders falls
+    } TEST_END();
+
+    TEST_CASE("AI57.10 The Boundary Click: A Thief In The Engine's Can't-Go Loop Is Clicked Off The Raid Tile At The Tick The Engine Takes It, And Sent Home When A Walk Opens; Under The Rules Before 14, With The Rule Off, Or At Easy It Stays In The Loop") {
+        ASSERT_TRUE(plan_for(Level::Hard).free_thief && plan_for(Level::Medium).free_thief && !plan_for(Level::Easy).free_thief);
+        {
+            LevelPlan p = plan_for(Level::Hard);
+            without_unstick_batch(p);                                                         // (the bot as it was: the batch's switch is one of them)
+            ASSERT_FALSE(p.free_thief);
+        }
+        struct Out {
+            bool ok{false};
+            bool free{false};
+            uint32_t loop_ticks{0};
+            uint32_t released{0};
+            uint32_t released_shut{0};                                                        // the commands the bot gave while the way home was shut
+            int32_t score{0};
+            uint32_t proposed{0};
+            uint32_t freed{0};
+            uint32_t homeward{0};
+            uint32_t homeward_shut{0};                                                        // the clicks onto the entrance while no walk home existed
+            TileCoord target{-1, -1};                                                         // the tile of the first click that left
+        };
+        const auto play = [&](bool after_commands, bool rule, bool open_later, bool shut_home = true, int open_at = -1) -> Out {
+            LoopWorld w(after_commands, 11, shut_home);
+            w.run_to_raid_end();
+            LevelPlan plan = peace_plan(Level::Hard);
+            plan.plugs = false;
+            plan.refusal_memory = false;
+            plan.rescue_thief = false;
+            plan.free_thief = rule;
+            RecordingSink sink(w.sim, true);
+            BotController c(w.sim, 3);
+            c.set_start_hold(0);
+            BotSpec spec;
+            spec.seat = 0;
+            spec.kind = "standard";
+            spec.level = Level::Hard;
+            auto bot = std::make_unique<StandardBot>(plan);
+            const StandardBot* raw = bot.get();
+            std::string why;
+            Out out;
+            if (!c.add(spec, std::move(bot), sink, why)) return out;
+            out.ok = true;
+            for (int t = 0; t < 500; ++t) {
+                if (t == open_at) w.open_rocks();                                             // (a refusal that ends by itself: the wall burns out)
+                w.sim.tick();
+                c.on_tick(w.sim);
+                w.sim.clear_news_events();
+                w.sim.clear_audio_events();
+                if (w.unit().state == sim::UnitState::CantGo) ++out.loop_ticks;
+            }
+            out.free = !w.on_raid_tile();
+            out.homeward_shut = raw->free_thief().homeward();
+            out.released_shut = c.stats(0).released;
+            out.score = w.sim.get_player_score(0);
+            if (!sink.log.empty()) out.target = TileCoord{sink.log[0].second.tile_x, sink.log[0].second.tile_y};
+            if (open_later) {                                                                 // the rings go (the walls burn out, the enemy's wall is down): a walk home exists
+                w.open_rocks();
+                for (int t = 0; t < 900; ++t) {
+                    w.sim.tick();
+                    c.on_tick(w.sim);
+                    w.sim.clear_news_events();
+                    w.sim.clear_audio_events();
+                }
+                out.score = w.sim.get_player_score(0);
+            }
+            out.released = c.stats(0).released;
+            out.proposed = raw->free_thief().proposed();
+            out.freed = raw->free_thief().freed();
+            out.homeward = raw->free_thief().homeward();
+            return out;
+        };
+        const Out on = play(true, true, true);
+        ASSERT_TRUE(on.ok);
+        ASSERT_TRUE(on.free);                                                                 // the thief left the raid tile ...
+        ASSERT_TRUE(on.loop_ticks < 120);                                                     // ... after a few cycles of the loop (the rule waits for two looks, and the controller for the tick)
+        ASSERT_TRUE(on.proposed >= 1 && on.freed >= 1);
+        ASSERT_EQ(on.homeward_shut, 0u);                                                      // (no click onto the entrance while no walk exists: it would be refused)
+        ASSERT_TRUE(on.target.chebyshev_dist(kLoopHome0) <= 16);                              // the tile of the pocket that is nearest to the own hill ...
+        ASSERT_FALSE(on.target.x >= 39 && on.target.x <= 44 && on.target.y >= 39 && on.target.y <= 44);   // ... and not one of the hill's tiles, where the loop would go on
+        ASSERT_TRUE(on.homeward >= 1);                                                        // when the walk home exists it is clicked onto the entrance
+        ASSERT_TRUE(on.score >= 50);                                                          // and the loot is banked: the steal is complete (the Thief raids again, the hole being open: 50 points a raid)
+        ASSERT_EQ(on.released_shut, 1u);                                                      // (one click paid for while the way was shut: the boundary click; the way home is the second)
+        const Out open = play(true, true, false, false);                                      // a Thief whose way home is open is never clicked away: the engine's walk takes it home and the loot is banked
+        ASSERT_EQ(open.proposed, 0u);
+        ASSERT_TRUE(open.loop_ticks == 0);
+        ASSERT_TRUE(open.score >= 50 && open.score % 50 == 0);                                // (a Thief whose way home is open banks the loot at once, and raids again)
+        const Out transient = play(true, true, false, true, 25);                              // the wall burns out after 25 ticks: the thief walks home by itself, and no click is proposed for a refusal that was not a loop
+        ASSERT_TRUE(transient.ok);
+        ASSERT_EQ(transient.proposed, 0u);
+        ASSERT_TRUE(transient.score >= 50);
+        const Out before = play(false, true, false);                                          // the rules before 14: no tick takes the click
+        ASSERT_FALSE(before.free);
+        ASSERT_TRUE(before.loop_ticks > 400);
+        ASSERT_EQ(before.released, 0u);                                                       // (and the click that never has its tick costs nothing)
+        const Out off = play(true, false, false);                                             // the rule off: the bot as it was
+        ASSERT_TRUE(open.ok && before.ok && off.ok);
+        ASSERT_FALSE(off.free);
+        ASSERT_TRUE(off.loop_ticks > 400);
+        ASSERT_EQ(off.proposed, 0u);
+        // a Thief with loot that stands idle and was never clicked away is not sent home by the task: it is not the task's
+        {
+            sim::SimulationEngine sim;
+            empty_field(sim, 58);
+            const uint32_t thief = sim.spawn_unit(0, sim::AntType::Thief, TileCoord{30, 30});
+            sim.get_unit(thief).steal_points(50);
+            LevelPlan plan = peace_plan(Level::Hard);
+            plan.plugs = false;
+            plan.refusal_memory = false;
+            plan.rescue_thief = false;
+            RecordingSink sink(sim, true);
+            BotController c(sim, 3);
+            c.set_start_hold(0);
+            BotSpec spec;
+            spec.seat = 0;
+            spec.kind = "standard";
+            spec.level = Level::Hard;
+            auto bot = std::make_unique<StandardBot>(plan);
+            const StandardBot* raw = bot.get();
+            std::string why;
+            ASSERT_TRUE(c.add(spec, std::move(bot), sink, why));
+            for (int t = 0; t < 400; ++t) {
+                sim.tick();
+                c.on_tick(sim);
+                sim.clear_news_events();
+                sim.clear_audio_events();
+            }
+            ASSERT_EQ(raw->free_thief().homeward(), 0u);
+            ASSERT_EQ(raw->free_thief().proposed(), 0u);
+        }
+        // a Thief that is shut in on the raid tile alone has no tile to be clicked to: nothing is proposed (the walls are the Fire Ant's business, AI57.8)
+        {
+            LoopWorld w(true, 12, false);
+            w.run_to_raid_end();
+            rocks_ring(w.sim, TileCoord{41, 41}, 3);                                           // (a pocket of nothing but tiles of the hill: no tile to be clicked to)
+            rocks_ring(w.sim, TileCoord{22, 22}, 6);
+            LevelPlan plan = peace_plan(Level::Hard);
+            plan.plugs = false;
+            plan.refusal_memory = false;
+            plan.rescue_thief = false;
+            RecordingSink sink(w.sim, true);
+            BotController c(w.sim, 3);
+            c.set_start_hold(0);
+            BotSpec spec;
+            spec.seat = 0;
+            spec.kind = "standard";
+            spec.level = Level::Hard;
+            auto bot = std::make_unique<StandardBot>(plan);
+            const StandardBot* raw = bot.get();
+            std::string why;
+            ASSERT_TRUE(c.add(spec, std::move(bot), sink, why));
+            for (int t = 0; t < 300; ++t) {
+                w.sim.tick();
+                c.on_tick(w.sim);
+                w.sim.clear_news_events();
+                w.sim.clear_audio_events();
+            }
+            ASSERT_EQ(raw->free_thief().proposed(), 0u);
+            ASSERT_EQ(c.stats(0).released, 0u);
+        }
     } TEST_END();
 }

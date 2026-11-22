@@ -49,6 +49,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.island_swimmers = 2;                                  // they carry food; no builder at any level (a Swimmer that ferries earns 700 to 850 points a match, a bridge carries one ant at a time: docs/BOTS.md)
             p.island_builders = 0;
             p.island_fly_on = false;             // Easy looks every 100 ticks: a leg that waits for the Bomber to fly on costs more than the flight it saves
+            p.free_thief = false;                // (a beginner does not click a Thief away at the right tick of its loop)
             break;
         case Level::Medium:
             p.defenders = 2;
@@ -356,6 +357,7 @@ void without_unstick_batch(LevelPlan& p) noexcept {
     p.plugs = false;
     p.refusal_memory = false;
     p.rescue_thief = false;
+    p.free_thief = false;
 }
 
 void without_kill_batch(LevelPlan& p) noexcept {

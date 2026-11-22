@@ -473,7 +473,6 @@ void run_bombs_tests() {
                 spec.factory = [on](const BotSpec& b) {
                     return std::make_unique<StandardBot>(b.level, b.style, [on](LevelPlan& p) {
                         without_thief_batch(p);                                                       // (the subject is the detour: the thief batch plays another game of the same matches, and six matches are a sample)
-                        without_unstick_batch(p);                                                     // (and so does the unstick batch)
                         if (!on) {
                             p.bomb_detour = 0;
                             p.bomb_route = false;
@@ -497,6 +496,6 @@ void run_bombs_tests() {
         ASSERT_TRUE(orders[0] >= 3000 && orders[1] >= 3000);                                  // the matches were played
         ASSERT_TRUE(blasts[1] >= 20);                                                         // the bot as it was walks into plenty of them
         ASSERT_TRUE(blasts[0] < blasts[1]);
-        ASSERT_TRUE(score[0] * 100 >= score[1] * 97);                                         // (the same score within 3 percent: under the rules number 14 the bots with the detour score 98.0 percent of the bot as it was over these 24 seeds, 191,630 against 195,490, and walk into 365 bombs against 423; the detour costs about 2 percent of the score)
+        ASSERT_TRUE(score[0] * 100 >= score[1] * 97);                                         // (the same score within 3 percent: under the rules number 14 the shipped bots with the detour score 100.2 percent of the bot as it was over these 24 seeds, 184,610 against 184,220, and walk into 382 bombs against 427; with the unstick batch off they scored 98.0 percent (191,630 against 195,490): 24 seeds swing about 2 percent, and over seeds 25 to 120 the same bots score 99.3 to 100.0 percent either way)
     } TEST_END();
 }

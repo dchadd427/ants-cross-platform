@@ -276,6 +276,11 @@ void Orders::pick_up(uint32_t ant, sim::TileCoord tile, Priority priority) {
     intents_.back().pickup = true;
 }
 
+void Orders::boundary_move(uint32_t ant, sim::TileCoord tile, Priority priority) {
+    group(sim::CommandType::GroupMove, std::vector<uint32_t>{ant}, tile, priority);
+    intents_.back().boundary = true;
+}
+
 void Orders::chain(uint32_t ant, const std::vector<ChainStep>& steps, Priority priority) {
     if (steps.empty()) return;
     const uint32_t number = ++chains_;

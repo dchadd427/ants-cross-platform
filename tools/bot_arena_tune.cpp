@@ -132,6 +132,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "unjam") return flag(p.raid_unjam);
     if (key == "refmem") return flag(p.refusal_memory);                              // a click that was refused twice is not given again for a while (0: the bot as it was; docs/BOT_UNSTUCK.md)
     if (key == "rescue") return flag(p.rescue_thief);                                // the Fire Ant puts out the walls that shut in an own Thief (0: the bot as it was; docs/BOT_UNSTUCK.md)
+    if (key == "freethief") return flag(p.free_thief);                              // the Thief in the can't-go loop is clicked away at the tick the engine takes it (0: the bot as it was; docs/BOT_UNSTUCK.md)
     if (key == "plugs") return flag(p.plugs);                                       // the power-ups that plug a way are taken (0: the bot as it was; docs/BOT_UNSTUCK.md)
     if (key == "sabotage") return flag(p.sabotage);
     if (key == "fireextra") { p.fire_extra = static_cast<uint32_t>(v); return true; }
@@ -249,7 +250,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "aschase") { p.assault_chase = static_cast<int32_t>(v); return true; }
     if (key == "asticks") { p.assault_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "asafter") { p.assault_after = static_cast<uint32_t>(v); return true; }
-    if (key == "unstick") {                                                          // the unstick batch of docs/BOT_UNSTUCK.md (0: the bot as it was before it; 1: the plan that ships; the three rules are `plugs`, `refmem` and `rescue`)
+    if (key == "unstick") {                                                          // the unstick batch of docs/BOT_UNSTUCK.md (0: the bot as it was before it; 1: the plan that ships; the four rules are `plugs`, `refmem`, `rescue` and `freethief`)
         if (v == 0) ai::without_unstick_batch(p);
         return true;
     }

@@ -636,10 +636,15 @@ void run_stand_tests() {
             for (const ArenaSeatResult& s : r.seats) ASSERT_EQ(s.rushes, 0u);
         }
         {   // (b) TREASURE: over four matches the shipped Hard bots (the batch on) fire and mine, and bank within a tenth of the same bots without it
-            const auto shipped = [](const BotSpec& b) { return plan_for(b.level); };
+            const auto shipped = [](const BotSpec& b) {
+                LevelPlan p = plan_for(b.level);
+                without_unstick_batch(p);                                                                // (the subject is the stand batch: the unstick batch plays another game of the same four matches)
+                return p;
+            };
             const auto before = [](const BotSpec& b) {
                 LevelPlan p = plan_for(b.level);
                 without_stand_batch(p);
+                without_unstick_batch(p);
                 return p;
             };
             int64_t with = 0, without = 0;

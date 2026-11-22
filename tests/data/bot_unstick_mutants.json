@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the unstick batch of the computer players (docs/BOT_UNSTUCK.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the plug task (which power-ups are plugs, whose ants are sent and in which order, the tiles shared with the trip task), the refusal memory (the second refusal blocks, the block grows, carriers and mound clicks and walking ants are not judged), the rescue of a walled-in Thief and the stuck tally against test_ai AI57. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_unstick_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "note": "Mutants of the unstick batch of the computer players (docs/BOT_UNSTUCK.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the plug task (which power-ups are plugs, whose ants are sent and in which order, the tiles shared with the trip task), the refusal memory (the second refusal blocks, the block grows, carriers and mound clicks and walking ants are not judged), the rescue of a walled-in Thief, the boundary click (the controller's watch of an ant's moment, AI2.29 and AI2.30, and the free-thief task, AI57.10) and the stuck tally against test_ai AI57 and AI2. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_unstick_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
  "mutants": [
   {
    "id": "plug_worthless_taken",
@@ -171,6 +171,159 @@
    "build": "test_ai",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI57.7 ' ./build/tests/test_ai/test_ai",
    "expect": "AI57.7"
+  },
+  {
+   "id": "boundary_pending_not_required",
+   "file": "src/ants_ai/bot_controller.cpp",
+   "old": "const bool takes = sim.has_pending_path(ant) && sim.predict_order_ack(probe) == ant;",
+   "new": "const bool takes = sim.predict_order_ack(probe) == ant;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI2.30 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI2.30"
+  },
+  {
+   "id": "boundary_period_forgotten",
+   "file": "src/ants_ai/bot_controller.cpp",
+   "old": "if (b.last != kNever && tick - b.last <= kBoundaryMaxPeriod) b.period = tick - b.last;",
+   "new": "if (b.last != kNever && tick - b.last <= kBoundaryMaxPeriod) b.period = 0;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI2.29 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI2.29"
+  },
+  {
+   "id": "boundary_wrong_phase",
+   "file": "src/ants_ai/bot_controller.cpp",
+   "old": "(applies - b.last) % b.period == 0);",
+   "new": "(applies - b.last) % b.period != 0);",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI2.29 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI2.29"
+  },
+  {
+   "id": "boundary_unpaid",
+   "file": "src/ants_ai/bot_controller.cpp",
+   "old": "        s.tokens_milli -= kToken;\n        s.last_order[ant] = tick;",
+   "new": "        s.last_order[ant] = tick;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI2.29 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI2.29"
+  },
+  {
+   "id": "boundary_not_replaced",
+   "file": "src/ants_ai/bot_controller.cpp",
+   "old": "if (s.queue[i].boundary && s.queue[i].command.ants == in.command.ants) {",
+   "new": "if (false) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI2.30 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI2.30"
+  },
+  {
+   "id": "boundary_not_superseded",
+   "file": "src/ants_ai/bot_controller.cpp",
+   "old": "        drop_boundary_of(s, c.ants, tick);                                              // (and so is a boundary click that waits for the ant)\n",
+   "new": "",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI2.30 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI2.30"
+  },
+  {
+   "id": "boundary_group_allowed",
+   "file": "src/ants_ai/bot_controller.cpp",
+   "old": "|| c.ants.size() != 1 || in.pickup || in.chain != 0 || in.follow_up)) return false;",
+   "new": "|| false || in.pickup || in.chain != 0 || in.follow_up)) return false;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI2.30 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI2.30"
+  },
+  {
+   "id": "boundary_never_expires",
+   "file": "src/ants_ai/bot_controller.cpp",
+   "old": "p.expires = tick + kBoundaryTtlTicks;",
+   "new": "p.expires = kNever;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI2.29 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI2.29"
+  },
+  {
+   "id": "free_thief_arms_at_once",
+   "file": "src/ants_ai/free_thief_task.cpp",
+   "old": "const bool trapped = r.looks >= params_.trap_looks && now >= r.streak + params_.trap_ticks;",
+   "new": "const bool trapped = true;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.10"
+  },
+  {
+   "id": "free_thief_tile_farthest",
+   "file": "src/ants_ai/free_thief_task.cpp",
+   "old": "if (best.x < 0 || key < best_key) {",
+   "new": "if (best.x < 0 || key > best_key) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.10"
+  },
+  {
+   "id": "free_thief_tile_in_hill",
+   "file": "src/ants_ai/free_thief_task.cpp",
+   "old": "!near_hill(c.map, cur) && v.powerup_at(cur) == nullptr",
+   "new": "v.powerup_at(cur) == nullptr",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.10"
+  },
+  {
+   "id": "free_thief_home_unchecked",
+   "file": "src/ants_ai/free_thief_task.cpp",
+   "old": "if (c.map.reaches_hill(joined, a.tile, a.type)) {",
+   "new": "if (true) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.10"
+  },
+  {
+   "id": "free_thief_switch_ignored",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "if (plan.free_thief) free_thief_.step(context);",
+   "new": "free_thief_.step(context);",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.10"
+  },
+  {
+   "id": "free_thief_easy_has_it",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "            p.free_thief = false;                // (a beginner does not click a Thief away at the right tick of its loop)\n",
+   "new": "",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.10"
+  },
+  {
+   "id": "unstick_batch_keeps_free_thief",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "    p.rescue_thief = false;\n    p.free_thief = false;\n}",
+   "new": "    p.rescue_thief = false;\n}",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.10"
+  },
+  {
+   "id": "free_thief_no_persistence",
+   "file": "src/ants_ai/free_thief_task.cpp",
+   "old": "const bool trapped = r.looks >= params_.trap_looks && now >= r.streak + params_.trap_ticks;",
+   "new": "const bool trapped = r.looks >= params_.trap_looks;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.10"
+  },
+  {
+   "id": "free_thief_home_for_all",
+   "file": "src/ants_ai/free_thief_task.cpp",
+   "old": "if (r.freed && a.state == sim::UnitState::Idle &&",
+   "new": "if (a.state == sim::UnitState::Idle &&",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI57.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI57.10"
   }
  ]
 }

@@ -37,6 +37,7 @@ add_library(ants_ai STATIC
     thief_guard.cpp
     miner_flight_task.cpp
     plug_task.cpp
+    free_thief_task.cpp
     standard_bot.cpp
     brawl_task.cpp
     team_up.cpp
