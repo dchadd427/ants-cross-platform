@@ -5,6 +5,7 @@
   const { clamp, mat4Translate, mat4Multiply, transformPoint, parseGlb, extractRestWorldVerts } = window.__antGltf;
   const {
     ANT_CLASSES, ANT_LABELS, TEAMS, ANGLES, SHEET_ANGLES, DEG,
+    LIGHTING_ORDER, validLighting, getLightingPreset, populateLightingSelect, paintPresetBackdrop2d,
     wrapAngleDeg, selectActionAnims, AntRenderer, installToolbarRovingTabindex,
   } = window.__antRender;
   const {
@@ -107,6 +108,7 @@
     const btnIdle = document.getElementById("btn-idle");
     const btnSyncReset = document.getElementById("btn-sync-reset");
     const actionSelect = document.getElementById("select-action");
+    const lightSelect = document.getElementById("select-lighting");
     const studioTab = document.getElementById("tab-studio");
     const statusEl = document.getElementById("status-region");
     const emptyOverlay = document.getElementById("compare-empty");
@@ -184,6 +186,7 @@
       ? qIdle !== "0"
       : (savedState && typeof savedState.idle === "boolean" ? savedState.idle : true);
     const initAction = validAction(qAction) || validAction(savedState && savedState.action) || "idle";
+    const initLight = validLighting(params.get("light")) || validLighting(savedState && savedState.lighting) || "studio";
     const initPixel = qPixel !== null
       ? (qPixel === "1" || qPixel.toLowerCase() === "true")
       : (savedState && typeof savedState.pixelMode === "boolean" ? savedState.pixelMode : false);
@@ -208,6 +211,7 @@
       zoom: 1.0,
       idle: initIdle,
       action: initAction,
+      lighting: initLight,
       pixelMode: initPixel,
       silhouette: initSil,
       retroFps: initRetro,
@@ -284,6 +288,7 @@
         q.set("proj", "ortho");
       }
       if (state.action !== "idle") q.set("action", state.action);
+      if (state.lighting !== "studio") q.set("light", state.lighting);
       if (state.silhouette) q.set("silhouette", "1");
       if (state.retroFps) q.set("retrofps", "1");
       studioTab.setAttribute("href", "viewer.html?" + q.toString());
@@ -356,6 +361,7 @@
         pitch: Number(state.pitch.toFixed(1)),
         idle: state.idle,
         action: state.action,
+        lighting: state.lighting,
         pixelMode: state.pixelMode,
         silhouette: state.silhouette,
         retroFps: state.retroFps,
@@ -378,6 +384,7 @@
       yaw: state.yaw,
       idle: state.idle,
       action: state.action,
+      lighting: state.lighting,
       pixelMode: state.pixelMode,
       silhouette: state.silhouette,
       retroFps: state.retroFps,
@@ -457,6 +464,7 @@
       if (btnPixelMode) btnPixelMode.setAttribute("aria-pressed", String(state.pixelMode));
       if (btnSilhouette) btnSilhouette.setAttribute("aria-pressed", String(state.silhouette));
       if (btnRetroFps) btnRetroFps.setAttribute("aria-pressed", String(state.retroFps));
+      populateLightingSelect(lightSelect, state.lighting);
 
       const isSolo = state.ant !== "all";
       gridEl.hidden = isSolo;
@@ -892,6 +900,7 @@
         bl.elapsed = Math.floor(savedBlink / bStep) * bStep;
       }
 
+      if (!state.silhouette) paintPresetBackdrop2d(ctx, x0, panelW, panelH, groundY, state.lighting);
       try {
         if (state.pixelMode && pxScale > 1) {
           const lowW = Math.max(16, Math.floor(panelW / pxScale));
@@ -908,6 +917,7 @@
             showPlinth: false,
             dark: state.dark,
             team: state.team,
+            lighting: state.lighting,
             blinkMode: "auto",
             idleAnim: true,
             clipName: activeClipName(),
@@ -941,6 +951,7 @@
           showPlinth: false,
           dark: state.dark,
           team: state.team,
+          lighting: state.lighting,
           blinkMode: "auto",
           idleAnim: true,
           clipName: activeClipName(),
@@ -1105,6 +1116,8 @@
       else if (btn === btnSyncReset) syncReset();
     });
     if (actionSelect) actionSelect.addEventListener("change", () => selectAction(actionSelect.value));
+    const selectLighting = (id) => { state.lighting = validLighting(id) || "studio"; updateUiState(); markDirty(); announce("Lighting set to " + getLightingPreset(state.lighting).label + "."); };
+    if (lightSelect) lightSelect.addEventListener("change", () => selectLighting(lightSelect.value));
 
     let suppressStageClickUntil = 0;
     function attachHorizontalDrag(el, matchFn, sensitivity) {
@@ -1259,6 +1272,9 @@
       } else if (e.key === "f" || e.key === "F") {
         e.preventDefault();
         toggleRetroFps();
+      } else if (e.key === "l" || e.key === "L") {
+        e.preventDefault();
+        selectLighting(LIGHTING_ORDER[(LIGHTING_ORDER.indexOf(state.lighting) + 1) % LIGHTING_ORDER.length]);
       } else if ((e.key === "r" || e.key === "R") && document.activeElement !== solo3dCanvas) {
         e.preventDefault();
         syncReset();

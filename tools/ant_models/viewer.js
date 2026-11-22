@@ -4,6 +4,7 @@
   const { clamp, mat4Translate, parseGlb } = window.__antGltf;
   const {
     ANT_CLASSES, ANT_LABELS, DEFAULT_CUSTOM_HEX, TEAMS, ANGLES, SHEET_ANGLES,
+    LIGHTING_ORDER, validLighting, getLightingPreset, populateLightingSelect,
     wrapAngleDeg, normalizeHex, resolveTeam, selectActionAnims, AntRenderer, installToolbarRovingTabindex,
   } = window.__antRender;
   const {
@@ -23,6 +24,7 @@
     const emptyOverlay = $("empty-overlay"), fileInput = $("glb-file-input");
     const colorInput = $("input-team-color"), customSwatch = $("swatch-custom");
     const actionSelect = $("select-action");
+    const lightSelect = $("select-lighting");
     const compareTab = $("tab-compare");
     if (!("focusGroup" in HTMLElement.prototype)) installToolbarRovingTabindex(toolbarEl);
 
@@ -67,12 +69,13 @@
     const initIdle = fixedIdleTime !== null ? false : (pIdle === "0" || pIdle === "false" ? false : (pIdle === "1" || pIdle === "true" ? true
       : (!params.has("idle") && savedView && typeof savedView.idle === "boolean" ? savedView.idle : !motionQuery.matches)));
     const initAction = validAction(pAction) || (!params.has("action") && validAction(savedView && savedView.action)) || "idle";
+    const initLight = validLighting(getP("light")) || (!params.has("light") && validLighting(savedView && savedView.lighting)) || "studio";
 
     const preset = ANGLES[initAngle] || ANGLES["301"];
     const useSavedCam = !params.has("angle") && pYaw === null && savedView && Number.isFinite(savedView.yaw) && Number.isFinite(savedView.pitch) && Number.isFinite(savedView.zoom);
     let pendingUpdatedVer = savedView && typeof savedView.updatedVersion === "string" ? savedView.updatedVersion : "";
     const state = {
-      ant: initAnt, customLabel: "", team: initTeam, customColor: initCustomColor, angle: initAngle, blinkMode: initBlink, idleAnim: initIdle, action: initAction, fixedIdleTime,
+      ant: initAnt, customLabel: "", team: initTeam, customColor: initCustomColor, angle: initAngle, blinkMode: initBlink, idleAnim: initIdle, action: initAction, lighting: initLight, fixedIdleTime,
       dark: darkQuery.matches, turntable: initTurn, spritePreview: initSprite, silhouette: initSil, retroFps: initRetro,
       cam: {
         yaw: pYaw !== null ? pYaw : (useSavedCam ? wrapAngleDeg(savedView.yaw) : preset.yaw),
@@ -89,7 +92,7 @@
     window.__antViewerGetState = () => ({
       ant: state.ant === "custom" ? "" : state.ant,
       team: state.team, customColor: state.customColor, angle: state.angle, proj: state.cam.projection,
-      turntable: state.turntable, idle: state.idleAnim, action: state.action, sprite: state.spritePreview, silhouette: state.silhouette, retroFps: state.retroFps,
+      turntable: state.turntable, idle: state.idleAnim, action: state.action, lighting: state.lighting, sprite: state.spritePreview, silhouette: state.silhouette, retroFps: state.retroFps,
       yaw: state.cam.yaw, pitch: state.cam.pitch, zoom: state.cam.zoom,
     });
 
@@ -152,6 +155,7 @@
       if (SHEET_ANGLES.includes(state.angle)) q.set("angle", state.angle);
       else if (state.angle === "custom") q.set("yaw", String(Math.round(state.cam.yaw)));
       if (state.action !== "idle") q.set("action", state.action);
+      if (state.lighting !== "studio") q.set("light", state.lighting);
       if (state.silhouette) q.set("silhouette", "1");
       if (state.retroFps) q.set("retrofps", "1");
       const qs = q.toString();
@@ -160,7 +164,7 @@
 
     function syncDebugState() {
       window.__antViewer = {
-        ready: state.ready, ant: state.ant, team: state.team, customColor: state.customColor, angle: state.angle, blink: state.blinkMode, idle: state.idleAnim, action: state.action, silhouette: state.silhouette, retroFps: state.retroFps,
+        ready: state.ready, ant: state.ant, team: state.team, customColor: state.customColor, angle: state.angle, blink: state.blinkMode, idle: state.idleAnim, action: state.action, lighting: state.lighting, silhouette: state.silhouette, retroFps: state.retroFps,
         hasBlinkAnim: state.scene.instances.some((inst) => inst.model.blinkInfo && inst.model.blinkInfo.hasBlink),
         idleAnims: state.scene.instances.flatMap((inst) => (inst.model.idleAnims || []).map((a) => a.name)),
         attackAnims: state.scene.instances.flatMap((inst) => (inst.model.attackAnims || []).map((a) => a.name)),
@@ -197,6 +201,7 @@
         });
         actionSelect.dataset.extended = String(!QUICK_ACTIONS.includes(state.action));
       }
+      populateLightingSelect(lightSelect, state.lighting);
       if (colorInput && colorInput.value.toLowerCase() !== state.customColor) colorInput.value = state.customColor;
       if (customSwatch) customSwatch.style.backgroundColor = state.customColor;
       $("btn-turntable").setAttribute("aria-pressed", String(state.turntable));
@@ -332,7 +337,7 @@
       SHEET_ANGLES.forEach((key, idx) => {
         const info = ANGLES[key], x = idx * size;
         const img = renderer.renderOffscreenPixels(size, size, state.scene, { yaw: info.yaw, pitch: info.pitch, zoom: 1, projection: "ortho" }, {
-          transparent: true, showPlinth: false, dark: false, team: state.team, teamColors: teamObj, blinkMode: state.blinkMode,
+          transparent: true, showPlinth: false, dark: false, team: state.team, teamColors: teamObj, lighting: state.lighting, blinkMode: state.blinkMode,
           idleAnim: state.idleAnim, clipName: activeClipName(), fixedIdleTime: state.fixedIdleTime, overrideProj: "ortho",
         });
         tCtx.putImageData(img, 0, 0); ctx.drawImage(tmp, x, 0);
@@ -474,6 +479,16 @@
     if (actionSelect) {
       actionSelect.addEventListener("change", () => selectAction(actionSelect.value));
     }
+    const selectLighting = (id) => {
+      const next = validLighting(id) || "studio";
+      state.lighting = next;
+      updateUiState(); markDirty();
+      announce("Lighting set to " + getLightingPreset(next).label + ".");
+    };
+    const cycleLighting = () => selectLighting(LIGHTING_ORDER[(LIGHTING_ORDER.indexOf(state.lighting) + 1) % LIGHTING_ORDER.length]);
+    if (lightSelect) {
+      lightSelect.addEventListener("change", () => selectLighting(lightSelect.value));
+    }
 
     if (colorInput) {
       const applyPickedColor = () => {
@@ -544,6 +559,7 @@
       else if (e.key === "i" || e.key === "I") { e.preventDefault(); toggleIdle(); return; }
       else if (e.key === "s" || e.key === "S") { e.preventDefault(); toggleSilhouette(); return; }
       else if (e.key === "f" || e.key === "F") { e.preventDefault(); toggleRetroFps(); return; }
+      else if (e.key === "l" || e.key === "L") { e.preventDefault(); cycleLighting(); return; }
       else {
         manual = false;
         const key = (e.key === "r" || e.key === "R") ? (ANGLES[state.angle] ? state.angle : "301")
@@ -564,6 +580,7 @@
       else if (e.key === "h" || e.key === "H") { e.preventDefault(); toggleAction("hit"); }
       else if (e.key === "s" || e.key === "S") { e.preventDefault(); toggleSilhouette(); }
       else if (e.key === "f" || e.key === "F") { e.preventDefault(); toggleRetroFps(); }
+      else if (e.key === "l" || e.key === "L") { e.preventDefault(); cycleLighting(); }
     });
 
     new ResizeObserver(() => markDirty(false)).observe(stageCanvas);
@@ -612,7 +629,7 @@
       if (state.dirty) {
         const [w, h] = renderer.resize();
         withQuantizedTiming(() => renderer.drawScene(state.scene, state.cam, {
-          width: w, height: h, transparent: false, showPlinth: true, dark: state.dark, team: state.team, teamColors: activeTeam(),
+          width: w, height: h, transparent: false, showPlinth: true, dark: state.dark, team: state.team, teamColors: activeTeam(), lighting: state.lighting,
           blinkMode: state.blinkMode, idleAnim: state.idleAnim, clipName: activeClipName(), fixedIdleTime: state.fixedIdleTime, silhouette: state.silhouette,
         }));
         state.dirty = false;
@@ -623,7 +640,7 @@
         if (state.scene.instances.length) {
           const spriteCam = { yaw: state.cam.yaw, pitch: state.cam.pitch, zoom: 1.0, projection: "ortho" };
           spriteCtx.putImageData(withQuantizedTiming(() => renderer.renderOffscreenPixels(spriteCanvas.width, spriteCanvas.height, state.scene, spriteCam, {
-            transparent: true, showPlinth: false, dark: state.dark, team: state.team, teamColors: activeTeam(),
+            transparent: true, showPlinth: false, dark: state.dark, team: state.team, teamColors: activeTeam(), lighting: state.lighting,
             blinkMode: state.blinkMode, idleAnim: state.idleAnim, clipName: activeClipName(), fixedIdleTime: state.fixedIdleTime, silhouette: state.silhouette, overrideProj: "ortho",
           })), 0, 0);
         }

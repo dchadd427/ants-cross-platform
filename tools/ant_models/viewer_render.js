@@ -80,6 +80,130 @@
     },
   };
 
+  const LIGHTING_ORDER = ["studio", "daylight", "golden", "moonlight", "spotlight", "dramatic", "neon", "flat"];
+  const LIGHTING_PRESETS = {
+    studio: {
+      id: "studio", label: "Studio",
+      keyBasis: [0.90, 0.24, -0.24], fillBasis: [0.56, -0.18, 0.80], rimBasis: [-0.58, 0.68, 0.44],
+      keyColor: [2.35, 2.303, 2.2325], fillColor: [0.2352, 0.2576, 0.28], rimColor: [0.4048, 0.4416, 0.46],
+      envKeyTint: [1.0, 0.95, 0.87], envFillTint: [0.64, 0.88, 1.0], envRimTint: [0.84, 0.96, 1.0],
+      spotParams: [0.48, 1.12, 1.15], lightMix: [1.0, 1.0, 1.02, 0.0], pal: null,
+    },
+    daylight: {
+      id: "daylight", label: "Sunlit Meadow",
+      keyBasis: [0.46, 0.82, -0.34], fillBasis: [0.35, 0.28, 0.89], rimBasis: [-0.62, 0.54, 0.56],
+      keyColor: [2.85, 2.68, 2.34], fillColor: [0.52, 0.66, 0.86], rimColor: [0.58, 0.68, 0.52],
+      envKeyTint: [1.0, 0.96, 0.84], envFillTint: [0.66, 0.86, 1.0], envRimTint: [0.84, 0.96, 0.78],
+      spotParams: [0.86, 1.08, 0.75], lightMix: [1.45, 1.05, 1.04, 0.0],
+      pal: {
+        bgTop: [0.54, 0.76, 0.95], bgMid: [0.85, 0.92, 0.96], bgBot: [0.64, 0.72, 0.54],
+        plinthTop: [0.64, 0.68, 0.56], plinthSide: [0.40, 0.44, 0.35], plinthRing: [0.46, 0.52, 0.38],
+        sky: [0.66, 0.84, 1.00], ground: [0.42, 0.48, 0.28], rimBoost: 0.62, darkPanel: false,
+      },
+    },
+    golden: {
+      id: "golden", label: "Golden Hour",
+      keyBasis: [0.34, 0.26, -0.90], fillBasis: [0.54, 0.36, 0.76], rimBasis: [-0.46, 0.52, -0.72],
+      keyColor: [2.95, 1.88, 0.92], fillColor: [0.30, 0.42, 0.76], rimColor: [1.35, 0.78, 0.38],
+      envKeyTint: [1.0, 0.72, 0.38], envFillTint: [0.52, 0.64, 0.96], envRimTint: [1.0, 0.68, 0.34],
+      spotParams: [0.55, 1.18, 1.10], lightMix: [0.95, 1.15, 1.04, 0.0],
+      pal: {
+        bgTop: [0.16, 0.14, 0.26], bgMid: [0.46, 0.28, 0.22], bgBot: [0.14, 0.09, 0.12],
+        plinthTop: [0.30, 0.22, 0.18], plinthSide: [0.14, 0.10, 0.09], plinthRing: [0.62, 0.40, 0.22],
+        sky: [0.52, 0.44, 0.68], ground: [0.38, 0.22, 0.12], rimBoost: 0.96, darkPanel: true,
+      },
+    },
+    moonlight: {
+      id: "moonlight", label: "Moonlight",
+      keyBasis: [0.34, 0.76, -0.55], fillBasis: [0.48, -0.10, 0.87], rimBasis: [-0.52, 0.72, 0.46],
+      keyColor: [1.45, 1.85, 2.48], fillColor: [0.14, 0.20, 0.36], rimColor: [0.95, 1.24, 1.65],
+      envKeyTint: [0.68, 0.86, 1.0], envFillTint: [0.34, 0.48, 0.80], envRimTint: [0.74, 0.92, 1.0],
+      spotParams: [0.40, 1.22, 1.35], lightMix: [0.75, 1.18, 1.00, 0.0],
+      pal: {
+        bgTop: [0.032, 0.052, 0.108], bgMid: [0.078, 0.122, 0.215], bgBot: [0.018, 0.028, 0.062],
+        plinthTop: [0.075, 0.105, 0.165], plinthSide: [0.032, 0.045, 0.078], plinthRing: [0.24, 0.38, 0.58],
+        sky: [0.20, 0.32, 0.58], ground: [0.06, 0.08, 0.15], rimBoost: 1.18, darkPanel: true,
+      },
+    },
+    spotlight: {
+      id: "spotlight", label: "Spotlight",
+      keyBasis: [0.58, 0.76, -0.28], fillBasis: [0.40, -0.35, 0.84], rimBasis: [-0.62, 0.62, 0.48],
+      keyColor: [3.35, 3.22, 2.95], fillColor: [0.07, 0.08, 0.11], rimColor: [0.52, 0.56, 0.66],
+      envKeyTint: [1.0, 0.96, 0.88], envFillTint: [0.28, 0.32, 0.40], envRimTint: [0.78, 0.84, 0.94],
+      spotParams: [0.06, 1.38, 2.80], lightMix: [0.28, 1.25, 1.02, 0.0],
+      pal: {
+        bgTop: [0.020, 0.022, 0.030], bgMid: [0.095, 0.102, 0.122], bgBot: [0.014, 0.016, 0.022],
+        plinthTop: [0.145, 0.152, 0.172], plinthSide: [0.035, 0.038, 0.046], plinthRing: [0.42, 0.44, 0.50],
+        sky: [0.16, 0.18, 0.24], ground: [0.05, 0.05, 0.07], rimBoost: 0.72, darkPanel: true,
+      },
+    },
+    dramatic: {
+      id: "dramatic", label: "Dramatic",
+      keyBasis: [0.24, 0.22, -0.94], fillBasis: [0.55, -0.22, 0.80], rimBasis: [-0.46, 0.56, 0.69],
+      keyColor: [3.25, 2.86, 2.40], fillColor: [0.08, 0.13, 0.20], rimColor: [0.55, 1.32, 1.72],
+      envKeyTint: [1.0, 0.88, 0.72], envFillTint: [0.24, 0.36, 0.52], envRimTint: [0.42, 0.88, 1.0],
+      spotParams: [0.22, 1.28, 1.85], lightMix: [0.34, 1.30, 1.04, 0.0],
+      pal: {
+        bgTop: [0.032, 0.038, 0.052], bgMid: [0.076, 0.094, 0.126], bgBot: [0.018, 0.022, 0.030],
+        plinthTop: [0.082, 0.096, 0.118], plinthSide: [0.028, 0.034, 0.044], plinthRing: [0.22, 0.42, 0.54],
+        sky: [0.18, 0.28, 0.40], ground: [0.06, 0.07, 0.09], rimBoost: 1.28, darkPanel: true,
+      },
+    },
+    neon: {
+      id: "neon", label: "Neon Arcade",
+      keyBasis: [0.42, 0.32, -0.85], fillBasis: [0.44, 0.18, 0.88], rimBasis: [-0.52, 0.66, 0.54],
+      keyColor: [2.75, 0.66, 2.05], fillColor: [0.26, 1.68, 1.98], rimColor: [0.42, 1.65, 2.00],
+      envKeyTint: [1.0, 0.32, 0.78], envFillTint: [0.18, 0.90, 1.0], envRimTint: [0.24, 0.92, 1.0],
+      spotParams: [0.42, 1.20, 1.25], lightMix: [0.52, 1.35, 1.02, 0.0],
+      pal: {
+        bgTop: [0.075, 0.028, 0.138], bgMid: [0.145, 0.058, 0.220], bgBot: [0.024, 0.058, 0.118],
+        plinthTop: [0.105, 0.068, 0.165], plinthSide: [0.038, 0.026, 0.072], plinthRing: [0.24, 0.72, 0.86],
+        sky: [0.34, 0.18, 0.52], ground: [0.08, 0.22, 0.32], rimBoost: 1.30, darkPanel: true,
+      },
+    },
+    flat: {
+      id: "flat", label: "Flat / 1998",
+      keyBasis: [0.88, 0.38, -0.28], fillBasis: [0.56, -0.18, 0.80], rimBasis: [-0.58, 0.68, 0.44],
+      keyColor: [1.0, 1.0, 1.0], fillColor: [0.0, 0.0, 0.0], rimColor: [0.0, 0.0, 0.0],
+      envKeyTint: [1.0, 1.0, 1.0], envFillTint: [1.0, 1.0, 1.0], envRimTint: [1.0, 1.0, 1.0],
+      spotParams: [1.0, 1.0, 1.0], lightMix: [1.0, 0.0, 1.0, 1.0], pal: null,
+    },
+  };
+
+  function validLighting(raw) {
+    if (typeof raw !== "string") return null;
+    const k = raw.trim().toLowerCase();
+    return Object.prototype.hasOwnProperty.call(LIGHTING_PRESETS, k) ? k : null;
+  }
+  function getLightingPreset(id) { return LIGHTING_PRESETS[validLighting(id) || "studio"]; }
+  function populateLightingSelect(selectEl, activeId) {
+    if (!selectEl) return;
+    if (!selectEl.options.length) {
+      for (const id of LIGHTING_ORDER) {
+        const opt = document.createElement("option");
+        opt.value = id; opt.textContent = LIGHTING_PRESETS[id].label;
+        selectEl.appendChild(opt);
+      }
+    }
+    selectEl.value = validLighting(activeId) || "studio";
+    selectEl.dataset.extended = String(selectEl.value !== "studio");
+  }
+  const rgbCss = (c) => `rgb(${Math.round(clamp(c[0], 0, 1) * 255)}, ${Math.round(clamp(c[1], 0, 1) * 255)}, ${Math.round(clamp(c[2], 0, 1) * 255)})`;
+  function paintPresetBackdrop2d(ctx, x0, w, h, groundY, lightingId) {
+    const pal = getLightingPreset(lightingId).pal;
+    if (!pal) return false;
+    const g = ctx.createLinearGradient(x0, 0, x0, h);
+    g.addColorStop(0, rgbCss(pal.bgTop)); g.addColorStop(0.55, rgbCss(pal.bgMid)); g.addColorStop(1, rgbCss(pal.bgBot));
+    ctx.fillStyle = g; ctx.fillRect(x0, 0, w, h);
+    const fg = ctx.createLinearGradient(x0, groundY, x0, h);
+    fg.addColorStop(0, pal.darkPanel ? "rgba(0,0,0,0.34)" : "rgba(20,32,48,0.12)");
+    fg.addColorStop(1, "rgba(0,0,0,0.06)");
+    ctx.fillStyle = fg; ctx.fillRect(x0, groundY, w, h - groundY);
+    ctx.strokeStyle = pal.darkPanel ? "rgba(255,255,255,0.20)" : "rgba(20,32,48,0.20)";
+    ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x0, groundY + 0.5); ctx.lineTo(x0 + w, groundY + 0.5); ctx.stroke();
+    return true;
+  }
+
   // --- WebGL2 Shaders (Studio Backdrop, Plinth + Contact Shadows, Pass 7 Cinematic PBR) ---
   const BACKDROP_VS = `#version 300 es
   out vec2 v_uv;
@@ -119,6 +243,8 @@
   in vec3 v_worldPos, v_worldNormal, v_color;
   in vec2 v_uv;
   uniform vec3 u_cameraPos, u_viewDir, u_baseColor, u_emissive, u_keyDir, u_fillDir, u_rimDir, u_skyColor, u_groundColor, u_silhouetteColor;
+  uniform vec3 u_keyColor, u_fillColor, u_rimColor, u_envKeyTint, u_envFillTint, u_envRimTint, u_spotParams;
+  uniform vec4 u_lightMix;
   uniform float u_alpha, u_metallic, u_roughness, u_normalScale, u_rimBoost;
   uniform int u_isOrtho, u_matKind, u_hasNormalTex, u_silhouette;
   uniform sampler2D u_baseTex, u_normalTex, u_mrTex;
@@ -159,7 +285,7 @@
     float keySoft = smoothstep(0.72, 0.97, dot(R, u_keyDir)) * 0.95 + pow(max(dot(R, u_keyDir), 0.0), glintExp) * 1.10 * sharp;
     float fillStrip = smoothstep(0.78, 0.98, dot(R, u_fillDir)) * 0.22;
     float rimSoft = smoothstep(0.74, 0.97, dot(R, u_rimDir)) * 0.34 + pow(max(dot(R, u_rimDir), 0.0), glintExp * 0.7) * 0.40 * sharp;
-    return env + vec3(1.0, 0.95, 0.87) * keySoft * sharp + vec3(0.64, 0.88, 1.0) * fillStrip * sharp + vec3(0.84, 0.96, 1.0) * rimSoft * sharp;
+    return env + u_envKeyTint * keySoft * sharp + u_envFillTint * fillStrip * sharp + u_envRimTint * rimSoft * sharp;
   }
   vec3 evalLight(vec3 L, vec3 lCol, vec3 N, vec3 V, vec3 albedo, float met, float rough, vec3 F0, float coatW, float coatRough, vec3 coatTint, inout vec3 specAcc) {
     float NoL = max(dot(N, L), 0.0);
@@ -205,11 +331,11 @@
     float keyCoat = u_matKind == 2 ? 0.48 : coatW;
     vec3 coatTint = u_matKind == 2 ? mix(vec3(1.0), clamp(albedo * 1.9 + vec3(0.24), 0.0, 1.0), 0.38) : vec3(1.0);
     float keyDot = max(dot(N, u_keyDir), 0.0);
-    float spotFocus = mix(0.48, 1.12, pow(keyDot, 1.15));
+    float spotFocus = mix(u_spotParams.x, u_spotParams.y, pow(keyDot, u_spotParams.z));
     vec3 F0 = mix(vec3(0.045), albedo, met), specAcc = vec3(0.0);
-    vec3 Lo = evalLight(u_keyDir, vec3(1.0, 0.98, 0.95) * 2.35 * spotFocus, N, V, albedo, met, rough, F0, keyCoat, coatR, coatTint, specAcc)
-            + evalLight(u_fillDir, vec3(0.84, 0.92, 1.0) * 0.28, N, V, albedo, met, rough, F0, coatW * 0.15, coatR, coatTint, specAcc)
-            + evalLight(u_rimDir, vec3(0.88, 0.96, 1.0) * 0.46, N, V, albedo, met, rough, F0, coatW * 0.20, coatR, coatTint, specAcc);
+    vec3 Lo = evalLight(u_keyDir, u_keyColor * spotFocus, N, V, albedo, met, rough, F0, keyCoat, coatR, coatTint, specAcc)
+            + evalLight(u_fillDir, u_fillColor, N, V, albedo, met, rough, F0, coatW * 0.15, coatR, coatTint, specAcc)
+            + evalLight(u_rimDir, u_rimColor, N, V, albedo, met, rough, F0, coatW * 0.20, coatR, coatTint, specAcc);
 
     vec3 bakedAo = clamp(v_color, 0.0, 1.0);
     vec3 aoSoft = mix(vec3(1.0), bakedAo, 0.72);
@@ -219,24 +345,29 @@
 
     vec3 R = reflect(-V, N); float NoV = max(dot(N, V), 0.0);
     float specOccl = clamp(pow(NoV + aoScalar, exp2(-16.0 * rough - 1.0)) - 1.0 + aoScalar, 0.0, 1.0);
-    vec3 ambDiff = mix(u_groundColor * 0.94, u_skyColor, N.y * 0.5 + 0.5) * albedo * (1.0 - met) * 0.20 * aoSoft * geoAo;
+    vec3 ambDiff = mix(u_groundColor * 0.94, u_skyColor, N.y * 0.5 + 0.5) * albedo * (1.0 - met) * 0.20 * u_lightMix.x * aoSoft * geoAo;
     float envAtten = (1.0 - rough) * (1.0 - rough);
     vec3 F_env = F0 + (max(vec3(1.0 - rough), F0) - F0) * pow(1.0 - NoV, 5.0);
-    vec3 envSpec = studioEnv(R, rough) * F_env * mix(0.08, 0.78, envAtten) * mix(envAtten, 1.0, met) * specOccl * geoAo;
-    vec3 envCoat = studioEnv(R, coatR) * coatTint * ((0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coatW) * (u_matKind == 2 ? 0.08 : 0.22) * specOccl;
+    vec3 envSpec = studioEnv(R, rough) * F_env * mix(0.08, 0.78, envAtten) * mix(envAtten, 1.0, met) * specOccl * geoAo * u_lightMix.y;
+    vec3 envCoat = studioEnv(R, coatR) * coatTint * ((0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coatW) * (u_matKind == 2 ? 0.08 : 0.22) * specOccl * u_lightMix.y;
 
     vec3 sssBounce = vec3(0.0);
     if (u_matKind == 2) {
       float wrapKey = clamp((dot(N, u_keyDir) + 0.22) / 1.22, 0.0, 1.0);
       float termBand = wrapKey * (1.0 - keyDot);
-      sssBounce = (albedo * vec3(1.14, 1.08, 0.94) + vec3(0.008, 0.008, 0.006)) * termBand * 0.14 * aoSoft * geoAo;
+      sssBounce = (albedo * vec3(1.14, 1.08, 0.94) + vec3(0.008, 0.008, 0.006)) * termBand * 0.14 * aoSoft * geoAo * min(u_lightMix.x, 1.15);
     }
     float fresnelRim = pow(1.0 - NoV, 3.2) * smoothstep(-0.25, 0.72, N.y);
     float rimMask = mix(0.45, 1.0, clamp(dot(N, u_rimDir) * 0.55 + 0.55, 0.0, 1.0));
-    vec3 rimTint = mix(vec3(0.80, 0.92, 0.98), albedo * 1.55 + vec3(0.20, 0.26, 0.24), u_matKind == 2 ? 0.65 : 0.18);
+    vec3 rimTint = mix(u_envRimTint, albedo * 1.55 + u_envRimTint * 0.28, u_matKind == 2 ? 0.65 : 0.18);
     vec3 rimGlow = rimTint * fresnelRim * rimMask * (u_matKind == 1 ? 0.24 : 0.15) * u_rimBoost * aoSoft * geoAo;
 
-    vec3 outCol = linearToSrgb(acesFilm((Lo * directAo + ambDiff + envSpec + envCoat + sssBounce + rimGlow + u_emissive) * 1.02));
+    vec3 outCol = linearToSrgb(acesFilm((Lo * directAo + ambDiff + envSpec + envCoat + sssBounce + rimGlow + u_emissive) * u_lightMix.z));
+    if (u_lightMix.w > 0.001) {
+      float softN = mix(0.78, 1.06, clamp(dot(N, u_keyDir) * 0.5 + 0.5, 0.0, 1.0));
+      vec3 flatCol = linearToSrgb(acesFilm((albedo * mix(vec3(1.0), bakedAo, 0.34) * softN + u_emissive) * 1.15));
+      outCol = mix(outCol, flatCol, u_lightMix.w);
+    }
     float outAlpha = 1.0;
     if (u_alpha < 0.99) {
       float baseA = clamp(u_alpha * baseSample.a, 0.0, 1.0);
@@ -430,6 +561,7 @@
         "u_baseColor", "u_alpha", "u_metallic", "u_roughness", "u_emissive", "u_normalScale",
         "u_matKind", "u_hasNormalTex", "u_baseTex", "u_normalTex", "u_mrTex",
         "u_keyDir", "u_fillDir", "u_rimDir", "u_skyColor", "u_groundColor", "u_rimBoost",
+        "u_keyColor", "u_fillColor", "u_rimColor", "u_envKeyTint", "u_envFillTint", "u_envRimTint", "u_spotParams", "u_lightMix",
         "u_silhouette", "u_silhouetteColor",
       ]);
       this.uPlinth = getUniforms(gl, this.plinthProg, [
@@ -477,7 +609,7 @@
       return { eye, viewProj: mat4Multiply(proj, mat4LookAt(eye, t, [0, 1, 0])), viewDir: [dx / l, dy / l, dz / l], isOrtho, yaw };
     }
 
-    cameraLights(camera) {
+    cameraLights(camera, preset) {
       const vd = camera.viewDir;
       const rLen = Math.hypot(vd[2], -vd[0]) || 1;
       const cr = [vd[2] / rLen, 0, -vd[0] / rLen];
@@ -486,22 +618,25 @@
         vd[2] * cr[0] - vd[0] * cr[2],
         vd[0] * cr[1] - vd[1] * cr[0],
       ];
-      const basis = (fv, uv, rv) => {
-        const x = vd[0] * fv + cu[0] * uv + cr[0] * rv;
-        const y = vd[1] * fv + cu[1] * uv + cr[1] * rv;
-        const z = vd[2] * fv + cu[2] * uv + cr[2] * rv;
+      const basis = (v) => {
+        const x = vd[0] * v[0] + cu[0] * v[1] + cr[0] * v[2];
+        const y = vd[1] * v[0] + cu[1] * v[1] + cr[1] * v[2];
+        const z = vd[2] * v[0] + cu[2] * v[1] + cr[2] * v[2];
         const l = Math.hypot(x, y, z) || 1;
         return [x / l, y / l, z / l];
       };
+      const p = preset || LIGHTING_PRESETS.studio;
       return {
-        keyDir: basis(0.90, 0.24, -0.24),
-        fillDir: basis(0.56, -0.18, 0.80),
-        rimDir: basis(-0.58, 0.68, 0.44),
+        keyDir: basis(p.keyBasis),
+        fillDir: basis(p.fillBasis),
+        rimDir: basis(p.rimBasis),
       };
     }
 
     drawScene(scene, cam, opts) {
-      const gl = this.gl, pal = opts.dark ? STUDIO_PALETTE.dark : STUDIO_PALETTE.light, team = opts.teamColors || resolveTeam(opts.team, opts.customColor);
+      const gl = this.gl, lp = getLightingPreset(opts.lighting);
+      const pal = lp.pal || (opts.dark ? STUDIO_PALETTE.dark : STUDIO_PALETTE.light);
+      const team = opts.teamColors || resolveTeam(opts.team, opts.customColor);
       gl.viewport(0, 0, opts.width, opts.height); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       if (!opts.transparent) {
         gl.disable(gl.DEPTH_TEST); gl.depthMask(false); gl.disable(gl.BLEND); gl.disable(gl.CULL_FACE);
@@ -511,7 +646,7 @@
       }
       gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
       const camera = this.computeCamera(scene, cam, opts.width, opts.height, opts.overrideProj, opts);
-      const { keyDir, fillDir, rimDir } = this.cameraLights(camera);
+      const { keyDir, fillDir, rimDir } = this.cameraLights(camera, lp);
 
       if (opts.showPlinth !== false && !opts.transparent) {
         const plinth = this.ensurePlinth(scene.plinthSpanX, scene.plinthRadius);
@@ -535,8 +670,11 @@
       gl.uniform3fv(this.uPbr.u_cameraPos, camera.eye); gl.uniform3fv(this.uPbr.u_viewDir, camera.viewDir);
       gl.uniform1i(this.uPbr.u_isOrtho, camera.isOrtho ? 1 : 0);
       gl.uniform3fv(this.uPbr.u_keyDir, keyDir); gl.uniform3fv(this.uPbr.u_fillDir, fillDir); gl.uniform3fv(this.uPbr.u_rimDir, rimDir);
+      gl.uniform3fv(this.uPbr.u_keyColor, lp.keyColor); gl.uniform3fv(this.uPbr.u_fillColor, lp.fillColor); gl.uniform3fv(this.uPbr.u_rimColor, lp.rimColor);
+      gl.uniform3fv(this.uPbr.u_envKeyTint, lp.envKeyTint); gl.uniform3fv(this.uPbr.u_envFillTint, lp.envFillTint); gl.uniform3fv(this.uPbr.u_envRimTint, lp.envRimTint);
+      gl.uniform3fv(this.uPbr.u_spotParams, lp.spotParams); gl.uniform4fv(this.uPbr.u_lightMix, lp.lightMix);
       gl.uniform3fv(this.uPbr.u_skyColor, pal.sky); gl.uniform3fv(this.uPbr.u_groundColor, pal.ground);
-      gl.uniform1f(this.uPbr.u_rimBoost, opts.transparent ? (opts.dark ? 0.95 : 0.65) : pal.rimBoost);
+      gl.uniform1f(this.uPbr.u_rimBoost, opts.transparent && !lp.pal ? (opts.dark ? 0.95 : 0.65) : pal.rimBoost);
       const isSil = Boolean(opts.silhouette);
       gl.uniform1i(this.uPbr.u_silhouette, isSil ? 1 : 0);
       gl.uniform3fv(this.uPbr.u_silhouetteColor, opts.dark ? [0.910, 0.933, 0.973] : [0.067, 0.086, 0.122]);
@@ -646,6 +784,7 @@
 
   window.__antRender = {
     ANT_CLASSES, ANT_LABELS, DEFAULT_CUSTOM_HEX, TEAMS, ANGLES, SHEET_ANGLES, DEG, STUDIO_PALETTE,
+    LIGHTING_ORDER, LIGHTING_PRESETS, validLighting, getLightingPreset, populateLightingSelect, paintPresetBackdrop2d,
     wrapAngleDeg, normalizeHex, deriveCustomTeam, resolveTeam, selectActionAnims, evaluateWorldMats, AntRenderer,
     installToolbarRovingTabindex,
   };
