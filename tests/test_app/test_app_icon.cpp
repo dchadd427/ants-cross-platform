@@ -1,11 +1,14 @@
 // The desktop game's icon (include/ants_app/app_icon.hpp): the picture is the original game's icon, whole-number zooms of it are exact, and the game gives its window the icon.
 //   [picture]  the size, the empty zooms, the transparent corners, the colors (the original's 16-color palette, a few cells of known colors), every zoom as the 1-pixel picture with each cell enlarged
-//   [window]   a window of SDL's dummy video driver takes the icon (and no window is refused); the application that makes a window gives it the icon, headless or not
+//   [surface]  the surface that goes to the window system, read back through SDL (converted to ARGB8888, then SDL_GetRGBA): its size and the original's colors in the right channels, at the zoom of 1 and the window's zoom
+//   [window]   a window of SDL's dummy video driver takes the icon (and no window is refused); the application that makes a window gives it the icon, headless or not. (The dummy driver keeps no icon: what
+//              the window system receives is the [surface] part's business)
 // Usage: test_app_icon. Exit code 0 when every check passes.
 #include <SDL.h>
 
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <set>
 #include <string>
@@ -102,6 +105,43 @@ void picture_checks() {
           "the picture that goes to the window system is a whole-number zoom of at least 64 pixels");
 }
 
+// The pixel in the middle of cell (cx, cy) of a surface, as SDL reads it after a conversion to ARGB8888: a surface whose channels are in another order than its format says comes out with the colors swapped
+bool surface_cell_is(SDL_Surface* argb, int zoom, int cx, int cy, const Pixel& want) {
+    const int x = cx * zoom + zoom / 2;
+    const int y = cy * zoom + zoom / 2;
+    Uint32 value = 0;
+    std::memcpy(&value, static_cast<const uint8_t*>(argb->pixels) + static_cast<size_t>(y) * static_cast<size_t>(argb->pitch) + static_cast<size_t>(x) * 4, 4);
+    Uint8 r = 0, g = 0, b = 0, a = 0;
+    SDL_GetRGBA(value, argb->format, &r, &g, &b, &a);
+    return Pixel{r, g, b, a} == want;
+}
+
+void surface_checks() {
+    group("surface", "the picture that goes to the window system: its size, and the original's colors in the right channels as SDL reads them");
+    check(app_icon::make_surface(0) == nullptr && app_icon::make_surface(-1) == nullptr && app_icon::make_surface(app_icon::kMaxZoom + 1) == nullptr, "a zoom outside 1 .. the largest gives no surface");
+    for (int zoom : {1, app_icon::window_zoom()}) {
+        const std::string at = " at " + std::to_string(zoom) + " pixels a cell";
+        SDL_Surface* made = app_icon::make_surface(zoom);
+        check(made != nullptr, "a surface is made" + at);
+        if (made == nullptr) continue;
+        check(made->w == app_icon::kCells * zoom && made->h == app_icon::kCells * zoom, "the surface is 32 cells across and down" + at);
+        SDL_Surface* argb = SDL_ConvertSurfaceFormat(made, SDL_PIXELFORMAT_ARGB8888, 0);
+        check(argb != nullptr, "SDL converts the surface to ARGB8888" + at);
+        if (argb != nullptr) {
+            check(surface_cell_is(argb, zoom, 14, 0, Pixel{255, 0, 0, 255}), "the red of the body is red (14, 0)" + at);
+            check(surface_cell_is(argb, zoom, 19, 3, Pixel{0, 0, 255, 255}), "the blue is blue (19, 3)" + at);
+            check(surface_cell_is(argb, zoom, 20, 3, Pixel{0, 255, 0, 255}), "the lime green is green (20, 3)" + at);
+            check(surface_cell_is(argb, zoom, 13, 7, Pixel{0, 128, 0, 255}), "the dark green is half green (13, 7)" + at);
+            check(surface_cell_is(argb, zoom, 16, 9, Pixel{0, 255, 255, 255}), "the cyan is green and blue (16, 9)" + at);
+            check(surface_cell_is(argb, zoom, 23, 14, Pixel{255, 255, 0, 255}), "the yellow is red and green (23, 14)" + at);
+            check(surface_cell_is(argb, zoom, 0, 0, Pixel{0, 0, 0, 0}), "the corner is transparent (0, 0)" + at);
+            check(surface_cell_is(argb, zoom, 31, 31, Pixel{0, 0, 0, 0}), "the last cell is transparent, after the rows' padding (31, 31)" + at);
+            SDL_FreeSurface(argb);
+        }
+        SDL_FreeSurface(made);
+    }
+}
+
 std::filesystem::path settings_of_this_run() {
 #if defined(_WIN32)
     const long long pid = static_cast<long long>(_getpid());
@@ -146,6 +186,7 @@ int main(int argc, char* argv[]) {
     (void)argc;
     (void)argv;
     picture_checks();
+    surface_checks();
     window_checks();
     std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

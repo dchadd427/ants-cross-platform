@@ -3,7 +3,7 @@
 
 The picture is drawn by tools/make_app_icons.py from the one grid that also draws the web icons. What this holds the committed files to, without a window (the window and the application are
 tests/test_app/test_app_icon.cpp): the tool writes the data include byte for byte as committed, writes an ants.ico whose five frames (16, 32, 48, 64 and 256 pixels) are the grid at their sizes by
-nearest neighbor and are the committed file's frames, and the resource script names an icon file that exists beside it. Needs Pillow (the runners of CI have none: skipped there).
+nearest neighbor and are the committed file's frames, and the resource script names an icon file that exists beside it. Needs Pillow: the tests are skipped only on a machine that has none (CI's python legs install it).
 """
 import os
 import re

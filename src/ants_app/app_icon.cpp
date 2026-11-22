@@ -60,15 +60,24 @@ int32_t window_zoom() {
 #endif
 }
 
+SDL_Surface* make_surface(int32_t zoom) {
+    const std::vector<uint8_t> pixels = rgba(zoom);
+    if (pixels.empty()) return nullptr;
+    const int32_t side = kCells * zoom;
+    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, side, side, 32, SDL_PIXELFORMAT_RGBA32);
+    if (surface == nullptr) return nullptr;
+    const size_t row = static_cast<size_t>(side) * 4;
+    for (size_t y = 0; y < static_cast<size_t>(side); ++y) {         // (row by row: the surface's rows may be longer than the picture's)
+        std::memcpy(static_cast<uint8_t*>(surface->pixels) + y * static_cast<size_t>(surface->pitch), &pixels[y * row], row);
+    }
+    return surface;
+}
+
 bool set_window_icon(SDL_Window* window) {
     if (window == nullptr) return false;
-    const int32_t zoom = window_zoom();
-    std::vector<uint8_t> pixels = rgba(zoom);
-    if (pixels.empty()) return false;
-    const int32_t side = kCells * zoom;
-    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormatFrom(pixels.data(), side, side, 32, side * 4, SDL_PIXELFORMAT_RGBA32);
+    SDL_Surface* surface = make_surface(window_zoom());
     if (surface == nullptr) return false;
-    SDL_SetWindowIcon(window, surface);                              // (SDL keeps its own copy: the surface and the pixels are ours to free)
+    SDL_SetWindowIcon(window, surface);                              // (SDL keeps its own copy: the surface is ours to free)
     SDL_FreeSurface(surface);
     return true;
 }
