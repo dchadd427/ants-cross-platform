@@ -101,8 +101,8 @@
         if (code === 'muted' || code === 'banned') return NOTE.mine;
         return NOTE.generic;
     }
-    function said(l) { var t = String(l.text || '').trim(); return t ? cut(t, LIMIT.quote) : l.img ? TEXT.image : ''; }       // (what a line says, for a quote: its words, or for a line that is only an image, that it is one)
     function cut(text, n) { text = String(text); return text.length > n ? text.slice(0, n - 1).replace(/[\ud800-\udbff]$/, '') + '\u2026' : text; }
+    function said(l) { var t = String(l.text || '').trim(); return t ? cut(t, LIMIT.quote) : l.img ? TEXT.image : ''; }       // (what a line says, for a quote: its words, or for a line that is only an image, that it is one)
     function firstOf(name) { var c = String(name).charCodeAt(0); return (c >= 0xd800 && c <= 0xdbff ? String(name).slice(0, 2) : String(name).charAt(0)).toUpperCase(); }
 
     // ---- the sheet ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
