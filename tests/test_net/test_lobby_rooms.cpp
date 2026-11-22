@@ -766,6 +766,7 @@ void run_lobby_rooms_tests() {
             ASSERT_EQ(room.guests[pia].lobby->my_seat(), 1);
             ASSERT_EQ(games_text(room.host.room()), std::string("1000"));
             const SeatKey pia_key = room.guests[pia].lobby->key();
+            pages_ready(room, {pia});                                              // (protocol 27: the START waits for a page's Ready first)
             room.host.take_events();
             ASSERT_TRUE(room.guests[ann].lobby->request_start());
             room.run(100);
@@ -809,6 +810,7 @@ void run_lobby_rooms_tests() {
             const size_t bob = room.join_seat("Bob");
             const size_t pia = join_with(room, page_config("Pia"));
             room.run(100);
+            pages_ready(room, {pia});
             ASSERT_TRUE(room.guests[ann].lobby->request_start());
             room.run(4500);
             ASSERT_TRUE(room.host.starting());
@@ -821,6 +823,7 @@ void run_lobby_rooms_tests() {
             // two pages: one notice naming both; the leader may ask again, and the room takes newcomers again
             const size_t pam = join_with(room, page_config("Pam"));
             room.run(100);
+            pages_ready(room, {pam});
             ASSERT_TRUE(room.guests[ann].lobby->request_start());
             room.run(5500);
             ASSERT_FALSE(room.host.starting());
@@ -833,6 +836,7 @@ void run_lobby_rooms_tests() {
             const size_t ann = room.join_seat("Ann");
             const size_t pia = join_with(room, page_config("Pia"));
             room.run(100);
+            pages_ready(room, {pia});
             ASSERT_TRUE(room.guests[ann].lobby->request_start());
             room.run(100);
             room.guests[pia].client_end->close();
@@ -855,6 +859,7 @@ void run_lobby_rooms_tests() {
             const size_t bob = room.join_seat("Bob");
             const size_t pia = join_with(room, page_config("Pia"));
             room.run(100);
+            pages_ready(room, {pia});
             ASSERT_TRUE(room.guests[ann].lobby->request_start());
             room.run(100);
             ASSERT_TRUE(room.host.starting());
@@ -1223,6 +1228,7 @@ void run_lobby_rooms_tests() {
             const size_t pia = join_with(room, page_config("Pia"));
             room.run(100);
             const uint8_t pia_seat = room.guests[pia].lobby->my_seat();
+            pages_ready(room, {pia});
             ASSERT_TRUE(room.guests[ann].lobby->request_start());
             room.run(100);
             ASSERT_TRUE(room.host.starting());
@@ -1385,6 +1391,7 @@ void run_lobby_rooms_tests() {
             const size_t pia = join_with(room, page_config("Pia"));
             const size_t pat = join_with(room, page_config("Pat"));
             room.run(100);
+            pages_ready(room, {pia, pat});
             ASSERT_TRUE(room.guests[ann].lobby->request_start());
             room.run(100);
             ASSERT_TRUE(room.host.starting());
@@ -1464,8 +1471,9 @@ void run_lobby_rooms_tests() {
             hc.start_wait_ms = 3600u * 1000u;
             Room room(hc);
             const size_t ann = room.join_seat("Ann");
-            join_with(room, page_config("Pia"));
+            const size_t pia = join_with(room, page_config("Pia"));
             room.run(100);
+            pages_ready(room, {pia});
             const uint8_t ann_seat = room.guests[ann].lobby->my_seat();
             const std::vector<uint8_t> wish = encode(StartRequestMsg{});
             room.guests[ann].client_end->send(wish);                                     // the one that stands (a page is no game: it waits)
@@ -1736,6 +1744,7 @@ void run_lobby_rooms_tests() {
             const size_t pia = join_with(room, page_config("Pia"));
             const size_t pat = join_with(room, page_config("Pat"));
             room.run(100);
+            pages_ready(room, {pia, pat});
             ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Open, K::Open, K::Easy})));      // (a bot in the last color: one person is enough for the match)
             room.run(100);
             ASSERT_TRUE(room.guests[ann].lobby->request_start());
@@ -1768,6 +1777,7 @@ void run_lobby_rooms_tests() {
             const size_t ann = room.join_seat("Ann");
             const size_t pia = join_with(room, page_config("Pia"));
             room.run(100);
+            pages_ready(room, {pia});
             ASSERT_TRUE(room.guests[ann].lobby->request_start());
             room.run(100);
             ASSERT_TRUE(room.host.starting());
@@ -1792,12 +1802,13 @@ void run_lobby_rooms_tests() {
             room.run(100);
             ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Open, K::Open, K::Easy})));      // (a bot in the last color: one person is enough for the match)
             room.run(100);
-            room.guests[bob].client_end->close();
-            room.run(100);
-            ASSERT_TRUE(room.host.held(1));
+            pages_ready(room, {bob});
             ASSERT_TRUE(room.guests[ann].lobby->request_start());
             room.run(100);
             ASSERT_TRUE(room.host.starting());
+            room.guests[bob].client_end->close();                                                            // (Bob's page goes: its link ends while the START waits, and its seat is held)
+            room.run(100);
+            ASSERT_TRUE(room.host.held(1) && room.host.starting());
             ASSERT_TRUE(leader_starts(room.host).empty());                                                   // (Bob's seat is held: the START waits for him)
             ASSERT_TRUE(room.host.held(1));
             ASSERT_TRUE(room.guests[ann].lobby->request_remove(1));                                          // (the leader's screen still shows Bob)
@@ -2175,6 +2186,12 @@ void run_lobby_rooms_tests() {
             const size_t pip = room.join_seat("Pip (bot, Hard)");
             ASSERT_EQ(room.host.room().slots[static_cast<size_t>(room.guests[pip].lobby->my_seat())].name, std::string("Player ") + std::to_string(room.guests[pip].lobby->my_seat() + 1));
             ASSERT_EQ(room.host.room().slots[static_cast<size_t>(room.guests[ann].lobby->my_seat())].name, std::string("Ann"));
+            // a name that only looks like a label (a mark behind it, another bracket, a 0 for the o, signs between the letters) is replaced the same way: no name that reads as a computer player's is a person's
+            for (const char* spoof : {"Pip (bot, Hard).", "Pip [bot, Hard]", "Pip (b0t, Hard)", "Pip (bot, Hard)'", "Pip (bot, Hard) .", "Pip (b.o.t, Hard)", "Pip (bot) x", "Pip (b o t)"}) {
+                Room spoof_room(lobby_room_config(85));
+                const size_t who = spoof_room.join_seat(spoof);
+                ASSERT_EQ(spoof_room.host.room().slots[static_cast<size_t>(spoof_room.guests[who].lobby->my_seat())].name, std::string("Player ") + std::to_string(spoof_room.guests[who].lobby->my_seat() + 1));
+            }
             // a control byte or a byte above the table between the letters, in a Hello that no honest client writes (raw bytes): the room cuts such bytes out BEFORE it checks the name, so what is stored is the cleaned
             // name, and it is never a bot's
             for (const char* sneaky : {"Pip (bo\x01t)", "Pip (b\x7F" "ot)", "Pip (bot\x01, Hard)", "Bo\x01t (Hard)", "Pip (bo\xC3\xA9t, Hard)", "Pip (bot)\x09"}) {
@@ -2226,7 +2243,7 @@ void run_lobby_rooms_tests() {
             {   // a client never sends such a name: the server would count a violation and, eight times, throw it out
                 Room rename_room(lobby_room_config(83));
                 const size_t sam = rename_room.join_seat("Sam");
-                for (const char* bad : {"Pip (bot)", "Bot (Hard)", "x ( BOT , idle )"}) ASSERT_FALSE(rename_room.guests[sam].lobby->request_name(bad));
+                for (const char* bad : {"Pip (bot)", "Bot (Hard)", "x ( BOT , idle )", "Pip (bot, Hard).", "Pip [bot]"}) ASSERT_FALSE(rename_room.guests[sam].lobby->request_name(bad));
                 ASSERT_TRUE(rename_room.guests[sam].lobby->request_name("Robot"));
                 rename_room.run(100);
                 ASSERT_EQ(rename_room.host.renames(), 1u);
@@ -2235,11 +2252,12 @@ void run_lobby_rooms_tests() {
             NameMsg got;
             name.name = "Pip";
             ASSERT_TRUE(decode(encode(name), got) && got.name == "Pip");
-            for (const char* bad : {"Pip (bot)", "Pip (bot, Hard)", "Bot (Hard)", "x (BOT , idle )", "bot(x", "Pip (bo\x01t)", "Pip (bot\xC3\xA9)"}) {
+            for (const char* bad : {"Pip (bot)", "Pip (bot, Hard)", "Bot (Hard)", "x (BOT , idle )", "bot(x", "Pip (bo\x01t)", "Pip (bot\xC3\xA9)",
+                                    "Pip (bot, Hard).", "Pip (bot) x", "Pip (bot, Hard))", "Pip [bot, Hard]", "Pip (b0t, Hard)", "Pip ( b . o . t , Hard ) '", ".Bot (Hard)"}) {      // (a label that something follows is still a label)
                 name.name = bad;
                 ASSERT_FALSE(decode(encode(name), got));
             }
-            for (const char* fine : {"Robot", "Pip (bots)", "Pip (bot) x", "Bot"}) {
+            for (const char* fine : {"Robot", "Pip (bots)", "Pip (bottle)", "Bot", "Maya (bot", "Bot Jones (Hard)", "Joe (807)", "Pip [8-0-7]", "Bo T. (SE)", "Ann (Bo T)", "Pip (b o t h)"}) {
                 name.name = fine;
                 ASSERT_TRUE(decode(encode(name), got));
             }

@@ -140,6 +140,21 @@ void Application::handle_camera_panning(float dt) {
     }
 }
 
+// The countdown card (protocol 21) is see-through while the player moves the view. Whatever moved it (the edge strips, a drag, the minimap, the wheel, two fingers), the camera is where it was at the
+// last frame or it is not: the first frame of the card only learns the place.
+void Application::track_look_around() {
+    if (!renderer_ || !hud_.is_match_countdown_active()) {
+        look_seen_ = false;
+        return;
+    }
+    const ViewportCamera& camera = renderer_->camera();
+    if (look_seen_ && (camera.x != look_x_ || camera.y != look_y_ || camera.zoom != look_zoom_)) hud_.note_view_moved();
+    look_x_ = camera.x;
+    look_y_ = camera.y;
+    look_zoom_ = camera.zoom;
+    look_seen_ = true;
+}
+
 // The view at the start (docs 5.44): from the map's corner just far enough to show the square around the anchor tile of the local team's hill (edge_scroll.hpp)
 void Application::show_start_view() {
     if (!renderer_) return;

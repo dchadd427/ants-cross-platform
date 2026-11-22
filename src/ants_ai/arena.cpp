@@ -5,6 +5,7 @@
 #include <array>
 #include <cstdlib>
 #include <set>
+#include <stdexcept>
 #include <utility>
 
 #include "ants_ai/map_info.hpp"
@@ -116,6 +117,10 @@ std::string refusal(const ArenaSpec& spec) {
     // short of an ant.) The server and the application ask the same question before they start a match.
     const assets::LevelValidation verdict = spec.level->validate(info.roster, assets::LevelLimits::for_play_extended());        // (the play limits: an Extended map is played here as it is in a room)
     if (!verdict.playable) return "the map cannot be played by these seats: " + verdict.reason();
+    if (spec.teams.set) {
+        const sim::StartTeamsPlan plan = sim::plan_start_teams(spec.teams, info.roster);
+        if (!plan.why.empty()) return "teams " + sim::start_teams_text(spec.teams) + ": " + plan.why;
+    }
     return "";
 }
 
@@ -285,6 +290,59 @@ void DropTally::scan(const sim::SimulationEngine& sim) {
     }
 }
 
+void IdleTally::scan(sim::SimulationEngine& sim) {
+    const uint64_t tick = sim.current_tick();
+    if (tick % kPeriod != 0) return;
+    uint64_t units = 0;
+    for (const sim::FoodObject& f : sim.grid().food_objects()) units += f.remaining;
+    if (started_ && units < units_) {                                                // a bite, from any pile (a lunchbox too): the food is going
+        last_food_ = tick;
+        for (Seat& s : seats_) {
+            s.after_ant_ticks = 0;
+            s.after_idle_ticks = 0;
+        }
+    }
+    units_ = units;
+    started_ = true;
+    for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
+        if (a.id > (1u << 20) || a.player_id >= sim::MAX_PLAYERS) continue;
+        if (a.id >= idle_since_.size()) {
+            idle_since_.resize(static_cast<size_t>(a.id) + 1, 0);
+            target_team_.resize(static_cast<size_t>(a.id) + 1, 255);
+        }
+        if (a.hp == 0 || a.state == sim::UnitState::Dead || a.state == sim::UnitState::Drowning) {
+            idle_since_[a.id] = 0;
+            continue;
+        }
+        Seat& seat = seats_[a.player_id];
+        seat.ant_ticks += kPeriod;
+        seat.after_ant_ticks += kPeriod;
+        bool standing = (a.state == sim::UnitState::Idle || a.state == sim::UnitState::GuardIdle || a.state == sim::UnitState::Swimming) && !a.is_holding && a.carried_points <= 0;
+        int32_t raid_amount = 0;
+        try {
+            const sim::AntUnit& u = sim.get_unit(a.id);
+            standing = standing && u.orig_order == sim::AntUnit::kOrderNone && u.home_state == 0 && u.waypoints.empty();
+            raid_amount = u.raid_amount;
+        } catch (const std::runtime_error&) {
+            standing = false;
+        }
+        if (a.type == sim::AntType::Thief && a.target_team_id < sim::MAX_PLAYERS && target_team_[a.id] >= sim::MAX_PLAYERS) {     // (the field names a team only while a Thief raids its hill)
+            ++seat.raids;
+            seat.raid_points += static_cast<uint32_t>(std::max<int32_t>(0, raid_amount));
+        }
+        target_team_[a.id] = a.target_team_id;
+        if (!standing) {
+            idle_since_[a.id] = 0;
+            continue;
+        }
+        if (idle_since_[a.id] == 0) idle_since_[a.id] = tick;
+        if (tick - idle_since_[a.id] >= kIdleTicks) {
+            seat.idle_ticks += kPeriod;
+            seat.after_idle_ticks += kPeriod;
+        }
+    }
+}
+
 ExpeditionResult read_expedition(const ExpeditionTask& e) noexcept {
     ExpeditionResult r;
     r.planned = e.planned();
@@ -338,6 +396,7 @@ ArenaResult play_match(const ArenaSpec& spec) {
     sim::SimulationEngine sim;
     sim.set_game_mode(spec.game_mode);
     sim.init(*spec.level, spec.seed, roster);
+    sim::apply_start_teams(sim, spec.teams);              // (free for all makes nothing)
     for (const BotSpec& b : spec.bots) {
         if (sim.grid().find_anthill(b.seat) == nullptr) {
             out.error = "the map has no hill for seat " + std::to_string(static_cast<unsigned>(b.seat));
@@ -352,6 +411,7 @@ ArenaResult play_match(const ArenaSpec& spec) {
     CantGoTally tally;
     FlowerTally flowers;
     DropTally drop_tally;
+    IdleTally idle_tally;
     Recorder rec;
     rec.log = spec.record ? &out.log : nullptr;
     rec.steps = &steps;
@@ -383,6 +443,7 @@ ArenaResult play_match(const ArenaSpec& spec) {
         const std::vector<sim::NewsEvent> news = sim.poll_news_events();
         const size_t audio = sim.poll_audio_events().size();
         tally.scan(sim, news);
+        idle_tally.scan(sim);
         if (sim.current_tick() % kFlowerScanPeriod == 0) {
             drop_tally.scan(sim);                       // (before the flower tally: both read the types of the last look)
             flowers.scan(sim);
@@ -403,6 +464,7 @@ ArenaResult play_match(const ArenaSpec& spec) {
     flowers.scan(sim);                                   // (the last ticks, when the match ended between two looks)
     out.landings = flowers.landings();
     out.drops = drop_tally.drops();
+    out.last_food = idle_tally.last_food();
     for (size_t k = 1; k < out.landed.size(); ++k) out.landed[k] = flowers.landed(static_cast<sim::AntType>(k));
     {
         std::set<uint32_t> counted;
@@ -441,6 +503,12 @@ ArenaResult play_match(const ArenaSpec& spec) {
         r.refused_orders = tally.seat(b.seat).refused;
         r.took = flowers.seat(b.seat).took;
         r.took_at_flowers = flowers.seat(b.seat).at_flowers;
+        r.ant_ticks = idle_tally.seat(b.seat).ant_ticks;
+        r.idle_ticks = idle_tally.seat(b.seat).idle_ticks;
+        r.after_ant_ticks = idle_tally.seat(b.seat).after_ant_ticks;
+        r.after_idle_ticks = idle_tally.seat(b.seat).after_idle_ticks;
+        r.raids = idle_tally.seat(b.seat).raids;
+        r.raid_points = idle_tally.seat(b.seat).raid_points;
         r.stats = controller.stats(b.seat);
         out.seats.push_back(r);
     }
@@ -458,6 +526,7 @@ ReplayResult replay_commands(const ArenaSpec& spec, const ArenaResult& played) {
     sim::SimulationEngine sim;
     sim.set_game_mode(spec.game_mode);
     sim.init(*spec.level, spec.seed, roster_of(spec.bots));                 // no controller, no bot: the commands alone
+    sim::apply_start_teams(sim, spec.teams);
     size_t next = 0;
     size_t checkpoint = 0;
     for (uint64_t step = 1; step <= played.steps; ++step) {

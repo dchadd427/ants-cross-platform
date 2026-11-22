@@ -854,8 +854,8 @@
   {
    "id": "limit_of_an_address_is_the_header",
    "file": "hub/server.py",
-   "old": "address = limitmod.address_key(h.get(\"x-client-address\"), peername[0] if peername else \"\")\n        writer.write(await route(request, address))",
-   "new": "address = limitmod.address_key(h.get(\"x-forwarded-for\"), peername[0] if peername else \"\")\n        writer.write(await route(request, address))",
+   "old": "headers.get(\"x-client-address\")",
+   "new": "headers.get(\"x-forwarded-for\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLimitsOfStart"
   },
   {
@@ -875,8 +875,8 @@
   {
    "id": "pages_take_a_body",
    "file": "hub/server.py",
-   "old": "if h.get(\"content-length\", \"0\") != \"0\" or \"transfer-encoding\" in h:\n            raise http.HttpError(400, \"body\")\n        peername",
-   "new": "if False:\n            raise http.HttpError(400, \"body\")\n        peername",
+   "old": "if h.get(\"content-length\", \"0\") != \"0\" or \"transfer-encoding\" in h:\n            raise http.HttpError(400, \"body\")\n        writer.write(await route(",
+   "new": "if False:\n            raise http.HttpError(400, \"body\")\n        writer.write(await route(",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart tests.scripts.test_hub_login.TheLogout"
   },
   {
@@ -980,8 +980,8 @@
   {
    "id": "log_holds_the_client_id",
    "file": "hub/config.py",
-   "old": "\"min_account_days\": self.min_account_days}",
-   "new": "\"min_account_days\": self.min_account_days, \"id\": self.login_client_id}",
+   "old": "\"images_configured\": int(bool(self.image_converter_url))}",
+   "new": "\"images_configured\": int(bool(self.image_converter_url)), \"id\": self.login_client_id}",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheProcess"
   },
   {
@@ -1092,15 +1092,15 @@
   {
    "id": "line_write_error_cuts_the_socket",
    "file": "hub/chat.py",
-   "old": "        try:\n            entry = self.store.add_line(who.account_id, who.name, line, max(RANK[role], 1 if mod else 0))       # (the role that the author has now: what the line will say of it)\n        except StoreError as e:",
-   "new": "        try:\n            entry = self.store.add_line(who.account_id, who.name, line, max(RANK[role], 1 if mod else 0))       # (the role that the author has now: what the line will say of it)\n        except ZeroDivisionError as e:",
+   "old": "        except StoreError as e:\n            self.account_limits.refund(who.account_id, counted)",
+   "new": "        except ZeroDivisionError as e:\n            self.account_limits.refund(who.account_id, counted)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheDatabaseThatCannotBeUsed tests.scripts.test_hub_server.TheLockedDatabaseOnTheWire"
   },
   {
    "id": "command_error_cuts_the_socket",
-   "file": "hub/chat.py",
-   "old": "            try:\n                return self.command(peer, line)\n            except StoreError as e:",
-   "new": "            try:\n                return self.command(peer, line)\n            except ZeroDivisionError as e:",
+   "file": "hub/commands.py",
+   "old": "        return commands.chat.command(peer, job)\n    except StoreError as e:",
+   "new": "        return commands.chat.command(peer, job)\n    except ZeroDivisionError as e:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheDatabaseThatCannotBeUsed tests.scripts.test_hub_server.TheLockedDatabaseOnTheWire"
   },
   {
@@ -1120,7 +1120,7 @@
   {
    "id": "failed_line_costs_its_token",
    "file": "hub/chat.py",
-   "old": "            self.account_limits.refund(who.account_id, line)       # (the line was not kept: it did not cost a token, and the same text may be tried again)",
+   "old": "            self.account_limits.refund(who.account_id, counted)       # (the line was not kept: it did not cost a token, and the same text may be tried again)",
    "new": "            pass",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheDatabaseThatCannotBeUsed tests.scripts.test_hub_server.TheLockedDatabaseOnTheWire"
   },
@@ -1133,9 +1133,9 @@
   },
   {
    "id": "failed_command_is_said_rate",
-   "file": "hub/chat.py",
-   "old": "return self.trouble(peer, e, \"bad\")                # (a moderator is told that the command did not happen, and may type it again)",
-   "new": "return self.trouble(peer, e, \"rate\")",
+   "file": "hub/commands.py",
+   "old": "return commands.chat.trouble(peer, e, \"bad\")",
+   "new": "return commands.chat.trouble(peer, e, \"rate\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheDatabaseThatCannotBeUsed tests.scripts.test_hub_server.TheLockedDatabaseOnTheWire"
   },
   {

@@ -8,7 +8,7 @@ What the original's network does is recorded in sections 5.46 to 5.48 of [`GAME_
 
 The remake runs **one deterministic simulation on every machine** and sends only the players' intent, a lock-step of commands. The host is the sequencer: it stamps every command with the sender's seat (a peer cannot speak for another player), seals a turn every 50 ms with the commands in canonical order and sends it to everybody. The host is a player's machine (a game on the local network) or a dedicated server (`ants_server`) that plays nobody (a room of the game server). This also makes web play possible.
 
-There is no NAT traversal in the game. Over the internet every player connects out to a dedicated server, so players need no forwarded port, and the browser build can join it. A launcher or lobby can still start the game with `--host` or `--join HOST[:PORT]`; the original's roster options (`-P`, `-G`, `-H`) are not read.
+There is no NAT traversal in the game's own match: over the internet every player connects out to a dedicated server, so players need no forwarded port, and the browser build can join it. (The channels of protocol 26 between browsers carry hints only, never the match: [`P2P_HINTS.md`](P2P_HINTS.md).) A launcher or lobby can still start the game with `--host` or `--join HOST[:PORT]`; the original's roster options (`-P`, `-G`, `-H`) are not read.
 
 ### What you can do
 
@@ -27,7 +27,7 @@ Every option of the game that is named on this page is listed in [`COMMAND_LINE.
 
 ### On a local network
 
-One player hosts and the others join. A local network, a VPN or a forwarded port 4001 will do.
+One player hosts and the others join. A local network or a VPN will do (plain TCP, not encrypted: the desktop game refuses to send a game server's room code over it to an address of the Internet, which is what the encrypted door below is for).
 
 ```bash
 ants --host --name Alice               # on one machine: opens a room (TCP port 4001)
@@ -44,10 +44,10 @@ ants --join 192.168.1.20 --name Bob    # joins the room of that host
 
 ### On the game server
 
-- The desktop start menu has **Join with a code** and **Host an online match** ([`CONTROLS.md`](CONTROLS.md) "Start Menu"). They use the game server's TCP port, `beta.playants.org:4001` unless `--server HOST[:PORT]` (or the settings key `server`) says another. The room's code is shown with a Copy button, every failure and every refusal is told in words, and a network game that ends takes you back to the menu. **Rejoin your match (CODE)** takes your seat in a match that still runs back.
-- From the command line the same is `ants --join HOST --room CODE`.
+- The desktop start menu has **Join with a code** and **Host an online match** ([`CONTROLS.md`](CONTROLS.md) "Start Menu"). They use the game server's encrypted door, `wss://beta.playants.org/ws` (TLS: the certificate is checked, and nothing is sent in the clear) unless `--server` (or the settings key `server`) says another: `--server wss://HOST[/PATH]`, or `--server HOST[:PORT]`, which is the wss door for a host of the Internet and plain TCP on 4001 for a server of this machine or the local network. The room's code is shown with a Copy button, every failure and every refusal is told in words, and a network game that ends takes you back to the menu. **Rejoin your match (CODE)** takes your seat in a match that still runs back.
+- From the command line the same is `ants --join-url wss://HOST/ws --room CODE` (`ants --join HOST --room CODE` for a server on this machine or the local network).
 - The first player in a server's room is its leader (`early_start` in the room's specification, on by default). Its setup screen is the host's, with START, and it may start the match with the players who are there: two at least, or one alone with bots in the empty seats. A room whose seats are all taken starts by itself, unless its create block says that a full room waits for its leader (the leader can then arrange the colors first). The leader also moves a player to another color: a press on the player's row puts that player in the next free color, or, in a room that waits for its leader's START when it is full, changes places with the next player when every color is held; the rooms of the front page and of the start menu start as soon as every color is held ([`CONTROLS.md`](CONTROLS.md)).
-- The server's rooms, its TCP and WebSocket doors, the control interface, reconnect and the Docker stack are described in [`SERVER.md`](SERVER.md) (the sections "The control interface", "Reconnect" and "The stack (Docker)").
+- The server's rooms, its TCP (LAN and development) and WebSocket doors, the control interface, reconnect and the Docker stack are described in [`SERVER.md`](SERVER.md) (the sections "The control interface", "Reconnect" and "The stack (Docker)").
 
 ### In the browser
 
@@ -71,6 +71,8 @@ Every change a player makes is a `Command` (a group move, special or attack, Sto
 ### Ping and delay
 
 - The corner of the screen shows `ping` and `delay` next to the frame rate, in the room and in the match (never in a game of one machine). `ping` is this machine's round trip to the host: the mean of the last five answers, a dash when the last answer is older than 3 s. In the browser the time that an answer waited for its frame is taken off, and a native window reads up to a frame too high. `delay` is the real time from sending one of your commands to the tick that applies it: the median of the last five, a dash after 10 s without a command. With the prediction on, `delay` shows what the click feels instead: from the frame that took the order to the frame that shows it.
+- **The ping of each player.** Where the game lists the people of a match with a number each (the countdown card, the list of connections of a match), the number is for you your own `ping` (the round trip to the server) and for each other player the round trip over the data channel to that player's page: the pages ping each other once a second and the number is the mean of the last five answers (`NetGame::peer_rtt_ms`, how it is measured: [`P2P_HINTS.md`](P2P_HINTS.md), "The channels"). There is no number (a dash) for a player with no channel, a page that does not answer, four seconds without an answer, and a computer player. The numbers are for the eye only: no turn, hash or replay reads one, and nothing is sent to the server for them. One scale colors every one of them (`ping_quality()` in `include/ants_net/latency.hpp`, `pingQuality()` in `web/front/lobby_rules.js`, and one table of cases, `tests/data/ping_quality_table.json`, that the tests of both run): **good** under 80 ms, **fair** from 80 to 149 ms, **poor** from 150 ms. The limits come from the measurements: a turn is 50 ms, with the server's hints a computer player's ants were corrected 0 to 0.7 times a minute up to a round trip of 80 ms and 15.5 times at 150 ms ([`P2P_HINTS.md`](P2P_HINTS.md), "Measured effect"), and the jitter buffer tops out at 200 ms. A channel's round trip through the relay is about the sum of the two players' ways to it, so a pair that is each 40 ms from the relay reads about 80: the scale is the same for both kinds of number.
+- **The list of connections.** A click on the corner's `ping` text in a match opens a small list of those numbers, one row for each person and computer player, and the next click closes it ([`VIEW_AND_HUD.md`](VIEW_AND_HUD.md#the-list-of-connections)); the countdown card has the same rows ([`VIEW_AND_HUD.md`](VIEW_AND_HUD.md#the-countdown-card)). Another player's own ping to the server is not shown: only that player knows it, and showing it would need a message of its own.
 - Without the prediction a click takes about the round trip plus 25 ms (the wait for the next seal) plus 50 ms (the buffer) plus the frames of the window (17 to 21 ms at 60 frames a second). Measured in a browser window at 60 frames a second: 99.5 ms at a round trip of 3 ms and 162.5 ms at 71 ms ([`NETWORK_PORT.md`](NETWORK_PORT.md) "What the player feels").
 
 ### Lag, silence and drop-outs
@@ -105,14 +107,15 @@ The prediction is **on by default** in every match of the network. `--no-predict
 
 - How the prediction works, what it shows and plays, when it is off and the limit on its work are described in [`NETWORK_PORT.md`](NETWORK_PORT.md#prediction-of-ones-own-orders-predictionhpp-cue_routerhpp-netgame-applicationview_sim).
 - [`NETWORK_PORT.md`](NETWORK_PORT.md) "Prediction of one's own orders" has the design.
+- **Hints (protocol 26).** The other players' orders, and a computer player's, can reach the prediction ahead of their sealed turns, so that their ants are corrected less: the browsers send each other their own orders through the operator's relay (a direct connection only when both players turned it on in the room), and the server sends a computer player's order the moment the bot gives it. The turns, the hashes and the record are not touched. [`P2P_HINTS.md`](P2P_HINTS.md) has the rules.
 
 ## Limits
 
 - No late join: a running match takes nobody new (the original has none either). Only a seat that was lost comes back, with its key, in a server's room.
 - A game on the local network has no pause, as in the original. A server's room pauses only for a player whose connection is lost.
-- A room on a local network is found with `ants --lan-list` and joined with `--join HOST[:PORT]` over TCP (a LAN, a VPN or a forwarded port 4001). There is no in-game LAN screen.
+- A room on a local network is found with `ants --lan-list` and joined with `--join HOST[:PORT]` over TCP (a LAN or a VPN). There is no in-game LAN screen.
 - The start menu joins and hosts on the game server only.
-- The browser build joins a game server over a WebSocket (`--join-url`). It cannot host a room or join a LAN room.
+- The browser build joins a game server over a WebSocket (`--join-url`, ws:// or wss://); the desktop game does so over wss:// only. It cannot host a room or join a LAN room.
 - A LAN host that dies in the first second of the match, before the links between guests are made, can split it.
 - When a network match ends, Leave on the results screen ends the program, as in the original ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) sections 5.49 and 5.63), unless the game was started from the start menu: then it returns to the menu ([`CONTROLS.md`](CONTROLS.md) "After a network match").
 - A player has one pending team offer at a time (the original queues several, section 5.42).

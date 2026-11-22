@@ -4,7 +4,7 @@
 //     make nothing, a number outlives its ant, at most 2 per sign per ant and 48 on the screen, and the opacity and the rise of a number over its 0.6 s;
 //   * the tracker on the real engine: a melee hit costs 1 and a Combat Ant's 2, a bomb costs the one ant that steps on it 2, a fire wall costs 1 to each ant on its tile, drowning changes nothing, and a hurt
 //     ant sent home shows one +N when it comes out;
-//   * the drawing on a real renderer (the software renderer, the dummy video driver), every pixel against numbers written down here: white outlined digits for damage, pale green for a heal, their place
+//   * the drawing on a real renderer (the software renderer, the dummy video driver), every pixel against numbers written down here: plain white digits for damage, white digits and a green plus for a heal, with nothing round them, their place
 //     over the ant at every zoom, their one size, the rise and the fade, the number that follows its ant and the one that outlives it, the clip to the view, the z-order over the health bars, a canvas shown small
 //     (twice the size at most) and Off, which changes no pixel.
 // The setting's storage and its menu row are in test_game_menu; a recording played with the numbers On and Off, with the same state hash at every tick, is RA10.3 of test_replay_app.
@@ -443,7 +443,7 @@ Picture shoot(PixelRig& rig, hc::ChangeTracker* tracker, int64_t now, double per
 }
 
 void test_drawing(const assets::AssetArchive& arc) {
-    std::printf("[drawing] white and green outlined numbers over the ants, pixel for pixel\n");
+    std::printf("[drawing] white and green numbers, with no border, over the ants, pixel for pixel\n");
     PixelRig rig(arc, "MEDIUM", kWideW, kWideH);
     check(rig.ok, "the rig is up");
     if (!rig.ok) return;
@@ -457,33 +457,56 @@ void test_drawing(const assets::AssetArchive& arc) {
         check(delta(none, shoot(rig, nullptr, 0)).n == 0, "Off: the frame is the frame without the feature, pixel for pixel");
         check(t.count() == 1, "...whatever the tracker holds");
     }
-    {   // a damage number, "-1", at its start: white digits, a near black outline round them
+    {   // a damage number, "-1", at its start: plain white digits and nothing round them
         hc::ChangeTracker t = with_number(1, 600, 500, 1, false);
         const Picture on = shoot(rig, &t, 0);
         const Delta d = delta(none, on);
-        // the glyphs are centred on the ant's body, 8 pixels over its position at the zoom 1: rows sy - 13 .. sy - 4, the outline one more each side
-        check(d.n > 30 && d.x0 == sx - 7 && d.x1 == sx + 6 && d.y0 == sy - 14 && d.y1 == sy - 3, "-1 stands centred on the ant's body: " + num(d.x0 - sx) + ".." + num(d.x1 - sx) + " x " + num(d.y0 - sy) + ".." + num(d.y1 - sy));
+        // the glyphs are centred on the ant's body, 8 pixels over its position at the zoom 1: rows sy - 13 .. sy - 4
+        check(d.n > 15 && d.x0 == sx - 6 && d.x1 == sx + 5 && d.y0 == sy - 13 && d.y1 == sy - 4, "-1 stands centred on the ant's body: " + num(d.x0 - sx) + ".." + num(d.x1 - sx) + " x " + num(d.y0 - sy) + ".." + num(d.y1 - sy));
         bool minus = true;
         for (int x = sx - 6; x <= sx - 2; ++x) minus = minus && is(on, x, sy - 8, 255, 255, 255);
         check(minus, "the minus is white, 5 pixels wide, at row 5 of the glyph");
         bool one = is(on, sx + 3, sy - 13, 255, 255, 255) && is(on, sx + 3, sy - 5, 255, 255, 255);
         for (int x = sx + 1; x <= sx + 5; ++x) one = one && is(on, x, sy - 4, 255, 255, 255);
         check(one, "the 1 is white, its foot 5 pixels wide on the glyph's last row (digits take 7 pixels each)");
+        int not_white = 0, darker = 0;                                       // (the picture's every changed pixel is the glyph's white: no border, nothing darker than the ground)
+        for (int y = d.y0; y <= d.y1; ++y) {
+            for (int x = d.x0; x <= d.x1; ++x) {
+                if (std::memcmp(on.at(x, y), none.at(x, y), 3) != 0 && !is(on, x, y, 255, 255, 255)) ++not_white;
+                for (int c = 0; c < 3; ++c) darker += on.at(x, y)[c] < none.at(x, y)[c] ? 1 : 0;
+            }
+        }
+        check(not_white == 0 && darker == 0, "-1 has no border: every pixel that it changes is white, and none is darker than the ground (" + num(not_white) + " not white, " + num(darker) + " darker)");
         const uint8_t* ground = none.at(sx - 4, sy - 9);
-        const uint8_t* ring = on.at(sx - 4, sy - 9);                       // (the pixel over the minus: the outline, near black at about 85 %)
-        bool at_85 = true;                                                   // (black at 217 / 255 over the ground: the ground keeps 38 / 255 of itself, give or take the rounding)
-        for (int c = 0; c < 3; ++c) at_85 = at_85 && std::abs(static_cast<int>(ring[c]) - static_cast<int>(ground[c]) * 38 / 255) <= 2;
-        check(at_85 && ground[1] > 40 && ring[1] > 0, "the outline is near black at about 85 % over the ground (ground " + num(ground[1]) + " -> " + num(ring[1]) + ")");
-        check(std::memcmp(on.at(sx - 4, sy - 16), none.at(sx - 4, sy - 16), 3) == 0 && std::memcmp(on.at(sx + 10, sy - 8), none.at(sx + 10, sy - 8), 3) == 0, "...and one pixel wide: nothing beyond it");
+        check(ground[1] > 40 && std::memcmp(on.at(sx - 4, sy - 9), ground, 3) == 0 && std::memcmp(on.at(sx - 4, sy - 7), none.at(sx - 4, sy - 7), 3) == 0, "...the pixels over and under the minus are the ground's own");
+        check(std::memcmp(on.at(sx - 7, sy - 8), none.at(sx - 7, sy - 8), 3) == 0 && std::memcmp(on.at(sx + 6, sy - 8), none.at(sx + 6, sy - 8), 3) == 0 && std::memcmp(on.at(sx - 4, sy - 14), none.at(sx - 4, sy - 14), 3) == 0 &&
+                  std::memcmp(on.at(sx + 3, sy - 14), none.at(sx + 3, sy - 14), 3) == 0 && std::memcmp(on.at(sx + 3, sy - 3), none.at(sx + 3, sy - 3), 3) == 0, "...and so are the ones beside the glyphs and over the 1's top and under its foot");
     }
-    {   // a heal number, "+3": pale green
+    {   // a heal number, "+3": a green plus and white digits, nothing round them
         hc::ChangeTracker t = with_number(1, 600, 500, 3, true);
         const Picture on = shoot(rig, &t, 0);
         const Delta d = delta(none, on);
-        check(d.n > 30 && d.x0 == sx - 7 && d.x1 == sx + 7 && d.y0 == sy - 14 && d.y1 == sy - 3, "+3 stands where -1 stood (its bar-free box is the same height): " + num(d.x0 - sx) + ".." + num(d.x1 - sx) + " x " + num(d.y0 - sy) + ".." + num(d.y1 - sy));
-        bool plus = is(on, sx - 4, sy - 8, 132, 236, 120) && is(on, sx - 7 + 3, sy - 10, 132, 236, 120) && is(on, sx - 7 + 3, sy - 6, 132, 236, 120);
-        for (int x = sx - 6; x <= sx - 2; ++x) plus = plus && is(on, x, sy - 8, 132, 236, 120);
-        check(plus, "the plus is pale green (132, 236, 120): a cross of 5 x 5 pixels, in the hand of the minus");
+        check(d.n > 15 && d.x0 == sx - 6 && d.x1 == sx + 6 && d.y0 == sy - 13 && d.y1 == sy - 4, "+3 stands where -1 stood (its box is the same height): " + num(d.x0 - sx) + ".." + num(d.x1 - sx) + " x " + num(d.y0 - sy) + ".." + num(d.y1 - sy));
+        const hc::Color sign = hc::kHealSignColor;
+        check(sign.r == 110 && sign.g == 255 && sign.b == 120 && hc::kHealColor.r == 255 && hc::kHealColor.g == 255 && hc::kHealColor.b == 255, "the heal number's plus is green (110, 255, 120) and its digits are white (255, 255, 255)");
+        bool plus = is(on, sx - 4, sy - 8, sign.r, sign.g, sign.b) && is(on, sx - 7 + 3, sy - 10, sign.r, sign.g, sign.b) && is(on, sx - 7 + 3, sy - 6, sign.r, sign.g, sign.b);
+        for (int x = sx - 6; x <= sx - 2; ++x) plus = plus && is(on, x, sy - 8, sign.r, sign.g, sign.b);
+        check(plus, "the plus is that green: a cross of 5 x 5 pixels, in the hand of the minus");
+        bool digit = is(on, sx + 0, sy - 12, 255, 255, 255) && is(on, sx + 6, sy - 12, 255, 255, 255) && is(on, sx + 1, sy - 4, 255, 255, 255);     // (the top row and the foot of the 3)
+        for (int x = sx + 1; x <= sx + 5; ++x) digit = digit && is(on, x, sy - 13, 255, 255, 255) && is(on, x, sy - 4, 255, 255, 255);
+        check(digit, "the 3 is white (the heal color), its first and last rows 5 pixels wide");
+        int other = 0, green_right_of_white = 0, last_green = -1000, first_white = 1000;   // (no border: every changed pixel is the green or the white; the green is the plus only, left of every white pixel)
+        for (int y = d.y0; y <= d.y1; ++y) {
+            for (int x = d.x0; x <= d.x1; ++x) {
+                if (std::memcmp(on.at(x, y), none.at(x, y), 3) == 0) continue;
+                if (is(on, x, y, sign.r, sign.g, sign.b)) last_green = std::max(last_green, x);
+                else if (is(on, x, y, 255, 255, 255)) first_white = std::min(first_white, x);
+                else ++other;
+            }
+        }
+        green_right_of_white = last_green >= first_white ? 1 : 0;
+        check(other == 0, "+3 has no border: every changed pixel is the green or the white (" + num(other) + " other)");
+        check(last_green > -1000 && first_white < 1000 && green_right_of_white == 0, "...and the green is the plus only, left of the white digits (green up to " + num(last_green - sx) + ", white from " + num(first_white - sx) + ")");
     }
     {   // the rise and the fade
         int top_age[3] = {0, 0, 0};
@@ -493,7 +516,7 @@ void test_drawing(const assets::AssetArchive& arc) {
             const Delta d = delta(none, shoot(rig, &t, ages[i]));
             top_age[i] = d.y0;
         }
-        check(top_age[0] == sy - 14 && top_age[1] == sy - 14 - 4 && top_age[2] == sy - 14 - 8, "it rises 8 pixels over its life: 0, 4 and 8 at 0, 0.3 and 0.58 s (" + num(top_age[0] - sy) + ", " + num(top_age[1] - sy) + ", " + num(top_age[2] - sy) + ")");
+        check(top_age[0] == sy - 13 && top_age[1] == sy - 13 - 4 && top_age[2] == sy - 13 - 8, "it rises 8 pixels over its life: 0, 4 and 8 at 0, 0.3 and 0.58 s (" + num(top_age[0] - sy) + ", " + num(top_age[1] - sy) + ", " + num(top_age[2] - sy) + ")");
         hc::ChangeTracker t = with_number(1, 600, 500, 1, false);
         const Picture solid = shoot(rig, &t, 300);
         hc::ChangeTracker t2 = with_number(1, 600, 500, 1, false);
@@ -518,8 +541,8 @@ void test_drawing(const assets::AssetArchive& arc) {
             hc::ChangeTracker t = with_number(1, 600, 500, 10, false);
             const Picture on = shoot(rig, &t, 0);
             const Delta d = delta(zn, on);
-            const int top = zy - z.centre - 6;                               // (the 12 high box, centred)
-            check(d.n > 30 && d.x1 - d.x0 == 21 && d.y0 == top && d.y1 == top + 11 && d.x0 == zx - 10, "zoom " + std::to_string(z.zoom) + ": -12 is the same 22 x 12 pixel box, its top " + num(top) + ": " + num(d.x0 - zx) + ".." + num(d.x1 - zx) + " x " + num(d.y0) + ".." + num(d.y1) + " (want " + num(top) + ".." + num(top + 11) + ")");
+            const int top = zy - z.centre - 5;                               // (the 10 high box, centred)
+            check(d.n > 15 && d.x1 - d.x0 == 19 && d.y0 == top && d.y1 == top + 9 && d.x0 == zx - 9, "zoom " + std::to_string(z.zoom) + ": -10 is the same 20 x 10 pixel box, its top " + num(top) + ": " + num(d.x0 - zx) + ".." + num(d.x1 - zx) + " x " + num(d.y0) + ".." + num(d.y1) + " (want " + num(top) + ".." + num(top + 9) + ")");
         }
         rig.look(500.0, 400.0, 1.0f);
     }
@@ -530,11 +553,11 @@ void test_drawing(const assets::AssetArchive& arc) {
         screen_of(rig, 640, 520, 1.0, mx, my);
         const Picture none_moved = shoot(rig, nullptr, 0);
         const Delta d = delta(none_moved, shoot(rig, &t, 0));
-        check(d.x0 == mx - 7 && d.y0 == my - 14, "the number stands over the ant as it is drawn now (it moved 40 and 20 pixels)");
+        check(d.x0 == mx - 6 && d.y0 == my - 13, "the number stands over the ant as it is drawn now (it moved 40 and 20 pixels)");
         rig.world.ants.clear();
         const Picture empty = shoot(rig, nullptr, 0);
         const Delta gone = delta(empty, shoot(rig, &t, 100));
-        check(gone.n > 30 && gone.x0 == mx - 7 && gone.y0 == my - 14 - 1, "an ant that is gone leaves its number where it was last drawn (the rise is 1 at 0.1 s)");
+        check(gone.n > 15 && gone.x0 == mx - 6 && gone.y0 == my - 13 - 1, "an ant that is gone leaves its number where it was last drawn (the rise is 1 at 0.1 s)");
         rig.world.ants = {sprite_less(1, 0, 600, 500, 9)};
     }
     {   // a safety net behind the tracker's gate: the ant is still in the game but the picture does not draw it (fog), so its number is not drawn either, and one that is drawn or gone is as before
@@ -547,7 +570,7 @@ void test_drawing(const assets::AssetArchive& arc) {
         check(delta(fogged_none, shoot(rig, &t, 0)).n == 0, "an ant that the fog hides has no number drawn, though the tracker holds one for it");
         rig.world.fog_revealed.assign(static_cast<size_t>(rig.world.width) * rig.world.height, 1);
         const Picture seen_none = shoot(rig, nullptr, 0);
-        check(delta(seen_none, shoot(rig, &t, 0)).n > 30, "...and the same ant on explored ground has it (the hiding is only for a frame in which the ant is not drawn)");
+        check(delta(seen_none, shoot(rig, &t, 0)).n > 15, "...and the same ant on explored ground has it (the hiding is only for a frame in which the ant is not drawn)");
         rig.world.fog_revealed.assign(static_cast<size_t>(rig.world.width) * rig.world.height, 0);
         shoot(rig, nullptr, 0);
         shoot(rig, &t, 0);                                                      // (hidden again: noted)
@@ -584,7 +607,7 @@ void test_drawing(const assets::AssetArchive& arc) {
         for (const double per_css : {1.0, 1.24, 2.0, 2.5, 3.9}) {
             hc::ChangeTracker t = with_number(1, 600, 500, 1, false);
             const Delta d = delta(shoot(rig, nullptr, 0, per_css), shoot(rig, &t, 0, per_css));
-            check(d.x1 - d.x0 + 1 == 14 && d.y1 - d.y0 + 1 == 12 && d.y0 == sy - 14, "a canvas shown at " + std::to_string(per_css) + " picture pixels per CSS pixel: the number is x1 (" + num(d.x1 - d.x0 + 1) + " x " + num(d.y1 - d.y0 + 1) + "), rows " + num(d.y0 - sy) + ".." + num(d.y1 - sy));
+            check(d.x1 - d.x0 + 1 == 12 && d.y1 - d.y0 + 1 == 10 && d.y0 == sy - 13, "a canvas shown at " + std::to_string(per_css) + " picture pixels per CSS pixel: the number is x1 (" + num(d.x1 - d.x0 + 1) + " x " + num(d.y1 - d.y0 + 1) + "), rows " + num(d.y0 - sy) + ".." + num(d.y1 - sy));
         }
     }
     {   // two numbers on one ant: a heal over a damage, a line (12 pixels) apart
@@ -596,7 +619,7 @@ void test_drawing(const assets::AssetArchive& arc) {
         w.ants[0].hp = 10;
         t.on_tick(w, 3, 0, 0);
         const Delta d = delta(none, shoot(rig, &t, 0));
-        check(d.y0 == sy - 14 - 12 && d.y1 == sy - 3, "a damage and a heal number of one ant: the newer stands one line (12 pixels) above the older (" + num(d.y0 - sy) + ".." + num(d.y1 - sy) + ")");
+        check(d.y0 == sy - 13 - 12 && d.y1 == sy - 4, "a damage and a heal number of one ant: the newer stands one line (12 pixels) above the older (" + num(d.y0 - sy) + ".." + num(d.y1 - sy) + ")");
     }
 }
 

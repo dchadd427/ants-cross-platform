@@ -9,6 +9,7 @@
 
 #include "ants_net/clock.hpp"
 #include "ants_net/protocol.hpp"
+#include "ants_server/history_details.hpp"
 #include "ants_server/online_limits.hpp"
 #include "ants_server/secret.hpp"
 
@@ -19,6 +20,7 @@ namespace ants::server {
 RoomManager::RoomManager(MapStore store, ServerLimits limits) : store_(std::move(store)), limits_(limits), log_budget_(limits.log_budget_bytes), code_source_(random_bytes) {
     if (!store_.scanned()) store_.scan();           // (the server's main has scanned it and logged the notes; a manager made by hand lists its folders here)
     live_board_.set_delay_seconds(limits_.live_delay_s);
+    guard_.set_limits(limits_.address);
 }
 
 RoomManager::~RoomManager() = default;
@@ -33,6 +35,7 @@ RoomSpec RoomManager::default_spec() const {
     spec.max_log_bytes = limits_.room_log_bytes;
     spec.countdown_s = limits_.countdown_s;
     spec.solo_countdown_s = limits_.solo_countdown_s;
+    spec.countdown_hold_ms = limits_.countdown_hold_ms;
     return spec;
 }
 
@@ -85,6 +88,7 @@ std::string spec_range_error(const RoomSpec& spec) {
     if (spec.resume_countdown_ms > kMaxResumeCountdownMs) return "resume_countdown_seconds must be 0 to 60";
     if (spec.countdown_s > net::kMaxCountdownSeconds) return "countdown_seconds must be 0 to 60";
     if (spec.solo_countdown_s > net::kMaxCountdownSeconds) return "solo_countdown_seconds must be 0 to 60";
+    if (spec.countdown_hold_ms != 0 && (spec.countdown_hold_ms < kMinCountdownHoldMs || spec.countdown_hold_ms > kMaxCountdownHoldMs)) return "countdown_hold_seconds must be 10 to 3600";
     if (spec.max_connections < spec.players || spec.max_connections > 4096) return "max_connections must be the number of players to 4096";
     if (spec.max_log_bytes < kMinLogBytes || spec.max_log_bytes > kMaxLogBytes) return "the limit of the turn log must be 1 KiB to 1 GiB";
     if (!sim::valid_game_mode(spec.mode)) return "the game mode must be one that this server knows (\"highest-score\" or \"187\")";           // (a mode that is not known is never played as another)
@@ -181,6 +185,9 @@ std::unique_ptr<Room> RoomManager::build_room(RoomSpec spec, uint32_t now_ms, Cr
     else if (visitor_made && !replay_demo_) room->set_replay_store(nullptr, "this server does not keep the matches of demo rooms (--replay-demo)");
     else room->set_replay_store(replays_.get());
     room->set_live_board(&live_board_);                           // (a room that records shows its match here from its start)
+    room->set_unrecorded_sink([this](UnrecordedMatch&& match) { keep_unrecorded(std::move(match)); });
+    room->set_turn_settings(limits_.turn);
+    room->set_relay_gate([this](const std::string& address) { return guard_.take_relay(address_identity(address), now_hint_); });       // (the budget per address: the seat's address as the lobby kept it)
     if (room->lobby()) room->set_lobby_services(lobby_services());
     return room;
 }
@@ -216,7 +223,7 @@ PublicChoice public_choice_of(const net::CreateBlock& block, const ServerLimits&
 
 }  // namespace
 
-bool RoomManager::make_public_room(const std::string& code, const net::CreateBlock& block, uint32_t now_ms) {
+bool RoomManager::make_public_room(const std::string& code, const net::CreateBlock& block, const std::string& creator, uint32_t now_ms) {
     // A visitor's room takes a code with no upper-case letter (net::public_room_code), which is what the pages and the menu make. The codes of the control interface keep out of its way: the server draws
     // them with a capital (draw_room_code), and an operator who chooses one by hand gives it one. Without this a Hello with a block could take any code that is free, "ROOM-1" before a lobby's
     // POST /rooms, and the players who come for that room with no block would be seated in the visitor's (v0.10.0 kept the two apart with its lower-case "demo-" prefix).
@@ -231,6 +238,7 @@ bool RoomManager::make_public_room(const std::string& code, const net::CreateBlo
     spec.teams = block.teams();                                     // (the room starts with them every time: the first Hello's choice)
     spec.leader_starts = block.leader_starts();                     // (a full room waits for its leader's START)
     spec.public_room = true;
+    spec.creator = creator;
     spec.early_start = true;                                        // the first player in a public room may start it with the players who are there (the page tells them)
     spec.wait_ms = limits_.demo_wait_ms;
     spec.keep_ms = 30000;
@@ -299,7 +307,7 @@ bool RoomManager::take_match_place(uint32_t now_ms, uint64_t cells, uint64_t sta
     return true;
 }
 
-bool RoomManager::make_lobby_room(const std::string& code, const net::CreateBlock& block, uint32_t now_ms) {
+bool RoomManager::make_lobby_room(const std::string& code, const net::CreateBlock& block, const std::string& creator, uint32_t now_ms) {
     // Lobbies need the server's public rooms (a match that a lobby begins is one of them), a map, and keys (a seat is held for its key). The code is a visitor's, as for a public room.
     if (limits_.demo_lobbies == 0 || limits_.demo_rooms == 0 || limits_.demo_map.empty() || !limits_.reconnect) return false;
     if (!net::public_room_code(code) || !net::valid_create_block(block) || !block.lobby()) return false;
@@ -308,7 +316,9 @@ bool RoomManager::make_lobby_room(const std::string& code, const net::CreateBloc
     if (!block.map_name.empty() && store_.test_map(block.map_name) != nullptr &&
         OnlineLimits::allows(store_.counts_of(block.map_name)))
         map = store_.test_map(block.map_name)->name;
-    return create_room(lobby_spec(code, map), now_ms).ok;      // (the map of the block when the server offers it; the plan changes it)
+    RoomSpec spec = lobby_spec(code, map);
+    spec.creator = creator;
+    return create_room(std::move(spec), now_ms).ok;            // (the map of the block when the server offers it; the plan changes it)
 }
 
 // The pool is full, or the server has no place for another room: the lobby that nobody is in gives its place up; when there is none, the one in which nothing has been done for a long time (never a lobby that is used)
@@ -355,7 +365,9 @@ void RoomManager::reopen_lobby(const std::string& code, uint32_t now_ms) {
     if (limits_.demo_lobbies == 0 || limits_.demo_rooms == 0 || limits_.demo_map.empty() || !limits_.reconnect || !net::public_room_code(code)) return;
     if (!lobby_place(now_ms)) return;
     CreateResult made;
-    std::unique_ptr<Room> lobby = build_room(lobby_spec(code, limits_.demo_map), now_ms, made);
+    RoomSpec spec = lobby_spec(code, limits_.demo_map);
+    spec.creator = it->second->creator();                           // (the rematch is the same room: its address still holds it, and made no new one)
+    std::unique_ptr<Room> lobby = build_room(std::move(spec), now_ms, made);
     if (lobby == nullptr || !lobby->reopen(*rematch, now_ms)) return;
     it = rooms_.find(code);                                          // (the evictions of lobby_place erased other entries: this one is still the match's)
     if (it == rooms_.end()) return;
@@ -434,6 +446,11 @@ void RoomManager::reject(std::unique_ptr<net::Connection> connection, net::Rejec
 
 void RoomManager::add_connection(std::unique_ptr<net::Connection> connection, const std::string& address, uint32_t now_ms) {
     if (connection == nullptr) return;
+    if (!guard_.allow_connection(address_identity(address), now_ms)) {      // (more than connections_per_second from this address in the last second: closed with no answer, a client tries again)
+        ++refused_;
+        connection->close();
+        return;
+    }
     if (pending_.size() >= limits_.max_pending) {
         // Too many that have not said Hello yet. The newcomer wins: the oldest of them has been silent the longest (a real client says Hello at once, and every
         // pass of update() reads the Hellos that came), so it is the one that is dropped. Otherwise 128 silent connections would keep every player out.
@@ -523,7 +540,7 @@ void RoomManager::release_parked(const std::string& code, uint32_t now_ms) {
     for (Parked& p : mine) route_hello(std::move(p.connection), p.address, p.message, p.hello, now_ms);
 }
 
-void RoomManager::route_hello(std::unique_ptr<net::Connection> connection, const std::string& address, const std::vector<uint8_t>& message, const net::HelloMsg& hello, uint32_t now_ms) {
+void RoomManager::route_hello(std::unique_ptr<net::Connection> connection, const std::string& address, const std::vector<uint8_t>& message, const net::HelloMsg& hello, uint32_t now_ms, bool held) {
     net::RejectReason reason = net::RejectReason::BadRequest;
     bool good = true;
     Room* room = nullptr;
@@ -551,15 +568,26 @@ void RoomManager::route_hello(std::unique_ptr<net::Connection> connection, const
         }
     }
     bool made_here = false;                                        // this very Hello made the room (the Welcome of its seat says so)
-    if (it == rooms_.end() && !keyed && hello.create.has_value() && !hello.room.empty()) {
+    const std::string id = address_identity(address);               // (the limits per address: "" when the door does not know the address, and nothing is limited then)
+    const bool makes = it == rooms_.end() && !keyed && hello.create.has_value() && !hello.room.empty();
+    if (makes) {
         // A page makes a lobby room with its lobby block and a game makes a public room with a plain one; the other way round is a request that no honest client sends (protocol 16)
         if ((hello.client_kind == net::kClientPage) != hello.create->lobby()) return reject(std::move(connection), net::RejectReason::BadRequest, now_ms);
-        if (hello.create->lobby() ? make_lobby_room(hello.room, *hello.create, now_ms) : make_public_room(hello.room, *hello.create, now_ms)) {
+        // An address that made rooms in a burst, or holds many open ones, is answered as a server that has no place for one: NoSuchRoom, which the clients word as "cannot make a room now, try again" (checked
+        // before anything is made or given up for it)
+        if (guard_.allow_room(id, open_rooms_of(id), now_ms) != AddressGuard::RoomVerdict::Allowed) return reject(std::move(connection), net::RejectReason::NoSuchRoom, now_ms);
+        if (hello.create->lobby() ? make_lobby_room(hello.room, *hello.create, id, now_ms) : make_public_room(hello.room, *hello.create, id, now_ms)) {
             it = rooms_.find(hello.room);
             made_here = it != rooms_.end();
+            if (made_here) guard_.note_room_made(id, now_ms);
         }
     }
+    // A Hello for a room that exists (not the one that made it, not a seat holder coming back to a match that runs, which needs its key) from an address that is over its allowance of wrong codes waits as a wrong
+    // code would: a program that tries codes gets no faster answer at the right one than at the wrong ones
+    if (!held && !made_here && it != rooms_.end() && it->second->state() != RoomState::Finished && it->second->state() != RoomState::Failed && !(keyed && !it->second->accepting()) &&
+        hold_hello(connection, address, id, message, hello, now_ms)) return;
     if (it == rooms_.end()) {
+        if (!makes && !held && !hello.room.empty()) return answer_no_such_room(std::move(connection), id, net::RejectReason::NoSuchRoom, now_ms);       // a code that no room has: tried, or mistyped
         good = false;
         reason = net::RejectReason::NoSuchRoom;
     } else if (it->second->state() == RoomState::Finished || it->second->state() == RoomState::Failed) {
@@ -603,6 +631,7 @@ bool RoomManager::history_may_run() const {
 }
 
 void RoomManager::update(uint32_t now_ms) {
+    now_hint_ = now_ms;
     if (replays_ != nullptr) replays_->update();                   // (the replays that are too old are deleted once an hour)
     if (history_feeder_ != nullptr) {                              // (one match of the replay store at a time is counted for the history, and only while nobody plays: a recording takes 0.4 - 0.5 s for a match of 10 - 12 minutes, so the gap after it is four times that)
         history_feeder_->step([this]() { return history_may_run(); }, now_ms);
@@ -663,6 +692,8 @@ void RoomManager::update(uint32_t now_ms) {
     }
     // 1c. the records that wait for their replay: a slice of work (a room that is restored takes the Hellos that waited for it)
     restore_step(now_ms);
+    // 1d. the answers to Hellos for rooms that do not exist that were held back (the limits per address)
+    release_delayed(now_ms);
     // 2. rejected connections wait a moment so that their answer is delivered, then they go
     for (size_t i = 0; i < lingering_.size();) {
         if (now_ms - lingering_[i].since_ms >= limits_.reject_linger_ms || !lingering_[i].connection->is_open()) lingering_.erase(lingering_.begin() + static_cast<std::ptrdiff_t>(i));
@@ -700,6 +731,9 @@ void RoomManager::update(uint32_t now_ms) {
         }
     }
     for (const std::string& code : rematches) reopen_lobby(code, now_ms);
+    // 6. the limits per address: lobbies of crowded addresses that nobody sets up, and the minute's upkeep
+    close_crowded_lobbies(now_ms);
+    limits_upkeep(now_ms);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -725,6 +759,31 @@ bool RoomManager::enable_replays(ReplayConfig config, bool include_demo, std::st
     if (!store->prepare(why)) return false;
     replays_ = std::move(store);
     return true;
+}
+
+// The id of a match that has no recording looks like the name of a recording ("ants-TREASURE-20261008-143209Z-9999": the same map and second, a number from 9999 down) so that every route that takes an id takes
+// it; no recording gets such a number (a store counts the matches of one second from 2 up), so the record cannot be mistaken for the count of a file that comes later
+void RoomManager::keep_unrecorded(UnrecordedMatch&& match) {
+    if (history_ == nullptr || replays_ == nullptr || !replays_->config().clock_s) return;
+    const int64_t ended_s = replays_->config().clock_s();
+    const std::string base = std::string("ants-") + ReplayStore::map_stem(match.head.map_name) + "-" + ReplayStore::time_stamp(ended_s);
+    std::string id;
+    for (unsigned number = 9999; number >= 9000; --number) {
+        const std::string candidate = base + "-" + std::to_string(number);
+        if (!valid_history_id(candidate) || history_->knows(candidate)) continue;
+        id = candidate;
+        break;
+    }
+    if (id.empty()) return;
+    replay::Replay whole;
+    whole.head = match.head;
+    whole.complete = true;
+    whole.total_turns = match.outcome.turns;
+    whole.match_over = match.outcome.match_over;
+    HistoryRecord record = make_history_record(id, ended_s, whole, match.outcome);
+    record.details = history_details_marker(record.heavy_orders, match.largest_sender);       // (the replay pass did not run: no stats, only the marker, the mark and the seat that sent the most into a recording that was over its limit)
+    std::string why;
+    if (!history_->put(record, why)) history_->report("history: the result of a match without a recording could not be kept: " + why);
 }
 
 bool RoomManager::enable_history(db::Database& database, std::string& why, HistoryStore::Config config) {
@@ -754,6 +813,8 @@ std::vector<std::string> RoomManager::take_notices() {
     bot_notes_.clear();
     for (std::string& line : room_notes_) notes.push_back(std::move(line));
     room_notes_.clear();
+    for (std::string& line : limit_notes_) notes.push_back(std::move(line));
+    limit_notes_.clear();
     if (replays_ != nullptr) {
         for (std::string& line : replays_->take_notes()) notes.push_back(std::move(line));
     }
@@ -1075,6 +1136,26 @@ std::vector<LobbyListing> RoomManager::lobbies(uint32_t now_ms) const {
         if (a.people != b.people) return a.people > b.people;
         if (a.age_ms != b.age_ms) return a.age_ms > b.age_ms;
         return a.code < b.code;
+    });
+    if (list.size() > kMaxListedLobbies) list.resize(kMaxListedLobbies);
+    return list;
+}
+
+std::vector<PrivateListing> RoomManager::private_lobbies() const {
+    std::vector<PrivateListing> list;
+    for (const auto& entry : rooms_) {
+        PrivateListing row;
+        if (entry.second->private_listing(row)) list.push_back(std::move(row));
+    }
+    // a total order of the fields that the row shows (rooms are visited by code: a stable sort of ties would leave that order in the answer; rows that tie in every field are the same row)
+    std::sort(list.begin(), list.end(), [](const PrivateListing& a, const PrivateListing& b) {
+        if (a.people != b.people) return a.people > b.people;
+        if (a.map != b.map) return a.map < b.map;
+        if (a.host != b.host) return a.host < b.host;
+        if (a.mode != b.mode) return a.mode < b.mode;
+        if (a.bots != b.bots) return a.bots < b.bots;
+        if (a.free_colors != b.free_colors) return a.free_colors < b.free_colors;
+        return a.size < b.size;
     });
     if (list.size() > kMaxListedLobbies) list.resize(kMaxListedLobbies);
     return list;

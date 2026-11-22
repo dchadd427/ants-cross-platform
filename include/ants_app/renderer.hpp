@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -246,6 +247,9 @@ public:
     /// Everything that is drawn afterwards is moved by (x, y), until set_origin(0, 0): a window of the original's own 640 x 480 screen (the options screen, the quick help, a dialog) is drawn
     /// with its own numbers and put where the picture wants it. Not a clip: nothing is cut. A renderer that records its calls sees them as they are given (without the move).
     virtual void set_origin(int32_t x, int32_t y) { (void)x; (void)y; }
+    /// Everything that is drawn afterwards (rectangles, text, the pieces of the HUD art) is laid over what is there with this share of its own opacity, 0 (not at all) .. 255 (as it is), until
+    /// set_alpha_scale(255): the countdown card is see-through while the player moves the view. A renderer that records its calls (the test renderers) ignores it.
+    virtual void set_alpha_scale(int32_t alpha) { (void)alpha; }
     virtual void fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) = 0;
     virtual void draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) = 0;
     virtual void draw_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color) = 0;
@@ -285,6 +289,19 @@ public:
     virtual void draw_dialog_text(const std::string& text, int32_t x, int32_t baseline, ants::assets::ColorRGBA color, int32_t em_tenths) {
         (void)text; (void)x; (void)baseline; (void)color; (void)em_tenths;
     }
+    /// The game's own face (Libre Franklin, the one draw_text uses) at any size, for a window that is drawn at a scale of its own (the countdown card): `em_tenths` is the em in tenths of a canvas pixel.
+    /// A renderer without it says false and the caller draws with draw_text at the nearest FontSize.
+    virtual bool face_text_ready() const { return false; }
+    virtual int32_t face_text_width(const std::string& text, int32_t em_tenths) const { (void)text; (void)em_tenths; return 0; }
+    /// A line of the face with its first letter's left edge at `x` and its baseline at `baseline`
+    virtual void draw_face_text(const std::string& text, int32_t x, int32_t baseline, ants::assets::ColorRGBA color, int32_t em_tenths) {
+        (void)text; (void)x; (void)baseline; (void)color; (void)em_tenths;
+    }
+    /// How many device pixels one canvas pixel is (1 when there is no output to measure): a window that is drawn in a whole number of device pixels to its own unit needs it
+    virtual double output_scale() const { return 1.0; }
+    /// The HUD art's sheet (1, 2 or 3) that the pieces drawn afterwards are taken from, until set_art_scale(0) leaves the choice to the output's scale: the countdown card picks the sheet that makes
+    /// one of its units whole device pixels
+    virtual void set_art_scale(int32_t scale) { (void)scale; }
     /// Restricts everything that is drawn afterwards to a rectangle until clear_clip_rect(): the original draws a label into a surface of the label's own
     /// size, so what sticks out of the box (the half line at the edge of the chat log) is not seen. A renderer without clipping draws it all.
     virtual void set_clip_rect(int32_t x, int32_t y, int32_t w, int32_t h) { (void)x; (void)y; (void)w; (void)h; }
@@ -510,6 +527,13 @@ public:
     /// (for the tests) pretends that the device takes no texture with a side above `limit` pixels (0: the device's own limit), as a small phone's does
     void set_art_texture_limit(int32_t limit) noexcept { art_texture_limit_ = limit; }
     void set_origin(int32_t x, int32_t y) override { origin_ = LayoutPoint{x, y}; }
+    void set_alpha_scale(int32_t alpha) override { alpha_scale_ = static_cast<uint8_t>(std::clamp(alpha, 0, 255)); }
+    int32_t alpha_scale() const noexcept { return alpha_scale_; }
+    void set_art_scale(int32_t scale) override { art_scale_override_ = std::clamp(scale, 0, 3); }
+    double output_scale() const override;
+    bool face_text_ready() const override;
+    int32_t face_text_width(const std::string& text, int32_t em_tenths) const override;
+    void draw_face_text(const std::string& text, int32_t x, int32_t baseline, ants::assets::ColorRGBA color, int32_t em_tenths) override;
     const LayoutPoint& origin() const noexcept { return origin_; }
     void fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) override;
     void draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) override;
@@ -540,10 +564,11 @@ public:
     /// paused). They keep one size on every canvas and stand centred on the ant's body.
     void set_health_changes(health::ChangeTracker* tracker, int64_t now_ms);
     /// The numbers' font, the original's fixed system font (the 8 x 15 raster "Fixedsys"): a cell is `kFixedCellW` x `kFixedCellH` pixels; only digits and '-' have glyphs (nothing else is drawn)
-    /// `scale` makes every font pixel `scale` x `scale` (the cell grows right and down from (x, y)); `outline` first draws the glyph in black one scaled pixel round (the phone look, health_marks.hpp: digit_scale)
-    void draw_fixed_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color, int32_t scale = 1, bool outline = false);
-    /// The numbers (hit points, damage and heal, score) in the game's TrueType font, white with a one pixel outline, rasterised at the real output resolution (renderer_numbers.cpp). `classic` true (the default for now)
-    /// keeps the old drawing (the 8 x 15 raster digits and the archive's digit sprites); it is also what is drawn when no font was found. A prototype switch.
+    /// `scale` makes every font pixel `scale` x `scale` (the cell grows right and down from (x, y); the phone look, health_marks.hpp: digit_scale). Plain: nothing is drawn round a glyph
+    void draw_fixed_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color, int32_t scale = 1);
+    /// The numbers (hit points, damage and heal, score) in the game's TrueType font, rasterised at the real output resolution (renderer_numbers.cpp): the hit points and the damage and heal numbers are plain glyphs,
+    /// the score numbers that rise from a hill and the results page's have the outline. `classic` true (the default for now) keeps the old drawing (the 8 x 15 raster digits and the archive's digit sprites); it is also
+    /// what is drawn when no font was found. A prototype switch.
     void set_classic_numbers(bool classic) noexcept { classic_numbers_ = classic; }
     bool classic_numbers() const noexcept { return classic_numbers_; }
     /// (a test hook) the face's file that the numbers use: empty is no face (the classic numbers are drawn); a file that does not open draws no number
@@ -704,6 +729,9 @@ private:
     std::unordered_map<std::string, CachedTextEntry> dialog_cache_;
     TTF_Font* dialog_font(int32_t em_tenths) const;
     void drop_dialog_fonts();
+    mutable std::unordered_map<int32_t, TTF_Font*> face_fonts_;    // the game's face at any size (face_text_ready), by em in tenths of a pixel, opened at twice the size
+    std::unordered_map<std::string, CachedTextEntry> face_cache_;
+    TTF_Font* face_font(int32_t em_tenths) const;
     static constexpr size_t kFontSizes = 8;          // the enumerators of FontSize
     static size_t font_index(FontSize size) noexcept;
     TTF_Font* font_for(FontSize size) const noexcept { return fonts_[font_index(size)]; }
@@ -724,7 +752,7 @@ private:
     int32_t art_texture_limit_{0};                         // (for the tests) the largest side of a texture that is made; 0: the device's own
     void drop_art_textures();
     SDL_Texture* art_texture(const hud_art::Art& art, int32_t scale);
-    int32_t art_scale_for_output(double* output_scale = nullptr) const;
+    int32_t art_scale_for_output(double* out = nullptr) const;
     std::array<SDL_Texture*, 12> fixed_glyphs_{};   // draw_fixed_text: '0' .. '9', '-' and '+', built on first use
     std::unordered_map<uint64_t, SDL_Texture*> blend_textures_;   // draw_rgba_blended: one for each different picture (by what it holds)
     int32_t rgba_texture_w_{0};
@@ -771,13 +799,17 @@ private:
     uint8_t hud_team_id_{0};
     health::Setting health_{health::When::Off, health::Style::Bar};
     bool health_thick_{false};
-    int32_t digit_scale_{1};          // the number's size and look on a canvas shown small (health::digit_scale / digit_outlined)
-    bool digit_outline_{false};
+    int32_t digit_scale_{1};          // the number's size on a canvas shown small (health::digit_scale)
     ScreenLayout layout_{ScreenLayout::classic()};
     int32_t canvas_w_{CANVAS_WIDTH};
     int32_t canvas_h_{CANVAS_HEIGHT};
     LayoutRect picture_{0, 0, CANVAS_WIDTH, CANVAS_HEIGHT};
     bool picture_inset_{false};            // the picture is smaller than the canvas: its corner is added to every position and it is the clip
+    uint8_t alpha_scale_{255};             // set_alpha_scale: the share of its opacity that what is drawn keeps (255: all of it)
+    int32_t art_scale_override_{0};        // set_art_scale: the sheet that the HUD art is taken from (0: the one the output's scale needs)
+    uint8_t scaled_alpha(uint8_t a) const noexcept { return alpha_scale_ == 255 ? a : static_cast<uint8_t>((static_cast<int32_t>(a) * alpha_scale_ + 127) / 255); }
+    /// One copy of a texture whose own opacity is `own_alpha`, kept under the alpha scale (set_alpha_scale): every picture of a window that goes through it is see-through with the rest
+    void copy_scaled(SDL_Texture* tex, const SDL_Rect* src, const SDL_Rect* dst, int32_t own_alpha = 255);
     LayoutPoint origin_{};                 // set_origin: what a window of the original's own screen is moved by (nothing, outside the HUD's pages and dialogs)
     /// A rectangle of the picture's own coordinates as SDL gets it (the picture's corner added, and the origin of a window)
     SDL_Rect placed(int32_t x, int32_t y, int32_t w, int32_t h) const noexcept { return SDL_Rect{x + picture_.x + origin_.x, y + picture_.y + origin_.y, w, h}; }
@@ -838,7 +870,7 @@ private:
     };
     std::vector<DeferredDigits> deferred_digits_;
     void draw_deferred_digits();
-    /// The damage and heal numbers: the tracker (null = Off), its clock and the size they are drawn at. The pictures of "-12" and "+7" are made once (outlined, white, 7 x 10 pixel glyphs) and tinted
+    /// The damage and heal numbers: the tracker (null = Off), its clock and the size they are drawn at. The pictures of "-12" and "+7" are made once (plain white 7 x 10 pixel glyphs) and tinted
     health::ChangeTracker* changes_{nullptr};
     int64_t changes_now_ms_{0};
     struct ChangePicture {
@@ -855,11 +887,11 @@ private:
     std::string number_path_;                      // the face of the numbers: the bundled Libre Franklin Black, else ttf_path_ (empty: none was found, the classic numbers are drawn)
     struct NumberPicture {
         std::string text;
-        int32_t height_px{0};                      // the wanted height of what shows (a digit and its outline) in output pixels
+        int32_t height_px{0};                      // the wanted height of what shows in output pixels (a plain picture: the digit; an outlined one: the digit and its old one pixel outline)
         int32_t outline_px{0};
         SDL_Texture* texture{nullptr};
         int32_t w{0}, h{0};                        // the texture
-        int32_t box_x{0}, box_y{0}, box_w{0}, box_h{0};   // the box of what shows (glyphs and outline) in the texture: the digits' height, the text's width
+        int32_t box_x{0}, box_y{0}, box_w{0}, box_h{0};   // the box of what shows (glyphs, and the outline if there is one) in the texture: the digits' height, the text's width
         uint64_t used{0};                          // when it was made or last asked for (number_tick_): the oldest go first
     };
     std::vector<NumberPicture> number_pictures_;
@@ -879,8 +911,9 @@ private:
     void drop_number_fonts();
     uint64_t number_tick_{0};                      // a counter of the cache's uses (the age of a picture or a face)
     size_t number_font_opens_{0};                  // how many times a face was opened for a size (two a size: the fill and the outline)
-    /// `x`, `y` are the canvas position of the box of what shows (its left and top edge; a centred one passes the middle); `width_px` > 0 stretches the box to that many output pixels
-    void draw_number_box(const NativeFrame& f, const NumberPicture& pic, double x, double y, bool centre_x, bool centre_y, health::Color color, int32_t alpha, int32_t width_px = 0);
+    /// `x`, `y` are the canvas position of the box of what shows (its left and top edge; a centred one passes the middle); `width_px` > 0 stretches the box to that many output pixels; `shift_px` moves it that many
+    /// output pixels right and down
+    void draw_number_box(const NativeFrame& f, const NumberPicture& pic, double x, double y, bool centre_x, bool centre_y, health::Color color, int32_t alpha, double width_px = 0.0, int32_t shift_px = 0);
     /// The part of an animation's sprites that shows (the pixels that are not the color key), in the animation's own coordinates: the digit sprites' ink, not their cell
     AnimBounds anim_ink(int32_t anim_id);
     std::unordered_map<int32_t, AnimBounds> anim_ink_;

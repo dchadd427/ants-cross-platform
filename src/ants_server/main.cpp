@@ -44,6 +44,9 @@
 //   --max-catch-up-seconds N
 //                      the time that one absence may spend catching up in all, over all its attempts: then the catch-up fails, the seat is absent (the vote and the cap apply) and its key
 //                      is refused (10 - 3600, default 300; the control interface's "max_catch_up_seconds")
+//   --countdown-hold-seconds N
+//                      a match that has not begun to play (the countdown) is held at most this long in all for seats that are away: then every seat that is not present is dropped and the match goes on
+//                      without it (10 - 3600, default 60; the control interface's "countdown_hold_seconds")
 //   --resume-countdown-seconds N
 //                      after a pause of 3 s or more the match is held this long before it goes on (0 - 60, default 10, 0 = none; the control interface's "resume_countdown_seconds")
 //   --start-countdown-seconds N
@@ -56,6 +59,11 @@
 //   --solo-countdown-seconds N
 //                      a room of exactly one person, with or without computer players, holds the first turn of its match the shorter of this and --start-countdown-seconds, with the same card (0 - 60, default 10,
 //                      0 = the plain 5 s dialog; the control interface's "solo_countdown_seconds")
+//   --turn-host HOST[:PORT]
+//                      protocol 26 (docs/P2P_HINTS.md): the relay that the players' browsers connect through (a coturn in shared-secret mode; the variable ANTS_TURN_HOST names it when the option is not
+//                      given). Needs the secret in the environment variable ANTS_TURN_SECRET (never on the command line). With both, every player of a match is handed a short-lived credential for it
+//                      and the players open channels that carry their orders to each other ahead of their turns; without either of them, nobody opens a channel and the match is what it always was
+//                      The relay's port is 3478 (TURN's own) unless the :PORT of the name or the environment variable ANTS_TURN_PORT says another (when both are given they must be the same number: else no relay).
 //   --log-mb N         the limit of one room's turn log, which a returning player is given the match from, in MiB (1 - 256, default 16); the logs of all the rooms together may take 256 MiB
 //   --restart-dir DIR  where the rooms that hold seats keep their RESTART RECORDS (restart_record.hpp, docs/NETWORK_PORT.md "Restart records"): from the start of its match to its end a room
 //                      writes every sealed turn to a file here (mode 600: it holds the keys of the seats) BEFORE the turn is sent to anybody, so that a server that is stopped, crashes or is
@@ -132,6 +140,13 @@
 // permissions of its folder), so a container needs no setup: the secret is printed once, the moment it is made (before anything else can stop the server); later it is read
 // from the file (docker exec <container> cat /results/control-secret). A secret in the environment wins. A file that exists is used as it is (secret.hpp).
 
+//   --address-connections-per-second N, --address-rooms-per-minute N, --address-rooms-open N, --address-wrong-codes-per-minute N, --address-crowded-rooms N, --address-crowded-idle-seconds N, --address-relay-per-hour N
+//                      the limits per network address (docs/ADDRESS_LIMITS.md; each takes 0 to switch it off, and the control interface's GET and POST /limits show and change them by the same names with
+//                      '_'): connections in a second, rooms made in a minute, rooms open at once, answers at once to Hellos for rooms that do not exist in a minute, and the open rooms above which an address's idle
+//                      lobbies are closed after the idle seconds, relay credentials in an hour. They are ON by default (20, 10, 16, 30, 8, 300, 24); --no-address-limits switches all of them off
+//   --trusted-proxies LIST
+//                      the reverse proxies whose X-Client-Address the WebSocket door believes: addresses and networks separated by commas ("10.0.0.0/8,2001:db8::/32"; "none": nobody). Without the option the
+//                      environment variable ANTS_TRUSTED_PROXIES, and without that the loopback address and the private networks, which is where the site's own proxy connects from
 #include <algorithm>
 #include <iostream>
 #include <atomic>
@@ -143,6 +158,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
@@ -150,10 +166,13 @@
 #include "ants_app/version.hpp"
 #include "ants_ctl/http.hpp"
 #include "ants_net/tcp.hpp"
+#include "ants_net/turn.hpp"
 #include "ants_net/ws.hpp"
 #include "ants_net/protocol.hpp"
+#include "ants_server/address_limits.hpp"
 #include "ants_server/admin_audit.hpp"
 #include "ants_server/bot_matches.hpp"
+#include "ants_server/bot_rotation.hpp"
 #include "ants_server/private_files.hpp"
 #include "ants_server/control.hpp"
 #include "ants_db/database.hpp"
@@ -200,10 +219,12 @@ struct Options {
     long max_pause_s{1800};
     long max_catch_up_s{300};
     long resume_countdown_s{10};
+    long countdown_hold_s{static_cast<long>(ants::net::kCountdownHoldMs / 1000u)};     // --countdown-hold-seconds
     long start_countdown_s{static_cast<long>(ants::net::kMatchCountdownSeconds)};     // --start-countdown-seconds (protocol 21)
     long solo_countdown_s{static_cast<long>(ants::net::kSoloCountdownSeconds)};       // --solo-countdown-seconds (a room of one person)
     long live_delay_s{static_cast<long>(ants::server::LiveBoard::kDefaultDelayS)};    // --live-delay-seconds (the public live door shows a match of two or more people this late)
     long log_mb{16};
+    std::string turn_host;                     // --turn-host (protocol 26: the relay; empty: the environment variable ANTS_TURN_HOST, else none)
     std::string restart_dir;                   // --restart-dir (empty: the folder "restart" in the results folder, when there is one)
     bool no_restart_records{false};
     long restart_vote_s{90};
@@ -232,6 +253,10 @@ struct Options {
     std::string picture_program;               // --map-picture-program (empty: no pictures of the players' maps)
     std::string picture_archive;               // --map-picture-archive
     std::string pictures_dir;                  // --map-pictures-dir (empty: the folder "map-pictures" in the results folder)
+    ants::server::AddressLimits address_limits{ants::server::AddressLimits::standard()};      // --address-* (docs/ADDRESS_LIMITS.md)
+    bool no_address_limits{false};             // --no-address-limits
+    std::string trusted_proxies;               // --trusted-proxies (empty and not given: ANTS_TRUSTED_PROXIES, else the private networks)
+    bool trusted_proxies_given{false};
 };
 
 void usage(FILE* to) {
@@ -240,15 +265,17 @@ void usage(FILE* to) {
                  "                    [--results-dir DIR] [--secret-file PATH] [--max-rooms N] [--community-maps DIR]\n"
                  "                    [--demo-rooms N --demo-map NAME [--demo-maps A.LVL,B.LVL,...] [--demo-lobbies N]]\n"
                  "                    [--reconnect | --no-reconnect] [--hold-vote-seconds 5-3600] [--max-pause-seconds 60-86400]\n"
-                 "                    [--max-catch-up-seconds 10-3600] [--resume-countdown-seconds 0-60] [--start-countdown-seconds 0-60] [--solo-countdown-seconds 0-60] [--live-delay-seconds 0-300] [--log-mb 1-256]\n"
+                 "                    [--max-catch-up-seconds 10-3600] [--resume-countdown-seconds 0-60] [--countdown-hold-seconds 10-3600] [--start-countdown-seconds 0-60] [--solo-countdown-seconds 0-60] [--live-delay-seconds 0-300] [--log-mb 1-256]\n"
                  "                    [--restart-dir DIR | --no-restart-records] [--restart-vote-seconds 30-3600] [--restart-budget-mb 1-4096]\n"
                  "                    [--replays-dir DIR | --no-replays] [--replay-demo] [--replays-days 1-3650] [--replays-max-mb 1-4096]\n"
                  "                    [--replay-port N] [--replay-any-interface] [--bot-match-every-min 0|5-1440] [--db FILE | --no-db] [--no-history]\n"
                  "                    [--submit-port N] [--submit-any-interface] [--submissions-dir DIR] [--submit-max-waiting N] [--submit-per-address N] [--submit-ignore-client-header]\n"
                  "                    [--test-map-port N] [--test-map-any-interface] [--test-maps-dir DIR] [--test-map-ignore-client-header]\n"
-                 "                    [--map-picture-program PATH --map-picture-archive FILE [--map-pictures-dir DIR]]\n"
+                 "                    [--map-picture-program PATH --map-picture-archive FILE [--map-pictures-dir DIR]] [--turn-host HOST[:PORT]]\n"
+                 "                    [--no-address-limits | --address-connections-per-second N --address-rooms-per-minute N --address-rooms-open N --address-wrong-codes-per-minute N\n"
+                 "                     --address-crowded-rooms N --address-crowded-idle-seconds N --address-relay-per-hour N] [--trusted-proxies LIST]\n"
                  "  the control interface takes its secret from the environment variable ANTS_SERVER_SECRET; without it the server makes one and keeps it\n"
-                 "  in --secret-file (default: control-secret in --results-dir)\n");
+                 "  in --secret-file (default: control-secret in --results-dir); the relay's secret (--turn-host) from ANTS_TURN_SECRET, its port from ANTS_TURN_PORT\n");
 }
 
 bool parse_port(const char* text, uint16_t& out) {
@@ -261,6 +288,10 @@ bool parse_port(const char* text, uint16_t& out) {
 
 // The address of a peer without its port ("10.0.0.5:51234" -> "10.0.0.5")
 std::string host_part(const std::string& peer) {
+    if (!peer.empty() && peer[0] == '[') {                           // ("[2001:db8::1]:51234": an IPv6 address is in brackets)
+        const size_t close = peer.find(']');
+        return close == std::string::npos ? peer : peer.substr(1, close - 1);
+    }
     const size_t colon = peer.rfind(':');
     return colon == std::string::npos ? peer : peer.substr(0, colon);
 }
@@ -316,6 +347,26 @@ int main(int argc, char** argv) {
         } else if (a == "--test-map-port") {
             if (!parse_port(value("--test-map-port"), o.test_map_port)) {
                 std::fprintf(stderr, "--test-map-port takes a port number (0 - 65535)\n");
+                return 2;
+            }
+        } else if (a == "--no-address-limits") {
+            o.no_address_limits = true;
+        } else if (a == "--trusted-proxies") {
+            o.trusted_proxies = value("--trusted-proxies");
+            o.trusted_proxies_given = true;
+        } else if (a.compare(0, 10, "--address-") == 0) {              // (one option for each limit of kAddressLimitFields: its key with '-' for '_')
+            std::string key = a.substr(10);
+            for (char& c : key) c = c == '-' ? '_' : c;
+            const char* text = value(a.c_str());
+            char* end = nullptr;
+            const long long n = std::strtoll(text, &end, 10);
+            std::string why;
+            if (end == text || *end != '\0') {
+                std::fprintf(stderr, "%s takes a whole number (0 switches the limit off)\n", a.c_str());
+                return 2;
+            }
+            if (!ants::server::set_address_limit(o.address_limits, key, n, why)) {
+                std::fprintf(stderr, "%s: %s\n", a.c_str(), why.c_str());
                 return 2;
             }
         } else if (a == "--test-map-any-interface") {
@@ -421,9 +472,11 @@ int main(int argc, char** argv) {
                 std::fprintf(stderr, "--restart-dir takes a folder\n");
                 return 2;
             }
+        } else if (a == "--turn-host") {
+            o.turn_host = value("--turn-host");
         } else if (a == "--no-restart-records") {
             o.no_restart_records = true;
-        } else if (a == "--hold-vote-seconds" || a == "--max-pause-seconds" || a == "--max-catch-up-seconds" || a == "--resume-countdown-seconds" || a == "--start-countdown-seconds" || a == "--solo-countdown-seconds" || a == "--live-delay-seconds" || a == "--log-mb" || a == "--restart-vote-seconds" ||
+        } else if (a == "--hold-vote-seconds" || a == "--max-pause-seconds" || a == "--max-catch-up-seconds" || a == "--resume-countdown-seconds" || a == "--countdown-hold-seconds" || a == "--start-countdown-seconds" || a == "--solo-countdown-seconds" || a == "--live-delay-seconds" || a == "--log-mb" || a == "--restart-vote-seconds" ||
                    a == "--restart-budget-mb" || a == "--replays-days" || a == "--replays-max-mb") {
             const char* text = value(a.c_str());
             char* end = nullptr;
@@ -434,6 +487,7 @@ int main(int argc, char** argv) {
             else if (a == "--max-pause-seconds") { lo = 60; hi = 86400; target = &o.max_pause_s; }
             else if (a == "--max-catch-up-seconds") { lo = 10; hi = 3600; target = &o.max_catch_up_s; }
             else if (a == "--resume-countdown-seconds") { lo = 0; hi = 60; target = &o.resume_countdown_s; }
+            else if (a == "--countdown-hold-seconds") { lo = 10; hi = 3600; target = &o.countdown_hold_s; }
             else if (a == "--start-countdown-seconds") { lo = 0; hi = 60; target = &o.start_countdown_s; }
             else if (a == "--solo-countdown-seconds") { lo = 0; hi = 60; target = &o.solo_countdown_s; }
             else if (a == "--live-delay-seconds") { lo = 0; hi = static_cast<long>(ants::server::LiveBoard::kMaxDelayS); target = &o.live_delay_s; }
@@ -624,10 +678,32 @@ int main(int argc, char** argv) {
     limits.max_pause_ms = static_cast<uint32_t>(o.max_pause_s * 1000);
     limits.max_catch_up_ms = static_cast<uint32_t>(o.max_catch_up_s * 1000);
     limits.resume_countdown_ms = static_cast<uint32_t>(o.resume_countdown_s * 1000);
+    limits.countdown_hold_ms = static_cast<uint32_t>(o.countdown_hold_s * 1000);
     limits.countdown_s = static_cast<uint32_t>(o.start_countdown_s);
     limits.solo_countdown_s = static_cast<uint32_t>(o.solo_countdown_s);
     limits.live_delay_s = static_cast<uint32_t>(o.live_delay_s);
     limits.room_log_bytes = static_cast<size_t>(o.log_mb) * 1024u * 1024u;
+    {                                                                 // the relay of protocol 26: its name from the option or ANTS_TURN_HOST, its port from the name or ANTS_TURN_PORT (ants_net/turn.hpp)
+        const auto text = [](const char* v) { return std::string(v != nullptr ? v : ""); };
+        limits.turn = ants::net::make_turn_settings(o.turn_host.empty() ? text(std::getenv("ANTS_TURN_HOST")) : o.turn_host, text(std::getenv("ANTS_TURN_PORT")), text(std::getenv("ANTS_TURN_SECRET")));
+    }      // (the secret stays in this closure: not in a log, a record or a room's spec)
+    if (!o.turn_host.empty() && limits.turn == nullptr) {
+        std::fprintf(stderr, "--turn-host needs a host name (letters, digits, '.', '-', an optional :port that agrees with ANTS_TURN_PORT when that is set) and the secret in the environment variable ANTS_TURN_SECRET\n");
+        return 2;
+    }
+    log(limits.turn != nullptr ? "players' channels: on (relay " + limits.turn->urls.front().substr(5) + "; each player of a match is handed a short-lived credential for it; hints go between them ahead of the turns)"
+                               : std::string("players' channels: off (no relay: --turn-host or ANTS_TURN_HOST (the port: its :PORT or ANTS_TURN_PORT, 3478 otherwise), and ANTS_TURN_SECRET)"));
+    limits.address = o.no_address_limits ? ants::server::AddressLimits() : o.address_limits;
+    ants::server::TrustedProxies proxies = ants::server::TrustedProxies::standard();
+    {                                                                 // the proxies whose X-Client-Address the WebSocket door believes: the option, else ANTS_TRUSTED_PROXIES, else the private networks
+        const char* env = std::getenv("ANTS_TRUSTED_PROXIES");
+        const std::string list = o.trusted_proxies_given ? o.trusted_proxies : std::string(env != nullptr ? env : "");
+        std::string why;
+        if (list.find_first_not_of(" \t\r\n,") != std::string::npos && !ants::server::TrustedProxies::parse(list, proxies, why)) {
+            std::fprintf(stderr, "%s: %s\n", o.trusted_proxies_given ? "--trusted-proxies" : "ANTS_TRUSTED_PROXIES", why.c_str());
+            return 2;
+        }
+    }
     ants::server::MapStore store{o.maps_dir, o.community_maps_dir};
     {
         std::vector<std::string> map_notes;
@@ -663,6 +739,14 @@ int main(int argc, char** argv) {
                                     : std::string("lobby rooms off") + (o.demo_lobbies_given ? " (--demo-lobbies 0)" : !o.reconnect ? " (--no-reconnect)" : " (--max-rooms leaves no place for them beside --demo-rooms)"));
     }
 
+    if (o.no_address_limits) {
+        log("limits per address: off (--no-address-limits)");
+    } else {
+        std::string numbers;
+        for (const ants::server::AddressLimitField& f : ants::server::kAddressLimitFields) numbers += (numbers.empty() ? "" : ", ") + std::string(f.key) + " " + std::to_string(limits.address.*f.member);
+        log("limits per address: " + numbers + " (0: no limit; docs/ADDRESS_LIMITS.md)");
+    }
+    if (ws) log("the WebSocket door believes X-Client-Address from " + std::to_string(proxies.size()) + " trusted proxy network(s) (--trusted-proxies, ANTS_TRUSTED_PROXIES); a connection from any other address counts as itself");
     if (ws) {                                                    // GET /busy on the WebSocket port: how many matches run, no name, no code, no secret
         ws->set_status("/busy", [&rooms]() {
             const ants::server::BusyCounts b = rooms.busy(now_ms());
@@ -836,16 +920,17 @@ int main(int argc, char** argv) {
     // The matches of computer players that the server plays itself (bot_matches.hpp, docs/SERVER_REPLAYS.md): their schedules are kept in the database, or in memory when the server has none. The first start makes the schedule
     // that --bot-match-every-min asks for; from then on the admin page edits them. The admin page's calls are handed to BotMatches by the submissions door, behind its pass and token.
     ants::server::BotScheduleStore bot_store(database.is_open() ? &database : nullptr);
+    ants::server::BotRotationStore rotation_store(database.is_open() ? &database : nullptr);          // (the lists that "random:rotation" draws from, when an admin edited them: the defaults otherwise)
     std::unique_ptr<ants::server::BotMatches> bot_matches;
     {
         std::string why;
-        if (!bot_store.open(static_cast<int64_t>(std::time(nullptr)), why)) {
+        if (!bot_store.open(static_cast<int64_t>(std::time(nullptr)), why) || !rotation_store.open(why)) {
             log("matches of computer players are off: " + why);
         } else {
             if (o.bot_match_every_min > 0 && rooms.replay_store() != nullptr && bot_store.seed_default(static_cast<int>(o.bot_match_every_min), static_cast<int64_t>(std::time(nullptr)))) {
                 log("the schedule of matches of computer players that --bot-match-every-min asks for was made: one every " + std::to_string(o.bot_match_every_min) + " minutes, the first one in a minute");
             }
-            bot_matches = std::make_unique<ants::server::BotMatches>(rooms, bot_store, audit.get());
+            bot_matches = std::make_unique<ants::server::BotMatches>(rooms, bot_store, rotation_store, audit.get());
             if (o.bot_match_every_min == 0) {
                 bot_matches->set_scheduling(false);
                 log("scheduled matches of computer players are OFF (--bot-match-every-min 0): no schedule starts a match; the admin page's Start now still works");
@@ -922,8 +1007,8 @@ int main(int argc, char** argv) {
     }
     if (o.reconnect) {
         log("rooms hold the seat of a player whose connection is lost (the default; --no-reconnect turns it off): a vote after " + std::to_string(o.hold_vote_s) + " s away, the pauses of a match capped at " + std::to_string(o.max_pause_s) +
-            " s, a catch-up of at most " + std::to_string(o.max_catch_up_s) + " s per absence, a resume countdown of " + std::to_string(o.resume_countdown_s) + " s, a turn log of at most " +
-            std::to_string(o.log_mb) + " MiB per room");
+            " s, a match that has not begun to play held at most " + std::to_string(o.countdown_hold_s) + " s for seats that are away (--countdown-hold-seconds), a catch-up of at most " + std::to_string(o.max_catch_up_s) +
+            " s per absence, a resume countdown of " + std::to_string(o.resume_countdown_s) + " s, a turn log of at most " + std::to_string(o.log_mb) + " MiB per room");
     } else {
         log("rooms hold no seats (--no-reconnect): a player whose connection is lost is dropped at once, unless a room's specification says \"reconnect\": true");
     }
@@ -964,7 +1049,10 @@ int main(int argc, char** argv) {
         return test_store && std::filesystem::exists(std::filesystem::path(test_store->config().dir) / (stem + ".lvl"), looked);
     };
     if (pictures) pictures->prune(picture_kept);
+    ants::server::LoopLoad loop_load;                          // (how busy the loop is: the matches of computer players wait while it is over 40 %: loop_load.hpp)
+    rooms.set_loop_load(&loop_load);
     while (!g_stop) {
+        const auto pass_began = std::chrono::steady_clock::now();
         const uint32_t now = now_ms();
         if (tcp) {
             for (int i = 0; i < 32; ++i) {
@@ -978,7 +1066,7 @@ int main(int argc, char** argv) {
             for (int i = 0; i < 32; ++i) {
                 auto c = ws->accept();
                 if (!c) break;
-                const std::string address = host_part(c->peer());
+                const std::string address = ants::server::door_address(host_part(c->peer()), c->client_address(), proxies);      // (the proxy's word only from a trusted proxy)
                 rooms.add_connection(std::move(c), address, now);
             }
         }
@@ -1021,10 +1109,16 @@ int main(int argc, char** argv) {
             if (demo && s.ticks == 0) continue;                    // a public room that nobody completed: no line, no file (a peer chooses these codes, nothing may pile up)
             std::string held;                                      // a room that held seats says what came of it (never a key)
             if (s.reconnect) {
-                held = ", paused " + std::to_string(s.paused_s) + " s, " + std::to_string(s.rejoins) + " back, dropped " + std::to_string(s.drops_by_vote) + " by vote and " + std::to_string(s.drops_by_cap) + " by the cap, " + std::to_string(s.rejoins_refused) +
+                held = ", paused " + std::to_string(s.paused_s) + " s, " + std::to_string(s.rejoins) + " back, dropped " + std::to_string(s.drops_by_vote) + " by vote and " + std::to_string(s.drops_by_cap) + " by the cap, " + std::to_string(s.drops_by_countdown_hold) + " by the countdown hold, " + std::to_string(s.rejoins_refused) +
                        " refused by a budget";
             }
             if (s.drops_by_state > 0) held += ", " + std::to_string(s.drops_by_state) + " dropped for a state that differed from the referee's";
+            if (s.heavy_order_seats != 0) {                                                  // (a seat whose orders went over its budget: a count of the orders that were not sealed, per seat)
+                held += ", heavy order rate on seat";
+                for (size_t seat = 0; seat < 4; ++seat) {
+                    if ((s.heavy_order_seats & (1u << seat)) != 0) held += " " + std::to_string(seat) + " (" + std::to_string(s.orders_over_budget[seat]) + " orders not sealed)";
+                }
+            }
             if (s.replay_kept) held += ", kept as " + s.replay_file;                       // (the replay of the match: its file name is the map and the end time, no code and no name of a person)
             log("room " + s.code + " " + ants::server::room_state_name(s.state) + ": " + s.reason + " (map " + s.map + ", " + std::to_string(s.ticks) + " ticks" + held + ")");
             if (!o.results_dir.empty() && !demo) {
@@ -1035,6 +1129,7 @@ int main(int argc, char** argv) {
         for (const std::string& line : rooms.take_notices()) log(line);          // (a record that the disk refused, ...)
         stats.save_if_due();
         for (const std::string& line : stats.take_notices()) log(line);
+        loop_load.add(now_ms(), static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - pass_began).count()));
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
     log("stopping");

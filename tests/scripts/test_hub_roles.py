@@ -227,7 +227,8 @@ class TheMapping(SetupTest):
             for frame in ({"t": "you", "you": {"role": "admin", "mod": True}}, {"t": "say", "text": "/mute bob 5", "role": "admin", "mod": True}, {"t": "here", "at": "look", "role": "admin"}):
                 c.send(hc.frame(1, json.dumps(frame).encode()))
             seen = wait_frames(c, "err")
-            self.assertEqual([m for m in seen if m["t"] == "err"], [{"t": "err", "code": "bad"}] * 2)       # (`you` is not a message that a client may send; and a command from somebody with no role is refused)
+            self.assertEqual([m for m in seen if m["t"] == "err"], [{"t": "err", "code": "bad"}])          # (`you` is not a message that a client may send)
+            self.assertEqual([m for m in seen if m["t"] == "reply"], [{"t": "reply", "c": "unknown", "r": "unknown"}])                   # (and a command from somebody with no role is answered as a word that is no command of theirs)
             self.assertEqual([m for m in seen if m["t"] == "line"], [])                                    # (and is not posted for everybody to read)
 
 
@@ -274,7 +275,7 @@ class TheChatAsksTheRoles(unittest.TestCase):
         self.w.roles.set("1001", "none")
         self.w.say(self.alice, "/mute alice 5")
         self.assertEqual(self.w.store.muted_until("1001"), 0)
-        self.assertEqual(self.alice.codes(), ["bad"])                            # (refused, privately)
+        self.assertEqual((self.alice.codes(), self.alice.kinds("reply")), ([], [{"t": "reply", "c": "unknown", "r": "unknown"}]))        # (answered privately, as a word that is no command of theirs)
         self.assertEqual(self.w.chat.ring[-1].text, "hello")                     # (and not posted for everybody to read)
 
     def test_the_command_words_are_read_in_any_case(self):
@@ -282,7 +283,7 @@ class TheChatAsksTheRoles(unittest.TestCase):
         for n, text in enumerate(("/Mute alice 5", "/MUTE alice 5", "/Del 1", "/dEl 1")):
             self.w.clock.now += 3
             self.w.say(self.alice, text)                                         # (a role-less account: a phone's capital letter does not make it a line for everybody)
-        self.assertEqual(self.alice.codes(), ["bad"] * 4)
+        self.assertEqual((self.alice.codes(), self.alice.kinds("reply")), ([], [{"t": "reply", "c": "unknown", "r": "unknown"}] * 4))
         self.assertEqual([l.text for l in self.w.chat.ring], ["hello"])
         self.w.roles.set("1002", "mod")
         self.w.roles.set("1001", "none")
@@ -947,8 +948,8 @@ class TheLiveRoles(LiveTest):
         self.wait_role(mod, "none")
         mod.drain(0.2)
         mod.say("/mute nobody 5")
-        seen = wait_frames(mod, "err")
-        self.assertEqual(([m for m in seen if m["t"] == "line"], [m["code"] for m in seen if m["t"] == "err"]), ([], ["bad"]))     # (refused, and not posted for everybody to read)
+        seen = wait_frames(mod, "reply")
+        self.assertEqual(([m for m in seen if m["t"] == "line"], [m for m in seen if m["t"] == "reply"], [m for m in seen if m["t"] == "err"]), ([], [{"t": "reply", "c": "unknown", "r": "unknown"}], []))     # (answered as a word that is no command of theirs, and not posted for everybody to read)
 
     def test_the_players_list_marks_both_roles(self):
         self.fake.members = {"1001": [MOD], "1002": [ADMIN]}
@@ -1081,7 +1082,8 @@ class TheSecrets(unittest.TestCase):
         for text in (repr(cfg), str(cfg), json.dumps(cfg.summary()), repr(roles), str(roles), repr(roles.entries), repr(vars(roles.client).keys())):
             for secret in SECRETS + (OWNER,):
                 self.assertNotIn(secret, text)
-        self.assertEqual(cfg.summary(), {"port": 4040, "origin": "none", "roles_configured": 1, "owner": 1, "recheck": 180, "test_login": 0, "login_configured": 0, "min_account_days": 7})
+        self.assertEqual(cfg.summary(), {"port": 4040, "origin": "none", "roles_configured": 1, "owner": 1, "recheck": 180, "test_login": 0, "login_configured": 0, "min_account_days": 7,
+                                       "role_images_configured": 0, "images_configured": 0})
         for name, value in (("ANTS_HUB_DISCORD_BOT_TOKEN", "canary token with blanks " + TOKEN), ("ANTS_HUB_DISCORD_BOT_TOKEN", "short"), ("ANTS_HUB_DISCORD_GUILD", "canary-guild"),
                             ("ANTS_HUB_ROLE_ADMIN", "canary-role"), ("ANTS_HUB_ROLE_MOD", "0123456"), ("ANTS_HUB_OWNER", "canary-owner"), ("ANTS_HUB_ROLE_RECHECK_SECONDS", "canary")):
             with self.assertRaises(config.ConfigError, msg=name) as caught:

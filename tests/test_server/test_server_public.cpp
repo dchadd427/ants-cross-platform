@@ -2,6 +2,8 @@
 // leaves out and never says, and the idle rule that makes an unused public room private
 #include "server_fixtures.hpp"
 
+#include <cctype>
+
 namespace {
 
 // The options of a server that offers the front page's lobbies, with a pool large enough for a list of more than 50
@@ -32,15 +34,35 @@ ctl::JsonValue list_of(World& w) {
     return j;
 }
 
-// The codes of the list, in its order, joined by commas
+// The codes of the list, in its order, joined by commas (the rows of private rooms have no code: they are not in it)
 std::string codes_of(const ctl::JsonValue& list) {
     std::string out;
     const ctl::JsonValue& rows = list.get("lobbies");
-    for (size_t i = 0; i < rows.size(); ++i) out += (out.empty() ? "" : ",") + rows.at(i).get("code").str();
+    for (size_t i = 0; i < rows.size(); ++i) {
+        if (rows.at(i).has("code")) out += (out.empty() ? "" : ",") + rows.at(i).get("code").str();
+    }
+    return out;
+}
+
+// The rows of private rooms (the ones that are marked private: no code), in the list's order
+std::vector<ctl::JsonValue> locked_of(const ctl::JsonValue& list) {
+    std::vector<ctl::JsonValue> out;
+    const ctl::JsonValue& rows = list.get("lobbies");
+    for (size_t i = 0; i < rows.size(); ++i) {
+        if (rows.at(i).get("private").as_bool_or(false)) out.push_back(rows.at(i));
+    }
     return out;
 }
 
 std::string codes_of(World& w) { return codes_of(list_of(w)); }
+std::vector<ctl::JsonValue> locked_of(World& w) { return locked_of(list_of(w)); }
+
+// The hosts of the locked rows, in order, joined by commas
+std::string locked_hosts(World& w) {
+    std::string out;
+    for (const ctl::JsonValue& row : locked_of(w)) out += (out.empty() ? "" : ",") + row.get("host").str();
+    return out;
+}
 
 // The row of a code in the list (null when it is not there)
 ctl::JsonValue row_of(World& w, const std::string& code) {
@@ -93,14 +115,14 @@ std::string hex_of(const net::SeatKey& key, bool upper) {
 void run_public_room_tests() {
     using K = net::PlanKind;
 
-    TEST_CASE("S3.232 The List Of Games (Protocol 22, GET /lobbies Of The Public Door): Nothing But An Empty List On A Server With No Public Room; A Private Lobby Is Not In It; When The Leader Makes The Room Public It Is, With The Code, The Leader's Name, The Map, The Mode And The Numbers (People, Bots, Free Colors, Size, Age In Seconds), Exactly These And In This Order, And The Numbers Follow The Plan And The People") {
+    TEST_CASE("S3.232 The List Of Games (Protocol 22, GET /lobbies Of The Public Door): Nothing But An Empty List On A Server With No Room; A Private Lobby Is Not A Public Row (It Is A Locked One: S3.247); When The Leader Makes The Room Public It Is, With The Code, The Leader's Name, The Map, The Mode And The Numbers (People, Bots, Free Colors, Size, Age In Seconds), Exactly These And In This Order, And The Numbers Follow The Plan And The People") {
         World w(public_limits());
         const std::string empty = R"({"format":1,"lobbies":[],"count":0})";
         ASSERT_TRUE(door(w, "GET").status == 200 && door(w, "GET").body == empty && door(w, "GET").content_type == "application/json");
         Client& pia = w.connect_page("Pia", "gam00001", lobby_block_of());
         w.run(300);
         ASSERT_TRUE(pia.lobby->is_leader() && !w.status("gam00001").lobby_public);
-        ASSERT_EQ(door(w, "GET").body, empty);                                                   // (a new room is private)
+        ASSERT_EQ(door(w, "GET").body, R"({"format":1,"lobbies":[{"private":true,"host":"Pia","map":"TINY.LVL","mode":"highest-score","people":1,"bots":0,"free":3,"size":4}],"count":0})");      // (a new room is private: it is a locked row, with no code, and not a public one)
         say_visibility(w, pia, true);
         ASSERT_TRUE(w.status("gam00001").lobby_public && pia.lobby->room_is_public());
         ASSERT_EQ(door(w, "GET").body, R"({"format":1,"lobbies":[{"code":"gam00001","host":"Pia","map":"TINY.LVL","mode":"highest-score","people":1,"bots":0,"free":3,"size":4,"age":0}],"count":1})");
@@ -140,15 +162,16 @@ void run_public_room_tests() {
         pia.lobby->leave();
         w.run(300);
         ASSERT_TRUE(bob.lobby->is_leader() && !bob.lobby->room_is_public() && !w.status("gam00001").lobby_public);
-        ASSERT_EQ(door(w, "GET").body, empty);
+        ASSERT_TRUE(codes_of(w).empty() && locked_hosts(w) == "Bob");
         say_visibility(w, bob, true);
         ASSERT_EQ(row_of(w, "gam00001").get("host").str(), "Bob");
         ASSERT_TRUE(row_of(w, "gam00001").get("people").as_int_or(-1) == 1 && row_of(w, "gam00001").get("free").as_int_or(-1) == 2);
-        // the leader says private: the list is empty again, and the room goes on
+        ASSERT_TRUE(locked_of(w).empty());                                                       // (a public room is one row: the locked rows are the private ones)
+        // the leader says private: no public row any more (the room is a locked row), and the room goes on
         say_visibility(w, bob, false);
-        ASSERT_EQ(door(w, "GET").body, empty);
+        ASSERT_TRUE(codes_of(w).empty() && locked_hosts(w) == "Bob");
         ASSERT_TRUE(w.status("gam00001").state == RoomState::Waiting && !w.status("gam00001").lobby_public && !bob.lobby->room_is_public());
-        // a room that a game's block made (a plain public room) and a room of the control interface are never in it
+        // a room that a game's block made (a plain public room) and a room of the control interface are never in it, as a public row or as a locked one: only Bob's lobby is (locked)
         w.connect_creating("Gus", "gus00001", block_of("TINY.LVL", 4));
         RoomSpec spec = w.mgr.default_spec();
         spec.code = "CTL-1";
@@ -156,7 +179,7 @@ void run_public_room_tests() {
         spec.players = 4;
         ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
         w.run(300);
-        ASSERT_EQ(door(w, "GET").body, empty);
+        ASSERT_EQ(door(w, "GET").body, R"({"format":1,"lobbies":[{"private":true,"host":"Bob","map":"SMALL.LVL","mode":"highest-score","people":1,"bots":0,"free":2,"size":3}],"count":0})");     // (the plan that Pia chose stays: the map and three colors)
     } TEST_END();
 
     TEST_CASE("S3.233 What The List Leaves Out (Protocol 22): A Private Room, A Room That Waits For The Games Of Its START, A Match That Loads Or Runs, A Room Nobody Is Connected To (Only Held Seats), A Room With No Free Color (Four People, Or The Plan Gave The Rest To Bots Or To Nobody); Each Comes Back When It Is Over: The Cancelled START, The Person Who Comes Back With The Key, The Person Who Leaves") {
@@ -169,6 +192,7 @@ void run_public_room_tests() {
         ASSERT_EQ(codes_of(w), "fil00001");
         const net::SeatKey pia_key = pia.lobby->key();
         const net::SeatKey bob_key = bob.lobby->key();
+        w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
         ASSERT_TRUE(pia.lobby->request_start());
         w.run(300);
         ASSERT_TRUE(w.status("fil00001").starting && w.status("fil00001").lobby_public);        // (public and starting: the leader's choice stands, the list does not show it)
@@ -243,9 +267,10 @@ void run_public_room_tests() {
         ASSERT_EQ(codes_of(w), "fil00002,fil00003");                                            // (two people each now: the room that has been public the longer comes first)
         const ctl::JsonValue three = row_of(w, "fil00003");
         ASSERT_TRUE(three.get("people").as_int_or(-1) == 2 && three.get("bots").as_int_or(-1) == 0 && three.get("free").as_int_or(-1) == 1 && three.get("size").as_int_or(-1) == 3);
-        // --- private
+        // --- private: out of the public rows (it is a locked row, S3.247)
         say_visibility(w, d1, false);
         ASSERT_EQ(codes_of(w), "fil00002");
+        ASSERT_EQ(locked_hosts(w), "D1");
     } TEST_END();
 
     TEST_CASE("S3.234 The Order Of The List (Protocol 22): More People First, Then The Room That Has Been Public The Longer, Then The Smaller Code; A Lone Host Is Listed After The Rooms That Have Company; Two Rooms Made Public In One Pass Are Told Apart By Their Codes") {
@@ -324,6 +349,7 @@ void run_public_room_tests() {
         list = list_of(w);
         ASSERT_EQ(list.get("count").as_int_or(-1), 50);
         ASSERT_TRUE(row_of(w, "cap00003").get("code").str().empty() && row_of(w, "cap00050").get("code").str() == "cap00050");
+        ASSERT_EQ(locked_hosts(w), "P3");                                                        // (the room that went private is a locked row; the 50 public rows are not cut by it)
     } TEST_END();
 
     TEST_CASE("S3.236 The List Says Nothing That Is Not Meant For Everybody (Protocol 22; The Test Of S3.46's Kind): Over A Whole Answer Of Rooms With People Who Have Keys, Addresses, Platforms, Names And Chat, No Key (In Hex, In Either Case, Or As Bytes), No Address, No Name But The Leader's, No Line Of Chat, No Plan Letters; The Keys Of A Row Are Its Nine And The Answer Is The Same Whoever Asks And Whatever The Request Carries") {
@@ -553,5 +579,275 @@ void run_public_room_tests() {
         w.run(300);
         say_visibility(w, blank, true);
         ASSERT_EQ(row_of(w, "nam00002").get("host").str(), "Player 1");
+    } TEST_END();
+
+    TEST_CASE("S3.247 Private Rooms In The List (Locked Cards): A Lobby Room Whose Leader Did Not Make It Public Is A Row Of Its Own Kind After The Public Rows, With Exactly Private, Host, Map, Mode, People, Bots, Free And Size (No Code, No Age); `count` Is The Public Rows; The Room Moves Between The Two Kinds When The Leader Chooses; Every Filter Of The Public Rows Holds For It: START Waits, A Match Loads Or Runs, Nobody Connected, No Free Color") {
+        World w(public_limits());
+        Client& pia = w.connect_page("Pia", "prv00001", lobby_block_of());
+        Client& bob = w.connect_page("Bob", "prv00001", lobby_block_of());
+        w.run(300);
+        // a new room is private: one locked row, in the keys that are meant, and nothing public
+        ctl::JsonValue list = list_of(w);
+        ASSERT_TRUE(list.size() == 3 && list.key_at(0) == "format" && list.key_at(1) == "lobbies" && list.key_at(2) == "count");
+        ASSERT_TRUE(list.get("count").as_int_or(-1) == 0 && list.get("lobbies").size() == 1);
+        const std::vector<std::string> want = {"private", "host", "map", "mode", "people", "bots", "free", "size"};
+        ASSERT_TRUE(list.get("lobbies").at(0).keys() == want);
+        ASSERT_TRUE(list.get("lobbies").at(0).get("private").is_bool() && list.get("lobbies").at(0).get("private").as_bool_or(false));
+        ASSERT_EQ(list.get("lobbies").at(0).get("host").str(), "Pia");
+        ASSERT_TRUE(locked_of(list)[0].get("people").as_int_or(-1) == 2 && locked_of(list)[0].get("free").as_int_or(-1) == 2 && locked_of(list)[0].get("bots").as_int_or(-1) == 0 && locked_of(list)[0].get("size").as_int_or(-1) == 4);
+        // the numbers follow the plan as a public row's do: a medium bot, the map and the mode
+        ASSERT_TRUE(pia.lobby->request_plan(plan_msg({K::Open, K::Open, K::Medium, K::Open}, 1, "SMALL.LVL")));
+        w.run(300);
+        ctl::JsonValue row = locked_of(w)[0];
+        ASSERT_TRUE(row.get("people").as_int_or(-1) == 2 && row.get("bots").as_int_or(-1) == 1 && row.get("free").as_int_or(-1) == 1 && row.get("size").as_int_or(-1) == 4);
+        ASSERT_TRUE(row.get("map").str() == "SMALL.LVL" && row.get("mode").str() == "187");
+        // a public room comes first, `count` is the public rows alone, and the locked row stays after it
+        Client& cy = w.connect_page("Cy", "prv00002", lobby_block_of());
+        w.run(300);
+        say_visibility(w, cy, true);
+        list = list_of(w);
+        ASSERT_TRUE(list.get("count").as_int_or(-1) == 1 && list.get("lobbies").size() == 2);
+        ASSERT_TRUE(list.get("lobbies").at(0).has("code") && !list.get("lobbies").at(1).has("code") && list.get("lobbies").at(1).get("host").str() == "Pia");
+        // the leader makes the room public: a row with its code (people first: two against one), and no locked row; private again: the code is gone from the answer
+        say_visibility(w, pia, true);
+        ASSERT_TRUE(codes_of(w) == "prv00001,prv00002" && locked_of(w).empty());
+        say_visibility(w, pia, false);
+        ASSERT_TRUE(codes_of(w) == "prv00002" && locked_hosts(w) == "Pia");
+        ASSERT_TRUE(door(w, "GET").body.find("prv00001") == std::string::npos);
+        // START waits for the games: not listed, whichever kind it is; the START that is cancelled brings the room back, as a locked row
+        const net::SeatKey pia_key = pia.lobby->key();
+        const net::SeatKey bob_key = bob.lobby->key();
+        w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
+        ASSERT_TRUE(pia.lobby->request_start());
+        w.run(300);
+        ASSERT_TRUE(w.status("prv00001").starting && !w.status("prv00001").lobby_public);
+        ASSERT_TRUE(locked_of(w).empty());
+        pia.end->close();
+        bob.end->close();
+        Client& pia_game = w.connect_game("Pia", "prv00001", pia_key);
+        Client& bob_game = w.connect_game("Bob", "prv00001", bob_key, true);                     // (Bob's game cannot load the map: the START is cancelled)
+        w.run(500);
+        ASSERT_TRUE(w.status("prv00001").state == RoomState::Waiting && !w.status("prv00001").starting);
+        ASSERT_TRUE(locked_hosts(w) == "Pia" && locked_of(w)[0].get("people").as_int_or(-1) == 2);
+        bob_game.fail_load = false;
+        w.run(2500);
+        ASSERT_TRUE(pia_game.lobby->request_start());
+        for (int i = 0; i < 100 && w.status("prv00001").state != RoomState::Loading && w.status("prv00001").state != RoomState::Running; ++i) w.run(10);
+        ASSERT_TRUE(w.status("prv00001").state == RoomState::Loading || w.status("prv00001").state == RoomState::Running);
+        ASSERT_TRUE(locked_of(w).empty() && codes_of(w) == "prv00002");                          // (a match that loads or runs is no room to join: it is not a locked card either)
+        w.run(8000);
+        ASSERT_TRUE(w.status("prv00001").state == RoomState::Running && locked_of(w).empty());
+        // nobody connected: a private lobby whose people all lost their links is held, not listed; the key brings it back
+        Client& ann = w.connect_page("Ann", "prv00003", lobby_block_of());
+        Client& cat = w.connect_page("Cat", "prv00003", lobby_block_of());
+        w.run(300);
+        const net::SeatKey ann_key = ann.lobby->key();
+        ASSERT_EQ(locked_hosts(w), "Ann");
+        ann.end->close();                                                                       // (the leader's link ends: its seat is held, Cat is here: listed under the held leader's name)
+        w.run(300);
+        ASSERT_TRUE(locked_hosts(w) == "Ann" && locked_of(w)[0].get("people").as_int_or(-1) == 2);
+        cat.end->close();                                                                       // (nobody is connected)
+        w.run(300);
+        ASSERT_TRUE(w.status("prv00003").joined == 2 && w.status("prv00003").state == RoomState::Waiting && locked_of(w).empty());
+        w.next_key = ann_key;
+        Client& ann_back = w.connect_page("Ann", "prv00003", lobby_block_of());
+        w.next_key = net::SeatKey{};
+        w.run(300);
+        ASSERT_TRUE(ann_back.lobby->phase() == net::ClientLobby::Phase::InRoom && !ann_back.lobby->room_is_public());
+        ASSERT_EQ(locked_hosts(w), "Ann");
+        // no free color: four people, or a plan that gave the rest to bots or to nobody; each comes back when a color is free
+        Client& d1 = w.connect_page("D1", "prv00004", lobby_block_of());
+        Client& d2 = w.connect_page("D2", "prv00004", lobby_block_of());
+        Client& d3 = w.connect_page("D3", "prv00004", lobby_block_of());
+        w.run(300);
+        ASSERT_EQ(locked_hosts(w), "D1,Ann");                                                    // (three people against two)
+        w.connect_page("D4", "prv00004", lobby_block_of());
+        w.run(300);
+        ASSERT_EQ(locked_hosts(w), "Ann");
+        d3.lobby->leave();
+        w.run(300);
+        ASSERT_EQ(locked_hosts(w), "D1,Ann");
+        ASSERT_TRUE(d1.lobby->request_plan(plan_msg({K::Open, K::Open, K::Hard, K::Easy})));
+        w.run(300);
+        ASSERT_EQ(locked_hosts(w), "Ann");
+        ASSERT_TRUE(d1.lobby->request_plan(plan_msg({K::Open, K::Open, K::Nobody, K::Nobody})));
+        w.run(1200);
+        ASSERT_EQ(locked_hosts(w), "Ann");
+        ASSERT_TRUE(d1.lobby->request_plan(plan_msg({K::Open, K::Open, K::Open, K::Open})));
+        w.run(1200);
+        ASSERT_EQ(locked_hosts(w), "D1,Ann");
+        (void)d2;
+        // a room that a game's block made and a room of the control interface are neither public nor locked rows
+        w.connect_creating("Gus", "gus00001", block_of("TINY.LVL", 4));
+        RoomSpec spec = w.mgr.default_spec();
+        spec.code = "CTL-1";
+        spec.map = "TINY.LVL";
+        spec.players = 4;
+        ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+        w.run(300);
+        ASSERT_EQ(locked_hosts(w), "D1,Ann");
+    } TEST_END();
+
+    TEST_CASE("S3.248 A Locked Row Never Leads To Its Room (The Test Of S3.236's Kind, For Rooms That Are Private): Over A Whole Answer, No Code Of A Private Room (Exact, Upper Case, Percent-Encoded, In Groups Of Three), No Key (Hex In Either Case, Raw Bytes, The First Eight Digits), No Address, No Name But The Leaders', No Line Of Chat, And The Keys Of A Row Are The Eight; The Same Whoever Asks, And After Every Step Of A Random Walk Of Rooms That Turn Public And Private, Fill, Empty, Chat And START") {
+        World w(public_limits());
+        w.next_address = "203.0.113.77";
+        w.next_platform = static_cast<uint8_t>(net::kOsLinux | net::kPlatformBrowser);
+        Client& pia = w.connect_page("Pia", "k7m2xq9w", lobby_block_of());
+        w.next_address = "198.51.100.23";
+        Client& bob = w.connect_page("SecretBob", "k7m2xq9w", lobby_block_of());
+        w.next_address = "2001:db8::17";
+        w.next_platform = net::kOsWindows;
+        Client& cat = w.connect_page("SecretCat", "k7m2xq9w", lobby_block_of());
+        w.next_address = "127.0.0.1";
+        w.next_platform = 0;
+        w.run(300);
+        ASSERT_TRUE(bob.lobby->chat("secretchat from bob"));
+        w.run(300);
+        ASSERT_EQ(locked_hosts(w), "Pia");
+        const std::string body = door(w, "GET").body;
+        const std::string code = "k7m2xq9w";
+        const std::vector<std::string> want = {"private", "host", "map", "mode", "people", "bots", "free", "size"};
+        std::string upper = code;
+        for (char& ch : upper) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+        std::string encoded;
+        for (const char ch : code) {
+            char two[4];
+            std::snprintf(two, sizeof two, "%%%02x", static_cast<unsigned>(static_cast<unsigned char>(ch)));
+            encoded += two;
+        }
+        std::vector<std::string> secrets = {code, upper, encoded, "k7m 2xq", "k7m-2xq", "K7M 2XQ", "k7m2", "7m2xq9", "m2xq9w", "203.0.113.77", "198.51.100.23", "2001:db8", "127.0.0.1", "SecretBob", "SecretCat", "secretchat", "platform", "key", "token", "address", "linux", "Linux", "code", "room", "link", "url", "href", "id\""};
+        for (Client* c : {&pia, &bob, &cat}) {
+            const net::SeatKey key = c->lobby->key();
+            ASSERT_FALSE(net::key_is_zero(key));
+            secrets.push_back(hex_of(key, false));
+            secrets.push_back(hex_of(key, true));
+            secrets.push_back(std::string(key.begin(), key.end()));
+            secrets.push_back(hex_of(key, false).substr(0, 8));
+        }
+        for (const std::string& secret : secrets) {
+            if (body.find(secret) != std::string::npos) std::cout << "\n    the list holds \"" << secret.substr(0, 40) << "\"";
+            ASSERT_TRUE(body.find(secret) == std::string::npos);
+        }
+        ASSERT_TRUE(body.find("oooo") == std::string::npos && body.find("reconnect") == std::string::npos && body.find("leader") == std::string::npos && body.find("\"age\"") == std::string::npos);
+        ASSERT_EQ(body, R"({"format":1,"lobbies":[{"private":true,"host":"Pia","map":"TINY.LVL","mode":"highest-score","people":3,"bots":0,"free":1,"size":4}],"count":0})");
+        ctl::HttpRequest asked;
+        asked.method = "GET";
+        asked.path = "/lobbies";
+        asked.body = "key=" + hex_of(pia.lobby->key(), false) + "&room=" + code;
+        ASSERT_EQ(handle_public_replays(w.mgr, asked, w.now).body, body);                        // (a body, like any header a visitor sends, is nothing to it)
+        for (const char* query : {"room=k7m2xq9w", "code=k7m2xq9w", "private=1", "x"}) ASSERT_TRUE(door(w, "GET", "/lobbies", query).status == 404);
+        for (const char* path : {"/lobbies/k7m2xq9w", "/lobbies/private", "/lobbies/1"}) ASSERT_TRUE(door(w, "GET", path).status == 404);
+
+        // a random walk: rooms that turn public and private, fill and empty, chat and START; after every step no private room's code is in the answer, a row with no code is a private row of the eight keys,
+        // and the private rows are exactly the rooms that wait with a person at them and a free color and that their leaders did not make public
+        struct Member { Client* page; std::string name; };
+        const char* const codes[] = {"wlk00001", "wlk00002", "wlk00003", "wlk00004", "wlk00005"};
+        std::vector<std::vector<Member>> rooms(5);
+        uint32_t seed = 0x2545F491u;
+        const auto next = [&seed]() { seed = seed * 1664525u + 1013904223u; return seed >> 8; };
+        std::vector<std::string> watched = {code};                                              // (the room of the sweep above stays: a locked row too)
+        for (const char* c : codes) watched.push_back(c);
+        int people = 0;
+        for (int step = 0; step < 90; ++step) {
+            const size_t r = next() % 5;
+            std::vector<Member>& room = rooms[r];
+            switch (next() % 6) {
+                case 0:
+                case 1:
+                    if (room.size() < 4) {
+                        const std::string name = "W" + std::to_string(++people);
+                        room.push_back({&w.connect_page(name, codes[r], lobby_block_of()), name});
+                    }
+                    break;
+                case 2:
+                    if (!room.empty() && w.status(codes[r]).state == RoomState::Waiting) say_visibility(w, *room[0].page, (next() & 1u) != 0);
+                    break;
+                case 3:
+                    if (room.size() > 1 && w.status(codes[r]).state == RoomState::Waiting) { room.back().page->lobby->leave(); room.pop_back(); }
+                    break;
+                case 4:
+                    if (!room.empty()) room.back().page->lobby->chat("walkchat " + std::to_string(step));
+                    break;
+                default:
+                    if (room.size() > 1 && step % 7 == 0 && w.status(codes[r]).state == RoomState::Waiting) room[0].page->lobby->request_start();
+                    break;
+            }
+            w.run(300);
+            const ctl::HttpResponse answer = door(w, "GET");
+            ASSERT_TRUE(answer.status == 200);
+            ctl::JsonValue j;
+            ASSERT_TRUE(ctl::parse_json(answer.body, j, nullptr));
+            size_t locked = 0, publics = 0;
+            for (size_t i = 0; i < j.get("lobbies").size(); ++i) {
+                const ctl::JsonValue& e = j.get("lobbies").at(i);
+                if (e.has("code")) {
+                    ASSERT_TRUE(!e.has("private") && e.keys().size() == 9u && w.status(e.get("code").str()).lobby_public);
+                    ++publics;
+                } else {
+                    ASSERT_TRUE(e.get("private").as_bool_or(false) && e.keys() == want);
+                    ++locked;
+                }
+            }
+            for (const std::string& c : watched) {
+                const RoomStatus st = w.status(c);
+                if (st.code.empty() || st.lobby_public) continue;
+                std::string up = c;
+                for (char& ch : up) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+                ASSERT_TRUE(answer.body.find(c) == std::string::npos && answer.body.find(up) == std::string::npos);        // (a private room's code is nowhere in the answer, whatever the room is doing)
+            }
+            ASSERT_TRUE(answer.body.find("walkchat") == std::string::npos);
+            size_t want_locked = 0, want_public = 0;
+            for (const std::string& c : watched) {
+                const RoomStatus st = w.status(c);
+                if (st.code.empty() || st.state != RoomState::Waiting || st.starting || st.reserved != 0 || st.joined == 0 || st.joined >= 4) continue;
+                if (st.lobby_public) ++want_public; else ++want_locked;
+            }
+            ASSERT_EQ(locked, want_locked);                                                      // (a room that waits with a person at it and a color that is free is a locked row, and no other room is)
+            ASSERT_EQ(publics, want_public);
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.249 The Order And The Cap Of The Locked Rows: More People First, Then The Map, The Host And The Numbers, Never The Code (Rooms Are Visited By Code, And The Order Must Teach Nothing About One); At Most 50, The Best 50, Beside The 50 Public Rows; The Longest Names Make An Answer Far Under The Door's Limit") {
+        // the order: the codes run opposite to the hosts' names, and the same rooms in the same list come out by the rows' own fields
+        {
+            World w(public_limits());
+            w.connect_page("Zed", "ord00001", lobby_block_of("SMALL.LVL"));
+            w.connect_page("Amy", "ord00002", lobby_block_of("SMALL.LVL"));
+            w.connect_page("Max", "ord00003", lobby_block_of("TINY.LVL"));
+            w.connect_page("Bea", "ord00004", lobby_block_of("TINY.LVL"));
+            w.connect_page("Cy", "ord00005", lobby_block_of("TINY.LVL"));
+            w.connect_page("Cy2", "ord00005", lobby_block_of("TINY.LVL"));
+            w.run(300);
+            ASSERT_EQ(locked_hosts(w), "Cy,Amy,Zed,Bea,Max");                                   // (two people first; then the map: SMALL.LVL, TINY.LVL; then the host's name; the codes ascend, so they decide nothing)
+            ASSERT_EQ(locked_hosts(w), "Cy,Amy,Zed,Bea,Max");                                   // (the same answer again)
+        }
+        // the cap: 55 private rooms and 55 public ones; the answer holds 50 of each, the public rows first
+        {
+            ServerLimits l = public_limits();
+            l.demo_lobbies = 140;
+            World w(l);
+            std::vector<Client*> leaders;
+            for (int i = 1; i <= 55; ++i) {
+                char code[16];
+                std::snprintf(code, sizeof code, "pub%05d", i);
+                Client& c = w.connect_page(std::string(32, static_cast<char>('A' + i % 26)), code, lobby_block_of());
+                w.run(60);
+                c.lobby->request_visibility(true);
+                w.run(60);
+                leaders.push_back(&c);
+                std::snprintf(code, sizeof code, "prv%05d", i);
+                w.connect_page(std::string(32, static_cast<char>('a' + i % 26)), code, lobby_block_of());
+                w.run(60);
+            }
+            ASSERT_EQ(w.mgr.room_count(), size_t{110});
+            const ctl::HttpResponse r = door(w, "GET");
+            ASSERT_TRUE(r.status == 200);
+            ctl::JsonValue j;
+            ASSERT_TRUE(ctl::parse_json(r.body, j, nullptr));
+            ASSERT_TRUE(j.get("count").as_int_or(-1) == 50 && j.get("lobbies").size() == 100);
+            for (size_t i = 0; i < 100; ++i) ASSERT_EQ(j.get("lobbies").at(i).has("code"), i < 50);       // (50 public rows, then 50 locked ones)
+            ASSERT_TRUE(r.body.size() < 20000);                                                  // (far below what the cache of the site and the page's own limit have room for)
+            ASSERT_TRUE(r.body.find("prv0") == std::string::npos);
+        }
     } TEST_END();
 }

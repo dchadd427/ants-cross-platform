@@ -37,17 +37,18 @@ constexpr uint32_t kJumpTicks = 10;         // more ticks than this between two 
 constexpr int32_t kGlyphAdvance = 7;        // a sign and a digit take 7 pixels each (the font's cell is 8 wide)
 constexpr int32_t kGlyphHeight = 10;
 constexpr int32_t kBodyCentreAbove = 8;     // the middle of the ant's body is this many world pixels above its sprite position (scaled by the zoom); the number starts centred there
-constexpr uint8_t kOutlineAlpha = 217;      // the outline's near black at about 85 %
-constexpr int32_t kNumberOutlineFactor = 2; // the font numbers' outline is this many times as wide as the old drawing's (one scaled pixel): 2 output pixels at 1:1, 4 on a phone at 2x
+constexpr uint8_t kOutlineAlpha = 217;      // the near black of the outline that the score numbers and the results page's numbers wear, at about 85 % (the health and damage numbers have none)
+constexpr int32_t kNumberOutlineFactor = 2; // the outline of those numbers is this many times as wide as the old drawing's (one scaled pixel): 2 output pixels at 1:1, 4 on a phone at 2x
 
-/// The outline of a font number in OUTPUT pixels, from the old drawing's outline width (`base_scale`: that width in output pixels, before rounding): never less than one old pixel, times kNumberOutlineFactor.
-/// The glyphs keep the size that the old outline left them; the thicker outline grows outward (renderer_numbers.cpp), so the counters of 0 6 8 9 4 stay open
+/// The outline of a score number (or a results number) in OUTPUT pixels, from the old drawing's outline width (`base_scale`: that width in output pixels, before rounding): never less than one old pixel, times
+/// kNumberOutlineFactor. The glyphs keep the size that the old outline left them; the thicker outline grows outward (renderer_numbers.cpp), so the counters of 0 6 8 9 4 stay open
 inline int32_t number_outline_px(double base_scale) noexcept {
     return kNumberOutlineFactor * std::max<int32_t>(1, static_cast<int32_t>(std::lround(base_scale)));
 }
 
 constexpr Color kDamageColor{255, 255, 255};     // the color of the original's Ctrl+L numbers
-constexpr Color kHealColor{132, 236, 120};
+constexpr Color kHealColor{255, 255, 255};       // the digits of a heal number: white, as the damage number's, so that they show on pale ground too
+constexpr Color kHealSignColor{110, 255, 120};   // the plus of a heal number: green, so that it reads as healing
 
 /// The opacity (0 .. 255) of a number of this age: solid for kSolidMs, then a linear fade to nothing at kLifeMs
 constexpr int32_t alpha_at(int32_t age_ms) noexcept {

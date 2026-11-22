@@ -62,7 +62,7 @@ class TheText(unittest.TestCase):
         self.assertEqual(sorted(writes.group(1).split("|")), WRITES)
         self.assertIn('default "";', MAP)
         self.assertEqual(len(re.findall(r'"~\^', MAP)), 2)
-        self.assertEqual((len(READS), len(WRITES)), (6, 7))
+        self.assertEqual((len(READS), len(WRITES)), (7, 9))
 
     def test_the_checks_come_before_the_allowance_and_before_anything_is_passed_on(self):
         self.assertIn('if ($hub_admin_call = "") { return 404; }', DOOR)
@@ -394,7 +394,7 @@ class TheWholeWay(unittest.TestCase):
         for name in ("bans", "mutes", "hidden", "modlog", "status"):
             r = self.page(owner, "GET", name)
             self.assertEqual(r.status, 200, name)
-            self.assertIn("untrusted", r.json()) if name != "status" else self.assertEqual(sorted(r.json()), ["health", "last_picture", "store", "version"])
+            self.assertIn("untrusted", r.json()) if name != "status" else self.assertEqual(sorted(r.json()), ["health", "images", "last_picture", "store", "version"])
         self.assertEqual(self.page(owner, "POST", "mute", {"account": "terry.target", "minutes": 5}, token="0" * 64).json(), {"error": "csrf"}, "a token that is not this login's")
         r = self.page(owner, "POST", "mute", {"account": "terry.target", "minutes": 5}, token=token)
         self.assertEqual((r.status, sorted(r.json())), (200, ["ok", "until"]))

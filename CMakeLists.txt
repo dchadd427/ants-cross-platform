@@ -167,6 +167,9 @@ set_target_properties(ants_version PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # Subdirectories
 add_subdirectory(src/ants_assets)
 add_subdirectory(src/ants_sim)
+if(NOT EMSCRIPTEN)
+    add_subdirectory(third_party/mbedtls) # Mbed TLS (Apache-2.0 option): the static library ants_mbedtls, the TLS client of the desktop game's encrypted link (src/ants_net/tls.cpp)
+endif()
 add_subdirectory(src/ants_net)
 add_subdirectory(src/ants_ai)         # the computer players (virtual clients, docs/BOTS.md): no SDL, no sockets, no threads, so it builds for the web too
 add_subdirectory(src/ants_replay)     # the replay file, its recorder and player (docs/REPLAYS.md): no SDL, no sockets, no threads, so it builds for the web too

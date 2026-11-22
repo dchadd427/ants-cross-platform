@@ -133,7 +133,7 @@ check('every name makes a label that fits a player name (32 characters) and the 
 {
     const un = (t) => (t === '<empty>' ? '' : t.replace(/\\x([0-9a-f]{2})/g, (m, h) => String.fromCharCode(parseInt(h, 16))));
     const seen = { label: 0, parse: 0, short: 0, reserved: 0 };
-    read('tests', 'data', 'bot_label_cases.tsv').split('\n').filter((l) => l !== '' && l[0] !== '#').forEach((line) => {
+    Buffer.from(read('tests', 'data', 'bot_label_cases.tsv'), 'latin1').toString('utf8').split('\n').filter((l) => l !== '' && l[0] !== '#').forEach((line) => {
         const f = line.split('\t').map(un);
         seen[f[0]]++;
         if (f[0] === 'label') same('label ' + JSON.stringify(f.slice(1, 3)), B.botLabel(f[1], f[2]), f[3]);
@@ -155,7 +155,7 @@ check('every name makes a label that fits a player name (32 characters) and the 
     check('every name with every tag: botLabel is read back by parseBotLabel', roundtrip);
     check('every name with every tag: the label and its short form are reserved names', reserved);
     check('no name of the list is a reserved name by itself', N.every((n) => !B.isReservedBotName(n)));
-    same('the Kelvin sign is no k: it does not make "worker" of a tag, and does not lower a name', [B.botLabel('Pip', 'wor\u212Aer'), B.botLabel('Pip', '\u212Aid'), B.isReservedBotName('Pip (bot, x)\u212A'), B.parseBotLabel('Pip (bot, wor\u212Aer)')], ['', '', false, null]);
+    same('the Kelvin sign is no k: it does not make "worker" of a tag, and does not lower a name', [B.botLabel('Pip', 'wor\u212Aer'), B.botLabel('Pip', '\u212Aid'), B.isReservedBotName('Pip (bot, x)\u212A'), B.parseBotLabel('Pip (bot, wor\u212Aer)')], ['', '', true, null]);       // (a sign after the label is no reason to let it pass: the name reads as a label)
     same('the Turkish capital dotted i is not lowered into an i either', [B.botLabel('Pip', 'IDLE'), B.botLabel('Pip', '\u0130dle')], ['Pip (bot, idle)', '']);
     check('the five legacy labels are reserved', ['Bot (Easy)', 'Bot (Medium)', 'Bot (Hard)', 'Bot (Idle)', 'Bot (Worker)'].every((l) => B.isReservedBotName(l)));
 }

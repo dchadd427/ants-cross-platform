@@ -48,9 +48,9 @@ FONT_FILES = ("LibreFranklin-Medium.ttf", "LibreFranklin-OFL.txt")
 STYLE_FILES = ("classic.css",)          # the look of the other pages (the front page keeps its own inline copy): not made by the tool, not used by lobby.html
 COFFEE_LINK = "https://www.buymeacoffee.com/dchadd"              # the owner's Buy Me a Coffee page and its button picture: the one thing on the front page that comes from another site
 COFFEE_IMAGE = "https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png"
-SCRIPT_FILES = ("map_maker_link.js", "lobby_rules.js", "lobby_net.js", "player_name.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js")    # what the lobby page loads, in this order: its rules (pure, no browser), the name that a person plays under (the login's, made to fit, or a guest name: tests/scripts/test_web_player_name.py; the game page loads it too), its client of network protocol 16 (tests/scripts/test_web_lobby_net.py), the chat box (tests/scripts/test_web_lobby_chat.py), the rematch's strip (tests/scripts/test_web_rematch.py; the game page loads it too) the game type's rows and control (tests/scripts/test_web_game_type.py) and the map list: scripts, not pictures
+SCRIPT_FILES = ("lobby_direct.js", "map_maker_link.js", "lobby_rules.js", "lobby_net.js", "player_name.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js")    # what the lobby page loads, in this order: its rules (pure, no browser), the name that a person plays under (the login's, made to fit, or a guest name: tests/scripts/test_web_player_name.py; the game page loads it too), its client of network protocol 16 (tests/scripts/test_web_lobby_net.py), the chat box (tests/scripts/test_web_lobby_chat.py), the rematch's strip (tests/scripts/test_web_rematch.py; the game page loads it too) the game type's rows and control (tests/scripts/test_web_game_type.py) and the map list: scripts, not pictures
 MAPMAKER_FILES = ("mapmaker.css", "mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_solid.js", "mapmaker_palette.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_objects.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_props.js", "mapmaker_store.js", "mapmaker_mine.js", "mapmaker_minimap.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")      # the map maker page's own style and scripts (web/mapmaker.html; tests/scripts/test_web_mapmaker.py): not the lobby's, not pictures
-LOBBY_STYLES = ("map_picker.css", "lobby_chat.css", "rematch.css", "game_type.css")     # the stylesheets that the lobby page links after its own <style>, in this order: the map list's (it moved out of the page, which is at the line limit of tools/check_hygiene.py), the chat box's and the rematch's (the game page links it too)
+LOBBY_STYLES = ("map_picker.css", "lobby_chat.css", "rematch.css", "game_type.css", "lobby_direct.css")     # the stylesheets that the lobby page links after its own <style>, in this order: the map list's (it moved out of the page, which is at the line limit of tools/check_hygiene.py), the chat box's and the rematch's (the game page links it too)
 MAPMAKER_LAZY = ("mapmaker_ground.js", "mapmaker_sprites.js", "mapmaker_edges.js")      # the three scripts that the map maker loads after its page is up (mapmaker_app.js, loadParts): the sheets of the kinds of ground, the game's pictures and Fix edges; measured apart (LAZY_BUDGET), not part of the editor's own budget
 UNLOADED_SCRIPTS = ("bot_names.js",)    # the names of the computer players (tests/scripts/test_bot_names.py): in the folder, loaded by no page yet
 MAP_KEYS = ("tiny", "small", "medium", "gauntlet", "treasure", "islands")
@@ -171,6 +171,11 @@ def stand_animation():
 def style_of(page):
     """The text of the page's <style>, without its comments."""
     return re.sub(r"/\*.*?\*/", "", page[page.index("<style>") + len("<style>"):page.index("</style>")], flags=re.S)
+
+
+def lobby_style(page):
+    """The front page's whole style: its own <style> and the Room's sheet (web/home/room.css, the Room is a panel of Home), without comments."""
+    return style_of(page) + "\n" + re.sub(r"/\*.*?\*/", "", read("web", "home", "room.css"), flags=re.S)
 
 
 def css_blocks(css):
@@ -587,7 +592,7 @@ class TheRosterAnts(unittest.TestCase):
         cls.cell_w = max(cls.at[n][0] + cls.sprites[n][1] for n in cls.order) - cls.left        # (a cell holds all seven pictures at their places)
         cls.cell_h = max(cls.at[n][1] + cls.sprites[n][2] for n in cls.order) - cls.top
         cls.sheet_w, cls.sheet_h = cls.cell_w * len(cls.order), cls.cell_h * len(cls.SHIFT)
-        cls.style = style_of(read("web", "lobby.html"))
+        cls.style = lobby_style(read("web", "lobby.html"))
         cls.sheet = Sheet(cls.style)
 
     @classmethod
@@ -746,7 +751,7 @@ class TheRosterAnts(unittest.TestCase):
 class ThePageUsesTheArt(unittest.TestCase):
     def setUp(self):
         self.page = read("web", "lobby.html")
-        self.style = style_of(self.page)
+        self.style = lobby_style(self.page)
         self.rules = read("web", "front", "lobby_rules.js")
 
     def maps(self):
@@ -776,19 +781,24 @@ class ThePageUsesTheArt(unittest.TestCase):
         for key in MAP_KEYS:
             self.assertEqual(png_size(os.path.join(FRONT, "preview_%s.png" % key)), (int(re.search(r'width="(\d+)"', shown).group(1)), int(re.search(r'height="(\d+)"', shown).group(1))), key)
 
-    def test_the_maps_picture_is_shown_at_its_own_size_and_square(self):
+    def test_the_maps_picture_is_square_and_never_drawn_larger_than_its_file(self):
         width = png_size(os.path.join(FRONT, "preview_treasure.png"))[0]
-        self.assertEqual(Sheet(self.style).value(".tv", "width"), "%dpx" % width)           # (a wide window: one picture pixel for each pixel of the screen)
-        self.assertEqual(Sheet(self.style).value(".tv img", "aspect-ratio"), "1")
+        sheet = Sheet(self.style)
+        self.assertLessEqual(int(sheet.value(".tv", "width").replace("px", "")), width)     # (the room's picture is a small one beside the map's name: 84 px, 112 px on a big screen)
+        self.assertEqual(sheet.value(".tv", "max-width"), "100%")
+        self.assertEqual(sheet.value(".tv img", "aspect-ratio"), "1")
+        for query in ("(min-width: 1500px) and (min-height: 960px)", "(max-width: 700px)", "(max-width: 374px)"):
+            for found in re.findall(r"\.tv \{ width: (\d+)px; \}", media(self.style, query)):
+                self.assertLessEqual(int(found), width, query)
 
     def test_nothing_is_loaded_from_another_site(self):
         scripts = re.findall(r'<script[^>]*\bsrc="([^"]*)"', self.page)
-        self.assertEqual(scripts, ["alert_core.js", "rejoin_key.js"] + ["front/" + name for name in SCRIPT_FILES] + ["shapes.js", "map_files.js", "home/home.js"])      # (the seat-key reader (web/rejoin_key.js), the folder's scripts, in this order, then the pages' table of the shapes (web/shapes.js) and the game page's file-fetching script (web/map_files.js, warm()), and no other)
+        self.assertEqual(scripts, ["alert_core.js", "rejoin_key.js", "update_notice.js"] + ["front/" + name for name in SCRIPT_FILES] + ["shapes.js", "map_files.js", "home/home.js"])      # (the seat-key reader (web/rejoin_key.js), the update notice's script (web/update_notice.js), the folder's scripts, in this order, then the pages' table of the shapes (web/shapes.js) and the game page's file-fetching script (web/map_files.js, warm()), and no other)
         self.assertEqual(len(re.findall(r"<script\b", self.page)), len(scripts) + 1)       # (and the one inline script that is the page's)
         self.assertNotRegex(self.page, r'<script[^>]*type="module"')
         for name in SCRIPT_FILES:
             self.assertNotRegex(read("web", "front", name), r"https?://", name + " names no other site")
-        self.assertEqual(re.findall(r'<link rel="stylesheet" href="([^"]*)">', self.page), ["front/" + name for name in LOBBY_STYLES] + ["home/home.css"])      # (the lobby's stylesheets of this folder, in this order, after the page's own style, then the style of web/home/, and no other)
+        self.assertEqual(re.findall(r'<link rel="stylesheet" href="([^"]*)">', self.page), ["front/" + name for name in LOBBY_STYLES] + ["home/home.css", "home/room.css", "update_notice.css"])      # (the lobby's stylesheets of this folder, in this order, after the page's own style, then the styles of web/home/ (Home's and the Room's), and no other)
         for name in LOBBY_STYLES:
             self.assertNotRegex(read("web", "front", name), r"https?://|@import|url\(\s*[\"']?(?:https?:)?//", name + " names no other site")
         self.assertNotRegex(self.page, r'<link[^>]*href="(?:https?:)?//')
@@ -843,11 +853,13 @@ class ThePageUsesTheArt(unittest.TestCase):
         self.assertIn('<link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>', self.page)
         self.assertRegex(self.page, r'@font-face \{ font-family: "Libre Franklin"; src: url\("front/LibreFranklin-Medium\.ttf"\) format\("truetype"\);')
 
-    def test_the_game_type_and_start_stack_at_the_top_of_the_match_column_between_721_and_1040_px(self):
-        """The map's column spans two rows, the second takes the spare height, so the game type and START! sit under each other beside the top of the map (not spread over its height)."""
-        wide = self.style[self.style.index("@media (max-width: 1040px)"):self.style.index("@media (max-width: 720px)")]
-        self.assertIn("grid-template-rows: auto 1fr;", wide)
-        self.assertIn(".side .maprow { grid-row: span 2; }", wide)
+    def test_the_map_the_game_type_and_start_are_one_column_beside_the_colors_with_start_at_its_bottom(self):
+        """The room's body has two columns, the colors and the match; the match is a column of its own (the map, the game type, Direct connection, START) and START is pushed to its bottom."""
+        sheet = Sheet(self.style)
+        self.assertEqual(sheet.value(".r-body", "display"), "grid")
+        self.assertEqual(len(sheet.value(".r-body", "grid-template-columns").split("minmax(0, 1fr) ")), 2)
+        self.assertEqual((sheet.value(".side", "display"), sheet.value(".side", "flex-direction")), ("flex", "column"))
+        self.assertEqual(sheet.value(".go", "margin-top"), "auto")
 
 
 class ThePanelsThatTheMockupDidNotDraw(unittest.TestCase):
@@ -884,21 +896,23 @@ class ThePanelsThatTheMockupDidNotDraw(unittest.TestCase):
 
 class TheCardsAtManyWidths(unittest.TestCase):
     """What the style says for the windows from a 320 px phone to a wide screen, read without a browser: the columns of the room, the color cards, the map's side and START, the lines that wrap, and the
-    order of the rules that lets the narrower ones win."""
+    order of the rules that lets the narrower ones win (web/home/room.css; a browser measures the fit: tests/scripts/web_room_in_home_browser.js)."""
 
     def setUp(self):
         self.page = read("web", "lobby.html")
-        self.style = style_of(self.page)
+        self.style = lobby_style(self.page)
         self.sheet = Sheet(self.style)
-        self.phone = media(self.style, "(max-width: 720px)")
+        self.room = re.sub(r"/\*.*?\*/", "", read("web", "home", "room.css"), flags=re.S)
+        self.phone = media(self.style, "(max-width: 700px)")
+        self.on_phone = Sheet(self.phone)
 
-    def test_the_room_has_two_columns_from_1041_px_and_one_under_it(self):
-        self.assertEqual(self.sheet.value(".grid", "grid-template-columns"), "minmax(0, 1fr) 340px")             # (the room, and the map's side: the picture, the game type, START)
-        narrower = media(self.style, "(max-width: 1040px)")
-        self.assertIn(".grid { grid-template-columns: minmax(0, 1fr);", narrower)
-        self.assertIn(".side { grid-template-columns: minmax(0, 300px) minmax(0, 1fr);", narrower)                 # (one column: the map's picture beside the game type and START)
-        self.assertIn(".side .maprow { grid-row: span 2; }", narrower)
-        self.assertIn(":root { --k: 4; }", media(self.style, "(min-width: 1041px) and (min-height: 880px)"))        # (the ants 4 times their size instead of 3, only where both the width and the height have room)
+    def test_the_room_has_two_columns_from_701_px_and_one_under_it(self):
+        columns = self.sheet.value(".r-body", "grid-template-columns")                                           # (the colors, and the match's side: the picture, the game type, START)
+        self.assertRegex(columns, r"^minmax\(0, 1fr\) clamp\(\d+px, \d+vw, \d+px\)$")
+        self.assertEqual(self.on_phone.value(".r-body", "display"), "block")                                     # (one column: the side under the colors)
+        self.assertIn(".r-body { display: block;", self.phone)
+        self.assertEqual(self.sheet.value(".hmain > #lobby", "--k"), "2")                                        # (the ants twice their size, three times where both the width and the height have room)
+        self.assertIn("--k: 3;", media(self.style, "(min-width: 1500px) and (min-height: 960px)"))
         self.assertEqual(self.sheet.value(".wrap", "max-width"), self.sheet.value(".bar-in", "max-width"))          # (the footer lines up with the page)
 
     def test_the_four_colors_lie_black_green_red_blue_in_two_columns_and_one_on_a_phone(self):
@@ -908,66 +922,64 @@ class TheCardsAtManyWidths(unittest.TestCase):
         for selector in (".slot", ".slots", ".slot .antbox", ".slot .txt"):
             self.assertIsNone(self.sheet.value(selector, "order"), selector + " has no CSS order")
         self.assertEqual(self.sheet.value(".slots", "grid-template-columns"), "minmax(0, 1fr) minmax(0, 1fr)")
-        self.assertIn(".slots { grid-template-columns: minmax(0, 1fr);", self.phone)                           # (the four cards one under the other, in the same order)
-        self.assertIn(".slot { grid-template-columns: calc(24px * var(--k) + 4px) minmax(0, 1fr) 36px;", self.phone)     # (the dots get a column of their own, so they never sit on a name or a drop-down; 36 px wide and 44 high, so the names keep room beside the narrower cards)
-        self.assertIn("body.guest .slot { grid-template-columns: calc(24px * var(--k) + 4px) minmax(0, 1fr);", self.phone)       # (a player has no dots: no column for them)
-        self.assertIn(":root { --k: 2; }", self.phone)
-        self.assertEqual(self.sheet.value(".grip", "position"), "absolute")                                    # (the dots lie on the card's corner, and on a phone they are a column of their own)
-        self.assertIn(".slot .grip { position: static;", self.phone)
+        self.assertEqual(self.on_phone.value(".slots", "grid-template-columns"), "minmax(0, 1fr)")            # (the four cards one under the other, in the same order)
+        self.assertEqual(self.on_phone.value(".slot .txt > .teamset", "grid-column"), "1 / -1")                 # (the Team buttons go under the name: the card is one column wide)
+        self.assertEqual(self.sheet.value(".grip", "position"), "absolute")                                    # (the dots lie on the card's corner, a finger's size on a phone)
+        self.assertEqual((self.on_phone.value(".grip", "width"), self.on_phone.value(".grip", "height")), ("44px", "44px"))
+        self.assertIn("(max-width: 700px)", " ".join(head for head, _ in css_blocks(self.room)))
 
     def test_the_media_rules_come_in_the_order_that_lets_the_narrower_ones_win_and_the_two_sides_of_a_break_agree(self):
-        order = [self.style.index("@media (%s)" % query) for query in ("max-width: 1040px", "max-width: 720px", "max-width: 374px")]
-        self.assertEqual(order, sorted(order), "the narrower rules come later: they win")
-        self.assertIn("@media (min-width: 1041px) and (min-height: 880px)", self.style)                         # (1040 and 1041: the same break, seen from both sides)
-        self.assertIn(".share { display: none; }", media(self.style, "(min-width: 721px)"))                    # (720 and 721: the Share button is for phones, and the script shows it only where a share sheet exists)
+        heads = [head for head, _ in css_blocks(self.room) if re.fullmatch(r"@media \(max-width: \d+px\)", head)]       # (the blocks of one width: a block for a phone, which is also for a low window, is none of them)
+        self.assertEqual(heads, ["@media (max-width: 700px)", "@media (max-width: 374px)"], "the narrower rules come later: they win")
+        self.assertIn("@media (min-width: 701px) and (max-height: 759px)", self.room)                           # (700 and 701: the same break, seen from both sides)
+        self.assertEqual(self.sheet.value(".share", "display"), "none")                               # (the Share button is for phones, and the script shows it only where a share sheet exists)
         self.assertIn(".share { display: inline-flex; }", self.phone)
         self.assertIn('<button class="btn share" type="button" id="share" hidden>Share</button>', self.page)
 
     def test_a_phone_puts_the_map_beside_its_picture_and_keeps_start_in_reach(self):
-        self.assertIn(".side { display: contents; }", self.phone)                                              # (the map and START are two rows of the page's own grid, so that START can stay at the bottom)
-        self.assertIn(".side .maprow { grid-row: auto; grid-template-columns: 112px minmax(0, 1fr);", self.phone)
-        self.assertIn(".go { position: sticky; bottom: 0;", self.phone)
-        self.assertIn("calc(10px + env(safe-area-inset-bottom, 0px))", self.phone)                              # (clear of the home bar of a phone: the page asks for the whole screen)
+        self.assertRegex(self.on_phone.value(".maprow", "grid-template-columns"), r"^\d+px minmax\(0, 1fr\)$")        # (the picture beside the map's name, chips, line and button)
+        self.assertEqual(self.on_phone.value(".go", "position"), "sticky")                                      # (START and its line are a bar at the bottom of the room's panel)
+        self.assertEqual(self.on_phone.value(".go", "bottom"), "0")
+        self.assertIn("calc(8px + env(safe-area-inset-bottom, 0px))", self.on_phone.value(".go", "padding"))      # (clear of the home bar of a phone: the page asks for the whole screen)
         self.assertIn("viewport-fit=cover", self.page)
         self.assertIn(".plan-long { display: none; } .plan-short { display: inline; }", self.phone)             # (the line under START is one short line, so that START and the line stay a small bar)
-        self.assertIn(".go .plan { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }", self.phone)
-        self.assertIn(".info { text-align: left; }", self.phone)
-        self.assertIn(".mapcard { justify-items: start; text-align: left;", self.phone)                        # (the map card's name, chips, line and button sit left of the picture, in its column)
+        self.assertEqual(self.sheet.value(".info", "text-align"), "left")
+        self.assertEqual((self.sheet.value(".mapcard", "justify-items"), self.sheet.value(".mapcard", "text-align")), ("start", "left"))      # (the map card's name, chips, line and button sit left of the picture, in its column)
+        self.assertGreaterEqual(int(self.on_phone.value(".go .btn.big", "min-height").replace("px", "")), 44)  # (START is a full touch target)
 
     def test_the_invitation_and_the_line_to_join_wrap_on_a_phone_and_never_scroll_sideways(self):
-        self.assertEqual(self.sheet.value(".invite", "grid-template-columns"), "minmax(0, 1fr) auto auto")        # (the link, Copy, Share)
-        self.assertIn(".invite { grid-template-columns: minmax(0, 1fr) auto; }", self.phone)
-        self.assertIn(".invite input { display: none; }", self.phone)                                         # (a phone: the buttons only; a long link would be a field that nobody reads on a phone)
-        self.assertIn(".invite #copy { width: 100%; }", self.phone)
-        self.assertEqual(self.sheet.value(".invite input", "width"), "100%")
-        self.assertEqual(self.sheet.value(".invite input", "text-overflow"), "ellipsis")                        # (a field can shrink under its row: a long link never makes the page wider)
+        self.assertEqual(self.sheet.value(".invite", "display"), "flex")                                       # (the link, Copy, Share)
+        self.assertEqual(self.on_phone.value(".invite", "min-width"), "0")
+        self.assertEqual(self.on_phone.value(".invite input", "display"), "none")                              # (a phone: the buttons only; a long link would be a field that nobody reads on a phone)
+        self.assertEqual(self.sheet.value(".invite input", "min-width"), "0")                                  # (a field can shrink under its row: a long link never makes the page wider)
+        self.assertEqual(self.sheet.value(".invite input", "text-overflow"), "ellipsis")
         self.assertEqual(self.sheet.value(".joinbox input", "min-width"), "0")
         self.assertEqual(self.sheet.value(".joinbox input", "flex"), "1")
-        for selector in (".invite-note", ".rejoin", ".banner"):                           # (the lines of the page wrap: the note under the link, the strips)
+        for selector in (".r-top", ".r-top .head", ".r-link", ".rejoin", ".banner"):                           # (the lines of the page wrap: the room's header and link row, the strips)
             self.assertEqual(self.sheet.value(selector, "flex-wrap"), "wrap", selector)
-        self.assertIn(".head { margin-bottom: 10px; flex-wrap: wrap; }", self.phone)
+        self.assertEqual(self.sheet.value(".r-notes", "min-width"), "0")
 
     def test_a_long_name_wraps_instead_of_widening_the_page(self):
         # (a name of 32 capital letters once widened the cards by 19 px: every box on the way from the page to the name may shrink, and the word breaks)
-        for selector in (".pname", ".rmask span", ".name-step-title", ".go .plan"):
+        for selector in (".pname", ".rmask span", ".name-step-title", ".plan"):
             self.assertEqual(self.sheet.value(selector, "overflow-wrap"), "anywhere", selector)
-        for selector in (".slot .txt", ".pname", ".pname input"):
+        for selector in (".slot .txt", ".pname", ".pname input", ".r-seats", ".side"):
             self.assertEqual(self.sheet.value(selector, "min-width"), "0", selector)
-        for selector in (".slots", ".grid", ".side"):
+        for selector in (".slots", ".r-body"):
             self.assertIn("minmax(0, 1fr)", self.sheet.value(selector, "grid-template-columns"), selector)
         self.assertIn("minmax(0, 1fr)", self.sheet.value(".slot", "grid-template-columns"))                      # (the card's text column is a minmax(0, 1fr) track, not a content-sized one)
         self.assertEqual(self.sheet.value(".pname input", "width"), "100%")
 
     def test_a_narrow_phone_keeps_the_maps_name_whole(self):
         # the map's name (Gauntlet, Treasure) is not cut off at 320 px: under 375 px a smaller picture and a smaller name (a browser measures it)
-        narrow = media(self.style, "(max-width: 374px)")
-        self.assertIn(".side .maprow { grid-template-columns: 96px minmax(0, 1fr);", narrow)
-        self.assertIn(".tv { width: 96px; }", narrow)
-        self.assertIn(".map-name { font-size: 21px; }", narrow)
+        narrow = Sheet(media(self.style, "(max-width: 374px)"))
+        self.assertEqual(narrow.value(".maprow", "grid-template-columns"), "72px minmax(0, 1fr)")
+        self.assertEqual(narrow.value(".tv", "width"), "72px")
+        self.assertEqual(narrow.value(".map-name", "font-size"), "21px")
         self.assertEqual(self.sheet.value(".map-name", "overflow-wrap"), "anywhere")                                 # (a long name of a players' map wraps)
         self.assertEqual(self.sheet.value(".change", "min-height"), "44px")                                      # (the one button of the card is a full touch target)
-        self.assertIn(".change { min-width: 0; padding: 4px 16px; }", self.phone)
-        self.assertGreater(int(re.search(r"\.tv \{[^}]*(?<![-\w])width: (\d+)px;", self.phone).group(1)), 96)           # (a phone of 375 px or more keeps the bigger one)
+        self.assertEqual(self.on_phone.value(".change", "min-width"), "0")
+        self.assertGreater(int(self.on_phone.value(".maprow", "grid-template-columns").split("px")[0]), 72)           # (a phone of 375 px or more keeps the bigger picture)
 
 
 class TheColors(unittest.TestCase):
@@ -976,7 +988,7 @@ class TheColors(unittest.TestCase):
 
     def setUp(self):
         page = read("web", "lobby.html")
-        self.style = style_of(page)
+        self.style = lobby_style(page)
         self.sheet = Sheet(self.style)
 
     def token(self, name):
@@ -1026,11 +1038,24 @@ class TheColors(unittest.TestCase):
             ("the map card's kind chip", (".map-facts .tag", "color"), (".map-facts .tag", "background")),
             ("the room code", (".code", "color"), (".panel", "background")),
             ("the room code's box", (".code b", "color"), (".code b", "background")),
-            ("the note under the link", (".invite-note", "color"), (".panel", "background")),
+            ("the note under the link", (".r-notes .invite-note", "color"), (".panel", "background")),
             ("a hint", (".hint", "color"), (".panel", "background")),
             ("the note under the colors", (".slots-note", "color"), (".panel", "background")),
             ("a refused team", (".teams-note.warn", "color"), (".panel", "background")),
             ("the name step's refusal", (".name-step-msg", "color"), (".name-step-msg", "background")),
+            ("the line under START", (".plan", "color"), (".panel", "background")),
+            ("the recording notice under START", (".room-notice", "color"), (".panel", "background")),
+            ("the line that says whose Ready START waits for", (".ready-line", "color"), (".panel", "background")),
+            ("the line that says that everyone is ready", (".ready-line.ok", "color"), (".panel", "background")),
+        ))
+
+    def test_the_ready_marks_keep_their_text_readable(self):
+        self.check((
+            ("the Ready mark", (".rdy-chip", "color"), (".rdy-chip", "background")),
+            ("the Not ready mark", (".rdy-chip.no", "color"), (".rdy-chip.no", "background")),
+            ("the Ready switch that is on", (".rdy-btn[aria-pressed=\"true\"]", "color"), (".rdy-btn[aria-pressed=\"true\"]", "background")),
+            ("the Ready switch that is off", (".btn", "color"), (".btn", "background")),
+            ("the mark on a card", (".rdy-chip", "color"), (".slot", "background")),
         ))
 
     def test_the_cards_of_the_colors_keep_their_text_readable_in_every_state(self):
@@ -1086,8 +1111,6 @@ class TheColors(unittest.TestCase):
         self.check((
             ("the name step's label", (".name-step label", "color"), (":root", "--clay")),
             ("the name step's hint", (".name-step-hint", "color"), (":root", "--clay")),
-            ("the line under START", (".go .plan", "color"), (":root", "--clay")),
-            ("the recording notice under START", (".room-notice", "color"), (":root", "--clay")),
         ))
         self.assertEqual(self.sheet.colors("body", "color"), [self.token("ink")])                           # (and the page's own text, where nothing says another color, is that ink)
         self.assertGreaterEqual(self.ratio(self.token("ink"), self.token("clay")), 4.5)

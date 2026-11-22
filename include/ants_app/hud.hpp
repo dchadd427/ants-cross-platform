@@ -265,6 +265,9 @@ public:
     bool countdown_takes_chat() const noexcept {
         return show_match_start_modal_ && match_countdown_ && !options_.is_open() && !show_quit_dialog_ && !show_quick_help_ && alliance_dialog_ == AllianceDialog::None;
     }
+    /// While the card is the only dialog that is up the player may LOOK AROUND: the edge strips, the minimap, a drag on the map, the wheel and two fingers move and zoom the view, and nothing of the
+    /// match can be picked or ordered (docs/VIEW_AND_HUD.md, "The countdown card")
+    bool countdown_takes_camera() const noexcept { return countdown_takes_chat(); }
     /// A dialog (options, quit, quick help, the "get ready" modal) is open: it gets all input, the hover and scroll logic does not run.
     bool is_modal_open() const noexcept {
         return options_.is_open() || show_quit_dialog_ || show_quick_help_ || show_match_start_modal_ || alliance_dialog_ != AllianceDialog::None;
@@ -277,11 +280,11 @@ public:
     /// May the wheel or the middle button change the zoom of the view now? Not while a dialog or a page is open (options, quick help, quit, alliance, "get ready"), not while a press holds
     /// the mouse (a rubber band, the minimap, a button, the right button, the chat log's drag): a zoom in the middle of a drag would move the world under it. The position is the
     /// caller's (over_map: the pointer must be over the map view, not over a panel).
-    bool view_zoom_allowed() const noexcept { return !is_modal_open() && !is_input_captured() && !chat_dragging_; }
+    bool view_zoom_allowed() const noexcept { return (!is_modal_open() || countdown_takes_camera()) && !is_input_captured() && !chat_dragging_; }
     /// May a touch screen's two fingers move and zoom the view now? As view_zoom_allowed, except that the press that the first finger holds on the map view itself (a rubber band, the right
     /// button's press there) is no reason to refuse: the gesture ends it (cancel_press). Any other press (a button, the minimap, the chat log) still is.
     bool view_gesture_allowed() const noexcept {
-        return !is_modal_open() && !chat_dragging_ && !is_radar_dragging_ && right_capture_ != 2 && !help_button_.is_pressed && !options_button_.is_pressed && !quit_button_.is_pressed && !fullscreen_button_.is_pressed &&
+        return (!is_modal_open() || countdown_takes_camera()) && !chat_dragging_ && !is_radar_dragging_ && right_capture_ != 2 && !help_button_.is_pressed && !options_button_.is_pressed && !quit_button_.is_pressed && !fullscreen_button_.is_pressed &&
                !send_to_button_.is_pressed && !team_button_.is_pressed;
     }
     /// A replay is for looking: the picture is not a place to click. With this on nothing can be picked (no click, no drag box, no corner marks, no Move and Stop buttons, no order markers, no
@@ -474,6 +477,10 @@ public:
     void dismiss_match_start_modal() noexcept {
         show_match_start_modal_ = false;
         match_countdown_ = false;
+        if (look_dragging_) {                                // a drag on the map that the first turn finds still held: its release is nobody's (it must not click in the match)
+            look_dragging_ = false;
+            swallow_release_ = true;
+        }
     }
     /// Protocol 21: the dialog of a match of a room with two or more people is a COUNTDOWN CARD (countdown_card.hpp): the count of the seconds that the host still holds the first turn, the colors with who
     /// plays them, and a Fullscreen button, in the middle of the map view. The dialog is up as ever (until dismiss_match_start_modal: the match's first turn), and every click and key stays out of the match, but
@@ -484,6 +491,14 @@ public:
         match_countdown_ = true;
         match_countdown_left_ms_ = ms_left;
         countdown_seats_ = seats;
+        card_look_ = 0;                                      // (solid until the view moves)
+        card_rest_steps_ = UINT32_MAX;
+    }
+    /// Protocol 26: how this machine is connected to the person of `seat` now (the row's small word, countdown_tag), and the round trip that the row shows (-1: none yet)
+    void set_countdown_link(size_t seat, net::PeerLink link, int32_t ping_ms = -1) noexcept {
+        if (seat >= countdown_seats_.size()) return;
+        countdown_seats_[seat].link = link;
+        countdown_seats_[seat].ping_ms = ping_ms;
     }
     bool is_match_countdown_active() const noexcept { return show_match_start_modal_ && match_countdown_; }
     void set_match_countdown_left_ms(int64_t ms_left) noexcept { match_countdown_left_ms_ = ms_left; }
@@ -491,8 +506,25 @@ public:
     const std::array<CountdownSeat, 4>& countdown_seats() const noexcept { return countdown_seats_; }       // who the card lists (its rows, and so its line)
     /// Where the Fullscreen button is (the picture's pixels): the page's button is laid over this place on the web (ants_probe 61 - 64), the native game draws its own there and calls the function that
     /// set_on_fullscreen gave when it is clicked
-    LayoutRect countdown_button_rect() const noexcept { return countdown_card_layout(layout_.view()).button; }
+    LayoutRect countdown_button_rect() const noexcept { return card_new_look_ ? countdown_card_now().button : classic_countdown_layout(layout_.view()).button; }
+    /// For the page's button (ants_probe 67 - 69): the card's bottom edge, the bottom of what lies above the button (the rows, the count, the hint of the classic card) and the card's width, in the picture's pixels
+    int32_t countdown_card_bottom() const noexcept { return card_new_look_ ? countdown_card_now().card.bottom() : classic_countdown_layout(layout_.view()).card.bottom(); }
+    int32_t countdown_content_bottom() const noexcept {
+        if (!card_new_look_) return classic_countdown_layout(layout_.view()).hint_y + 20;                    // (the hint line: 18 px letters)
+        const LayoutRect c = countdown_card_now().content;
+        return c.bottom();
+    }
+    int32_t countdown_card_width() const noexcept { return card_new_look_ ? countdown_card_now().card.w : kClassicCardW; }
     void set_on_fullscreen(std::function<void()> fn) { on_fullscreen_ = std::move(fn); }
+    /// The card is see-through while the view moves (the camera of the player: the edge scroll, the minimap, a drag, the wheel, two fingers) and solid again a moment after it stops. The application
+    /// says when the view moved (note_view_moved, once per frame at most); update() takes it from there in its steps of 50 ms.
+    void note_view_moved() noexcept { if (show_match_start_modal_ && match_countdown_) card_rest_steps_ = 0; }
+    /// How see-through the card is now, 0 (solid) .. 255 (as see-through as it gets), and how much of itself the wells, the writing and the button keep at that moment (255: all of it; ants_probe 66, which
+    /// the page's own Fullscreen button follows)
+    int32_t countdown_card_look() const noexcept { return card_look_; }
+    int32_t countdown_card_opacity() const noexcept { return 255 - card_look_ * (255 - kCardFrontSeeThrough) / 255; }
+    /// Is the view being dragged now (a press on the map that moves the view, during the countdown)
+    bool is_looking() const noexcept { return look_dragging_; }
     /// The dialog's length in steps of 50 ms (a local game's dialog closes itself after this many)
     static constexpr uint32_t kMatchStartModalSteps = sim::kMatchStartDialogMs / sim::TICK_MS;
     bool is_shift_held() const noexcept;
@@ -500,6 +532,7 @@ public:
 
 private:
     void render_match_countdown(IRenderer& renderer, const assets::AssetArchive& assets);
+    CountdownCard countdown_card_now() const noexcept;            // the new card at this frame's scale and for the players that it lists
     bool handle_countdown_key(int32_t key, uint16_t mod, bool repeat);
     bool handle_countdown_mouse_down(int32_t x, int32_t y, uint8_t button);
     bool handle_countdown_mouse_up(int32_t x, int32_t y, bool left_release, bool fire_quit, bool fire_all, bool fire_team);
@@ -609,7 +642,7 @@ private:
     struct BandRect { int32_t left, top, right, bottom; };
     BandRect band_rect() const noexcept;
     /// Opening a dialog removes a displayed rubber band and releases the captures
-    void release_capture() noexcept { is_dragging_ = false; is_radar_dragging_ = false; right_capture_ = 0; end_chat_drag(); }
+    void release_capture() noexcept { is_dragging_ = false; is_radar_dragging_ = false; look_dragging_ = false; swallow_release_ = false; right_capture_ = 0; end_chat_drag(); }
     /// The cursor's special-target question (FUN_01026f91) for the selected ants' common type
     bool special_target(const sim::SimulationEngine* query, const sim::WorldState& world, sim::TileCoord tile, PanelMode panel) const;
 
@@ -723,6 +756,14 @@ private:
     int64_t match_countdown_left_ms_{0};
     std::array<CountdownSeat, 4> countdown_seats_{};
     bool countdown_button_pressed_{false};               // the native game's Fullscreen button of the card is held
+    bool look_dragging_{false};                          // the countdown: the left button is held on the map and the view follows it (handle_countdown_mouse_down)
+    int32_t look_x_{0};                                  // (where the drag's last move was)
+    int32_t look_y_{0};
+    bool swallow_release_{false};                        // the card closed in a drag: the release of that button does nothing
+    int32_t card_look_{0};                               // how see-through the card is drawn now, 0 (solid) .. 255 (the most see-through)
+    uint32_t card_rest_steps_{UINT32_MAX};               // 50 ms steps since the view last moved
+    bool card_new_look_{false};                          // the card was drawn in the new look at the last frame (its place is the new card's)
+    double card_output_scale_{1.0};                      // ... and the device pixels to a canvas pixel that it was drawn at
     std::function<void()> on_fullscreen_{nullptr};
 
     bool show_quit_dialog_{false};

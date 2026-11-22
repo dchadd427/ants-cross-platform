@@ -5,7 +5,8 @@
 # a build that starts from a clean emsdk. This stage does it with a small program (docker/emsdk_warm.cpp) before any file of the game is copied, in the two flavours that CMake builds (the game's
 # flags of src/ants_app/CMakeLists.txt, the map core's of CMakeLists.txt), so that its layers are reused by every build until the version below or the program changes. The build log of the
 # stage after it must show no "generating system library" and no "retrieving port" line. ccache (the compile of the stage after it uses it through EM_COMPILER_WRAPPER) is installed here too.
-FROM emscripten/emsdk:3.1.58 AS emsdk-warm
+# The base image is pinned by tag and digest: the digest is what is pulled, the tag is for the reader and for Dependabot (.github/dependabot.yml), which raises the pair to a newer one in a pull request that CI builds.
+FROM emscripten/emsdk:3.1.58@sha256:b640884dffe6ffd6270b4e61548dc2c597f01aaf2c8d7b788009cb7f4719dd20 AS emsdk-warm
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ccache && \
@@ -143,14 +144,16 @@ RUN cp /src/web/lobby.html /src/lobby.html && \
         if grep -q '@@SITE_' "$PAGE"; then echo "a site placeholder is left in $PAGE" >&2; exit 1; fi; \
     done
 
-# Build the changelog page (CHANGELOG.md -> changelog.html; no dependencies) after the compile layers so that editing the changelog does not rebuild the game
+# Build the changelog page (CHANGELOG.md -> changelog.html; no dependencies) after the compile layers so that editing the changelog does not rebuild the game, and with it the data file of the update notice
+# (whats_new.json: the live version and the lines that the changelog wrote for players, docs/SITE_NAV.md "The update notice"; the build stops when a line of those names the operator's side)
 COPY CHANGELOG.md /src/changelog/CHANGELOG.md
 COPY tools/changelog_to_html.py /src/changelog/changelog_to_html.py
 RUN cd /src/changelog && \
     GAME_VERSION="v$(head -n 1 /src/VERSION | tr -d '[:space:]')" && \
     BUILD_ID="$(cat /src/build_id.txt)" && \
     BUILD_DATE="$(cat /src/build_date.txt)" && \
-    python3 changelog_to_html.py CHANGELOG.md changelog.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --build-date "${BUILD_DATE}"
+    python3 changelog_to_html.py CHANGELOG.md changelog.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --build-date "${BUILD_DATE}" --whats-new whats_new.json && \
+    test -s changelog.html && test -s whats_new.json
 
 # The map maker's sprite atlas (docs/MAP_EDITOR.md, "Sprites"): the game's pictures of the ground and of the objects that the editor offers, in two small sheets and an index, made by tools/map_atlas.py (Python
 # standard library only) from the public decoded sprites and the animation table that the sprite viewer's data holds (asset_catalog/catalog_data.js); the repository keeps no generated picture. After the
@@ -163,7 +166,8 @@ RUN python3 tools/map_atlas.py mapmaker_atlas && test -s mapmaker_atlas/atlas.js
 # =============================================================================
 # Stage 2: High-Performance Lightweight Nginx Web Server
 # =============================================================================
-FROM nginx:alpine AS runner
+# Pinned by tag and digest, like the base image of the first stage.
+FROM nginx:alpine@sha256:fb4658584bd9a916ffb6f6e365f97c25cfdb2923801f551ea08356e695f14ff7 AS runner
 
 # Clear default static files
 RUN rm -rf /usr/share/nginx/html/*
@@ -209,6 +213,9 @@ COPY --from=builder /src/match.html /usr/share/nginx/html/match.html
 COPY web/matches.css /usr/share/nginx/html/matches.css
 COPY web/site_nav.css /usr/share/nginx/html/site_nav.css
 COPY web/site_nav.js /usr/share/nginx/html/site_nav.js
+# The update notice (docs/SITE_NAV.md "The update notice"): the strip and the "What's new" window that every page with the version stamped loads (update_notice.js, update_notice.css); the data file whats_new.json is made below, with the changelog
+COPY web/update_notice.css /usr/share/nginx/html/update_notice.css
+COPY web/update_notice.js /usr/share/nginx/html/update_notice.js
 # The bar of the game page (docs/SITE_NAV.md "The game page"): the game page's own rules for the site bar and its part of the bar's script (the links that ask first during a match, the keys, the Menu's own lines)
 COPY web/game_bar.css /usr/share/nginx/html/game_bar.css
 COPY web/game_bar.js /usr/share/nginx/html/game_bar.js
@@ -242,6 +249,9 @@ COPY web/hud_fullscreen.js /usr/share/nginx/html/hud_fullscreen.js
 # The screen stays on while a match is played or a recording plays (docs/PLAY_IN_BROWSER.md "The screen stays on"): the game page asks the browser for a Screen Wake Lock (wake_lock.js)
 COPY web/wake_lock.js /usr/share/nginx/html/wake_lock.js
 
+# The data channels to the other players of a match (docs/P2P_HINTS.md): the game's hints travel between the browsers through the operator's relay (p2p.js, called by the game's wasm_rtc.cpp)
+COPY web/p2p.js /usr/share/nginx/html/p2p.js
+
 # The touch buttons for the game's hotkeys (docs/TOUCH.md "The hotkey buttons"): the game page makes them on a touch screen during a match (touch_keys.js, touch_keys.css)
 COPY web/touch_keys.js /usr/share/nginx/html/touch_keys.js
 COPY web/touch_keys.css /usr/share/nginx/html/touch_keys.css
@@ -264,7 +274,7 @@ COPY --from=builder /src/legal.html /usr/share/nginx/html/legal.html
 
 # The changelog page (built from CHANGELOG.md, linked from the game page); it is in the Classic look of the front page: it links
 # /front/classic.css, which the web/front/ copy above puts in the image
-COPY --from=builder /src/changelog/changelog.html /usr/share/nginx/html/
+COPY --from=builder /src/changelog/changelog.html /src/changelog/whats_new.json /usr/share/nginx/html/
 
 # Copy Asset Catalog & Viewer for reference on beta site
 COPY asset_catalog/ /usr/share/nginx/html/asset_catalog/
@@ -272,6 +282,7 @@ COPY asset_catalog/ /usr/share/nginx/html/asset_catalog/
 # The admin page (docs/MAP_SUBMISSIONS.md "The admin page"): the address /admin is typed, nothing links to it; its API and the logon are paths of docker/nginx.conf
 COPY --from=builder /src/web/admin.html /usr/share/nginx/html/admin.html
 COPY web/admin.css /usr/share/nginx/html/admin.css
+COPY web/admin_map_pick.js /usr/share/nginx/html/admin_map_pick.js
 COPY web/admin_bots.js /usr/share/nginx/html/admin_bots.js
 COPY web/admin_page.js /usr/share/nginx/html/admin_page.js
 

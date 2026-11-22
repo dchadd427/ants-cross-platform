@@ -12,6 +12,7 @@ versions they hold; the address of a release opens its page). The script is RUN 
 are skipped and say so), and the check is shown able to fail: broken copies of the page's script are refused by it. The real browsers' check is opt-in: tests/scripts/test_web_changelog.sh.
 """
 import html.parser
+import json
 import os
 import re
 import shutil
@@ -249,10 +250,10 @@ class MadeUpFiles(unittest.TestCase):
         self.assertEqual(page.errors, [])
         self.assertEqual(page.stack, [])
         self.assertEqual([(l.get("rel"), l.get("href")) for l in page.links],
-                         [("icon", "/favicon.png?v=f34bea03"), ("manifest", "/manifest.webmanifest"), ("apple-touch-icon", "/app/apple-touch-icon.png?v=4fbefb68"), ("preload", "/front/LibreFranklin-Medium.ttf"), ("stylesheet", "/front/classic.css"), ("stylesheet", "/site_nav.css")])
+                         [("icon", "/favicon.png?v=9ea2152a"), ("manifest", "/manifest.webmanifest"), ("apple-touch-icon", "/app/apple-touch-icon.png?v=82bef672"), ("preload", "/front/LibreFranklin-Medium.ttf"), ("stylesheet", "/front/classic.css"), ("stylesheet", "/site_nav.css"), ("stylesheet", "/update_notice.css")])
         self.assertEqual([i.get("src") for i in page.imgs], [])
-        self.assertEqual(page.scripts, ["script", "script"])                                       # (the one inline script that makes the pages: TheScript, below, and the site bar's file at the end)
-        self.assertIn('</div>\n<script src="/site_nav.js"></script>\n</body>', self.text)
+        self.assertEqual(page.scripts, ["script", "script", "script"])                             # (the one inline script that makes the pages: TheScript, below, and the site bar's file and the update notice's at the end)
+        self.assertIn('</div>\n<script src="/site_nav.js"></script>\n<script src="/update_notice.js"></script>\n</body>', self.text)
         style = re.search(r"<style>(.*?)</style>", self.text, re.S).group(1)
         self.assertNotIn("@import", style)
         self.assertNotIn("url(", style)
@@ -384,14 +385,18 @@ class RealFile(unittest.TestCase):
             lines = [l for l in entry.splitlines() if l.strip()]
             self.assertGreaterEqual(len(lines), 4, head)
             self.assertLessEqual(len(entry.rstrip("\n").splitlines()), 17, "%s: an entry is 5 - 15 lines (blank ones count)" % head)
-            self.assertIn("**For players:**\n", entry, head)
-            players = re.search(r"\*\*For players:\*\*\n((?:- .*\n)+)", entry)
-            self.assertIsNotNone(players, head)
-            self.assertTrue(1 <= len(players.group(1).splitlines()) <= 6, "%s: 1 - 6 bullets under For players" % head)
+            if "**For operators:**" not in entry or "**For players:**" in entry:                       # (a release that has only lines for operators has no For players paragraph)
+                self.assertIn("**For players:**\n", entry, head)
+                players = re.search(r"\*\*For players:\*\*\n((?:- .*\n)+)", entry)
+                self.assertIsNotNone(players, head)
+                self.assertTrue(1 <= len(players.group(1).splitlines()) <= 6, "%s: 1 - 6 bullets under For players" % head)
+            else:
+                self.assertRegex(entry, r"\*\*For operators:\*\*\n- ", head)
             self.assertIn("**Details:** [commits](https://github.com/", entry, head)
             # fixed order of the labels
-            positions = [entry.find(label) for label in ("**For players:**", "**Rules / network:**", "**Fixes:**", "**Details:**") if label in entry]
-            self.assertEqual(positions, sorted(positions), "%s: the labels are in the order For players, Rules / network, Fixes, Details" % head)
+            positions = [entry.find(label) for label in ("**For players:**", "**Rules / network:**", "**Fixes:**", "**For operators:**", "**Details:**") if label in entry]
+            self.assertEqual(positions, sorted(positions), "%s: the labels are in the order For players, Rules / network, Fixes, For operators, Details" % head)
+            self.assertEqual(sorted(set(re.findall(r"^\*\*([^*:]+):\*\*", entry, re.M)) - {"For players", "Rules / network", "Fixes", "For operators", "Details"}), [], "%s: a label that the template does not have" % head)
             self.assertNotRegex(entry, r"\b[0-9,]+ (assertions|test cases)\b", head)             # no test counts in the changelog
 
 
@@ -452,11 +457,11 @@ class ThePagesOfThePage(unittest.TestCase):
 
     def test_one_inline_script_after_the_releases(self):
         for page in (self.real, self.long, self.short):
-            self.assertEqual(page.count("<script"), 2)                                               # (the page's own, and the site bar's file at the end)
-            self.assertEqual(page.count("</script>"), 2)
+            self.assertEqual(page.count("<script"), 3)                                               # (the page's own, and the site bar's file and the update notice's at the end)
+            self.assertEqual(page.count("</script>"), 3)
             self.assertIn("</main>\n<script>\n(function () {", page)
             self.assertLess(page.index("</main>"), page.index("</script>"))
-            self.assertNotRegex(page.replace('<script src="/site_nav.js"></script>', ""), r"<script[^>]*\b(src|type|defer|async)=")
+            self.assertNotRegex(page.replace('<script src="/site_nav.js"></script>', "").replace('<script src="/update_notice.js"></script>', ""), r"<script[^>]*\b(src|type|defer|async)=")
             self.assertNotIn("@", script_of(page))                                           # (every placeholder of the template was filled)
 
     def test_the_script_is_the_same_for_every_changelog(self):
@@ -610,8 +615,194 @@ class TheScriptRunByNode(unittest.TestCase):
         self.assertEqual(survivors, [], "the check did not notice these broken copies of the script")
 
 
+WHATS_NEW_MD = """# Changelog
+
+Intro.
+
+<!--
+## vX.Y.Z - YYYY-MM-DD - title
+
+**For players:**
+- a bullet of the template that must not appear
+-->
+
+## Next
+
+**For players:**
+- **Not released yet.** Nobody has this.
+
+## v1.4.0 - 2026-01-04 - Operators only: the administration page of the secret title
+
+**For operators:**
+- **The administration page has a new tab.** Setting `ANTS_SECRET_SETTING=1` shows it.
+
+**Details:** [commits](https://github.com/example/ants/compare/aaaaaaa...bbbbbbb)
+
+## v1.3.0 - 2026-01-03 - The third release, with a title of its own
+
+**For players:**
+- **Bold lead.** Plain words with `code`, a [link](docs/BOTS.md), <angle> brackets & an ampersand.
+- Second bullet that goes on
+  on a second line.
+
+**Rules / network:**
+- Network protocol 12 (a rules bullet that is not for the window).
+
+**Fixes:**
+- A fix that players see.
+
+**For operators:**
+- **For the person who runs the server.** The database moves to schema 9; set `ANTS_OTHER_SETTING`.
+
+**Internal:**
+- A label that nobody knows is never read.
+
+**Details:** [commits](https://github.com/example/ants/compare/ccccccc...aaaaaaa)
+
+## v1.2.0 - 2026-01-02 - Second
+
+**For players:**
+- Only one bullet.
+
+A paragraph that no label opened.
+- and a bullet after it that is not read
+
+**Details:** [commits](https://github.com/example/ants/compare/ddddddd...ccccccc)
+
+## v1.1.0 - 2026-01-01 - First
+
+**Fixes:**
+- Only a fix.
+
+**Details:** [commits](https://github.com/example/ants/compare/eeeeeee...ddddddd)
+
+## Older versions (v1.0.0 and before)
+
+Every release before v1.1.0 is only in the git history.
+"""
+
+
+class TheWhatsNewFile(unittest.TestCase):
+    """The data file of the update notice (`--whats-new`): the live version and the lines that were written for players, and nothing else (docs/SITE_NAV.md "The update notice")."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def make(self, md, *extra, name="a"):
+        src, out, data = (os.path.join(self.tmp.name, name + suffix) for suffix in (".md", ".html", ".json"))
+        with open(src, "w", encoding="utf-8") as f:
+            f.write(md)
+        for stale in (out, data):
+            if os.path.exists(stale):
+                os.remove(stale)
+        result = run_tool(src, out, "--version", "v1.4.0", "--whats-new", data, *extra)
+        loaded = None
+        if os.path.exists(data):
+            with open(data, encoding="utf-8") as f:
+                loaded = f.read()
+        return result, loaded, os.path.exists(out)
+
+    def file(self, md=WHATS_NEW_MD):
+        result, text, _ = self.make(md)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(text), text
+
+    def test_the_file_has_the_live_version_and_the_releases_that_have_lines_newest_first(self):
+        data, text = self.file()
+        self.assertEqual(data["version"], "1.4.0")                                                      # (the live version, even when its own entry has nothing for players)
+        self.assertEqual([r["version"] for r in data["releases"]], ["1.3.0", "1.2.0", "1.1.0"])
+        self.assertEqual([r["date"] for r in data["releases"]], ["2026-01-03", "2026-01-02", "2026-01-01"])
+        self.assertTrue(text.endswith("\n") and all(ord(c) < 128 for c in text))
+
+    def test_only_the_bullets_under_for_players_and_fixes_are_in_it_and_nothing_else(self):
+        data, text = self.file()
+        third, second, first = data["releases"]
+        self.assertEqual(len(third["items"]), 2)
+        self.assertEqual(len(third["fixes"]), 1)
+        self.assertEqual((len(second["items"]), len(second["fixes"])), (1, 0))                         # (a bullet after a paragraph that no label opened is not read)
+        self.assertEqual((len(first["items"]), len(first["fixes"])), (0, 1))
+        for left_out in ("administration page", "ANTS_", "SECRET", "operators", "database", "schema", "rules bullet", "etwork protocol", "Internal", "nobody knows", "Not released", "template that must not",
+                         "title of its own", "Operators only", "commits", "github", "aaaaaaa", "Nobody has this"):
+            self.assertNotIn(left_out, text, left_out)
+        self.assertEqual(set(data), {"version", "releases"})
+        self.assertTrue(all(set(r) == {"version", "date", "items", "fixes"} for r in data["releases"]))
+
+    def test_a_line_is_text_with_its_bold_lead_and_nothing_made_from_a_link_or_code(self):
+        data, _ = self.file()
+        first = data["releases"][0]["items"][0]
+        self.assertEqual(first, [["b", "Bold lead."], ["t", " Plain words with code, a link, <angle> brackets & an ampersand."]])
+        self.assertEqual(data["releases"][0]["items"][1], [["t", "Second bullet that goes on on a second line."]])
+
+    def test_a_release_that_has_only_lines_for_operators_is_not_in_the_file_and_neither_is_its_title(self):
+        data, text = self.file()
+        self.assertNotIn("1.4.0", [r["version"] for r in data["releases"]])
+        self.assertNotIn("secret title", text)
+
+    def test_the_newest_eight_releases_that_have_lines_are_kept(self):
+        md = "# Changelog\n\n" + "".join("## v1.0.%d - 2026-01-%02d - Release %d\n\n**For players:**\n- bullet %d\n\n**Details:** [commits](https://github.com/example/ants/compare/a...b)\n\n" % (k, k, k, k) for k in range(12, 0, -1))
+        data, _ = self.file(md)
+        self.assertEqual([r["version"] for r in data["releases"]], ["1.0.%d" % k for k in range(12, 4, -1)])
+
+    def test_a_shipped_line_that_names_the_operators_side_stops_the_build_and_writes_nothing(self):
+        for line in ("The administration page has a tab.", "The admin page has a tab.", "Set `ANTS_SOME_SETTING=0` to switch it off.", "The database is bigger.", "It now uses schema 9.", "Site admins sign in with Discord.", "An environment variable sets it."):
+            for label in ("For players", "Fixes"):
+                md = "# Changelog\n\n## v1.4.0 - 2026-01-04 - Title\n\n**%s:**\n- Fine.\n- %s\n\n**Details:** [commits](https://github.com/example/ants/compare/a...b)\n" % (label, line)
+                result, text, wrote_page = self.make(md)
+                self.assertEqual(result.returncode, 2, line)
+                self.assertIn("v1.4.0", result.stderr, line)
+                self.assertIn("For operators", result.stderr, line)
+                self.assertIsNone(text, line)
+                self.assertFalse(wrote_page, line)                                                       # (the page is not written either: the build stops)
+        md = "# Changelog\n\n## v1.4.0 - 2026-01-04 - Title\n\n**For players:**\n- A map called ANTS_PARTY-V.3 is in the library.\n- Admins and an administrator's long message.\n\n**Details:** [commits](https://github.com/example/ants/compare/a...b)\n"
+        self.assertEqual(self.make(md)[0].returncode, 0)                                                 # (a map's name and the word for a person are not the operator's side)
+
+    def test_the_same_words_under_the_other_labels_are_fine_and_so_are_old_releases(self):
+        result, text, _ = self.make(WHATS_NEW_MD)
+        self.assertEqual(result.returncode, 0, result.stderr)                                            # (the made-up file has them under For operators, Rules / network, Details and an unknown label)
+        old = "".join("## v1.0.%d - 2026-01-%02d - Release %d\n\n**For players:**\n- bullet %d\n\n**Details:** [commits](https://github.com/example/ants/compare/a...b)\n\n" % (k, k, k, k) for k in range(12, 0, -1))
+        md = "# Changelog\n\n" + old.replace("- bullet 1\n", "- The admin page was new.\n")
+        self.assertEqual(self.make(md)[0].returncode, 0)                                                 # (v1.0.1 is not among the newest eight: the file never holds it)
+
+    def test_the_option_needs_a_version(self):
+        src = os.path.join(self.tmp.name, "b.md")
+        with open(src, "w", encoding="utf-8") as f:
+            f.write(WHATS_NEW_MD)
+        result = run_tool(src, os.path.join(self.tmp.name, "b.html"), "--whats-new", os.path.join(self.tmp.name, "b.json"))
+        self.assertEqual(result.returncode, 2)
+        self.assertFalse(os.path.exists(os.path.join(self.tmp.name, "b.json")))
+
+    def test_without_the_option_no_data_file_is_made(self):
+        src, out = os.path.join(self.tmp.name, "c.md"), os.path.join(self.tmp.name, "c.html")
+        with open(src, "w", encoding="utf-8") as f:
+            f.write(WHATS_NEW_MD)
+        self.assertEqual(build(src, out).returncode, 0)
+        self.assertEqual(sorted(n for n in os.listdir(self.tmp.name) if n.startswith("c.")), ["c.html", "c.md"])
+
+    def test_the_real_changelog_makes_a_file_whose_lines_are_all_in_it_under_the_two_labels(self):
+        real = read_text(os.path.join(REPO, "CHANGELOG.md"))
+        version = "v" + read_text(os.path.join(REPO, "VERSION")).strip()
+        src, out, data = (os.path.join(self.tmp.name, "real" + suffix) for suffix in (".md", ".html", ".json"))
+        with open(src, "w", encoding="utf-8") as f:
+            f.write(real)
+        result = run_tool(src, out, "--version", version, "--whats-new", data)
+        self.assertEqual(result.returncode, 0, result.stderr)                                            # (a line for operators under the two labels would stop it: it belongs under For operators)
+        with open(data, encoding="utf-8") as f:
+            loaded = json.load(f)
+        self.assertGreaterEqual(len(loaded["releases"]), 1)
+        plain = re.sub(r"\s+", " ", re.sub(r"\[([^\]]+)\]\([^)\s]+\)", r"\1", real).replace("`", "").replace("**", ""))
+        for rel in loaded["releases"]:
+            for line in rel["items"] + rel["fixes"]:
+                self.assertIn("".join(piece[1] for piece in line), plain, rel["version"])
+        self.assertLess(len(json.dumps(loaded)), 20000)
+
+
 class DockerfileBuildsThePage(unittest.TestCase):
-    """The Dockerfile builds the one changelog page with the command that the tests above run (the version, the build id and the build date, no other option), and the runner stage copies that one file."""
+    """The Dockerfile builds the one changelog page, and the data file of the update notice beside it, with the command that the tests above run (the version, the build id and the build date, and the data file's name), and the runner stage copies those two files."""
 
     @classmethod
     def setUpClass(cls):
@@ -619,15 +810,15 @@ class DockerfileBuildsThePage(unittest.TestCase):
 
     def test_one_command_builds_the_page_with_the_version_and_the_build_id_and_nothing_else(self):
         found = [line for line in self.lines if "python3 changelog_to_html.py" in line]
-        self.assertEqual(found, ['python3 changelog_to_html.py CHANGELOG.md changelog.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --build-date "${BUILD_DATE}"'])
+        self.assertEqual(found, ['python3 changelog_to_html.py CHANGELOG.md changelog.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --build-date "${BUILD_DATE}" --whats-new whats_new.json && \\'])
 
     def test_the_builder_copies_the_changelog_and_the_tool_and_no_document_of_docs(self):
         self.assertEqual([l for l in self.lines if l.startswith("COPY") and "/src/changelog/" in l and "--from" not in l],
                          ["COPY CHANGELOG.md /src/changelog/CHANGELOG.md", "COPY tools/changelog_to_html.py /src/changelog/changelog_to_html.py"])
         self.assertEqual([l for l in self.lines if re.match(r"COPY\s+(--\S+\s+)*docs", l)], [])
 
-    def test_the_runner_copies_the_one_page(self):
-        self.assertEqual([l for l in self.lines if l.startswith("COPY --from=builder /src/changelog/")], ["COPY --from=builder /src/changelog/changelog.html /usr/share/nginx/html/"])
+    def test_the_runner_copies_the_page_and_the_data_file(self):
+        self.assertEqual([l for l in self.lines if l.startswith("COPY --from=builder /src/changelog/")], ["COPY --from=builder /src/changelog/changelog.html /src/changelog/whats_new.json /usr/share/nginx/html/"])
 
 
 if __name__ == "__main__":

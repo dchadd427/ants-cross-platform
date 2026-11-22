@@ -264,6 +264,46 @@ const STRIP = [
 for (const [search, want] of STRIP) same('withoutName(' + search + ')', P.withoutName(search), want);
 check('a copy of the address of a game that was given a name is a shared link', P.asksForName(P.withoutName('?join=/ws&room=ABC&seat=1&name=Bob')) === true);
 
+// The name in the address (ANTS_PAGE.vouched): the game's only when the front page of this tab vouched for that very name, once; a link that somebody wrote has none, so it asks like any shared link
+const store = (value) => { const s = { value, got: 0, removed: 0, getItem(k) { s.got++; return k === 'ants.joinas' ? s.value : null; }, removeItem(k) { if (k === 'ants.joinas') { s.removed++; s.value = null; } } }; return s; };
+const JOIN = '?join=/ws&room=k7m2xq&seat=1&name=Bob';
+{
+    const mine = store('Bob');
+    same('vouched: the front page of this tab put this name in the address: the address is as it is, and the note is taken out (once)', [P.vouched(JOIN, mine), mine.value, mine.removed], [JOIN, null, 1]);
+    check('... so the link asks for no name (the page that made it chose it), and the game is given the name', P.asksForName(P.vouched(JOIN, store('Bob'))) === false && P.joinArguments(P.vouched(JOIN, store('Bob')), false, 'h').args.indexOf('Bob') !== -1);
+    same('... the same note does not vouch for the same address a second time', [P.vouched(JOIN, mine) === P.withoutName(JOIN), mine.removed], [true, 2]);
+}
+for (const [label, search, kept] of [
+    ['a link that somebody wrote: no note in this tab', JOIN, null],
+    ['a note for another name', JOIN, 'Alice'],
+    ['a note for the same name in other letters', JOIN, 'bob'],
+    ['an empty note and a name in the address', JOIN, ''],
+    ['a name of a game on this computer, with no note', '?map=tiny&name=Mallory', null],
+]) {
+    const s = store(kept), out = P.vouched(search, s);
+    same('not vouched (' + label + '): the address comes back without its name', out, P.withoutName(search));
+    check('... and a link to a room asks for the name, where the address had one', !/^\?join=/.test(search) || (P.asksForName(out) === true && P.joinArguments(out, false, 'h').args.indexOf('--name') === -1));
+}
+{
+    same('a name that was chosen as none (an empty name, and a note that says so) stays: the Rejoin button', P.vouched('?join=/ws&room=k7m2xq&seat=1&name=', store('')), '?join=/ws&room=k7m2xq&seat=1&name=');
+    same('a name in the address with a storage that throws, or none: not vouched', [P.vouched(JOIN, { getItem() { throw new Error('no storage'); }, removeItem() {} }), P.vouched(JOIN, null), P.vouched(JOIN, undefined)], [P.withoutName(JOIN), P.withoutName(JOIN), P.withoutName(JOIN)]);
+    const idle = store('Bob');
+    same('an address with no name is left alone, and the note is not touched', [P.vouched('?join=/ws&room=k7m2xq', idle), P.vouched('', idle), idle.got, idle.value], ['?join=/ws&room=k7m2xq', '', 0, 'Bob']);
+}
+const vouchBlock = between(lobbyText, 'VOUCH_BEGIN', 'VOUCH_END', lobbyPath);
+{
+    const vouch = new Function(vouchBlock + '\nreturn vouchName;')();
+    const kept = {}, win = { sessionStorage: { setItem(k, v) { kept[k] = v; } } };
+    vouch(win, 'Bob'); vouch(win, ''); 
+    same('the front page keeps the name that it puts in an address, as text, under one key, in this tab', [kept], [{ 'ants.joinas': '' }]);
+    vouch(win, 'Eve');
+    same('... the last name is the one (a tab goes to one game page at a time)', kept, { 'ants.joinas': 'Eve' });
+    check('... and no storage, or a storage that throws, is no error: the game page asks for the name', (() => { vouch({}, 'x'); vouch({ get sessionStorage() { throw new Error('denied'); } }, 'x'); return true; })());
+    const navigations = lobbyText.match(/window\.location\.assign\(new URL\((?:'\.\/' \+ rejoinQuery|address)/g) || [];
+    const vouches = lobbyText.match(/vouchName\(window, [^)]*\);\n\s*window\.location\.assign\(new URL\((?:'\.\/' \+ rejoinQuery|address)/g) || [];
+    check('the three places that take this tab from the front page to a game with a name in its address each vouch for it first (a click needs a browser: this is read from the page)', navigations.length === 3 && vouches.length === 3, navigations.length + ' ' + vouches.length);
+}
+
 // The seat in the address (the review's L2): the game tells the page the seat that the room gave this window, and the address carries it, so that a reload of this window takes its own seat and its key
 const SEATS = [
     ['a link with no seat gets it, at the end', '?join=/ws&room=ABC', 0, '?join=/ws&room=ABC&seat=0'],
@@ -282,8 +322,8 @@ for (const [label, search, seat, want] of SEATS) same('withSeat: ' + label + ' (
 for (const seat of [4, -1, 255, 1.5, NaN, '1', null, undefined]) same('withSeat: ' + String(seat) + ' is no seat of a player: the address is as it was', P.withSeat('?join=/ws&room=ABC', seat), '?join=/ws&room=ABC');
 {
     const doc = { getElementById() { return { setAttribute() {}, classList: { add() {} } }; }, querySelectorAll() { return []; }, body: { classList: { add() {} }, style: { setProperty() {} } } };
-    const pageAt = (search, throws) => {
-        const win = { location: { search, protocol: 'http:', host: 'h', pathname: '/play', hash: '#x' }, localStorage: null, urls: [] };
+    const pageAt = (search, throws, vouchedName = 'Bob') => {
+        const win = { location: { search, protocol: 'http:', host: 'h', pathname: '/play', hash: '#x' }, localStorage: null, urls: [], sessionStorage: { getItem: () => vouchedName, removeItem() {} } };       // (the front page of this tab vouched for the name "Bob", or for what the test says)
         win.history = {
             replaceState(state, title, url) {
                 if (throws) throw new Error('refused');
@@ -303,6 +343,10 @@ for (const seat of [4, -1, 255, 1.5, NaN, '1', null, undefined]) same('withSeat:
     same('... told the same seat again, it leaves the address alone', told.urls.length, 1);
     told.antsSeatKnown(2);
     same('... another seat replaces it', told.urls[1], '/play?join=/ws&room=ABC&name=Bob&seat=2#x');
+    const stranger = pageAt('?join=/ws&room=ABC&seat=1&name=Mallory', false);
+    same('a link of somebody else that carries a name is brought back without it as the page starts, so that the page asks (the front page of this tab vouched for another name)', stranger.urls, ['/play?join=/ws&room=ABC&seat=1#x']);
+    same('... and a link that the front page of this tab made is left as it is', pageAt('?join=/ws&room=ABC&seat=1&name=Mallory', false, 'Mallory').urls, []);
+    same('... and so is a link with no name', pageAt('?join=/ws&room=ABC', false, null).urls, []);
     const local = pageAt('?map=TINY.LVL&bots=easy', false);
     local.antsSeatKnown(0);
     same('a game on this computer leaves its address alone', local.urls, []);
@@ -448,7 +492,7 @@ const path = require('path');
 const H = require('./web_page_harness.js')(lobbyPath);
 const { lobbyDir, lobbyMarkup, lobbyScripts, lobbyScript, RULES0, NET0, CHAT0, GUEST, hex, E, C, str8, KEY, welcome, reject, roomMessage, helloBytes, helloName, helloRoom, CODE, grouped, BLOCK_PARAMS, blockText, noBlockOf, THROWS, runLobby } = H;
 {
-    same('the page loads its scripts (the alerts, the seat-key reader, the rules, the network client, the chat box, the rematch\'s strip, the map list, the shapes, the file fetcher, the Home screen) and then runs its own', lobbyScripts.map((m) => { const s = /src="([^"]*)"/.exec(m[1]); return s ? s[1] : 'inline'; }), ['alert_core.js', 'rejoin_key.js', 'front/map_maker_link.js', 'front/lobby_rules.js', 'front/lobby_net.js', 'front/player_name.js', 'front/lobby_chat.js', 'front/rematch.js', 'front/game_modes.js', 'front/game_type.js', 'front/map_picker.js', 'shapes.js', 'map_files.js', 'home/home.js', 'inline']);
+    same('the page loads its scripts (the alerts, the seat-key reader, the update notice, the direct-connection switch, the rules, the network client, the chat box, the rematch\'s strip, the map list, the shapes, the file fetcher, the Home screen) and then runs its own', lobbyScripts.map((m) => { const s = /src="([^"]*)"/.exec(m[1]); return s ? s[1] : 'inline'; }), ['alert_core.js', 'rejoin_key.js', 'update_notice.js', 'front/lobby_direct.js', 'front/map_maker_link.js', 'front/lobby_rules.js', 'front/lobby_net.js', 'front/player_name.js', 'front/lobby_chat.js', 'front/rematch.js', 'front/game_modes.js', 'front/game_type.js', 'front/map_picker.js', 'shapes.js', 'map_files.js', 'home/home.js', 'inline']);
     const markupIds = [...lobbyMarkup.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
     check('no id is used twice in the markup', new Set(markupIds).size === markupIds.length, markupIds.filter((id, i) => markupIds.indexOf(id) !== i).join(','));
     const asked = new Set([...lobbyScript.matchAll(/\$\('([\w-]+)'\)/g), ...lobbyScript.matchAll(/freshNode\('([\w-]+)'\)/g), ...lobbyScript.matchAll(/getElementById\('([\w-]+)'\)/g)].map((m) => m[1]));
@@ -1158,7 +1202,7 @@ async function codeBox(env) {
     check('a room whose match has started: "The match in that room has already started."', running.box.hint.textContent === 'The match in that room has already started.');
     const old = await typedJoin('k7m2xq');
     old.last().open().receive(reject(2));
-    check('a server that speaks another version: the strip asks for a reload', !old.$('banner').hidden && /A newer version of Ants is out/.test(old.$('banner-text').textContent) && old.$('banner-x').textContent === 'Reload');
+    check('a server that speaks another version: the strip asks for a reload', !old.$('banner').hidden && /A new version of Ants is out/.test(old.$('banner-text').textContent) && old.$('banner-x').textContent === 'Reload');
     // the probe is welcomed: the page leaves its own room and shows that one
     const ok = await typedJoin('k7m2xq');
     const ownSocket = ok.sockets[0];
@@ -1186,9 +1230,9 @@ async function codeBox(env) {
     const KEY_ENTRY = 'ants.rejoin.';
     const env = runLobby('', { 'ants.name': 'Maya', 'ants.rejoin.old-room.1': '{"k":"0f1e2d3c4b5a69788796a5b4c3d2e1f0","s":"wss://play.test/ws","t":' + (Date.now() - 600000) + '}' });
     check('before START: the way back to an older match is offered, and the page is waiting in its room', !env.$('rejoin').hidden);
-    const s = env.arrive({ key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']] });
+    const s = env.arrive({ key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { ready: 2 } });
     const code = helloRoom(s.sent[0]);
-    check('with another player in the room START is on, and says START!', env.$('start').disabled === false && env.$('start').textContent === 'START!');
+    check('with another player in the room, who said Ready, START is on, and says START!', env.$('start').disabled === false && env.$('start').textContent === 'START!');
     env.$('start').click();
     check('START asks the room (one StartRequest) and the page goes on waiting: nothing has moved yet', s.sent.length === 2 && s.sent[1][0] === NET0.MSG.StartRequest && env.assigned.length === 0 && Object.keys(env.storage.data).every((k) => k !== KEY_ENTRY + code + '.0'));
     s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
@@ -1233,11 +1277,45 @@ async function codeBox(env) {
     check('a name with < > & goes into that address encoded (a plain value in the query, never markup)', evil.assigned[0] === 'https://play.test/play?map=treasure&name=%3Cb%3Ex%3C%2Fb%3E%26y' && evil.param(evil.assigned[0], 'name') === '<b>x</b>&y', evil.assigned[0]);
 }
 
+// ---- 5.5d ready up (protocol 27, docs/READY_UP.md): a person's own switch on their card, the marks of the others, START that waits for them, and what the page sends
+{
+    const readyBtn = (env, seat) => env.inCard(seat, 'data-ready');
+    const marks = (env) => [0, 1, 2, 3].map((i) => env.card(i).findAll((e) => /\brdy-chip\b/.test(e.className)).map((c) => c.textContent + (/\bno\b/.test(c.className) ? '-' : '+')).join(''));
+    // the host's screen: Sam has not said it
+    const host = runLobby('', { 'ants.name': 'Maya' });
+    const hs = host.arrive({ key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']] });
+    check('the host has no switch of their own, and Sam\'s card says Not ready (the host\'s card says Ready by itself)', !readyBtn(host, 0) && !readyBtn(host, 1) && marks(host).slice(0, 2).join('|') === 'Ready+|Not ready-');
+    check('START is off and the line under it says whose Ready it waits for', host.$('start').disabled === true && host.$('start').textContent === 'START!' && host.$('ready-line').hidden === false && host.$('ready-line').textContent === 'Waiting for Sam to ready up' && !/\bok\b/.test(host.$('ready-line').className));
+    host.$('start').click();
+    check('a press on the START that is off sends nothing', hs.sent.length === 1 && host.assigned.length === 0);
+    hs.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, ready: 2 }));
+    check('Sam says Ready: his card says Ready, START is on and the line says that everybody is', marks(host).slice(0, 2).join('|') === 'Ready+|Ready+' && host.$('start').disabled === false && host.$('ready-line').textContent === 'Everyone is ready.' && /\bok\b/.test(host.$('ready-line').className));
+    hs.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, ready: 2, map: 'ISLANDS.LVL', plan: [0, 0, 1, 0], mode: 1 }));
+    check('the leader changes the map, a color and the game type: the marks stay, START stays on', marks(host).slice(0, 2).join('|') === 'Ready+|Ready+' && host.$('start').disabled === false);
+    const bot = marks(host)[2];
+    check('a computer player (the plan\'s Easy bot in Blue) shows Ready on its card, always', bot === 'Ready+' && host.card(2).findAll((e) => /\brdy-chip\b/.test(e.className) && /\bbot\b/.test(e.className)).length === 1);
+    // a guest's screen
+    const guest = runLobby('?room=k7m2xq', { 'ants.name': 'Sam' });
+    guest.$('name-step-go').click();
+    const gs = guest.arrive({ seat: 1, key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
+    const btn = readyBtn(guest, 1);
+    check('a guest has the switch on their own card: it says Ready up and is not pressed; START says that it waits for the host and the line says "Waiting for you to ready up"', !!btn && btn.textContent === 'Ready up' && btn.getAttribute('aria-pressed') === 'false' && btn.disabled !== true && guest.$('start').disabled === true && guest.$('start').textContent === 'Waiting for Maya' && guest.$('ready-line').textContent === 'Waiting for you to ready up');
+    const before = gs.sent.length;
+    guest.press(btn);
+    check('a press on Ready up sends one Ready (the C++ encoder\'s bytes: type 41, 1), and the card stays as the room last said (the room says the mark back)', gs.sent.length === before + 1 && hex(gs.sent[before]) === '2901' && readyBtn(guest, 1).getAttribute('aria-pressed') === 'false');
+    gs.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0, ready: 2 }));
+    check('the room says it: the switch is pressed and says Ready, the line says that everybody is ready, START is still the host\'s', readyBtn(guest, 1).getAttribute('aria-pressed') === 'true' && readyBtn(guest, 1).textContent === 'Ready' && guest.$('ready-line').textContent === 'Everyone is ready.' && guest.$('start').disabled === true);
+    guest.advance(1300);
+    guest.press(readyBtn(guest, 1));
+    check('a press on the pressed switch takes the mark back (Ready, 0)', hex(gs.sent[gs.sent.length - 1]) === '2900');
+    gs.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0, flags: 7, inGame: 1, ready: 2 }));
+    check('START is pressed: the switch is gone from the card (nothing is asked any more) and the line is empty', !readyBtn(guest, 1) && guest.$('ready-line').hidden === true);
+}
 // ---- 5.5c the rematch (front/rematch.js, docs/PLAY_IN_BROWSER.md "After a match"): the tab comes back from its match with the room's code and the key of its seat (the game page's hand-over in the
 // tab's session storage); the strip "Back from the match." at the top, the colors' words, the note under START, START that the room answers, the host who comes back
 {
     const roomChat = (text) => { const w = [9, 255, 0]; str8(w, text); return Uint8Array.from(w); };
-    const statOf = (env, seat) => { const p = env.card(seat).findAll((e) => /\bpstat\b/.test(e.className))[0]; return p ? [p.textContent, p.className] : null; };
+    const statOf = (env, seat) => { const p = env.card(seat).findAll((e) => /\bpstat\b/.test(e.className))[0]; return p ? [p.children.filter((c) => c.isText).map((c) => c.textContent).join('') || p.textContent, p.className] : null; };       // (the words of the line: the Ready mark in front of them is not one of them)
     const barOf = (env) => env.root.children.find((c) => c.className === 'backbar') || null;
     const handed = (name, w, t) => ({ 'ants.lobby': JSON.stringify({ c: 'k7m2xq', k: hex(KEY), n: name, o: 0 }), 'ants.back': JSON.stringify({ c: 'k7m2xq', t: t === undefined ? Date.now() - 5000 : t, m: 'TREASURE.LVL', p: ['Maya', 'Sam', '', ''], w: w }) });
     const env = runLobby('?room=k7m2xq', { 'ants.name': 'Maya' }, { session: handed('Maya', 'Maya won with 2,040.') });

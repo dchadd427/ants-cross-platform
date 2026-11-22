@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the page's Bot matches section (web/admin_bots.js and the Log of web/admin_page.js): each breaks a rule of the section (what a button sends, what is asked before something cannot be undone, what is shown as typed text, the limits) and the node check of the page (tests/scripts/web_admin_check.js) must notice. Run: python3 tools/mutate.py tests/data/bot_admin_page_mutants.json --keep-going",
+ "note": "Mutants of the page's Bot matches section (web/admin_bots.js, the list of maps web/admin_map_pick.js and the Log of web/admin_page.js): each breaks a rule of the section (what a button sends, what is asked before something cannot be undone, what is shown as typed text, the limits) and the node check of the page (tests/scripts/web_admin_check.js) must notice. Run: python3 tools/mutate.py tests/data/bot_admin_page_mutants.json --keep-going",
  "defaults": {
   "build": [],
   "test": "node tests/scripts/web_admin_check.js web/admin_page.js web/admin_bots.js"
@@ -28,10 +28,10 @@
   },
   {
    "id": "bots_the_name_of_a_map_of_a_player_is_not_marked_as_player_text",
-   "file": "web/admin_bots.js",
-   "old": "if (m.group === 'players') o.setAttribute('data-untrusted', UNTRUSTED);",
-   "new": "",
-   "why": "the name of a map of a player is not marked as player text"
+   "file": "web/admin_map_pick.js",
+   "old": "add(left, typed('span', 'mn', m.name), el('span', 'ms', mapMeta(m)));",
+   "new": "add(left, el('span', 'mn', m.name), el('span', 'ms', mapMeta(m)));",
+   "why": "the name of a map in the list of maps is not marked as typed text"
   },
   {
    "id": "bots_delete_asks_no_question",
@@ -41,39 +41,11 @@
    "why": "Delete asks no question"
   },
   {
-   "id": "bots_stop_all_asks_no_question",
-   "file": "web/admin_bots.js",
-   "old": "button('Stop all ' + n, 'bad', function () { askStopAll(); })",
-   "new": "button('Stop all ' + n, 'bad', function () { call('POST', '/admin/api/bot-matches/stop-all', {}).then(function () { loadAll(true); }); })",
-   "why": "Stop all asks no question"
-  },
-  {
    "id": "bots_the_question_can_be_confirmed_at_once",
    "file": "web/admin_bots.js",
    "old": "function () { if (tick() - opened < ASK_DELAY) return; closeAsk(); onGo(); }",
    "new": "function () { closeAsk(); onGo(); }",
    "why": "the question can be confirmed at once"
-  },
-  {
-   "id": "bots_the_limit_is_nine",
-   "file": "web/admin_bots.js",
-   "old": "var CAP = 8;",
-   "new": "var CAP = 9;",
-   "why": "the limit is nine"
-  },
-  {
-   "id": "bots_start_stays_on_when_all_eight_places_are_taken",
-   "file": "web/admin_bots.js",
-   "old": "off = full || !st.replays;",
-   "new": "off = !st.replays;",
-   "why": "Start stays on when all eight places are taken"
-  },
-  {
-   "id": "bots_start_stays_on_when_the_server_keeps_no_replays",
-   "file": "web/admin_bots.js",
-   "old": "off = full || !st.replays;",
-   "new": "off = full;",
-   "why": "Start stays on when the server keeps no replays"
   },
   {
    "id": "bots_watch_opens_in_the_page_s_own_tab",
@@ -148,8 +120,8 @@
   {
    "id": "bots_a_server_with_no_routes_is_not_told",
    "file": "web/admin_bots.js",
-   "old": "rs[0].json.error === 'bots_off'",
-   "new": "rs[0].json.error === 'never'",
+   "old": "matches.json.error === 'bots_off'",
+   "new": "matches.json.error === 'never'",
    "why": "a server with no routes is not told"
   },
   {
@@ -167,17 +139,10 @@
    "why": "the Running panel does not tell the badge"
   },
   {
-   "id": "bots_a_refusal_of_the_number_of_matches_does_not_say_what_is_free",
-   "file": "web/admin_bots.js",
-   "old": "' be over the limit of ' + CAP + '. Start ' + j.free + ' or fewer",
-   "new": "' be over the limit of ' + CAP + '. Start fewer",
-   "why": "a refusal of the number of matches does not say what is free"
-  },
-  {
    "id": "bots_a_start_that_is_old_an_old_token_is_not_told",
    "file": "web/admin_bots.js",
-   "old": "if (r.status === 403 && e === 'csrf') return",
-   "new": "if (false) return",
+   "old": "if (r.status === 403 && e === 'csrf') return [",
+   "new": "if (false) return [",
    "why": "a start that is old (an old token) is not told"
   },
   {
@@ -258,13 +223,6 @@
    "why": "a batch that stopped for the people's matches says it was for places"
   },
   {
-   "id": "bots_the_budget_refusal_is_not_told",
-   "file": "web/admin_bots.js",
-   "old": "if (r.status === 409 && e === 'budget') return",
-   "new": "if (false) return",
-   "why": "a start that the store has no room for gets the plain line"
-  },
-  {
    "id": "bots_the_default_question_says_an_hour",
    "file": "web/admin_bots.js",
    "old": "(s.default ? ' This is the schedule that the server began with (' + whenWords(s).toLowerCase() + '): until",
@@ -319,6 +277,412 @@
    "old": "call('GET', '/admin/api/audit?kind=bots')",
    "new": "call('GET', '/admin/api/audit?kind=maps')",
    "why": "the Bot matches filter shows the map decisions"
+  },
+  {
+   "id": "bots_a_map_that_cannot_be_played_can_be_chosen",
+   "file": "web/admin_map_pick.js",
+   "old": "var off = cannot || inList, b = el('button'",
+   "new": "var off = inList, b = el('button'",
+   "why": "a map that a room cannot play can be chosen"
+  },
+  {
+   "id": "bots_the_reason_of_a_map_that_cannot_be_played_is_not_said",
+   "file": "web/admin_map_pick.js",
+   "old": "if (cannot) add(left, el('span', 'mr', cannotWords(m)));",
+   "new": "",
+   "why": "a map that cannot be played does not say why"
+  },
+  {
+   "id": "bots_a_map_of_the_list_can_be_added_twice",
+   "file": "web/admin_map_pick.js",
+   "old": "inList = o.mode === 'add' && o.isIn(m.file)",
+   "new": "inList = false",
+   "why": "a map that the list has can be added again"
+  },
+  {
+   "id": "bots_islands_in_187_is_added_without_a_question",
+   "file": "web/admin_map_pick.js",
+   "old": "asked = o.mode === 'add' && (m.random === false || (o.rules === '187' && m.file === ISLANDS));",
+   "new": "asked = o.mode === 'add' && m.random === false;",
+   "why": "ISLANDS is put in the 187 list without the question"
+  },
+  {
+   "id": "bots_a_long_map_is_added_without_a_question",
+   "file": "web/admin_map_pick.js",
+   "old": "asked = o.mode === 'add' && (m.random === false ||",
+   "new": "asked = o.mode === 'add' && (false ||",
+   "why": "a map over 30 minutes is put in a list without the question"
+  },
+  {
+   "id": "bots_a_search_shows_every_map_that_it_finds",
+   "file": "web/admin_map_pick.js",
+   "old": "var MAX_ROWS = 40;",
+   "new": "var MAX_ROWS = 4000;",
+   "why": "a search shows every map that it finds"
+  },
+  {
+   "id": "bots_the_search_puts_the_longer_name_first",
+   "file": "web/admin_map_pick.js",
+   "old": "|| a.name.length - b.name.length || byName(a, b);",
+   "new": "|| b.name.length - a.name.length || byName(a, b);",
+   "why": "a search shows the longer name before the shorter"
+  },
+  {
+   "id": "bots_two_letters_of_the_library_stay_open",
+   "file": "web/admin_map_pick.js",
+   "old": "if (openLetter === L) letters[L].forEach(function (m) { add(list, row(m, false)); });",
+   "new": "if (openLetter === L || (L === 'P' && openLetter !== '')) letters[L].forEach(function (m) { add(list, row(m, false)); });",
+   "why": "a letter of the library stays open when another is opened"
+  },
+  {
+   "id": "bots_the_box_of_maps_does_not_close_with_escape",
+   "file": "web/admin_map_pick.js",
+   "old": "if (e.key === 'Escape') { close(); return; }",
+   "new": "",
+   "why": "Escape does not close the list of maps"
+  },
+  {
+   "id": "bots_the_page_behind_the_box_of_maps_is_not_inert",
+   "file": "web/admin_map_pick.js",
+   "old": "inertOthers(shell.node);",
+   "new": "",
+   "why": "the page behind the list of maps is not inert"
+  },
+  {
+   "id": "bots_tab_leaves_the_box_of_maps",
+   "file": "web/admin_map_pick.js",
+   "old": "if (at < 0 || (e.shiftKey && at === 0) || (!e.shiftKey && at === items.length - 1)) { e.preventDefault();",
+   "new": "if (false) { e.preventDefault();",
+   "why": "Tab leaves the list of maps"
+  },
+  {
+   "id": "bots_the_focus_does_not_return_to_the_map_button",
+   "file": "web/admin_bots.js",
+   "old": "onClose: function () { mapBtn.setAttribute('aria-expanded', 'false'); mapBtn.focus(); }",
+   "new": "onClose: function () { mapBtn.setAttribute('aria-expanded', 'false'); }",
+   "why": "the focus does not go back to the Map button"
+  },
+  {
+   "id": "bots_the_chosen_map_is_not_marked",
+   "file": "web/admin_map_pick.js",
+   "old": "if (m.file === o.current) add(tags, el('span', 'tg active', 'Chosen'));",
+   "new": "",
+   "why": "the chosen map is not marked in the list"
+  },
+  {
+   "id": "bots_an_empty_list_can_be_saved",
+   "file": "web/admin_bots.js",
+   "old": "var empty = ROT_KEYS.some(function (k) { return listDirty(k) && !st.draft[k].length; });",
+   "new": "var empty = false;",
+   "why": "an empty list can be saved"
+  },
+  {
+   "id": "bots_save_sends_the_maps_in_another_order",
+   "file": "web/admin_bots.js",
+   "old": "maps: filesOf(st.draft[k]) }",
+   "new": "maps: filesOf(st.draft[k]).sort() }",
+   "why": "Save sends the maps in another order than the list has"
+  },
+  {
+   "id": "bots_an_added_map_is_sent_at_once",
+   "file": "web/admin_bots.js",
+   "old": "st.dirty[key] = true;\n                        st.rotMsg = null;\n                        drawRot();",
+   "new": "st.dirty[key] = true;\n                        st.rotMsg = null;\n                        saveRot();",
+   "why": "an added map is sent at once, before Save"
+  },
+  {
+   "id": "bots_remove_is_sent_at_once",
+   "file": "web/admin_bots.js",
+   "old": "st.rotMsg = null;\n                drawRot();\n            }\n            function discardRot()",
+   "new": "st.rotMsg = null;\n                saveRot();\n            }\n            function discardRot()",
+   "why": "a removed map is sent at once, before Save"
+  },
+  {
+   "id": "bots_discard_keeps_the_changes",
+   "file": "web/admin_bots.js",
+   "old": "st.draft = clone(st.rotLists);\n                st.dirty = {};",
+   "new": "st.dirty = {};",
+   "why": "Discard keeps the changes in the lists"
+  },
+  {
+   "id": "bots_back_to_the_defaults_asks_no_question",
+   "file": "web/admin_bots.js",
+   "old": "button('Back to the defaults', 'ghost', function () { askDefaults(key); })",
+   "new": "button('Back to the defaults', 'ghost', function () { call('POST', '/admin/api/bot-rotation/reset', { rules: key }).then(function () { loadRotation().then(drawRot); }); })",
+   "why": "Back to the defaults asks no question"
+  },
+  {
+   "id": "bots_back_to_the_defaults_resets_the_other_list",
+   "file": "web/admin_bots.js",
+   "old": "call('POST', '/admin/api/bot-rotation/reset', { rules: key })",
+   "new": "call('POST', '/admin/api/bot-rotation/reset', { rules: key === '187' ? 'highest-score' : '187' })",
+   "why": "Back to the defaults resets the other list"
+  },
+  {
+   "id": "bots_a_list_that_is_the_defaults_offers_to_go_back",
+   "file": "web/admin_bots.js",
+   "old": "if (isDef && !listDirty(key)) { again.disabled = true;",
+   "new": "if (false) { again.disabled = true;",
+   "why": "a list that is the defaults offers Back to the defaults"
+  },
+  {
+   "id": "bots_a_skipped_map_is_not_marked",
+   "file": "web/admin_bots.js",
+   "old": "if (e.state === 'skipped') add(nm, el('span', 'tg bad', 'Skipped now'));",
+   "new": "",
+   "why": "a map of a list that is skipped is not marked"
+  },
+  {
+   "id": "bots_the_spacing_is_sent_in_minutes",
+   "file": "web/admin_bots.js",
+   "old": "function everyTyped() { v.every_s = everySeconds(everyI.value); changed(); }",
+   "new": "function everyTyped() { v.every_s = Math.round(everySeconds(everyI.value) / 60); changed(); }",
+   "why": "the spacing is sent in minutes, not seconds"
+  },
+  {
+   "id": "bots_a_spacing_of_four_hours_is_taken",
+   "file": "web/admin_bots.js",
+   "old": "var EVERY_MAX_MIN = 120;",
+   "new": "var EVERY_MAX_MIN = 240;",
+   "why": "a spacing over two hours is taken by the page"
+  },
+  {
+   "id": "bots_one_match_is_sent_with_a_spacing",
+   "file": "web/admin_bots.js",
+   "old": "if (withSpacing && v.count < 2) o.every_s = 0;",
+   "new": "",
+   "why": "one match is sent with a spacing"
+  },
+  {
+   "id": "bots_stop_all_does_not_name_the_waiting_starts",
+   "file": "web/admin_bots.js",
+   "old": "var what = n && k ?",
+   "new": "var what = false ?",
+   "why": "the question of Stop all does not name the waiting starts"
+  },
+  {
+   "id": "bots_a_schedule_whose_map_is_gone_is_not_said",
+   "file": "web/admin_bots.js",
+   "old": "function mapGone(s) { return st.maps.length > 0 &&",
+   "new": "function mapGone(s) { return false && st.maps.length > 0 &&",
+   "why": "a schedule whose map is gone is not marked"
+  },
+  {
+   "id": "bots_the_maps_that_are_not_judged_are_not_asked_again",
+   "file": "web/admin_bots.js",
+   "old": "else if (!st.checkTimer && !st.dead && env.setTimeout && st.checkTries < 30) {",
+   "new": "else if (false) {",
+   "why": "the maps that the server has not judged are not asked about again"
+  },
+  {
+   "id": "bots_the_log_does_not_word_a_change_of_the_rotation",
+   "file": "web/admin_bots.js",
+   "old": "bot_rotation_changed: 'Changed the rotation list ', ",
+   "new": "",
+   "why": "the log does not word a change of a rotation list"
+  },
+  {
+   "id": "bots_the_log_does_not_word_a_cancelled_start",
+   "file": "web/admin_bots.js",
+   "old": "bot_waiting_stopped: 'Cancelled a waiting start on ', ",
+   "new": "",
+   "why": "the log does not word a cancelled waiting start"
+  },
+  {
+   "id": "bots_the_hint_of_a_schedule_says_now",
+   "file": "web/admin_bots.js",
+   "old": "first = withSpacing === 'run' ? 'when the schedule runs' : 'now'",
+   "new": "first = 'now'",
+   "why": "the hint of a schedule says that its first match starts now"
+  },
+  {
+   "id": "bots_a_spacing_that_the_server_refuses_is_not_told_in_a_schedule",
+   "file": "web/admin_bots.js",
+   "old": "e === 'bad_spacing' ? 'Start one every: 0 to '",
+   "new": "false ? 'Start one every: 0 to '",
+   "why": "a spacing that the server refuses in a schedule is not told"
+  },
+  {
+   "id": "bots_delete_does_not_say_that_the_waiting_starts_go_on",
+   "file": "web/admin_bots.js",
+   "old": "(s.what.count > 1 && s.what.every_s ? ' Its starts that still wait go on too.' : '')",
+   "new": "''",
+   "why": "the question of Delete does not say that the starts that wait go on"
+  },
+  {
+   "id": "bots_a_schedule_row_does_not_say_its_spacing",
+   "file": "web/admin_bots.js",
+   "old": "(w.count > 1 && w.every_s ? ', ' + spacingWords(w.every_s) : '')",
+   "new": "''",
+   "why": "a schedule row does not say its spacing"
+  },
+  {
+   "id": "bots_stop_all_asks_no_question",
+   "file": "web/admin_bots.js",
+   "old": "button('Stop all ' + thousands(n + k), 'bad', function () { askStopAll(); })",
+   "new": "button('Stop all ' + thousands(n + k), 'bad', function () { call('POST', '/admin/api/bot-matches/stop-all', {}).then(function () { loadAll(true); }); })",
+   "why": "Stop all asks no question"
+  },
+  {
+   "id": "bots_stop_all_counts_only_the_matches",
+   "file": "web/admin_bots.js",
+   "old": "button('Stop all ' + thousands(n + k), 'bad',",
+   "new": "button('Stop all ' + thousands(n), 'bad',",
+   "why": "Stop all does not count the starts that wait"
+  },
+  {
+   "id": "bots_a_schedule_may_start_more_than_eight",
+   "file": "web/admin_bots.js",
+   "old": "var SCHEDULE_MAX = 8;",
+   "new": "var SCHEDULE_MAX = 9;",
+   "why": "a schedule keeps its limit of eight: one more is nine"
+  },
+  {
+   "id": "bots_start_now_keeps_the_stepper_of_eight",
+   "file": "web/admin_bots.js",
+   "old": "withSpacing === 'now' ? numberBox(",
+   "new": "false ? numberBox(",
+   "why": "Start now is a stepper of 1 to 8 again, not a number box"
+  },
+  {
+   "id": "bots_the_count_may_pass_the_servers_queue",
+   "file": "web/admin_bots.js",
+   "old": "take(n >= min && n <= max ? n : -1);",
+   "new": "take(n >= min && n <= max * 2 ? n : -1);",
+   "why": "a count over the server's queue is taken"
+  },
+  {
+   "id": "bots_the_count_takes_a_fraction",
+   "file": "web/admin_bots.js",
+   "old": "/^[0-9]{1,6}$/.test(t) ? parseInt(t, 10) : -1",
+   "new": "/^[0-9.]{1,6}$/.test(t) ? parseInt(t, 10) : -1",
+   "why": "a count that is 1.5 is taken as one"
+  },
+  {
+   "id": "bots_the_count_takes_a_zero",
+   "file": "web/admin_bots.js",
+   "old": "take(n >= min && n <= max ? n : -1);",
+   "new": "take(n >= 0 && n <= max ? n : -1);",
+   "why": "a count of 0 is taken"
+  },
+  {
+   "id": "bots_start_is_on_for_a_count_that_is_not_one",
+   "file": "web/admin_bots.js",
+   "old": "var off = picked.value().count < 1 || !st.replays;",
+   "new": "var off = !st.replays;",
+   "why": "Start is on when the number box holds no number"
+  },
+  {
+   "id": "bots_start_is_off_when_the_places_are_taken",
+   "file": "web/admin_bots.js",
+   "old": "var off = picked.value().count < 1 || !st.replays;",
+   "new": "var off = picked.value().count < 1 || !st.replays || st.matches.length >= st.cap;",
+   "why": "Start is off when every place is taken (a start is queued by the server instead)"
+  },
+  {
+   "id": "bots_start_is_on_when_the_server_keeps_no_replays",
+   "file": "web/admin_bots.js",
+   "old": "var off = picked.value().count < 1 || !st.replays;",
+   "new": "var off = picked.value().count < 1;",
+   "why": "Start stays on when the server keeps no replays"
+  },
+  {
+   "id": "bots_the_cap_is_a_number_of_the_page",
+   "file": "web/admin_bots.js",
+   "old": "st.cap = matches.status === 200 && matches.json.cap > 0 ? matches.json.cap : CAP_FALLBACK;",
+   "new": "st.cap = CAP_FALLBACK;",
+   "why": "the number that run at once is a constant of the page, not the server's"
+  },
+  {
+   "id": "bots_a_batch_has_no_row",
+   "file": "web/admin_bots.js",
+   "old": "st.queues.forEach(function (q) { add(runBox, queueRow(q)); });",
+   "new": "",
+   "why": "a batch with starts to come has no row in Running"
+  },
+  {
+   "id": "bots_a_batch_cannot_be_stopped",
+   "file": "web/admin_bots.js",
+   "old": "add(r, l, add(el('div', 'bb'), stop));",
+   "new": "add(r, l);",
+   "why": "a batch has no Stop the rest"
+  },
+  {
+   "id": "bots_stop_the_rest_stops_everything",
+   "file": "web/admin_bots.js",
+   "old": "call('POST', '/admin/api/bot-matches/' + encodeURIComponent(q.id) + '/stop', {})",
+   "new": "call('POST', '/admin/api/bot-matches/stop-all', {})",
+   "why": "Stop the rest of a batch stops every match and every batch"
+  },
+  {
+   "id": "bots_a_batch_does_not_say_when_the_next_start_comes",
+   "file": "web/admin_bots.js",
+   "old": "nextStart(q, env.now()) + ' · '",
+   "new": "' · '",
+   "why": "a batch does not say when its next start comes"
+  },
+  {
+   "id": "bots_a_batch_that_waits_for_room_is_not_said",
+   "file": "web/admin_bots.js",
+   "old": "if (q.held) return 'its time has come: it waits for a free place';",
+   "new": "",
+   "why": "a batch that waits for a free place does not say so"
+  },
+  {
+   "id": "bots_the_page_does_not_say_that_a_spaced_queue_is_lost_on_a_restart",
+   "file": "web/admin_bots.js",
+   "old": "'. A queue is lost if the server restarts.' + tail;\n                return 'Started '",
+   "new": "'.' + tail;\n                return 'Started '",
+   "why": "the page does not say that the starts that wait are lost if the server restarts (a spacing)"
+  },
+  {
+   "id": "bots_the_page_does_not_say_that_a_big_queue_is_lost_on_a_restart",
+   "file": "web/admin_bots.js",
+   "old": "and start as each one ends. A queue is lost if the server restarts.' + tail;",
+   "new": "and start as each one ends.' + tail;",
+   "why": "the page does not say that the starts that wait are lost if the server restarts (a big batch)"
+  },
+  {
+   "id": "bots_the_note_does_not_say_that_a_queue_is_lost_on_a_restart",
+   "file": "web/admin_bots.js",
+   "old": "A queue is lost if the server restarts: a schedule is not.'",
+   "new": "'",
+   "why": "the note under Running does not say that a queue is lost if the server restarts"
+  },
+  {
+   "id": "bots_only_five_matches_are_shown_after_show_all",
+   "file": "web/admin_bots.js",
+   "old": "st.matches.slice(0, st.showAll ? st.matches.length : SHOWN)",
+   "new": "st.matches.slice(0, SHOWN)",
+   "why": "Show all shows only five"
+  },
+  {
+   "id": "bots_ten_matches_are_shown_before_the_button",
+   "file": "web/admin_bots.js",
+   "old": "var SHOWN = 5;",
+   "new": "var SHOWN = 10;",
+   "why": "the first ten matches are shown, not five"
+  },
+  {
+   "id": "bots_the_queue_is_full_is_not_told",
+   "file": "web/admin_bots.js",
+   "old": "if (r.status === 409 && e === 'queue_full') return",
+   "new": "if (false) return",
+   "why": "a start that would pass the queue gets the plain line"
+  },
+  {
+   "id": "bots_a_batch_that_could_not_start_is_told_as_started",
+   "file": "web/admin_bots.js",
+   "old": "if (!n) return 'Queued '",
+   "new": "if (false) return 'Queued '",
+   "why": "a batch whose first start waits is told as started"
+  },
+  {
+   "id": "bots_a_schedule_form_has_no_spacing_field",
+   "file": "web/admin_bots.js",
+   "old": "as any start does.', 'run');",
+   "new": "as any start does.', false);",
+   "why": "the form of a schedule has no field for the spacing"
   }
  ]
 }

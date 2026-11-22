@@ -25,13 +25,14 @@ import shutil
 import signal
 import socket
 import struct
-import subprocess
 import sys
-import tempfile
 import threading
 import time
 import urllib.parse
 import urllib.request
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import browser_process  # noqa: E402  (how the browser is started and stopped)
 
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 # a WebSocket client (RFC 6455, text frames, what the DevTools protocol needs)
@@ -293,12 +294,10 @@ def main():
     web = args.web if args.web.endswith("/") else args.web + "/"
     code = "hid%d" % random.randint(10000, 99999)                  # (a code is only a name: the room is what the create block of its first Hello says)
     block = "&roommap=small&roomseats=2"                          # (protocol 15: two seats on Small; every link of a room that the front page made carries it right after the code)
-    profile = tempfile.mkdtemp(prefix="ants_hidden_profile.")
     port = free_port()
-    process = subprocess.Popen(
-        [browser, "--headless=new", "--remote-debugging-port=%d" % port, "--user-data-dir=" + profile, "--no-first-run", "--no-default-browser-check",
-         "--disable-extensions", "--autoplay-policy=no-user-gesture-required", "about:blank"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    process, profile = browser_process.start(
+        [browser, "--headless=new", "--remote-debugging-port=%d" % port, "--user-data-dir={profile}", "--no-first-run", "--no-default-browser-check",
+         "--disable-extensions", "--autoplay-policy=no-user-gesture-required", "about:blank"], "ants_hidden_profile.")
     tabs = []
     devtools = None
     try:
@@ -413,12 +412,7 @@ def main():
                     devtools.close_tab(t)
             except Exception:
                 pass
-        process.terminate()
-        try:
-            process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            process.kill()
-        shutil.rmtree(profile, ignore_errors=True)
+        browser_process.stop(process, profile)
     print("[web hidden] %d checks, %d failed" % (checks[0], len(failures)))
     return 1 if failures else 0
 

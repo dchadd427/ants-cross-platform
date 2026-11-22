@@ -210,17 +210,24 @@ class TheOnlyWayIsTheTypedAddress(unittest.TestCase):
         return out
 
     def test_no_other_file_of_the_site_names_the_address_or_the_file(self):
-        mine = {"admin.html", "admin.css", "admin_page.js", "admin_bots.js"}
+        mine = {"admin.html", "admin.css", "admin_page.js", "admin_bots.js", "admin_map_pick.js"}
         for path in self.web_files():
             if os.path.basename(path) in mine and os.path.dirname(path) == os.path.join(REPO, "web"):
                 continue
             if path == os.path.join(REPO, "web", "home", "chat.js"):
                 continue                                                                          # (the account menu's one line, below)
+            if path in (os.path.join(REPO, "web", "home", "cmds.js"), os.path.join(REPO, "web", "home", "cmds.css")):
+                continue                                                                          # (the /bots builder of the chat borrows the admin page's list of maps and reads two of its calls: below)
             with open(path, encoding="utf-8", errors="replace") as f:
                 text = f.read()
             self.assertNotRegex(text, r"/admin\b|admin\.html|admin_page|admin\.css|maps-review", os.path.relpath(path, REPO))
         for name in ("sitemap.xml", "robots.txt"):
             self.assertFalse(os.path.exists(os.path.join(REPO, "web", name)), name + " would list it")
+
+    def test_the_chats_bots_builder_borrows_only_the_list_of_maps_and_reads_two_calls(self):
+        js = re.sub(r"(?m)^\s*//.*|\s//.*", "", read("web", "home", "cmds.js"))                      # (a comment may name them; the code may name only these)
+        self.assertEqual(sorted(set(re.findall(r"['\"](/admin[^'\"\s]*)", js))), ["/admin.css", "/admin/api/bot-matches/summary", "/admin/api/bot-options", "/admin_map_pick.js"], "the admin page's list of maps and its style, and two GETs of its API: what runs at once and the maps (tests/scripts/test_web_home_cmds.py)")
+        self.assertNotRegex(js, r"admin_page|admin_bots|admin\.html|maps-review")
 
     def test_the_front_pages_account_menu_names_the_address_once_and_its_behavior_is_run_in_node(self):
         self.assertEqual(read("web", "home", "chat.js").count("/admin"), 1)                       # (the one line for an administrator: what it shows and to whom is RUN by tests/scripts/web_home_chat_check.js)
@@ -230,7 +237,7 @@ class TheOnlyWayIsTheTypedAddress(unittest.TestCase):
         bar = re.search(r'<header class="sb".*?</header>', page, re.S).group(0)
         self.assertEqual(bar, re.search(r'<header class="sb".*?</header>', read("web", "legal.html"), re.S).group(0))          # (the very markup of the other pages' bar: the build stamps it)
         self.assertEqual(len(re.findall(r"<a\b", page)), len(re.findall(r"<a\b", bar)))                                 # (no link outside the bar)
-        self.assertEqual(re.findall(r'(?:href|src)="([^"]+)"', page.replace(bar, "")), ["/favicon.png?v=f34bea03", "/front/classic.css", "/site_nav.css", "admin.css", "/site_nav.js", "admin_bots.js", "admin_page.js"])
+        self.assertEqual(re.findall(r'(?:href|src)="([^"]+)"', page.replace(bar, "")), ["/favicon.png?v=9ea2152a", "/front/classic.css", "/site_nav.css", "/update_notice.css", "admin.css", "/site_nav.js", "/update_notice.js", "admin_map_pick.js", "admin_bots.js", "admin_page.js"])
         self.assertIn('<meta name="robots" content="noindex, nofollow">', page)
         self.assertNotRegex(page, r"<script>|<style|onclick|onload|javascript:")
         self.assertEqual(len(re.findall(r'<div id="app"></div>', page)), 1)
@@ -260,6 +267,17 @@ class TheOnlyWayIsTheTypedAddress(unittest.TestCase):
         for word in ("Waiting", "Banned", "Muted", "Refresh"):
             self.assertNotIn(word, shell)
 
+
+class TheChatSectionOnAPhone(unittest.TestCase):
+    def test_every_panel_of_the_chat_section_has_its_own_place_when_the_page_is_one_column(self):
+        script, css = read("web", "admin_page.js"), read("web", "admin.css")
+        chat = script[script.index("function renderChat(host)"):script.index("// ---- the section \"Log\"")]
+        panels = re.findall(r"\.className \+= ' (p-[a-z]+)'", chat)
+        self.assertEqual(sorted(panels), ["p-banned", "p-form", "p-muted", "p-noimg", "p-pics"])
+        places = {name: int(n) for name, n in re.findall(r"\.adm \.(p-[a-z]+) \{ order: (\d+); \}", css)}
+        self.assertEqual(sorted(places), sorted(panels), "a panel without an order would come first on a phone")
+        self.assertEqual(len(set(places.values())), len(places), "two panels with one place")
+        self.assertEqual(max(places, key=places.get), "p-noimg", "the box for image posting comes last")
 
 if __name__ == "__main__":
     unittest.main()

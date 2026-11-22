@@ -42,7 +42,7 @@ function str8(w, s) { w.push(s.length); for (let i = 0; i < s.length; i++) w.pus
 const KEY = Uint8Array.from(Array.from({ length: 16 }, (_, i) => 0x30 + i));
 const welcome = (player, key, flags) => Uint8Array.from([2, player, 4].concat(Array.from(key || KEY), [flags === undefined ? 2 : flags]));
 const reject = (reason) => Uint8Array.from([3, reason]);
-// seats: [state, name] x 4; o: { map, you, leader, teamA, teamB, flags (3: a lobby that the leader starts; 7: and START was pressed), plan, inGame, mode }
+// seats: [state, name] x 4; o: { map, you, leader, teamA, teamB, flags (3: a lobby that the leader starts; 7: and START was pressed), plan, inGame, mode, ready (the mask of the persons who said Ready) }
 function roomMessage(seats, o) {
     o = o || {};
     const w = [12];
@@ -50,7 +50,7 @@ function roomMessage(seats, o) {
     str8(w, o.map === undefined ? 'TREASURE.LVL' : o.map);
     w.push(0, o.you === undefined ? 0 : o.you, o.leader === undefined ? 0 : o.leader, o.teamA === undefined ? 255 : o.teamA, o.teamB === undefined ? 255 : o.teamB, o.flags === undefined ? 3 : o.flags);
     for (const k of (o.plan || [0, 0, 0, 0])) w.push(k);
-    w.push(o.inGame || 0, o.mode || 0);                                               // (protocol 17: the game mode is the last byte)
+    w.push(o.inGame || 0, o.mode || 0, o.ready || 0);                                 // (protocol 17: the game mode; protocol 27: the ready mask is the last byte)
     return Uint8Array.from(w);
 }
 // What the page's Hello says: its name, its room, whether it brings a key and a lobby block (a page that makes the room, or one that only joins)
@@ -374,7 +374,9 @@ function runLobby(search, stored, options) {
     // Home: the buttons that home.js makes (it builds its own markup), by their class
     // (the games list's own handle, the button with its count, is made but not placed in the bar: Home has no Games button; a lookup that finds nothing in the tree finds it among the made elements)
     env.home = (cls) => env.$('home').findAll((e) => String(e.className).split(/\s+/).indexOf(cls) !== -1)[0] || (cls === 'games' ? made.find((e) => String(e.className).split(/\s+/).indexOf(cls) !== -1) : null) || null;
-    env.roomBar = (cls) => env.root.findAll((e) => String(e.className).split(/\s+/).indexOf('rbar') !== -1)[0].findAll((e) => String(e.className).split(/\s+/).indexOf(cls) !== -1)[0] || null;
+    // The Room is inside Home: it has no bar of its own. Its controls, by the names that the checks have for them: 'rhome' is My room (pressed while the Room shows it brings the games' list back, the room stays), 'leave' the Leave room
+    // button of the room's header, 'hmenu' Home's Menu button
+    env.roomBar = (cls) => (cls === 'rhome' ? env.home('mine') : env.home(cls) || env.root.findAll((e) => String(e.className).split(/\s+/).indexOf(cls) !== -1)[0] || null);       // (the tree is flat: the room's header is not under Home's div)
     env.screen = () => env.body.getAttribute('data-screen');
     env.dumpAll = () => [...Object.values(env.elements), ...env.root.children, env.body].flatMap((e) => e.all()).map((e) => e.textContent + '|' + JSON.stringify(e.attributes) + '|' + e.value).join('\n') + env.innerHTMLWrites.join('') + JSON.stringify(env.replaced) + JSON.stringify(env.assigned);
     if (!options.stayHome && env.screen() === 'home' && env.sockets.length === 0) env.home('mine').click();       // (a plain visit is Home and makes no room: the tests that need one press My room, as a person does)

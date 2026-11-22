@@ -55,26 +55,32 @@ SHAPES_BUDGET, SHAPES_GZIP_BUDGET = 12_000, 4_400       # the one table of the p
 REJOIN_KEY_BUDGET, REJOIN_KEY_GZIP_BUDGET = 5_900, 2_400    # the seat-key reader (web/rejoin_key.js), shared by the front page and the game page
 PICKER_BUDGET, PICKER_GZIP_BUDGET = 17_000, 5_500      # the picture's dropdown
 WAKE_LOCK_BUDGET, WAKE_LOCK_GZIP_BUDGET = 8_100, 2_900   # the screen lock of a match and a replay (web/wake_lock.js)
+P2P_BUDGET, P2P_GZIP_BUDGET = 17_500, 5_600             # the data channels to the other players (web/p2p.js)
 TOUCH_KEYS_BUDGET, TOUCH_KEYS_GZIP_BUDGET = 35_700, 11_200   # the hotkey buttons of a touch screen, with the Shift button (web/touch_keys.js and web/touch_keys.css together)
 # the front page (web/home/, web/front/player_name.js)
 HOME_BUDGET, HOME_GZIP_BUDGET = 53_600, 15_900
-GAMES_BUDGET, GAMES_GZIP_BUDGET = 98_000, 28_000
+GAMES_BUDGET, GAMES_GZIP_BUDGET = 105_000, 29_800
 PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET = 39_000, 12_300
 VP_BUDGET, VP_GZIP_BUDGET = 4_200, 1_900            # vp.js: the screen numbers of /?vp (loaded for that address only)
-CHAT_BUDGET, CHAT_GZIP_BUDGET = 98_000, 30_000
+CHAT_BUDGET, CHAT_GZIP_BUDGET = 105_000, 31_800     # chat.js and chat.css: raised from 98,500 and 30,000 for the images' part of the dock (a line's image, the answers, the author's delete, the paste of a file; docs/HUB_IMAGES.md)
+IMAGES_BUDGET, IMAGES_GZIP_BUDGET = 41_500, 14_500    # pics.js, pics.css, post.js and post.css: the thumbnails, the viewer and the poster of the chat's images (loaded when the first image is drawn; post.* for a person who may post only)
 TALK_BUDGET, TALK_GZIP_BUDGET = 80_600, 28_900
 MOD_BUDGET, MOD_GZIP_BUDGET = 71_300, 20_800        # mod.js and mod.css: the moderation sheet (loaded for a visitor with a role only)
+CMDS_BUDGET, CMDS_GZIP_BUDGET = 52_500, 16_000       # cmds.js and cmds.css: the helper of the chat's commands, the /bots builder and the private answers (loaded for an account that has commands only)
 SPLIT_BUDGET, SPLIT_GZIP_BUDGET = 16_000, 5_200     # split.js and split.css: the drag handles of Home
+ROOM_BUDGET, ROOM_GZIP_BUDGET = 38_000, 11_200       # room.css, roomchat.js and roomchat.css: the room inside Home and the room's tab of the chat box
 ALERTS_BUDGET, ALERTS_GZIP_BUDGET = 25_000, 8_300   # alerts.js and alerts.css: the alerts sheet, the join alert and the bell of Home
 ALERT_CORE_BUDGET, ALERT_CORE_GZIP_BUDGET = 13_000, 4_400   # web/alert_core.js: the switches, the tab alert and the sound table that the front page and the game page share
 SCRIPT_BUDGET, SCRIPT_GZIP_BUDGET = 13_000, 4_500       # player_name.js
-# the installable web app (web/app/, web/manifest.webmanifest): the four icons together (measured 4,260 bytes), and the manifest (measured 1,166, revalidated on every visit)
-APP_ICONS_BUDGET = 4_700
-# the browser-tab icon (web/favicon.png 285 bytes + web/favicon.ico 1,212 bytes)
-FAVICON_BUDGET = 1_650
+# the installable web app (web/app/, web/manifest.webmanifest): the four icons together (measured 5,922 bytes: the original game's icon, 12 colors and fine detail), and the manifest (measured 1,166, revalidated on every visit)
+APP_ICONS_BUDGET = 6_500
+# the browser-tab icon (web/favicon.png 527 bytes + web/favicon.ico 1,530 bytes: the original game's icon at 32 and 64 px)
+FAVICON_BUDGET = 2_300
 APP_MANIFEST_BUDGET = 1_300
 # the game page's part of the bar (web/game_bar.js and web/game_bar.css together)
 GAME_BAR_BUDGET, GAME_BAR_GZIP_BUDGET = 12_800, 4_250
 # the bar at the top of every page (web/site_nav.css, web/site_nav.js)
 NAV_CSS_BUDGET, NAV_CSS_GZIP_BUDGET = 4_900, 1_700
 NAV_JS_BUDGET, NAV_JS_GZIP_BUDGET = 8_200, 3_150
+# the update notice (web/update_notice.js and web/update_notice.css together: the strip and the "What's new" window that every page with the version stamped loads)
+UPDATE_NOTICE_BUDGET, UPDATE_NOTICE_GZIP_BUDGET = 24_000, 7_900

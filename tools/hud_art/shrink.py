@@ -16,6 +16,7 @@ import derive as DV
 STEP = {'lettering': 24, 'fitting': 16, 'clay': 2}      # levels: plain lettering; buttons, switches, pedestals, frame, brushed headings, slider tracks; the clay's tooth
 BUSY = {'lettering': 8, 'fitting': 6}                   # levels: how far a pixel is from the average of its four neighbors where the picture counts as busy (an edge, a stroke of the brush, grain)
 CANDIDATES = ('qh_part_', 'op_part_', 'cd_title')       # the sprites that may be plain lettering (plain_lettering measures which are)
+EXACT = ('cd_dot_',)                                    # the sprites that are never rounded: the color squares of the countdown card's rows (they are 11 x 11 pixels, and the color names the player)
 DERIVE_MAX = 3.5                                        # levels: the most that a plain lettering's 2x picture made from the 3x one may differ (mean, over the pixels that show) from the one drawn at 2x
 DERIVE_LIMIT = 25                                       # levels: the 2x picture of any sprite made from the 3x one may differ this much (mean) from the one drawn at 2x: more means the 3x picture is not the same drawing
 PERIODIC = {'panel_t': 'x', 'panel_b': 'x', 'panel_l': 'y', 'panel_r': 'y'}      # frame pieces that the game repeats along an axis: rounded as if the picture went on round that axis
@@ -102,6 +103,8 @@ def shrink(images):
         for name in list(pics):
             if name == 'panel_c':
                 pics[name] = tooth(pics[name], STEP['clay'])
+            elif name.startswith(EXACT):
+                continue
             else:
                 kind = 'lettering' if name in plain else 'fitting'
                 pics[name] = quantize(pics[name], STEP[kind], BUSY[kind], PERIODIC.get(name, ''), background(pics[name]) if kind == 'lettering' else None)

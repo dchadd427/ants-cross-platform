@@ -79,6 +79,20 @@ std::vector<int32_t> active_bomber_comps(const GateInfo& gates, const BotView& v
 
 }  // namespace
 
+HopChoice hop_choice(const BotView& view) {
+    HopChoice choice;
+    const uint8_t ally = view.ally();
+    if (view.map() != nullptr && view.map()->hill(view.seat()).present) {
+        choice.near = view.map()->hill(view.seat()).entrance;
+        if (ally < sim::MAX_PLAYERS && view.map()->hill(ally).present) choice.ally_near = view.map()->hill(ally).entrance;
+    }
+    for (const AntView& o : view.others()) {
+        choice.occupied.push_back(o.tile);
+        if (o.type == sim::AntType::Combat && !(ally < sim::MAX_PLAYERS && o.team == ally)) choice.punchers.push_back(o.tile);
+    }
+    return choice;
+}
+
 GateGoal plan_gate_goal(const GateInfo& gates, const BotView& view, const GoalRules& rules) {
     GateGoal best;
     if (gates.empty()) return best;
@@ -112,6 +126,7 @@ GateGoal plan_gate_goal(const GateInfo& gates, const BotView& view, const GoalRu
     const bool fire_source = has_source_in_comp(gates, view, sim::AntType::Fire, gates.home());
     const bool bomber_home_source = has_source_in_comp(gates, view, sim::AntType::Bomber, gates.home());
     const std::vector<int32_t> bomber_comps = active_bomber_comps(gates, view);
+    const HopChoice choice = hop_choice(view);
     for (const PileView& p : view.piles()) {
         if (p.lunchbox || p.index >= piles.size()) continue;
         const GateTarget& t = piles[p.index];
@@ -159,8 +174,8 @@ GateGoal plan_gate_goal(const GateInfo& gates, const BotView& view, const GoalRu
             }
         }
         if (bomber_home_source && t.hop >= 0) {
-            const BombHop& h = gates.hops()[static_cast<size_t>(t.hop)];
-            if (h.bombs <= static_cast<int32_t>(rules.hop_bombs)) {
+            const BombHop h = gates.best_hop_into(t.comps, choice);                  // (the cheapest hop; of those the one that no ant is in the way of)
+            if (h.bombs > 0 && h.bombs <= static_cast<int32_t>(rules.hop_bombs)) {
                 GateGoal g;
                 g.kind = GoalKind::Hop;
                 g.need = sim::AntType::Bomber;
@@ -175,7 +190,7 @@ GateGoal plan_gate_goal(const GateInfo& gates, const BotView& view, const GoalRu
             for (const int32_t src_comp : bomber_comps) {
                 if (src_comp == gates.home()) continue;
                 for (const int32_t dst_comp : t.comps) {
-                    const BombHop h = GateInfo::best_hop_between(gates, view.grid(), src_comp, dst_comp);
+                    const BombHop h = GateInfo::best_hop_between(gates, view.grid(), src_comp, dst_comp, choice);
                     if (h.bombs > 0 && h.bombs <= static_cast<int32_t>(rules.hop_bombs)) {
                         GateGoal g;
                         g.kind = GoalKind::Hop;

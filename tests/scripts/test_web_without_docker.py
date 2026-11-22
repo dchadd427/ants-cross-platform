@@ -92,7 +92,7 @@ class TheDockerfileIsRead(unittest.TestCase):
         self.assertTrue(all(s.text.strip() for s in self.steps))
 
     def test_the_emscripten_version_is_the_one_of_the_from_line(self):
-        self.assertEqual(wd.emscripten_version(self.steps), re.search(r"^FROM emscripten/emsdk:(\S+) AS emsdk-warm", self.text, re.M).group(1))
+        self.assertEqual(wd.emscripten_version(self.steps), re.search(r"^FROM emscripten/emsdk:([0-9.]+)(?:@\S+)? AS emsdk-warm", self.text, re.M).group(1))
 
     def test_a_dockerfile_without_the_emsdk_image_is_an_error(self):
         with self.assertRaises(wd.ToolError):
@@ -403,13 +403,19 @@ class TheRealDockerfileReplayed(Scratch):
         self.assertIn("Generated from CHANGELOG.md when the site image is built", page)
         self.assertEqual(sorted(name for name in os.listdir(self.html("plain")) if name.startswith("changelog")), ["changelog.html"])
 
+    def test_the_data_file_of_the_update_notice_is_made_beside_the_changelog_page_with_the_live_version(self):
+        with open(os.path.join(self.html("plain"), "whats_new.json"), encoding="utf-8") as f:
+            data = json.load(f)
+        self.assertEqual(data["version"], read("VERSION").strip())
+        self.assertGreaterEqual(len(data["releases"]), 1)
+
     def test_the_builder_got_what_the_dockerignore_lets_through_and_nothing_else(self):
         src = os.path.join(self.site["plain"], "src")
         for name in ("CMakeLists.txt", "VERSION", "include", "src", "web", "Original-Ants", "assets", "docker", "changelog"):
             self.assertTrue(os.path.exists(os.path.join(src, name)), name)
         for name in ("tests", "docs", "README.md", "run_tests.sh", ".github"):
             self.assertFalse(os.path.exists(os.path.join(src, name)), name)
-        self.assertEqual(sorted(os.listdir(os.path.join(src, "changelog"))), ["CHANGELOG.md", "changelog.html", "changelog_to_html.py"])
+        self.assertEqual(sorted(os.listdir(os.path.join(src, "changelog"))), ["CHANGELOG.md", "changelog.html", "changelog_to_html.py", "whats_new.json"])
         self.assertFalse(os.path.exists(os.path.join(src, "gitinfo", "config")), "a clone's .git/config is never part of the build")
 
 
@@ -713,7 +719,7 @@ class TheSiteConfiguration(Scratch):
         self.assertIn("log_format ants_noquery ", text, "but the log format stays, a location that is left would not know it")
         self.assertGreater(text.count("resolver 127.0.0.11"), 10)
         self.assertEqual(text.count("resolver_timeout 1s;"), text.count("resolver 127.0.0.11"), "a game server that is not there is not waited for for 30 seconds where Docker's resolver is not")
-        self.assertEqual(text.count("access_log off;"), 18)          # (the server block, which logs every path to the image's output, and the four paths that say so again: the submissions, their single ids, the admin API and the test maps; and the hub's door and its answer for a hub that is not there, which have none of their own; and the five pages of the hub's login with the three answers that they share, which log nothing at all: their addresses hold a code; and the hub's pictures, whose door logs nothing: a log of who fetched which name would say who looked at whom; and the hub's gate for the admin API, whose requests the admin API's own block logs; and the page's calls to the hub's admin API, whose actions the hub writes in its own log)
+        self.assertEqual(text.count("access_log off;"), 20)          # (the server block, which logs every path to the image's output, and the four paths that say so again: the submissions, their single ids, the admin API and the test maps; and the hub's door and its answer for a hub that is not there, which have none of their own; and the five pages of the hub's login with the three answers that they share, which log nothing at all: their addresses hold a code; and the hub's pictures, whose door logs nothing: a log of who fetched which name would say who looked at whom; and the hub's gate for the admin API, whose requests the admin API's own block logs; and the page's calls to the hub's admin API, whose actions the hub writes in its own log; and the chat's images, whose two doors log nothing: the upload and the files, where a log of who fetched which name would say who looked at what)
 
     def test_the_list_of_maps_is_answered_from_a_file_and_the_rest_of_the_conf_is_as_it_was(self):
         plain = wd.site_config(read("docker", "nginx.conf"), "/w/fs", "/w/cache", 1234)

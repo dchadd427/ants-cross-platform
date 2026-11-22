@@ -23,7 +23,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    var BOTS = typeof AntsAdminBots === 'object' ? AntsAdminBots : null;       // the section "Bot matches" (web/admin_bots.js): without that file the page has four sections
+    var BOTS = typeof AntsAdminBots === 'object' && typeof AntsAdminMapPick === 'object' ? AntsAdminBots : null;       // the section "Bot matches" (web/admin_bots.js, with the list of maps of web/admin_map_pick.js, both loaded before this file): without them the page has four sections
     var TIME_ZONE = 'America/Los_Angeles';                 // the maintainer's times are Pacific time
     var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     var TABS = [['waiting', 'Waiting'], ['approved', 'Approved'], ['declined', 'Declined'], ['taken_down', 'Taken down']];
@@ -64,7 +64,7 @@
     var REFERENCE = /^[0-9a-f]{16}$/;                      // the hub's short name for an account (never a Discord id)
     var ID_SHAPED = /^[0-9]{15,20}$/;                      // as long as a Discord id: never typed into this page's boxes, never sent
     var HUB_API = '/hub/admin/api/';
-    var CHAT_ACTIONS = { mute: 'Muted', unmute: 'Unmuted', ban: 'Banned', unban: 'Unbanned', kick: 'Kicked', nopic: 'Hid the picture of', pic: 'Showed the picture of' };
+    var CHAT_ACTIONS = { mute: 'Muted', unmute: 'Unmuted', ban: 'Banned', unban: 'Unbanned', kick: 'Kicked', nopic: 'Hid the picture of', pic: 'Showed the picture of', noimages: 'Took away image posting from', images: 'Gave back image posting to', bots_start: 'Started bot matches from the chat', bots_stop: 'Stopped bot matches from the chat' };
     var MAP_ACTIONS = { map_approved: 'Approved ', map_declined: 'Declined ', map_taken_down: 'Took down ', map_put_back: 'Put back ' };
     var PICTURE_KINDS = {
         ok: ['active', 'Saved'], none: ['active', 'Discord has no picture to keep'], down: ['warn', 'Discord did not answer'], type: ['warn', 'Not a picture that the hub accepts'],
@@ -765,7 +765,7 @@
 
         function renderChat(host) {
             var st = { busy: false, keyOff: null };
-            var msgBox = el('div'), bannedBox = el('div'), mutedBox = el('div'), hiddenBox = el('div');
+            var msgBox = el('div'), bannedBox = el('div'), mutedBox = el('div'), hiddenBox = el('div'), noimgBox = el('div');
             cleanup = function () { if (st.keyOff) { st.keyOff(); st.keyOff = null; } };
 
             // the form that mutes or bans
@@ -796,9 +796,14 @@
             add(banned, bannedBox);
             add(muted, mutedBox);
             add(pics, picUser.box, add(el('div', 'acts'), button('Hide picture', 'big', function () { hidePicture(); })), hiddenHead, hiddenBox, el('p', 'ph', 'After “Show again” the picture stays off until the person turns it on themselves.'));
+            var noimg = panel('Image posting', 'People with the Active Anters role, moderators and administrators can post images in the chat. Here an administrator takes that away from one person, or gives it back.');
+            noimg.className += ' p-noimg';
+            var imgUser = field('Username', 'ni-user', 'for example marlow.old');
+            var noimgHead = el('h2', 'sub', 'Taken away now');
+            add(noimg, imgUser.box, add(el('div', 'acts'), button('Take away image posting', 'big', function () { takeAwayImages(); })), noimgHead, noimgBox, el('p', 'ph', 'Images that the person posted stay in the chat until a moderator deletes them. Only administrators can take image posting away or give it back.'));
             var left = el('div', 'cc'), right = el('div', 'cc');
             add(left, form, pics);
-            add(right, banned, muted);
+            add(right, banned, muted, noimg);
             add(host, add(el('div', 'cgrid'), left, right));
 
             function say(parts, cls) {                                                                      // the line in the form: an error or a done (words and names)
@@ -817,9 +822,9 @@
                 add(box, rows.length ? build(rows) : el('p', 'none', none));
             }
             function loadLists() {
-                return Promise.all([call('GET', HUB_API + 'bans'), call('GET', HUB_API + 'mutes'), call('GET', HUB_API + 'hidden')]).then(function (rs) {
+                return Promise.all([call('GET', HUB_API + 'bans'), call('GET', HUB_API + 'mutes'), call('GET', HUB_API + 'hidden'), call('GET', HUB_API + 'imagesoff')]).then(function (rs) {
                     for (var i = 0; i < rs.length; i++) if (refused(rs[i])) return;
-                    var bans = rs[0].status === 200 ? rs[0].json.bans || [] : null, mutes = rs[1].status === 200 ? rs[1].json.mutes || [] : null, hidden = rs[2].status === 200 ? rs[2].json.hidden || [] : null;
+                    var bans = rs[0].status === 200 ? rs[0].json.bans || [] : null, mutes = rs[1].status === 200 ? rs[1].json.mutes || [] : null, hidden = rs[2].status === 200 ? rs[2].json.hidden || [] : null, imagesOff = rs[3].status === 200 ? rs[3].json.imagesoff || [] : null;
                     var now = env.now();
                     paint(bannedBox, banned.children[0], 'Banned', bans, 'Nobody is banned.', function (rows) {
                         return personRows(rows, 'Unban', function (x) { return add(el('div', 'ps'), doc.createTextNode('banned ' + when(x.at, now) + ' · by '), byNode(x)); }, function (x) { rowChange('unban', x, 'is unbanned'); });
@@ -830,10 +835,14 @@
                     paint(hiddenBox, hiddenHead, 'Hidden now', hidden, 'No picture is hidden.', function (rows) {
                         return personRows(rows, 'Show again', function () { return el('div', 'ps', 'picture hidden'); }, function (x) { rowChange('pic', x, 'has the picture shown again'); });
                     });
+                    paint(noimgBox, noimgHead, 'Taken away now', imagesOff, 'Nobody has image posting taken away.', function (rows) {
+                        return personRows(rows, 'Give back', function (x) { return add(el('div', 'ps'), doc.createTextNode('taken away by '), byNode(x), doc.createTextNode(' \u00b7 ' + when(x.at, now))); }, function (x) { rowChange('images', x, 'can post images again'); });
+                    });
                 }, function () {
                     paint(bannedBox, banned.children[0], 'Banned', null);
                     paint(mutedBox, muted.children[0], 'Muted', null);
                     paint(hiddenBox, hiddenHead, 'Hidden now', null);
+                    paint(noimgBox, noimgHead, 'Taken away now', null);
                 });
             }
 
@@ -861,7 +870,7 @@
                 if (r.status === 404 && e === 'who') return ['No account has the username “', who, '”. Check the spelling in the lists below.'];
                 if (r.status === 403 && e === 'power') return ['You may not do that to this person.'];
                 if (r.status === 409 && e === 'bad') {
-                    var words = { ban: ' is banned already.', unban: ' is not banned.', unmute: ' is not muted.', nopic: ': the picture is hidden already.', pic: ': the picture is not hidden.' };
+                    var words = { ban: ' is banned already.', unban: ' is not banned.', unmute: ' is not muted.', nopic: ': the picture is hidden already.', pic: ': the picture is not hidden.', noimages: ': image posting is taken away already.', images: ': image posting is not taken away.' };
                     return [who, words[name] || ': nothing changed.'];
                 }
                 if (r.status === 503 && e === 'role') return ['Discord did not confirm the roles just now, so nothing was done. Try again in a minute.'];
@@ -886,6 +895,11 @@
                 minutes.input.className = n >= 1 && n <= MAX_MINUTES ? 'plain' : 'plain err';
                 if (n < 1 || n > MAX_MINUTES) { say(['Minutes: a whole number from 1 to ' + MAX_MINUTES + '.'], 'bad'); return; }
                 change('mute', { account: a.account, minutes: n }, typed('span', null, a.shown), 'is muted for ' + minutesWords(n), user.input);
+            }
+            function takeAwayImages() {
+                var a = named(imgUser.input);
+                if (!a) return;
+                change('noimages', { account: a.account }, typed('span', null, a.shown), 'cannot post images now', imgUser.input);
             }
             function hidePicture() {
                 var a = named(picUser.input);
@@ -943,12 +957,15 @@
             function chatText(r, tagged) {
                 var wt = add(el('span', 'wt'), tag('chat', tagged));
                 var target = r.target ? (r.target_name ? typed('span', null, r.target_name) : ref(r.target)) : null;
-                if (r.action === 'del') {
+                if (r.action === 'del_img') {
+                    add(wt, doc.createTextNode('Deleted the image on line ' + r.detail + (target ? ' by ' : '')), target);
+                } else if (r.action === 'del') {
                     add(wt, doc.createTextNode(r.detail === 'purge' ? 'Deleted the recent lines of ' : 'Deleted line ' + r.detail + (target ? ' by ' : '')), target);
                 } else if (r.action === 'mute') {
                     add(wt, doc.createTextNode('Muted '), target, doc.createTextNode(' for ' + minutesWords(parseInt(r.detail, 10) || 0)));
                 } else if (CHAT_ACTIONS[r.action]) {
                     add(wt, doc.createTextNode(CHAT_ACTIONS[r.action] + ' '), target);
+                    if (r.action.indexOf('bots_') === 0 && r.detail) add(wt, typed('span', 'why', r.detail));              // (the numbers of the batch, as the hub keeps them: "1000 every 0s", "stopped 3 dropped 940")
                 } else {
                     add(wt, typed('span', null, r.action), doc.createTextNode(' '), target);
                 }
@@ -982,7 +999,7 @@
                     add(chips, b);
                 });
                 add(tools, chips);
-                lead.textContent = st.mode === 'bots' ? 'What was started and stopped, and the schedules that were added, changed or deleted.' : st.mode === 'maps' ? 'What was decided about the maps that players sent.' : st.mode === 'chat' ? 'What moderators and admins did in the chat, the last 30 days.' : 'Chat actions (the last 30 days), map decisions and bot matches, newest first.';
+                lead.textContent = st.mode === 'bots' ? 'What was started and stopped, the schedules that were added, changed or deleted, and the changes of the rotation lists.' : st.mode === 'maps' ? 'What was decided about the maps that players sent.' : st.mode === 'chat' ? 'What moderators and admins did in the chat, the last 30 days.' : 'Chat actions (the last 30 days), map decisions and bot matches, newest first.';
                 body.textContent = '';
                 if (st.chat === null) add(body, message('The chat’s log could not be loaded.'));
                 if (st.maps === null) add(body, message('The map decisions could not be loaded.'));
@@ -1061,7 +1078,11 @@
                 add(meter, fill);
                 add(p, kv('Database', megabytes(t.bytes) + ' of ' + megabytes(t.limit, true) + ' MB', pct + '%'), meter,
                     kv('Log file', megabytes(t.log) + ' MB'), kv('Lines kept', String(t.lines), t.oldest ? 'the oldest from ' + when(t.oldest, env.now()) : null),
-                    kv('Pictures kept', String(t.pictures), megabytes(t.picture_bytes) + ' of ' + megabytes(t.picture_bytes_max, true) + ' MB'), kv('Switched off / blocked', t.off + ' / ' + t.blocked));
+                    kv('Pictures kept', String(t.pictures), megabytes(t.picture_bytes) + ' of ' + megabytes(t.picture_bytes_max, true) + ' MB'));
+                var im = s.images;
+                if (im && im.on) add(p, kv('Chat images', im.files + ' kept', megabytes(im.bytes) + ' of ' + megabytes(im.bytes_max, true) + ' MB'),
+                    kv('Image converter', im.converter === 'ok' ? 'Working' : 'Not answering', im.last === null ? 'no image yet' : 'last image ' + ago(im.last)));
+                add(p, kv('Switched off / blocked', t.off + ' / ' + t.blocked));
                 return p;
             }
             function versions(s) {

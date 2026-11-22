@@ -15,7 +15,8 @@
 #                                                   The path must name an existing FILE: for a path that does not exist Docker makes a directory there and nginx stops with "Is a directory"
 #   ANTS_WEB_BIND_PREFIX=127.0.0.1:                 put in front of the host port of the web page (optional; empty by default: the port is published as before). An address of this machine and a colon, such as 127.0.0.1:,
 #                                                   publishes it on that address only, so a reverse proxy on another machine, or one that reaches this machine by its public address, would no longer reach it (docs/SERVER.md "Behind a reverse proxy")
-#   ANTS_SERVER_PORT=4001                           the public TCP game port of native clients (optional; the browser page does not use it)
+#   ANTS_TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12   the reverse proxies whose X-Client-Address the game server's WebSocket door believes for its limits per address (docs/ADDRESS_LIMITS.md; optional): networks and
+#                                                   addresses separated by commas, `none` for nobody. Empty (the default): the private networks, which is where the web container connects from
 #   ANTS_BUILD_ID=<text>                            which build this is (the page's footer, the changelog pages, `ants_server --version`); optional: without it the images
 #                                                   take the commit that the clone's .git/HEAD and .git/refs name, and the UTC build time when the clone has no such files
 #   ANTS_DEMO_ROOMS=48 ANTS_DEMO_MAP=TREASURE.LVL   how many demo rooms the page web/lobby.html may make at a time, and the map of a room whose create block names none
@@ -65,11 +66,24 @@
 #   ANTS_HUB_DISCORD_BOT_TOKEN, ANTS_HUB_DISCORD_GUILD, ANTS_HUB_ROLE_ADMIN, ANTS_HUB_ROLE_MOD    who may moderate the chat: the hub asks the site's Discord server, with the bot's token, which
 #                                                   roles a logged-in person holds (docs/HUB.md, "Roles"): the server's id and the two roles' ids. ALL come from this stack's environment and never
 #                                                   from a file of the repository; the token is read by the hub and printed nowhere. Without them nobody moderates in the chat (optional)
+#   ANTS_HUB_ROLE_IMAGES=<role id>                  the Discord role whose holders may post images in the chat, besides the moderators, the administrators and the operator's account (docs/HUB_IMAGES.md); it needs the token and the server
+#                                                   above, and must be a different role from the other two. Its id comes from this stack's environment and never from a file of the repository. Without it only the staff post images (optional)
+#   ANTS_HUB_IMAGE_CONVERTER_URL=http://ants-img:4050   where the hub reaches the image converter (the service ants-img below, on a private network): `http://`, a host and a port, nothing else. Set but EMPTY switches images off for everybody (no posting: the files that are there are still deleted with their lines); not set at all is the default shown here
 #   ANTS_HUB_ROLE_RECHECK_SECONDS=180               how often the role of everybody who is in the chat is asked again, 60 to 3600 (optional; this is the default)
 #   ANTS_HUB_OWNER=<account id>                     one account (Discord's id, digits only) that is always an administrator, even when Discord does not answer (optional; none by default).
 #                                                   Moderation from a terminal: docker exec ants-hub python -m hub.admin list
+#   ANTS_HUB_GAME_ADMIN_URL=http://ants-server:4030  where the chat hub reaches the game server's admin door, for the administrators' `/bots` command (docs/HUB_COMMANDS.md, "The game door"): `http://`, the
+#                                                   service's name and the port of ANTS_SUBMIT_PORT above (4030), nothing else. The call is signed with ANTS_ADMIN_GATE_SECRET and goes over the network
+#                                                   below: no port is published for it. Empty (the default): `/bots` answers that it is off. Needs ANTS_SUBMIT_PORT=4030 and the admin key (optional)
 #   ANTS_HUB_ADMIN_GATE_SECRET=<32+ characters>     the hub's OLD name for ANTS_ADMIN_GATE_SECRET above (the one key; the hub reads this one only when that one is not set; optional; none by default; the release after this one
 #                                                   drops it). Keys come from this stack's environment and never from a file of the repository; with no key the door is shut for everybody
+#
+#   ANTS_TURN_HOST=turn.example.org  ANTS_TURN_SECRET=<openssl rand -hex 32>  ANTS_TURN_EXTERNAL_IP=<the public IPv4 of this machine>  COMPOSE_PROFILES=relay  [ANTS_TURN_PORT=3478]
+#                                                   the relay of the players' channels (docs/SERVER.md "The relay for the players' channels", docs/P2P_HINTS.md; optional, OFF by default): coturn in the
+#                                                   service ants-turn, which starts only with the profile `relay`, plus the same name and secret in the game server's environment. The name must be a DNS
+#                                                   record that points straight at this machine and is NOT proxied (a CDN proxy carries no UDP); the host's firewall must let in UDP and TCP on the relay's port (ANTS_TURN_PORT,
+#                                                   3478 unless another TURN server on this machine holds it: then pick another, 3480 for one, the relay, the game server and the health check all read this one variable) and UDP
+#                                                   49160-49359. Without the profile, or without the name or the secret, no player opens a channel and every match is what it was. The secret is never printed
 #
 # Only the TCP game port is open to other machines. The WebSocket port (the site's nginx passes /ws to it over the network below) and the control
 # interface (the lobby's backend calls it) are published on the host's loopback address only.
@@ -89,6 +103,8 @@ services:
     # sign-in tries, map files) count each visitor's own address; a proxy at a public address goes in a list of your own.
     volumes:
       - ${ANTS_TRUSTED_PROXIES_FILE:-/dev/null}:/etc/nginx/ants-trusted-proxies.d/own.conf:ro
+      # the files of the chat's images (docs/HUB_IMAGES.md): the hub writes them, this server only reads and serves them (GET /hub/img/..., docker/nginx.conf), so a file that the hub deleted is gone from the site at once
+      - ants-hub-images:/srv/hub-img:ro
     ports:
       - "${ANTS_WEB_BIND_PREFIX:-}${ANTS_PORT:-19980}:80"
     networks:
@@ -112,7 +128,7 @@ services:
     stop_grace_period: 15s
     # The page web/lobby.html (the front page) makes rooms of its own: its Hello carries a create block (the map, the seats, the teams) and a code of six lower-case letters and digits: demo rooms are ON here, at most ANTS_DEMO_ROOMS at a time
     # (default 48) on the map ANTS_DEMO_MAP (default TREASURE.LVL) unless the block names one of ANTS_DEMO_MAPS (the page's choice; the maps folder must hold them
-    # all). A code with an upper-case letter makes no such room (the control interface draws those). Demo rooms are open to anyone who can reach a game port (the site, or TCP port 4001), so their number is bounded; rooms of the control interface keep their own places.
+    # all). A code with an upper-case letter makes no such room (the control interface draws those). Demo rooms are open to anyone who can reach a game port (the site's /ws), so their number is bounded; rooms of the control interface keep their own places.
     # ANTS_DEMO_ROOMS is 1 to 255 (see the header). To switch them off, delete the three demo options. A demo room waits ten minutes for its players; its first player can start it earlier with START (two players at least, or one alone with bots).
     # --log-mb 4: one room's turn log (what a returning player is given) is at most 4 MiB (a busy 30-minute match logs 0.65 MB), so that the demo rooms alone cannot use up the 256 MiB that
     # all the logs share (docs/NETWORK_PORT.md). Keep ANTS_DEMO_ROOMS times --log-mb under 256 (tests/scripts/test_default_map.py checks it).
@@ -125,11 +141,19 @@ services:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}
       # the admin page (docs/MAP_SUBMISSIONS.md): the key of the pass that the hub's gate signs; the hub gets the same variable; without a good key every /admin/api path answers 403 closed
       ANTS_ADMIN_GATE_SECRET: ${ANTS_ADMIN_GATE_SECRET:-}
+      # the relay of the players' channels (docs/P2P_HINTS.md): its DNS name and the secret of its credentials; the server reads them both or neither (without them no player is given a credential)
+      ANTS_TURN_HOST: ${ANTS_TURN_HOST:-}
+      ANTS_TURN_SECRET: ${ANTS_TURN_SECRET:-}
+      # the relay's port, from the same variable as the relay's own (empty: TURN's 3478): it is the number in the addresses that the players are given
+      ANTS_TURN_PORT: ${ANTS_TURN_PORT:-}
+      # the reverse proxies whose X-Client-Address the WebSocket door believes for its limits per address (empty: the private networks)
+      ANTS_TRUSTED_PROXIES: ${ANTS_TRUSTED_PROXIES:-}
     volumes:
       - ${ANTS_MAPS_DIR:-ants-maps}:/maps:ro
       - ants-server-results:/results
     ports:
-      - "${ANTS_SERVER_PORT:-4001}:4001"
+      # (no port for the TCP game port 4001: it is not encrypted and the site does not open it; the browser page and the desktop game reach the server through the site's /ws. A LAN or development server
+      # that wants it adds a line `- "4001:4001"` in a file of its own: docs/SERVER.md "The stack (Docker)")
       - "127.0.0.1:${ANTS_SERVER_WS_PORT:-4002}:4002"
       - "127.0.0.1:${ANTS_SERVER_CTL_PORT:-4010}:4010"
     networks:
@@ -159,23 +183,100 @@ services:
       ANTS_HUB_DISCORD_GUILD: ${ANTS_HUB_DISCORD_GUILD:-}
       ANTS_HUB_ROLE_ADMIN: ${ANTS_HUB_ROLE_ADMIN:-}
       ANTS_HUB_ROLE_MOD: ${ANTS_HUB_ROLE_MOD:-}
+      ANTS_HUB_ROLE_IMAGES: ${ANTS_HUB_ROLE_IMAGES:-}
       ANTS_HUB_ROLE_RECHECK_SECONDS: ${ANTS_HUB_ROLE_RECHECK_SECONDS:-180}
       # the admin page's one key (the game server gets the same variable); the second name is the old one for it, which the hub reads only when the first is empty
       ANTS_ADMIN_GATE_SECRET: ${ANTS_ADMIN_GATE_SECRET:-}
       ANTS_HUB_ADMIN_GATE_SECRET: ${ANTS_HUB_ADMIN_GATE_SECRET:-}
       ANTS_HUB_OWNER: ${ANTS_HUB_OWNER:-}
+      # where the game server's admin door is, for `/bots` (empty: off); the call stays on this network and publishes no port
+      ANTS_HUB_GAME_ADMIN_URL: ${ANTS_HUB_GAME_ADMIN_URL:-}
+      # where the image converter is (docs/HUB_IMAGES.md); the call stays on the private network below. A variable that is not set takes the default; one that is set and EMPTY (no colon in the line: `-`, not
+      # `:-`) switches images off for everybody
+      ANTS_HUB_IMAGE_CONVERTER_URL: ${ANTS_HUB_IMAGE_CONVERTER_URL-http://ants-img:4050}
+      ANTS_HUB_IMAGE_DIR: /images
     volumes:
       - ants-hub-data:/data
+      - ants-hub-images:/images
     networks:
       - proxy-network
+      - img-network
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     pids_limit: 32
-    mem_limit: 192m
+    mem_limit: 256m
     tmpfs:
       - /tmp
     # the hub writes a few lines for each connection: the log is kept small (docker's own default keeps all of it)
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # The image converter (docs/HUB_IMAGES.md): the only place that decodes an image that somebody uploaded to the chat, and it is walled in. It holds no secret (no variable but its port), mounts no volume, publishes no port and
+  # is on a private network that only the hub shares and that has no way out and no other member: whatever a hostile file did to its decoder, it would find nothing here and reach nothing. Read only, no capabilities, small
+  # memory, one processor, 16 processes (every picture is converted in a child process that is killed after ten seconds). It is built from imgconv/ alone, so a deploy that changes nothing there builds the same image.
+  ants-img:
+    build:
+      context: .
+      dockerfile: Dockerfile.img
+    container_name: ants-img
+    restart: unless-stopped
+    networks:
+      - img-network
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 16
+    mem_limit: 768m
+    cpus: 1
+    tmpfs:
+      - /tmp
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # The relay of the players' channels (docs/SERVER.md "The relay for the players' channels"): coturn, in shared-secret mode, for the browsers of the players of a match. Only with the profile `relay`
+  # (COMPOSE_PROFILES=relay) and the three variables of the header (it exits at once without them): the stack deploys without them. Host networking: one public address, no port publishing (Docker publishes a range of 200 UDP ports one
+  # rule at a time, slowly), and the relay sees the players' real addresses. It is NOT behind the web page's proxy and listens on UDP and TCP ANTS_TURN_PORT (3478 unless set) and sends from UDP 49160-49359, on the address ANTS_TURN_EXTERNAL_IP (an address of this machine; the entry point
+  # refuses any other) and on no other address or port (docker/turnserver.conf).
+  # The image starts only with the capability to bind its port (the binary carries it); the process still runs as the user nobody. The configuration (docker/turnserver.conf) holds no secret: the entry point puts
+  # the secret into a file of its own on the memory file system at /tmp (readable by the relay's user only) and coturn reads it there, so that it is not in the process list of the machine. The name and the address
+  # are on the command line, where `$$` reaches the container as `$` and the image's entry point expands it.
+  ants-turn:
+    profiles: ["relay"]
+    build:
+      context: .
+      dockerfile: Dockerfile.turn
+    container_name: ants-turn
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      ANTS_TURN_SECRET: ${ANTS_TURN_SECRET:-}
+      ANTS_TURN_EXTERNAL_IP: ${ANTS_TURN_EXTERNAL_IP:-}
+      ANTS_TURN_HOST: ${ANTS_TURN_HOST:-}
+      ANTS_TURN_PORT: ${ANTS_TURN_PORT:-}
+    # (The image's entry point, docker/turn-entrypoint.sh, refuses to start unless all three are set, writes the configuration with the secret, then expands `$` in the arguments below.)
+    command: ["--external-ip=$$ANTS_TURN_EXTERNAL_IP", "--realm=$$ANTS_TURN_HOST"]
+    read_only: true
+    # the process id file (pidfile in docker/turnserver.conf) and the configuration file that holds the secret are the only files that the container writes
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=1m"]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    mem_limit: 256m
+    healthcheck:
+      # (the entry point asks for a STUN binding on the address and the port that it listens on: ANTS_TURN_EXTERNAL_IP and ANTS_TURN_PORT)
+      test: ["CMD", "/usr/local/bin/ants-turn-entrypoint.sh", "--health"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+    # the log holds the players' addresses and the random labels of their credentials: it is kept short
     logging:
       driver: json-file
       options:
@@ -186,7 +287,11 @@ volumes:
   ants-server-results:
   ants-maps:
   ants-hub-data:
+  ants-hub-images:
 
 networks:
   proxy-network:
     external: true
+  # the hub and the image converter, and nothing else; `internal`: no way out of it (docs/HUB_IMAGES.md)
+  img-network:
+    internal: true

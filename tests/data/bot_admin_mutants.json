@@ -1,11 +1,11 @@
 {
- "note": "Mutants of what the admin page may ask of the server's own matches of computer players, and of the schedules that start them (src/ants_server/room_manager_bots.cpp, bot_matches.cpp, bot_schedules.cpp, pacific_time.cpp, submissions_http.cpp and the constants of bot_match_spec.hpp and bot_schedules.hpp; docs/SERVER_REPLAYS.md 'Matches of computer players' and 'Schedules', docs/MAP_SUBMISSIONS.md 'Bot matches on the admin page') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the limit of eight matches and of sixteen places (and a big map's weight), people first (three of every four places), the second between two starts, Stop that never touches a room of people, every new route behind the door's pass and token, the lines of the admin log, a run that a limit holds back that is skipped and never queued, the log that names a schedule by its number, the limits of the schedules (20, 12 times, 5 to 1440 minutes, 40 characters), a restart that does not run at once and makes nothing up, the default that is made once, and the Pacific clock (the second Sunday of March, the first of November, the hour that does not happen and the hour that happens twice). Each is caught by test_server S3.270 to S3.277 (the first block: the server suite, ANTS_TEST_FILTER=S3.27) or by test_bot_schedules (BSC). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_admin_mutants.json --keep-going --jobs 1. Every mutant must be caught. The page's own rules are proved by the broken copies of tests/scripts/test_web_admin.py.",
+ "note": "Mutants of what the admin page may ask of the server's own matches of computer players, and of the schedules that start them (src/ants_server/room_manager_bots.cpp, bot_matches.cpp, bot_schedules.cpp, pacific_time.cpp, submissions_http.cpp and the constants of bot_match_spec.hpp and bot_schedules.hpp; docs/SERVER_REPLAYS.md 'Matches of computer players' and 'Schedules', docs/MAP_SUBMISSIONS.md 'Bot matches on the admin page') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the limit of eight matches and of sixteen places (and a big map's weight), people first (three of every four places), the second between two starts, Stop that never touches a room of people, every new route behind the door's pass and token, the lines of the admin log, a run that a limit holds back that is skipped and never queued, the log that names a schedule by its number, the limits of the schedules (20, 12 times, 5 to 1440 minutes, 40 characters), a restart that does not run at once and makes nothing up, the default that is made once, and the Pacific clock (the second Sunday of March, the first of November, the hour that does not happen and the hour that happens twice). Each is caught by test_server S3.270 to S3.277 (the first block: the server suite, ANTS_TEST_FILTER=S3.27) or by test_bot_schedules (BSC). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_admin_mutants.json --keep-going --jobs 1. Every mutant must be caught. The page's own rules are proved by the broken copies of tests/scripts/test_web_admin.py. The rotation lists and the staggered start add: a named map is looked up in the catalog and never on the disk, ISLANDS by name in 187 stays refused, a list may not be empty or hold more than 100 maps or a name twice or a name that is no map of the server or a new map that a room cannot play, a map that a room cannot play is never drawn, a change of a list is logged and one that changes nothing is not, the spacing of a batch and its bounds, the 32 waiting starts, a batch that needs room for its first match only, a held start that waits and is not dropped (and moves the starts after it), a stop of one waiting start and of all, the waiting starts that go on while the schedules are off, the catalog's bounded loads, and the store of the lists (the defaults are no row, an empty list or a name twice is no list). The spacing of a schedule adds: a run that ignores it, a refused spacing that is taken, a start that waits and is dropped by the eight or by people's share, a deleted schedule that cancels what it let wait, a spacing that is not kept in the row, and a column of the table too short for the longest batch.",
  "mutants": [
   {
    "id": "bot_cap_is_nine",
    "file": "include/ants_server/bot_match_spec.hpp",
-   "old": "inline constexpr size_t kBotMatchesMax = 8;",
-   "new": "inline constexpr size_t kBotMatchesMax = 9;",
+   "old": "inline constexpr size_t kBotMatchesMax = 80;",
+   "new": "inline constexpr size_t kBotMatchesMax = 81;",
    "build": "test_server",
    "test": "timeout 900 env ANTS_TEST_FILTER=S3.27 ./build/tests/test_server/test_server",
    "expect": "S3.270"
@@ -22,8 +22,8 @@
   {
    "id": "bot_places_cap_is_seventeen",
    "file": "include/ants_server/bot_match_spec.hpp",
-   "old": "inline constexpr uint32_t kBotPlacesMax = 16;",
-   "new": "inline constexpr uint32_t kBotPlacesMax = 17;",
+   "old": "inline constexpr uint32_t kBotPlacesMax = 160;",
+   "new": "inline constexpr uint32_t kBotPlacesMax = 161;",
    "build": "test_server",
    "test": "timeout 900 env ANTS_TEST_FILTER=S3.27 ./build/tests/test_server/test_server",
    "expect": "S3.270"
@@ -103,17 +103,17 @@
   {
    "id": "start_refuses_a_batch_over_the_limit_by_halves",
    "file": "src/ants_server/bot_matches.cpp",
-   "old": "if (what.count > kBotMatchesMax - std::min(running, kBotMatchesMax)) {",
+   "old": "if (queues_.size() >= kBotBatchesMax || waiting_count() + what.count > kBotQueueMax) {",
    "new": "if (false) {",
    "build": "test_server",
-   "test": "timeout 900 env ANTS_TEST_FILTER=S3.27 ./build/tests/test_server/test_server",
-   "expect": "S3.275"
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.293"
   },
   {
    "id": "start_says_nothing_of_the_people_who_hold_it_back",
    "file": "src/ants_server/bot_matches.cpp",
-   "old": "if (rooms_.people_busy()) {",
-   "new": "if (false) {",
+   "old": "    if (batch.refusal != BotRefusal::None && !is_limit(batch.refusal)) return batch;",
+   "new": "    if (batch.refusal != BotRefusal::None) return batch;",
    "build": "test_server",
    "test": "timeout 900 env ANTS_TEST_FILTER=S3.27 ./build/tests/test_server/test_server",
    "expect": "S3.275"
@@ -130,8 +130,8 @@
   {
    "id": "start_is_not_logged",
    "file": "src/ants_server/bot_matches.cpp",
-   "old": "record(who, now_s, \"bot_started\", std::to_string(batch.started) + (batch.started == 1 ? \" match\" : \" matches\"), bot_what_words(what));",
-   "new": "(void)batch;",
+   "old": "record(who, now_s, \"bot_started\", std::to_string(what.count) + (what.count == 1 ? \" match\" : \" matches\"), bot_what_words(what));",
+   "new": "(void)who;",
    "build": "test_server",
    "test": "timeout 900 env ANTS_TEST_FILTER=S3.27 ./build/tests/test_server/test_server",
    "expect": "S3.275"
@@ -157,8 +157,8 @@
   {
    "id": "a_run_that_fits_only_in_part_starts_none",
    "file": "src/ants_server/bot_matches.cpp",
-   "old": "for (uint32_t i = 0; i < what.count; ++i) {",
-   "new": "for (uint32_t i = 0; i < what.count && rooms_.bot_match_count() + what.count <= kBotMatchesMax; ++i) {",
+   "old": "for (uint32_t i = 0; i < now_wanted; ++i) {",
+   "new": "for (uint32_t i = 0; i < now_wanted && rooms_.bot_match_count() + now_wanted <= kBotMatchesMax; ++i) {",
    "build": "test_server",
    "test": "timeout 900 env ANTS_TEST_FILTER=S3.27 ./build/tests/test_server/test_server",
    "expect": "S3.277"
@@ -310,8 +310,8 @@
   {
    "id": "budget_is_not_checked",
    "file": "src/ants_server/room_manager_bots.cpp",
-   "old": "if (replays_->bot_saves_left() <= bot_match_count()) return refuse(BotRefusal::Budget,",
-   "new": "if (false) return refuse(BotRefusal::Budget,",
+   "old": "spec.keep_replay = replays_->bot_saves_left() > bot_kept_count();",
+   "new": "spec.keep_replay = true;",
    "build": "test_server",
    "test": "timeout 900 env ANTS_TEST_FILTER=S3.2 ./build/tests/test_server/test_server",
    "expect": "S3.282"
@@ -319,8 +319,8 @@
   {
    "id": "random_pick_takes_a_long_map",
    "file": "src/ants_server/room_manager_bots.cpp",
-   "old": "if (refusal_text.empty() && !named && limit > kBotRandomMaxMinutes)",
-   "new": "if (refusal_text.empty() && !named && limit > 1000)",
+   "old": "if (refusal_text.empty() && !named && choice.map != kBotMapRotation && limit > kBotRandomMaxMinutes)",
+   "new": "if (refusal_text.empty() && !named && choice.map != kBotMapRotation && limit > 1000)",
    "build": "test_server",
    "test": "timeout 900 env ANTS_TEST_FILTER=S3.2 ./build/tests/test_server/test_server",
    "expect": "S3.284"
@@ -355,8 +355,8 @@
   {
    "id": "the_off_switch_does_not_stop_a_run",
    "file": "src/ants_server/bot_matches.cpp",
-   "old": "    if (!scheduling_) return;",
-   "new": "",
+   "old": "        return;                                                                      // (the operator switched the schedules off: they are kept and shown, and none of them starts a match)",
+   "new": "        // (mutant: the schedules run although the operator switched them off)",
    "build": "test_server",
    "test": "timeout 900 env ANTS_TEST_FILTER=S3.2 ./build/tests/test_server/test_server",
    "expect": "S3.279"
@@ -373,7 +373,7 @@
   {
    "id": "stopping_nothing_is_logged",
    "file": "src/ants_server/bot_matches.cpp",
-   "old": "if (n > 0) record(who, now_s, \"bot_stopped_all\"",
+   "old": "if (n > 0 || dropped > 0) record(who, now_s, \"bot_stopped_all\"",
    "new": "if (true) record(who, now_s, \"bot_stopped_all\"",
    "build": "test_server",
    "test": "timeout 900 env ANTS_TEST_FILTER=S3.2 ./build/tests/test_server/test_server",
@@ -459,6 +459,465 @@
    "build": "test_bot_schedules",
    "test": "timeout 600 ./build/tests/test_server/test_bot_schedules",
    "expect": "BSC7.2"
+  },
+  {
+   "id": "a_name_that_the_catalog_lacks_is_looked_for_on_the_disk",
+   "file": "src/ants_server/room_manager_bots.cpp",
+   "old": "if (named && !bot_catalog_has(choice.map, named_approved)) return refuse(BotRefusal::NoMap,",
+   "new": "if (false) return refuse(BotRefusal::NoMap,",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.28 ./build/tests/test_server/test_server",
+   "expect": "S3.285"
+  },
+  {
+   "id": "a_named_islands_in_187_is_played",
+   "file": "src/ants_server/room_manager_bots.cpp",
+   "old": "if (named && choice.rules == BotRules::Kills187 && choice.map == kIslands) return refuse(",
+   "new": "if (false) return refuse(",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.28 ./build/tests/test_server/test_server",
+   "expect": "S3.288"
+  },
+  {
+   "id": "a_list_may_be_saved_empty",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "if (maps.size() == 0) return failure(400, \"empty\",",
+   "new": "if (false) return failure(400, \"empty\",",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.28 ./build/tests/test_server/test_server",
+   "expect": "S3.287"
+  },
+  {
+   "id": "a_list_may_hold_a_hundred_and_one_maps",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "if (maps.size() > kBotRotationMax) {",
+   "new": "if (maps.size() > kBotRotationMax + 1) {",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.28 ./build/tests/test_server/test_server",
+   "expect": "S3.287"
+  },
+  {
+   "id": "the_cap_of_a_list_is_two_hundred",
+   "file": "include/ants_server/bot_match_spec.hpp",
+   "old": "inline constexpr size_t kBotRotationMax = 100;",
+   "new": "inline constexpr size_t kBotRotationMax = 200;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.28 ./build/tests/test_server/test_server",
+   "expect": "S3.287"
+  },
+  {
+   "id": "a_name_that_is_no_map_of_the_server_is_saved_in_a_list",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "if (have == current.end()) return failure(400, \"bad_map\", \"That map is not one of the server's maps.\");",
+   "new": "if (false) return failure(400, \"bad_map\", \"That map is not one of the server's maps.\");",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.28 ./build/tests/test_server/test_server",
+   "expect": "S3.287"
+  },
+  {
+   "id": "a_new_map_that_a_room_cannot_play_is_saved_in_a_list",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "if (!reason.empty()) {\n                JsonValue extra = JsonValue::make_object();\n                extra.set(\"file\", text_value(file));",
+   "new": "if (false) {\n                JsonValue extra = JsonValue::make_object();\n                extra.set(\"file\", text_value(file));",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.28 ./build/tests/test_server/test_server",
+   "expect": "S3.287"
+  },
+  {
+   "id": "a_map_twice_is_saved_in_a_list",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "if (!seen.insert(file).second) return failure(400, \"bad_map\", \"A map is in the list twice.\");",
+   "new": "if (false) return failure(400, \"bad_map\", \"A map is in the list twice.\");",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.28 ./build/tests/test_server/test_server",
+   "expect": "S3.287"
+  },
+  {
+   "id": "a_map_that_cannot_be_played_is_drawn_from_a_list",
+   "file": "src/ants_server/room_manager_bots.cpp",
+   "old": "if (refusal_text.empty()) {\n            maps.push_back(entry.file);",
+   "new": "if (true) {\n            maps.push_back(entry.file);",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.290"
+  },
+  {
+   "id": "a_change_of_a_list_is_not_logged",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "record(who, now_s, \"bot_rotation_changed\",",
+   "new": "(void)who; (void)(",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.28 ./build/tests/test_server/test_server",
+   "expect": "S3.287"
+  },
+  {
+   "id": "a_list_that_changes_nothing_is_written_and_logged",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "if (bot_rotation_same(next, current)) {",
+   "new": "if (false) {",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.28 ./build/tests/test_server/test_server",
+   "expect": "S3.287"
+  },
+  {
+   "id": "a_waiting_start_comes_at_the_first_pass",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "q.due_ms = batch.started > 0 ? now_ms + q.every_ms : now_ms;",
+   "new": "q.due_ms = now_ms;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.292"
+  },
+  {
+   "id": "a_late_start_does_not_move_the_next",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "q.due_ms = now_ms + q.every_ms;                              // (the starts that follow keep their spacing from this one)",
+   "new": "q.due_ms += q.every_ms;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.295"
+  },
+  {
+   "id": "a_held_start_is_dropped",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "                release_held_ = true;\n                next_release_ms_ = now_ms + 1000u;\n                return made;",
+   "new": "                q.remaining = 0;\n                release_held_ = true;\n                next_release_ms_ = now_ms + 1000u;\n                return made;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.295"
+  },
+  {
+   "id": "the_waiting_limit_is_thirty_three",
+   "file": "include/ants_server/bot_match_spec.hpp",
+   "old": "inline constexpr size_t kBotQueueMax = 10000;",
+   "new": "inline constexpr size_t kBotQueueMax = 10001;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.293"
+  },
+  {
+   "id": "a_batch_over_the_waiting_limit_is_taken",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "    if (queues_.size() >= kBotBatchesMax || waiting_count() + remaining > kBotQueueMax) {",
+   "new": "    if (false) {",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.30 ./build/tests/test_server/test_server",
+   "expect": "S3.301"
+  },
+  {
+   "id": "a_request_starts_a_whole_batch_before_it_answers",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "const uint32_t now_wanted = spaced ? 1 : std::min<uint32_t>(what.count, kBotStartsNow);",
+   "new": "const uint32_t now_wanted = spaced ? 1 : std::min<uint32_t>(what.count, kBotStartsNow + 100000);",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.30 ./build/tests/test_server/test_server",
+   "expect": "S3.300"
+  },
+  {
+   "id": "stop_all_leaves_the_waiting_starts",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "    queues_.clear();\n    if (n > 0 || dropped > 0) record(who, now_s, \"bot_stopped_all\"",
+   "new": "    if (n > 0 || dropped > 0) record(who, now_s, \"bot_stopped_all\"",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.294"
+  },
+  {
+   "id": "a_waiting_start_cannot_be_stopped_on_its_own",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "if (queues_[i].id != id) continue;",
+   "new": "continue;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.294"
+  },
+  {
+   "id": "the_spacing_may_be_a_quarter_of_a_minute",
+   "file": "include/ants_server/bot_match_spec.hpp",
+   "old": "inline constexpr uint32_t kBotSpacingStepS = 30;",
+   "new": "inline constexpr uint32_t kBotSpacingStepS = 15;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.293"
+  },
+  {
+   "id": "the_spacing_may_be_four_hours",
+   "file": "include/ants_server/bot_match_spec.hpp",
+   "old": "inline constexpr uint32_t kBotSpacingMaxS = 7200;",
+   "new": "inline constexpr uint32_t kBotSpacingMaxS = 14400;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.293"
+  },
+  {
+   "id": "the_waiting_starts_stop_with_the_off_switch",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "size_t made = release_queues(now_s, now_ms);",
+   "new": "size_t made = scheduling_ ? release_queues(now_s, now_ms) : 0;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.296"
+  },
+  {
+   "id": "the_catalog_loads_every_file_at_the_first_call",
+   "file": "include/ants_server/bot_match_spec.hpp",
+   "old": "inline constexpr size_t kBotCatalogLoads = 48;",
+   "new": "inline constexpr size_t kBotCatalogLoads = 10000;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.28 ./build/tests/test_server/test_server",
+   "expect": "S3.286"
+  },
+  {
+   "id": "the_idle_pass_warms_every_map_at_once",
+   "file": "include/ants_server/bot_match_spec.hpp",
+   "old": "inline constexpr size_t kBotWarmLoadsPerPass = 4;",
+   "new": "inline constexpr size_t kBotWarmLoadsPerPass = 10000;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.28 ./build/tests/test_server/test_server",
+   "expect": "S3.286"
+  },
+  {
+   "id": "the_store_keeps_a_list_that_is_the_defaults",
+   "file": "src/ants_server/bot_rotation.cpp",
+   "old": "if (bot_rotation_same(maps, bot_rotation_defaults(kills_187))) return reset(kills_187, error);",
+   "new": "if (false) return reset(kills_187, error);",
+   "build": "test_bot_rotation",
+   "test": "timeout 300 ./build/tests/test_server/test_bot_rotation",
+   "expect": "BRO2.1"
+  },
+  {
+   "id": "the_store_reads_an_empty_list",
+   "file": "src/ants_server/bot_rotation.cpp",
+   "old": "json.size() == 0 || json.size() > kBotRotationMax",
+   "new": "json.size() > kBotRotationMax",
+   "build": "test_bot_rotation",
+   "test": "timeout 300 ./build/tests/test_server/test_bot_rotation",
+   "expect": "BRO1.2"
+  },
+  {
+   "id": "the_store_reads_a_name_twice",
+   "file": "src/ants_server/bot_rotation.cpp",
+   "old": "|| !seen.insert(o.get(\"file\").str()).second) return false;",
+   "new": ") return false;",
+   "build": "test_bot_rotation",
+   "test": "timeout 300 ./build/tests/test_server/test_bot_rotation",
+   "expect": "BRO1.2"
+  },
+  {
+   "id": "a_schedule_run_ignores_its_spacing",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "const Batch batch = run_batch(s.what, std::string(), s.name, now_s, now_ms, false);",
+   "new": "BotWhat flat = s.what; flat.every_s = 0; const Batch batch = run_batch(flat, std::string(), s.name, now_s, now_ms, false);",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.299"
+  },
+  {
+   "id": "a_schedule_takes_a_spacing_that_is_not_one",
+   "file": "src/ants_server/bot_schedules.cpp",
+   "old": "if (!parse_bot_what(body.get(\"what\"), patch.what, error, kBotScheduleCountMax)) return false;",
+   "new": "if (!parse_bot_what(body.get(\"what\"), patch.what, error, kBotScheduleCountMax) && error != \"bad_spacing\") return false;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.298"
+  },
+  {
+   "id": "a_start_held_by_the_eighty_is_dropped",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "bool is_limit(BotRefusal refusal) { return refusal == BotRefusal::Cap || refusal == BotRefusal::Places",
+   "new": "bool is_limit(BotRefusal refusal) { return refusal == BotRefusal::Places",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.299"
+  },
+  {
+   "id": "a_start_held_by_people_is_dropped",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": " || refusal == BotRefusal::PeopleBusy || refusal == BotRefusal::Busy; }",
+   "new": " || refusal == BotRefusal::Busy; }",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.299"
+  },
+  {
+   "id": "a_deleted_schedule_cancels_the_starts_that_it_let_wait",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "const std::string name = row != nullptr ? row->name : std::string();",
+   "new": "const std::string name = row != nullptr ? row->name : std::string();\n    waiting_.erase(std::remove_if(waiting_.begin(), waiting_.end(), [&](const Waiting& w) { return !name.empty() && w.schedule == name; }), waiting_.end());",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.299"
+  },
+  {
+   "id": "a_schedule_keeps_no_spacing_in_its_row",
+   "file": "src/ants_server/bot_match_spec.cpp",
+   "old": "o.set(\"every_s\", ctl::JsonValue::make_int(static_cast<int64_t>(what.every_s)));",
+   "new": "(void)what;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.298"
+  },
+  {
+   "id": "the_column_of_a_schedule_is_too_short_for_its_spacing",
+   "file": "src/ants_server/db_schema.cpp",
+   "old": "\" what TEXT NOT NULL CHECK (length(what) <= 1000),\"",
+   "new": "\" what TEXT NOT NULL CHECK (length(what) <= 150),\"",
+   "build": "test_bot_schedules",
+   "test": "timeout 300 ./build/tests/test_server/test_bot_schedules",
+   "expect": "BSC8.1"
+  },
+  {
+   "id": "a_run_of_a_schedule_starts_past_the_eight",
+   "file": "src/ants_server/room_manager_bots.cpp",
+   "old": "if (bot_match_count() >= kBotMatchesMax) return refuse",
+   "new": "if (bot_match_count() > kBotMatchesMax) return refuse",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.299"
+  },
+  {
+   "id": "a_run_of_a_schedule_starts_while_people_use_the_places",
+   "file": "src/ants_server/room_manager_bots.cpp",
+   "old": "return limits_.demo_rooms != 0 && public_places() * kBotPeopleShareDenominator > limits_.demo_rooms * kBotPeopleShareNumerator;",
+   "new": "return false;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.299"
+  },
+  {
+   "id": "a_busy_loop_does_not_hold_a_start",
+   "file": "src/ants_server/room_manager_bots.cpp",
+   "old": "if (loop_load_ != nullptr && loop_load_->share(now_ms) > kBotBusyGate) return refuse(",
+   "new": "if (false && loop_load_ != nullptr && loop_load_->share(now_ms) > kBotBusyGate) return refuse(",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.295"
+  },
+  {
+   "id": "the_busy_gate_is_fifty_percent",
+   "file": "include/ants_server/bot_match_spec.hpp",
+   "old": "inline constexpr double kBotBusyGate = 0.40;",
+   "new": "inline constexpr double kBotBusyGate = 0.50;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.295"
+  },
+  {
+   "id": "a_pass_starts_every_queued_match",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "constexpr size_t kBotStartsPerPass = 2;",
+   "new": "constexpr size_t kBotStartsPerPass = 2000;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.30 ./build/tests/test_server/test_server",
+   "expect": "S3.300"
+  },
+  {
+   "id": "a_request_starts_all_its_matches_now",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "constexpr uint32_t kBotStartsNow = 8;",
+   "new": "constexpr uint32_t kBotStartsNow = 100000;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.30 ./build/tests/test_server/test_server",
+   "expect": "S3.300"
+  },
+  {
+   "id": "a_queue_does_not_count_the_done",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "            ++q.finished;\n            return;",
+   "new": "            return;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.30 ./build/tests/test_server/test_server",
+   "expect": "S3.300"
+  },
+  {
+   "id": "the_queue_limit_of_batches_is_fifty_one",
+   "file": "include/ants_server/bot_match_spec.hpp",
+   "old": "inline constexpr size_t kBotBatchesMax = 50;",
+   "new": "inline constexpr size_t kBotBatchesMax = 51;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.293"
+  },
+  {
+   "id": "a_batch_may_ask_ten_thousand_and_one",
+   "file": "include/ants_server/bot_match_spec.hpp",
+   "old": "inline constexpr uint32_t kBotCountMax = 10000;",
+   "new": "inline constexpr uint32_t kBotCountMax = 10001;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.293"
+  },
+  {
+   "id": "a_schedule_may_start_nine",
+   "file": "include/ants_server/bot_match_spec.hpp",
+   "old": "inline constexpr size_t kBotScheduleCountMax = 8;",
+   "new": "inline constexpr size_t kBotScheduleCountMax = 9;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.30 ./build/tests/test_server/test_server",
+   "expect": "S3.303"
+  },
+  {
+   "id": "a_schedule_takes_the_batch_limit_of_the_page",
+   "file": "src/ants_server/bot_schedules.cpp",
+   "old": "if (!parse_bot_what(body.get(\"what\"), patch.what, error, kBotScheduleCountMax)) return false;",
+   "new": "if (!parse_bot_what(body.get(\"what\"), patch.what, error)) return false;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.30 ./build/tests/test_server/test_server",
+   "expect": "S3.303"
+  },
+  {
+   "id": "a_match_without_a_slot_is_kept_all_the_same",
+   "file": "src/ants_server/room.cpp",
+   "old": "    if (!spec_.keep_replay) {",
+   "new": "    if (false) {",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.2 ./build/tests/test_server/test_server",
+   "expect": "S3.282"
+  },
+  {
+   "id": "the_slots_count_every_match",
+   "file": "src/ants_server/room_manager_bots.cpp",
+   "old": "if (kv.second->bots_only() && kv.second->keep_replay() && (state ==",
+   "new": "if (kv.second->bots_only() && (state ==",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.2 ./build/tests/test_server/test_server",
+   "expect": "S3.282"
+  },
+  {
+   "id": "the_slot_check_lets_one_more",
+   "file": "src/ants_server/room_manager_bots.cpp",
+   "old": "spec.keep_replay = replays_->bot_saves_left() > bot_kept_count();",
+   "new": "spec.keep_replay = replays_->bot_saves_left() >= bot_kept_count();",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.2 ./build/tests/test_server/test_server",
+   "expect": "S3.282"
+  },
+  {
+   "id": "the_meter_keeps_the_old_second",
+   "file": "include/ants_server/loop_load.hpp",
+   "old": "            slots_[head_] = 0;",
+   "new": "            (void)head_;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.30 ./build/tests/test_server/test_server",
+   "expect": "S3.304"
+  },
+  {
+   "id": "the_meter_window_is_twenty_seconds",
+   "file": "include/ants_server/loop_load.hpp",
+   "old": "static constexpr uint32_t kSeconds = 10;",
+   "new": "static constexpr uint32_t kSeconds = 20;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.30 ./build/tests/test_server/test_server",
+   "expect": "S3.304"
+  },
+  {
+   "id": "a_batch_with_a_spacing_starts_all_its_matches_now",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "const uint32_t now_wanted = spaced ? 1 : std::min<uint32_t>(what.count, kBotStartsNow);",
+   "new": "const uint32_t now_wanted = spaced ? what.count : std::min<uint32_t>(what.count, kBotStartsNow);",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.292"
   }
  ]
 }

@@ -1,0 +1,313 @@
+{
+ "note": "Mutants of the commands of the chat dock (web/home/cmds.js and cmds.css, web/home/chat.js, docs/HOME_CHAT.md 'Roles and commands') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_home_cmds_check.js (the real dock and the real helper on a fake socket) and the static checks of tests/scripts/test_web_home_cmds.py: only rules of the product: a command of a higher role drawn in the list, a guest or an empty list that still loads the file, a count over 10,000, /help sent to the hub, // not passed through, a refusal worded by the command that was typed, the builder that sends, a map that cannot be typed, markup made of text; every one must be caught (tools/mutate.py tests/data/home_cmds_mutants.json --keep-going --jobs 1).",
+ "mutants": [
+  {
+   "id": "rows_of_the_old_role_stay_after_a_new_cmds_frame",
+   "file": "web/home/cmds.js",
+   "old": "rows: function (list) { rows = rowsOf(list); last = null;",
+   "new": "rows: function (list) { rows = rows.concat(rowsOf(list)); last = null;",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "a_row_that_is_not_a_word_is_drawn",
+   "file": "web/home/cmds.js",
+   "old": "!/^\\/[a-z][a-z0-9]{0,15}$/.test(r.w) ||",
+   "new": "",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "more_than_24_rows_are_drawn",
+   "file": "web/home/cmds.js",
+   "old": "rows: 24,",
+   "new": "rows: 240,",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "a_word_twice_is_drawn_twice",
+   "file": "web/home/cmds.js",
+   "old": "|| seen[r.w] === true) continue;",
+   "new": ") continue;",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "the_list_narrows_by_any_part_of_a_word",
+   "file": "web/home/cmds.js",
+   "old": "rows.filter(function (r) { return r.w.indexOf(q) === 0; })",
+   "new": "rows.filter(function (r) { return r.w.indexOf(q.slice(1)) >= 0; })",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "the_list_opens_for_a_line_that_starts_with_two_slashes",
+   "file": "web/home/cmds.js",
+   "old": "!/^\\/[A-Za-z]*$/.test(v)) close(); else openFor(v);",
+   "new": "!/^\\/+[A-Za-z]*$/.test(v)) close(); else openFor(v);",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "the_list_is_not_closed_when_the_field_is_off",
+   "file": "web/home/cmds.js",
+   "old": "if (!rows.length || field.disabled || ",
+   "new": "if (!rows.length || ",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "escape_folds_the_panel_too",
+   "file": "web/home/cmds.js",
+   "old": "close(); stop(); if (e.stopPropagation) e.stopPropagation(); return true; }",
+   "new": "close(); stop(); return true; }",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "enter_chooses_a_whole_word_again_instead_of_sending",
+   "file": "web/home/cmds.js",
+   "old": "if (v === c.w && !c.a) return false; ",
+   "new": "",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "tab_chooses_nothing",
+   "file": "web/home/cmds.js",
+   "old": "if (k === 'Tab') { choose(c); stop(); return true; }",
+   "new": "if (k === 'Tab') return false;",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "a_choice_of_bots_does_not_open_the_builder",
+   "file": "web/home/cmds.js",
+   "old": "if (c.w === '/bots') { setField('/bots '); builder(); return; }",
+   "new": "",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "an_empty_list_asks_for_the_helper",
+   "file": "web/home/chat.js",
+   "old": "else if (cmdsRows.length && !cmdsAsked && env.load) {",
+   "new": "else if (!cmdsAsked && env.load) {",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "the_helper_is_asked_for_again_for_each_frame",
+   "file": "web/home/chat.js",
+   "old": "else if (cmdsRows.length && !cmdsAsked && env.load) {\n                cmdsAsked = true;",
+   "new": "else if (cmdsRows.length && env.load) {\n                cmdsAsked = false;",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "a_visitor_that_is_nobody_keeps_the_rows",
+   "file": "web/home/chat.js",
+   "old": "you = youOf(m.you); picPending(false); if (!you) setCmds([]);",
+   "new": "you = youOf(m.you); picPending(false);",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "help_is_sent_to_the_hub",
+   "file": "web/home/chat.js",
+   "old": "if (word === '/help') return '';",
+   "new": "",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "help_does_not_open_the_list",
+   "file": "web/home/chat.js",
+   "old": "field.value = help ? '/' : ''; grow();",
+   "new": "field.value = ''; grow();",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "double_slash_is_not_passed_through",
+   "file": "web/home/chat.js",
+   "old": "try { sock.send(JSON.stringify({ t: 'say', text: text })); }",
+   "new": "try { sock.send(JSON.stringify({ t: 'say', text: text.replace(/^\\/\\//, '/') })); }",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "a_hub_help_reply_prints_instead_of_opening_the_list",
+   "file": "web/home/cmds.js",
+   "old": "if (r.help) { setField('/'); return; }",
+   "new": "if (r.help) { dock.block(function (row) { row.appendChild(el('div', 'gc-pl', 'help')); }, ''); return; }",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "unknown_is_worded_by_the_command",
+   "file": "web/home/cmds.js",
+   "old": "if (r === 'unknown') return bad(TEXT.unknown);",
+   "new": "if (r === 'unknown') return bad(c === 'bots' || c === 'mute' || c === 'ban' ? TEXT.generic : TEXT.unknown);",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "unknown_has_no_refusal_edge",
+   "file": "web/home/cmds.js",
+   "old": "if (r === 'unknown') return bad(TEXT.unknown);",
+   "new": "if (r === 'unknown') return say(TEXT.unknown);",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "a_reply_is_not_the_answer_of_the_oldest_command",
+   "file": "web/home/chat.js",
+   "old": "typed = entry ? entry.text : '';",
+   "new": "typed = '';",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "a_reply_does_not_answer_a_waiting_command",
+   "file": "web/home/chat.js",
+   "old": "var at = oldest(true), entry = at >= 0 ? unanswered.splice(at, 1)[0] : null, typed",
+   "new": "var at = oldest(true), entry = at >= 0 ? unanswered[at] : null, typed",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "the_count_goes_over_ten_thousand",
+   "file": "web/home/cmds.js",
+   "old": "count: 10000,",
+   "new": "count: 10001,",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "the_spacing_goes_over_120_minutes",
+   "file": "web/home/cmds.js",
+   "old": "every: 120,",
+   "new": "every: 121,",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "write_does_not_look_at_the_bounds",
+   "file": "web/home/cmds.js",
+   "old": "write.addEventListener('click', function () { if (!stateOk(S)) return; ",
+   "new": "write.addEventListener('click', function () { ",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "write_stays_on_for_a_bad_count",
+   "file": "web/home/cmds.js",
+   "old": "write.disabled = !good;",
+   "new": "write.disabled = false;",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "write_sends_the_command",
+   "file": "web/home/cmds.js",
+   "old": "closeBuilder(); setField(c); });",
+   "new": "closeBuilder(); setField(c); form.fire('submit', { preventDefault: function () {} }); });",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "a_spacing_is_written_for_one_match",
+   "file": "web/home/cmds.js",
+   "old": "if (s.every > 0 && s.count > 1) c += ' every ' + s.every;",
+   "new": "if (s.every > 0) c += ' every ' + s.every;",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "a_split_is_written_with_the_wrong_number_of_bots",
+   "file": "web/home/cmds.js",
+   "old": "function teamsOf(s) { return teamChoices(s.bots).some(function (c) { return c[0] === s.teams; }) ? s.teams : 'random'; }",
+   "new": "function teamsOf(s) { return s.teams; }",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "the_map_of_the_rotation_is_written_by_its_name",
+   "file": "web/home/cmds.js",
+   "old": "if (s.map && mapText(s.map.file)) c += ' map ' + mapText(s.map.file);",
+   "new": "if (s.map && mapText(s.map.file)) c += ' map ' + mapText(s.map.file); else c += ' map The rotation';",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "a_map_that_cannot_be_typed_is_written",
+   "file": "web/home/cmds.js",
+   "old": "!/[<>]/.test(t) ? t : ''",
+   "new": "true ? t : ''",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "a_random_pick_is_written_as_a_named_map",
+   "file": "web/home/cmds.js",
+   "old": "S.map = /^random:/.test(String(m.file)) ? null :",
+   "new": "S.map = false ? null :",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "the_number_that_run_at_once_is_a_constant",
+   "file": "web/home/cmds.js",
+   "old": "atOnce = int(j.at_once);",
+   "new": "atOnce = 40;",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "the_catalog_is_fetched_with_a_post",
+   "file": "web/home/cmds.js",
+   "old": "f.call(win, path, { credentials: 'same-origin', cache: 'no-store' })",
+   "new": "f.call(win, path, { method: 'POST', credentials: 'same-origin', cache: 'no-store' })",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "the_catalog_is_fetched_without_the_cookie",
+   "file": "web/home/cmds.js",
+   "old": "f.call(win, path, { credentials: 'same-origin', cache: 'no-store' })",
+   "new": "f.call(win, path, { credentials: 'omit', cache: 'no-store' })",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "the_blocks_are_made_with_innerhtml",
+   "file": "web/home/cmds.js",
+   "old": "if (text !== undefined) e.textContent = text;",
+   "new": "if (text !== undefined) e.innerHTML = text;",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "the_echo_of_what_was_typed_is_not_cleaned",
+   "file": "web/home/cmds.js",
+   "old": "d.appendChild(el('bdi', '', clean(typed, 200)));",
+   "new": "d.appendChild(el('bdi', '', String(typed)));",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "the_close_names_are_not_cut",
+   "file": "web/home/cmds.js",
+   "old": ".slice(0, LIMIT.close).map(",
+   "new": ".slice(0, 30).map(",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "the_status_shows_more_than_five_batches",
+   "file": "web/home/cmds.js",
+   "old": "queues: 5,",
+   "new": "queues: 50,",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "the_bar_is_not_held_to_a_hundred_percent",
+   "file": "web/home/cmds.js",
+   "old": "var done = total ? Math.min(100, fin * 100 / total) : 0,",
+   "new": "var done = total ? fin * 100 / total : 0,",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "a_wait_is_taken_from_the_hub_without_a_bound",
+   "file": "web/home/cmds.js",
+   "old": "n = Math.min(LIMIT.wait, Math.max(1, int(m.wait)));",
+   "new": "n = int(m.wait);",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "a_second_press_of_map_asks_again",
+   "file": "web/home/cmds.js",
+   "old": "if (busy || adm) return;   // (a second press",
+   "new": "if (false) return;   // (a second press",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "escape_closes_the_builder_under_the_maps_list",
+   "file": "web/home/cmds.js",
+   "old": "if (!box || !e || adm) return;",
+   "new": "if (!box || !e) return;",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "a_reopened_builder_keeps_a_count_that_was_no_number",
+   "file": "web/home/cmds.js",
+   "old": "if (!(S.count >= 1)) S.count = 1;",
+   "new": "",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  }
+ ]
+}

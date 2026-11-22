@@ -76,6 +76,7 @@
 #include "ants_net/flood.hpp"
 #include "ants_net/latency.hpp"
 #include "ants_net/lockstep.hpp"
+#include "ants_net/p2p.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_net/sequencer.hpp"
 #include "ants_net/transport.hpp"
@@ -158,6 +159,18 @@ public:
         LogBudget* log_budget{nullptr};                         // the server's memory for the logs of all its rooms (turnlog.hpp), shared: a log that it refuses is not kept
         uint32_t presence_every_ms{kPresenceEveryMs};
         size_t stream_window_bytes{kStreamWindowBytes};
+        // Hints and channels (protocol 26, p2p.hpp). `turn`: the relay's addresses and the maker of its credentials; null, or without addresses: no relay, so no player is given a credential and none opens a channel.
+        // `random_bytes` makes the random label of a credential's user name (the operating system's source; without it no credential is made) and `unix_now` is the clock of its expiry (empty: the system clock).
+        // A credential is made only once the match has begun, only in a match that began with two or more people (a computer player's hints need no channel) and at most kMaxP2pCredentials (p2p.hpp) times for a player.
+        // `relay_ttl_s` is the longest a credential may live: the longest the match can last and a margin (the room sets it); 0: the relay's own (TurnSettings::ttl_s). The shorter of the two counts.
+        std::shared_ptr<const TurnSettings> turn;
+        std::function<bool(uint8_t*, size_t)> random_bytes;
+        std::function<uint32_t()> unix_now;
+        uint32_t relay_ttl_s{0};
+        /// Asked once for each credential that is about to be made, with the seat that asks: false answers the player as a server that has no relay answers (an empty list; the match is what it was). The server
+        /// gives its budget per address here (docs/ADDRESS_LIMITS.md); empty: no budget beyond the player's own kMaxP2pCredentials.
+        std::function<bool(uint8_t player)> relay_take;
+        bool bot_hints{true};                                   // a computer player's order is sent to every player the moment the bot gives it, ahead of its turn (the turn is what counts)
     };
 
     HostSession(sim::SimulationEngine& sim, Config config);
@@ -220,6 +233,14 @@ public:
     /// The seats of a dedicated server that were dropped for a state that differs from the referee's (the others went on)
     uint32_t diverged_drops() const noexcept { return diverged_drops_; }
     uint32_t turns_sealed() const noexcept { return sequencer_.next_turn(); }
+    /// The orders of a seat that were not sealed: over its budget (Sequencer::Config::order_burst), and naming no ant that the seat can order. And the seats that went over their budget at least once ("heavy order
+    /// rate"): the status, the replay's head and the history say so. A seat is never dropped for either: its orders are not carried out, the others' are.
+    uint32_t orders_over_budget(uint8_t seat) const noexcept { return sequencer_.dropped_over_budget(seat); }
+    uint32_t orders_without_ants(uint8_t seat) const noexcept { return sequencer_.dropped_no_ants(seat); }
+    uint8_t heavy_order_seats() const noexcept { return sequencer_.heavy_seats(); }
+    /// The sequencer's question of an order that names ants (see the definition): what `sim`, the host's engine, would not carry out is taken out of `command` (an ant of another player, an id that no ant has and none
+    /// is about to have, an ant named twice); false when no ant is left. An ant of `player` is kept whether it is alive or dead, so nothing that a person plays is changed. A command without an ant list is let through.
+    static bool vet_ants(const sim::SimulationEngine& sim, uint8_t player, sim::Command& command);
     /// True while a host with a seat has stopped sealing because a peer is more than 3 s behind (a host without a seat never waits)
     bool waiting() const noexcept { return started_ && !seatless() && !sequencer_.can_seal(); }
     uint8_t laggard() const noexcept { return seatless() ? uint8_t{255} : sequencer_.laggard(); }
@@ -318,7 +339,15 @@ private:
         uint32_t next_notice_ms{0};         // when the announcement is repeated
         uint32_t acked_seen{0};             // the ack the last progress check saw, and when it moved (lag_drop_idle_ms)
         uint32_t progress_ms{0};
+        bool p2p_ready{false};              // protocol 26: it sent P2pConfig and the room has a relay: it may exchange Signals
+        bool p2p_direct{false};             // ... and allows direct channels
+        uint32_t p2p_configs{0};            // its P2pConfigs and Signals in this match (the numbers are limited)
+        uint32_t p2p_signals{0};
+        uint32_t p2p_credentials{0};        // the relay credentials made for it in this match (at most kMaxP2pCredentials)
     };
+    void handle_p2p_config(uint8_t player, const P2pConfigMsg& m);
+    void handle_signal(uint8_t player, const SignalMsg& m);
+    void send_peers_if_changed();
     void poll_clients();
     void handle_message(uint8_t player, const std::vector<uint8_t>& msg);
     void violation(uint8_t player);
@@ -366,11 +395,15 @@ private:
     std::vector<Rejoiner> rejoiners_;
     uint32_t next_presence_ms_{0};
     bool presence_dirty_{false};
+    uint8_t peers_ready_sent_{0};           // the masks of the last P2pPeers (protocol 26); a change is sent to the seats that are ready
+    uint8_t peers_direct_sent_{0};
+    std::array<uint32_t, sim::MAX_PLAYERS> hint_seq_{};      // the number of the last hint sent for each seat (a computer player's orders)
     bool was_paused_{false};
     bool was_voting_{false};                // the last Presence went out while a vote was open (a vote that closes is told once)
     std::unique_ptr<LockstepRunner> runner_;
     std::array<Client, sim::MAX_PLAYERS> clients_{};
     uint8_t bot_seats_{0};                  // bit s: seat s is a bot (no connection; acknowledged by this host). A new host after a migration has none: the bots leave with the old host
+    uint8_t people_{0};                     // bit s: seat s was a person's when the match began (a bot's seat is not; a host with a seat is one): a relay credential needs two of them
     std::vector<DesyncMsg> desyncs_;
     uint32_t diverged_drops_{0};
     std::function<void(uint8_t)> on_left_;
@@ -393,7 +426,7 @@ public:
     struct Config {
         uint8_t player{1};
         uint8_t host{0};                     // the seat of the host (kNoSeat for a dedicated server's room)
-        bool migration{true};                // false (a dedicated server): the host is not a player and nobody can take over: a lost link ends the match here (Lost)
+        bool migration{true};                // false (a dedicated server): the host is not a player and nobody can take over, and nothing that another guest says over a link is heard: a lost link ends the match here (Lost)
         LockstepRunner::Config runner{};
         uint32_t ping_every_ms{1000};
         uint32_t host_silence_ms{10000};     // a host that says nothing for this long is gone (its answers to our pings keep it alive)
@@ -465,6 +498,10 @@ public:
     static constexpr uint32_t kAskGraceMs = 3000;
 
     void set_on_chat(std::function<void(const ChatMsg&)> fn) { on_chat_ = std::move(fn); }
+    /// Protocol 26: every Hint, IceConfig, P2pPeers and Signal that the host sends while this machine follows the match, whole (the caller decodes it: p2p.hpp). Never called for another message.
+    void set_on_p2p(std::function<void(const std::vector<uint8_t>&)> fn) { on_p2p_ = std::move(fn); }
+    /// Sends a P2pConfig or a Signal (an encoded message of p2p.hpp) to the host. False when there is no host to send it to (a new one is being chosen, the machine reconnects or catches up)
+    bool send_p2p(const std::vector<uint8_t>& message);
 
     /// The host reported that this client's simulation differs from its own (the match must stop)
     bool desynced() const noexcept { return desynced_; }
@@ -594,6 +631,7 @@ private:
     std::array<uint32_t, sim::MAX_PLAYERS> peer_heard_{};
     std::array<uint32_t, sim::MAX_PLAYERS> next_request_ok_ms_{};
     std::function<void(const ChatMsg&)> on_chat_;
+    std::function<void(const std::vector<uint8_t>&)> on_p2p_;
     bool started_{false};
     bool finished_{false};
     bool desynced_{false};

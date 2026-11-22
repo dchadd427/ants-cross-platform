@@ -9,6 +9,7 @@
 #include "ants_net/netgame.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_net/tcp.hpp"
+#include "ants_net/ws.hpp"
 #include "ants_server/map_store.hpp"
 #include "ants_server/room.hpp"
 #include "ants_server/room_manager.hpp"
@@ -35,6 +36,7 @@
 #include <vector>
 #include "ants_test_paths.hpp"
 #include "../common/ants_test_pause.hpp"
+#include "../common/tls_test_server.hpp"
 #include "../common/test_assert.hpp"
 #include "ants_ai/bot_names.hpp"
 
@@ -184,15 +186,39 @@ inline server::ServerLimits demo_limits(size_t demo_rooms, const std::vector<std
 }
 const std::vector<std::string> kAllMaps = {"TINY.LVL", "SMALL.LVL", "MEDIUM.LVL", "GAUNTLET.LVL", "TREASURE.LVL", "ISLANDS.LVL"};
 
+// The server's encrypted door as the site makes it: the game server's WebSocket door (path /ws) behind a TLS terminator that holds a certificate for `localhost`, which a test authority issued (Server::open_secure_door)
+struct SecureDoor {
+    ants_test_tls::Ca ca;
+    std::unique_ptr<ants_test_tls::Identity> id;
+    std::unique_ptr<net::WsListener> ws;
+    std::unique_ptr<ants_test_tls::Terminator> term;
+    SecureDoor() {
+        id = ca.issue(ants_test_tls::Names{{"localhost"}, {}});
+        net::WsServerOptions options;
+        options.path = "/ws";
+        ws = net::WsListener::listen(0, true, options);
+        ants_test_tls::TerminatorOptions t;
+        t.backend_port = ws->port();
+        term = std::make_unique<ants_test_tls::Terminator>(id.get(), t);
+    }
+    uint16_t port() const { return term->port(); }
+    std::string url() const { return "wss://localhost:" + std::to_string(port()) + "/ws"; }
+};
+
 struct Server {
     server::RoomManager mgr;
     std::unique_ptr<net::TcpListener> listener{net::TcpListener::listen(0, true)};
+    std::unique_ptr<SecureDoor> secure;                     // the encrypted door, when a test opens one
     uint32_t now{1000};
 
     // `maps`: the maps that the server's public rooms may be made on (--demo-maps; the menu offers the six of the original, a server may offer fewer). `hold_seats`: whether its rooms hold the seat of a
     // lost connection: the server's default since release B; false is a server that was started with --no-reconnect
     explicit Server(size_t demo_rooms = 4, const std::vector<std::string>& maps = kAllMaps, bool hold_seats = server::kReconnectByDefault) : mgr(server::MapStore(std::string(ORIGINAL_ASSETS_DIR) + "/Maps"), demo_limits(demo_rooms, maps, hold_seats)) {}
     uint16_t port() const { return listener ? listener->port() : uint16_t{0}; }
+    SecureDoor& open_secure_door() {
+        secure = std::make_unique<SecureDoor>();
+        return *secure;
+    }
     void update() {
         if (listener) {
             for (int k = 0; k < 4; ++k) {
@@ -200,6 +226,14 @@ struct Server {
                 if (!c) break;
                 mgr.add_connection(std::move(c), "127.0.0.1", now);
             }
+        }
+        if (secure) {
+            for (int k = 0; k < 4; ++k) {
+                auto c = secure->ws->accept();
+                if (!c) break;
+                mgr.add_connection(std::move(c), "127.0.0.1", now);
+            }
+            secure->term->pump();
         }
         mgr.update(now);
     }

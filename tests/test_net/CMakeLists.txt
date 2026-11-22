@@ -7,6 +7,8 @@ add_executable(test_lockstep
     test_lockstep_reconnect_session.cpp
     test_lockstep_protocols.cpp
     test_lockstep_countdown.cpp
+    test_lockstep_p2p.cpp
+    test_lockstep_orders.cpp
 )
 
 target_link_libraries(test_lockstep PRIVATE
@@ -64,6 +66,7 @@ add_executable(test_lobby
     test_lobby_rooms.cpp
     test_lobby_rematch.cpp
     test_lobby_public.cpp
+    test_lobby_ready.cpp
 )
 
 target_link_libraries(test_lobby PRIVATE
@@ -81,6 +84,7 @@ add_test(NAME test_lobby COMMAND test_lobby)
 add_executable(test_netgame
     test_netgame.cpp
     test_netgame_teams.cpp
+    test_netgame_p2p.cpp
 )
 
 target_link_libraries(test_netgame PRIVATE
@@ -127,6 +131,8 @@ target_include_directories(test_latency PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
 )
 
+target_link_libraries(test_latency PRIVATE ants_test_paths)
+
 add_test(NAME test_latency COMMAND test_latency)
 
 add_executable(test_jitter
@@ -162,3 +168,38 @@ target_include_directories(test_prediction PRIVATE
 
 add_test(NAME test_prediction COMMAND test_prediction)
 set_tests_properties(test_prediction PROPERTIES COST 35)
+
+# The hints of the prediction (another player's order, or a computer player's, ahead of its turn): the same rig
+add_executable(test_prediction_hints
+    test_prediction_hints.cpp
+)
+
+target_link_libraries(test_prediction_hints PRIVATE
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_prediction_hints PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_prediction_hints COMMAND test_prediction_hints)
+set_tests_properties(test_prediction_hints PROPERTIES COST 20)
+
+# The desktop game's encrypted link (ants_net/wss.hpp over tls.hpp): the pure parts, and the link over real sockets against a TLS terminator with the tests' own certificates (tests/common/tls_test_server.hpp)
+add_executable(test_wss
+    test_wss.cpp
+)
+
+target_link_libraries(test_wss PRIVATE
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_wss PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_wss COMMAND test_wss)

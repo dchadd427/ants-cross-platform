@@ -17,6 +17,7 @@ namespace ants::server {
 
 namespace {
 constexpr uint32_t kMaxFailedStarts = 5;             // a room whose start is cancelled this many times (a client that cannot load the map, leavers) gives up
+constexpr uint32_t kRelayMarginS = 600;              // a relay credential outlasts the longest that its match can last by this much (the countdowns after a pause, a slow end)
 }  // namespace
 
 const char* room_state_name(RoomState state) noexcept {
@@ -125,6 +126,7 @@ Room::Room(RoomSpec spec, MapEntry map, assets::LevelData level, uint32_t seed, 
         retry_at_ms_ = now_ms + spec_.start_hold_ms;
     }
     active_ms_ = now_ms;
+    setup_ms_ = now_ms;
     lobby_.set_map(map_.name);
     lobby_.set_fog(spec_.fog);
     lobby_.set_mode(spec_.mode);
@@ -305,10 +307,17 @@ void Room::build_session(uint32_t restart_vote_after_ms, uint32_t start_delay_ms
     hc.attendance.vote_after_ms = spec_.vote_after_ms;
     hc.attendance.restart_vote_after_ms = std::max(restart_vote_after_ms, spec_.vote_after_ms);      // (after a restart: never less than a lost link's time)
     hc.attendance.max_pause_ms = spec_.max_pause_ms;
+    hc.attendance.countdown_hold_ms = spec_.countdown_hold_ms;
     hc.attendance.max_catch_up_ms = spec_.max_catch_up_ms;
     hc.attendance.resume_countdown_ms = spec_.resume_countdown_ms;
+    hc.sequencer = spec_.sequencer;
     hc.max_log_bytes = spec_.max_log_bytes;
     hc.log_budget = log_budget_;
+    hc.turn = turn_;                                              // protocol 26: the relay's credential for a player of a match of two or more people who asks (a room made without one gives none)
+    // a credential lives as long as the match can: its limit of play, the pauses that its seats may hold (a room that holds no seat has none) and a margin, never longer than the relay's own limit
+    hc.relay_ttl_s = spec_.run_ms / 1000u + (spec_.reconnect ? spec_.max_pause_ms / 1000u : 0u) + kRelayMarginS;
+    hc.random_bytes = [](uint8_t* out, size_t n) { return random_bytes(out, n); };
+    if (relay_gate_) hc.relay_take = [this](uint8_t seat) { return relay_gate_(lobby_.seat_address(seat)); };      // (the budget per address: the address of the seat that asks, which the lobby kept from its Hello)
     session_ = std::make_unique<net::HostSession>(*sim_, hc);
     session_->set_on_diverged([this](uint32_t turn, uint8_t differ, uint8_t agree) {       // (the line at the end of the room counts the drops; this one says when, and how many agreed)
         const auto seats = [](uint8_t n) { return std::to_string(static_cast<unsigned>(n)) + (n == 1 ? " seat" : " seats"); };
@@ -500,6 +509,12 @@ void Room::lobby_waiting_pass(uint32_t now_ms, uint8_t asked_by, const std::arra
     } else if (now_ms - active_ms_ > kMaxIdleMs) {
         active_ms_ = now_ms - kMaxIdleMs;                    // (the idle time stops growing: the 32-bit clock would read a much longer one as a short one)
     }
+    if (lobby_.setup_activity() != seen_setup_) {
+        seen_setup_ = lobby_.setup_activity();
+        setup_ms_ = now_ms;
+    } else if (now_ms - setup_ms_ > kMaxIdleMs) {
+        setup_ms_ = now_ms - kMaxIdleMs;
+    }
     if (cancels_ != 0 && now_ms - last_cancel_ms_ >= kCancelsForgottenMs) cancels_ = 0;       // (starts that failed long ago are forgotten)
     if (lobby_.present() > 0) {                              // (a seat that is reserved for a person of the match and that no results screen holds is nobody: the room still goes when nobody is in it)
         empty_ = false;
@@ -672,7 +687,7 @@ void Room::update(uint32_t now_ms) {
 // Restart records (restart_record.hpp)
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-// What a record's head holds: the room as it is, the match that is being started (the start message without the addresses of the clients: the record is no place for them) and the keys that the lobby
+// What a record's head holds: the room as it is, the match that is being started (the start message, which a server's room sends with no address or port of any client) and the keys that the lobby
 // gave out (secrets: they are in this file and nowhere else)
 RestartHead Room::make_head() const {
     RestartHead h;
@@ -697,7 +712,6 @@ RestartHead Room::make_head() const {
     h.bots = bot_specs_;
     h.fill_mask = fill_seats_;
     h.start = lobby_.start_info();
-    for (net::Endpoint& e : h.start.endpoints) e = net::Endpoint{};      // (how the other clients reach a client: its address, which the record has no business keeping)
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) h.keys[seat] = lobby_.key_of(seat);
     return h;
 }
@@ -825,7 +839,7 @@ void Room::replay_begin(const net::StartMsg& start) {
     }
     head.teams = start.teams();
     head.recorder_seat = replay::kNoSeat;                        // (the server plays nobody)
-    recorder_ = std::make_unique<replay::Recorder>(std::move(head));
+    recorder_ = std::make_unique<replay::Recorder>(std::move(head), spec_.max_recording_bytes);
     session_->runner().set_on_executed([this](const net::TurnMsg& turn) {
         if (recorder_ != nullptr && sim_ != nullptr) recorder_->on_turn(turn, *sim_);
     });
@@ -852,7 +866,10 @@ void Room::replay_end() {
         return;
     }
     std::unique_ptr<replay::Recorder> recorder = std::move(recorder_);
-    if (session_ != nullptr) session_->runner().set_on_executed(nullptr);
+    if (session_ != nullptr) {
+        session_->runner().set_on_executed(nullptr);
+        recorder->set_heavy_orders(static_cast<uint8_t>(session_->heavy_order_seats() & recorder->replay().head.roster));       // (the mark of a seat whose orders went over its budget: the head says so, the match is what it was)
+    }
     const std::string kept = replay_store_ != nullptr && sim_ != nullptr ? replay_keep(*recorder) : std::string();
     live_end(kept);                                              // (the recorder goes at the end of this function: the live board lets go of it first)
 }
@@ -869,11 +886,23 @@ std::string Room::replay_keep(replay::Recorder& recorder) {
         replay_note_ = "the match ran less than " + std::to_string(kReplayMinTurns / net::kTurnsPerSecond) + " seconds, so it is not kept";
         return std::string();
     }
+    if (!spec_.keep_replay) {
+        replay_note_ = "the match was played and is not kept: the hour's recordings of computer players were used";
+        return std::string();
+    }
     std::string error;
     const std::vector<uint8_t> bytes = recorder.finish(*sim_, error);
     if (bytes.empty()) {
         replay_note_ = "the match could not be written as a replay: " + error;
         replay_store_->report("room " + spec_.code + ": the match could not be written as a replay: " + error);
+        if (unrecorded_sink_ != nullptr) {                      // (the result is the referee's own, so the history has it all the same)
+            UnrecordedMatch lost;
+            lost.head = recorder.replay().head;
+            lost.outcome.turns = last_ticks_;
+            if (recorder.over_size_limit()) lost.largest_sender = recorder.largest_sender();       // (a seat that filled it is named though the file is gone)
+            replay::take_result_of(lost.head.roster, *sim_, lost.outcome);
+            unrecorded_sink_(std::move(lost));
+        }
         return std::string();
     }
     const ReplaySave saved = replay_store_->save(bytes);
@@ -1154,17 +1183,19 @@ uint32_t Room::abandoned_ms(uint32_t now_ms) const {
     return now_ms - last_person_ms_;
 }
 
-// A public lobby room that a newcomer can join now (room.hpp). Each condition is one thing a visitor would be sent to a dead end by: a room that has begun or loads, one that is private, one whose START waits (it takes nobody
+// A lobby room that a newcomer could join now (room.hpp), whatever its leader chose. Each condition is one thing a visitor would be sent to a dead end by: a room that has begun or loads, one whose START waits (it takes nobody
 // new), one nobody is at, one with no free color, one that keeps seats for the people of its last match.
-bool Room::listing(uint32_t now_ms, LobbyListing& out) const {
-    if (!lobby_waiting() || !lobby_.is_public()) return false;                 // (a room that waits is a lobby in its open phase: Loading and Running are other states of the room)
+bool Room::lobby_joinable(size_t& free_now) const {
+    if (!lobby_waiting()) return false;                                        // (a room that waits is a lobby in its open phase: Loading and Running are other states of the room)
     if (lobby_.starting() || lobby_.any_reserved()) return false;
     const uint8_t leader = lobby_.leader();
     if (leader >= sim::MAX_PLAYERS || lobby_.connected() == 0) return false;
-    const size_t free_now = lobby_.open_colors();
-    if (free_now == 0) return false;
-    out = LobbyListing{};
-    out.code = spec_.code;
+    free_now = lobby_.open_colors();
+    return free_now != 0;
+}
+
+void Room::list_seats(ListedSeats& out, size_t free_now) const {
+    const uint8_t leader = lobby_.leader();
     const std::string& leader_name = lobby_.room().slots[leader].name;
     out.host = leader_name.empty() ? "Player " + std::to_string(static_cast<unsigned>(leader) + 1u) : leader_name;      // (a Hello with no name: the list names the person as the lobby names a player who gave none)
     out.map = lobby_.map_name();
@@ -1173,7 +1204,25 @@ bool Room::listing(uint32_t now_ms, LobbyListing& out) const {
     out.bots = static_cast<uint8_t>(lobby_.bot_colors());
     out.free_colors = static_cast<uint8_t>(free_now);
     out.size = static_cast<uint8_t>(lobby_.match_colors());
+}
+
+// A public lobby room that a newcomer can join now (room.hpp).
+bool Room::listing(uint32_t now_ms, LobbyListing& out) const {
+    size_t free_now = 0;
+    if (!lobby_joinable(free_now) || !lobby_.is_public()) return false;
+    out = LobbyListing{};
+    out.code = spec_.code;
+    list_seats(out, free_now);
     out.age_ms = lobby_.listed_age_ms(now_ms);
+    return true;
+}
+
+// The same room when its leader has not made it public: the seats and nothing else (the code is the room's key, and a PrivateListing has no place for it), and no age (a private room is not "listed" for any time).
+bool Room::private_listing(PrivateListing& out) const {
+    size_t free_now = 0;
+    if (!lobby_joinable(free_now) || lobby_.is_public()) return false;
+    out = PrivateListing{};
+    list_seats(out, free_now);
     return true;
 }
 
@@ -1249,6 +1298,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
     s.resume_countdown_ms = spec_.resume_countdown_ms;
     s.countdown_s = spec_.countdown_s;
     s.solo_countdown_s = spec_.solo_countdown_s;
+    s.countdown_hold_ms = spec_.countdown_hold_ms;
     s.connections = static_cast<uint32_t>(connections_.size());
     const bool stale = !stale_path_.empty() && restart_store_ != nullptr && restart_store_->is_stale(stale_path_);
     s.record_kept = record_ != nullptr || stale;                // (a file that is still there is a record that a restart would use: never "not kept" while it is)
@@ -1281,7 +1331,13 @@ RoomStatus Room::status(uint32_t now_ms) const {
         s.rejoins = a.rejoins();
         s.drops_by_vote = a.drops_by_vote();
         s.drops_by_cap = a.drops_by_cap();
+        s.drops_by_countdown_hold = a.drops_by_countdown_hold();
         s.drops_by_state = session_->diverged_drops();
+        s.heavy_order_seats = session_->heavy_order_seats();
+        for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+            s.orders_over_budget[seat] = session_->orders_over_budget(seat);
+            s.orders_without_ants[seat] = session_->orders_without_ants(seat);
+        }
         s.rejoins_refused = a.rejoins_refused();
         s.catch_up_expired = a.catch_up_expired();
         s.streamed_bytes = a.streamed_bytes();

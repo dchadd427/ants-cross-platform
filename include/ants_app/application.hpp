@@ -27,6 +27,7 @@
 #include "ants_net/cue_router.hpp"
 #include "ants_net/latency.hpp"
 #include "ants_net/netgame.hpp"
+#include "ants_net/p2p_transport.hpp"
 #include "ants_replay/recorder.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_app/renderer.hpp"
@@ -40,6 +41,7 @@
 #include "ants_app/fps_overlay.hpp"
 #include "ants_app/game_menu.hpp"
 #include "ants_app/health_changes.hpp"
+#include "ants_app/connections_overlay.hpp"
 #include "ants_app/latency_corner.hpp"
 #include "ants_app/local_teams.hpp"
 #include "ants_app/midi_player.hpp"
@@ -93,6 +95,11 @@ struct ApplicationConfig {
     /// --prediction on | off (--no-prediction is --prediction off): whether a match of the network shows the player's own orders at once (net::Prediction, docs/NETWORK_PORT.md). On by default;
     /// a game of one machine never predicts.
     bool prediction{true};
+    /// --no-p2p (and the page's ?p2p=off): the browser build opens no data channels to the other players of a match and the game takes no hint, from a channel or from the server (protocol 26, docs/P2P_HINTS.md). On by default; only the browser build has channels.
+    bool p2p{true};
+    /// --direct on | off: this player allows direct connections to the other players who allow them too (their address is then visible to each other). Off by default: every channel goes through the
+    /// operator's relay and no player's address reaches another. The page passes the choice that the player made in the room (the browser remembers it).
+    bool direct{false};
     /// --hud-art new | classic (the settings key `hud_art` when the command line does not say): the look of the match screen's frame, buttons and panel (hud_art.hpp): the new pictures (the default) or the
     /// original's own. `hud_art_given` is true when the command line said it (the settings key then does not count, and it is not written). `hud_art_dir`: the folder of the new pictures.
     bool hud_art_new{true};
@@ -133,7 +140,8 @@ struct ApplicationConfig {
     std::string net_address{"127.0.0.1"};       // Join: the host's address
     uint16_t net_port{4001};                    // the original's port
     std::function<std::unique_ptr<net::Connection>()> net_link_maker;    // The tests: every link of a game that this application joins (the first one and the way back's) is made by this function (net::NetGame::set_link_maker_for_test); empty: TCP to net_address, as always
-    std::string net_url;                        // Join through a WebSocket (--join-url ws://host/path or wss://...): the browser build's only way, and the one a server's proxy offers
+    std::string net_url;                        // Join through a WebSocket (--join-url wss://host/path; the web build also takes ws://): the browser build's only way, and the encrypted one that the desktop game uses for a server on the Internet (TLS, the certificate is checked)
+    std::string net_extra_ca_pem;               // More certificate authorities (PEM) that the encrypted link trusts besides the system's: a private server's CA, a test's. They only add to what is trusted; nothing skips the check.
     bool net_loopback_only{false};              // Host: accept only this machine (two copies on one computer, tests)
     uint16_t lan_port{net::kLanDiscoveryPort};  // the UDP port on which an open room announces itself to the local network (--lan-port N; 0 = not at all, --no-lan)
     std::string net_room;                       // Join: the room of a server (--room CODE); "" for a LAN / direct host
@@ -212,7 +220,7 @@ struct ApplicationConfig {
     /// --seat, --bot, --headless, --screenshot, --player / -pnum, --select-ant, --select-base, --open-options, --scorecard) and with --start-menu, which forces it (also headless, for the tests
     /// and the screenshots). A config that is made by hand has it off, which is the game without a menu exactly; the web build never shows it (its page has its own controls).
     bool start_menu{false};
-    /// --server HOST[:PORT]: the game server of the menu's Join and Host. Empty: the settings key `server`, else beta.playants.org:4001 (start_menu.hpp parse_server).
+    /// --server wss://HOST[/PATH] or HOST[:PORT]: the game server of the menu's Join and Host. Empty: the settings key `server`, else wss://beta.playants.org/ws (start_menu.hpp parse_server).
     std::string server;
     /// For the tests: the system clipboard that the menu pastes from and copies the room's code to (empty: SDL's), and the name lookup of the menu's connection (empty: the system's)
     std::function<std::string()> clipboard_get;
@@ -600,6 +608,10 @@ public:
     bool pointer_outside() const noexcept { return pointer_outside_; }
     /// Where the last frame put the network's ping and delay (none when it drew none: a game of one machine, a screen without the readout); for the tests
     const std::optional<LatencyCornerLayout>& last_latency_layout() const noexcept { return last_latency_layout_; }
+    /// The list of connections of a match of a network game (connections_overlay.hpp): open or not, and the rectangle of the corner's "ping" text that opens and closes it (empty when the corner shows none)
+    bool connections_open() const noexcept { return connections_open_; }
+    const LayoutRect& connections_hit() const noexcept { return connections_hit_; }
+    std::array<CountdownSeat, 4> connection_seats() const;  // who plays and how this machine is connected to each (the card's rows, and the list's, in the match)
     /// The line that a match of the network shows at the top of the playfield right now (an empty text: nothing, and always for a game that is not a match of the network): the one that
     /// render_net_overlay draws, from what the network layer reports. Public for the tests (the seconds before the first turn of a match must say nothing)
     NetOverlayLine net_overlay_now() const;
@@ -736,6 +748,10 @@ private:
     float replay_speed_{1.0f};
     AutoCamera auto_camera_;                              // the camera of a replay (auto_camera.hpp): Auto locks on the biggest action and follows it, Manual leaves the view where the viewer put it
     int camera_taken_{0};                                 // how many times the viewer has taken the camera from Auto (ReplayValue::CameraTaken)
+    bool look_seen_{false};                               // track_look_around: the view's place at the last frame of the countdown card
+    float look_x_{0.0f};
+    float look_y_{0.0f};
+    float look_zoom_{0.0f};
     float camera_zoom_seen_{0.0f};                        // the zoom of the last frame: a change keeps Auto, at the viewer's zoom
     double camera_pan_px_{0.0};                           // what two fingers have panned lately (a pinch drifts a pixel or two: that is not taking the camera)
     double camera_pan_at_ms_{0.0};
@@ -751,6 +767,7 @@ private:
     std::vector<std::unique_ptr<sim::CommandSink>> bot_sinks_;   // where the bots' commands go (declared before bots_: the controller is destroyed first)
     std::unique_ptr<ai::BotController> bots_;
     std::unique_ptr<RejoinStore> rejoin_store_;           // the keys of the seats (before net_: its callbacks write here, and leave() writes last)
+    std::unique_ptr<net::P2pTransport> p2p_;           // the browser's data channels (protocol 26; none in a native build); declared before net_, which uses it and ends first
     std::unique_ptr<net::NetGame> net_;
     net::CueRouter cue_router_;                           // which of the two engines each cue is heard from (a match of the network that predicts); reset with every match
     net::FeltDelayMeter felt_delay_;                      // what the player feels of an order while the prediction is on (the corner's "delay"); reset with every match
@@ -787,6 +804,9 @@ private:
     double held_since_ms_{-1.0};                          // net_time_ms_ when the match began to be held on this screen (a seat missing, or the countdown after a pause): -1 when it is not (track_net_state)
     std::vector<net::PauseInfo::Seat> prev_missing_;      // the seats that were missing at the last look: who came back when the list empties
     std::string back_name_;                               // the seat that came back, while the countdown that follows its return runs ("" when nobody did)
+    bool connections_open_{false};                        // the list of connections is on the screen (a click on the corner's ping text toggles it)
+    LayoutRect connections_hit_{};                        // the corner's ping text, a little larger, as the last frame drew it (empty: no corner in this frame)
+    bool connections_press_{false};                       // a left press went down on that text (its release inside is the toggle)
     uint8_t vote_press_{0};                               // a left press went down on a button of the vote block: 1 keep waiting, 2 go on without the seat (its release is the choice)
     bool catch_up_backlog_{false};                        // this machine has caught up: the sounds that the engine queued meanwhile are dropped with the first live tick (post_tick)
     std::string net_notice_;
@@ -894,6 +914,8 @@ private:
     bool handle_vote_key(const SDL_KeyboardEvent& key);   // F2 / F3 while a vote is open
     bool handle_vote_mouse(const SDL_MouseButtonEvent& button);   // a click on a button of the vote block
     void render_latency_corner(int32_t version_x, int32_t text_y, const CornerPlate& plate);       // "ping NN ms" / "delay NN ms" next to the frame rate, in a room and a match of a network game
+    void render_connections();                            // the list of connections over the map view of a match of a network game, when it is open (connections_overlay.hpp)
+    bool handle_connections_mouse(const SDL_MouseButtonEvent& button);   // a press and a release on the corner's ping text open and close the list (nothing of it reaches the map)
     std::optional<LatencyCornerLayout> last_latency_layout_;                                         // where the last frame put the network's readout (none: it drew none)
     void apply_team_names(const std::array<std::string, 4>& names, uint8_t roster);   // simulation texts, HUD labels, results rows
 
@@ -952,6 +974,7 @@ private:
     bool presentation_hidden_{false};                     // macOS: the game has made the Dock and the menu bar leave the fullscreen Space that the window is in (update_mouse_grab gives them back)
 #endif
     bool button_outside_window(const SDL_MouseButtonEvent& button) const;   // the position SDL delivered (before the clamp) lies outside the window, not merely the picture
+    void track_look_around();                             // the countdown card: when the view moved since the last frame the card turns see-through (application_view.cpp)
     void update_auto_camera(float dt);                    // a replay's frame: the camera model moves the view (Auto) and the minimap's ring shows the busiest place (application_view.cpp)
     void take_camera();                                   // the viewer moved the view by hand (the edge of the screen, the minimap, two fingers): Manual
     void show_start_view();                               // the view at the start of a match: scrolled just far enough to show the square around the hill's anchor tile

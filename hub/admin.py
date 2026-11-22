@@ -6,6 +6,8 @@
     docker exec ants-hub python -m hub.admin unban ACCOUNT
     docker exec ants-hub python -m hub.admin nopic ACCOUNT               (block the account's Discord picture on this site; it survives logins, the person's switch and Forget me)
     docker exec ants-hub python -m hub.admin pic ACCOUNT                 (lift that block: the picture then stays off until the person turns it on)
+    docker exec ants-hub python -m hub.admin noimages ACCOUNT            (take away the account's posting of images, whatever its Discord role says; it survives Forget me)
+    docker exec ants-hub python -m hub.admin images ACCOUNT              (give it back)
     docker exec ants-hub python -m hub.admin del LINE_ID
     docker exec ants-hub python -m hub.admin log [--days N] [--lines N]
     docker exec ants-hub python -m hub.admin status
@@ -145,6 +147,22 @@ def show_pictures(store, limits, out):
                                                                                         format(marks.count(SHOW_OFF), ","), format(marks.count(SHOW_BLOCKED), ",")))
 
 
+def change_images(store, command, whom, setter, out, err):
+    """`noimages` and `images`: `whom` is the account's reference (never its id) and `setter(on, note)` the store's call that sets or lifts the flag, by the account or by the reference."""
+    on = command == "noimages"
+    if not setter(on, (TERMINAL, command, whom, "")):
+        err.write("hub.admin: the posting of images of %s is %s\n" % (whom, "taken away already" if on else "not taken away"))
+        return 1
+    out.write("%s may not post images\n" % whom if on else "%s: the posting of images is given back (it depends on the Discord role again)\n" % whom)
+    return 0
+
+
+def show_images(store, limits, out):
+    """The images' line of `status`: how many images are kept and their bytes, of the two limits, and how many accounts have their posting taken away."""
+    count, size = store.image_usage()
+    out.write("images: %s of %s kept, %s of %s; %s with posting taken away\n" % (format(count, ","), format(limits.image_files_max, ","), megabytes(size), megabytes(limits.image_bytes_max), format(len(store.noimages_marks()), ",")))
+
+
 def purge(store, limits, keep_lines, out, err, sleep=time.sleep):
     """Delete the oldest lines a chunk at a time, with a pause between two chunks so that the hub's own writes go on: down to the hub's lower mark, or all but the newest `keep_lines`."""
     target, keep = (limits.prune_to_bytes, limits.keep_lines) if keep_lines is None else (0, keep_lines)
@@ -187,6 +205,8 @@ def run(argv, out=None, err=None, env=None):
     sub.add_parser("unban", help="lift a ban").add_argument("account")
     sub.add_parser("nopic", help="block an account's Discord picture").add_argument("account")
     sub.add_parser("pic", help="lift the block of an account's Discord picture").add_argument("account")
+    sub.add_parser("noimages", help="take away an account's posting of images").add_argument("account")
+    sub.add_parser("images", help="give an account's posting of images back").add_argument("account")
     sub.add_parser("del", help="delete a chat line by its id").add_argument("line_id", type=int)
     p = sub.add_parser("log", help="the moderators' log")
     p.add_argument("--days", type=int, default=30)
@@ -225,12 +245,14 @@ def run(argv, out=None, err=None, env=None):
         if args.command == "status":
             show_usage(store, limitmod.Limits().db_max_bytes, out)
             show_pictures(store, limitmod.Limits(), out)
+            show_images(store, limitmod.Limits(), out)
             return 0
         if args.command == "purge":
             return purge(store, limitmod.Limits(), args.keep_lines, out, err)
         if args.command == "del":
             author = store.account_of_line(args.line_id)
-            if not store.delete_line(args.line_id, BY, note=(TERMINAL, "del", ref(store, author) if author else "", str(args.line_id))):
+            kind = "del_img" if store.image_of_line(args.line_id) is not None else "del"      # (the running hub deletes the file of an image when it learns of the deletion)
+            if not store.delete_line(args.line_id, BY, note=(TERMINAL, kind, ref(store, author) if author else "", str(args.line_id))):
                 err.write("hub.admin: no such line, or it is deleted already\n")
                 return 1
             out.write("line %d deleted\n" % args.line_id)
@@ -238,10 +260,15 @@ def run(argv, out=None, err=None, env=None):
         if args.command in ("nopic", "pic") and pseudo.REFERENCE.match(args.account) and store.picture_state_by_reference(args.account) is not None:
             return change_picture(store, args.command, args.account, store.picture_state_by_reference(args.account),
                                   lambda show, note: store.set_picture_show_by_reference(args.account, show, operator=True, note=note), out, err)      # (the pictures' own row has the reference: a block is lifted by it after Forget me)
+        if args.command == "images" and pseudo.REFERENCE.match(args.account) and store.noimages_state_by_reference(args.account):
+            return change_images(store, args.command, args.account, lambda on, note: store.set_noimages_by_reference(args.account, on, TERMINAL, note=note), out, err)      # (a flag outlives Forget me: it is lifted by its reference)
         account, name = resolve(store, args.account)
         if account is None:
             err.write("hub.admin: %s\n" % name)
             return 1
+        if args.command in ("noimages", "images"):
+            whom = ref(store, account)
+            return change_images(store, args.command, whom, lambda on, note: store.set_noimages(account, on, TERMINAL, note=note), out, err)
         if args.command in ("nopic", "pic"):
             whom = ref(store, account)
             return change_picture(store, args.command, whom, store.picture_state(account), lambda show, note: store.set_picture_show(account, show, operator=True, note=note), out, err)

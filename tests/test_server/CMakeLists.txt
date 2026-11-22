@@ -10,6 +10,7 @@ add_executable(test_server
     test_server_rematch.cpp
     test_server_public.cpp
     test_server_countdown.cpp
+    test_server_relay.cpp
     test_server_online_limit.cpp
 )
 
@@ -57,6 +58,49 @@ target_include_directories(test_rejoin PRIVATE
 
 add_test(NAME test_rejoin COMMAND test_rejoin)
 set_tests_properties(test_rejoin PROPERTIES COST 25)
+
+# The limits per network address (ants_server/address_limits.hpp, docs/ADDRESS_LIMITS.md): the windows, which address a connection counts under, and a real room manager at the door (a household that plays, a burst of
+# rooms, codes tried one after another, relay credentials, lobbies of a crowded address, the control interface's numbers)
+add_executable(test_address_limits
+    test_address_limits.cpp
+)
+
+target_link_libraries(test_address_limits PRIVATE
+    ants_server_core
+    ants_test_paths
+)
+
+target_include_directories(test_address_limits PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+# The program's own door (S3.362) is started as a child process, as test_server's S3.95 is: built with the test, its folder in the one tiny source that CMake generates for test_server. Not on Windows, where the test has no fork.
+if(NOT WIN32)
+    add_dependencies(test_address_limits ants_server)
+    target_sources(test_address_limits PRIVATE "${ANTS_GENERATED_DIR}/ants_server_binary.cpp")
+    target_compile_definitions(test_address_limits PRIVATE ANTS_HAS_SERVER_BINARY)
+endif()
+
+add_test(NAME test_address_limits COMMAND test_address_limits)
+set_tests_properties(test_address_limits PROPERTIES COST 20)
+
+# The desktop game's encrypted link in a whole match (docs/NETWORK_PORT.md "The desktop game's encrypted link"): real NetGames join a real RoomManager through wss:// (TLS with the tests' own authority,
+# tests/common/tls_test_server.hpp), so it needs the server's library as test_rejoin does
+add_executable(test_wss_match
+    test_wss_match.cpp
+)
+
+target_link_libraries(test_wss_match PRIVATE
+    ants_server_core
+    ants_test_paths
+)
+
+target_include_directories(test_wss_match PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_wss_match COMMAND test_wss_match)
+set_tests_properties(test_wss_match PROPERTIES COST 25)
 
 # The store of the matches that the server keeps (ants_server/replay_store.hpp): the file names, the age and size limits, the free space, a folder that holds other things. No network and no match
 add_executable(test_replay_store
@@ -357,6 +401,24 @@ target_include_directories(test_bot_schedules PRIVATE
 
 add_test(NAME test_bot_schedules COMMAND test_bot_schedules)
 set_tests_properties(test_bot_schedules PROPERTIES COST 3)
+
+# The lists of the rotation of the server's own matches of computer players (ants_server/bot_match_spec.hpp bot_rotation_defaults, bot_rotation.hpp, db_schema.cpp version 10): the lists that a server starts with, a saved list in the database and
+# in memory, back to the defaults as no row, the shape of a list read back, the migration from a copy of a version 9 database. No sockets, no rooms
+add_executable(test_bot_rotation
+    test_bot_rotation.cpp
+)
+
+target_link_libraries(test_bot_rotation PRIVATE
+    ants_server_core
+    ants_test_paths
+)
+
+target_include_directories(test_bot_rotation PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_bot_rotation COMMAND test_bot_rotation)
+set_tests_properties(test_bot_rotation PROPERTIES COST 3)
 
 # The admin page's pass (ants_server/admin_pass.hpp) and the door that checks it (ants_server/submissions_http.hpp): the key, the known answers of docs/HUB.md, every reason a pass is refused, a pass used once, the one answer without a good pass,
 # the token of a change, the retired routes, the decisions signed with the username and the reference. Requests made by hand: no network

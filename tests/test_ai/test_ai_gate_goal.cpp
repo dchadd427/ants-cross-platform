@@ -26,13 +26,22 @@
 //   AI27.13c an own worker beside a pile at the first look: the flag is set and the opening is not held back
 //   AI27.14  on a gate map the counters leave the map's own bombs (of no team) alone while the gate goals are live; a team's bomb there, a map bomb on an open map and a map bomb once the
 //            goals are exhausted are countered as before (every seat, straight and transposed)
+//   AI27.15  the choice between hops of the same cost: a tile of a hop that an ant of another team stands on makes it the last choice, a throw that does not depend on a power-up comes
+//            first, the way home lands far from the Combat Ants of other teams, two allies plant on their own sides, then nearest to the hill
+//   AI27.16  a bomb of another team on the plant tile is never defused by the plant order: the goal takes another hop
+//   AI27.17  HELLRAISER with four bots, in two teams and free for all: no bot defuses its ally's bomb, and the seats bank (the vault is five tiles across and every seat hops from it)
+//   AI27.18  HELLRAISER with the teams 0 + 1 against 2 + 3: the start ants of each team stand in its ally's quadrant, so the only power-up they reach lies on the ally's side, and they take it
+//   AI27.19  the same power-up stays the ally's when an ant of the ally can walk to it (also one that stands inside its mound)
+//   AI27.20  a Bomber that holds food in the vault and has no hop home waits while a bomb of another team lies on or beside the vault, and gives the attempt up as stranded when the only bombs are far away
 #include <algorithm>
+#include <array>
 
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
 #include "ants_ai/arena.hpp"
 #include "ants_ai/gate_goal.hpp"
 #include "ants_ai/gate_task.hpp"
+#include "ants_sim/start_teams.hpp"
 
 using namespace ai_test;
 using namespace ants;
@@ -1129,6 +1138,303 @@ void run_gate_goal_tests() {
                 const bool acted = bot.bombs().defused() + bot.bombs().set_off() > 0 || bot.bombs().busy() || !sim.grid().has_bomb_at(bomb);
                 ASSERT_EQ(acted, c.countered);
             }
+        }
+    } TEST_END();
+    TEST_CASE("AI27.15 The Choice Between Hops Of The Same Cost: A Tile Of A Hop That An Ant Of Another Team Stands On Makes It The Last Choice, The Way Home Lands Far From The Combat Ants Of Other Teams And Then Nearest To The Hill") {
+        {   // (a) a tile the hop needs: the plant tile, the tile to step from, and for a diagonal step the two tiles at its sides (the engine's walk does not cut across them)
+            BombHop diagonal;
+            diagonal.bomb = TileCoord{5, 5};
+            diagonal.from = TileCoord{6, 6};
+            BombHop straight;
+            straight.bomb = TileCoord{5, 5};
+            straight.from = TileCoord{6, 5};
+            const auto shut = [](const BombHop& h, TileCoord ant) {
+                HopChoice c;
+                c.occupied = {ant};
+                return GateInfo::hop_shut(h, c);
+            };
+            ASSERT_TRUE(shut(diagonal, TileCoord{5, 5}));
+            ASSERT_TRUE(shut(diagonal, TileCoord{6, 6}));
+            ASSERT_TRUE(shut(diagonal, TileCoord{6, 5}));
+            ASSERT_TRUE(shut(diagonal, TileCoord{5, 6}));
+            ASSERT_FALSE(shut(diagonal, TileCoord{7, 7}));
+            ASSERT_TRUE(shut(straight, TileCoord{5, 5}));
+            ASSERT_TRUE(shut(straight, TileCoord{6, 5}));
+            ASSERT_FALSE(shut(straight, TileCoord{5, 6}));                              // (a straight step has no sides)
+            ASSERT_FALSE(GateInfo::hop_shut(diagonal, HopChoice{}));
+        }
+        assets::LevelData level;
+        ASSERT_TRUE(level.load_from_file(std::string(ANTS_SOURCE_DIR) + "/Community-Maps/HELLRAISER.lvl"));
+        sim::SimulationEngine sim;
+        sim.init(level, 1, 0x0F);
+        const MapInfo map(sim);
+        {   // (b) the way into the vault from the north-west quadrant: with an ant on a tile of the hop that it would be, another hop of the same cost is chosen
+            const GateInfo gates = GateInfo::analyse(map, sim.grid(), 0);
+            const std::vector<int32_t>& comps = gates.piles()[0].comps;
+            const BombHop plain = gates.best_hop_into(comps);
+            ASSERT_EQ(plain.bombs, 1);
+            for (const TileCoord t : {plain.bomb, plain.from}) {
+                HopChoice c;
+                c.occupied = {t};
+                const BombHop other = gates.best_hop_into(comps, c);
+                ASSERT_EQ(other.bombs, 1);
+                ASSERT_TRUE(other.bomb != plain.bomb || other.from != plain.from);
+                ASSERT_FALSE(GateInfo::hop_shut(other, c));
+            }
+            HopChoice every;                                                           // an ant on every tile that a hop of the map needs: the first of them, as with no ant
+            for (int y = 0; y < 31; ++y) {
+                for (int x = 0; x < 31; ++x) every.occupied.push_back(TileCoord{x, y});
+            }
+            const BombHop first = gates.best_hop_into(comps, every);
+            ASSERT_TRUE(first.bomb == plain.bomb && first.from == plain.from);
+        }
+        {   // (c) the way home of the south-east seat: the Combat Ants of the north-west team stand in its quadrant and punch what comes within three tiles. The hop that is chosen keeps four tiles
+            // from them at the tile it steps from, the plant tile and the landing, is planted from the tile it steps from, and of hops that are alike lands nearest to the hill
+            const GateInfo gates = GateInfo::analyse(map, sim.grid(), 1);
+            const int32_t vault = gates.piles()[0].comps[0];
+            HopChoice c;
+            for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
+                if (a.player_id == 0) c.punchers.push_back(TileCoord{a.tile_x, a.tile_y});
+            }
+            ASSERT_EQ(c.punchers.size(), 3u);
+            c.near = map.hill(1).entrance;
+            const BombHop plain = GateInfo::best_hop_between(gates, sim.grid(), vault, gates.home());
+            const BombHop clear = GateInfo::best_hop_between(gates, sim.grid(), vault, gates.home(), c);
+            ASSERT_EQ(plain.bombs, 1);
+            ASSERT_EQ(clear.bombs, 1);
+            const auto nearest = [&](const BombHop& h) {
+                int32_t d = 99;
+                for (const TileCoord& p : c.punchers) {
+                    for (const TileCoord t : {h.from, h.bomb, h.land()}) d = std::min(d, std::max(std::abs(p.x - t.x), std::abs(p.y - t.y)));
+                }
+                return d;
+            };
+            ASSERT_TRUE(nearest(clear) >= 4);                                          // none of them reaches the standing tile, the plant tile or the landing
+            ASSERT_TRUE(nearest(clear) >= nearest(plain));
+            ASSERT_TRUE(clear.from.x == clear.bomb.x || clear.from.y == clear.bomb.y);   // a step along a row or a column: no walk between the plant and the throw
+            const BombHop alike = GateInfo::best_hop_between(gates, sim.grid(), vault, gates.home(), HopChoice{});         // (with nothing else to tell them apart: a step along a row or a column comes before the first in the scan, which is a diagonal one)
+            ASSERT_TRUE(alike.from.x == alike.bomb.x || alike.from.y == alike.bomb.y);
+        }
+        {   // (d) two allies: of the hops that are alike, each takes one whose plant tile is nearer to its own hill than to its ally's, so they never plant on the same tile
+            const auto dist2 = [](TileCoord a, TileCoord b) { return (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y); };
+            for (const uint8_t seat : {uint8_t{1}, uint8_t{2}}) {
+                const uint8_t ally = seat == 1 ? uint8_t{2} : uint8_t{1};
+                const GateInfo gates = GateInfo::analyse(map, sim.grid(), seat);
+                HopChoice c;
+                c.near = map.hill(seat).entrance;
+                c.ally_near = map.hill(ally).entrance;
+                const BombHop mine = GateInfo::best_hop_between(gates, sim.grid(), gates.piles()[0].comps[0], gates.home(), c);
+                ASSERT_EQ(mine.bombs, 1);
+                ASSERT_TRUE(dist2(mine.bomb, c.near) <= dist2(mine.bomb, c.ally_near));
+            }
+        }
+        {   // (e) a throw passes a tile over that refuses the landing for a power-up, and lands elsewhere once the power-up is taken (the Thief power-ups beside HELLRAISER III's vault): of the
+            // hops of the same cost the one that is chosen lands on the same tile either way, even when a hop of the other kind lands right where the way goes on
+            assets::LevelData level3;
+            ASSERT_TRUE(level3.load_from_file(std::string(ANTS_SOURCE_DIR) + "/Community-Maps/HELLRAISER III.lvl"));
+            sim::SimulationEngine sim3;
+            sim3.init(level3, 1, 0x0F);
+            const MapInfo map3(sim3);
+            uint32_t tried = 0;
+            for (uint8_t seat = 0; seat < 4; ++seat) {
+                const GateInfo gates = GateInfo::analyse(map3, sim3.grid(), seat);
+                const std::vector<int32_t>& comps = gates.piles()[0].comps;
+                ASSERT_TRUE(gates.best_hop_into(comps).firm);
+                for (const BombHop& h : gates.hops()) {
+                    const bool straight = h.from.x == h.bomb.x || h.from.y == h.bomb.y;
+                    if (h.firm || !straight || h.bombs != 1 || std::find(comps.begin(), comps.end(), h.to_comp) == comps.end()) continue;
+                    HopChoice c;
+                    c.near = h.land();                                                  // the loose hop lands exactly on the tile that the choice would like to be nearest to
+                    ASSERT_TRUE(gates.best_hop_into(comps, c).firm);
+                    ++tried;
+                }
+            }
+            ASSERT_TRUE(tried >= 1u);                                                  // (the map has hops of the other kind: the choice was between them)
+        }
+    } TEST_END();
+
+    TEST_CASE("AI27.16 A Bomb Of Another Team On The Plant Tile Is Never Defused By The Plant Order (A Special Order Onto A Bomb Is A Defuse Whoever's It Is): The Goal Takes Another Hop And Is Done, Seeds 1 .. 4") {
+        for (uint32_t seed = 1; seed <= 4; ++seed) {
+            Field f(seed);
+            f.rock_wall();
+            f.powerup(8, 8, sim::AntType::Bomber);
+            f.powerup(30, 30, sim::AntType::Swimmer);
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            auto& bot = rig.as<StandardBot>();
+            TileCoord blocked{-1, -1};
+            for (int step = 0; step < 300 && blocked.x < 0; ++step) {                    // the hop is chosen (the Bomber is still to be fetched): another team puts a bomb on its plant tile
+                rig.run(1);
+                if (bot.gate_goals().goal().kind == GoalKind::Hop) blocked = bot.gate_goals().goal().hop.bomb;
+            }
+            ASSERT_TRUE(blocked.x >= 0);
+            f.sim.grid_mut().place_bomb(static_cast<uint32_t>(blocked.x), static_cast<uint32_t>(blocked.y), 1);
+            rig.run(3000);
+            ASSERT_EQ(f.sim.get_player_stats(0).bombs_defused, 0u);                    // the bomb of the other team is still there, and nobody took it away
+            ASSERT_TRUE(f.sim.grid().has_bomb_at(blocked));
+            ASSERT_TRUE(bot.gate_goals().replans() >= 1u);
+            ASSERT_EQ(bot.gate_goals().done(), 1u);                                    // the goal was done over another hop
+        }
+    } TEST_END();
+
+    // The vault of HELLRAISER is five tiles across and the hops of all four seats start from it. Two teams of two used to play it as a standing fight over one tile: the allies of one
+    // pair chose the same plant tile and each defused the other's bomb with its own plant order, for the rest of the match; the Bombers that waited for each other stood in the middle
+    // with their food, and the Combat Ants that the other team has in each home quadrant punched the ones that landed beside them.
+    TEST_CASE("AI27.17 HELLRAISER With Four Bots, In Two Teams And Free For All: No Bot Defuses Its Ally's Bomb, And The Seats Bank (Seeds 1 .. 6, Whole Matches)") {
+        assets::LevelData level;
+        ASSERT_TRUE(level.load_from_file(std::string(ANTS_SOURCE_DIR) + "/Community-Maps/HELLRAISER.lvl"));
+        const std::array<uint8_t, 4> partner{3, 2, 1, 0};                                // the teams 0 + 3 and 1 + 2
+        for (const bool teams : {true, false}) {
+            uint64_t banked = 0, seats = 0;
+            uint32_t allied_defuses = 0;
+            for (uint32_t seed = 1; seed <= 6; ++seed) {
+                ArenaSpec spec;
+                spec.level = &level;
+                spec.seed = seed;
+                for (uint8_t seat = 0; seat < 4; ++seat) {
+                    BotSpec b;
+                    b.seat = seat;
+                    b.kind = "standard";
+                    b.level = Level::Medium;
+                    spec.bots.push_back(b);
+                }
+                std::string why;
+                if (teams) ASSERT_TRUE(sim::parse_start_teams("0+3", spec.teams, why));
+                std::array<bool, 31 * 31> bombs{};                                       // the tiles that held a bomb at the last tick, and whose
+                std::array<uint8_t, 31 * 31> owner{};
+                std::array<uint32_t, 4> defused{};
+                spec.on_tick = [&](const sim::SimulationEngine& e) {
+                    std::array<bool, 4> rose{};
+                    bool any = false;
+                    for (uint8_t s = 0; s < 4; ++s) {
+                        const uint32_t d = e.get_player_stats(s).bombs_defused;
+                        rose[s] = d > defused[s];
+                        defused[s] = d;
+                        any = any || rose[s];
+                    }
+                    for (int y = 0; y < 31; ++y) {
+                        for (int x = 0; x < 31; ++x) {
+                            const size_t i = static_cast<size_t>(y) * 31 + static_cast<size_t>(x);
+                            const bool now = e.grid().has_bomb_at(TileCoord{x, y});
+                            if (any && bombs[i] && !now && teams) {                      // a bomb is gone in a tick in which a seat defused one: the seat of its ally?
+                                const uint8_t o = owner[i];
+                                if (o < 4 && rose[partner[o]]) ++allied_defuses;
+                            }
+                            bombs[i] = now;
+                            owner[i] = now ? e.grid().get_cell(static_cast<uint32_t>(x), static_cast<uint32_t>(y)).interactive_owner : uint8_t{255};
+                        }
+                    }
+                };
+                const ArenaResult r = play_match(spec);
+                ASSERT_TRUE(r.error.empty());
+                ASSERT_EQ(r.seats.size(), 4u);
+                for (const ArenaSeatResult& s : r.seats) {
+                    banked += s.banked;
+                    ++seats;
+                }
+            }
+            ASSERT_TRUE(allied_defuses <= 2u);                                          // (a bomb that appears between a look and its click is the one thing that no look sees; before: 13 in one match of these six)
+            ASSERT_TRUE(banked / seats >= 145u);                                        // (in these six seeds: before 88 a seat in two teams and 77 free for all, now 162 and 260; the way home re-plans round a bomb of another team, and without that 131 in two teams)
+        }
+    } TEST_END();
+    TEST_CASE("AI27.18 HELLRAISER With The Teams 0 + 1 Against 2 + 3: The Start Ants Of A Team Stand In Its Ally's Quadrant, The Only Power-Up They Reach Lies On The Ally's Side, And They Take It (Seeds 1 .. 4, Whole Matches)") {
+        assets::LevelData level;
+        ASSERT_TRUE(level.load_from_file(std::string(ANTS_SOURCE_DIR) + "/Community-Maps/HELLRAISER.lvl"));
+        uint64_t banked = 0, seats = 0;
+        for (uint32_t seed = 1; seed <= 4; ++seed) {
+            ArenaSpec spec;
+            spec.level = &level;
+            spec.seed = seed;
+            for (uint8_t seat = 0; seat < 4; ++seat) {
+                BotSpec b;
+                b.seat = seat;
+                b.kind = "standard";
+                b.level = Level::Medium;
+                spec.bots.push_back(b);
+            }
+            std::string why;
+            ASSERT_TRUE(sim::parse_start_teams("0+1", spec.teams, why));
+            const ArenaResult r = play_match(spec);
+            ASSERT_TRUE(r.error.empty());
+            uint64_t match = 0;
+            for (const ArenaSeatResult& s : r.seats) {
+                match += s.banked;
+                banked += s.banked;
+                ++seats;
+            }
+            ASSERT_TRUE(match > 0u);                                                    // (before: not one point in any match: the bots never took the Bomber power-up that their ally's side holds)
+        }
+        ASSERT_TRUE(banked / seats >= 150u);
+    } TEST_END();
+    TEST_CASE("AI27.19 On HELLRAISER An Ally's Power-Up Is Taken Only When No Ant Of The Ally Can Walk To It: With An Ant Of The Ally In That Quadrant, Or Inside Its Mound, It Stays The Ally's") {
+        assets::LevelData level;
+        ASSERT_TRUE(level.load_from_file(std::string(ANTS_SOURCE_DIR) + "/Community-Maps/HELLRAISER.lvl"));
+        enum class Ally : uint8_t { None, Beside, InMound };
+        for (const Ally ally : {Ally::None, Ally::Beside, Ally::InMound}) {
+            sim::SimulationEngine sim;
+            sim.init(level, 1, 0x03);                                                  // Green and Red, allies: the start ants of Green stand in Red's quadrant (south-east), Red's in Green's
+            sim.form_alliance(0, 1);
+            if (ally == Ally::Beside) sim.spawn_unit(1, sim::AntType::Worker, TileCoord{28, 27});
+            if (ally == Ally::InMound) sim.spawn_unit(1, sim::AntType::Worker, TileCoord{24, 24});
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)));
+            rig.run(900);
+            ASSERT_EQ(sim.grid().has_powerup_at(TileCoord{30, 30}), ally != Ally::None);   // the Bomber power-up in the south-east corner: the ally's side, taken only when nobody of the ally can walk to it
+        }
+    } TEST_END();
+
+    TEST_CASE("AI27.20 A Bomber With Food In The Vault And No Hop Home Waits While A Bomb Of Another Team Lies On Or Beside The Vault (It May Be What Shuts The Hops) And Gives The Attempt Up As Stranded When The Only Bomb Of Another Team Is Far Away") {
+        assets::LevelData level;
+        ASSERT_TRUE(level.load_from_file(std::string(ANTS_SOURCE_DIR) + "/Community-Maps/HELLRAISER.lvl"));
+        {   // the helper: the vault of the south-east seat, a bomb inside it, one on its wall's far side, and one far away
+            sim::SimulationEngine sim;
+            sim.init(level, 1, 0x0F);
+            const MapInfo map(sim);
+            const GateInfo gates = GateInfo::analyse(map, sim.grid(), 1);
+            const int32_t vault = gates.piles()[0].comps[0];
+            ASSERT_TRUE(gates.bomb_beside(TileCoord{14, 14}, vault));
+            ASSERT_TRUE(gates.bomb_beside(TileCoord{12, 14}, vault));                  // (on the ring of rock: a tile beside the floor)
+            ASSERT_FALSE(gates.bomb_beside(TileCoord{3, 3}, vault));
+            ASSERT_FALSE(gates.bomb_beside(TileCoord{25, 25}, vault));
+        }
+        for (const bool near : {true, false}) {
+            sim::SimulationEngine sim;
+            sim.init(level, 1, 0x02);                                                  // the south-east seat alone
+            RecordingSink sink(sim, true);
+            BotController ctl(sim, 1);
+            BotSpec spec;
+            spec.seat = 1;
+            spec.kind = "standard";
+            spec.level = Level::Medium;
+            auto inner = std::make_unique<StandardBot>(spec.level, spec.style);
+            StandardBot* bot = inner.get();
+            std::string why;
+            ASSERT_TRUE(ctl.add(spec, std::move(inner), sink, why));
+            bool placed = false;
+            uint64_t placed_at = 0;
+            for (uint64_t t = 0; t < 3000; ++t) {
+                sim.tick();
+                sim.clear_news_events();
+                sim.clear_audio_events();
+                ctl.on_tick(sim);
+                if (!placed) {                                                         // the Bomber holds food in the vault: no hop home any more
+                    for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
+                        if (a.player_id != 1 || a.type != sim::AntType::Bomber || !a.is_holding || a.tile_x < 13 || a.tile_x > 17 || a.tile_y < 13 || a.tile_y > 17) continue;
+                        for (int y = 13; y <= 17; ++y) {                               // the floor is rock: no hop home exists
+                            for (int x = 13; x <= 17; ++x) {
+                                if (!sim.grid().has_powerup_at(TileCoord{x, y}) && !(x == 15 && y == 15) && !(near && x == 14 && y == 14)) sim.set_terrain(x, y, sim::TERRAIN_OBSTACLE);
+                            }
+                        }
+                        if (near) sim.grid_mut().place_bomb(14, 14, 2);               // and a bomb of another team lies on the floor of the vault: it may be what shuts the hops
+                        else sim.grid_mut().place_bomb(3, 3, 2);                       // or the only bomb of another team is far away: it shuts nothing
+                        placed = true;
+                        placed_at = sim.current_tick();
+                        break;
+                    }
+                }
+                if (placed && sim.current_tick() >= placed_at + 400) break;
+            }
+            ASSERT_TRUE(placed);
+            if (near) ASSERT_EQ(bot->gate_goals().given_up(), 0u);                     // waits: the attempt is not given up within 400 ticks
+            else ASSERT_TRUE(bot->gate_goals().given_up() >= 1u && std::string(bot->gate_goals().last_failure()) == "stranded");
         }
     } TEST_END();
 }

@@ -57,7 +57,7 @@ async function startServer() {
     const ports = { tcp: await freePort(), ws: await freePort(), ctl: await freePort(), door: await freePort() };
     const results = fs.mkdtempSync(path.join(os.tmpdir(), 'ants_host_return.'));
     const child = spawn(SERVER, ['--maps', path.join(ROOT, 'Original-Ants', 'Maps'), '--port', String(ports.tcp), '--ws-port', String(ports.ws), '--ctl-port', String(ports.ctl), '--replay-port', String(ports.door),
-        '--results-dir', results, '--demo-rooms', '5', '--demo-map', 'TINY.LVL', '--demo-maps', 'TINY.LVL,MEDIUM.LVL', '--demo-lobbies', '12'], { env: Object.assign({}, process.env, { ANTS_SERVER_SECRET: 'host-return-check-secret' }), stdio: 'ignore' });
+        '--results-dir', results, '--demo-rooms', '5', '--demo-map', 'TINY.LVL', '--demo-maps', 'TINY.LVL,MEDIUM.LVL', '--demo-lobbies', '12', '--no-address-limits'], { env: Object.assign({}, process.env, { ANTS_SERVER_SECRET: 'host-return-check-secret' }), stdio: 'ignore' });
     let ended = false;
     child.on('exit', () => { ended = true; });
     for (let i = 0; i < 100; i++) {

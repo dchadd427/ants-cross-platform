@@ -28,9 +28,18 @@ class FakeRoles:
         self.stale = set()                      # accounts whose answer is older than a minute (an action waits for `confirm`)
         self.lookups = []                       # the accounts of every `confirm`
         self.outcome = True                     # what `confirm` says: the lookups gave their answers (False: they failed)
+        self.images = set()                     # accounts that hold the images' role (a moderator and an administrator may post images too)
+        self.unknown = set()                    # accounts whose role is not known just now (Discord has not answered): they may not post images
 
     def role_of(self, account):
         return self.roles.get(account, "none")
+
+    def images_of(self, account):
+        """hub.roles.Roles.images_of: the images' role, a moderator or an administrator, on an answer that is known."""
+        return account not in self.unknown and (account in self.images or self.roles.get(account, "none") != "none")
+
+    def knows(self, account):
+        return account not in self.unknown
 
     def want(self, account):
         self.wanted.append(account)
@@ -69,7 +78,7 @@ class Rig:
         self.db = db or os.path.join(self.folder.name, "hub.db")
         env = dict(env or {}, ANTS_HUB_DB=self.db, ANTS_HUB_PUBLIC_URL=origin, ANTS_HUB_HOST="127.0.0.1")
         if member_fake is not None:
-            env.update(ANTS_HUB_DISCORD_BOT_TOKEN=member_fake.bot_token, ANTS_HUB_DISCORD_GUILD=member_fake.guild, ANTS_HUB_ROLE_ADMIN=fake_discord.ROLE_ADMIN, ANTS_HUB_ROLE_MOD=fake_discord.ROLE_MOD,
+            env.update(ANTS_HUB_DISCORD_BOT_TOKEN=member_fake.bot_token, ANTS_HUB_DISCORD_GUILD=member_fake.guild, ANTS_HUB_ROLE_ADMIN=fake_discord.ROLE_ADMIN, ANTS_HUB_ROLE_MOD=fake_discord.ROLE_MOD, ANTS_HUB_ROLE_IMAGES=fake_discord.ROLE_IMAGES,
                        ANTS_HUB_TEST_DISCORD_URL=member_fake.url)
         if owner:
             env["ANTS_HUB_OWNER"] = owner

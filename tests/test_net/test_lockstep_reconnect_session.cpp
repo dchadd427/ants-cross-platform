@@ -862,6 +862,7 @@ void run_reconnect_session_tests() {
     TEST_CASE("N2.63 Hold: A Hostile Log Of The Biggest Turns (Two Players Put 40 Commands Of 32 Ants Into Every Turn: 5 MB In 25 s) Is Streamed To A Machine That Starts From Nothing Without Failing Its Link (A Link That Fails At 1 MB Of Backlog, As A WebSocket Does): The Stream Is Paced By What The Machine Has Executed, In Bytes") {
         HoldOptions o;
         o.host.max_log_bytes = 8u * 1024u * 1024u;
+        o.host.sequencer.orders_per_second = 0;                                          // (a log of this size is made of more orders than a seat may have sealed: the budget of orders is S2.59's, here it is off)
         HoldMatch m(3, o);
         m.audit_new_links = true;
         std::vector<uint32_t> many;                                                      // 32 ants: the most that a command names
@@ -1506,7 +1507,9 @@ void run_reconnect_session_tests() {
             m.run(1000, true, [&](uint32_t now) {
                 if (paused_after_ms == 0 && m.host->paused()) paused_after_ms = now - at;
             });
-            ASSERT_TRUE(paused_after_ms >= 10000 && paused_after_ms <= 10100);
+            const uint32_t last_word_ms = m.taps[2]->last_delivered_ms;                  // the last message that the host heard from it: the links' delays are random, so it was a little before the silence began
+            ASSERT_TRUE(paused_after_ms != 0 && last_word_ms <= at && at - last_word_ms <= 200);
+            ASSERT_TRUE(at + paused_after_ms - last_word_ms >= 10000 && at + paused_after_ms - last_word_ms <= 10100);       // 10 s after the last word
             ASSERT_TRUE(m.until([&]() { return !m.host->paused() && m.clients[2]->mode() == ClientSession::Mode::Normal; }, 8000));      // the host closed the dead link: the machine found out and came back
             m.run(2000);
             m.settle();
@@ -1739,6 +1742,7 @@ void run_reconnect_session_tests() {
         {   // the stream is paced in bytes: a window of 64 KB, a batch of 48 KB at the most beyond it
             HoldOptions o;
             o.host.stream_window_bytes = 64 * 1024;
+            o.host.sequencer.orders_per_second = 0;                                      // (a log of this size is made of more orders than a seat may have sealed: the budget of orders is S2.59's, here it is off)
             HoldMatch m(3, o);
             std::vector<uint32_t> many;
             for (uint32_t i = 0; i < 32; ++i) many.push_back(1000 + i);

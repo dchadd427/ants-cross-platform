@@ -470,10 +470,12 @@ public:
             if (swallow_acks && (t == MsgType::TurnAck || t == MsgType::Hash)) {
                 if (t == MsgType::TurnAck && let_one_ack_through_every_ms != 0 && static_cast<uint32_t>(*clock_ - last_ack_through_) >= let_one_ack_through_every_ms) {
                     last_ack_through_ = *clock_;                                   // one acknowledgement in a while: it makes progress, slowly
+                    last_delivered_ms = *clock_;
                     return true;
                 }
                 continue;
             }
+            last_delivered_ms = *clock_;
             return true;
         }
         return false;
@@ -482,6 +484,7 @@ public:
     void close() override { inner_->close(); }
     size_t sent_of(MsgType t) const { return sent_by_type[static_cast<size_t>(t) % sent_by_type.size()]; }
     bool silent{false};
+    uint32_t last_delivered_ms{0};                                  // the clock when this end last gave the host a message from the client: the last word that the host heard
     bool swallow_acks{false};
     uint32_t let_one_ack_through_every_ms{0};
     uint32_t fail_send_of_turn{UINT32_MAX};                         // the send of this turn fails (and closes the link): a connection that breaks while the host broadcasts
@@ -1011,3 +1014,5 @@ void run_protocol17_tests();
 void run_protocol21_tests();
 void run_restart_tests();
 void run_reconnect_session_tests_2();
+void run_p2p_tests();
+void run_order_tests();

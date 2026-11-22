@@ -1507,7 +1507,7 @@ void run_way_back_tests() {
         Machine& d = w.join_creating("Fay", "prrm0004", block_of("", 2));
         ASSERT_TRUE(w.run_until([&]() { return d.net.phase() != NetGame::Phase::Connecting; }, 4000));
         ASSERT_TRUE(d.net.phase() == NetGame::Phase::Failed && d.net.reject_reason() == net::RejectReason::NoSuchRoom);
-        ASSERT_EQ(d.net.status_text(), std::string("The server cannot make a room now: it is busy, or hosts no online matches. Try again in a few minutes."));      // (a Hello with a block: it is the place that is missing, not a room that does not exist)
+        ASSERT_EQ(d.net.status_text(), std::string("The server cannot make a room now: it is busy, or your network made many rooms. Try again in a minute."));      // (a Hello with a block: it is the place that is missing, not a room that does not exist)
         ASSERT_TRUE(w.status("prrm0001").state == RoomState::Running && w.status("prrm0003").state == RoomState::Waiting && w.server.mgr->room_count() == 2);
         ASSERT_TRUE(a1.net.phase() == NetGame::Phase::Playing && !w.server.mgr->take_ended(w.server_now()).empty());      // (Ann is still in her match: pr2's end was the only one)
         // Ann closes her tab: pr1 is abandoned from now on; for half a minute it is not ended, after a minute it is
@@ -1561,7 +1561,7 @@ void run_way_back_tests() {
             ASSERT_TRUE(s.status("strm0003").code.empty() && s.server.mgr->room_count() == 2 && s.server.mgr->rooms_created() == 2 && s.server.mgr->take_ended(s.server_now()).empty());
             ASSERT_TRUE(s.run_until([&]() { return eve.net.phase() == NetGame::Phase::Failed; }, 4000));
             ASSERT_TRUE(eve.net.reject_reason() == net::RejectReason::NoSuchRoom);       // the answer that it always was when no place is free
-            ASSERT_EQ(eve.net.status_text(), std::string("The server cannot make a room now: it is busy, or hosts no online matches. Try again in a few minutes."));
+            ASSERT_EQ(eve.net.status_text(), std::string("The server cannot make a room now: it is busy, or your network made many rooms. Try again in a minute."));
         }
     } TEST_END();
 
@@ -1904,6 +1904,8 @@ void run_way_back_tests() {
         plan.team_b = 1;
         ASSERT_TRUE(ann.lobby->request_plan(plan));
         ASSERT_TRUE(w.run_until([&]() { return bob.lobby->room().plan[3] == net::PlanKind::Easy && bob.lobby->room().team_a == 0 && bob.lobby->room().team_b == 1; }, 3000));
+        ASSERT_TRUE(bob.lobby->request_ready(true));                                         // (protocol 27: the START waits for Bob's Ready)
+        ASSERT_TRUE(w.run_until([&]() { return ann.lobby->room().seat_ready(1); }, 3000));
         ASSERT_TRUE(ann.lobby->request_start());                                             // the START of a page: it waits until both are games
         ASSERT_TRUE(w.run_until([&]() { return bob.lobby->room().starting(); }, 3000));
         RoomStatus s = w.status("lob27001");
@@ -2051,6 +2053,107 @@ void run_way_back_tests() {
         ask();
         ASSERT_EQ(looks, 5u);
         ASSERT_TRUE(w.status("RJ-LIVE").state == RoomState::Running && w.status("RJ-LIVE").rejoins == 1);
+    } TEST_END();
+
+    TEST_CASE("RJ1.30 A Game That Plays Through A Server Keeps No Door Open For The Other Players And Tells The Server No Port (The Server Relays Everything): Neither Machine Has A Port For Guests, The Start Of Each Names Nobody, A Machine From Nothing Is Given A Start That Names Nobody Either; A Game On The Local Network Still Opens One And The Host Names It To The Others (The Links Of Host Migration)") {
+        const auto names_nobody = [](const NetGame& n) {
+            for (const net::Endpoint& e : n.start_info().endpoints) {
+                if (!e.address.empty() || e.port != 0) return false;
+            }
+            return true;
+        };
+        {   // a server's room
+            World w("rj-noaddr");
+            ASSERT_TRUE(w.server.start(w.now));
+            ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-30"), w.server_now()).ok);
+            Machine& a = w.join("Ann", "RJ-30");
+            Machine& b = w.join("Bob", "RJ-30");
+            ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}); }, 12000 + kPre));
+            ASSERT_TRUE(a.net.peer_port() == 0 && b.net.peer_port() == 0);
+            ASSERT_TRUE(names_nobody(a.net) && names_nobody(b.net));
+            ASSERT_EQ(a.net.start_info().roster, 0x03);
+            w.run(2000);
+            const uint8_t seat = b.net.my_seat();
+            const net::SeatKey key = w.server.read_record("RJ-30").head.keys[seat];
+            ASSERT_FALSE(net::key_is_zero(key));
+            w.machines.erase(w.machines.begin() + 1);                                    // Bob's game is gone: its links with it
+            ASSERT_TRUE(w.run_until([&]() { return w.status("RJ-30").paused; }, 3000));
+            Machine& b2 = w.add_machine("Bob");                                          // a game that starts from nothing but the key
+            ASSERT_TRUE(b2.net.join("127.0.0.1", w.server.port(), "Bob", seat, "RJ-30", "", key));
+            ASSERT_TRUE(w.run_until([&]() { return b2.net.phase() == NetGame::Phase::Playing && !w.status("RJ-30").paused; }, 30000));
+            ASSERT_EQ(b2.count(NetGame::Event::Type::StartRequested), size_t{1});         // (it was given the Start)
+            ASSERT_EQ(b2.net.start_info().roster, 0x03);
+            ASSERT_EQ(b2.net.peer_port(), 0);
+            ASSERT_TRUE(names_nobody(b2.net));
+        }
+        {   // a room on the local network: the guest keeps its door open and the host passes the port on
+            World w;
+            Machine& host = w.add_machine("Alice");
+            ASSERT_TRUE(host.net.host(0, "Alice", true));
+            host.net.set_map("TINY.LVL");
+            Machine& guest = w.add_machine("Bob");
+            ASSERT_TRUE(guest.net.join("127.0.0.1", host.net.listen_port(), "Bob"));
+            ASSERT_TRUE(w.run_until([&]() { return host.net.can_start(); }, 8000));
+            ASSERT_TRUE(guest.net.peer_port() != 0);
+            uint64_t hash = 0;
+            ASSERT_TRUE(net::hash_file(maps_dir() + "TINY.LVL", hash));
+            ASSERT_TRUE(host.net.start_match(8, hash));
+            ASSERT_TRUE(w.run_until([&]() { return w.running({&host, &guest}); }, 12000 + kPre));
+            ASSERT_TRUE((host.net.start_info().endpoints[1] == net::Endpoint{"127.0.0.1", guest.net.peer_port()}));
+            ASSERT_TRUE((guest.net.start_info().endpoints[1] == host.net.start_info().endpoints[1]));
+        }
+    } TEST_END();
+
+    TEST_CASE("RJ1.31 A Game In A Server's Room Makes No Link To Another Guest, Whatever The Start Names (A Start That Names A Machine Is No Reason To Dial It) And Has No Port For One; The Same Start In A Room On The Local Network Is Dialed, And That Game Has A Port") {
+        const auto play = [&](const std::string& room, bool& dialed, uint16_t& own_port) {
+            World w;
+            ASSERT_TRUE(w.server.start(w.now));
+            std::unique_ptr<net::TcpListener> named = net::TcpListener::listen(0, true);      // the machine that the Start names for seat 1
+            ASSERT_TRUE(named != nullptr);
+            net::WelcomeMsg welcome;
+            welcome.player = 0;
+            welcome.players = sim::MAX_PLAYERS;
+            net::RoomMsg msg;
+            msg.you = 0;
+            msg.map_name = "TINY.LVL";
+            msg.slots[0].state = net::SlotState::Client;
+            msg.slots[0].name = "Ann";
+            msg.slots[1].state = net::SlotState::Client;
+            msg.slots[1].name = "Bob";
+            w.server.door = Server::Door::Scripted;
+            w.server.script_messages = {net::encode(welcome), net::encode(msg)};
+            Machine& m = w.add_machine("Ann");
+            m.orders = false;
+            ASSERT_TRUE(m.net.join("127.0.0.1", w.server.port(), "Ann", 0, room));
+            ASSERT_TRUE(w.run_until([&]() { return m.net.phase() == NetGame::Phase::Room; }, 5000));
+            own_port = m.net.peer_port();
+            uint64_t hash = 0;
+            ASSERT_TRUE(net::hash_file(maps_dir() + "TINY.LVL", hash));
+            net::StartMsg start;
+            start.seed = 8;
+            start.map_name = "TINY.LVL";
+            start.map_hash = hash;
+            start.roster = 0x03;
+            start.names[0] = "Ann";
+            start.names[1] = "Bob";
+            start.endpoints[1] = net::Endpoint{"127.0.0.1", named->port()};
+            ASSERT_TRUE(w.server.scripted_send(net::encode(start)));
+            ASSERT_TRUE(w.run_until([&]() { return w.server.scripted_heard(net::MsgType::Loaded); }, 5000));
+            for (int i = 0; i < 300 && !dialed; ++i) {                                   // (3 s of game time, with the kernel given a moment each step)
+                dialed = named->accept() != nullptr;
+                if (!dialed) w.run(10);
+            }
+        };
+        bool dialed_by_server_game = false;
+        uint16_t port_of_server_game = 1;
+        play("RJ-31", dialed_by_server_game, port_of_server_game);
+        ASSERT_FALSE(dialed_by_server_game);
+        ASSERT_EQ(port_of_server_game, 0);
+        bool dialed_by_lan_game = false;
+        uint16_t port_of_lan_game = 0;
+        play("", dialed_by_lan_game, port_of_lan_game);
+        ASSERT_TRUE(dialed_by_lan_game);
+        ASSERT_TRUE(port_of_lan_game != 0);
     } TEST_END();
 }
 

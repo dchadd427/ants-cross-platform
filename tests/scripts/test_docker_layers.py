@@ -100,8 +100,8 @@ class TheWebImage(unittest.TestCase):
     def test_the_stages_are_the_warm_one_the_builder_and_the_runner_in_that_order(self):
         self.assertEqual([self.docker.names[i] for i in sorted(self.docker.names)], ["emsdk-warm", "builder", "runner"])
         self.assertEqual(self.builder[0].words[0], "emsdk-warm", "the builder starts from the stage that has Emscripten's libraries")
-        self.assertRegex(self.warm[0].words[0], r"^emscripten/emsdk:\d+\.\d+\.\d+$")
-        self.assertEqual(self.runner[0].words[0], "nginx:alpine")
+        self.assertRegex(self.warm[0].words[0], r"^emscripten/emsdk:\d+\.\d+\.\d+(@sha256:[0-9a-f]{64})?$")
+        self.assertRegex(self.runner[0].words[0], r"^nginx:alpine(@sha256:[0-9a-f]{64})?$")
 
     def test_the_warm_stage_depends_on_the_version_and_one_program_only(self):
         self.assertEqual(self.docker.copies(self.warm), [(["docker/emsdk_warm.cpp"], "/warm/emsdk_warm.cpp")])
@@ -223,8 +223,8 @@ class TheWebImage(unittest.TestCase):
         outputs = sorted(w for s in self.runner if s.op == "COPY" and "from" in s.flags for w in s.words[:-1])
         self.assertEqual(outputs, sorted([
             "/src/build_web/src/ants_app/index.*", "/src/build_web/lvl_core/lvl_core.js", "/src/build_web/lvl_core/lvl_core.wasm", "/src/lobby.html", "/src/matches.html", "/src/match.html", "/src/legal.html",
-            "/src/mapmaker.html", "/src/mapmaker_atlas/", "/src/changelog/changelog.html", "/src/web/admin.html"]))
-        text = self.docker.text[self.docker.text.index("FROM nginx:alpine AS runner"):]
+            "/src/mapmaker.html", "/src/mapmaker_atlas/", "/src/changelog/changelog.html", "/src/changelog/whats_new.json", "/src/web/admin.html"]))
+        text = self.docker.text[re.search(r"(?m)^FROM nginx:alpine(@\S+)? AS runner", self.docker.text).start():]
         self.assertEqual(len(re.findall(r"(?m)^USER ", text)), 0)
         self.assertEqual(re.findall(r"(?m)^EXPOSE .*$", text), ["EXPOSE 80"])
         self.assertEqual(re.findall(r"(?m)^CMD .*$", text), ['CMD ["nginx", "-g", "daemon off;"]'])
@@ -345,7 +345,7 @@ class TheServerImage(unittest.TestCase):
         self.assertEqual(sorted(w for s in self.runner if s.op == "COPY" for w in s.words[:-1]),
                          sorted(["Original-Ants/Maps/", "Original-Ants/ants.chd", "Community-Maps/*.lvl", "Community-Maps/*.LVL", "Community-Maps/maps.json", "Community-Maps/previews.json", "/src/build/src/ants_thumb/ants_thumb",
                                  "/src/build/src/ants_server/ants_server"]))
-        text = self.docker.text[self.docker.text.index("FROM debian:12-slim AS runner"):]
+        text = self.docker.text[re.search(r"(?m)^FROM debian:12-slim(@\S+)? AS runner", self.docker.text).start():]
         self.assertEqual(re.findall(r"(?m)^USER .*$", text), ["USER ants"])
         self.assertEqual(re.findall(r"(?m)^EXPOSE .*$", text), ["EXPOSE 4001 4002 4010 4020"])
         self.assertIn('exec 3<>/dev/tcp/127.0.0.1/4001', text)

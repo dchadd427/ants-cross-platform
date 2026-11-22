@@ -1077,6 +1077,16 @@ AntType SimulationEngine::ant_type(const AntUnit& ant) const noexcept {
     return impl_->type_of(ant);
 }
 
+SimulationEngine::AntClaim SimulationEngine::ant_claim(uint32_t ant_id, uint8_t player) const noexcept {
+    const AntUnit* u = impl_->find_unit(ant_id);
+    if (u == nullptr) return AntClaim::Unborn;
+    return u->player_id == player ? AntClaim::Own : AntClaim::Foreign;
+}
+
+uint32_t SimulationEngine::next_ant_id() const noexcept {
+    return impl_->next_ant_id_;
+}
+
 AntUnit& SimulationEngine::get_unit(uint32_t ant_id) {
     AntUnit* u = impl_->find_unit(ant_id);
     if (!u) {

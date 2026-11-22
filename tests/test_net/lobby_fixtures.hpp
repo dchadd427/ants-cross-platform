@@ -183,15 +183,16 @@ inline size_t join_keyed(Room& r, const std::string& name, const SeatKey& key, u
     return r.guests.size() - 1;
 }
 
-// A guest with a configuration of its own (a platform, a create block ...), joined to the room like Room::join does; returns its index
-inline size_t join_with(Room& r, const ClientLobby::Config& cc) {
+// A guest with a configuration of its own (a platform, a create block, a port for the other guests ...), joined to the room like Room::join does; `address` is where the room sees its connection come from
+// (a server tells the room; empty: nobody does, as in Room::join); returns its index
+inline size_t join_with(Room& r, const ClientLobby::Config& cc, const std::string& address = std::string()) {
     auto ends = r.net.connect({10, 0});
     r.guests.emplace_back();
     Room::Guest& g = r.guests.back();
     g.host_end = ends.first;
     g.client_end = ends.second;
     g.lobby = std::make_unique<ClientLobby>(ends.second, cc);
-    r.host.add_connection(ends.first, r.now);
+    r.host.add_connection(ends.first, r.now, address);
     return r.guests.size() - 1;
 }
 
@@ -295,6 +296,12 @@ inline HostLobby::Config lobby_room_config(uint32_t seed) {
     return hc;
 }
 
+// The pages of a lobby room that are not its leader say Ready (protocol 27: the leader's START waits for them), and the room is run until it has heard them
+inline void pages_ready(Room& r, std::initializer_list<size_t> who) {
+    for (const size_t i : who) r.guests[i].lobby->request_ready(true);
+    r.run(100);
+}
+
 // What the front page is in a Hello: a lobby page, which cannot play a match
 inline ClientLobby::Config page_config(const std::string& name) {
     ClientLobby::Config cc;
@@ -337,3 +344,4 @@ void run_lobby_rejoin_tests();
 void run_lobby_rooms_tests();
 void run_lobby_rematch_tests();
 void run_lobby_public_tests();
+void run_lobby_ready_tests();

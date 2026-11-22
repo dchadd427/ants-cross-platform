@@ -1,12 +1,7 @@
 /* The chat box of the front page's lobby (front/lobby_chat.js, docs/PLAY_IN_BROWSER.md "Chat in the lobby"). It is the lobby's own look: the black box with the green frame (.panel), the cream words,
-   the four color accents of the cards (.slot[data-c]), the teal button, and the page's tokens (:root of web/lobby.html), which is why the page links this sheet after its own <style>. */
+   the four color accents of the cards (.slot[data-c]), the teal button, and the page's tokens (:root of web/lobby.html), which is why the page links this sheet after its own <style>. In Home the box is a tab of the chat dock (web/home/roomchat.css);
+   these rules are its look there and where that part has not come: in the room's panel, under the notice. */
 
-/* Where it sits. A wide window: across the page, under the colors and the map. Below 1041 px the page is one column and the box is where the markup puts it, after the colors and before the map. */
-@media (min-width: 1041px) {
-    .grid > :first-child { grid-column: 1; grid-row: 1; }
-    .grid > .side { grid-column: 2; grid-row: 1; }
-    .grid > .chat { grid-column: 1 / -1; grid-row: 2; }
-}
 .chat .head { margin-bottom: 12px; }
 .chat .note { font-size: 15px; color: var(--muted); text-align: right; }
 

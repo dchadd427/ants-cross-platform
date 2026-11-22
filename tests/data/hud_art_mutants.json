@@ -380,6 +380,33 @@
    "expect": "[windows]"
   },
   {
+   "id": "countdown_card_does_not_need_its_row",
+   "file": "src/ants_app/window_art.cpp",
+   "old": " && art.find_animation(\"cd_row\") != nullptr &&",
+   "new": " &&",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[windows]"
+  },
+  {
+   "id": "countdown_card_does_not_need_every_color_square",
+   "file": "src/ants_app/window_art.cpp",
+   "old": "\"cd_dot_2\", \"cd_dot_3\", \"dlg_btn_fullscreen_up\"",
+   "new": "\"cd_dot_3\", \"dlg_btn_fullscreen_up\"",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[windows]"
+  },
+  {
+   "id": "countdown_card_does_not_need_the_pressed_button",
+   "file": "src/ants_app/window_art.cpp",
+   "old": "\"dlg_btn_fullscreen_up\", \"dlg_btn_fullscreen_down\"})",
+   "new": "\"dlg_btn_fullscreen_up\"})",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[windows]"
+  },
+  {
    "id": "veil_lower_band_overlaps_the_card",
    "file": "src/ants_app/window_art.cpp",
    "old": "LayoutRect{picture.x, card.y + card.h, picture.w, picture.y + picture.h - (card.y + card.h)},",

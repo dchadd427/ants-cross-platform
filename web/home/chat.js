@@ -1,19 +1,21 @@
 // The global chat dock of Home (docs/HOME_CHAT.md, "The chat dock"): a panel along the bottom of Home (the Chat view on a phone) that reads and writes the site's chat hub, one WebSocket, JSON, version 1
-// (docs/HUB.md: up {"t":"say","text"} and {"t":"ping"}; down welcome, line, del, online, err, and for a moderator you, ok, bans, bye). Loaded by web/home/home.js after the first paint, with web/home/chat.css, and only by the front page: a plain visit of any
+// (docs/HUB.md: up {"t":"say","text"} and {"t":"ping"}; down welcome, line, del, online, err, cmds, reply, and for a moderator you, ok, bans, bye). Loaded by web/home/home.js after the first paint, with web/home/chat.css, and only by the front page: a plain visit of any
 // other page opens no hub socket. ES5, no module system: a page gets AntsHomeChat, node gets module.exports (tests/scripts/web_home_chat_check.js).
 //   * Everything the hub sends is text from strangers: it becomes DOM text with createElement and textContent only (never markup; the one thing that becomes a link is an http or https address, or a bare www host, made as an element with attributes: see partsOf); names and lines are cut for display, the bidirectional and zero-width
-//     controls are removed, and each name and line sits in a <bdi>; a frame that is too big, is not JSON or is of a kind that is not known is ignored; at most 100 lines are kept (in memory and on the screen).
-//   * The chat never blocks Home, the Room or START: a hub that is not there, slow or garbage is "Chat is offline" and a retry (1 s, doubling to 60 s, plus jitter; a hub that opens and closes again at once does not
-//     reset it); every handler is guarded; nothing is kept in the browser (no storage), the state is in memory.
+//     controls are removed, and each name and line sits in a <bdi>; a frame that is too big, not JSON or of an unknown kind is ignored; at most 100 lines are kept (in memory and on the screen).
+//   * The chat never blocks Home, the Room or START: a hub that is not there, slow or garbage is "Chat is offline" and a retry (1 s, doubling to 60 s, plus jitter; a hub that opens and closes at once does not
+//     reset it); every handler is guarded; nothing is kept in the browser (no storage): the state is in memory.
 //   * It reads for everybody; the field and Send are there only when the welcome names the visitor (`you`). The login (docs/HUB.md, "Login") is the hub's: where the welcome says login:true and names nobody, the field is off and a
 //     Log in button takes its place, here and in the bar's chip (`env.chip`), and it is a full navigation to /hub/login (Discord, then back to this screen); where it names the visitor, the chip is a button that opens #gchat-login-slot (a dropdown under the chip): "Chatting as <name>",
-//     the choice of the name that the chat shows, Log out and Forget me, which are POSTs of this page to the hub (same origin, with the cookie, which this script never sees: it is HttpOnly). Nothing of the login is read, kept or sent by this script.
+//     the choice of the name that the chat shows, Log out and Forget me, which are POSTs of this page to the hub (same origin; the HttpOnly cookie is never seen by this script). Nothing of the login is read, kept or sent by it.
 //   * Roles (docs/HUB.md, "Roles", "Moderation"): `you.role` is none, mod or admin and a `you` frame changes it live. Only the flags `mod`, `role` and `sys` of the hub's frames decide a mark or the hub's own line, never
-//     a person's text. /help is this page's own (never sent) and lists the commands of the role; each reply of the hub (`ok`, `bans`, the codes power, role, who, rate, bad) is told in plain words as a private line of this
-//     screen. A `bye` is a plain notice, the field off where the hub's state needs it, and the usual reconnect with its backoff (so the person reads on).
+//     a person's text. A line that starts with one slash is a command and goes to the hub as typed (`//x` too: the hub says `/x`); /help is never sent: it opens the helper (web/home/cmds.js: the account's own commands, the /bots builder
+//     and the words of the hub's `reply` frames; loaded through env.load when a `cmds` frame has a row). Each reply of the hub (`ok`, `bans`, `reply`, the codes power, role, who, rate, bad) is a private line of this screen.
+//     A `bye` is a plain notice, the field off where the hub's state needs it, and the usual reconnect with its backoff (so the person reads on).
 //   * Staff on a touch screen or with a mouse act on a line through the moderation sheet (web/home/mod.js, loaded by home.js only for a role): the dock gives it its log, `you()`, `line(id)`, `command(text, done)` (a
-//     command sent as typed, one at a time, answered once), `mutes(done)` (the same for `/mutes`: done('ok', the hub's list of mutes as { until, i } rows, never a name), or a code), `note(text)` (a private line), `rows(fn)` (told of every person's line that is drawn for staff), `by(id)` (the lines of the log that the author of line `id` wrote, newest first), `when(at)` (the log's own words for a time) and `arrived(fn)` (told when a line comes) and the tap kind `del`. Nothing of it exists for a person with no role.
-//   * While the tab is hidden the socket stays and the model follows, but nothing is painted (the screen is made again when the tab is back); a line that arrives while the dock is folded, on the Room or in a hidden tab is unread.
+//     command sent as typed, one at a time, answered once), `mutes(done)` (the same for `/mutes`: done('ok', { until, i } rows, never a name), or a code), `note(text)`, `rows(fn)`, `by(id)` (the lines of the author of line `id`, newest first), `when(at)` and `arrived(fn)`, and the tap kind `del`. Nothing of it exists for a person with no role.
+//   * Images (docs/HUB_IMAGES.md): a `line` may carry `img`, drawn by web/home/pics.js (loaded when the first one is); `you.img` is `on` for a person who may post, and web/home/post.js is loaded then. The hub decides.
+//   * In a hidden tab the socket stays and the model follows, but nothing is painted (the screen is made again when the tab is back); a line that comes while the dock is folded, on the Room or in a hidden tab is unread.
 (function (root, factory) {
     var api = factory();
     if (typeof module === 'object' && module.exports) module.exports = api;
@@ -22,12 +24,12 @@
     'use strict';
 
     var PATH = '/hub/ws', VERSION = 1;
-    var LOGIN = '/hub/login?next=', LOGOUT = '/hub/logout', FORGET = '/hub/forget';      // the hub's pages (nginx passes them; the cookie goes along with a request of this page only)
-    var LIMIT = { name: 32, line: 1000, feed: 100, history: 50, frame: 240000, bad: 30, field: 2000, count: 1e9, here: 500, said: 2 };       // (the hub's own: names 32, lines 1,000 code points, history 50; the rest is this page's: a frame is read up to 240,000 characters, twice what the largest welcome takes (50 lines of 1,000 emoji, 2,000 UTF-16 units each); the field takes 2,000 UTF-16 units, so that 1,000 code points fit however many are pairs)
-    var ROW = 44, LINE = 22;       // (the box's one row and the height of one more line of words: four lines at most; the style sheet's max-height keeps it lower in a wide or a low window)
-    var MS = { ping: 25000, answer: 30000, connect: 15000, stable: 30000, notice: 6000, regain: 1000, wake: 3000, grace: 5000, pics: 8000, flood: 3000, pending: 8000 };       // (pending: the hub answers a line at once: one that has no answer after this long is not waited for)
-    var BACKOFF = { min: 1000, max: 60000, low: 0.5, high: 1.5 };      // the wait is spread from half to one and a half times the step (never under a second or over a minute): many pages that lost one hub do not come back together
-    var PACE = { burst: 8, every: 600, same: 31000 };                   // this page's own limit, below the hub's (10 at once, one every 0.5 s, the same text twice within 30 s)
+    var LOGIN = '/hub/login?next=', LOGOUT = '/hub/logout', FORGET = '/hub/forget';      // the hub's pages (the cookie goes along with this page's own request only)
+    var LIMIT = { name: 32, line: 1000, feed: 100, history: 50, frame: 240000, bad: 30, field: 2000, count: 1e9, here: 500, said: 2 };       // (the hub's: names 32, lines 1,000 code points, history 50; a frame up to 240,000 characters, twice the largest welcome; the field 2,000 UTF-16 units: 1,000 code points whatever pairs)
+    var ROW = 44, LINE = 22;       // (the box's one row and one more line of words: four lines at most; the style sheet's max-height keeps it lower in a wide or a low window)
+    var MS = { ping: 25000, answer: 30000, connect: 15000, stable: 30000, notice: 6000, regain: 1000, wake: 3000, grace: 5000, pics: 8000, flood: 3000, pending: 8000 };       // (pending: the hub answers a line at once; one with no answer after this long is not waited for)
+    var BACKOFF = { min: 1000, max: 60000, low: 0.5, high: 1.5 };      // the wait is half to one and a half times the step (1 to 60 s): many pages that lost one hub do not come back together
+    var PACE = { burst: 8, every: 600, same: 31000 };                   // this page's own limit, below the hub's (10 at once, one every 0.5 s, no same text twice in 30 s)
     var TEXT = {
         title: 'Global chat', welcome: 'Welcome to the front page. Everyone here can read what you write.', online: ' here now', connecting: 'connecting…', reconnecting: 'reconnecting…',
         offline: 'Chat is offline', readonly: 'Chat is read-only for now', guest: 'You can read as a guest. Playing and watching stay anonymous.', field: 'Say something to everyone', hint: 'Enter sends the message.', send: 'Send',
@@ -36,22 +38,21 @@
         picShow: 'Show my Discord picture', picNote: 'Everyone on the front page sees it next to your name.', picNone: 'Your picture is loaded when you log in.', picAgain: 'Log in again', picBlocked: 'Your picture is hidden on this site.',
         shows: 'Chat shows your ', names: ['display name', 'username'], use: 'Show my ',
         administrator: 'administrator', moderator: 'moderator', only: 'Only you', youAre: { mod: 'You are a moderator', admin: 'You are an administrator' }, today: 'Today', yesterday: 'Yesterday', linkMax: 5, linkCut: 48,
-        helpHead: 'Commands you can use. Only you can see this.', helpNone: 'There are no chat commands for you.', cmdBad: 'That command is not right. Type /help to see the commands.', cmdRate: 'You are going too fast, try again in a moment', bansHead: 'People who are banned', bansNone: 'Nobody is banned.', noName: '(no name)',
+        cmdBad: 'That command is not right. Type /help to see the commands.', cmdRate: 'You are going too fast, try again in a moment', bansHead: 'People who are banned', bansNone: 'Nobody is banned.', noName: '(no name)',
         kicked: 'A moderator removed you from the chat. You can log in again.', banned: 'You are banned from the chat. You can still read it.', banField: 'You are banned from the chat'
     };
-    var RANK = { none: 0, mod: 1, admin: 2 };                            // (the hub's own table: docs/HUB.md, "Moderation")
-    var COMMANDS = [                                                     // [the word, the rank that may use it, how it is typed, what it does]: what /help lists; the hub decides what is done
-        ['/mute', 1, '/mute name minutes', 'stop a person writing for 1 to 10080 minutes'], ['/unmute', 1, '/unmute name', 'allow a muted person to write again'],
-        ['/del', 1, '/del number', 'take one line off the screen of everybody (hold or point at the time of the line to see its number)'], ['/kick', 1, '/kick name', 'remove a person from the chat (they can log in again)'],
-        ['/ban', 2, '/ban name', 'stop a person writing until the ban is lifted (they can still read)'], ['/unban', 2, '/unban name', 'lift a ban'], ['/bans', 2, '/bans', 'list the people who are banned']
-    ];
-    var DONE = { mute: 'Done: the person is muted.', unmute: 'Done: the person can write again.', del: 'Done: the line is gone.', kick: 'Done: the person was removed.', ban: 'Done: the person is banned.', unban: 'Done: the ban is lifted.' };
+    var DONE = { mute: 'Done: the person is muted.', unmute: 'Done: the person can write again.', del: 'Done: the line is gone.', kick: 'Done: the person was removed.', ban: 'Done: the person is banned.', unban: 'Done: the ban is lifted.', noimages: 'Done: the person cannot post images.', images: 'Done: the person can post images again.' };
     var MAXBANS = 50;                                                    // (the hub sends the newest 50)
     var ABOUT = ['power', 'role', 'who'];                                // the codes that are only for a command (a line is never refused with them)
     var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young', 'quota', 'bad'];       // the codes that the hub answers a line with: an err of any other code (a refused `here` has its own) is not about a line
+    SAID.push('img', 'imgid');                                           // (and the two of an image line: the upload is not the account's, or it may not post one)
     var ERR = {                                                          // the words of the hub's err codes (docs/HUB.md: "the page owns the words") and of this page's own refusals
         rate: 'Slow down a little', login: 'Log in with Discord to chat', muted: 'You cannot chat for a while', banned: 'You cannot chat here', long: 'That line is too long', empty: 'Write something first',
-        young: 'Your account is too new to chat yet', quota: 'You have chatted a lot, try again later', bad: 'That line could not be sent', markup: 'Lines cannot hold < or >', power: 'You are not allowed to do that', role: 'Could not confirm your role, try again in a moment', who: 'Nobody by that name is here', offline: TEXT.offline, readonly: TEXT.readonly, failed: 'That did not work, try again'
+        young: 'Your account is too new to chat yet', quota: 'You have chatted a lot, try again later', bad: 'That line could not be sent', markup: 'Lines cannot hold < or >', power: 'You are not allowed to do that', role: 'Could not confirm your role, try again in a moment', who: 'Nobody by that name is here', offline: TEXT.offline, readonly: TEXT.readonly, failed: 'That did not work, try again',
+        img: 'You cannot post images now', imgid: 'That image is not there any more: add it again',
+        imgrole: 'Images can be posted by people with the Active Anters role on our Discord server. Your message was not changed.',
+        imgoff: 'Posting images is turned off for your account. If you think that is a mistake, ask a moderator on our Discord server.',
+        imgwait: 'Could not check your Discord role just now, so images are off for a moment. Messages still work.'
     };
 
     // ---- the pure parts -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -97,7 +98,7 @@
     var PICNAME = /^[0-9a-f]{32}$/, PICDIR = '/hub/pic/', PICEXT = '.png';
     function picOf(v) { return typeof v === 'string' && PICNAME.test(v) ? v : ''; }       // the name of a picture in a frame of the hub (`pic` of `you` and of a players row), or '' (the one place that reads it)
     function picsOf(v) { return v === 'on' || v === 'off' || v === 'blocked' ? v : ''; }       // the switch's state in `you.pics`, or '' (no switch: a guest, a hub without the Discord login)
-    var FAILED = Object.create(null), FAILED_ORDER = [], FAILED_MAX = 200, FAILED_MS = 600000;       // the names of pictures that did not load (a 404, a refusal, not a picture) and when: a circle drawn for one of them within ten minutes asks for nothing, so that no repaint makes a request; after ten minutes the name is asked for once more, the next time a circle is drawn for it (no timer); at most 200 names
+    var FAILED = Object.create(null), FAILED_ORDER = [], FAILED_MAX = 200, FAILED_MS = 600000;       // the pictures that did not load, and when: within ten minutes a circle asks for nothing (no repaint makes a request); then once more, when a circle is drawn for it (no timer); at most 200 names
     function failed(name) { if (FAILED[name] !== undefined) return; FAILED[name] = Date.now(); FAILED_ORDER.push(name); if (FAILED_ORDER.length > FAILED_MAX) delete FAILED[FAILED_ORDER.shift()]; }
     function hasFailed(name) {                                           // true while the name failed less than ten minutes ago; a name that is older is forgotten (and asked for again by the circle that is drawn now)
         var at = FAILED[name], d;
@@ -128,13 +129,16 @@
     function youOf(y) {                                                  // the visitor, as the hub's `you` says (a welcome, or the frame that changes it), or null when it names nobody: { name, mod, role, k, pick, other, pic (a checked name or ''), pics ('on', 'off', 'blocked' or '') }
         if (!y || typeof y !== 'object') return null;
         var name = nameOf(y.name), role = y.role === 'admin' || y.role === 'mod' || y.role === 'none' ? y.role : y.mod === true ? 'mod' : 'none';       // (`role` where the hub says it; an older hub says `mod` only)
-        return name ? { name: name, mod: role !== 'none', role: role, k: nameOf(y.k), pick: y.pick, other: y.pick === 'display' || y.pick === 'username' ? nameOf(y.other) : '', pic: picsOf(y.pics) === 'on' ? picOf(y.pic) : '', pics: picsOf(y.pics) } : null;       // (a picture only where the switch says `on`, whatever else a frame holds)
+        return name ? { name: name, mod: role !== 'none', role: role, k: nameOf(y.k), pick: y.pick, other: y.pick === 'display' || y.pick === 'username' ? nameOf(y.other) : '', pic: picsOf(y.pics) === 'on' ? picOf(y.pic) : '', pics: picsOf(y.pics), img: y.img === 'on' || y.img === 'role' || y.img === 'off' || y.img === 'wait' ? y.img : '' } : null;       // (a picture only where the switch says `on`, whatever else a frame holds)
     }
-    function lineOf(m) {                                                 // one line of the hub (history or live), cleaned: { id, who, text, mod, role, sys (a line of the hub's own: only its flag says so), k (its author's key), u (its author's username: only a moderator's copy has it; drawn for a moderator only) }, or null when it is not a line
+    function imgOf(v) { return v && typeof v === 'object' && typeof v.n === 'string' && PICNAME.test(v.n) ? v : null; }       // (the image of a line: pics.js checks the rest before it makes an address)
+    function lineOf(m) {                                                 // one line of the hub, cleaned: { id, who, text, mod, role, sys (the hub's own line: only its flag says so), k (the author's key), u (the author's username: a moderator's copy only) }, or null when it is no line
         if (!m || typeof m !== 'object' || typeof m.who !== 'string' || typeof m.text !== 'string' || count(m.id) === null) return null;
         var text = clip(plain(m.text.slice(0, LIMIT.line * 4)), LIMIT.line), sys = m.sys === true;
-        if (!shows(text)) return null;
+        var img = sys ? null : imgOf(m.img);
+        if (!shows(text) && !img) return null;                           // (an image may have no words)
         var out = { id: m.id, who: nameOf(m.who) || '?', text: text, mod: !sys && m.mod === true, role: sys ? 'none' : roleOf(m.role, m.mod), sys: sys, k: nameOf(m.k), u: nameOf(m.u) };
+        out.img = img;
         if (dayOf(m.at) !== '') out.at = m.at;                           // (the hub's own time of the line, seconds since 1970; a line without one shows no time: the page never makes one up)
         return out;
     }
@@ -151,7 +155,7 @@
         if ((u.protocol !== 'http:' && u.protocol !== 'https:') || !u.hostname || u.hostname.indexOf('.') < 1 || u.username || u.password || /\s/.test(String(u))) return null;
         return { url: String(u), host: u.hostname };
     }
-    function shorten(typed) { return typed.length > TEXT.linkCut ? pairs(typed.slice(0, 30)) + '\u2026' + pairs(typed.slice(-17)) : typed; }
+    function shorten(typed, host) { return typed.length > TEXT.linkCut ? host + '/\u2026' + pairs(typed.slice(-17)) : typed; }
     function partsOf(text) {                                             // a line as [{ s } text, { s, href, host, title } link]: at most five links, the rest is text
         var out = [], at = 0, links = 0, m, typed, k, link;
         LINKRE.lastIndex = 0;
@@ -159,7 +163,7 @@
             typed = trimLink(m[2]); link = linkOf(typed); k = m.index + m[1].length;
             if (!link) continue;
             if (k > at) out.push({ s: text.slice(at, k) });
-            out.push({ s: shorten(typed), url: link.url, title: (/[^\x00-\x7f]/.test(typed) ? link.host + ' ' : '') + link.url });
+            out.push({ s: shorten(typed, link.host), url: link.url, title: (/[^\x00-\x7f]/.test(typed) ? link.host + ' ' : '') + link.url });
             at = k + typed.length; links++;
             LINKRE.lastIndex = at;
         }
@@ -171,11 +175,6 @@
     function wordOfCommand(text) {                                       // the command word that a text starts with, in lower case ('/mute'), or '': the hub reads them in any case
         var m = /^(\/[a-z]+)(?: |$)/i.exec(text);
         return m ? m[1].toLowerCase() : '';
-    }
-    function helpOf(role) {                                              // what /help says to a role: [the lines], each a text or [how it is typed, what it does]
-        var rank = RANK[role] || 0, out = [];
-        COMMANDS.forEach(function (c) { if (c[1] <= rank) out.push([c[2], c[3]]); });
-        return out.length ? [TEXT.helpHead].concat(out) : [TEXT.helpNone];
     }
     function dayOf(at) {                                                 // the day of a time in seconds since 1970 (UTC, as 2026-11-12), or ''
         if (typeof at !== 'number' || at !== Math.floor(at) || at < 0 || at > 4e9) return '';
@@ -213,14 +212,14 @@
     function addressOf(loc) { return (loc.protocol === 'https:' ? 'wss://' : 'ws://') + loc.host + PATH; }
 
     // ---- the dock ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    // mount({ doc, win, host (Home's div), chip (the bar's login button), screen() ('home' or 'room'), go(url), fetch, now, random, WebSocket, error }) returns { root, slot, field, shown(isHome), open(on), say(text), state() }
+    // mount({ doc, win, host (Home's div), chip (the bar's login button), screen() ('home' or 'room'), go(url), fetch, now, random, WebSocket, error }) returns { root, slot, field, shown(isHome), open(on), away(on) (another chat has the box: the room's tab), say(text), state() }
     function mount(env) {
         var doc = env.doc, win = env.win, host = env.host, chip = env.chip || null;
         var visit = env.go || function (url) { win.location.assign(url); };
         var now = env.now || function () { return Date.now(); }, rnd = env.random || Math.random, Socket = env.WebSocket || win.WebSocket;
         var feed = [], you = null, login = false, people = null, state = 'connecting', welcomed = false, ever = false, lastId = -1, bad = 0, attempt = 0, liveSince = null, lastTry = 0;
         var rx = 0, wokeAt = null, grace = false, lockOf = null;       // (when the hub last spoke; when the page last came back; the Web Lock held)
-        var sock = null, stopped = false, isHome = false, stale = true, notice = '', unanswered = [], stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0, flood: 0, pics: 0 };       // (unanswered: lines and commands sent and not answered yet, oldest first)
+        var sock = null, stopped = false, isHome = false, aside = false, stale = true, notice = '', unanswered = [], stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0, flood: 0, pics: 0, flash: 0 };       // (unanswered: lines and commands sent and not answered yet, oldest first)
         var picWait = false, picWant = false, picFailed = false;                  // (the switch: a press waits for the `you` frame; a refusal or 8 s of silence puts it back)
         var busy = false, menuOn = false, forgetSure = false, refocus = false, forgetAt = 0;                                       // (a POST of the login is on its way; the chip's dropdown of the account is open)
         var tokens = PACE.burst, tokensAt = now(), said = Object.create(null), heard = 0, skipped = 0, muted = { repaint: false, flood: false };       // (said: the texts that were sent in the last 31 s, as the hub remembers them)
@@ -228,6 +227,8 @@
         var hold = false;                                                        // the next repaint is for a change of the role: the reader keeps their place
         var removed = '';                                                        // 'kicked' or 'banned' after the hub said `bye` (or `banned` to a line): a notice stays on the screen, and a banned person's field stays off
         var barredShown = false;                                                 // (whether the last paint showed the field off for a ban: the pieces that stand beside the field are told when it changes)
+        var picsApi = null, picsAsked = false, postAsked = false, delWait = [];                                  // the readers' part (pics.js), the posters' part (post.js: asked once), the author's deletes that wait
+        var cmdsApi = null, cmdsRows = [], cmdsAsked = false, cmdsHeld = [];       // the helper (cmds.js), the hub's `cmds` rows, replies that came before it was there
         var taps = [], hello = null, rowFns = [], arrivalFns = [];                                             // the players list listens through this socket: fn(kind, frame), kind 'live' (the welcome), 'who', 'lost' or 'shown' (Home shows or not); hello: the open socket's welcome
 
         function el(tag, cls, text) {
@@ -295,13 +296,14 @@
 
         // ---- what is seen -----------------------------------------------------------------------------------------------------------------------------------------------------------------------
         function visible() { return !doc.hidden; }
-        function seen() { return isHome && open && visible(); }                 // the log is on the screen and somebody can read it
+        function seen() { return isHome && open && !aside && visible(); }       // the log is on the screen and somebody can read it (aside: another chat has the box, the room's tab: web/home/roomchat.js)
         function unread() { var n = 0; for (var i = 0; i < feed.length; i++) if (feed[i].fresh) n++; return n; }
         function row(e) {
             var r, admin = e.role === 'admin';
             if (e.priv) {                                                        // an answer to this visitor alone (never sent, never kept by the hub): a tag, then its lines
-                r = el('div', 'gc-line gc-private'); r.appendChild(el('span', 'gc-tag', TEXT.only));
+                r = el('div', 'gc-line gc-private' + (e.cls ? ' ' + e.cls : '')); r.appendChild(el('span', 'gc-tag', TEXT.only));
                 e.lines.forEach(function (l) { r.appendChild(typeof l === 'string' ? el('div', 'gc-pl', l) : put(el('div', 'gc-pl'), [el('bdi', 'gc-cmd', l[0]), el('span', 'gc-pw', l[1] ? ' ' + l[1] : '')])); });
+                if (e.draw) { try { e.draw(r); } catch (x) { if (env.error) env.error(x); } }       // (the helper's own block)
                 return r;
             }
             if (e.sys) { r = put(el('div', 'gc-line gc-event'), [stamp(e), el('bdi', 'gc-text', e.text)]); r.setAttribute('data-n', String(e.id)); return r; }       // (a line of the hub's own, drawn quietly; it names the person in its words, and has no author)
@@ -312,8 +314,15 @@
             put(r, [name]);
             if (tools() && e.u) put(r, [el('bdi', 'gc-u', ' (' + e.u + ')')]);       // (a moderator is shown the username where it differs from the name; nobody else ever is)
             put(r, [el('span', 'gc-sep', ': '), words(e.text)]);
+            if (e.img) pic(e, r);
             if (tools()) rowFns.forEach(function (fn) { tell1(fn, e.id, r); });       // (the moderation sheet marks the lines that its viewer may act on)
             return r;
+        }
+        function pic(e, r) {                                                     // the thumbnail of a line's image (pics.js, loaded the first time: the log is drawn again when it is there)
+            if (picsApi) { try { picsApi.draw(r, e); } catch (x) { if (env.error) env.error(x); } return; }
+            if (picsAsked || !env.load) return;
+            picsAsked = true;
+            env.load('home/pics', function () { if (win.AntsHomePics) { picsApi = win.AntsHomePics.mount({ doc: doc, win: win, dock: { root: box, log: log, you: function () { return you ? { name: you.name, role: you.role } : null; }, line: lineById, clock: clockOf, command: guard(command), delimg: guard(delimg) } }); stale = true; render(); } });
         }
         function stamp(e) {                                                      // the time of a line, from the hub's frame: first in the line, so that it is read before the name; the title has the date, and a moderator's the number that /del takes
             if (e.at === undefined) return el('span', 'gc-t gc-t0');
@@ -399,7 +408,7 @@
             acctName.className = 'gc-an' + roleClass(you ? you.role : 'none'); if (you && you.role !== 'none') acctName.setAttribute('title', wordOfRole(you.role)); else acctName.removeAttribute('title');
             adminLink.hidden = !(you && you.role === 'admin');
             yr.hidden = !(you && you.role !== 'none'); yr.textContent = yr.hidden ? '' : TEXT.youAre[you.role];       // (the role in words, as well as in the color of the name)
-            if (slot.hidden && chip && slot.contains && slot.contains(doc.activeElement)) { if (live && login) chip.focus(); else refocus = true; }       // (the dropdown goes under the focus: a Log out, a Forget me: the focus goes to the chip, not to nowhere; a name that is picked closes the socket and hides the chip too, so the focus waits for the dropdown to come back)
+            if (slot.hidden && chip && slot.contains && slot.contains(doc.activeElement)) { if (live && login) chip.focus(); else refocus = true; }       // (the dropdown goes under the focus: it goes to the chip, not to nowhere; a picked name closes the socket and hides the chip, so the focus waits for the dropdown to come back)
             outBtn.disabled = forgetBtn.disabled = busy;
             pickNote.hidden = pickBtn.hidden = !(you && you.other);
             if (you && you.other) { var a = you.pick === 'display' ? 0 : 1; pickNote.textContent = TEXT.shows + TEXT.names[a] + '.'; pickBtn.textContent = TEXT.use + TEXT.names[1 - a] + ': ' + you.other; }
@@ -519,8 +528,8 @@
             if (e.id !== null && e.id > lastId) lastId = e.id;
             while (feed.length > LIMIT.feed) { var old = feed.shift(); if (seen() && !stale && old.el && old.el.parentNode) unrow(old); else stale = true; }       // (a screen that is not painted is made again when it comes back)
         }
-        function answer(lines) {                                                // a private answer: a line of this screen, with its lines, for this visitor alone (nothing is sent, the hub keeps nothing)
-            var e = { id: null, priv: true, lines: lines, mod: false, role: 'none', own: false, fresh: false };
+        function answer(lines, draw, cls) {                                     // a private answer: a line of this screen, with its lines (or what `draw(row)` adds), for this visitor alone (the hub keeps nothing)
+            var e = { id: null, priv: true, lines: lines, draw: draw || null, cls: cls || '', mod: false, role: 'none', own: false, fresh: false };
             push(e);
             if (seen() && !stale) { settle(true); e.el = row(e); log.appendChild(e.el); days(); reveal(e); } else stale = true;
             render();
@@ -531,7 +540,7 @@
         function onWelcome(m) {
             if (welcomed) return;                                                // (one welcome for each socket)
             if (m.v !== VERSION || (m.history !== undefined && !Array.isArray(m.history))) { lost(); return; }       // (a hub that speaks another version is no hub for this page)
-            you = youOf(m.you); picPending(false);
+            you = youOf(m.you); picPending(false); if (!you) setCmds([]); wantPost();
             if ((removed === 'kicked' && you) || (removed === 'banned' && !you)) removed = '';       // (a person who is somebody else now, or nobody, is not the one that was removed)
             login = m.login === true; people = count(m.online);
             var before = lastId;
@@ -552,7 +561,8 @@
             var e = lineOf(m);
             if (!e || known(e.id)) return;
             e.own = !e.sys && mine(e); e.fresh = !e.own && !seen();
-            if (e.own) { var key = nfc(e.text), at = -1, old; waiting(); for (var j = 0; j < unanswered.length && at < 0; j++) if (unanswered[j].key === key) at = j; old = oldest(false); if (at < 0 && old >= 0 && points(key) * 2 >= points(unanswered[old].key) && within(key, unanswered[old].key)) at = old; if (at >= 0) unanswered.splice(at, 1); }       // (the echo of a line: composed, or with characters taken out)
+            if (e.own && e.img) { for (var q = 0; q < unanswered.length; q++) if (unanswered[q].img) { unanswered.splice(q, 1)[0].done('ok'); break; } }       // (the echo of an image line)
+            else if (e.own) { var key = nfc(e.text), at = -1, old; waiting(); for (var j = 0; j < unanswered.length && at < 0; j++) if (unanswered[j].key === key) at = j; old = oldest(false); if (at < 0 && old >= 0 && points(key) * 2 >= points(unanswered[old].key) && within(key, unanswered[old].key)) at = old; if (at >= 0) unanswered.splice(at, 1); }       // (the echo of a line: composed, or with characters taken out)
             push(e);
             if (seen() && !stale) { settle(); flow(); e.el = row(e); log.appendChild(e.el); days(); } else stale = true;
             render();
@@ -560,6 +570,7 @@
         }
         function onDel(m) {
             if (count(m.id) === null) return;                                    // (only a number names a line: a private answer has none)
+            delWait.slice().forEach(function (w) { var at = unanswered.indexOf(w.entry); if (w.id === m.id) { if (at >= 0) unanswered.splice(at, 1); w.entry.done('ok'); } });
             for (var i = 0; i < feed.length; i++) {
                 if (feed[i].id !== m.id) continue;
                 var gone = feed.splice(i, 1)[0];
@@ -575,7 +586,7 @@
             var next = you ? youOf(m.you) : null;
             if (!next) return;
             var was = tools();
-            you.role = next.role; you.mod = next.mod; you.pic = next.pic; you.pics = next.pics;       // (the picture and the switch follow the hub's whole `you` at once, whenever it comes)
+            you.role = next.role; you.mod = next.mod; you.pic = next.pic; you.pics = next.pics; you.img = next.img; wantPost();       // (the picture and the switch follow the hub's whole `you` at once, whenever it comes)
             if (!picWait || next.pics === 'blocked' || next.pics === (picWant ? 'on' : 'off')) picPending(false);       // (a `you` that says what was asked for answers a press of the switch, and so does one that follows a refusal; another `you` meanwhile does not)
             if (was !== tools()) { stale = true; hold = seen(); }                                   // (the numbers and the usernames come or go with the role: the log is made again)
             render();
@@ -600,6 +611,23 @@
             entry = unanswered.splice(at, 1)[0];
             entry.done('ok', rows);
         }
+        function setCmds(rows) {                                                // the account's commands (the hub's `cmds`): the helper is loaded the first time there is a row, never for a guest or a reader
+            cmdsRows = Array.isArray(rows) ? rows : [];
+            if (cmdsApi) cmdsApi.rows(cmdsRows);
+            else if (cmdsRows.length && !cmdsAsked && env.load) {
+                cmdsAsked = true;
+                env.load('home/cmds', function () {
+                    if (!win.AntsHomeCmds) return;
+                    cmdsApi = win.AntsHomeCmds.mount({ doc: doc, win: win, dock: { root: box, field: field, grow: grow, block: function (draw, cls) { answer([], draw, cls); } } }); cmdsApi.rows(cmdsRows);
+                    cmdsHeld.splice(0).forEach(function (h) { cmdsApi.reply(h[0], h[1]); });
+                });
+            }
+        }
+        function onReply(m) {                                                   // the hub's private answer to a command: the oldest command that waits is answered, as with `ok`
+            var at = oldest(true), entry = at >= 0 ? unanswered.splice(at, 1)[0] : null, typed = entry ? entry.text : '';
+            if (entry && entry.done) entry.done(m.r === 'rate' ? 'rate' : m.r === 'unknown' ? 'power' : 'bad');       // (the sheet's own command: the sheet says the words)
+            else if (cmdsApi) cmdsApi.reply(m, typed); else if (cmdsHeld.length < 10) cmdsHeld.push([m, typed]);
+        }
         function onOk(m) {                                                       // a command was done: the oldest command that waits is answered
             var at = oldest(true), c = typeof m.c === 'string' && Object.prototype.hasOwnProperty.call(DONE, m.c) ? m.c : '', entry = at >= 0 ? unanswered.splice(at, 1)[0] : null;
             if (entry && entry.done) { entry.done('ok'); return; }               // (the sheet's own command: the sheet says the words, as a toast and a private line)
@@ -617,6 +645,8 @@
             else if (m.t === 'ok') onOk(m);
             else if (m.t === 'bans') onBans(m);
             else if (m.t === 'mutes') onMutes(m);
+            else if (m.t === 'cmds') setCmds(you ? m.rows : []);
+            else if (m.t === 'reply') onReply(m);
             else if (m.t === 'bye') onBye(m);
             else if (m.t === 'online') { people = count(m.n); render(); }
             else if (m.t === 'who') tapped('who', m);
@@ -626,6 +656,48 @@
         }                                                                        // (any other kind is ignored)
 
         // ---- what the visitor does ------------------------------------------------------------------------------------------------------------------------------------------------------------
+        function wantPost() {                                                    // post.js, once, for a person whom the hub says may post
+            if (postAsked || !env.load || !you || you.img !== 'on') return;
+            postAsked = true;
+            env.load('home/post', function () { if (win.AntsHomePost) win.AntsHomePost.mount({ doc: doc, win: win, dock: { root: box, form: form, field: field, grow: grow, sendImage: sendImage } }); });
+        }
+        function holdFor(entry, frame) {                                            // a frame that waits for its answer: done(code) once ('ok', the hub's code, `offline` or `silent`)
+            var done = entry.done;
+            entry.done = function (code) { clearTimeout(entry.timer); delWait = delWait.filter(function (w) { return w.entry !== entry; }); tell1(function () { done(code); }); };
+            waiting(); sendHeld(entry, frame);
+        }
+        function sendHeld(entry, frame) {                                           // the frame goes out and its entry waits for the answer (8 s)
+            try { sock.send(JSON.stringify(frame)); } catch (e) { lost(); entry.done('offline'); return; }
+            unanswered.push(entry);
+            entry.timer = setTimeout(guard(function () { var at = unanswered.indexOf(entry); if (at >= 0) unanswered.splice(at, 1); entry.done('silent'); }), MS.pending);
+        }
+        function sendImage(id, words, done) {                                    // a line that carries an upload: '' when it went out, else the code that says why not
+            var text = plain(String(words || '')), why = !sock || sock.readyState !== 1 || state !== 'live' ? 'offline' : you ? (removed === 'banned' ? 'banned' : you.img !== 'on' ? 'img' : LIMIT.line < points(text) ? 'long' : text.search(/[<>]/) >= 0 ? 'markup' : '') : 'readonly';
+            if (why) { tell(why); return why; }
+            holdFor({ text: text, key: '', at: now(), cmd: false, img: true, done: done }, { t: 'say', text: text, img: id });
+            return '';
+        }
+        function delimg(id, done) {                                              // the author deletes its own image line: done('ok') when the line is taken off the screens
+            var entry = { text: '', key: '', at: now(), cmd: true, done: done };
+            if (!sock || sock.readyState !== 1 || state !== 'live' || !you) { tell1(function () { done('offline'); }); return; }
+            if (oldest(true) >= 0) { tell1(function () { done('rate'); }); return; }
+            delWait.push({ id: id, entry: entry }); holdFor(entry, { t: 'delimg', id: id });
+        }
+        function note1(from, cls) {                                              // the first element under `from` with the class (a walk: the dock makes no selector)
+            for (var i = 0, c = from.children || [], hit; i < c.length; i++) if ((hit = (' ' + c[i].className + ' ').indexOf(' ' + cls + ' ') !== -1 ? c[i] : note1(c[i], cls))) return hit;
+            return null;
+        }
+        function noImage(ev) {                                                   // a paste or a drop of a file by a person who may not post one: a few words, and the page is not taken away
+            var d = ev.clipboardData || ev.dataTransfer, t = d && d.types, i, file = false, s = note1(form, 'gt-say'), code;
+            for (i = 0; t && i < t.length; i++) if (t[i] === 'Files') file = true;
+            if (!file || !you || you.img === 'on' || !you.img) return;
+            ev.preventDefault();
+            if (ev.type === 'dragover') return;
+            code = you.img === 'off' ? 'imgoff' : you.img === 'wait' ? 'imgwait' : 'imgrole';
+            if (!s) { tell(code); return; }
+            s.textContent = wordOf(code, login); s.hidden = false; stop('flash');
+            timers.flash = setTimeout(guard(function () { timers.flash = 0; s.hidden = true; }), MS.notice);
+        }
         function waiting() { var t = now(); unanswered = unanswered.filter(function (o) { return t - o.at < MS.pending; }); }       // (a send with no answer after 8 s is not waited for)
         function oldest(cmd) { for (var i = 0; i < unanswered.length; i++) if (!unanswered[i].cmd === !cmd) return i; return -1; }       // (the oldest line that waits, or with `cmd` the oldest command)
         function refuse(code) {                                                 // the hub refused a send, in order: `bad` is what it says to a wrong command, any other code is for a line; nothing of ours waiting, no refusal of ours
@@ -633,6 +705,7 @@
             var about = ABOUT.indexOf(code) !== -1, at = oldest(about || code === 'bad'), refused = at < 0 && about ? { cmd: true } : unanswered.splice(at < 0 ? 0 : at, 1)[0];       // (power, role and who are a command's, even when its wait is over)
             if (!refused) return;
             if (code === 'banned') removed = 'banned';                           // (a banned person who reloads the page is told by the hub's refusal: the notice and the field off)
+            if (refused.img) tell(code);                                         // (an image line's refusal is told in the note as well)
             if (refused.done) { refused.done(code); render(); return; }          // (the sheet's own command: the sheet says the words)
             if (refused.cmd) answer([code === 'bad' ? TEXT.cmdBad : code === 'rate' ? TEXT.cmdRate : wordOf(code, login)]); else tell(code);
             if (refused.text === undefined) return;
@@ -649,31 +722,28 @@
         }
         function sendLine(raw) {                                                // '' when the line went out, else the code that says why not; never while the link is down
             var text = plain(String(raw)), word = you ? wordOfCommand(text) : '';
-            if (word === '/help') { answer(helpOf(you.role)); return ''; }       // (this page's own: it is never sent, and it never is a line)
-            if (word && you.role === 'none' && COMMANDS.some(function (c) { return c[0] === word; })) { answer([ERR.power]); return ''; }       // (a command word from a person who holds no role is not a line either: the hub would refuse it and never post it)
+            if (word === '/help') return '';                                     // (never sent, never a line; post() leaves a slash in the field, which opens the helper)
             var why = !sock || sock.readyState !== 1 || state !== 'live' ? 'offline' : !you ? 'readonly' : removed === 'banned' ? 'banned' : !text ? 'empty' : points(text) > LIMIT.line ? 'long' : /[<>]/.test(text) ? 'markup' : !allowed(text) ? 'rate' : '';
             if (why) { tell(why); return why; }
             try { sock.send(JSON.stringify({ t: 'say', text: text })); } catch (e) { lost(); return 'offline'; }
-            var cmd = you.mod && text.charAt(0) === '/';
+            var cmd = text.charAt(0) === '/' && text.charAt(1) !== '/';          // (one slash: a command, answered by ok, bans, reply or err; two: a line, answered by its echo)
             waiting(); unanswered.push({ text: text, key: nfc(text), at: now(), cmd: cmd });       // (a command has no answer when the hub takes it, and `bad` when it is wrong)
             return '';
         }
-        function command(text, done, rows) {                                    // a command of the moderation sheet, sent as the hub reads a typed one, one at a time; done(code) is called once: 'ok', a code of the hub (power, role, who, rate, bad...), 'offline', or 'silent' (no answer in 8 s). The dock adds nothing to the log: the sheet says the words. With `rows` (the sheet's `/mutes`) the hub's `mutes` frame is the answer: done('ok', rows)
+        function command(text, done, rows) {                                    // a command of the moderation sheet, sent as typed, one at a time; done(code) is called once: 'ok', a code of the hub (power, role, who, rate, bad...), 'offline', or 'silent' (8 s). The sheet says the words, the dock adds nothing to the log. With `rows` (`/mutes`) the `mutes` frame is the answer
             var entry = { text: text, key: nfc(text), at: now(), cmd: true, rows: rows === true }, fired = false;
             entry.done = function (code, list) { if (fired) return; fired = true; clearTimeout(entry.timer); tell1(function () { done(code, list); }); };
             waiting();
             if (!you || you.role === 'none') { entry.done('power'); return; }
             if (!sock || sock.readyState !== 1 || !welcomed || state !== 'live') { entry.done('offline'); return; }
             if (oldest(true) >= 0) { entry.done('rate'); return; }
-            try { sock.send(JSON.stringify({ t: 'say', text: entry.text })); } catch (e) { lost(); entry.done('offline'); return; }
-            unanswered.push(entry);
-            entry.timer = setTimeout(guard(function () { var at = unanswered.indexOf(entry); if (at >= 0) unanswered.splice(at, 1); entry.done('silent'); }), MS.pending);
+            sendHeld(entry, { t: 'say', text: entry.text });
         }
         function lineById(id) {                                                 // a copy of a person's line of the log (never a private answer), or null
-            for (var i = 0; i < feed.length; i++) { var e = feed[i]; if (!e.priv && e.id === id) return { id: e.id, who: e.who, text: e.text, role: e.role, sys: e.sys, u: e.u, own: !!e.own }; }
+            for (var i = 0; i < feed.length; i++) { var e = feed[i]; if (!e.priv && e.id === id) return { id: e.id, who: e.who, text: e.text, role: e.role, sys: e.sys, u: e.u, img: !!e.img, own: !!e.own }; }
             return null;
         }
-        function byAuthor(id) {                                                 // for a moderator or an administrator only: the lines of the log (never a private answer, never the hub's own) that the account of line `id` wrote, newest first, as { id, text, at }; matched by the hub's key of the account, never by a name; none when that line is not in the log or has no key
+        function byAuthor(id) {                                                 // staff only: the lines of the log (no private answer, no hub line) that the account of line `id` wrote, newest first, as { id, text, at }; matched by the hub's key, never a name
             var from = null, out = [], i, e;
             if (!tools()) return out;
             for (i = 0; i < feed.length; i++) if (!feed[i].priv && feed[i].id === id) from = feed[i];
@@ -691,6 +761,7 @@
             drop();
             liveSince = null; welcomed = false; attempt = 0; you = null; menuOn = false; hello = null; removed = '';
             for (var i = feed.length - 1; i >= 0; i--) if (feed[i].priv) feed.splice(i, 1);       // (the private answers go too: a list of bans is not for the next person)
+            setCmds([]); cmdsHeld.length = 0;
             stale = true;                                                        // (the log is made again at once, without the usernames and numbers of a moderator: nobody sees them after a Log out)
             go();
             render();
@@ -724,13 +795,14 @@
             for (i = 0; i < list.length; i++) if (!list[i].hidden && !list[i].disabled && !(swRow.hidden && (list[i] === swBox || list[i] === swAgain))) return list[i];
             return outBtn;
         }
-        if (chip) chip.addEventListener('click', guard(function () { if (!you) { startLogin(); return; } setMenu(!menuOn); if (menuOn) { var first = firstControl(); if (first.focus) first.focus(); } }));       // (the chip opens the dropdown and puts the focus on its first control, so that a Tab forward meets the rest; a second press closes it)
+        if (chip) chip.addEventListener('click', guard(function () { if (!you) { startLogin(); return; } setMenu(!menuOn); if (menuOn) { var first = firstControl(); if (first.focus) first.focus(); } }));       // (the chip opens the dropdown with the focus on its first control; a second press closes it)
         doc.addEventListener('click', guard(function (e) { var t = e && e.target; if (menuOn && !(t && ((slot.contains && slot.contains(t)) || (chip && chip.contains && chip.contains(t))))) setMenu(false); }));       // (a press anywhere else puts it away)
         win.addEventListener('resize', guard(function () { if (menuOn) render(); }));
         doc.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Escape' && menuOn) { setMenu(false); if (chip && chip.focus) chip.focus(); } }));       // (Escape closes it, wherever the focus is, and the focus goes back to the chip)
         // the field is a text area (the box grows with the words, in every window) that behaves as the one-line field it replaced: Enter sends (a keyboard that makes a line break through beforeinput does too), a line break that is pasted becomes a space
         function grow() {                                                       // the height of the words, one line to four, then it scrolls (talk.css has a lower max-height for a wide window and for a low one)
             var s = field.style;
+            if (cmdsApi) cmdsApi.sync();                                          // (the helper follows the field's text)
             if (field.scrollHeight === 0) return;                                 // (the Chat view is not shown: it is measured when the view comes, paint() asks again)
             var was = atBottom(), at = field.selectionStart, before = s.height, to;       // (a log that is read at its end stays at its end while the box grows and shrinks)
             s.height = 'auto'; to = field.gtFit ? field.gtFit() : field.scrollHeight;
@@ -738,15 +810,15 @@
             if (was && to !== before) log.scrollTop = log.scrollHeight;
             if (typeof at !== 'number' || at >= field.value.length) field.scrollTop = field.scrollHeight;
         }
-        function post() { if (sendLine(field.value) === '') { field.value = ''; grow(); } }
+        function post() { var typed = field.value, help = !!you && wordOfCommand(plain(typed)) === '/help'; if (sendLine(typed) === '') { field.value = help ? '/' : ''; grow(); } }
         function sendNow() {                                                    // through the form's own submit, which the emoji and voice buttons hear; where the form has no requestSubmit (iOS 15) a submit event that can be cancelled is sent to it
             if (form.requestSubmit) form.requestSubmit();
             else if (form.dispatchEvent && typeof win.Event === 'function') form.dispatchEvent(new win.Event('submit', { cancelable: true }));
             else post();
         }
         form.addEventListener('submit', guard(function (e) { if (e && e.preventDefault) e.preventDefault(); post(); }));
-        field.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) { if (e.preventDefault) e.preventDefault(); sendNow(); } }));
-        field.addEventListener('beforeinput', guard(function (e) { if (e && (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph')) { if (e.preventDefault) e.preventDefault(); sendNow(); } }));
+        field.addEventListener('keydown', guard(function (e) { if (cmdsApi && cmdsApi.key(e)) return; if (e && e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) { if (e.preventDefault) e.preventDefault(); sendNow(); } }));
+        field.addEventListener('beforeinput', guard(function (e) { if (e && (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph')) { if (e.preventDefault) e.preventDefault(); if (!(cmdsApi && cmdsApi.key({ key: 'Enter' }))) sendNow(); } }));
         field.addEventListener('input', guard(function () {
             var v = field.value, at = field.selectionStart;
             if (/[\r\n]/.test(v)) { field.value = v.replace(/[\r\n]+/g, ' '); if (field.setSelectionRange && typeof at === 'number') { at = v.slice(0, at).replace(/[\r\n]+/g, ' ').length; field.setSelectionRange(at, at); } }       // (a run of breaks is one space, and the caret stays after the same letter)
@@ -765,6 +837,7 @@
         win.addEventListener('pagehide', guard(function () { stopped = true; lost(); }));       // (a page that goes away, or into the back-forward cache, lets the hub go)
         win.addEventListener('pageshow', guard(function (e) { if (!e || !e.persisted) return; if (stopped) { stopped = false; attempt = 0; wokeAt = now(); go(); } else wake(); }));
 
+        field.addEventListener('paste', guard(noImage)); box.addEventListener('dragover', guard(noImage)); box.addEventListener('drop', guard(noImage));
         paint();
         go();
         return {
@@ -772,9 +845,10 @@
             you: function () { return you ? { name: you.name, role: you.role } : null; }, line: lineById, by: byAuthor, when: clockOf, arrived: function (fn) { arrivalFns.push(fn); }, command: guard(command), mutes: guard(function (done) { command('/mutes', done, true); }), note: guard(function (text) { answer([String(text)]); }), rows: function (fn) { rowFns.push(fn); },
             tap: function (fn) { taps.push(fn); if (hello) tell1(fn, 'live', hello); else if (state === 'offline') tell1(fn, 'lost'); },
             send: out,
-            shown: guard(function (on) { isHome = !!on; if (!on) menuOn = false; if (seen()) stale = true; render(); tapped('shown', !!on); }), open: guard(setOpen)
+            shown: guard(function (on) { isHome = !!on; if (!on) menuOn = false; if (seen()) stale = true; render(); tapped('shown', !!on); }), open: guard(setOpen),
+            away: guard(function (on) { on = !!on; if (aside === on) return; aside = on; if (seen()) stale = true; render(); })
         };
     }
 
-    return { PATH: PATH, LIMIT: LIMIT, MS: MS, PACE: PACE, TEXT: TEXT, ERR: ERR, plain: plain, points: points, clip: clip, parse: parse, count: count, lineOf: lineOf, partsOf: partsOf, mutesOf: mutesOf, youOf: youOf, picOf: picOf, picture: picture, roleOf: roleOf, wordOfRole: wordOfRole, helpOf: helpOf, bansOf: bansOf, wordOfCommand: wordOfCommand, wordOf: wordOf, delayOf: delayOf, addressOf: addressOf, mount: mount };
+    return { PATH: PATH, LIMIT: LIMIT, MS: MS, PACE: PACE, TEXT: TEXT, ERR: ERR, plain: plain, points: points, clip: clip, parse: parse, count: count, lineOf: lineOf, partsOf: partsOf, mutesOf: mutesOf, youOf: youOf, picOf: picOf, picture: picture, roleOf: roleOf, wordOfRole: wordOfRole, bansOf: bansOf, wordOfCommand: wordOfCommand, wordOf: wordOf, delayOf: delayOf, addressOf: addressOf, mount: mount };
 });

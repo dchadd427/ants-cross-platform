@@ -2,6 +2,7 @@
 #include "ants_app/net_overlay.hpp"
 #include "ants_app/version.hpp"
 #include "ants_ai/bot.hpp"
+#include "ants_net/address.hpp"
 #include <iostream>
 #include <algorithm>
 #include <cstdlib>
@@ -344,6 +345,13 @@ bool Application::init(const ApplicationConfig& config) {
         // newest entry of that server and room, or of the seat that --seat asks for. The key goes into the Hello only; the seat is the entry's, so that the key can be let go of by its seat.
         net::SeatKey join_key{};
         uint8_t join_seat = config_.net_seat;
+#ifndef __EMSCRIPTEN__
+        if (!host_role && !config_.net_url.empty()) {                                   // (a wss address as it was typed or configured, in the one written form that the key of a seat names the server by: wss_url_text)
+            net::WssUrl written;
+            std::string why;
+            if (net::parse_wss_url(config_.net_url, written, why)) config_.net_url = net::wss_url_text(written);
+        }
+#endif
         if (!host_role && !config_.net_room.empty() && rejoin_store_) {
             const std::string server = rejoin_server_text(config_.net_address, config_.net_port, config_.net_url);
             if (const std::optional<RejoinEntry> kept = rejoin_store_->find(server, config_.net_room, config_.net_seat)) {
@@ -351,6 +359,7 @@ bool Application::init(const ApplicationConfig& config) {
                 join_seat = kept->seat;
             }
         }
+        if (!config_.net_extra_ca_pem.empty()) net_->set_extra_trusted_ca_pem(config_.net_extra_ca_pem);
         const bool ok = host_role                   ? net_->host(config_.net_port, player_name, config_.net_loopback_only)
                         : !config_.net_url.empty() ? net_->join_url(config_.net_url, player_name, join_seat, config_.net_room, config_.net_token, join_key)
                                                    : net_->join(config_.net_address, config_.net_port, player_name, join_seat, config_.net_room, config_.net_token, join_key);
@@ -358,11 +367,15 @@ bool Application::init(const ApplicationConfig& config) {
 #if defined(__EMSCRIPTEN__)
             std::cerr << "[Application] Could not join " << config_.net_url << " (not a usable ws:// or wss:// address, or this browser has no WebSocket)" << std::endl;
 #else
-            std::cerr << "[Application] Could not join " << config_.net_url << ": --join-url works in the web build only, a native game joins with --join host[:port]" << std::endl;
+            std::cerr << "[Application] Could not join " << config_.net_url << ": " << (net_->join_refusal().empty() ? std::string("the link could not be made") : net_->join_refusal()) << std::endl;
 #endif
             return false;
         }
         if (!ok) {
+            if (!host_role && !net_->join_refusal().empty()) {
+                std::cerr << "[Application] Could not join " << config_.net_address << ":" << config_.net_port << ": " << net_->join_refusal() << std::endl;
+                return false;
+            }
             std::cerr << "[Application] Could not " << (host_role ? "open a room on port " : "reach the host at ")
                       << (host_role ? std::to_string(config_.net_port)
                                     : !config_.net_url.empty() ? config_.net_url : config_.net_address + ":" + std::to_string(config_.net_port))
@@ -805,6 +818,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_set_page_fullscreen(int on) {
 // The touch model, for the page's browser check (tests/scripts/web_touch_check.py): 30: the taps, 31: the holds, 32: the drags, 33: the two-finger gestures, 34: the fingers that are tracked, 35: what the model
 // is doing (touch_control.hpp Mode: 0 idle, 1 waiting, 2 left button, 3 right button, 4 minimap, 5 two fingers), 36: the slop in picture pixels times 100.
 // The picking, for the page's browser check of a replay (tests/scripts/web_camera_check.py): 50: the ants that are picked, plus 1000 when a base is picked and 100000 when an ant is inspected (0: nothing is picked; -1 outside a match).
+// Hints (protocol 26, docs/P2P_HINTS.md): 80: the hints that this game sent (its own orders, to the other players' channels), 81: the hints that the server sent (a computer player's orders), 82: the hints
+// that the channels delivered, 83: the hints that the prediction took, 84: ... that a sealed turn confirmed, 85: ... that arrived after their turn or were dropped, 86: the rebuilds that a hint caused (-1: no game).
 // The countdown card (protocol 21), for the page's Fullscreen button (web/countdown_button.js): 60 - 65, see Application::countdown_probe (application_net.cpp).
 // The HUD's own Fullscreen button, for the page (web/hud_fullscreen.js): 70 - 76, see Application::hud_probe (application_net.cpp); the page tells the game whether it is fullscreen (ants_set_page_fullscreen).
 // Anything else, or no game: -1.
@@ -850,6 +865,22 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
             g_frame_work_max_ms = 0.0;
             g_frame_work_frames = 0;
             return 0;
+        case 80: case 81: case 82: case 83: case 84: case 85: case 86: {
+            const net::NetGame* game = g_web_app->net();
+            if (game == nullptr) return -1;
+            const net::NetGame::HintCounts& counts = game->hint_counts();
+            const net::Prediction::Stats empty;
+            const net::Prediction::Stats& st = game->prediction() != nullptr ? game->prediction()->stats() : empty;
+            switch (what) {
+                case 80: return static_cast<int>(counts.sent);
+                case 81: return static_cast<int>(counts.from_server);
+                case 82: return static_cast<int>(counts.from_peers);
+                case 83: return static_cast<int>(st.hints_accepted);
+                case 84: return static_cast<int>(st.hints_confirmed + st.hints_confirmed_moved);
+                case 85: return static_cast<int>(st.hints_late + st.hints_dropped);
+                default: return static_cast<int>(st.rebuilds_hint);
+            }
+        }
         case 20: return g_web_app->match_running() ? static_cast<int>(g_web_app->sim().roster_mask()) : -1;
         case 21: case 22: case 23: case 24: {
             if (!g_web_app->match_running()) return -1;
@@ -872,7 +903,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
         case 35: return static_cast<int>(g_web_app->touch().mode());
         case 36: return static_cast<int>(g_web_app->touch_slop() * 100.0 + 0.5);
         case 70: case 71: case 72: case 73: case 74: case 75: case 76: return g_web_app->hud_probe(what);                          // (the HUD's Fullscreen button: application_net.cpp)
-        case 60: case 61: case 62: case 63: case 64: case 65: return g_web_app->countdown_probe(what);                // (the countdown card, protocol 21: application_net.cpp)
+        case 60: case 61: case 62: case 63: case 64: case 65: case 66: case 67: case 68: case 69: return g_web_app->countdown_probe(what);                // (the countdown card, protocol 21: application_net.cpp)
         case 50: return g_web_app->match_running() ? static_cast<int>(g_web_app->hud().get_selected_ant_ids().size()) + (g_web_app->hud().get_selected_base_team_id() >= 0 ? 1000 : 0) + (g_web_app->hud().get_selected_ant_id() != 0 ? 100000 : 0) : -1;
         default: return net_overlay_probe(g_web_app->net_overlay_now(), what);                 // (16 and 10000 and up; anything else is -1)
     }

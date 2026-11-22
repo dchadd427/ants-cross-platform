@@ -531,7 +531,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(d.ok && same(d.replay, crowd));
     } TEST_END();
 
-    TEST_CASE("RP1.5 The Writer Refuses What The Reader Would: A Command That The Wire Form Cannot Hold, A Turn Out Of Order Or Past The End, An Unprintable Text, A File Over 1 MiB") {
+    TEST_CASE("RP1.5 The Writer Refuses What The Reader Would: A Command That The Wire Form Cannot Hold, A Turn Out Of Order Or Past The End, An Unprintable Text, A File Over 16 MiB") {
         std::string error;
         const auto refused = [&](const Replay& r) { return encode(r, error).empty() && !error.empty(); };
         Replay r = synthetic();
@@ -593,8 +593,8 @@ int main(int argc, char* argv[]) {
         huge.head = head_for(tiny, "TINY", 1, 0x0F);
         huge.complete = true;
         huge.total_turns = 100;
-        for (uint32_t i = 0; i < 40000; ++i) huge.commands.push_back(TimedCommand{i / 400, make_command(CommandType::GroupMove, 0, 1, 1, std::vector<uint32_t>(32, i))});
-        ASSERT_TRUE(refused(huge));                                                // 40,000 commands of 137 bytes: over 1 MiB
+        for (uint32_t i = 0; i < 130000; ++i) huge.commands.push_back(TimedCommand{i / 1400, make_command(CommandType::GroupMove, 0, 1, 1, std::vector<uint32_t>(32, i))});
+        ASSERT_TRUE(refused(huge));                                                // 130,000 commands of 137 bytes: over 16 MiB
         ASSERT_TRUE(contains(error, "KiB"));
     } TEST_END();
 
@@ -758,7 +758,7 @@ int main(int argc, char* argv[]) {
         }
     } TEST_END();
 
-    TEST_CASE("RP1.9 A File Over The Longest A File Can Be (A Match And Its Map) Is Refused At Once, A Match Over 1 MiB Is Refused Whatever Its Map, A Chunk That Claims Four Billion Bytes Does Not Allocate Them, And Random Bytes Are Never A Replay") {
+    TEST_CASE("RP1.9 A File Over The Longest A File Can Be (A Match And Its Map) Is Refused At Once, A Match Over 16 MiB Is Refused Whatever Its Map, A Chunk That Claims Four Billion Bytes Does Not Allocate Them, And Random Bytes Are Never A Replay") {
         std::vector<uint8_t> big = encoded(synthetic());
         big.resize(kMaxFileBytesWithMap + 1, 0);
         Decoded d = decoded(big);
@@ -989,14 +989,14 @@ int main(int argc, char* argv[]) {
         engine.init(tiny.level, 1, 0x0F);
         Recorder rec(head_for(tiny, "TINY", 1, 0x0F));
         const Command big = make_command(CommandType::GroupMove, 0, 3, 3, std::vector<uint32_t>(32, 1u));
-        for (int i = 0; i < 9000 && rec.failure().empty(); ++i) rec.on_command(big);
+        for (int i = 0; i < 130000 && rec.failure().empty(); ++i) rec.on_command(big);
         ASSERT_FALSE(rec.failure().empty());
-        ASSERT_TRUE(rec.commands() == 0 && contains(rec.failure(), "size limit (1 MiB)"));
+        ASSERT_TRUE(rec.commands() == 0 && contains(rec.failure(), "size limit (16 MiB)"));
         engine.tick();
         rec.on_tick(engine);
         ASSERT_EQ(rec.turns(), 0u);                                                 // (the tick of a recording that failed is not counted: the server asks its room how long the match ran)
         std::string error;
-        ASSERT_TRUE(rec.finish(engine, error).empty() && contains(error, "size limit (1 MiB)"));
+        ASSERT_TRUE(rec.finish(engine, error).empty() && contains(error, "size limit (16 MiB)"));
     } TEST_END();
 
     TEST_CASE("RP2.8 What the match began with is part of it: the teams made at the start and the Fog of War setting are set up as they were, and an order given after the last tick (a Quit that ends the match) is played too") {
@@ -1480,7 +1480,7 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(encode_snapshot(running, 450, error), shot);
     } TEST_END();
 
-    TEST_CASE("RP9.3 The Writer Refuses A Map That Is Not The File That The Head's Hash Names Or Is Over 1 MiB; A Map Of Exactly 1 MiB Is Written And Read; The Match Keeps Its Own 1 MiB, With Or Without A Map") {
+    TEST_CASE("RP9.3 The Writer Refuses A Map That Is Not The File That The Head's Hash Names Or Is Over 1 MiB; A Map Of Exactly 1 MiB Is Written And Read; The Match Keeps Its Own 16 MiB, With Or Without A Map") {
         std::string error;
         Replay r = synthetic_small();
         r.embedded_map = read_bytes(tiny.path);
@@ -1493,27 +1493,27 @@ int main(int argc, char* argv[]) {
         edge.embedded_map.assign(kMaxEmbeddedMapBytes, 0x5A);
         edge.head.map_hash = net::hash_bytes(edge.embedded_map.data(), edge.embedded_map.size());
         const std::vector<uint8_t> edge_file = encoded(edge);
-        ASSERT_TRUE(!edge_file.empty() && edge_file.size() > kMaxFileBytes && edge_file.size() <= kMaxFileBytesWithMap);
+        ASSERT_TRUE(!edge_file.empty() && edge_file.size() > kMaxEmbeddedMapBytes && edge_file.size() <= kMaxFileBytesWithMap);
         Decoded d = decoded(edge_file);
         ASSERT_TRUE(d.ok && d.replay.embedded_map == edge.embedded_map);
         edge.embedded_map.push_back(0x5A);
         edge.head.map_hash = net::hash_bytes(edge.embedded_map.data(), edge.embedded_map.size());
         ASSERT_TRUE(encode(edge, error).empty() && contains(error, "embedded map"));       // (right hash, one byte over)
-        // the match is limited as it was: a map does not make room for more commands, and a match under the limit with a map is a file over 1 MiB that is kept
+        // the match is limited as it was: a map does not make room for more commands, and a match under the limit with a map is a file over 16 MiB that is kept
         Replay match;
         match.head = head_for(tiny, "TINY", 1, 0x0F);
         match.complete = true;
         match.total_turns = 300;
-        for (uint32_t i = 0; i < 40000; ++i) match.commands.push_back(TimedCommand{i / 400, make_command(CommandType::GroupMove, 0, 1, 1, std::vector<uint32_t>(32, i))});
+        for (uint32_t i = 0; i < 135000; ++i) match.commands.push_back(TimedCommand{i / 450, make_command(CommandType::GroupMove, 0, 1, 1, std::vector<uint32_t>(32, i))});      // (137 bytes each: over 16 MiB)
         ASSERT_TRUE(encode(match, error).empty() && contains(error, "KiB"));
         match.embedded_map = read_bytes(tiny.path);
         ASSERT_TRUE(encode(match, error).empty() && contains(error, "KiB"));
-        match.commands.resize(9000);                                                // (9,000 of 137 bytes: 1.2 MB, more than a match may be, and less than a match and a map: the map does not make room for it)
+        match.commands.resize(125000);                                              // (125,000 of 137 bytes: 17.1 MB, more than a match may be, and less than a match and a map: the map does not make room for it)
         ASSERT_TRUE(encode(match, error).empty() && contains(error, "KiB"));
         match.embedded_map.clear();
         ASSERT_TRUE(encode(match, error).empty() && contains(error, "KiB"));
         match.embedded_map = read_bytes(tiny.path);
-        match.commands.resize(7000);                                                // (7,000 of 137 bytes: just under 1 MiB)
+        match.commands.resize(122000);                                              // (122,000 of 137 bytes: just under 16 MiB)
         match.embedded_map.clear();
         const std::vector<uint8_t> bare = encoded(match);
         ASSERT_TRUE(!bare.empty() && bare.size() < kMaxFileBytes && bare.size() > kMaxFileBytes - 100000);
@@ -1522,7 +1522,7 @@ int main(int argc, char* argv[]) {
         const std::vector<uint8_t> both = encoded(match);
         ASSERT_TRUE(!both.empty() && both.size() > kMaxFileBytes);
         d = decoded(both);
-        ASSERT_TRUE(d.ok && d.replay.embedded_map == match.embedded_map && d.replay.commands.size() == 7000);
+        ASSERT_TRUE(d.ok && d.replay.embedded_map == match.embedded_map && d.replay.commands.size() == 122000);
     } TEST_END();
 
     TEST_CASE("RP9.4 The Reader Refuses A Second tmap, A tmap Over 1 MiB (From Its Length, Before Its Bytes: Four Billion Allocates Nothing, Even In A Cut File), An Empty One, One Whose Hash Is Not The Head's, And One After The End Or Before The Head, Each With The Chunk Named") {
@@ -1626,7 +1626,7 @@ int main(int argc, char* argv[]) {
         }
     } TEST_END();
 
-    TEST_CASE("RP9.6 The File Without Its Map Is The Match: The Match Part Is Limited To 1 MiB Whatever The Map, A File Over 2 MiB Is Refused At Once; An Older Reader Skips The Chunk And Reads The Same Match") {
+    TEST_CASE("RP9.6 The File Without Its Map Is The Match: The Match Part Is Limited To 16 MiB Whatever The Map, A File Over 17 MiB Is Refused At Once; An Older Reader Skips The Chunk And Reads The Same Match") {
         Replay r = synthetic_small();
         r.embedded_map.assign(1000, 9);
         r.head.map_hash = net::hash_bytes(r.embedded_map.data(), r.embedded_map.size());
@@ -1647,7 +1647,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(d.ok && d.replay.embedded_map == r.embedded_map);
         d = decoded(padded_to(base, kMaxFileBytes + map_chunk + 1));
         ASSERT_TRUE(!d.ok && contains(d.error, "KiB") && contains(d.error, "map"));
-        // without a map the same file is the match: exactly 1 MiB is read, one byte more is refused, as it always was
+        // without a map the same file is the match: exactly 16 MiB is read, one byte more is refused
         std::vector<Chunk> no_map = base;
         no_map.erase(no_map.begin() + 1);
         ASSERT_TRUE(decoded(padded_to(no_map, kMaxFileBytes)).ok);
@@ -1658,7 +1658,7 @@ int main(int argc, char* argv[]) {
         too_long.resize(kMaxFileBytesWithMap + 1, 0);
         d = decoded(too_long);
         ASSERT_TRUE(!d.ok && contains(d.error, "KiB"));
-        ASSERT_TRUE(kMaxFileBytesWithMap == 2 * (1u << 20) + kChunkFrameBytes && max_file_bytes(0) == kMaxFileBytes && max_file_bytes(5) == kMaxFileBytes + 5 + kChunkFrameBytes);
+        ASSERT_TRUE(kMaxFileBytesWithMap == 17 * (1u << 20) + kChunkFrameBytes && max_file_bytes(0) == kMaxFileBytes && max_file_bytes(5) == kMaxFileBytes + 5 + kChunkFrameBytes);
         // an older reader skips the chunk: with the tag as another lower case name the file is the match as it was before the chunk
         std::vector<Chunk> older = base;
         older[1].tag = "tmax";
@@ -1820,13 +1820,13 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(last, hex);
     } TEST_END();
 
-    TEST_CASE("RP9.10 A Map Chunk That Was Cut Is The Map's Part Of The File And Not The Match's: A 1 MiB Map Cut Near Its End Is A Cut File With No Map (As A Shorter One Is), While A Match Over 1 MiB In Front Of A Cut Map Is Refused") {
+    TEST_CASE("RP9.10 A Map Chunk That Was Cut Is The Map's Part Of The File And Not The Match's: A 1 MiB Map Cut Near Its End Is A Cut File With No Map (As A Shorter One Is), While A Match Over 16 MiB In Front Of A Cut Map Is Refused") {
         Replay r = synthetic_small();
         r.embedded_map.assign(kMaxEmbeddedMapBytes, 0x6B);
         r.head.map_hash = net::hash_bytes(r.embedded_map.data(), r.embedded_map.size());
         const std::vector<uint8_t> whole = encoded(r);
         const size_t map_at = 8 + chunks_of(whole)[0].payload.size() + kChunkFrameBytes;       // where the tmap chunk starts
-        ASSERT_TRUE(whole.size() > kMaxFileBytes);
+        ASSERT_TRUE(whole.size() > kMaxEmbeddedMapBytes);
         for (const size_t keep : {size_t{100}, kMaxEmbeddedMapBytes / 2, kMaxEmbeddedMapBytes - 1000, kMaxEmbeddedMapBytes + 2}) {      // (the last: cut inside its checksum)
             const std::vector<uint8_t> piece(whole.begin(), whole.begin() + static_cast<std::ptrdiff_t>(map_at + 8 + keep));
             const Decoded d = decoded(piece);
@@ -1835,7 +1835,7 @@ int main(int argc, char* argv[]) {
         const std::vector<uint8_t> nearly(whole.begin(), whole.begin() + static_cast<std::ptrdiff_t>(whole.size() - 1));
         ASSERT_TRUE(decoded(nearly).ok);                                              // (cut in the last chunk, which is after the map: the map is whole and the file is read)
         ASSERT_TRUE(decoded(nearly).replay.embedded_map == r.embedded_map);
-        // a match of more than 1 MiB in front of a cut map is refused: the map's cut part does not hide it
+        // a match of more than 16 MiB in front of a cut map is refused: the map's cut part does not hide it
         std::vector<Chunk> chunks = chunks_of(whole);
         Chunk filler;
         filler.tag = "padd";
@@ -2153,7 +2153,7 @@ int main(int argc, char* argv[]) {
         }
     } TEST_END();
 
-    TEST_CASE("RP7.6 A Reader That Does Not Know The Mode Refuses A Match Of Mode 187 By Its Rules Number: It Skips Field 17, Reads Field 16 As 2 And Plays Rules 1 Only; An Id That Nobody Knows Yet (18) Is Skipped By This Reader Too, In A File Of Either Mode") {
+    TEST_CASE("RP7.6 A Reader That Does Not Know The Mode Refuses A Match Of Mode 187 By Its Rules Number: It Skips Field 17, Reads Field 16 As 2 And Plays Rules 1 Only; An Id That Nobody Knows Yet (19) Is Skipped By This Reader Too, In A File Of Either Mode") {
         const Played p = play_scripted(tiny, 33, 120, 0x0F, sim::StartTeams{}, false, nullptr, k187);
         const Played original = play_scripted(tiny, 33, 120);
         // the reader of every release before the mode: it walks the fields, takes the ones it knows (here: the rules number, field 16) and skips the others, then plays only its own rules number
@@ -2173,9 +2173,9 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(!decoded(file_with_head(p, [&](std::vector<HeadField>& f) { drop_field(f, 17); })).ok);
         // an id that no build knows yet is skipped: the head still reads and the match plays, whichever mode it is
         for (const Played* base : {&p, &original}) {
-            const Decoded d = decoded(file_with_head(*base, [&](std::vector<HeadField>& f) { f.insert(f.begin() + 3, HeadField{18, {9, 9, 9}}); }));
+            const Decoded d = decoded(file_with_head(*base, [&](std::vector<HeadField>& f) { f.insert(f.begin() + 3, HeadField{19, {9, 9, 9}}); }));
             ASSERT_TRUE(d.ok && same(d.replay, base->replay));
-            const Decoded last = decoded(file_with_head(*base, [&](std::vector<HeadField>& f) { f.push_back(HeadField{18, {}}); f.push_back(HeadField{99, {1}}); }));
+            const Decoded last = decoded(file_with_head(*base, [&](std::vector<HeadField>& f) { f.push_back(HeadField{19, {}}); f.push_back(HeadField{99, {1}}); }));
             ASSERT_TRUE(last.ok && same(last.replay, base->replay) && plays_here(last.replay.head));
             const Outcome o = play(last.replay, tiny.level);
             ASSERT_TRUE(o.ok && o.hash == base->hash);
@@ -2239,7 +2239,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(legacy_rules == 12 && legacy_rules != kSimRules);
         ASSERT_TRUE(!decoded(file_with_head(p, [&](std::vector<HeadField>& f) { drop_field(f, 17); })).ok);
         ASSERT_TRUE(!decoded(file_with_head(p, [&](std::vector<HeadField>& f) { set_field(f, 16, {5, 0}); })).ok);
-        const Decoded unknown = decoded(file_with_head(p, [&](std::vector<HeadField>& f) { f.push_back(HeadField{18, {7}}); }));
+        const Decoded unknown = decoded(file_with_head(p, [&](std::vector<HeadField>& f) { f.push_back(HeadField{19, {7}}); }));
         ASSERT_TRUE(unknown.ok && same(unknown.replay, p.replay));
         o = play(unknown.replay, tiny.level);
         ASSERT_TRUE(o.ok && o.hash == p.hash);

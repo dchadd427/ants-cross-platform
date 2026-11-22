@@ -1,17 +1,16 @@
-/* The front page's two screens (web/home/home.js, docs/HOME_SCREEN.md): <body data-screen="home|room"> says which shows. The colors, .btn and .ant are the page's own (web/lobby.html). Home is
-   the top bar and under it the games (left), the players (right) and the chat (along the bottom); a phone has one of the three at a time and a strip to pick. Every target is at least 44 px high and wide. */
+/* The front page (web/home/home.js, docs/HOME_SCREEN.md): <body data-screen="home|room"> says what takes the games' place. The colors, .btn and .ant are the page's own (web/lobby.html). Home is
+   the top bar and under it the games or the room (left, room.css), the players (right) and the chat (along the bottom); a phone has one of the three at a time and a strip to pick. Every target is at least 44 px high and wide. */
 
-/* ---- which screen shows ---- */
-body[data-screen="home"] main.wrap { display: none; }
-body[data-screen="room"] #home { display: none; }
+/* ---- the page ---- */
+main.wrap { display: none; }                                /* (the old masthead's place: nothing is drawn in it) */
 .mast { display: none; }                                    /* the old heading row: its buttons are in the Menu now, and the bars below carry the page's name as a heading */
 .strips { flex: none; padding-top: 0; padding-bottom: 0; }
 .strips > :not([hidden]) { margin-top: 16px; margin-bottom: 0; }
 html { height: 100%; }                                      /* (the percentage chain: html, then body, for an installed window's smaller candidate) */
-body[data-screen="home"] { display: flex; flex-direction: column; height: 100vh; height: 100dvh; padding-bottom: env(safe-area-inset-bottom); overflow: hidden; }       /* (a strip above the page, "Back from the match", takes its height out of the screen's) */
-@supports (height: 100dvh) { body[data-screen="home"] { height: var(--home-h, 100dvh); } }       /* (--home-h: set by home.js only while the box is taller than the window; inside @supports, so that a browser with no dvh keeps the 100vh line) */
-@supports (height: 100svh) { @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) { body[data-screen="home"] { height: min(var(--home-h, 100dvh), 100%, 100svh); } } }       /* (an installed window: the smallest height that can be right) */
-body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; padding-bottom: env(safe-area-inset-bottom); overflow: hidden; }       /* (a strip above the page, "Back from the match", takes its height out of the screen's) */
+@supports (height: 100dvh) { body { height: var(--home-h, 100dvh); } }       /* (--home-h: set by home.js only while the box is taller than the window; inside @supports, so that a browser with no dvh keeps the 100vh line) */
+@supports (height: 100svh) { @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) { body { height: min(var(--home-h, 100dvh), 100%, 100svh); } } }       /* (an installed window: the smallest height that can be right) */
+body .screen { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 #home { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; position: relative; }
 .hopen { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; width: max-content; max-width: calc(100% - 24px); padding: 18px 34px; font-size: 24px; text-align: center; color: var(--cream); background: var(--inset);
     border: 3px solid var(--gold); border-radius: 6px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
@@ -63,34 +62,25 @@ body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidd
 .gdock .gitem:has(.gyours) { border-color: var(--gold); }
 .gdock .gmap { grid-area: m; width: 72px; height: 72px; }
 .gdock .gtxt { display: contents; }
-.gdock .gtop { grid-area: t; } .gdock .gline { grid-area: l; } .gdock .gjoin, .gdock .gwatch { grid-area: j; }
+.gdock .gtop { grid-area: t; } .gdock .gline { grid-area: l; } .gdock .gjoin, .gdock .gwatch { grid-area: j; } .gdock .glockbox { grid-area: j; }
 .gdock .gempty { align-content: center; min-height: 100%; background: none; border: 0; }
 .gdock .gemtitle { font-size: 26px; }
 @media (max-height: 700px) { .gdock .glegend { display: none; } .gdock .gcode .joinbox input { min-height: 44px; } }
-/* ---- a phone, or a window up to 700 px wide: one of the three at a time, picked by the strip along the bottom ---- */
-@media (max-width: 700px) {
+/* ---- a phone: a window up to 700 px wide or up to 500 px high (a phone held sideways). One of the three at a time, picked by the strip along the bottom ---- */
+@media (max-width: 700px), (max-height: 500px) {
     .hmain { padding: 2px 12px 8px; }
     .pl-on .hmain { grid-template-columns: minmax(0, 1fr); }
     .htabs { order: 9; flex: none; display: flex; gap: 8px; padding: 8px 12px 12px; background: rgba(5, 10, 8, .55); }
-    .gdock .glist { grid-template-columns: minmax(0, 1fr); } .gdock .gitem { grid-template-columns: 56px minmax(0, 1fr) auto; padding: 8px; gap: 4px 10px; } .gdock .gmap { width: 56px; height: 56px; }
+    .gdock .gitem { grid-template-columns: 56px minmax(0, 1fr) auto; padding: 8px; gap: 4px 10px; } .gdock .gmap { width: 56px; height: 56px; }
     .htab { flex: 1 1 0; min-width: 0; min-height: 48px; padding: 6px 4px; }
     #home:not(.pl-on) .htab.t-players { display: none; }
     #home[data-tab="chat"] .hmain, #home:not([data-tab="chat"]) .gc, #home[data-tab="games"] .pl, #home[data-tab="players"] .gdock { display: none; }
     #home:not(.pl-on)[data-tab="players"] .gdock { display: flex; }
 }
+@media (max-width: 700px) { .gdock .glist { grid-template-columns: minmax(0, 1fr); } }       /* (a wider, low window keeps the columns of cards) */
 @media (max-width: 700px) and (min-height: 501px) { .hmain { padding: 2px 12px 6px; } .htabs { gap: 6px; padding: 4px 12px 12px; } .htab { min-height: 44px; font-size: 15px; } }       /* (a phone upright: the strip is 60 px, not 68) */
 @media (max-width: 380px) { .htabs { gap: 6px; padding-left: 8px; padding-right: 8px; } .htab { gap: 0; font-size: 15px; padding: 6px 2px; } .htab .pill { margin-left: 4px; padding: 0 5px; font-size: 13px; } }       /* (320 px: Players with "99+" fits its third of the strip) */
-@media (max-width: 700px) and (max-height: 500px) { .htabs { padding: 4px 12px 6px; } .htab { min-height: 44px; } }       /* (a phone held sideways: the strip is 54 px, so the views keep the room) */
-
-/* ---- the Room: the slim bar ---- */
-.rbar { display: flex; align-items: center; gap: 10px; min-height: 52px; margin: -4px 0 8px; }
-.rbar .hmenu { flex: none; }
-.rbar .grow { flex: 1 1 0; }
-.rbar .btn { min-height: 46px; padding: 6px 16px; font-size: 16px; }
-.rhome { gap: 6px; padding-left: 10px; }
-.rhome .chev { font-size: 24px; line-height: 1; margin-top: -3px; }
-.leave { color: var(--cream); background: var(--sheen) #9d0d17; border-color: var(--edge); box-shadow: var(--bevel), 3px 4px 0 #3b0d10; }       /* (red like Leave game in the game's menu: the pressed and the forced-colors looks are .btn's) */
-.leave:hover { background-color: #b5222c; }
+@media (max-height: 500px) { .htabs { padding: 4px 12px 6px; } .htab { min-height: 44px; } }       /* (a phone held sideways: the strip is 54 px, so the views keep the room) */
 
 /* ---- the Menu ---- */
 .hmenubox { position: fixed; right: 10px; z-index: 60; width: min(316px, calc(100vw - 20px)); max-height: calc(100vh - 90px); max-height: calc(100dvh - 90px); overflow-y: auto; overscroll-behavior: contain; padding: 6px 16px 12px; color: var(--cream); background: #050b0e; border: 3px solid var(--frame);
@@ -115,7 +105,6 @@ body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidd
     .hbar .quick.host { grid-column: 1; } .hbar .quick.join { grid-column: 2; }
     .hbar .hmine { grid-row: 3; grid-column: 1 / -1; margin-top: 6px; }                                            /* (My room, with its X badge, has the third row to itself, while the page holds a room; the badge stands 9 px above it, so the row is 16 px from the one above, not 10) */
     .hbar .hmine .mine { flex: 1 1 0; min-width: 0; }
-    .rbar { gap: 8px; } .rbar .btn { padding: 6px 12px; } .rbar .rhome { padding-left: 9px; }
     .hmenubox { width: calc(100vw - 20px); }
 }
 /* ---- a phone upright: two rows of 44 px (110 px, not 184): My room and its X (while the page holds a room), the name chip and the Menu; then Quick host and Quick join ---- */
@@ -165,11 +154,4 @@ body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidd
     .hbar { gap: 6px; padding-left: 10px; padding-right: 10px; }
     .hbar .btn { padding: 4px 8px; font-size: 14px; }
     .hbar .quick { padding: 4px 10px; font-size: 14px; letter-spacing: .04em; }
-}
-@media (max-height: 500px) and (orientation: landscape) {
-    .rbar { min-height: 52px; margin-bottom: 6px; }
-}
-/* ---- a narrow phone (360 and 320 px): the Room's bar */
-@media (max-width: 389px) {
-    .rbar { gap: 6px; } .rbar .btn { padding: 6px 8px; font-size: 15px; }
 }

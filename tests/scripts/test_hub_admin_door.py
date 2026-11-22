@@ -125,7 +125,7 @@ class DoorTest(unittest.TestCase):
         if post and csrf is not None:
             pairs.append(("X-Ants-Csrf", self.token(account) if csrf == "default" else csrf))
         pairs += list(extra)
-        return hc.request(self.rig.port, method, path, pairs, body=data)
+        return hc.request(self.rig.port, method, path, pairs, body=data, timeout=30.0)
 
     def token(self, account):
         """The token of /me for this login (a made-up one for somebody who is not let in: the call is then refused for that, and the test says so)."""
@@ -148,11 +148,22 @@ class DoorTest(unittest.TestCase):
     def modlog(self):
         return self.rig.call(self.rig.store.actions, 0, 100)
 
+    def health_when(self, condition, account=OWNER, seconds=30):
+        """The health that /status tells once `condition` holds of it. The door asks for a lookup and waits only `roles_urgent_seconds` for it; the hub's roles task makes it and notes that Discord refused or did
+        not answer when it ends, which on a machine that is busy can be after the door has answered: the status is read again until it says so, and the last word is told when it never does (`seconds` is a stop
+        for that, not a time that anything takes)."""
+        end = time.monotonic() + seconds
+        while True:
+            health = self.get("status", account).json()["health"]
+            if condition(health) or time.monotonic() >= end:
+                return health
+            time.sleep(0.05)
+
     def ref(self, account):
         return self.rig.call(self.rig.hub.chat.ref, account)
 
     def socket(self, account):
-        c = hc.Client(self.rig.port, login="%s:%s" % (account, NAMES[account]))
+        c = hc.Client(self.rig.port, login="%s:%s" % (account, NAMES[account]), timeout=30.0)
         self.sockets.append(c)
         self.assertTrue(c.ok, c.status)
         c.recv_json()
@@ -747,7 +758,7 @@ class TheChanges(DoorTest):
         r = self.post("ban", {"account": NAMES[TARGET]})
         self.assertEqual((r.status, r.json()), (200, {"ok": True}))
         self.assertTrue(self.rig.call(self.rig.store.is_banned, TARGET))
-        self.assertEqual(target.recv_json()["t"], "bye")
+        self.assertEqual(target.recv_reply(total=30.0)["t"], "bye")                               # (the hub's own clock may say the count of people first, at a moment that no test controls)
         rows = self.get("bans").json()
         self.assertEqual([(b["ref"], b["name"], b["by"], b["by_name"]) for b in rows["bans"]], [(self.ref(TARGET), NAMES[TARGET], self.ref(ADMIN), NAMES[ADMIN])])
         self.assertEqual((rows["untrusted"], rows["untrusted_fields"]), (True, ["name", "by_name"]))
@@ -762,10 +773,12 @@ class TheChanges(DoorTest):
         self.assertEqual(self.get("bans").json()["bans"], [])
 
     def test_mute_takes_minutes_one_to_a_week_and_unmute_lifts_it(self):
+        asked = time.time()
         r = self.post("mute", {"account": NAMES[TARGET], "minutes": 30})
+        answered = time.time()
         self.assertEqual(r.status, 200)
         until = r.json()["until"]
-        self.assertAlmostEqual(until, time.time() + 1800, delta=5)
+        self.assertTrue(asked + 1800 - 1 <= until <= answered + 1800 + 1, "thirty minutes from the moment of the change (%s, between %s and %s)" % (until, asked + 1800, answered + 1800))
         rows = self.get("mutes").json()
         self.assertEqual([(m["ref"], m["name"], m["until"], m["by"], m["by_name"]) for m in rows["mutes"]], [(self.ref(TARGET), NAMES[TARGET], until, self.ref(ADMIN), NAMES[ADMIN])])
         self.assertEqual(rows["untrusted_fields"], ["name", "by_name"])
@@ -786,7 +799,7 @@ class TheChanges(DoorTest):
         self.post("mute", {"account": NAMES[TARGET], "minutes": 5})
         target = self.socket(TARGET)
         target.say("hello")
-        self.assertEqual(target.recv_reply(), {"t": "err", "code": "muted"})
+        self.assertEqual(target.recv_reply(total=30.0), {"t": "err", "code": "muted"})
 
     def test_a_reference_of_digits_only_is_still_a_reference_in_the_lists(self):
         digits = "1234567890123456"                                  # (a reference that happens to be all digits: one in about two thousand is)
@@ -822,7 +835,7 @@ class TheChanges(DoorTest):
         self.rig.call(setattr, self.rig.hub, "next_deletions", float("inf"))        # (the clock's own look at the deletions never comes: the screens are told by the change itself)
         r = self.post("del", {"line": line_id})
         self.assertEqual((r.status, r.json()), (200, {"ok": True}))
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + 30
         seen = []
         while time.monotonic() < deadline and {"t": "del", "id": line_id} not in seen:
             seen += watcher.drain(0.3)
@@ -939,7 +952,7 @@ class TheChanges(DoorTest):
     def test_the_status_is_numbers_for_the_store_the_health_of_the_roles_the_last_picture_and_the_program(self):
         self.line()
         body = self.get("status").json()
-        self.assertEqual(sorted(body), ["health", "last_picture", "store", "version"])
+        self.assertEqual(sorted(body), ["health", "images", "last_picture", "store", "version"])
         store = body["store"]
         self.assertEqual(sorted(store), ["blocked", "bytes", "free", "limit", "lines", "log", "off", "oldest", "picture_bytes", "picture_bytes_max", "pictures", "pictures_max"])
         self.assertEqual((store["limit"], store["lines"], store["pictures"], store["off"], store["blocked"]), (self.rig.limits.db_max_bytes, 1, 0, 0, 0))
@@ -954,14 +967,12 @@ class TheChanges(DoorTest):
         self.assertEqual(sorted(body["version"]), ["code", "started"])
         self.fake.member_mode = "status:500"
         self.gate(PLAIN)
-        time.sleep(0.4)
-        self.assertEqual(self.get("status", OWNER).json()["health"]["roles"], "down")
+        self.assertEqual(self.health_when(lambda h: h["roles"] == "down")["roles"], "down")
 
     def test_the_status_says_which_refusal_and_when_the_hub_asks_again_while_discord_refuses(self):
         self.fake.member_mode = "err:401"
         self.gate(PLAIN)
-        time.sleep(0.4)
-        health = self.get("status", OWNER).json()["health"]
+        health = self.health_when(lambda h: h["roles"] == "refused")
         self.assertEqual((health["roles"], health["kind"], health["status"]), ("refused", "token", 401))
         self.assertTrue(0 < health["retry"] <= 61, health)
         self.assertEqual(sorted(health), ["kind", "retry", "roles", "roles_known", "status"])
@@ -1042,6 +1053,8 @@ class TheIdIsLikeAPassword(DoorTest):
         blob = b"\n".join(texts).decode("utf-8", "replace")
         for account in EVERY_ID:
             self.assertNotIn(account, blob, "an id is somewhere that an id must never be")
+        for account in EVERY_ID:
+            blob = blob.replace(self.ref(account), "<ref>")                           # (a reference is a form that may be in an answer: 16 hex digits, which are all decimal one time in two thousand, and then look like a number as long as an id)
         self.assertNotRegex(blob, r"(?<![0-9a-f])[0-9]{15,}(?![0-9a-f])")
 
     def test_the_stores_modlog_and_picture_rows_hold_references_and_no_id(self):

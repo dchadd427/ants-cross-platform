@@ -73,6 +73,7 @@
 #include "ants_net/session.hpp"
 #include "ants_net/transport.hpp"
 #include "ants_net/turnlog.hpp"
+#include "ants_replay/player.hpp"
 #include "ants_replay/recorder.hpp"
 #include "ants_server/map_store.hpp"
 #include "ants_server/online_limits.hpp"
@@ -103,6 +104,9 @@ struct RoomSpec {
     /// Protocol 15: a room that a visitor's create block made (RoomManager::make_public_room). The server counts these against its public-room cap (--demo-rooms), gives them the short pause cap and
     /// ends the one that has been abandoned the longest when a new one needs the place; a room that the control interface made is not one.
     bool public_room{false};
+    /// The address that a visitor's create block made the room from, as the limits count it (address_limits.hpp; "" for a room of the control interface, one that was restored from a record, and a server that
+    /// counts nothing). Kept in memory for the limits per address alone: never in a status, a record, a replay or the log.
+    std::string creator;
     /// Protocol 15: the room does not start by itself when every seat is taken: only its leader's START starts the match (the leader can arrange the seats first). It needs a leader, so it is
     /// for a room with `early_start` (a room that has none ignores it).
     bool leader_starts{false};
@@ -134,10 +138,15 @@ struct RoomSpec {
     uint32_t resume_countdown_ms{net::kResumeCountdownMs};   // after a pause of at least 3 s the match is held this long before it goes on (0 .. 60 s, 0 = none; the control key "resume_countdown_seconds")
     size_t max_connections{32};                              // the connections that the room keeps at once (everything that ever said Hello to it, and every connection that came back, until it is closed and
                                                              // nobody uses it): a flood is refused beyond this. 32 for every room the server makes; the control interface has no key for it
+    net::Sequencer::Config sequencer;                        // the budget of orders of a seat and the quotas of a turn that the room's host applies (the defaults are the server's; the control interface has no key for it, a test changes them to make a log or a recording that no seat could fill)
+    size_t max_recording_bytes{replay::kMaxFileBytes};       // what the orders of the match may take in its recording (a recording over it is not made: the room's note says so and the history keeps the result all the same); a smaller number is for the tests, the control interface has no key for it
     bool record_replay{true};                                // the match is kept as a replay when the server keeps replays (the control key "record": false switches it off for the room)
     /// The server's own match of computer players alone (RoomManager::start_bot_match): every seat of the room is a bot (`bots` as many as `players`), no person is needed to start it or to keep it going, and it is
     /// played at the normal speed like any other. Only the server makes such a room (the control interface has no key for it); it holds no seats (`reconnect` false), so no restart record is kept for it.
     bool bots_only{false};
+    /// Whether the match is kept as a replay when it ends (RoomManager::start_bot_match gives it only while the hour's budget of recordings of computer players has a slot reserved for it): false plays the match, records
+    /// it for the live list, and writes no file. A room of people always keeps.
+    bool keep_replay{true};
     /// The room does not try to start its match until this long after it was made (milliseconds; 0: at once): the server's own matches of computer players are made one after another with a gap, so that setting up
     /// their engines is spread over the passes of the main loop (bot_match_spec.hpp: kBotStartGapMs). Only the server sets it.
     uint32_t start_hold_ms{0};
@@ -148,6 +157,10 @@ struct RoomSpec {
     /// The seconds that a room of exactly one person holds the first turn (the same card, a shorter count): 0 .. net::kMaxCountdownSeconds, 0 = the plain 5 s dialog. A spec built by code says 0; the server's rooms
     /// start from RoomManager::default_spec() (--solo-countdown-seconds, default 10; the control key "solo_countdown_seconds"). A room whose countdown_s is 0 never counts down, whatever this says.
     uint32_t solo_countdown_s{0};
+    /// The most that the match is held, in all, for seats that are away while it has not begun to play (the countdown, and the pauses that a loss there causes): 10 s .. 1 h, or 0 for no such limit (the cap
+    /// on the pauses is then the only one). At the limit every seat that is not present is dropped and the match goes on without it (net::Attendance::Config::countdown_hold_ms). A spec built by code says 0;
+    /// the server's rooms start from RoomManager::default_spec() (--countdown-hold-seconds, default net::kCountdownHoldMs = 60 s; the control key "countdown_hold_seconds").
+    uint32_t countdown_hold_ms{0};
 };
 
 /// The bounds of the room's reconnect settings (the control interface refuses others, RoomManager::create_room too)
@@ -158,6 +171,8 @@ inline constexpr uint32_t kMaxMaxPauseMs = 86400u * 1000u;
 inline constexpr uint32_t kMinCatchUpMs = 10u * 1000u;
 inline constexpr uint32_t kMaxCatchUpLimitMs = 3600u * 1000u;
 inline constexpr uint32_t kMaxResumeCountdownMs = 60u * 1000u;
+inline constexpr uint32_t kMinCountdownHoldMs = 10u * 1000u;
+inline constexpr uint32_t kMaxCountdownHoldMs = 3600u * 1000u;
 inline constexpr size_t kMinLogBytes = 1024;
 inline constexpr size_t kMaxLogBytes = size_t{1} << 30;
 
@@ -188,10 +203,9 @@ struct RoomRow {
     bool winner{false};
 };
 
-/// One row of the public list of games (GET /lobbies, docs/SERVER.md "Lobby rooms"; Room::listing): a public lobby room that a newcomer can join now. Only what the list shows: the room's code (the link, public on purpose), the
-/// leader's name, the map's file name, the game mode and numbers; never an address, a key, a platform, another person's name or the plan's letters.
-struct LobbyListing {
-    std::string code;
+/// What the list of games says of a lobby room that a newcomer could join: the leader's name, the map's file name, the game mode and the seats. Public and private rooms share it. It has no member for a code, a key or an id: a row that is
+/// made of nothing else cannot carry what leads to the room.
+struct ListedSeats {
     std::string host;                       // the leader's name, as the room shows it
     std::string map;                        // the plan's map (a file name)
     uint8_t mode{0};                        // sim::GameMode as a byte
@@ -199,8 +213,17 @@ struct LobbyListing {
     uint8_t bots{0};                        // the colors that nobody holds and the plan gives to a bot
     uint8_t free_colors{0};                 // the colors that a newcomer can take (nobody holds them and the plan calls them Open)
     uint8_t size{0};                        // the colors in the match: people + bots + free_colors (a color that nobody holds and the plan calls Nobody is not)
+};
+
+/// One row of the public list of games (GET /lobbies, docs/SERVER.md "Lobby rooms"; Room::listing): a public lobby room that a newcomer can join now. Only what the list shows: the room's code (the link, public on purpose), the
+/// leader's name, the map's file name, the game mode and numbers; never an address, a key, a platform, another person's name or the plan's letters.
+struct LobbyListing : ListedSeats {
+    std::string code;
     uint32_t age_ms{0};                     // how long the room has been public, in ms
 };
+
+/// One row of the same list for a PRIVATE lobby room (Room::private_listing): shown as a locked card that nobody joins from. Nothing but ListedSeats: no code, no key, no id, no age (docs/PUBLIC_ROOMS.md "Private rooms in the list").
+using PrivateListing = ListedSeats;
 
 struct RoomStatus {
     std::string code;
@@ -259,6 +282,7 @@ struct RoomStatus {
     uint32_t resume_countdown_ms{0};
     uint32_t countdown_s{0};                // protocol 21: the seconds that the room holds the first turn when two or more people play (0: none)
     uint32_t solo_countdown_s{0};           // ... and when exactly one person plays (the shorter of this and countdown_s; 0: the plain 5 s dialog)
+    uint32_t countdown_hold_ms{0};          // ... and the most that a match that has not begun to play is held for seats that are away (0: no such limit)
     uint8_t resume_s{0};                    // the countdown that follows a pause is running: the seconds that are left (0: none)
     bool paused{false};                     // the match waits for a seat (running rooms only)
     struct Absent {
@@ -276,7 +300,11 @@ struct RoomStatus {
     uint32_t rejoins{0};                    // seats that came back and were verified
     uint32_t drops_by_vote{0};              // seats dropped because the players voted to go on without them
     uint32_t drops_by_cap{0};               // seats dropped because the match's pauses used up max_pause_ms
+    uint32_t drops_by_countdown_hold{0};    // seats dropped because the match, which had not begun to play, was held for them as long as countdown_hold_ms
     uint32_t drops_by_state{0};             // seats dropped because their state differed from the referee's (the others went on; any room, held seats or not)
+    uint8_t heavy_order_seats{0};           // the seats (a bit for each) whose orders went over their budget at some time of the match (net::Sequencer::Config::order_burst): the "heavy order rate" mark; the orders beyond it were not sealed
+    std::array<uint32_t, 4> orders_over_budget{};   // by seat: the orders that were dropped for it, and the ones that were dropped because they named no ant that the seat could order (neither is a violation)
+    std::array<uint32_t, 4> orders_without_ants{};
     uint32_t rejoins_refused{0};            // Hellos with a key that were refused for a budget (the absence's catch-up time, twelve attempts a minute, three times the log's size in ten minutes)
     uint32_t catch_up_expired{0};           // absences whose catch-up time ran out
     uint64_t streamed_bytes{0};             // the bytes of the turn log that were streamed to returning players (all seats)
@@ -299,6 +327,14 @@ struct RoomStatus {
     uint32_t restored_turns{0};             // ... holding this many turns
     uint32_t restore_ms{0};                 // ... which the replay took this long to run (real time)
     uint64_t restored_hash{0};              // ... and the referee's state hash (StateHash::total) was this at the restored tick
+};
+
+/// A match that was played and has no recording: the head that the recorder had (the map, the names that the room showed, the roster, the teams, the mode, the mark of a heavy order rate) and what the referee's own engine
+/// says it came to (`outcome.turns` is the ticks that the referee ran; the rest is replay::take_result_of), and, for a recording that passed its size limit, the seat that sent the most into it
+struct UnrecordedMatch {
+    replay::Header head;
+    replay::Outcome outcome;
+    int largest_sender{-1};     // when the recording failed on its size: the seat that had sent the most bytes of commands into it (replay::Recorder::largest_sender), else -1
 };
 
 /// The name that a replay file keeps for a person's seat, from the name that the room showed everybody (the Start message's): the name as it is, in printable ASCII (every byte of anything else becomes a '?': a letter with an accent, two bytes of UTF-8, gives two), at most
@@ -352,8 +388,14 @@ public:
     /// The server's board of the matches that run (live_board.hpp; it must outlive the room): the room registers the recording of its match there when the match begins and takes it off when the recording becomes
     /// a file or is dropped (and in its destructor). Null (the default): the match is not shown live. Set it right after the room is made, before its match is started.
     void set_live_board(LiveBoard* board) noexcept { live_board_ = board; }
+    /// Where a match goes whose recording could not be made (it ran long enough to be kept, and the file could not be written: too large, a turn missing): the numbers that the referee's own engine has for it, so that the
+    /// history can still say who won (docs/REPLAYS.md "The match history"). The sink is called once, from the end of the match; without one such a match is not counted.
+    using UnrecordedSink = std::function<void(UnrecordedMatch&&)>;
+    void set_unrecorded_sink(UnrecordedSink sink) { unrecorded_sink_ = std::move(sink); }
     /// What a lobby room asks of its server (see LobbyServices): set it right after the room is made. A room that is no lobby room never asks.
     void set_lobby_services(LobbyServices services);
+    /// The relay that the players' channels go through (protocol 26): the session of the match hands each player a credential for it. Set it right after the room is made; null: none.
+    void set_turn_settings(std::shared_ptr<const net::TurnSettings> turn) { turn_ = std::move(turn); }
     /// Bringing a match back from a record, first half (RoomManager replays the queue in slices from update(), so that the server serves meanwhile). begin_replay() does everything before the turns: the
     /// bots, the engine, the session with its keys. The room must be fresh (Waiting, made from room_spec_of(record.head)) and `record` must stay alive until replay_step() has said Replayed or Refused.
     /// Refused, with the reason in `why`: the room holds a half-built match and is thrown away. `restart_vote_after_ms`: how long the others wait before they may vote on a seat that has not come back.
@@ -402,6 +444,8 @@ public:
     const std::string& live_id() const noexcept { return live_id_; }
     /// The server's own match of computer players alone (RoomSpec::bots_only)
     bool bots_only() const noexcept { return spec_.bots_only; }
+    /// Whether the match will be kept as a replay when it ends (RoomSpec::keep_replay)
+    bool keep_replay() const noexcept { return spec_.keep_replay; }
     /// A lobby room (protocol 16) ...
     bool lobby() const noexcept { return spec_.lobby; }
     /// ... that waits (no match has been started): it is in the server's pool of lobbies, and holds no place of the public rooms
@@ -409,6 +453,8 @@ public:
     /// Protocol 22: a public lobby room that a newcomer can join now fills `out` and is true. Listed = a lobby room that waits (no match has begun or loads), that its leader made public, whose START does not wait, that has a
     /// person whose connection is open (a room that only holds seats is nobody's: it goes within a minute), at least one color that a newcomer can take, and no seat kept for a person of the match who is not back. Cheap: no status is built.
     bool listing(uint32_t now_ms, LobbyListing& out) const;
+    /// The same for a lobby room that its leader has NOT made public: it fills `out` (no code: PrivateListing has none) and is true under every condition of `listing` but the public one. The page shows it as a locked card; nobody joins from it.
+    bool private_listing(PrivateListing& out) const;
     /// A waiting lobby room that has had nobody in it since the last pass (a held seat is somebody) and that no Hello has reached since (the room reads it in its next pass: a lobby that a visitor was just
     /// sent to is not empty, whatever the room's last pass saw), and for how long (0 for every other room)
     bool empty_lobby() const noexcept { return lobby_waiting() && empty_ && !arrived_; }
@@ -416,6 +462,14 @@ public:
     /// How long nothing has been done in a waiting lobby room (HostLobby::activity: a ping that is answered is nothing), 0 for every other room and for one that a Hello has reached since its last pass. The manager gives
     /// the place of an idle lobby up when it needs it (never otherwise: a person may sit in a lobby for as long as they like). It stops growing at kMaxIdleMs.
     uint32_t idle_ms(uint32_t now_ms) const noexcept { return lobby_waiting() && !arrived_ ? now_ms - active_ms_ : 0u; }
+    /// The same, counting only what sets a room up (HostLobby::setup_activity: a person joins, a color moves, the plan or a name changes, a person is removed, a START is asked for), so that a line of chat or a
+    /// Ready mark does not make a room "used" (the early close of a crowded address's lobbies: docs/ADDRESS_LIMITS.md)
+    uint32_t quiet_ms(uint32_t now_ms) const noexcept { return lobby_waiting() && !arrived_ ? now_ms - setup_ms_ : 0u; }
+    /// The address that made the room (RoomSpec::creator); "" when none
+    const std::string& creator() const noexcept { return spec_.creator; }
+    /// The server's budget of relay credentials per address (docs/ADDRESS_LIMITS.md): asked with the address of the seat that wants a credential ("" when the room does not know it), once for each
+    /// credential about to be made; false answers the player as a server that has no relay. Set it right after the room is made; empty: no budget.
+    void set_relay_gate(std::function<bool(const std::string& address)> gate) { relay_gate_ = std::move(gate); }
     /// The owner forgets the room at once, without a word in the log or a result file (the server needs the place of a lobby that nobody is in): its clients are dropped
     void forget(uint32_t now_ms);
     /// The rematch (see the paragraph "Lobby rooms" above): a lobby room whose match its rules ended has the plan and the persons of that match to give, once (take_rematch). Nothing for any other room, for a
@@ -455,6 +509,8 @@ public:
     uint32_t abandoned_ms(uint32_t now_ms) const;
 
 private:
+    bool lobby_joinable(size_t& free_now) const;             // a lobby room that waits and takes a newcomer (the conditions of both listings except the leader's choice); free_now: the colors a newcomer can take
+    void list_seats(ListedSeats& out, size_t free_now) const;       // the leader's name, the map, the mode and the seats of a room that lobby_joinable
     void fail(const std::string& reason, uint32_t now_ms);
     void begin_match(uint32_t now_ms);
     void finish(const std::string& reason, uint32_t now_ms);
@@ -513,10 +569,14 @@ private:
 
     net::HostLobby lobby_;
     LobbyServices services_;                 // protocol 16: what a lobby room asks of its server
+    std::shared_ptr<const net::TurnSettings> turn_;     // protocol 26: the relay (never kept in a record: nothing about it is part of the match)
     bool empty_{false};                      // a lobby room: nobody is in it, since empty_since_ms_
     bool arrived_{false};                    // a lobby room: a connection was given to it since its last pass (its Hello is read in the next one: empty_ is stale until then)
     uint32_t seen_activity_{0};              // a lobby room: HostLobby::activity() at the last pass, and since when it is what it is
     uint32_t active_ms_{0};
+    uint32_t seen_setup_{0};                 // ... the same for HostLobby::setup_activity()
+    uint32_t setup_ms_{0};
+    std::function<bool(const std::string& address)> relay_gate_;      // the server's budget of relay credentials per address (set_relay_gate)
     uint32_t empty_since_ms_{0};
     bool forgotten_{false};                  // the owner forgot the room (forget): it is expired at once
     bool ended_by_rules_{false};             // the rematch: the match ended by its rules (every machine has its results screen), not by a leaver, a failure or the owner
@@ -532,6 +592,7 @@ private:
     std::unique_ptr<ai::BotController> bot_controller_;
     ReplayStore* replay_store_{nullptr};
     LiveBoard* live_board_{nullptr};
+    UnrecordedSink unrecorded_sink_;
     std::string live_id_;                    // the recording's id on the live board ("": it is not there)
     std::unique_ptr<replay::Recorder> recorder_;     // the match so far (null: it is not recorded, or it is over)
     std::string replay_file_;                // the match was kept under this name ...

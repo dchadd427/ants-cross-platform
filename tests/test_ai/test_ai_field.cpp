@@ -27,6 +27,7 @@
 //   AI29.19  a Bomber that no single hop brings to the work (a fire wall and a lake lie between) hops first to ground from which a second hop reaches it
 //   AI29.20  no bomb is planted on a tile that an ant stands on, one in its death clip too (the engine plants none, and the click of the special order is refused)
 //   AI29.21  a Stuck step gets one fresh plan before its ant is given up
+//   AI29.22  a given-up ant, and the task that waits after four of them, try again when the map's bombs, fire walls or bridges change (anybody's defuse, fire or bridge), not only after the rest
 #include <algorithm>
 #include <cstdlib>
 #include <string>
@@ -1228,6 +1229,51 @@ void run_field_tests() {
             rig.run(600);
             ASSERT_TRUE(bot.field().given_up() >= 1u);                                       // the ant is given up either way ...
             ASSERT_EQ(bot.field().replans() > 0, replan);                                    // ... after a fresh plan, or at once
+        }
+    } TEST_END();
+
+    TEST_CASE("AI29.22 A Given-Up Ant And The Task That Waits After Four Of Them Try Again When The Map's Bombs, Fire Walls Or Bridges Change, Not Only After The Rest; With The Switch Off They Wait It Out (Every Seat, Straight And Transposed)") {
+        const auto scene = [](const Drawing& w, bool wake, int change) {                    // change: what the map gets (0 a bomb, 1 a fire wall, 2 a bridge), planted by somebody on open ground away from every hill
+            FieldWorld f(w, FieldWorld::Options{});
+            for (int y = 8; y <= 11; ++y) {                                                  // the room of rock of AI29.10 round the worker (8, 10), its door (10, 10) held by an ant of another team
+                for (int x = 6; x <= 10; ++x) {
+                    const TileCoord c = w.at(x, y);
+                    if ((x == 6 || x == 10 || y == 8) && !(x == 10 && y == 10)) f.sim.set_terrain(c.x, c.y, sim::TERRAIN_OBSTACLE);
+                }
+            }
+            f.sim.spawn_unit(static_cast<uint8_t>((w.seat + 1) % 4), sim::AntType::Worker, w.at(10, 10));
+            LevelPlan plan = field_plan_of();
+            plan.field_wake = wake;
+            Rig rig(f.sim, w.seat, Level::Hard, std::make_unique<StandardBot>(plan));
+            auto& bot = rig.as<StandardBot>();
+            const auto alter = [&](TileCoord at) {
+                if (change == 0) f.sim.grid_mut().place_bomb(static_cast<uint32_t>(at.x), static_cast<uint32_t>(at.y), 255);
+                if (change == 1) f.sim.grid_mut().place_firewall(static_cast<uint32_t>(at.x), static_cast<uint32_t>(at.y), 255);
+                if (change == 2) f.sim.grid_mut().set_bridge_at(at, 4, 3600);
+            };
+            rig.run(400);
+            ASSERT_EQ(bot.field().given_up(), 1u);
+            const uint32_t first = bot.field().orders();
+            alter(w.at(30, 40));
+            rig.run(300);
+            ASSERT_EQ(bot.field().orders() > first, wake);                                   // the ant is tried again at once, or rests its 2,400 ticks
+            uint64_t ticks = 700;
+            while (bot.field().live() && ticks < 40000) {                                    // (with the switch on the change brings it back after every give-up: it rests only after four in a row with the map as it was)
+                rig.run(200);
+                ticks += 200;
+            }
+            ASSERT_FALSE(bot.field().live());                                                // four ants given up: the task waits ...
+            const uint32_t resting = bot.field().orders();
+            alter(w.at(31, 40));
+            rig.run(400);
+            ASSERT_EQ(bot.field().live(), wake);                                             // ... and a change of the map wakes it (with the switch off only the bot's ants or power-ups do)
+            if (wake) ASSERT_TRUE(bot.field().orders() > resting);
+        };
+        for (uint8_t d = 0; d < 8; ++d) {
+            const Drawing w{static_cast<uint8_t>(d >> 1), (d & 1) != 0};
+            for (const bool wake : {true, false}) {
+                for (int change = 0; change < 3; ++change) scene(w, wake, change);
+            }
         }
     } TEST_END();
 }

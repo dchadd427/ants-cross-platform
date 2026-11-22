@@ -35,6 +35,24 @@ def read(*parts):
         return f.read()
 
 
+def without_media(css):
+    """The style without its @media blocks (what every window has before a query changes it)."""
+    out, depth, before, head = [], 0, 0, ""
+    for i, char in enumerate(css):
+        if char == "{":
+            if depth == 0:
+                head = css[before:i]
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                if not head.strip().startswith("@media"):
+                    out.append(css[before:i + 1])
+                before = i + 1
+    out.append(css[before:])
+    return "".join(out)
+
+
 class PageCase(unittest.TestCase):
     """assertRegex / assertNotRegex without printing the whole page when they fail"""
 
@@ -49,8 +67,9 @@ class TheFrontPageMarkup(PageCase):
     def setUp(self):
         self.page = read("web", "lobby.html")
         self.markup = self.page[:self.page.index("<script")]                                             # the style and the body: what the browser has before any script runs
-        self.style = re.sub(r"/\*.*?\*/", "", self.page[:self.page.index("</style>")], flags=re.S)       # (the rules, with their comments taken out)
-        self.wide = self.style[:self.style.index("@media (min-width: 1041px)")]                               # (the rules of a wide page: the media queries of the narrower windows come after them)
+        room = read("web", "home", "room.css")                                                           # (the Room is a panel of Home: its look is web/home/room.css)
+        self.style = re.sub(r"/\*.*?\*/", "", self.page[:self.page.index("</style>")] + "\n" + room, flags=re.S)       # (the rules, with their comments taken out)
+        self.wide = without_media(self.style)                                                                # (the rules of a wide page: the media queries of the other windows taken out)
         self.script = self.page[self.page.index('<script src="front/lobby_rules.js">'):]
         self.rules = read("web", "front", "lobby_rules.js")
 
@@ -67,14 +86,14 @@ class TheFrontPageMarkup(PageCase):
 
     def test_the_page_is_one_lobby_the_room_with_its_four_colors_and_the_match_with_its_map_and_start(self):
         self.assertEqual(len(re.findall(r'<section class="card', self.page)), 0)                  # the one card of the earlier front page (New match: Friend seats, Sit here, START) is gone: the page is a room
-        self.assertEqual(self.markup.count('<div class="grid" id="lobby">'), 1)
+        self.assertEqual(self.markup.count('<section class="panel" id="lobby" aria-labelledby="room-h">'), 1)       # (the Room is one panel, which Home puts in the games' place while a room is held)
         self.assertEqual(len(re.findall(r'<select ', self.page)), 0)                               # (no drop-down in the markup: the map is a card with a button, the drop-down of a color is made by the script, for the colors that the host can set; the picture's shape is a row of the game's settings menu)
         for gone in ('id="map-solo"', 'id="map-host"', 'id="host"', 'name="players"', 'name="opponent-', 'host-seat-', 'id="fill"', 'id="fill-label"', 'Play vs the computer', 'Play online</h2>', 'Host the match',
                      'Opponents</span>', 'Sit here', 'seat-row-', 'id="h-match"', 'id="player-name"', 'btn_start', 'setup-hint', 'four.html'):
             self.assertTrue(gone not in self.page, "the page still has " + gone)
         self.not_found(self.page, r"(?i)\bfriends?\b", "on-screen text says player, never friend (docs/VIEW_AND_HUD.md, Wording)")
         # the room: its heading and code, the invitation, the colors; the match: the map, the line about it and START
-        self.assertIn('<section class="panel" aria-labelledby="room-h">\n            <div class="head"><span class="hl"><h2 id="room-h">Your room</h2><span class="modetag" id="mode-tag" hidden></span></span><span class="code">Room code <b id="code"></b></span></div>', self.markup)
+        self.assertIn('<div class="head"><span class="hl"><h2 id="room-h">Your room</h2><span class="modetag" id="mode-tag" hidden></span></span><span class="code">Room code <b id="code"></b></span></div>\n        <div class="r-acts" id="r-acts"></div>', self.markup)
         self.assertIn('<ul class="slots" id="slots" aria-label="The four colors"></ul>', self.markup)
         self.assertIn('<p class="slots-note" id="slots-note" role="status"></p>\n            <p class="slots-note teams-note" id="teams-note" role="status"></p>', self.markup)
         self.assertIn('<aside class="side" aria-label="The match">', self.markup)
@@ -97,9 +116,11 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("originals: Rules.MAPS });", self.script)       # (the map list's fallback is the rules' list of the six, in its order)
 
     def test_a_leaders_bot_card_shows_the_bots_name_small_under_the_level_switch(self):
-        """protocol 20: the name (card.who[0], which the rules put there) is a span of its own right after the level select, and the style rule makes it small text"""
-        self.assertIn("txt.appendChild(select); if (card.who.length) txt.appendChild(el('span', 'botname', card.who[0].text));", self.page)
-        self.assertRegex(self.page, r"\.botname \{ display: block; font-size: 15px;")
+        """protocol 20: the name (card.who[0], which the rules put there) is the line under the level select, in place of "Computer player", after the Ready mark, in the small text of the card's state line"""
+        self.assertIn("txt.appendChild(select); botLabel = card.who.length ? card.who[0].text : '';", self.page)
+        self.assertIn("stat.appendChild(document.createTextNode(botLabel || card.stat));", self.page)
+        self.assertLess(self.page.index("stat.appendChild(chipMark);"), self.page.index("stat.appendChild(document.createTextNode(botLabel || card.stat));"))
+        self.found(self.style, r"\.pstat \{ font-size: 13px;")
 
     def test_the_four_colors_are_built_in_reading_order_by_the_script_and_every_control_of_a_color_is_named(self):
         script = self.script
@@ -111,7 +132,7 @@ class TheFrontPageMarkup(PageCase):
             if ".slot" in selector:
                 self.not_found(body, r"(?<![-\w])order\s*:", "a color card is placed by the order of the markup, never by a CSS order: " + selector.strip())
         self.found(self.style, r"\.slots \{[^}]*grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\);")             # two columns on a wide page ...
-        phone = self.style[self.style.index("@media (max-width: 720px)"):self.style.index("@media (max-width: 374px)")]
+        phone = self.style[self.style.index("@media (max-width: 700px)"):self.style.index("@media (min-width: 560px)")]
         self.found(phone, r"\.slots \{ grid-template-columns: minmax\(0, 1fr\);")                                         # ... one column on a phone, in the same order
         # the page keeps no table of the seats' names of its own (the colors' names, seats and cards come from front/lobby_rules.js: Green 0, Red 1, Blue 2, Black 3)
         self.assertNotIn("var SEATS", script)
@@ -137,8 +158,8 @@ class TheFrontPageMarkup(PageCase):
         # v0.8.0 showed the original's 98 x 27 picture as the button's background at three times its size with image-rendering: pixelated, so its letters and edges were blocky and it was bigger than the rows
         # above it. START is text on the page's own bevel (.btn) now: the browser draws it at the screen's resolution, and its size is a minimum that the text may outgrow.
         self.not_found(self.page, r"btn_start")
-        rules = re.findall(r"(?m)^\s*\.btn\.big \{([^}]*)\}", self.style)
-        self.assertEqual(len(rules), 2, "one rule for a wide page and one for a phone")
+        rules = re.findall(r"\.go \.btn\.big \{([^}]*)\}", self.style)
+        self.assertEqual(len(rules), 3, "one rule for a wide page, one for a big screen and one for a phone")
         for rule in rules:
             self.not_found(rule, r"background|image-rendering|(?<![-\w])(width|height):", "the size is a minimum of the text's button, never a picture or a fixed box: " + rule)
 
@@ -146,17 +167,18 @@ class TheFrontPageMarkup(PageCase):
             found = re.search(r"(?<![-\w])%s: (\d+)px" % prop, rule)
             self.assertIsNotNone(found, "%s is a number of px in: %s" % (prop, rule))
             return int(found.group(1))
-        wide, phone = rules
-        for prop, wide_most, phone_most in (("min-height", 64, 58), ("font-size", 30, 28)):                # (one assert each: a tuple would compare its first number alone)
+        wide, big, phone = rules
+        for prop, wide_most, big_most, phone_most in (("min-height", 64, 64, 58), ("font-size", 30, 30, 28)):         # (one assert each: a tuple would compare its first number alone)
             self.assertLessEqual(px(wide, prop), wide_most, "wide " + prop)
+            self.assertLessEqual(px(big, prop), big_most, "big " + prop)
             self.assertLessEqual(px(phone, prop), phone_most, "phone " + prop)
-        self.assertGreaterEqual(px(phone, "min-height"), 44)                                             # (a finger's target: the base .btn is 44 px high at the least)
+        self.assertGreaterEqual(px(wide, "min-height"), 44)                                              # (a finger's target: the base .btn is 44 px high at the least)
+        self.assertGreaterEqual(px(phone, "min-height"), 44)
         self.assertGreaterEqual(px(self.rule(".btn"), "min-height"), 44)
         self.assertEqual(self.markup.count('class="btn big"'), 1)
-        at = self.style.index("@media (max-width: 720px)")
+        at = self.style.index("@media (max-width: 700px)")
         phone_block = self.style[at:self.style.index("@media", at + 1)]
-        self.assertEqual(len(re.findall(r"\.btn\.big \{", phone_block)), 1, "the phone's rule is the one in the 720 px block")
-        self.assertEqual(len(re.findall(r"\.btn\.big \{", self.style[:at])), 1)
+        self.assertEqual(len(re.findall(r"\.go \.btn\.big \{", phone_block)), 1, "the phone's rule is the one in the 700 px block")
         self.found(phone_block, r"\.go \{ position: sticky; bottom: 0;")                                 # (on a phone START stays in view at the bottom of the screen)
 
     def test_the_team_buttons_have_their_look_a_hidden_rule_and_a_place_on_every_width(self):
@@ -203,12 +225,14 @@ class TheFrontPageMarkup(PageCase):
             self.assertGreaterEqual(ratio(color(ink), color(ground)), 4.5, "a %s button: %s on %s" % (look, ink, ground))
         # a pressed button is told from a loose one by more than its hue: its edge is far lighter than the loose edge (3 : 1 is the least that a state needs against what it is told from)
         self.assertGreaterEqual(ratio(color(edge(pressed)), color(edge(base))), 3.0, "the edge of a pressed button against the edge of a loose one")
-        # a place for them on every width: 36 px high on a wide page, 34 on a phone (the shorter cards of the approved picture; they were 40), and a narrower phone only makes the letters and the room around them smaller
-        self.assertGreaterEqual(int(re.search(r"min-height: (\d+)px", base).group(1)), 36)
-        phone = self.style[self.style.index("@media (max-width: 720px)"):self.style.index("@media (max-width: 374px)")]
-        self.found(phone, r"\.teamset button \{ flex: 1 1 0; max-width: 112px; min-height: 34px; \}")
+        # a place for them on every width: 32 px high with a mouse on the room's compact cards (36 on a big screen), a finger's 44 on a phone, and a narrower phone only makes the letters and the room around them smaller
+        self.assertGreaterEqual(int(re.search(r"min-height: (\d+)px", base).group(1)), 32)
+        big = self.style[self.style.index("@media (min-width: 1500px) and (min-height: 960px)"):self.style.index("@media (min-width: 701px) and (max-height: 759px)")]
+        self.found(big, r"\.teamset button \{ min-height: 36px;")
+        phone = self.style[self.style.index("@media (max-width: 700px)"):self.style.index("@media (min-width: 560px)")]
+        self.found(phone, r"\.teamset button \{ min-height: 44px; padding: 2px 14px; \}")
         narrow = self.style[self.style.index("@media (max-width: 374px)"):]
-        self.found(narrow, r"\.teamset button \{ padding: 3px 4px; font-size: 14px; \}")
+        self.found(narrow, r"\.teamset button \{ padding: 3px 6px; font-size: 14px; \}")
         # the script puts the buttons in a group of their own, named for the color, inside the text of the card (so they follow the name and the status in the reading order)
         self.assertIn("var set = el('div', 'teamset');", self.script)
         self.assertIn("txt.appendChild(set);", self.script)
@@ -231,11 +255,11 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("if (typeof navigator.share === 'function') {", script)
         self.assertIn("$('share').hidden = false;", script)
         self.assertIn("navigator.share({ url: roomLink() })", script)
-        self.found(self.style, r"@media \(min-width: 721px\) \{ \.share \{ display: none; \} \}")                 # (Share is a phone's button; the field and Copy link are a wide page's)
-        phone = self.style[self.style.index("@media (max-width: 720px)"):self.style.index("@media (max-width: 374px)")]
+        self.found(self.wide, r"\.share \{ display: none; \}")                                              # (Share is a phone's button; the field and Copy link are a wide page's)
+        phone = self.style[self.style.index("@media (max-width: 700px)"):self.style.index("@media (min-width: 560px)")]
         self.found(phone, r"\.invite input \{ display: none; \}")
         self.found(phone, r"\.share \{ display: inline-flex; \}")
-        self.found(phone, r"\.invite #copy \{ width: 100%; \}")
+        self.found(phone, r"\.invite \.btn \{ min-height: 48px; flex: 1 1 0; \}")
 
     def test_join_by_code_is_the_games_lists_and_a_typed_code_asks_for_a_name_then_looks_at_the_room_before_it_leaves_this_one(self):
         for gone in ('id="havecode"', 'id="joinbox"', 'id="joincode"', 'id="joingo"', 'id="joinhint"', "Have a code?", 'class="rt"'):
@@ -534,7 +558,7 @@ class TheGamePage(PageCase):
         join = self.page[self.page.index("function joinArguments(search, secure, host) {"):]
         join = join[:join.index("return out;", join.index("if (join && "))]                                     # (the first "return out;" is the one of an address that cannot be read)
         self.assertEqual(re.findall(r"out\.args\.push\('(--[a-z-]+)'", join),
-                         ["--join-url", "--room", "--room-map", "--room-seats", "--room-teams", "--room-leader-start", "--platform", "--seat", "--fill-bots", "--teams", "--start-when", "--name"])
+                         ["--join-url", "--room", "--room-map", "--room-seats", "--room-teams", "--room-leader-start", "--platform", "--direct", "--seat", "--fill-bots", "--teams", "--start-when", "--name"])
         self.assertIn("var roomTeams = antsTeamsArg(q.get('roomteams'));", join)
         self.assertIn("var platform = antsPlatformArg(q.get('platform'));", join)
         self.assertNotIn("navigator", join)                                                                    # (the page does not look for the platform: it is the address's word or none)
@@ -610,7 +634,7 @@ class TheDocuments(unittest.TestCase):
         rows = [[cell.strip() for cell in line.strip("|").split("|")] for line in table.splitlines()[2:]]
         self.assertEqual([(row[0], row[2]) for row in rows], [("`roommap`", "`--room-map <key>`"), ("`roomseats`", "`--room-seats <n>`"), ("`roomteams`", "`--room-teams <A+B>`"),
                                                               ("`roomleaderstart`", "`--room-leader-start`"), ("`platform`", "`--platform <word>`")])
-        self.assertIn("`--join-url`, `--room`, `--room-map`, `--room-seats`, `--room-teams`, `--room-leader-start`, `--platform`, `--seat`, `--fill-bots`, `--teams`, `--start-when`, `--name`, then the page's own `--aspect`", page)
+        self.assertIn("`--join-url`, `--room`, `--room-map`, `--room-seats`, `--room-teams`, `--room-leader-start`, `--platform`, `--direct`, `--seat`, `--fill-bots`, `--teams`, `--start-when`, `--name`, then the page's own `--aspect`", page)
         for stale in ("`demo-<map>-4p-", "a word of the room's code", "demo-treasure-4p-", "is a word of the code itself", "a word of the code itself"):                 # (the old codes named the map, the seats and the teams)
             self.assertNotIn(stale, page, stale)
 

@@ -69,6 +69,7 @@ cleanup() {
     [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2> /dev/null
     for p in $CLIENT_PIDS $VICTIM_PIDS $LEAD_PIDS $FILL_PIDS $PLAN_PIDS $CHAT_PIDS $RC_PIDS $RR_PIDS $RP_PIDS; do kill -CONT "$p" 2> /dev/null; kill "$p" 2> /dev/null; done
     [ -n "$PROXY_PID" ] && kill "$PROXY_PID" 2> /dev/null
+    [ -n "$RH_PROXY_PID" ] && kill "$RH_PROXY_PID" 2> /dev/null
     stop_watchdog
     [ -n "$PORT_SLOT_DIR" ] && rm -rf "$PORT_SLOT_DIR"
     rm -rf "$WORK"
@@ -305,6 +306,11 @@ check "the log says the delay of the live door: 30 s by default, for a match wit
 check "... the number that --live-delay-seconds says" "$(log_of --live-delay-seconds 45 | grep -q 'the live door shows a match with two or more people 45 s late'; echo $?)"
 check "... and that 0 shows every match as it is" "$(log_of --live-delay-seconds 0 | grep -q 'the live door shows every match as it is'; echo $?)"
 check "--help names --live-delay-seconds and its range" "$("$SERVER" --help 2>&1 | grep -q -- '--live-delay-seconds 0-300'; echo $?)"
+check "the log says the relay of the players' channels with TURN's own port when none is said (network protocol 26)" "$(ANTS_TURN_HOST=turn.example.org ANTS_TURN_SECRET=s log_of | grep -q "players' channels: on (relay turn.example.org:3478;"; echo $?)"
+check "... the port of ANTS_TURN_PORT" "$(ANTS_TURN_HOST=turn.example.org ANTS_TURN_PORT=3480 ANTS_TURN_SECRET=s log_of | grep -q "players' channels: on (relay turn.example.org:3480;"; echo $?)"
+check "... the port of the name, from the option or from ANTS_TURN_HOST, and the same number twice" "$(ANTS_TURN_SECRET=s log_of --turn-host turn.example.org:3481 | grep -q "relay turn.example.org:3481;" && ANTS_TURN_HOST=turn.example.org:3482 ANTS_TURN_SECRET=s log_of | grep -q "relay turn.example.org:3482;" && ANTS_TURN_PORT=3483 ANTS_TURN_SECRET=s log_of --turn-host turn.example.org:3483 | grep -q "relay turn.example.org:3483;"; echo $?)"
+check "... two numbers that differ are refused with --turn-host, and with the environment alone there is no relay and the log says so" "$([ "$(ANTS_TURN_PORT=3480 ANTS_TURN_SECRET=s exit_of --turn-host turn.example.org:3481)" = "2" ] && ANTS_TURN_HOST=turn.example.org:3481 ANTS_TURN_PORT=3480 ANTS_TURN_SECRET=s log_of | grep -q "players' channels: off"; echo $?)"
+check "... a port that is no port is refused, and without the secret there is no relay" "$([ "$(ANTS_TURN_SECRET=s exit_of --turn-host turn.example.org:0)" = "2" ] && [ "$(ANTS_TURN_PORT=70000 ANTS_TURN_SECRET=s exit_of --turn-host turn.example.org)" = "2" ] && ANTS_TURN_HOST=turn.example.org log_of | grep -q "players' channels: off"; echo $?)"
 check "--log-mb 0 is refused" "$([ "$(exit_of --log-mb 0)" = "2" ]; echo $?)"
 check "--log-mb above 256 is refused" "$([ "$(exit_of --log-mb 257)" = "2" ]; echo $?)"
 check "--log-mb that is no number is refused" "$([ "$(exit_of --log-mb big)" = "2" ]; echo $?)"
@@ -389,14 +395,14 @@ db_start() {      # db_start LOGFILE ARGS...: starts the server in the backgroun
 }
 db_version() { python3 -c 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); print(c.execute("select max(version) from schema_version").fetchone()[0], c.execute("select count(*) from meta where key = ?", ("created_at",)).fetchone()[0], c.execute("pragma journal_mode").fetchone()[0])' "$1" 2> /dev/null; }
 mkdir -p "$WORK/db_default"
-check "a server with --results-dir starts, logs the database line and stops cleanly on SIGTERM (status 0)" "$([ "$(db_start "$WORK/db_default.log" --results-dir "$WORK/db_default")" = "0" ] && grep -q "database $WORK/db_default/ants.db: schema version 9" "$WORK/db_default.log"; echo $?)"
+check "a server with --results-dir starts, logs the database line and stops cleanly on SIGTERM (status 0)" "$([ "$(db_start "$WORK/db_default.log" --results-dir "$WORK/db_default")" = "0" ] && grep -q "database $WORK/db_default/ants.db: schema version 10" "$WORK/db_default.log"; echo $?)"
 check "... and the database file is in the results folder by default (ants.db)" "$([ -s "$WORK/db_default/ants.db" ]; echo $?)"
 if python3 -c 'import sqlite3' 2> /dev/null; then
-    check "... it is a database at schema version 9 (the match history tables are in it) with the created_at row, in WAL mode, and a clean stop left no -wal file" "$([ "$(db_version "$WORK/db_default/ants.db")" = "9 1 wal" ] && [ ! -s "$WORK/db_default/ants.db-wal" ]; echo $?)"
+    check "... it is a database at schema version 10 (the match history tables are in it) with the created_at row, in WAL mode, and a clean stop left no -wal file" "$([ "$(db_version "$WORK/db_default/ants.db")" = "10 1 wal" ] && [ ! -s "$WORK/db_default/ants.db-wal" ]; echo $?)"
 else
     echo "  SKIP: python3 has no sqlite3 module: the content of the database file was NOT read"
 fi
-check "a second start over the same file finds schema version 9 and keeps its created_at" "$(CREATED="$(python3 -c 'import sqlite3, sys; print(sqlite3.connect(sys.argv[1]).execute("select value from meta").fetchone()[0])' "$WORK/db_default/ants.db" 2> /dev/null)"; [ "$(db_start "$WORK/db_again.log" --results-dir "$WORK/db_default")" = "0" ] && grep -q 'schema version 9' "$WORK/db_again.log" && { [ -z "$CREATED" ] || [ "$(python3 -c 'import sqlite3, sys; print(sqlite3.connect(sys.argv[1]).execute("select value from meta").fetchone()[0])' "$WORK/db_default/ants.db")" = "$CREATED" ]; }; echo $?)"
+check "a second start over the same file finds schema version 10 and keeps its created_at" "$(CREATED="$(python3 -c 'import sqlite3, sys; print(sqlite3.connect(sys.argv[1]).execute("select value from meta").fetchone()[0])' "$WORK/db_default/ants.db" 2> /dev/null)"; [ "$(db_start "$WORK/db_again.log" --results-dir "$WORK/db_default")" = "0" ] && grep -q 'schema version 10' "$WORK/db_again.log" && { [ -z "$CREATED" ] || [ "$(python3 -c 'import sqlite3, sys; print(sqlite3.connect(sys.argv[1]).execute("select value from meta").fetchone()[0])' "$WORK/db_default/ants.db")" = "$CREATED" ]; }; echo $?)"
 check "--db FILE puts the database there (its folder is made) and not in the results folder" "$([ "$(db_start "$WORK/db_named.log" --results-dir "$WORK/db_default2" --db "$WORK/db_dir/sub/named.db")" = "0" ] && [ -s "$WORK/db_dir/sub/named.db" ] && [ ! -e "$WORK/db_default2/ants.db" ]; echo $?)"
 check "--no-db keeps no database file, whatever --results-dir says, and the log says so" "$([ "$(db_start "$WORK/db_off.log" --results-dir "$WORK/db_off" --no-db)" = "0" ] && [ ! -e "$WORK/db_off/ants.db" ] && grep -q 'database is off (--no-db)' "$WORK/db_off.log"; echo $?)"
 check "without --results-dir and --db there is no database, and the log says so" "$([ "$(db_start "$WORK/db_none.log")" = "0" ] && grep -q 'database is off: no --results-dir or --db' "$WORK/db_none.log"; echo $?)"
@@ -1145,9 +1151,9 @@ def answer_text(peer):
     m = peer.answer()
     return 'none' if m is None else 'welcome' if m[0] == 2 else 'reject-%d' % m[1]
 def created(m): return m is not None and (m[19] & 2) != 0                          # (the Welcome: type, player, players, the key, the flags)
-def lobby_room(peer):                                                              # the Room message ends with the flags, four plan bytes, the games and the game mode (protocol 17)
+def lobby_room(peer):                                                              # the Room message ends with the flags, four plan bytes, the games, the game mode (protocol 17) and the ready mask (protocol 27)
     m = peer.wait_for((12,), 3.0)
-    return m is not None and (m[-7] & 2) != 0
+    return m is not None and (m[-8] & 2) != 0
 out = {}
 a = Peer('Ada', 'lob00001', 1, LOBBY); wa = welcomed(a)
 out['page_makes_lobby'] = 'yes' if wa is not None and created(wa) and wa[1] == 0 and wa[3:19] != bytes(16) else 'no'
@@ -1189,10 +1195,10 @@ def wait_listed(wanted, secs):
         time.sleep(0.1)
         text = list_text()
     return text
-def sees_public(peer):                                                              # the last Room message that the peer read says public (the flags are 7 bytes from the end: flags, four plans, the games, the mode)
+def sees_public(peer):                                                              # the last Room message that the peer read says public (the flags are 8 bytes from the end: flags, four plans, the games, the mode, the ready mask)
     peer.wait_for((99,), 0.5)
     rooms = [m for m in peer.msgs if m[0] == 12]
-    return bool(rooms) and (rooms[-1][-7] & 8) != 0
+    return bool(rooms) and (rooms[-1][-8] & 8) != 0
 if lobbies()[0] == 200 and wa is not None and wb is not None and wc is not None:                  # (a server with the public door and the lobbies)
     out['list_private'] = list_text()
     b.sock.sendall(frame(bytes([35, 1])))                                               # Bea does not lead: nothing happens
@@ -1203,7 +1209,7 @@ if lobbies()[0] == 200 and wa is not None and wb is not None and wc is not None:
     out['list_public'] = wait_listed('lob00001', 3.0)
     out['leader_sees_public'] = 'yes' if sees_public(a) else 'no'
     out['guest_sees_public_now'] = 'yes' if sees_public(b) else 'no'
-    leaks = [text for text in (wa[3:19].hex(), wa[3:19].hex().upper(), wb[3:19].hex(), wc[3:19].hex(), '127.0.0.1', 'Bea', 'Cy', 'lob00002', 'platform') if text in out['list_public']]
+    leaks = [text for text in (wa[3:19].hex(), wa[3:19].hex().upper(), wb[3:19].hex(), wc[3:19].hex(), '127.0.0.1', 'Bea', 'lob00002', 'platform') if text in out['list_public']]
     out['list_leaks'] = ','.join(leaks) if leaks else 'none'
     out['list_post'] = str(lobbies('POST')[0])
     out['list_query'] = str(lobbies('GET', '?a=1')[0])
@@ -1229,6 +1235,7 @@ if 'list_made_private' in out:                                                  
     time.sleep(0.6)
     out['list_leader_left'] = list_text()
     out['new_leader_sees_public'] = 'yes' if sees_public(b) else 'no'
+out['private_lists_leak'] = ','.join(sorted(set(code for key in ('list_private', 'list_after_guest', 'list_made_private', 'list_leader_left') for code in ('lob00001', 'lob00002') if code in out.get(key, '')))) or 'none'       # (while a room is private, its code is in no answer)
 for key in sorted(out):
     print('%s=%s' % (key, out[key]))
 PY
@@ -1253,13 +1260,14 @@ check "a Hello with a key makes no lobby room (NoSuchRoom)" "$([ "$(lobby_value 
 check "a code with an upper-case letter makes no lobby room (NoSuchRoom)" "$([ "$(lobby_value capital_letter)" = "reject-6" ]; echo $?)"
 check "the control interface sees the lobby: waiting, on the server's map, for four, with its two pages" "$([ "$(lobby_value status)" = "waiting/TINY.LVL/4" ] && [ "$(lobby_value joined)" = "2" ]; echo $?)"
 check "GET /busy counts the people of the lobbies as players and no match (a lobby never holds a deploy back)" "$([ "$(lobby_value busy)" = "0/4" ]; echo $?)"
-check "GET /lobbies of the public door (network protocol 22) lists nothing while every room is private (a new room is private)" "$([ "$(lobby_value list_private)" = '{"format":1,"lobbies":[],"count":0}' ]; echo $?)"
-check "... a guest's Visibility changes nothing (only the leader is heard)" "$([ "$(lobby_value list_after_guest)" = '{"format":1,"lobbies":[],"count":0}' ] && [ "$(lobby_value guest_sees_public)" = "no" ]; echo $?)"
-check "... the leader's Visibility makes the room public: the list holds its code, the leader's name, the map and the numbers, and both pages are told in the Room message (the flag, bit 3)" "$([ "$(lobby_value list_public)" = '{"format":1,"lobbies":[{"code":"lob00001","host":"Ada","map":"TINY.LVL","mode":"highest-score","people":2,"bots":0,"free":2,"size":4,"age":0}],"count":1}' ] && [ "$(lobby_value leader_sees_public)" = "yes" ] && [ "$(lobby_value guest_sees_public_now)" = "yes" ]; echo $?)"
-check "... the answer holds no key, no address, no other person's name, no platform and no private room's code" "$([ "$(lobby_value list_leaks)" = "none" ]; echo $?)"
+check "GET /lobbies of the public door (network protocol 22) lists the rooms that are private (a new room is private) as locked rows: the leader's name, the map and the numbers, no code, and nothing public" "$([ "$(lobby_value list_private)" = '{"format":1,"lobbies":[{"private":true,"host":"Ada","map":"TINY.LVL","mode":"highest-score","people":2,"bots":0,"free":2,"size":4},{"private":true,"host":"Cy","map":"TINY.LVL","mode":"highest-score","people":1,"bots":0,"free":3,"size":4}],"count":0}' ]; echo $?)"
+check "... a guest's Visibility changes nothing (only the leader is heard)" "$([ "$(lobby_value list_after_guest)" = '{"format":1,"lobbies":[{"private":true,"host":"Ada","map":"TINY.LVL","mode":"highest-score","people":2,"bots":0,"free":2,"size":4},{"private":true,"host":"Cy","map":"TINY.LVL","mode":"highest-score","people":1,"bots":0,"free":3,"size":4}],"count":0}' ] && [ "$(lobby_value guest_sees_public)" = "no" ]; echo $?)"
+check "... the leader's Visibility makes the room public: the list holds its code, the leader's name, the map and the numbers (and the other room, still private, as a locked row with no code), and both pages are told in the Room message (the flag, bit 3)" "$([ "$(lobby_value list_public)" = '{"format":1,"lobbies":[{"code":"lob00001","host":"Ada","map":"TINY.LVL","mode":"highest-score","people":2,"bots":0,"free":2,"size":4,"age":0},{"private":true,"host":"Cy","map":"TINY.LVL","mode":"highest-score","people":1,"bots":0,"free":3,"size":4}],"count":1}' ] && [ "$(lobby_value leader_sees_public)" = "yes" ] && [ "$(lobby_value guest_sees_public_now)" = "yes" ]; echo $?)"
+check "... the answer holds no key, no address, no guest's name, no platform and no private room's code (the leader of that room is named by its locked row)" "$([ "$(lobby_value list_leaks)" = "none" ]; echo $?)"
+check "... while a room is private its code is in no answer (the locked rows have none)" "$([ "$(lobby_value private_lists_leak)" = "none" ]; echo $?)"
 check "... the door answers GET only and no query (a POST is 405 and a query 404)" "$([ "$(lobby_value list_post)" = "405" ] && [ "$(lobby_value list_query)" = "404" ]; echo $?)"
-check "... and the leader's Visibility of private takes the room out of the list again" "$([ "$(lobby_value list_made_private)" = '{"format":1,"lobbies":[],"count":0}' ]; echo $?)"
-check "... a public room whose leader goes is private and off the list, and the person who leads next is told it is private (the choice was the leader's)" "$([ "$(lobby_value list_public_again)" != '{"format":1,"lobbies":[],"count":0}' ] && [ "$(lobby_value list_leader_left)" = '{"format":1,"lobbies":[],"count":0}' ] && [ "$(lobby_value new_leader_sees_public)" = "no" ]; echo $?)"
+check "... and the leader's Visibility of private takes the room out of the public rows again (it is a locked row)" "$([ "$(lobby_value list_made_private)" = '{"format":1,"lobbies":[{"private":true,"host":"Ada","map":"TINY.LVL","mode":"highest-score","people":2,"bots":0,"free":2,"size":4},{"private":true,"host":"Cy","map":"TINY.LVL","mode":"highest-score","people":1,"bots":0,"free":3,"size":4}],"count":0}' ]; echo $?)"
+check "... a public room whose leader goes is private and out of the public rows (a locked row of the leader who is next), and the person who leads next is told it is private (the choice was the leader's)" "$([ "$(lobby_value list_public_again)" = '{"format":1,"lobbies":[{"code":"lob00001","host":"Ada","map":"TINY.LVL","mode":"highest-score","people":2,"bots":0,"free":2,"size":4,"age":0},{"private":true,"host":"Cy","map":"TINY.LVL","mode":"highest-score","people":1,"bots":0,"free":3,"size":4}],"count":1}' ] && [ "$(lobby_value list_leader_left)" = '{"format":1,"lobbies":[{"private":true,"host":"Bea","map":"TINY.LVL","mode":"highest-score","people":1,"bots":0,"free":3,"size":4},{"private":true,"host":"Cy","map":"TINY.LVL","mode":"highest-score","people":1,"bots":0,"free":3,"size":4}],"count":0}' ] && [ "$(lobby_value new_leader_sees_public)" = "no" ]; echo $?)"
 stop_server
 ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --demo-rooms 5 --demo-map TINY.LVL --demo-lobbies 0 > "$WORK/lobby0.log" 2>&1 &
 SERVER_PID=$!
@@ -1520,6 +1528,68 @@ check "the referee's clock runs again (ticks $RC_TC, $RC_TD three seconds later)
 check "the status keeps the counters: the pause lasted about 60 s, nobody came back, one seat dropped by the cap, none by a vote" "$([ "$(rc_field "$RC_CODE" paused_seconds)" -ge 59 ] && [ "$(rc_field "$RC_CODE" paused_seconds)" -le 65 ] && [ "$(rc_field "$RC_CODE" rejoins)" = "0" ] && [ "$(rc_field "$RC_CODE" drops_by_vote)" = "0" ]; echo $?)"
 check "the two clients that stayed saw no error" "$(grep -qiE 'out of sync|failed|error' "$WORK/h1.log" "$WORK/h2.log"; [ $? -ne 0 ]; echo $?)"
 check "the second room's two steady clients saw no error either" "$(grep -qiE 'out of sync|failed|error' "$WORK/s1.log" "$WORK/s2.log"; [ $? -ne 0 ]; echo $?)"
+# the countdown hold: a match that has not begun to play is held for a seat that is away at most the room's "countdown_hold_seconds" (10 s here; the server's own default is 60). A room of
+# two whose countdown is 20 s: Bob's link is cut 3 s in and never comes back, the room is held, drops the seat after 10 s (the counter of its own, not the cap's), waits out the resume
+# countdown, and its first turn carries the Drop: Ann, who stayed, wins. (docs/MATCH_COUNTDOWN.md, "How long a seat can hold the countdown")
+RH_CODE="E2E-HOLD2-$RANDOM"
+RH_PROXY_PORT="$(free_port)"
+python3 "$ROOT/tests/scripts/flaky_proxy.py" "$RH_PROXY_PORT" "$RC_PORT" 3600 > "$WORK/proxy_hold.log" 2>&1 &
+RH_PROXY_PID=$!
+RH_PROXY_UP=1
+for _ in $(seq 1 $((300 * TIME_SCALE))); do
+    if grep -q listening "$WORK/proxy_hold.log" 2> /dev/null; then RH_PROXY_UP=0; break; fi
+    kill -0 "$RH_PROXY_PID" 2> /dev/null || break
+    sleep 0.1
+done
+check "the proxy for the countdown hold's second player is listening" "$RH_PROXY_UP"
+RH_BODY="{\"map\":\"TINY.LVL\",\"players\":2,\"code\":\"$RH_CODE\",\"seed\":7,\"countdown_seconds\":20,\"countdown_hold_seconds\":10}"
+curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "$RH_BODY" "$RC_URL/rooms"
+check "the room says its countdown hold: 10 s" "$([ "$(rc_field "$RH_CODE" countdown_hold_seconds)" = "10" ]; echo $?)"
+"$GAME" --headless --no-lan --name HoldAnn --join "127.0.0.1:$RC_PORT" --room "$RH_CODE" --screenshot "$WORK/ha.png" --frames 4000000 > "$WORK/ha.log" 2>&1 &
+RH_PIDS="$!"
+"$GAME" --headless --no-lan --name HoldBob --join "127.0.0.1:$RH_PROXY_PORT" --room "$RH_CODE" --screenshot "$WORK/hb.png" --frames 4000000 > "$WORK/hb.log" 2>&1 &
+RH_PIDS="$RH_PIDS $!"
+RC_PIDS="$RC_PIDS $RH_PIDS"
+RH_RUNNING=1
+for _ in $(seq 1 $((450 * TIME_SCALE))); do
+    [ "$(rc_field "$RH_CODE" state)" = "running" ] && { RH_RUNNING=0; break; }
+    sleep 0.2
+done
+[ "$RH_RUNNING" = "0" ] || fail_note "countdown hold: the room $RH_CODE was not running after $((90 * TIME_SCALE)) s (state $(rc_field "$RH_CODE" state))"
+check "the room of the countdown hold runs (its two clients joined)" "$RH_RUNNING"
+check "... and it is in its countdown: no turn sealed yet" "$([ "$(rc_field "$RH_CODE" turns)" = "0" ]; echo $?)"
+sleep 3
+kill -USR1 "$RH_PROXY_PID"
+RH_CUT_AT="$(python3 -c 'import time; print(time.time())')"
+RH_PAUSED=1
+for _ in $(seq 1 100); do
+    [ "$(rc_field "$RH_CODE" paused)" = "true" ] && { RH_PAUSED=0; break; }
+    sleep 0.1
+done
+check "cutting Bob's link in the countdown pauses the room" "$RH_PAUSED"
+check "the status names the absent seat (HoldBob) and no turn has been sealed" "$(rc_field "$RH_CODE" absent | python3 -c 'import sys, json; a = json.load(sys.stdin); sys.exit(0 if len(a) == 1 and a[0]["name"] == "HoldBob" and a[0]["state"] == "absent" else 1)'; [ $? -eq 0 ] && [ "$(rc_field "$RH_CODE" turns)" = "0" ]; echo $?)"
+RH_HELD=1
+for _ in $(seq 1 300); do
+    [ "$(rc_field "$RH_CODE" drops_by_countdown_hold)" = "1" ] && { RH_HELD=0; break; }
+    sleep 0.1
+done
+RH_HELD_AFTER="$(python3 -c "import time; print(round(time.time() - $RH_CUT_AT, 1))")"
+check "the countdown hold drops the absent seat ($RH_HELD_AFTER s after the cut)" "$RH_HELD"
+check "... about 10 s after the cut (9 - 14 s), and not by the cap or a vote" "$(python3 -c "import sys; sys.exit(0 if 9 <= $RH_HELD_AFTER <= 14 else 1)" && [ "$(rc_field "$RH_CODE" drops_by_cap)" = "0" ] && [ "$(rc_field "$RH_CODE" drops_by_vote)" = "0" ]; echo $?)"
+RH_OVER=1
+for _ in $(seq 1 300); do
+    [ "$(rc_field "$RH_CODE" state)" = "finished" ] && { RH_OVER=0; break; }
+    sleep 0.2
+done
+RH_OVER_AFTER="$(python3 -c "import time; print(round(time.time() - $RH_CUT_AT, 1))")"
+check "the match goes on without the seat after the resume countdown (8 s here) and ends with the one who stayed ($RH_OVER_AFTER s after the cut)" "$RH_OVER"
+check "... no more than the hold and the resume countdown after the cut (at most 22 s)" "$(python3 -c "print(0 if $RH_OVER_AFTER <= 22 else 1)")"
+check "... the room's reason is the match's end, the winner is HoldAnn" "$([ "$(rc_field "$RH_CODE" reason)" = "the match ended" ] && curl -s -m 3 -H "Authorization: Bearer $SECRET" "$RC_URL/rooms/$RH_CODE" | grep -q '"winner":true'; echo $?)"
+check "the game of the player who stayed saw no error" "$(grep -qiE 'out of sync|failed|error' "$WORK/ha.log"; [ $? -ne 0 ]; echo $?)"
+stop_pids "the clients of the countdown hold" $RH_PIDS
+stop_pids "the proxy of the countdown hold (stopped with SIGTERM)" "$RH_PROXY_PID"
+RH_PROXY_PID=""
+code_of -X DELETE -H "Authorization: Bearer $SECRET" "$RC_URL/rooms/$RH_CODE" > /dev/null
 stop_pids "the clients of the reconnect part (one of them was stopped with SIGSTOP)" $RC_PIDS
 RC_PIDS=""
 code_of -X DELETE -H "Authorization: Bearer $SECRET" "$RC_URL/rooms/$RC_CODE" > /dev/null

@@ -1,0 +1,8 @@
+# The relay of the players' channels (docs/SERVER.md "The relay for the players' channels"): the official coturn image with this repository's configuration (docker/turnserver.conf: no secret and no
+# address in it; the stack gives the secret, the public address and the name as variables) and an entry point that refuses to start without them, keeps the secret out of the command line and hands over
+# (docker/turn-entrypoint.sh).
+# The base image is pinned by tag and digest: the digest is what is pulled, the tag is for the reader and for Dependabot (.github/dependabot.yml), which raises the pair to a newer one in a pull request that CI builds.
+FROM coturn/coturn:4.19.2@sha256:ccdbc51e6f072130b0fc9eebda21f8d026d0a25581746c52557e887818011a3f
+COPY docker/turnserver.conf /etc/coturn/turnserver.conf
+COPY --chmod=0755 docker/turn-entrypoint.sh /usr/local/bin/ants-turn-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/ants-turn-entrypoint.sh"]

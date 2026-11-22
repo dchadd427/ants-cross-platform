@@ -282,7 +282,7 @@ class TheSwitch(FrameTest):
         c.send(pics(True))                                                              # (it is on already)
         answer = c.recv_reply()
         self.assertEqual((answer["t"], answer["you"]["pics"], answer["you"]["pic"]), ("you", "on", name))
-        self.assertEqual([m for m in d.drain(0.5) if m["t"] != "online"], [])             # (nothing changed: the account's other socket is told nothing)
+        self.assertEqual([m for m in d.drain(0.5) if m["t"] not in ("online", "cmds")], [])             # (nothing changed: the account's other socket is told nothing; its list of commands came after the welcome)
         c.send(pics(True))
         self.assertEqual(c.recv_reply()["t"], "you")
         c.send(pics(True))

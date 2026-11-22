@@ -1572,7 +1572,7 @@ void run_room_chat_ui_tests() {
     TEST_CASE("N5.76b The Refusal For A Room That The Server Cannot Make (A Hello That Carried A Create Block, NoSuchRoom: The Cap Of Public Rooms Is Full) Says So And What To Do, Not That There Is No Such Room, In Words That Fit The Setup Screen's Status Box In Two Lines On Both Pages; A Hello Without A Block Is Told As Before") {
         using net::NetGame;
         using net::RejectReason;
-        const std::string no_place = "The server cannot make a room now: it is busy, or hosts no online matches. Try again in a few minutes.";
+        const std::string no_place = "The server cannot make a room now: it is busy, or your network made many rooms. Try again in a minute.";
         const std::string no_room = "There is no such room on this server.";
         for (const bool browser : {false, true}) {
             ASSERT_EQ(NetGame::reject_text(RejectReason::NoSuchRoom, browser, true), no_place);               // (the Hello carried a create block: the server would have made the room, and cannot now)

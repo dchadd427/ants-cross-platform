@@ -57,7 +57,7 @@ int make_shots(const std::string& dir, bool wide) {
     click(app, MenuId::Join);
     shot(app, dir + "/07_join_name_refused.png");
     fill(app, MenuId::Name, "Dave");
-    app.start_menu().set_server(ServerAddress{"localhost", server.port()});         // (a name, not an address: the lookup goes to the slow resolver above)
+    app.start_menu().set_server(ServerAddress{"localhost", server.port(), true});         // (a name, not an address: the lookup goes to the slow resolver above)
     click(app, MenuId::Join);
     hall.step(50);
     shot(app, dir + "/08_connecting.png");
@@ -69,11 +69,11 @@ int make_shots(const std::string& dir, bool wide) {
             auto l = net::TcpListener::listen(0, true);
             return l ? l->port() : uint16_t{1};
         }();
-        app.start_menu().set_server(ServerAddress{"127.0.0.1", closed});
+        app.start_menu().set_server(ServerAddress{"127.0.0.1", closed, true});
         click(app, MenuId::Join);
         if (!hall.until([&]() { return failed_on(app, MenuPanel::Join) && app.start_menu().message().find("Cannot reach") != std::string::npos; }, 8000)) return 1;
         shot(app, dir + "/10_join_server_unreachable.png");
-        app.start_menu().set_server(ServerAddress{"127.0.0.1", server.port()});
+        app.start_menu().set_server(ServerAddress{"127.0.0.1", server.port(), true});
     }
     // host an online match: the panel, then the room's code, copied
     press(app, SDLK_ESCAPE);
@@ -113,7 +113,7 @@ int make_shots(const std::string& dir, bool wide) {
     app.start_menu().show_main();
     Server small(2, {"TINY.LVL", "SMALL.LVL"});
     Hall hall2{&small, &app, {}, nullptr, false};
-    app.start_menu().set_server(ServerAddress{"127.0.0.1", small.port()});
+    app.start_menu().set_server(ServerAddress{"127.0.0.1", small.port(), true});
     click(app, MenuId::HostOnline);
     while (app.start_menu().settings().host_map != 5) click(app, MenuId::HostMap);                         // Islands
     click(app, MenuId::Host);

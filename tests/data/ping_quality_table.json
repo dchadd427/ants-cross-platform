@@ -1,0 +1,21 @@
+{
+ "note": "One table for the scale of the ping colors: the quality of a round trip in milliseconds (good under 80, fair under 150, poor from there, none for no number). tests/test_net/test_latency.cpp runs it through ping_quality() of include/ants_net/latency.hpp and tests/scripts/web_lobby_rules_check.js through pingQuality() of web/front/lobby_rules.js, so the two cannot drift apart. A case is one line: ms (the number, -1 for none) and quality (none, good, fair, poor).",
+ "cases": [
+  {"ms": -2147483648, "quality": "none"},
+  {"ms": -1000, "quality": "none"},
+  {"ms": -1, "quality": "none"},
+  {"ms": 0, "quality": "good"},
+  {"ms": 1, "quality": "good"},
+  {"ms": 40, "quality": "good"},
+  {"ms": 79, "quality": "good"},
+  {"ms": 80, "quality": "fair"},
+  {"ms": 81, "quality": "fair"},
+  {"ms": 120, "quality": "fair"},
+  {"ms": 149, "quality": "fair"},
+  {"ms": 150, "quality": "poor"},
+  {"ms": 151, "quality": "poor"},
+  {"ms": 250, "quality": "poor"},
+  {"ms": 65535, "quality": "poor"},
+  {"ms": 2147483647, "quality": "poor"}
+ ]
+}

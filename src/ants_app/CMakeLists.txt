@@ -71,6 +71,7 @@ add_library(ants_app STATIC
     options_screen.cpp
     text_layout.cpp
     latency_corner.cpp
+    connections_overlay.cpp
     net_overlay.cpp
     start_menu.cpp
     start_menu_view.cpp

@@ -4,6 +4,7 @@
 #include "ants_app/hud.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_app/text_layout.hpp"
+#include "ants_net/latency.hpp"
 
 #include <string>
 
@@ -12,7 +13,8 @@ namespace ants::app {
 void HUD::render_match_start_modal(IRenderer& renderer, const assets::AssetArchive& assets) {
     if (match_countdown_) {                       // protocol 21: the card, in the picture's own pixels in the middle of the map view (the caller's offset is the original dialog's)
         renderer.set_origin(0, 0);
-        render_match_countdown(renderer, assets);
+        render_match_countdown(renderer, assets);                                 // (it lays the see-through of a card that the player looks round over what it draws)
+        renderer.set_alpha_scale(255);
         return;
     }
     // Start modal (Ants.exe 0x1017127): std_dialg at origin (100,100), one wrapped centred label (string 105) in the
@@ -75,12 +77,15 @@ bool HUD::handle_countdown_key(int32_t key, uint16_t mod, bool repeat) {
 // The countdown card (protocol 21, countdown_card.hpp): the "Get ready to play!" dialog of every match, bigger while the host holds the first turn for 30 s. The colors are the original's: the clay
 // orange of the dialog, the thin green frame, the dark violet letters (#1F1733), and the black boxes of the setup screens for the count and the colors.
 void HUD::render_match_countdown(IRenderer& renderer, const assets::AssetArchive& assets) {
-    if (art_ != nullptr && window_pieces(assets).countdown) {          // the new look: render_match_countdown_new (hud_windows.cpp)
+    card_output_scale_ = renderer.output_scale();
+    card_new_look_ = art_ != nullptr && window_pieces(assets).countdown;
+    if (card_new_look_) {                                              // the new look: render_match_countdown_new (hud_windows.cpp)
         render_match_countdown_new(renderer, assets);
         return;
     }
     using assets::ColorRGBA;
-    const CountdownCardLayout l = countdown_card_layout(layout_.view());
+    renderer.set_alpha_scale(255 - card_look_ * (255 - kClassicCardSeeThrough) / 255);          // (see-through while the player moves the view: the whole card, one level)
+    const ClassicCountdownLayout l = classic_countdown_layout(layout_.view());
     const LayoutRect& c = l.card;
     const ColorRGBA clay{219, 75, 19, 255};
     const ColorRGBA ink{31, 23, 51, 255};                // dark slate (COLORREF 0x33171F), the dialog's own letters
@@ -112,7 +117,7 @@ void HUD::render_match_countdown(IRenderer& renderer, const assets::AssetArchive
     centred(std::to_string(shown), b, l.digits_y, FontSize::Px96, gold);
     centred(countdown_caption(shown == 0), b, l.caption_y, FontSize::Px18, cream);
 
-    // who plays which color: the people are "in" (everybody has loaded), a computer player says so
+    // who plays which color: the people are "in" (everybody has loaded), a computer player says so, and in a game over the network the connection's number stands above that word, in its color of quality
     static const ColorRGBA kDots[4] = {{63, 174, 106, 255}, {209, 75, 85, 255}, {92, 111, 224, 255}, {110, 110, 118, 255}};
     for (size_t seat = 0; seat < 4; ++seat) {
         const CountdownSeat& who = countdown_seats_[seat];
@@ -123,10 +128,20 @@ void HUD::render_match_countdown(IRenderer& renderer, const assets::AssetArchive
         renderer.fill_rect(r.x + 8, r.y + (r.h - 12) / 2 + 1, 10, 10, kDots[seat]);
         std::string name = who.name.empty() ? std::string(kTeamNames[seat]) : who.name;
         if (seat == local_player_id_ && !who.computer) name += " (you)";
-        const char* tag = who.computer ? "bot" : "in";
-        const int32_t tag_w = renderer.get_text_width(tag, FontSize::Px14);
-        renderer.draw_text_squeezed(name, r.x + 26, r.y + (r.h - 18) / 2, cream, FontSize::Px18, r.w - 26 - tag_w - 14);
-        renderer.draw_text(tag, r.right() - tag_w - 8, r.y + (r.h - 14) / 2, who.computer ? ColorRGBA{168, 194, 184, 255} : ColorRGBA{143, 224, 178, 255}, FontSize::Px14);
+        const bool mine = seat == local_player_id_ && !who.computer;
+        const CountdownRowWords words = countdown_row_words(who, mine, kTeamNames[seat]);
+        const std::string tag = who.computer ? std::string("bot") : words.tag;           // (the classic row has no room for a computer player's level: its name carries it)
+        const int32_t tag_w = renderer.get_text_width(tag, FontSize::Px12);
+        const int32_t ping_w = renderer.get_text_width(words.ping, FontSize::Px12);
+        const int32_t right_w = std::max(tag_w, ping_w);
+        renderer.draw_text_squeezed(name, r.x + 26, r.y + (r.h - 18) / 2, cream, FontSize::Px18, r.w - 26 - right_w - 14);
+        const ColorRGBA dim = who.computer ? ColorRGBA{168, 194, 184, 255} : ColorRGBA{143, 224, 178, 255};
+        if (!words.ping.empty()) {
+            renderer.draw_text(words.ping, r.right() - ping_w - 8, r.y + 2, ping_color(who.ping_ms), FontSize::Px12);
+            renderer.draw_text(tag, r.right() - tag_w - 8, r.y + 14, dim, FontSize::Px12);
+        } else {
+            renderer.draw_text(tag, r.right() - tag_w - 8, r.y + (r.h - 14) / 2, dim, FontSize::Px14);
+        }
     }
 
     // one person alone (with or without computer players) has nobody to say hello to: the card says what is at hand instead
@@ -145,7 +160,15 @@ void HUD::render_match_countdown(IRenderer& renderer, const assets::AssetArchive
 #endif
 }
 
-// A press while the card is up (protocol 21): the map is out of reach, the chat's buttons, Quit and Fullscreen are not. The press only captures the button; the release acts on it.
+// The new card at this frame's scale, for the players that it lists (a row for each color that plays)
+CountdownCard HUD::countdown_card_now() const noexcept {
+    size_t rows = 0;
+    for (const CountdownSeat& who : countdown_seats_) rows += who.plays ? 1u : 0u;
+    return countdown_card(layout_.view(), countdown_card_scale(layout_.view(), layout_.height, card_output_scale_), rows);
+}
+
+// A press while the card is up (protocol 21): nothing of the match is in reach (a press on the map takes hold of the ground, on the minimap moves the view), the chat's buttons, Quit and Fullscreen are. The
+// press only captures the button; the release acts on it.
 bool HUD::handle_countdown_mouse_down(int32_t x, int32_t y, uint8_t button) {
     if (button != SDL_BUTTON_LEFT) return true;
     if (quit_button_.contains(x, y)) {
@@ -157,16 +180,24 @@ bool HUD::handle_countdown_mouse_down(int32_t x, int32_t y, uint8_t button) {
     } else if (options_.state().chat && is_on_team_ && team_button_.contains(x, y)) {
         team_button_.is_pressed = true;
         play_sfx(sim::SoundID::ButtonClick);
-    } else if (countdown_card_layout(layout_.view()).button.contains(x, y)) {
+    } else if (countdown_button_rect().contains(x, y)) {
         countdown_button_pressed_ = true;
         play_sfx(sim::SoundID::ButtonClick);
+    } else if (over_minimap(x, y)) {                  // looking around (countdown_takes_camera): the view follows the pointer on the minimap while the button is held, as in the match
+        if (countdown_takes_camera()) is_radar_dragging_ = true;
+    } else if (over_map(x, y)) {                      // a press on the map takes hold of the ground: nothing is picked, nothing is ordered
+        if (countdown_takes_camera()) {
+            look_dragging_ = true;
+            look_x_ = x;
+            look_y_ = y;
+        }
     }
     return true;
 }
 
 // A release while the card is up: what a press captured acts at the release, on the button (`fire_*` are the release's own decisions, handle_mouse_up)
 bool HUD::handle_countdown_mouse_up(int32_t x, int32_t y, bool left_release, bool fire_quit, bool fire_all, bool fire_team) {
-    const bool fire_fullscreen = left_release && countdown_button_pressed_ && countdown_card_layout(layout_.view()).button.contains(x, y);
+    const bool fire_fullscreen = left_release && countdown_button_pressed_ && countdown_button_rect().contains(x, y);
     countdown_button_pressed_ = false;
     if (fire_quit) open_quit_dialog();
     else if (fire_all) send_chat(false);

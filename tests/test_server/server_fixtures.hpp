@@ -362,6 +362,14 @@ struct World {
         run(100);
         return c;
     }
+    // The pages of the lobby rooms that do not lead say Ready (protocol 27: a leader's START waits for it), and the world runs until the rooms have heard them. A leader, a game and a client of a room that is no lobby room are not
+    // asked (the client sends nothing for them), so this is safe to call before any START
+    void pages_ready(uint32_t ms = 100) {
+        for (auto& c : clients) {
+            if (c->lobby) c->lobby->request_ready(true);
+        }
+        run(ms);
+    }
     // A game that takes the seat of a page over (or of a game whose link was lost) with the seat's key, as the page's own game does
     Client& connect_game(const std::string& name, const std::string& room, const net::SeatKey& key, bool cannot_load = false, const std::string& map_folder = std::string()) {
         next_key = key;
@@ -1080,11 +1088,13 @@ struct PWorld : LinkSource {
             net.cut(ends.first, true);
             return ends.second;
         }
-        mgr->add_connection(std::make_unique<TapSend>(ends.first, &on_server_send), "127.0.0.1", server_now());
+        mgr->add_connection(std::make_unique<TapSend>(ends.first, &on_server_send), link_address, server_now());
         server_ends.push_back(ends.first);
         return ends.second;
     }
+    std::string link_address{"127.0.0.1"};                  // where the server is told that the next link comes from (a machine's new link after a cut too)
     uint16_t announce_port{0};                              // the listen port that the machines made by connect() announce
+    uint8_t announce_platform{0};                           // the platform byte that they tell (protocol 15: valid_platform; 0: not told)
     std::optional<net::CreateBlock> next_create;            // the block that the next connect() puts in its Hello (connect_creating sets it for one call)
     RClient& connect(const std::string& name, const std::string& room, uint8_t seat = 255, const net::SeatKey& key = net::SeatKey{}) {
         net::Connection* end = open_link();
@@ -1095,6 +1105,7 @@ struct PWorld : LinkSource {
         c.want_seat = seat;
         c.key = key;
         c.listen_port = announce_port;
+        c.platform = announce_platform;
         c.create = next_create;
         c.start(end, static_cast<uint32_t>(clients.size()) * 7919u);
         return c;
@@ -1422,6 +1433,9 @@ void run_replay_tests();
 void run_state_hash_tests();
 void run_bot_match_tests();
 void run_bot_admin_tests();
+void run_bot_rotation_tests();
+void run_bot_stagger_tests();
+void run_bot_queue_tests();
 void run_store_tests();
 void run_manager_tests();
 void run_demo_tests();
@@ -1435,6 +1449,7 @@ void run_secret_tests();
 void run_reconnect_tests();
 void run_bot_tests();
 void run_countdown_tests();
+void run_relay_tests();
 void run_online_limit_tests();
 void run_persist_tests();
 void run_persist_server_tests();

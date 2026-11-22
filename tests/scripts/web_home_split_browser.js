@@ -21,6 +21,7 @@ if (python.status !== 0) { console.log('SKIP: python3 cannot import the hub: the
 const ROOT = path.resolve(__dirname, '..', '..');
 const arg = (name) => { const i = process.argv.indexOf(name); return i === -1 ? null : process.argv[i + 1]; };
 const WEB = path.resolve(arg('--web') || path.join(ROOT, 'web'));
+const GT = require(path.join(WEB, 'home', 'games.js')).TEXT;          // (the page's own words: a check names the button that the page has for a situation, and does not spell it)
 const SHOTS = arg('--shots') ? path.resolve(arg('--shots')) : null;
 const ONLY = arg('--only') ? arg('--only').split(',') : null;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.ttf': 'font/ttf', '.ico': 'image/x-icon', '.json': 'application/json', '.svg': 'image/svg+xml' };
@@ -149,16 +150,16 @@ async function openPage(r, size, account, o) {
 }
 const listShows = (page, text) => until('the list shows ' + text, () => page.evaluate((t) => { const p = document.getElementById('players'); return !!p && p.textContent.indexOf(t) !== -1 && !p.closest('.pl-root').hidden; }, text), 15000);
 async function shot(page, name) { if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: true }); await page.screenshot({ path: path.join(SHOTS, 'built_' + name + '.png') }); } }
-const PHONE_W = 700;                                       // (a window up to this wide has the strip and one view at a time)
+const PHONE_W = 700;                                       // (a window up to this wide, or up to 500 px high, has the strip and one view at a time)
 const showPlayers = async (page) => {                       // the Players view of a phone's width; in a wider window the list is on the page already
-    if (await page.evaluate(() => innerWidth <= 700)) { await page.click('.htab.t-players'); await sleep(150); }
+    if (await page.evaluate(() => innerWidth <= 700 || innerHeight <= 500)) { await page.click('.htab.t-players'); await sleep(150); }
 };
 
 // what a page must be at any size and with any crowd (the checks of docs/HOME_SCREEN.md that the list must not break)
 const LAYOUT = () => {
     const R = (e) => { if (!e || !e.getClientRects().length) return null; const q = e.getBoundingClientRect(); return { l: q.left, t: q.top, r: q.right, b: q.bottom }; };
     const meet = (a, b) => a && b && a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b - 0.5 && b.t < a.b - 0.5;
-    const panel = document.getElementById('players'), phone = innerWidth <= 700;
+    const panel = document.getElementById('players'), phone = innerWidth <= 700 || innerHeight <= 500;
     const pl = R(panel), dock = R(document.querySelector('.gdock')), chat = R(document.getElementById('gchat')), main = R(document.getElementById('hmain')), tabs = R(document.querySelector('.htabs'));
     const iw = innerWidth, ih = innerHeight, out = [];
     [['panel', pl], ['games', dock], ['chat', chat], ['strip', tabs]].forEach(([n, q]) => { if (q && (q.l < -0.5 || q.t < -0.5 || q.r > iw + 0.5 || q.b > ih + 0.5)) out.push(n + ' outside the window ' + JSON.stringify(q)); });
@@ -296,7 +297,7 @@ async function main() {
         await page.evaluate(() => document.querySelector('.hmain') && 0);
         await page.click('.quick.host, .hbar .quick').catch(() => {});
         await sleep(600);
-        await page.getByRole('button', { name: 'Private room' }).click().catch(() => {});
+        await page.locator('.gconfirm button', { hasText: GT.hostPrivate }).click().catch(() => {});
         await page.waitForFunction(() => document.body.getAttribute('data-screen') === 'room', null, { timeout: 8000 }).catch(() => {});
         await sleep(800);
         await shot(page, 'split_room_probe');

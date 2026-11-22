@@ -1,4 +1,4 @@
-/* The Games list, Quick host and the Room's Public | Private switch (web/home/games.js, docs/HOME_GAMES.md). Loaded after the first paint; the colors, .btn, .banner, .joinbox and .hint are the page's own
+/* The Games list, Quick host and the Room's Public | Invite only switch (web/home/games.js, docs/HOME_GAMES.md). Loaded after the first paint; the colors, .btn, .banner, .joinbox and .hint are the page's own
    (web/lobby.html). Every target is at least 44 px high and wide. */
 
 /* ---- the Games button while the list is open ---- */
@@ -66,6 +66,25 @@
 .glen { color: #a8cfc0; font-variant-numeric: tabular-nums; }
 .gwatch { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-width: 72px; min-height: 44px; text-decoration: none; }
 
+/* ---- the locked cards of private rooms: dashed and dimmed, a padlock where Join stands (not a control), and the line that counts the rest ---- */
+.gpriv { border: 1px dashed #34514a !important; background: #070b0e !important; }
+.gpriv .gmap img { opacity: .5; filter: grayscale(.55); }
+.gpriv .gname { color: #c4d6ce; }
+.gpriv .gmapname, .gpriv .gcount, .gpriv .gbots { color: #8fb0a3; }
+.gpriv .gdot.player { opacity: .75; }
+.glockbox { position: relative; display: block; box-sizing: border-box; width: 44px; height: 44px; justify-self: end; align-self: center; color: #b7cfc5; border: 1px dashed #4a6a5f; border-radius: 4px; }
+.glockbox::before, .glockbox::after { content: ""; position: absolute; left: 50%; box-sizing: border-box; }
+.glockbox::before { top: 11px; width: 11px; height: 11px; margin-left: -5.5px; border: 2px solid currentColor; border-bottom: 0; border-radius: 6px 6px 0 0; }       /* (the shackle) */
+.glockbox::after { top: 20px; width: 15px; height: 12px; margin-left: -7.5px; background: currentColor; border-radius: 2px; }       /* (the body) */
+.gprivtag { display: inline-block; padding: 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .06em; line-height: 18px; text-transform: uppercase; color: #cfe3da; background: #24342f; border: 1px solid #4a6a5f; border-radius: 3px; }
+.gmore { grid-column: 1 / -1; padding: 10px 12px; font-size: 15px; text-align: center; color: #8fb0a3; border: 1px dashed #34514a; border-radius: 4px; }
+/* (private rooms but nothing to join: the empty card is a slim strip over the locked cards) */
+.gempty.gslim { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t b" "l b"; justify-items: start; align-items: center; gap: 2px 14px; min-height: 0; margin: 0 0 12px; padding: 12px 14px; text-align: left; background: #080d12; border: 1px solid #17382f; }
+.gslim .ant { display: none; }
+.gempty.gslim .gemtitle { grid-area: t; font-size: 17px; line-height: 1.3; }
+.gempty.gslim .gemline { grid-area: l; margin: 0; font-size: 14px; }
+.gempty.gslim .gemhost { grid-area: b; justify-self: end; min-height: 44px; }
+
 /* ---- the confirm card: the question, what it is about, the answer that changes nothing ---- */
 .gshade { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 16px; background: rgba(5, 10, 8, .72); }
 .gconfirm { width: min(440px, 100%); max-height: 100%; overflow-y: auto; padding: 18px 20px 18px; text-align: center; }
@@ -124,7 +143,7 @@
 @media (max-width: 359px) { .vbtn { padding: 5px 4px 3px; font-size: 4.7vw; } .vbtn small { margin-left: .47em; font-size: .765em; } }
 
 /* ---- a phone upright and a short window ---- */
-@media (max-width: 720px) { .gphead { align-items: center; } .gptitle { flex: 1 1 auto; } .gcodelink { order: 1; } .gpcount { order: 2; flex: 1 0 100%; margin-left: 0; text-align: left; } .gpop { padding: 12px 12px 14px; } .gitem { gap: 10px; padding: 8px 8px; } .gmap { width: 52px; height: 52px; } .gname { font-size: 19px; } .gcode .joinbox input { min-width: 0; } }
+@media (max-width: 720px) { .gempty.gslim { grid-template-columns: minmax(0, 1fr); grid-template-areas: "t" "l" "b"; } .gempty.gslim .gemhost { justify-self: start; margin-top: 14px; } .gphead { align-items: center; } .gptitle { flex: 1 1 auto; } .gcodelink { order: 1; } .gpcount { order: 2; flex: 1 0 100%; margin-left: 0; text-align: left; } .gpop { padding: 12px 12px 14px; } .gitem { gap: 10px; padding: 8px 8px; } .gmap { width: 52px; height: 52px; } .gname { font-size: 19px; } .gcode .joinbox input { min-width: 0; } }
 @media (max-height: 500px) and (orientation: landscape) { .gphead { align-items: center; } .gptitle { font-size: 20px; } .gpop { padding: 10px 14px 12px; } .gcbtns .btn { min-height: 44px; } .gconfirm { padding: 12px 16px; } .gctitle { font-size: 22px; } .gcline { margin-bottom: 10px; } }
 @media (max-height: 350px), (max-width: 260px) { .gshade { padding: 8px; } .gmark { margin-bottom: 6px; } .gmark.shadow .ant { --k: 1; } .gcline { margin-bottom: 8px; } .gcbtns .gyes.big { min-height: 48px; font-size: 22px; } .gcnote { margin: 6px 0; } .gbar, .gconfirm .gitem { margin-bottom: 10px; } }       /* (a short window or a zoomed phone: the none card fits without a scroll) */
 @media (max-width: 260px) { .gconfirm { padding: 10px; } .gctitle { margin-bottom: 6px; font-size: 20px; } .gcline { font-size: 14px; } .gcnote { font-size: 13px; } }

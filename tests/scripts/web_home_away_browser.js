@@ -68,7 +68,7 @@ async function main() {
             page.on('pageerror', (e) => errors.push(String(e && e.message || e)));
             await page.goto(site.url + '/', { waitUntil: 'load' });
             await page.waitForSelector('#players .pl-card', { state: 'attached', timeout: 8000 });
-            if (width <= 700) { await page.click('.htab.t-players'); await sleep(200); }
+            if (width <= 700 || height <= 500) { await page.click('.htab.t-players'); await sleep(200); }
             await settled(page);
             const size = width + ' x ' + height;
             check(size + ': the groups in their order, a moderator who is away stays with the moderators, the Away group is last', JSON.stringify(await groups(page)) === JSON.stringify(['mod:ada+moss', 'look:juniper', 'wait:clover+pebble', 'play:hazel', 'away:basil+fern']), JSON.stringify(await groups(page)));
@@ -84,7 +84,7 @@ async function main() {
                 await page.screenshot({ path: path.join(SHOTS, down) }); taken.push([down, size + ', the list scrolled to its end (the Away group)']);
                 await page.evaluate(() => { document.querySelector('#players .pl-list').scrollTop = 0; });
             }
-            if (width > 700) {
+            if (width > 700 && height > 500) {
                 hub.set({ who: WHO([row(8, 'fern')], { full: false, gone: [9] }) });
                 hub.broadcast(WHO([row(8, 'fern')], { full: false, gone: [9] }));
                 await sleep(300);

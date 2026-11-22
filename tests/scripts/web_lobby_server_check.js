@@ -14,8 +14,8 @@ if (!modulePath || !wsUrl) { console.log('usage: web_lobby_server_check.js lobby
 const N = require(path.resolve(modulePath));
 
 // The WebSocket client for a page's code: over a plain socket, the same on every node (the global WebSocket arrived in node 22); mini_websocket.js
-const MiniWebSocket = require('./mini_websocket.js');
-// ANTS_NATIVE_WEBSOCKET=1 runs the same scenarios with node's own WebSocket (node 22 or later), as a browser does
+const MiniWebSocket = require('./mini_websocket.js').visitors();           // (every connection is a visitor of its own to the server's limits per address, as behind the site's nginx)
+// ANTS_NATIVE_WEBSOCKET=1 runs the same scenarios with node's own WebSocket (node 22 or later), as a browser does (it cannot name a visitor's address: every page then comes from one address, so start the server with --no-address-limits)
 const WS = process.env.ANTS_NATIVE_WEBSOCKET && typeof WebSocket !== 'undefined' ? WebSocket : MiniWebSocket;
 
 let checks = 0;
@@ -112,6 +112,10 @@ function page(name, code, extra) {
 const login = (name) => ({ login: true, you: { name, mod: false } });
 function names(c) { return c.room ? c.room.slots.map((s) => (s.state === N.SLOT.Client ? s.name : s.state === N.SLOT.Bot ? '(bot)' : '-')).join('|') : '(no room)'; }
 const online = (c) => () => c.status === 'online' && c.room !== null;
+// The mark of Ready (protocol 27, docs/READY_UP.md): the START of a leader waits for every person who is not the leader to say it, and the room shows the mark to everybody
+const readyOf = (viewer, who) => { const at = viewer.seatOf(who); return at >= 0 && viewer.room && ((viewer.room.ready >> at) & 1) === 1; };
+// The page of the harness (the real front page) presses the Ready up switch on its own card
+const pressReady = (env) => { const button = env.$('slots').findAll((e) => e.tagName === 'button' && e.hasAttribute('data-ready'))[0]; if (button) button.click(); return !!button; };
 
 (async () => {
     // ---- 1. two pages in one lobby: the code makes the room, and the same link joins it ---------------------------------------------------------------------------------------------------------------
@@ -331,6 +335,8 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         B.connect();
         await step('B joins', () => online(B));
         await step('A sees B', () => () => A.count('joined') === 1);
+        check('B says Ready (the START of the leader waits for it)', B.setReady(true) === true);
+        await step('A is shown that B is ready', () => () => readyOf(A, 'Bea'));
         check('A presses START (the request carries the plan\'s fill and teams)', A.start() === true);
         await step('both pages are told that the START waits, and that no game is in yet', () => () => A.room.starting && B.room.starting && A.count('starting') === 1 && B.count('starting') === 1 && A.room.inGame === 0);
         check('(the leader cannot move, plan, rename or start again while it waits)', A.move(1, 2) === false && A.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }) === false && A.rename('Zed') === false && A.start() === false);
@@ -587,6 +593,8 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         await step('Home follows what the room says: My room counts the two colors that play of the two that are in the match', () => () => env.home('mine').children[1].textContent === '2/2' && env.home('mine').getAttribute('aria-label') === 'My room, 2 of 2');
         await sleep(2500);
         check('2.5 seconds on Home: the page answered the server\'s pings, and Bea is still in her color (no hold, no drop)', A.count('left') === 0 && A.room.slots[2].state === N.SLOT.Client && A.room.slots[2].name === 'Bea' && pageSockets.length === 1 && env.screen() === 'home');
+        check('Bea presses Ready up on her own card (the page is on Home: the room is still the page\'s)', pressReady(env) === true);
+        await step('... Ada is shown that Bea is ready', () => () => readyOf(A, 'Bea'));
         check('Ada presses START', A.start() === true);
         await step('START reaches the page on Home: the tab goes to the game page of its seat and name, once', () => () => env.assigned.length === 1, 5000);
         check('... the address of the game page (the plain code, the seat, the name; no key)', JSON.stringify(env.assigned) === JSON.stringify(['https://play.test/?join=/ws&room=' + room + '&seat=2&name=Bea']), JSON.stringify(env.assigned));
@@ -602,6 +610,7 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
     await scenario('the front page: Quick host makes a real room public, a second page sees it in the real list and joins it from there', async () => {
         if (!listBase) { console.log('SKIP: no public door was given: the front page\'s Games list was NOT run against the real list'); return; }
         const webDir = path.join(path.dirname(path.resolve(modulePath)), '..');
+        const GT = require(path.join(webDir, 'home', 'games.js')).TEXT;          // (the page's own words: a check names the chip or the button that the page has for a situation, and does not spell it)
         globalThis.AntsShapes = require(path.join(webDir, 'shapes.js'));
         const harness = require('./web_page_harness.js')(path.join(webDir, 'lobby.html'));
         const sockets = [];
@@ -634,7 +643,7 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         check('... and the real list says two people', (await listed()).lobbies.find((x) => x.code === room).people === 2);
         const priv = A.root.findAll((n) => String(n.className).split(/\s+/).indexOf('vbtn') !== -1 && n.getAttribute('aria-pressed') === 'false')[0];
         priv.click();
-        await step('the host presses Private: the guest\'s chip says so', () => () => B.root.findAll((n) => String(n.className).split(/\s+/).indexOf('vistag') !== -1)[0].textContent === 'Private room', 8000);
+        await step('the host presses Invite only: the guest\'s chip says so', () => () => B.root.findAll((n) => String(n.className).split(/\s+/).indexOf('vistag') !== -1)[0].textContent === GT.privateRoom, 8000);
         check('... and the real list has lost the room', (await listed()).lobbies.every((x) => x.code !== room));
         for (const ws of sockets) { try { ws.close(); } catch (e) { /* closed already */ } }
     });
@@ -645,6 +654,7 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
     await scenario('Quick join: the best open room of the real list, the question when others are in the room, a room that is full or started is skipped, three tries at most, Cancel leaves no seat behind', async () => {
         if (!listBase) { console.log('SKIP: no public door was given: Quick join was NOT run against the real list'); return; }
         const webDir = path.join(path.dirname(path.resolve(modulePath)), '..');
+        const GT = require(path.join(webDir, 'home', 'games.js')).TEXT;          // (the page's own words: a check names the button and the switch that the page has for a situation, and does not spell them)
         globalThis.AntsShapes = require(path.join(webDir, 'shapes.js'));
         const harness = require('./web_page_harness.js')(path.join(webDir, 'lobby.html'));
         const sockets = [];
@@ -731,10 +741,11 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         const Pv = onPage('Qjpriv');
         await step('a page lights Quick host', () => lit(Pv), 5000);
         Pv.home('host').click();
-        await step('Quick host asks again, and Private room is chosen', () => () => cardTitle(Pv) === 'Host a game' && (() => { const b = cardOf(Pv).findAll((n) => String(n.className).split(/\s+/).indexOf('btn') !== -1 && n.textContent === 'Private room')[0]; if (b) b.click(); return !!b; })(), 3000);
-        await step('Private room makes a real room, and the switch says Private (no Visibility was asked for)', () => () => Pv.screen() === 'room' && Pv.root.findAll((n) => n.getAttribute && n.getAttribute('aria-pressed') === 'true' && /Private/.test(n.textContent) && String(n.className).indexOf('vbtn') !== -1).length === 1, 8000);
+        await step('Quick host asks again, and Invite only is chosen', () => () => cardTitle(Pv) === 'Host a game' && (() => { const b = cardOf(Pv).findAll((n) => String(n.className).split(/\s+/).indexOf('btn') !== -1 && n.textContent === GT.hostPrivate)[0]; if (b) b.click(); return !!b; })(), 3000);
+        await step('Invite only makes a real room, and the switch says Invite only (no Visibility was asked for)', () => () => Pv.screen() === 'room' && Pv.root.findAll((n) => n.getAttribute && n.getAttribute('aria-pressed') === 'true' && n.textContent.indexOf(GT.private) === 0 && String(n.className).indexOf('vbtn') !== -1).length === 1, 8000);
         await sleep(1500);
-        check('... and the real door does not list it (a private room is for the people who have its link)', !(await realRows()).some((x) => x.host === 'Qjpriv'));
+        const mineRows = (await realRows()).filter((x) => x.host === 'Qjpriv');
+        check('... and the real door lists it only as a locked row (private on the wire, no code: an invite-only room is for the people who have its link, and nothing in the list leads to it)', mineRows.length === 1 && mineRows[0].private === true && !('code' in mineRows[0]) && !/[0-9a-f]{32}/.test(JSON.stringify(mineRows)), JSON.stringify(mineRows));
         Pv.roomBar('leave').click();
         await sleep(300);
 
@@ -749,6 +760,8 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         await step('a room of two that will START', () => () => online(S)() && online(S2)(), 8000);
         check('(its leader sets the plan for the two of them and presses START: the room waits for the games)', S.setPlan({ map: '', kinds: [N.PLAN.Open, N.PLAN.Open, N.PLAN.Nobody, N.PLAN.Nobody], teamA: N.NO_TEAM, teamB: N.NO_TEAM }) === true);
         await sleep(400);
+        check('(the other person says Ready)', S2.setReady(true) === true);
+        await step('(the leader is shown the mark)', () => () => readyOf(S, 'Qjstart2'));
         check('(START)', S.start() === true);
         await step('the room says that START waits', () => () => S.room.starting === true, 8000);
         const stale = (codeOf, host, age) => ({ code: codeOf, host: host, map: 'TINY.LVL', mode: 'highest-score', people: 3, bots: 0, free: 1, size: 4, age: age });
@@ -813,6 +826,8 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         env.roomBar('rhome').click();
         check('(Bea goes Home, Ada plans for two)', env.screen() === 'home' && A.setPlan({ map: '', kinds: [N.PLAN.Open, N.PLAN.Open, N.PLAN.Nobody, N.PLAN.Nobody], teamA: N.NO_TEAM, teamB: N.NO_TEAM }) === true);
         await step('... the plan is in (My room says 2/2)', () => () => env.home('mine').children[1].textContent === '2/2');
+        check('Bea presses Ready up on her own card', pressReady(env) === true);
+        await step('... Ada is shown that Bea is ready', () => () => readyOf(A, 'Bea'));
         check('Ada presses START', A.start() === true);
         await step('START reaches the page: it goes to the game page (and does not get there)', () => () => env.assigned.length === 1, 5000);
         const t0 = Date.now();

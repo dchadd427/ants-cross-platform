@@ -283,6 +283,7 @@ struct LevelPlan {
     uint32_t repeat_limit{12};
     uint32_t repeat_window{1200};
     uint32_t fallback_ticks{2400};
+    bool stall_walkable{true};           // the no-point trigger counts the food that the hill walks to: a lunchbox that no walk joins to the hill (a dead ant's, in a field of bombs) is none of it (false, `stallwalk=0`: the bot as it was, for which any lunchbox was)
     uint32_t gate_user_fails{16};        // the gate stops guiding for 900 ticks after this many clicks onto the entrance in a row that delivered nothing (0: it never stops)
     // islands (ISLANDS, SMALL: food beyond water; IslandTask, docs/BOTS.md "Islands"): a Swimmer digs bridges, the economy walks over them. Idle where nothing lies beyond water
     bool islands{false};                 // the island task is on (every level of the standard bot; a plan made by hand, as the tests do, has it off)
@@ -334,6 +335,7 @@ struct LevelPlan {
     bool field_set_off{true};            // a seat that has no ant to start the work lets a plain ant set one bomb off to get to a power-up of the kind
     bool field_serve{true};              // an ant takes only a power-up whose kind then reaches the work from it (a Swimmer power-up on a strip that fire walls cut off from the water is none)
     bool field_replan{true};             // a Stuck step of the field breach gets one fresh plan before its ant is given up
+    bool field_wake{true};               // an ant that the field breach gave up (and the task that waited) tries again when the bombs, fire walls or bridges of the map change, not only after its rest
     bool gate_spare_map_bombs{true};     // on a gate map the counters leave the map's own bombs (no team, 255) alone while the gate goals are live (Tactics::gate_goals_live): they are the gate, and the goals defuse those on the way. A bomb of a
                                          // team is countered as on any map, and so is a map bomb once the goals are exhausted or the bot is in the fallback
     // the flowers (docs/BOTS.md, "The flowers"; Hard's: Medium and Easy play none): what the bot does with the power-ups that the droppers let fall. `--tune flowers=0` switches all of it off (the bot as it was)
@@ -453,6 +455,28 @@ struct LevelPlan {
     bool thief_trap{false};              // an enemy Thief shut in on the own raid tile by the own walls: one wall tile is put out on the side where fighters wait, and the Thief is struck as it comes out (never with nobody ready)
     uint32_t thief_trap_wait{200};       // ... the opened tile stays open this long (the walls are lit again after that)
     bool fire_home_only{false};          // the Fire power-up is not taken where the ant could not walk back to the own hill (a corner row of ISLANDS), and a wall order that the keeper cannot walk to is dropped
+    // The food-gone batch (docs/BOTS.md, "When the food is gone"; ON at every level, with the numbers of the level; `bot_arena --tune gone=0` is the bot before it, the keys below are one rule each). With no food that
+    // the hill can walk to, and no island, gate or field work for the ants, a bot does not stand: after `gone_wait` ticks of it (Tactics::gone) its idle ants steal, fight and heal.
+    bool gone{false};                    // the batch runs
+    uint32_t gone_stall{3600};           // food is left that the hill cannot walk to and the island, gate or field work banks nothing for this long: the work counts as lost
+    uint32_t gone_wait{800};          // ... this many ticks after the last work was gone (the opening's trips to power-ups and the Swimmers' work are not a lull)
+    uint32_t gone_raid_min{15};       // a raid is worth the trip for this much, whoever the level is (a steal is a swing of twice the loot), and a Thief is wanted while a box shows so much
+    bool gone_thief{true};            // ... and a Thief power-up that the team does not have is fetched for it (Tactics::wants), on a longer trip (gone_trip_ticks)
+    uint32_t gone_trip_ticks{900};
+    uint32_t gone_assault_min{2};     // an assault may be begun by this many free ants, with no wait and no surplus of the economy (the level asks for both); a lone ant sent at a target met more than it counted (measured on TREASURE at Hard)
+    uint32_t gone_margin{50};            // the last ants join an assault only on a team that has more to lose than the bot (min(its box, 200) at least this many points above min(the own box, 200): a wipe-out forces a hatch of that price) or that is ahead of it by twice this many points (a team that is behind loses no place by a lost fight)
+    uint32_t gone_wipe_ants{2};       // a team that shows at most this many ants, and a box of gone_wipe_box, is the first target of an assault (its wipe-out costs it min(score, 200)); 0: no preference
+    int32_t gone_wipe_box{60};
+    uint32_t gone_odds_percent{200};  // an assault with the food gone asks for this much strength against what answers near the target (a fight pays only when it is won) ...
+    uint32_t gone_wipe_odds_percent{100};   // ... and this much against a team that a wipe-out would force to hatch
+    bool gone_swap{true};             // an idle Swimmer that nothing holds becomes the Thief for the steals (PowerUpTask::swappable)
+    bool gone_heal{true};             // an idle ant with at most gone_heal_hp hit points walks home to heal, from wherever a walk leads (HealTask)
+    uint8_t gone_heal_hp{7};
+    int32_t gone_heal_walk{80};
+    // The idle swap (docs/BOT_GONE.md, "An idle ant takes the Fire power-up"): an own Bomber or Swimmer that stands idle, held by no task, for `idle_swap_ticks` takes a Fire power-up that lies within a trip while the bot has no
+    // Fire Ant (Fire is first in the order of value of the pick-up trips; an ant that takes another power-up leaves its old one on a free tile beside it). Plain ants were the only ones that PowerUpTask sent; a bot whose ants are all typed stood.
+    bool idle_swap{false};
+    uint32_t idle_swap_ticks{600};
 };
 
 /// The plan of a level (the neutral one: no style, no variations)
@@ -479,6 +503,8 @@ void without_defence_batch(LevelPlan& plan) noexcept;
 void without_hit_cadence(LevelPlan& plan) noexcept;
 /// The plan without the heal batch (docs/BOT_PEOPLE.md, "Step 2: hurt ants heal"): no ant is sent home to heal; the engine's own walk home at 1 hit point is all there is. For `bot_arena --tune heal=0` and the tests whose subject is an older rule.
 void without_heal(LevelPlan& plan) noexcept;
+/// The plan as it was before the food-gone batch and the idle swap of the same change (docs/BOT_GONE.md): the batch off, no idle ant takes another power-up
+void without_gone_batch(LevelPlan& plan) noexcept;
 /// The plan without the group batch (docs/BOT_PEOPLE.md, "Step 3: fight as a group"): the ants that answer a blow come from at most defend_reach tiles (and never from beyond the leash), and the fight is kept up at
 /// defend_keep_percent, as before the batch. For `bot_arena --tune group=0` and the tests whose subject is an older rule.
 void without_group_fight(LevelPlan& plan) noexcept;
@@ -680,6 +706,10 @@ struct Tactics {
     size_t surplus{0};
     /// No pile that the own hill can walk to lies on the map (set at every look by StandardBot): the economy has nothing to do and no points are at risk in a fight (LevelPlan::idle_hunt)
     bool no_work{false};
+    /// The food-gone batch is on at this look (LevelPlan::gone): no work for LevelPlan::gone_wait ticks, and the match has time left (set at every look by StandardBot)
+    bool gone{false};
+    /// The food-gone batch wants a Thief for the steals at this look: an enemy box shows enough and the own hill's ants walk to that enemy hill (the Thief that the plan wants for other reasons is no reason to turn an idle Swimmer into one)
+    bool gone_thief{false};
     /// Food lies beyond water (the island play) or behind a gate or a field (the gate goals): the few ants of the seat are the crews of that work
     bool far_work{false};
     /// The ants that no fight takes: the last ones (a wipe-out forces a hatch of 200 points, or ends the team); with LevelPlan::idle_hunt and no work (nothing to bank, nothing to lose) only the last one

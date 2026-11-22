@@ -108,7 +108,7 @@ class TheLegalPage(unittest.TestCase):
         self.assertIn('<link rel="stylesheet" href="/front/classic.css">', self.page)
         self.assertIn('<div class="pt"><h1>Legal</h1><p>', self.page)
         self.assertIn('<link rel="stylesheet" href="/site_nav.css">', self.page)
-        self.assertEqual(re.findall(r"<script[^>]*>", self.page), ['<script src="/site_nav.js">'])               # (the site bar's Menu: no other script)
+        self.assertEqual(re.findall(r"<script[^>]*>", self.page), ['<script src="/site_nav.js">', '<script src="/update_notice.js">'])               # (the site bar's Menu and the update notice: no other script)
         self.assertIn('<header class="sb" data-live="menu" ', self.page)
         self.assertEqual(re.findall(r'<nav aria-label="Pages">(.*?)</nav>', self.page, re.S)[0].count('aria-current'), 0)      # (Legal is not one of the bar's five: it is in the Menu)
         self.assertEqual(sorted(re.findall(r"@@\w+@@", self.page)), ["@@BUILD_DATE@@", "@@BUILD_ID@@", "@@GAME_VERSION@@"])      # (what the build fills in: the bar's three stamps, for the last line of the Menu)
@@ -124,7 +124,7 @@ class TheLegalPage(unittest.TestCase):
             "a protocol-relative style sheet": ('<link rel="stylesheet" href="/front/classic.css">', '<link rel="stylesheet" href="/front/classic.css"><link rel="stylesheet" href="//cdn.example/x.css">', "//cdn.example/x.css"),
             "a protocol-relative image": ('<div class="pt">', '<img src="//cdn.example/logo.png"><div class="pt">', "//cdn.example/logo.png"),
             "an image of another site": ('<div class="pt">', '<img src="https://cdn.example/logo.png"><div class="pt">', "https://cdn.example/logo.png"),
-            "a plain http address": ('<link rel="icon" type="image/png" href="/favicon.png?v=f34bea03">', '<link rel="icon" type="image/png" href="http://cdn.example/f.png">', "http://cdn.example/f.png"),
+            "a plain http address": ('<link rel="icon" type="image/png" href="/favicon.png?v=9ea2152a">', '<link rel="icon" type="image/png" href="http://cdn.example/f.png">', "http://cdn.example/f.png"),
             "an address that only starts like the repository's": ('href="https://github.com/dchadd427/ants-cross-platform/issues"', 'href="https://github.com/dchadd427/ants-cross-platform.evil.example/issues"', "ants-cross-platform.evil.example"),
             "an @import of a quoted address": ("main { margin: 26px 0 32px; }", '@import "https://cdn.example/x.css";\nmain { margin: 26px 0 32px; }', "@import"),
             "an @import url()": ("main { margin: 26px 0 32px; }", "@import url(//cdn.example/x.css);\nmain { margin: 26px 0 32px; }", "@import"),
@@ -152,7 +152,17 @@ class TheLegalPage(unittest.TestCase):
 
     def without_the_chat_panel(self):
         start = self.main.index('<section class="panel" id="chat-login">')
-        return plain(self.main[:start] + self.main[self.main.index("</section>", start) + len("</section>"):])
+        text = self.main[:start] + self.main[self.main.index("</section>", start) + len("</section>"):]
+        start = text.index('<section class="panel" id="channels">')              # (the panel of the players' channels, protocol 26, says who can see an address and that the relay's log is short-lived: its own test below)
+        return plain(text[:start] + text[text.index("</section>", start) + len("</section>"):])
+
+    def test_the_panel_of_the_channels_says_who_can_see_an_address_and_that_off_is_the_default(self):
+        start = self.main.index('<section class="panel" id="channels">')
+        panel = plain(self.main[start:self.main.index("</section>", start)])
+        for words in ("relay", "no player's address reaches another player", "Direct connection", "can see your IP address", "turn it off again", "at any time", "short-lived"):
+            self.assertIn(words, panel)
+        for word in ("STUN", "TURN", "WebRTC", "ICE"):
+            self.assertNotIn(word, panel, "the page speaks plainly")
 
     def test_it_is_short_and_says_nothing_of_what_the_site_stores_or_for_how_long_apart_from_the_panel_of_the_chat(self):
         text = self.without_the_chat_panel()
@@ -198,12 +208,29 @@ class TheLegalPage(unittest.TestCase):
                       "the name you play under", "Games and Players lists", "the match history, which keeps results and names for good, and into the replay files", "for up to 90 days on the site, and for ever in a file that someone has downloaded", "Forget me does not remove it", "whether they are looking around, waiting in a room or playing",
                       "The voice button in the chat uses your browser's speech recognition", "Your browser may send the audio to its maker's speech service (Chrome, Edge and Safari do)", "this site receives no audio and keeps nothing of it"):
             self.assertIn(words, panel, words)
-        self.assertLessEqual(len(panel.split()), 1100)                                                           # (230 until the display name: the third thing that the site gets, the name that is shown, and what moderators see; 252 words, then 90 more for the name that is played under and the Players list; 351 words, then: the newest 200 lines, 9 words more; raised from 352 to 390 on purpose for the voice button's sentence, 35 words: who hears the voice and that the site gets no audio, 386 words, then raised from 390 to 590 on purpose for the two sentences of the roles and of the moderators' log, which the people in the chat are told about: who may moderate and how it is asked of Discord, what is written down about an action and for how long, that the log holds a code and not the id, and that Forget me does not remove it, 185 words, 571; then raised from 590 to 620 on purpose for two clauses: that Forget me does not remove the line that said a person was kicked or banned, and that Discord is asked about an account when a moderator acts on it, in the chat or not, 37 words, 608 now) (raised from 620 to 930 on purpose for the pictures: the fourth thing that the site gets, the paragraph about the small copy of the Discord picture (what is fetched and when, who sees it, how long it is kept and what ends it, the cache, the switch and the operator's hiding), and what Forget me removes of it and what stays; raised from 930 to 1000 on purpose for the refresh of the picture while logged in: that the site asks Discord again every few minutes, through the bot, or once a day for the public profile of an account that is not in the server, and when the new picture shows)
+        self.assertLessEqual(len(panel.split()), 1350)                                                           # (230 until the display name: the third thing that the site gets, the name that is shown, and what moderators see; 252 words, then 90 more for the name that is played under and the Players list; 351 words, then: the newest 200 lines, 9 words more; raised from 352 to 390 on purpose for the voice button's sentence, 35 words: who hears the voice and that the site gets no audio, 386 words, then raised from 390 to 590 on purpose for the two sentences of the roles and of the moderators' log, which the people in the chat are told about: who may moderate and how it is asked of Discord, what is written down about an action and for how long, that the log holds a code and not the id, and that Forget me does not remove it, 185 words, 571; then raised from 590 to 620 on purpose for two clauses: that Forget me does not remove the line that said a person was kicked or banned, and that Discord is asked about an account when a moderator acts on it, in the chat or not, 37 words, 608 now) (raised from 620 to 930 on purpose for the pictures: the fourth thing that the site gets, the paragraph about the small copy of the Discord picture (what is fetched and when, who sees it, how long it is kept and what ends it, the cache, the switch and the operator's hiding), and what Forget me removes of it and what stays; raised from 930 to 1000 on purpose for the refresh of the picture while logged in: that the site asks Discord again every few minutes, through the bot, or once a day for the public profile of an account that is not in the server, and when the new picture shows; then raised from 1100 to 1350 on purpose for the paragraph of the chat's images, 190 words: who may post, what is kept and for how long, what is left out, who can open a picture and how to report one)
         self.assertEqual(re.findall(r"<strong>(.*?)</strong>", self.main[start:self.main.index("</section>", start)]), ["id", "username", "display name", "profile picture", "Show my Discord picture", "Log out", "Forget me"])
         self.assertNotIn("two things only", panel)
         self.assertNotIn("three things only", panel)
         self.assertNotIn("no avatar", panel)
         self.assertNotRegex(self.main[start:self.main.index("</section>", start)], r"href=|src=|<script|<img")        # (the panel loads nothing and links nothing)
+
+    def test_the_paragraph_of_the_images_says_what_is_kept_and_its_numbers_are_the_numbers_of_the_code(self):
+        """The sizes and the revalidation that the page promises about the chat's images are the code's own, read from where they are made: the converter's two sides and the nginx header of the picture's door."""
+        start = self.main.index('<section class="panel" id="chat-login">')
+        panel = plain(self.main[start:self.main.index("</section>", start)])
+        converter = read("imgconv", "convert.py")
+        side, animated = int(re.search(r"^MAX_SIDE = (\d+)", converter, re.M).group(1)), int(re.search(r"^ANIM_SIDE = (\d+)", converter, re.M).group(1))
+        self.assertIn("at most %s pixels on a side" % format(side, ","), panel)
+        self.assertIn("a GIF of at most %d pixels that keeps moving" % animated, panel)
+        door = re.search(r"location ~ \"\^/hub/img/(?s:.*?)add_header Cache-Control \"(private, [a-z0-9=-]+)\"", read("docker", "nginx.conf"))
+        self.assertEqual(door.group(1), "private, no-cache")                                                      # (a browser asks again before it shows a picture again: "asks the site again before it shows it again")
+        self.assertIn("a browser that has loaded one asks the site again before it shows it again", panel)
+        for words in ("Moderators, administrators and members of the project's Discord server who hold its images role may post images in the chat", "unless an administrator has taken that away from them", "stays after Forget me",
+                      "never keeps your image as you sent it", "a new file from the pixels alone", "the location, camera and other details of a photo are left out", "kept only as long as the chat line that shows them",
+                      "deleted for good", "when you or a moderator delete the image and when you use Forget me", "random addresses that hold nothing of your Discord id", "anyone who has an address can open the picture",
+                      "does not look at what is in them", "tell a moderator on the project's Discord server", "taking image posting away or giving it back, are written down in the log below"):
+            self.assertIn(words, panel, words)
 
     def test_it_links_the_licence_the_third_party_notices_and_the_issues_page_of_the_repository(self):
         hrefs = re.findall(r'<a href="([^"]*)"', self.main)

@@ -62,7 +62,7 @@ class TheImage(unittest.TestCase):
         cls.code = code(cls.text)
 
     def test_it_is_slim_python_and_runs_as_a_user_that_is_not_root(self):
-        self.assertRegex(self.code, r"(?m)^FROM python:3\.\d+-slim-\w+\s*$")
+        self.assertRegex(self.code, r"(?m)^FROM python:3\.\d+-slim-\w+(@sha256:[0-9a-f]{64})?\s*$")
         self.assertRegex(self.code, r"(?m)^USER hub\s*$")
         self.assertRegex(self.code, r"useradd --system .*--shell /usr/sbin/nologin hub")
         self.assertLess(self.code.index("useradd"), self.code.index("USER hub"))
@@ -71,6 +71,18 @@ class TheImage(unittest.TestCase):
     def test_the_data_folder_belongs_to_the_user_so_that_a_new_volume_is_writable(self):
         self.assertRegex(self.code, r"mkdir -p /data .*chown hub /data")
         self.assertIn("ANTS_HUB_DB=/data/hub.db", self.code)
+
+    def test_the_images_folder_belongs_to_the_user_so_that_a_new_volume_is_writable(self):
+        # the stack mounts the images' volume where the hub's own default says (hub/config.py), and the image makes that folder the user's
+        from hub import config as hub_config
+        folder = hub_config.Config().image_dir
+        self.assertEqual(folder, "/images")
+        made = re.search(r"mkdir -p ([^&\n]*)&& chown hub ([^\n\\]*)", self.code)
+        self.assertIsNotNone(made)
+        self.assertIn(folder, made.group(1).split())
+        self.assertIn(folder, made.group(2).split())
+        stack = read(os.path.join(REPO, "docker-compose.stack.yml"))
+        self.assertIn("ants-hub-images:" + folder + "\n", stack)
 
     def test_it_copies_the_code_and_nothing_else_and_makes_the_bytecode_while_it_can_write(self):
         copies = re.findall(r"(?m)^COPY (.*)$", self.code)
@@ -116,7 +128,7 @@ class TheServices(unittest.TestCase):
     def test_it_is_hardened_like_the_game_server_and_smaller(self):
         for name, text in self.files.items():
             hub = service(text, "ants-hub")
-            for line in ("read_only: true", "cap_drop: [ALL]", 'security_opt: ["no-new-privileges:true"]', "pids_limit: 32", "mem_limit: 192m", "dockerfile: Dockerfile.hub", "restart: unless-stopped"):
+            for line in ("read_only: true", "cap_drop: [ALL]", 'security_opt: ["no-new-privileges:true"]', "pids_limit: 32", "mem_limit: 256m", "dockerfile: Dockerfile.hub", "restart: unless-stopped"):
                 self.assertIn(line, hub, "%s: %s" % (name, line))
             self.assertRegex(hub, r"tmpfs:\s*\n\s+- /tmp\b")
 
@@ -138,6 +150,8 @@ class TheServices(unittest.TestCase):
         stack_hub = service(self.files["stack"], "ants-hub")
         self.assertIn("- ants-hub-data:/data", stack_hub)
         self.assertIn("- proxy-network", stack_hub)
+        self.assertIn("- img-network", stack_hub)
+        self.assertIn("- ants-hub-images:/images", stack_hub)
         self.assertIn("container_name: ants-hub\n", stack_hub + "\n")
         self.assertIn("ants-hub-data", top_level_keys(self.files["stack"], "volumes"))
 
@@ -145,9 +159,9 @@ class TheServices(unittest.TestCase):
         for name, text in self.files.items():
             hub = service(text, "ants-hub")
             self.assertEqual(sorted(re.findall(r"(?m)^      (ANTS_[A-Z_]+):", hub)), ["ANTS_ADMIN_GATE_SECRET", "ANTS_HUB_ADMIN_GATE_SECRET", "ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_DISCORD_CLIENT_ID", "ANTS_HUB_DISCORD_CLIENT_SECRET",
-                                                                                     "ANTS_HUB_DISCORD_GUILD", "ANTS_HUB_MIN_ACCOUNT_DAYS", "ANTS_HUB_OWNER", "ANTS_HUB_PUBLIC_URL",
-                                                                                     "ANTS_HUB_ROLE_ADMIN", "ANTS_HUB_ROLE_MOD", "ANTS_HUB_ROLE_RECHECK_SECONDS"], name)
-            for secret in ("ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_DISCORD_GUILD", "ANTS_HUB_ROLE_ADMIN", "ANTS_HUB_ROLE_MOD", "ANTS_HUB_OWNER", "ANTS_HUB_ADMIN_GATE_SECRET", "ANTS_ADMIN_GATE_SECRET"):
+                                                                                     "ANTS_HUB_DISCORD_GUILD", "ANTS_HUB_GAME_ADMIN_URL", "ANTS_HUB_IMAGE_CONVERTER_URL", "ANTS_HUB_IMAGE_DIR", "ANTS_HUB_MIN_ACCOUNT_DAYS", "ANTS_HUB_OWNER", "ANTS_HUB_PUBLIC_URL",
+                                                                                     "ANTS_HUB_ROLE_ADMIN", "ANTS_HUB_ROLE_IMAGES", "ANTS_HUB_ROLE_MOD", "ANTS_HUB_ROLE_RECHECK_SECONDS"], name)
+            for secret in ("ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_DISCORD_GUILD", "ANTS_HUB_ROLE_ADMIN", "ANTS_HUB_ROLE_MOD", "ANTS_HUB_ROLE_IMAGES", "ANTS_HUB_OWNER", "ANTS_HUB_ADMIN_GATE_SECRET", "ANTS_ADMIN_GATE_SECRET"):
                 self.assertIn("%s: ${%s:-}\n" % (secret, secret), hub + "\n", name)                  # (the bot's token, the server and the roles: from the stack's environment only, no value in the file)
             self.assertIn("ANTS_HUB_ROLE_RECHECK_SECONDS: ${ANTS_HUB_ROLE_RECHECK_SECONDS:-180}\n", hub + "\n", name)
             self.assertNotIn("ANTS_HUB_MODS", hub, name)
@@ -173,16 +187,18 @@ class TheServices(unittest.TestCase):
                         self.assertEqual(line.strip(), "%s: ${%s:-}" % (name, name), path)
                         self.assertTrue(path.startswith("docker-compose.st"), path)
 
-    def test_the_stack_has_these_three_services_and_no_profile(self):
+    def test_the_stack_has_these_services_and_only_the_relay_is_behind_a_profile(self):
         text = self.files["stack"]
-        self.assertEqual(top_level_keys(text, "services"), ["ants-beta", "ants-server", "ants-hub"])
+        self.assertEqual(top_level_keys(text, "services"), ["ants-beta", "ants-server", "ants-hub", "ants-img", "ants-turn"])
+        for name in ("ants-beta", "ants-server", "ants-hub"):
+            self.assertNotIn("profiles:", code(service(text, name)), name)
+        self.assertIn('profiles: ["relay"]', code(service(text, "ants-turn")), "the relay is optional: it starts only with the profile, so that the stack deploys without its three variables")
         for dockerfile in ("Dockerfile", "Dockerfile.server", "Dockerfile.hub"):
             self.assertIn("dockerfile: %s\n" % dockerfile, text)
-        self.assertNotIn("profiles:", code(text))
         for line in ("read_only: true", "cap_drop: [ALL]", 'security_opt: ["no-new-privileges:true"]', "pids_limit: 64"):
             self.assertIn(line, service(text, "ants-server"))
         ports = [int(m.group(1) or m.group(2)) for m in re.finditer(r'(?m)^\s+- "(?:\$\{ANTS_WEB_BIND_PREFIX:-\})?(?:127\.0\.0\.1:)?(?:\$\{[A-Z_]+:-(\d+)\}|(\d+)):\d+"\s*$', code(text))]
-        self.assertEqual(sorted(ports), [4001, 4002, 4010, 19980])
+        self.assertEqual(sorted(ports), [4002, 4010, 19980])             # (the site's page, and the server's WebSocket port and control port on the loopback address: the TCP game port 4001 is not encrypted and is published by no stack file)
 
     def test_the_game_servers_service_is_not_changed_by_the_hub(self):
         for name, text in self.files.items():
@@ -227,10 +243,95 @@ class TheServices(unittest.TestCase):
             self.assertTrue(hub["read_only"])
             self.assertEqual(hub["cap_drop"], ["ALL"])
             self.assertEqual(hub["pids_limit"], 32)
-            self.assertEqual(int(hub["mem_limit"]), 192 * 1024 * 1024)
+            self.assertEqual(int(hub["mem_limit"]), 256 * 1024 * 1024)
             self.assertEqual(list(hub["tmpfs"]), ["/tmp"])
             self.assertEqual(hub["build"]["dockerfile"], "Dockerfile.hub")
             self.assertNotIn("args", hub["build"])
+
+
+class TheConverterService(unittest.TestCase):
+    """The image converter's container (docs/HUB_IMAGES.md, "The stack"): walled in, holding nothing, and the one network that the hub shares with it has no way out."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = read(STACK)
+        cls.img = service(cls.text, "ants-img")
+
+    def test_it_is_hardened_and_small(self):
+        for line in ("read_only: true", "cap_drop: [ALL]", 'security_opt: ["no-new-privileges:true"]', "pids_limit: 16", "mem_limit: 768m", "cpus: 1", "dockerfile: Dockerfile.img", "restart: unless-stopped"):
+            self.assertIn(line, self.img, line)
+        self.assertRegex(self.img, r"tmpfs:\s*\n\s+- /tmp\b")
+
+    def test_it_holds_no_secret_and_mounts_nothing_and_publishes_nothing(self):
+        for word in ("ports:", "expose:", "volumes:", "environment:", "env_file", "args:", "secrets:", "network_mode", "privileged", "cap_add", "devices", "extra_hosts"):
+            self.assertNotIn(word, self.img, word)
+
+    def test_its_network_is_internal_and_has_the_hub_and_nobody_else(self):
+        self.assertRegex(self.img, r"networks:\s*\n\s+- img-network\s*(?:\n\s+(?!-)|$)")
+        self.assertNotIn("proxy-network", self.img)
+        self.assertIn("img-network", top_level_keys(self.text, "networks"))
+        block = self.text[self.text.index("  img-network:"):]
+        self.assertRegex(block, r"^  img-network:\s*\n    internal: true", "a network with no way out")
+        members = [name for name in ("ants-beta", "ants-server", "ants-hub", "ants-img", "ants-turn") if "img-network" in service(self.text, name)]
+        self.assertEqual(members, ["ants-hub", "ants-img"])
+
+    def test_the_site_reads_the_images_and_the_hub_writes_them_and_nothing_else_has_them(self):
+        self.assertIn("- ants-hub-images:/srv/hub-img:ro", service(self.text, "ants-beta"))
+        self.assertIn("- ants-hub-images:/images\n", service(self.text, "ants-hub") + "\n")
+        for name in ("ants-server", "ants-img", "ants-turn"):
+            self.assertNotIn("ants-hub-images", service(self.text, name), name)
+        self.assertIn("ants-hub-images", top_level_keys(self.text, "volumes"))
+
+    def test_the_hub_reaches_it_by_its_name_and_may_be_told_that_there_is_none(self):
+        self.assertIn("ANTS_HUB_IMAGE_DIR: /images", service(self.text, "ants-hub"))
+
+    def test_an_empty_address_switches_images_off_and_only_an_unset_one_takes_the_default(self):
+        """The stack file rendered by docker compose, three times: the address not set (the default: images on), set and empty (off: the hub is given an empty address, not the default), set to another."""
+        seen = {}
+        for label, given in (("unset", None), ("empty", ""), ("other", "http://converter.test:4050")):
+            env = {k: v for k, v in os.environ.items() if k != "ANTS_HUB_IMAGE_CONVERTER_URL"}
+            if given is not None:
+                env["ANTS_HUB_IMAGE_CONVERTER_URL"] = given
+            try:
+                done = subprocess.run(["docker", "compose", "-f", STACK, "config", "--format", "json"], capture_output=True, text=True, env=env)
+            except OSError as e:                                                                                       # (no docker program at all: a machine that has none)
+                self.skipTest("docker is not available: %s" % e)
+            if done.returncode != 0:
+                self.skipTest("docker compose is not available: " + done.stderr[:200])
+            seen[label] = json.loads(done.stdout)["services"]["ants-hub"]["environment"].get("ANTS_HUB_IMAGE_CONVERTER_URL")
+        self.assertEqual(seen, {"unset": "http://ants-img:4050", "empty": "", "other": "http://converter.test:4050"})
+
+    def test_a_conversion_cannot_take_what_the_container_has(self):
+        """The most that a conversion may take (imgconv/server.py WORKING_BYTES, on top of the address space that its process starts with) leaves the converter's container a quarter of a gigabyte at least for the
+        server, the interpreter and the libraries: the kernel's OOM killer is never the one that ends a big image."""
+        working = eval(re.search(r"(?m)^WORKING_BYTES = ([0-9 *]+)", read(os.path.join(REPO, "imgconv", "server.py"))).group(1))     # (digits and stars only: the regular expression says so)
+        limit = re.search(r"(?m)^    mem_limit: ([0-9]+)m$", self.img).group(1)
+        self.assertGreaterEqual(int(limit) * 1024 * 1024, working + 256 * 1024 * 1024)
+
+    def test_the_image_is_made_from_its_own_folder_and_runs_as_nobody_in_particular(self):
+        docker = read(os.path.join(REPO, "Dockerfile.img"))
+        copied = " ".join(re.findall(r"(?m)^COPY (.*)$", docker))
+        self.assertEqual(sorted(copied.split()), sorted(["imgconv/requirements.txt", "/app/requirements.txt", "imgconv/", "/app/imgconv/"]))
+        self.assertRegex(docker, r"(?m)^USER img$")
+        self.assertIn("HEALTHCHECK", docker)
+        self.assertNotIn("ANTS_BUILD_ID", "\n".join(l for l in docker.splitlines() if not l.lstrip().startswith("#")))
+        self.assertRegex(read(os.path.join(REPO, "imgconv", "requirements.txt")), r"(?m)^Pillow==[0-9]+\.[0-9]+\.[0-9]+ \\$")
+
+    def test_the_hub_does_not_import_the_converter_or_pillow(self):
+        for name in os.listdir(os.path.join(REPO, "hub")):
+            if name.endswith(".py"):
+                text = read(os.path.join(REPO, "hub", name))
+                self.assertNotRegex(text, r"(?m)^\s*(?:import|from)\s+(?:PIL|imgconv|convert)\b", name)
+
+    def test_the_web_job_builds_and_starts_the_converter_too(self):
+        workflow = read(os.path.join(REPO, ".github", "workflows", "ci.yml"))
+        step = workflow[workflow.index("- name: Build the image converter and start it with the stack's hardening"):]
+        step = step[:step.index("# The stack file")]
+        for needle in ("docker buildx build --load -f Dockerfile.img -t ants-img .", "--read-only", "--cap-drop ALL", "--security-opt no-new-privileges", "--pids-limit 16", "--memory 768m", "--cpus 1", "--tmpfs /tmp",
+                       "State.Health.Status", "= healthy", "/convert", "docker rm -f ants-img-check", "4898, 4898", "State.OOMKilled"):
+            self.assertIn(needle, step, needle)
+        self.assertIn("python3-pil", workflow)
+        self.assertIn('ANTS_REQUIRE_PILLOW: "1"', workflow)
 
 
 class TheCode(unittest.TestCase):
@@ -256,7 +357,7 @@ class TheCode(unittest.TestCase):
 
     def test_the_sources_hold_no_invisible_or_look_alike_character(self):
         # a bidirectional control or a zero-width character in a source file could make the code read differently from what it does; the tricks are written as escapes (\\u202e) and the files are ASCII
-        names = ["Dockerfile.hub", os.path.join("docs", "HUB.md"), os.path.join("docs", "HUB_PICTURES.md")] + [os.path.join("hub", n) for n in os.listdir(os.path.join(REPO, "hub")) if n.endswith(".py")]
+        names = ["Dockerfile.hub", os.path.join("docs", "HUB.md"), os.path.join("docs", "HUB_COMMANDS.md"), os.path.join("docs", "HUB_PICTURES.md"), os.path.join("docs", "HUB_IMAGES.md"), "Dockerfile.img"] + [os.path.join("hub", n) for n in os.listdir(os.path.join(REPO, "hub")) if n.endswith(".py")]
         names += [os.path.join("tests", "scripts", n) for n in os.listdir(os.path.join(REPO, "tests", "scripts")) if n.startswith(("test_hub_", "hub_")) or n == "test_nginx_hub.py"]
         for name in names:
             with open(os.path.join(REPO, name), "rb") as f:
@@ -314,7 +415,7 @@ class TheWiring(unittest.TestCase):
         web = workflow[workflow.index("\n  web_stack:"):workflow.index("\n  image_files:")]
         step = web[web.index("- name: Build the chat hub image"):]
         step = step[:step.index("\n      # The stack file")]
-        for needle in ("docker buildx build --load -f Dockerfile.hub -t ants-hub .", "--read-only", "--cap-drop ALL", "--security-opt no-new-privileges", "--pids-limit 32", "--memory 192m", "--tmpfs /tmp",
+        for needle in ("docker buildx build --load -f Dockerfile.hub -t ants-hub .", "--read-only", "--cap-drop ALL", "--security-opt no-new-privileges", "--pids-limit 32", "--memory 256m", "--tmpfs /tmp",
                        "-v ants-hub-check-data:/data", "State.Health.Status", "= healthy", "python -m hub.admin list", "evil.example", "docker rm -f ants-hub-check"):
             self.assertIn(needle, step, needle)
 

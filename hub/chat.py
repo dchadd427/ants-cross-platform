@@ -8,12 +8,15 @@ Messages (JSON, "v":1; docs/HUB.md has the table):
         {"t":"pick","pick":"display"|"username"}     which of its two names the account is shown by (only an account that has a display name as well may); stored, then every socket of
                                                      the account is closed (the same call as a logout's: end_logins), and the page connects again and reads the new name in the welcome
   down  {"t":"welcome",...}  {"t":"line",...}  {"t":"del","id":n}  {"t":"online","n":n}  {"t":"who",...}  {"t":"err","code":"login|rate|quota|muted|banned|long|empty|young|bad|here|pick|pics|power|role|who"}
+        {"t":"cmds","rows":[...]}                    the commands that the account has (hub/commands.py): after the welcome of a login and with every `you` that a change of role makes
+        {"t":"reply","c":word,"r":code,...}          the private answer to a command of hub/commands.py (/help, /ignore, /unignore, /bots; a word that is not the account's own is `unknown`)
         {"t":"you","you":{...}}                      the whole `you` again, to every socket of an account whose role changed (hub/roles.py: who is a moderator or an administrator) or whose picture
                                                      arrived, went, was switched or blocked (hub/pictures.py `sync`)
-        {"t":"ok","c":"mute|unmute|del|kick|ban|unban"}   the private answer to a moderator's command that was done
+        {"t":"ok","c":"mute|unmute|del|kick|ban|unban|nopic|pic"}   the private answer to a moderator's command that was done
         {"t":"bans","rows":[{"u","at"}]}             the private answer to /bans (a username, never an id; the newest 50)
         {"t":"bye","why":"kicked|banned"}            to every socket of a person who was kicked or banned, just before the hub closes it
-A moderator's commands (docs/HUB.md, "Moderation") are /mute username minutes, /unmute username, /del id, /kick username, /ban username, /unban username and /bans, in any case. Who may do what to whom is
+A line that starts with one `/` is a command and never a line (hub/commands.py: the one table of the commands, their ranks and their answers; docs/HUB_COMMANDS.md); `//` says one slash as a line. A moderator's
+commands are /mute username minutes, /unmute username, /del id, /kick username, /ban username, /unban username, /bans, /mutes, /nopic username and /pic username, in any case. Who may do what to whom is
 one table (`allowed`); before an action the role of the one who acts and of the one acted on must have been answered by Discord within the last minute (hub/roles.py `fresh`, `confirm`), else an
 urgent lookup is waited for, and one that fails refuses the action (`err role`). Every action that is done is written to the moderators' log by a pseudonymous reference of the account (hub/pseudo.py),
 never the id; a kick or a ban is told to everybody as a line of the chat that names the person ("<name> was kicked.": a line of the account "" and the name `system`, kept like any other line).
@@ -27,20 +30,19 @@ import asyncio
 import collections
 import hashlib
 import hmac
+import io
 import json
 import os
 import re
 
-from . import PROTOCOL, presence as presencemod, pseudo, session as sessionmod, text as textrules
+from . import PROTOCOL, admin as adminmod, commands as commandsmod, images as imagesmod, presence as presencemod, pseudo, session as sessionmod, text as textrules
+from .commands import NEEDS, RANK
 from .limits import AccountLimits, RateByAccount, TokenBucket
 from .store import PICKS, StoreError
-from .store.base import SHOW_OFF, SHOW_ON
+from .store.base import IMAGE_NAME, SHOW_OFF, SHOW_ON, ImageGone
 
 NUMBER = re.compile(r"[0-9]{1,9}\Z")
 MAX_CHAT_MUTE_MINUTES = 10080               # a moderator's /mute: a week at the most (the command line has no such bound)
-COMMANDS = frozenset(("/mute", "/unmute", "/del", "/kick", "/ban", "/unban", "/bans", "/mutes"))     # the words of a moderator's commands: from an account with no role they are refused and never become a line of chat
-RANK = {"none": 0, "mod": 1, "admin": 2}
-NEEDS = {"mute": 1, "unmute": 1, "del": 1, "kick": 1, "ban": 2, "unban": 2, "bans": 2, "mutes": 1}       # the rank that a command needs
 SYSTEM = "system"                           # who a line of the hub's own is from: a reserved name (hub/text.py), which no account can have
 BANS_SHOWN = 50                             # the newest bans that /bans lists
 MUTES_SHOWN = 50                            # the mutes that /mutes lists (the ones that end soonest first)
@@ -84,6 +86,9 @@ class Chat:
         self.named_limits = RateByAccount(limits.named_lines_burst, limits.named_lines_refill_seconds)               # the kicks and the bans of a moderator: each one is a line for everybody
         self.pick_limits = RateByAccount(limits.pick_burst, limits.pick_refill_seconds)               # an account's switches between its two names, across all its tabs
         self.pics_limits = RateByAccount(limits.pics_burst, limits.pics_refill_seconds)               # an account's switches of its picture, across all its tabs (keyed by the run's key of the account)
+        self.commands = commandsmod.Commands(self, dumps)           # the table of the commands, who may use which, the answers, /ignore and /bots (hub/commands.py)
+        self.images = None                          # hub/images.py Images (the hub makes it): who may post an image, and the files; none, and no image field anywhere, in the tests that have no hub
+        self.delimg_limits = RateByAccount(limits.commands_other_burst, limits.commands_other_refill_seconds)       # a person's deletes of its own images, across all its tabs (the hub's key of the account)
         self.pictures = None                        # hub/pictures.py Pictures on a hub that has the Discord login (the login sets it): none, and no picture field anywhere, on a hub without it
         self.salt = os.urandom(16)                  # the key of an account (key_of) is made with this: it changes with every start, so it names nobody for longer than the hub runs
         self.peers = presencemod.Peers()
@@ -126,6 +131,7 @@ class Chat:
             who = peer.identity
             if who is not None and who.account_id == account and not getattr(peer, "closed", False):
                 peer.send_text(dumps({"t": "you", "you": self.you_of(who)}))
+                self.commands.send_list(peer)                  # (the commands that the account has are the commands of its new role)
 
     def names_changed(self, account, nick, display):
         """The member answer of Discord says the account's server nickname (`nick`, '' for none that may be shown) and its display name (`display`, '' for none, None when the answer did not say). The
@@ -167,6 +173,33 @@ class Chat:
             if who is not None and not getattr(peer, "closed", False) and self.ref(who.account_id) in refs:
                 peer.send_text(dumps({"t": "you", "you": self.you_of(who)}))
 
+    def images_changed(self, refs):
+        """The posting of images of the accounts with these references changed (hub/images.py `sync`: a flag was set or lifted, here or by the command line): every socket of each gets the whole `you` again."""
+        if not refs:
+            return
+        for peer in list(self.peers):
+            who = peer.identity
+            if who is not None and not getattr(peer, "closed", False) and (refs is imagesmod.EVERYBODY or self.ref(who.account_id) in refs):
+                peer.send_text(dumps({"t": "you", "you": self.you_of(who)}))
+
+    def sync_images(self):
+        """The flags are read again at once (after a command that sets or lifts one) and the pages of the accounts that they change are told; a database that refuses leaves it to the clock's look."""
+        if self.images is not None and self.images.on:
+            try:
+                self.images_changed(self.images.sync())
+            except StoreError as e:
+                if self.on_store_error:
+                    self.on_store_error(e)
+
+    def sweep_images(self):
+        """The files of the images whose lines are deleted or gone are deleted now (hub/images.py `sweep`): right after the line goes, so that nothing that was taken off the screens stays on the site."""
+        if self.images is not None and self.images.files:
+            try:
+                self.images.sweep()
+            except StoreError as e:
+                if self.on_store_error:
+                    self.on_store_error(e)
+
     def sync_pictures(self):
         """The pictures are read again after a kick or a ban; a database that refuses leaves it to the clock's look a tick later: the act is done, and its public line and its answer must not depend on a look."""
         if self.pictures is not None:
@@ -187,6 +220,8 @@ class Chat:
             entry = getattr(self.roles, "entries", {}).get(who.account_id)
             if entry is not None and entry.nick and who.name == entry.nick and entry.display and entry.display not in (who.name, who.username):
                 you["next"] = entry.display      # (the name that comes after the server nickname: a page whose game cannot take the nickname tries it before the username)
+        if self.images is not None and self.images.on:
+            you["img"] = self.images.state_of(who.account_id)      # (`on`, `role`, `off` or `wait`: hub/images.py; absent where the hub has no converter)
         if self.pictures is not None:
             ref = self.ref(who.account_id)
             you["pics"] = self.pictures.state_of(ref)
@@ -201,7 +236,7 @@ class Chat:
             self.roles.want(you.account_id)                       # (its role is asked at the front of the queue; the welcome says the last answer, and a `you` frame follows a new one)
             if self.pictures is not None:
                 self.pictures.want(you.account_id)                # (where the roles' check does not say what the picture is, its profile is asked for when that is due)
-        lines = self.recent()
+        lines = [l for l in self.recent() if not self.commands.hides(l, you)]        # (what a person ignores is not in the history that it is sent)
         names = self.usernames([l.account for l in lines]) if you is not None and self.is_mod(you.account_id) else None        # (only a moderator's welcome has the usernames)
         welcome = {"t": "welcome", "v": PROTOCOL, "you": self.you_of(you) if you else None, "login": bool(self.login), "presence": True,
                    "online": self.presence.people(), "history": [self.line_of(l, names) for l in lines]}
@@ -234,6 +269,11 @@ class Chat:
             out["role"] = "admin" if line.mod >= RANK["admin"] else "mod"      # (what the author was when it wrote the line: a mark for the pages and never a reason to allow anything)
         if not line.account:
             out["sys"] = True                      # (a line of the hub's own: nobody's, so it has no key)
+        if line.img is not None:
+            image = line.img
+            out["img"] = {"n": image.name, "x": image.x, "w": image.w, "h": image.h, "tw": image.tw, "th": image.th}
+            if image.anim:
+                out["img"]["a"] = 1                                # (animated: the page plays it while it is on screen)
         username = names.get(line.account) if names else None
         if username and username != line.name:
             out["u"] = username
@@ -261,7 +301,9 @@ class Chat:
         if kind == "ping":
             peer.send_text(dumps({"t": "online", "n": self.presence.people()}))      # the answer to a ping is the online count: the page learns that the hub is alive
         elif kind == "say":
-            self.on_say(peer, msg.get("text"))
+            self.on_say(peer, msg.get("text"), msg.get("img"))
+        elif kind == "delimg":
+            self.on_delimg(peer, msg)
         elif kind == "who":
             self.presence.on_who(peer)
         elif kind == "here":
@@ -299,7 +341,7 @@ class Chat:
             self.secret = self.store.secret()
         return pseudo.reference(self.secret, account)
 
-    def on_say(self, peer, raw):
+    def on_say(self, peer, raw, img=None):
         who = peer.identity
         if who is None:
             return self.mistake(peer, "login")
@@ -312,18 +354,25 @@ class Chat:
             return self.trouble(peer, e, "rate")
         if who.young:
             return self.mistake(peer, "young")
+        if img is not None:
+            if not (isinstance(img, str) and IMAGE_NAME.match(img)):
+                return self.mistake(peer, "bad")
+            if self.images is None or not self.images.may_post(who.account_id):
+                return self.mistake(peer, "img")                    # (not allowed now, or no images here: the role, the flag and Discord's answer are the hub's, never the page's)
+            raw = "" if raw is None else raw                        # (the caption of an image is optional)
         line, why = textrules.clean_line(raw)
+        if why == "empty" and img is not None:
+            line, why = "", None
         if why:
             return self.mistake(peer, why)
+        if line.startswith("//"):
+            line = line[1:]                                        # (`//` is one slash of a line: it goes the way every line goes, with every limit)
+        elif line.startswith("/"):
+            if img is not None:
+                return self.mistake(peer, "bad")                   # (an image has a caption, never a command)
+            return self.commands.run(peer, line)                   # (a command is never a line: not kept, not shown, not counted; the commands' own table says who has which)
         mod = self.is_mod(who.account_id)
         role = self.roles.role_of(who.account_id)
-        if mod and line.startswith("/"):
-            try:
-                return self.command(peer, line)
-            except StoreError as e:
-                return self.trouble(peer, e, "bad")                # (a moderator is told that the command did not happen, and may type it again)
-        if line.split(" ")[0].lower() in COMMANDS:
-            return self.mistake(peer, "bad")                       # (a command from an account that holds no role, or whose role is not known yet, is not posted for everybody to read)
         now = self.clock()
         try:
             full = self.store.size() >= self.limits.db_max_bytes
@@ -331,16 +380,21 @@ class Chat:
             return self.trouble(peer, e, "rate")
         if not self.global_limit.ready(now) or full:
             return self.mistake(peer, "rate", count=False)         # (the hub is busy or full: a client that tries again is not misbehaving)
-        why = self.account_limits.check(who.account_id, line, now)         # (this check is the last: it is the one that counts the line as said)
+        counted = line if img is None else "\0" + img                     # (two images with no words are no duplicates of each other)
+        why = self.account_limits.check(who.account_id, counted, now)         # (this check is the last: it is the one that counts the line as said)
         if why == "quota":
             return self.mistake(peer, "quota", count=False)        # (the hour's or the day's lines are said: not a mistake, and the page tells it calmly)
         if why:
             return self.mistake(peer, "rate")
         self.global_limit.take(now)
         try:
-            entry = self.store.add_line(who.account_id, who.name, line, max(RANK[role], 1 if mod else 0))       # (the role that the author has now: what the line will say of it)
+            entry = self.store.add_line(who.account_id, who.name, line, max(RANK[role], 1 if mod else 0), **({} if img is None else {"image": img}))       # (the role that the author has now: what the line will say of it)
+        except ImageGone:
+            self.account_limits.refund(who.account_id, counted)
+            self.global_limit.give_back()
+            return self.mistake(peer, "imgid")                     # (not its upload, used, expired or gone: one answer for all of them)
         except StoreError as e:
-            self.account_limits.refund(who.account_id, line)       # (the line was not kept: it did not cost a token, and the same text may be tried again)
+            self.account_limits.refund(who.account_id, counted)       # (the line was not kept: it did not cost a token, and the same text may be tried again)
             self.global_limit.give_back()
             return self.trouble(peer, e, "rate")
         self.ring.append(entry)
@@ -353,7 +407,29 @@ class Chat:
         moderators = dumps(dict(frame, u=username)) if username and username != entry.name else everybody
         for peer in list(self.peers):
             who = peer.identity
+            if self.commands.hides(entry, who):
+                continue                                           # (the line of a person that this account ignores: nothing is sent, and the author is told nothing)
             peer.send_text(moderators if who is not None and self.is_mod(who.account_id) else everybody)
+
+    def on_delimg(self, peer, msg):
+        """`{"t":"delimg","id":n}`: the account deletes its own image line (a poster has no moderator's `/del`): only a line of its own that carries an image and is not deleted; the file goes with the line (the
+        same path as `/del`: the `del` frame, then the sweep). Anything else is `bad`; no row of the moderators' log (it is the account's own line)."""
+        who = peer.identity
+        if who is None:
+            return self.mistake(peer, "login")
+        line_id = msg.get("id")
+        if set(msg) != {"t", "id"} or type(line_id) is not int or not 0 < line_id < 2 ** 62 or self.images is None or not self.images.files:
+            return self.mistake(peer, "bad")
+        if not self.delimg_limits.take(self.key_of(who.account_id), self.clock()):
+            return self.mistake(peer, "rate", count=False)
+        try:
+            if self.store.account_of_line(line_id) != who.account_id or self.store.image_of_line(line_id) is None:
+                return self.mistake(peer, "bad")
+            if not self.store.delete_line(line_id, self.ref(who.account_id)):
+                return self.mistake(peer, "bad")
+        except StoreError as e:
+            return self.trouble(peer, e, "bad")
+        self.sync_deletions()
 
     def on_pick(self, peer, msg):
         """Which of its two names the account is shown by. Refused (a mistake of the socket) with `login` for a guest and with `pick` for anything but one of the two words, past the account's
@@ -410,7 +486,7 @@ class Chat:
             return name, words[1], int(words[2])
         if name == "ban" and len(words) == 3 and words[2] == "purge":
             return name, words[1], PURGE_MINUTES                    # (a ban that also takes the person's lines of the last hour off every screen: the same power as /ban)
-        if name in ("unmute", "kick", "ban", "unban") and len(words) == 2:
+        if name in ("unmute", "kick", "ban", "unban", "nopic", "pic", "noimages", "images") and len(words) == 2:
             return name, words[1], 0
         if name == "del" and len(words) == 2 and NUMBER.match(words[1]):
             return name, int(words[1]), 0
@@ -418,12 +494,9 @@ class Chat:
             return name, None, 0
         return None
 
-    def command(self, peer, line):
-        """A moderator's command (see the top of this file). Done at once when the roles of the accounts that it involves were all answered by Discord within the last minute; otherwise it waits (a task
-        of its own, one at a time for a socket; a second command meanwhile is `rate`) for an urgent lookup of them, and is refused `role` if that does not give them."""
-        job = self.parse(line)
-        if job is None:
-            return self.mistake(peer, "bad")
+    def command(self, peer, job):
+        """A moderator's command, read already (`parse`; hub/commands.py has the table that says who may type which). Done at once when the roles of the accounts that it involves were all answered by Discord
+        within the last minute; otherwise it waits (a task of its own, one at a time for a socket; a second command meanwhile is `rate`) for an urgent lookup of them, and is refused `role` if that does not give them."""
         if peer in self.busy:
             return self.mistake(peer, "rate", count=False)
         accounts, _, refusal = self.aim(peer.identity, job)
@@ -525,7 +598,8 @@ class Chat:
                 return self.mistake(peer, "bad")
             self.store.mute(target, 0, by, "", note=(by, "unmute", whom, ""))
         elif name == "del":
-            if not self.store.delete_line(arg, by, note=None if target == me.account_id else (by, "del", whom, str(arg))):
+            kind = "del_img" if self.store.image_of_line(arg) is not None else "del"          # (the log says that it was an image: the file goes with the line)
+            if not self.store.delete_line(arg, by, note=None if target == me.account_id else (by, kind, whom, str(arg))):
                 return self.mistake(peer, "bad")
             self.sync_deletions()
         elif name == "bans":
@@ -542,6 +616,15 @@ class Chat:
         elif name == "unban":
             if not self.store.unban(target, note=(by, "unban", whom, "")):
                 return self.mistake(peer, "bad")
+        elif name in ("nopic", "pic"):
+            setter = lambda show, note: self.store.set_picture_show(target, show, operator=True, note=(by,) + note[1:])
+            if adminmod.change_picture(self.store, name, whom, self.store.picture_state(target), setter, io.StringIO(), io.StringIO()):          # (the admin page's own change: its picture block and its lift)
+                return self.mistake(peer, "bad")
+            self.sync_pictures()
+        elif name in ("noimages", "images"):
+            if not self.store.set_noimages(target, name == "noimages", by, note=(by, name, whom, "")):
+                return self.mistake(peer, "bad")                     # (already taken away, or not taken away: nothing to do)
+            self.sync_images()
         elif name == "kick":
             sockets = self.sockets_of(target)
             shown = sockets[0].identity.name
@@ -634,6 +717,7 @@ class Chat:
         gone = set(ids)
         for line in [l for l in self.ring if l.id in gone]:
             self.ring.remove(line)
+        self.sweep_images()                                        # (the files of their images go first: a page that is told that a line is gone never finds its file)
         for line_id in sorted(gone)[-self.limits.deleted_announce_max:]:
             self.broadcast({"t": "del", "id": line_id})
 

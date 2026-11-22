@@ -176,7 +176,9 @@ void Renderer::draw_text(const std::string& text, int32_t x, int32_t y, ants::as
         if (it != text_cache_.end()) {
             it->second.last_frame = text_frame_counter_;
             const SDL_Rect dst = placed(x, y, squeezed(it->second.width), it->second.height);
+            if (alpha_scale_ != 255) SDL_SetTextureAlphaMod(it->second.texture, alpha_scale_);          // (the countdown card, see-through: the cached text is the same, its opacity is the copy's)
             SDL_RenderCopy(renderer_, it->second.texture, nullptr, &dst);
+            if (alpha_scale_ != 255) SDL_SetTextureAlphaMod(it->second.texture, 255);
             return;
         }
 
@@ -192,7 +194,9 @@ void Renderer::draw_text(const std::string& text, int32_t x, int32_t y, ants::as
                 CachedTextEntry entry{tex, lw, lh, text_frame_counter_};
                 text_cache_[key] = entry;
                 const SDL_Rect dst = placed(x, y, squeezed(lw), lh);
+                if (alpha_scale_ != 255) SDL_SetTextureAlphaMod(tex, alpha_scale_);
                 SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+                if (alpha_scale_ != 255) SDL_SetTextureAlphaMod(tex, 255);
                 SDL_FreeSurface(surf);
                 return;
             }
@@ -203,6 +207,7 @@ void Renderer::draw_text(const std::string& text, int32_t x, int32_t y, ants::as
 
     // Fallback: built-in 5x7 bitmap font, scaled up for the larger sizes
     const int32_t scale = std::max(1, font_cell_height(size) / 10);
+    color.a = scaled_alpha(color.a);
     if (color.a < 255) {
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     }

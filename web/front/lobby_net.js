@@ -1,4 +1,4 @@
-// The front page's side of network protocol 25 (docs/NETWORK_PORT.md "Protocol 16", "Protocol 17", "Protocol 20" and "Protocol 22", docs/MATCH_COUNTDOWN.md; 18 to 21 and 23 to 25 moved no message layout that a lobby page uses: 21 gave the Begin a second byte, which a page leaves to the game page): the codec of the messages that a lobby page sends and hears, the guard of a color move, and the client that keeps
+// The front page's side of network protocol 26 (docs/NETWORK_PORT.md "Protocol 16", "Protocol 17", "Protocol 20" and "Protocol 22", docs/MATCH_COUNTDOWN.md; 18 to 21 and 23 to 26 moved no message layout that a lobby page uses: 21 gave the Begin a second byte, which a page leaves to the game page): the codec of the messages that a lobby page sends and hears, the guard of a color move, and the client that keeps
 // a page in its lobby room (a keyed way back, the answers to the server's pings, what each refusal means). No screen is drawn here: the page reads the client's state and its events.
 //   * ES5 and no module system, as the site's other scripts: a page gets the global AntsLobbyNet, node gets module.exports (tests/scripts/web_lobby_net_check.js runs it).
 //   * Every layout is the C++ one (src/ants_net/protocol.cpp), little endian, and every decoder refuses what the C++ decoder refuses; tests/data/lobby_messages.txt holds bytes that the C++ encoders wrote,
@@ -10,7 +10,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    var PROTOCOL = 25;                                             // kProtocolVersion
+    var PROTOCOL = 27;                                             // kProtocolVersion
     var LAST_GAME_MODE = 1;                                        // sim::kLastGameMode: 0 the original's highest score, 1 "187"; a byte above it is refused, never played as another mode
     var MAX_NAME = 32, MAX_ROOM_CODE = 32, MAX_MAP_NAME = 64, MAX_CHAT = 100;
     var PLAYERS = 4;                                               // sim::MAX_PLAYERS
@@ -20,7 +20,7 @@
     var WELCOME_REJOIN = 1, WELCOME_CREATED = 2;                   // Welcome.flags
     var ROOM_LEADER_STARTS = 1, ROOM_LOBBY = 2, ROOM_STARTING = 4, ROOM_PUBLIC = 8; // Room.flags
 
-    var MSG = { Hello: 1, Welcome: 2, Reject: 3, Chat: 9, Ping: 10, Pong: 11, Room: 12, Start: 13, Cancel: 16, Leave: 17, StartRequest: 24, SeatMove: 31, Plan: 32, Name: 33, Remove: 34, Visibility: 35, Last: 35 };
+    var MSG = { Hello: 1, Welcome: 2, Reject: 3, Chat: 9, Ping: 10, Pong: 11, Room: 12, Start: 13, Cancel: 16, Leave: 17, StartRequest: 24, SeatMove: 31, Plan: 32, Name: 33, Remove: 34, Visibility: 35, Ready: 41, Last: 41 };
     var REJECT = { Full: 1, VersionMismatch: 2, MatchRunning: 3, Kicked: 4, BadRequest: 5, NoSuchRoom: 6, Dropped: 7, RejoinFailed: 8, Superseded: 9 };
     var SLOT = { Empty: 0, Host: 1, Client: 2, Bot: 3 };
     var PLAN = { Open: 0, Easy: 1, Medium: 2, Hard: 3, Nobody: 4 };
@@ -99,8 +99,12 @@
         for (var i = 0; i < s.length && out.length < max; i++) { var c = s.charCodeAt(i); if (c >= 0x20 && c <= 0x7E) out += s.charAt(i); }
         return out;
     }
-    // the names that are a computer player's (ai::is_reserved_bot_name; the page's nameCheck says the same): starts with "Bot (" or ends with "(bot)" or "(bot, ...)", blanks and case ignored
-    function reservedName(name) { return /^bot\(|\(bot(,[^()]+)?\)$/.test(String(name).replace(/[ \t\r\n]/g, '').replace(/[A-Z]/g, function (c) { return c.toLowerCase(); })); }
+    // the names that are a computer player's (ai::is_reserved_bot_name; the page's nameCheck says the same, and tests/scripts/web_lobby_rules_check.js compares them): the word bot first and a bracket after it, or a bracket, the word bot
+    // and then a sign or a blank; blanks, signs between the letters and case ignored, a 0 reads as o; the letters stand one after the other or each pair parted ("b o t", not "Bo T"), and a parted word is one only when no letter follows its blanks
+    function reservedName(name) {
+        var s = String(name).toLowerCase().replace(/0/g, 'o');
+        return /^[^a-z0-9()\[\]{}<>]*(?:bot|b[^a-z0-9()\[\]{}<>]+o[^a-z0-9()\[\]{}<>]+t)[^a-z0-9()\[\]{}<>]*[(\[{<]/.test(s) || /[(\[{<][^a-z0-9()\[\]{}<>]*(?:bot(?=[^a-z0-9])|b[^a-z0-9()\[\]{}<>]+o[^a-z0-9()\[\]{}<>]+t(?=[^a-z0-9])(?! +[a-z0-9]))/.test(s);
+    }
     // a name that a person may go by: 1 - 32 printable characters, no space at either end (NameMsg)
     function validPersonName(name) { return printable(name, MAX_NAME) && name.length > 0 && name.charAt(0) !== ' ' && name.charAt(name.length - 1) !== ' '; }
     function validTeams(a, b) { return (a === NO_TEAM && b === NO_TEAM) || (isWhole(a) && isWhole(b) && a >= 0 && a < b && b < PLAYERS); }
@@ -149,6 +153,7 @@
     function encodeName(name) { return new Writer().u8(MSG.Name).str8(name).done(); }
     function encodeRemove(seat, guard) { return new Writer().u8(MSG.Remove).u8(seat).u32(guard).done(); }
     function encodeVisibility(isPublic) { return new Writer().u8(MSG.Visibility).u8(isPublic ? 1 : 0).done(); }       // the leader's choice: the room is public (1) or private (0)
+    function encodeReady(ready) { return new Writer().u8(MSG.Ready).u8(ready ? 1 : 0).done(); }       // (protocol 27) a person's choice: ready to start (1) or not (0)
     // the leader's START: the levels of the bots of the plan (FILL.*; Open and Nobody are none) and its teams; the room decides by its own plan, the message must still be a valid StartRequest
     function encodeStartRequest(fill, teamA, teamB) {
         var w = new Writer().u8(MSG.StartRequest);
@@ -190,10 +195,11 @@
             if (!validPlatform(slot.platform) || (slot.platform !== 0 && slot.state !== SLOT.Host && slot.state !== SLOT.Client)) return null;
             slots.push(slot);
         }
-        var m = { type: 'room', slots: slots, map: r.str8(), fog: r.u8(), you: r.u8(), leader: r.u8(), teamA: r.u8(), teamB: r.u8(), flags: r.u8(), plan: [], inGame: 0, mode: 0 };
+        var m = { type: 'room', slots: slots, map: r.str8(), fog: r.u8(), you: r.u8(), leader: r.u8(), teamA: r.u8(), teamB: r.u8(), flags: r.u8(), plan: [], inGame: 0, mode: 0, ready: 0 };
         for (var k = 0; k < PLAYERS; k++) m.plan.push(r.u8());
         m.inGame = r.u8();
-        m.mode = r.u8();                                             // (protocol 17: the last byte; 0 the original's highest score, 1 "187")
+        m.mode = r.u8();                                             // (protocol 17; 0 the original's highest score, 1 "187")
+        m.ready = r.u8();                                            // (protocol 27: the last byte, bit s: the person of seat s said Ready)
         if (!r.done() || m.mode > LAST_GAME_MODE || m.fog > 1 || (m.map !== '' && !validMapName(m.map)) || (m.you !== 255 && m.you >= PLAYERS)) return null;
         if (m.leader !== NO_LEADER && (m.leader >= PLAYERS || slots[m.leader].state !== SLOT.Client)) return null;
         if ((m.teamA !== NO_TEAM || m.teamB !== NO_TEAM) && (m.teamA >= m.teamB || m.teamB >= PLAYERS)) return null;
@@ -210,7 +216,8 @@
             if (((m.inGame >> p) & 1) !== 0 && (!m.lobby || slots[p].state !== SLOT.Client)) return null;
             if (slots[p].state === SLOT.Empty && slots[p].name !== '' && (m.plan[p] < PLAN.Easy || m.plan[p] > PLAN.Hard || !/ \(bot(, (Easy|Medium|Hard))?\)$|^Bot \((Easy|Medium|Hard)\)$/.test(slots[p].name))) return null;       // (protocol 20: only a planned bot's label)
         }
-        if ((m.inGame & ~15) !== 0) return null;
+        if ((m.inGame & ~15) !== 0 || (m.ready & ~15) !== 0) return null;
+        for (var q = 0; q < PLAYERS; q++) { if (((m.ready >> q) & 1) !== 0 && (!m.lobby || slots[q].state !== SLOT.Client || q === m.leader || ((m.inGame >> q) & 1) !== 0)) return null; }       // (protocol 27: a mark belongs to a lobby room's person who is a page and does not lead)
         m.fog = m.fog === 1;
         return m;
     }
@@ -283,7 +290,16 @@
         if (planChanged) events.push({ type: 'plan' });
         if (!prev.starting && next.starting) events.push({ type: 'starting' });
         if (prev.inGame !== next.inGame) events.push({ type: 'games', mask: next.inGame });
+        if (prev.ready !== next.ready) events.push({ type: 'ready', mask: next.ready });
         return events;
+    }
+    // Ready up (protocol 27, docs/READY_UP.md). A person whom the START waits for: a person of a lobby room who is a page (no game is open in the seat) and does not lead; the others (the leader, a computer player, a game) are
+    // never asked. waitingFor(room) is the seats of the persons who have not said Ready; an empty list is a room that the leader can start.
+    function mustReady(room, seat) { return room.lobby && room.slots[seat].state === SLOT.Client && seat !== room.leader && ((room.inGame >> seat) & 1) === 0; }
+    function waitingFor(room) {
+        var out = [];
+        for (var s = 0; s < PLAYERS; s++) { if (mustReady(room, s) && ((room.ready >> s) & 1) === 0) out.push(s); }
+        return out;
     }
 
     // ---- the entry that the game page reads to take the seat over ----------------------------------------------------------------------------------------------------------------------------------------
@@ -338,7 +354,7 @@
     // argument, and a request whose guard is not the seating of the room as it is now (somebody joined, left, was renamed or moved meanwhile) is not sent (false); without a guard the room as it is now counts.
     // Limits: connectMs (20 s) is how long a socket may take to open, silenceMs (8 s) how long a link that is open may say nothing (the server pings every second), stableMs (10 s) how long a link must stay
     // online before its loss counts as a first loss again (else the waits of the way back go on growing); 0 for a limit waits for the browser.
-    // [burst, a second] of each kind of request, KEPT BELOW the server's own (include/ants_net/flood.hpp: a color move or a plan 6 and 4, a name, a removal or a visibility 3 and 1, a line of chat 5 and 1). The server drops a request
+    // [burst, a second] of each kind of request, KEPT BELOW the server's own (include/ants_net/flood.hpp: a color move or a plan 6 and 4, a name, a removal, a visibility or a Ready 3 and 1, a line of chat 5 and 1). The server drops a request
     // beyond its own without a word (the sender sees nothing and the room does not change; a connection that goes on is thrown out), and it counts the moment at which it HANDLES a request, not the moment at which it was
     // sent. A page that paced itself at exactly the server's rate lost a request whenever the network (or the server's own loop) delayed one request and not the next: two that were 1000 ms apart arrive 990 ms apart, and
     // the second finds 0.99 of a token (seen once on the macOS CI for the chat, then reproduced for a rename and a plan). So every kind keeps a request in reserve (a burst one smaller than the server's: the server always
@@ -347,7 +363,7 @@
     // and about 1.5 s for a name, a removal or a line; a longer hold-up can still lose a request (then the screen follows the room). tests/scripts/web_lobby_client_check.js replays the page's requests of every kind
     // through the server's own bucket (it reads the limits from flood.hpp) with delays of 0 to 150 ms on every request and a hold-up of 333 or 1400 ms on one; tests/scripts/web_lobby_server_check.js sends them
     // through a link that jitters by 150 ms to the real server.
-    var BUDGETS = { move: [5, 3.2], plan: [5, 3.2], rename: [2, 0.8], remove: [2, 0.8], visibility: [2, 0.8], chat: [4, 0.8] };
+    var BUDGETS = { move: [5, 3.2], plan: [5, 3.2], rename: [2, 0.8], remove: [2, 0.8], visibility: [2, 0.8], ready: [2, 0.8], chat: [4, 0.8] };
     function LobbyClient(opts) {
         this.url = opts.url;
         this.code = opts.code;
@@ -610,6 +626,13 @@
         if (!this.canAct() || !this.isLeader() || this.room.starting || typeof isPublic !== 'boolean') return false;
         return this.send('visibility', encodeVisibility(isPublic));
     };
+    // A person's Ready (protocol 27): ready to start (true) or not (false). Refused (false, nothing sent, nothing spent) when the link is not online, the room is no lobby room or its START waits, or this page is not a person that
+    // the START waits for (the leader starts, and a game needs no Ready).
+    LobbyClient.prototype.setReady = function (ready) {
+        var r = this.room;
+        if (!this.canAct() || r.starting || typeof ready !== 'boolean' || r.you === 255 || !mustReady(r, r.you)) return false;
+        return this.send('ready', encodeReady(ready));
+    };
     LobbyClient.prototype.rename = function (name) {
         if (!this.canAct() || this.room.starting || !validPersonName(name) || reservedName(name)) return false;        // (protocol 20: the server counts a bot-like name as a violation; a page never sends one)
         return this.send('rename', encodeName(name));
@@ -629,7 +652,7 @@
     };
     LobbyClient.prototype.start = function () {
         var r = this.room;
-        if (!this.canAct() || !this.isLeader() || r.starting) return false;
+        if (!this.canAct() || !this.isLeader() || r.starting || waitingFor(r).length > 0) return false;        // (protocol 27: the room would not take it, and says whose Ready it waits for)
         return this.sendBytes(encodeStartRequest(fillOfPlan(r.plan), r.teamA, r.teamB));
     };
     // On purpose: the seat is given up at once (a closed tab would hold it for a minute), also between the Hello and the Welcome (the server has the person already); before the Hello there is
@@ -661,7 +684,7 @@
         NO_TEAM: NO_TEAM, NO_LEADER: NO_LEADER, ROOM_SENDER: ROOM_SENDER, MAX_NAME: MAX_NAME, MAX_CHAT: MAX_CHAT,
         validMapName: validMapName, validRoomCode: validRoomCode, publicRoomCode: publicRoomCode, validPersonName: validPersonName, validTeams: validTeams, validPlatform: validPlatform, validChatLine: validChatLine,
         encodeHello: encodeHello, encodeLeave: encodeLeave, encodePong: encodePong, encodePing: function (nonce, sentMs) { return encodePing(MSG.Ping, nonce, sentMs); },
-        encodeSeatMove: encodeSeatMove, encodePlan: encodePlan, encodeName: encodeName, encodeRemove: encodeRemove, encodeVisibility: encodeVisibility, encodeStartRequest: encodeStartRequest, encodeChat: encodeChat,
+        encodeSeatMove: encodeSeatMove, encodePlan: encodePlan, encodeName: encodeName, encodeRemove: encodeRemove, encodeVisibility: encodeVisibility, encodeReady: encodeReady, mustReady: mustReady, waitingFor: waitingFor, encodeStartRequest: encodeStartRequest, encodeChat: encodeChat,
         fillOfPlan: fillOfPlan, seatingHash: seatingHash, decode: decode, diffRooms: diffRooms, rejoinEntry: rejoinEntry, SEAT_MEMORY: SEAT_MEMORY, SEAT_MEMORY_MS: SEAT_MEMORY_MS, seatMemory: seatMemory, seatMemoryRead: seatMemoryRead, LobbyClient: LobbyClient,
         hexOf: hexOf, bytesOfHex: bytesOfHex, zeroKey: zeroKey, isZeroKey: isZeroKey
     };

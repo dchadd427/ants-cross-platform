@@ -647,6 +647,47 @@ void run_migration_tests() {
         t.run(3000);
         ASSERT_TRUE(all_equal(t));
     } TEST_END();
+
+    TEST_CASE("N3.12b Host Migration: A Guest's Port Keeps At Most 8 Connections That Have Said Nothing And Gives Each Of Them 5 s: Twenty Silent Strangers Leave 8 Open At Once And None After 5 s, The Link Of The Guests Is Not Touched And The Match Does Not Notice") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 2));
+        Machine& host = *t.machines[0];
+        host.net.set_map("SMALL.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(8, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
+        t.run(2000);
+        Machine& carol = *t.machines[2];
+        std::vector<std::unique_ptr<TcpConnection>> strangers;
+        for (int i = 0; i < 20; ++i) {
+            strangers.push_back(TcpConnection::connect("127.0.0.1", carol.net.peer_port()));
+            ASSERT_TRUE(strangers.back() != nullptr);
+        }
+        const auto open_strangers = [&]() {
+            size_t open = 0;
+            for (auto& s : strangers) {
+                std::vector<uint8_t> nothing;
+                s->poll(nothing);
+                open += s->is_open() ? 1u : 0u;
+            }
+            return open;
+        };
+        ASSERT_TRUE(t.run_until([&]() { return open_strangers() <= 8; }, 3000));        // (the ones beyond the eighth are closed as they are taken off the listener)
+        t.run(500);
+        ASSERT_TRUE(open_strangers() >= 1 && open_strangers() <= 8);                     // (the eight that wait have not been given up yet)
+        t.run(5500);
+        ASSERT_EQ(open_strangers(), size_t{0});                                          // (nothing came in 5 s)
+        t.run(2000);
+        for (auto& m : t.machines) {
+            ASSERT_FALSE(m->net.electing());
+            ASSERT_FALSE(m->saw(NetGame::Event::Type::HostChanged));
+            ASSERT_FALSE(m->net.desynced());
+        }
+        host.net.freeze();
+        t.run(3000);
+        ASSERT_TRUE(all_equal(t));
+    } TEST_END();
 }
 
 // A client that is refused: every reason of a Reject ends the join with its own text on the screen
@@ -672,7 +713,7 @@ void run_reject_tests() {
         // that does not exist, and it is told so; every other refusal, and NoSuchRoom for a Hello without a block, is as it was. So is NoSuchRoom for a block with a code that has a capital (variant 3: the
         // name of a room of the control interface, which a block never makes: a room that does not exist, not a place that is missing). The Hello also tells what the machine runs on (protocol 15): its
         // own platform unless it was told another (variant 0: never set; 1: the web's word, with a block; 2: a byte that is no platform, so the machine's own)
-        const std::string no_place = "The server cannot make a room now: it is busy, or hosts no online matches. Try again in a few minutes.";
+        const std::string no_place = "The server cannot make a room now: it is busy, or your network made many rooms. Try again in a minute.";
         for (const Case& c : cases) for (const int variant : {0, 1, 2, 3}) {
             const bool with_block = variant == 1 || variant == 3;
             const uint8_t told = variant == 1 ? static_cast<uint8_t>(kPlatformBrowser | kOsMacos) : native_platform();
@@ -990,6 +1031,7 @@ int main() {
     run_team_tests();
     run_seat_move_tests();
     run_prediction_tests();
+    run_p2p_netgame_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     if (g_test_count == 0) {                                      // (a misspelt or forgotten filter must not turn the suite green)

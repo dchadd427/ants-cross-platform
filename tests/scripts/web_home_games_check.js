@@ -9,13 +9,17 @@
 //      press elsewhere put it away; a malformed list (markup, look-alike characters, 10,000 rows, wrong types, duplicate codes);
 //  10. the pictures of the rows: an original's own, the library's for a map of the players at the address that the server's own list gives (every map of Community-Maps/ and a table of the awkward names), a picture that does not
 //      come taken away, and nothing of an odd name that is not percent-encoded;
+//  11. the locked cards of private rooms (rows with `private: true` and no code): what a row must be to be drawn, a row that carries a code dropped, the card (no button, no link, no code anywhere in the page), the count line,
+//      the strip when nothing can be joined, the line after six cards;
 // The Room's switch, Quick host and Join are web_home_games_room_check.js. tests/scripts/test_web_home_games.py runs both with node (the quick tier).
 // usage: node web_home_games_check.js web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
 const fs = require('fs');
 const path = require('path');
 const R = require('./web_home_games_rig.js')(process.argv[2]);
-const { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, chooseHost, hostCard, pressEscape, pressElsewhere, popOf, rowsOf, joinOf, textOf, pillOf, myRoom, Games, RULES0, done, broke, helloRoom, runLobby, hex, helloBytes } = R;
+const { GUEST, check, same, flush, fakeSite, row, locked, lockedCards, listOf, page, wait, classes, find, first, home, tap, chooseHost, hostCard, pressEscape, pressElsewhere, popOf, rowsOf, joinOf, textOf, pillOf, myRoom, guestRoom, PUBLIC, PRIVATE, KEY, E, C, Games, RULES0, done, broke, helloRoom, runLobby, hex, helloBytes } = R;
+const TEXT = Games.TEXT;                          // (the page's own words: a check names the tag, the button or the chip that the page has for a situation, and does not spell it)
+const LOCKED = TEXT.privateTag.toLowerCase(), LOCKED_ADJ = LOCKED.replace(' ', '-');      // the setting's one name: the tag of a locked card says it, and so do the list's head ("3 open, 3 invite only"), "and 6 more invite-only rooms", Quick join's line and the screen reader's sentence
 
 // the address of a picture of the library (map_picker.js: the one shape that the page loads for a map of the players): /maps/previews/ and a name of unreserved characters and %XX (never an escaped slash, backslash or NUL), no leading dot
 const LIBRARY = /^\/maps\/previews\/(?:[A-Za-z0-9_~-]|%(?!2F|5C|00)[0-9A-F]{2})(?:[A-Za-z0-9._~-]|%(?!2F|5C|00)[0-9A-F]{2})*\.webp$/;
@@ -430,7 +434,7 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     const pop = popOf(env), yard = env.$('home').children[1];
     check('the list is in Home\'s body, not a popover: #hmain holds it, it is shown from the first look on (nobody pressed Games), and it is a region named "Open games", not a dialog', yard.id === 'hmain' && pop.parent === yard && classes(pop).indexOf('gdock') !== -1 && pop.hidden === false
           && pop.getAttribute('role') === 'region' && pop.getAttribute('aria-label') === 'Open games' && classes(yard).join() === 'hmain');
-    check('... the body holds nothing else (no stand-in), and Games names no popup and says nothing of being open (it is not a popover)', yard.children.length === 1 && env.home('games').getAttribute('aria-haspopup') === null && env.home('games').getAttribute('aria-expanded') === null);
+    check('... the body holds nothing else but the room\'s panel (no stand-in), and Games names no popup and says nothing of being open (it is not a popover)', yard.children.length === 2 && yard.children[0] === env.$('lobby') && env.home('games').getAttribute('aria-haspopup') === null && env.home('games').getAttribute('aria-expanded') === null);
     same('... the rows are the Games list\'s own, best first (the fewest open seats, then the oldest), BEST on the first, with a Join button each', [rowsOf(env).map((li) => textOf(first(li, 'gname'))), find(popOf(env), 'gbest').length, rowsOf(env).map((li) => !!joinOf(li))], [['Clover', 'Juniper', 'Pebble'], 1, [true, true, true]]);
     same('... the count beside the heading and on the Games button are the same 3', [textOf(first(popOf(env), 'gpcount')).indexOf('3 waiting') === 0, textOf(first(env.home('games'), 'pill'))], [true, '3']);
     check('... and the "Join by code" box is under the heading, shut, with "Have a code?" in the heading', !!first(popOf(env), 'gcode') && popOf(env).children[1] === first(popOf(env), 'gcode') && first(popOf(env), 'gcode').hidden === true && first(first(popOf(env), 'gphead'), 'gcodelink').getAttribute('aria-expanded') === 'false');
@@ -453,7 +457,7 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     check('... and the card has the one button, Host a game (the bar above has Quick host and Quick join)', first(popOf(env), 'gempty').findAll((e) => e.tagName === 'button').map(textOf).join() === 'Host a game');
     first(popOf(env), 'gempty').findAll((e) => e.tagName === 'button')[0].click();
     const asked = hostCard(env);
-    same('... a press on it does what Quick host does with no room: the card "Host a game" with Public room, Private room and Cancel, nothing made yet', [!!asked, asked ? find(asked, 'btn').map(textOf) : [], env.sockets.length], [true, ['Public room', 'Private room', 'Cancel'], 0]);
+    same('... a press on it does what Quick host does with no room: the card "Host a game" with Public room, Invite only and Cancel, nothing made yet', [!!asked, asked ? find(asked, 'btn').map(textOf) : [], env.sockets.length], [true, [TEXT.hostPublic, TEXT.hostPrivate, TEXT.cancel], 0]);
     pressEscape(env);
 }
 {
@@ -554,6 +558,233 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     site.body = listOf([row('aaaaaa', 'Has', { map: 'POPcOrN.lvl', people: 1, free: 3, age: 30 }), row('cccccc', 'Own', { map: 'TINY.LVL', people: 1, free: 3, age: 10 })]);
     const env = await page({ site, options: { popover: false } });
     same('without AntsMapPicker an original has its picture and a map of the players has none (the list works)', rowsOf(env).map((li) => find(li, 'gmap')[0].children.map((i) => i.src)), [[], ['front/preview_tiny.png']]);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 11. The locked cards of private rooms: a row that says private: true and has no code. It is a card with a padlock and nothing to press, and the room's key is nowhere in the page.
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const good = locked('Maple', { map: 'SMALL.LVL', mode: '187', people: 2, bots: 1, free: 1 });
+    const parsed = Games.lockedOf(good, RULES0);
+    same('a locked row: the host, the map (an original by its name and its key), the mode, the seats; nothing else (no code, no age)', parsed, { host: 'Maple', map: 'SMALL.LVL', mapKey: 'small', mapName: 'Small', people: 2, bots: 1, free: 1, size: 4, mode187: true });
+    same('a mode that is not 187 is a plain match', Games.lockedOf(locked('A'), RULES0).mode187, false);
+    same('a map of the players has its file name without the ending', Games.lockedOf(locked('A', { map: 'My Map.LVL' }), RULES0).mapName, 'My Map');
+    const extra = Games.lockedOf(Object.assign({}, good, { url: '/room/x', id: 'abc', href: 'http://x', link: 'y', room: 'z', key: 'ff', age: 9 }), RULES0);
+    same('fields that are not in the shape (an address, an id, a link, a key) are not read, and nothing of them is in the row', Object.keys(extra).sort(), Object.keys(parsed).sort());
+    for (const code of ['k7m2xq', '', null, 7, undefined]) check('a row that has a code (' + JSON.stringify(code) + ') is dropped: a private row has none, and one that has is not drawn', Games.lockedOf(Object.assign({}, good, { code }), RULES0) === null);
+    for (const [what, value] of [['private missing', locked('A', { private: undefined })], ['private false', locked('A', { private: false })], ['private as text', locked('A', { private: 'true' })], ['private as 1', locked('A', { private: 1 })],
+        ['no object', null], ['an array', [1]], ['a text', 'row'],
+        ['a host of 33 characters', locked('x'.repeat(33))], ['a host with a right-to-left mark', locked('Ann‮Bob')], ['a host that is a number', locked(7)],
+        ['a map that is no file name', locked('A', { map: '../x.LVL' })], ['a mode that is a number', locked('A', { mode: 1 })],
+        ['people as text', locked('A', { people: '2' })], ['seats that do not add up to the size', locked('A', { people: 2, bots: 0, free: 1, size: 4 })], ['no free color', locked('A', { people: 4, bots: 0, free: 0, size: 4 })], ['a size of 5', locked('A', { people: 1, bots: 0, free: 4, size: 5 })]]) {
+        check('a locked row with ' + what + ' is dropped', Games.lockedOf(value, RULES0) === null);
+    }
+    for (const field of ['host', 'map', 'mode', 'people', 'bots', 'free', 'size']) {
+        const without = Object.assign({}, good); delete without[field];
+        check('a locked row without its ' + field + ' is dropped', Games.lockedOf(without, RULES0) === null);
+    }
+    const mixed = listOf([row('aaaaaa', 'Open'), locked('Maple'), 'x', locked('Quill', { mode: '187' }), Object.assign(locked('Leak'), { code: 'bbbbbb' }), locked('Maple'), row('cccccc', 'Open2'), { code: 'dddddd' }]);
+    same('the locked rows of a list: in its order, a look-alike twice is two cards, a row with a code and a public row are not among them', Games.parseLocked(mixed, RULES0).map((r) => r.host), ['Maple', 'Quill', 'Maple']);
+    same('... and the joinable rows are the public ones alone (a locked row is no row of the open list)', Games.parseList(mixed, RULES0).map((r) => r.code), ['aaaaaa', 'cccccc']);
+    same('50 locked rows at most, however many the answer holds', Games.parseLocked(listOf(Array.from({ length: 10000 }, (_, i) => locked('H' + i))), RULES0).length, 50);
+    {   // as for the open rooms: a list of 10,000 entries is not read to its end
+        const touched = { n: 0 };
+        const entries = new Proxy(Array.from({ length: 10000 }, () => 'x'), { get(target, key, receiver) { if (/^\d+$/.test(String(key))) touched.n++; return Reflect.get(target, key, receiver); } });
+        check('10,000 entries that are no locked rows are looked at only up to a bound (500), and the answer is an empty list', Games.parseLocked({ format: 1, lobbies: entries }, RULES0).length === 0 && touched.n <= 501, 'looked at ' + touched.n);
+    }
+    same('an answer that is no list has no locked rows', [Games.parseLocked(null, RULES0), Games.parseLocked({ format: 2, lobbies: [locked('A')] }, RULES0), Games.parseLocked({ format: 1, lobbies: 'x' }, RULES0), Games.parseLocked([locked('A')], RULES0)], [[], [], [], []]);
+}
+{   // the cards in the list: joinable rooms first, locked ones after them; nothing to press on a locked one
+    const site = fakeSite();
+    site.body = listOf([row('k7m2xq', 'Pebble', { map: 'ISLANDS.LVL', people: 3, free: 1 }), row('abc234', 'Clover', { map: 'TREASURE.LVL', people: 2, bots: 1, free: 1 }),
+                        locked('Maple', { map: 'SMALL.LVL' }), locked('Quill', { map: 'TREASURE.LVL', mode: '187', people: 1, bots: 2, free: 1 }), locked('Rowan', { map: 'TINY.LVL', people: 1, free: 3 })]);
+    const env = await page({ site });
+    tap(env.home('games'));
+    await flush();
+    const cards = lockedCards(env);
+    same('the rows: the joinable rooms in their order, then the locked ones in the answer\'s', rowsOf(env).map((li) => textOf(first(li, 'gname'))), ['Pebble', 'Clover', 'Maple', 'Quill', 'Rowan']);
+    same('a locked card names the host and the map, has the invite-only tag (and 187 for that mode), and the seats as n of the size and the bots', cards.map((li) => [textOf(first(li, 'gname')), textOf(first(li, 'gmapname')), find(li, 'gprivtag').map(textOf).join(), find(li, 'gmode').map(textOf).join(), textOf(first(li, 'gcount')), textOf(first(li, 'gbots'))].join('|')),
+        ['Maple|Small|' + TEXT.privateTag + '||2/4|no bots', 'Quill|Treasure|' + TEXT.privateTag + '|187|3/4|2 bots', 'Rowan|Tiny|' + TEXT.privateTag + '||1/4|no bots']);
+    same('... the dots as an open room draws them', cards.map((li) => find(first(li, 'gdots'), 'gdot').map((d) => classes(d).filter((c) => c !== 'gdot').join('.')).join(' ')),
+        ['player.c0 player.c1 open.c2 open.c3', 'player.c0 bot.c1 bot.c2 open.c3', 'player.c0 open.c1 open.c2 open.c3']);
+    same('the joinable rooms have their Join buttons and the locked cards have none: no button, no link, no control of any kind, no focus stop, no data-code, no address', [rowsOf(env).filter((li) => joinOf(li)).length,
+        cards.map((li) => li.findAll((e) => e.tagName === 'button' || e.tagName === 'a' || e.tagName === 'input' || e.tagName === 'select' || e.hasAttribute('tabindex') || e.hasAttribute('href') || e.hasAttribute('data-code') || e.hasAttribute('onclick') || e.hasAttribute('role')).length)], [2, [0, 0, 0]]);
+    check('a press on a locked card does nothing (no listener for a press, a key or a touch on it or on a part of it)', cards.every((li) => li.all().every((e) => !e.listeners || ['click', 'pointerdown', 'pointerup', 'mousedown', 'touchstart', 'keydown', 'keyup', 'keypress'].every((t) => !(e.listeners[t] || []).length))));
+    same('a screen reader hears one sentence for a card (the pieces are hidden from it): the room is called what its tag says, and it cannot be joined', cards.map((li) => [find(li, 'sr').map(textOf).join(), first(li, 'gtxt').getAttribute('aria-hidden'), first(li, 'glockbox').getAttribute('aria-hidden')].join('|')),
+        [TEXT.privateRoom + ', cannot join. Maple’s room, Small, 2/4 seats taken, no bots.|true|true', TEXT.privateRoom + ', cannot join. Quill’s room, Treasure, 3/4 seats taken, 2 bots.|true|true', TEXT.privateRoom + ', cannot join. Rowan’s room, Tiny, 1/4 seats taken, no bots.|true|true']);
+    same('the heading counts the joinable rooms, the invite-only ones (and the matches in progress when the door shows them)', textOf(first(popOf(env), 'gpcount')), '2 open, 3 ' + LOCKED);
+    same('the button of the Games list counts the joinable rooms alone (a locked room is not a game to join)', [pillOf(env).textContent, env.home('games').getAttribute('aria-label')], ['2', 'Games, 2 open']);
+    check('the first button of the list is the first Join (the locked cards are no stop)', env.focused === joinOf(rowsOf(env)[0]));
+}
+{   // with a match in progress (the door of /live answers) the heading adds it, and the box of matches stands under the cards
+    const site = fakeSite();
+    site.live.reject = false;
+    site.live.body = { live: [{ id: 'TINY-20261119-120000Z', map: 'TINY.LVL', mode: 'highest-score', started: 1, turns: 400, seconds: 20, players: ['Green (Ann)', 'Red (Bob)'] }], count: 1 };
+    site.body = listOf([row('k7m2xq', 'Pebble', { map: 'ISLANDS.LVL', people: 3, free: 1 }), locked('Maple')]);
+    const env = await page({ site });
+    tap(env.home('games'));
+    await flush();
+    same('with a match in progress the heading adds it', textOf(first(popOf(env), 'gpcount')), '1 open, 1 ' + LOCKED + ', 1 in progress');
+    same('... and the box of matches is under the cards, unchanged (a watchable match, with its Watch link)', [find(popOf(env), 'glive').length, find(popOf(env), 'gpriv').length, find(popOf(env), 'gwatch').length], [1, 1, 1]);
+    same('... the count on the Games button is the open games and the matches, as it was (a locked room is in neither)', pillOf(env).textContent, '2');
+}
+{   // what the answer carries is never drawn: a row that holds a code is dropped, and the other names of a way to the room are not read; the whole page is searched, every text and every attribute
+    const site = fakeSite();
+    site.body = listOf([locked('Maple', { code: 'sec00001', url: '/?room=sec00002', id: 'sec00003', href: 'sec00004', link: 'sec00005', join: 'sec00006', key: 'sec00007', room: 'sec00008' }), locked('Quill', { url: '/?room=sec00012', id: 'sec00013', href: 'sec00014', link: 'sec00015', join: 'sec00016', key: 'sec00017', room: 'sec00018', roomCode: 'sec00019' })]);
+    const env = await page({ site });
+    tap(env.home('games'));
+    await flush();
+    const all = env.dumpAll();
+    check('a row with a code is not drawn at all; the one without is, and no code, address, id, link or key of either is anywhere in the page (every text and every attribute)', lockedCards(env).length === 1 && textOf(first(lockedCards(env)[0], 'gname')) === 'Quill' && !/sec000[0-9][0-9]/.test(all) && !/\/\?room=|room=/.test(all), all.match(/sec000[0-9][0-9]/));
+    check('the page has asked for nothing but the list (no address was made of a row)', env.site.calls.every((c) => c.url === '/lobbies'));
+}
+{   // nothing can be joined: the big empty card gives way to a slim strip, and the locked cards stay
+    const site = fakeSite();
+    site.body = listOf([locked('Maple', { map: 'SMALL.LVL' }), locked('Quill', { map: 'TREASURE.LVL', people: 3, free: 1 })]);
+    const env = await page({ site });
+    tap(env.home('games'));
+    await flush();
+    const pop = popOf(env);
+    const strip = first(pop, 'gempty');
+    same('the big "No open games" card is a slim strip: "No open games to join right now." with the line under it (the page\'s own) and Host a game', [strip.hidden, classes(strip).indexOf('gslim') !== -1, textOf(first(strip, 'gemtitle')), textOf(first(strip, 'gemline')), find(strip, 'btn').map(textOf)],
+        [false, true, 'No open games to join right now.', 'Rooms show up here when their host switches them to Public.', ['Host a game']]);
+    check('... it stands above the locked cards', pop.findAll((e) => e === strip || e === first(pop, 'glist')).map((e) => e === strip ? 'strip' : 'list').join() === 'strip,list');
+    same('the list is shown with the two locked cards, and the heading says none open', [first(pop, 'glist').hidden, lockedCards(env).length, textOf(first(pop, 'gpcount'))], [false, 2, 'none open, 2 ' + LOCKED]);
+    same('the count on the Games button is 0 joinable rooms (the button shows no count of locked ones)', [pillOf(env).textContent, env.home('games').getAttribute('aria-label')], ['0', 'Games, 0 open']);
+    check('the first button is Host a game of the strip', env.focused === find(strip, 'btn')[0]);
+    tap(find(strip, 'btn')[0]);
+    check('Host a game does what Quick host does (the question: Public room or Invite only)', hostCard(env) !== null);
+    pressEscape(env);
+    tap(env.home('games'));
+    await flush();
+    site.body = listOf([]);
+    await wait(env, 6000);
+    same('when the last locked card goes the big card comes back, as it was (its own title, no strip)', [strip.hidden, classes(strip).indexOf('gslim') !== -1, textOf(first(strip, 'gemtitle')), first(pop, 'glist').hidden, textOf(first(pop, 'gpcount'))], [false, false, 'No open games right now.', true, 'none waiting']);
+}
+{   // private rooms, nothing to join and a match in progress: the strip stands over the cards, and the matches under them
+    const site = fakeSite();
+    site.live.reject = false;
+    site.live.body = { live: [{ id: 'TINY-20261119-120000Z', map: 'TINY.LVL', mode: 'highest-score', started: 1, turns: 400, seconds: 20, players: ['Green (Ann)', 'Red (Bob)'] }], count: 1 };
+    site.body = listOf([locked('Maple')]);
+    const env = await page({ site });
+    tap(env.home('games'));
+    await flush();
+    await wait(env, 6000);
+    const pop = popOf(env), strip = first(pop, 'gempty');
+    same('private rooms and a match, nothing to join: the strip is there (the match does not take its place), then the locked card, then the match', [strip.hidden, classes(strip).indexOf('gslim') !== -1, find(pop, 'gpriv').length, find(pop, 'glive').length, textOf(first(pop, 'gpcount'))], [false, true, 1, 1, 'none open, 1 ' + LOCKED + ', 1 in progress']);
+    site.body = listOf([]);
+    await wait(env, 6000);
+    same('no private room, no open game, a match in progress: no card at all, as before', [strip.hidden, find(pop, 'glive').length, textOf(first(pop, 'gpcount'))], [true, 1, '0 open, 1 in progress']);
+}
+{   // six cards, then one line for the rest
+    const site = fakeSite();
+    const many = (n) => Array.from({ length: n }, (_, i) => locked('H' + i, { map: ['SMALL.LVL', 'TINY.LVL', 'TREASURE.LVL'][i % 3] }));
+    site.body = listOf([row('k7m2xq', 'Pebble', { map: 'ISLANDS.LVL', people: 3, free: 1 })].concat(many(12)));
+    const env = await page({ site });
+    tap(env.home('games'));
+    await flush();
+    const pop = popOf(env);
+    const more = () => find(pop, 'gmore').map(textOf);
+    same('12 invite-only rooms: the first 6 cards and one line that counts the rest', [lockedCards(env).length, more(), textOf(first(pop, 'gpcount'))], [6, ['and 6 more ' + LOCKED_ADJ + ' rooms'], '1 open, 12 ' + LOCKED]);
+    same('... the line is no card, no button and no link', find(pop, 'gmore').map((li) => [li.tagName, li.findAll((e) => e.tagName === 'button' || e.tagName === 'a').length].join()), ['li,0']);
+    site.body = listOf(many(7));
+    await wait(env, 6000);
+    same('7: the line says "room" for one', [lockedCards(env).length, more()], [6, ['and 1 more ' + LOCKED_ADJ + ' room']]);
+    site.body = listOf(many(6));
+    await wait(env, 6000);
+    same('6: all six and no line', [lockedCards(env).length, more()], [6, []]);
+    site.body = listOf(many(50));
+    await wait(env, 6000);
+    same('50 (the most that is sent): 44+ more, and "50+" in the heading', [lockedCards(env).length, more(), textOf(first(pop, 'gpcount'))], [6, ['and 44+ more ' + LOCKED_ADJ + ' rooms'], 'none open, 50+ ' + LOCKED]);
+}
+{   // the words of the list: the tag, the head, the line of the rest and the sentence of a screen reader call the setting Invite only (the maintainer's word), and none of them says "private" or "link only" (web_home_games_room_check.js holds the same rule for the Room)
+    const site = fakeSite();
+    site.body = listOf([row('k7m2xq', 'Pebble', { map: 'ISLANDS.LVL', people: 3, free: 1 })].concat(Array.from({ length: 8 }, (_, i) => locked('H' + i))));
+    const env = await page({ site });
+    tap(env.home('games'));
+    await flush();
+    const words = textOf(popOf(env));
+    same('the tag of a locked card is Invite only', TEXT.privateTag, 'Invite only');
+    check('the list, with its locked cards, the head and the line of the rest, says it that way and never says "private" or "link only"', words.indexOf(TEXT.privateTag) !== -1 && find(popOf(env), 'gmore').length === 1 && !/link only|\bprivate\b/i.test(words), words.slice(0, 160));
+}
+{   // a list that is off shows no locked card, and a failed look keeps none
+    const site = fakeSite();
+    site.body = listOf([locked('Maple')]);
+    const env = await page({ site });
+    tap(env.home('games'));
+    await flush();
+    check('one locked card to begin with', lockedCards(env).length === 1);
+    site.status = 503;
+    await wait(env, 6000);
+    same('the list is off: no card, no strip, "Games list is off right now"', [lockedCards(env).length, first(popOf(env), 'gempty').hidden, first(popOf(env), 'goff').hidden, first(popOf(env), 'glist').hidden], [0, true, false, true]);
+}
+{   // the page's own private room: first among the locked cards, tagged Yours (a locked row has no code, so the page knows it by its host, map, mode and seats: a look-alike that differs in ANY ONE of them is not it)
+    const site = fakeSite();
+    const env = await page({ site });
+    myRoom(env, ['Maya']);
+    const own = { map: 'TREASURE.LVL', people: 1, bots: 0, free: 3, size: 4 };
+    const alike = [['Mara', {}], ['Maya', { map: 'TINY.LVL' }], ['Maya', { mode: '187' }], ['Maya', { people: 2, free: 2 }], ['Maya', { bots: 1, free: 2 }], ['Maya', { free: 2, size: 3 }]];       // (each is Maya's room but for one thing)
+    const body = (looks) => listOf([row('abc234', 'Clover')].concat(looks.map(([h, o]) => locked(h, Object.assign({}, own, o))), [locked('Maya', own)]));
+    site.body = body(alike.slice(0, 5));
+    env.roomBar('rhome').click();
+    await flush();
+    await wait(env, 30000);
+    tap(env.home('games'));
+    await flush();
+    const tags = () => lockedCards(env).map((li) => [textOf(first(li, 'gname')), textOf(first(li, 'gmapname')), textOf(first(li, 'gcount')), find(li, 'gmode').length ? '187' : '', find(li, 'gyours').length ? 'Yours' : ''].join('|'));
+    same('the page\'s own private room is the first locked card, tagged Yours; the rooms that differ in one thing each (the host, the map, the mode, the people, the bots) stay plain, in their order', tags(),
+        ['Maya|Treasure|1/4||Yours', 'Mara|Treasure|1/4||', 'Maya|Tiny|1/4||', 'Maya|Treasure|1/4|187|', 'Maya|Treasure|2/4||', 'Maya|Treasure|2/4||']);
+    same('... the tags stand in the order invite only, Yours (the room\'s own tag is the style of the public Yours)', find(lockedCards(env)[0], 'gmarks')[0].children.map(textOf), [TEXT.privateTag, TEXT.yours]);
+    check('... it has no button, no link, no press either (it is the page\'s own room: nothing to join), and its sentence says that it is yours', lockedCards(env)[0].findAll((e) => e.tagName === 'button' || e.tagName === 'a').length === 0 && textOf(first(lockedCards(env)[0], 'sr')).indexOf(TEXT.privateRoom + ', cannot join. Yours. ') === 0);
+    same('the heading counts it with the others: 1 open and 6 private (the page\'s own room is one of them), and the button counts the joinable rooms alone', [textOf(first(popOf(env), 'gpcount')), pillOf(env).textContent], ['1 open, 6 ' + LOCKED, '1']);
+    site.body = body(alike.slice(5));
+    await wait(env, 6000);
+    same('the room that differs in the colors of the match (three, not four) stays plain too', tags(), ['Maya|Treasure|1/4||Yours', 'Maya|Treasure|1/3||']);
+    site.body = listOf([locked('Maya', Object.assign({}, own, { people: 2, free: 2 })), locked('Quill', { people: 3, free: 1 })]);
+    await wait(env, 6000);
+    same('a stale answer (the room has one person, the row says two) tags nothing: plain until the next look says otherwise', tags(), ['Maya|Treasure|2/4||', 'Quill|Treasure|3/4||']);
+    site.body = listOf([locked('Maya', own), locked('Maya', own)]);
+    await wait(env, 6000);
+    same('two rooms that look just alike: one is tagged (the first), not both', tags(), ['Maya|Treasure|1/4||Yours', 'Maya|Treasure|1/4||']);
+}
+{   // a room of the page's own with one person, a computer player, a color that is Nobody's and a free color, in mode 187: the seats and the mode are read from the Room message as the server counts them (a color that is Nobody's is no color of the match)
+    const site = fakeSite();
+    const env = await page({ site });
+    env.home('mine').click();
+    env.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']], room: { flags: PRIVATE, plan: [0, 0, 2, 4], mode: 1, map: 'ISLANDS.LVL' } });
+    const base = { map: 'ISLANDS.LVL', mode: '187', people: 1, bots: 1, free: 1, size: 3 };
+    site.body = listOf([locked('Maya', Object.assign({}, base, { mode: 'highest-score' })), locked('Maya', Object.assign({}, base, { people: 2, size: 4 })), locked('Maya', Object.assign({}, base, { bots: 0, size: 2 })), locked('Maya', Object.assign({}, base, { free: 2, size: 4 })), locked('Maya', base)]);
+    env.roomBar('rhome').click();
+    await flush();
+    await wait(env, 30000);
+    tap(env.home('games'));
+    await flush();
+    same('one person, a medium computer player, a free color and a color that is Nobody\'s, mode 187: the row that says exactly that is tagged and moves to the front; each row that differs in the mode, the people, the bots or the free colors stays plain',
+        lockedCards(env).map((li) => [textOf(first(li, 'gcount')), find(li, 'gmode').length ? '187' : '', find(li, 'gyours').length ? 'Yours' : ''].join('|')), ['2/3|187|Yours', '2/3||', '3/4|187|', '1/2|187|', '2/4|187|']);
+}
+{   // a guest in somebody else's private room: the room is the guest's own too (the host's name, the map, the seats)
+    const site = fakeSite();
+    const env = await page({ site, search: '?room=k7m2xq', options: { stayHome: false } });
+    guestRoom(env, 'Hana');
+    site.body = listOf([locked('Hana', { map: 'TREASURE.LVL', people: 2, free: 2 }), locked('Maya', { map: 'TREASURE.LVL', people: 2, free: 2 })]);
+    env.roomBar('rhome').click();
+    await flush();
+    await wait(env, 30000);
+    tap(env.home('games'));
+    await flush();
+    same('a guest in Hana\'s private room: Hana\'s card is tagged Yours (and goes first), a card of the same seats that another person hosts is not', lockedCards(env).map((li) => textOf(first(li, 'gname')) + (find(li, 'gyours').length ? '+Yours' : '')), ['Hana+Yours', 'Maya']);
+}
+{   // a public room of the page's own is a row by its code, and no locked card is tagged for it
+    const site = fakeSite();
+    const env = await page({ site });
+    const sock = myRoom(env, ['Maya'], PUBLIC);
+    site.body = listOf([row(helloRoom(sock.sent[0]), 'Maya', { people: 1, free: 3 }), locked('Maya', { map: 'TREASURE.LVL', people: 1, free: 3 })]);
+    env.roomBar('rhome').click();
+    await flush();
+    await wait(env, 30000);
+    tap(env.home('games'));
+    await flush();
+    same('the own public room is the Yours row of the open rooms, and a private room that looks like it is another room\'s card (not tagged)', [rowsOf(env).map((li) => textOf(first(li, 'gname')) + (find(li, 'gyours').length ? '+Yours' : '')), textOf(first(popOf(env), 'gpcount'))], [['Maya+Yours', 'Maya'], '1 open, 1 ' + LOCKED]);
 }
 
 done('the games list');

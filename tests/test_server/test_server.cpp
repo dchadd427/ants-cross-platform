@@ -22,6 +22,7 @@ int main() {
     run_reconnect_tests();
     run_bot_tests();
     run_countdown_tests();
+    run_relay_tests();
     run_online_limit_tests();
     run_persist_tests();
     run_persist_server_tests();
@@ -36,6 +37,9 @@ int main() {
     run_state_hash_tests();
     run_bot_match_tests();
     run_bot_admin_tests();
+    run_bot_rotation_tests();
+    run_bot_stagger_tests();
+    run_bot_queue_tests();
     run_restore_tests();
 #if !defined(_WIN32) && defined(ANTS_SERVER_BINARY)
     run_persist_process_tests();

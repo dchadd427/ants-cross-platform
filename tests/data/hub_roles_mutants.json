@@ -28,8 +28,8 @@
   {
    "id": "a_role_is_believed_for_ever",
    "file": "hub/roles.py",
-   "old": "entry.ok_at is None or self.clock() - entry.ok_at > self.grace:",
-   "new": "entry.ok_at is None:",
+   "old": "entry.ok_at is None or self.clock() - entry.ok_at > self.grace:\n            return NONE",
+   "new": "entry.ok_at is None:\n            return NONE",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheGrace tests.scripts.test_hub_roles.TheFailures"
   },
   {
@@ -84,7 +84,7 @@
   {
    "id": "a_refused_token_leaves_the_roles",
    "file": "hub/roles.py",
-   "old": "            entry.ok_at = None\n            entry.role = NONE\n            entry.due = self.pause_until",
+   "old": "            entry.ok_at = None\n            entry.role = NONE\n            entry.images = False\n            entry.due = self.pause_until",
    "new": "            entry.due = self.pause_until",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheRefusals"
   },
@@ -147,8 +147,8 @@
   {
    "id": "no_you_frame_for_a_role_that_is_lost",
    "file": "hub/roles.py",
-   "old": "            entry.shown = current\n            self.changed(account)",
-   "new": "            entry.shown = current\n            if current != NONE:\n                self.changed(account)",
+   "old": "entry.shown, entry.shown_images = current, images\n            self.changed(account)",
+   "new": "entry.shown, entry.shown_images = current, images\n            if current != NONE:\n                self.changed(account)",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheGrace tests.scripts.test_hub_roles.TheRefusals tests.scripts.test_hub_roles.TheScheduler"
   },
   {
@@ -336,15 +336,15 @@
   {
    "id": "roles_on_without_a_token",
    "file": "hub/config.py",
-   "old": "return bool(self.discord_bot_token and self.discord_guild and (self.role_admin or self.role_mod))",
-   "new": "return bool(self.discord_guild and (self.role_admin or self.role_mod))",
+   "old": "return bool(self.discord_bot_token and self.discord_guild and (self.role_admin or self.role_mod or self.role_images))",
+   "new": "return bool(self.discord_guild and (self.role_admin or self.role_mod or self.role_images))",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheSettings"
   },
   {
    "id": "the_two_roles_may_be_one",
    "file": "hub/config.py",
-   "old": "    if cfg.role_admin and cfg.role_admin == cfg.role_mod:",
-   "new": "    if False:",
+   "old": "if (cfg.role_admin and cfg.role_admin == cfg.role_mod) or (cfg.role_images and",
+   "new": "if False or (cfg.role_images and",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheSettings"
   },
   {
@@ -399,8 +399,8 @@
   {
    "id": "a_command_from_a_person_with_no_role_is_posted",
    "file": "hub/chat.py",
-   "old": "        if line.split(\" \")[0].lower() in COMMANDS:",
-   "new": "        if False:",
+   "old": "        elif line.startswith(\"/\"):",
+   "new": "        elif False:",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheChatAsksTheRoles tests.scripts.test_hub_roles.TheLiveRoles tests.scripts.test_hub_roles.TheMapping"
   },
   {
@@ -482,9 +482,9 @@
   },
   {
    "id": "a_command_word_in_capitals_is_posted",
-   "file": "hub/chat.py",
-   "old": "if line.split(\" \")[0].lower() in COMMANDS:",
-   "new": "if line.split(\" \")[0] in COMMANDS:",
+   "file": "hub/commands.py",
+   "old": "        word = lower(line.split(\" \", 1)[0][1:])",
+   "new": "        word = line.split(\" \", 1)[0][1:]",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheChatAsksTheRoles"
   },
   {

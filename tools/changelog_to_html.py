@@ -2,10 +2,13 @@
 """Turns the changelog (Markdown) into a standalone page of the beta site: CHANGELOG.md into /changelog (changelog.html).
 
 Usage: changelog_to_html.py IN.md OUT.html [REPO_BLOB_URL]
-           [--version vX.Y.Z] [--build-id ID]
+           [--version vX.Y.Z] [--build-id ID] [--whats-new OUT.json]
 
   --version, --build-id, --build-date   which build of the site this is: the last line of the page's Menu names it ("Version v0.1.0 - build abc1234 (2026-01-02 09:30 PT)"; the bar
                           carries the three as data-version, data-build and data-built, and web/site_nav.js writes the line as text)
+
+  --whats-new OUT.json    also writes the data file of the update notice (web/update_notice.js, docs/SITE_NAV.md "The update notice"): the live version (--version is required) and the newest
+                          releases, each with only the bullets under **For players:** and **Fixes:** (see whats_new() below), never a title, a link or a commit
 
 An HTML comment (<!-- ... -->, the template at the top of CHANGELOG.md) is dropped.
 
@@ -21,6 +24,7 @@ Relative links (README.md, docs/...) are pointed at the repository, because thos
 """
 import argparse
 import html
+import json
 import posixpath
 import re
 import sys
@@ -213,14 +217,15 @@ PAGE = """<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ants (1998) - Changelog</title>
-<link rel="icon" type="image/png" href="/favicon.png?v=f34bea03">
+<link rel="icon" type="image/png" href="/favicon.png?v=9ea2152a">
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#2b5f43">
-<link rel="apple-touch-icon" href="/app/apple-touch-icon.png?v=4fbefb68">
+<link rel="apple-touch-icon" href="/app/apple-touch-icon.png?v=82bef672">
 <meta name="apple-mobile-web-app-title" content="Ants!">
 <link rel="preload" href="/front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>
 <link rel="stylesheet" href="/front/classic.css">
 <link rel="stylesheet" href="/site_nav.css">
+<link rel="stylesheet" href="/update_notice.css">
 <style>
 {style}
 </style>
@@ -244,6 +249,7 @@ PAGE = """<!DOCTYPE html>
 </div>
 </div>
 <script src="/site_nav.js"></script>
+<script src="/update_notice.js"></script>
 </body>
 </html>
 """
@@ -379,6 +385,96 @@ def convert(md, repo_blob, version="", build_id="", build_date="", source="CHANG
     return PAGE.format(style=STYLE, script=SCRIPT, title=html.escape(title), intro=intro_html, nav=" ".join(nav), sections=body, stamps=stamp_attributes(version, build_id, build_date), source=html.escape(source))
 
 
+# ---- the data file of the update notice ---------------------------------------------------------------------------------------------------------
+# What the "What's new" window shows is public text, so the file is made from the two labels that were written for players and from nothing else: the bullets under **For players:** and **Fixes:**
+# of each release. Every other label (**Rules / network:**, **For operators:**, **Details:**, and any label that is not known) is never read, a release that has no bullet under the two labels is not in
+# the file (its title with it: a title can name the operator's side), and the file has no title, link, code or commit at all. A shipped line that names the operator's side anyway is refused
+# when the file is made, so the build stops and the line is moved under **For operators:** (the template at the top of CHANGELOG.md).
+WHATS_NEW_KEPT = ("For players", "Fixes")
+WHATS_NEW_RELEASES = 8                      # the newest releases that have lines (the window shows the newest five of them since the visitor's version: web/update_notice.js)
+LABEL = re.compile(r"^\*\*([^*:]+):\*\*")
+RELEASE_HEADING = re.compile(r"^## v(\d+\.\d+\.\d+) - (\d{4}-\d{2}-\d{2}) - \S")
+OPERATOR_SIDE = re.compile(r"`[^`]*\bANTS_[A-Z0-9_]+|\bschema\b|\badmin(?:istration)? page\b|\bsite admins?\b|\benvironment variables?\b|\bdatabase\b", re.I)
+
+
+class OperatorLine(Exception):
+    """A shipped line that names the administration page, a setting, an environment variable or the database."""
+
+
+def segments(text):
+    """'**Bold lead.** rest `code` [label](url)' as [["b", "Bold lead."], ["t", " rest code label"]]: bold kept, a link is its label, code is plain text. Text only: the page makes elements from it."""
+    text = re.sub(r"\[([^\]]+)\]\([^)\s]+\)", r"\1", text).replace("`", "")
+    out, pos = [], 0
+    for m in re.finditer(r"\*\*([^*]+)\*\*", text):
+        if m.start() > pos:
+            out.append(["t", text[pos:m.start()]])
+        out.append(["b", m.group(1)])
+        pos = m.end()
+    if pos < len(text):
+        out.append(["t", text[pos:]])
+    return out
+
+
+def shipped_lines(md):
+    """[(version, date, [For players lines], [Fixes lines])] of the released entries, in the file's order: the bullets under the two kept labels, a continuation line joined to its bullet."""
+    md = re.sub(r"<!--.*?-->", "", md, flags=re.S)
+    found, current, label, item = [], None, None, None
+
+    def flush():
+        nonlocal item
+        if item is not None and current is not None and label in WHATS_NEW_KEPT:
+            current[2 if label == "For players" else 3].append(" ".join(item))
+        item = None
+
+    for raw in md.splitlines():
+        line = raw.rstrip()
+        if line.startswith("## "):
+            flush()
+            m = RELEASE_HEADING.match(line)
+            current = (m.group(1), m.group(2), [], []) if m else None
+            if current:
+                found.append(current)
+            label = None
+        elif current is None:
+            continue
+        elif LABEL.match(line):
+            flush()
+            label = LABEL.match(line).group(1)
+        elif line.startswith("- "):
+            flush()
+            item = [line[2:].strip()]
+        elif line.startswith("  ") and item is not None:
+            item.append(line.strip())
+        elif not line.strip():
+            flush()
+        else:
+            flush()
+            label = None                                    # (a paragraph that no label opened is not read)
+    flush()
+    return found
+
+
+def operator_side(number, players, fixes):
+    """['v1.2.3: 'schema' in: the line ...'] for each shipped line (under For players or Fixes) of a release that names the operator's side."""
+    return ["v%s: %r in: %s" % (number, m.group(0), t[:90]) for t in players + fixes for m in [OPERATOR_SIDE.search(t)] if m]
+
+
+def whats_new(md, version):
+    """The data file as a dict: {"version": "0.17.12", "releases": [{"version", "date", "items": [segments...], "fixes": [segments...]}...]}, newest first. OperatorLine, naming every such line, when a
+    shipped line of a release that the file would hold names the operator's side."""
+    releases, refused = [], []
+    for number, date, players, fixes in sorted(shipped_lines(md), key=lambda r: tuple(int(n) for n in r[0].split(".")), reverse=True):
+        if not players and not fixes:
+            continue
+        refused += operator_side(number, players, fixes)
+        releases.append({"version": number, "date": date, "items": [segments(t) for t in players], "fixes": [segments(t) for t in fixes]})
+        if len(releases) == WHATS_NEW_RELEASES:
+            break
+    if refused:
+        raise OperatorLine('a line under "For players" or "Fixes" names the operator\'s side: move it under "**For operators:**" (the template at the top of CHANGELOG.md)\n  ' + "\n  ".join(refused))
+    return {"version": version.lstrip("v"), "releases": releases}
+
+
 def main(argv):
     parser = argparse.ArgumentParser(description="Turns a changelog (Markdown) into a standalone page of the site.")
     parser.add_argument("input", help="the Markdown file")
@@ -387,6 +483,7 @@ def main(argv):
     parser.add_argument("--version", default="", help="the game's version, shown under the title")
     parser.add_argument("--build-id", default="", help="the build id, shown under the title")
     parser.add_argument("--build-date", default="", help="the build date and time in Pacific time, shown after the build id")
+    parser.add_argument("--whats-new", metavar="OUT.json", help="also write the data file of the update notice (needs --version)")
     args = parser.parse_args(argv[1:])
     repo_blob = args.repo_blob
     if not repo_blob.endswith("/"):
@@ -395,8 +492,20 @@ def main(argv):
         md = f.read()
     source = args.input.replace("\\", "/").split("/")[-1]
     out = convert(md, repo_blob, version=args.version, build_id=args.build_id, build_date=args.build_date, source=source)
+    data = None
+    if args.whats_new:
+        if not re.fullmatch(r"v?\d+\.\d+\.\d+", args.version):
+            parser.error("--whats-new needs --version vX.Y.Z")
+        try:
+            data = whats_new(md, args.version)
+        except OperatorLine as e:
+            print("changelog_to_html: %s" % e, file=sys.stderr)
+            return 2
     with open(args.output, "w", encoding="utf-8") as f:
         f.write(out)
+    if data is not None:
+        with open(args.whats_new, "w", encoding="utf-8", newline="\n") as f:
+            f.write(json.dumps(data, separators=(",", ":")) + "\n")
     return 0
 
 

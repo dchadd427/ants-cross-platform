@@ -1,6 +1,9 @@
 #include "ants_net/session.hpp"
 
+#include <chrono>
+
 #include "ants_net/clock.hpp"
+#include "ants_net/prediction.hpp"
 
 #include <algorithm>
 
@@ -12,6 +15,9 @@ using session_detail::bit;
 
 namespace {
 constexpr int kMaxSealsPerUpdate = static_cast<int>(500 / kTurnMs);     // a pass that came late seals the turns it missed, up to half a second of them, then the schedule goes on
+/// An ant id that the host's engine has not handed out yet is let through when it is this close to the next one (a machine that runs a few turns ahead of the host's engine has seen ants
+/// that the host's engine has not made: about a tick's births, with a wide margin); any other id that no ant has cannot be a seat's honest order
+constexpr uint32_t kAntIdsAhead = 1024;
 }  // namespace
 
 // ------------------------------------------------------------------------------------------------
@@ -30,6 +36,7 @@ HostSession::HostSession(sim::SimulationEngine& sim, Config config, std::unique_
       runner_(std::move(runner)),
       delay_(config.host_player) {
     sequencer_.set_host_player(cfg_.host_player);
+    sequencer_.set_vetter([this](uint8_t player, sim::Command& command) { return sim_ == nullptr || vet_ants(*sim_, player, command); });
     // the delay of the host's own commands: the tick that applies one is read off the runner (a runner that a promoted guest brings has its old session's observer replaced)
     runner_->set_on_applied([this](const sim::Command& c) { delay_.on_applied(c, last_ms_); });
 }
@@ -47,7 +54,39 @@ void HostSession::add_bot_seat(uint8_t player) {
 
 bool HostSession::submit_bot(uint8_t player, sim::Command command) {
     if (!started_ || !is_bot_seat(player) || paused()) return false;         // (a bot waits, like everybody, while a seat is away: its orders would only pile up in the first turn after)
-    return sequencer_.submit(player, std::move(command));
+    // Protocol 26: every player is told the order the moment the bot gives it, ahead of the turn that will carry it (the turn is the next one to be sealed: the order is queued for it). The hint changes
+    // nothing that is sealed or recorded; a player's prediction puts the bot's ants where the turn will, so that the turn corrects them less.
+    HintMsg hint;
+    const bool wanted = cfg_.bot_hints && Prediction::predicts(command.type);
+    if (wanted) {
+        hint.seq = ++hint_seq_[player];
+        hint.tick = sequencer_.next_turn();
+        hint.command = command;
+        hint.command.issuer = player;
+    }
+    if (!sequencer_.submit(player, std::move(command))) return false;
+    if (wanted && hint.tick <= kMaxHintTick) broadcast(encode(hint));
+    return true;
+}
+
+// What the host's engine would do with the ants of an order, done before the order is sealed: an order that names an ant of another player, an id that no ant has and none is about to have, or an ant twice is
+// not made of anything that the engine carries out (SimulationEngine::apply_command keeps an ant of the issuer once, in the order given), so those ids are taken out, and an order with no ant left is
+// dropped. An ant of the issuer is kept whether it is alive or dead (an honest player's order can name an ant that died a moment ago: the engine passes over it, and the order is sealed as it was sent),
+// so nothing that a person plays is changed. The engine's answer depends only on the host's state and the sealed turn is what every machine runs.
+bool HostSession::vet_ants(const sim::SimulationEngine& sim, uint8_t player, sim::Command& command) {
+    if (!sim::has_ant_list(command.type)) return true;
+    const uint32_t horizon = sim.next_ant_id() + kAntIdsAhead;
+    std::vector<uint32_t> kept;
+    kept.reserve(command.ants.size());
+    for (const uint32_t id : command.ants) {
+        if (id == 0 || id >= horizon) continue;
+        if (sim.ant_claim(id, player) == sim::SimulationEngine::AntClaim::Foreign) continue;
+        if (std::find(kept.begin(), kept.end(), id) != kept.end()) continue;
+        kept.push_back(id);
+    }
+    if (kept.empty()) return false;
+    command.ants = std::move(kept);
+    return true;
 }
 
 void HostSession::start(uint32_t now_ms) {
@@ -68,6 +107,7 @@ void HostSession::start(uint32_t now_ms) {
         clients_[p].acked_seen = sequencer_.acked(p);
         humans = static_cast<uint8_t>(humans | bit(p));
     }
+    people_ = static_cast<uint8_t>(humans | (seatless() ? 0u : bit(cfg_.host_player)));
     attendance_.seat_humans(humans, now_ms);
     next_presence_ms_ = now_ms;
 }
@@ -103,6 +143,7 @@ void HostSession::resume(uint32_t now_ms, uint32_t resume_turn, uint8_t old_host
         }
         send_turns(s.conn, s.next_receive, resume_turn);
     }
+    people_ = following;
     // the old host and every seat of the roster that did not follow leave with the first turn (a seat that already dropped stays as it is)
     const uint8_t roster = sim_->roster_mask();
     if (old_host < sim::MAX_PLAYERS && old_host != cfg_.host_player) announce_drop(old_host);
@@ -131,6 +172,7 @@ void HostSession::start_restored(uint32_t now_ms, uint8_t humans, uint8_t droppe
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
         if (is_bot_seat(p)) sequencer_.set_active(p, true);        // a bot's seat is level with the match (the host acknowledges every turn for it)
     }
+    people_ = humans;
     attendance_.seat_restored(humans, dropped, now_ms);
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {   // a seat without a key can never be taken back: it is gone, as a lost link without a key is (its Drop is sealed after the pause)
         if ((humans & bit(p)) != 0 && (dropped & bit(p)) == 0 && key_is_zero(keys_[p]) && attendance_.dropped(p, now_ms)) announce_drop(p);
@@ -283,7 +325,7 @@ void HostSession::handle_message(uint8_t player, const std::vector<uint8_t>& msg
                                                      // clicks on would reach the limit of commands per turn, which no turn resets): discarded, no violation
             if (cfg_.start_delay_ms != 0 && sequencer_.next_turn() == 0) return;     // no turn is sealed yet in a match that waits for its start dialog (protocol 12): an honest client sends nothing (its dialog takes every
                                                      // click and key until its first turn has run), and a command now would run at the first tick, ahead of every person's: discarded, no violation
-            if (!sequencer_.submit(player, std::move(m.command))) violation(player);
+            if (sequencer_.submit_checked(player, std::move(m.command)) == Submit::Refused) violation(player);      // (a command over the budget, or without an ant to order, is dropped: not an offence)
             return;
         }
         case MsgType::Vote: {
@@ -328,6 +370,18 @@ void HostSession::handle_message(uint8_t player, const std::vector<uint8_t>& msg
             if (++clients_[player].ignored_seat_moves > kIgnoredSeatMovesAllowed) violation(player);       // the same ladder as the StartRequest's: free at first, a violation each beyond it
             return;
         }
+        case MsgType::P2pConfig: {
+            P2pConfigMsg m;
+            if (!decode(msg, m)) return violation(player);
+            handle_p2p_config(player, m);
+            return;
+        }
+        case MsgType::Signal: {
+            SignalMsg m;
+            if (!decode(msg, m)) return violation(player);
+            handle_signal(player, m);
+            return;
+        }
         case MsgType::Chat: {
             ChatMsg m;
             if (!decode(msg, m)) return violation(player);
@@ -343,6 +397,86 @@ void HostSession::handle_message(uint8_t player, const std::vector<uint8_t>& msg
         }
         default:
             return violation(player);                // hosts do not receive Turn, Desync, Welcome, ...
+    }
+}
+
+// ---- hints and channels (protocol 26, p2p.hpp) -------------------------------------------------------------------------------------------------------
+
+namespace {
+constexpr uint32_t kMaxP2pConfigs = 16;       // the asks that a match may see (a page that was reloaded, a few reconnects); every ask after them is a violation
+constexpr uint32_t kMaxP2pSignals = 512;      // an offer, an answer and a few relay candidates per pair make a dozen; a page that sends more is not setting up a channel
+
+unsigned seats_set_in(uint8_t mask) noexcept {
+    unsigned n = 0;
+    for (; mask != 0; mask = static_cast<uint8_t>(mask & (mask - 1u))) ++n;
+    return n;
+}
+}  // namespace
+
+// A player says that it can open channels and whether it allows direct ones. It is given the relay's credential (a user name that holds its expiry and a random label, never a name or an account) when the
+// server has a relay, the match has begun and began with two or more people (a computer player's hints reach every player on the server's own connection: a match of one person has nobody to open a channel to),
+// and the player has not had kMaxP2pCredentials of them yet (people_ is empty until the match begins). Any other ask is answered as a server that has no relay answers, with an empty list: the player is not
+// ready, nothing opens and the match is what it was.
+void HostSession::handle_p2p_config(uint8_t player, const P2pConfigMsg& m) {
+    Client& c = clients_[player];
+    if (++c.p2p_configs > kMaxP2pConfigs) return violation(player);
+    IceConfigMsg ice;
+    if (seats_set_in(people_) >= 2 && c.p2p_credentials < kMaxP2pCredentials && cfg_.turn != nullptr && cfg_.turn->usable() && cfg_.random_bytes) {
+        uint8_t raw[8];
+        if (cfg_.random_bytes(raw, sizeof(raw)) && (!cfg_.relay_take || cfg_.relay_take(player))) {
+            static const char kHex[] = "0123456789abcdef";
+            std::string label;
+            for (const uint8_t b : raw) {
+                label.push_back(kHex[b >> 4]);
+                label.push_back(kHex[b & 15u]);
+            }
+            const uint32_t now = cfg_.unix_now ? cfg_.unix_now() : static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+            const uint32_t ttl = cfg_.relay_ttl_s != 0 && cfg_.relay_ttl_s < cfg_.turn->ttl_s ? cfg_.relay_ttl_s : cfg_.turn->ttl_s;
+            ice.expires = now + ttl;
+            ice.username = turn_username(ice.expires, label);
+            ice.credential = cfg_.turn->credential(ice.username);
+            ice.urls = cfg_.turn->urls;
+            if (ice.credential.empty()) ice = IceConfigMsg{};
+            else ++c.p2p_credentials;
+        }
+    }
+    c.p2p_ready = !ice.urls.empty();
+    c.p2p_direct = c.p2p_ready && m.direct;
+    if (c.conn != nullptr) c.conn->send(encode(ice));
+}
+
+// A player's offer, answer or candidate for another player: passed on with the sender's seat stamped by the connection, when both are here and ready, and never an address that the other player may
+// not see (signal_allowed): a page that sends one is counted as a violation and the message is not passed on.
+void HostSession::handle_signal(uint8_t player, const SignalMsg& m) {
+    Client& c = clients_[player];
+    if (!c.p2p_ready) return violation(player);                      // a Signal before P2pConfig (or with no relay): nothing that an honest page does
+    if (++c.p2p_signals > kMaxP2pSignals) return violation(player);
+    if (m.peer == player) return violation(player);
+    Client& to = clients_[m.peer];
+    if (!to.present || !to.p2p_ready || to.conn == nullptr) return;       // the other player has left, or is not ready yet: nothing to pass on (the page tries again when P2pPeers says it is)
+    if (!signal_allowed(c.p2p_direct, to.p2p_direct, m.text)) return violation(player);
+    SignalMsg out;
+    out.peer = player;
+    out.kind = m.kind;
+    out.text = m.text;
+    to.conn->send(encode(out));
+}
+
+// Who is ready and who allows direct, told to the ready seats whenever it changes (a seat that arrives, leaves or is dropped is a change)
+void HostSession::send_peers_if_changed() {
+    uint8_t ready = 0;
+    uint8_t direct = 0;
+    for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
+        if (!clients_[p].present || !clients_[p].p2p_ready) continue;
+        ready = static_cast<uint8_t>(ready | bit(p));
+        if (clients_[p].p2p_direct) direct = static_cast<uint8_t>(direct | bit(p));
+    }
+    if (ready == peers_ready_sent_ && direct == peers_direct_sent_) return;
+    peers_ready_sent_ = ready;
+    peers_direct_sent_ = direct;
+    const std::vector<uint8_t> msg = encode(P2pPeersMsg{ready, direct});
+    for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
+        if (clients_[p].present && clients_[p].p2p_ready && clients_[p].conn != nullptr) clients_[p].conn->send(msg);
     }
 }
 
@@ -435,6 +569,7 @@ void HostSession::update(uint32_t now_ms) {
     last_ms_ = now_ms;
     delay_.on_frame(now_ms);
     poll_clients();
+    send_peers_if_changed();
     // a peer that says nothing for a minute is gone (its ack and ping stop); in a room that holds seats, for silence_ms: nothing at all for that long is a half-open link (a power cut, a
     // frozen machine), the connection is lost, and the seat is held
     const uint32_t silence = cfg_.hold_seats ? cfg_.silence_ms : cfg_.silence_timeout_ms;
@@ -475,7 +610,12 @@ void HostSession::update(uint32_t now_ms) {
             break;
         }
         stall_player_ = 255;
+        const bool first_turn = sequencer_.next_turn() == 0;
         const TurnMsg turn = sequencer_.seal();
+        if (first_turn) {                                    // the match plays from its first turn: the countdown hold (attendance.hpp) is over, the cap on the pauses is the limit from here on
+            attendance_.begin_play();
+            presence_dirty_ = true;                          // (the players are told once more: the seconds that Presence named last were the hold's, and a player whose link is lost later gives up by them)
+        }
         if (cfg_.hold_seats) log_.append(turn);              // before it is sent: the log is the match (a log that is full stops being usable, and a lost seat is dropped at once from then on)
         if (on_seal_) on_seal_(turn);                        // the restart record, also before it is sent: no client may run a turn that the record lacks (set_on_seal)
         broadcast(encode(turn));

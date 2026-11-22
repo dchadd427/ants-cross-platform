@@ -1,0 +1,94 @@
+{
+ "note": "Mutants of the admin page's image parts (the panel Image posting, the Log's three rows, the Status's two rows; web/admin_page.js, docs/HUB_IMAGES.md) for tools/mutate.py, against tests/scripts/web_admin_check.js: a button that lifts what it should set, the list that is not the right one, a row that sends a name for the reference, the log's words swapped, a delete of an image that reads as a line, the converter that is always well, rows for a hub with no images, a time that is not there, a box that takes what it should refuse, the words of a refusal.",
+ "baseline": [
+  {
+   "test": "node tests/scripts/web_admin_check.js web/admin_page.js"
+  }
+ ],
+ "mutants": [
+  {
+   "id": "give_back_lifts_nothing",
+   "file": "web/admin_page.js",
+   "old": "rowChange('images', x, 'can post images again')",
+   "new": "rowChange('noimages', x, 'can post images again')",
+   "test": "node tests/scripts/web_admin_check.js web/admin_page.js"
+  },
+  {
+   "id": "take_away_gives_back",
+   "file": "web/admin_page.js",
+   "old": "change('noimages', { account: a.account }",
+   "new": "change('images', { account: a.account }",
+   "test": "node tests/scripts/web_admin_check.js web/admin_page.js"
+  },
+  {
+   "id": "the_list_is_the_hidden_one",
+   "file": "web/admin_page.js",
+   "old": "call('GET', HUB_API + 'imagesoff')",
+   "new": "call('GET', HUB_API + 'hidden')",
+   "test": "node tests/scripts/web_admin_check.js web/admin_page.js"
+  },
+  {
+   "id": "the_row_has_no_reference",
+   "file": "web/admin_page.js",
+   "old": "rowChange('images', x,",
+   "new": "change('images', { account: x.name }, x.name ? typed('span', null, x.name) : ref(x.ref),",
+   "test": "node tests/scripts/web_admin_check.js web/admin_page.js"
+  },
+  {
+   "id": "the_log_swaps_the_two_words",
+   "file": "web/admin_page.js",
+   "old": "noimages: 'Took away image posting from', images: 'Gave back image posting to'",
+   "new": "noimages: 'Gave back image posting to', images: 'Took away image posting from'",
+   "test": "node tests/scripts/web_admin_check.js web/admin_page.js"
+  },
+  {
+   "id": "an_image_delete_is_a_line_delete",
+   "file": "web/admin_page.js",
+   "old": "if (r.action === 'del_img') {",
+   "new": "if (false) {",
+   "test": "node tests/scripts/web_admin_check.js web/admin_page.js"
+  },
+  {
+   "id": "the_converter_is_always_working",
+   "file": "web/admin_page.js",
+   "old": "im.converter === 'ok' ? 'Working' : 'Not answering'",
+   "new": "'Working'",
+   "test": "node tests/scripts/web_admin_check.js web/admin_page.js"
+  },
+  {
+   "id": "rows_for_a_hub_without_images",
+   "file": "web/admin_page.js",
+   "old": "if (im && im.on) add(p,",
+   "new": "if (im) add(p,",
+   "test": "node tests/scripts/web_admin_check.js web/admin_page.js"
+  },
+  {
+   "id": "no_image_yet_is_a_time",
+   "file": "web/admin_page.js",
+   "old": "im.last === null ? 'no image yet' : 'last image ' + ago(im.last)",
+   "new": "'last image ' + ago(im.last || 0)",
+   "test": "node tests/scripts/web_admin_check.js web/admin_page.js"
+  },
+  {
+   "id": "the_box_takes_an_id",
+   "file": "web/admin_page.js",
+   "old": "var a = named(imgUser.input);",
+   "new": "var a = { account: imgUser.input.value, shown: imgUser.input.value };",
+   "test": "node tests/scripts/web_admin_check.js web/admin_page.js"
+  },
+  {
+   "id": "the_words_of_a_409_are_the_bans",
+   "file": "web/admin_page.js",
+   "old": "noimages: ': image posting is taken away already.', images: ': image posting is not taken away.' };",
+   "new": "};",
+   "test": "node tests/scripts/web_admin_check.js web/admin_page.js"
+  },
+  {
+   "id": "the_list_is_not_asked_again",
+   "file": "web/admin_page.js",
+   "old": "                    paint(noimgBox, noimgHead, 'Taken away now', imagesOff,",
+   "new": "                    if (0) paint(noimgBox, noimgHead, 'Taken away now', imagesOff,",
+   "test": "node tests/scripts/web_admin_check.js web/admin_page.js"
+  }
+ ]
+}

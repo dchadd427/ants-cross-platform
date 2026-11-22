@@ -483,6 +483,7 @@ void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
     }
 
     if (catch_up_screen_active() && !hud_.is_quit_dialog_open()) return;  // (no match is on the screen: a click would give orders to a map that nobody sees)
+    if (handle_connections_mouse(button)) return;                        // the corner's ping text opens and closes the list of connections
     if (handle_vote_mouse(button)) return;                               // a press and a release on a button of the vote block are that choice (nothing of it reaches the map)
 
     if (button.button == SDL_BUTTON_MIDDLE) {                            // the original has no use for it; the remake's: back to the zoom 1, towards the pointer (the release is nobody's)

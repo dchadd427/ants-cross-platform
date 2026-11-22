@@ -21,8 +21,7 @@ std::string printable(const std::string& s, size_t max) {
     return out;
 }
 
-// Whether a name looks like a bot's (ai::is_reserved_bot_name, protocol 20): it starts with "Bot (" or ends with "(bot)" or "(bot, ...)", blanks, tabs and case left out: none of them
-// may pass for a person, and none may be taken by one
+// Whether a name reads as a bot's label (ai::is_reserved_bot_name, protocol 20: docs/BOT_NAMES.md says how a name is read): none of them may pass for a person, and none may be taken by one
 bool bot_like(const std::string& name) { return ai::is_reserved_bot_name(name); }
 
 std::string trimmed(const std::string& s) {
@@ -218,6 +217,9 @@ void HostLobby::sync_room_flags() {
     uint8_t games = 0;
     for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) games = static_cast<uint8_t>(games | (in_game(s) || guests_[s].reserved ? 1u << s : 0u));      // (the rematch: a person who is not back is on the game page)
     room_.in_game = games;
+    uint8_t ready = 0;                                                                                                            // (protocol 27: the marks of the persons that the START waits for: a leader's, a game's and a reserved seat's is never shown)
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) ready = static_cast<uint8_t>(ready | (must_ready(s) && guests_[s].ready ? 1u << s : 0u));
+    room_.ready = ready;
     room_.flags = starting_.active ? static_cast<uint8_t>(room_.flags | kRoomStarting) : static_cast<uint8_t>(room_.flags & static_cast<uint8_t>(~kRoomStarting));
     room_.flags = public_ ? static_cast<uint8_t>(room_.flags | kRoomPublic) : static_cast<uint8_t>(room_.flags & static_cast<uint8_t>(~kRoomPublic));      // (protocol 22)
 }
@@ -280,6 +282,7 @@ void HostLobby::elect_leader() {
         }
     }
     room_.leader = best;
+    if (best != kNoLeader) guests_[best].ready = false;           // (protocol 27: the leader does not ready: a person who comes to lead starts with no mark)
     // Protocol 22: a room is public because its leader said so. Whoever leads next, because that leader left, was thrown out or came back in another color (the lead goes with the person, so the seat does not
     // tell), chose nothing and inherits nothing: the room is private again, and every caller shows the Room message. A rematch's lobby keeps seats for the persons of the match, so the choice of the person who made the
     // room public stands for as long as that person is in the room, back or kept (the room is not listed while a seat is kept, and nobody else leads before the persons of the match): with nobody back, or with another
@@ -403,12 +406,13 @@ bool HostLobby::start(uint32_t seed, uint64_t map_hash, uint32_t now_ms, const s
     start_.map_hash = map_hash;
     start_.fog = room_.fog;
     start_.mode = room_.mode;                                    // (protocol 17: the rules of the match, the same on every machine)
+    const bool guests_link = cfg_.host_seat < sim::MAX_PLAYERS;  // (the guests of a host that holds a seat can take its place, so they need each other's addresses; a dedicated server's room relays everything and names no machine)
     for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
         if (room_.slots[s].state == SlotState::Empty) continue;
         start_.roster = static_cast<uint8_t>(start_.roster | (1u << s));
         start_.names[s] = room_.slots[s].name;
         start_.platforms[s] = room_.slots[s].platform;
-        if (guests_[s].conn != nullptr && !guests_[s].address.empty() && guests_[s].listen_port != 0) {
+        if (guests_link && guests_[s].conn != nullptr && !guests_[s].address.empty() && guests_[s].listen_port != 0) {
             start_.endpoints[s] = Endpoint{guests_[s].address, guests_[s].listen_port};      // how the other guests reach it
         }
     }
@@ -475,6 +479,7 @@ void HostLobby::take_over(uint8_t seat, Pending& p, const HelloMsg& hello, uint3
     Connection* old = g.conn;
     g.conn = p.conn;
     g.held = false;                                              // (protocol 16: a seat that was held has its person back)
+    if (!starting_.active) g.ready = false;                      // (protocol 27: a person whose link ended, or a page that took the seat over, says Ready again; a START that waits keeps the marks)
     g.heard_ms = now_ms;
     g.kind = hello.client_kind;                                  // (and a page that goes to the game page comes back as a game)
     if (g.reserved && (hello.client_kind == kClientPage || hello.want_seat < sim::MAX_PLAYERS)) {        // (the rematch: the person's page is back, or a game that asks for a color (the front page's Rejoin), an
@@ -598,10 +603,11 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
             if (cfg_.lobby_room) {
                 // A lobby room (protocol 16): the PLAN decides what a START seats and which teams it makes, so the request only asks, and the leader's is kept until every person is a game (pump_start).
                 // One that cannot be honoured, or a second one while the first waits, is ignored and counted like any other.
-                if (phase_ == Phase::Room && !starting_.active && seat == room_.leader && start_possible()) {
+                if (phase_ == Phase::Room && !starting_.active && seat == room_.leader && start_possible() && everyone_ready()) {
                     arm_start(seat, now_ms);
                 } else {
                     if (phase_ == Phase::Room && !starting_.active && seat == room_.leader && any_reserved()) notify(seat, not_back_notice());      // (the rematch: the START waits for them, and says so)
+                    else if (phase_ == Phase::Room && !starting_.active && seat == room_.leader && start_possible()) notify(seat, not_ready_notice());      // (protocol 27: the START waits for Ready, and says whose)
                     ++ignored_start_requests_;
                     if (++guests_[seat].ignored_start_requests > kIgnoredStartRequestsAllowed) violation(seat);
                 }
@@ -711,6 +717,23 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
             }
             ++ignored_visibility_;
             if (++guests_[seat].ignored_visibility > kIgnoredVisibilityAllowed) violation(seat);
+            return;
+        }
+        case MsgType::Ready: {                                            // (protocol 27) a person says that they are ready to start, or not
+            ReadyMsg m;
+            if (!cfg_.lobby_room || !decode(msg, m)) return violation(seat);       // (a room that is no lobby room has no Ready: the message is garbage there)
+            // Only a person who is a page and does not lead is heard (the leader's START is their ready, a game needs none), while the room is open and its START does not wait; what it says is shown to everybody, so it has a
+            // budget of its own. As for the plans: one that cannot be heard is no offence at first, every one after kIgnoredReadyAllowed is a violation; one beyond the budget is dropped, and a connection that goes on beyond
+            // it is flooding.
+            if (phase_ == Phase::Room && !starting_.active && must_ready(seat)) {
+                switch (guests_[seat].readies.take(now_ms, kReadyBurst, kReadyPerSecond, kReadyExcessBurst)) {
+                    case ChatBudget::Verdict::Relay: apply_ready(seat, m.ready); return;
+                    case ChatBudget::Verdict::Drop: return;
+                    case ChatBudget::Verdict::Offence: return violation(seat);
+                }
+            }
+            ++ignored_ready_;
+            if (++guests_[seat].ignored_ready > kIgnoredReadyAllowed) violation(seat);
             return;
         }
         case MsgType::Chat: {                                             // (protocol 11) a line for the room: in the waiting room and while the map loads
@@ -832,6 +855,7 @@ void HostLobby::hold_guest(uint8_t seat, uint32_t now_ms) {
     Guest& g = guests_[seat];
     g.conn = nullptr;
     g.held = true;
+    if (!starting_.active) g.ready = false;                      // (protocol 27: a person who drops is not ready; a page that leaves for the game page, while the START waits, is)
     g.held_since_ms = now_ms;
     g.measured = false;
     g.rtt_ms = 0;
@@ -847,7 +871,7 @@ void HostLobby::hold_guest(uint8_t seat, uint32_t now_ms) {
 void HostLobby::forgive(Guest& g, uint32_t now_ms) const noexcept {
     if (cfg_.forgive_ms == 0 || !time_reached(now_ms, g.forgive_at_ms)) return;
     g.forgive_at_ms = now_ms + cfg_.forgive_ms;
-    for (uint32_t* count : {&g.violations, &g.ignored_start_requests, &g.ignored_seat_moves, &g.ignored_plans, &g.ignored_names, &g.ignored_removes, &g.ignored_visibility}) {
+    for (uint32_t* count : {&g.violations, &g.ignored_start_requests, &g.ignored_seat_moves, &g.ignored_plans, &g.ignored_names, &g.ignored_removes, &g.ignored_visibility, &g.ignored_ready}) {
         if (*count > 0) --*count;
     }
 }
@@ -1062,6 +1086,39 @@ std::string HostLobby::not_back_notice() const {
     return names_notice(names, kNoticeNotBack, kNoticeNotBackMany);
 }
 
+// Protocol 27. A person whom the START waits for to say Ready: a seat that a person holds as a page (a game needs no Ready: it is open already, and a reserved seat waits for its person's return, which any_reserved()
+// holds the START back for) and that does not lead (the leader's START is their ready)
+bool HostLobby::must_ready(uint8_t seat) const noexcept {
+    return cfg_.lobby_room && seat < sim::MAX_PLAYERS && room_.slots[seat].state == SlotState::Client && seat != room_.leader && person(seat) && !guests_[seat].reserved && !in_game(seat);
+}
+
+bool HostLobby::ready(uint8_t seat) const noexcept {
+    return must_ready(seat) && guests_[seat].ready;
+}
+
+bool HostLobby::everyone_ready() const noexcept {
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
+        if (must_ready(s) && !guests_[s].ready) return false;
+    }
+    return true;
+}
+
+std::string HostLobby::not_ready_notice() const {
+    std::vector<std::string> names;
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
+        if (must_ready(s) && !guests_[s].ready) names.push_back(room_.slots[s].name);
+    }
+    return names_notice(names, kNoticeNotReady, kNoticeNotReadyMany);
+}
+
+// A person's Ready (already heard): the room is shown to everybody when the mark changed, and the change is use of the room. The same said again changes nothing.
+void HostLobby::apply_ready(uint8_t seat, bool want_ready) {
+    if (guests_[seat].ready == want_ready) return;
+    guests_[seat].ready = want_ready;
+    ++ready_changes_;
+    broadcast_room();
+}
+
 // A new name of a person (already heard: an open room, within the budget): the room is shown to everybody when the name changed
 void HostLobby::rename(uint8_t seat, const std::string& raw) {
     const std::string name = human_name(raw, room_.slots[seat].name);       // (a name that looks like a bot's is not taken: the person keeps the name they have)
@@ -1237,6 +1294,12 @@ bool ClientLobby::request_remove(uint8_t seat) {
 bool ClientLobby::request_visibility(bool make_public) {
     if (conn_ == nullptr || phase_ != Phase::InRoom || !is_leader() || !room_.lobby() || room_.starting() || !conn_->is_open()) return false;        // (a START that waits hears nobody: the room counts such a message as ignored)
     return conn_->send(encode(VisibilityMsg{make_public}));
+}
+
+bool ClientLobby::request_ready(bool ready) {
+    if (conn_ == nullptr || phase_ != Phase::InRoom || is_leader() || !room_.lobby() || room_.starting() || !conn_->is_open()) return false;        // (the leader's START is their ready, and a START that waits hears nobody)
+    if (seat_ >= sim::MAX_PLAYERS || room_.slots[seat_].state != SlotState::Client || room_.seat_in_game(seat_)) return false;                 // (a game needs no Ready: the room counts such a message as ignored)
+    return conn_->send(encode(ReadyMsg{ready}));
 }
 
 bool ClientLobby::chat(const std::string& text) {

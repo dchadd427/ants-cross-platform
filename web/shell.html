@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Ants (1998) — beta.playants.org@@SITE_TITLE@@</title>
-    <link rel="icon" type="image/png" href="/favicon.png?v=f34bea03">
+    <link rel="icon" type="image/png" href="/favicon.png?v=9ea2152a">
     <link rel="manifest" href="/manifest.webmanifest">
     <meta name="theme-color" content="#2b5f43">
-    <link rel="apple-touch-icon" href="/app/apple-touch-icon.png?v=4fbefb68">
+    <link rel="apple-touch-icon" href="/app/apple-touch-icon.png?v=82bef672">
     <meta name="apple-mobile-web-app-title" content="Ants!">
-    <link rel="shortcut icon" href="/favicon.ico?v=e2d196f0">
+    <link rel="shortcut icon" href="/favicon.ico?v=67dc022d">
     <link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>
-    <link rel="stylesheet" href="site_nav.css"><link rel="stylesheet" href="game_bar.css"><link rel="stylesheet" href="replay_stats.css"><link rel="stylesheet" href="death_map.css"><link rel="stylesheet" href="front/rematch.css"><link rel="stylesheet" href="touch_keys.css">
+    <link rel="stylesheet" href="site_nav.css"><link rel="stylesheet" href="game_bar.css"><link rel="stylesheet" href="replay_stats.css"><link rel="stylesheet" href="death_map.css"><link rel="stylesheet" href="front/rematch.css"><link rel="stylesheet" href="touch_keys.css"><link rel="stylesheet" href="update_notice.css">
     <style>
         /* The look of the front page (web/lobby.html), which is the look of the 1998 game's own menus: the orange clay, the thin green frame, teal bevelled buttons with a red shadow, black
            inset boxes, the game's own font (Libre Franklin, SIL OFL) and the "ants!" logo, all from web/front/. The colors are the front page's, token for token (tests/scripts/test_web_game.py
@@ -1129,7 +1129,7 @@
 
     <div class="toast" id="toast" role="status" hidden></div>
 
-    <script src="site_nav.js"></script><script src="game_bar.js"></script><script src="rejoin_key.js"></script><script src="hub_here.js"></script><script src="shapes.js"></script><script src="shape_picker.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="alert_core.js"></script><script src="hud_fullscreen.js"></script><script src="wake_lock.js"></script><script src="touch_keys.js"></script><script src="front/lobby_net.js"></script><script src="front/player_name.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
+    <script src="site_nav.js"></script><script src="game_bar.js"></script><script src="update_notice.js" data-window="no"></script><script src="rejoin_key.js"></script><script src="hub_here.js"></script><script src="shapes.js"></script><script src="shape_picker.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="alert_core.js"></script><script src="hud_fullscreen.js"></script><script src="wake_lock.js"></script><script src="p2p.js"></script><script src="touch_keys.js"></script><script src="front/lobby_net.js"></script><script src="front/player_name.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
     <script>
         var ANTS_BUILD_VER = '@@BUILD_TIMESTAMP@@';
         if (!ANTS_BUILD_VER || ANTS_BUILD_VER.indexOf('@') !== -1) {
@@ -1420,6 +1420,8 @@
                         if (roomLeaderStart) out.args.push('--room-leader-start');
                     }
                     if (platform) out.args.push('--platform', platform);
+                    if (q.get('p2p') === 'off') out.args.push('--no-p2p');                 // (protocol 26: ?p2p=off opens no data channel to the other players)
+                    else if (window.AntsP2p && window.AntsP2p.directSetting()) out.args.push('--direct', 'on');       // the choice that the player made in the room (off: nothing is said, and every channel goes through the relay)
                     if (seat && /^[0-3]$/.test(seat)) out.args.push('--seat', seat);
                     if (fill) out.args.push('--fill-bots', fill);
                     if (teams) out.args.push('--teams', teams);
@@ -1522,6 +1524,16 @@
                 return kept.length ? '?' + kept.join('&') : '';
             }
 
+            // The name that an address carries is the game's only when the front page of this tab put it there on purpose: web/lobby.html keeps the name in this tab's storage just before it takes the tab here, and this
+            // page takes it out once. A link that somebody else wrote has no such entry, so its name is not the game's: the address comes back without it, and the page asks, like for any shared link.
+            function vouched(search, storage) {
+                var text = String(search), given = null, kept = null;
+                try { given = new URLSearchParams(text).get('name'); } catch (e) { return withoutName(text); }
+                if (given === null) return text;
+                try { kept = storage.getItem('ants.joinas'); storage.removeItem('ants.joinas'); } catch (e) { kept = null; }
+                return typeof kept === 'string' && kept === given ? text : withoutName(text);
+            }
+
             // The address with `seat` set to the seat that the room gave this window (replacing the one that was there, the others kept in their order): a reload then asks for this seat and takes its key.
             // Without it the game takes the newest key of the room, which is another window's when two windows of one browser play one room (they share the storage). Not a seat of a player: unchanged.
             function withSeat(search, seat) {
@@ -1578,7 +1590,7 @@
             }
 
             return { parseAspect: AntsShapes.parse, shapeNumber: AntsShapes.placeOf, shapeForScreen: AntsShapes.forScreen, slotVars: slotVars, resolveAspect: resolveAspect, cssFor: cssFor, fitBox: fitBox, snapOffset: snapOffset, edgePixel: edgePixel, clientFor: clientFor,
-                     marginPixel: marginPixel, overControl: overControl, overTouchKeys: overTouchKeys, lockStart: lockStart, moveLocked: moveLocked, lockSetting: lockSetting, releasesMouseLock: releasesMouseLock, makeFrameLimiter: makeFrameLimiter, joinArguments: joinArguments, localArguments: localArguments, startCardArguments: startCardArguments, asksForName: asksForName, codeText: codeText, withoutName: withoutName, withSeat: withSeat, cancelsBrowserKey: cancelsBrowserKey, badDownload: badDownload,
+                     marginPixel: marginPixel, overControl: overControl, overTouchKeys: overTouchKeys, lockStart: lockStart, moveLocked: moveLocked, lockSetting: lockSetting, releasesMouseLock: releasesMouseLock, makeFrameLimiter: makeFrameLimiter, joinArguments: joinArguments, localArguments: localArguments, startCardArguments: startCardArguments, asksForName: asksForName, codeText: codeText, withoutName: withoutName, vouched: vouched, withSeat: withSeat, cancelsBrowserKey: cancelsBrowserKey, badDownload: badDownload,
                      downloadWithRetries: downloadWithRetries };
         })();
 
@@ -1608,6 +1620,14 @@
         var ANTS_LIVE_MODE = ANTS_REPLAY_MODE && !ANTS_OWN_MODE && !/(^|[?&])replay=/.test(window.location.search);
         var ANTS_EMBED = ANTS_REPLAY_MODE && !ANTS_LIVE_MODE && !ANTS_OWN_MODE && /(^|[?&])embed=1(&|$)/.test(window.location.search);      // the frame of a match page (web/match.html): the picture and the bar only
         var ANTS_LIVE_ID = ANTS_LIVE_MODE ? window.AntsReplay.liveIdOf(window.location.search) : null;
+        (function () {                                                       // (the name in the address is the game's only when the front page of this tab vouched for it: ANTS_PAGE.vouched; the address is read below as it comes back)
+            var storage = { getItem: function () { return null; }, removeItem: function () { /* no storage: nothing is vouched for */ } };
+            try { storage = window.sessionStorage || storage; } catch (e) { /* the fake storage above */ }
+            var search = ANTS_PAGE.vouched(window.location.search, storage);
+            if (search !== window.location.search) {
+                try { window.history.replaceState(null, '', window.location.pathname + search + window.location.hash); } catch (e) { /* the address stays as it is */ }
+            }
+        })();
         (function () {
             if (ANTS_REPLAY_MODE) return;
             var joined = ANTS_PAGE.joinArguments(window.location.search, window.location.protocol === 'https:', window.location.host);
@@ -1656,15 +1676,21 @@
         if (window.AntsHubHere) AntsHubHere.begin({ win: window, args: ANTS_ARGS, replay: ANTS_REPLAY_MODE, test: !!ANTS_TEST });      // (web/hub_here.js: tells the chat hub that this visitor is in a match, for the players list; nothing for a recording, a live match or a test map)
         // NAME_BEGIN (tests/scripts/web_name_check.js runs this block; web/lobby.html and web/shell.html carry the same text)
         // THE PLAYER'S NAME is not typed on the web: a person who is logged in with Discord plays under the login's name, anybody else under a guest name (front/player_name.js). The game takes printable ASCII only, the blanks at
-        // both ends cut off, at most 32 characters, and nothing that starts with "Bot (" or ends with "(bot)" or "(bot, ...)" (blanks and case ignored: a computer player is always shown as one): the rules of the desktop game's
+        // both ends cut off, at most 32 characters, and nothing that reads as a computer player's label: "Bot (...)", "Pip (bot)", "Pip (bot, Hard)" (blanks, signs between the letters and case ignored: a computer player is always shown as one, and a person never): the rules of the desktop game's
         // start menu (check_player_name in src/ants_app/start_menu.cpp). nameCheck(text) is { ok: true, name } or { ok: false, why }. A name is only ever shown as text and put into a link with encodeURIComponent, never markup.
         var NAME_MAX = 32;
+        // A name that reads as a computer player's label (ai::is_reserved_bot_name; the name is printable ASCII here): the word bot first and a bracket after it ("Bot (Hard)"), or a bracket, the word bot and then a sign or a blank
+        // ("Pip (bot, Hard)", "Pip [bot]", "Pip (bot) x"); case, blanks and signs between the letters are looked through, and 0 reads as o; the letters are one after the other or each pair parted ("b o t", not "Bo T"), and a word that is parted is one only when no letter follows its blanks ("(b o t h)" is a name).
+        function readsAsBot(name) {
+            var s = name.toLowerCase().replace(/0/g, 'o');
+            return /^[^a-z0-9()\[\]{}<>]*(?:bot|b[^a-z0-9()\[\]{}<>]+o[^a-z0-9()\[\]{}<>]+t)[^a-z0-9()\[\]{}<>]*[(\[{<]/.test(s) || /[(\[{<][^a-z0-9()\[\]{}<>]*(?:bot(?=[^a-z0-9])|b[^a-z0-9()\[\]{}<>]+o[^a-z0-9()\[\]{}<>]+t(?=[^a-z0-9])(?! +[a-z0-9]))/.test(s);
+        }
         function nameCheck(text) {
             var raw = typeof text === 'string' ? text.replace(/[\t\r\n]/g, '') : '';
             if (/[^\x20-\x7e]/.test(raw)) return { ok: false, why: 'A name can hold printable ASCII characters only: letters, digits and signs without accents.' };
             var name = raw.replace(/^ +/, '').replace(/ +$/, '');
             if (name.length > NAME_MAX) return { ok: false, why: 'A name has at most ' + NAME_MAX + ' characters.' };
-            if (/^bot\(|\(bot(,[^()]+)?\)$/.test(name.replace(/ /g, '').toLowerCase())) return { ok: false, why: 'A name like "Bot (...)" or "Pip (bot)" is for computer players. Please choose another name.' };
+            if (readsAsBot(name)) return { ok: false, why: 'A name like "Bot (...)" or "Pip (bot)" is for computer players. Please choose another name.' };
             return { ok: true, name: name };
         }
         // THE WORDS under the name on the card: whose name it is; where a login changes it (the chat menu's switch, when the hub says that there is another name); why a login plays under the username (its shown name did not fit)
@@ -2000,6 +2026,21 @@
             arm();
             document.addEventListener('visibilitychange', function() { if (!document.hidden) check(); });
         })();
+
+        // ANTS_QUIET_BEGIN (tests/scripts/web_quiet_dialog_check.js runs this block on a page of fakes)
+        // A box of the browser's own (confirm, prompt) stops the page until it is answered, and with it the page's feed of SDL's Web Audio: the context goes on playing the last piece of sound over and
+        // over, loud. So the game's sound is paused while such a box is open and goes on when it closes (only when it was playing: a context that has not been let start yet is left as it is).
+        function antsQuietly(ask) {
+            var ctx = null, paused = false;
+            try { ctx = (typeof Module !== 'undefined' && Module.SDL2 && Module.SDL2.audioContext) || null; } catch (e) { ctx = null; }
+            if (ctx && ctx.state === 'running' && ctx.suspend) {
+                try { var stop = ctx.suspend(); paused = true; if (stop && stop.catch) stop.catch(function () {}); } catch (e) { /* not paused: the box is asked all the same */ }
+            }
+            try { return ask(); } finally {
+                if (paused) { try { var go = ctx.resume(); if (go && go.catch) go.catch(function () {}); } catch (e) { /* the next press resumes it (the block above) */ } }
+            }
+        }
+        // ANTS_QUIET_END
 
         // A hidden page (another tab in front, a minimised window): the browser stops requestAnimationFrame and slows the page's timers (to once a second; then Chrome to once a
         // minute: measured in headless Chrome 154, the throttle began after about 58 s hidden; Chrome documents it for a page hidden for five minutes), so a network match cannot
@@ -2559,11 +2600,31 @@
                 try { playing = typeof Module !== 'undefined' && !!Module._ants_match_running && Module._ants_match_running() === 1; } catch (err) { /* the game does not answer: it is not running a match */ }
                 return ANTS_ARGS.indexOf('--join-url') !== -1 || playing;
             },
-            ask: function () { return window.confirm('Leave the game and go back to the menu?'); },
+            ask: function () { return antsQuietly(function () { return window.confirm('Leave the game and go back to the menu?'); }); },
             running: function () { try { return typeof Module !== 'undefined' && !!Module._ants_match_running && Module._ants_match_running() === 1; } catch (err) { return false; } },
             leave: antsLeaveMatch,
             focus: function () { canvas.focus(); }
         });
+
+        // The update notice (web/update_notice.js, docs/SITE_NAV.md "The update notice"): NOTHING while the game loads, a match is joined or played, or a live match is watched; its strip comes once the results are up (or at a game's menu,
+        // or a recording), and goes when the next match starts. window.antsMatchOver (the rematch strip and the hub's tab already wrap it) says that the match of a room is over.
+        // ANTS_UPDATE_BEGIN (tests/scripts/web_update_notice_check.js runs this block on a page of fakes)
+        (function () {
+            var over = false, previous = window.antsMatchOver;
+            window.antsMatchOver = function () {
+                try { if (typeof previous === 'function') return previous.apply(this, arguments); } finally { over = true; }
+                return undefined;
+            };
+            if (window.AntsUpdate) window.AntsUpdate.page({
+                quiet: function () {
+                    var playing = false;
+                    try { playing = typeof Module !== 'undefined' && !!Module._ants_match_running && Module._ants_match_running() === 1; } catch (err) { /* the game does not answer: no match */ }
+                    return !isReadyToPlay || ANTS_LIVE_MODE || playing || (ANTS_ARGS.indexOf('--join-url') !== -1 && !over);
+                },
+                moved: function () { relayout(false); }      // (the strip changes the room that the picture has: measureChrome counts it)
+            });
+        })();
+        // ANTS_UPDATE_END
 
         // The fullscreen mouse: Locked (the default) or Free, a row of the settings menu (Video; web/game_menu.js calls antsLock). The browser remembers the choice under ANTS_LOCK_KEY (nothing else writes it; only
         // "off" turns the lock off, see ANTS_PAGE.lockSetting); the pointer lock above reads ANTS_POINTER_LOCK. A browser without a pointer lock (an iPhone) has no such row.
@@ -3355,9 +3416,9 @@
                 var url = replayUrl();
                 var done = function () { say('Link to this match copied.'); };
                 try {
-                    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(url).then(done, function () { window.prompt('Copy the link to this match:', url); }); return; }
+                    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(url).then(done, function () { antsQuietly(function () { return window.prompt('Copy the link to this match:', url); }); }); return; }
                 } catch (e) { /* the prompt below */ }
-                window.prompt('Copy the link to this match:', url);
+                antsQuietly(function () { return window.prompt('Copy the link to this match:', url); });
             };
             $('copy-btn').addEventListener('click', copy);
             $('b-fsx').addEventListener('click', function () { $('fullscreen-btn').click(); });

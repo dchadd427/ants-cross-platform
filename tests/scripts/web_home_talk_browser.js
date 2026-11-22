@@ -89,8 +89,7 @@ async function main() {
         page.on('pageerror', (e) => errors.push(String(e && e.message || e)));
         await page.goto(site.url + '/', { waitUntil: 'load' });
         await page.waitForSelector('#gchat', { timeout: 5000 }).catch(() => {});
-        if (phone) { await page.click('.htab.t-chat').catch(() => {}); await sleep(250); }
-        if (!phone && h < 500 && (await page.getAttribute('#gchat', 'data-open')) === 'false') { await page.click('#gchat .gc-head'); await sleep(250); }       // (a low window starts with the dock folded)
+        if (phone || w <= 700 || h <= 500) { await page.click('.htab.t-chat').catch(() => {}); await sleep(250); }       // (a low window is a phone's layout: the Chat view)
         await page.waitForFunction(() => { const f = document.querySelector('#gchat .gc-form'); return !!f && !f.hidden; }, null, { timeout: 8000 }).catch(() => {});
         await page.waitForSelector('.gt-emoji', { state: 'visible', timeout: 6000 }).catch(() => {});
         await sleep(150);
@@ -265,8 +264,7 @@ async function main() {
         await sleep(60);
         await page.reload({ waitUntil: 'load' });
         await page.waitForSelector('.gt-emoji', { state: 'visible', timeout: 6000 }).catch(() => {});
-        if (phone && w <= 700) { await page.click('.htab.t-chat').catch(() => {}); await sleep(250); }
-        if (!phone && h < 500 && (await page.getAttribute('#gchat', 'data-open')) === 'false') { await page.click('#gchat .gc-head'); await sleep(250); }
+        if (phone || w <= 700 || h <= 500) { await page.click('.htab.t-chat').catch(() => {}); await sleep(250); }
         await page.waitForSelector('.gt-emoji', { state: 'visible', timeout: 6000 }).catch(() => {});
         await page.click('.gt-emoji');
         await sleep(150);
@@ -312,7 +310,7 @@ async function main() {
         check(name + 'Enter on an emoji adds it (at the caret: after the "a")', (await field(page)).length === 3 && (await field(page)).startsWith('a'), JSON.stringify(await field(page)));
         await page.keyboard.press('Escape');
 
-        if (h < 500 && w > 700) check(name + 'a low window keeps the dock at its own height (no taller than 200 px) and the buttons beside the field', dockBox.h <= 200, JSON.stringify(dockBox));
+        if (h <= 500 && w > 700) check(name + 'a low window: the dock is the Chat view, above the strip', dockBox.bottom <= (await rect(page, '.htabs')).y + 1, JSON.stringify([dockBox, await rect(page, '.htabs')]));
         if (size === 'w900' || size === 'w1000') {
             await page.click('#gchat .gc-fold');
             await sleep(250);

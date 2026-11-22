@@ -33,6 +33,7 @@
 
 #include "ants_net/lan.hpp"
 #include "ants_net/lobby.hpp"
+#include "ants_net/p2p_transport.hpp"
 #include "ants_net/prediction.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_net/session.hpp"
@@ -52,10 +53,10 @@ std::string match_lost_text(ClientSession::LostReason reason);
 /// How a client reached its server, kept by join() and join_url() so that the way back can make the same link again: the TCP address and port of a native client, or the WebSocket URL of the
 /// browser build, and what the Hello said (the name, the seat that was asked for, the room's code, the token: carried, never interpreted, never written to a log).
 struct JoinTarget {
-    std::string address;               // native: the host to connect to, as the player gave it (empty in the browser)
-    std::string resolved;              // native: the numeric address that `address` stood for when the game was joined: the way back's links go there, the name is not looked up again
-    uint16_t port{0};
-    std::string url;                   // the browser build: the ws:// or wss:// URL (empty natively)
+    std::string address;               // native, TCP: the host to connect to, as the player gave it (empty for a URL and in the browser)
+    std::string resolved;              // native: the numeric address that `address` (or the URL's host) stood for when the game was joined: the way back's links go there, the name is not looked up again
+    uint16_t port{0};                  // native, TCP: the port
+    std::string url;                   // the WebSocket URL: wss:// natively (the written form of wss_url_text), ws:// or wss:// in the browser build; empty for a TCP link
     std::string name;
     uint8_t want_seat{255};
     std::string room;
@@ -156,10 +157,19 @@ public:
     /// `rejoin`). A room that is over, that does not hold the seat or that has dropped it refuses, with the reasons of the way back (status_text()).
     bool join(const std::string& address, uint16_t port, const std::string& name, uint8_t want_seat = 255, const std::string& room = std::string(), const std::string& token = std::string(),
               const SeatKey& key = SeatKey{});
-    /// The same through a WebSocket (ws:// or wss:// URL, the game server's door behind its proxy): the browser build's only way to join. False when the URL cannot
-    /// be used or there is no WebSocket (every native build: it joins with TCP). A server's room has no host migration and no links between guests.
+    /// The same through a WebSocket, the game server's door behind its proxy: the browser build's only way to join (ws:// or wss://), and the desktop game's encrypted one (wss:// only, the TLS client
+    /// of ants_net/wss.hpp: the certificate is checked for the URL's host, and the name is looked up once, here, or not at all when `resolved` gives the numeric address that the caller looked up). False when the URL
+    /// cannot be used (not wss:// natively), the name does not resolve, or no TLS link can be set up. A server's room has no host migration and no links between guests.
     bool join_url(const std::string& url, const std::string& name, uint8_t want_seat = 255, const std::string& room = std::string(), const std::string& token = std::string(),
-                  const SeatKey& key = SeatKey{});
+                  const SeatKey& key = SeatKey{}, const std::string& resolved = std::string());
+    /// Why the last join() or join_url() returned false, in words for a player (empty when it did not, or when it was only the address that could not be used)
+    const std::string& join_refusal() const noexcept { return join_refusal_; }
+    /// More certificate authorities that the encrypted link trusts besides the system's (PEM; a private server's CA, a test's): they add to the checks, nothing here skips one. Native builds; before join_url().
+    void set_extra_trusted_ca_pem(std::string pem) { extra_ca_pem_ = std::move(pem); }
+    /// Trust only `extra_trusted_ca_pem`, not the system's roots (the tests: no machine's store decides a result)
+    void set_system_roots_trusted_for_test(bool trusted) noexcept { system_roots_trusted_ = trusted; }
+    /// Why the uplink's connection failed, in words for a player, when the transport can tell (a certificate that is not trusted, a server that did not accept the upgrade); empty otherwise
+    std::string link_failure_text() const;
     /// Before join() / join_url() / host() (protocol 15): what this machine tells the room about itself and about the room it would make. `set_platform`: the platform byte of the Hello (net::kOs...,
     /// with kPlatformBrowser for a game in a page), or of the host's own seat when it hosts, which the room hands on to everybody as an icon beside the name; cosmetic, nothing is decided by it; the
     /// default is net::native_platform() (a web game: a system in a browser, unless its address says another). `set_create`: the CREATE BLOCK of the Hello: the map, the seats, the teams and the leader-starts flag of the room if the server has none of this code yet (a server that
@@ -305,8 +315,8 @@ public:
     /// The words of a refusal, as the status line shows them when a join fails (the original's text for a dropped machine, the remake's for the rest). `in_browser`: the game runs in a web page,
     /// where reloading the page is how a player gets the current version (a tab that was opened before the server was updated is the old game), so the refusal for another version says so; every
     /// other refusal is the same words everywhere (the desktop start menu has texts of its own, Application::menu_failure_text). `made_a_room`: the Hello carried a create block for a code that a block
-    /// can make a room of (public_room_code; the server makes the room of such a Hello when somebody comes): NoSuchRoom then says that the server cannot make a room now, which is a full cap of public rooms or a
-    /// server that makes none; for a Hello without a block, and for a block with the code of a room of the control interface (it has a capital), it says that there is no such room.
+    /// can make a room of (public_room_code; the server makes the room of such a Hello when somebody comes): NoSuchRoom then says that the server cannot make a room now, which is a full cap of public rooms or
+    /// the server's limit of rooms for one network address; for a Hello without a block, and for a block with the code of a room of the control interface (it has a capital), it says that there is no such room.
     static std::string reject_text(RejectReason reason, bool in_browser, bool made_a_room = false);
 
     // ---- the waiting room's chat (protocol 11) ------------------------------------------------------------------------------------------------------
@@ -372,6 +382,30 @@ public:
     /// (the ant that will say "Yessir!") so that the click feels immediate although the order reaches the simulation a few turns later. While the prediction is on (below), an order
     /// that it handles (group moves, special orders, attacks, Stop) is also applied to the predicted engine at once and the answer is that engine's own verdict.
     sim::CommandResult submit(const sim::Command& command) override;
+
+    // ---- hints and channels (protocol 26, p2p.hpp, docs/P2P_HINTS.md) ----------------------------------------------------------------------------------
+    /// The page's data channels (the browser build; null everywhere else): the game then tells the server that it can open channels (P2pConfig, once the match has begun in a server's room), gives the
+    /// transport the relay's credential and the signalling, sends every order that the prediction applied as a hint to the other players, and gives what their channels deliver to the prediction. `direct`:
+    /// this player allows direct connections. The transport must outlive the game; the game never owns it. Set before the match begins.
+    void set_p2p(P2pTransport* transport, bool direct) noexcept {
+        p2p_ = transport;
+        p2p_direct_ = direct;
+    }
+    /// On by default: a hint from the server (a computer player's order) or from a channel goes to the prediction. Off (--no-p2p, the measurements' "before"): hints are not looked at, and the
+    /// picture waits for the sealed turns as it did before protocol 26.
+    void set_hints_enabled(bool on) noexcept { hints_enabled_ = on; }
+    /// How this machine is connected to the player of `seat` (PeerLink::None without a transport or for this player's own seat)
+    PeerLink peer_link(uint8_t seat) const;
+    /// The round trip in milliseconds over the channel to the player of `seat` (P2pTransport::rtt_ms); -1 for no number: no transport, this player's own seat, a seat that is not one, or a channel that has no answer
+    int32_t peer_rtt_ms(uint8_t seat) const noexcept;
+    /// The hints that the game sent and took (the tests and the readout): `sent` for each order given, `from_server` for a computer player's, `from_peers` for what the channels delivered
+    struct HintCounts {
+        uint64_t sent{0};
+        uint64_t from_server{0};
+        uint64_t from_peers{0};
+        uint64_t refused{0};      // a hint of a channel whose message did not decode, or said another seat than the channel's
+    };
+    const HintCounts& hint_counts() const noexcept { return hint_counts_; }
 
     // ---- the prediction of one's own orders (prediction.hpp, docs/NETWORK_PORT.md "Prediction of one's own orders") --------------------------------------
     /// On by default: a match that plays makes the prediction (it begins with the next tick); off (--no-prediction, the tests), every order waits for its turn and no second engine is made. A local game has
@@ -472,6 +506,8 @@ private:
     void begin_match();
     void install_hooks();
     void make_prediction();
+    void on_p2p_message(const std::vector<uint8_t>& message);
+    void pump_p2p();
     void drop_prediction();
     void refresh_prediction();
     /// The lag of the player's orders, as a delay in ms, until the prediction has learned it from the orders: the measured delay of the last orders, else the round trip, half a seal and the
@@ -565,6 +601,9 @@ private:
     std::function<void()> on_wake_;
     std::function<std::unique_ptr<Connection>()> link_maker_;      // (the tests: make_link)
     std::function<std::string(const std::string&)> resolver_;      // (the tests: join's one lookup)
+    std::string join_refusal_;                                      // why the last join was refused, for the player (join_refusal)
+    std::string extra_ca_pem_;                                      // more trusted roots of the encrypted link (set_extra_trusted_ca_pem)
+    bool system_roots_trusted_{true};                               // the system's roots are trusted besides them (always, but in the tests)
     std::function<void()> on_tick_;
     std::function<void()> on_prediction_dropped_;
     std::function<void(const sim::Command&, const sim::CommandResult&)> on_command_;
@@ -577,6 +616,12 @@ private:
     std::unique_ptr<ClientLobby> client_lobby_;
     std::unique_ptr<HostSession> host_session_;
     std::unique_ptr<ClientSession> client_session_;
+    P2pTransport* p2p_{nullptr};
+    bool p2p_direct_{false};
+    bool p2p_config_sent_{false};
+    bool hints_enabled_{true};
+    uint32_t hint_seq_{0};
+    HintCounts hint_counts_;
     std::unique_ptr<Prediction> prediction_;     // (after the sessions: it holds their runner and goes first; made by refresh_prediction() when it is wanted, never otherwise)
     bool prediction_enabled_{true};
     bool app_suspends_prediction_{false};

@@ -28,6 +28,7 @@ CSS = os.path.join(FRONT, "lobby_chat.css")
 RULES = os.path.join(FRONT, "lobby_rules.js")
 NET = os.path.join(FRONT, "lobby_net.js")
 LOBBY = os.path.join(REPO, "web", "lobby.html")
+ROOM_CSS = os.path.join(REPO, "web", "home", "room.css")
 NODE = shutil.which("node")
 
 
@@ -80,13 +81,15 @@ class ThePage(unittest.TestCase):
     def setUpClass(cls):
         cls.page = read(LOBBY)
 
-    def test_the_section_is_in_the_grid_between_the_room_and_the_map_with_its_name(self):
-        grid = self.page.index('<div class="grid" id="lobby">')
-        room = self.page.index('aria-labelledby="room-h"', grid)
-        chat = self.page.index('<section class="panel chat" id="chat" hidden></section>', room)
-        side = self.page.index('<aside class="side"', chat)
-        self.assertTrue(grid < room < chat < side)
-        self.assertLess(chat - room, 4000, "directly after the room's panel")
+    def test_the_section_is_the_last_thing_of_the_rooms_panel_and_home_moves_it_into_the_chat_box(self):
+        """in the markup the section stays in the room's panel, hidden, after the notice under START (where a page whose Home parts did not come shows it); Home's chat box takes it into its Room tab (web/home/roomchat.js)"""
+        room = self.page.index('<section class="panel" id="lobby" aria-labelledby="room-h">')
+        side = self.page.index('<aside class="side"', room)
+        chat = self.page.index('<section class="chat" id="chat" hidden></section>', side)
+        foot = self.page.index('<footer class="bar"')
+        self.assertTrue(room < side < self.page.index('id="room-notice"', side) < chat < foot)
+        self.assertEqual(self.page.count('id="chat"'), 1)
+        self.assertIn("body.appendChild(chat);", read(os.path.join(REPO, "web", "home", "roomchat.js")))      # (a move, not a copy)
 
     def test_the_stylesheets_come_after_the_pages_own_style(self):
         """so that their rules win a tie by order, as the rules that moved out of the page did"""
@@ -105,7 +108,7 @@ class ThePage(unittest.TestCase):
         self.assertRegex(self.page, r"if \(!Rules \|\| !Net \|\| !Chat \|\| !Rematch \|\| !Modes \|\| !GameType \|\| !PlayerName \|\| !window\.AntsHome\) \{")                           # (the rematch's strip too: front/rematch.js)
 
     def test_the_page_mounts_the_box_with_its_colors_its_client_and_its_toast_and_gives_it_every_client(self):
-        self.assertRegex(self.page, r"var chat = Chat\.mount\(\{ doc: document, host: \$\('chat'\), colors: COLORS, say: function \(text\) \{ return !!client && client\.say\(text\); \}, toast: say \}\);")
+        self.assertRegex(self.page, r"var chat = Chat\.mount\(\{ doc: document, host: \$\('chat'\), colors: COLORS, say: function \(text\) \{ return !!client && client\.say\(text\); \}, toast: function \(text\) \{ if \(!\(Home && Home\.roomChatNews\(text\)\)\) say\(text\); \}, onScreen: function \(\) \{ return Home \? Home\.roomChatSeen\(\) : null; \} \}\);")
         hook = self.page[self.page.index("function hook(c) {"):self.page.index("function makeClient(p)")]
         self.assertIn("chat.attach(c);", hook, "a client of the room, a link that the host's code gave or a probe that was taken, is the box's")
         self.assertEqual(self.page.count("chat.attach("), 1)
@@ -139,13 +142,13 @@ class ThePage(unittest.TestCase):
         words = "Online matches are recorded. Recordings are kept for up to 90 days. Results and names are kept for good and are public."
         notice = '<p class="room-notice" id="room-notice">' + words + "</p>"
         self.assertEqual(self.page.count(notice), 1)
-        side = self.page[self.page.index('<aside class="side"'):self.page.index("</aside>")]
-        self.assertIn(notice, side, "in the match column")
+        panel = self.page[self.page.index('<section class="panel" id="lobby"'):self.page.index('<footer class="bar"')]
+        self.assertIn(notice, panel, "in the room's panel")
         self.assertGreater(self.page.index(notice), self.page.index('id="start"'), "after START")
         self.assertNotIn(words, self.page[self.page.index('<footer class="bar"'):self.page.index("</footer>")], "not in the footer that is not drawn")
-        rule = re.search(r"\.room-notice \{([^}]*)\}", self.page).group(1)
+        rule = re.search(r"\.room-notice \{([^}]*)\}", read(ROOM_CSS)).group(1)
         self.assertNotRegex(rule, r"display:\s*none")
-        self.assertRegex(rule, r"margin:\s*0 0 1[0-9]px", "room at the foot of the page, where the footer's was")
+        self.assertRegex(rule, r"font-size:\s*1[2-9]px", "a line that can be read")
 
     def test_the_room_chat_loads_the_front_pages_composer_and_does_not_copy_it(self):
         js = read(CHAT)
@@ -177,7 +180,7 @@ class TheStylesheet(unittest.TestCase):
         self.assertNotRegex(self.css, r"https?://|@import|url\(\s*[\"']?(?:https?:)?//")
 
     def test_the_four_colors_have_the_accents_of_the_cards(self):
-        page = read(LOBBY)
+        page = read(LOBBY) + read(ROOM_CSS)
         cards = dict(re.findall(r'\.slot\[data-c="(\w+)"\] \{ --accent: (#[0-9a-f]{6}); \}', page))
         self.assertEqual(sorted(cards), ["black", "blue", "red"])
         default = re.search(r"\.slot \{ --accent: (#[0-9a-f]{6});", page).group(1)
@@ -196,7 +199,7 @@ class TheStylesheet(unittest.TestCase):
         self.assertRegex(self.css, r"\.chat-form \.gc-send \{[^}]*min-height:\s*(4[4-9]|[5-9]\d)px")
 
     def test_the_places_at_each_width(self):
-        self.assertRegex(self.css, r"@media \(min-width: 1041px\) \{[^@]*\.grid > \.chat \{ grid-column: 1 / -1; grid-row: 2; \}")          # (a wide window: across the page, under the room and the map)
+        self.assertNotIn(".grid", self.css)                                                                                             # (a wide window: the box has no cell of the page's grid, it is a tab of the chat box of Home: web/home/roomchat.css)
         self.assertRegex(self.css, r"@media \(max-width: 720px\)")                                                                      # (a phone: shorter box)
         self.assertRegex(self.css, r"\.chat-log \.sys \{[^}]*font-size:\s*14px")                                                      # (the system's lines are the smaller size, as a notice in the game's box is)
 
@@ -270,7 +273,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/lobby_chat_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make a check
     fail (a command that exits non-zero), and the copy with nothing changed must pass, so that a failure is the change's"""
 
-    FILES = ("web/home/home.css", "web/home/home.js", "web/home/talk.js", "web/front/lobby_chat.js", "web/front/lobby_chat.css", "web/front/lobby_rules.js", "web/front/player_name.js", "web/front/lobby_net.js", "web/front/map_picker.css", "web/front/game_modes.js", "web/front/game_type.js", "web/front/game_type.css", "web/lobby.html", "web/rejoin_key.js", "tests/scripts/web_lobby_chat_check.js",
+    FILES = ("web/home/home.css", "web/home/home.js", "web/home/talk.js", "web/front/lobby_chat.js", "web/front/lobby_chat.css", "web/front/lobby_rules.js", "web/front/player_name.js", "web/front/lobby_net.js", "web/front/map_picker.css", "web/front/game_modes.js", "web/front/game_type.js", "web/front/game_type.css", "web/lobby.html", "web/home/room.css", "web/home/roomchat.js", "web/rejoin_key.js", "tests/scripts/web_lobby_chat_check.js",
              "tests/scripts/web_lobby_client_check.js", "tests/scripts/web_lobby_net_check.js", "tests/scripts/test_web_lobby_chat.py", "tests/data/lobby_messages.txt",
              "include/ants_net/flood.hpp")      # (the client check reads the server's limits from the header)
 
