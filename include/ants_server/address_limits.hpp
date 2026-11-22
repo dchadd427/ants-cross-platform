@@ -4,7 +4,7 @@
 //
 // Many people share one address: a phone carrier puts thousands of them behind one, a household or a LAN party plays from one. So nothing here counts people. The limits stop what only a program does
 // (rooms made in a burst, rooms held open without a game, codes tried one after another, relay credentials collected) and are set well above what a household does; a refusal is polite and soon over
-// (a sliding window of seconds or minutes, never a ban), and a Hello for a room that exists is never limited: a player who knows the code always gets in.
+// (a sliding window of seconds or minutes, never a ban), and a Hello for a room that exists is never refused: a player who knows the code gets in (when the address has been trying codes, after a short wait).
 //
 // An address is counted as address_identity says: an IPv4 address as it is, an IPv6 address as its /64. The address of a browser is the one that the site's proxy writes in X-Client-Address, and only
 // a connection from a trusted proxy (TrustedProxies) is believed; the address of any other connection is its own. A connection whose address is unknown (a trusted proxy that sent none) is not limited:
@@ -112,9 +112,9 @@ private:
 };
 
 /// The address that a WebSocket connection counts under: the proxy's header when the connection comes from a trusted proxy and the header holds one address (what nginx sets: the visitor's own header of that
-/// name never reaches the server through it); "" when the connection comes from one and the header is missing or is no address (the proxy cannot say whose it is: no limit, not one for everybody); the
-/// connection's own address in every other case (a header from anyone else is no news). `peer` is the connection's address without its port, `header` the value of the one X-Client-Address header ("" when
-/// there was none or more than one).
+/// name never reaches the server through it); the connection's own address in every other case: a connection from anyone else (a header from anyone else is no news), and a connection from a trusted proxy
+/// whose header is missing or is no address (nginx never sends one like that, so it is a connection that did not come through the site's proxy: all of them count under the proxy's own address, one count).
+/// `peer` is the connection's address without its port, `header` the value of the one X-Client-Address header ("" when there was none or more than one).
 std::string door_address(const std::string& peer, const std::string& header, const TrustedProxies& proxies);
 
 /// A sliding window of events: how many happened in the last `span_ms` (the clock is 32 bits and wraps: only differences are used)
@@ -149,6 +149,9 @@ public:
 
     /// A Hello for a room that does not exist, from this address: how long the answer waits (0: it is sent at once). Every one is noted.
     uint32_t wrong_code(const std::string& id, uint32_t now_ms);
+    /// How long a try at a code that EXISTS waits from this address now: what the next wrong code would wait (0 while the address is within its allowance). Nothing is noted: only wrong codes count,
+    /// so a person who joins many rooms is never slowed by that, and an address that is trying codes waits at the right ones as at the wrong ones.
+    uint32_t hold_now(const std::string& id, uint32_t now_ms);
     /// What became of an answer that was to wait: it waits (counted as slowed), or the door's places for waiting answers were used up and the Hello is dropped without one (counted as dropped)
     void note_wrong_code_slowed() noexcept { ++refusals_.wrong_codes_slowed; }
     void note_wrong_code_dropped() noexcept { ++refusals_.wrong_codes_dropped; }

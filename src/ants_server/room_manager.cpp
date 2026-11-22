@@ -538,7 +538,7 @@ void RoomManager::release_parked(const std::string& code, uint32_t now_ms) {
     for (Parked& p : mine) route_hello(std::move(p.connection), p.address, p.message, p.hello, now_ms);
 }
 
-void RoomManager::route_hello(std::unique_ptr<net::Connection> connection, const std::string& address, const std::vector<uint8_t>& message, const net::HelloMsg& hello, uint32_t now_ms) {
+void RoomManager::route_hello(std::unique_ptr<net::Connection> connection, const std::string& address, const std::vector<uint8_t>& message, const net::HelloMsg& hello, uint32_t now_ms, bool held) {
     net::RejectReason reason = net::RejectReason::BadRequest;
     bool good = true;
     Room* room = nullptr;
@@ -580,8 +580,12 @@ void RoomManager::route_hello(std::unique_ptr<net::Connection> connection, const
             if (made_here) guard_.note_room_made(id, now_ms);
         }
     }
+    // A Hello for a room that exists (not the one that made it, not a seat holder coming back to a match that runs, which needs its key) from an address that is over its allowance of wrong codes waits as a wrong
+    // code would: a program that tries codes gets no faster answer at the right one than at the wrong ones
+    if (!held && !made_here && it != rooms_.end() && it->second->state() != RoomState::Finished && it->second->state() != RoomState::Failed && !(keyed && !it->second->accepting()) &&
+        hold_hello(connection, address, id, message, hello, now_ms)) return;
     if (it == rooms_.end()) {
-        if (!makes && !hello.room.empty()) return answer_no_such_room(std::move(connection), id, net::RejectReason::NoSuchRoom, now_ms);       // a code that no room has: tried, or mistyped
+        if (!makes && !held && !hello.room.empty()) return answer_no_such_room(std::move(connection), id, net::RejectReason::NoSuchRoom, now_ms);       // a code that no room has: tried, or mistyped
         good = false;
         reason = net::RejectReason::NoSuchRoom;
     } else if (it->second->state() == RoomState::Finished || it->second->state() == RoomState::Failed) {

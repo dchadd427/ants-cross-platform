@@ -71,8 +71,8 @@
   {
    "id": "wrong_allowance_off_by_one",
    "file": "src/ants_server/address_limits.cpp",
-   "old": "if (before < limits_.wrong_codes_per_minute) return 0;",
-   "new": "if (before <= limits_.wrong_codes_per_minute) return 0;",
+   "old": "if (before < allowance) return 0;",
+   "new": "if (before <= allowance) return 0;",
    "build": "test_address_limits",
    "test": "env ANTS_TEST_FILTER=S3.350 ./build/tests/test_server/test_address_limits",
    "expect": "S3.350"
@@ -204,10 +204,10 @@
    "expect": "S3.352"
   },
   {
-   "id": "trusted_proxy_without_address_counts_as_proxy",
+   "id": "trusted_proxy_without_address_is_not_limited",
    "file": "src/ants_server/address_limits.cpp",
-   "old": "return address_identity(header).empty() ? std::string() : header;",
-   "new": "return address_identity(header).empty() ? peer : header;",
+   "old": "return address_identity(header).empty() ? peer : header;",
+   "new": "return address_identity(header).empty() ? std::string() : header;",
    "build": "test_address_limits",
    "test": "env ANTS_TEST_FILTER=S3.352 ./build/tests/test_server/test_address_limits",
    "expect": "S3.352"
@@ -481,6 +481,51 @@
    "build": "test_address_limits ants_server",
    "test": "env ANTS_TEST_FILTER=S3.362 ./build/tests/test_server/test_address_limits",
    "expect": "S3.362"
+  },
+  {
+   "id": "real_codes_never_held",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "if (!held && !made_here && it != rooms_.end()",
+   "new": "if (false && !held && !made_here && it != rooms_.end()",
+   "build": "test_address_limits",
+   "test": "env ANTS_TEST_FILTER=S3.363 ./build/tests/test_server/test_address_limits",
+   "expect": "S3.363"
+  },
+  {
+   "id": "held_hello_is_held_again",
+   "file": "src/ants_server/room_manager_limits.cpp",
+   "old": "route_hello(std::move(due.connection), due.address, due.message, due.hello, now_ms, true);",
+   "new": "route_hello(std::move(due.connection), due.address, due.message, due.hello, now_ms, false);",
+   "build": "test_address_limits",
+   "test": "env ANTS_TEST_FILTER=S3.363 ./build/tests/test_server/test_address_limits",
+   "expect": "S3.363"
+  },
+  {
+   "id": "real_code_try_counted_as_wrong",
+   "file": "src/ants_server/room_manager_limits.cpp",
+   "old": "const uint32_t hold = guard_.hold_now(id, now_ms);",
+   "new": "const uint32_t hold = guard_.wrong_code(id, now_ms);",
+   "build": "test_address_limits",
+   "test": "env ANTS_TEST_FILTER=S3.363 ./build/tests/test_server/test_address_limits",
+   "expect": "S3.363"
+  },
+  {
+   "id": "real_codes_held_within_the_allowance",
+   "file": "src/ants_server/address_limits.cpp",
+   "old": "hold_after(found->second.wrong.count(now_ms, kMinuteMs), limits_.wrong_codes_per_minute)",
+   "new": "hold_after(found->second.wrong.count(now_ms, kMinuteMs), 0)",
+   "build": "test_address_limits",
+   "test": "env ANTS_TEST_FILTER=S3.350 ./build/tests/test_server/test_address_limits",
+   "expect": "S3.350"
+  },
+  {
+   "id": "held_hello_of_a_running_match_seat_is_held",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "&& !(keyed && !it->second->accepting()) &&",
+   "new": "&&",
+   "build": "test_address_limits",
+   "test": "env ANTS_TEST_FILTER=S3.363 ./build/tests/test_server/test_address_limits",
+   "expect": "S3.363"
   }
  ]
 }

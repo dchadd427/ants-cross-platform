@@ -239,12 +239,18 @@ void run_address_limit_tests() {
         ASSERT_EQ(g.refusals().rooms_rate, uint64_t{3});
         ASSERT_EQ(g.refusals().rooms_open, uint64_t{1});
         // wrong codes: two answered at once, then each one waits half a second longer, up to five seconds; a minute later all is forgotten; another address has its own
+        ASSERT_EQ(g.hold_now(a, 100000), 0u);                                        // (a try at a code that exists waits as the next wrong code would, and notes nothing)
         ASSERT_EQ(g.wrong_code(a, 100000), 0u);
         ASSERT_EQ(g.wrong_code(a, 100000), 0u);
+        const size_t tracked_before = g.tracked();
+        ASSERT_TRUE(g.hold_now(a, 100000) == 500u && g.hold_now(a, 100000) == 500u);
+        ASSERT_TRUE(g.hold_now(b, 100000) == 0u && g.hold_now("203.0.113.99", 100000) == 0u && g.hold_now("", 100000) == 0u);
+        ASSERT_EQ(g.tracked(), tracked_before);                                      // (an address that was never seen is not tracked for it)
         for (uint32_t k = 1; k <= 10; ++k) ASSERT_EQ(g.wrong_code(a, 100000), 500u * k);
         for (int k = 0; k < 40; ++k) ASSERT_EQ(g.wrong_code(a, 100000), kWrongCodeMaxHoldMs);     // (the count is kept a little past the allowance and no more: the wait stays at its longest)
         ASSERT_EQ(g.wrong_code(b, 100000), 0u);
         ASSERT_EQ(g.wrong_code(a, 160000), 0u);
+        ASSERT_EQ(g.hold_now(a, 160000), 0u);                                        // (after it: asking forgets what is a minute old, and the first must see it for itself)
         // relay credentials in an hour
         ASSERT_TRUE(g.take_relay(a, 200000) && g.take_relay(a, 201000));
         ASSERT_FALSE(g.take_relay(a, 3000000));
@@ -329,7 +335,7 @@ void run_address_limit_tests() {
         ASSERT_EQ(door_address("10.0.0.5", "2001:db8::7", standard), std::string("2001:db8::7"));
         ASSERT_EQ(door_address("203.0.113.9", "198.51.100.1", standard), std::string("203.0.113.9"));              // (a connection from anywhere else counts as itself, whatever it sends)
         ASSERT_EQ(door_address("203.0.113.9", "", standard), std::string("203.0.113.9"));
-        for (const char* odd : {"", "garbage", "1.2.3.4, 5.6.7.8", "1.2.3.4:80"}) ASSERT_EQ(door_address("10.0.0.5", odd, standard), std::string());       // (a trusted proxy that cannot say whose: nobody's)
+        for (const char* odd : {"", "garbage", "1.2.3.4, 5.6.7.8", "1.2.3.4:80"}) ASSERT_EQ(door_address("10.0.0.5", odd, standard), std::string("10.0.0.5"));       // (a trusted proxy that cannot say whose: its own address, one count)
         ASSERT_EQ(door_address("10.0.0.5", "203.0.113.7", none), std::string("10.0.0.5"));                         // (no trusted proxy: nothing is believed)
         ASSERT_EQ(door_address("127.0.0.1", "203.0.113.7", own), std::string("127.0.0.1"));
     } TEST_END();
@@ -468,7 +474,7 @@ void run_address_limit_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.356 Trying Codes One After Another Is Slowed And A Right Code Is Never: Up To The Minute's Allowance A Wrong Code Is Answered At Once, Then Each Answer Waits Longer, At Most Eight Wait For One Address And The Rest Are Dropped; Meanwhile The Address Joins A Room That Exists At Once")  {
+    TEST_CASE("S3.356 Trying Codes One After Another Is Slowed: Up To The Minute's Allowance A Wrong Code Is Answered At Once, Then Each Answer Waits Longer, At Most Eight Wait For One Address And The Rest Are Dropped; A Right Code Is Never Refused Or Counted But Waits As A Wrong One Does Above The Allowance")  {
         ServerLimits l = server_limits();
         l.address.wrong_codes_per_minute = 5;
         l.address.connections_per_second = 0;                                                                   // (the connections' own limit is S3.357's)
@@ -487,16 +493,18 @@ void run_address_limit_tests() {
         w.run(700);
         ASSERT_EQ(answered(sixth), net::RejectReason::NoSuchRoom);                                             // (... and is told the same)
         ASSERT_EQ(w.mgr.address_refusals().wrong_codes_slowed, uint64_t{1});
-        // a burst of guesses in one pass: the answers that wait are bounded, the rest are dropped without one
-        std::vector<Client*> burst;
-        for (int k = 0; k < 20; ++k) burst.push_back(&w.connect("Burst" + std::to_string(k), code_of("zzzz", k)));
-        // a Hello for a room that exists, from the same address and in the same pass, is answered at once
+        // a try at a code that exists, from the address that is over its allowance, waits as the next wrong code would (a second here), is not counted, and is then answered as it would have been
         Client& right = w.connect("Right", "good0001");
         w.run(200);
-        ASSERT_TRUE(in_room(right));
-        ASSERT_TRUE(w.status("good0001").joined == 2);
+        ASSERT_TRUE(!in_room(right) && w.status("good0001").joined == 1);
+        w.run(1000);
+        ASSERT_TRUE(in_room(right) && w.status("good0001").joined == 2);
+        // a burst of guesses in one pass: the answers that wait are bounded
+        std::vector<Client*> burst;
+        for (int k = 0; k < 20; ++k) burst.push_back(&w.connect("Burst" + std::to_string(k), code_of("zzzz", k)));
+        w.run(200);
         const AddressRefusals r = w.mgr.address_refusals();
-        ASSERT_EQ(r.wrong_codes_slowed, uint64_t{1 + kWrongCodeHeldPerAddress});
+        ASSERT_EQ(r.wrong_codes_slowed, uint64_t{2 + kWrongCodeHeldPerAddress});                                  // (the sixth wrong code, the right one, and the eight of the burst)
         ASSERT_EQ(r.wrong_codes_dropped, uint64_t{20 - kWrongCodeHeldPerAddress});
         w.run(6000);
         size_t told = 0;
@@ -672,11 +680,91 @@ void run_address_limit_tests() {
         ASSERT_TRUE(text.find(kHousehold) == std::string::npos && text.find(kCarrier) == std::string::npos);
     } TEST_END();
 
-    TEST_CASE("S3.361 A Connection From A Proxy That Names Nobody Is Not Limited, And With The Limits Off The Server Is What It Was: Any Number Of Rooms, Codes And Connections From One Address") {
+    TEST_CASE("S3.363 An Address That Is Over Its Wrong Codes Waits At The Right Codes Too: Within The Allowance A Right Code Is Answered At Once; Above It The Hello For A Room That Exists Waits As A Wrong Code Would (And Is Then Answered As It Would Have Been, A Room That Has Begun Told So), Is Not Counted, Shares The List Of Waiting Answers And Is Dropped When It Is Full; Other Addresses And The Next Minute Are Not Held") {
+        ServerLimits l = server_limits();
+        l.address.wrong_codes_per_minute = 3;
+        l.address.connections_per_second = 0;
+        World w(l);
+        w.next_address = kCarrier;
+        Client& host = w.connect_creating("Host", "real0001", block_of("TINY.LVL", 4));
+        ASSERT_TRUE(in_room(host));
+        w.next_address = kHousehold;
+        Client& first = w.connect("First", "real0001");
+        w.run(200);
+        ASSERT_TRUE(in_room(first));                                                                           // (within the allowance: at once)
+        for (int k = 0; k < 3; ++k) {
+            Client& guess = w.connect("Guess" + std::to_string(k), code_of("nope", k));
+            w.run(200);
+            ASSERT_EQ(answered(guess), net::RejectReason::NoSuchRoom);
+        }
+        Client& second = w.connect("Second", "real0001");
+        w.run(200);
+        ASSERT_TRUE(!in_room(second) && answered(second) == static_cast<net::RejectReason>(0));                  // (over the allowance: it waits, as the next wrong code would, half a second)
+        ASSERT_TRUE(w.status("real0001").joined == 2);                                                         // (and the room has not seen it yet)
+        w.run(700);
+        ASSERT_TRUE(in_room(second) && w.status("real0001").joined == 3);                                      // (then it is answered as it would have been)
+        w.next_address = kCarrier;
+        Client& other = w.connect("Other", "real0001");
+        w.run(200);
+        ASSERT_TRUE(in_room(other));                                                                           // (another address is not held)
+        w.next_address = kHousehold;
+        Client& late = w.connect("Late", "real0001");                                                          // (the room is full and has begun: the answer is the room's own, after the same wait)
+        w.run(200);
+        ASSERT_EQ(answered(late), static_cast<net::RejectReason>(0));
+        w.run(700);
+        ASSERT_EQ(answered(late), net::RejectReason::MatchRunning);
+        ASSERT_EQ(w.mgr.address_refusals().wrong_codes_slowed, uint64_t{2});                                   // (a try at a right code is not counted as a wrong one: the second wait was as long as the first)
+        w.run(61000);                                                                                          // a minute later the allowance is whole
+        Client& after = w.connect("After", "real0001");
+        w.run(200);
+        ASSERT_EQ(answered(after), net::RejectReason::MatchRunning);
+        // a burst of tries at a right code, in one pass, from an address that is over its allowance: eight wait, the rest are dropped without an answer, and a hit is no faster than a miss
+        World b(l);
+        b.next_address = kCarrier;
+        ASSERT_TRUE(in_room(b.connect_creating("Host", "real0002", block_of("TINY.LVL", 4))));
+        b.next_address = kHousehold;
+        for (int k = 0; k < 3; ++k) b.connect("Guess" + std::to_string(k), code_of("nope", k));
+        b.run(200);
+        std::vector<Client*> burst;
+        for (int k = 0; k < 12; ++k) burst.push_back(&b.connect("Try" + std::to_string(k), "real0002"));
+        b.run(300);
+        for (Client* c : burst) ASSERT_TRUE(!in_room(*c) && answered(*c) == static_cast<net::RejectReason>(0));       // (nobody is answered before the wait is over)
+        ASSERT_EQ(b.mgr.address_refusals().wrong_codes_slowed, uint64_t{kWrongCodeHeldPerAddress});
+        ASSERT_EQ(b.mgr.address_refusals().wrong_codes_dropped, uint64_t{12 - kWrongCodeHeldPerAddress});
+        b.run(2000);
+        size_t seated = 0;
+        size_t told = 0;
+        size_t silent = 0;
+        for (Client* c : burst) {
+            seated += in_room(*c) ? 1u : 0u;
+            told += answered(*c) == net::RejectReason::Full ? 1u : 0u;
+            silent += !in_room(*c) && answered(*c) == static_cast<net::RejectReason>(0) ? 1u : 0u;
+        }
+        ASSERT_EQ(seated, size_t{3});                                                                          // (the three seats that were free; the room begins when they are taken)
+        ASSERT_EQ(told, kWrongCodeHeldPerAddress - 3);                                                         // (the rest of the eight, answered in the same pass, are told that the room is full)
+        ASSERT_EQ(silent, 12 - kWrongCodeHeldPerAddress);                                                      // (the dropped ones got no answer, right code or not)
+        // a seat holder who comes back to a match that runs, from an address that is over its allowance, is not held: it needs its key, and a guess has none
+        World k(l);
+        RoomSpec spec = spec_of("real0003", 2);
+        spec.reconnect = true;
+        ASSERT_TRUE(k.mgr.create_room(spec, k.now).ok);
+        k.next_address = kHousehold;
+        Client& ann = k.connect("Ann", "real0003");
+        Client& bob = k.connect("Bob", "real0003");
+        for (Client* c : {&ann, &bob}) c->next_order_ms = 0xFFFFFFFFu;
+        for (int i = 0; i < 600 && k.status("real0003").state != RoomState::Running; ++i) k.run(10);
+        ASSERT_TRUE(k.status("real0003").state == RoomState::Running);
+        for (int g = 0; g < 3; ++g) k.connect("Guess" + std::to_string(g), code_of("nope", g));
+        k.run(200);
+        Client& back = k.connect_game("Ann", "real0003", ann.lobby->key());
+        ASSERT_TRUE(back.lobby->rejoined());                                                                   // (answered at once, as it was)
+    } TEST_END();
+
+    TEST_CASE("S3.361 An Address That The Door Could Not Tell Is Not Limited, And With The Limits Off The Server Is What It Was: Any Number Of Rooms, Codes And Connections From One Address") {
         {
             World w(server_limits());
             for (int k = 0; k < 14; ++k) {
-                w.next_address = "";                                                              // (what the door gives for a trusted proxy's connection that has no address in it)
+                w.next_address = "";                                                              // (what the door gives when the connection's own address is no address at all)
                 ASSERT_TRUE(in_room(w.connect_page("NoAddr" + std::to_string(k), code_of("anon", k), lobby_block_of())));
             }
             ASSERT_EQ(w.mgr.address_refusals().total(), uint64_t{0});
@@ -742,14 +830,15 @@ void run_address_limit_tests() {
             ASSERT_EQ(c.ask_for_a_lobby("proc0031"), welcome);
             ASSERT_EQ(d.ask_for_a_lobby("proc0032"), welcome);
         }
-        {   // a connection from a trusted proxy that writes no address is nobody's: no limit
+        {   // a connection from a trusted proxy that writes no address counts under the proxy's own address: all of them are one address
             ProgramProcess program;
             const uint16_t port = free_port();
             ASSERT_TRUE(port != 0 && start_program(program, port, {}));
-            WsPage a, b;
-            ASSERT_TRUE(a.open(port, "") && b.open(port, ""));
+            WsPage a, b, c;
+            ASSERT_TRUE(a.open(port, "") && b.open(port, "") && c.open(port, "203.0.113.5"));
             ASSERT_EQ(a.ask_for_a_lobby("proc0041"), welcome);
-            ASSERT_EQ(b.ask_for_a_lobby("proc0042"), welcome);
+            ASSERT_EQ(b.ask_for_a_lobby("proc0042"), no_place);
+            ASSERT_EQ(c.ask_for_a_lobby("proc0043"), welcome);                            // (a visitor whose address the proxy wrote is its own count)
         }
         {   // 0 and --no-address-limits switch them off: the same visitor makes two rooms (the program has one room open for an address in the cases above; the last option wins)
             for (const std::vector<std::string>& extra : std::vector<std::vector<std::string>>{{"--address-rooms-open", "0"}, {"--no-address-limits"}}) {

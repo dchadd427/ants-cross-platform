@@ -18,22 +18,46 @@ size_t RoomManager::open_rooms_of(const std::string& id) const {
     return n;
 }
 
-// A Hello for a room that does not exist. A person who mistypes a code is answered at once; so is everybody until the address has said more wrong codes in the minute than the allowance. Beyond it each answer waits
-// longer, and the answer at the end of the wait is the same NoSuchRoom. A program that tries codes one after another is held to the few answers that wait; the Hellos that find no place to wait are dropped
-// without one, as a link that never completed is. A Hello for a room that exists is never in here: it is answered as it always was.
-void RoomManager::answer_no_such_room(std::unique_ptr<net::Connection> connection, const std::string& id, net::RejectReason reason, uint32_t now_ms) {
-    const uint32_t hold = guard_.wrong_code(id, now_ms);
-    if (hold == 0) return reject(std::move(connection), reason, now_ms);
+void RoomManager::queue_delayed(Delayed delayed) {
     size_t held_by_id = 0;
-    for (const Delayed& d : delayed_) held_by_id += d.id == id ? 1u : 0u;
+    for (const Delayed& d : delayed_) held_by_id += d.id == delayed.id ? 1u : 0u;
     if (delayed_.size() >= kWrongCodeHeldTotal || held_by_id >= kWrongCodeHeldPerAddress) {
         guard_.note_wrong_code_dropped();
         ++refused_;
-        if (connection->is_open()) connection->close();
+        if (delayed.connection->is_open()) delayed.connection->close();
         return;
     }
     guard_.note_wrong_code_slowed();
-    delayed_.push_back(Delayed{std::move(connection), id, reason, now_ms + hold});
+    delayed_.push_back(std::move(delayed));
+}
+
+// A Hello for a room that does not exist. A person who mistypes a code is answered at once; so is everybody until the address has said more wrong codes in the minute than the allowance. Beyond it each answer waits
+// longer, and the answer at the end of the wait is the same NoSuchRoom. A program that tries codes one after another is held to the few answers that wait; the Hellos that find no place to wait are dropped
+// without one, as a link that never completed is. A Hello for a room that exists from such an address waits in the same list (hold_hello), so that the right codes are no faster than the wrong ones.
+void RoomManager::answer_no_such_room(std::unique_ptr<net::Connection> connection, const std::string& id, net::RejectReason reason, uint32_t now_ms) {
+    const uint32_t hold = guard_.wrong_code(id, now_ms);
+    if (hold == 0) return reject(std::move(connection), reason, now_ms);
+    Delayed d;
+    d.connection = std::move(connection);
+    d.id = id;
+    d.reason = reason;
+    d.due_ms = now_ms + hold;
+    queue_delayed(std::move(d));
+}
+
+bool RoomManager::hold_hello(std::unique_ptr<net::Connection>& connection, const std::string& address, const std::string& id, const std::vector<uint8_t>& message, const net::HelloMsg& hello, uint32_t now_ms) {
+    const uint32_t hold = guard_.hold_now(id, now_ms);
+    if (hold == 0) return false;
+    Delayed d;
+    d.connection = std::move(connection);
+    d.id = id;
+    d.due_ms = now_ms + hold;
+    d.hello_waits = true;
+    d.address = address;
+    d.message = message;
+    d.hello = hello;
+    queue_delayed(std::move(d));
+    return true;
 }
 
 void RoomManager::release_delayed(uint32_t now_ms) {
@@ -43,10 +67,10 @@ void RoomManager::release_delayed(uint32_t now_ms) {
             ++refused_;
             delayed_.erase(delayed_.begin() + static_cast<std::ptrdiff_t>(i));
         } else if (net::time_reached(now_ms, d.due_ms)) {
-            std::unique_ptr<net::Connection> connection = std::move(d.connection);
-            const net::RejectReason reason = d.reason;
+            Delayed due = std::move(d);
             delayed_.erase(delayed_.begin() + static_cast<std::ptrdiff_t>(i));
-            reject(std::move(connection), reason, now_ms);
+            if (due.hello_waits) route_hello(std::move(due.connection), due.address, due.message, due.hello, now_ms, true);       // (its turn has come: the door answers it as it would have)
+            else reject(std::move(due.connection), due.reason, now_ms);
         } else {
             ++i;
         }

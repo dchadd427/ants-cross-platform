@@ -152,7 +152,7 @@ bool TrustedProxies::contains(const std::string& address) const {
 
 std::string door_address(const std::string& peer, const std::string& header, const TrustedProxies& proxies) {
     if (!proxies.contains(peer)) return peer;                                     // (a header from anyone else is no news)
-    return address_identity(header).empty() ? std::string() : header;            // (a proxy that cannot say whose it is: nobody's, so no limit)
+    return address_identity(header).empty() ? peer : header;                     // (a proxy that cannot say whose it is: the proxy's own address, one count for all such connections)
 }
 
 size_t SlidingWindow::count(uint32_t now_ms, uint32_t span_ms) {
@@ -213,14 +213,25 @@ void AddressGuard::note_room_made(const std::string& id, uint32_t now_ms) {
     seen(id, now_ms).rooms.add(now_ms, limits_.rooms_per_minute);
 }
 
+// How long an answer waits when the address has said `before` wrong codes in the last minute
+static uint32_t hold_after(size_t before, uint32_t allowance) {
+    if (before < allowance) return 0;
+    const size_t over = before - allowance + 1;
+    return static_cast<uint32_t>(std::min<size_t>(kWrongCodeMaxHoldMs, over * kWrongCodeStepMs));
+}
+
 uint32_t AddressGuard::wrong_code(const std::string& id, uint32_t now_ms) {
     if (id.empty() || limits_.wrong_codes_per_minute == 0) return 0;
     Seen& s = seen(id, now_ms);
     const size_t before = s.wrong.count(now_ms, kMinuteMs);
     s.wrong.add(now_ms, static_cast<size_t>(limits_.wrong_codes_per_minute) + kWrongCodeOverCap + 1);
-    if (before < limits_.wrong_codes_per_minute) return 0;
-    const size_t over = before - limits_.wrong_codes_per_minute + 1;
-    return static_cast<uint32_t>(std::min<size_t>(kWrongCodeMaxHoldMs, over * kWrongCodeStepMs));
+    return hold_after(before, limits_.wrong_codes_per_minute);
+}
+
+uint32_t AddressGuard::hold_now(const std::string& id, uint32_t now_ms) {
+    if (id.empty() || limits_.wrong_codes_per_minute == 0) return 0;
+    const auto found = seen_.find(id);
+    return found == seen_.end() ? 0u : hold_after(found->second.wrong.count(now_ms, kMinuteMs), limits_.wrong_codes_per_minute);
 }
 
 bool AddressGuard::take_relay(const std::string& id, uint32_t now_ms) {

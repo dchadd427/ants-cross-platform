@@ -6,10 +6,10 @@
 // a Hello for a room goes to that room's lobby together with the connection.
 //
 // Rooms are made from outside (create_room: the control interface calls it), update() runs every room and forgets the finished ones when their keep time is over.
-// Limits protect the server: the number of rooms, the number of connections that have not said Hello yet, the time they get for it. So do the limits per address (AddressGuard, docs/SERVER.md "Limits per
-// address"): rooms made in a burst and rooms held open from one address are refused as a server that cannot make a room now refuses (NoSuchRoom), a Hello for a room that does not exist is answered later and
+// Limits protect the server: the number of rooms, the number of connections that have not said Hello yet, the time they get for it. So do the limits per address (AddressGuard, docs/ADDRESS_LIMITS.md):
+// rooms made in a burst and rooms held open from one address are refused as a server that cannot make a room now refuses (NoSuchRoom), a Hello for a room that does not exist is answered later and
 // later when many come from one address, the lobbies of an address that holds many rooms are closed sooner when nobody is setting them up, and a connection that comes too fast is closed. A Hello for a room that
-// exists is never held back.
+// exists is never refused, and waits only when its address is over its allowance of wrong codes (then as a wrong code would: hold_hello).
 //
 // A Hello with a KEY (protocol 10) for a room whose match runs and that holds seats goes to that room (Room::rejoin: the session takes the connection over and gives the player the match
 // again); a key that fits no seat, a room that does not hold seats and a room that is loading are answered MatchRunning, as a Hello without a key is, so that nothing is revealed; a room
@@ -350,11 +350,15 @@ private:
         std::unique_ptr<net::Connection> connection;
         uint32_t since_ms{0};
     };
-    struct Delayed {                             // the answer to a Hello for a room that does not exist, held back (AddressGuard::wrong_code)
+    struct Delayed {                             // the answer to a Hello for a room that does not exist (AddressGuard::wrong_code), or the Hello for a room that exists from an address that is over its allowance of wrong codes, held back
         std::unique_ptr<net::Connection> connection;
         std::string id;                          // the address, as the limits count it
         net::RejectReason reason{net::RejectReason::NoSuchRoom};
         uint32_t due_ms{0};
+        bool hello_waits{false};                 // a Hello for a room that exists: it goes through the door again when its time comes (else the Reject above is sent)
+        std::string address;                     // ... with the address that the door was given
+        std::vector<uint8_t> message;
+        net::HelloMsg hello;
     };
 
     // Restart records. A record that was judged good waits in `restoring_` (newest first) until update() has replayed it: the room is made when its replay starts and goes to `rooms_` when it ends.
@@ -403,13 +407,20 @@ private:
     JobEnd end_job(Restoring& job, const std::string& refusal, uint32_t now_ms);
     bool restoring_has(const std::string& code) const;
     /// A Hello (a decoded one, from a connection that no room has yet) finds its room: given to it, parked for a room that waits for its replay, or rejected
-    void route_hello(std::unique_ptr<net::Connection> connection, const std::string& address, const std::vector<uint8_t>& message, const net::HelloMsg& hello, uint32_t now_ms);
+    /// `held`: the Hello has waited for its turn (hold_hello) and goes through now
+    void route_hello(std::unique_ptr<net::Connection> connection, const std::string& address, const std::vector<uint8_t>& message, const net::HelloMsg& hello, uint32_t now_ms, bool held = false);
     void park(std::unique_ptr<net::Connection> connection, const std::string& address, const std::vector<uint8_t>& message, const net::HelloMsg& hello, const Restoring& job, uint32_t now_ms);
     void release_parked(const std::string& code, uint32_t now_ms);
     void reject(std::unique_ptr<net::Connection> connection, net::RejectReason reason, uint32_t now_ms);
     // The limits per address (room_manager_limits.cpp)
     /// A Hello for a room that does not exist: the Reject waits as long as the address's count of them asks (guard_.wrong_code), or goes at once when it asks none; a Hello that finds no place to wait is dropped
     void answer_no_such_room(std::unique_ptr<net::Connection> connection, const std::string& id, net::RejectReason reason, uint32_t now_ms);
+    /// Puts an answer or a Hello in the list of those that wait, which is bounded (kWrongCodeHeldPerAddress for an address, kWrongCodeHeldTotal in all): with no place the connection is closed and the Hello
+    /// dropped without an answer
+    void queue_delayed(Delayed delayed);
+    /// A Hello for a room that exists, from an address that is over its allowance of wrong codes, waits as long as a wrong code would (the same list, the same bounds), so that a program that tries codes cannot
+    /// tell a right one by the time of the answer or try them faster than the wrong ones are answered. True when the Hello was taken (held or dropped); false when none is due and the caller goes on.
+    bool hold_hello(std::unique_ptr<net::Connection>& connection, const std::string& address, const std::string& id, const std::vector<uint8_t>& message, const net::HelloMsg& hello, uint32_t now_ms);
     /// The held answers that are due are sent; one whose peer has gone is forgotten
     void release_delayed(uint32_t now_ms);
     /// The rooms of this address (RoomSpec::creator) that are open: a room that has not ended
