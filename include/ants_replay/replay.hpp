@@ -42,10 +42,10 @@ namespace ants::replay {
 
 inline constexpr uint16_t kFormatVersion = 1;
 inline constexpr uint32_t kHashPeriodTurns = 100;      // the state hash is kept after every 100th turn (5 s of play)
-inline constexpr size_t kMaxFileBytes = 1u << 20;      // 1 MiB: a heavy half hour of four people is under 200 KiB (a click on a big selection adds up to 6.4 KiB: docs/CONTROLS.md). It is the size of the MATCH: a file that holds a map (tmap) may be that much longer than the map's chunk (max_file_bytes)
+inline constexpr size_t kMaxFileBytes = 16u << 20;     // 16 MiB: a heavy half hour of four people is under 200 KiB (a click on a big selection adds up to 6.4 KiB: docs/CONTROLS.md; five minutes of an army of 200 ants clicked four times a second are about 1 MiB), and the most that one seat can put into a match under the server's budget of orders (12.1 MiB in the longest match: net::Sequencer::Config), so that no seat can make a recording fail. It is the size of the MATCH: a file that holds a map (tmap) may be that much longer than the map's chunk (max_file_bytes)
 inline constexpr size_t kChunkFrameBytes = 4 + 4 + 4;  // a chunk's tag, length and checksum
 inline constexpr size_t kMaxEmbeddedMapBytes = 1u << 20;   // 1 MiB: a map of 65,536 cells (the most that a room plays) is about 0.8 MB, a Classic map at most 512 KB
-inline constexpr size_t kMaxFileBytesWithMap = kMaxFileBytes + kMaxEmbeddedMapBytes + kChunkFrameBytes;   // the longest file there can be: 2 MiB and the frame of the map's chunk (a reader refuses more before it reads a byte)
+inline constexpr size_t kMaxFileBytesWithMap = kMaxFileBytes + kMaxEmbeddedMapBytes + kChunkFrameBytes;   // the longest file there can be: 17 MiB and the frame of the map's chunk (a reader refuses more before it reads a byte)
 /// The most starting ants (the start markers of the four colors added up) that a map carried in a file may start. A viewer sets the match up on its own machine, in one thread, and setting the ants up grows with the square
 /// of their number (natively 6,000 ants take about 50 ms, 10,000 about 0.5 s, 40,000 about 9 s: ants_server/online_limits.hpp; WebAssembly is several times slower, and the page's timers cannot run meanwhile, so no card
 /// could say what is wrong). 8,000 is above every map of the library (at most 248) and of the players (the largest, 6,000); a map above it is refused with one sentence (fits_a_replay in player.cpp, which

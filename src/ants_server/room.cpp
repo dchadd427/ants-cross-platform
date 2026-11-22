@@ -891,6 +891,7 @@ std::string Room::replay_keep(replay::Recorder& recorder) {
             UnrecordedMatch lost;
             lost.head = recorder.replay().head;
             lost.outcome.turns = last_ticks_;
+            if (recorder.over_size_limit()) lost.largest_sender = recorder.largest_sender();       // (a seat that filled it is named though the file is gone)
             replay::take_result_of(lost.head.roster, *sim_, lost.outcome);
             unrecorded_sink_(std::move(lost));
         }

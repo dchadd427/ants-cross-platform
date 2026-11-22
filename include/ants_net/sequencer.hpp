@@ -58,7 +58,7 @@ public:
         // every 32 ants): 6,144 and 12 a second. An honest player does not meet it: the busiest second of the recordings measured is 6 commands, the busiest minute 110; the biggest play that a person can
         // make is the HUD's click, ceil(ants / 32) commands (docs/CONTROLS.md), so an army of 200 ants clicked 4 times a second for five minutes is 8,400 commands and a fight of 100 ants clicked 12 times a
         // second is 48 a second: the store holds 6,144 and earns 12 a second (9,744 commands in five minutes, 6,864 in a minute). And what one seat can make of it is bounded in time: 6,144 + 12 x 7,200 are
-        // 92,544 commands in the longest match (2 hours), at most 137 bytes each in the turn log: 12 MiB, three quarters of its 16 MiB.
+        // 92,544 commands in the longest match (2 hours), at most 137 bytes each in the turn log: 12 MiB, so one seat fills neither the 16 MiB of the room's turn log nor the 16 MiB that its recording may have (several seats can: four fill them in about 34 minutes).
         uint32_t order_burst = 6144;
         uint32_t orders_per_second = 12;
         // Control commands, the others (Hatch, the alliance commands, a second Quit): a store of their own, 512 and 8 a second, so that a seat that has used up its orders can still say them and a seat

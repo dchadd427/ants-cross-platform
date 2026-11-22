@@ -37,7 +37,7 @@ const headLength = FIXTURE[12] | (FIXTURE[13] << 8) | (FIXTURE[14] << 16) | (FIX
 const headEnd = 8 + 8 + headLength + 4;               // the end of the HEAD chunk: after its checksum
 same('the real file is a replay', verdict(FIXTURE), { ok: true });
 check('the real file has a head of a plain size and is longer than it', headLength > 100 && headLength < R.HEAD_MAX_BYTES && FIXTURE.length > headEnd + 200, 'head ' + headLength + ', file ' + FIXTURE.length);
-check('the limit of a file is the game\'s kMaxFileBytesWithMap, 2 MiB and the frame of a chunk', R.LOCAL_MAX_BYTES === 2 * 1048576 + 12 && R.LOCAL_MAX_BYTES === 2097164, R.LOCAL_MAX_BYTES);
+check('the limit of a file is the game\'s kMaxFileBytesWithMap, 17 MiB and the frame of a chunk', R.LOCAL_MAX_BYTES === 17 * 1048576 + 12 && R.LOCAL_MAX_BYTES === 17825804, R.LOCAL_MAX_BYTES);
 check('the limit of a head is the game\'s kMaxHeadBytes', R.HEAD_MAX_BYTES === 4096);
 same('the page\'s checksum is the definition\'s (the vector of the standard, and the head of the file)', [R.crc32(Uint8Array.from('123456789', (ch) => ch.charCodeAt(0)), 0, 9, 0), R.crc32(FIXTURE, 16, 16 + headLength, R.crc32(FIXTURE, 8, 12, 0))],
      [0xcbf43926, (FIXTURE[8 + 8 + headLength] | (FIXTURE[9 + 8 + headLength] << 8) | (FIXTURE[10 + 8 + headLength] << 16) | (FIXTURE[11 + 8 + headLength] << 24)) >>> 0]);
@@ -59,7 +59,7 @@ same('a head read and written again is the same head, byte for byte', Array.from
 }
 
 // ---- the size, asked from File.size before a byte is read
-for (const [size, want] of [[0, false], [1, true], [3180, true], [1048576, true], [2097163, true], [2097164, true], [2097165, false], [14900000, false], [-1, false], [NaN, false], [Infinity, false], ['3000', false], [null, false], [undefined, false]]) {
+for (const [size, want] of [[0, false], [1, true], [3180, true], [1048576, true], [17825803, true], [17825804, true], [17825805, false], [39000000, false], [-1, false], [NaN, false], [Infinity, false], ['3000', false], [null, false], [undefined, false]]) {
     same('a file of ' + String(size) + ' bytes may be a replay: ' + want, R.localSizeOk(size), want);
 }
 
@@ -90,7 +90,7 @@ for (const n of [headEnd, headEnd + 1, headEnd + 11, headEnd + 12, headEnd + 100
 function padded(n) { const out = new Uint8Array(n); out.set(FIXTURE.slice(0, Math.min(n, FIXTURE.length))); return out; }
 same('a replay of exactly the longest size passes', kindOf(padded(R.LOCAL_MAX_BYTES)), 'ok');
 same('one byte more is too big', kindOf(padded(R.LOCAL_MAX_BYTES + 1)), 'big');
-same('a file of 14 MB is too big', kindOf(new Uint8Array(14 * 1048576)), 'big');
+same('a file of 40 MB is too big', kindOf(new Uint8Array(40 * 1048576)), 'big');
 same('too big wins over every other fault (no magic at all)', kindOf(new Uint8Array(R.LOCAL_MAX_BYTES + 1)), 'big');
 same('the verdict of too big has no reason text to show', Object.keys(verdict(padded(R.LOCAL_MAX_BYTES + 1))).sort(), ['kind', 'ok']);
 
@@ -138,7 +138,7 @@ same('a head that is one byte short of its checksum', kindOf(file(chunk('HEAD', 
 // ---- the page's check against a second reader written from the format's own words (the layout in include/ants_replay/replay.hpp), on thousands of damaged files: they must never differ, and the page's must never throw
 {
     const reference = (b) => {                                   // (the same questions, asked the long way round)
-        if (b.length > 2097164) return 'big';
+        if (b.length > 17825804) return 'big';
         const head = [0x89, 0x41, 0x52, 0x50, 0x4c, 0x0d, 0x0a, 0x1a, 0x48, 0x45, 0x41, 0x44];
         if (b.length < 20 || head.some((v, i) => b[i] !== v)) return 'bad';
         const len = tools.read32(b, 12);
@@ -407,9 +407,9 @@ async function main() {
     {
         const w = world();
         const keep = await R.ownOpen(w.env, fakeFile(FIXTURE, 'keep.antsrep'));
-        const huge = fakeFile(new Uint8Array(10), 'holiday-video.mp4', { size: 14900000 });
+        const huge = fakeFile(new Uint8Array(10), 'holiday-video.mp4', { size: 39000000 });
         const r = await R.ownOpen(w.env, huge);
-        same('a file that is too big by its size: kind big, with its size and name', [r.ok, r.kind, r.size, r.name], [false, 'big', 14900000, 'holiday-video.mp4']);
+        same('a file that is too big by its size: kind big, with its size and name', [r.ok, r.kind, r.size, r.name], [false, 'big', 39000000, 'holiday-video.mp4']);
         same('... and not one byte of it was read', huge.reads, 0);
         same('... the record that was there is still there', (await w.store.read(keep.id)).name, 'keep.antsrep');
         const edge = fakeFile(new Uint8Array(10), 'edge', { size: R.LOCAL_MAX_BYTES + 1 });
@@ -549,11 +549,11 @@ async function settle() {
     }
     {
         const w = stripWorld(); w.opener.wire();
-        const video = fakeFile(new Uint8Array(10), 'holiday-video.mp4', { size: 14900000 });
+        const video = fakeFile(new Uint8Array(10), 'holiday-video.mp4', { size: 39000000 });
         await chooseOne(w, video);
         const card = w.note.children[0];
         same('a file that is too big: the approved words with its size, and not a byte of it was read', [card.children[0].textContent, card.children[1].textContent, card.children[2].textContent, video.reads, w.went.length],
-             ['That file is too big', 'A replay file is at most 2 MB. This one is 14.2 MB, so it is not a replay of a match.', 'holiday-video.mp4', 0, 0]);
+             ['That file is too big', 'A replay file is at most 17 MB. This one is 37.2 MB, so it is not a replay of a match.', 'holiday-video.mp4', 0, 0]);
     }
     {
         const w = stripWorld({ idb: { abortWrites: 'QuotaExceededError' } }); w.opener.wire();
@@ -749,7 +749,7 @@ async function settle() {
         const w6 = ownWorld(); w6.page.pick(); const in6 = w6.doc.body.children[0];
         in6.files = [fakeFile(text('no replay at all, only a text that is long enough to be looked at, as it is'), 'notes.txt')]; in6.fire('change'); await settle();
         same('a file that is refused from the player is a note and nothing else', [w6.said, w6.went.length], [['That file is not a readable replay.'], 0]);
-        in6.files = [fakeFile(new Uint8Array(1), 'big.mp4', { size: 9000000 })]; in6.fire('change'); await settle();
+        in6.files = [fakeFile(new Uint8Array(1), 'big.mp4', { size: 39000000 })]; in6.fire('change'); await settle();
         same('(and the page can take another file after a refusal)', [w6.said[1], w6.went.length], ['That file is too big.', 0]);
     }
 

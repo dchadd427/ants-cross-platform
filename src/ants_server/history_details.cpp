@@ -364,12 +364,14 @@ std::string make_history_details(const replay::MatchStats& stats, const HistoryR
     return history_details_marker(record.heavy_orders);               // (a match so long, with numbers so large, that its minutes of orders alone do not fit: told as not counted, the cap is never passed)
 }
 
-std::string history_details_marker(uint8_t heavy_orders) {
-    if (heavy_orders == 0) return "{\"v\":1,\"n\":1}";
+std::string history_details_marker(uint8_t heavy_orders, int largest_sender) {
+    const bool sender = largest_sender >= 0 && largest_sender < static_cast<int>(sim::MAX_PLAYERS);
+    if (heavy_orders == 0 && !sender) return "{\"v\":1,\"n\":1}";
     JsonValue d = JsonValue::make_object();
     d.set("v", num(kDetailsVersion));
     d.set("n", num(1));
-    d.set("heavy_orders", heavy_seats(heavy_orders));
+    if (heavy_orders != 0) d.set("heavy_orders", heavy_seats(heavy_orders));
+    if (sender) d.set("largest_sender", num(largest_sender));
     return ctl::to_json(d);
 }
 

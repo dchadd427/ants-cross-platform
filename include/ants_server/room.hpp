@@ -327,10 +327,11 @@ struct RoomStatus {
 };
 
 /// A match that was played and has no recording: the head that the recorder had (the map, the names that the room showed, the roster, the teams, the mode, the mark of a heavy order rate) and what the referee's own engine
-/// says it came to (`outcome.turns` is the ticks that the referee ran; the rest is replay::take_result_of)
+/// says it came to (`outcome.turns` is the ticks that the referee ran; the rest is replay::take_result_of), and, for a recording that passed its size limit, the seat that sent the most into it
 struct UnrecordedMatch {
     replay::Header head;
     replay::Outcome outcome;
+    int largest_sender{-1};     // when the recording failed on its size: the seat that had sent the most bytes of commands into it (replay::Recorder::largest_sender), else -1
 };
 
 /// The name that a replay file keeps for a person's seat, from the name that the room showed everybody (the Start message's): the name as it is, in printable ASCII (every byte of anything else becomes a '?': a letter with an accent, two bytes of UTF-8, gives two), at most

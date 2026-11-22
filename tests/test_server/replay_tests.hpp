@@ -101,7 +101,7 @@ void send_orders(World& w, Client& who, int turns) {
     }
 }
 
-// A room whose recording may take 8 KiB of orders instead of 1 MiB: the orders of one seat are limited (net::Sequencer::Config::order_burst), so a test that wants a recording to fail makes the limit small
+// A room whose recording may take 8 KiB of orders instead of 16 MiB: the orders of one seat are limited (net::Sequencer::Config::order_burst), so a test that wants a recording to fail makes the limit small
 RoomSpec small_recording(RoomSpec spec) {
     spec.max_recording_bytes = 8 * 1024;
     return spec;
@@ -314,12 +314,12 @@ void run_replay_tests() {
         ASSERT_EQ(w.mgr.replay_store()->count(), size_t{1});
     } TEST_END();
 
-    TEST_CASE("S3.244 The Note Of A Match That Was Not Kept Names The Real Reason: A Recording That Passed Its Size Limit (1 MiB) While The Match Went On Past 30 Seconds Says So (Not \"Ran Less Than 30 Seconds\") And The Server's Log Has One Line; A Match That Really Ran Less Than 30 Seconds Still Says That, Whatever Became Of Its Recording, With No Line; The Same Orders In A Longer Match Are Not Kept Either, And A Match Without Them Is Kept As Before") {
+    TEST_CASE("S3.244 The Note Of A Match That Was Not Kept Names The Real Reason: A Recording That Passed Its Size Limit (16 MiB) While The Match Went On Past 30 Seconds Says So (Not \"Ran Less Than 30 Seconds\") And The Server's Log Has One Line; A Match That Really Ran Less Than 30 Seconds Still Says That, Whatever Became Of Its Recording, With No Line; The Same Orders In A Longer Match Are Not Kept Either, And A Match Without Them Is Kept As Before") {
         ReplayClock clock;
         World w;
         std::string why;
         ASSERT_TRUE(w.mgr.enable_replays(replay_config("replay-limit", &clock), false, why));
-        // the recording is over its limit (8 KiB here: a seat's orders are limited too, so the 1 MiB of the real limit would take a seat longer than a test runs), then the match goes on to 30 seconds and past them
+        // the recording is over its limit (8 KiB here: a seat's orders are limited too, so the 16 MiB of the real limit would take a seat longer than a test runs: no one seat can fill it), then the match goes on to 30 seconds and past them
         ASSERT_TRUE(w.mgr.create_room(small_recording(spec_of("LIMIT-1", 2)), w.now).ok);
         Client& ann = w.connect("Ann", "LIMIT-1");
         w.connect("Bob", "LIMIT-1");

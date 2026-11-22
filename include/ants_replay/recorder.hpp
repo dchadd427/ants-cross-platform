@@ -13,6 +13,7 @@
 // changing anything (no known type, an ant order with no ant or with too many) is left out and counted, and does not spoil the recording. A command that the engine would apply but that the
 // wire form cannot hold (one without an ant list that names ants) is not left out: it spoils the recording, because a file without it would not play the match that was played.
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -46,6 +47,13 @@ public:
     uint32_t skipped_commands() const noexcept { return skipped_; }
     /// Why the recording cannot be a replay ("" while it can)
     const std::string& failure() const noexcept { return failure_; }
+    /// True when the recording failed because the commands would pass the size limit (the one failure that says whose commands filled it: largest_sender())
+    bool over_size_limit() const noexcept { return over_limit_; }
+    /// The bytes of commands that a seat has sent into the recording (what each took in the file, about: the same count that the limit is held to; a command of the system, the drop of a peer that left, is nobody's).
+    /// The counts stop where the recording fails, so they are what each seat had sent when the limit was passed, the command that passed it included.
+    size_t sent_bytes(uint8_t seat) const noexcept { return seat < sim::MAX_PLAYERS ? sent_[seat] : 0u; }
+    /// The seat that has sent the most bytes (the lowest of those that tie), -1 when no seat has sent any
+    int largest_sender() const noexcept;
     bool finished() const noexcept { return finished_; }
 
     /// Ends the recording: the file's bytes, or empty when there is nothing to write (no turn ran, the recording failed, it is finished already); `error` says why. The engine is read for
@@ -77,6 +85,8 @@ private:
     uint32_t skipped_{0};
     size_t own_{0};                    // of the commands held, those of the recorder's seat
     size_t bytes_{0};                  // what the commands will take in the file, about
+    std::array<size_t, sim::MAX_PLAYERS> sent_{};      // ... of which each seat's commands took this much
+    bool over_limit_{false};
     size_t max_bytes_{kMaxFileBytes};
     std::string failure_;
     bool finished_{false};

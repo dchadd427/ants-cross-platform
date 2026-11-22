@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """A replay that carries its map is served end to end: the real ants_server behind the real blocks of docker/nginx.conf (run by ./run_tests.sh; the program nginx and ants_server must be there).
 
-A replay of a match on a test map holds the map's bytes (the chunk `tmap`, docs/REPLAYS.md "The file"): a file of up to 2 MiB and a bit, while the game server's public door answers at most 1 MiB for everything that is
+A replay of a match on a test map holds the map's bytes (the chunk `tmap`, docs/REPLAYS.md "The file"): a file of up to 17 MiB and a bit (a match may be 16 MiB, the map 1 MiB), while the game server's public door answers at most 1 MiB for everything that is
 not marked as a file (ctl::HttpResponse::file). The file of a replay used to be an answer like any other, so a replay over 1 MiB was an HTTP 500 for every browser, and a recording that was kept could not be watched.
 Here a replay of 1.5 MiB (a map of 1 MiB and a match of half a MiB) is put into the store's folder, the real server lists it, and the file is fetched from the door directly and through nginx: each answer is 200,
-byte for byte the file that the store keeps. The file is made here, byte by byte, from the format's own description (not by the program that reads it).
+byte for byte the file that the store keeps. A second file is the longest there can be (a match of just under 16 MiB and the map of 1 MiB). The files are made here, byte by byte, from the format's own description (not by the program that reads it).
 """
 import hashlib
 import http.client
@@ -30,7 +30,9 @@ BUILD = os.environ.get("BUILD_DIR", "build")
 SERVER = os.path.join(REPO, BUILD, "src", "ants_server", "ants_server")
 NAME = "ants-DraftMap-20261008-143209Z.antsrep"
 MAP_BYTES = 1024 * 1024                    # kMaxEmbeddedMapBytes
-PADDING = 500 * 1000                       # a match part that a skipped chunk makes (the match is limited to 1 MiB; the map is not part of it)
+PADDING = 500 * 1000                       # a match part that a skipped chunk makes (the match is limited to 16 MiB; the map is not part of it)
+BIG_NAME = "ants-DraftMap-20261008-143210Z.antsrep"
+BIG_PADDING = 16 * 1024 * 1024 - 2000      # a match of just under the 16 MiB that a recording may have (replay::kMaxFileBytes), with the 1 MiB map beside it: the longest file there can be, 17 MiB and a bit
 
 
 def fnv1a64(data):
@@ -98,11 +100,13 @@ class BigReplayThroughNginx(unittest.TestCase):
         os.makedirs(folder)
         cls.map_bytes = bytes((i * 31 + 7) & 0xFF for i in range(MAP_BYTES))
         cls.file = replay_with_map(cls.map_bytes, PADDING)
-        path = os.path.join(folder, NAME)
-        with open(path, "wb") as f:
-            f.write(cls.file)
+        cls.big = replay_with_map(cls.map_bytes, BIG_PADDING)
         aged = time.time() - 600                                                           # (a file that changed a moment ago is another program's write under way, and waits to be listed)
-        os.utime(path, (aged, aged))
+        for name, data in ((NAME, cls.file), (BIG_NAME, cls.big)):
+            path = os.path.join(folder, name)
+            with open(path, "wb") as f:
+                f.write(data)
+            os.utime(path, (aged, aged))
         cls.replay_port = free_port()
         cls.proc = subprocess.Popen([SERVER, "--maps", os.path.join(REPO, "Original-Ants", "Maps"), "--port", "0", "--ws-port", str(free_port()), "--replay-port", str(cls.replay_port), "--no-db",
                                      "--results-dir", results, "--replays-days", "3650"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -129,7 +133,7 @@ class BigReplayThroughNginx(unittest.TestCase):
         shutil.rmtree(cls.work, ignore_errors=True)
 
     def test_the_file_is_what_the_test_means_it_to_be(self):
-        self.assertTrue(1024 * 1024 < len(self.file) < 2 * 1024 * 1024)                    # (the 1 MiB of the door lies below it, the 2 MiB of a replay above it)
+        self.assertTrue(1024 * 1024 < len(self.file) < 2 * 1024 * 1024)                    # (the 1 MiB of the door lies below it)
         self.assertTrue(len(self.file) > 1500 * 1000)
         self.assertEqual(self.file.count(b"tmap"), 1)
 
@@ -154,6 +158,18 @@ class BigReplayThroughNginx(unittest.TestCase):
         self.assertEqual(hashlib.sha256(body).hexdigest(), hashlib.sha256(self.file).hexdigest())
         self.assertEqual(body[:8], b"\x89ARPL\r\n\x1a")
         self.assertEqual(body[body.index(b"tmap") + 8:][:MAP_BYTES], self.map_bytes)       # (the map is inside, exactly)
+
+    def test_the_longest_replay_there_can_be_is_listed_and_sent_whole_by_the_door_and_by_nginx(self):
+        self.assertTrue(17 * 1024 * 1024 - 4096 < len(self.big) <= 17 * 1024 * 1024 + 12)  # (a match of 16 MiB less a little, the map of 1 MiB, the frame of its chunk: replay::kMaxFileBytesWithMap)
+        status, headers, body = get(self.replay_port, "/replays")
+        listed = [e for e in json.loads(body)["replays"] if e["file"] == BIG_NAME]
+        self.assertTrue(status == 200 and len(listed) == 1 and listed[0]["bytes"] == len(self.big), body[:300])
+        status, headers, body = get(self.replay_port, "/replays/" + BIG_NAME)
+        self.assertEqual(status, 200, "the replay door answered %d %r" % (status, body[:80]))
+        self.assertEqual(hashlib.sha256(body).hexdigest(), hashlib.sha256(self.big).hexdigest())
+        status, headers, body = self.rig.ask("GET", "/replays/" + BIG_NAME)
+        self.assertEqual(status, 200, "through nginx: %d %r" % (status, body[:80]))
+        self.assertEqual(hashlib.sha256(body).hexdigest(), hashlib.sha256(self.big).hexdigest())
 
 
 if __name__ == "__main__":

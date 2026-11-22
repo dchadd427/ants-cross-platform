@@ -13,6 +13,7 @@
 //                           hp: [[..] x4] (the team of the damage row, the seat that lost the points), raids: [[t, thief, victim, points] ..] (capped likewise; raids_n), stolen, robbed (x4)}
 //   economy                {food: [[trips, points] x4], banked, hatch_cost, bombs_off (x4), taken: [[bomber, fire, thief, combat, swimmer] x4]}
 //   heavy_orders          [seat ..]  only when a seat's orders went over their budget in the match (the "heavy order rate" mark: net::Sequencer::Config::order_burst); the marker has it too
+//   largest_sender        seat       only in the marker of a match whose recording passed its size limit: the seat that had sent the most bytes of commands into it (replay::Recorder::largest_sender)
 // A match that the pass could not count has the marker {"v":1,"n":1} (so that it is not tried again at every start); the page shows no stats for it. A match that was played and has no recording (the file could not
 // be written) has the marker too: its numbers are the referee's own, kept in the record.
 // The text is at most kDetailsMaxBytes, always: when a very long match with many events is larger, the lists of events go first, then the points of the series get fewer, then combat and economy go;
@@ -37,6 +38,7 @@ inline constexpr size_t kDetailsMaxEvents = 30;       // events in each list (ki
 std::string make_history_details(const replay::MatchStats& stats, const HistoryRecord& record);
 
 /// The text that stands for "the pass tried and could not count this match" (`heavy_orders`: the seats with the mark of a heavy order rate, as in HistoryRecord; 0: none, and the text is the plain marker)
-std::string history_details_marker(uint8_t heavy_orders = 0);
+/// `largest_sender`: the seat (0 to 3) that sent the most bytes of commands into a recording that failed on its size, -1 for none or another failure; the marker has the key "largest_sender" then
+std::string history_details_marker(uint8_t heavy_orders = 0, int largest_sender = -1);
 
 }  // namespace ants::server

@@ -752,7 +752,7 @@ void RoomManager::keep_unrecorded(UnrecordedMatch&& match) {
     whole.total_turns = match.outcome.turns;
     whole.match_over = match.outcome.match_over;
     HistoryRecord record = make_history_record(id, ended_s, whole, match.outcome);
-    record.details = history_details_marker(record.heavy_orders);       // (the replay pass did not run: no stats, only the marker and the mark)
+    record.details = history_details_marker(record.heavy_orders, match.largest_sender);       // (the replay pass did not run: no stats, only the marker, the mark and the seat that sent the most into a recording that was over its limit)
     std::string why;
     if (!history_->put(record, why)) history_->report("history: the result of a match without a recording could not be kept: " + why);
 }

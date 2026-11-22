@@ -410,7 +410,7 @@ ctl::HttpResponse replay_file_response(const ReplayStore& store, const std::stri
     ctl::HttpResponse r;
     r.status = 200;
     r.content_type = "application/octet-stream";
-    r.file = true;                                       // a replay that carries its map is up to about 2 MiB (replay::kMaxFileBytesWithMap), and a non-file answer over 1 MiB is a 500 (ctl::HttpResponse::file)
+    r.file = true;                                       // a replay is up to about 17 MiB when it carries its map (replay::kMaxFileBytesWithMap), and a non-file answer over 1 MiB is a 500 (ctl::HttpResponse::file)
     r.body.assign(reinterpret_cast<const char*>(bytes.data()), bytes.size());
     return r;
 }
@@ -587,6 +587,7 @@ static ctl::HttpResponse approved_map_file(const MapStore& store, const ctl::Htt
         return r;
     }
     static_assert(MapStore::kMaxMapBytes <= ctl::HttpServer::kMaxFileResponseBytes, "the door must be able to send the largest map that the store keeps");
+    static_assert(replay::kMaxFileBytesWithMap <= ctl::HttpServer::kMaxFileResponseBytes, "the door must be able to send the longest replay file there can be");
     std::string bytes;                                // (one read into a string of the file's size: the byte-by-byte copy of an istreambuf_iterator took 18 ms of the one game thread for a 3 MB map, this about 1.6 ms)
     std::ifstream in(map->path, std::ios::binary | std::ios::ate);
     if (in) {

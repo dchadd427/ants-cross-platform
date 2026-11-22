@@ -545,6 +545,16 @@ int main() {
         ASSERT_TRUE(ctl::parse_json(history_details_marker(0x05), marker, nullptr));
         ASSERT_TRUE(marker.get("v").as_int_or(0) == 1 && marker.get("n").as_int_or(0) == 1);
         ASSERT_TRUE(marker.get("heavy_orders").size() == 2 && marker.get("heavy_orders").at(0).as_int_or(-1) == 0 && marker.get("heavy_orders").at(1).as_int_or(-1) == 2);
+        ASSERT_FALSE(marker.has("largest_sender"));
+        // the seat that sent the most into a recording that failed: its own key, with the mark or without it; a number that is no seat (or -1: none) leaves it out
+        ASSERT_EQ(history_details_marker(0, 2), std::string("{\"v\":1,\"n\":1,\"largest_sender\":2}"));
+        ASSERT_EQ(history_details_marker(0, 0), std::string("{\"v\":1,\"n\":1,\"largest_sender\":0}"));
+        ASSERT_EQ(history_details_marker(0, -1), history_details_marker());
+        ASSERT_EQ(history_details_marker(0, 4), history_details_marker());
+        ASSERT_EQ(history_details_marker(0x05, 9), history_details_marker(0x05));
+        ctl::JsonValue both;
+        ASSERT_TRUE(ctl::parse_json(history_details_marker(0x05, 3), both, nullptr));
+        ASSERT_TRUE(both.get("v").as_int_or(0) == 1 && both.get("n").as_int_or(0) == 1 && both.get("heavy_orders").size() == 2 && both.get("largest_sender").as_int_or(-1) == 3);
     } TEST_END();
 
     std::cout << "\n" << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";

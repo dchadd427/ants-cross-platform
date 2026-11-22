@@ -2,6 +2,7 @@
 // room manager with a replay store and a database; the history counts each match from its recording when no room runs a match, the record is the match (mode, names, format, rows, the rule that picks the
 // winner), both doors list it. The store's own rules are test_history_store.cpp, the rule of the winner test_history_record.cpp.
 #include "ants_ai/bot_names.hpp"
+#include <array>
 #include <cstdlib>
 #include <functional>
 #include <iomanip>
@@ -289,7 +290,7 @@ int main() {
         HistoryRecord rec;
         ASSERT_TRUE(valid_history_id(id) && r.mgr.history_store()->find(id, rec));
         ASSERT_TRUE(rec.map == "TINY.LVL" && rec.mode == "highest-score" && rec.game == "v0.12.0-test" && rec.ended_s == kT0 && rec.format == "ffa3" && rec.computers_only);
-        ASSERT_TRUE(rec.seats.size() == 3 && rec.rows.size() == 3 && rec.turns >= 600 && rec.details == history_details_marker() && rec.deaths.empty());
+        ASSERT_TRUE(rec.seats.size() == 3 && rec.rows.size() == 3 && rec.turns >= 600 && rec.deaths.empty());
         ASSERT_TRUE(rec.seats[0].bot == "Medium" && rec.seats[1].bot == "Hard" && rec.seats[2].bot == "Medium");
         bool rule_holds = false;
         check_rule(rec, rule_holds);
@@ -320,6 +321,33 @@ int main() {
             ASSERT_TRUE(a.score == b.score && a.killed == b.killed && a.lost == b.lost && a.hatched == b.hatched && a.bombs_planted == b.bombs_planted && a.bombs_defused == b.bombs_defused && a.fires_lit == b.fires_lit && a.winner == b.winner && a.left == b.left);
         }
         ASSERT_EQ(history_rows_to_json(rec.rows), history_rows_to_json(counted.rows));
+        // the details of a lost recording are the marker with one more key, the seat that had sent the most bytes of commands into it when it failed (the limit here is 64 bytes, so it is a seat of the first orders):
+        // worked out from the identical match that was recorded, the same commands in the same order counted the way the limit counts them
+        const std::string recorded = r.call("GET", "/replays/" + r.status("HIS-K").replay_file, "", true).body;
+        replay::Replay played;
+        std::string read_error;
+        ASSERT_TRUE(replay::decode(reinterpret_cast<const uint8_t*>(recorded.data()), recorded.size(), played, read_error));
+        std::array<size_t, sim::MAX_PLAYERS> sent{};
+        size_t total = 0;
+        for (const replay::TimedCommand& tc : played.commands) {
+            const size_t taken = 1 + sim::encoded_size(tc.command);
+            if (sim::is_client_command(tc.command.type) && tc.command.issuer < sim::MAX_PLAYERS) sent[tc.command.issuer] += taken;
+            total += taken;
+            if (total > 64) break;
+        }
+        int expected_sender = -1;
+        size_t most = 0;
+        for (size_t seat = 0; seat < sent.size(); ++seat) {
+            if (sent[seat] > most) {
+                most = sent[seat];
+                expected_sender = static_cast<int>(seat);
+            }
+        }
+        ASSERT_TRUE(expected_sender >= 0 && total > 64);
+        ASSERT_EQ(rec.details, history_details_marker(0, expected_sender));
+        ASSERT_EQ(parse_text(rec.details).get("largest_sender").as_int_or(-1), int64_t{expected_sender});
+        ASSERT_EQ(parse_text(r.call("GET", "/history/" + id, "", true).body).get("details").get("largest_sender").as_int_or(-1), int64_t{expected_sender});      // (the door gives it back)
+        ASSERT_TRUE(counted.details.find("largest_sender") == std::string::npos);                       // (a recording that was kept has none)
         // both doors list the record of the lost match, with no recording to watch
         const ctl::HttpResponse door = r.call("GET", "/history", "", true);
         ASSERT_TRUE(door.status == 200 && r.call("GET", "/history").body == door.body);
