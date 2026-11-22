@@ -9,6 +9,7 @@
 
 #include "ants_net/clock.hpp"
 #include "ants_net/protocol.hpp"
+#include "ants_server/history_details.hpp"
 #include "ants_server/online_limits.hpp"
 #include "ants_server/secret.hpp"
 
@@ -183,6 +184,7 @@ std::unique_ptr<Room> RoomManager::build_room(RoomSpec spec, uint32_t now_ms, Cr
     else if (visitor_made && !replay_demo_) room->set_replay_store(nullptr, "this server does not keep the matches of demo rooms (--replay-demo)");
     else room->set_replay_store(replays_.get());
     room->set_live_board(&live_board_);                           // (a room that records shows its match here from its start)
+    room->set_unrecorded_sink([this](UnrecordedMatch&& match) { keep_unrecorded(std::move(match)); });
     room->set_turn_settings(limits_.turn);
     if (room->lobby()) room->set_lobby_services(lobby_services());
     return room;
@@ -728,6 +730,31 @@ bool RoomManager::enable_replays(ReplayConfig config, bool include_demo, std::st
     if (!store->prepare(why)) return false;
     replays_ = std::move(store);
     return true;
+}
+
+// The id of a match that has no recording looks like the name of a recording ("ants-TREASURE-20261008-143209Z-9999": the same map and second, a number from 9999 down) so that every route that takes an id takes
+// it; no recording gets such a number (a store counts the matches of one second from 2 up), so the record cannot be mistaken for the count of a file that comes later
+void RoomManager::keep_unrecorded(UnrecordedMatch&& match) {
+    if (history_ == nullptr || replays_ == nullptr || !replays_->config().clock_s) return;
+    const int64_t ended_s = replays_->config().clock_s();
+    const std::string base = std::string("ants-") + ReplayStore::map_stem(match.head.map_name) + "-" + ReplayStore::time_stamp(ended_s);
+    std::string id;
+    for (unsigned number = 9999; number >= 9000; --number) {
+        const std::string candidate = base + "-" + std::to_string(number);
+        if (!valid_history_id(candidate) || history_->knows(candidate)) continue;
+        id = candidate;
+        break;
+    }
+    if (id.empty()) return;
+    replay::Replay whole;
+    whole.head = match.head;
+    whole.complete = true;
+    whole.total_turns = match.outcome.turns;
+    whole.match_over = match.outcome.match_over;
+    HistoryRecord record = make_history_record(id, ended_s, whole, match.outcome);
+    record.details = history_details_marker(record.heavy_orders, match.largest_sender);       // (the replay pass did not run: no stats, only the marker, the mark and the seat that sent the most into a recording that was over its limit)
+    std::string why;
+    if (!history_->put(record, why)) history_->report("history: the result of a match without a recording could not be kept: " + why);
 }
 
 bool RoomManager::enable_history(db::Database& database, std::string& why, HistoryStore::Config config) {

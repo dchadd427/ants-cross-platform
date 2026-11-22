@@ -953,7 +953,7 @@ bool HistoryFeeder::work(const std::string& file) {
         record.details.clear();
         no_stats = std::string("the details could not be made: ") + ex.what();
     }
-    if (record.details.empty()) record.details = history_details_marker();
+    if (record.details.empty()) record.details = history_details_marker(record.heavy_orders);
     try {                                                                                // (the map of deaths has a try of its own too; only a match counted here has one: an older record is not played again for it)
         record.deaths = deaths_maker_ ? deaths_maker_(played.stats) : std::string();
     } catch (const std::exception& ex) {
@@ -1005,6 +1005,7 @@ bool HistoryFeeder::backfill(const std::string& file) {
     else if (!load_level(rep.head, level, why)) for_now = true;
     else {
         try {
+            record.heavy_orders = static_cast<uint8_t>(rep.head.heavy_orders & rep.head.roster);        // (the mark that the head carries goes into the details with the rest)
             const replay::StatsPlay played = replay::play_with_stats(rep, level);
             if (played.outcome.ok && played.stats.ok) {
                 const std::string text = details_maker_(played.stats, record);
@@ -1016,6 +1017,7 @@ bool HistoryFeeder::backfill(const std::string& file) {
             why = std::string("the recording could not be played: ") + ex.what();
         }
     }
+    if (rep.head.roster != 0 && details == history_details_marker()) details = history_details_marker(static_cast<uint8_t>(rep.head.heavy_orders & rep.head.roster));       // (a recording that was read and not played: the marker keeps the head's mark)
     if (!why.empty() && ++skip_lines_ <= kMaxSkipLines) history_.report("history: " + id + (for_now ? " has no stats yet: " : " has no stats: ") + why);
     if (for_now) return true;                                                            // (nothing is written: a marker is for a recording that really cannot be played)
     std::string refused;

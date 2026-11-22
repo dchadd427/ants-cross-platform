@@ -15,6 +15,9 @@ using session_detail::bit;
 
 namespace {
 constexpr int kMaxSealsPerUpdate = static_cast<int>(500 / kTurnMs);     // a pass that came late seals the turns it missed, up to half a second of them, then the schedule goes on
+/// An ant id that the host's engine has not handed out yet is let through when it is this close to the next one (a machine that runs a few turns ahead of the host's engine has seen ants
+/// that the host's engine has not made: about a tick's births, with a wide margin); any other id that no ant has cannot be a seat's honest order
+constexpr uint32_t kAntIdsAhead = 1024;
 }  // namespace
 
 // ------------------------------------------------------------------------------------------------
@@ -33,6 +36,7 @@ HostSession::HostSession(sim::SimulationEngine& sim, Config config, std::unique_
       runner_(std::move(runner)),
       delay_(config.host_player) {
     sequencer_.set_host_player(cfg_.host_player);
+    sequencer_.set_vetter([this](uint8_t player, sim::Command& command) { return sim_ == nullptr || vet_ants(*sim_, player, command); });
     // the delay of the host's own commands: the tick that applies one is read off the runner (a runner that a promoted guest brings has its old session's observer replaced)
     runner_->set_on_applied([this](const sim::Command& c) { delay_.on_applied(c, last_ms_); });
 }
@@ -62,6 +66,26 @@ bool HostSession::submit_bot(uint8_t player, sim::Command command) {
     }
     if (!sequencer_.submit(player, std::move(command))) return false;
     if (wanted && hint.tick <= kMaxHintTick) broadcast(encode(hint));
+    return true;
+}
+
+// What the host's engine would do with the ants of an order, done before the order is sealed: an order that names an ant of another player, an id that no ant has and none is about to have, or an ant twice is
+// not made of anything that the engine carries out (SimulationEngine::apply_command keeps an ant of the issuer once, in the order given), so those ids are taken out, and an order with no ant left is
+// dropped. An ant of the issuer is kept whether it is alive or dead (an honest player's order can name an ant that died a moment ago: the engine passes over it, and the order is sealed as it was sent),
+// so nothing that a person plays is changed. The engine's answer depends only on the host's state and the sealed turn is what every machine runs.
+bool HostSession::vet_ants(const sim::SimulationEngine& sim, uint8_t player, sim::Command& command) {
+    if (!sim::has_ant_list(command.type)) return true;
+    const uint32_t horizon = sim.next_ant_id() + kAntIdsAhead;
+    std::vector<uint32_t> kept;
+    kept.reserve(command.ants.size());
+    for (const uint32_t id : command.ants) {
+        if (id == 0 || id >= horizon) continue;
+        if (sim.ant_claim(id, player) == sim::SimulationEngine::AntClaim::Foreign) continue;
+        if (std::find(kept.begin(), kept.end(), id) != kept.end()) continue;
+        kept.push_back(id);
+    }
+    if (kept.empty()) return false;
+    command.ants = std::move(kept);
     return true;
 }
 
@@ -301,7 +325,7 @@ void HostSession::handle_message(uint8_t player, const std::vector<uint8_t>& msg
                                                      // clicks on would reach the limit of commands per turn, which no turn resets): discarded, no violation
             if (cfg_.start_delay_ms != 0 && sequencer_.next_turn() == 0) return;     // no turn is sealed yet in a match that waits for its start dialog (protocol 12): an honest client sends nothing (its dialog takes every
                                                      // click and key until its first turn has run), and a command now would run at the first tick, ahead of every person's: discarded, no violation
-            if (!sequencer_.submit(player, std::move(m.command))) violation(player);
+            if (sequencer_.submit_checked(player, std::move(m.command)) == Submit::Refused) violation(player);      // (a command over the budget, or without an ant to order, is dropped: not an offence)
             return;
         }
         case MsgType::Vote: {

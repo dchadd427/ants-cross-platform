@@ -2,6 +2,7 @@
 // room manager with a replay store and a database; the history counts each match from its recording when no room runs a match, the record is the match (mode, names, format, rows, the rule that picks the
 // winner), both doors list it. The store's own rules are test_history_store.cpp, the rule of the winner test_history_record.cpp.
 #include "ants_ai/bot_names.hpp"
+#include <array>
 #include <cstdlib>
 #include <functional>
 #include <iomanip>
@@ -9,6 +10,7 @@
 
 #include "../common/test_assert.hpp"
 #include "ants_server/history_deaths.hpp"
+#include "ants_server/history_details.hpp"
 #include "big_map_fixtures.hpp"
 #include "history_fixtures.hpp"
 
@@ -270,6 +272,88 @@ int main() {
         HistoryRecord rec;
         ASSERT_TRUE(r.mgr.history_store()->find(stem_of(ended.replay_file), rec));
         ASSERT_TRUE(rec.map == "Fight Island.lvl" && rec.mode == "187" && rec.computers_only && rec.seats.size() == 3 && rec.turns >= 600);
+    } TEST_END();
+
+    TEST_CASE("HR4.1 A match whose recording could not be made is in the history all the same, from the numbers of the room's own referee: the same numbers that the replay pass gives for an identical match that was recorded, under an id of a recording's form that no recording has (9999 down), with the marker and no recording; it counts as a play of its map, and both doors list it") {
+        Rooms r;
+        ASSERT_TRUE(r.db_ok && r.open());
+        RoomSpec lost = bots_room("HIS-L", 0);
+        lost.max_recording_bytes = 64;                                                                  // (the recording is over its limit within the first orders)
+        ASSERT_TRUE(r.mgr.create_room(lost, r.now).ok);
+        ASSERT_TRUE(r.until([&] { return r.status("HIS-L").state == RoomState::Running; }, 12000));
+        ASSERT_TRUE(r.until([&] { return r.status("HIS-L").state != RoomState::Running; }, 60000));
+        const RoomStatus ls = r.status("HIS-L");
+        ASSERT_TRUE(!ls.replay_kept && ls.replay_note.find("size limit (64 bytes)") != std::string::npos);
+        ASSERT_EQ(r.mgr.replay_store()->count(), size_t{0});
+        ASSERT_EQ(r.mgr.history_store()->count(), size_t{1});                                           // (put at the end of the match: nothing waits for a feeder)
+        const std::string id = "ants-TINY-20261008-143209Z-9999";
+        HistoryRecord rec;
+        ASSERT_TRUE(valid_history_id(id) && r.mgr.history_store()->find(id, rec));
+        ASSERT_TRUE(rec.map == "TINY.LVL" && rec.mode == "highest-score" && rec.game == "v0.12.0-test" && rec.ended_s == kT0 && rec.format == "ffa3" && rec.computers_only);
+        ASSERT_TRUE(rec.seats.size() == 3 && rec.rows.size() == 3 && rec.turns >= 600 && rec.deaths.empty());
+        ASSERT_TRUE(rec.seats[0].bot == "Medium" && rec.seats[1].bot == "Hard" && rec.seats[2].bot == "Medium");
+        bool rule_holds = false;
+        check_rule(rec, rule_holds);
+        ASSERT_TRUE(rule_holds);
+        // a second match that is lost in the same second as the first takes the next number down, and the first record is not replaced
+        RoomSpec lost_too = bots_room("HIS-M", 0);
+        lost_too.max_recording_bytes = 64;
+        ASSERT_TRUE(r.mgr.create_room(lost_too, r.now).ok);
+        ASSERT_TRUE(r.until([&] { return r.status("HIS-M").state == RoomState::Running; }, 12000));
+        ASSERT_TRUE(r.until([&] { return r.status("HIS-M").state != RoomState::Running; }, 60000));
+        ASSERT_EQ(r.mgr.history_store()->count(), size_t{2});
+        HistoryRecord second;
+        ASSERT_TRUE(r.mgr.history_store()->find("ants-TINY-20261008-143209Z-9998", second));
+        ASSERT_TRUE(r.mgr.history_store()->find(id, rec) && rec.seats.size() == 3);
+        // an identical match that is recorded, and counted by the replay pass: the same numbers (the referee's own are the engine's, as the pass's are)
+        r.clock += 3600;
+        ASSERT_TRUE(r.mgr.create_room(bots_room("HIS-K", 0), r.now).ok);
+        ASSERT_TRUE(r.until([&] { return r.status("HIS-K").state == RoomState::Running; }, 12000));
+        ASSERT_TRUE(r.until([&] { return r.status("HIS-K").state != RoomState::Running; }, 60000));
+        ASSERT_TRUE(r.status("HIS-K").replay_kept);
+        ASSERT_TRUE(r.until([&] { return r.mgr.history_store()->count() == 3; }, 8000));
+        HistoryRecord counted;
+        ASSERT_TRUE(r.mgr.history_store()->find(stem_of(r.status("HIS-K").replay_file), counted));
+        ASSERT_TRUE(counted.turns == rec.turns && counted.seats.size() == rec.seats.size() && counted.finished == rec.finished && counted.draw == rec.draw && counted.quitter == rec.quitter);
+        for (size_t k = 0; k < rec.seats.size(); ++k) {
+            const HistorySeat& a = rec.seats[k];
+            const HistorySeat& b = counted.seats[k];
+            ASSERT_TRUE(a.score == b.score && a.killed == b.killed && a.lost == b.lost && a.hatched == b.hatched && a.bombs_planted == b.bombs_planted && a.bombs_defused == b.bombs_defused && a.fires_lit == b.fires_lit && a.winner == b.winner && a.left == b.left);
+        }
+        ASSERT_EQ(history_rows_to_json(rec.rows), history_rows_to_json(counted.rows));
+        // the details of a lost recording are the marker with one more key, the seat that had sent the most bytes of commands into it when it failed (the limit here is 64 bytes, so it is a seat of the first orders):
+        // worked out from the identical match that was recorded, the same commands in the same order counted the way the limit counts them
+        const std::string recorded = r.call("GET", "/replays/" + r.status("HIS-K").replay_file, "", true).body;
+        replay::Replay played;
+        std::string read_error;
+        ASSERT_TRUE(replay::decode(reinterpret_cast<const uint8_t*>(recorded.data()), recorded.size(), played, read_error));
+        std::array<size_t, sim::MAX_PLAYERS> sent{};
+        size_t total = 0;
+        for (const replay::TimedCommand& tc : played.commands) {
+            const size_t taken = 1 + sim::encoded_size(tc.command);
+            if (sim::is_client_command(tc.command.type) && tc.command.issuer < sim::MAX_PLAYERS) sent[tc.command.issuer] += taken;
+            total += taken;
+            if (total > 64) break;
+        }
+        int expected_sender = -1;
+        size_t most = 0;
+        for (size_t seat = 0; seat < sent.size(); ++seat) {
+            if (sent[seat] > most) {
+                most = sent[seat];
+                expected_sender = static_cast<int>(seat);
+            }
+        }
+        ASSERT_TRUE(expected_sender >= 0 && total > 64);
+        ASSERT_EQ(rec.details, history_details_marker(0, expected_sender));
+        ASSERT_EQ(parse_text(rec.details).get("largest_sender").as_int_or(-1), int64_t{expected_sender});
+        ASSERT_EQ(parse_text(r.call("GET", "/history/" + id, "", true).body).get("details").get("largest_sender").as_int_or(-1), int64_t{expected_sender});      // (the door gives it back)
+        ASSERT_TRUE(counted.details.find("largest_sender") == std::string::npos);                       // (a recording that was kept has none)
+        // both doors list the record of the lost match, with no recording to watch
+        const ctl::HttpResponse door = r.call("GET", "/history", "", true);
+        ASSERT_TRUE(door.status == 200 && r.call("GET", "/history").body == door.body);
+        const ctl::JsonValue one = parse_text(r.call("GET", "/history/" + id, "", true).body);
+        ASSERT_TRUE(one.get("id").str() == id && one.get("recording").str() == "removed" && one.get("file").str().empty() && one.get("computers_only").as_bool_or(false));
+        ASSERT_FALSE(contains(door.body, "HIS-L"));
     } TEST_END();
 
     TEST_CASE("HR3.1 A server that opens its replay store in the background (the game server does) lists a recording whose head is not read yet as one that can be watched, and a request for it by name reads it: the first minutes after a start do not show the replays of the history as removed") {

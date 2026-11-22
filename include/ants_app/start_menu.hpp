@@ -131,7 +131,7 @@ net::CreateBlock make_create_block(const MenuMap& map, int players, const LocalT
 
 /// The player's name as the menu sends it: blanks at both ends cut away, printable ASCII only (what the original's edit field takes), at most `net::kMaxNameChars`
 std::string clean_player_name(const std::string& raw);
-/// Does the name look like a computer player's (ai::is_reserved_bot_name: "Bot (Hard)" starts with "bot(", "Pip (bot, Hard)" ends with "(bot)" or "(bot, ...)", blanks and case left out): the server never lets a person have such a name
+/// Does the name read as a computer player's label (ai::is_reserved_bot_name: "Bot (Hard)", "Pip (bot, Hard)"; docs/BOT_NAMES.md says how a name is read): the server never lets a person have such a name
 /// (it renames the player), so the menu refuses it with the reason
 bool looks_like_bot_name(const std::string& name);
 /// True when `raw` can be sent as a player's name (`clean` holds it); else false with the reason in `why`

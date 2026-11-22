@@ -99,8 +99,12 @@
         for (var i = 0; i < s.length && out.length < max; i++) { var c = s.charCodeAt(i); if (c >= 0x20 && c <= 0x7E) out += s.charAt(i); }
         return out;
     }
-    // the names that are a computer player's (ai::is_reserved_bot_name; the page's nameCheck says the same): starts with "Bot (" or ends with "(bot)" or "(bot, ...)", blanks and case ignored
-    function reservedName(name) { return /^bot\(|\(bot(,[^()]+)?\)$/.test(String(name).replace(/[ \t\r\n]/g, '').replace(/[A-Z]/g, function (c) { return c.toLowerCase(); })); }
+    // the names that are a computer player's (ai::is_reserved_bot_name; the page's nameCheck says the same, and tests/scripts/web_lobby_rules_check.js compares them): the word bot first and a bracket after it, or a bracket, the word bot
+    // and then a sign or a blank; blanks, signs between the letters and case ignored, a 0 reads as o; the letters stand one after the other or each pair parted ("b o t", not "Bo T"), and a parted word is one only when no letter follows its blanks
+    function reservedName(name) {
+        var s = String(name).toLowerCase().replace(/0/g, 'o');
+        return /^[^a-z0-9()\[\]{}<>]*(?:bot|b[^a-z0-9()\[\]{}<>]+o[^a-z0-9()\[\]{}<>]+t)[^a-z0-9()\[\]{}<>]*[(\[{<]/.test(s) || /[(\[{<][^a-z0-9()\[\]{}<>]*(?:bot(?=[^a-z0-9])|b[^a-z0-9()\[\]{}<>]+o[^a-z0-9()\[\]{}<>]+t(?=[^a-z0-9])(?! +[a-z0-9]))/.test(s);
+    }
     // a name that a person may go by: 1 - 32 printable characters, no space at either end (NameMsg)
     function validPersonName(name) { return printable(name, MAX_NAME) && name.length > 0 && name.charAt(0) !== ' ' && name.charAt(name.length - 1) !== ' '; }
     function validTeams(a, b) { return (a === NO_TEAM && b === NO_TEAM) || (isWhole(a) && isWhole(b) && a >= 0 && a < b && b < PLAYERS); }

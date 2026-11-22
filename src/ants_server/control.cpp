@@ -129,6 +129,25 @@ JsonValue status_to_json(const RoomStatus& s, bool in_list) {
     o.set("drops_by_cap", JsonValue::make_int(s.drops_by_cap));
     if (!in_list) o.set("drops_by_countdown_hold", JsonValue::make_int(s.drops_by_countdown_hold));
     o.set("drops_by_state", JsonValue::make_int(s.drops_by_state));
+    if (s.heavy_order_seats != 0) {                                  // the "heavy order rate" mark (a seat whose orders went over its budget): the key exists only when a seat has it
+        JsonValue heavy = JsonValue::make_array();
+        for (int seat = 0; seat < 4; ++seat) {
+            if ((s.heavy_order_seats & (1u << seat)) != 0) heavy.push_back(JsonValue::make_int(seat));
+        }
+        o.set("heavy_order_seats", std::move(heavy));
+    }
+    if (!in_list) {                                                  // the orders that were not sealed, by seat
+        JsonValue orders = JsonValue::make_object();
+        JsonValue over = JsonValue::make_array();
+        JsonValue without = JsonValue::make_array();
+        for (size_t seat = 0; seat < 4; ++seat) {
+            over.push_back(JsonValue::make_int(s.orders_over_budget[seat]));
+            without.push_back(JsonValue::make_int(s.orders_without_ants[seat]));
+        }
+        orders.set("over_budget", std::move(over));
+        orders.set("without_ants", std::move(without));
+        o.set("orders", std::move(orders));
+    }
     o.set("rejoins_refused", JsonValue::make_int(s.rejoins_refused));
     o.set("catch_up_expired", JsonValue::make_int(s.catch_up_expired));
     o.set("streamed_bytes", JsonValue::make_int(static_cast<int64_t>(s.streamed_bytes)));
@@ -391,7 +410,7 @@ ctl::HttpResponse replay_file_response(const ReplayStore& store, const std::stri
     ctl::HttpResponse r;
     r.status = 200;
     r.content_type = "application/octet-stream";
-    r.file = true;                                       // a replay that carries its map is up to about 2 MiB (replay::kMaxFileBytesWithMap), and a non-file answer over 1 MiB is a 500 (ctl::HttpResponse::file)
+    r.file = true;                                       // a replay is up to about 17 MiB when it carries its map (replay::kMaxFileBytesWithMap), and a non-file answer over 1 MiB is a 500 (ctl::HttpResponse::file)
     r.body.assign(reinterpret_cast<const char*>(bytes.data()), bytes.size());
     return r;
 }
@@ -568,6 +587,7 @@ static ctl::HttpResponse approved_map_file(const MapStore& store, const ctl::Htt
         return r;
     }
     static_assert(MapStore::kMaxMapBytes <= ctl::HttpServer::kMaxFileResponseBytes, "the door must be able to send the largest map that the store keeps");
+    static_assert(replay::kMaxFileBytesWithMap <= ctl::HttpServer::kMaxFileResponseBytes, "the door must be able to send the longest replay file there can be");
     std::string bytes;                                // (one read into a string of the file's size: the byte-by-byte copy of an istreambuf_iterator took 18 ms of the one game thread for a 3 MB map, this about 1.6 ms)
     std::ifstream in(map->path, std::ios::binary | std::ios::ate);
     if (in) {

@@ -1,8 +1,19 @@
 #include "ants_replay/recorder.hpp"
 
+#include <algorithm>
+
 namespace ants::replay {
 
-Recorder::Recorder(Header head) {
+namespace {
+// "1 MiB", "16 KiB", "100 bytes": the limit as the failure says it
+std::string limit_text(size_t bytes) {
+    if (bytes >= (1u << 20) && bytes % (1u << 20) == 0) return std::to_string(bytes >> 20) + " MiB";
+    if (bytes >= 1024 && bytes % 1024 == 0) return std::to_string(bytes >> 10) + " KiB";
+    return std::to_string(bytes) + " bytes";
+}
+}  // namespace
+
+Recorder::Recorder(Header head, size_t max_bytes) : max_bytes_(std::min(max_bytes, kMaxFileBytes)) {
     head.format_version = kFormatVersion;
     if (head.mode != 0) head.sim_rules = sim_rules_for_mode(head.mode);       // (a match of another game mode is recorded under the rules number that goes with it, whoever made the head)
     replay_.head = std::move(head);
@@ -34,9 +45,12 @@ void Recorder::on_command(const sim::Command& command) {
         fail("a command that has no ant list names ants");
         return;
     }
-    bytes_ += 1 + sim::encoded_size(command);                   // (the gap is a byte or two: the count is about what the commands take in the file; encode() makes the final check. The embedded map is not counted: kMaxFileBytes is the match's, see max_file_bytes)
-    if (bytes_ > kMaxFileBytes) {
-        fail("the recording is over its size limit (" + std::to_string(kMaxFileBytes >> 20) + " MiB)");
+    const size_t taken = 1 + sim::encoded_size(command);
+    if (command.issuer < sim::MAX_PLAYERS && sim::is_client_command(command.type)) sent_[command.issuer] += taken;       // (counted before the limit is asked: the command that passes it is the sender's too)
+    bytes_ += taken;                                            // (the gap is a byte or two: the count is about what the commands take in the file; encode() makes the final check. The embedded map is not counted: kMaxFileBytes is the match's, see max_file_bytes)
+    if (bytes_ > max_bytes_) {
+        over_limit_ = true;
+        fail("the recording is over its size limit (" + limit_text(max_bytes_) + ")");
         return;
     }
     if (replay_.head.recorder_seat != kNoSeat && command.issuer == replay_.head.recorder_seat) ++own_;
@@ -44,6 +58,18 @@ void Recorder::on_command(const sim::Command& command) {
     tc.turn = turns_;
     tc.command = command;
     replay_.commands.push_back(std::move(tc));
+}
+
+int Recorder::largest_sender() const noexcept {
+    int best = -1;
+    size_t most = 0;
+    for (size_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        if (sent_[seat] > most) {
+            most = sent_[seat];
+            best = static_cast<int>(seat);
+        }
+    }
+    return best;
 }
 
 void Recorder::on_tick(const sim::SimulationEngine& engine) {

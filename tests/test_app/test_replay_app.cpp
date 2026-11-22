@@ -1404,7 +1404,7 @@ int main(int argc, char* argv[]) {
             ASSERT_TRUE(v.ok && v.app.replay_failure() == ReplayFailure::NoMap);
             v.app.shutdown();
         }
-        {   // past 1 MiB (a match of 1 MiB at the most and the map beside it)
+        {   // past 16 MiB (a match of 16 MiB at the most and the map beside it)
             const size_t match_part = bytes.size() - (tiny.size() + 12);                        // (the file without its map's chunk)
             const std::vector<uint8_t> big = with_filler(bytes, replay::kMaxFileBytes - 100 - match_part - 12);       // (a match of 100 bytes under the limit)
             ASSERT_TRUE(big.size() > replay::kMaxFileBytes && big.size() < replay::kMaxFileBytesWithMap);
@@ -1414,7 +1414,7 @@ int main(int argc, char* argv[]) {
             ASSERT_EQ(v.app.sim().state_hash().total, made.file.final_hash);
             v.app.shutdown();
         }
-        {   // a match over 1 MiB is no replay, whatever the map beside it
+        {   // a match over 16 MiB is no replay, whatever the map beside it
             const std::vector<uint8_t> too_long = with_filler(bytes, replay::kMaxFileBytes);
             Viewer v(too_long, "long.antsrep", false, empty.path().string());
             ASSERT_TRUE(v.ok && v.app.replay_failure() == ReplayFailure::Unreadable);

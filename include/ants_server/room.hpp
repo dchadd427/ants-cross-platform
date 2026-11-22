@@ -73,6 +73,7 @@
 #include "ants_net/session.hpp"
 #include "ants_net/transport.hpp"
 #include "ants_net/turnlog.hpp"
+#include "ants_replay/player.hpp"
 #include "ants_replay/recorder.hpp"
 #include "ants_server/map_store.hpp"
 #include "ants_server/online_limits.hpp"
@@ -134,6 +135,8 @@ struct RoomSpec {
     uint32_t resume_countdown_ms{net::kResumeCountdownMs};   // after a pause of at least 3 s the match is held this long before it goes on (0 .. 60 s, 0 = none; the control key "resume_countdown_seconds")
     size_t max_connections{32};                              // the connections that the room keeps at once (everything that ever said Hello to it, and every connection that came back, until it is closed and
                                                              // nobody uses it): a flood is refused beyond this. 32 for every room the server makes; the control interface has no key for it
+    net::Sequencer::Config sequencer;                        // the budget of orders of a seat and the quotas of a turn that the room's host applies (the defaults are the server's; the control interface has no key for it, a test changes them to make a log or a recording that no seat could fill)
+    size_t max_recording_bytes{replay::kMaxFileBytes};       // what the orders of the match may take in its recording (a recording over it is not made: the room's note says so and the history keeps the result all the same); a smaller number is for the tests, the control interface has no key for it
     bool record_replay{true};                                // the match is kept as a replay when the server keeps replays (the control key "record": false switches it off for the room)
     /// The server's own match of computer players alone (RoomManager::start_bot_match): every seat of the room is a bot (`bots` as many as `players`), no person is needed to start it or to keep it going, and it is
     /// played at the normal speed like any other. Only the server makes such a room (the control interface has no key for it); it holds no seats (`reconnect` false), so no restart record is kept for it.
@@ -296,6 +299,9 @@ struct RoomStatus {
     uint32_t drops_by_cap{0};               // seats dropped because the match's pauses used up max_pause_ms
     uint32_t drops_by_countdown_hold{0};    // seats dropped because the match, which had not begun to play, was held for them as long as countdown_hold_ms
     uint32_t drops_by_state{0};             // seats dropped because their state differed from the referee's (the others went on; any room, held seats or not)
+    uint8_t heavy_order_seats{0};           // the seats (a bit for each) whose orders went over their budget at some time of the match (net::Sequencer::Config::order_burst): the "heavy order rate" mark; the orders beyond it were not sealed
+    std::array<uint32_t, 4> orders_over_budget{};   // by seat: the orders that were dropped for it, and the ones that were dropped because they named no ant that the seat could order (neither is a violation)
+    std::array<uint32_t, 4> orders_without_ants{};
     uint32_t rejoins_refused{0};            // Hellos with a key that were refused for a budget (the absence's catch-up time, twelve attempts a minute, three times the log's size in ten minutes)
     uint32_t catch_up_expired{0};           // absences whose catch-up time ran out
     uint64_t streamed_bytes{0};             // the bytes of the turn log that were streamed to returning players (all seats)
@@ -318,6 +324,14 @@ struct RoomStatus {
     uint32_t restored_turns{0};             // ... holding this many turns
     uint32_t restore_ms{0};                 // ... which the replay took this long to run (real time)
     uint64_t restored_hash{0};              // ... and the referee's state hash (StateHash::total) was this at the restored tick
+};
+
+/// A match that was played and has no recording: the head that the recorder had (the map, the names that the room showed, the roster, the teams, the mode, the mark of a heavy order rate) and what the referee's own engine
+/// says it came to (`outcome.turns` is the ticks that the referee ran; the rest is replay::take_result_of), and, for a recording that passed its size limit, the seat that sent the most into it
+struct UnrecordedMatch {
+    replay::Header head;
+    replay::Outcome outcome;
+    int largest_sender{-1};     // when the recording failed on its size: the seat that had sent the most bytes of commands into it (replay::Recorder::largest_sender), else -1
 };
 
 /// The name that a replay file keeps for a person's seat, from the name that the room showed everybody (the Start message's): the name as it is, in printable ASCII (every byte of anything else becomes a '?': a letter with an accent, two bytes of UTF-8, gives two), at most
@@ -371,6 +385,10 @@ public:
     /// The server's board of the matches that run (live_board.hpp; it must outlive the room): the room registers the recording of its match there when the match begins and takes it off when the recording becomes
     /// a file or is dropped (and in its destructor). Null (the default): the match is not shown live. Set it right after the room is made, before its match is started.
     void set_live_board(LiveBoard* board) noexcept { live_board_ = board; }
+    /// Where a match goes whose recording could not be made (it ran long enough to be kept, and the file could not be written: too large, a turn missing): the numbers that the referee's own engine has for it, so that the
+    /// history can still say who won (docs/REPLAYS.md "The match history"). The sink is called once, from the end of the match; without one such a match is not counted.
+    using UnrecordedSink = std::function<void(UnrecordedMatch&&)>;
+    void set_unrecorded_sink(UnrecordedSink sink) { unrecorded_sink_ = std::move(sink); }
     /// What a lobby room asks of its server (see LobbyServices): set it right after the room is made. A room that is no lobby room never asks.
     void set_lobby_services(LobbyServices services);
     /// The relay that the players' channels go through (protocol 26): the session of the match hands each player a credential for it. Set it right after the room is made; null: none.
@@ -560,6 +578,7 @@ private:
     std::unique_ptr<ai::BotController> bot_controller_;
     ReplayStore* replay_store_{nullptr};
     LiveBoard* live_board_{nullptr};
+    UnrecordedSink unrecorded_sink_;
     std::string live_id_;                    // the recording's id on the live board ("": it is not there)
     std::unique_ptr<replay::Recorder> recorder_;     // the match so far (null: it is not recorded, or it is over)
     std::string replay_file_;                // the match was kept under this name ...

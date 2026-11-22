@@ -83,17 +83,28 @@ std::vector<uint8_t> synthetic_replay(uint32_t seed, uint32_t turns = 700, uint1
     return replay::encode(r, error);
 }
 
-// 40 group orders of 32 ants in every turn from `who`, for `turns` turns (800 messages a second: a client may send 1,000), about 5.5 KB of recording a turn: the 1 MiB of a match is passed in about 190 turns
+// 40 group orders of the sender's own ants (at most 32 of them) in every turn from `who`, for `turns` turns (800 messages a second: a client may send 1,000): far more than a seat may have sealed
+// (net::Sequencer::Config), so most of them are dropped
 void send_orders(World& w, Client& who, int turns) {
     sim::Command order;
     order.type = sim::CommandType::GroupMove;
     order.tile_x = 5;
     order.tile_y = 5;
-    for (uint32_t ant = 1; ant <= sim::kMaxCommandAnts; ++ant) order.ants.push_back(ant);
+    order.issuer = who.lobby != nullptr ? who.lobby->my_seat() : uint8_t{0};
+    for (const auto& ant : who.sim.get_world_state().ants) {
+        if (ant.player_id == order.issuer && order.ants.size() < sim::kMaxCommandAnts) order.ants.push_back(ant.id);
+    }
+    for (uint32_t ant = 1; order.ants.empty() && ant <= sim::kMaxCommandAnts; ++ant) order.ants.push_back(ant);
     for (int i = 0; i < turns; ++i) {
         for (int k = 0; k < 40; ++k) who.session->submit(order);
         w.run(50);
     }
+}
+
+// A room whose recording may take 8 KiB of orders instead of 16 MiB: the orders of one seat are limited (net::Sequencer::Config::order_burst), so a test that wants a recording to fail makes the limit small
+RoomSpec small_recording(RoomSpec spec) {
+    spec.max_recording_bytes = 8 * 1024;
+    return spec;
 }
 
 // The lines of the server's log (taken now) that name `code`
@@ -303,13 +314,13 @@ void run_replay_tests() {
         ASSERT_EQ(w.mgr.replay_store()->count(), size_t{1});
     } TEST_END();
 
-    TEST_CASE("S3.244 The Note Of A Match That Was Not Kept Names The Real Reason: A Recording That Passed Its Size Limit (1 MiB) While The Match Went On Past 30 Seconds Says So (Not \"Ran Less Than 30 Seconds\") And The Server's Log Has One Line; A Match That Really Ran Less Than 30 Seconds Still Says That, Whatever Became Of Its Recording, With No Line; The Same Orders In A Longer Match Are Not Kept Either, And A Match Without Them Is Kept As Before") {
+    TEST_CASE("S3.244 The Note Of A Match That Was Not Kept Names The Real Reason: A Recording That Passed Its Size Limit (16 MiB) While The Match Went On Past 30 Seconds Says So (Not \"Ran Less Than 30 Seconds\") And The Server's Log Has One Line; A Match That Really Ran Less Than 30 Seconds Still Says That, Whatever Became Of Its Recording, With No Line; The Same Orders In A Longer Match Are Not Kept Either, And A Match Without Them Is Kept As Before") {
         ReplayClock clock;
         World w;
         std::string why;
         ASSERT_TRUE(w.mgr.enable_replays(replay_config("replay-limit", &clock), false, why));
-        // the recording is over its limit, then the match goes on to 30 seconds and past them
-        ASSERT_TRUE(w.mgr.create_room(spec_of("LIMIT-1", 2), w.now).ok);
+        // the recording is over its limit (8 KiB here: a seat's orders are limited too, so the 16 MiB of the real limit would take a seat longer than a test runs: no one seat can fill it), then the match goes on to 30 seconds and past them
+        ASSERT_TRUE(w.mgr.create_room(small_recording(spec_of("LIMIT-1", 2)), w.now).ok);
         Client& ann = w.connect("Ann", "LIMIT-1");
         w.connect("Bob", "LIMIT-1");
         w.run(1500 + kPre);
@@ -320,13 +331,13 @@ void run_replay_tests() {
         ASSERT_TRUE(w.mgr.close_room("LIMIT-1", w.now));
         s = w.status("LIMIT-1");
         ASSERT_TRUE(!s.replay_kept && s.replay_file.empty());
-        ASSERT_MSG(s.replay_note.find("size limit") != std::string::npos && s.replay_note.find("1 MiB") != std::string::npos && s.replay_note.find("less than 30 seconds") == std::string::npos, s.replay_note);
+        ASSERT_MSG(s.replay_note.find("size limit") != std::string::npos && s.replay_note.find("8 KiB") != std::string::npos && s.replay_note.find("less than 30 seconds") == std::string::npos, s.replay_note);
         ASSERT_TRUE(status_to_json(s).get("replay").get("note").str() == s.replay_note);
         const std::vector<std::string> logged = log_lines_about(w, "LIMIT-1");
         ASSERT_MSG(logged.size() == 1 && logged[0].find("size limit") != std::string::npos && logged[0].find("could not be written as a replay") != std::string::npos, logged.empty() ? std::string("no line") : logged[0]);
         ASSERT_EQ(w.mgr.replay_store()->count(), size_t{0});
         // the same orders, and the match is over before 30 seconds: it ran less than that, whatever became of its recording; nothing to tell the log
-        ASSERT_TRUE(w.mgr.create_room(spec_of("LIMIT-2", 2), w.now).ok);
+        ASSERT_TRUE(w.mgr.create_room(small_recording(spec_of("LIMIT-2", 2)), w.now).ok);
         Client& cy = w.connect("Cy", "LIMIT-2");
         w.connect("Di", "LIMIT-2");
         w.run(1500 + kPre);
@@ -354,7 +365,7 @@ void run_replay_tests() {
         ASSERT_TRUE(w.mgr.enable_replays(replay_config("replay-edge-failed", &clock), false, why));
         for (const uint32_t ticks : {598u, 599u, 600u, 601u}) {
             const std::string code = "FAIL-" + std::to_string(ticks);
-            ASSERT_TRUE(w.mgr.create_room(spec_of(code, 2), w.now).ok);
+            ASSERT_TRUE(w.mgr.create_room(small_recording(spec_of(code, 2)), w.now).ok);
             Client& ann = w.connect("Ann", code);
             w.connect("Bob", code);
             w.run(1500 + kPre);
@@ -369,11 +380,58 @@ void run_replay_tests() {
                 ASSERT_MSG(s.replay_note.find("ran less than 30 seconds") != std::string::npos && s.replay_note.find("size limit") == std::string::npos, code + ": " + s.replay_note);
                 ASSERT_MSG(logged.empty(), code + ": " + (logged.empty() ? std::string() : logged[0]));
             } else {
-                ASSERT_MSG(s.replay_note.find("size limit (1 MiB)") != std::string::npos && s.replay_note.find("less than 30 seconds") == std::string::npos, code + ": " + s.replay_note);
-                ASSERT_MSG(logged.size() == 1 && logged[0].find("size limit (1 MiB)") != std::string::npos, code + ": " + std::to_string(logged.size()) + " lines");
+                ASSERT_MSG(s.replay_note.find("size limit (8 KiB)") != std::string::npos && s.replay_note.find("less than 30 seconds") == std::string::npos, code + ": " + s.replay_note);
+                ASSERT_MSG(logged.size() == 1 && logged[0].find("size limit (8 KiB)") != std::string::npos, code + ": " + std::to_string(logged.size()) + " lines");
             }
         }
         ASSERT_EQ(w.mgr.replay_store()->count(), size_t{0});
+    } TEST_END();
+
+    TEST_CASE("S3.308 A Seat That Sends Orders As Fast As It Can Has The Orders Over Its Budget Dropped And Counted And Is Marked: The Room's Status Says So (In The List Too), The Kept Replay's Head Carries The Mark And Plays Out To Its Hashes, The Other Seat Is Not Marked, And Nobody Is Dropped") {
+        ReplayClock clock;
+        World w;
+        std::string why;
+        ASSERT_TRUE(w.mgr.enable_replays(replay_config("replay-heavy", &clock), false, why));
+        ASSERT_TRUE(w.mgr.create_room(spec_of("HEAVY-1", 2), w.now).ok);
+        Client& ann = w.connect("Ann", "HEAVY-1");
+        Client& bob = w.connect("Bob", "HEAVY-1");
+        w.run(1500 + kPre);
+        ASSERT_TRUE(ann.lobby != nullptr && bob.lobby != nullptr);
+        const uint8_t heavy = ann.lobby->my_seat();
+        const uint8_t calm = bob.lobby->my_seat();
+        ASSERT_TRUE(heavy < 2 && calm < 2 && heavy != calm);
+        send_orders(w, ann, 600);                                                         // 24,000 orders in 30 s (the store of a seat's orders is 6,144 and earns 12 a second)
+        w.run(10000);
+        RoomStatus s = w.status("HEAVY-1");
+        ASSERT_MSG(s.state == RoomState::Running && s.ticks >= 650, "state " + std::string(room_state_name(s.state)) + " ticks " + std::to_string(s.ticks));
+        ASSERT_EQ(s.heavy_order_seats, static_cast<uint8_t>(1u << heavy));
+        ASSERT_TRUE(s.orders_over_budget[heavy] > 16000 && s.orders_over_budget[heavy] < 24000 - 6144);   // (6,144 at once and 12 a second are sealed, the rest is not)
+        ASSERT_EQ(s.orders_over_budget[calm], 0u);
+        ASSERT_EQ(s.orders_without_ants[heavy], 0u);
+        ASSERT_TRUE(!s.names[heavy].empty() && !s.names[calm].empty() && !ann.lost && !bob.lost);        // nobody was dropped, nobody was thrown out
+        ASSERT_EQ(s.drops_by_state, 0u);
+        const ctl::JsonValue json = status_to_json(s);
+        ASSERT_TRUE(json.get("heavy_order_seats").size() == 1 && json.get("heavy_order_seats").at(0).as_int_or(-1) == heavy);
+        ASSERT_EQ(json.get("orders").get("over_budget").at(heavy).as_int_or(-1), static_cast<int64_t>(s.orders_over_budget[heavy]));
+        ASSERT_TRUE(json.get("orders").get("without_ants").size() == 4 && json.get("orders").get("over_budget").at(calm).as_int_or(-1) == 0);
+        const ctl::JsonValue listed = status_to_json(s, true);
+        ASSERT_TRUE(listed.get("heavy_order_seats").size() == 1 && !listed.has("orders"));                // (the list keeps the mark, not the counts)
+        ASSERT_TRUE(w.mgr.close_room("HEAVY-1", w.now));
+        s = w.status("HEAVY-1");
+        ASSERT_TRUE(s.replay_kept && s.replay_note.empty());
+        const StoredReplay stored = load_stored(*w.mgr.replay_store(), s.replay_file);
+        ASSERT_TRUE(stored.ok);
+        ASSERT_EQ(stored.rep.head.heavy_orders, static_cast<uint8_t>(1u << heavy));
+        replay::Outcome played;
+        ASSERT_TRUE(plays_out(stored.rep, played) && played.hashes_checked > 0);                            // (what was dropped is in no file: the recording is the match that was played)
+        // a match of ordinary play has no mark, in the status and in the file
+        ASSERT_TRUE(w.mgr.create_room(spec_of("HEAVY-2", 2), w.now).ok);
+        start_pair(w, "HEAVY-2", 38000, "Cy", "Di");
+        RoomStatus calm_status = w.status("HEAVY-2");
+        ASSERT_TRUE(calm_status.heavy_order_seats == 0 && !status_to_json(calm_status).has("heavy_order_seats"));
+        ASSERT_TRUE(w.mgr.close_room("HEAVY-2", w.now));
+        const StoredReplay plain = load_stored(*w.mgr.replay_store(), w.status("HEAVY-2").replay_file);
+        ASSERT_TRUE(plain.ok && plain.rep.head.heavy_orders == 0);
     } TEST_END();
 
     TEST_CASE("S3.163 A Room Made With \"record\": false Keeps Nothing, A Server That Keeps No Replays Keeps Nothing: The Status Says Which; The Control Interface Takes \"record\" As A Boolean Only") {

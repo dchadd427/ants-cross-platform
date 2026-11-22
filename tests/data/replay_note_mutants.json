@@ -84,8 +84,8 @@
   {
    "id": "recording_limit_not_named",
    "file": "src/ants_replay/recorder.cpp",
-   "old": "fail(\"the recording is over its size limit (\" + std::to_string(kMaxFileBytes >> 20) + \" MiB)\");",
-   "new": "fail(\"the match is too long to keep as a replay\");",
+   "old": "fail(\"the recording is over its size limit (\" + limit_text(max_bytes_) + \")\");",
+   "new": "fail(\"the recording is over its size limit (\" + limit_text(0) + \")\");",
    "build": [
     "test_server",
     "test_replay"
@@ -95,8 +95,8 @@
   {
    "id": "recording_limit_in_the_wrong_unit",
    "file": "src/ants_replay/recorder.cpp",
-   "old": "std::to_string(kMaxFileBytes >> 20) + \" MiB)\"",
-   "new": "std::to_string(kMaxFileBytes >> 10) + \" MiB)\"",
+   "old": "return std::to_string(bytes >> 10) + \" KiB\";",
+   "new": "return std::to_string(bytes >> 10) + \" MiB\";",
    "build": [
     "test_server",
     "test_replay"

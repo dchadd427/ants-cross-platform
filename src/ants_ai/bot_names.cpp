@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <utility>
+#include <vector>
 
 #include "ants_ai/rng.hpp"
 
@@ -39,6 +40,130 @@ const char* label_tag(std::string_view tag) {
 bool starts_with(std::string_view s, std::string_view p) noexcept { return s.size() >= p.size() && s.compare(0, p.size(), p) == 0; }
 bool ends_with(std::string_view s, std::string_view p) noexcept { return s.size() >= p.size() && s.compare(s.size() - p.size(), p.size(), p) == 0; }
 
+// ---- the names that a person may not take (is_reserved_bot_name) --------------------------------------------------------------------------------------------------------------------
+// A name is read the way a person reads it, not the way it is spelled: case, blanks, signs between letters, invisible characters and letters that are drawn like b, o or t (a 0 for the o, the Cyrillic and
+// Greek ones, letters with accents, wide and bold forms) do not hide a label. Every character becomes one Glyph; everything that is not a letter, a digit or a bracket is only a break between letters (a blank,
+// or another sign), and an invisible character is not there at all.
+
+enum class Glyph : uint8_t { Skip, Space, Sign, Open, Close, Letter };      // Skip: it is not there to the eye (a combining mark, a zero-width character); Space: a blank; Sign: any other mark that is no letter, digit or bracket
+struct Folded {
+    Glyph glyph{Glyph::Sign};
+    char letter{0};                                                    // Letter: a to z or a digit (the look-alikes of b and o and t already turned into them: a 0 is an o, and no other digit is a letter)
+};
+bool is_break(const Folded& f) noexcept { return f.glyph == Glyph::Space || f.glyph == Glyph::Sign; }
+
+constexpr uint32_t kBadCodePoint = 0xFFFDu;
+
+uint32_t next_code_point(std::string_view s, size_t& i) noexcept {      // UTF-8; a byte that is no part of a character is one code point of its own (it is a break)
+    const auto byte = [&](size_t at) { return static_cast<uint32_t>(static_cast<unsigned char>(s[at])); };
+    const uint32_t b0 = byte(i);
+    size_t length = 1;
+    uint32_t cp = b0;
+    if (b0 >= 0xF0 && b0 < 0xF8) { length = 4; cp = b0 & 0x07u; }
+    else if (b0 >= 0xE0) { length = 3; cp = b0 & 0x0Fu; }
+    else if (b0 >= 0xC0) { length = 2; cp = b0 & 0x1Fu; }
+    else if (b0 >= 0x80) { ++i; return kBadCodePoint; }
+    if (b0 >= 0xF8 || i + length > s.size()) { ++i; return b0 < 0x80 ? b0 : kBadCodePoint; }
+    for (size_t k = 1; k < length; ++k) {
+        const uint32_t b = byte(i + k);
+        if ((b & 0xC0u) != 0x80u) { ++i; return kBadCodePoint; }
+        cp = (cp << 6) | (b & 0x3Fu);
+    }
+    i += length;
+    return cp;
+}
+
+Folded letter_glyph(char c) noexcept {
+    Folded out;
+    out.glyph = Glyph::Letter;
+    out.letter = c == '0' ? 'o' : c;
+    return out;
+}
+
+struct Lookalike {
+    uint32_t first;
+    uint32_t last;
+    char letter;
+};
+constexpr Lookalike kLookalikes[] = {
+    {0x00B0, 0x00B0, 'o'}, {0x00BA, 0x00BA, 'o'}, {0x00D2, 0x00D6, 'o'}, {0x00D8, 0x00D8, 'o'}, {0x00F2, 0x00F6, 'o'}, {0x00F8, 0x00F8, 'o'},     // (accents and signs: the degree sign, the ordinal, o with a grave to a diaeresis, o with a stroke)
+    {0x014C, 0x0151, 'o'}, {0x01A0, 0x01A1, 'o'}, {0x01D1, 0x01D2, 'o'}, {0x01EA, 0x01ED, 'o'}, {0x1ECC, 0x1EE3, 'o'},
+    {0x039F, 0x039F, 'o'}, {0x03BF, 0x03BF, 'o'}, {0x041E, 0x041E, 'o'}, {0x043E, 0x043E, 'o'}, {0x0585, 0x0585, 'o'}, {0x1D0F, 0x1D0F, 'o'}, {0x1D52, 0x1D52, 'o'}, {0x2092, 0x2092, 'o'},      // (Greek, Cyrillic, Armenian, small capital, superscript, subscript)
+    {0x0180, 0x0180, 'b'}, {0x0253, 0x0253, 'b'}, {0x0299, 0x0299, 'b'}, {0x0392, 0x0392, 'b'}, {0x03B2, 0x03B2, 'b'}, {0x0412, 0x0412, 'b'}, {0x0432, 0x0432, 'b'}, {0x042C, 0x042C, 'b'}, {0x044C, 0x044C, 'b'},
+    {0x1D2E, 0x1D2E, 'b'}, {0x1D47, 0x1D47, 'b'}, {0x1E02, 0x1E07, 'b'},
+    {0x0162, 0x0167, 't'}, {0x01AB, 0x01AB, 't'}, {0x01AD, 0x01AD, 't'}, {0x021A, 0x021B, 't'}, {0x03A4, 0x03A4, 't'}, {0x03C4, 0x03C4, 't'}, {0x0422, 0x0422, 't'}, {0x0442, 0x0442, 't'},    // (0x03A4: Greek capital tau)
+    {0x1D1B, 0x1D1B, 't'}, {0x1D57, 0x1D57, 't'}, {0x1E6A, 0x1E6F, 't'}, {0x2020, 0x2020, 't'},
+};
+
+// The brackets that are not ASCII, as pairs (an opening one, and the closing one that follows it by one)
+constexpr uint32_t kOpeners[] = {0x2329, 0x2768, 0x276A, 0x276C, 0x2770, 0x27E6, 0x27E8, 0x27EA, 0x3008, 0x300A, 0x300C, 0x300E, 0x3010, 0x3014, 0xFE59, 0xFE5B, 0xFE5D};
+
+Folded fold_code_point(uint32_t cp) noexcept {
+    Folded out;
+    if (cp < 0x80u) {
+        const char c = lower(static_cast<char>(cp));
+        if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) return letter_glyph(c);
+        if (c == '(' || c == '[' || c == '{' || c == '<') out.glyph = Glyph::Open;
+        else if (c == ')' || c == ']' || c == '}' || c == '>') out.glyph = Glyph::Close;
+        else if (c == ' ' || (c >= '\t' && c <= '\r')) out.glyph = Glyph::Space;
+        return out;                                                                      // (a blank or a sign: a break)
+    }
+    if (cp >= 0xFF01u && cp <= 0xFF5Eu) return fold_code_point(cp - 0xFEE0u);                            // the wide forms of ASCII
+    if (cp >= 0x1D400u && cp <= 0x1D6A3u) return letter_glyph(static_cast<char>('a' + (cp - 0x1D400u) % 52u % 26u));       // bold, italic, script, fraktur, double-struck, monospace letters
+    if (cp >= 0x1D7CEu && cp <= 0x1D7FFu) return letter_glyph(static_cast<char>('0' + (cp - 0x1D7CEu) % 10u));
+    if (cp >= 0x24B6u && cp <= 0x24CFu) return letter_glyph(static_cast<char>('a' + (cp - 0x24B6u)));      // circled letters
+    if (cp >= 0x24D0u && cp <= 0x24E9u) return letter_glyph(static_cast<char>('a' + (cp - 0x24D0u)));
+    if (cp == 0x00ADu || cp == 0x034Fu || (cp >= 0x0300u && cp <= 0x036Fu) || (cp >= 0x1AB0u && cp <= 0x1AFFu) || (cp >= 0x1DC0u && cp <= 0x1DFFu) || (cp >= 0x200Bu && cp <= 0x200Fu) ||
+        (cp >= 0x202Au && cp <= 0x202Eu) || (cp >= 0x2060u && cp <= 0x206Fu) || (cp >= 0x20D0u && cp <= 0x20FFu) || (cp >= 0xFE00u && cp <= 0xFE0Fu) || cp == 0xFEFFu) {
+        out.glyph = Glyph::Skip;
+        return out;
+    }
+    for (const uint32_t open : kOpeners) {
+        if (cp == open) out.glyph = Glyph::Open;
+        else if (cp == open + 1) out.glyph = Glyph::Close;
+    }
+    if (out.glyph != Glyph::Sign) return out;
+    if (cp == 0x0085u || cp == 0x00A0u || cp == 0x1680u || (cp >= 0x2000u && cp <= 0x200Au) || cp == 0x2028u || cp == 0x2029u || cp == 0x202Fu || cp == 0x205Fu || cp == 0x3000u) {
+        out.glyph = Glyph::Space;                                                        // (a no-break space, a wide space, a line or paragraph end: a blank)
+        return out;
+    }
+    for (const Lookalike& l : kLookalikes) {
+        if (cp >= l.first && cp <= l.last) return letter_glyph(l.letter);
+    }
+    return out;                                                                          // (any other character, a no-break space included: a break)
+}
+
+std::vector<Folded> fold_name(std::string_view text) {
+    std::vector<Folded> out;
+    out.reserve(text.size());
+    for (size_t i = 0; i < text.size();) {
+        const Folded one = fold_code_point(next_code_point(text, i));
+        if (one.glyph != Glyph::Skip) out.push_back(one);                                // (an invisible character is not part of the name)
+    }
+    return out;
+}
+
+// The word bot from `at` (blanks and signs may stand before it): the letters b, o, t, in that order, either one after the other or each pair of them parted by blanks or signs ("b o t", "b.o.t"), never
+// one pair parted and the other not ("Bo T"); `end` is the place after the t and `parted` says which of the two it was. Anything else between the letters (another letter, a bracket) is no word.
+bool bot_word_at(const std::vector<Folded>& f, size_t at, size_t& end, bool& parted) noexcept {
+    static const char kWord[3] = {'b', 'o', 't'};
+    size_t i = at;
+    while (i < f.size() && is_break(f[i])) ++i;
+    bool gap[2] = {false, false};
+    for (size_t k = 0; k < 3; ++k) {
+        if (i >= f.size() || f[i].glyph != Glyph::Letter || f[i].letter != kWord[k]) return false;
+        ++i;
+        if (k < 2) {
+            const size_t before = i;
+            while (i < f.size() && is_break(f[i])) ++i;
+            gap[k] = i > before;
+        }
+    }
+    if (gap[0] != gap[1]) return false;
+    parted = gap[0];
+    end = i;
+    return true;
+}
 }  // namespace
 
 size_t bot_name_count() noexcept { return kNameCount; }
@@ -139,17 +264,26 @@ std::string bot_short_label(std::string_view text) {
 }
 
 bool is_reserved_bot_name(std::string_view text) {
-    std::string s;
-    for (const char c : text) {
-        if (c != ' ' && c != '\t' && c != '\r' && c != '\n') s.push_back(lower(c));
+    const std::vector<Folded> f = fold_name(text);
+    const size_t n = f.size();
+    // "Bot (...)": the word bot at the start, then an opening bracket (blanks and signs may stand between)
+    size_t end = 0;
+    bool parted = false;
+    if (bot_word_at(f, 0, end, parted)) {
+        while (end < n && is_break(f[end])) ++end;
+        if (end < n && f[end].glyph == Glyph::Open) return true;
     }
-    if (starts_with(s, "bot(")) return true;                       // the legacy form: "Bot (Hard)" and anything that starts that way
-    if (!ends_with(s, ")")) return false;
-    const size_t open = s.rfind('(');
-    if (open == std::string::npos) return false;
-    const std::string inside = s.substr(open + 1, s.size() - open - 2);                       // between the last "(" and the final ")"
-    if (inside == "bot") return true;
-    return starts_with(inside, "bot,") && inside.size() > 4 && inside.find(')') == std::string::npos;
+    // "... (bot)", "... (bot, Hard)": an opening bracket, the word bot, and then no letter (a bracket, a comma, a blank, a sign: whatever follows, the name reads as a computer player's label); for the word
+    // that is spelled apart ("b o t") the blanks after it are passed first: "(b o t h)" is a name
+    for (size_t i = 0; i < n; ++i) {
+        if (f[i].glyph != Glyph::Open || !bot_word_at(f, i + 1, end, parted)) continue;
+        size_t next = end;
+        if (parted) {
+            while (next < n && f[next].glyph == Glyph::Space) ++next;
+        }
+        if (end < n && !(next < n && f[next].glyph == Glyph::Letter)) return true;
+    }
+    return false;
 }
 
 }  // namespace ants::ai
