@@ -2,7 +2,7 @@
 // pages that make a lobby room and join it by one code, the leader's color moves (a move to an empty color, a change of places), the plan and the teams, a new name (and a name that looks like a
 // bot's), the leader taking a person out, the leader going (the player who has been there the longest leads), a link that drops (the seat is held and taken back with the key), a key for a room that is
 // gone (the page makes the room again), a second window with the same key, START that waits for the games, the people of the lobbies in GET /busy, and the front page itself (web/lobby.html with web/home/home.js in the
-// fake browser of web_page_harness.js, on a real socket): a guest on Home takes START; and, with the public door, a host that makes its room public with Quick host, a second page that sees it in the real list and joins it from there.
+// fake browser of web_page_harness.js, on a real socket): a guest takes START while the page holds its room (the Room stays and says that the game is opening); and, with the public door, a host that makes its room public with Quick host, a second page that sees it in the real list and joins it from there.
 // usage: node web_lobby_server_check.js web/front/lobby_net.js ws://127.0.0.1:PORT/ws http://127.0.0.1:WSPORT [http://127.0.0.1:REPLAYPORT]     (the server: --demo-rooms N --demo-map TINY.LVL --demo-maps TINY.LVL,MEDIUM.LVL
 //        --demo-lobbies M [--replay-port REPLAYPORT: the public door that lists the games; the front page's Quick host and Games list are run against it when it is given])
 //        exit 0: every check holds; the failures are printed
@@ -595,10 +595,10 @@ const pressReady = (env) => { const button = env.$('start'), can = !button.disab
         B.leave();
     });
 
-    // ---- the front page itself, on Home, against the real server (docs/HOME_SCREEN.md): the page of a guest opens on the Room by a link and goes Home; the room goes on (the page answers the server's pings and nobody ----
-    // is dropped), Home follows what the room says, and when the leader presses START the hidden Room takes the hand-off: the key of the seat is written for the game page, the tab goes to the game page and Home
-    // says that the game is opening. The page is the real web/lobby.html and web/home/home.js in the fake browser of tests/scripts/web_page_harness.js, on a real socket (the clock is the real one).
-    await scenario('the front page on Home: the room goes on while Home is up, and START reaches the page', async () => {
+    // ---- the front page itself against the real server (docs/HOME_SCREEN.md): the page of a guest opens on the Room by a link and asks for Home in the Menu (the page holds a room: the Room stays); the room goes on (the page ----
+    // answers the server's pings and nobody is dropped), the Room follows what the room says, and when the leader presses START the Room takes the hand-off: the key of the seat is written for the game page, the tab goes to the game page and the Room's
+    // own cards say that the game is opening. The page is the real web/lobby.html and web/home/home.js in the fake browser of tests/scripts/web_page_harness.js, on a real socket (the clock is the real one).
+    await scenario('the front page: the room goes on while the person asks for Home, and START reaches the page', async () => {
         const webDir = path.join(path.dirname(path.resolve(modulePath)), '..');
         globalThis.AntsShapes = require(path.join(webDir, 'shapes.js'));
         const harness = require('./web_page_harness.js')(path.join(webDir, 'lobby.html'));
@@ -612,22 +612,22 @@ const pressReady = (env) => { const button = env.$('start'), can = !button.disab
         check('a link opens the page on the Room, behind the name card', env.screen() === 'room' && !env.$('name-step').hidden && pageSockets.length === 0);
         env.$('name-step-go').click();
         await step('the page joins by the link: the real room welcomes it as seat 1 and it waits for Ada', () => () => A.seatOf('Bea') === 1 && env.$('start').textContent === 'READY', 5000);
-        env.toggleRoom();
-        check('Bea presses Home: Home shows and the room is not touched (one socket, Ada heard nobody leave)', env.screen() === 'home' && pageSockets.length === 1 && A.count('left') === 0);
+        env.menuHome();
+        check('Bea presses Home in the Menu: the page holds a room, so the Room stays (the middle panel is the room until she leaves), and the room is not touched (one socket, Ada heard nobody leave)', env.screen() === 'room' && pageSockets.length === 1 && A.count('left') === 0);
         check('the leader moves Bea to color 2 and plans for the two of them (no bot to wait for)', A.move(1, 2) === true);
         await step('... Bea is in color 2', () => () => A.seatOf('Bea') === 2);
         check('(the plan)', A.setPlan({ map: '', kinds: [N.PLAN.Open, N.PLAN.Nobody, N.PLAN.Open, N.PLAN.Nobody], teamA: N.NO_TEAM, teamB: N.NO_TEAM }) === true);
-        await step('Home follows what the room says: the page holds the room and its line says who starts', () => () => env.holdsRoom() && env.$('go-status').textContent === 'Ada starts the match.');
+        await step('the Room follows what the room says: the page holds the room and its line says who starts', () => () => env.holdsRoom() && env.$('go-status').textContent === 'Ada starts the match.');
         await sleep(2500);
-        check('2.5 seconds on Home: the page answered the server\'s pings, and Bea is still in her color (no hold, no drop)', A.count('left') === 0 && A.room.slots[2].state === N.SLOT.Client && A.room.slots[2].name === 'Bea' && pageSockets.length === 1 && env.screen() === 'home');
-        check('Bea presses Ready up on her own card (the page is on Home: the room is still the page\'s)', pressReady(env) === true);
+        check('2.5 seconds on the Room: the page answered the server\'s pings, and Bea is still in her color (no hold, no drop)', A.count('left') === 0 && A.room.slots[2].state === N.SLOT.Client && A.room.slots[2].name === 'Bea' && pageSockets.length === 1 && env.screen() === 'room');
+        check('Bea presses Ready up on her own card', pressReady(env) === true);
         await step('... Ada is shown that Bea is ready', () => () => readyOf(A, 'Bea'));
         check('Ada presses START', A.start() === true);
-        await step('START reaches the page on Home: the tab goes to the game page of its seat and name, once', () => () => env.assigned.length === 1, 5000);
+        await step('START reaches the page: the tab goes to the game page of its seat and name, once', () => () => env.assigned.length === 1, 5000);
         check('... the address of the game page (the plain code, the seat, the name; no key)', JSON.stringify(env.assigned) === JSON.stringify(['https://play.test/?join=/ws&room=' + room + '&seat=2&name=Bea']), JSON.stringify(env.assigned));
         const entry = JSON.parse(env.storage.data['ants.rejoin.' + room + '.2'] || 'null');
         check('... the key of the seat that the room gave the page is written for the game page (32 hex digits that are not zero, this site\'s server), and it is in no address', !!entry && /^[0-9a-f]{32}$/.test(entry.k) && !/^0+$/.test(entry.k) && entry.s === 'wss://play.test/ws' && env.assigned[0].indexOf(entry.k) === -1);
-        check('... Home says "Opening the game…" and stays Home', env.screen() === 'home' && env.$('home').children[2].hidden === false && env.$('home').children[2].textContent === 'Opening the game…');
+        check('... the Room says "Opening the game…" itself (Bea\'s card, and the line under the big button) and stays the Room', env.screen() === 'room' && /Opening the game…/.test(env.card(2).textContent) && /^Ada pressed START\. Opening the game for everybody/.test(env.$('go-status').textContent));
         check('(the room waits for the games: START is on for both)', A.room.starting === true && A.room.slots[2].state === N.SLOT.Client);
         A.leave();
         for (const ws of pageSockets) { try { ws.close(); } catch (e) { /* closed already */ } }
@@ -835,7 +835,7 @@ const pressReady = (env) => { const button = env.$('start'), can = !button.disab
         for (const ws of sockets) { try { ws.close(); } catch (e) { /* closed already */ } }
     });
 
-    // ---- the hand-off that does not come (docs/HOME_SCREEN.md, START while a guest sits on Home): the tab was told to go to the game page, and the page is still here 15 s later. It says so ("slow to open. Reload this page to get your seat back"),
+    // ---- the hand-off that does not come (docs/HOME_SCREEN.md, START): the tab was told to go to the game page, and the page is still here 15 s later. It says so ("slow to open. Reload this page to get your seat back"),
     // keeps the seat (a Leave room that sent a Leave would end the START for everybody and leave a game page that is only slow with no seat to take over), and a game page that is 20 s late takes the seat over with the key
     // that the page wrote for it, as a game does (the page's own socket is superseded). This runs in real time: it takes about 21 s.
     await scenario('the hand-off that does not come: after 15 s the page says so and keeps the seat; a game page that is 20 s late takes it over', async () => {
@@ -850,8 +850,7 @@ const pressReady = (env) => { const button = env.$('start'), can = !button.disab
         const env = harness.runLobby('?room=' + room, {}, { me: login('Bea'), WebSocket: ToTheServer, realTime: true });
         env.$('name-step-go').click();
         await step('Bea joins by the link', () => () => A.seatOf('Bea') === 1 && env.$('start').textContent === 'READY', 5000);
-        env.toggleRoom();
-        check('(Bea goes Home, Ada plans for two)', env.screen() === 'home' && A.setPlan({ map: '', kinds: [N.PLAN.Open, N.PLAN.Open, N.PLAN.Nobody, N.PLAN.Nobody], teamA: N.NO_TEAM, teamB: N.NO_TEAM }) === true);
+        check('(Ada plans for two)', env.screen() === 'room' && A.setPlan({ map: '', kinds: [N.PLAN.Open, N.PLAN.Open, N.PLAN.Nobody, N.PLAN.Nobody], teamA: N.NO_TEAM, teamB: N.NO_TEAM }) === true);
         await step('... the plan is in (the line says who starts)', () => () => env.$('go-status').textContent === 'Ada starts the match.');
         check('Bea presses Ready up on her own card', pressReady(env) === true);
         await step('... Ada is shown that Bea is ready', () => () => readyOf(A, 'Bea'));
@@ -860,10 +859,9 @@ const pressReady = (env) => { const button = env.$('start'), can = !button.disab
         const t0 = Date.now();
         const STALLED = 'The game is slow to open. Reload this page to get your seat back.';       // (a game page that is 20 s late is slow, it did not fail: "did not open" comes a minute after START)
         await sleep(5000);
-        check('5 s later Home still says "Opening the game…", the bars are inert, and no strip says that anything is wrong', env.$('home').children[2].hidden === false && env.home('hbar').hasAttribute('inert') && env.$('banner').hidden === true);
+        check('5 s later the Room still says "Opening the game…", it is still the Room, the bars are inert, and no strip says that anything is wrong', env.screen() === 'room' && /Opening the game…/.test(env.card(1).textContent) && env.home('hbar').hasAttribute('inert') && env.$('banner').hidden === true);
         await step('at 15 s the strip says that the game is slow to open, with a Reload button', () => () => env.$('banner').hidden === false && env.$('banner-text').textContent === STALLED, 15000);
-        check('... not before 14.5 s, and Home takes presses again with Leave room off', Date.now() - t0 >= 14500 && env.$('home').children[2].hidden === true && !env.home('hbar').hasAttribute('inert') && env.roomBar('leave').disabled === true && env.$('banner-x').textContent === 'Reload');
-        env.makeRoom();
+        check('... not before 14.5 s, and the bars take presses again with Leave room off (the page still holds the room and shows it)', Date.now() - t0 >= 14500 && env.screen() === 'room' && env.holdsRoom() && !env.home('hbar').hasAttribute('inert') && env.roomBar('leave').disabled === true && env.$('banner-x').textContent === 'Reload');
         env.roomBar('leave').click();
         await sleep(800);
         check('Leave room pressed on the stalled page sends no Leave: Ada has heard nobody leave, the page\'s socket is open, Bea has her color', A.count('left') === 0 && A.seatOf('Bea') === 1 && pageSockets.length === 1 && pageSockets[0].readyState === 1 && A.room.starting === true);
