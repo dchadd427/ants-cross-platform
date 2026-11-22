@@ -603,11 +603,12 @@ void run_unstick_tests() {
             ASSERT_EQ(raw->free_thief().homeward(), 0u);
             ASSERT_EQ(raw->free_thief().proposed(), 0u);
         }
-        // a Thief that is shut in on the raid tile alone has no tile to be clicked to: nothing is proposed (the walls are the Fire Ant's business, AI57.8)
-        {
+        // a Thief whose part of the map holds no tile that is not a tile of a hill has no tile to be clicked to: nothing is proposed (the walls are the Fire Ant's business, AI57.8). Two such parts: the raid tile
+        // alone (the mound and a ring of rocks round it), and the raid tile with the column of the walls and the row above the mound, which are walkable but are tiles of the hill
+        for (const TileCoord centre : {TileCoord{41, 41}, TileCoord{42, 41}}) {
             LoopWorld w(true, 12, false);
             w.run_to_raid_end();
-            rocks_ring(w.sim, TileCoord{41, 41}, 3);                                           // (a pocket of nothing but tiles of the hill: no tile to be clicked to)
+            rocks_ring(w.sim, centre, 3);
             rocks_ring(w.sim, TileCoord{22, 22}, 6);
             LevelPlan plan = peace_plan(Level::Hard);
             plan.plugs = false;
