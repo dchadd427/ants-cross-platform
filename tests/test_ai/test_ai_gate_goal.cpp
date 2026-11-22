@@ -1225,21 +1225,27 @@ void run_gate_goal_tests() {
             }
         }
         {   // (e) a throw passes a tile over that refuses the landing for a power-up, and lands elsewhere once the power-up is taken (the Thief power-ups beside HELLRAISER III's vault): of the
-            // hops of the same cost the one that is chosen lands on the same tile either way
+            // hops of the same cost the one that is chosen lands on the same tile either way, even when a hop of the other kind lands right where the way goes on
             assets::LevelData level3;
             ASSERT_TRUE(level3.load_from_file(std::string(ANTS_SOURCE_DIR) + "/Community-Maps/HELLRAISER III.lvl"));
             sim::SimulationEngine sim3;
             sim3.init(level3, 1, 0x0F);
             const MapInfo map3(sim3);
-            uint32_t loose = 0;
+            uint32_t tried = 0;
             for (uint8_t seat = 0; seat < 4; ++seat) {
                 const GateInfo gates = GateInfo::analyse(map3, sim3.grid(), seat);
-                for (const BombHop& h : gates.hops()) loose += h.firm ? 0u : 1u;
-                const BombHop chosen = gates.best_hop_into(gates.piles()[0].comps);
-                ASSERT_EQ(chosen.bombs, 1);
-                ASSERT_TRUE(chosen.firm);
+                const std::vector<int32_t>& comps = gates.piles()[0].comps;
+                ASSERT_TRUE(gates.best_hop_into(comps).firm);
+                for (const BombHop& h : gates.hops()) {
+                    const bool straight = h.from.x == h.bomb.x || h.from.y == h.bomb.y;
+                    if (h.firm || !straight || h.bombs != 1 || std::find(comps.begin(), comps.end(), h.to_comp) == comps.end()) continue;
+                    HopChoice c;
+                    c.near = h.land();                                                  // the loose hop lands exactly on the tile that the choice would like to be nearest to
+                    ASSERT_TRUE(gates.best_hop_into(comps, c).firm);
+                    ++tried;
+                }
             }
-            ASSERT_TRUE(loose >= 1u);                                                  // (the map has hops of the other kind: the choice was between them)
+            ASSERT_TRUE(tried >= 1u);                                                  // (the map has hops of the other kind: the choice was between them)
         }
     } TEST_END();
 

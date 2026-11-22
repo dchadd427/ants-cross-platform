@@ -365,8 +365,8 @@
   {
    "id": "choice_ignores_combat_ants",
    "file": "src/ants_ai/gate_info.cpp",
-   "old": "    const int32_t ca = choice.punchers.empty() ? kSafeFar : hop_clearance(a, choice.punchers);\n    const int32_t cb = choice.punchers.empty() ? kSafeFar : hop_clearance(b, choice.punchers);\n",
-   "new": "    const int32_t ca = kSafeFar;\n    const int32_t cb = kSafeFar;\n",
+   "old": "    for (const sim::TileCoord& a : punchers) {\n        for (const sim::TileCoord& t : {hop.from, hop.bomb, hop.land()}) d = std::min(d, std::max(std::abs(a.x - t.x), std::abs(a.y - t.y)));\n    }\n",
+   "new": "    (void)punchers;\n",
    "test": "timeout 900 env ANTS_TEST_FILTER=AI27.15 ./build/tests/test_ai/test_ai",
    "expect": "AI27.15"
   },
@@ -374,7 +374,7 @@
    "id": "choice_ignores_straight_step",
    "file": "src/ants_ai/gate_info.cpp",
    "old": "    if (straight_a != straight_b) return straight_a;\n",
-   "new": "",
+   "new": "    if (false && straight_a != straight_b) return straight_a;\n",
    "test": "timeout 900 env ANTS_TEST_FILTER=AI27.15 ./build/tests/test_ai/test_ai",
    "expect": "AI27.15"
   },
@@ -382,7 +382,7 @@
    "id": "choice_ignores_ally_side",
    "file": "src/ants_ai/gate_info.cpp",
    "old": "        if (mine_a != mine_b) return mine_a;\n",
-   "new": "",
+   "new": "        if (false && mine_a != mine_b) return mine_a;\n",
    "test": "timeout 900 env ANTS_TEST_FILTER=AI27.15 ./build/tests/test_ai/test_ai",
    "expect": "AI27.15"
   },
@@ -398,7 +398,7 @@
    "id": "ally_side_power_up_never_taken",
    "file": "src/ants_ai/standard_tasks_powerup.cpp",
    "old": "(ally_side && !(tactics_.gate_map && !ally_reaches(v, c.map, p.tile)))",
-   "new": "ally_side",
+   "new": "(ally_side && !(tactics_.gate_map && !ally_reaches(v, c.map, p.tile) && false))",
    "test": "timeout 900 env ANTS_TEST_FILTER=AI27.18 ./build/tests/test_ai/test_ai",
    "expect": "AI27.18"
   }
