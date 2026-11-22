@@ -1210,6 +1210,8 @@ void run_gate_goal_tests() {
             ASSERT_TRUE(nearest(clear) >= 4);                                          // none of them reaches the standing tile, the plant tile or the landing
             ASSERT_TRUE(nearest(clear) >= nearest(plain));
             ASSERT_TRUE(clear.from.x == clear.bomb.x || clear.from.y == clear.bomb.y);   // a step along a row or a column: no walk between the plant and the throw
+            const BombHop alike = GateInfo::best_hop_between(gates, sim.grid(), vault, gates.home(), HopChoice{});         // (with nothing else to tell them apart: a step along a row or a column comes before the first in the scan, which is a diagonal one)
+            ASSERT_TRUE(alike.from.x == alike.bomb.x || alike.from.y == alike.bomb.y);
         }
         {   // (d) two allies: of the hops that are alike, each takes one whose plant tile is nearer to its own hill than to its ally's, so they never plant on the same tile
             const auto dist2 = [](TileCoord a, TileCoord b) { return (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y); };

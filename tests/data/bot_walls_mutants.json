@@ -127,16 +127,16 @@
   {
    "id": "plant_tile_not_cleared",
    "file": "src/ants_ai/gate_task.cpp",
-   "old": "    else if (!tile_blocked(context, hop.bomb)) context.orders.special(ant_, hop.bomb);",
-   "new": "    else context.orders.special(ant_, hop.bomb);",
+   "old": "    else if (!tile_blocked(context, hop.bomb)) send(context, true, hop.bomb);",
+   "new": "    else send(context, true, hop.bomb);",
    "test": "timeout 600 env ANTS_TEST_FILTER=AI27.9b ./build/tests/test_ai/test_ai",
    "expect": "AI27.9b"
   },
   {
    "id": "step_tile_not_cleared",
    "file": "src/ants_ai/gate_task.cpp",
-   "old": "        } else if (!tile_blocked(context, hop.from)) {\n            context.orders.move({ant_}, hop.from);",
-   "new": "        } else {\n            context.orders.move({ant_}, hop.from);",
+   "old": "        } else if (!tile_blocked(context, hop.from)) {\n            send(context, false, hop.from);",
+   "new": "        } else {\n            send(context, false, hop.from);",
    "test": "timeout 600 env ANTS_TEST_FILTER=AI27.9b ./build/tests/test_ai/test_ai",
    "expect": "AI27.9b"
   },
@@ -365,8 +365,8 @@
   {
    "id": "choice_ignores_combat_ants",
    "file": "src/ants_ai/gate_info.cpp",
-   "old": "    for (const sim::TileCoord& a : punchers) {\n        for (const sim::TileCoord& t : {hop.from, hop.bomb, hop.land()}) d = std::min(d, std::max(std::abs(a.x - t.x), std::abs(a.y - t.y)));\n    }\n",
-   "new": "    (void)punchers;\n",
+   "old": "    for (const sim::TileCoord& a : punchers) {\n",
+   "new": "    for (const sim::TileCoord& a : punchers) {\n        if (d >= 0) break;\n",
    "test": "timeout 900 env ANTS_TEST_FILTER=AI27.15 ./build/tests/test_ai/test_ai",
    "expect": "AI27.15"
   },
