@@ -14,8 +14,8 @@ if (!modulePath || !wsUrl) { console.log('usage: web_lobby_server_check.js lobby
 const N = require(path.resolve(modulePath));
 
 // The WebSocket client for a page's code: over a plain socket, the same on every node (the global WebSocket arrived in node 22); mini_websocket.js
-const MiniWebSocket = require('./mini_websocket.js');
-// ANTS_NATIVE_WEBSOCKET=1 runs the same scenarios with node's own WebSocket (node 22 or later), as a browser does
+const MiniWebSocket = require('./mini_websocket.js').visitors();           // (every connection is a visitor of its own to the server's limits per address, as behind the site's nginx)
+// ANTS_NATIVE_WEBSOCKET=1 runs the same scenarios with node's own WebSocket (node 22 or later), as a browser does (it cannot name a visitor's address: every page then comes from one address, so start the server with --no-address-limits)
 const WS = process.env.ANTS_NATIVE_WEBSOCKET && typeof WebSocket !== 'undefined' ? WebSocket : MiniWebSocket;
 
 let checks = 0;

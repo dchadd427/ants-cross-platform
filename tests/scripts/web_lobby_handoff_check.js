@@ -11,7 +11,7 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const { spawn } = require('child_process');
-const MiniWebSocket = require('./mini_websocket.js');
+const MiniWebSocket = require('./mini_websocket.js').visitors();           // (every connection is a visitor of its own to the server's limits per address, as behind the site's nginx)
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function until(label, fn, ms) {
