@@ -25,6 +25,8 @@ const gone = (sock) => sock.closed === true;
 const touch = (env, kind) => (env.doc.capturing[kind || 'pointerdown'] || []).forEach((fn) => fn({}));       // (a press, a key or a touch of the person: what the repeat of a public room asks for)
 const openGames = async (env) => { tap(env.home('games')); await flush(); };
 const OTHERS = ['Maya', 'Sage'];
+// a page that hosts a public room (Quick host with no room, and the room that the server makes is public): "Your room is already public." is then the notice of the list, a toast with one button and no question
+const hostedPublic = (env, names) => { tap(env.home('host')); return env.arrive({ key: KEY, seats: seatsOf(names), room: { flags: PUBLIC } }); };
 
 (async () => {
 
@@ -335,91 +337,26 @@ const OTHERS = ['Maya', 'Sage'];
     sock.receive(roomAs(['Maya', 'Sage'], 0, PUBLIC));
     same('(nothing more is sent)', visibilities(sock), [1]);
 }
-{   // a leader of a private room, with others: it asks first, and then flips the room, the others stay
-    const env = await page();
-    const sock = myRoom(env, ['Maya', 'Sage', 'Pip']);
-    env.toggleRoom();
-    tap(env.home('host'));
-    const box = dialogOf(env);
-    check('Quick host with a private room of yours that has others in it asks first: "Make your room public?", who is in it, and the answer that changes nothing has the focus; nothing was sent', !!box && textOf(first(box, 'gctitle')) === 'Make your room public?'
-          && textOf(first(box, 'gcline')) === 'Sage and Pip are in it. Anybody on the front page will be able to join it.' && textOf(first(box, 'gyes')) === TEXT.makePublic && textOf(first(box, 'gstay')) === TEXT.keepPrivate && env.focused === first(box, 'gstay')
-          && visibilities(sock).length === 0 && env.screen() === 'home');
-    tap(first(box, 'gstay'));
-    check('The answer that keeps the room as it is changes nothing: the card is gone, nothing was sent, Home stays, no timer waits for the room to turn public', dialogOf(env) === null && visibilities(sock).length === 0 && env.screen() === 'home' && env.sockets.length === 1);
-    tap(env.home('host'));
-    pressEscape(env);
-    check('Escape is the answer that keeps the room as it is', dialogOf(env) === null && visibilities(sock).length === 0);
-    tap(env.home('host'));
-    tap(first(dialogOf(env), 'gyes'));
-    check('"Make it public" flips it: Visibility(public) at once, the Room shows, no second room, nobody leaves', visibilities(sock).length === 1 && visibilities(sock)[0] === 1 && env.screen() === 'room' && env.sockets.length === 1 && leaves(sock) === 0);
-    sock.receive(roomAs(['Maya', 'Sage', 'Pip'], 0, PUBLIC));
-    same('... and says who stays in it, as the picture does', toastTextOf(env), 'Your room is public now. It shows in Open games; Sage and Pip stay in it.');
-    const one = await page();
-    const s1 = myRoom(one, ['Maya', 'Sage']);
-    one.toggleRoom();
-    tap(one.home('host'));
-    check('(one other: the card names him alone, "Sage is in it.")', textOf(first(dialogOf(one), 'gcline')) === 'Sage is in it. Anybody on the front page will be able to join it.');
-    tap(first(dialogOf(one), 'gyes'));
-    s1.receive(roomAs(['Maya', 'Sage'], 0, PUBLIC));
-    same('(and "Sage stays in it")', toastTextOf(one), 'Your room is public now. It shows in Open games; Sage stays in it.');
-    const alone = await page();
-    const sa = myRoom(alone, ['Maya']);
-    alone.toggleRoom();
-    tap(alone.home('host'));
-    check('a leader who is alone in the room is not asked: it flips at once', dialogOf(alone) === null && visibilities(sa).length === 1 && alone.screen() === 'room');
-    const bots = await page();
-    bots.makeRoom();
-    const sb = bots.arrive({ key: KEY, seats: [[C, 'Maya'], [NET0.SLOT.Bot, 'Easy'], [E, ''], [E, '']], room: { flags: PRIVATE } });
-    bots.toggleRoom();
-    tap(bots.home('host'));
-    check('(a computer player is not a person who is asked about: only people are in the question)', dialogOf(bots) === null && visibilities(sb).length === 1);
-    const press = await page();
-    const sp = myRoom(press, ['Maya', 'Sage']);
-    press.toggleRoom();
-    tap(press.home('host'));
-    sp.receive(roomMessage(seatsOf(['Maya', 'Sage']), { you: 0, leader: 0, flags: STARTING }));
-    check('START that reaches the page while the question is up takes the question away and nothing is sent', dialogOf(press) === null && visibilities(sp).length === 0);
-}
-{   // already public
-    const env = await page();
-    const sock = myRoom(env, OTHERS, PUBLIC);
-    env.toggleRoom();
-    tap(env.home('host'));
-    check('Quick host with a room that is public already sends nothing, says so and shows the Room', visibilities(sock).length === 0 && toastTextOf(env) === 'Your room is already public.' && env.screen() === 'room' && env.sockets.length === 1);
-}
-{   // START reaches a guest while the card "Leave ... and host your own?" is up
-    const env = await page({ search: '?room=k7m2xq', options: { stayHome: false } });
-    const sock = guestRoom(env, 'Pebble', PUBLIC);
-    env.toggleRoom();
-    tap(env.home('host'));
-    const rbar = env.$('r-acts');
-    check('(the card is up, and the bar is inert behind it)', dialogOf(env) !== null && env.home('hbar').hasAttribute('inert'));
-    sock.receive(roomMessage(seatsOf(['Pebble', 'Maya']), { you: 1, leader: 0, flags: STARTING }));
-    check('START reaches the page: the card is gone, the hand-off goes, and both bars stay inert (the card gives back what it took before the hand-off holds them)', env.assigned.length === 1 && dialogOf(env) === null && env.home('hbar').hasAttribute('inert') && rbar.hasAttribute('inert'));
-    await wait(env, 16000);
-    check('... and 15 s later, when Home takes presses again, they are free', !env.home('hbar').hasAttribute('inert') && !rbar.hasAttribute('inert') && env.home('host').disabled === true && env.home('games').disabled === true);
-}
-{   // somebody else's room: ask first
-    const env = await page({ search: '?room=k7m2xq', options: { stayHome: false } });
-    const guestSock = guestRoom(env, 'Pebble', PUBLIC);
-    env.toggleRoom();
-    tap(env.home('host'));
-    const box = dialogOf(env);
-    check('Quick host as a guest asks first, in the approved card: "Leave Pebble’s room and host your own?", the answer that changes nothing has the focus, and nothing has happened yet (no socket, no Leave)', !!box
-          && textOf(first(box, 'gctitle')) === 'Leave Pebble’s room and host your own?' && textOf(first(box, 'gyes')) === 'Leave and host' && textOf(first(box, 'gstay')) === 'Stay here' && env.focused === first(box, 'gstay') && box.getAttribute('role') === 'dialog'
-          && box.getAttribute('aria-modal') === 'true' && env.sockets.length === 1 && leaves(guestSock) === 0 && !guestSock.closed);
-    check('... the rest of Home takes no press while it is up (inert)', env.$('home').children.filter((c) => !classes(c).includes('gshade')).every((c) => c.getAttribute('inert') !== null));
-    tap(first(box, 'gstay'));
-    check('"Stay here" changes nothing: the card is gone, nobody left, no socket, Home is as it was', dialogOf(env) === null && env.sockets.length === 1 && leaves(guestSock) === 0 && env.screen() === 'home' && env.$('home').children.every((c) => c.getAttribute('inert') === null));
-    tap(env.home('host'));
-    pressEscape(env);
-    check('Escape is "Stay here"', dialogOf(env) === null && env.sockets.length === 1 && leaves(guestSock) === 0);
-    tap(env.home('host'));
-    tap(first(dialogOf(env), 'gyes'));
-    check('"Leave and host" leaves the room (a Leave, the socket closed), makes a room of its own (a new socket and code, not the room of the link) and shows the Room', leaves(guestSock) === 1 && guestSock.closed && env.sockets.length === 2 && env.screen() === 'room' && helloRoom(env.last().sent[0] || env.last().open().sent[0]) !== 'k7m2xq');
-    const mine = env.last();
-    env.arrive({ key: KEY2, seats: seatsOf(['Maya']), room: { flags: PRIVATE } });
-    same('... and Visibility(public) goes after its Welcome', visibilities(mine), [1]);
+{   // Quick host while the page holds a room just shows the room: nothing is asked, nothing is sent, nobody leaves (while the page holds a room the middle panel is the room, and Leave is the way out)
+    const guestPage = () => page({ search: '?room=k7m2xq', options: { stayHome: false } });
+    const cases = [
+        ['the leader of a private room with others in it', async () => { const env = await page(); return [env, myRoom(env, ['Maya', 'Sage', 'Pip'])]; }],
+        ['the leader of a private room, alone in it', async () => { const env = await page(); return [env, myRoom(env, ['Maya'])]; }],
+        ['the leader of a public room', async () => { const env = await page(); return [env, myRoom(env, OTHERS, PUBLIC)]; }],
+        ['the leader of a private room with a computer player in it', async () => { const env = await page(); env.makeRoom(); return [env, env.arrive({ key: KEY, seats: [[C, 'Maya'], [NET0.SLOT.Bot, 'Easy'], [E, ''], [E, '']], room: { flags: PRIVATE } })]; }],
+        ['a guest of somebody else\'s room', async () => { const env = await guestPage(); return [env, guestRoom(env, 'Pebble', PUBLIC)]; }],
+        ['a page whose room is on its way (the server has not said the Room yet)', async () => { const env = await page(); env.makeRoom(); return [env, env.last().open()]; }],
+    ];
+    for (const [who, make] of cases) {
+        const [env, sock] = await make();
+        const sockets = env.sockets.length, entries = env.entries.length;
+        tap(env.home('host'));
+        await flush();
+        check('Quick host as ' + who + ' shows the Room and changes nothing: no question, no notice, no Visibility, no Leave, the same socket and seat', dialogOf(env) === null && toastOf(env).hidden === true && visibilities(sock).length === 0 && leaves(sock) === 0 && !sock.closed
+              && env.sockets.length === sockets && env.screen() === 'room' && env.entries.length === entries);
+        await wait(env, 20000);
+        check('... and nothing comes of it later (no request to make the room public is waiting)', visibilities(sock).length === 0 && leaves(sock) === 0 && env.screen() === 'room');
+    }
 }
 {   // START waiting, a match of yours that runs
     const env = await page();
@@ -452,58 +389,32 @@ const OTHERS = ['Maya', 'Sage'];
     env.arrive({ key: KEY, seats: seatsOf(['Maya']), room: { flags: PRIVATE } });
     check('Quick host, Leave room before the room is there, then a room that the page makes: the second room stays private (the request was for the first)', env.sockets.length === 2 && visibilities(second).length === 0 && state(env) === 'true,false');
 }
-{   // a room that is not ready (the page's seat is coming back), and a request that the pace holds back
+{   // a room that is not ready (the page's seat is coming back): Quick host only shows it
     const env = await page({ stored: { 'ants.name': 'Maya' }, options: { session: { 'ants.lobby': JSON.stringify({ c: 'abc234', k: hex(KEY), n: 'Maya', o: 1 }) } } });
     const waiting = env.sockets[0];
     tap(env.home('host'));
-    check('Quick host while the page\'s room is coming back (a reload of a tab that holds a seat) makes no second room and waits for it', env.sockets.length === 1 && env.screen() === 'room');
+    check('Quick host while the page\'s room is coming back (a reload of a tab that holds a seat) shows the Room, makes no second room, and asks nothing', env.sockets.length === 1 && env.screen() === 'room' && dialogOf(env) === null);
     env.arrive({ key: KEY, seats: seatsOf(['Maya']), room: { flags: PRIVATE } });
-    same('... and sends Visibility(public) when the room is there', visibilities(waiting), [1]);
+    same('... and the room that comes back is not made public by it: nothing is sent', visibilities(waiting), []);
+    const other = await page({ stored: { 'ants.name': 'Maya' }, options: { session: { 'ants.lobby': JSON.stringify({ c: 'abc234', k: hex(KEY), n: 'Maya', o: 1 }) } } });
+    const sock = other.sockets[0];
+    tap(other.home('host'));
+    other.arrive({ seat: 1, key: KEY, seats: seatsOf(['Pebble', 'Maya']), room: { you: 1, leader: 0, flags: PRIVATE } });
+    await wait(other, 30000);
+    check('... and the room that turns out to be somebody else\'s is never taken over: nothing is sent, now or later', visibilities(sock).length === 0 && toastOf(other).hidden === true);
 }
-{   // the seat that comes back is in a room that is public already
-    const env = await page({ stored: { 'ants.name': 'Maya' }, options: { session: { 'ants.lobby': JSON.stringify({ c: 'abc234', k: hex(KEY), n: 'Maya', o: 1 }) } } });
-    const sock = env.sockets[0];
+{   // the request of Quick host is for a room that the page leads: a room that says that somebody else leads it is never made public
+    const env = await page();
     tap(env.home('host'));
-    env.arrive({ key: KEY, seats: seatsOf(['Maya', 'Sage']), room: { flags: PUBLIC } });
-    check('Quick host while the page\'s room comes back, and the room turns out to be public already: nothing is sent, and the toast says so', visibilities(sock).length === 0 && toastTextOf(env) === 'Your room is already public.');
-}
-{
-    const env = await page({ stored: { 'ants.name': 'Maya' }, options: { session: { 'ants.lobby': JSON.stringify({ c: 'abc234', k: hex(KEY), n: 'Maya', o: 1 }) } } });
-    const sock = env.sockets[0];
-    tap(env.home('host'));
-    env.arrive({ seat: 1, key: KEY, seats: seatsOf(['Pebble', 'Maya']), room: { you: 1, leader: 0, flags: PRIVATE } });
-    check('a request that waited for a room which turned out to be the room of somebody else is dropped: it never takes it over', visibilities(sock).length === 0);
+    const sock = env.arrive({ seat: 1, key: KEY, seats: seatsOf(['Pebble', 'Maya']), room: { you: 1, leader: 0, flags: PRIVATE } });
     await wait(env, 30000);
-    check('... and it does not come back later', visibilities(sock).length === 0 && toastOf(env).hidden === true);
-}
-{   // ... not even when the guest becomes the host a moment later (the host leaves)
-    const env = await page({ stored: { 'ants.name': 'Maya' }, options: { session: { 'ants.lobby': JSON.stringify({ c: 'abc234', k: hex(KEY), n: 'Maya', o: 1 }) } } });
-    const sock = env.sockets[0];
-    tap(env.home('host'));
-    env.arrive({ seat: 1, key: KEY, seats: seatsOf(['Pebble', 'Maya']), room: { you: 1, leader: 0, flags: PRIVATE } });
-    sock.receive(roomMessage([[E, ''], [C, 'Maya'], [E, ''], [E, '']], { you: 1, leader: 1, flags: PRIVATE }));
-    await wait(env, 30000);
-    check('a request that waited for a room which was somebody else\'s is given up for good: when the host leaves and the page leads, the room stays private', visibilities(sock).length === 0 && state(env) === 'true,false');
-}
-{   // the page's pace holds the request back: it is made again a moment later
-    const env = await page({ options: { fakeClock: true } });
-    const sock = myRoom(env, ['Maya'], PRIVATE);
-    tap(visOf(env).children[1]);
-    sock.receive(roomAs(['Maya'], 0, PUBLIC));
-    tap(visOf(env).children[0]);
-    sock.receive(roomAs(['Maya'], 0, PRIVATE));
-    env.toggleRoom();
-    tap(env.home('host'));
-    check('Quick host when the page has no more requests to spend sends nothing yet', visibilities(sock).length === 2);
-    await wait(env, 1500);
-    same('... it is made a moment later (once)', visibilities(sock), [1, 0, 1]);
+    check('Quick host, then a room that a guest sits in: nothing is sent, now or 30 seconds later, and no notice says anything', visibilities(sock).length === 0 && sock.sent.every((b) => b[0] !== 35) && toastOf(env).hidden === true);
 }
 {   // a request that nobody answers is forgotten after a while: no room turns public much later
     const env = await page({ options: { fakeClock: true } });
-    const sock = myRoom(env, ['Maya'], PRIVATE);
-    env.toggleRoom();
     tap(env.home('host'));
-    same('Quick host sends Visibility(public)', visibilities(sock), [1]);
+    const sock = env.arrive({ key: KEY, seats: seatsOf(['Maya']), room: { flags: PRIVATE } });
+    same('Quick host with no room sends Visibility(public) after the Welcome', visibilities(sock), [1]);
     await wait(env, 20500);
     check('a room that has not said "public" after 20 seconds is told so (the notice that sends the leader to the Public switch)', toastTextOf(env) === TEXT.stillPrivate && toastOf(env).className.indexOf('warn') !== -1);
 }
@@ -945,9 +856,7 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
 }
 {   // the notice of the list is behind the question card too
     const env = await withList();
-    myRoom(env, ['Maya', 'Sage'], PUBLIC);
-    env.toggleRoom();
-    tap(env.home('host'));
+    hostedPublic(env, ['Maya', 'Sage']);
     env.toggleRoom();
     check('(a notice of the list stands, and takes presses)', toastOf(env).hidden === false && !toastOf(env).hasAttribute('inert'));
     await openGames(env);
@@ -968,7 +877,7 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     await openGames(env);
     const looks = env.looks();
     sock.receive(roomMessage(seatsOf(OTHERS), { you: 0, leader: 0, flags: STARTING }));
-    check('START reaches a page whose list is open: the hand-off goes (the tab goes to the game page), Home says that the game is opening, and the list is put away', env.assigned.length === 1 && popOf(env).hidden === true && env.$('home').children.some((c) => c.textContent === 'Opening the game…' && !c.hidden));
+    check('START reaches a page whose list is open: the hand-off goes (the tab goes to the game page), and the list is put away', env.assigned.length === 1 && popOf(env).hidden === true);
     await wait(env, 14000);
     env.hide(true); env.hide(false);
     await wait(env, 500);
@@ -990,13 +899,11 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
 {   // the leader of a public room starts: the hand-off goes, the switch cannot be pressed, the repeat is over, and the page says why (as the guest's buttons do)
     const SLOW = 'The game is slow to open. Reload this page to get your seat back.', FAILED = 'The game did not open. Reload this page to get your seat back.';
     const env = await page();
-    const sock = myRoom(env, OTHERS, PUBLIC);
+    const sock = hostedPublic(env, OTHERS);
     sock.receive(roomAs(OTHERS, 0, PUBLIC));
     const vis = visOf(env);
     check('(the leader of a public room: the switch can be pressed)', vis.hidden === false && vis.children.every((b) => b.disabled === false));
-    env.toggleRoom();
-    tap(env.home('host'));
-    check('(a notice of the list stands: Quick host on a public room says so)', toastTextOf(env) === 'Your room is already public.' && toastButtons(env).length === 1);
+    check('(a notice of the list stands: the room that came back public says so)', toastTextOf(env) === 'Your room is already public.' && toastButtons(env).length === 1);
     sock.receive(roomMessage(seatsOf(OTHERS), { you: 0, leader: 0, flags: STARTING }));
     check('START reaches the page: the hand-off goes, the notice is taken away (its OK would take no press), and the switch is off at once', env.assigned.length === 1 && toastOf(env).hidden === true && vis.children.every((b) => b.disabled === true));
     vis.children[0].click(); vis.children[1].click();
@@ -1047,26 +954,21 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
 }
 {   // a script that comes while a dialog of the page is open is under it as well
     const site = fakeSite();
-    const env = R.runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, fakeClock: true, fetch: site.fetch, popover: true });
+    const env = R.runLobby('', { 'ants.name': 'Maya', 'ants.rejoin.k7m2xq.1': JSON.stringify({ k: hex(KEY), s: 'wss://play.test/ws', t: Date.now() }) }, { stayHome: true, fakeClock: true, fetch: site.fetch, popover: true });
     env.advance(0);
-    env.makeRoom();
-    env.arrive({ key: KEY, seats: seatsOf(['Maya']), room: { flags: PUBLIC } });
-    env.toggleRoom();
     env.$('how-open').click();
     env.win.AntsHomeGames = R.PopoverGames;
     env.body.children.filter((c) => (c.tagName === 'script' && c.src === 'home/games.js') || (c.tagName === 'link' && c.href === 'home/games.css')).forEach((c) => c.onload && c.onload({}));
     await flush();
     env.home('host').click();
-    check('How it works is open when the list arrives: a notice that it makes then is inert with the rest of the page', toastTextOf(env) === 'Your room is already public.' && toastOf(env).hasAttribute('inert'));
+    check('How it works is open when the list arrives: a notice that it makes then ("Your match is running.", the strip\'s Rejoin) is inert with the rest of the page', toastTextOf(env) === 'Your match is running.' && toastOf(env).hasAttribute('inert'));
     env.$('how-close').click();
     check('... and takes presses again when the dialog is closed', !toastOf(env).hasAttribute('inert'));
 }
 {   // a dialog of the page (How it works, the map list) and the notice of the list: the toast is behind it, so it takes no key or tap
     const env = await page();
-    myRoom(env, ['Maya'], PUBLIC);
-    env.toggleRoom();
-    tap(env.home('host'));
-    check('(Quick host on a public room says so)', toastTextOf(env) === 'Your room is already public.');
+    hostedPublic(env, ['Maya']);
+    check('(the room that came back public says so)', toastTextOf(env) === 'Your room is already public.');
     env.$('how-open').click();
     check('How it works is open: the toast of the list is inert with the rest of the page (a Tab does not reach its OK)', toastOf(env).hasAttribute('inert') && env.$('how').hidden === false && !env.$('how').hasAttribute('inert'));
     env.$('how-close').click();
@@ -1096,16 +998,15 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 9. The toast: a notice is over the page, one at a time, and goes by itself unless it asks for an answer
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-{
+{   // a notice with no question: "You left the room." after a Leave of a room that nobody else is in
     const env = await page();
-    const sock = myRoom(env, OTHERS, PUBLIC);
     const toasts = () => env.body.findAll((e) => classes(e).indexOf('gtoast') !== -1);
-    env.toggleRoom();
-    tap(env.home('host'));
-    check('a notice with no question (already public) is the one toast, shown', toasts().length === 1 && toastOf(env).hidden === false && toastTextOf(env) === 'Your room is already public.');
-    env.toggleRoom();
-    tap(env.home('host'));
-    check('the same words again make no second toast', toasts().length === 1 && toastTextOf(env) === 'Your room is already public.');
+    myRoom(env, ['Maya']);
+    env.roomBar('leave').click();
+    check('a notice with no question (a room left) is the one toast, shown', toasts().length === 1 && toastOf(env).hidden === false && toastTextOf(env) === 'You left the room.');
+    myRoom(env, ['Maya']);
+    env.roomBar('leave').click();
+    check('the same words again make no second toast', toasts().length === 1 && toastTextOf(env) === 'You left the room.');
     await wait(env, 5000);
     check('... and the toast is still there before 6 s have gone', toastOf(env).hidden === false);
     toastOf(env).matches = () => true;       // (a browser's :hover, :focus-within)
@@ -1114,22 +1015,30 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     toastOf(env).matches = () => false;
     await wait(env, 2000);
     check('a toast that asks nothing goes by itself, 6 s after it came, and soon after the pointer left', toastOf(env).hidden === true);
-    env.toggleRoom();
-    tap(env.home('host'));
-    env.toggleRoom();
-    tap(env.home('host'));
+}
+{   // a notice with a question stays until it is answered
+    const env = await page();
+    const toasts = () => env.body.findAll((e) => classes(e).indexOf('gtoast') !== -1);
+    const homeKids = () => env.$('home').children.filter((c) => classes(c).indexOf('gshade') === -1);
+    toastOf(env).matches = () => false;       // (a browser's :hover, :focus-within: the pointer is somewhere else)
+    myRoom(env, ['Maya']);
+    env.roomBar('leave').click();
+    check('(a notice with no question comes first: "You left the room.", with the one button OK)', toastTextOf(env) === 'You left the room.' && toastButtons(env).length === 1);
+    const sock = myRoom(env, OTHERS, PUBLIC);
     sock.receive(roomAs(OTHERS, 0, PRIVATE));
-    check('a notice with a question ("Make it public") replaces the one that was there: one toast, its own two buttons (none of the old one is left)', toasts().length === 1 && toastButtons(env).length === 2 && toastTextOf(env) === TEXT.idle);
+    check('a notice with a question ("Make it public") replaces the one that was there: one toast, its own two buttons (none of the old one is left)', toasts().length === 1 && toastButtons(env).length === 2 && toastTextOf(env) === TEXT.idle
+          && textOf(toastButtons(env)[0]) === TEXT.makePublic);
     await wait(env, 20000);
     check('... and it stays for as long as it is not answered', toastOf(env).hidden === false && toasts().length === 1);
     pressEscape(env);
     check('Escape pressed elsewhere (the focus is not in the toast) does not close a toast that asks something', toastOf(env).hidden === false);
-    env.toggleRoom();
-    tap(env.home('host'));
-    check('(the question "Make your room public?" is up over the toast)', dialogOf(env) !== null);
+    env.roomBar('leave').click();
+    check('(the question "Leave your room?" is up over the toast: Leave with others in the room asks first)', dialogOf(env) !== null);
+    check('... and the rest of Home takes no press while it is up (inert)', homeKids().length > 0 && homeKids().every((c) => c.getAttribute('inert') !== null));
     env.doc.activeElement = toastButtons(env)[1];
     pressEscape(env);
     check('Escape that answers the question does not close the toast, even when the focus is on it', dialogOf(env) === null && toastOf(env).hidden === false);
+    check('... and Home takes presses again (nothing is inert any more)', homeKids().every((c) => c.getAttribute('inert') === null));
     (env.doc.listeners.focusin || []).forEach((fn) => fn({ target: env.home('games') }));       // (the focus was on the Games button before it went to the toast)
     env.doc.activeElement = toastButtons(env)[1];
     pressEscape(env);

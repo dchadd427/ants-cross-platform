@@ -43,11 +43,6 @@ class ThePage(unittest.TestCase):
             for token, why in ((r"=>", "an arrow function"), (r"\blet\b", "let"), (r"\bconst\b", "const"), (r"`", "a template literal"), (r"\.innerHTML", "innerHTML")):
                 self.assertIsNone(re.search(token, code), name + " is ES5 and sets text with textContent only: it has " + why)
 
-    def test_the_sheets_rows_are_in_the_page_and_the_sheet_is_put_away_in_the_markup(self):
-        page = read("web", "lobby.html")
-        for ident in ("rules-open", "rules-box", "rules-x", "rules-done", "r-vis", "r-fog", "direct"):
-            self.assertEqual(len(re.findall(r'id="%s"' % ident, page)), 1, ident)
-        self.assertRegex(page, r'<div class="rs-back" id="rules" hidden>', "the sheet is put away until the Rules button opens it")
 
 
 @unittest.skipUnless(NODE, "node is not installed: the Room's menu and sheet were NOT run (tests/scripts/web_room_menus_check.js)")

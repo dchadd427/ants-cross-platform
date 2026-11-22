@@ -45,7 +45,6 @@ let checks = 0;
 let failures = 0;
 function check(label, ok, detail) { checks++; if (!ok) { failures++; console.log('FAIL ' + label + (detail === undefined ? '' : ' (' + detail + ')')); } }
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const goHome = async (page) => { await page.click('.hbar .hmenu'); await page.click('.hmenubox a.mitem[aria-current="page"]'); };       // (the Menu's Home: the Room has no bar of its own and the top bar has no button for it)
 async function until(label, fn, ms) {
     const end = Date.now() + (ms || 10000);
     for (;;) {
@@ -154,41 +153,23 @@ const over = (a, b) => a && b && a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b
             check(label('a press on the dimmed page closes it'), !(await box(page, '.al-card')));
             await page.click('.hbar .hmenu'); await page.click('.hmenubox .al-menu'); await page.click('.al-line[data-switch="join"]'); await page.keyboard.press('Escape');       // (the switch is on again)
 
-            // ---- 2. a person joins while Home shows ----
+            // ---- 2. a person joins while the Room shows (the page never shows Home while it holds a room): the page's own toast says it, and Home's own alert is not drawn ----
             await page.click('.hbar .quick.host');
             await until('the host card', () => page.evaluate(() => !!document.querySelector('.gshade .gyes')));
             await page.evaluate(() => document.querySelector('.gshade .gyes').click());
             await until('the Room', () => page.evaluate(() => document.body.dataset.screen === 'room' && document.getElementById('code') && document.getElementById('code').textContent.length > 3));
-            await goHome(page);
-            await until('Home', () => page.evaluate(() => document.body.dataset.screen === 'home'));
             await sleep(300);
             await fetch(origin + '/__seat?seat=1&kind=bot&name=' + encodeURIComponent('Pip (bot, Easy)'));
             await sleep(500);
-            check(label('a computer player sits down: no alert, and the page\'s own toast is not up either'), !(await box(page, '.al-toast')) && await page.evaluate(() => document.getElementById('toast').hidden === true));
+            check(label('a computer player sits down: no alert of Home, and the page\'s own toast says nothing of it either'), !(await box(page, '.al-toast')) && await page.evaluate(() => document.getElementById('toast').hidden === true));
             await fetch(origin + '/__seat?seat=2&kind=client&name=Sam');
-            await until('the toast', () => box(page, '.al-toast'));
-            const t = await box(page, '.al-toast');
-            const parts = phone ? ['.htabs', '.hbar'] : ['#gchat .gc-form', '.hbar'];
-            let bad = [];
-            for (const sel of parts) { const b = await box(page, sel); if (over(t, b)) bad.push(sel); }
-            check(label('the toast is up, inside the window and not over ' + parts.join(' or ')), t.l >= 0 && t.r <= w && t.t >= 0 && t.b <= h && bad.length === 0, JSON.stringify(t) + ' ' + bad.join());
-            check(label('it says who and where, with Open, and the page\'s own toast is not up'), await page.evaluate(() => /Sam joined as Blue\./.test(document.querySelector('.al-toast').textContent) && /Open/.test(document.querySelector('.al-toast').textContent) && document.getElementById('toast').hidden === true));
-            await sleep(400);                                                          // (the toast comes in over a fifth of a second)
+            await sleep(600);
+            check(label('a person sits down while the Room shows: the page\'s own toast says who and where, and Home\'s alert is not drawn'), await page.evaluate(() => /Sam joined as Blue\./.test(document.getElementById('toast').textContent) && !document.getElementById('toast').hidden && !Array.from(document.querySelectorAll('.al-toast')).some((e) => !e.hidden)));
             await shot(page, name + '_join');
-            await page.click('.al-toast .btn');
-            check(label('Open shows the Room'), await page.evaluate(() => document.body.dataset.screen === 'room') && !(await box(page, '.al-toast')));
-            await goHome(page);
             await fetch(origin + '/__seat?seat=2&kind=empty');
             await sleep(300);
             await page.evaluate(() => { document.querySelectorAll('.al-toast, #toast').forEach((e) => { e.hidden = true; }); });       // (the page's own "Sam left." is up for a moment)
-            // the switch off: none
-            await page.evaluate(() => localStorage.setItem('ants.alerts.v1', '{"join":false}'));
-            await fetch(origin + '/__seat?seat=2&kind=client&name=Eve');
-            await sleep(600);
-            const offState = await page.evaluate(() => ({ own: document.getElementById('toast').hidden ? '' : document.getElementById('toast').textContent, mine: Array.from(document.querySelectorAll('.al-toast')).filter((e) => !e.hidden).map((e) => e.textContent), stored: localStorage.getItem('ants.alerts.v1'), screen: document.body.dataset.screen }));
-            check(label('the switch off: no alert on Home, and none of the page\'s own'), offState.own === '' && offState.mine.length === 0, JSON.stringify(offState));
             await page.evaluate(() => localStorage.removeItem('ants.alerts.v1'));
-            await fetch(origin + '/__seat?seat=2&kind=empty'); await sleep(300);
 
             // ---- 3. the background ----
             const original = await page.evaluate(() => document.title);
@@ -264,8 +245,6 @@ const bellState = (page) => page.evaluate(() => { const b = document.querySelect
             await until('the host card', () => page.evaluate(() => !!document.querySelector('.gshade .gyes')));
             await page.evaluate(() => document.querySelector('.gshade .gyes').click());
             await until('the Room', () => page.evaluate(() => document.body.dataset.screen === 'room' && document.getElementById('code') && document.getElementById('code').textContent.length > 3));
-            await goHome(page);
-            await until('Home', () => page.evaluate(() => document.body.dataset.screen === 'home'));
             await sleep(300);
             c = await controls(page); st = await bellState(page);
             check(label('with a room held: Quick host, Quick join, Match history, the account button and the Menu are inside the window and none is over another (or over the bell)'), !!c.hist && [c.host, c.join, c.hist, c.menu, c.chip].every((r) => r && r.l >= -0.5 && r.r <= w + 0.5 && r.t >= -0.5 && r.b <= h + 0.5) && clash(c).length === 0, clash(c).join() + ' ' + JSON.stringify(c));
@@ -306,8 +285,6 @@ const bellState = (page) => page.evaluate(() => { const b = document.querySelect
                 await until('the host card', () => page.evaluate(() => !!document.querySelector('.gshade .gyes')));
                 await page.evaluate(() => document.querySelector('.gshade .gyes').click());
                 await until('the Room', () => page.evaluate(() => document.body.dataset.screen === 'room' && document.getElementById('code') && document.getElementById('code').textContent.length > 3));
-                await goHome(page);
-                await until('Home', () => page.evaluate(() => document.body.dataset.screen === 'home'));
                 await sleep(300);
                 c = await controls(page);
                 check('bell place ' + name + ', ' + who + ', a room held: right beside the Menu\'s button, one gap to its left, the same top and height, Match history and the others inside the window and over no other', BESIDE(c, await gapOf(page)) && !!c.hist && c.menu.r >= w - 36 && c.menu.r <= w && clash(c).length === 0 && [c.host, c.join, c.hist, c.menu, c.bell].every((r) => r && r.l >= -0.5 && r.r <= w + 0.5 && r.t >= -0.5 && r.b <= h + 0.5), JSON.stringify([c, await gapOf(page)]));

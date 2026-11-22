@@ -129,8 +129,6 @@ async function newPage(browser, site, name, size, search, silent) {
     return page;
 }
 const lit = (page) => page.waitForFunction(() => { const g = document.querySelector('.quick.join'), q = document.querySelector('.quick.host'); return !!g && !!q && !g.disabled && !q.disabled; }, null, { timeout: 10000 });
-const goHome = async (page) => { await page.click('.hbar .hmenu'); await page.click('.hmenubox a.mitem[aria-current="page"]'); };       // (the Menu's Home: the Room has no bar of its own and the top bar has no button for it)
-const toRoom = (page) => page.evaluate(() => { location.hash = '#room'; });       // (the Room's address while the page holds a room: Home shows it as Forward does)
 const hostPrivate = async (page) => {       // (Quick host asks who can join; Invite only makes the page's own room and shows it)
     await page.click('.quick.host'); await page.waitForSelector('.gconfirm .gyes');
     await page.evaluate(() => Array.from(document.querySelectorAll('.gconfirm .gyes')).filter((b) => /^Invite only$/.test(b.textContent.trim()))[0].click());
@@ -261,10 +259,6 @@ async function flows() {
             const lines = await watcher.evaluate(() => [...document.querySelectorAll('.gconfirm .gcline')].map((e) => e.textContent));
             check('Quick join skips it: the card says "No open games right now." with the line that says that its one invite-only room is locked and skipped, and the room still has its one person', lines.length === 2 && lines[1] === '1 ' + GT.privateTag.toLowerCase().replace(' ', '-') + ' room is locked, so Quick join skips it.' && (await textOf(watcher, '.gconfirm .gctitle')) === 'No open games right now.' && await people() === 1, JSON.stringify(lines));
             await watcher.click('.gconfirm .gstay');
-            await goHome(host);
-            await until('the host is on Home', async () => (await screenOf(host)) === 'home', 8000);
-            const own = await until('the host\'s own private room is a locked card tagged Yours', async () => (await host.evaluate(() => { const c = document.querySelector('.glist .gpriv'); return c && c.querySelector('.gyours') ? { yours: c.querySelector('.gyours').textContent, controls: c.querySelectorAll('button, a').length, head: document.querySelector('.gpcount').textContent } : null; })), 12000);
-            check('the host\'s own list shows the room as a locked card tagged Yours (found by its host, map and seats: a locked row has no code), with nothing to press; the heading counts it', own.yours === 'Yours' && own.controls === 0 && own.head === 'none open, 1 ' + GT.private.toLowerCase(), JSON.stringify(own));
             for (const p of [host, watcher]) check('no script error in the page', p.errors.length === 0, p.errors.join(' | '));
             for (const p of [host, watcher]) await p.context().close();
         }
@@ -296,42 +290,6 @@ async function flows() {
         check('the host flips the room to Invite only: the guest\'s Rules button follows, and the real list no longer holds it', !after.lobbies.some((x) => x.code === code));
         for (const p of [maple, sage]) check('no script error in the page', p.errors.length === 0, p.errors.join(' | '));
         for (const p of [maple, sage]) await p.context().close();
-
-        // ---- 1b. a press on the page's own cards (the question, the name) is not a press elsewhere: the list stays open, with the focus where it was, and shows why a Join did not go (real mouse clicks) ----------------------
-        {
-            const a = await newPage(browser, fake, 'Maple', SIZES[2]); await lit(a);
-            await hostPrivate(a);
-            await a.waitForSelector('#slots li');
-            const room = await a.evaluate(() => document.getElementById('code').textContent.replace(/\s+/g, ''));
-            const b = await newPage(browser, fake, 'Sage', SIZES[2], '/?room=' + room);
-            await b.click('#name-step-go');
-            await until('Sage is in the room of Maple', async () => (await a.evaluate(() => document.getElementById('slots').textContent.indexOf('Sage') !== -1)), 10000);
-            await goHome(a);
-            await a.evaluate(() => document.querySelector('.htab.t-games').click()); await a.waitForSelector('.glist .gitem');
-            await a.click('.gjoin');
-            await a.waitForSelector('.gconfirm');
-            await a.click('.gstay');
-            check('"Stay here" with the mouse keeps the list open, and the focus is on the Join button that asked', await a.evaluate(() => !document.querySelector('.gpop').hidden && !document.querySelector('.gconfirm') && !!document.activeElement && document.activeElement.classList.contains('gjoin')));
-            await a.click('.gjoin');
-            await a.waitForSelector('.gconfirm');
-            await a.click('.gyes');
-            await a.waitForSelector('.gpnote:not([hidden])');
-            check('"Leave and join" into a game that is gone: the list is open and says "That game is not open any more." (and the room that the page is in is kept)', !(await a.evaluate(() => document.querySelector('.gpop').hidden)) && (await textOf(a, '.gpnote')) === 'That game is not open any more.' && await screenOf(a) === 'home' && (await a.evaluate(() => !!document.getElementById('code').textContent)));
-            await a.click('.gcodelink'); await a.fill('.gcode input', 'zzzzzz');
-            await a.click('.gcgo');
-            await a.waitForSelector('.gconfirm');
-            await a.click('.gyes');
-            await a.waitForSelector('#name-step:not([hidden])');
-            await a.click('#name-step-go');
-            await a.waitForFunction(() => { const h = document.querySelector('.gcode .hint'); return !!h && h.textContent.length > 0; }, null, { timeout: 12000 });
-            check('Join by code with a code that leads nowhere: the name card is answered, the list is still open and the words are under the field (not in a list that went away)', await a.evaluate(() => !document.querySelector('.gpop').hidden && /no room/i.test(document.querySelector('.gcode .hint').textContent)), await textOf(a, '.gcode .hint'));
-            await a.click('.gjoin');
-            await a.waitForSelector('.gconfirm');
-            await a.click('.gyes');
-            await a.waitForSelector('.gjoining:not([hidden]), .gpnote:not([hidden])');
-            check('(no script error in these pages)', a.errors.length === 0 && b.errors.length === 0, a.errors.concat(b.errors).join(' | '));
-            await a.context().close(); await b.context().close();
-        }
 
         // ---- 1c. a double click on Join is one Join: the line of a Join that waits is put above the rows, and its Cancel stands where the Join button stood, so that the second click of the double click lands on it (a real double click) ----
         for (const size of [SIZES[2], SIZES[0]]) {
@@ -388,7 +346,6 @@ async function flows() {
             const tess = await newPage(browser, fake, 'Tess', size, '/?room=' + raeRoom);
             await tess.click('#name-step-go');
             await until('Tess is in', async () => (await rae.evaluate(() => document.getElementById('slots').textContent.indexOf('Tess') !== -1)), 10000);
-            await goHome(rae);
             await rae.click('.quick.join');
             await rae.waitForSelector('.gconfirm');
             check(label + ': Quick join with another person in the own room asks first ("Leave your room?", "Tess is in your room…", the best room with its BEST tag, "Leave and join" and "Stay here")', (await textOf(rae, '.gctitle')) === 'Leave your room?' && /Tess is in your room/.test(await textOf(rae, '.gcline')) && (await textOf(rae, '.gconfirm .gbest')) === 'BEST' && (await textOf(rae, '.gconfirm .gname')) === 'Pebble');
@@ -452,7 +409,7 @@ async function flows() {
             const tess = await newPage(browser, fake, 'Tess', size, '/?room=' + room);
             await tess.click('#name-step-go');
             await until('Tess is in', async () => (await rae.evaluate(() => document.getElementById('slots').textContent.indexOf('Tess') !== -1)), 10000);
-            await goHome(rae); await rae.click('.quick.join'); await rae.waitForSelector('.gconfirm .gcbtns'); await rae.waitForTimeout(300);
+            await rae.click('.quick.join'); await rae.waitForSelector('.gconfirm .gcbtns'); await rae.waitForTimeout(300);
             const cv = await look(rae);
             check(label + ': the question has its two buttons', cv.buttons === 2, JSON.stringify(cv));
             verdict('the question', cv);
@@ -506,24 +463,15 @@ async function flows() {
                 await a.waitForFunction(() => document.getElementById('slots').textContent.indexOf('Pip') !== -1 || document.getElementById('slots').textContent.indexOf('bot') !== -1);
                 await shot(a, 'room_private', size);
                 check(label + ': the Room card has the switch (private), 44 px high, inside the window, and the page does not scroll sideways', (await small(a, '.vis')).length === 0 && (await a.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)), JSON.stringify(await small(a, '.vis')));
-                await goHome(a); await a.click('.quick.host');
-                await a.waitForSelector('.gconfirm');
-                await shot(a, 'confirm_public', size);
-                check(label + ': Quick host with people in the room asks first ("Make your room public?"), with its two answers at least 44 px high', (await textOf(a, '.gctitle')) === 'Make your room public?' && await a.evaluate(() => Array.from(document.querySelectorAll('.gconfirm .btn')).every((b) => b.getBoundingClientRect().height >= 44)));
-                await a.click('.gyes');
+                await pressVis(a);       // (the room is made public in the Rules sheet: Quick host with a room only shows it)
                 await a.waitForSelector('.vbtn[aria-pressed="true"] >> text=Public', { state: 'attached' });
                 await shot(a, 'room_public', size);
                 await shot(b, 'room_guest', size);
-                await goHome(a);
-                await a.evaluate(() => document.querySelector('.htab.t-games').click()); await a.waitForSelector('.glist .gitem');
-                await a.click('.gjoin');
+                await a.click('.quick.join');
                 await a.waitForSelector('.gconfirm');
                 await shot(a, 'confirm', size);
-                check(label + ': the question card is inside the window with its two answers at least 44 px high', await a.evaluate(() => { const r = document.querySelector('.gconfirm').getBoundingClientRect(), ok = Array.from(document.querySelectorAll('.gconfirm button')).every((x) => x.getBoundingClientRect().height >= 44); return ok && r.bottom <= window.innerHeight + 1 && r.right <= window.innerWidth + 1 && r.left >= 0; }));
+                check(label + ': the question card of Quick join ("Leave your room?") is inside the window with its two answers at least 44 px high', await a.evaluate(() => { const r = document.querySelector('.gconfirm').getBoundingClientRect(), ok = Array.from(document.querySelectorAll('.gconfirm button')).every((x) => x.getBoundingClientRect().height >= 44); return ok && r.left >= 0 && r.right <= window.innerWidth + 0.5 && r.top >= 0 && r.bottom <= window.innerHeight + 0.5; }));
                 await a.keyboard.press('Escape');
-                await goHome(b); await b.click('.quick.host');
-                await b.waitForSelector('.gconfirm');
-                await shot(b, 'confirm_host', size);
                 await a.context().close(); await b.context().close();
                 // a refusal in plain words (a game of the fake list that the real server does not have), and a Join that works (the real list)
                 const r = await newPage(browser, fake, 'Sage', size); await lit(r);
@@ -582,7 +530,6 @@ async function flows() {
                 await shot(qa, 'qj_leave', size);
                 check(label + ': the question before Leave room is the card of the other questions, inside the window', (await textOf(qa, '.gctitle')) === 'Leave your room?' && (await qa.evaluate(() => { const r = document.querySelector('.gconfirm').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight; })));
                 await qa.click('.gstay');
-                await goHome(qa);
                 await qa.click('.quick.join');
                 await qa.waitForSelector('.gconfirm .gbest');
                 await shot(qa, 'qj_confirm', size);
@@ -590,57 +537,23 @@ async function flows() {
                 await qa.context().close(); await qb.context().close();
             }
         }
-        // ---- 1g. the page's own public room is the first row of its Games list, tagged Yours, with no Join; the count and the heading include it; BEST and Quick join are for the other rooms (real clicks, real rooms) ---------
+        // ---- 1g. Quick join from a room that the page holds: the own room is skipped by its code, and the page joins the best other room (the list is not drawn while the page holds a room: the real list answers) ----
         for (const size of [SIZES[2], SIZES[0]]) {
             const label = size[0] + ' ' + size[1] + 'x' + size[2];
-            const rowsOf = (p) => p.evaluate(() => Array.from(document.querySelectorAll('.glist .gitem')).map((li) => ({ name: li.querySelector('.gname').textContent, yours: !!li.querySelector('.gyours') && li.querySelector('.gyours').textContent, best: !!li.querySelector('.gbest'), buttons: li.querySelectorAll('button').length, join: !!li.querySelector('.gjoin') })));
             const hostPublic = async (name) => {
                 const p = await newPage(browser, live, name, size); await lit(p);
                 await p.click('.quick.host'); await p.click('.gconfirm .gyes');       // (Quick host with no room asks Public or Invite only first: Public room)
                 await until(name + ' room is public', async () => (await p.evaluate(() => { const b = document.querySelector('.vbtn[aria-pressed="true"]'); return b && b.textContent; })) === 'Public', 10000);
                 return p;
             };
-            const openGames = async (p) => { if (!(await p.evaluate(() => document.querySelector('.gpop') && !document.querySelector('.gpop').hidden))) await p.evaluate(() => document.querySelector('.htab.t-games').click()); };
             const maple = await hostPublic('Maple');
-            await goHome(maple);
-            await openGames(maple);
-            await until('the own room is the one row', async () => (await rowsOf(maple)).length === 1, 12000);
-            let rows = await rowsOf(maple);
-            check(label + ': only the own public room is open: one row, Maple, tagged Yours, with no Join button and no button at all, no BEST', rows[0].name === 'Maple' && rows[0].yours === 'Yours' && !rows[0].join && rows[0].buttons === 0 && !rows[0].best);
-            check(label + ': ... the button counts it (1), the heading says "1 waiting · updates live", and "No open games right now." is not shown', (await textOf(maple, '.htab.t-games .pill')) === '1' && (await textOf(maple, '.gpcount')) === '1 waiting · updates live' && (await maple.evaluate(() => document.querySelector('.gempty').hidden && !document.querySelector('.glist').hidden)));
-            await maple.click('.glist .gitem');
-            check(label + ': ... a press on the own row changes nothing: Home, the list still open, the room still Maple\'s', (await screenOf(maple)) === 'home' && (await maple.evaluate(() => !document.querySelector('.gpop').hidden && document.querySelectorAll('.glist .gitem').length === 1)));
             const sage = await hostPublic('Sage'), tess = await hostPublic('Tess');
-            await until('the list holds three rows', async () => (await rowsOf(maple)).length === 3, 14000);
-            rows = await rowsOf(maple);
-            check(label + ': own room and two others: Yours is the first row, BEST is on the second and on no other, only the other two have a Join', rows[0].name === 'Maple' && rows[0].yours === 'Yours' && !rows[0].best && !rows[0].join && !rows[1].yours && rows[1].best && rows[1].join && !rows[2].yours && !rows[2].best && rows[2].join, JSON.stringify(rows));
-            check(label + ': ... the button says 3 and the heading "3 waiting · updates live"', (await textOf(maple, '.htab.t-games .pill')) === '3' && (await textOf(maple, '.gpcount')) === '3 waiting · updates live');
-            const bestHost = rows[1].name;
-            // the own room goes private: its row becomes a locked card (a private room is listed so: no Join, nothing to press) after the rooms that can be joined, at the next look
-            await maple.keyboard.press('Escape');
-            await toRoom(maple);
-            await pressVis(maple);
-            await until('the room is invite only', async () => (await maple.evaluate(() => document.querySelector('.vbtn[aria-pressed="true"]').textContent)) === GT.private, 10000);
-            await goHome(maple);
-            await openGames(maple);
-            await until('the own row is a locked card at the end', async () => { const r = await rowsOf(maple); return r.length === 3 && r[2].yours === 'Yours' && !r[2].join; }, 14000);
-            rows = await rowsOf(maple);
-            check(label + ': the own room goes private: its row is a locked card tagged Yours after the other two, with no Join and nothing to press; the other two stay joinable (BEST on the first), the button says 2', rows.slice(0, 2).every((r) => r.name !== 'Maple' && !r.yours && r.join) && rows[0].best && !rows[1].best && rows[2].buttons === 0 && (await textOf(maple, '.htab.t-games .pill')) === '2' && (await textOf(maple, '.gpcount')) === '2 open, 1 ' + GT.private.toLowerCase(), JSON.stringify(rows) + ' ' + (await textOf(maple, '.gpcount')));
-            // public again, and Quick join: the own room is skipped by its code, the page joins the best other room
-            await maple.keyboard.press('Escape');
-            await toRoom(maple);
-            await pressVis(maple);
-            await until('the room is public again', async () => (await maple.evaluate(() => document.querySelector('.vbtn[aria-pressed="true"]').textContent)) === 'Public', 10000);
-            await goHome(maple);
-            await openGames(maple);
-            await until('the own row is back, first', async () => { const r = await rowsOf(maple); return r.length === 3 && r[0].yours === 'Yours'; }, 14000);
-            rows = await rowsOf(maple);
-            check(label + ': public again: Yours is first again and BEST is still on the first other row (' + rows[1].name + ')', rows[1].best && !rows[2].best && !rows[0].best);
-            await maple.keyboard.press('Escape');
+            await until('the real list holds three rooms', async () => (await (await maple.request.get(live.url + '/lobbies')).json()).lobbies.length === 3, 14000);
+            await sleep(1500);       // (a look of the page that is less than a second old is as good as a new one: let it be older, so that the press looks at the three rooms)
             await maple.click('.quick.join');
-            await until('Maple is in another room', async () => (await screenOf(maple)) === 'room' && (await textOf(maple, '#room-h')) !== 'Maple’s room', 15000).catch(() => null);
+            await until('Maple is in another room', async () => /^(Sage|Tess)’s room$/.test(await textOf(maple, '#room-h')), 15000).catch(() => null);
             const wentTo = await textOf(maple, '#room-h');
-            check(label + ': Quick join skips the own room (by its code) and joins the best other room: ' + wentTo, (await screenOf(maple)) === 'room' && /^(Sage|Tess)’s room$/.test(wentTo) && wentTo === bestHost + '’s room', wentTo + ' / ' + bestHost);
+            check(label + ': Quick join skips the own room (by its code) and joins another public room: ' + wentTo, (await screenOf(maple)) === 'room' && /^(Sage|Tess)’s room$/.test(wentTo), wentTo);
             for (const p of [maple, sage, tess]) check(label + ': no script error in the page', p.errors.length === 0, p.errors.join(' | '));
             for (const p of [maple, sage, tess]) await p.context().close();
         }

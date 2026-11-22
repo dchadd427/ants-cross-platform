@@ -649,7 +649,7 @@ const SESSION = (room, own) => ({ 'ants.lobby': JSON.stringify({ c: room, k: hex
         const env = runLobby('', { 'ants.lobbyseat': note('k7m2xq') });
         const hello = env.last().open().sent[0];
         check('a page that opens at once after another went takes its seat back: a Hello with the key, the code and the name that the seat had, and no card', hex(hello) === hex(helloBytes('Maya', 'k7m2xq', { key: KEY })) && env.$('name-step').hidden && env.sockets.length === 1);
-        check('... it opens on Home (a seat that is taken back in the background), with the room held', env.screen() === 'home' && env.holdsRoom());
+        check('... it opens on the Room (a seat that is taken back in the background: there is no Games view for a person who holds a room), with the room held', env.screen() === 'room' && env.holdsRoom());
         env.arrive({ key: KEY, flags: 0, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 0, leader: 0 } });
         check('... the room welcomes it as the seat of the key: no strip, it leads, the tab\'s session keeps the seat, and the note is gone (the seat is this page\'s)', words(env) === '' && JSON.parse(env.session.data['ants.lobby']).k === hex(KEY) && JSON.parse(env.session.data['ants.lobby']).o === 1 && !('ants.lobbyseat' in env.storage.data));
     }
@@ -891,13 +891,14 @@ for (const [what, me, shown] of [['a hub where nobody is logged in', 'guest', tr
     same('... the room is named after the host, and the big button is the guest\'s Ready (START is the host\'s)', [env.$('room-h').textContent, env.$('start').disabled, env.$('start').textContent], ['Maya\u2019s room', false, 'READY']);
 }
 {   // the link that Share gives (copied, or handed to the share sheet of a phone) carries the room and nothing of the player
-    const env = runLobby('', { 'ants.name': 'Maya' }, {});
+    const env = runLobby('', { 'ants.name': 'Maya' }, { fakeClock: true });
     env.arrive({ key: KEY });
     const code = env.$('code').textContent.replace(' ', '');
+    check('(the button shows the code in two groups of three and says Share)', env.$('code').textContent === code.slice(0, 3) + ' ' + code.slice(3) && env.$('share-t').textContent === 'Share');
     env.$('share').click();
     same('Share copies the invitation: the page\'s address and ?room=<code>', env.copied, ['https://play.test/?room=' + code]);
     check('... a name is never in it', env.param(env.copied[0], 'name') === null && env.shared.length === 0);
-    check('... and the button says so for a moment, then says Share again', env.$('share-t').textContent === 'Copied!' || env.$('share-t').textContent === 'Share');
+    check('... and the button says Copied! for a moment, then says Share again', env.$('share-t').textContent === 'Copied!' && (env.advance(1800), env.$('share-t').textContent === 'Share'));
     const phone = runLobby('', { 'ants.name': 'Maya' }, { share: true, win: { matchMedia: () => ({ matches: true }) } });
     phone.arrive({ key: KEY });
     const pc = phone.$('code').textContent.replace(' ', '');

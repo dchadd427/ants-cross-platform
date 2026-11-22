@@ -52,7 +52,7 @@
         legendPlayer: 'player', legendBot: 'bot', legendOpen: 'open seat', code: 'Join by code', haveCode: 'Have a code?', closeCode: 'Close', codePlaceholder: 'Room code, like k7m 2xq', join: 'Join',
         private: 'Invite only', public: 'Public', privateRoom: 'Invite-only room', visLabel: 'Who can join this room',
         noteHow: 'Invite-only rooms show locked in Open games. Only people with the link can join.', noteListed: 'Public rooms are listed in Open games. The link always works.', noteWait: 'One moment, then press again.',
-        ok: 'OK', makePublic: 'Make it public', rejoin: 'Rejoin', stay: 'Stay here', keepPrivate: 'Keep it invite only', hostTitle: 'Host a game', hostLine: 'Who can join? A public room shows in Open games, and anyone can join it. An invite-only room shows there locked; people join only with your link.', hostPublic: 'Public room', hostPrivate: 'Invite only', leaveJoin: 'Leave and join', leaveHost: 'Leave and host', cancel: 'Cancel', reload: 'Reload', best: 'BEST', yours: 'Yours', live: ' · updates live', finding: 'Finding a game…', looking: 'Looking for open games…', roomOpening: 'Opening the room…', goRoom: 'Go to the room', leaveRoom: 'Leave room', notNow: 'Not now',
+        ok: 'OK', makePublic: 'Make it public', rejoin: 'Rejoin', stay: 'Stay here', hostTitle: 'Host a game', hostLine: 'Who can join? A public room shows in Open games, and anyone can join it. An invite-only room shows there locked; people join only with your link.', hostPublic: 'Public room', hostPrivate: 'Invite only', leaveJoin: 'Leave and join', cancel: 'Cancel', reload: 'Reload', best: 'BEST', yours: 'Yours', live: ' · updates live', finding: 'Finding a game…', looking: 'Looking for open games…', roomOpening: 'Opening the room…', goRoom: 'Go to the room', leaveRoom: 'Leave room', notNow: 'Not now',
         noneLine: 'Nobody is waiting for a player. Host one, and others can join you.', noneYours: 'Your room goes public with its map and your friends in it.', noneNew: 'A new room opens for you, and it goes public.', joiningCode: 'Joining the room…', joinFirst: ' Wait for it, or cancel it in the list.', opening: 'The game is opening. If it does not, reload this page.',
         already: 'Your room is already public.', running: 'Your match is running.', idle: 'Your room went invite only after 30 minutes. Make it public again?',
         hostChanged: 'This room is invite only again because the host changed.', stillPrivate: 'Your room is still invite only. Use the Public switch in the room.',
@@ -342,7 +342,7 @@
         function stopPending() { if (pendingTimer !== null) { cancel(pendingTimer); pendingTimer = null; } }
         function endPending() { pending = null; stopPending(); }
         function startPending(forClient) {                     // forClient: the client whose room is to be made public (a room that is left meanwhile is not the one: a later room is never made public by it)
-            pending = { forClient: forClient || null, sent: false, tries: 0 };
+            pending = { forClient: forClient || null, sent: false };
             stopPending();
             pendingTimer = later(guard(function () {
                 pendingTimer = null;
@@ -358,8 +358,7 @@
             if (room.isPublic) { endPending(); notice('already', TEXT.already, '', []); return; }
             if (!c.canAct()) return;
             if (c.setPublic(true)) { pending.sent = true; lastSent = now(); lock(); return; }
-            if (++pending.tries <= 3) later(guard(function () { var k = client(); if (pending && k === c) doPending(k); }), RETRY_MS);
-            else endPending();
+            endPending();       // (a fresh room has all of its requests: a press that is held back cannot be the first one)
         }
         function startHost() {                             // a room of the page's own (through make()), then Visibility(public) when the room is ready
             startPending();
@@ -387,20 +386,10 @@
             if (joining) { stillJoining(); return; }
             if (over()) { itsWay(); return; }
             closeAll();
-            if (pending) { ctl.show('room', 'push'); return; }          // (a second press: the first one is on its way)
             var c = client();
             if (matchRunning(c)) { runningNotice(); return; }
             if (!c || (c.room && !c.room.lobby)) { if (straight) startHost(); else chooseHost(); return; }       // (no room, a refused one, or a room that a game made: a room of our own, public or private as asked; Host one! of the card of Quick join goes straight to public: that is what its words promise)
-            if (!c.room) { startPending(c); ctl.show('room', 'push'); return; }  // (the page's room is on its way: it gets Visibility(public) when it is ready)
-            if (!c.isLeader()) {
-                ask({ title: 'Leave ' + hostLabel(c) + ' room and host your own?', line: 'A new room opens for you, with its own map and colors. It goes public.', yes: TEXT.leaveHost }, function () { page.leave(); startHost(); });
-                return;
-            }
-            if (c.room.isPublic) { notice('already', TEXT.already, '', []); ctl.show('room', 'push'); return; }
-            var names = others(c);
-            function flip() { startPending(c); ctl.show('room', 'push'); doPending(c); }
-            if (names.length) ask({ title: 'Make your room public?', line: rules.listOf(names) + (names.length > 1 ? ' are' : ' is') + ' in it. Anybody on the front page will be able to join it.', yes: TEXT.makePublic, stay: TEXT.keepPrivate }, flip);
-            else flip();
+            ctl.show('room', 'push');                      // (the page holds a room, as its host or as a guest: Quick host shows it. Nothing is changed and nothing is asked: while the page holds a room the middle panel is the room, and Leave is the way out)
         }
 
         // ---- the confirm card (the approved picture): the question, what it is about, and the answer that changes nothing has the focus ----

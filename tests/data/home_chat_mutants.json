@@ -1332,13 +1332,6 @@
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "opening_card_below_the_dock",
-   "file": "web/home/home.css",
-   "old": "translate(-50%, -50%); z-index: 8;",
-   "new": "translate(-50%, -50%); z-index: 5;",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
    "id": "narrow_phone_heading_wraps",
    "file": "web/home/chat.css",
    "old": "@media (max-width: 359px) { .gc-head { gap: 6px; } .gc-title { font-size: 19px; white-space: nowrap; } .gc-online { gap: 6px; font-size: 13px; } }\n",

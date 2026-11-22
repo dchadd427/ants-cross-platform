@@ -325,7 +325,7 @@ function runLobby(search, stored, options) {
         win.AntsHome = Object.assign({}, win.AntsHome, { mount: (e) => { const api = realMount(e); env.homeApi = api; env.pageBridge = e.page; return api; } });       // (the page's own Home and the bridge that it gave it: env.makeRoom below)
     }
     const nav = { userAgent: options.ua || 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36', platform: 'Linux x86_64' };
-    if (options.clipboard !== false) nav.clipboard = { writeText(t) { env.copied.push(t); return { then() {} }; } };       // (options.clipboard: false is a browser without the clipboard's own API: the copy command is used)
+    if (options.clipboard !== false) nav.clipboard = { writeText(t) { env.copied.push(t); return { then(ok) { if (ok) ok(); } }; } };       // (options.clipboard: false is a browser without the clipboard's own API: the copy command is used)
     // options.share: a browser that has navigator.share (true: it takes the data; 'throws': it throws; 'rejects': the person closes the sheet, a promise that fails)
     if (options.share === true) nav.share = (d) => { env.shared.push(d); return Promise.resolve(); };
     if (options.share === 'throws') nav.share = () => { throw new Error('not allowed'); };
@@ -386,6 +386,7 @@ function runLobby(search, stored, options) {
     // button of the room's header, 'hmenu' Home's Menu button
     env.holdsRoom = () => !!env.pageBridge.info().client;       // (the page holds a room: made, joined or taken back)
     env.toggleRoom = () => env.homeApi.show(env.screen() === 'room' ? 'home' : 'room', 'push');       // (the screens, as Quick host, the Menu's Home and Back change them: there is no button of the bar for it any more)
+    env.menuHome = () => { env.roomBar('hmenu').click(); const box = env.body.findAll((e) => String(e.className).split(/\s+/).indexOf('hmenubox') !== -1)[0]; box.children[0].click(); };       // (the person's way to Home: the Menu's first item; a page that holds a room stays on the Room. toggleRoom is the screen function itself, for the checks of the Games list)
     env.roomBar = (cls) => (cls === 'rhome' ? { click: () => env.toggleRoom() } : env.home(cls) || env.root.findAll((e) => String(e.className).split(/\s+/).indexOf(cls) !== -1)[0] || null);       // (the tree is flat: the room's header is not under Home's div)
     env.screen = () => env.body.getAttribute('data-screen');
     env.dumpAll = () => [...Object.values(env.elements), ...env.root.children, env.body].flatMap((e) => e.all()).map((e) => e.textContent + '|' + JSON.stringify(e.attributes) + '|' + e.value).join('\n') + env.innerHTMLWrites.join('') + JSON.stringify(env.replaced) + JSON.stringify(env.assigned);

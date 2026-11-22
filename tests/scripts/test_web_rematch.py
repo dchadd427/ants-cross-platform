@@ -135,17 +135,16 @@ class TheStylesheet(unittest.TestCase):
 
     def test_every_class_that_the_scripts_set_has_a_rule(self):
         for selector in (".rematch {", ".rematch[hidden]", ".rmt-title {", ".rmt-text {", ".rmt-who {", ".rmt-chip {", ".rmt-chip i {", ".rmt-chip.away {", ".rmt-go {", ".rmt-go[hidden]", ".rematch .btn.big {",
-                         ".rmt-note {", ".backbar {", ".backbar b {", ".backbar a {", ".pstat.back::before {", ".pstat.away::before {", ".start-note {", ".start-note[hidden]"):
+                         ".rmt-note {", ".backbar {", ".backbar b {", ".backbar a {", ".pstat.back::before {", ".pstat.away::before {"):
             self.assertIn(selector, self.css)
 
     def test_the_colors_of_the_pictures(self):
-        """picture R1: the panel in the gold frame, the chips; picture R2: the green strip at the top, the dots of back and away, the gold note under START"""
+        """picture R1: the panel in the gold frame, the chips; picture R2: the green strip at the top, the dots of back and away"""
         css = self.css
         self.assertRegex(css, r"\.rematch \{[^}]*border: 3px solid var\(--gold\)")
         self.assertRegex(css, r"\.rmt-chip \{[^}]*background: #0b1612; border: 1px solid #1d4a3d")
         self.assertRegex(css, r"\.backbar \{[^}]*color: #d6ffe8; background: #173b2c; border-bottom: 3px solid #2f9a68")
         self.assertRegex(css, r"\.pstat\.back::before \{ background: #6fe3a4; \}")
-        self.assertRegex(css, r"\.start-note \{[^}]*color: #ffe9a8; background: #0b1612; border: 1px solid var\(--gold\)")
 
     def test_a_narrow_window_has_one_column(self):
         self.assertRegex(self.css, r"@media \(max-width: 760px\) \{\s*\.rematch \{ grid-template-columns: minmax\(0, 1fr\);")

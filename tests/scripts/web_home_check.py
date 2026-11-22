@@ -150,7 +150,7 @@ STATE_JS = """(function () {
              stat: stat ? text(stat) : '', statClass: stat ? stat.className : '', pencil: !!li.querySelector('[data-edit]'), remove: !!li.querySelector('[data-remove]'), ask: ask ? text(ask) : '', grip: !!li.querySelector('[data-grip]'),
              tab: tab ? text(tab) : '', teams: teams, picked: li.classList.contains('picked'), target: li.classList.contains('picked-target'), classes: li.className, markup: nm ? nm.children.length : 0 };
   });
-  return JSON.stringify({ path: location.pathname, search: location.search, heading: text($('room-h')), code: text($('code')), link: $('link').value, invite: text($('invite-line')), cards: cards,
+  return JSON.stringify({ path: location.pathname, search: location.search, heading: text($('room-h')), code: text($('code')), link: location.origin + '/?room=' + text($('code')).replace(/\\s+/g, ''), cards: cards,
     slotsNote: text($('slots-note')), teamsNote: text($('teams-note')), teamsWarn: $('teams-note').classList.contains('warn'),
     start: { text: text($('start')), disabled: $('start').disabled, busy: $('start').getAttribute('aria-busy') }, plan: text($('plan')), planShort: text($('plan-short')), info: text($('info')), map: text($('map-name')).toLowerCase(), mapDisabled: $('change-map').disabled || $('change-map').hidden,
     banner: { shown: !banner.hidden, text: text($('banner-text')), button: $('banner-x').hidden ? '' : text($('banner-x')), cls: banner.className }, rejoin: !$('rejoin').hidden, toast: $('toast').hidden ? '' : text($('toast')),
@@ -193,7 +193,7 @@ LAYOUT_JS = """(function () {
   var mapName = $('map-name');
   return JSON.stringify({ scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth, innerH: window.innerHeight, docH: document.documentElement.scrollHeight, scrollY: window.scrollY,
     panel: rect(panel), side: shown(side) ? rect(side) : null, maprow: rect(document.querySelector('.maprow')), start: rect($('start')), go: rect(document.querySelector('.go')), cards: cards, strays: strays,
-    plan: [shown($('plan')), shown($('plan-short'))], link: shown($('link')), copy: rect($('copy')), invite: rect(document.querySelector('.invite')), share: shown($('share')),
+    plan: [shown($('plan')), shown($('plan-short'))], share: shown($('share')),
     mapFit: [mapName.scrollWidth, mapName.clientWidth] });
 })()"""
 
@@ -593,8 +593,7 @@ def main():
                 logo: (function () { var i = document.querySelector('header.mast h1'); return i ? [document.querySelectorAll('header.mast img').length === 0, i.textContent] : null; })(),
                 tag: document.querySelector('.mast .tag').textContent, sub: document.querySelector('.mast .sub').textContent,
                 head: [document.getElementById('room-h').textContent, document.querySelector('.code').textContent],
-                link: [document.getElementById('link').value, document.getElementById('link').readOnly, document.getElementById('link').getAttribute('aria-label')],
-                buttons: ['copy'].map(function (id) { return document.getElementById(id).textContent; }), share: getComputedStyle(document.getElementById('share')).display, linkLine: document.getElementById('invite-line').textContent,
+                share: [document.getElementById('share-t').textContent, document.getElementById('code').textContent],
                 noMore: !document.getElementById('more') && !document.getElementById('morebox') && document.body.textContent.indexOf('More ways to play') === -1,
                 font: Array.from(document.fonts).some(function (f) { return f.family.indexOf('Libre Franklin') !== -1 && f.status === 'loaded'; }),
                 screenSize: [screen.width, screen.height], picked: pickedShape,
@@ -608,10 +607,7 @@ def main():
             code = code_of(st)
             check(re.match(r"^[%s]{6}$" % CODE_ALPHABET, code) is not None and st["code"] == code[:3] + " " + code[3:] and info["head"] == ["Your room", "Room code " + st["code"]],
                   "the room: \"Your room\" with a code of six letters and numbers (no i, l, o, 0 or 1) shown in two groups of three (%r, the link carries %r)" % (st["code"], code))
-            check(info["link"] == [web + "?room=" + code, True, "Invitation link"] and info["linkLine"] == "Players who open this link take the next free color.",
-                  "the link is the page's address with ?room=<code> in a read-only field, and the line under it says what it does (%r)" % (info["link"][0],))
-            check(info["buttons"] == ["Copy link"] and info["share"] == "none",
-                  "Copy link is there (Share is for a phone; Join by code is in the Games list of Home) (%s)" % (info["buttons"],))
+            check(info["share"] == ["Share", st["code"]], "the Share button is there with the room's code on it (%s)" % (info["share"],))
             check(info["noMore"], "there is no \"More ways to play\": the map selection screen is the only way to play")
             status = server.room(code) or {}
             check(status.get("lobby") is True and status.get("state") == "waiting" and status.get("leader") == 0 and status.get("joined") == 1 and status.get("starting") is False and status.get("plan", "").startswith("oooo"),
@@ -882,11 +878,7 @@ def main():
                 if width <= 720:                                                         # START stays in view at the bottom of a phone's window, with its line under it (the page is longer than the window)
                     if not (m["docH"] > m["innerH"] and start["top"] >= 0 and start["bottom"] <= m["innerH"] + 0.5 and m["go"]["bottom"] <= m["innerH"] + 0.5 and m["go"]["bottom"] >= m["innerH"] - 30):
                         problems.append("START! is not held at the bottom of the window (%s)" % {k: round(v) for k, v in start.items() if k in ("top", "bottom")})
-                    if m["plan"] != [False, True] or m["link"] or m["copy"]["left"] < panel["left"] or m["copy"]["right"] > panel["right"]:
-                        problems.append("the phone's short line, no link field and a Copy link inside the room's box: %s" % ([m["plan"], m["link"]],))
                 else:
-                    if m["plan"] != [True, False] or not m["link"]:
-                        problems.append("the long line under START and the link field are shown: %s" % ([m["plan"], m["link"]],))
                     if width >= 1041 and start["bottom"] > m["innerH"]:
                         problems.append("START! is not in the first screen")
                 if m["mapFit"][0] > m["mapFit"][1] + 0.5:

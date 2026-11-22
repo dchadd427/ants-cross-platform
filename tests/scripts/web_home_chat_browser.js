@@ -58,7 +58,7 @@ async function main() {
     let browser;
     try { browser = await playwright.chromium.launch(launch); } catch (e) { console.log('SKIP: no browser could be started (' + String(e.message).split('\n')[0] + '): the chat dock was NOT run in a browser'); await hub.close(); site.server.close(); process.exit(0); }
     const errors = [];
-    const goHome = async (page) => { await page.click('.hbar .hmenu'); await page.click('.hmenubox a.mitem[aria-current="page"]'); };       // (the Menu's Home: the Room has no bar of its own and the top bar no button for it)
+    const goHome = async (page) => { await page.click('.r-acts .leave'); await page.waitForFunction(() => document.body.getAttribute('data-screen') === 'home', null, { timeout: 5000 }); };       // (Leave: while the page holds a room there is no Games view, and Leave is the way to Home)
     const hostPrivate = async (page) => {       // (Quick host asks who can join; Invite only makes the page's own room and shows it)
         await page.evaluate(() => document.querySelector('.hbar .quick.host').click());
         await page.waitForSelector('.gcbtns button', { timeout: 5000 });
@@ -199,17 +199,6 @@ async function main() {
             check(name + ': when the notices are gone the panel is back as the visitor left it, without a press (Home\'s height changed, not the window\'s)', back.open === 'true' && back.height >= 200, JSON.stringify(back));
         }
         await shot(page, 'strips', name);
-        await context.close();
-    }
-    {
-        const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
-        const page = await context.newPage();
-        await page.goto(site.url + '/', { waitUntil: 'load' });
-        await page.waitForSelector('#gchat');
-        await page.evaluate(() => { const c = document.querySelector('.hopen'); c.hidden = false; document.querySelector('#gchat .gc-head').click(); });
-        await sleep(200);
-        const top = await page.evaluate(() => { const c = document.querySelector('.hopen').getBoundingClientRect(), d = document.querySelector('#gchat').getBoundingClientRect(); const x = Math.round(Math.max(c.left, d.left) + 20), y = Math.round(Math.max(c.top, d.top) + 10); const e = document.elementFromPoint(x, y); return { overlap: c.bottom > d.top && c.top < d.bottom, onTop: !!e && (e.closest('.hopen') !== null) }; });
-        check('the card "Opening the game…" is above an open dock where they meet', !top.overlap || top.onTop, JSON.stringify(top));
         await context.close();
     }
 

@@ -35,13 +35,9 @@ function same(label, got, want) {
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 1. The pure parts
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-same('the screen of an address and a history entry: the entry that Home wrote wins, else the hash; the Room only with a room to show',
-    [Home.screenOf({ ants: 'room' }, '', true), Home.screenOf({ ants: 'home' }, '#room', true), Home.screenOf(null, '#room', true), Home.screenOf(null, '', true), Home.screenOf({ ants: 'room' }, '#room', false),
-     Home.screenOf({ ants: 'other' }, '#room', true), Home.screenOf('room', '', true), Home.screenOf({}, '#nope', true)],
-    ['room', 'home', 'room', 'home', 'home', 'room', 'home', 'home']);
-same('the screen that a page opens on: a link (or a test room) opens the Room; a reload keeps the screen of the address when the tab holds a seat; else Home',
-    [Home.firstScreen(true, false, ''), Home.firstScreen(true, true, ''), Home.firstScreen(false, true, '#room'), Home.firstScreen(false, false, '#room'), Home.firstScreen(false, true, ''), Home.firstScreen(false, false, '')],
-    ['room', 'room', 'room', 'home', 'home', 'home']);
+same('the screen that the page shows: the Room while it holds a room, Home when it does not (no address and no entry of the history decides)', [Home.screenOf(true), Home.screenOf(false)], ['room', 'home']);
+same('the screen that a page opens on: a link (or a test room) and a seat that this tab holds open the Room; else Home',
+    [Home.firstScreen(true, false), Home.firstScreen(true, true), Home.firstScreen(false, true), Home.firstScreen(false, false)], ['room', 'room', 'room', 'home']);
 same('the address of the Room is the hash #room', Home.HASH, '#room');
 
 // The Menu's links are the page's own: the footer's, the header's (Matches, Discord), the Map maker's and How it works (a button, not a link)
@@ -81,7 +77,7 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     check('... and makes no room: no socket, nothing in this tab\'s session storage', env.sockets.length === 0 && env.session.data['ants.lobby'] === undefined);
     check('... and writes nothing to the history (the address stays what it is until a button is pressed), and moves nothing (no scroll, no focus: the first look is not a press)', env.pushed.length === 0 && env.replaced.length === 0 && env.marked.length === 0 && env.entries.length === 1 && env.scrolled.length === 0 && env.focused === null);
     const bar = env.$('home').children[0];
-    same('Home is a top bar, the body (the games and the players), the card that says that the game is opening and the phone\'s strip, in that order (the chat dock comes after them, when it loads)', env.$('home').children.map((c) => c.tagName + '#' + (c.id || classes(c)[0])), ['header#hbar', 'main#hmain', 'div#hopen', 'nav#htabs']);
+    same('Home is a top bar, the body (the games and the players) and the phone\'s strip, in that order (the chat dock comes after them, when it loads)', env.$('home').children.map((c) => c.tagName + '#' + (c.id || classes(c)[0])), ['header#hbar', 'main#hmain', 'nav#htabs']);
     same('the bar has the page\'s heading (words, no picture), Quick host, Quick join, Match history, and the right-hand group (the login chip and the Menu): no Games button, no button for a room', bar.children.map((c) => classes(c).slice(0, 2).join(' ')), ['hbrand', 'btn quick', 'btn quick', 'btn quick', 'hright']);
     check('... no button of the bar says Games (the list is on Home, and a phone\'s strip has Games)', !bar.findAll((e) => e.textContent === 'Games').length && !bar.findAll((e) => classes(e).indexOf('games') !== -1).length);
     const quickHost = env.home('host'), quickJoin = env.home('join'), hist = env.home('hist'), games = env.home('games');
@@ -98,14 +94,12 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     const main = env.$('home').children[1];
     check('the body\'s container is #hmain, and it holds only the room\'s panel until the pieces that fill it are in (the Games list docks into it when games.js has loaded: tests/scripts/web_home_games_check.js; the players list when players.js has): no Yard, no stand-in, no words, nothing that prints a size', main.id === 'hmain' && classes(main).join() === 'hmain'
           && main.children.length === 1 && main.children[0] === env.$('lobby') && !env.$('yard') && !/Yard will live|reserved: /.test(env.dumpAll()));
-    const strip = env.$('home').children[3];
+    const strip = env.$('home').children[2];
     same('the phone\'s strip has Games, Players and Chat, each a plain button that says whether it is the one shown (Games, at first), with a count that is not shown until there is one', [strip.getAttribute('aria-label'), strip.children.map((b) => b.children[0].textContent + ':' + b.getAttribute('aria-pressed') + ':' + b.children[1].hidden)], ['Home views', ['Games:true:true', 'Players:false:true', 'Chat:false:true']]);
     strip.children[2].click();
     check('a press on Chat shows it (the page says which view: data-tab on Home), and a press on Games shows the list again', env.$('home').getAttribute('data-tab') === 'chat' && strip.children[2].getAttribute('aria-pressed') === 'true' && strip.children[0].getAttribute('aria-pressed') === 'false' && (strip.children[0].click(), env.$('home').getAttribute('data-tab') === 'games'));
     strip.children[1].click(); env.home('games').click();
     check('the Games button of the bar shows the Games view, whichever view was shown (the list is the thing that it is about)', env.$('home').getAttribute('data-tab') === 'games' && strip.children[0].getAttribute('aria-pressed') === 'true' && strip.children[1].getAttribute('aria-pressed') === 'false');
-    const opening = env.$('home').children[2];
-    check('the card that says that the game is opening is there and not shown, as a status', opening.hidden === true && opening.getAttribute('role') === 'status' && opening.textContent === 'Opening the game…');
     // the Room is inside Home: no bar of its own; its Leave room button is in the room's header, and Home's own bar has the Menu
     const room = env.$('lobby'), leave = env.roomBar('leave');
     check('the Room has no bar of its own: it is a panel of Home\'s body, with the Leave room button in its header (a plain button), and Home\'s bar has the one Menu button (it promises no other kind of popup)', room.parent === main && env.root.findAll((e) => classes(e).indexOf('rbar') !== -1).length === 0
@@ -114,7 +108,7 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
 }
 {   // a page with a site label in its footer (the test site's build) has the same Home: the label changes nothing of it
     const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, label: 'staging' });
-    same('with the site label "staging" the order of Home is the same, and there is no Yard and no stand-in', env.$('home').children.map((c) => c.tagName + '#' + (c.id || classes(c)[0])), ['header#hbar', 'main#hmain', 'div#hopen', 'nav#htabs']);
+    same('with the site label "staging" the order of Home is the same, and there is no Yard and no stand-in', env.$('home').children.map((c) => c.tagName + '#' + (c.id || classes(c)[0])), ['header#hbar', 'main#hmain', 'nav#htabs']);
     check('... the body is as empty as on the live site (it holds the room\'s panel only)', env.$('home').children[1].children.length === 1 && !/Yard will live|reserved: |yant/.test(env.dumpAll()));
 }
 {   // the phone's strip (a window up to 700 px wide or up to 500 px high): the chat is open only on its own view, the counts follow the lists, and a wide, tall window ignores the strip
@@ -122,7 +116,7 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     // the fake window answers a media query as a browser does, against the size that the check sets (fake_media.js)
     const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, win: { matchMedia: (q) => ({ matches: require('./fake_media.js').matches(q, size.w, size.h) }), MutationObserver: function (fn) { this.observe = (node) => watchers.push({ node, fn }); } } });
     const at = (w, h) => { size.w = w; size.h = h; env.win.innerWidth = w; env.win.innerHeight = h; };
-    const strip = env.$('home').children[3], pill = (i) => strip.children[i].children[1];
+    const strip = env.$('home').children[2], pill = (i) => strip.children[i].children[1];
     check('the strip watches the Games button\'s count (and only that one until the players list is there)', watchers.length === 1 && watchers[0].node === env.home('games').children[1]);
     env.home('games').children[1].textContent = '7'; env.home('games').children[1].hidden = false; watchers[0].fn();
     check('... and shows the same count, beside Games', pill(0).textContent === '7' && pill(0).hidden === false && pill(2).hidden === true);
@@ -180,17 +174,12 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     const s = env.arrive({ key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { plan: [0, 0, 0, 2] } });
     const code = helloRoom(s.sent[0]);
     const sent = s.sent.length;
-    env.toggleRoom();
-    check('Home shows Home: data-screen="home", the address "/", a new history entry', env.screen() === 'home' && env.win.location.hash === '' && env.entries.length === 3 && env.entries[2].url === '/' && env.focused === env.home('hmenu'));
-    check('... and the room is not touched: the same socket, open, nothing sent, nobody left, the seat is still in the session storage', env.sockets.length === 1 && !s.closed && s.sent.length === sent && s.sent.every((b) => b[0] !== NET0.MSG.Leave) && !!env.session.data['ants.lobby']);
+    env.menuHome();
+    check('Home, asked for while the page holds a room (the Menu\'s Home), shows the Room: data-screen="room", no new entry of the history, the same socket, nothing sent, nobody left, the seat is still in the session storage', env.screen() === 'room' && env.entries.length === 2 && env.sockets.length === 1 && !s.closed && s.sent.length === sent && s.sent.every((b) => b[0] !== NET0.MSG.Leave) && !!env.session.data['ants.lobby']);
     s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [C, 'Tess'], [E, '']], { you: 0, leader: 0, plan: [0, 0, 0, 2] }));
-    check('a room that changes while Home is up is followed: the card of the third color has Tess', env.card(2).textContent.indexOf('Tess') !== -1);
-    env.makeRoom();
-    check('showing the Room again (the room is held) only shows it: no second socket, no second room', env.screen() === 'room' && env.sockets.length === 1 && env.entries.length === 4 && env.entries[3].url === '/#room');
-    check('Back from the Room is Home (the browser\'s Back goes to the entry before): the screen, the address, and the room still held', env.back() && env.screen() === 'home' && env.win.location.hash === '' && env.sockets.length === 1 && !s.closed && s.sent.every((b) => b[0] !== NET0.MSG.Leave));
-    check('Forward is the Room again, with no new socket', env.forward() && env.screen() === 'room' && env.win.location.hash === '#room' && env.sockets.length === 1);
-    env.back(); env.back(); env.back();
-    check('Back to the first entry is Home (it was marked as Home when the first button was pressed), and Back past it goes nowhere', env.screen() === 'home' && env.win.location.hash === '' && env.back() === false && env.sockets.length === 1);
+    check('a room that changes is followed: the card of the third color has Tess', env.card(2).textContent.indexOf('Tess') !== -1);
+    check('Back from the Room shows the Room still (the page holds it: there is no Games view for a person who holds a room): the screen, the address /#room again, no second socket, no Leave', env.back() && env.screen() === 'room' && env.win.location.hash === '#room' && env.sockets.length === 1 && !s.closed && s.sent.every((b) => b[0] !== NET0.MSG.Leave));
+    check('Back past the first entry goes nowhere, and the room stays', env.back() === false && env.screen() === 'room' && env.sockets.length === 1);
     env.$('share').click();
     check('the code of the room is the same all through, and Share hands out its link', env.$('code').textContent === code.slice(0, 3) + ' ' + code.slice(3) && env.copied[env.copied.length - 1] === 'https://play.test/?room=' + code);
 }
@@ -200,18 +189,18 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     env.$('name-step-go').click();
     env.arrive({ seat: 1, key: KEY, seats: [[C, 'Sam'], [C, 'Maya'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
     check('after Join the Room is the guest\'s: no Home button was pressed, so the address is still the link', env.screen() === 'room' && env.win.location.search === '?room=k7m2xq' && env.entries.length === 1);
-    env.toggleRoom();
-    check('Home from the link: the first entry is marked as the Room with its address unchanged (the link), and Home is a new entry at "/"', env.screen() === 'home' && env.entries.length === 2 && env.entries[0].url === '/?room=k7m2xq' && JSON.stringify(env.entries[0].state) === '{"ants":"room"}' && env.entries[1].url === '/' && env.marked.length === 1 && env.replaced.length === 0);
-    check('Back from there is the Room again, at the link', env.back() && env.screen() === 'room' && env.win.location.search === '?room=k7m2xq' && env.sockets.length === 1);
+    env.menuHome();
+    check('Home, asked for from the link while the page holds the room, shows the Room: the address is still the link and nothing was written to the history', env.screen() === 'room' && env.win.location.search === '?room=k7m2xq' && env.entries.length === 1 && env.pushed.length === 0 && env.sockets.length === 1);
+    env.roomBar('leave').click();
+    check('Leave (the way out of a room that a link opened): Home shows as a new entry, and the first entry is marked as the Room and keeps its address, the link', env.screen() === 'home' && env.entries.length === 2 && env.entries[0].url === '/?room=k7m2xq' && JSON.stringify(env.entries[0].state) === '{"ants":"room"}' && env.entries[1].url === '/' && JSON.stringify(env.entries[1].state) === '{"ants":"home"}');
 }
 {   // a reload: the screen of the address, the seat of the tab
     const seat = { 'ants.lobby': JSON.stringify({ c: 'k7m2xq', k: hex(KEY), n: 'Maya', o: 1 }) };
     const onHome = runLobby('', { 'ants.name': 'Maya' }, { session: seat });
-    check('a reload on Home: Home, and the room is taken back in the background (one socket, a Hello with the key of the seat, no card)', onHome.screen() === 'home' && onHome.sockets.length === 1 && onHome.$('name-step').hidden
+    check('a reload in a tab that holds a seat opens the Room (there is no Games view for a person who holds a room), and the seat is taken back in the background (one socket, a Hello with the key of the seat, no card)', onHome.screen() === 'room' && onHome.sockets.length === 1 && onHome.$('name-step').hidden
           && hex(onHome.last().open().sent[0]) === hex(helloBytes('Maya', 'k7m2xq', { key: KEY })));
     const t = onHome.arrive({ key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']] });
-    check('a seat that is taken back is the page\'s room at once, before the room answers (the page holds the room)', onHome.holdsRoom() === true);
-    check('... and the room is shown at once when it is asked for (no new socket)', (onHome.makeRoom(), onHome.screen() === 'room' && onHome.sockets.length === 1 && !t.closed));
+    check('a seat that is taken back is the page\'s room at once, before the room answers (the page holds the room), and no new socket is made', onHome.holdsRoom() === true && onHome.sockets.length === 1 && !t.closed);
     const onRoom = runLobby('', { 'ants.name': 'Maya' }, { session: seat, hash: '#room' });
     check('a reload on the Room (/#room, the tab holds a seat): the Room, and the seat is taken back with its key', onRoom.screen() === 'room' && onRoom.sockets.length === 1 && hex(onRoom.last().open().sent[0]) === hex(helloBytes('Maya', 'k7m2xq', { key: KEY })));
     const orphan = runLobby('', { 'ants.name': 'Maya' }, { hash: '#room', stayHome: true });
@@ -243,16 +232,15 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     const env = runLobby('?room=k7m2xq', { 'ants.name': 'Sam', 'ants.rejoin.old-room.1': '{"k":"0f1e2d3c4b5a69788796a5b4c3d2e1f0","s":"wss://play.test/ws","t":' + (Date.now() - 600000) + '}' });
     env.$('name-step-go').click();
     const s = env.arrive({ seat: 1, key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
-    env.toggleRoom();
-    check('the guest is on Home, in the room (the socket is open, the room is welcomed)', env.screen() === 'home' && !s.closed && env.$('start').textContent === 'READY');
-    check('... the Rejoin strip of an older match is shown on Home (it is above both screens)', env.$('rejoin').hidden === false);
-    check('... and nobody says that the game is opening yet', env.$('home').children[2].hidden === true && env.assigned.length === 0);
+    check('the guest is in the Room (the socket is open, the room is welcomed), and the big button is READY', env.screen() === 'room' && !s.closed && env.$('start').textContent === 'READY');
+    check('... the Rejoin strip of an older match is shown (it is above the Room)', env.$('rejoin').hidden === false);
+    check('... and nobody says that the game is opening yet', !/Opening the game/.test(env.card(1).textContent) && env.assigned.length === 0);
     s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0, flags: 7 }));
-    same('the host presses START: the hidden Room takes the hand-off, and this tab goes to the game page with its own seat and name', env.assigned, ['https://play.test/?join=/ws&room=k7m2xq&seat=1&name=Sam']);
+    same('the host presses START: the Room takes the hand-off, and this tab goes to the game page with its own seat and name', env.assigned, ['https://play.test/?join=/ws&room=k7m2xq&seat=1&name=Sam']);
     const entry = JSON.parse(env.storage.data['ants.rejoin.k7m2xq.1'] || 'null');
     check('... the key of the seat is written for the game page (ants.rejoin.<room>.<seat> = {"k", "s", "t"}), and it is nowhere else', !!entry && Object.keys(entry).sort().join() === 'k,s,t' && entry.k === hex(KEY) && entry.s === 'wss://play.test/ws'
           && env.assigned[0].indexOf(hex(KEY)) === -1 && env.dumpAll().indexOf(hex(KEY)) === -1);
-    check('... Home says "Opening the game…" (the card is shown, as a status), and stays Home: nothing is switched behind the person', env.$('home').children[2].hidden === false && env.$('home').children[2].textContent === 'Opening the game…' && env.screen() === 'home');
+    check('... the Room says "Opening the game…" itself (its card), and stays the Room: nothing is switched behind the person', /Opening the game/.test(env.card(1).textContent) && env.screen() === 'room');
     check('... the Rejoin strip is gone (the page is on its way), the socket stays open for the game to take over, and the tab forgets its room', env.$('rejoin').hidden === true && !s.closed && s.sent.every((b) => b[0] !== NET0.MSG.Leave) && env.session.data['ants.lobby'] === undefined);
     s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0, flags: 7 }));
     check('and what the room says after that is not heard (one hand-over only: the tab keeps no room in its session storage, as the page has gone)', env.assigned.length === 1 && env.session.data['ants.lobby'] === undefined);
@@ -261,27 +249,25 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     const seat = { 'ants.lobby': JSON.stringify({ c: 'k7m2xq', k: hex(KEY), n: 'Sam', o: 0 }) };
     const env = runLobby('', { 'ants.name': 'Sam' }, { session: seat });
     const s = env.arrive({ seat: 1, key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 1, leader: 0, flags: 7 } });
-    check('a reload on Home whose room already waits for the games: the hand-off is taken from the first Room message', env.screen() === 'home' && env.assigned.length === 1 && env.$('home').children[2].hidden === false && !!env.storage.data['ants.rejoin.k7m2xq.1'] && !s.closed);
+    check('a reload whose room already waits for the games: the hand-off is taken from the first Room message', env.screen() === 'room' && env.assigned.length === 1 && !!env.storage.data['ants.rejoin.k7m2xq.1'] && !s.closed);
     const room = runLobby('?room=k7m2xq', { 'ants.name': 'Sam' });
     room.$('name-step-go').click();
     const t = room.arrive({ seat: 1, key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
     t.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0, flags: 7, inGame: 0 }));
-    check('on the Room the hand-off is the same, and Home\'s card is not shown (the Room\'s own cards say it)', room.assigned.length === 1 && room.screen() === 'room' && room.$('home').children[2].hidden === true && /Opening the game/.test(room.card(1).textContent));
-    // a host on Home: its page gets the room's word too (START was pressed by it earlier, or from another window)
+    check('on a link\'s Room the hand-off is the same (the Room\'s own cards say it)', room.assigned.length === 1 && room.screen() === 'room' && /Opening the game/.test(room.card(1).textContent));
+    // a host: its page gets the room's word too (START was pressed by it earlier, or from another window)
     const host = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
     host.makeRoom();
     const h = host.arrive({ key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']] });
-    host.toggleRoom();
     h.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
-    check('the leader\'s page on Home takes the hand-off the same way', host.assigned.length === 1 && host.$('home').children[2].hidden === false && !!host.storage.data['ants.rejoin.' + helloRoom(h.sent[0]) + '.0']);
+    check('the leader\'s page takes the hand-off the same way', host.assigned.length === 1 && !!host.storage.data['ants.rejoin.' + helloRoom(h.sent[0]) + '.0']);
 }
-{   // START given up (the games did not come in time): everybody is back in the room, and a guest on Home is not moved
+{   // START given up (the games did not come in time): everybody is back in the room, and a guest is not moved
     const env = runLobby('', { 'ants.name': 'Sam' }, { stayHome: true });
     env.makeRoom();
     const s = env.arrive({ key: KEY, seats: [[C, 'Sam'], [E, ''], [E, ''], [E, '']] });
-    env.toggleRoom();
     s.receive(roomMessage([[C, 'Sam'], [C, 'Maya'], [E, ''], [E, '']], { you: 0, leader: 0 }));
-    check('a room that does not wait for the games does not move a page on Home: no hand-off, no card', env.assigned.length === 0 && env.$('home').children[2].hidden === true && env.screen() === 'home');
+    check('a room that does not wait for the games does not move a page: no hand-off, no card, the Room stays', env.assigned.length === 0 && !/Opening the game/.test(env.card(0).textContent + env.card(1).textContent) && env.screen() === 'room');
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -294,11 +280,11 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     env.$('rejoin-go').click();
     check('... and its button goes to the game page from Home', env.assigned.length === 1 && /\?join=\/ws&room=r-1&seat=1&name=$/.test(env.assigned[0]));
 }
-{   // a room that refuses the page while it is on Home: a room of its own and a note, and Home stays
+{   // a room that refuses the page (a reload of a tab that holds a seat opens the Room): a room of its own and a note, and the Room stays
     const env = runLobby('', { 'ants.name': 'Maya' }, { session: { 'ants.lobby': JSON.stringify({ c: 'k7m2xq', k: hex(KEY), n: 'Maya', o: 0 }) } });
     const first = env.last();
     first.open().receive(Uint8Array.from([3, NET0.REJECT.MatchRunning]));
-    check('a refusal while Home is up (the match of that room runs): the page makes a room of its own and says why in the strip above Home; the screen is not changed behind the person', env.screen() === 'home' && env.sockets.length === 2 && !env.$('banner').hidden && env.win.location.hash === '');
+    check('a refusal (the match of that room runs): the page makes a room of its own and says why in the strip above the Room; the screen stays the Room, at /#room', env.screen() === 'room' && env.sockets.length === 2 && !env.$('banner').hidden && env.win.location.hash === '#room', [env.screen(), env.sockets.length, env.$('banner').hidden, env.win.location.hash].join('|'));
 }
 {
     const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
@@ -342,9 +328,9 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     const roomBox = room.body.findAll((e) => classes(e).indexOf('hmenubox') !== -1)[0];
     check('the Menu of the Room is the same list, opened by Home\'s own button while the Room shows', !!roomBox && roomBox.hidden === false && room.roomBar('hmenu').getAttribute('aria-expanded') === 'true');
     roomBox.children[0].click();
-    check('Home, the first item of the Menu in the Room, goes back to the front page\'s own screen and puts the Menu away (the page is not loaded again)', room.screen() === 'home' && roomBox.hidden === true);
+    check('Home, the first item of the Menu, puts the Menu away and leaves the Room up (the page holds a room: there is no Games view then; the page is not loaded again)', room.screen() === 'room' && roomBox.hidden === true);
     room.toggleRoom();
-    check('going to Home puts the Menu away', roomBox.hidden === true);
+    check('asking for Home puts the Menu away', roomBox.hidden === true);
 }
 {   // THE LINKS TO THE MATCHES (the masthead's, the footer's and the Menu's): while the page holds a room they open in a new tab (target _blank, rel noopener noreferrer), so that the room's tab stays connected for as long as a
     // replay is watched (the maintainer's decision of 2026-11-17: before it only the links that leave the site did); with no room, and once the page is on its way to a game, they are plain links of the same tab, as before
@@ -443,13 +429,8 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     const s = env.last().open();
     check('the room made and the screens changed before the Welcome: one socket and one Hello (the room, the games\' list, the room again)', env.sockets.length === 1 && s.sent.length === 1 && env.screen() === 'room');
     const pressed = env.entries.length;
-    env.toggleRoom();
-    check('... the games\' list comes back with an entry of the history (the room is still held), and the room shows again with another', env.screen() === 'home' && env.entries.length === pressed + 1 && env.holdsRoom()
-        && (env.toggleRoom(), env.screen() === 'room' && env.entries.length === pressed + 2 && env.sockets.length === 1));
-    env.toggleRoom();
-    const onHome = env.entries.length;
-    env.roomBar('leave').click();
-    check('Leave while the games\' list shows (the room is still held) leaves it and makes no new entry of the history: the page is on Home already', env.screen() === 'home' && !env.holdsRoom() && env.entries.length === onHome);
+    env.menuHome();
+    check('... the games\' list does not come back while the page holds the room: Home, asked for, shows the Room and writes no entry of the history', env.screen() === 'room' && env.entries.length === pressed && env.holdsRoom() && env.sockets.length === 1);
 }
 {   // Leave is a move to Home like the Menu's Home: its entry, its address
     const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
@@ -464,8 +445,8 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     try { env.makeRoom(); } catch (e) { thrown = e; }
     check('a history that refuses (a sandboxed frame) does not stop the room: it is made and shown, the address stays', thrown === null && env.screen() === 'room' && env.sockets.length === 1 && env.win.location.hash === '');
     let again = null;
-    try { env.toggleRoom(); } catch (e) { again = e; }
-    check('... nor Home', again === null && env.screen() === 'home');
+    try { env.roomBar('leave').click(); } catch (e) { again = e; }
+    check('... nor Leave, which goes Home', again === null && env.screen() === 'home');
 }
 {   // the Menu goes when the browser moves too (Back), not only when a button does
     const env = runLobby('', {}, { stayHome: true });
@@ -474,7 +455,7 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     const box = env.body.findAll((e) => classes(e).indexOf('hmenubox') !== -1)[0];
     check('(the Menu is open on the Room)', box.hidden === false);
     env.back();
-    check('Back puts the Menu away', env.screen() === 'home' && box.hidden === true && env.home('hmenu') !== null);
+    check('Back puts the Menu away (and the Room stays: the page holds it)', env.screen() === 'room' && box.hidden === true && env.home('hmenu') !== null);
 }
 {   // a test room (a map from the Map Maker) opens the Room like a link; the page makes no room until the map is ready
     const env = runLobby('?testroom=abc123', { 'ants.name': 'Maya' });
@@ -489,7 +470,7 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     check('... and the reload is the Room, with the seat taken back', reloaded.screen() === 'room' && reloaded.sockets.length === 1);
     const home = runLobby('', { 'ants.name': 'Maya' }, { session: { 'ants.lobby': JSON.stringify({ c: 'k7m2xq', k: hex(KEY), n: 'Maya', o: 0 }) } });
     home.last().open().receive(Uint8Array.from([3, NET0.REJECT.MatchRunning]));
-    check('a refusal while Home is up rewrites the address to "/" (Home): no hash', home.screen() === 'home' && home.win.location.hash === '' && home.win.location.search === '');
+    check('a refusal rewrites the address: no room code in it', home.screen() === 'room' && home.win.location.search === '');
     const away = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
     away.makeRoom();
     const s = away.arrive({ key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']] });
@@ -501,7 +482,7 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     env.makeRoom();
     check('the first entry is marked as Home with the address "/" (the hash that named no room is gone), and the Room is a new entry', env.entries.length === 2 && env.entries[0].url === '/' && JSON.stringify(env.entries[0].state) === '{"ants":"home"}' && env.entries[1].url === '/#room');
     env.back();
-    check('Back from the Room is Home at "/", not Home at "/#room"', env.screen() === 'home' && env.win.location.hash === '' && env.win.location.pathname === '/');
+    check('Back from the Room shows the Room at "/#room" (the page holds it)', env.screen() === 'room' && env.win.location.hash === '#room' && env.win.location.pathname === '/');
 }
 {   // the map list is a dialog: the page makes Home's bars inert while it is open (the real list, opened by the real button)
     const env = runLobby('', { 'ants.name': 'Maya' }, { picker: true, fetch: () => { throw new Error('offline'); } });      // (the site's list cannot be had, at once: the list holds the six originals from the page's own table)
@@ -575,18 +556,17 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     const env = runLobby('', { 'ants.name': 'Sam' }, { stayHome: true });
     env.makeRoom();
     const s = env.arrive({ key: KEY, seats: [[C, 'Sam'], [E, ''], [E, ''], [E, '']] });
-    env.toggleRoom();
     const START = roomMessage([[C, 'Sam'], [C, 'Maya'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 });
     const hold = (ms) => { for (let t = 0; t < ms; t += 1000) { env.advance(Math.min(1000, ms - t)); s.receive(START); } };       // (the time goes by, and the server goes on talking: a silent link would be a lost one)
     s.receive(START);
-    const rbar = env.$('r-acts'), hbar = env.home('hbar'), card = env.$('home').children[2], banner = env.$('banner'), words = env.$('banner-text'), button = env.$('banner-x'), leave = env.roomBar('leave');
+    const rbar = env.$('r-acts'), hbar = env.home('hbar'), banner = env.$('banner'), words = env.$('banner-text'), button = env.$('banner-x'), leave = env.roomBar('leave');
     const frozen = () => env.card(2).textContent.indexOf('Zed') === -1;       // (the third color is open: the room's later message, with Zed in it, is not drawn)
     const STALLED = 'The game is slow to open. Reload this page to get your seat back.', FAILED = 'The game did not open. Reload this page to get your seat back.';       // (a page that is only slow says so first; a minute without the game is a failure)
-    check('START: Home says "Opening the game…", both bars are inert, and no strip says that anything is wrong', card.hidden === false && rbar.hasAttribute('inert') && hbar.hasAttribute('inert') && banner.hidden === true && leave.disabled !== true);
+    check('START: both bars are inert, and no strip says that anything is wrong', rbar.hasAttribute('inert') && hbar.hasAttribute('inert') && banner.hidden === true && leave.disabled !== true);
     hold(14999);
-    check('14.999 s later it still does, and there is still no strip', card.hidden === false && hbar.hasAttribute('inert') && rbar.hasAttribute('inert') && banner.hidden === true);
+    check('14.999 s later it still does, and there is still no strip', hbar.hasAttribute('inert') && rbar.hasAttribute('inert') && banner.hidden === true);
     hold(1);
-    check('after 15 s (the page is still here: the hand-off failed, was stopped or is slow) the card goes and both bars take presses again', card.hidden === true && !hbar.hasAttribute('inert') && !rbar.hasAttribute('inert'));
+    check('after 15 s (the page is still here: the hand-off failed, was stopped or is slow) both bars take presses again', !hbar.hasAttribute('inert') && !rbar.hasAttribute('inert'));
     check('... the notice strip says "' + STALLED + '" with a Reload button, in the warning look', banner.hidden === false && words.textContent === STALLED && button.hidden === false && button.textContent === 'Reload' && banner.className === 'banner warn');
     check('... Leave room is off (disabled, and said so to a screen reader): a Leave now would take the seat out from under a game page that is only slow', leave.disabled === true && leave.getAttribute('aria-disabled') === 'true');
     env.makeRoom();
@@ -595,14 +575,14 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     check('a press that reaches Leave all the same does nothing: no Leave is sent, the socket stays, the Room stays', env.screen() === 'room' && s.sent.every((b) => b[0] !== NET0.MSG.Leave) && !s.closed && env.sockets.length === 1);
     s.receive(roomMessage([[C, 'Sam'], [C, 'Maya'], [C, 'Zed'], [E, '']], { you: 0, leader: 0, flags: 7 }));
     check('the room is frozen on this page (a page on its way takes no message: a third player does not show) and the strip says why, and stays', frozen() && banner.hidden === false && words.textContent === STALLED);
-    env.toggleRoom();
-    check('Home works: the Menu\'s Home goes Home', env.screen() === 'home');
+    env.menuHome();
+    check('the Menu\'s Home is the Room while the page holds it (it stays here)', env.screen() === 'room');
     hold(44000);
     check('44 s after the strip came (59 s after START) it still says "slow to open", and Leave room is still off', words.textContent === STALLED && banner.hidden === false && leave.disabled === true);
     hold(1000);
     check('a minute after START the same strip says "' + FAILED + '" (with its Reload button, in the warning look): the wording of a failure comes only after a minute', words.textContent === FAILED && banner.hidden === false && button.textContent === 'Reload' && banner.className === 'banner warn' && leave.disabled === true);
     button.click();
-    check('Reload reloads the page', env.reloads === 1 && env.screen() === 'home');
+    check('Reload reloads the page', env.reloads === 1 && env.screen() === 'room');
     const again = runLobby('', Object.assign({}, env.storage.data), { stayHome: true });
     check('the page that comes up after it offers the seat back, as the strip said: "Rejoin it" (the key was written for the game page), on Home, and it made no room', again.$('rejoin').hidden === false && again.$('rejoin-go').textContent === 'Rejoin it' && again.sockets.length === 0 && again.screen() === 'home');
 }

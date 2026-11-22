@@ -342,15 +342,19 @@ async function main() {
         await guestPage.press('#start');
         await hostPage.waitFor('START is off again', 'document.getElementById("start").disabled === true || document.getElementById("start").getAttribute("aria-disabled") === "true"', 5000);
         check('ready: when the guest takes the mark back, START is off again and the line names them', (await readyLine(hostPage)) === 'Waiting for Wren to ready up' && (await readySwitch(guestPage)).on === false);
-        // the games' list and the room: the Menu's Home shows the games' list (the room stays), Back shows the room again; Leave asks, then brings the games' list back
+        // the games' list and the room: while the page holds a room there is no games' list: the Menu's Home, Back and Quick host show the room; Leave asks, then brings the games' list back
+        const visWas = await hostPage.eval('document.querySelector(".vbtn[aria-pressed=\\"true\\"]").textContent');
         await hostPage.press('.hmenu');
         await hostPage.press('.hmenubox .mitem', 'Home');
-        await hostPage.waitFor('the games\' list shows', 'document.body.getAttribute("data-screen") === "home"', 3000);
-        const shownGames = await measure(hostPage);
-        check('games and room: Home shows the games\' list in the room\'s place (the page does not scroll), and the room is still held', shownGames.noPageScroll && shownGames.gamesShown && await hostPage.eval('document.getElementById("lobby").getClientRects().length === 0 && !!document.querySelector(".hbar .quick.hist")'));
-        await hostPage.shot('games_list_while_a_room_is_held');
+        await sleep(300);
+        const stays = await measure(hostPage);
+        check('games and room: the Menu\'s Home leaves the room up (there is no games\' list for a person who holds a room), and the page does not scroll', stays.noPageScroll && !stays.gamesShown && await hostPage.eval('document.body.getAttribute("data-screen") === "room" && document.getElementById("lobby").getClientRects().length > 0'));
         await hostPage.eval('history.back()');
-        await hostPage.waitFor('the room shows again', 'document.body.getAttribute("data-screen") === "room"', 3000);
+        await sleep(400);
+        check('... Back shows the room too, at /#room, and the room is still the host\'s', await hostPage.eval('document.body.getAttribute("data-screen") === "room" && location.hash === "#room"') && (await startState(hostPage)).text === 'START!');
+        await hostPage.press('.quick.host');
+        await sleep(300);
+        check('... and so does Quick host: no question, who can join is as it was', await hostPage.eval('document.body.getAttribute("data-screen") === "room" && !document.querySelector(".gconfirm")') && (await hostPage.eval('document.querySelector(".vbtn[aria-pressed=\\"true\\"]").textContent')) === visWas);
         await hostPage.press('.leave');
         await hostPage.waitFor('the card asks', '!!document.querySelector(".gconfirm")', 3000);
         await hostPage.press('.gconfirm button', 'Leave room');

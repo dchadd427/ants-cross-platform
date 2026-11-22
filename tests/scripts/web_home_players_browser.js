@@ -377,7 +377,7 @@ async function main() {
             await page.evaluate(() => Array.from(document.querySelectorAll('.gcbtns button')).filter((b) => /^Invite only$/.test(b.textContent.trim()))[0].click());
             await sleep(300);
             check('the Room shows: the list stays beside it (the same list, narrower), and the Games list is not drawn', await page.evaluate(() => { const g = document.querySelector('.glist'), p = document.getElementById('players'); return document.body.getAttribute('data-screen') === 'room' && p.getClientRects().length > 0 && p.textContent.indexOf('clover') !== -1 && (!g || !g.getClientRects().length); }));
-            await page.click('.hbar .hmenu'); await page.click('.hmenubox a.mitem[aria-current="page"]');       // (the Menu's Home: the Room has no bar of its own)
+            await page.click('.r-acts .leave');       // (Leave, alone in the room: the page holds none now, and Home is the screen)
             await sleep(300);
             check('Home again: the list is there, the same one', await page.evaluate(() => document.body.getAttribute('data-screen') === 'home' && document.getElementById('players').getClientRects().length > 0 && document.getElementById('players').textContent.indexOf('clover') !== -1));
             await page.context().close();

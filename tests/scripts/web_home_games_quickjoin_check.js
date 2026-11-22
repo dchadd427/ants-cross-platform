@@ -22,6 +22,7 @@ const ROWS = [row('f3rn22', 'Fern', { map: 'MEDIUM.LVL', people: 1, free: 3, age
               row('c1v3rr', 'Clover', { map: 'TREASURE.LVL', people: 2, bots: 1, free: 1, age: 200 }), BEST];        // (in the list's own order, which is not the best first)
 const CODES = ['p4n8dz', 'c1v3rr', 'j7n1pr', 'b4s1l2', 'f3rn22'];                     // (the best first)
 const card = (env) => dialogOf(env);
+const homeKids = (env) => env.$('home').children.filter((c) => classes(c).indexOf('gshade') === -1);       // (what Home holds, the card apart: all of it takes no press while a card is up)
 const title = (env) => (card(env) ? textOf(first(card(env), 'gctitle')) : null);
 const lineOf = (env) => (card(env) ? textOf(first(card(env), 'gcline')) : null);
 const act = (env, cls) => (card(env) ? first(card(env), cls) : null);
@@ -75,6 +76,7 @@ const press = async (env) => { tap(env.home('join')); await flush(); };
           && lineOf(env) === 'Looking through 5 open games for the best one.' && !!first(card(env), 'gbar') && find(card(env), 'gdot').length === 4 && textOf(act(env, 'gstay')) === 'Cancel' && card(env).getAttribute('role') === 'dialog' && card(env).getAttribute('aria-modal') === 'true');
     check('the second client asks for the BEST room (a Hello that only joins, with the name of the page), nothing else is opened, and the page asks the list again for nothing', env.sockets.length === 1 && hex(env.last().open().sent[0]) === hex(helloBytes(GUEST, 'p4n8dz', { join: true })));
     check('the page behind the card takes no key or tap (Home\'s bar, the Room, the strips)', env.home('hbar').hasAttribute('inert') && env.$('lobby').hasAttribute('inert') && env.$('banner').hasAttribute('inert'));
+    check('... and everything else that Home holds takes none either', homeKids(env).length > 0 && homeKids(env).every((c) => c.hasAttribute('inert')));
     check('the card is the body\'s (over both screens), full over the window', card(env).parent.parent.parent === env.body || card(env).parent.parent === env.body);
     const probe = env.last();
     check('while the page only looks for a game it holds no room', env.holdsRoom() === false);
@@ -89,7 +91,7 @@ const press = async (env) => { tap(env.home('join')); await flush(); };
     check('the Room is not opened before 1.5 s are gone', card(env) !== null && env.screen() === 'home');
     await wait(env, 200);
     check('... then the card goes and the Room opens as a guest of that room ("Pebble’s room", "Public room" is for the room\'s own flags: private here), with no toast', card(env) === null && env.screen() === 'room' && env.$('room-h').textContent === 'Pebble’s room' && toastOf(env).hidden === true);
-    check('the page is not inert any more', !env.home('hbar').hasAttribute('inert') && !env.$('lobby').hasAttribute('inert'));
+    check('the page is not inert any more', !env.home('hbar').hasAttribute('inert') && !env.$('lobby').hasAttribute('inert') && homeKids(env).every((c) => !c.hasAttribute('inert')));
 }
 {
     const env = await withRooms(ROWS);
@@ -226,7 +228,7 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     await wait(env, 1500);
     await press(env);
     tap(act(env, 'gyes'));
-    check('Host one! with a room of the page\'s own (alone in it) flips it to public (Quick host\'s Visibility), with no second room', sock.sent.filter((b) => b[0] === 35).length === 1 && env.sockets.length === 1 && env.screen() === 'room');
+    check('Host one! with a room of the page\'s own (alone in it) is Quick host with a room held: it shows the room and changes nothing (no Visibility, no second room, no question)', sock.sent.filter((b) => b[0] === 35).length === 0 && env.sockets.length === 1 && env.screen() === 'room' && card(env) === null);
 }
 {
     const site = fakeSite();

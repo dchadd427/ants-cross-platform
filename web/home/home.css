@@ -12,8 +12,6 @@ body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; pad
 @supports (height: 100svh) { @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) { body { height: min(var(--home-h, 100dvh), 100%, 100svh); } } }       /* (an installed window: the smallest height that can be right) */
 body .screen { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 #home { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; position: relative; }
-.hopen { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; width: max-content; max-width: calc(100% - 24px); padding: 18px 34px; font-size: 24px; text-align: center; color: var(--cream); background: var(--inset);
-    border: 3px solid var(--gold); border-radius: 6px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
 
 /* ---- Home: the top bar ---- */
 .hbar { flex: none; display: flex; align-items: center; gap: 10px; padding: 14px 30px 12px; }

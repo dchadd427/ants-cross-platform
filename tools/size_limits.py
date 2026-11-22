@@ -60,7 +60,7 @@ TOUCH_KEYS_BUDGET, TOUCH_KEYS_GZIP_BUDGET = 35_700, 11_200   # the hotkey button
 # the front page (web/home/, web/front/player_name.js)
 HOME_BUDGET, HOME_GZIP_BUDGET = 53_600, 15_900
 GAMES_BUDGET, GAMES_GZIP_BUDGET = 105_000, 29_800
-PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET = 39_000, 12_300
+PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET = 39_500, 12_300       # players.js and players.css: raised from 39,000 for the count of the room's seats, which Home used to give it (countOf)
 VP_BUDGET, VP_GZIP_BUDGET = 4_200, 1_900            # vp.js: the screen numbers of /?vp (loaded for that address only)
 CHAT_BUDGET, CHAT_GZIP_BUDGET = 105_500, 32_000     # chat.js and chat.css: raised from 98,500 and 30,000 for the images' part of the dock (a line's image, the answers, the author's delete, the paste of a file; docs/HUB_IMAGES.md), then to 105,500 and 32,000 for the chat box's header in the new look of the Room
 IMAGES_BUDGET, IMAGES_GZIP_BUDGET = 41_500, 14_500    # pics.js, pics.css, post.js and post.css: the thumbnails, the viewer and the poster of the chat's images (loaded when the first image is drawn; post.* for a person who may post only)

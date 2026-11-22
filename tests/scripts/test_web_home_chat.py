@@ -315,9 +315,7 @@ class TheStyle(unittest.TestCase):
         self.assertIn("@media (prefers-reduced-motion: reduce) { .gc-dot { animation: none; } }", self.css)
         self.assertIn("animation: gc-pulse", self.css)
 
-    def test_the_card_that_says_that_the_game_is_opening_is_above_the_dock_and_the_summary_place_is_not_seen(self):
-        card = re.search(r"\.hopen \{[^}]*z-index: (\d+);", self.home_css)
-        self.assertGreaterEqual(int(card.group(1)), 8, "the card is a layer over the page's columns, the dock's panel among them (it has none of its own)")
+    def test_the_dock_has_no_layer_of_its_own_and_the_summary_place_is_not_seen(self):
         self.assertNotIn("z-index", self.rule(".gc"))
         news = self.rule(".gc-news")
         self.assertIn("clip: rect(0 0 0 0);", news)

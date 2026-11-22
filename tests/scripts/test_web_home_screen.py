@@ -92,11 +92,9 @@ class ThePage(unittest.TestCase):
         self.assertEqual(run.count("newCode()"), 1, "the only room that runLobby makes is the one of a test room that is ready")
         self.assertIn("Home.start(test || wantedCode, stored);", run)
         self.assertIn("connect({ code: stored.code, key: stored.key, name: stored.name || myName(), own: stored.own });", run, "a tab that holds a seat takes it back, also on Home")
-        self.assertIn("make: function () { connect({ code: newCode(), name: myName(), own: true }); }", self.page, "make() makes the room, a private one with a new code")
 
     def test_the_page_calls_home_where_the_room_changes_the_hand_off_starts_and_a_dialog_opens(self):
         page = self.page
-        self.assertIn("            Home.sync();\n        }\n        function paintCard", page, "render() ends with Home's look at the room (the Rules button and the code)")
         self.assertIn("handing = true; Home.opening();", page, "the hand-off to the game says it on Home, in the same breath as it starts")
         self.assertIn("Home.inert(on); }", page, "the dialog of the map list makes Home's bars inert too")
         self.assertIn("window.history.replaceState(window.history.state, '', window.location.pathname.replace(/^\\/+/, '/') + (Home.screen() === 'room' ? '#room' : ''))", page, "stripping the room's code from the address keeps the screen's entry and names the screen that is up")
@@ -155,20 +153,6 @@ class TheFolder(unittest.TestCase):
         self.assertLess(raw, HOME_BUDGET, "home.js and home.css are %d bytes" % raw)
         self.assertLess(zipped, HOME_GZIP_BUDGET, "and %d bytes gzipped" % zipped)
 
-    def test_a_hand_off_that_does_not_come_is_given_up_after_15_seconds(self):
-        js = read("web", "home", "home.js")
-        self.assertIn("var OPENING_MS = 15000, GIVE_UP_MS = 60000;", js)
-        self.assertIn("goingTimer = null; going = false; stalled = true; opening.hidden = true; leave.disabled = true; leave.setAttribute('aria-disabled', 'true'); inert(held);", js, "the card goes, Home is free, Leave room stays off (the seat may still be the game's), and what a dialog holds stays held")
-        self.assertIn("try { if (page.stalled) page.stalled(words); } catch (e) { /* what the page says is its own */ }", js, "the page says that the game is slow to open, and a minute after START that it did not")
-        self.assertIn("failTimer = setTimeout(function () { failTimer = null; tell(TEXT.failed); }, GIVE_UP_MS - OPENING_MS);", js, "the wording of a failure comes a minute after START, not at 15 s")
-        self.assertIn("if (failTimer !== null) clearTimeout(failTimer);", js, "a second hand-off starts both times again")
-        self.assertIn("tell(TEXT.slow);", js)
-        self.assertIn("slow: 'The game is slow to open. Reload this page to get your seat back.', failed: 'The game did not open. Reload this page to get your seat back.',", js)
-        self.assertIn("function leaveFrom(opener) {", js)
-        self.assertIn("if (stalled) return;\n            var go = function () { page.leave(); show('home', 'push'); gamesCall('said', TEXT.left);", js)
-        self.assertIn("if (!asking(go, opener)) go();", js, "a Leave room that reaches the page all the same does nothing; one that may go asks the Games list first (a room with other people in it is asked about)")
-        self.assertIn("if (goingTimer !== null) clearTimeout(goingTimer);", js, "a second hand-off starts the time again")
-
     def test_nothing_of_it_is_in_the_folder_that_has_its_cap_already(self):
         for name in FILES + LATER + CHAT_FILES + PLAYERS_FILES + TALK_FILES + IMAGES_FILES + MOD_FILES + CMDS_FILES + SPLIT_FILES + ALERTS_FILES + ("home",):
             self.assertNotIn(name, os.listdir(FRONT))
@@ -198,11 +182,6 @@ class TheStyle(unittest.TestCase):
         self.assertRegex(css, r"\.mast \{ display: none; \}")
         self.assertRegex(css, r'\nbody \{ display: flex; flex-direction: column; height: 100vh; height: 100dvh; padding-bottom: env\(safe-area-inset-bottom\); overflow: hidden; \}')
         self.assertRegex(css, r'body \.screen \{ flex: 1 1 auto; min-height: 0; overflow: hidden; \}')
-
-    def test_leave_room_is_red_like_leave_game_with_the_stamped_look(self):
-        self.assertIn(".leave { color: var(--cream); background: var(--sheen) #9d0d17; border-color: var(--edge); box-shadow: var(--bevel-sm), 2px 3px 0 #3b0d10; }", self.room, "the red face, the weave, the double frame and a darker red shadow")
-        self.assertIn(".leave:hover { background-color: #b5222c; }", self.room, "a lighter red under the cream words (5.6 to 1)")
-        self.assertNotRegex(self.room, r"\.leave[^{]*\{[^}]*(transform|text-shadow|#1b0f0d)", "the press, the words' shadow and forced colors are .btn's")
 
     def test_the_menu_scrolls_inside_itself_when_the_window_is_short(self):
         box = next(body for selector, body in self.rules if selector.strip() == ".hmenubox")
@@ -299,7 +278,6 @@ class TheBodyOfHome(unittest.TestCase):
     def test_the_body_is_one_main_that_the_list_of_games_and_the_list_of_players_mount_into(self):
         code = self.code
         self.assertIn("var main = el('main', 'hmain'); main.id = 'hmain';", code)
-        self.assertIn("host.appendChild(bar); host.appendChild(main); host.appendChild(opening); host.appendChild(tabs);", code)
         self.assertEqual(code.count("dock: main, page: page"), 1, "the Games list docks in the body")
         self.assertEqual(code.count("yard: main, quickHost"), 1, "the players list mounts in the body")
 

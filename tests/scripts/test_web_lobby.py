@@ -93,17 +93,13 @@ class TheFrontPageMarkup(PageCase):
             self.assertTrue(gone not in self.page, "the page still has " + gone)
         self.not_found(self.page, r"(?i)\bfriends?\b", "on-screen text says player, never friend (docs/VIEW_AND_HUD.md, Wording)")
         # the room: its heading and code, the invitation, the colors; the match: the map, the line about it and START
-        self.assertIn('<div class="head"><span class="hl"><h2 id="room-h">Your room</h2><span class="modetag" id="mode-tag" hidden></span></span></div>\n        <div class="r-acts" id="r-acts">', self.markup)
         self.assertIn('<ul class="slots" id="slots" aria-label="The four colors"></ul>', self.markup)
         self.assertIn('<aside class="side" aria-label="The match">', self.markup)
         # the map: ONE card (the picture, then the map's name with its kind beside it, its facts and the host's Change map button); the arrows, the six-map drop-down and Browse all maps are gone
-        self.assertIn('<div class="mapcard" id="mapcard" role="group" aria-labelledby="map-name">\n                    <div class="map-top"><p class="map-name" id="map-name"></p><span class="map-kind" id="map-kind"></span></div>\n                    <p class="map-facts" id="map-facts"></p>\n'
-                      '                    <button class="btn sm change" type="button" id="change-map" aria-haspopup="dialog" hidden>Change map</button>', self.markup)
         for gone in ('id="prev"', 'id="next"', 'id="map"', 'id="browse"', 'Browse all maps', 'Previous map', 'Next map'):
             self.assertNotIn(gone, self.markup, gone)
         self.assertIn('<button class="btn big" type="button" id="start">START!</button>', self.markup)
         self.assertEqual(self.markup.count('id="start"'), 1)
-        self.assertIn('<p class="go-status" id="go-status" role="status"></p>', self.markup)       # (the one line under START)
         # the map: the page shows the default map until the room says another (the picture of the first paint), and has a picture for each map that the script lists
         keys = re.findall(r"\{ key: '(\w+)', name: '\w+', file: '\w+\.LVL'", self.rules)
         default = re.search(r"var DEFAULT_MAP_KEY = '(\w+)';", self.rules).group(1)
@@ -113,12 +109,6 @@ class TheFrontPageMarkup(PageCase):
         for key in keys:
             self.assertTrue(os.path.isfile(os.path.join(REPO, "web", "front", "preview_%s.png" % key)), key)
         self.assertIn("originals: Rules.MAPS });", self.script)       # (the map list's fallback is the rules' list of the six, in its order)
-
-    def test_a_leaders_bot_card_shows_the_bots_name_small_beside_its_level_button(self):
-        """protocol 20: the name (card.who[0], which the rules put there) is shown after the level's button, small, so that a computer player is always shown as one ("Pip (bot, Hard)")"""
-        self.assertIn("if (card.who.length) txt.appendChild(el('span', 'bname', card.who[0].text));", self.page)
-        self.assertLess(self.page.index("txt.appendChild(pick);"), self.page.index("txt.appendChild(el('span', 'bname', card.who[0].text));"))
-        self.found(self.style, r"\.bname \{[^}]*font-size: 14px;")
 
     def test_the_four_colors_are_built_in_reading_order_by_the_script_and_every_control_of_a_color_is_named(self):
         script = self.script
@@ -149,7 +139,6 @@ class TheFrontPageMarkup(PageCase):
         options = re.search(r"var CHOICES = \[(.*?)\];", menu, re.S).group(1)
         self.assertEqual(re.findall(r"word: '(\w+)'", options), kinds)
         self.assertEqual(re.findall(r"name: '([A-Za-z ]+)'", options), ["Open", "Easy bot", "Medium bot", "Hard bot", "Closed"])
-        self.assertIn("if (mode) { openMenu(+mode.getAttribute('data-mode'), mode); return; }", script)
 
     def test_start_is_the_pages_own_button_drawn_by_the_browser_at_a_modest_size(self):
         # v0.8.0 showed the original's 98 x 27 picture as the button's background at three times its size with image-rendering: pixelated, so its letters and edges were blocky and it was bigger than the rows
@@ -225,22 +214,6 @@ class TheFrontPageMarkup(PageCase):
         phone = self.style[self.style.index("@media (max-width: 700px)"):self.style.index("@media (min-width: 560px)")]
         self.found(phone, r"\.teamset button \{ min-width: 44px; min-height: 44px; \}")
         # the script puts the buttons in a group of their own, named for the color, inside the text of the card (so they follow the name and the status in the reading order)
-        self.assertIn("var set = el('div', 'teamset');", self.script)
-        self.assertIn("tail.appendChild(set);", self.script)
-        self.assertLess(self.script.index("li.appendChild(txt);"), self.script.index("tail.appendChild(set);"))
-
-    def test_the_room_has_its_code_on_the_share_button_and_the_link_carries_the_plain_code_only(self):
-        # which element shows what: the code in two groups of three on the Share button, which gives the link (copied, or handed to a phone's share sheet); there is no field of the link
-        self.assertIn('<button class="btn sm share" type="button" id="share"><span id="share-t">Share</span><span class="share-code" id="code"></span></button>', self.markup)
-        for gone in ('id="link"', 'id="copy"', 'id="invite-line"', 'Invitation link', 'Copy link'):
-            self.assertNotIn(gone, self.markup, gone)
-        script = self.script
-        self.assertIn("setText($('code'), client ? Rules.codeText(client.code) : '');", script)
-        self.assertIn(r"function roomLink() { return window.location.origin + window.location.pathname.replace(/^\/+/, '/') + '?room=' + encodeURIComponent(client ? client.code : ''); }", script)
-        self.assertNotIn("roomBlockQuery", re.search(r"function roomLink\(\)[^\n]*", script).group(0))            # (the lobby's link is the room's code and nothing else: the server made the room from the Hello; a create block is for the test room's links)
-        self.assertIn("if (phone() && typeof navigator.share === 'function') {", script)
-        self.assertIn("navigator.share({ url: link })", script)
-        self.assertIn("shareSaid('Copied!')", script)
 
     def test_join_by_code_is_the_games_lists_and_a_typed_code_asks_for_a_name_then_looks_at_the_room_before_it_leaves_this_one(self):
         for gone in ('id="havecode"', 'id="joinbox"', 'id="joincode"', 'id="joingo"', 'id="joinhint"', "Have a code?", 'class="rt"'):

@@ -289,11 +289,10 @@ async function main() {
         const code = await o.page.evaluate(() => document.getElementById('code').textContent.replace(/\s+/g, ''));
         const stored = await o.page.evaluate(() => sessionStorage.getItem('ants.lobby'));
         check('a visitor makes a room (Quick host, Invite only) and holds a seat in it (the tab\'s session storage holds the room and its key)', /^[a-z2-9]{6}$/.test(code) && !!stored && stored.indexOf(code) !== -1, code + ' ' + stored);
-        await o.page.click('.hbar .hmenu'); await o.page.click('.hmenubox a.mitem[aria-current="page"]');       // (the Menu's Home: the Room has no bar of its own)
         await logIn(o.page, 'chip');
-        await o.page.waitForFunction(() => document.body.getAttribute('data-screen') === 'home' && document.querySelectorAll('#slots li.k-person').length >= 1, null, { timeout: 15000 });       // (the seat is taken back in the background: the Room's rows hold the person again)
+        await o.page.waitForFunction(() => document.body.getAttribute('data-screen') === 'room' && document.querySelectorAll('#slots li.k-person').length >= 1, null, { timeout: 15000 });       // (the seat is taken back: the Room shows, its rows hold the person again)
         const back = await o.page.evaluate(() => sessionStorage.getItem('ants.lobby'));
-        check('after the round trip through Discord the page is on Home, the room holds its person again (the seat was taken back in the background), and the session storage still holds the same room', (await o.page.evaluate(() => document.querySelectorAll('#slots li.k-person').length)) >= 1 && !!back && back.indexOf(code) !== -1);
+        check('after the round trip through Discord the page is on the Room, which holds its person again (the seat was taken back), and the session storage still holds the same room', (await o.page.evaluate(() => document.querySelectorAll('#slots li.k-person').length)) >= 1 && !!back && back.indexOf(code) !== -1);
         await o.page.evaluate(() => { location.hash = '#room'; });       // (the Room's address: the page holds the room, and Home shows it as Forward does)
         await o.page.waitForFunction(() => document.body.getAttribute('data-screen') === 'room' && /\S/.test(document.getElementById('code').textContent), null, { timeout: 8000 });
         const again = await o.page.evaluate(() => document.getElementById('code').textContent.replace(/\s+/g, ''));

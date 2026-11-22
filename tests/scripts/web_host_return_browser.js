@@ -114,7 +114,7 @@ const snap = (page) => page.evaluate(() => {
     return {
         screen: document.body.getAttribute('data-screen'), held: held, heading: document.getElementById('room-h').textContent,
         banner: document.getElementById('banner').hidden ? '' : document.getElementById('banner-text').textContent, slots: Array.from(document.querySelectorAll('#slots li')).map((li) => li.getAttribute('aria-label')),
-        code: session && session.c, own: session && session.o, join: document.querySelectorAll('.gjoin').length, yours: /Yours/.test((document.querySelector('#hmain') || { textContent: '' }).textContent)
+        code: session && session.c, own: session && session.o, join: document.querySelectorAll('.gjoin').length
     };
 });
 const people = (s) => (s.slots || []).filter((l) => l && !/: (open|Open)$/i.test(l)).length;
@@ -182,7 +182,7 @@ async function main() {
             }
             await hostCtx.close(); await guestCtx.close();
         }
-        // ---- 0b. Watch: the same tab with no room; a new tab with a room, whose Home closes it and leaves the room's tab as it was --------------------------------------------------------------------------------
+        // ---- 0b. Watch: the same tab with no room (the Games list is not drawn while the page holds a room, so there is no Watch to press then) --------------------------------------------------------------------------------
         {
             site.setLive({ live: [{ id: 'TREASURE-20261109-120000Z', map: 'TREASURE.LVL', started: 1790000000, turns: 2500, seconds: 125, players: ['Green (Ann)', 'Red (Cy)'] }], count: 1, sim_rules: 9 });
             const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
@@ -195,33 +195,6 @@ async function main() {
             await Promise.all([plain.waitForURL(/\/play\?live=/, { timeout: 8000 }), plain.click('.gdock .gwatch')]);
             check('0b. ... a press goes to the match in this very tab, and opens no other', ctx.pages().length === 1);
             await plain.close();
-            const A = await host(ctx, site); watch(A.page);
-            await A.page.evaluate(() => { window.__same = 'the room\'s own page'; });
-            await A.page.click('.hbar .hmenu'); await A.page.click('.hmenubox a.mitem[aria-current="page"]');                                              // (Home: the screen with the Games list)
-            await A.page.waitForSelector('.gdock .gwatch', { timeout: 15000 });
-            await sleep(400);
-            check('0b. with a room Watch is a new tab with no opener (_blank, noopener)', JSON.stringify(await attrs(A.page)) === JSON.stringify(['/play?live=TREASURE-20261109-120000Z', '_blank', 'noopener']), JSON.stringify(await attrs(A.page)));
-            const [side] = await Promise.all([ctx.waitForEvent('page'), A.page.click('.gdock .gwatch')]);
-            watch(side);
-            await side.waitForSelector('.sbhome', { timeout: 8000 });
-            await sleep(500); await bare(side);                                              // (the watch tab asked the front page when it opened)
-            check('0b. ... the press opens the match in another tab', /\/play\?live=TREASURE-/.test(side.url()) && ctx.pages().length === 2);
-            const gone = new Promise((resolve) => side.once('close', () => resolve(true)));
-            await side.click('.sbhome').catch(() => {});                                     // (the page goes away under the press)
-            check('0b. Home in the watch tab closes that tab', (await Promise.race([gone, sleep(3000).then(() => false)])) === true && ctx.pages().length === 1);
-            const kept = await A.page.evaluate(() => ({ same: window.__same, nav: performance.getEntriesByType('navigation').map((n) => n.type).join(), path: location.pathname }));
-            check('0b. ... the room\'s tab was neither reloaded nor navigated, and it is still "Your room"', kept.same === 'the room\'s own page' && kept.nav === 'navigate' && kept.path === '/' && (await snap(A.page)).heading === 'Your room', JSON.stringify(kept));
-            const [side2] = await Promise.all([ctx.waitForEvent('page'), A.page.click('.gdock .gwatch')]);
-            watch(side2);
-            await side2.waitForSelector('.sbhome', { timeout: 8000 });
-            await sleep(500); await bare(side2);
-            await A.page.close();                                                           // (the room's tab is gone: the seat is held, and a note says so)
-            await sleep(300);
-            await Promise.all([side2.waitForURL((u) => new URL(u).pathname === '/', { timeout: 5000 }), side2.click('.sbhome')]);
-            await side2.waitForSelector('.hbar', { timeout: 8000 });
-            await sleep(2500);
-            const back = await snap(side2);
-            check('0b. with the room\'s tab gone Home goes on as a link in the watch tab, and that front page takes the seat back (the room is held, "Your room")', ctx.pages().length === 1 && back.held && back.heading === 'Your room', JSON.stringify(back));
             site.setLive(null);
             await ctx.close();
         }
@@ -244,8 +217,6 @@ async function main() {
             await plain.close();
             const A = await host(ctx, site); watch(A.page);
             await A.page.evaluate(() => { window.__same = 'the room\'s own page'; });
-            await A.page.click('.hbar .hmenu'); await A.page.click('.hmenubox a.mitem[aria-current="page"]');
-            await sleep(400);
             const inRoom = await matchesLink(A.page, '.hbar');
             const [tab] = await Promise.all([ctx.waitForEvent('page'), inRoom.click()]);
             watch(tab);
@@ -311,7 +282,7 @@ async function main() {
             await settle(fresh);
             const back = await snap(fresh), seen = await snap(B), list = await listed(server);
             check('2. the new tab takes the seat that the first page left: the page holds the room, the room is "Your room", the host leads', back.held && back.heading === 'Your room' && back.slots.some((l) => /you, host$/.test(l)) && back.code === A.code, JSON.stringify(back));
-            check('2. ... it does not offer to Join the room (the room is the person\'s own, "Yours"), and there is no strip', back.join === 0 && back.yours === true && back.banner === '', JSON.stringify(back));
+            check('2. ... it does not offer to Join the room (the Room shows, not the games\' list), and there is no strip', back.join === 0 && back.screen === 'room' && back.banner === '', JSON.stringify(back));
             check('2. ... the room has two people, not three: the real list says so, and the guest saw nobody join or leave', list.filter((x) => x.code === A.code).every((x) => x.people === 2) && people(back) === 2 && JSON.stringify(seen.slots) === JSON.stringify(guestBefore.slots), JSON.stringify(list));
             await hostCtx.close(); await guestCtx.close();
         }
