@@ -391,9 +391,9 @@
   },
   {
    "id": "ipv6_counted_whole",
-   "file": "src/ants_server/upload_common.cpp",
-   "old": "std::string(reinterpret_cast<const char*>(b), 8)",
-   "new": "std::string(reinterpret_cast<const char*>(b), 16)"
+   "file": "src/ants_server/address_limits.cpp",
+   "old": "std::string(reinterpret_cast<const char*>(b.data()), 8)",
+   "new": "std::string(reinterpret_cast<const char*>(b.data()), 16)"
   },
   {
    "id": "extended_limit_for_all",

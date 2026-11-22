@@ -1507,7 +1507,7 @@ void run_way_back_tests() {
         Machine& d = w.join_creating("Fay", "prrm0004", block_of("", 2));
         ASSERT_TRUE(w.run_until([&]() { return d.net.phase() != NetGame::Phase::Connecting; }, 4000));
         ASSERT_TRUE(d.net.phase() == NetGame::Phase::Failed && d.net.reject_reason() == net::RejectReason::NoSuchRoom);
-        ASSERT_EQ(d.net.status_text(), std::string("The server cannot make a room now: it is busy, or hosts no online matches. Try again in a few minutes."));      // (a Hello with a block: it is the place that is missing, not a room that does not exist)
+        ASSERT_EQ(d.net.status_text(), std::string("The server cannot make a room now: it is busy, or your network made many rooms. Try again in a minute."));      // (a Hello with a block: it is the place that is missing, not a room that does not exist)
         ASSERT_TRUE(w.status("prrm0001").state == RoomState::Running && w.status("prrm0003").state == RoomState::Waiting && w.server.mgr->room_count() == 2);
         ASSERT_TRUE(a1.net.phase() == NetGame::Phase::Playing && !w.server.mgr->take_ended(w.server_now()).empty());      // (Ann is still in her match: pr2's end was the only one)
         // Ann closes her tab: pr1 is abandoned from now on; for half a minute it is not ended, after a minute it is
@@ -1561,7 +1561,7 @@ void run_way_back_tests() {
             ASSERT_TRUE(s.status("strm0003").code.empty() && s.server.mgr->room_count() == 2 && s.server.mgr->rooms_created() == 2 && s.server.mgr->take_ended(s.server_now()).empty());
             ASSERT_TRUE(s.run_until([&]() { return eve.net.phase() == NetGame::Phase::Failed; }, 4000));
             ASSERT_TRUE(eve.net.reject_reason() == net::RejectReason::NoSuchRoom);       // the answer that it always was when no place is free
-            ASSERT_EQ(eve.net.status_text(), std::string("The server cannot make a room now: it is busy, or hosts no online matches. Try again in a few minutes."));
+            ASSERT_EQ(eve.net.status_text(), std::string("The server cannot make a room now: it is busy, or your network made many rooms. Try again in a minute."));
         }
     } TEST_END();
 

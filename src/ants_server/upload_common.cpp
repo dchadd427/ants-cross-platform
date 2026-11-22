@@ -1,18 +1,8 @@
 #include "ants_server/upload_common.hpp"
 
 #include <algorithm>
-#include <cstring>
 
-#include "ants_server/crypto.hpp"
-
-#ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#else
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#endif
+#include "ants_server/address_limits.hpp"
 
 namespace ants::server {
 
@@ -44,29 +34,6 @@ int hex_value(char c) {
     if (c >= 'a' && c <= 'f') return c - 'a' + 10;
     if (c >= 'A' && c <= 'F') return c - 'A' + 10;
     return -1;
-}
-
-// The identity of one address text, "" when it is none: an IPv4 address as it is, an IPv4-mapped IPv6 address as its IPv4 address, any other IPv6 address as its /64
-std::string identity_of(const std::string& text) {
-    if (text.empty() || text.size() > 45) return std::string();
-    in6_addr v6;
-    in_addr v4;
-    if (inet_pton(AF_INET, text.c_str(), &v4) == 1) {
-        char buf[INET_ADDRSTRLEN];
-        return inet_ntop(AF_INET, &v4, buf, sizeof buf) != nullptr ? std::string(buf) : std::string();
-    }
-    if (inet_pton(AF_INET6, text.c_str(), &v6) == 1) {
-        const auto* b = reinterpret_cast<const unsigned char*>(&v6);
-        static const unsigned char kMapped[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF};
-        if (std::memcmp(b, kMapped, 12) == 0) {
-            char buf[INET_ADDRSTRLEN];
-            in_addr mapped;
-            std::memcpy(&mapped, b + 12, 4);
-            return inet_ntop(AF_INET, &mapped, buf, sizeof buf) != nullptr ? std::string(buf) : std::string();
-        }
-        return "v6:" + hex_encode(std::string(reinterpret_cast<const char*>(b), 8));
-    }
-    return std::string();        // (anything else a visitor could put in a header is no address)
 }
 
 }  // namespace
@@ -194,11 +161,11 @@ std::string client_identity(const HttpRequest& request, bool trust_header) {
     if (trust_header) {
         const std::string* h = request.header("x-client-address");
         if (h != nullptr) {
-            const std::string id = identity_of(*h);
+            const std::string id = address_identity(*h);
             if (!id.empty()) return id;
         }
     }
-    return identity_of(request.peer);
+    return address_identity(request.peer);
 }
 
 bool check_window_open(CheckWindow& window, uint32_t window_ms, uint32_t now_ms, const std::string& identity, size_t per_window, size_t per_address, uint32_t budget_ms) {

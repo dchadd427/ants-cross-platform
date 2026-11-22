@@ -126,6 +126,7 @@ Room::Room(RoomSpec spec, MapEntry map, assets::LevelData level, uint32_t seed, 
         retry_at_ms_ = now_ms + spec_.start_hold_ms;
     }
     active_ms_ = now_ms;
+    setup_ms_ = now_ms;
     lobby_.set_map(map_.name);
     lobby_.set_fog(spec_.fog);
     lobby_.set_mode(spec_.mode);
@@ -316,6 +317,7 @@ void Room::build_session(uint32_t restart_vote_after_ms, uint32_t start_delay_ms
     // a credential lives as long as the match can: its limit of play, the pauses that its seats may hold (a room that holds no seat has none) and a margin, never longer than the relay's own limit
     hc.relay_ttl_s = spec_.run_ms / 1000u + (spec_.reconnect ? spec_.max_pause_ms / 1000u : 0u) + kRelayMarginS;
     hc.random_bytes = [](uint8_t* out, size_t n) { return random_bytes(out, n); };
+    if (relay_gate_) hc.relay_take = [this](uint8_t seat) { return relay_gate_(lobby_.seat_address(seat)); };      // (the budget per address: the address of the seat that asks, which the lobby kept from its Hello)
     session_ = std::make_unique<net::HostSession>(*sim_, hc);
     session_->set_on_diverged([this](uint32_t turn, uint8_t differ, uint8_t agree) {       // (the line at the end of the room counts the drops; this one says when, and how many agreed)
         const auto seats = [](uint8_t n) { return std::to_string(static_cast<unsigned>(n)) + (n == 1 ? " seat" : " seats"); };
@@ -506,6 +508,12 @@ void Room::lobby_waiting_pass(uint32_t now_ms, uint8_t asked_by, const std::arra
         active_ms_ = now_ms;
     } else if (now_ms - active_ms_ > kMaxIdleMs) {
         active_ms_ = now_ms - kMaxIdleMs;                    // (the idle time stops growing: the 32-bit clock would read a much longer one as a short one)
+    }
+    if (lobby_.setup_activity() != seen_setup_) {
+        seen_setup_ = lobby_.setup_activity();
+        setup_ms_ = now_ms;
+    } else if (now_ms - setup_ms_ > kMaxIdleMs) {
+        setup_ms_ = now_ms - kMaxIdleMs;
     }
     if (cancels_ != 0 && now_ms - last_cancel_ms_ >= kCancelsForgottenMs) cancels_ = 0;       // (starts that failed long ago are forgotten)
     if (lobby_.present() > 0) {                              // (a seat that is reserved for a person of the match and that no results screen holds is nobody: the room still goes when nobody is in it)

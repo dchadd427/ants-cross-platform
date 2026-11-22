@@ -5,7 +5,8 @@ const crypto = require('crypto');
 
 // It has the parts of the browser's WebSocket that the client uses (binaryType, send, close, onopen, onmessage, onclose, onerror). A server frame is one message per binary frame; a client frame is masked.
 class MiniWebSocket {
-    constructor(url) {
+    // `headers`: more lines for the handshake, {name: value}. A page that stands for one visitor behind the site's proxy gives its X-Client-Address, as nginx writes it (MiniWebSocket.visitors)
+    constructor(url, headers) {
         const m = /^ws:\/\/([^:/]+):(\d+)(\/.*)?$/.exec(url);
         if (!m) throw new Error('ws://host:port/path only: ' + url);
         this.readyState = 0;                                           // 0 connecting, 1 open, 2 closing, 3 closed
@@ -17,7 +18,7 @@ class MiniWebSocket {
         this.kind = 2;                                                 // the kind of the message that is being read: 1 text, 2 binary
         const key = crypto.randomBytes(16).toString('base64');
         this.socket = net.connect(Number(m[2]), m[1]);
-        this.socket.on('connect', () => this.socket.write('GET ' + (m[3] || '/') + ' HTTP/1.1\r\nHost: ' + m[1] + ':' + m[2] + '\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: ' + key + '\r\nSec-WebSocket-Version: 13\r\n\r\n'));
+        this.socket.on('connect', () => this.socket.write('GET ' + (m[3] || '/') + ' HTTP/1.1\r\nHost: ' + m[1] + ':' + m[2] + '\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: ' + key + '\r\nSec-WebSocket-Version: 13\r\n' + Object.keys(headers || {}).map((k) => k + ': ' + headers[k] + '\r\n').join('') + '\r\n'));
         this.socket.on('data', (data) => this.take(data));
         this.socket.on('error', () => { if (this.onerror) this.onerror({}); });
         this.socket.on('close', () => this.finish());
@@ -88,5 +89,17 @@ class MiniWebSocket {
         this.socket.end();
     }
 }
+
+// A WebSocket class whose every connection is another visitor, as the site's nginx would tell the game server: the header X-Client-Address names an address of its own (198.18.x.y, 65,536 of them), so
+// that a check which stands for many people behind one machine meets the server's limits per address (docs/ADDRESS_LIMITS.md) as many people would, not as one.
+MiniWebSocket.visitors = function () {
+    let next = 0;
+    return class VisitorWebSocket extends MiniWebSocket {
+        constructor(url) {
+            const n = next++ % 65536;
+            super(url, { 'X-Client-Address': '198.18.' + (n >> 8) + '.' + (n & 255) });
+        }
+    };
+};
 
 module.exports = MiniWebSocket;

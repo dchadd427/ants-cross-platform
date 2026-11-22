@@ -66,7 +66,7 @@ async function startServer() {
     const [port, ws, ctl, replay] = [await freePort(), await freePort(), await freePort(), await freePort()];
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ants_room_browser.'));
     const child = spawn(path.resolve(serverPath), ['--maps', path.resolve(mapsPath), '--port', String(port), '--ws-port', String(ws), '--ctl-port', String(ctl), '--replay-port', String(replay), '--results-dir', dir, '--no-replays', '--no-db',
-        '--demo-rooms', '2', '--demo-map', 'TREASURE.LVL', '--demo-maps', 'TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL', '--demo-lobbies', '10'], { env: Object.assign({}, process.env, { ANTS_SERVER_SECRET: 'room-browser-secret' }), stdio: 'ignore' });
+        '--demo-rooms', '2', '--demo-map', 'TREASURE.LVL', '--demo-maps', 'TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL', '--demo-lobbies', '10', '--no-address-limits'], { env: Object.assign({}, process.env, { ANTS_SERVER_SECRET: 'room-browser-secret' }), stdio: 'ignore' });
     const server = { child, port, ws, ctl, replay, dir, stop() { try { child.kill('SIGTERM'); } catch (e) { /* gone */ } try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* it stays */ } } };
     started.push(server);
     await until('the server answers', () => new Promise((resolve) => http.get({ host: '127.0.0.1', port: ctl, path: '/healthz' }, (res) => { res.resume(); resolve(res.statusCode === 200); }).on('error', () => resolve(false))), 15000);

@@ -423,7 +423,7 @@ void HostSession::handle_p2p_config(uint8_t player, const P2pConfigMsg& m) {
     IceConfigMsg ice;
     if (seats_set_in(people_) >= 2 && c.p2p_credentials < kMaxP2pCredentials && cfg_.turn != nullptr && cfg_.turn->usable() && cfg_.random_bytes) {
         uint8_t raw[8];
-        if (cfg_.random_bytes(raw, sizeof(raw))) {
+        if (cfg_.random_bytes(raw, sizeof(raw)) && (!cfg_.relay_take || cfg_.relay_take(player))) {
             static const char kHex[] = "0123456789abcdef";
             std::string label;
             for (const uint8_t b : raw) {

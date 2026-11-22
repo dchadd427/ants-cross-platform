@@ -428,7 +428,7 @@
         removed: function () { return 'The host removed you from the room, so this one is yours now. Send the link on if you like.'; },
         full: function () { return 'That room is full, so this one is yours now. Send the link on if you like.'; },
         running: function () { return 'The match in that room has already started, so this room is yours instead. Send the link on if you like.'; },
-        busy: function () { return 'The server is full right now, so there is no room for you yet. Try again in a minute.'; },
+        busy: function () { return 'The server is full right now, or your network made many rooms, so there is no room for you yet. Try again in a minute.'; },
         seatgone: function (a) { return 'Your seat in this room ended while you were away, so you joined again.' + (a && a.host ? ' ' + a.host + ' is the host.' : ' You are the host.'); },      // (the room kept the seat for a minute; the person came back with its key after that)
         lost: function () { return 'Connection lost. Getting you back in…'; },
         unreachable: function () { return 'Cannot reach the game server. Check your connection; trying again…'; },

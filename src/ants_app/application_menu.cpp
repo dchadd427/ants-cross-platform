@@ -396,7 +396,7 @@ std::string Application::menu_failure_text() const {
                 case net::RejectReason::Superseded:
                     return "This game was taken over by another window.";
                 case net::RejectReason::NoSuchRoom:
-                    if (menu_conn_.hosting) return "The server could not make a room now: it is busy, or it does not host online matches. Try again in a few minutes.";
+                    if (menu_conn_.hosting) return "The server could not make a room now: it is busy, or your network made many rooms. Try again in a minute.";
                     return "There is no room with the code " + menu_conn_.room + " on " + server + ". Check the code (capital letters matter).";
             }
             break;
