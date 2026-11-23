@@ -415,6 +415,7 @@ LIVE_ROWS = [
     ("a page that is not there", "GET", "/nothing.html", (), 404, "page"),
     ("the robots file", "GET", "/robots.txt", (), 200, "robots"),
     ("the sitemap", "GET", "/sitemap.xml", (), 200, "sitemap"),
+    ("the sitemap of the map pages", "GET", "/sitemap-library.xml", (), 200, "sitemap"),
     ("the asset catalog", "GET", "/asset_catalog/", (), 200, "page"),
     ("the asset catalog's file", "GET", "/asset_catalog/index.html", (), 301, "plain"),
     ("the asset catalog's data script", "GET", "/asset_catalog/catalog_data.js", (), 200, "plain"),
@@ -520,7 +521,7 @@ def docroot_files():
     big = (b"ANTS " + bytes(range(32, 120))) * 4000
     files = {name: page % name for name in ("lobby.html", "index.html", "play.html", "matches.html", "match.html", "legal.html", "changelog.html", "mapmaker.html", "admin.html", "asset_catalog/index.html", "test_3d/compare.html", "test_3d/viewer.html")}
     files.update({"404.html": stats.read("web", "404.html"), "50x.html": stats.read("web", "50x.html")})                  # (the real error pages)
-    files.update({"robots.txt": seo_files.robots_txt(SITE_ORIGIN), "sitemap.xml": seo_files.sitemap_xml(SITE_ORIGIN)})   # (the real files' text, as the build makes them)
+    files.update({"robots.txt": seo_files.robots_txt(SITE_ORIGIN), "sitemap.xml": seo_files.sitemap_xml(SITE_ORIGIN), "sitemap-library.xml": seo_files.sitemap_xml(SITE_ORIGIN, ["/map-library", "/map/treasure"])})   # (the real files' text, as the build makes them)
     files.update({"front/classic.css": "body { color: #222; }\n" * 80, "front/big.css": ".a { color: red; }\n" * 400, "shapes.js": "var shapes = 1;\n" * 80, "home/home.js": "var home = 1;\n" * 80, "asset_catalog/catalog_data.js": "var data = 1;\n" * 80, "test_3d/compare.js": "var cmp = 1;\n" * 80, "test_3d/models/manifest.json": '{"version":"v-test"}',
                   "front/logo.png": "\x89PNG stand-in", "manifest.webmanifest": stats.read("web", "manifest.webmanifest"), "whats_new.json": WHATS_NEW, "app/icon-192.png": "\x89PNG stand-in", "app/apple-touch-icon.png": "\x89PNG stand-in", "favicon.png": "\x89PNG stand-in", "favicon.ico": "ico stand-in", "front/click.wav": "RIFF stand-in", "mapmaker_atlas/atlas.json": '{"v":1}', "mapmaker_atlas/ground.png": "\x89PNG stand-in",
                   "asset_catalog/sprites/s1.png": "\x89PNG stand-in", "asset_catalog/sounds/a.wav": "RIFF stand-in", "lvl_core.wasm": "\0asm stand-in", "index.js": big[:50000], "index.wasm": big[:120000], "index.data": big})
@@ -678,7 +679,8 @@ class TheFileRuns(unittest.TestCase):
         self.assertEqual(fetch(self.live.port, "/whats_new.json", "POST", body=b"x").status, 405)
 
     def test_the_files_for_search_engines_are_the_files_and_never_the_game_page_even_when_a_file_is_missing(self):
-        for name, text in (("robots.txt", seo_files.robots_txt(SITE_ORIGIN)), ("sitemap.xml", seo_files.sitemap_xml(SITE_ORIGIN))):
+        for name, text in (("robots.txt", seo_files.robots_txt(SITE_ORIGIN)), ("sitemap.xml", seo_files.sitemap_xml(SITE_ORIGIN)),
+                           ("sitemap-library.xml", seo_files.sitemap_xml(SITE_ORIGIN, ["/map-library", "/map/treasure"]))):
             path = "/" + name
             answer = fetch(self.live.port, path)
             self.assertEqual(answer.body, text.encode("utf-8"), name)

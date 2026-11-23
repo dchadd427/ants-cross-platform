@@ -18,14 +18,14 @@
   {
    "id": "the_sitemap_names_another_address",
    "file": "tools/seo_files.py",
-   "old": "% (origin, path) for path in list(PUBLIC_PAGES)",
-   "new": "% (\"https://example.org\", path) for path in list(PUBLIC_PAGES)",
+   "old": "% (origin, path) for path in dict.fromkeys(paths)",
+   "new": "% (\"https://example.org\", path) for path in dict.fromkeys(paths)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo"
   },
   {
    "id": "the_robots_file_names_no_sitemap",
    "file": "tools/seo_files.py",
-   "old": "lines += [\"\", \"Sitemap: %s/sitemap.xml\" % origin, \"\"]",
+   "old": "lines += [\"\", \"Sitemap: %s/sitemap.xml\" % origin, \"Sitemap: %s/%s\" % (origin, MAP_SITEMAP), \"\"]",
    "new": "lines += [\"\"]",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo"
   },
@@ -81,8 +81,8 @@
   {
    "id": "a_bad_address_is_written_anyway",
    "file": "tools/seo_files.py",
-   "old": "        robots, sitemap = robots_txt(argv[1]), sitemap_xml(argv[1], more)\n    except (ValueError, OSError) as e:\n        sys.stderr.write(\"seo_files.py: %s\\n\" % e)\n        return 1",
-   "new": "        robots, sitemap = robots_txt(argv[1].rstrip('/')), sitemap_xml(argv[1].rstrip('/'), more)\n    except (ValueError, OSError) as e:\n        sys.stderr.write(\"seo_files.py: %s\\n\" % e)\n        return 1",
+   "old": "        files = {\"robots.txt\": robots_txt(argv[1]), \"sitemap.xml\": sitemap_xml(argv[1])}",
+   "new": "        files = {\"robots.txt\": robots_txt(argv[1].rstrip('/')), \"sitemap.xml\": sitemap_xml(argv[1].rstrip('/'))}",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo"
   },
   {
@@ -98,6 +98,13 @@
    "old": "(\"/maps/previews/\",))",
    "new": "(\"/maps/\",))",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo"
+  },
+  {
+   "id": "the_robots_file_names_no_sitemap_of_the_map_pages",
+   "file": "tools/seo_files.py",
+   "old": "\"Sitemap: %s/%s\" % (origin, MAP_SITEMAP), ",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo tests.scripts.test_map_pages"
   }
  ]
 }

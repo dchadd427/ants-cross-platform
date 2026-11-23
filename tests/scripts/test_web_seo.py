@@ -271,7 +271,7 @@ class TheFiles(unittest.TestCase):
             self.assertNotIn(ORIGIN + address, locations)
 
     def test_robots_txt_names_the_sitemap_by_the_same_address(self):
-        self.assertEqual(re.findall(r"(?mi)^sitemap:\s*(\S+)\s*$", self.files["robots.txt"]), [ORIGIN + "/sitemap.xml"])
+        self.assertEqual(re.findall(r"(?mi)^sitemap:\s*(\S+)\s*$", self.files["robots.txt"]), [ORIGIN + "/sitemap.xml", ORIGIN + "/sitemap-library.xml"])         # (the map pages' own, tests/scripts/test_map_pages.py)
         self.assertEqual(re.findall(r"(?mi)^user-agent:\s*(\S+)\s*$", self.files["robots.txt"]), ["*"])
 
     def test_a_crawler_may_read_every_page_and_every_file_that_a_page_loads_to_draw_itself(self):

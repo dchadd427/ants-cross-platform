@@ -566,36 +566,44 @@ class TheTextOfAPlayerIsData(unittest.TestCase):
 
 
 class TheSitemap(unittest.TestCase):
-    def test_the_sitemap_lists_the_pages_that_ask_to_be_listed_by_their_canonical_addresses_and_nothing_else(self):
+    def test_the_sitemap_of_the_map_pages_lists_the_pages_of_the_library_that_ask_to_be_listed_by_their_canonical_addresses_and_nothing_else(self):
         files = mp.build(ORIGIN, TEMPLATE, mp.read_library())
         root = ET.fromstring(seo_files.sitemap_xml(ORIGIN, files["addresses.txt"].split()))
         ns = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
         locations = [e.find(ns + "loc").text for e in root]
         self.assertEqual(len(locations), len(set(locations)))
         canon = [l["href"] for path, text in files.items() if path.endswith(".html") for l in parse(text).links if l.get("rel") == "canonical"]
-        fixed = {ORIGIN + page for page in seo_files.PUBLIC_PAGES}
-        self.assertTrue(fixed <= set(locations))                                                 # (the pages of the site are still listed)
-        self.assertEqual(set(locations) - fixed, {c for c in canon if "?" not in c})            # (the pages of the library that ask to be listed: page 1 of the index and every map)
-        for location in locations:
-            self.assertNotIn("?", location)
+        self.assertEqual(set(locations), {c for c in canon if "?" not in c})                    # (the pages of the library that ask to be listed: page 1 of the index and every map)
+        self.assertIn(ORIGIN + "/map-library", locations)
         self.assertNotIn(ORIGIN + "/map-library?page=2", locations)                              # (the other pages of the index are reached by its links, and name themselves)
         self.assertIn(ORIGIN + "/map-library?page=2", canon)
 
-    def test_the_tool_takes_a_file_of_addresses_and_refuses_what_is_no_address(self):
-        text = seo_files.sitemap_xml(ORIGIN, ["/map/a", "/map/a", "/map-library"])
-        self.assertEqual(text.count("/map/a<"), 1)
-        for bad in ("map/a", "//evil.example", "/a b", "/a?x=1", "/a#x", "/<x>", "http://x/", "/a\n/b"):
-            with self.assertRaises(ValueError, msg=bad):
-                seo_files.sitemap_xml(ORIGIN, [bad])
+    def test_the_tool_makes_the_sitemap_of_the_map_pages_a_file_of_its_own_and_the_other_two_files_are_the_same_with_or_without_it(self):
         with tempfile.TemporaryDirectory(prefix="ants_seo_") as tmp:
             pages = os.path.join(tmp, "pages.txt")
             with open(pages, "w", encoding="utf-8") as f:
                 f.write("/map-library\n/map/treasure\n\n")
-            done = subprocess.run([sys.executable, os.path.join(REPO, "tools", "seo_files.py"), ORIGIN, tmp, "--pages", pages], capture_output=True, text=True, timeout=60)
+            plain, withmaps = os.path.join(tmp, "plain"), os.path.join(tmp, "with")
+            tool = os.path.join(REPO, "tools", "seo_files.py")
+            self.assertEqual(subprocess.run([sys.executable, tool, ORIGIN, plain], capture_output=True, text=True, timeout=60).returncode, 0)
+            done = subprocess.run([sys.executable, tool, ORIGIN, withmaps, "--pages", pages], capture_output=True, text=True, timeout=60)
             self.assertEqual(done.returncode, 0, done.stderr)
-            self.assertIn("<loc>%s/map/treasure</loc>" % ORIGIN, read_file(os.path.join(tmp, "sitemap.xml")))
-            missing = subprocess.run([sys.executable, os.path.join(REPO, "tools", "seo_files.py"), ORIGIN, tmp, "--pages", os.path.join(tmp, "nothing.txt")], capture_output=True, text=True, timeout=60)
+            self.assertEqual(sorted(os.listdir(plain)), ["robots.txt", "sitemap.xml"])
+            self.assertEqual(sorted(os.listdir(withmaps)), ["robots.txt", "sitemap-library.xml", "sitemap.xml"])
+            for name in ("robots.txt", "sitemap.xml"):                                           # (the image check: a change of the Dockerfile that adds the map pages leaves these two files as they were)
+                self.assertEqual(read_file(os.path.join(plain, name)), read_file(os.path.join(withmaps, name)), name)
+            self.assertEqual(read_file(os.path.join(withmaps, "sitemap-library.xml")), seo_files.sitemap_xml(ORIGIN, ["/map-library", "/map/treasure"]))
+            self.assertNotIn("/map/", read_file(os.path.join(withmaps, "sitemap.xml")))
+            self.assertIn("Sitemap: %s/sitemap-library.xml" % ORIGIN, read_file(os.path.join(withmaps, "robots.txt")))
+            missing = subprocess.run([sys.executable, tool, ORIGIN, tmp, "--pages", os.path.join(tmp, "nothing.txt")], capture_output=True, text=True, timeout=60)
             self.assertEqual(missing.returncode, 1)
+
+    def test_a_sitemap_lists_a_page_once_and_takes_only_clean_addresses(self):
+        self.assertEqual(seo_files.sitemap_xml(ORIGIN, ["/map/a", "/map/a", "/map-library"]).count("/map/a<"), 1)
+        for bad in ("map/a", "//evil.example", "/a b", "/a?x=1", "/a#x", "/<x>", "http://x/", "/a\n/b", "/a//b", "/../x", "/."):
+            with self.assertRaises(ValueError, msg=bad):
+                seo_files.sitemap_xml(ORIGIN, [bad])
+        self.assertIn("<loc>%s/</loc>" % ORIGIN, seo_files.sitemap_xml(ORIGIN))                  # (the pages of the site by default)
 
 
 def read_file(path):

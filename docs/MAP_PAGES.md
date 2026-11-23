@@ -34,7 +34,7 @@ nginx (`docker/nginx.conf`): `/map-library` is a location of its own and `/map/N
 
 ## What the head of a page says
 
-The title is `<name> (<original map | map by NAME | player map>, W x H) — Ants (1998)` and at most 70 characters (a long name is cut); the description is the facts, the map's own line and an invitation, at most 175; the canonical link is the page's own address (page N of the index names itself, page 1 is `/map-library`); the share card says the same with the map's picture (an absolute address); a map page has a `BreadcrumbList` (Home, Maps, the map). The sitemap lists `/map-library` and every map page ([`BUILD_AND_RUN.md`](BUILD_AND_RUN.md#search-engines-and-share-cards)); robots.txt opens `/maps/previews/` (the pictures) and keeps the rest of `/maps/` shut.
+The title is `<name> (<original map | map by NAME | player map>, W x H) — Ants (1998)` and at most 70 characters (a long name is cut); the description is the facts, the map's own line and an invitation, at most 175; the canonical link is the page's own address (page N of the index names itself, page 1 is `/map-library`); the share card says the same with the map's picture (an absolute address); a map page has a `BreadcrumbList` (Home, Maps, the map). A sitemap of their own, `/sitemap-library.xml`, lists `/map-library` and every map page (`tools/seo_files.py --pages`; `robots.txt` names it beside `sitemap.xml`, and those two files are the same with and without it, because the image check of a Dockerfile change tells a changed file from an added one; [`BUILD_AND_RUN.md`](BUILD_AND_RUN.md#search-engines-and-share-cards)); robots.txt opens `/maps/previews/` (the pictures) and keeps the rest of `/maps/` shut.
 
 ## How it is made
 

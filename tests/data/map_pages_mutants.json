@@ -394,17 +394,24 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
-   "id": "the_sitemap_leaves_out_the_map_pages",
+   "id": "the_sitemap_of_the_map_pages_is_not_made",
    "file": "tools/seo_files.py",
-   "old": "list(PUBLIC_PAGES) + [p for p in dict.fromkeys(more) if p not in PUBLIC_PAGES])",
-   "new": "list(PUBLIC_PAGES))",
+   "old": "            files[MAP_SITEMAP] = sitemap_xml(argv[1], more)",
+   "new": "            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
+  },
+  {
+   "id": "the_site_s_own_sitemap_holds_the_map_pages",
+   "file": "tools/seo_files.py",
+   "old": "files = {\"robots.txt\": robots_txt(argv[1]), \"sitemap.xml\": sitemap_xml(argv[1])}",
+   "new": "files = {\"robots.txt\": robots_txt(argv[1]), \"sitemap.xml\": sitemap_xml(argv[1], more)}",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
    "id": "a_page_is_listed_twice",
    "file": "tools/seo_files.py",
-   "old": "[p for p in dict.fromkeys(more) if p not in PUBLIC_PAGES]",
-   "new": "list(more)",
+   "old": "for path in dict.fromkeys(paths))",
+   "new": "for path in paths)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {

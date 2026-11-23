@@ -46,7 +46,7 @@ BUILD_ID="$(sh "${SCRIPT_DIR}/docker/resolve_build_id.sh" "${ANTS_BUILD_ID:-}" "
 BUILD_DATE="$(TZ=PST8PDT,M3.2.0,M11.1.0 date '+%Y-%m-%d %H:%M PT')"
 # The address that the pages name themselves by (web/SITE_ORIGIN: their canonical links and share cards; docs/BUILD_AND_RUN.md "Search engines and share cards"); robots.txt and sitemap.xml are made with it too
 SITE_ORIGIN="$(head -n 1 "${SCRIPT_DIR}/web/SITE_ORIGIN" | tr -d '[:space:]')"
-# The map pages (docs/MAP_PAGES.md: one for each map of the library, and the index), made from the library with the same stamps and address; the sitemap names them (the image's nginx, docker/nginx.conf, serves /map/NAME and /map-library from them)
+# The map pages (docs/MAP_PAGES.md: one for each map of the library, and the index), made from the library with the same stamps and address; their sitemap (sitemap-library.xml, named by robots.txt) lists them (the image's nginx, docker/nginx.conf, serves /map/NAME and /map-library from them)
 MAP_SITE="${BUILD_DIR}/map_site"
 python3 "${SCRIPT_DIR}/tools/map_pages.py" "${SITE_ORIGIN}" "${MAP_SITE}" --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --build-date "${BUILD_DATE}"
 cp -R "${MAP_SITE}/html/." "${DIST_DIR}/"

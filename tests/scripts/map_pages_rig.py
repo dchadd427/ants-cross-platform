@@ -34,5 +34,8 @@ def put_pages(docroot, nginx_dir, library=None, originals=None):
             shutil.copyfile(os.path.join(out, "nginx", name), os.path.join(nginx_dir, name))
         for name in ("map_pages.css", "map_library.js"):
             shutil.copyfile(os.path.join(REPO, "web", name), os.path.join(docroot, name))
+        done = subprocess.run([sys.executable, os.path.join(REPO, "tools", "seo_files.py"), "https://site.example", docroot, "--pages", os.path.join(out, "addresses.txt")], capture_output=True, text=True, timeout=60)
+        if done.returncode != 0:
+            raise AssertionError("tools/seo_files.py failed: " + done.stderr)                                   # (the sitemap of the map pages: robots.txt and sitemap.xml are written again, the same)
     finally:
         shutil.rmtree(out, ignore_errors=True)

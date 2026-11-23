@@ -167,7 +167,7 @@ RUN ORIGIN="$(head -n 1 /src/web/SITE_ORIGIN | tr -d '[:space:]')" && \
     ! grep -rlE '@@(TITLE|DESCRIPTION|CANONICAL|IMAGE|BODY|SCRIPTS|GAME_VERSION|BUILD_ID|BUILD_DATE)@@' /src/map_site/html
 
 # The address that the pages name themselves by (web/SITE_ORIGIN, one line): the canonical link, the share card's address and picture and the structured data of a page carry @@SITE_ORIGIN@@, which becomes that address here, in the finished pages
-# (after the stamps and the changelog above, so that none of them depends on it; docs/BUILD_AND_RUN.md "Search engines and share cards"), and tools/seo_files.py makes robots.txt and sitemap.xml with the same address, the map pages included
+# (after the stamps and the changelog above, so that none of them depends on it; docs/BUILD_AND_RUN.md "Search engines and share cards"), and tools/seo_files.py makes robots.txt and sitemap.xml with the same address, and sitemap-library.xml for the map pages
 # (the addresses that the layer above wrote). It refuses an address that is not an origin before anything uses it. The build stops if a placeholder is left or a file is empty.
 RUN ORIGIN="$(head -n 1 /src/web/SITE_ORIGIN | tr -d '[:space:]')" && \
     python3 tools/seo_files.py "${ORIGIN}" /src --pages /src/map_site/addresses.txt && \
@@ -175,7 +175,7 @@ RUN ORIGIN="$(head -n 1 /src/web/SITE_ORIGIN | tr -d '[:space:]')" && \
         sed -i "s|@@SITE_ORIGIN@@|${ORIGIN}|g" "$PAGE" || exit 1; \
         if grep -q '@@SITE_ORIGIN@@' "$PAGE"; then echo "the site's address is left as a placeholder in $PAGE" >&2; exit 1; fi; \
     done && \
-    test -s /src/robots.txt && test -s /src/sitemap.xml
+    test -s /src/robots.txt && test -s /src/sitemap.xml && test -s /src/sitemap-library.xml
 
 # The map maker's sprite atlas (docs/MAP_EDITOR.md, "Sprites"): the game's pictures of the ground and of the objects that the editor offers, in two small sheets and an index, made by tools/map_atlas.py (Python
 # standard library only) from the public decoded sprites and the animation table that the sprite viewer's data holds (asset_catalog/catalog_data.js); the repository keeps no generated picture. After the
@@ -352,6 +352,8 @@ COPY --from=builder /src/changelog/changelog.html /src/changelog/whats_new.json 
 
 # The two files for search engines (docs/BUILD_AND_RUN.md "Search engines and share cards"): what a crawler may read, and the pages that it should list, made in the builder stage from the site's address; two exact locations of docker/nginx.conf serve them
 COPY --from=builder /src/robots.txt /src/sitemap.xml /usr/share/nginx/html/
+# The map pages have a sitemap of their own (robots.txt names it beside sitemap.xml: tools/seo_files.py), so that the two files above are what they were
+COPY --from=builder /src/sitemap-library.xml /usr/share/nginx/html/
 
 # Copy Asset Catalog & Viewer for reference on beta site
 COPY asset_catalog/ /usr/share/nginx/html/asset_catalog/
