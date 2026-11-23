@@ -30,7 +30,7 @@ sys.path.insert(0, REPO)
 sys.path.insert(0, HERE)
 import hub_client as hc  # noqa: E402
 import hub_rig  # noqa: E402
-from hub import aikeys, aimcp, aitools, config as configmod  # noqa: E402
+from hub import aikeys, aimcp, aitools, config as configmod, limits as limitmod  # noqa: E402
 
 ANN, BOB, CAT = "9100000000000011", "9100000000000012", "9100000000000013"
 NAMES = {ANN: "ann.one", BOB: "bob.two", CAT: "cat.three"}
@@ -669,23 +669,24 @@ class TheRelay(AiTest):
         tab.answer(tab.next_call(), error="stopped", message="x")                                      # (a code that is the hub's own: not the tab's to say)
         self.assertEqual(future.result(10).json()["error"], "tab_error")
 
-    def test_calls_of_an_account_go_one_at_a_time_and_the_queue_is_short(self):
+    def test_an_account_has_one_call_running_and_one_waiting_and_a_third_is_busy_at_once(self):
         self.rig.hub.limits = dataclasses.replace(self.rig.hub.limits, ai_call_seconds=8.0, ai_queue_seconds=8.0)          # (the test takes its time: it is not a test of the times)
         tab = self.arm()
         first = self.call(self.key, "map_info")
         one = tab.next_call()
-        rest = [self.call(self.key, "map_info") for _ in range(3)]
+        second = self.call(self.key, "map_info")
         time.sleep(0.3)
         with self.assertRaises(socket.timeout):
-            tab.client.recv_json(0.2)                                                                  # (the three wait: the tab sees one call at a time)
-        extra = self.call(self.key, "map_info").result(10)
-        self.assertEqual((extra.status, extra.json()["error"]), (409, "busy"))
+            tab.client.recv_json(0.2)                                                                  # (the second waits: the tab sees one call at a time)
+        started = time.monotonic()
+        for _ in range(2):
+            extra = self.door(self.key, "map_info")
+            self.assertEqual((extra.status, extra.json()["error"]), (409, "busy"))
+        self.assertLess(time.monotonic() - started, 3.0, "a call past the queue is refused at once, it does not wait its turn")
         tab.answer(one)
         self.assertEqual(first.result(10).status, 200)
-        for _ in rest:                                                                                 # (the three come in the order that their requests were let in, which is not the order that they were made)
-            tab.answer(tab.next_call())
-        for future in rest:
-            self.assertEqual(future.result(10).status, 200)
+        tab.answer(tab.next_call())
+        self.assertEqual(second.result(10).status, 200)
 
     def test_a_call_that_waits_too_long_in_the_queue_is_busy(self):
         tab = self.arm()
@@ -1070,6 +1071,30 @@ class TheHubKeepsItsPlaces(AiTest):
             tab.answer(frame)
             self.assertEqual(future.result(10).status, 200)
         chat.close()
+
+    def test_it_takes_sixteen_accounts_to_fill_the_limit_of_the_whole_hub(self):
+        limits = limitmod.Limits()
+        self.assertEqual(limits.ai_queue_max, 1)                                                      # (one running and one waiting for an account)
+        self.assertEqual(limits.ai_in_flight_total // (1 + limits.ai_queue_max), 16)
+
+    def test_what_does_no_tab_work_is_not_counted_against_the_limit(self):
+        calls, frames = self.silent_calls((ANN, BOB))                                                # (the hub-wide limit of two is full)
+        key = self.make(CAT)["key"]
+        for method, params in (("initialize", {"protocolVersion": "2025-06-18"}), ("ping", {}), ("tools/list", {})):
+            r = self.door(key, path="/hub/ai/mcp", body={"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+            self.assertEqual(r.status, 200, method)
+            self.assertIn("result", json.loads(r.body), method)
+        self.assertEqual(self.door(key, path="/hub/ai/mcp", body={"jsonrpc": "2.0", "method": "notifications/initialized"}).status, 202)
+        self.assertEqual(self.door(key, "no_such_tool").status, 400)                                  # (a call that is refused does no tab work either)
+        self.assertEqual(self.door(key, "paint", {}).json()["error"], "bad_args")
+        self.assertEqual(self.rig.call(lambda: self.rig.hub.ai.in_flight), 2)
+        r = self.door(key, "map_info")                                                               # (and a call that asks a tab is)
+        self.assertEqual((r.status, r.json()["error"]), (429, "rate"))
+        inside = json.loads(self.door(key, path="/hub/ai/mcp", body={"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "map_info", "arguments": {}}}).body)["result"]
+        self.assertTrue(inside["isError"] and json.loads(inside["content"][-1]["text"])["error"] == "rate")
+        for (future, tab, _), frame in zip(calls, frames):
+            tab.answer(frame)
+            self.assertEqual(future.result(10).status, 200)
 
     def test_the_calls_that_are_served_are_limited_for_the_whole_hub_and_given_back(self):
         calls, frames = self.silent_calls((ANN, BOB))

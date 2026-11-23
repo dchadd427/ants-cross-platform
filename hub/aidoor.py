@@ -15,10 +15,11 @@ can be decided is decided before a body byte is read.
 THE KEY DOORS take no cookie and no CORS: the key is the right to ask (hub/aikeys.py judges it on every call, in the same order for every failure), the armed tab is the consent to receive. In this order, and
 nothing is read from the body before the key is good: the address's allowance of bad keys (429 `rate`, the key is not looked at), the Origin (a browser's page of another site is 403 `origin`; there is none from
 an AI app), the type and the length of the body, the key (401 `bad_key`, one answer for every wrong), the key's and the account's budgets (429 `rate`), the body, the tool and its arguments (hub/aitools.py), the
-scope (403 `read_only`), then the relay. A call is one line in the log and one row in the calls' log, never a key, an argument, a result or a name.
+scope (403 `read_only`), the hub's calls in flight (429 `rate`), then the relay. A call is one line in the log and one row in the calls' log, never a key, an argument, a result or a name.
 
-A CALL DOES NOT HOLD THE PLACE OF A HANDSHAKE. The hub counts the connections that have not finished their handshake (`pending_total`); a call may wait for its tab for twenty seconds, so as soon as the key is good the
-connection gives its place back (`release`) and is counted in its own, hub-wide limit instead (`ai_in_flight_total`, 429 `rate` over it): silent tabs cannot fill the places that the chat, the login and the admin page need.
+A CALL DOES NOT HOLD THE PLACE OF A HANDSHAKE. The hub counts the connections that have not finished their handshake (`pending_total`); a call may wait for its tab for twenty seconds, so when it is about to ask
+the tab (and not before: `initialize`, `ping`, `tools/list` and a call that is refused do no tab work and are not counted) the connection gives its place back (`release`) and is counted in its own, hub-wide limit
+instead (`ai_in_flight_total`, 429 `rate` over it): silent tabs cannot fill the places that the chat, the login and the admin page need. The numbers of every limit are in docs/MAP_AI.md, "Limits".
 """
 import asyncio
 import hashlib
@@ -231,33 +232,26 @@ class Door:
             self.budgets.bad_key(address)
             self.noted("bad_key", address)
             return self.refusal("bad_key")
-        if self.in_flight >= hub.limits.ai_in_flight_total:
-            self.noted("rate", address)
-            return self.refusal("rate")
         if not self.budgets.take(key.id, key.ref):
             self.noted("rate", address)
             return self.refusal("rate")
-        self.in_flight += 1
-        release()                                                   # (from here the call waits for a tab, up to twenty seconds: it is counted in `in_flight`, not among the handshakes)
-        try:
-            data = aitools.parse(await self.body(reader, length))
-            hub.store.ai_key_use(key.id)
-            return await (self.mcp(key, data) if mcp else self.plain(key, data))
-        finally:
-            self.in_flight -= 1
+        data = aitools.parse(await self.body(reader, length))
+        hub.store.ai_key_use(key.id)
+        return await (self.mcp(key, data, release) if mcp else self.plain(key, data, release))
 
-    async def plain(self, key, data):
+    async def plain(self, key, data, release):
         if not isinstance(data, dict) or not set(data) <= {"tool", "args"} or not isinstance(data.get("tool"), str):
             return self.refusal("bad_request")
         args = data.get("args", {})
         try:
-            result = await self.run(key, data["tool"], args)
+            result = await self.run(key, data["tool"], args, release)
         except airelay.Refusal as e:
             return self.refusal(e.code, e.message, tab=e.tab)
         return http.response(200, {"ok": True, "result": result})
 
-    async def run(self, key, name, args):
-        """The marked result of a tool for a key, or a Refusal: the tool is in the table, the scope covers it, the arguments fit, the relay asks the tab. One row of the calls' log either way."""
+    async def run(self, key, name, args, release):
+        """The marked result of a tool for a key, or a Refusal: the tool is in the table, the scope covers it, the arguments fit, the hub has room for one more call in flight, the relay asks the tab (until then
+        the connection holds the place of a handshake; `release` gives it back). One row of the calls' log for a call that asked the tab."""
         tool = aitools.TOOLS.get(name)
         if tool is None:
             raise airelay.Refusal("unknown_tool")
@@ -266,12 +260,17 @@ class Door:
         bad = aitools.arguments(name, args)
         if bad:
             raise airelay.Refusal(bad[0], bad[1])
+        if self.in_flight >= self.hub.limits.ai_in_flight_total:
+            raise airelay.Refusal("rate")
         started, cells, ok = time.monotonic(), 0, 0
+        self.in_flight += 1
+        release()                                                   # (from here the call waits for a tab, up to twenty seconds: it is counted in `in_flight`, not among the handshakes)
         try:
             result, cells = await self.relay.call(key, name, args, lambda: self.still_good(key))
             ok = 1
             return aitools.mark(name, result)
         finally:
+            self.in_flight -= 1
             self.log_call(key, name, cells, ok, started)
 
     def still_good(self, key):
@@ -287,7 +286,7 @@ class Door:
         except StoreError as e:
             self.hub.store_trouble(e)
 
-    async def mcp(self, key, message):
+    async def mcp(self, key, message, release):
         if not isinstance(message, dict) or message.get("jsonrpc") != "2.0" or not isinstance(message.get("method"), str) or ("id" in message and type(message["id"]) not in aimcp.ID_TYPES):
             return http.response(400, aimcp.rpc_error(None, -32600, "Invalid request: one JSON-RPC 2.0 message at a time"))
         if "id" not in message:
@@ -307,7 +306,7 @@ class Door:
         if not isinstance(name, str) or name not in aitools.TOOLS:
             return http.response(200, aimcp.rpc_error(ident, -32602, "Unknown tool"))
         try:
-            result = await self.run(key, name, args)
+            result = await self.run(key, name, args, release)
         except airelay.Refusal as e:
             return http.response(200, aimcp.rpc_result(ident, aimcp.error_result(e.code, e.message, e.tab)))
         return http.response(200, aimcp.rpc_result(ident, aimcp.tool_result(name, result)))

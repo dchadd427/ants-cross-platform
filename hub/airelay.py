@@ -52,7 +52,7 @@ class Tab:
         self.closed = False
         self.lock = asyncio.Lock()
         self.waiting = 0
-        self.pending = None                         # (id, future) of the call in flight
+        self.pending = None                         # (id, future, key id) of the call in flight
         self.next_id = 1
         self.cells = 0                              # the cells that the AI changed while this tab stayed armed
         self.why = "stopped"                        # what a call in flight is answered with when the socket goes
