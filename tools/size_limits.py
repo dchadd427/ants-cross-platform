@@ -61,9 +61,9 @@ TOUCH_KEYS_BUDGET, TOUCH_KEYS_GZIP_BUDGET = 35_700, 11_200   # the hotkey button
 # the front page (web/home/, web/front/player_name.js)
 HOME_BUDGET, HOME_GZIP_BUDGET = 53_600, 15_900
 GAMES_BUDGET, GAMES_GZIP_BUDGET = 105_000, 29_800
-PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET = 39_000, 12_300
+PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET = 39_500, 12_300       # players.js and players.css: raised from 39,000 for the count of the room's seats, which Home used to give it (countOf)
 VP_BUDGET, VP_GZIP_BUDGET = 4_200, 1_900            # vp.js: the screen numbers of /?vp (loaded for that address only)
-CHAT_BUDGET, CHAT_GZIP_BUDGET = 105_000, 31_800     # chat.js and chat.css: raised from 98,500 and 30,000 for the images' part of the dock (a line's image, the answers, the author's delete, the paste of a file; docs/HUB_IMAGES.md)
+CHAT_BUDGET, CHAT_GZIP_BUDGET = 105_500, 32_000     # chat.js and chat.css: raised from 98,500 and 30,000 for the images' part of the dock (a line's image, the answers, the author's delete, the paste of a file; docs/HUB_IMAGES.md), then to 105,500 and 32,000 for the chat box's header in the new look of the Room
 IMAGES_BUDGET, IMAGES_GZIP_BUDGET = 46_000, 15_800    # pics.js, pics.css, post.js and post.css: the thumbnails, the viewer and the poster of the chat's images (loaded when the first image is drawn; post.* for a person who may post only); raised from 41,500 and 14,500 for the viewer's Share, Copy link and Save in the installed app
 TALK_BUDGET, TALK_GZIP_BUDGET = 80_600, 28_900
 MOD_BUDGET, MOD_GZIP_BUDGET = 71_300, 20_800        # mod.js and mod.css: the moderation sheet (loaded for a visitor with a role only)

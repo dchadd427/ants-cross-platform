@@ -164,7 +164,7 @@
 
 
     </style>
-<link rel="stylesheet" href="front/map_picker.css"><link rel="stylesheet" href="front/lobby_chat.css"><link rel="stylesheet" href="front/rematch.css"><link rel="stylesheet" href="front/game_type.css"><link rel="stylesheet" href="front/lobby_direct.css"><link rel="stylesheet" href="home/home.css"><link rel="stylesheet" href="home/room.css"><link rel="stylesheet" href="update_notice.css">
+<link rel="stylesheet" href="front/map_picker.css"><link rel="stylesheet" href="front/lobby_chat.css"><link rel="stylesheet" href="front/rematch.css"><link rel="stylesheet" href="front/game_type.css"><link rel="stylesheet" href="front/lobby_direct.css"><link rel="stylesheet" href="front/room_sheet.css"><link rel="stylesheet" href="front/seat_menu.css"><link rel="stylesheet" href="home/home.css"><link rel="stylesheet" href="home/room.css"><link rel="stylesheet" href="update_notice.css">
 </head>
 <body data-screen="home">
 <div class="screen" id="screen">
@@ -178,40 +178,32 @@
 </main>
 <section class="panel" id="lobby" aria-labelledby="room-h">
     <div class="r-top">
-        <div class="head"><span class="hl"><h2 id="room-h">Your room</h2><span class="modetag" id="mode-tag" hidden></span></span><span class="code">Room code <b id="code"></b></span></div>
-        <div class="r-acts" id="r-acts"></div>
-    </div>
-    <div class="r-link">
-        <div class="invite">
-            <input id="link" type="text" readonly value="" aria-label="Invitation link">
-            <button class="btn" type="button" id="copy">Copy link</button>
-            <button class="btn share" type="button" id="share" hidden>Share</button>
+        <div class="head"><span class="hl"><h2 id="room-h">Your room</h2><span class="modetag" id="mode-tag" hidden></span></span></div>
+        <div class="r-acts" id="r-acts">
+            <button class="btn sm share" type="button" id="share"><span id="share-t">Share</span><span class="share-code" id="code"></span></button>
+            <button class="btn sm rules-open" type="button" id="rules-open" aria-haspopup="dialog" aria-controls="rules" aria-expanded="false"><span>Rules</span><small id="rules-state"></small></button>
         </div>
-        <div class="r-notes" id="r-notes"><p class="invite-note"><span id="invite-line">Players who open this link take the next free color.</span></p></div>
     </div>
     <div class="r-body">
         <div class="r-seats">
             <ul class="slots" id="slots" aria-label="The four colors"></ul>
-            <p class="slots-note" id="slots-note" role="status"></p>
-            <p class="slots-note teams-note" id="teams-note" role="status"></p>
-            <p class="plan"><span class="plan-long" id="plan"></span><span class="plan-short" id="plan-short"></span></p>
-            <div id="direct"></div>
         </div>
         <aside class="side" aria-label="The match">
             <div class="maprow">
                 <figure class="tv"><img id="preview" src="front/preview_treasure.png" alt="The map: Treasure" width="300" height="300"></figure>
-                <div class="mapcard" role="group" aria-labelledby="map-name"><p class="map-name" id="map-name"></p><p class="map-facts" id="map-facts"></p><p class="info" id="info" aria-live="polite"></p>
-                <button class="btn change" type="button" id="change-map" aria-haspopup="dialog" hidden>Change map</button></div>
+                <div class="mapcard" id="mapcard" role="group" aria-labelledby="map-name">
+                    <div class="map-top"><p class="map-name" id="map-name"></p><span class="map-kind" id="map-kind"></span></div>
+                    <p class="map-facts" id="map-facts"></p>
+                    <button class="btn sm change" type="button" id="change-map" aria-haspopup="dialog" hidden>Change map</button>
+                </div>
             </div>
             <div id="gtype"></div>
             <div class="go">
                 <button class="btn big" type="button" id="start">START!</button>
-                <p class="ready-line" id="ready-line" role="status" hidden></p>
-                <p class="start-note" id="start-note" role="status" hidden></p>
+                <p class="go-status" id="go-status" role="status"></p>
             </div>
         </aside>
     </div>
-    <p class="room-notice" id="room-notice">Online matches are recorded. Recordings are kept for up to 90 days. Results and names are kept for good and are public.</p>
     <section class="chat" id="chat" hidden></section>
 </section>
 
@@ -223,10 +215,19 @@
 </div>
 
 <div class="how pickhow" id="picker" hidden><div class="panel" id="picker-panel" role="dialog" aria-modal="true"></div></div>
+<div class="rs-back" id="rules" hidden><div class="rs" id="rules-box" role="dialog" aria-modal="true" aria-labelledby="rules-h" tabindex="-1">
+    <div class="rs-top"><h3 id="rules-h">Rules</h3><button class="rs-x" type="button" id="rules-x" aria-label="Close"></button></div>
+    <p class="rs-by" id="rules-by" hidden>The host sets these. The direct connection is yours.</p>
+    <div class="rs-rule" id="r-vis"><b>Who can join</b></div>
+    <div class="rs-rule" id="r-fog"></div>
+    <div class="rs-rule" id="direct"></div>
+    <p class="room-notice" id="room-notice">Online matches are recorded. Recordings are kept for up to 90 days. Results and names are kept for good and are public.</p>
+    <button class="btn" type="button" id="rules-done">Done</button>
+</div></div>
 <div class="how" id="how" hidden><div class="panel" role="dialog" aria-modal="true" aria-label="How it works">
     <div class="head"><h2>How it works</h2><button class="btn sm" type="button" id="how-close">Close</button></div>
     <h3>The room</h3><p>From Home, press Quick host, choose Public room or Invite only, and your room is ready, with the first color yours. The four colors lie as the four hills lie on the maps: Black top left, Green top right, Red bottom left, Blue bottom right. Send the link: players who open it take the next free color and show up here at once. The host drags a player onto another color to move them; a color that is taken swaps places. On a phone, tap a player's dots and then the color. A public room is listed under Games, where players join it from the list or by its code; an invite-only room shows there locked, and players join it only with its link.</p>
-    <h3>The other colors</h3><p>A color that nobody holds can be left open for a player, given to a computer player (Easy, Medium or Hard) or set to Nobody, which keeps it out of the match.</p>
+    <h3>The other colors</h3><p>A color that nobody holds can be left open for a player, given to a computer player (Easy, Medium or Hard) or set to Closed, which keeps it out of the match.</p>
     <h3>Removing a player</h3><p>The host can take a player out of the room with the Remove button on their color. It asks first, and the color opens up again. The player gets a room of their own, with a note that says why, and can come back by using the link again.</p>
     <h3>Teams</h3><p>With three or four players (computer players count) you can play in teams: press Team 1 or Team 2 under a player. Two on the same team play together; with four players the other two are the other team. Press a lit button again to take it off. When you move a player to another color, their team goes along.</p>
     <h3>START!</h3><p>The host starts the match with whoever is in. An open color stays empty. When the match is over, Leave Game takes you back to the front page, where Quick host makes a new room.</p>
@@ -256,7 +257,7 @@
 <script src="front/lobby_direct.js"></script>
 <script src="front/map_maker_link.js"></script><script src="front/lobby_rules.js"></script>
 <script src="front/lobby_net.js"></script><script src="front/player_name.js"></script>
-<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script>
+<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script><script src="front/room_fog.js"></script><script src="front/room_sheet.js"></script><script src="front/seat_menu.js"></script>
 <script src="front/map_picker.js"></script>
 <script src="shapes.js"></script><script src="map_files.js"></script><script src="home/home.js"></script>
 <script>
@@ -265,9 +266,9 @@
         var Rules = window.AntsLobbyRules;
         var Net = window.AntsLobbyNet;
         var Chat = window.AntsLobbyChat;
-        var Rematch = window.AntsRematch, Modes = window.AntsGameModes, GameType = window.AntsGameType, PlayerName = window.AntsPlayerName, storage = null, newRoom = false, pendingMode = -1;
+        var Rematch = window.AntsRematch, Modes = window.AntsGameModes, GameType = window.AntsGameType, PlayerName = window.AntsPlayerName, RoomSheet = window.AntsRoomSheet, SeatMenu = window.AntsSeatMenu, storage = null, newRoom = false, pendingMode = -1, pendingFog = -1;
         try { storage = window.localStorage; } catch (e) { /* the leader's last game type is not kept: every room starts with the default */ }
-        if (!Rules || !Net || !Chat || !Rematch || !Modes || !GameType || !PlayerName || !window.AntsHome) {           // the scripts of front/ did not come: the page cannot do anything, and says so
+        if (!Rules || !Net || !Chat || !Rematch || !Modes || !GameType || !PlayerName || !RoomSheet || !SeatMenu || !window.AntsHome) {           // the scripts of front/ did not come: the page cannot do anything, and says so
             document.getElementById('banner-text').textContent = 'This page could not load all of its parts. Reload it to try again.';
             document.getElementById('banner-x').hidden = true;
             document.getElementById('banner').className = 'banner warn';
@@ -552,43 +553,48 @@
         }
         function context() { return { sides: localSides, picked: picked, removing: removing, offline: offline, refusal: refusal, community: communityOf, back: back }; }
         function setText(node, text) { if (node.textContent !== text) node.textContent = text; }      // (a live region says its text again whenever it is written: only a line that changed is)
-        var painted = {};
+        var painted = {}, lastView = null, tilesQuery = null, tilesNow = false;
+        try { tilesQuery = window.matchMedia ? window.matchMedia('(max-width: 700px) and (min-height: 501px)') : null; } catch (e) { tilesQuery = null; }       // (a phone held upright: the four colors are tiles, front/seat_menu.js; every other window has the rows)
         function render() {
             if (drag && drag.moved) { dirty = true; return; }
             dirty = false;
             var m = model || blankModel();
             var v = Rules.viewOf(m, context());
-            removing = v.removing;
+            removing = v.removing; lastView = v;
+            tilesNow = !!tilesQuery && tilesQuery.matches === true; document.body.classList.toggle('tiles', tilesNow);
             document.body.classList.toggle('guest', v.ro);
             document.body.classList.toggle('offline', !!v.offline);
             document.body.classList.toggle('joining', v.offline === 'join');
             setText($('room-h'), v.heading);
             setText($('code'), client ? Rules.codeText(client.code) : '');
-            if ($('link').value !== roomLink()) $('link').value = roomLink();
-            setText($('invite-line'), v.notes.invite);
+            setText($('rules-state'), v.rules.state);
+            $('share').disabled = $('rules-open').disabled = !client;
+            $('rules-by').hidden = !v.guest;
+            if (v.offline && sheet.isOpen()) sheet.close();       // (the room is gone: its rules are not there to read)
             var active = document.activeElement && $('slots').contains(document.activeElement) ? document.activeElement.getAttribute('data-key') : null;
             GRID.forEach(function (seat) { paintCard(v.cards[seat], m); });
             if (active) { var again = $('slots').querySelector('[data-key="' + active + '"]'); if (again && document.activeElement !== again) again.focus(); }
-            setText($('slots-note'), v.notes.slots);
-            setText($('teams-note'), v.notes.teams);
-            $('teams-note').className = 'slots-note teams-note' + (v.notes.teamsWarn ? ' warn' : '');
+            if (refusal) sheetNote = refusal;
             refusal = '';
             paintSide(v.side);
             gameType.paint({ id: m.mode, guest: v.guest, disabled: v.ro }); setText($('mode-tag'), Modes.tagOf(m.mode)); $('mode-tag').hidden = !Modes.tagOf(m.mode); backBar.sync(model, sendPlan, warmMap);
+            if (fogSwitch) fogSwitch.paint({ on: m.fog, guest: v.guest, disabled: v.ro });
+            paintSheet(model);
             Home.sync();
         }
         function paintCard(card, m) {
             var li = lis[card.seat], seat = card.seat, c = card.color;
-            var stamp = JSON.stringify([card, picked === seat, picked >= 0, fresh[seat] === true]);
+            var stamp = JSON.stringify([tilesNow, card, picked === seat, picked >= 0, fresh[seat] === true, !!m.fog]);       // (fog is in it: the menu that is open has its bot choices as of when it opened, so it closes when fog changes)
             if (painted[seat] === stamp) return;
             painted[seat] = stamp;
+            if (menuSeat === seat) seatMenu.close();           // (this color changed under its open menu)
             li.className = 'slot k-' + card.kind + (picked === seat ? ' picked' : '') + (picked >= 0 && picked !== seat ? ' picked-target' : '') + (card.ask ? ' removing' : '') + (fresh[seat] ? ' fresh' : '');
             li.setAttribute('role', 'group');
             li.setAttribute('data-c', c.id);
             li.setAttribute('aria-label', card.label);
             li.setAttribute('data-drop', card.drop);
             while (li.firstChild) li.removeChild(li.firstChild);
-            if (card.tab) li.appendChild(el('span', 'tab', card.tab));
+            if (tilesNow) { SeatMenu.tile(document, li, card, { on: Rules.READY.chip, off: Rules.READY.chipOff }); return; }
             if (card.grip) {
                 var grip = el('button', 'grip');
                 grip.type = 'button';
@@ -603,20 +609,18 @@
             box.appendChild(el('span', 'ant ant-' + c.id));
             li.appendChild(box);
             var txt = el('div', 'txt');
-            var botLabel = '';
             txt.appendChild(el('span', 'cname', c.name));
-            if (card.mode) {
-                var select = el('select', 'mode');
-                select.setAttribute('data-key', 'mode:' + seat);
-                select.setAttribute('data-mode', String(seat));
-                select.setAttribute('aria-label', c.name + ' is');
-                [['open', 'Open'], ['easy', 'Easy bot'], ['medium', 'Medium bot'], ['hard', 'Hard bot'], ['nobody', 'Nobody']].forEach(function (o) {
-                    var option = el('option', '', o[1]);
-                    option.value = o[0];
-                    option.selected = o[0] === card.mode;
-                    select.appendChild(option);
-                });
-                txt.appendChild(select); botLabel = card.who.length ? card.who[0].text : '';      // (the bot's name is the line under the level switch, in place of "Computer player")
+            if (card.mode) {                                    // (the leader's choice of an open color or a computer player: one press opens the menu, front/seat_menu.js)
+                var pick = el('button', 'mode', SeatMenu.nameOf(card.mode));
+                pick.type = 'button';
+                pick.setAttribute('data-key', 'mode:' + seat);
+                pick.setAttribute('data-mode', String(seat));
+                pick.setAttribute('aria-haspopup', 'menu');
+                pick.setAttribute('aria-expanded', 'false');
+                pick.setAttribute('aria-label', c.name + ' is ' + SeatMenu.nameOf(card.mode));
+                pick.appendChild(el('i', 'car'));
+                txt.appendChild(pick);
+                if (card.who.length) txt.appendChild(el('span', 'bname', card.who[0].text));      // (the bot's own name, "Pip (bot, Hard)": a computer player is always shown as one)
             } else {
                 var who = el('span', 'pname');
                 card.who.forEach(function (w) { who.appendChild(el('span', w.cls, w.text)); });
@@ -627,15 +631,6 @@
                     rm.setAttribute('data-remove', String(seat));
                     rm.setAttribute('aria-label', 'Remove ' + card.who[0].text + ' from the room');
                     who.appendChild(rm);
-                }
-                if (card.ready && card.ready.kind === 'button') {              // (protocol 27: this page's own Ready, a switch: pressed is ready)
-                    var rd = el('button', 'btn rdy-btn', card.ready.on ? Rules.READY.buttonOn : Rules.READY.button);
-                    rd.type = 'button';
-                    rd.setAttribute('data-key', 'ready:' + seat);
-                    rd.setAttribute('data-ready', String(seat));
-                    rd.setAttribute('aria-pressed', String(card.ready.on));
-                    if (card.ready.off) rd.disabled = true;
-                    who.appendChild(rd);
                 }
                 txt.appendChild(who);
             }
@@ -651,22 +646,16 @@
                 ask.appendChild(yes);
                 ask.appendChild(keep);
                 txt.appendChild(ask);
-            } else {
-                var stat = el('span', card.statCls);
-                if (card.ready && card.ready.kind === 'chip') {                // (protocol 27: Ready or Not ready; the host's, a computer player's and a game's are always Ready)
-                    var chipMark = el('span', 'rdy-chip' + (card.ready.on ? '' : ' no') + (card.ready.bot ? ' bot' : ''), card.ready.on ? Rules.READY.chip : Rules.READY.chipOff);
-                    if (card.ready.title) chipMark.setAttribute('title', card.ready.title);
-                    stat.appendChild(chipMark);
-                }
-                stat.appendChild(document.createTextNode(botLabel || card.stat));
-                txt.appendChild(stat);
-            }
+            } else if (card.stat) txt.appendChild(el('span', card.statCls, card.stat));
+            li.appendChild(txt);
+            var tail = el('div', 'tail');
+            if (card.tab) tail.appendChild(el('span', 'tab', card.tab));
             if (card.teams) {
                 var set = el('div', 'teamset');
                 set.setAttribute('role', 'group');
                 set.setAttribute('aria-label', 'Team of ' + c.name);
                 card.teams.forEach(function (t) {
-                    var b = el('button', '', 'Team ' + t.side);
+                    var b = el('button', '', String(t.side));
                     b.type = 'button';
                     b.setAttribute('data-key', 'side:' + seat + ':' + t.side);
                     b.setAttribute('data-seat', String(seat));
@@ -676,9 +665,14 @@
                     b.setAttribute('aria-label', 'Team ' + t.side + ' for ' + c.name);
                     set.appendChild(b);
                 });
-                txt.appendChild(set);
+                tail.appendChild(set);
             }
-            li.appendChild(txt);
+            if (card.ready) {                                   // (protocol 27: Ready or Not ready; the host's, a computer player's and a game's are always Ready; a person's own switch is the big button)
+                var chipMark = el('span', 'rdy-chip' + (card.ready.on ? '' : ' no') + (card.ready.bot ? ' bot' : ''), card.ready.on ? Rules.READY.chip : Rules.READY.chipOff);
+                if (card.ready.title) chipMark.setAttribute('title', card.ready.title);
+                tail.appendChild(chipMark);
+            }
+            li.appendChild(tail);
         }
         function paintSide(side) {
             var shownMap = side.mapKey || side.mapFile + '|' + side.mapThumb;
@@ -693,17 +687,14 @@
             }
             paintMapCard(side);
             if (side.mapFile) { warmMap(side.mapFile); if (window.AntsMapPicker && (!picker || picker.status() !== 'ready')) ensurePicker().load(); }
-            setText($('info'), side.mapInfo);
             if (side.mapDisabled && picker && picker.isOpen()) picker.close();       // (the room changed hands, or START was pressed, while the list was open)
             $('change-map').disabled = side.mapDisabled; $('change-map').hidden = !model || !!model.guest;      // (a guest sees the card without the button)
             var start = $('start');
             start.disabled = side.startDisabled;
             start.setAttribute('aria-busy', String(side.startBusy));
+            if (side.startPressed === null) start.removeAttribute('aria-pressed'); else start.setAttribute('aria-pressed', String(side.startPressed));      // (a guest's big button is their Ready, a switch: pressed is ready)
             if (start.textContent !== side.startLabel) start.textContent = side.startLabel;
-            setText($('plan'), side.plan);
-            setText($('plan-short'), side.planShort);
-            setText($('ready-line'), side.readyLine); $('ready-line').hidden = !side.readyLine; $('ready-line').className = 'ready-line' + (side.readyOk ? ' ok' : '');
-            setText($('start-note'), side.note); $('start-note').hidden = !side.note;
+            setText($('go-status'), side.status); $('go-status').className = 'go-status' + (side.statusTone ? ' ' + side.statusTone : '');
         }
         // The colors glow for a moment when a player arrives or changes places
         function glow(seats) {
@@ -724,7 +715,7 @@
                 if (bannerKind === 'lost' || bannerKind === 'unreachable' || bannerKind === 'busy') hideBanner();
                 if (wasLost) say('You are back in the room.');
             }
-            pendingMode = -1; if (e.created) { newRoom = true; backBar.remade(); }      // (a room that this page made starts with the leader's last game type: onRoom; a pick that no Room has confirmed is dropped with the link)
+            pendingMode = -1; pendingFog = -1; if (e.created) { newRoom = true; backBar.remade(); }      // (a room that this page made starts with the leader's last game type: onRoom; a pick that no Room has confirmed is dropped with the link)
             if (e.created && (!ownRoom || (!wasOnline && lastParams && lastParams.key))) showBanner('old', { sameMap: false });      // (a page that came with a key to a room that had ended says so, whoever made the room)
             if (e.replaced) { ownRoom = false; seatLost = true; }      // (the key found no seat: this page is a newcomer in a room that went on without it, and it made none; the first Room says who leads)
             saveSession();
@@ -739,15 +730,15 @@
             }
             model = Rules.modelOf(room);
             if (seatLost) { seatLost = false; showBanner('seatgone', { host: model.guest ? Rules.hostName(model) : '' }); }
-            pendingMode = Rules.pendingAfter(pendingMode, room, model);      // (the leader's pick until a Room confirms it: every plan carries it)
-            if (newRoom) { if (room.leader !== room.you) newRoom = false; else if (!room.starting) { var want = Modes.wanted(storage, room.mode); if (want < 0 || client.setPlan(Rules.planWith(room, model, { mode: want }))) { newRoom = false; if (want >= 0) pendingMode = want; } } }
+            pendingMode = Rules.pendingAfter(pendingMode, room, model); pendingFog = Rules.pendingFogAfter(pendingFog, room, model);      // (the leader's pick until a Room confirms it: every plan carries it)
+            if (newRoom) { if (room.leader !== room.you) newRoom = false; else if (!room.starting) { var want = Modes.wanted(storage, room.mode); if (want < 0 || client.setPlan(Rules.planWith(Rules.withFog(room, pendingFog), model, { mode: want }))) { newRoom = false; if (want >= 0) pendingMode = want; } } }
             localSides = Rules.reconcileSides(localSides, model);
             if (model.guest) {
                 if (lastStarting && !room.starting) showBanner('lateplayer', { host: Rules.hostName(model) });      // the start was given up: everybody is back in the room
             } else if (room.starting) {
                 /* the correction waits for the start to end */
             } else if (Rules.teamNeedsFix(room, model)) {
-                var plan = Rules.planWith(Rules.withMode(room, pendingMode), model, { sides: [0, 0, 0, 0] });
+                var plan = Rules.planWith(Rules.withFog(Rules.withMode(room, pendingMode), pendingFog), model, { sides: [0, 0, 0, 0] });
                 var stamp = JSON.stringify(plan);
                 if (stamp !== fixSent && client.setPlan(plan)) fixSent = stamp;
             } else fixSent = '';                       // (the room is right: the next time that a team is left alone is a new case and is corrected again)
@@ -911,10 +902,27 @@
         // ---- the buttons and the cards ----
         function sendPlan(change) {
             if (!client || !client.room) return false; if (change.moveTo >= 0 && client.room.you !== change.moveTo) client.move(client.room.you, change.moveTo, client.guardNow());
-            return client.setPlan(Rules.planWith(Rules.withMode(client.room, pendingMode), Rules.modelOf(client.room), change));
+            return client.setPlan(Rules.planWith(Rules.withFog(Rules.withMode(client.room, pendingMode), pendingFog), Rules.modelOf(client.room), change));
         }
         var directSwitch = window.AntsLobbyDirect ? window.AntsLobbyDirect.create({ doc: document, host: $('direct'), storage: storage, rtc: !!window.RTCPeerConnection }) : null;      // (front/lobby_direct.js: protocol 26's switch, this player's own, off by default)
         var gameType = GameType.create({ doc: document, host: $('gtype'), modes: Modes, onChoose: function (id) { Modes.remember(storage, id); if (sendPlan({ mode: id })) pendingMode = id; else render(); } });      // (front/game_type.js)
+        // ---- the Fog of War switch (front/room_fog.js; protocol 28): a plan with fog; with computer players planned the leader is asked first, and "Turn fog on" sets their colors to Open in the same plan ----
+        function withRulesOf(plan, room) { var meant = Rules.withFog(Rules.withMode(room, pendingMode), pendingFog); if (typeof meant.mode === 'number') plan.mode = meant.mode; plan.fog = meant.fog; return plan; }       // (a plan that the page builds by another way, the exchange of two colors, keeps the room's game type and fog, or the leader's picks that no Room has confirmed: a plan with no game type is Highest score)
+        function setFog(on, kinds) {
+            var change = { fog: on };
+            if (kinds) change.kinds = kinds;
+            if (sendPlan(change)) pendingFog = on ? 1 : 0; else render();
+        }
+        function pressFog(on) {
+            if (!client || !client.room || !model || model.guest || model.starting) return;
+            var bots = on ? Rules.botColors(model) : [];
+            if (!bots.length) { setFog(on, null); return; }
+            var asked = Home.tell('fog', window.AntsRoomFog.question(bots), '', [{ text: window.AntsRoomFog.TEXT.yes, run: function () { if (client && client.room && !model.guest) setFog(true, Rules.kindsWithoutBots(client.room)); } }]);
+            if (!asked) say(window.AntsRoomFog.TEXT.refusal);         // (the Games list's part has not come: the page's own toast says why nothing happened)
+        }
+        var fogSwitch = window.AntsRoomFog ? window.AntsRoomFog.create({ doc: document, host: $('r-fog'), onPress: pressFog }) : null;       // (its row of the Rules sheet)
+        // ---- the Rules sheet (front/room_sheet.js): who can join (web/home/games.js), Fog of War, Direct connection and the note about recordings, behind the Rules button ----
+        var sheet = RoomSheet.create({ doc: document, back: $('rules'), box: $('rules-box'), opener: $('rules-open'), closers: [$('rules-x'), $('rules-done')], hold: function (on) { inert(on); } });
         // ---- the map card and the map list (front/map_picker.js): the card shows the room's map, and its Change map button (the host's) opens the list: the six originals first, then the players' maps ----
         var picker = null, warmed = {};
         function ensurePicker() {
@@ -933,14 +941,12 @@
             if (known ? !sendPlan({ map: known.key }) : !sendPlan({ file: entry.file })) render();
             else if (!known) warmMap(entry.file);
         }
-        function paintMapCard(side) {                    // the map card's name and its chips (what the list knows of the map, once it has the list)
-            var e = picker && model && model.mapFile && !side.mapKey ? picker.find(model.mapFile) : null;       // (an original shows its kind only, with or without the list)
-            setText($('map-name'), side.mapName);
-            if (!window.AntsMapPicker) return;
-            var facts = $('map-facts'), now = AntsMapPicker.factsOf(e, !side.mapKey);
-            if (facts.getAttribute('data-facts') === now.join('|')) return;
-            facts.setAttribute('data-facts', now.join('|')); facts.textContent = '';
-            now.forEach(function (t, i) { facts.appendChild(el('span', i ? '' : 'tag', t)); });
+        function paintMapCard(side) {                    // the map card: the name, the kind beside it and the facts under it (what the list knows of the map, once it has the list); the map's own line is the card's title
+            var e = picker && model && model.mapFile && !side.mapKey ? picker.find(model.mapFile) : null;       // (an original shows its kind and its minutes only, with or without the list)
+            var facts = window.AntsMapPicker ? AntsMapPicker.factsOf(e, !side.mapKey) : [side.mapKey ? 'Original' : "Players' map"], more = facts.slice(1), minutes = /\((\d+) min\)$/.exec(side.mapInfo);
+            if (!more.length && minutes) more = [minutes[1] + ' min'];
+            setText($('map-name'), side.mapName); setText($('map-kind'), facts[0]); setText($('map-facts'), more.join(' · '));
+            $('mapcard').setAttribute('title', side.mapInfo);
         }
         function changeMap() {            // (the list; when front/map_picker.js did not load, the next of the six originals)
             if (!isHost()) return;
@@ -952,7 +958,8 @@
         $('preview').addEventListener('click', changeMap);       // (a tap on the picture does the same; the button is the keyboard's and the screen reader's way)
 
         $('start').addEventListener('click', function () {
-            if (!client || !model || model.guest || model.starting || offline) return;
+            if (!client || !model || model.starting || offline) return;
+            if (model.guest) { pressReady(); return; }              // (a guest's big button is their Ready: protocol 27)
             if (Rules.startsAlone(model)) { startAlone(); return; }
             client.start();
         });
@@ -976,13 +983,38 @@
             if (again) again.focus();
         }
         function setMode(seat, word) {
+            if (model && model.fog && /^(easy|medium|hard)$/.test(word)) { say(window.AntsRoomFog.TEXT.refusal); render(); return; }      // (a disabled choice cannot be picked; a key that gets there is told why)
             if (!sendPlan({ seat: seat, kind: word })) { render(); return; }
             say(COLORS[seat].name + ' is now ' + (word === 'open' ? 'open for a player' : word === 'nobody' ? 'out of the match' : Rules.article(word) + Rules.levelWord(word) + ' bot') + '.');
         }
-        $('slots').addEventListener('change', function (e) {
-            var s = e.target.closest && e.target.closest('[data-mode]');
-            if (s) setMode(+s.getAttribute('data-mode'), s.value);
-        });
+        var seatMenu = SeatMenu.create({ doc: document, win: window }), menuSeat = -1;
+        function openMenu(seat, button) {       // a press on an open color's button: the menu (a second press puts it away)
+            if (!model || model.guest || model.starting) return;
+            if (seatMenu.isOpen() && menuSeat === seat) { seatMenu.close(); return; }
+            var slot = model.slots[seat];
+            menuSeat = seat;
+            seatMenu.open({ anchor: button, value: slot.kind === 'bot' ? slot.level : slot.kind, off: model.fog ? ['easy', 'medium', 'hard'] : [], label: COLORS[seat].name + ' is',
+                onPick: function (word) { setMode(seat, word); }, onBlocked: function (word) { setMode(seat, word); }, onClose: function () { menuSeat = -1; } });
+        }
+        var seatSheet = SeatMenu.createSheet({ doc: document, hold: inert }), sheetSeat = -1, sheetPerson = '', sheetNote = '';       // (the leader's sheet for a color, a phone upright, front/seat_menu.js: the tiles have no dots, no Remove and no Team buttons, so the sheet has them, and every press is the desktop control's own function)
+        function sheetSpec(seat) {
+            var spec = Rules.sheetOf(model, lastView.cards[seat]), act = function (f) { return function (a) { sheetNote = ''; f(a); paintSheet(model); }; };       spec.off = model.fog ? ['easy', 'medium', 'hard'] : []; spec.note = sheetNote;
+            spec.onTeam = act(function (side) { pressTeam(seat, side); }); spec.onColor = act(function (to) { moveColor(seat, to, client ? client.guardNow() : 0); }); spec.onMode = act(function (word) { setMode(seat, word); });
+            spec.onBlocked = function (word) { sheetNote = window.AntsRoomFog.TEXT.refusal; setMode(seat, word); };       spec.onRemove = act(function () { removing = seat; picked = -1; removeGuard = client ? client.guardNow() : 0; render(); }); spec.onRemoveYes = function () { removePerson(seat); }; spec.onRemoveNo = function () { removing = -1; render(); };
+            spec.onClose = function (keep) { var at = sheetSeat, tile = $('slots').querySelector('[data-key="tap:' + at + '"]'); sheetSeat = -1; sheetNote = ''; if (removing >= 0) { removing = -1; render(); } if (keep && tile && tile.focus) tile.focus(); };
+            return spec;
+        }
+        function openSheet(seat) {
+            if (!tilesNow || !model || !lastView.cards[seat].grip) return;
+            sheetSeat = seat; sheetNote = ''; sheetPerson = model.slots[seat].kind === 'person' ? model.slots[seat].name : '';       seatSheet.open(sheetSpec(seat));
+        }
+        function paintSheet(m) {       // the room changed under the sheet: it follows its player to another color, and closes when its color is no longer the leader's to change (the player left, START, the window turned)
+            if (!seatSheet.isOpen()) return;       var seat = sheetSeat, at = m && m.slots[seat];
+            if (sheetPerson && m && !(at.kind === 'person' && at.name === sheetPerson)) { seat = -1; m.slots.forEach(function (x, i) { if (x.kind === 'person' && x.name === sheetPerson) seat = i; }); }
+            else if (!sheetPerson && m && at.kind === 'person') seat = -1;
+            if (!tilesNow || !m || lastView.ro || seat < 0) { seatSheet.close(); return; }       sheetSeat = seat; seatSheet.paint(sheetSpec(seat));
+        }
+        if (tilesQuery && tilesQuery.addEventListener) tilesQuery.addEventListener('change', render);       // (the window turned: the colors are drawn again, and the sheet goes with the tiles)
 
         // Move a color onto another: the room exchanges a person with the other color (SeatMove); two colors that nobody holds exchange their plans
         function moveColor(from, to, guard) {
@@ -990,7 +1022,7 @@
             var room = client.room, op = Rules.moveOf(room, model, from, to);
             if (!op) { render(); return; }
             if (op.op === 'move') client.move(op.from, op.to, guard);
-            else if (room.plan[from] !== room.plan[to] && client.setPlan(op.plan)) say(Rules.nameAt(model, to, false) + ' and ' + Rules.nameAt(model, from, false) + ' swapped colors.');
+            else if (room.plan[from] !== room.plan[to] && client.setPlan(withRulesOf(op.plan, room))) say(Rules.nameAt(model, to, false) + ' and ' + Rules.nameAt(model, from, false) + ' swapped colors.');
             render();
         }
         function tapSlot(i) {
@@ -1071,6 +1103,10 @@
             if (skipClick) return;
             var t = e.target.closest ? e.target : null;
             if (!t) return;
+            var tap = t.closest('[data-tap]');
+            if (tap) { openSheet(+tap.getAttribute('data-tap')); return; }
+            var mode = t.closest('[data-mode]');
+            if (mode) { openMenu(+mode.getAttribute('data-mode'), mode); return; }
             var side = t.closest('[data-side]');
             if (side) { pressTeam(+side.getAttribute('data-seat'), +side.getAttribute('data-side')); return; }
             var rm = t.closest('[data-remove],[data-remove-yes],[data-remove-no]');
@@ -1089,11 +1125,10 @@
                 } else removePerson(+rm.getAttribute('data-remove-yes'));
                 return;
             }
-            if (t.closest('[data-ready]')) { pressReady(); return; }
             var grip = t.closest('.grip');
             if (grip) { if (e.detail === 0) tapSlot(+grip.getAttribute('data-grip')); return; }               // Enter or Space on the dots (a mouse or finger press is handled on pointerdown)
             var li = t.closest('.slot');
-            if (picked >= 0 && li && !t.closest('select')) tapSlot(+li.getAttribute('data-i'));
+            if (picked >= 0 && li) tapSlot(+li.getAttribute('data-i'));
         });
         // This page's own Ready (protocol 27): the room says the new mark back in its next Room message; a press that the page's pace holds back is told, and changes nothing
         function pressReady() {
@@ -1122,22 +1157,19 @@
             if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { done(true); }, fallback);
             else fallback();
         }
-        function copyButton(btn, text) {
-            var label = btn.textContent;
-            btn.addEventListener('click', function () {
-                copyText(text(), function (ok) {
-                    btn.textContent = ok ? 'Copied!' : 'Press Ctrl+C';
-                    if (!ok) { try { $('link').focus(); $('link').select(); } catch (e) { /* hidden on a phone */ } }
-                    setTimeout(function () { btn.textContent = label; }, 1800);
-                });
+        // Share: one button with the code on it. On a phone (the page's phone layout) it opens the browser's share sheet, anywhere else it copies the link and says "Copied!" for a moment; a browser that cannot copy shows the link in its own box to copy by hand.
+        var shareTimer = 0;
+        function phone() { try { return !!window.matchMedia && window.matchMedia('(max-width: 700px), (max-height: 500px)').matches; } catch (e) { return false; } }
+        function shareSaid(words) { setText($('share-t'), words); clearTimeout(shareTimer); shareTimer = setTimeout(function () { setText($('share-t'), 'Share'); }, 1800); }
+        $('share').addEventListener('click', function () {
+            var link = roomLink();
+            if (phone() && typeof navigator.share === 'function') { try { navigator.share({ url: link }).catch(function () { /* the sheet was closed */ }); return; } catch (e) { /* no share sheet: copy it */ } }
+            copyText(link, function (ok) {
+                if (ok) { shareSaid('Copied!'); return; }
+                shareSaid('Copy it by hand');
+                try { window.prompt('Copy the link of the room', link); } catch (e) { /* no box either */ }
             });
-        }
-        copyButton($('copy'), roomLink);
-        $('link').addEventListener('focus', function () { $('link').select(); });
-        if (typeof navigator.share === 'function') {
-            $('share').hidden = false;
-            $('share').addEventListener('click', function () { try { navigator.share({ url: roomLink() }).catch(function () { /* the sheet was closed */ }); } catch (e) { /* no share sheet */ } });
-        }
+        });
         // A code that was typed (Join by code, in the Games list: web/home/games.js): the line for a code that leads nowhere, or '' when the join is on its way: before(go) may ask a question first, go() opens the name card, and
         // the look at the room follows when the name is done (done gets what probe says, or null when the visitor keeps the room that is theirs)
         function joinTyped(text, done, before) {

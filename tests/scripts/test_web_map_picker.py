@@ -51,7 +51,7 @@ class ThePage(unittest.TestCase):
 
     def test_the_card_says_the_kind_and_what_the_list_knows_of_the_map_and_nothing_more(self):
         self.assertTrue("var e = picker && model && model.mapFile && !side.mapKey ? picker.find(model.mapFile) : null;" in self.page)      # (an original shows its kind only, with or without the list)
-        self.assertTrue("now = AntsMapPicker.factsOf(e, !side.mapKey);" in self.page)
+        self.assertTrue("AntsMapPicker.factsOf(e, !side.mapKey)" in self.page)
         self.assertTrue("if (!m) return [community ? \"Players' map\" : 'Original'];" in self.script)             # (no entry yet: only the kind)
         self.assertTrue("if (m.players) out.push(" in self.script and "if (m.minutes) out.push(" in self.script and "if (m.width && m.height) out.push(" in self.script)      # (a number the list does not have is not shown)
         self.assertTrue("room: function () { return model ? model.mapFile : ''; }, originals: Rules.MAPS });" in self.page)

@@ -134,6 +134,7 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
     for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) present = static_cast<uint8_t>(present | (v.rows()[t].present ? 1u << t : 0u));
     for (const PowerUpView& p : v.powerups()) {
         if (p.kind != kind || p.standing_ant != 0 || tile_blacklisted(p.tile, now)) continue;
+        if (std::find(tactics_.plug_tiles.begin(), tactics_.plug_tiles.end(), p.tile) != tactics_.plug_tiles.end()) continue;        // (the plug task has an ant on its way to it)
         if (kind == sim::AntType::Thief && is_link_flower(p.tile)) continue;       // (a Thief of the strip: nothing uses it there)
         const int side = power_up_side(c.map, p.tile, present);
         const bool ally_side = v.ally() < sim::MAX_PLAYERS && side == v.ally();
@@ -486,6 +487,8 @@ void PowerUpTask::step(TaskContext& c) {
             ++have;
         }
     }
+    tactics_.trip_tiles.clear();
+    for (const auto& t : takes_) tactics_.trip_tiles.push_back(t.second.tile);
 }
 
 }  // namespace ants::ai

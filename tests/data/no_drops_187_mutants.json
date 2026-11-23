@@ -112,7 +112,7 @@
   {
    "id": "player_never_turns_the_rule_off",
    "file": "src/ants_replay/player.cpp",
-   "old": "engine.set_no_drops_187(!(replay.head.mode == static_cast<uint8_t>(sim::GameMode::Kills187) && sim_rules_of(replay.head) < kSimRulesMode187));",
+   "old": "engine.set_no_drops_187(!(replay.head.mode == static_cast<uint8_t>(sim::GameMode::Kills187) && sim_rules_of(replay.head) < kSimRulesMode187BeforeCantGo));",
    "new": "engine.set_no_drops_187(true);",
    "build": "test_rules_no_drops",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_no_drops",
@@ -121,7 +121,7 @@
   {
    "id": "player_always_turns_the_rule_off",
    "file": "src/ants_replay/player.cpp",
-   "old": "engine.set_no_drops_187(!(replay.head.mode == static_cast<uint8_t>(sim::GameMode::Kills187) && sim_rules_of(replay.head) < kSimRulesMode187));",
+   "old": "engine.set_no_drops_187(!(replay.head.mode == static_cast<uint8_t>(sim::GameMode::Kills187) && sim_rules_of(replay.head) < kSimRulesMode187BeforeCantGo));",
    "new": "engine.set_no_drops_187(false);",
    "build": "test_rules_no_drops",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_no_drops",
@@ -130,7 +130,7 @@
   {
    "id": "player_plays_12_with_the_drops",
    "file": "src/ants_replay/player.cpp",
-   "old": "sim_rules_of(replay.head) < kSimRulesMode187));",
+   "old": "sim_rules_of(replay.head) < kSimRulesMode187BeforeCantGo));",
    "new": "sim_rules_of(replay.head) <= kSimRulesMode187));",
    "build": "test_rules_no_drops",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_no_drops",
@@ -139,7 +139,7 @@
   {
    "id": "player_plays_11_without_the_drops",
    "file": "src/ants_replay/player.cpp",
-   "old": "sim_rules_of(replay.head) < kSimRulesMode187));",
+   "old": "sim_rules_of(replay.head) < kSimRulesMode187BeforeCantGo));",
    "new": "sim_rules_of(replay.head) < kSimRulesMode187BeforeNoDrops));",
    "build": "test_rules_no_drops",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_no_drops",
@@ -148,7 +148,7 @@
   {
    "id": "player_plays_6_without_the_drops",
    "file": "src/ants_replay/player.cpp",
-   "old": "sim_rules_of(replay.head) < kSimRulesMode187));",
+   "old": "sim_rules_of(replay.head) < kSimRulesMode187BeforeCantGo));",
    "new": "sim_rules_of(replay.head) < kSimRulesMode187 && sim_rules_of(replay.head) != kSimRulesMode187Heal));",
    "build": "test_rules_no_drops",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_no_drops",
@@ -157,8 +157,8 @@
   {
    "id": "player_turns_the_rule_off_for_the_original",
    "file": "src/ants_replay/player.cpp",
-   "old": "engine.set_no_drops_187(!(replay.head.mode == static_cast<uint8_t>(sim::GameMode::Kills187) && sim_rules_of(replay.head) < kSimRulesMode187));",
-   "new": "engine.set_no_drops_187(!(sim_rules_of(replay.head) < kSimRulesMode187));",
+   "old": "engine.set_no_drops_187(!(replay.head.mode == static_cast<uint8_t>(sim::GameMode::Kills187) && sim_rules_of(replay.head) < kSimRulesMode187BeforeCantGo));",
+   "new": "engine.set_no_drops_187(!(sim_rules_of(replay.head) < kSimRulesMode187BeforeCantGo));",
    "build": "test_rules_no_drops",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_no_drops",
    "expect": "RP16.5"
@@ -166,7 +166,7 @@
   {
    "id": "rules_12_not_played",
    "file": "include/ants_replay/replay.hpp",
-   "old": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeNoDrops ||",
+   "old": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeCantGo || rules == kSimRulesMode187BeforeNoDrops ||",
    "new": "(rules == kSimRulesMode187BeforeNoDrops ||",
    "build": "test_rules_no_drops",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_no_drops",
@@ -175,7 +175,7 @@
   {
    "id": "head_12_without_the_mode_ok",
    "file": "src/ants_replay/replay.cpp",
-   "old": "(h.sim_rules == kSimRulesMode187 || h.sim_rules == kSimRulesMode187BeforeNoDrops ||",
+   "old": "(h.sim_rules == kSimRulesMode187 || h.sim_rules == kSimRulesMode187BeforeCantGo || h.sim_rules == kSimRulesMode187BeforeNoDrops ||",
    "new": "(h.sim_rules == kSimRulesMode187BeforeNoDrops ||",
    "build": "test_rules_no_drops",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_no_drops",
@@ -184,8 +184,8 @@
   {
    "id": "played_text_lacks_12",
    "file": "src/ants_replay/replay.cpp",
-   "old": "+ \", \" + std::to_string(kSimRulesMode187) + \" and \"",
-   "new": "+ \" and \"",
+   "old": "+ \", \" + std::to_string(kSimRulesMode187BeforeCantGo) + \", \" + std::to_string(kSimRulesBeforeCantGo) + \", \"",
+   "new": "+ \", \" + std::to_string(kSimRulesBeforeCantGo) + \", \"",
    "build": "test_rules_no_drops",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_no_drops",
    "expect": "RP16.1"

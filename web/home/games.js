@@ -50,13 +50,13 @@
         title: 'Open games', loading: 'Looking for games…', off: 'Games list is off right now', offHint: 'Join by code still works.', none: 'none waiting',
         emptyTitle: 'No open games right now.', emptyLine: 'Rooms show up here when their host switches them to Public.', hostOne: 'Host one!', quickHost: 'Quick host', quickJoin: 'Quick join',
         legendPlayer: 'player', legendBot: 'bot', legendOpen: 'open seat', code: 'Join by code', haveCode: 'Have a code?', closeCode: 'Close', codePlaceholder: 'Room code, like k7m 2xq', join: 'Join',
-        private: 'Invite only', privateSub: 'locked', public: 'Public', publicSub: 'listed', publicWide: ' in Open games', publicRoom: 'Public room', privateRoom: 'Invite-only room', visLabel: 'Who can join this room',
-        noteHow: 'Others see it in Open games, locked, with your name and map. People join only with your link.', noteListed: 'Listed. Anyone on the front page can join from Open games. The link works too.', noteWait: 'One moment, then press again.',
-        ok: 'OK', makePublic: 'Make it public', rejoin: 'Rejoin', stay: 'Stay here', keepPrivate: 'Keep it invite only', hostTitle: 'Host a game', hostLine: 'Who can join? A public room shows in Open games, and anyone can join it. An invite-only room shows there locked; people join only with your link.', hostPublic: 'Public room', hostPrivate: 'Invite only', leaveJoin: 'Leave and join', leaveHost: 'Leave and host', cancel: 'Cancel', reload: 'Reload', best: 'BEST', yours: 'Yours', live: ' · updates live', finding: 'Finding a game…', looking: 'Looking for open games…', roomOpening: 'Opening the room…', goRoom: 'Go to the room', leaveRoom: 'Leave room', notNow: 'Not now',
+        private: 'Invite only', public: 'Public', privateRoom: 'Invite-only room', visLabel: 'Who can join this room',
+        noteHow: 'Invite-only rooms show locked in Open games. Only people with the link can join.', noteListed: 'Public rooms are listed in Open games. The link always works.', noteWait: 'One moment, then press again.',
+        ok: 'OK', makePublic: 'Make it public', rejoin: 'Rejoin', stay: 'Stay here', hostTitle: 'Host a game', hostLine: 'Who can join? A public room shows in Open games, and anyone can join it. An invite-only room shows there locked; people join only with your link.', hostPublic: 'Public room', hostPrivate: 'Invite only', leaveJoin: 'Leave and join', cancel: 'Cancel', reload: 'Reload', best: 'BEST', yours: 'Yours', live: ' · updates live', finding: 'Finding a game…', looking: 'Looking for open games…', roomOpening: 'Opening the room…', goRoom: 'Go to the room', leaveRoom: 'Leave room', notNow: 'Not now',
         noneLine: 'Nobody is waiting for a player. Host one, and others can join you.', noneYours: 'Your room goes public with its map and your friends in it.', noneNew: 'A new room opens for you, and it goes public.', joiningCode: 'Joining the room…', joinFirst: ' Wait for it, or cancel it in the list.', opening: 'The game is opening. If it does not, reload this page.',
         already: 'Your room is already public.', running: 'Your match is running.', idle: 'Your room went invite only after 30 minutes. Make it public again?',
         hostChanged: 'This room is invite only again because the host changed.', stillPrivate: 'Your room is still invite only. Use the Public switch in the room.',
-        privateTag: 'Invite only', noneJoin: 'No open games to join right now.',
+        privateTag: 'Invite only', fogTag: 'Fog', noneJoin: 'No open games to join right now.',
         watch: 'Watch', liveMark: 'Live', mode187: '187', inProgress: 'In progress', soFar: ' so far', starting: 'Starting\u2026', nobodyNamed: 'Players not named',
         full: 'That room is full.', started: 'The match in that room has already started.', gone: 'That game is not open any more.', silent: 'The server did not answer. Try again in a moment.'
     };
@@ -71,14 +71,14 @@
         if (!whole(raw.people, 4) || !whole(raw.bots, 4) || !whole(raw.free, 4) || !whole(raw.size, 4)) return null;
         if (raw.size < 1 || raw.free < 1 || raw.people + raw.bots + raw.free !== raw.size) return null;
         var known = rules.mapOfFile(raw.map);
-        return { host: raw.host.replace(/^ +| +$/g, '') || 'Player', map: raw.map, mapKey: known ? known.key : '', mapName: known ? known.name : rules.communityName(raw.map).slice(0, 28), people: raw.people, bots: raw.bots, free: raw.free, size: raw.size };
+        return { host: raw.host.replace(/^ +| +$/g, '') || 'Player', map: raw.map, mapKey: known ? known.key : '', mapName: known ? known.name : rules.communityName(raw.map).slice(0, 28), people: raw.people, bots: raw.bots, free: raw.free, size: raw.size, fog: raw.fog === true };
     }
-    // One row of the list as the page may show it, or null. The nine fields of docs/PUBLIC_ROOMS.md, each of its type and in its range (unknown extra fields are ignored): code (what a room code may be, no capital), age, and the seven of seatsRow.
+    // One row of the list as the page may show it, or null. The ten fields of docs/PUBLIC_ROOMS.md, each of its type and in its range (unknown extra fields are ignored): code (what a room code may be, no capital), age, and the eight of seatsRow (fog is true only when the row says the boolean true).
     function rowOf(raw, rules) {
         if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
         if (typeof raw.code !== 'string' || !/^[a-z0-9_-]{1,32}$/.test(raw.code) || !whole(raw.age, 2147483647)) return null;
         var r = seatsRow(raw, rules);
-        return r && { code: raw.code, host: r.host, map: r.map, mapKey: r.mapKey, mapName: r.mapName, people: r.people, bots: r.bots, free: r.free, size: r.size, age: raw.age };
+        return r && { code: raw.code, host: r.host, map: r.map, mapKey: r.mapKey, mapName: r.mapName, people: r.people, bots: r.bots, free: r.free, size: r.size, age: raw.age, fog: r.fog };
     }
     // One match of the door's answer to GET /live as the page may show it, or null: the id of the server's shape, the map as the door sends it (the whole file name, like a room's: 'TREASURE.LVL', 'DRY LAND.lvl'; else the one in the id), the seconds it has run (or its turns / 20), and at most four
     // players as the door writes them ("Green (Ann)", "Red", "Blue (Bot (Medium))"): a color word and the name, printable ASCII only, and the game mode (the word '187' marks a match of mode 187; any other value, or none, is a plain match).
@@ -213,12 +213,14 @@
         function rectOf(sel) { var n = doc.querySelector && doc.querySelector(sel), r = n && n.getBoundingClientRect && n.getBoundingClientRect(); return r && r.height ? r : null; }
         function placeToast() {                            // above what is at the bottom: the chat (a phone's Chat view: its field), the strip of views, the Room's START bar; never into the bar at the top
             if (toast.parentNode !== doc.body) doc.body.appendChild(toast);
-            var h = win.innerHeight || 0, bar = rectOf('.hbar'), r = rectOf('#gchat') || rectOf('.htabs'), y = null, up;
+            var h = win.innerHeight || 0, bar = rectOf('.hbar'), r = rectOf('#gchat') || rectOf('.htabs'), y = null, go, up;
             if (r) y = rectOf('#hmain') ? r.top : (rectOf('.gc-form') || { top: r.bottom - 6 }).top;
             else if (win.innerWidth <= 700 && (r = rectOf('.go'))) y = r.top;
+            if (y !== null && win.innerWidth <= 700 && (go = rectOf('.go')) && go.top < y) y = go.top;       // (the Room's START bar stands above the strip of views: the toast goes above it)
             if (y === null || toast.hidden) { toast.style.bottom = ''; return; }
             up = h - y + 10;
             if (bar && toast.offsetHeight && h - up - toast.offsetHeight < bar.bottom + 2) up = h - bar.bottom - 2 - toast.offsetHeight;
+            if (up < 8) up = 8;       // (no room between the bar and the strip: the toast stays in the window, over the bar's lower edge, and its question can be answered)
             toast.style.bottom = Math.round(up) + 'px';
         }
         placeToast();
@@ -246,32 +248,26 @@
             notice('running', TEXT.running, 'warn', rejoinOffered() ? [{ text: TEXT.rejoin, run: function () { doc.getElementById('rejoin-go').click(); } }] : []);
         }
 
-        // ---- the Public | Invite only switch of the Room's card (a guest reads it; the leader changes it) ----
-        var visBox = el('div', 'vis'), visPrivate = el('button', 'btn vbtn'), visPublic = el('button', 'btn vbtn'), visTag = el('span', 'vistag'), visNote = el('p', 'visnote');
-        visBox.setAttribute('role', 'group'); visBox.setAttribute('aria-label', TEXT.visLabel); visBox.hidden = true; visTag.hidden = true; visNote.hidden = true; visNote.setAttribute('role', 'status');
+        // ---- the Public | Invite only switch in the Room's Rules sheet (a guest reads it; the leader changes it) ----
+        var visBox = el('div', 'vis'), visPrivate = el('button', 'btn vbtn', TEXT.private), visPublic = el('button', 'btn vbtn', TEXT.public), visNote = el('p', 'visnote');
+        visBox.setAttribute('role', 'group'); visBox.setAttribute('aria-label', TEXT.visLabel); visBox.hidden = true; visNote.hidden = true; visNote.setAttribute('role', 'status');
         [visPrivate, visPublic].forEach(function (b) { b.type = 'button'; visBox.appendChild(b); });
-        visPrivate.appendChild(el('b', '', TEXT.private)); visPrivate.appendChild(el('small', '', TEXT.privateSub));
-        visPublic.appendChild(el('b', '', TEXT.public));
-        (function () { var s = el('small', '', TEXT.publicSub); s.appendChild(el('span', 'vwide', TEXT.publicWide)); visPublic.appendChild(s); })();
         visPrivate.addEventListener('click', guard(function () { choose(false); }));
         visPublic.addEventListener('click', guard(function () { choose(true); }));
-        function placeVis() {                              // the switch in the room's heading line (before the code) and its note with the room's other notes (web/home/room.css lays both out, a phone's too)
-            var h = doc.getElementById('room-h'), notes = doc.getElementById('r-notes'), head = h && ((h.parentNode && h.parentNode.parentNode) || h.parentNode);
-            if (!head) return;
-            head.insertBefore(visBox, (head.querySelector && head.querySelector('.code')) || null);
-            if (notes) notes.insertBefore(visNote, notes.firstChild || null);
-        }
-        (function () { var h = doc.getElementById('room-h'); if (h && h.parentNode) h.parentNode.appendChild(visTag); placeVis(); })();
+        (function () {                                     // the switch and its note stand in the sheet's row (web/lobby.html #r-vis; web/home/room.css lays it out)
+            var row = doc.getElementById('r-vis');
+            if (!row) return;
+            row.appendChild(visBox); row.appendChild(visNote);
+        })();
         function paintVis() {
             var c = client(), room = c && c.room;
-            visBox.hidden = visTag.hidden = visNote.hidden = true;
+            visBox.hidden = visNote.hidden = true;
             if (!room || !room.lobby) return;
-            if (!c.isLeader()) { visTag.textContent = room.isPublic ? TEXT.publicRoom : TEXT.privateRoom; visTag.hidden = false; return; }
-            var can = c.canAct() && !room.starting && !locked;
+            var lead = c.isLeader(), can = lead && c.canAct() && !room.starting && !locked;
             visPrivate.setAttribute('aria-pressed', String(!room.isPublic)); visPublic.setAttribute('aria-pressed', String(room.isPublic));
             visPrivate.disabled = visPublic.disabled = !can;
             visBox.hidden = false;
-            visNote.textContent = hint || (room.isPublic ? TEXT.noteListed : TEXT.noteHow);
+            visNote.textContent = (lead && hint) || (room.isPublic ? TEXT.noteListed : TEXT.noteHow);
             visNote.hidden = false;
         }
         function lock() { locked = true; if (lockTimer !== null) cancel(lockTimer); lockTimer = later(guard(function () { lockTimer = null; locked = false; hint = ''; paintVis(); }), RETRY_MS); }
@@ -346,7 +342,7 @@
         function stopPending() { if (pendingTimer !== null) { cancel(pendingTimer); pendingTimer = null; } }
         function endPending() { pending = null; stopPending(); }
         function startPending(forClient) {                     // forClient: the client whose room is to be made public (a room that is left meanwhile is not the one: a later room is never made public by it)
-            pending = { forClient: forClient || null, sent: false, tries: 0 };
+            pending = { forClient: forClient || null, sent: false };
             stopPending();
             pendingTimer = later(guard(function () {
                 pendingTimer = null;
@@ -362,17 +358,16 @@
             if (room.isPublic) { endPending(); notice('already', TEXT.already, '', []); return; }
             if (!c.canAct()) return;
             if (c.setPublic(true)) { pending.sent = true; lastSent = now(); lock(); return; }
-            if (++pending.tries <= 3) later(guard(function () { var k = client(); if (pending && k === c) doPending(k); }), RETRY_MS);
-            else endPending();
+            endPending();       // (a fresh room has all of its requests: a press that is held back cannot be the first one)
         }
-        function startHost() {                             // a room of the page's own (My room's machinery), then Visibility(public) when the room is ready
+        function startHost() {                             // a room of the page's own (through make()), then Visibility(public) when the room is ready
             startPending();
             page.make();
             pending.forClient = client();
             track(client());
             ctl.show('room', 'push');
         }
-        function startPrivate() {                          // a private room of the page's own (the first press of My room, as it was): the page makes it and the Room shows
+        function startPrivate() {                          // a private room of the page's own: the page makes it and the Room shows
             page.make();
             track(client());
             ctl.show('room', 'push');
@@ -391,20 +386,10 @@
             if (joining) { stillJoining(); return; }
             if (over()) { itsWay(); return; }
             closeAll();
-            if (pending) { ctl.show('room', 'push'); return; }          // (a second press: the first one is on its way)
             var c = client();
             if (matchRunning(c)) { runningNotice(); return; }
             if (!c || (c.room && !c.room.lobby)) { if (straight) startHost(); else chooseHost(); return; }       // (no room, a refused one, or a room that a game made: a room of our own, public or private as asked; Host one! of the card of Quick join goes straight to public: that is what its words promise)
-            if (!c.room) { startPending(c); ctl.show('room', 'push'); return; }  // (the page's room is on its way: it gets Visibility(public) when it is ready)
-            if (!c.isLeader()) {
-                ask({ title: 'Leave ' + hostLabel(c) + ' room and host your own?', line: 'A new room opens for you, with its own map and colors. It goes public.', yes: TEXT.leaveHost }, function () { page.leave(); startHost(); });
-                return;
-            }
-            if (c.room.isPublic) { notice('already', TEXT.already, '', []); ctl.show('room', 'push'); return; }
-            var names = others(c);
-            function flip() { startPending(c); ctl.show('room', 'push'); doPending(c); }
-            if (names.length) ask({ title: 'Make your room public?', line: rules.listOf(names) + (names.length > 1 ? ' are' : ' is') + ' in it. Anybody on the front page will be able to join it.', yes: TEXT.makePublic, stay: TEXT.keepPrivate }, flip);
-            else flip();
+            ctl.show('room', 'push');                      // (the page holds a room, as its host or as a guest: Quick host shows it. Nothing is changed and nothing is asked: while the page holds a room the middle panel is the room, and Leave is the way out)
         }
 
         // ---- the confirm card (the approved picture): the question, what it is about, and the answer that changes nothing has the focus ----
@@ -525,7 +510,7 @@
             }
             for (var k = 0; k < priv.length; k++) {
                 var r = priv[k];
-                if (r.host === name && r.map === room.map && r.mode187 === (room.mode === 1) && r.people === people && r.bots === bots && r.free === free) return k;
+                if (r.host === name && r.map === room.map && r.mode187 === (room.mode === 1) && r.fog === !!room.fog && r.people === people && r.bots === bots && r.free === free) return k;
             }
             return -1;
         }
@@ -563,13 +548,14 @@
             line.appendChild(dots); line.appendChild(el('span', 'gcount', seats.count)); line.appendChild(el('span', 'gbots', seats.bots));
             if (lock) {
                 var marks = el('span', 'gmarks');
-                marks.appendChild(el('span', 'gprivtag', TEXT.privateTag)); if (lock === 'yours') marks.appendChild(el('span', 'gyours', TEXT.yours)); if (row.mode187) marks.appendChild(el('span', 'gmode', TEXT.mode187));
+                marks.appendChild(el('span', 'gprivtag', TEXT.privateTag)); if (lock === 'yours') marks.appendChild(el('span', 'gyours', TEXT.yours)); if (row.mode187) marks.appendChild(el('span', 'gmode', TEXT.mode187)); if (row.fog) marks.appendChild(el('span', 'gfog', TEXT.fogTag));
                 top.appendChild(marks); text.setAttribute('aria-hidden', 'true');
             }
+            if (row.fog && !lock) top.appendChild(el('span', 'gfog', TEXT.fogTag));       // (Fog of War: a mark beside the map's name; a narrow row wraps it under)
             if (best || yours) top.appendChild(el('span', yours ? 'gyours' : 'gbest', yours ? TEXT.yours : TEXT.best));       // (beside the map's name; a narrow row wraps it under)
             text.appendChild(top); text.appendChild(line); li.appendChild(pic); li.appendChild(text);
             if (lock) {
-                var pad = el('span', 'glockbox'), tell = el('span', 'sr', 'Invite-only room, cannot join. ' + (lock === 'yours' ? 'Yours. ' : '') + possessive(row.host) + ' room, ' + row.mapName + ', ' + seats.count + ' seats taken, ' + seats.bots + '.');
+                var pad = el('span', 'glockbox'), tell = el('span', 'sr', TEXT.privateRoom + ', cannot join. ' + (lock === 'yours' ? 'Yours. ' : '') + possessive(row.host) + ' room, ' + row.mapName + ', ' + seats.count + ' seats taken, ' + seats.bots + '.');
                 pad.setAttribute('aria-hidden', 'true'); li.appendChild(pad); li.appendChild(tell);
             } else if (onList && !yours) {
                 var b = button('gjoin', TEXT.join, guard(function () { joinRow(row); }));
@@ -646,7 +632,7 @@
             popEmpty.className = locks.length ? 'gempty gslim' : 'gempty'; popEmptyTitle.textContent = locks.length ? TEXT.noneJoin : TEXT.emptyTitle;         // (private rooms but none to join: the card becomes a slim strip above the locked cards)
             popList.hidden = !(loaded && !off && (shown.length || locks.length)); popLegend.hidden = popList.hidden;
             popNote.hidden = !popNote.textContent;
-            var sig = JSON.stringify(shown.map(function (r) { return [r.code, r.host, r.map, r.people, r.bots, r.free, r.size]; }).concat(lead, locks.map(function (l) { return [l.row.host, l.row.map, l.row.mode187, l.row.people, l.row.bots, l.row.free, l.row.size, l.yours]; })));       // (the rows are made again only when what they show changed: a press that straddles a repaint is not lost, and a focus stays)
+            var sig = JSON.stringify(shown.map(function (r) { return [r.code, r.host, r.map, r.people, r.bots, r.free, r.size, r.fog]; }).concat(lead, locks.map(function (l) { return [l.row.host, l.row.map, l.row.mode187, l.row.people, l.row.bots, l.row.free, l.row.size, l.yours, l.row.fog]; })));       // (the rows are made again only when what they show changed: a press that straddles a repaint is not lost, and a focus stays)
             if (sig === paintedSig) return;
             paintedSig = sig;
             while (popList.firstChild) popList.removeChild(popList.firstChild);
@@ -941,7 +927,7 @@
 
         function sync() { track(client()); paintVis(); armRefresh(); paintPill(); if (holdsRoom()) matches = true; liveLens.forEach(function (l) { markWatch(l.link, l.id); }); if (isOpen) { paintList(); place(); } }
         function shown(name) {
-            if (name === 'room') { closeAll(); placeVis(); scheduleLive(); } else { poll(); pollLive(); }
+            if (name === 'room') { closeAll(); scheduleLive(); } else { poll(); pollLive(); }
             sync();
             schedule();
         }
@@ -961,7 +947,7 @@
         poll();
         pollLive();
         return {
-            sync: guard(sync), shown: guard(shown), leaving: leaving, said: guard(function (words) { notice('left', words, '', []); }), opening: opening, stalled: stalled, inert: inert, poll: poll,
+            sync: guard(sync), shown: guard(shown), leaving: leaving, said: guard(function (words) { notice('left', words, '', []); }), told: guard(function (kind, text, tone, actions) { notice(kind, text, tone, actions || []); return true; }), opening: opening, stalled: stalled, inert: inert, poll: poll,
             state: function () { return { rows: rows, loaded: loaded, off: off, failures: failures, open: isOpen, pending: !!pending, joining: joining, notice: noticeKind, live: live, liveOff: liveOff, liveLoaded: liveLoaded, showLive: showLive }; }
         };
     }

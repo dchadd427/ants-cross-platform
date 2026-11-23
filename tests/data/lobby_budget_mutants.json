@@ -179,8 +179,8 @@
   {
    "id": "net_plan_outside_the_budget",
    "file": "web/front/lobby_net.js",
-   "old": "return this.send('plan', encodePlan(map, kinds, plan.teamA, plan.teamB, plan.mode));",
-   "new": "return this.sendBytes(encodePlan(map, kinds, plan.teamA, plan.teamB, plan.mode));",
+   "old": "return this.send('plan', encodePlan(map, kinds, plan.teamA, plan.teamB, plan.mode, fog));",
+   "new": "return this.sendBytes(encodePlan(map, kinds, plan.teamA, plan.teamB, plan.mode, fog));",
    "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
   },
   {

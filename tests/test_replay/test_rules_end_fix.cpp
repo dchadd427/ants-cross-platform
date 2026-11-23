@@ -157,21 +157,21 @@ int main() {
     const assets::LevelData ghost = scenario::level(true);
 
     TEST_CASE("RP15.1 This build plays 5, 8, 9 and 13 for the original's game and 6, 7, 10, 11 and 12 for 187, nothing else; a 187 match is recorded under 12; every number names its one mode; a refusal names all nine") {
-        ASSERT_TRUE(kSimRulesMode187 == 12 && kSimRulesMode187BeforeNoDrops == 11 && kSimRulesMode187BeforeEndFix == 10 && kSimRulesMode187BeforeFireWall == 7 && kSimRulesMode187Heal == 6);
-        ASSERT_TRUE(kSimRules == 13 && kSimRulesBeforeEmptyRecord == 9 && kSimRulesBeforeFireWall == 8 && kSimRulesBeforeLastSide == 5 && kSimRulesNewest == 13);
-        ASSERT_TRUE(sim_rules_for_mode(0) == 13 && sim_rules_for_mode(1) == 12 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);
-        for (uint16_t rules = 0; rules < 16; ++rules) {
-            ASSERT_EQ(plays_mode_rules(0, rules), rules == 5 || rules == 8 || rules == 9 || rules == 13);
-            ASSERT_EQ(plays_mode_rules(k187, rules), rules == 6 || rules == 7 || rules == 10 || rules == 11 || rules == 12);
+        ASSERT_TRUE(kSimRulesMode187 == 15 && kSimRulesMode187BeforeCantGo == 12 && kSimRulesMode187BeforeNoDrops == 11 && kSimRulesMode187BeforeEndFix == 10 && kSimRulesMode187BeforeFireWall == 7 && kSimRulesMode187Heal == 6);
+        ASSERT_TRUE(kSimRules == 14 && kSimRulesBeforeCantGo == 13 && kSimRulesBeforeEmptyRecord == 9 && kSimRulesBeforeFireWall == 8 && kSimRulesBeforeLastSide == 5 && kSimRulesNewest == 15);
+        ASSERT_TRUE(sim_rules_for_mode(0) == 14 && sim_rules_for_mode(1) == 15 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);
+        for (uint16_t rules = 0; rules < 18; ++rules) {
+            ASSERT_EQ(plays_mode_rules(0, rules), rules == 5 || rules == 8 || rules == 9 || rules == 13 || rules == 14);
+            ASSERT_EQ(plays_mode_rules(k187, rules), rules == 6 || rules == 7 || rules == 10 || rules == 11 || rules == 12 || rules == 15);
             ASSERT_FALSE(plays_mode_rules(2, rules));
             ASSERT_FALSE(plays_mode_rules(255, rules));
             ASSERT_EQ(fire_wall_as_original_rules(rules), rules >= 9);                       // (10, 11 and 12 have the loader of the original, as 9 does)
         }
-        ASSERT_EQ(played_rules_text(), std::string("5, 6, 7, 8, 9, 10, 11, 12 and 13"));
+        ASSERT_EQ(played_rules_text(), std::string("5, 6, 7, 8, 9, 10, 11, 12, 13, 14 and 15"));
         Header head;
         head.map_name = "TINY.LVL";
         head.roster = 0x0F;
-        for (uint16_t rules = 0; rules < 16; ++rules) {
+        for (uint16_t rules = 0; rules < 18; ++rules) {
             for (const uint8_t mode : {uint8_t{0}, k187}) {
                 Header h = head;
                 h.set_mode(mode);
@@ -180,8 +180,8 @@ int main() {
                 r.head = h;
                 std::string error;
                 const std::vector<uint8_t> bytes = encode(r, error);
-                const bool mode_has_it = mode == 0 ? (rules == 5 || rules == 8 || rules == 9 || rules == 13) : (rules == 6 || rules == 7 || rules == 10 || rules == 11 || rules == 12);
-                const bool other_mode_has_it = mode == 0 ? (rules == 6 || rules == 7 || rules == 10 || rules == 11 || rules == 12) : (rules == 5 || rules == 8 || rules == 9 || rules == 13);
+                const bool mode_has_it = mode == 0 ? (rules == 5 || rules == 8 || rules == 9 || rules == 13 || rules == 14) : (rules == 6 || rules == 7 || rules == 10 || rules == 11 || rules == 12 || rules == 15);
+                const bool other_mode_has_it = mode == 0 ? (rules == 6 || rules == 7 || rules == 10 || rules == 11 || rules == 12 || rules == 15) : (rules == 5 || rules == 8 || rules == 9 || rules == 13 || rules == 14);
                 ASSERT_EQ(plays_here(h), mode_has_it);
                 ASSERT_EQ(!bytes.empty(), !other_mode_has_it && (mode == 0 || rules >= 6));      // (a number of another mode is no file; 4 and 13 are files, only not played)
                 if (!bytes.empty()) {
@@ -190,18 +190,18 @@ int main() {
                 }
             }
         }
-        for (const uint16_t said : {uint16_t{5}, uint16_t{6}, uint16_t{7}, uint16_t{8}, uint16_t{9}, uint16_t{10}, uint16_t{11}, uint16_t{12}}) {
+        for (const uint16_t said : {uint16_t{5}, uint16_t{6}, uint16_t{7}, uint16_t{8}, uint16_t{9}, uint16_t{10}, uint16_t{11}, uint16_t{12}, uint16_t{15}}) {
             Header h = head;
             h.set_mode(k187);
             h.sim_rules = said;
             Recorder rec(h);
-            ASSERT_EQ(rec.replay().head.sim_rules, 12);                                      // (a mode that is not 0 gets the number of that mode whatever the head said)
+            ASSERT_EQ(rec.replay().head.sim_rules, 15);                                      // (a mode that is not 0 gets the number of that mode whatever the head said)
         }
         Recorder fresh(head);
-        ASSERT_TRUE(fresh.replay().head.sim_rules == 13 && fresh.replay().head.mode == 0);
+        ASSERT_TRUE(fresh.replay().head.sim_rules == 14 && fresh.replay().head.mode == 0);
         Header foreign = head;
-        foreign.sim_rules = 14;
-        ASSERT_TRUE(rules_refusal(foreign).find("simulation rules 14; this build plays simulation rules 5, 6, 7, 8, 9, 10, 11, 12 and 13") != std::string::npos);
+        foreign.sim_rules = 16;
+        ASSERT_TRUE(rules_refusal(foreign).find("simulation rules 16; this build plays simulation rules 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 and 15") != std::string::npos);
     } TEST_END();
 
     TEST_CASE("RP15.2 A recording of the number 10, 7 or 6, made in code on the two matches of the scenario, plays to every hash it holds and to the final hash that the build before the number made of it") {

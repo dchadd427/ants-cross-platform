@@ -240,7 +240,7 @@ class TheStyle(unittest.TestCase):
         self.assertNotIn("z-index", body)
         self.assertIn("z-index: 60;", self.home_css, "the Menu stays above the dock")
         self.assertIn("height: auto;", self.rule('.gc[data-open="false"]'))
-        self.assertIn("min-height: 50px;", self.rule(".gc-head"))
+        self.assertIn("min-height: 38px;", self.rule(".gc-head"))
         self.assertIn("#home { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;", self.home_css, "the column that the dock is a part of")
 
     def test_the_field_has_the_row_under_the_log_in_a_wide_window(self):
@@ -272,9 +272,12 @@ class TheStyle(unittest.TestCase):
         for selector in (".gc-fold", ".gc-input", ".gc-send", ".gc-head"):
             self.assertIn(selector, heights, selector)
         for selector, values in heights.items():
+            if selector in (".gc-head", ".gc-fold"):
+                continue       # (the header's row and the minimize mark are as drawn, low and small: the mark is a mouse's, a phone has none: it is display: none below, and a phone's tabs have 44 px: roomchat.css)
             for value in values:
                 self.assertGreaterEqual(value, 44, "%s has a min-height of %d" % (selector, value))
-        self.assertIn("min-width: 46px;", self.rule(".gc-fold"))
+        phone = re.search(r"@media \(max-width: 700px\), \(max-height: 500px\) \{(.*?)\n\}", self.css, re.S).group(1)
+        self.assertIn(".gc-fold { display: none; }", phone, "the minimize mark is not drawn on a phone")
         self.assertGreaterEqual(heights[".gc-input"][0], 48)
         self.assertGreaterEqual(heights[".gc-send"][0], 48)
         self.assertNotRegex(self.css, r"(?<!min-)height: [1-3]\d px; *}", "no fixed height under 40 px on a control")
@@ -312,9 +315,7 @@ class TheStyle(unittest.TestCase):
         self.assertIn("@media (prefers-reduced-motion: reduce) { .gc-dot { animation: none; } }", self.css)
         self.assertIn("animation: gc-pulse", self.css)
 
-    def test_the_card_that_says_that_the_game_is_opening_is_above_the_dock_and_the_summary_place_is_not_seen(self):
-        card = re.search(r"\.hopen \{[^}]*z-index: (\d+);", self.home_css)
-        self.assertGreaterEqual(int(card.group(1)), 8, "the card is a layer over the page's columns, the dock's panel among them (it has none of its own)")
+    def test_the_dock_has_no_layer_of_its_own_and_the_summary_place_is_not_seen(self):
         self.assertNotIn("z-index", self.rule(".gc"))
         news = self.rule(".gc-news")
         self.assertIn("clip: rect(0 0 0 0);", news)
@@ -554,7 +555,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     FILES = (["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/alert_core.js", "web/hub_here.js", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/talk.css", "web/home/players.css", "web/home/players.js", "web/home/cmds.js", "web/home/cmds.css", "web/home/pics.js", "web/home/pics.css", "web/home/post.js", "web/home/post.css", "tests/scripts/test_web_home_chat.py", "tests/scripts/test_hub_text.py", "tests/scripts/web_home_chat_check.js",
               "tests/scripts/web_home_chat_hub_check.js", "tests/scripts/web_page_harness.js", "tests/scripts/fake_hub.js", "tests/scripts/mini_websocket.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
               "docs/HOME_SCREEN.md", "docs/HOME_CHAT.md", "hub/__init__.py", "hub/text.py", "web/matches.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html", "web/admin_page.js"]
-             + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js", "mapmaker_ai.js")])
+             + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "room_fog.js", "room_sheet.js", "seat_menu.js", "map_picker.js", "map_maker_link.js", "mapmaker_ai.js")])
 
     @classmethod
     def setUpClass(cls):

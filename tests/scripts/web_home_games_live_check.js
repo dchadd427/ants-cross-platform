@@ -194,9 +194,9 @@ function watchTab(bus, side) {
     same('with no room Watch is a plain link of the same tab, and a press does not change that', [outTab(link()), (link().click(), outTab(link()))], [[null, null], [null, null]]);
     same('... and nobody that asks for this page is answered (no seat was given up for a tab to come back to)', tab.ask('t0'), 0);
     myRoom(env, ['Maya'], R.PRIVATE);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await flush();
-    check('(Home shows, with the room: My room is there)', env.screen() === 'home' && !env.home('mine').hidden);
+    check('(Home shows, with the room held)', env.screen() === 'home' && env.holdsRoom());
     same('while the page holds a room Watch is a new tab with no opener (leaving would give the seat up)', outTab(link()), ['_blank', 'noopener']);
     same('... the address is the same one', link().getAttribute('href'), '/play?live=' + ID);
     same('a watch tab that asks for the match listed now is answered, with its own token', [tab.ask('t1'), tab.heard.filter((m) => m.token === 't1')], [1, [{ t: 'here', token: 't1' }]]);
@@ -222,7 +222,7 @@ function watchTab(bus, side) {
     const bus = channels();
     const env = await livePage({ search: '?room=k7m2xq', options: { stayHome: false, win: { BroadcastChannel: bus.Channel } } });
     const sock = R.guestRoom(env, 'Pebble', R.PUBLIC);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await wait(env, 1000);
     const tab = watchTab(bus, 'TREASURE-20261109-120000Z'), before = tab.ask('a');
     const matches = watchTab(bus, 'matches'), beforeMatches = matches.ask('c');
@@ -231,7 +231,7 @@ function watchTab(bus, side) {
 }
 {   // a browser with no channel, a channel that refuses: nothing breaks, Watch is the same as ever
     const none = await livePage({ options: { win: { BroadcastChannel: undefined } } });
-    myRoom(none, ['Maya'], R.PRIVATE); none.roomBar('rhome').click(); await flush();
+    myRoom(none, ['Maya'], R.PRIVATE); none.toggleRoom(); await flush();
     same('no channel in the browser: the list shows and Watch is a new tab in a room', [watchOf(liveRows(none)[0]).getAttribute('target'), none.screen()], ['_blank', 'home']);
     const broken = await livePage({ options: { win: { BroadcastChannel: function () { throw new Error('not allowed'); } } } });
     check('a channel that cannot be made changes nothing: the rows are there', liveRows(broken).length === 2 && watchOf(liveRows(broken)[0]).getAttribute('target') === null);
@@ -301,7 +301,7 @@ for (const [what, tweak] of [['404', (s) => { s.live.reject = false; s.live.stat
 {   // the hand-off: START reaches the page; no more looks
     const env = await livePage({ search: '?room=k7m2xq', options: { stayHome: false } });
     const sock = R.guestRoom(env, 'Pebble', R.PUBLIC);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await wait(env, 12500);
     check('(Home shows with the list, and it looks at /live)', env.screen() === 'home' && looksAtLive(env) >= 1);
     sock.receive(roomMessage(seatsOf(['Pebble', 'Maya']), { you: 1, leader: 0, flags: STARTING }));
@@ -317,7 +317,7 @@ for (const [what, tweak] of [['404', (s) => { s.live.reject = false; s.live.stat
     check('(the Room shows)', env.screen() === 'room');
     await wait(env, 60000);
     check('nothing looks at /live while the Room shows', looksAtLive(env) === n);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await flush();
     check('Home comes back: a look at once (the 5 s have gone)', env.screen() === 'home' && looksAtLive(env) === n + 1);
 }
@@ -327,7 +327,7 @@ for (const [what, tweak] of [['404', (s) => { s.live.reject = false; s.live.stat
     await wait(env, 1500);
     myRoom(env, ['Maya'], R.PRIVATE);
     await wait(env, 1500);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await flush();
     check('Home is back 3 s after the look: no look yet (5 s must have gone since the last one)', env.screen() === 'home' && looksAtLive(env) === 1, looksAtLive(env));
     await wait(env, 1000);
@@ -356,7 +356,7 @@ for (const [what, tweak] of [['404', (s) => { s.live.reject = false; s.live.stat
     await wait(env, 1500);
     myRoom(env, ['Maya'], R.PRIVATE);
     await wait(env, 6000);
-    env.roomBar('rhome').click();
+    env.toggleRoom();
     await flush();
     check('Home is back 7.5 s after a failed look: no look (a failure waits 10 s, not 5)', env.screen() === 'home' && looksAtLive(env) === 1, looksAtLive(env));
     env.hide(true); env.hide(false);

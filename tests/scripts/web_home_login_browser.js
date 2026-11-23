@@ -280,18 +280,20 @@ async function main() {
     // ---- a room and the round trip ----
     if (serverBinary && info.server) {
         const o = await open('desktop');
-        await o.page.evaluate(() => document.querySelector('.hbar .mine').click());
+        await o.page.waitForFunction(() => { const b = document.querySelector('.hbar .quick.host'); return b && !b.disabled; }, null, { timeout: 15000 });
+        await o.page.evaluate(() => document.querySelector('.hbar .quick.host').click());       // (Quick host asks who can join; Invite only makes the visitor's own room and shows it)
+        await o.page.waitForSelector('.gcbtns button', { timeout: 5000 });
+        await o.page.evaluate(() => Array.from(document.querySelectorAll('.gcbtns button')).filter((b) => /^Invite only$/.test(b.textContent.trim()))[0].click());
         await o.page.waitForSelector('#code', { timeout: 10000 });
         await o.page.waitForFunction(() => /\S/.test(document.getElementById('code').textContent) && document.querySelectorAll('#slots li.k-person').length >= 1, null, { timeout: 10000 });
         const code = await o.page.evaluate(() => document.getElementById('code').textContent.replace(/\s+/g, ''));
         const stored = await o.page.evaluate(() => sessionStorage.getItem('ants.lobby'));
-        check('a visitor makes a room (My room) and holds a seat in it (the tab\'s session storage holds the room and its key)', /^[a-z2-9]{6}$/.test(code) && !!stored && stored.indexOf(code) !== -1, code + ' ' + stored);
-        await o.page.click('.rhome');
+        check('a visitor makes a room (Quick host, Invite only) and holds a seat in it (the tab\'s session storage holds the room and its key)', /^[a-z2-9]{6}$/.test(code) && !!stored && stored.indexOf(code) !== -1, code + ' ' + stored);
         await logIn(o.page, 'chip');
-        await o.page.waitForFunction(() => { const p = document.querySelector('.hbar .mine .pill'); return p && !p.hidden && /^\d\/\d$/.test(p.textContent); }, null, { timeout: 15000 });
+        await o.page.waitForFunction(() => document.body.getAttribute('data-screen') === 'room' && document.querySelectorAll('#slots li.k-person').length >= 1, null, { timeout: 15000 });       // (the seat is taken back: the Room shows, its rows hold the person again)
         const back = await o.page.evaluate(() => sessionStorage.getItem('ants.lobby'));
-        check('after the round trip through Discord the page is on Home, the room chip says how many are in it (the seat was taken back in the background), and the session storage still holds the same room', (await text(o.page, '.hbar .mine')).indexOf('1/') !== -1 && !!back && back.indexOf(code) !== -1);
-        await o.page.evaluate(() => document.querySelector('.hbar .mine').click());
+        check('after the round trip through Discord the page is on the Room, which holds its person again (the seat was taken back), and the session storage still holds the same room', (await o.page.evaluate(() => document.querySelectorAll('#slots li.k-person').length)) >= 1 && !!back && back.indexOf(code) !== -1);
+        await o.page.evaluate(() => { location.hash = '#room'; });       // (the Room's address: the page holds the room, and Home shows it as Forward does)
         await o.page.waitForFunction(() => document.body.getAttribute('data-screen') === 'room' && /\S/.test(document.getElementById('code').textContent), null, { timeout: 8000 });
         const again = await o.page.evaluate(() => document.getElementById('code').textContent.replace(/\s+/g, ''));
         check('the Room shows the SAME room code, and the visitor is in a seat of it (a person in a seat of the room, no second room made)', again === code && (await o.page.evaluate(() => document.querySelectorAll('#slots li.k-person').length)) >= 1, again);

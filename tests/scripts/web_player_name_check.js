@@ -555,7 +555,7 @@ const GUEST_NAME = 'Guest 550000';                      // (the guest name that 
         r.restore();
     }
 
-    // -- a seat never plays under a guest name that an older answer gave while the site has a login (Quick host, My room, Join, Quick join, a rematch all ask through ready)
+    // -- a seat never plays under a guest name that an older answer gave while the site has a login (Quick host, Join, Quick join, a rematch all ask through ready)
     {
         // (a) the page opens while the hub says nobody is logged in, the person logs in without a reload, then a seat
         const r = rig();

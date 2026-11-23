@@ -325,6 +325,14 @@ StateHash SimulationEngine::state_hash() const {
             h.u32(s.first);
             h.u32(s.second);
         }
+        for (uint8_t team = 0; team < MAX_PLAYERS; ++team) {      // an answer that is held until after the next commands (rules numbers 14 and later; none, and no change to the hash, before)
+            const auto& held = e.held_answers_[team];
+            if (!held.present) continue;
+            h.u32(0xA0u + team);
+            h.u32(held.ant_id);
+            h.size(held.path.size());
+            for (const TileCoord& t : held.path) h.tile(t);
+        }
         out.paths = h.value();
     }
 

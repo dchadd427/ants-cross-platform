@@ -62,6 +62,7 @@ void StandardBot::start(const BotContext& context) {
     ledger_.set_rank(kSwarm, kRankPowerUps);                      // (the spare ants that wait at a flower strip for its Swimmer: taken from the economy)
     ledger_.set_rank(kFlowerLink, kRankPowerUps);                 // (the Swimmer that digs the tiles to a flower strip: taken from the ferry, which has the lower rank)
     ledger_.set_rank(kThiefGuard, kRankFight);                    // (the fighters that meet an enemy Thief: taken from the economy, the guard and the ferry, never from a pick-up, a raid, a wall or a fight)
+    ledger_.set_rank(kPlugs, kRankPowerUps);                      // (the ant that takes a power-up that plugs the way of the seat: the stranded ants first, else an ant the economy can spare)
     ledger_.set_rank(kFerry, kRankGuard);                         // (the Swimmers that carry food: the island task takes one when a bridge is wanted)
 }
 
@@ -85,6 +86,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     const MapInfo* map = view.map() != nullptr ? view.map() : map_;
     if (map == nullptr) return;                                  // without the analysis of the map there is nothing to plan with (the controller always hands it over)
     ledger_.forget_missing(view.mine());
+    refusals_.look(view);                                        // (the orders that left are judged: an ant that stands where it stood did not obey)
     TaskContext context{view, orders, ledger_, profile_, *map, seat_};
 
     // 0. the game type 187 has no food: the whole fight is the brawl's (docs/BOTS.md, "187: the brawl")
@@ -132,8 +134,9 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     }
     tactics_.gone = plan.gone && view.game_mode() == sim::GameMode::HighestScore && no_work_since_ != 0 && !fallback && now >= no_work_since_ + plan.gone_wait && view.ticks_left() > 300;       // (the game type 187 has no food by its rules: its brawl is its own)
     const bool gate_breaching = tactics_.gate_map && !tactics_.gate_beside && !fallback && !gate_goals_.exhausted() && !any_reachable_pile && now < kBreachTicks && (view.score() == 0 || gate_goals_.phase() != GateGoalTask::Phase::Idle);
+    if (plan.rescue_thief) note_shut_in_thieves(tactics_, view, *map);                       // (the Thieves that are walled in, for the Fire Ant's wish and its walls)
     tactics_.wall_demand = !gate_breaching && wall_demand(tactics_, view, *map);
-    if (tactics_.wall_demand) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = 1;
+    if (tactics_.wall_demand || (plan.rescue_thief && !gate_breaching && !tactics_.shut_in.empty())) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = 1;       // (a Fire Ant puts out the walls that shut in an own Thief)
     uint8_t present = 0;
     for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) present = static_cast<uint8_t>(present | (view.rows()[t].present ? 1u << t : 0u));
     if (plan.secure_side && !gate_breaching) {                    // the power-ups of the own side are taken early: an enemy that steals the Fire can wall the piles in, the Bomber can mine the base, the Thief can raid twice
@@ -223,6 +226,8 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     thief_guard_.step(context);                                                               // (after the fights and the heals: an enemy Thief that comes for the own hole is met by the nearest free fighters; nothing when the plan has none)
     if (plan.rush || rush_.active()) rush_.step(context);                                   // (when the plan has no rush the task only gives back what it held)
     if (!gate_breaching) walls_.step(context);
+    if (plan.free_thief) free_thief_.step(context);                                         // (a Thief that shows the can't-go loop is clicked again and again, a volley; a free one with loot is sent home when a walk exists)
+    if (plan.plugs && !fallback) plugs_.step(context);                                      // (before the trips: its tile is not theirs, and the ants of the far part are free for it)
     powerups_.step(context);
     bombs_.step(context);
     if (plan.mine_per_pile > 0 || plan.mine_gate > 0 || plan.mine_home > 0 || mines_.jobs() != 0) mines_.step(context);       // (when the plan has no mines the task only gives back what it held)
@@ -254,6 +259,9 @@ void StandardBot::think(const BotView& view, Orders& orders) {
             on_command(refused, Fate::Filtered, now);                                       // the tasks are told, as for a click that the controller refuses
             fight_.unreachable(refused);                                                    // and a fight that sent ants where no walk goes is over
         }
+    }
+    if (plan.refusal_memory) {
+        for (const sim::Command& refused : refusals_.filter(view, orders)) on_command(refused, Fate::Filtered, now);        // (the click that was refused before: the tasks are told, as for one that the controller refuses)
     }
     if (!tactics_.gate_map && !tactics_.field_map) detour_.apply(view, plan, profile_, orders);        // the last look: the walk round a bomb of another team (BombDetour)
 }
@@ -402,9 +410,13 @@ void StandardBot::on_proposed(const sim::Command& command, Fate fate, uint64_t t
         deny_after_ = fate == Fate::Sent ? tick + 12u : 0u;
         return;
     }
-    if (fate == Fate::Sent) note_repeat(command, tick);
+    if (fate == Fate::Sent) {
+        note_repeat(command, tick);
+        refusals_.sent(command, tick);
+    }
     fight_.on_command(command, fate, tick);
     walls_.on_command(command, fate, tick);
+    free_thief_.on_command(command, fate, tick);
     powerups_.on_command(command, fate, tick);
     bombs_.on_command(command, fate, tick);
     mines_.on_command(command, fate, tick);

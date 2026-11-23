@@ -87,6 +87,8 @@ class TheWebImage(unittest.TestCase):
         cls.docker = Stages("Dockerfile")
         cls.warm = cls.docker.stage("emsdk-warm")
         cls.builder = cls.docker.stage("builder")
+        cls.ant_models_env = cls.docker.stage("ant-models-env")
+        cls.ant_models = cls.docker.stage("ant-models")
         cls.runner = cls.docker.stage("runner")
 
     def build(self, text):
@@ -98,9 +100,13 @@ class TheWebImage(unittest.TestCase):
         return hits[nth]
 
     def test_the_stages_are_the_warm_one_the_builder_and_the_runner_in_that_order(self):
-        self.assertEqual([self.docker.names[i] for i in sorted(self.docker.names)], ["emsdk-warm", "builder", "runner"])
+        self.assertEqual([self.docker.names[i] for i in sorted(self.docker.names)], ["emsdk-warm", "builder", "ant-models-env", "ant-models", "runner"])
         self.assertEqual(self.builder[0].words[0], "emsdk-warm", "the builder starts from the stage that has Emscripten's libraries")
         self.assertRegex(self.warm[0].words[0], r"^emscripten/emsdk:\d+\.\d+\.\d+(@sha256:[0-9a-f]{64})?$")
+        self.assertNotIn("python3-numpy", self.warm[1].text, "the Emscripten warm stage stays untouched by the 3D models stage")
+        self.assertNotIn("python3-pil", self.warm[1].text, "the Emscripten warm stage stays untouched by the 3D models stage")
+        self.assertRegex(self.ant_models_env[0].words[0], r"^debian:\d+-slim@sha256:[0-9a-f]{64}$")
+        self.assertEqual(self.ant_models[0].words[0], "ant-models-env", "the 3D models stage starts from its own small environment stage")
         self.assertRegex(self.runner[0].words[0], r"^nginx:alpine(@sha256:[0-9a-f]{64})?$")
 
     def test_the_warm_stage_depends_on_the_version_and_one_program_only(self):
@@ -223,7 +229,7 @@ class TheWebImage(unittest.TestCase):
         outputs = sorted(w for s in self.runner if s.op == "COPY" and "from" in s.flags for w in s.words[:-1])
         self.assertEqual(outputs, sorted([
             "/src/build_web/src/ants_app/index.*", "/src/build_web/lvl_core/lvl_core.js", "/src/build_web/lvl_core/lvl_core.wasm", "/src/lobby.html", "/src/matches.html", "/src/match.html", "/src/legal.html",
-            "/src/mapmaker.html", "/src/mapmaker_atlas/", "/src/changelog/changelog.html", "/src/changelog/whats_new.json", "/src/robots.txt", "/src/sitemap.xml", "/src/web/admin.html"]))
+            "/src/mapmaker.html", "/src/mapmaker_atlas/", "/src/test_3d/", "/src/changelog/changelog.html", "/src/changelog/whats_new.json", "/src/robots.txt", "/src/sitemap.xml", "/src/web/admin.html"]))
         text = self.docker.text[re.search(r"(?m)^FROM nginx:alpine(@\S+)? AS runner", self.docker.text).start():]
         self.assertEqual(len(re.findall(r"(?m)^USER ", text)), 0)
         self.assertEqual(re.findall(r"(?m)^EXPOSE .*$", text), ["EXPOSE 80"])

@@ -217,7 +217,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     FILES = (["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/alert_core.js", "web/hub_here.js", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/cmds.js", "web/home/cmds.css",
               "tests/scripts/test_web_home_cmds.py", "tests/scripts/web_home_cmds_check.js", "tests/scripts/web_page_harness.js", "tests/scripts/fake_hub.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml", "docs/HOME_CHAT.md",
               "web/matches.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html"]
-             + ["web/front/" + n for n in ("classic.css", "lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")])
+             + ["web/front/" + n for n in ("classic.css", "lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "room_fog.js", "room_sheet.js", "seat_menu.js", "map_picker.js", "map_maker_link.js")])
 
     @classmethod
     def setUpClass(cls):

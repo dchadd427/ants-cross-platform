@@ -114,6 +114,8 @@ async function shot(page, name) { if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: 
     const clearOf = async (page, label, t, parts) => {
         const bad = [];
         if (/^side/.test(label) && /chat|Chat/.test(label)) parts = parts.filter((p) => p !== '#gchat .gc-form');       // (568 x 320 with the page's Rejoin strip up: between the bar and the field there is less room than the toast is high, so it covers the top of the field, not the bar)
+        const room = await page.evaluate(() => [document.querySelector('.hbar').getBoundingClientRect().bottom, window.innerHeight]);       // (a window whose bar leaves less room under it than the toast is high: the toast stays in the window and may cover the bar's lower edge, as docs/HOME_GAMES.md says; where there is room it never does)
+        if (t.b - t.t > room[1] - room[0] - 8) parts = parts.filter((p) => p !== '.hbar .btn');
         for (const sel of parts) for (const q of await rectsOf(page, sel)) if (over(t, q)) bad.push(sel);
         check(label + ': the toast is not over ' + parts.join(', '), bad.length === 0, bad.join(',') + ' ' + JSON.stringify(t));
     };
@@ -241,21 +243,25 @@ async function shot(page, name) { if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: 
                 if (phone) { await page.click('.htab.t-games'); await sleep(200); }
             }
             // the Room: the toast is placed again, and the START bar and the Room's bottom row stay free
+            await page.evaluate(() => { document.getElementById('rejoin').hidden = true; });       // (no match of ours runs: Quick host asks who can join, and Invite only makes the page's own room)
+            await page.evaluate(() => document.querySelector('.hbar .quick.host').click()); await sleep(300);
+            await page.evaluate(() => Array.from(document.querySelectorAll('.gcbtns button')).filter((b) => /^Invite only$/.test(b.textContent.trim()))[0].click()); await sleep(500);
+            await page.click('.hbar .hmenu'); await page.click('.hmenubox a.mitem[aria-current="page"]'); await sleep(300);       // (the Menu's Home: the Room and Home are two screens of one page, and the toast below is raised on Home)
             await raise(page);
-            await page.evaluate(() => document.querySelector('.hbar .mine').click()); await sleep(500);
+            await page.evaluate(() => { location.hash = '#room'; }); await sleep(500);       // (the Room's address: the page holds a room, and Home shows it as Forward does)
             const onRoom = await page.evaluate(() => document.body.dataset.screen);
-            check(name + ': My room shows the Room', onRoom === 'room');
+            check(name + ': the Room\'s address shows the Room', onRoom === 'room');
             const t5 = await toastBox(page);
             check(name + ': the toast (it asks) is still there on the Room', !!t5);
             if (t5) {
                 check(name + ': on the Room the toast is inside the window', t5.l >= -0.5 && t5.t >= -0.5 && t5.r <= w + 0.5 && t5.b <= h + 0.5, JSON.stringify(t5));
                 if (phone) await clearOf(page, name + ': the Room', t5, ['.go']);
-                // Copy link: free where there is room; in a window under about 400 px high there is none, and the toast (which OK closes) can sit over it (docs/HOME_GAMES.md, "Notices")
-                if (h > 400) await clearOf(page, name + ': the Room', t5, ['#copy']);
+                // Share (it copies the link): free where there is room; in a window under about 400 px high there is none, and the toast (which OK closes) can sit over it (docs/HOME_GAMES.md, "Notices")
+                if (h > 400) await clearOf(page, name + ': the Room', t5, ['#share']);
                 else {
                     await page.evaluate(() => Array.from(document.querySelectorAll('.gtoast button')).pop().click());
                     await sleep(150);
-                    check(name + ': a short window: OK clears the toast, and Copy link is free', (await toastBox(page)) === null);
+                    check(name + ': a short window: OK clears the toast, and Share is free', (await toastBox(page)) === null);
                     await raise(page).catch(() => {});
                 }
                 // a banner comes on the Room too: the Room's bar is not covered

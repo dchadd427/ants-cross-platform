@@ -38,7 +38,7 @@ Object.keys(RAW).forEach((k) => {
 });
 
 // ---- 0. what the library offers -------------------------------------------------------------------------------------------------------------------------------------------------------------------
-same('the library exports exactly these names (a new one needs a table here)', Object.keys(RAW).sort(), ['MAX_LINE', 'MAX_LINES', 'PENDING_MS', 'TEXT', 'TOAST_CHARS', 'TOAST_GAP', 'cleanLine', 'joinedText', 'leftText', 'mount', 'nameOf', 'peopleIn', 'sendable', 'stateOf', 'toastText']);
+same('the library exports exactly these names (a new one needs a table here)', Object.keys(RAW).sort(), ['MAX_LINE', 'MAX_LINES', 'PENDING_MS', 'TEXT', 'TOAST_CHARS', 'TOAST_GAP', 'cleanLine', 'fogText', 'joinedText', 'leftText', 'mount', 'nameOf', 'peopleIn', 'sendable', 'stateOf', 'toastText']);
 check('a line is at most 100 characters: the match\'s chat entry (the server\'s kMaxChatChars, the client\'s MAX_CHAT)', C.MAX_LINE === 100 && C.MAX_LINE === Net.MAX_CHAT);
 check('the box keeps the last 200 lines, as the room\'s own log does (ChatLog::kMaxLines)', C.MAX_LINES === 200);
 same('a toast is at most 60 characters of the line, one chat toast in 4 s, and a line is called lost after 3 s without its echo', [C.TOAST_CHARS, C.TOAST_GAP, C.PENDING_MS], [60, 4000, 3000]);
@@ -106,6 +106,7 @@ function roomOf(states, o) {
     same('a joiner is announced as the page\'s toast says it: name, "joined as", the color', C.joinedText('Sam', 1, Rules.COLORS), 'Sam joined as Red.');
     same('... in each color', [0, 1, 2, 3].map((s) => C.joinedText('X', s, Rules.COLORS)), ['X joined as Green.', 'X joined as Red.', 'X joined as Blue.', 'X joined as Black.']);
     same('a person who goes', C.leftText('Sam'), 'Sam left.');
+same('the leader\'s switch of Fog of War (protocol 28): who, "turned Fog of War", on or off; a leader with no name is the host', [C.fogText(true, 'Hazel'), C.fogText(false, 'Hazel'), C.fogText(true, ''), C.fogText(false, undefined)], ['Hazel turned Fog of War on.', 'Hazel turned Fog of War off.', 'The host turned Fog of War on.', 'The host turned Fog of War off.']);
     same('a name is put in as it is (it is text; nothing is cut or escaped here)', [C.leftText('<b>'), C.joinedText('<i>&', 3, Rules.COLORS)], ['<b> left.', '<i>& joined as Black.']);
     same('the toast of a line is "name: line"', C.toastText('Sam', 'hello there'), 'Sam: hello there');
     same('a line of 60 characters is whole in the toast, one of 61 is cut with an ellipsis (a stranger\'s line of 100 must not fill the screen)', [C.toastText('Sam', 'y'.repeat(60)), C.toastText('Sam', 'x'.repeat(61)), C.toastText('Sam', 'x'.repeat(100))], ['Sam: ' + 'y'.repeat(60), 'Sam: ' + 'x'.repeat(59) + '…', 'Sam: ' + 'x'.repeat(59) + '…']);
@@ -219,6 +220,10 @@ const lineTexts = (w) => logOf(w).children.map((li) => li.textContent);
     check('(the system lines have the class "sys" and no seat color)', sys.every((l) => l.className === 'sys' && l.getAttribute('data-c') === null && l.children.length === 0));
     c.emit('joined', { type: 'joined', seat: 0, name: 'Maple' });
     check('the page\'s own seat is not announced to itself', lineTexts(w).length === before + 2);
+    c.emit('fog', { type: 'fog', on: true, name: 'Priya', you: false });
+    c.emit('fog', { type: 'fog', on: false, name: 'Priya', you: true });
+    same('the leader\'s switch of Fog of War is a line of the system for everybody, the leader too (protocol 28)', lineTexts(w).slice(before + 2), ['Priya turned Fog of War on.', 'Priya turned Fog of War off.']);
+    check('(it has the class "sys")', logOf(w).children.slice(before + 2).every((l) => l.className === 'sys'));
 }
 
 {   // names and lines are TEXT: the fake throws when markup is assigned; a name that is markup shows as it is
