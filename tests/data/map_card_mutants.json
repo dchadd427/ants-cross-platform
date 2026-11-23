@@ -9,17 +9,17 @@
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
   },
   {
-   "id": "card_chips_are_not_written",
+   "id": "card_kind_and_facts_are_not_written",
    "file": "web/lobby.html",
-   "old": "now.forEach(function (t, i) { facts.appendChild(el('span', i ? '' : 'tag', t)); });",
-   "new": "0;",
+   "old": "setText($('map-kind'), facts[0]); setText($('map-facts'), more.join(' \u00b7 '));",
+   "new": "",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
   },
   {
-   "id": "card_kind_chip_is_not_tagged",
+   "id": "card_minutes_of_an_original_are_dropped",
    "file": "web/lobby.html",
-   "old": "el('span', i ? '' : 'tag', t)",
-   "new": "el('span', '', t)",
+   "old": "if (!more.length && minutes) more = [minutes[1] + ' min'];",
+   "new": "",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
   },
   {

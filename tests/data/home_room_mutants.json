@@ -140,8 +140,8 @@
   {
    "id": "the_tab_is_too_low",
    "file": "web/home/roomchat.css",
-   "old": "min-height: 44px; padding: 4px 18px;",
-   "new": "min-height: 40px; padding: 4px 18px;",
+   "old": ".gc-head { display: flex; } .rc-tab { min-height: 44px; } }",
+   "new": ".gc-head { display: flex; } .rc-tab { min-height: 40px; } }",
    "test": "python3 tests/scripts/test_web_home_room.py TheFiles TheStyle TheLoader && node tests/scripts/web_home_roomchat_check.js"
   },
   {

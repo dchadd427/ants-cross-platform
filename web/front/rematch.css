@@ -42,5 +42,3 @@
 .pstat.away { color: var(--muted, #8fb3a6); }
 .pstat.away::before { background: var(--muted, #8fb3a6); }
 /* the leader's note under START while somebody of the match is not back: START waits for them */
-.start-note { margin-top: 10px; padding: 7px 10px; font-size: 13px; line-height: 1.35; color: #ffe9a8; background: #0b1612; border: 1px solid var(--gold); border-radius: 6px; }
-.start-note[hidden] { display: none !important; }

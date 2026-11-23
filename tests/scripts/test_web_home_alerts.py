@@ -89,7 +89,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     copy with nothing changed must pass"""
     FILES = (["tools/size_limits.py", "tools/ci_light.sh", "web/lobby.html", "web/shell.html", "web/shapes.js", "web/rejoin_key.js", "web/alert_core.js", "web/home/home.js", "web/home/games.js", "web/home/alerts.js", "web/home/alerts.css",
               "tests/scripts/test_web_home_alerts.py", "tests/scripts/web_home_alerts_check.js", "tests/scripts/web_page_harness.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml"]
-             + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "room_fog.js", "map_picker.js", "player_name.js", "map_maker_link.js")])
+             + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "room_fog.js", "room_sheet.js", "seat_menu.js", "map_picker.js", "player_name.js", "map_maker_link.js")])
 
     @classmethod
     def setUpClass(cls):

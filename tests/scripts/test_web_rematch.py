@@ -111,13 +111,13 @@ class ThePages(unittest.TestCase):
         page = self.lobby
         self.assertIn('<link rel="stylesheet" href="front/rematch.css">', page)
         self.assertLess(page.index('<script src="front/lobby_rules.js"></script>'), page.index('<script src="front/rematch.js"></script>'))
-        self.assertIn('<p class="start-note" id="start-note" role="status" hidden></p>', page)
+        self.assertIn('<p class="go-status" id="go-status" role="status"></p>', page)
         self.assertIn("var Rematch = window.AntsRematch, Modes = window.AntsGameModes,", page)
         self.assertIn('<div class="screen" id="screen">', page)
         self.assertIn("Rematch.frontStrip({ doc: document, before: $('screen'),", page)
         self.assertIn("back = Rematch.readBack(window.sessionStorage, stored.code, Date.now());", page)
         self.assertIn("community: communityOf, back: back }", page)
-        self.assertIn("setText($('start-note'), side.note); $('start-note').hidden = !side.note;", page)
+        self.assertIn("setText($('go-status'), side.status);", page)
         self.assertIn("showBanner('host', { guest: !e.you, leaver: e.before, host: e.name, back: e.back })", page)
 
     def test_the_front_page_lets_the_match_go_at_start_and_for_another_room(self):
@@ -135,17 +135,16 @@ class TheStylesheet(unittest.TestCase):
 
     def test_every_class_that_the_scripts_set_has_a_rule(self):
         for selector in (".rematch {", ".rematch[hidden]", ".rmt-title {", ".rmt-text {", ".rmt-who {", ".rmt-chip {", ".rmt-chip i {", ".rmt-chip.away {", ".rmt-go {", ".rmt-go[hidden]", ".rematch .btn.big {",
-                         ".rmt-note {", ".backbar {", ".backbar b {", ".backbar a {", ".pstat.back::before {", ".pstat.away::before {", ".start-note {", ".start-note[hidden]"):
+                         ".rmt-note {", ".backbar {", ".backbar b {", ".backbar a {", ".pstat.back::before {", ".pstat.away::before {"):
             self.assertIn(selector, self.css)
 
     def test_the_colors_of_the_pictures(self):
-        """picture R1: the panel in the gold frame, the chips; picture R2: the green strip at the top, the dots of back and away, the gold note under START"""
+        """picture R1: the panel in the gold frame, the chips; picture R2: the green strip at the top, the dots of back and away"""
         css = self.css
         self.assertRegex(css, r"\.rematch \{[^}]*border: 3px solid var\(--gold\)")
         self.assertRegex(css, r"\.rmt-chip \{[^}]*background: #0b1612; border: 1px solid #1d4a3d")
         self.assertRegex(css, r"\.backbar \{[^}]*color: #d6ffe8; background: #173b2c; border-bottom: 3px solid #2f9a68")
         self.assertRegex(css, r"\.pstat\.back::before \{ background: #6fe3a4; \}")
-        self.assertRegex(css, r"\.start-note \{[^}]*color: #ffe9a8; background: #0b1612; border: 1px solid var\(--gold\)")
 
     def test_a_narrow_window_has_one_column(self):
         self.assertRegex(self.css, r"@media \(max-width: 760px\) \{\s*\.rematch \{ grid-template-columns: minmax\(0, 1fr\);")
@@ -169,7 +168,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/rematch_mutants.json that need no build, on a COPY of the files, one at a time: each must make its check fail (a command that exits non-zero), and the copy with
     nothing changed must pass, so that a failure is the change's"""
 
-    FILES = ("web/front/rematch.js", "web/front/lobby_net.js", "web/front/lobby_rules.js", "web/front/player_name.js", "web/front/lobby_chat.js", "web/front/game_modes.js", "web/front/game_type.js", "web/front/room_fog.js", "web/lobby.html", "web/rejoin_key.js", "web/alert_core.js", "web/shell.html", "web/shapes.js", "tests/data/match_over.txt", "tests/data/replay_players.txt", "tests/data/lobby_messages.txt", "tests/data/ping_quality_table.json",
+    FILES = ("web/front/rematch.js", "web/front/lobby_net.js", "web/front/lobby_rules.js", "web/front/player_name.js", "web/front/lobby_chat.js", "web/front/game_modes.js", "web/front/game_type.js", "web/front/room_fog.js", "web/front/room_sheet.js", "web/front/seat_menu.js", "web/lobby.html", "web/rejoin_key.js", "web/alert_core.js", "web/shell.html", "web/shapes.js", "tests/data/match_over.txt", "tests/data/replay_players.txt", "tests/data/lobby_messages.txt", "tests/data/ping_quality_table.json",
              "tests/scripts/web_rematch_check.js", "tests/scripts/web_lobby_rules_check.js", "tests/scripts/web_lobby_client_check.js", "tests/scripts/web_lobby_net_check.js", "tests/scripts/web_name_check.js", "tests/scripts/web_page_harness.js", "web/home/home.js", "web/home/games.js", "web/home/alerts.js", "web/home/alerts.css",
              "include/ants_net/flood.hpp", "include/ants_net/protocol.hpp")      # (the client check reads the server's limits, the rules check the server's sentences and the table of the ping scale)
 

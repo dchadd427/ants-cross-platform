@@ -1,0 +1,498 @@
+{
+ "note": "Mutants of the Room's two small overlays (web/front/seat_menu.js, the choice of a color; web/front/room_sheet.js, the card of the room's rules; docs/PLAY_IN_BROWSER.md 'Your room') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_room_menus_check.js (a fake DOM): what the menu offers and how it says it (Closed, the choices that are off and the page told when one is pressed, the choice that is already the color's, the focus, the keys), every way it closes and the one press that must not, where it opens, and the sheet's hold on the page behind, its focus, its Escape and the press on the dark ground that closes it and the drag from inside that does not.",
+ "baseline": {
+  "test": "node tests/scripts/web_room_menus_check.js web/front"
+ },
+ "mutants": [
+  {
+   "id": "menu_closed_color_is_called_nobody",
+   "file": "web/front/seat_menu.js",
+   "old": "name: 'Closed', line: 'stays empty'",
+   "new": "name: 'Nobody', line: 'stays empty'",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_blocked_choice_is_picked",
+   "file": "web/front/seat_menu.js",
+   "old": "if (off) { if (s.onBlocked) s.onBlocked(c.word); }",
+   "new": "if (off) { if (s.onPick) s.onPick(c.word); }",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_blocked_choice_is_not_told",
+   "file": "web/front/seat_menu.js",
+   "old": "if (off) { if (s.onBlocked) s.onBlocked(c.word); }",
+   "new": "if (off) { }",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_same_choice_is_sent_again",
+   "file": "web/front/seat_menu.js",
+   "old": "else if (c.word !== s.value && s.onPick) s.onPick(c.word);",
+   "new": "else if (s.onPick) s.onPick(c.word);",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_choice_leaves_it_open",
+   "file": "web/front/seat_menu.js",
+   "old": "            close(true);\n            if (off)",
+   "new": "            if (off)",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_chosen_item_is_not_marked",
+   "file": "web/front/seat_menu.js",
+   "old": "li.setAttribute('aria-checked', String(on));",
+   "new": "li.setAttribute('aria-checked', 'false');",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_off_item_is_not_marked",
+   "file": "web/front/seat_menu.js",
+   "old": "if (off) li.setAttribute('aria-disabled', 'true'); else li.removeAttribute('aria-disabled');",
+   "new": "li.removeAttribute('aria-disabled');",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_off_marks_stay_on",
+   "file": "web/front/seat_menu.js",
+   "old": "else li.removeAttribute('aria-disabled');",
+   "new": "",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_focus_scrolls_the_page",
+   "file": "web/front/seat_menu.js",
+   "old": "items[i].focus({ preventScroll: true });",
+   "new": "items[i].focus();",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_down_runs_off_the_end",
+   "file": "web/front/seat_menu.js",
+   "old": "setActive(Math.min(items.length - 1, active + 1), true);",
+   "new": "setActive(active + 1, true);",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_up_runs_off_the_beginning",
+   "file": "web/front/seat_menu.js",
+   "old": "setActive(Math.max(0, active - 1), true);",
+   "new": "setActive(active - 1, true);",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_end_goes_nowhere",
+   "file": "web/front/seat_menu.js",
+   "old": "else if (k === 'End') { e.preventDefault(); setActive(items.length - 1, true); }",
+   "new": "else if (k === 'End') { e.preventDefault(); }",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_space_does_not_choose",
+   "file": "web/front/seat_menu.js",
+   "old": "else if (k === 'Enter' || k === ' ')",
+   "new": "else if (k === 'Enter')",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_arrows_scroll_the_page",
+   "file": "web/front/seat_menu.js",
+   "old": "if (k === 'ArrowDown') { e.preventDefault(); setActive(Math.min",
+   "new": "if (k === 'ArrowDown') { setActive(Math.min",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_escape_loses_the_focus",
+   "file": "web/front/seat_menu.js",
+   "old": "else if (k === 'Escape') { e.preventDefault(); close(true); }",
+   "new": "else if (k === 'Escape') { e.preventDefault(); close(false); }",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_escape_does_not_close",
+   "file": "web/front/seat_menu.js",
+   "old": "else if (k === 'Escape') { e.preventDefault(); close(true); }",
+   "new": "else if (k === 'Escape') { e.preventDefault(); }",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_tab_leaves_it_open",
+   "file": "web/front/seat_menu.js",
+   "old": "else if (k === 'Tab') close(false);",
+   "new": "",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_press_outside_keeps_it_open",
+   "file": "web/front/seat_menu.js",
+   "old": "doc.addEventListener('pointerdown', function (e) { if (spec && !box.contains(e.target) && !spec.anchor.contains(e.target)) close(false); }, true);",
+   "new": "",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_press_inside_closes_it",
+   "file": "web/front/seat_menu.js",
+   "old": "if (spec && !box.contains(e.target) && !spec.anchor.contains(e.target)) close(false);",
+   "new": "if (spec && !spec.anchor.contains(e.target)) close(false);",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_press_on_button_closes_it_first",
+   "file": "web/front/seat_menu.js",
+   "old": "if (spec && !box.contains(e.target) && !spec.anchor.contains(e.target)) close(false);",
+   "new": "if (spec && !box.contains(e.target)) close(false);",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_still_scroll_closes_it",
+   "file": "web/front/seat_menu.js",
+   "old": "function () { if (moved()) close(false); }",
+   "new": "function () { close(false); }",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_moving_scroll_keeps_it_open",
+   "file": "web/front/seat_menu.js",
+   "old": "function () { if (moved()) close(false); }",
+   "new": "function () { }",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_resize_keeps_it_open",
+   "file": "web/front/seat_menu.js",
+   "old": "win.addEventListener('resize', function () { close(false); });",
+   "new": "",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_runs_off_the_right",
+   "file": "web/front/seat_menu.js",
+   "old": "if (vw && w && left + w > vw - 8) left = Math.max(8, vw - 8 - w);",
+   "new": "",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_runs_off_the_bottom",
+   "file": "web/front/seat_menu.js",
+   "old": "if (vh && h && top + h > vh - 8) top = Math.max(8, Math.round(r.top - 6 - h));",
+   "new": "",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_second_menu_leaves_the_first_open",
+   "file": "web/front/seat_menu.js",
+   "old": "if (spec) close(false);\n            spec = s;",
+   "new": "spec = s;",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_closing_tells_nobody",
+   "file": "web/front/seat_menu.js",
+   "old": "if (s.onClose) s.onClose();",
+   "new": "",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_closing_keeps_the_button_expanded",
+   "file": "web/front/seat_menu.js",
+   "old": "s.anchor.setAttribute('aria-expanded', 'false');",
+   "new": "",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_button_is_not_expanded_when_open",
+   "file": "web/front/seat_menu.js",
+   "old": "s.anchor.setAttribute('aria-expanded', 'true');",
+   "new": "",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_has_no_name_for_a_screen_reader",
+   "file": "web/front/seat_menu.js",
+   "old": "box.setAttribute('aria-label', s.label || 'Choice of the color');",
+   "new": "",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "menu_opens_on_the_first_item",
+   "file": "web/front/seat_menu.js",
+   "old": "if (CHOICES[i].word === s.value) chosen = i;",
+   "new": "",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "sheet_opens_with_no_room",
+   "file": "web/front/room_sheet.js",
+   "old": "if (shown || opener.disabled) return;",
+   "new": "if (shown) return;",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "sheet_leaves_the_page_live",
+   "file": "web/front/room_sheet.js",
+   "old": "if (o.hold) o.hold(true);",
+   "new": "",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "sheet_keeps_the_page_held",
+   "file": "web/front/room_sheet.js",
+   "old": "if (o.hold) o.hold(false);",
+   "new": "",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "sheet_takes_no_focus",
+   "file": "web/front/room_sheet.js",
+   "old": "if (box.focus) box.focus();",
+   "new": "",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "sheet_gives_no_focus_back",
+   "file": "web/front/room_sheet.js",
+   "old": "if (keepFocus !== false && opener.focus) opener.focus();",
+   "new": "",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "sheet_close_by_the_page_takes_the_focus",
+   "file": "web/front/room_sheet.js",
+   "old": "if (keepFocus !== false && opener.focus) opener.focus();",
+   "new": "if (opener.focus) opener.focus();",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "sheet_button_is_not_expanded_when_open",
+   "file": "web/front/room_sheet.js",
+   "old": "opener.setAttribute('aria-expanded', 'true');",
+   "new": "opener.setAttribute('aria-expanded', 'false');",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "sheet_closes_stay_put",
+   "file": "web/front/room_sheet.js",
+   "old": "back.hidden = true;\n            opener",
+   "new": "opener",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "sheet_done_does_not_close",
+   "file": "web/front/room_sheet.js",
+   "old": "(o.closers || []).forEach(function (b) { b.addEventListener('click', function () { close(); }); });",
+   "new": "(o.closers || []).slice(0, 1).forEach(function (b) { b.addEventListener('click', function () { close(); }); });",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "sheet_escape_does_not_close",
+   "file": "web/front/room_sheet.js",
+   "old": "if (e && e.key === 'Escape') {",
+   "new": "if (e && e.key === 'Escape' && false) {",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "sheet_any_key_closes",
+   "file": "web/front/room_sheet.js",
+   "old": "if (e && e.key === 'Escape') {",
+   "new": "if (e) {",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "sheet_escape_is_not_the_sheets_own",
+   "file": "web/front/room_sheet.js",
+   "old": "if (e.preventDefault) e.preventDefault(); close(); } });",
+   "new": "close(); } });",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "sheet_dark_ground_does_not_close",
+   "file": "web/front/room_sheet.js",
+   "old": "if (h && e.target === back) close();",
+   "new": "",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "sheet_click_without_a_press_closes",
+   "file": "web/front/room_sheet.js",
+   "old": "if (h && e.target === back) close();",
+   "new": "if (e.target === back) close();",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "sheet_drag_from_inside_closes",
+   "file": "web/front/room_sheet.js",
+   "old": "down = e.target === back; hit = false;",
+   "new": "down = true; hit = false;",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "sheet_release_inside_closes",
+   "file": "web/front/room_sheet.js",
+   "old": "hit = down && e.target === back; down = false;",
+   "new": "hit = down; down = false;",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "sheet_cancelled_press_closes",
+   "file": "web/front/room_sheet.js",
+   "old": "back.addEventListener('pointercancel', function () { down = hit = false; });",
+   "new": "",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "tile_guest_has_a_button",
+   "file": "web/front/seat_menu.js",
+   "old": "if (card.grip) {\n            var tap = node(doc, 'button', 'tap');",
+   "new": "if (true) {\n            var tap = node(doc, 'button', 'tap');",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "tile_guest_has_an_arrow",
+   "file": "web/front/seat_menu.js",
+   "old": "if (card.grip) tail.appendChild(node(doc, 'i', 'tchev'));",
+   "new": "tail.appendChild(node(doc, 'i', 'tchev'));",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "tile_mark_is_always_ready",
+   "file": "web/front/seat_menu.js",
+   "old": "(card.ready.on ? 'on' : 'no')",
+   "new": "'on'",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "tile_guest_team_is_not_shown",
+   "file": "web/front/seat_menu.js",
+   "old": "} else if (card.tab) team = Number(card.tab.charAt(card.tab.length - 1));",
+   "new": "}",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "seatsheet_own_color_press_is_sent",
+   "file": "web/front/seat_menu.js",
+   "old": "if (!c.here) say('onColor')(c.seat);",
+   "new": "say('onColor')(c.seat);",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "seatsheet_chosen_choice_is_sent_again",
+   "file": "web/front/seat_menu.js",
+   "old": "else if (!on) say('onMode')(c.word);",
+   "new": "else say('onMode')(c.word);",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "seatsheet_blocked_choice_is_picked",
+   "file": "web/front/seat_menu.js",
+   "old": "if (off) say('onBlocked')(c.word);",
+   "new": "if (off) say('onMode')(c.word);",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "seatsheet_choice_that_is_off_is_not_marked",
+   "file": "web/front/seat_menu.js",
+   "old": "if (off) b.setAttribute('aria-disabled', 'true');",
+   "new": "if (off) b.setAttribute('aria-disabled', 'false');",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "seatsheet_team_press_is_not_told",
+   "file": "web/front/seat_menu.js",
+   "old": "function () { say('onTeam')(t.side); }",
+   "new": "function () { }",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "seatsheet_remove_removes_at_once",
+   "file": "web/front/seat_menu.js",
+   "old": "button(keyed, 'rm', 'ss-remove', SHEET.remove, say('onRemove'))",
+   "new": "button(keyed, 'rm', 'ss-remove', SHEET.remove, say('onRemoveYes'))",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "seatsheet_question_focus_is_on_remove",
+   "file": "web/front/seat_menu.js",
+   "old": "var focus = asked && !asking ? keyed.no :",
+   "new": "var focus = asked && !asking ? keyed.yes :",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "seatsheet_keep_loses_the_focus",
+   "file": "web/front/seat_menu.js",
+   "old": "!asked && asking && keyed.rm ? keyed.rm : ",
+   "new": "",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "seatsheet_redraw_loses_the_focus",
+   "file": "web/front/seat_menu.js",
+   "old": "was && keyed[was] ? keyed[was] : null;",
+   "new": "null;",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "seatsheet_done_does_not_close",
+   "file": "web/front/seat_menu.js",
+   "old": "button(keyed, 'done', 'btn', SHEET.done, function () { close(true); })",
+   "new": "button(keyed, 'done', 'btn', SHEET.done, function () { })",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "seatsheet_escape_does_not_close",
+   "file": "web/front/seat_menu.js",
+   "old": "if (e && e.key === 'Escape') { if (e.preventDefault) e.preventDefault(); close(true); }",
+   "new": "if (e && e.key === 'Escape') { if (e.preventDefault) e.preventDefault(); }",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "seatsheet_close_by_the_page_takes_the_focus",
+   "file": "web/front/seat_menu.js",
+   "old": "close: function () { close(false); }, isOpen: function () { return shown; }",
+   "new": "close: function () { close(true); }, isOpen: function () { return shown; }",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "seatsheet_click_without_a_press_closes",
+   "file": "web/front/seat_menu.js",
+   "old": "if (h && e.target === back) close(true); });",
+   "new": "if (e.target === back) close(true); });",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "seatsheet_drag_from_inside_closes",
+   "file": "web/front/seat_menu.js",
+   "old": "down = e.target === back; hit = false; });",
+   "new": "down = true; hit = false; });",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "seatsheet_opened_twice_holds_the_page_twice",
+   "file": "web/front/seat_menu.js",
+   "old": "if (shown) { paint(s); return; }",
+   "new": "",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "seatsheet_color_with_no_name_is_not_called_by_its_choice",
+   "file": "web/front/seat_menu.js",
+   "old": "called = s.title || nameOf(s.mode),",
+   "new": "called = s.title,",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "seatsheet_same_card_is_made_again",
+   "file": "web/front/seat_menu.js",
+   "old": "if (JSON.stringify(s) === drawn) { spec = s; return; }",
+   "new": "if (false) { spec = s; return; }",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  },
+  {
+   "id": "seatsheet_same_card_keeps_the_old_answers",
+   "file": "web/front/seat_menu.js",
+   "old": "if (JSON.stringify(s) === drawn) { spec = s; return; }",
+   "new": "if (JSON.stringify(s) === drawn) return;",
+   "test": "node tests/scripts/web_room_menus_check.js web/front"
+  }
+ ]
+}

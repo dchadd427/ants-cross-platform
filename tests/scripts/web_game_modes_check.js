@@ -14,9 +14,8 @@ function same(label, got, want) { const a = JSON.stringify(got), b = JSON.string
 // ---- the rows ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 same('two modes today, by number and word', M.MODES.map((m) => [m.id, m.word]), [[0, 'highest-score'], [1, '187']]);
 same('the names', M.MODES.map((m) => m.name), ['Highest score', '187']);
-same('the lines', M.MODES.map((m) => m.line), ['The original game. Food and power-ups; the highest score wins.', 'A fight with no food. Kills decide.']);
+same('the lines', M.MODES.map((m) => m.line), ['Food and power-ups. The highest score wins.', 'No food. Most kills win.']);
 same('the tags: none for the default', M.MODES.map((m) => m.tag), ['', '187']);
-same('the notes: only 187 has one', M.MODES.map((m) => m.note), ['', 'No food and no power-ups. The most kills wins.']);
 same('exactly one default, the one with no tag', M.MODES.filter((m) => m.def).map((m) => m.word), ['highest-score']);
 check('ids and words are unique', new Set(M.MODES.map((m) => m.id)).size === M.MODES.length && new Set(M.MODES.map((m) => m.word)).size === M.MODES.length);
 check('every word is a word of the server (POST /rooms)', M.MODES.every((m) => ['highest-score', '187'].indexOf(m.word) !== -1));
@@ -31,9 +30,9 @@ same('highest-score remembered', M.initialOf('highest-score').word, 'highest-sco
 same('an unknown remembered word: the default', [M.initialOf('no-such-mode').word, M.initialOf('').word, M.initialOf(7).word, M.initialOf(undefined).word, M.initialOf('__proto__').word], ['highest-score', 'highest-score', 'highest-score', 'highest-score', 'highest-score']);
 
 // ---- the words of a mode, known and unknown -------------------------------------------------------------------------------------------------------------------------------------------------------
-same('view of 0', M.viewOf(0), { known: true, id: 0, name: 'Highest score', tag: '', line: 'The original game. Food and power-ups; the highest score wins.', note: '' });
-same('view of 1', M.viewOf(1), { known: true, id: 1, name: '187', tag: '187', line: 'A fight with no food. Kills decide.', note: 'No food and no power-ups. The most kills wins.' });
-same('view of an unknown mode', M.viewOf(5), { known: false, id: 5, name: 'New mode', tag: 'New mode', line: '', note: '' });
+same('view of 0', M.viewOf(0), { known: true, id: 0, name: 'Highest score', tag: '', line: 'Food and power-ups. The highest score wins.' });
+same('view of 1', M.viewOf(1), { known: true, id: 1, name: '187', tag: '187', line: 'No food. Most kills win.' });
+same('view of an unknown mode', M.viewOf(5), { known: false, id: 5, name: 'New mode', tag: 'New mode', line: '' });
 same('an unknown mode with the server\'s name', [M.viewOf(5, 'Brawl').name, M.viewOf(5, 'Brawl').tag, M.viewOf(5, '').name, M.viewOf(5, 3).name], ['Brawl', 'New mode', 'New mode', 'New mode']);
 same('a known mode ignores the server\'s name', M.viewOf(1, 'Other').name, '187');
 same('the tags', [M.tagOf(0), M.tagOf(1), M.tagOf(9), M.tagOf(undefined), M.tagOf(-3)], ['', '187', 'New mode', 'New mode', 'New mode']);
@@ -118,10 +117,10 @@ function build(modes, extra) {
     check('the field starts disabled until the page paints', u.combo.getAttribute('aria-disabled') === 'true');
     u.c.paint({ id: 0, guest: false, disabled: false });
     check('the field is a combobox with a listbox, closed', u.combo.getAttribute('role') === 'combobox' && u.combo.getAttribute('aria-haspopup') === 'listbox' && u.combo.getAttribute('aria-expanded') === 'false' && u.list.getAttribute('role') === 'listbox');
-    same('the closed field: name, line, no note', [u.q('gt-name').textContent, u.q('gt-line').textContent, u.q('gt-line').hidden, u.q('gt-note').hidden], ['Highest score', M.MODES[0].line, false, true]);
+    same('the closed field: the name only (the line of each type is in the list)', [u.q('gt-name').textContent, u.q('gt-line'), u.q('gt-note')], ['Highest score', undefined, undefined]);
     check('the guest line is hidden for the leader and the field is shown', u.q('gt-guest').hidden && u.q('gt-gline').hidden && !u.q('gt-field').hidden && !u.q('gt-label').hidden);
     same('one option for each row, the chosen one aria-selected', [u.opt(0).getAttribute('role'), u.opt(0).getAttribute('aria-selected'), u.opt(1).getAttribute('aria-selected')], ['option', 'true', 'false']);
-    same('the option text', [u.opt(1).textContent], ['187A fight with no food. Kills decide.']);
+    same('the option text', [u.opt(1).textContent], ['187' + M.MODES[1].line]);
     check('the list starts closed', u.q('gt-pop').hidden);
     key(u.combo, 'ArrowDown');
     same('Down opens, on the chosen row', [u.c.isOpen(), u.q('gt-pop').hidden, u.combo.getAttribute('aria-expanded'), u.combo.getAttribute('aria-activedescendant')], [true, false, 'true', 'gt-opt-0']);
@@ -142,7 +141,7 @@ function build(modes, extra) {
     click(u.combo); check('a second click closes', !u.c.isOpen());
     click(u.combo); click(u.opt(1)); same('a click on a row chooses it and closes', [u.c.isOpen(), u.chosen], [false, [1, 1]]);
     u.c.paint({ id: 1, guest: false, disabled: false });
-    same('painted on 187: the name, the line, the note, the mark', [u.q('gt-name').textContent, u.q('gt-line').textContent, u.q('gt-note').hidden, u.q('gt-note').textContent, u.opt(1).getAttribute('aria-selected'), u.opt(0).getAttribute('aria-selected')], ['187', M.MODES[1].line, false, M.MODES[1].note, 'true', 'false']);
+    same('painted on 187: the name, the mark', [u.q('gt-name').textContent, u.opt(1).getAttribute('aria-selected'), u.opt(0).getAttribute('aria-selected')], ['187', 'true', 'false']);
     click(u.combo); click(u.opt(0)); same('a click on the other row', u.chosen, [1, 1, 0]);
     click(u.combo); u.doc.pointerdown(u.doc.root); same('a click on the page outside closes', [u.c.isOpen(), u.chosen.length], [false, 3]);
     click(u.combo); u.doc.pointerdown(u.opt(0)); check('a click inside the list does not close it', u.c.isOpen());
@@ -170,10 +169,10 @@ function build(modes, extra) {
     }
     click(u.combo); u.c.paint({ id: 1, guest: true, disabled: false });
     check('the leader becomes a guest while the list is open: it closes', !u.c.isOpen());
-    same('the guest: the field and its line are hidden, the read-only line shows', [u.q('gt-field').hidden, u.q('gt-line').hidden, u.q('gt-note').hidden, u.q('gt-guest').hidden, u.q('gt-guest').textContent, u.q('gt-gline').textContent, u.q('gt-gline').hidden], [true, true, true, false, 'Game type: 187', M.MODES[1].line, false]);
+    same('the guest: the field is hidden, the read-only name and its line show', [u.q('gt-field').hidden, u.q('gt-guest').hidden, u.q('gt-guest').textContent, u.q('gt-gline').textContent, u.q('gt-gline').hidden], [true, false, 'Game type 187', M.MODES[1].line, false]);
     key(u.combo, 'ArrowDown'); click(u.combo); check('a guest cannot open it', !u.c.isOpen());
     u.c.paint({ id: 0, guest: true, disabled: false });
-    same('the guest line follows the room', [u.q('gt-guest').textContent, u.q('gt-gline').textContent], ['Game type: Highest score', M.MODES[0].line]);
+    same('the guest line follows the room', [u.q('gt-guest').textContent, u.q('gt-gline').textContent], ['Game type Highest score', M.MODES[0].line]);
     u.c.paint({ id: 0, guest: false, disabled: true });
     key(u.combo, 'ArrowDown'); click(u.combo);
     same('a disabled field (START pressed, or offline) does not open', [u.c.isOpen(), u.combo.getAttribute('aria-disabled'), u.combo.getAttribute('tabindex')], [false, 'true', '-1']);
@@ -189,7 +188,7 @@ function build(modes, extra) {
 }
 
 {   // a mode that is added as a row: the control grows by a row, nothing else changes
-    M.MODES.push({ id: 2, word: 'brawl', name: 'Brawl', tag: 'BR', line: 'Everyone fights.', note: '' }, { id: 3, word: 'zen', name: 'Zen', tag: '', line: 'Calm.', note: 'Take your time.' });
+    M.MODES.push({ id: 2, word: 'brawl', name: 'Brawl', tag: 'BR', line: 'Everyone fights.' }, { id: 3, word: 'zen', name: 'Zen', tag: '', line: 'Calm.' });
     const u = build(M);
     same('the added rows reach the functions too', [M.tagOf(2), M.guestLine(3), M.initialOf('brawl').id, M.wanted(store({ [M.STORAGE_KEY]: 'brawl' }), 0)], ['BR', 'Game type: Zen', 2, 2]);
     u.c.paint({ id: 2, guest: false, disabled: false });
@@ -197,20 +196,19 @@ function build(modes, extra) {
     key(u.combo, 'z'); same('type-ahead finds the added mode', u.combo.getAttribute('aria-activedescendant'), 'gt-opt-3');
     key(u.combo, 'Enter'); same('choosing it says its number', u.chosen, [3]);
     u.c.paint({ id: 3, guest: false, disabled: false });
-    same('its note shows', [u.q('gt-note').hidden, u.q('gt-note').textContent], [false, 'Take your time.']);
     M.MODES.length = 2;
 }
 
 {   // a mode that this list does not hold
     const u = build(M);
     u.c.paint({ id: 6, guest: false, disabled: false });
-    same('the leader sees New mode, no row marked, no line, no note', [u.q('gt-name').textContent, u.q('gt-line').hidden, u.q('gt-note').hidden, all(u.host, (n) => n.getAttribute('aria-selected') === 'true').length], ['New mode', true, true, 0]);
+    same('the leader sees New mode, no row marked', [u.q('gt-name').textContent, all(u.host, (n) => n.getAttribute('aria-selected') === 'true').length], ['New mode', 0]);
     key(u.combo, 'ArrowDown'); same('the list opens on the first row', u.combo.getAttribute('aria-activedescendant'), 'gt-opt-0');
     key(u.combo, 'Enter'); same('choosing a known row from it works', u.chosen, [0]);
     u.c.paint({ id: 6, guest: true, disabled: false });
-    same('the guest line says New mode', [u.q('gt-guest').textContent, u.q('gt-gline').hidden], ['Game type: New mode', true]);
+    same('the guest line says New mode', [u.q('gt-guest').textContent, u.q('gt-gline').hidden], ['Game type New mode', true]);
     u.c.paint({ id: 6, guest: true, disabled: false, serverName: 'Brawl' });
-    same('and the server\'s name when it sends one', u.q('gt-guest').textContent, 'Game type: Brawl');
+    same('and the server\'s name when it sends one', u.q('gt-guest').textContent, 'Game type Brawl');
 }
 
 console.log(checks + ' checks, ' + failures + ' failed');

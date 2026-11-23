@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the login chip's name and of My room's rule (only while the page holds a room) in Home's top bar (web/home/home.js, home.css, docs/HOME_SCREEN.md, \"The top bar\") that only the opt-in real-Chromium check can see (Playwright, Chromium, nginx and python3, no game server): run with `python3 tools/mutate.py tests/data/home_topbar_mutants.json --keep-going --jobs 1 --timeout 300`; tools/mutate.py --check only proves that every old text is still in the code.",
+ "note": "Mutants of the login chip's name in Home's top bar (web/home/home.js, home.css, docs/HOME_SCREEN.md, \"The top bar\") that only the opt-in real-Chromium check can see (Playwright, Chromium, nginx and python3, no game server): run with `python3 tools/mutate.py tests/data/home_topbar_mutants.json --keep-going --jobs 1 --timeout 300`; tools/mutate.py --check only proves that every old text is still in the code.",
  "mutants": [
   {
    "id": "topbar_name_never_shown",
@@ -42,34 +42,6 @@
    "old": ".hbar .hright { grid-area: 1 / 1 / 2 / -1;",
    "new": ".hbar .hright { grid-area: 1 / 1;",
    "test": "node tests/scripts/web_home_topbar_browser.js"
-  },
-  {
-   "id": "mine_shown_without_a_room",
-   "file": "web/home/home.js",
-   "old": "mine.hidden = mineBox.hidden = !info.client;",
-   "new": "mine.hidden = mineBox.hidden = false;",
-   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
-  },
-  {
-   "id": "mine_hidden_with_a_room",
-   "file": "web/home/home.js",
-   "old": "mine.hidden = mineBox.hidden = !info.client;",
-   "new": "mine.hidden = mineBox.hidden = true;",
-   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
-  },
-  {
-   "id": "mine_waits_for_the_count",
-   "file": "web/home/home.js",
-   "old": "mine.hidden = mineBox.hidden = !info.client;",
-   "new": "mine.hidden = mineBox.hidden = !n;",
-   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
-  },
-  {
-   "id": "focus_after_leave_stays_on_the_hidden_button",
-   "file": "web/home/home.js",
-   "old": "mine.hidden ? away() : mine;",
-   "new": "mine;",
-   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
   },
   {
    "id": "topbar_menu_waits_for_the_chip",
@@ -266,20 +238,6 @@
    "old": "focus: 0, opener: parts.quickHost });",
    "new": "focus: 0 });",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
-  },
-  {
-   "id": "mine_not_on_the_first_row",
-   "file": "web/home/home.css",
-   "old": ".hbar .hmine { order: 2; flex: 0 1 auto;",
-   "new": ".hbar .hmine { order: 6; flex: 0 1 auto;",
-   "test": "node tests/scripts/web_home_topbar_browser.js"
-  },
-  {
-   "id": "minex_too_small",
-   "file": "web/home/home.css",
-   "old": "left: -2px; top: -2px; right: -22px; bottom: -22px; }",
-   "new": "left: -2px; top: -2px; right: -4px; bottom: -4px; }",
-   "test": "node tests/scripts/web_home_topbar_browser.js"
   }
  ]
 }
