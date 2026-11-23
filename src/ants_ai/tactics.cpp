@@ -49,8 +49,10 @@ LevelPlan plan_for(Level level) noexcept {
             p.island_swimmers = 2;                                  // they carry food; no builder at any level (a Swimmer that ferries earns 700 to 850 points a match, a bridge carries one ant at a time: docs/BOTS.md)
             p.island_builders = 0;
             p.island_fly_on = false;             // Easy looks every 100 ticks: a leg that waits for the Bomber to fly on costs more than the flight it saves
+            p.free_thief = false;                // (a beginner does not click a Thief again and again)
             break;
         case Level::Medium:
+            p.free_thief = false;                // (the volley is eight clicks, two more than Medium's bucket holds: only Hard's budget pays it)
             p.defenders = 2;
             p.leash_tiles = 10;
             p.fight_linger_ticks = 100;
@@ -350,6 +352,13 @@ void without_thief_batch(LevelPlan& p) noexcept {
     p.thief_guard = false;
     p.thief_trap = false;
     p.fire_home_only = false;
+}
+
+void without_unstick_batch(LevelPlan& p) noexcept {
+    p.plugs = false;
+    p.refusal_memory = false;
+    p.rescue_thief = false;
+    p.free_thief = false;
 }
 
 void without_kill_batch(LevelPlan& p) noexcept {
@@ -731,6 +740,37 @@ bool reachable_by(const MapInfo& map, uint8_t team, sim::TileCoord tile) noexcep
     for (int32_t dy = -1; dy <= 1; ++dy) {
         for (int32_t dx = -1; dx <= 1; ++dx) {
             if (map.component(team, sim::TileCoord{tile.x + dx, tile.y + dy}) == home) return true;
+        }
+    }
+    return false;
+}
+
+void note_shut_in_thieves(Tactics& tactics, const BotView& view, const MapInfo& map) {
+    const uint64_t now = view.tick();
+    tactics.shut_in.clear();
+    for (const AntView& a : view.mine()) {
+        if (a.type != sim::AntType::Thief || !(a.holding || a.carried_points > 0)) continue;
+        bool on_raid_tile = false;
+        for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) on_raid_tile = on_raid_tile || (map.hill(t).present && map.hill(t).raid == a.tile);
+        if (!on_raid_tile) continue;
+        auto seen = tactics.shut_seen.find(a.id);
+        if (a.state == sim::UnitState::CantGo) {
+            if (seen == tactics.shut_seen.end() || now > seen->second.second + 60u) seen = tactics.shut_seen.insert_or_assign(a.id, std::make_pair(now, now)).first;
+            seen->second.second = now;
+        }
+        if (seen != tactics.shut_seen.end() && now <= seen->second.second + 60u && now >= seen->second.first + tactics.plan.rescue_after) tactics.shut_in.push_back(a.tile);
+    }
+    for (auto it = tactics.shut_seen.begin(); it != tactics.shut_seen.end();) it = now > it->second.second + 60u ? tactics.shut_seen.erase(it) : std::next(it);
+}
+
+bool shuts_in_own_thief(const std::vector<sim::TileCoord>& shut_in, const MapInfo& map, sim::TileCoord wall) noexcept {
+    for (const sim::TileCoord& tile : shut_in) {
+        for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+            const HillInfo& h = map.hill(t);
+            if (!h.present || h.raid != tile) continue;
+            for (const sim::TileCoord& e : east_tiles(h)) {
+                if (e == wall) return true;
+            }
         }
     }
     return false;

@@ -4,7 +4,7 @@
 //
 //   AI51.1  a worker's walk to a pile with a bomb of another team on the straight way is sent to ONE waypoint first and the order is given again there (the bomb is still there and the worker
 //           is whole at the pile); with the detour off the same match sets the bomb off. The tasks are told the fate of the order they proposed, never of the waypoint
-//   AI51.2  an order whose walk meets no bomb is left byte for byte as it was: none on the map, an own bomb, a bomb far from the walk, a click onto a bomb (a set-off or a defuse on purpose)
+//   AI51.2  an order whose walk meets no bomb is left byte for byte as it was: none on the map, an own bomb, a bomb far from the walk, a click onto a bomb (a set-off or a defuse on purpose), the clicks of a volley
 //   AI51.3  the levels: Easy never, Medium the walks of workers, power-up trips and fights (not a Thief, not a special order), Hard every walk (a raid, a mine trip); a Swimmer never; a walk with no
 //           way round (a bomb in a corridor of rocks) goes as it is; a detour that makes the walk much longer is not taken
 //   AI51.4  a bomb that appears on a walk under way sends the ant round it at the next look, and a Hard carrier that walks home on the engine's own order is sent round a bomb on its way
@@ -60,7 +60,7 @@ bool same_orders(const std::vector<Intent>& a, const Orders& b) {
     for (size_t i = 0; i < a.size(); ++i) {
         const Command& x = a[i].command;
         const Command& y = b.intents()[i].command;
-        if (x.type != y.type || x.tile_x != y.tile_x || x.tile_y != y.tile_y || x.ants != y.ants || a[i].priority != b.intents()[i].priority || a[i].pickup != b.intents()[i].pickup) return false;
+        if (x.type != y.type || x.tile_x != y.tile_x || x.tile_y != y.tile_y || x.ants != y.ants || a[i].priority != b.intents()[i].priority || a[i].pickup != b.intents()[i].pickup || a[i].volley != b.intents()[i].volley || a[i].later != b.intents()[i].later) return false;
     }
     return true;
 }
@@ -150,7 +150,7 @@ void run_bombs_tests() {
     } TEST_END();
 
     TEST_CASE("AI51.2 An Order Whose Walk Meets No Bomb Of Another Team Is Left Byte For Byte As It Was: No Bomb, An Own Bomb, A Bomb Far From The Walk, A Click Onto A Bomb") {
-        for (const int variant : {0, 1, 2, 3}) {
+        for (const int variant : {0, 1, 2, 3, 4}) {
             sim::SimulationEngine sim;
             empty_field(sim, 72);
             add_pile(sim, 30, 20, 40, 30);
@@ -158,11 +158,12 @@ void run_bombs_tests() {
             sim.spawn_unit(1, sim::AntType::Worker, TileCoord{40, 40});
             if (variant == 1) sim.grid_mut().place_bomb(20, 20, 0);                              // an own bomb: the engine's walk goes round it already
             if (variant == 2) sim.grid_mut().place_bomb(20, 56, 1);                              // a bomb of another team, far from the walk
-            if (variant == 3) sim.grid_mut().place_bomb(20, 20, 1);
+            if (variant == 3 || variant == 4) sim.grid_mut().place_bomb(20, 20, 1);
             MapInfo map(sim);
             const BotView view = BotView::build(sim, 0, &map);
             Orders orders;
             if (variant == 3) orders.move({w}, TileCoord{20, 20});                                // (a click onto the bomb itself: a set-off on purpose)
+            else if (variant == 4) orders.volley(w, TileCoord{30, 20}, {0, 3, 7});                // (the clicks of a volley, a bomb of another team on the straight way: they leave as they are, at their own times)
             else orders.move({w}, TileCoord{30, 20});
             Orders before = orders;
             BombDetour detour;
@@ -496,6 +497,6 @@ void run_bombs_tests() {
         ASSERT_TRUE(orders[0] >= 3000 && orders[1] >= 3000);                                  // the matches were played
         ASSERT_TRUE(blasts[1] >= 20);                                                         // the bot as it was walks into plenty of them
         ASSERT_TRUE(blasts[0] < blasts[1]);
-        ASSERT_TRUE(score[0] * 100 >= score[1] * 97);                                         // (the same score within 3 percent: under the rules number 14 the bots with the detour score 98.0 percent of the bot as it was over these 24 seeds, 191,630 against 195,490, and walk into 365 bombs against 423; the detour costs about 2 percent of the score)
+        ASSERT_TRUE(score[0] * 100 >= score[1] * 97);                                         // (the same score within 3 percent: under the rules number 14 the shipped bots with the detour score 100.0 percent of the bot as it was over these 24 seeds, 194,800 against 194,875, and walk into 403 bombs against 454; with the unstick batch off they scored 98.0 percent (191,630 against 195,490): 24 seeds swing about 2 percent, and over seeds 25 to 120 the same bots score 100.3 percent)
     } TEST_END();
 }

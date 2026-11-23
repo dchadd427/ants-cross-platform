@@ -450,6 +450,9 @@ public:
         std::fprintf(stderr, "DIAG3 label=%s seat=%u raids=%u rechecks=%u retargets=%u meets=%u strikes=%u gone=%u trap_opens=%u stranded_skips=%u wall_unreachable=%u\n", label_.c_str(), static_cast<unsigned>(seat_),
                      b.raids().raids_ordered(), b.raids().rechecks(), b.raids().retargets(), b.thief_guard().meets_started(), b.thief_guard().strikes(), b.thief_guard().thieves_gone(), b.thief_guard().trap_opens(),
                      b.powerups().stranded_skips(), b.walls().unreachable());
+        // The unstick batch (docs/BOT_UNSTUCK.md): the plugs found, the pick-ups sent for them, the power-ups gone after them and the takes given up
+        std::fprintf(stderr, "DIAG4 label=%s seat=%u plugs_found=%u plugs_sent=%u plugs_opened=%u plugs_given_up=%u\n", label_.c_str(), static_cast<unsigned>(seat_), b.plugs().found(), b.plugs().sent(), b.plugs().opened(),
+                     b.plugs().given_up());
     }
     const char* kind() const noexcept override { return inner_->kind(); }
     void start(const BotContext& context) override {
