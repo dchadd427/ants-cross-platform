@@ -40,7 +40,7 @@
     // frame(rect, label) (draws a dashed frame over the map for a moment), announce(text)
     function create(env) {
         var doc = env.doc, win = env.win, dialogs = env.dialogs, origin = win.location.origin;
-        var tenv = env.tools, tools, sock = null, state = 'off', csrf = '', keys = [], max = 3, on = true, loginNeeded = false, loadFailed = '', edits = 0, who = { client: '', key: '' };
+        var tenv = env.tools, tools, sock = null, state = 'off', csrf = '', keys = [], max = 3, on = true, loginNeeded = false, loadFailed = '', edits = 0, who = { key: '' }, gen = 0, cancelled = {};
         var activity = [], strip = null, ticker = 0, shownKey = '', pending = null, ended = '', current = null;
 
         tenv.note = function (text) { activityAdd('The AI says: \u201c' + clean(text) + '\u201d', true); showStrip(); };
@@ -112,7 +112,7 @@
             var meta = el('div', 'meta');
             if (state === 'off') meta.textContent = ended;
             else if (state === 'armed') meta.textContent = 'Waiting for your AI to connect. Nothing changes until it does, and you will see each change here. This turns off by itself when you close or reload the tab.';
-            else meta.textContent = (who.client || 'An AI app') + ' \u00b7 key \u201c' + who.key + '\u201d \u00b7 ' + plural(edits, 'change', 'changes') + ' so far \u00b7 you can keep editing';
+            else meta.textContent = 'The AI with key \u201c' + who.key + '\u201d \u00b7 ' + plural(edits, 'change', 'changes') + ' so far \u00b7 you can keep editing';
             bar.appendChild(meta);
             var btns = el('div', 'btns');
             if (state === 'off') btns.appendChild(button('OK', 'ghost', function () { ended = ''; showStrip(); }));
@@ -145,17 +145,18 @@
         function arm() {
             if (sock) return;
             var url = (win.location.protocol === 'https:' ? 'wss://' : 'ws://') + win.location.host + '/hub/ai/ws';
-            ended = ''; edits = 0; activity = []; who = { client: '', key: '' };
+            ended = ''; edits = 0; activity = []; who = { key: '' }; gen++; cancelled = {};
             try { sock = new win.WebSocket(url); } catch (e) { sock = null; ended = 'The connection could not be opened.'; return setState('off'); }
             var mine = sock;
             setState('connecting');
             mine.onmessage = function (e) { if (sock === mine) onFrame(e.data); };
-            mine.onclose = function () { if (sock !== mine) return; sock = null; if (!ended) ended = state === 'connecting' ? 'The site did not let this tab be opened to an AI. Log in with Discord and try again.' : 'The connection to the site ended, so this tab is turned off for AIs.'; setState('off'); };
+            mine.onclose = function () { if (sock !== mine) return; sock = null; gen++; if (!ended) ended = state === 'connecting' ? 'The site did not let this tab be opened to an AI. Log in with Discord and try again.' : 'The connection to the site ended, so this tab is turned off for AIs.'; setState('off'); };
             mine.onerror = function () {};
         }
         function disarm() {
             var s = sock;
             sock = null;
+            gen++;                                                                  // (a call that is still waiting for the person's stroke is dropped: it asks alive() before it changes anything)
             ended = '';
             if (s) { try { s.close(1000, 'stopped'); } catch (e) {} }
             setState('off');
@@ -168,6 +169,7 @@
             if (!m || typeof m !== 'object') return;
             if (m.t === 'ready') { tools.arm(); setState('armed'); }
             else if (m.t === 'bye') { ended = BYE[m.why] || 'The AI was turned off.'; }
+            else if (m.t === 'cancel' && typeof m.id === 'number') { Object.keys(cancelled).forEach(function (k) { if (Number(k) < m.id - 100) delete cancelled[k]; }); cancelled[m.id] = true; }
             else if (m.t === 'call') onCall(m);
         }
         var SAYS = {
@@ -176,11 +178,12 @@
         };
         function onCall(m) {
             if (typeof m.id !== 'number' || typeof m.tool !== 'string' || !m.args || typeof m.args !== 'object') return;
-            who = { client: clean(m.client), key: clean(m.key) };
+            who = { key: clean(m.key) };
             if (state !== 'working') setState('working');
-            var mine = sock, id = m.id;
+            var mine = sock, id = m.id, mygen = gen;
+            function alive() { return sock === mine && gen === mygen && !cancelled[id]; }          // (this arming, and the call not cancelled by the hub)
             tools.run(m.tool, m.args, function (frame) {
-                if (sock !== mine) return;                                         // (stopped meanwhile: the hub has answered the call itself)
+                if (!alive()) return;                                              // (stopped or cancelled meanwhile: the hub has answered the call itself)
                 if (frame.ok) {
                     if (SAYS[m.tool] && !frame.cells && frame.result && !frame.result.changed) activityAdd(SAYS[m.tool], false);
                     if (frame.cells || (frame.result && frame.result.changed)) edits++;
@@ -188,7 +191,7 @@
                     send({ t: 'result', id: id, ok: true, result: frame.result, cells: frame.cells || 0 });
                 } else send({ t: 'result', id: id, ok: false, error: frame.error, message: frame.message });
                 showStrip();
-            });
+            }, alive);
         }
 
         // ---- the sheet ----
@@ -339,7 +342,7 @@
                 lead.textContent = t[3];
                 pre.textContent = commandFor(kind, origin, key);
                 tabButtons.forEach(function (b, i) { b.className = 'play-tab aik-tab' + (TABS[i][0] === kind ? ' on' : ''); b.setAttribute('aria-selected', String(TABS[i][0] === kind)); });
-                copyNote.textContent = key ? 'The key is inside the text. Do not paste it in a chat or a public place.' : 'Put your key where it says <your key>. A key is shown only once, when it is made.';
+                copyNote.textContent = key ? 'The key is inside the text. Do not paste it in a chat or a public place. Running or saving it keeps the key on this computer (the terminal\u2019s history, the AI app\u2019s settings): if the computer is shared, revoke the key when you are done.' : 'Put your key where it says <your key>. A key is shown only once, when it is made.';
             }
             open({
                 title: 'Connect your AI', cls: 'aikey', onClose: function () { key = ''; pre.textContent = ''; },

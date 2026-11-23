@@ -155,8 +155,11 @@ class Limits:
     ai_account_hour: int = 600          # ... and, for all the keys of one account together, 600 calls an hour (a budget that fills up again steadily)
     ai_bad_burst: int = 10              # keys that are no good, for each client address: a burst of 10, then one every 6 seconds (ten a minute); over it: 429, and the key is not even looked up
     ai_bad_refill_seconds: float = 6.0
-    ai_pages_burst: int = 30            # the key pages (list, make, revoke) for each client address: a burst of 30, then one every 2 seconds
+    ai_pages_burst: int = 30            # the key pages (list, make, revoke) for each ACCOUNT, the limit that decides for one person: a burst of 30, then one every 2 seconds ...
     ai_pages_refill_seconds: float = 2.0
+    ai_pages_address_burst: int = 150   # ... and, for each client address (many people behind one address, a school or a household, share it), a wall five times wider
+    ai_pages_address_refill_seconds: float = 0.4
+    ai_in_flight_total: int = 32        # the calls of AIs that are being served at once in the whole hub (from a good key until the answer): over it a call is `rate`; the place of a connection in `pending_total` is given back as soon as the key is good
     ai_body_max: int = 65536            # the body of a call (HTTP or MCP): 64 KB (nginx says the same in front)
     ai_page_body_max: int = 512         # the body of the key pages
     ai_frame_max: int = 1048576         # a frame that the armed tab sends (a result, a picture): 1 MiB at the most
@@ -168,9 +171,8 @@ class Limits:
     ai_frames_burst: int = 40           # the frames that an armed tab may send at once (its answers to calls) ...
     ai_frames_refill_seconds: float = 0.1       # ... then ten a second: a frame over it is a mistake of the socket, as in the chat
     ai_idle_seconds: float = 3600.0     # an armed tab that has had no call for this long is disarmed
-    ai_sockets_address: int = 4         # armed tabs for each client address
+    ai_sockets_address: int = 8         # armed tabs for each client address (an account has one: this is a wall, and nginx says the same in front)
     ai_sockets_total: int = 100         # armed tabs in all
-    ai_clients_max: int = 500           # the app names of the MCP initialize that are kept (memory only), for the strip of the page
     ai_log_days: int = 30               # the rows of the calls' log are kept this long ...
     ai_log_rows: int = 10000            # ... and at most this many (the newest)
     ai_ended_days: int = 7              # a key that ended or was revoked stays in the list of the operator's command this long, then the row goes

@@ -109,6 +109,14 @@ class TheText(unittest.TestCase):
         for path in DOORS:
             wait = int(re.search(r"proxy_read_timeout (\d+)s;", BLOCKS[path]).group(1))
             self.assertGreater(wait, LIMITS.ai_call_seconds + LIMITS.ai_queue_seconds, path)
+
+    def test_the_calls_that_are_open_at_once_are_counted_for_an_address_at_both_doors(self):
+        # (a call waits for its tab for seconds: the open ones are limited here and, for all addresses together, in the hub, tests/scripts/test_hub_ai.py)
+        self.assertRegex(HEAD, r"limit_conn_zone \$binary_remote_addr zone=ants_hub_aicalls:1m;")
+        for path in DOORS:
+            self.assertIn("limit_conn ants_hub_aicalls 16;", BLOCKS[path], path)
+            self.assertIn("limit_conn_status 429;", BLOCKS[path], path)
+        self.assertNotIn("ants_hub_aicalls", BLOCKS[SOCKET] + BLOCKS[FILE] + "".join(BLOCKS[p] for p in PAGES))
         self.assertEqual(aikeys.DAYS, (7, 30, 90))
 
 
