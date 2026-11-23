@@ -70,6 +70,7 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [`P2P_HINTS.md`](docs/P2P_HINTS.md): hints and direct channels between players (network protocol 26): another player's orders, and a computer player's, reach the prediction ahead of their sealed turns; the relay as the default and the switch for a direct connection
 - [`MATCH_COUNTDOWN.md`](docs/MATCH_COUNTDOWN.md): the 30 s countdown with the chat open before an online match: the Begin that tells it, the card, the Fullscreen button
 - [`BOT_NAMES.md`](docs/BOT_NAMES.md): the names of the computer players ("Pip (bot, Hard)"): the list, the picker, the label, the names a person may not take, network protocol 20
+- [`ANT_3D_MODELS.md`](docs/ANT_3D_MODELS.md): procedural 3D ant models (`.glb`), the 88 animation clips, the `/test_3d/` 1998 comparison viewer and 3D studio, and the separate Docker build stage
 
 ## Reverse Engineering & Historical Preservation
 
