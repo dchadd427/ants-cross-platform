@@ -6,7 +6,7 @@ numbers, shown as `k7m 2xq`; a link, ?room=<code>, to send on), four color cards
 Nobody; players are dragged between colors), the map, the picture's shape (Picture: a dropdown of the seven shapes of the table, the one nearest the screen until a pick) and START! at its side, and the footer with the version and the links. A visitor who
 opens somebody's link, or types a code into Join by code (the Games list of Home), is asked for a name first. START hands every browser that is in the room to the game page, which takes its seat with the key that the lobby page
 wrote to the browser's storage; START with nobody else in the match plays a game on this computer. Needs a running web page that has nginx's routes (the web image of this tree: `docker build -t ants-beta .`,
-run it on a port), a Chromium-based browser and Python 3, and, because the check presses My room (a plain visit is Home and makes no room), the site's /ws leading to a game server: --ws-port is the port that it leads to, and the check starts the
+run it on a port), a Chromium-based browser and Python 3, and, because the check hosts a private room (a plain visit is Home and makes no room), the site's /ws leading to a game server: --ws-port is the port that it leads to, and the check starts the
 native `ants_server` of this tree there (as web_rejoin_check.py does). The DevTools protocol is spoken with the client of web_hidden_check.py, standard library only. Each part opens the site in a throwaway
 headless browser (its own profile and port; nothing of yours is touched), the parts with several people in one browser each. Parts:
 
@@ -26,7 +26,7 @@ headless browser (its own profile and port; nothing of yours is touched), the pa
   * play     START with a bot in every other color takes THIS tab to the game page (no new tab): the arguments are the site's door, the room's code, the seat, the name and the shape and nothing else (the server holds the
              plan), the address keeps the code and the shape, the key of the seat is in the browser, and the match starts by itself (no START of the player's, the "Get ready" dialog closes by itself); the server's status
              lists the three bots (Bot (Medium), seats 1 - 3) and the player, the bots' scores, which the HUD shows at the bottom, rise from 0; the game page's Menu link asks first and, with Yes, goes back to the front page
-             in the same tab, which opens on Home: My room there makes a room again for the same name;
+             in the same tab, which opens on Home: hosting there makes a room again for the same name;
   * solo     START with nobody else in the match (every other color Nobody) takes THIS tab to the game page of a game on this computer, a game for one (the map, --alone and the name, no room, no bot): the match runs
              with its one colony and only that: Red, Blue and Black have no hill, no ants and no eggs, at Green; Classic 4:3, chosen under Screen, reaches that game (and with nothing chosen the page hands on no shape at all: the game page picks its own, 16:10 at 1440 x 900);
   * leave    Leave game: a game on this computer against one bot (in each shape of the picture) played to its results with the quit dialog (Ctrl+Q, Yes), and a click on the results' Leave Game button takes THIS tab back
@@ -59,7 +59,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import web_aspect_check as aspect                                            # noqa: E402
 import web_rejoin_check as rejoin                                            # noqa: E402  (its Server: the site's game server of this tree; its Player: a person's own browser)
 from web_aspect_check import Browser, NotReachable, Tab                    # noqa: E402
-from web_front_room import press_my_room                                     # noqa: E402
+from web_front_room import host_a_private_room                                     # noqa: E402
 
 # The browsers of this check are a 1440 x 900 screen unless a part says otherwise: a first visit starts in the shape nearest to it (web/shapes.js, firstVisit; web_aspect_check.py's oracle),
 # and the front page hands a shape on to the game only when the player picked one.
@@ -150,7 +150,7 @@ STATE_JS = """(function () {
              stat: stat ? text(stat) : '', statClass: stat ? stat.className : '', pencil: !!li.querySelector('[data-edit]'), remove: !!li.querySelector('[data-remove]'), ask: ask ? text(ask) : '', grip: !!li.querySelector('[data-grip]'),
              tab: tab ? text(tab) : '', teams: teams, picked: li.classList.contains('picked'), target: li.classList.contains('picked-target'), classes: li.className, markup: nm ? nm.children.length : 0 };
   });
-  return JSON.stringify({ path: location.pathname, search: location.search, heading: text($('room-h')), code: text($('code')), link: $('link').value, invite: text($('invite-line')), cards: cards,
+  return JSON.stringify({ path: location.pathname, search: location.search, heading: text($('room-h')), code: text($('code')), link: location.origin + '/?room=' + text($('code')).replace(/\\s+/g, ''), cards: cards,
     slotsNote: text($('slots-note')), teamsNote: text($('teams-note')), teamsWarn: $('teams-note').classList.contains('warn'),
     start: { text: text($('start')), disabled: $('start').disabled, busy: $('start').getAttribute('aria-busy') }, plan: text($('plan')), planShort: text($('plan-short')), info: text($('info')), map: text($('map-name')).toLowerCase(), mapDisabled: $('change-map').disabled || $('change-map').hidden,
     banner: { shown: !banner.hidden, text: text($('banner-text')), button: $('banner-x').hidden ? '' : text($('banner-x')), cls: banner.className }, rejoin: !$('rejoin').hidden, toast: $('toast').hidden ? '' : text($('toast')),
@@ -193,7 +193,7 @@ LAYOUT_JS = """(function () {
   var mapName = $('map-name');
   return JSON.stringify({ scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth, innerH: window.innerHeight, docH: document.documentElement.scrollHeight, scrollY: window.scrollY,
     panel: rect(panel), side: shown(side) ? rect(side) : null, maprow: rect(document.querySelector('.maprow')), start: rect($('start')), go: rect(document.querySelector('.go')), cards: cards, strays: strays,
-    plan: [shown($('plan')), shown($('plan-short'))], link: shown($('link')), copy: rect($('copy')), invite: rect(document.querySelector('.invite')), share: shown($('share')),
+    plan: [shown($('plan')), shown($('plan-short'))], share: shown($('share')),
     mapFit: [mapName.scrollWidth, mapName.clientWidth] });
 })()"""
 
@@ -241,8 +241,8 @@ def lobby_of(t):
 
 def seated(t):
     """The page is in its room: the room has welcomed it (the colors are not greyed out) and a person sits in a color. A plain visit opens on Home and makes no room (docs/HOME_SCREEN.md): the first
-    time that this asks about a page that holds no room, it presses My room, as a person does (web_front_room.py)."""
-    press_my_room(t.ev)
+    time that this asks about a page that holds no room, it hosts a private room, as a person does (web_front_room.py)."""
+    host_a_private_room(t.ev)
     return bool(t.ev("!document.body.classList.contains('offline') && !!document.querySelector('#slots li.k-person')"))
 
 
@@ -463,7 +463,7 @@ def main():
                 time.sleep(settle + 0.5)
 
         def clear_storage():
-            """The site's storage of this tab emptied (a page of the site that holds no room: My room makes one and the page keeps its key in the tab's session storage)."""
+            """The site's storage of this tab emptied (a page of the site that holds no room: hosting makes one and the page keeps its key in the tab's session storage)."""
             tab.open(web + "changelog", wait=False)
             time.sleep(1.0)
             tab.ev("try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} 1")
@@ -580,7 +580,7 @@ def main():
 
         # ------------------------------------------------------------------------------------------------------------------------------------------------------------
         if wanted("front") and not can_play:
-            note("front: left out (no game server: give --ws-port; My room makes a room)")
+            note("front: left out (no game server: give --ws-port; hosting makes a room)")
         if wanted("front") and can_play:
             print("[web home] the front page: a first visit")
             clear_storage()
@@ -593,8 +593,7 @@ def main():
                 logo: (function () { var i = document.querySelector('header.mast h1'); return i ? [document.querySelectorAll('header.mast img').length === 0, i.textContent] : null; })(),
                 tag: document.querySelector('.mast .tag').textContent, sub: document.querySelector('.mast .sub').textContent,
                 head: [document.getElementById('room-h').textContent, document.querySelector('.code').textContent],
-                link: [document.getElementById('link').value, document.getElementById('link').readOnly, document.getElementById('link').getAttribute('aria-label')],
-                buttons: ['copy'].map(function (id) { return document.getElementById(id).textContent; }), share: getComputedStyle(document.getElementById('share')).display, linkLine: document.getElementById('invite-line').textContent,
+                share: [document.getElementById('share-t').textContent, document.getElementById('code').textContent],
                 noMore: !document.getElementById('more') && !document.getElementById('morebox') && document.body.textContent.indexOf('More ways to play') === -1,
                 font: Array.from(document.fonts).some(function (f) { return f.family.indexOf('Libre Franklin') !== -1 && f.status === 'loaded'; }),
                 screenSize: [screen.width, screen.height], picked: pickedShape,
@@ -608,10 +607,7 @@ def main():
             code = code_of(st)
             check(re.match(r"^[%s]{6}$" % CODE_ALPHABET, code) is not None and st["code"] == code[:3] + " " + code[3:] and info["head"] == ["Your room", "Room code " + st["code"]],
                   "the room: \"Your room\" with a code of six letters and numbers (no i, l, o, 0 or 1) shown in two groups of three (%r, the link carries %r)" % (st["code"], code))
-            check(info["link"] == [web + "?room=" + code, True, "Invitation link"] and info["linkLine"] == "Players who open this link take the next free color.",
-                  "the link is the page's address with ?room=<code> in a read-only field, and the line under it says what it does (%r)" % (info["link"][0],))
-            check(info["buttons"] == ["Copy link"] and info["share"] == "none",
-                  "Copy link is there (Share is for a phone; Join by code is in the Games list of Home) (%s)" % (info["buttons"],))
+            check(info["share"] == ["Share", st["code"]], "the Share button is there with the room's code on it (%s)" % (info["share"],))
             check(info["noMore"], "there is no \"More ways to play\": the map selection screen is the only way to play")
             status = server.room(code) or {}
             check(status.get("lobby") is True and status.get("state") == "waiting" and status.get("leader") == 0 and status.get("joined") == 1 and status.get("starting") is False and status.get("plan", "").startswith("oooo"),
@@ -735,7 +731,8 @@ def main():
             wait_for(lambda: open_name_card(tab), 5)
             click_on(tab, "#name-step-own")
             check(not open_name_card(tab) and lobby()["code"] == st["code"] and lobby()["heading"] == "Your room", "\"Start a room of my own instead\" closes the card and the page's own room stays")
-            real_click(".hchip.mine")
+            tab.ev("history.back(); 1")
+            wait_for(lambda: value("document.body.getAttribute('data-screen')") == "home", 5)
 
             # the footer
             check("Version" in info["footer"] and "@@" not in info["footer"] and "build" in info["footer"] and re.match(r"^\d+\.\d+\.\d+", info["version"][0]) is not None and info["version"][1] != "",
@@ -881,11 +878,7 @@ def main():
                 if width <= 720:                                                         # START stays in view at the bottom of a phone's window, with its line under it (the page is longer than the window)
                     if not (m["docH"] > m["innerH"] and start["top"] >= 0 and start["bottom"] <= m["innerH"] + 0.5 and m["go"]["bottom"] <= m["innerH"] + 0.5 and m["go"]["bottom"] >= m["innerH"] - 30):
                         problems.append("START! is not held at the bottom of the window (%s)" % {k: round(v) for k, v in start.items() if k in ("top", "bottom")})
-                    if m["plan"] != [False, True] or m["link"] or m["copy"]["left"] < panel["left"] or m["copy"]["right"] > panel["right"]:
-                        problems.append("the phone's short line, no link field and a Copy link inside the room's box: %s" % ([m["plan"], m["link"]],))
                 else:
-                    if m["plan"] != [True, False] or not m["link"]:
-                        problems.append("the long line under START and the link field are shown: %s" % ([m["plan"], m["link"]],))
                     if width >= 1041 and start["bottom"] > m["innerH"]:
                         problems.append("START! is not in the first screen")
                 if m["mapFit"][0] > m["mapFit"][1] + 0.5:
@@ -1396,7 +1389,7 @@ def main():
                         front_ready()
                         remembered = lobby()
                         check(code_of(remembered) != code and card_of(remembered, "green")["name"] == "Bob" and remembered["map"] == "treasure" and tab.ev("localStorage.getItem('ants.name')") == "Bob" and not remembered["guest"],
-                              "menu: the front page (Home), after My room, makes a room again, a new code (%s), for the same name, and the map is Treasure (%s)" % (code_of(remembered), card_of(remembered, "green")["name"]))
+                              "menu: the front page (Home), after hosting, makes a room again, a new code (%s), for the same name, and the map is Treasure (%s)" % (code_of(remembered), card_of(remembered, "green")["name"]))
                         note("the front page after the Menu of a match that goes on: rejoin line %s (%r)" % ("shown" if remembered["rejoin"] else "not shown", tab.ev("document.getElementById('rejoin-note').textContent")))
             else:
                 check(False, "the game page of the room is ready")

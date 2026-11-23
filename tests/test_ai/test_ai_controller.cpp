@@ -1,6 +1,6 @@
 // Tests of the controller that stands between a bot and the door of a person: schedule, reaction delay, budget, time to live, priorities, ants that died,
 // splitting, the rules of the HUD, the issuer, the anti-thrash cool-down, and above all that a controller whose bots only read changes nothing (AI2.3 .. AI2.16); AI2.21: a refused
-// click has a fate (Bot::Fate::Filtered); AI2.23 .. AI2.28: timed chains (Orders::chain, CommandSink::applied_at).
+// click has a fate (Bot::Fate::Filtered); AI2.23 .. AI2.28: timed chains (Orders::chain, CommandSink::applied_at); AI2.31: the volley (Orders::volley).
 #include "ai_test.hpp"
 
 #include <algorithm>
@@ -1623,5 +1623,82 @@ void run_controller_tests() {
             ASSERT_EQ(c.pending(0), 0u);
         }
     } TEST_END();
+
+    TEST_CASE("AI2.31 A Volley Leaves Its Clicks At Their Own Times After The Look's Release Time, Never Sooner, Each Paid For And Held Back By The Bucket; One Ant's Plain Move Only, And No Click Is Put Off Beyond kVolleyMaxLater") {
+        const std::vector<uint32_t> offsets = {0, 3, 7, 10, 14, 17, 21, 24};
+        {   // Hard: eight clicks, ten tokens in the bucket: each leaves exactly its offset after the first, and the first no sooner than the reaction time lets a click of the look leave
+            sim::SimulationEngine sim;
+            build_world(sim, 5);
+            RecordingSink sink(sim);
+            BotController c(sim, 5);
+            c.set_start_hold(0);
+            const uint32_t ant = ants_of(sim, 0)[0];
+            bool done = false;
+            ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
+                if (done) return;
+                done = true;
+                o.volley(ant, tc(30, 30), offsets);
+            });
+            ASSERT_TRUE(bot != nullptr);
+            run_ticks(sim, c, 80);
+            ASSERT_EQ(sink.log.size(), offsets.size());
+            const Profile hard = profile_for(Level::Hard);
+            ASSERT_TRUE(sink.log[0].first >= bot->thought[0] + hard.reaction_delay - hard.reaction_delay * hard.jitter_percent / 100u);
+            for (size_t i = 0; i < offsets.size(); ++i) {
+                ASSERT_EQ(sink.log[i].first - sink.log[0].first, offsets[i]);
+                ASSERT_TRUE(sink.log[i].second.type == CommandType::GroupMove && sink.log[i].second.issuer == 0 && sink.log[i].second.ants == std::vector<uint32_t>{ant});
+            }
+            ASSERT_EQ(bot->count(Bot::Fate::Sent), offsets.size());
+            ASSERT_EQ(c.stats(0).released, offsets.size());
+        }
+        {   // Medium: twelve clicks one tick apart against a bucket of six and 1.5 commands a second: what leaves is what the bucket allows, the rest waits and is dropped after the time to live
+            sim::SimulationEngine sim;
+            build_world(sim, 5);
+            RecordingSink sink(sim);
+            BotController c(sim, 5);
+            c.set_start_hold(0);
+            const uint32_t ant = ants_of(sim, 0)[0];
+            bool done = false;
+            ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Medium), sink, [&](const BotView&, Orders& o) {
+                if (done) return;
+                done = true;
+                std::vector<uint32_t> every;
+                for (uint32_t k = 0; k < 12; ++k) every.push_back(k);
+                o.volley(ant, tc(30, 30), every);
+            });
+            ASSERT_TRUE(bot != nullptr);
+            run_ticks(sim, c, 150);
+            const auto& st = c.stats(0);
+            ASSERT_EQ(st.released + st.expired + st.superseded, 12u);
+            ASSERT_TRUE(st.expired + st.superseded >= 1);                                                    // (the bucket held back some of them: the newest of those that wait leaves, the others are dropped)
+            const Profile medium = profile_for(Level::Medium);
+            const uint64_t span = sink.log.back().first - bot->thought[0];
+            ASSERT_TRUE(static_cast<uint64_t>(st.released) <= medium.burst + medium.rate_milli_cps * span / 20000u + 1u);
+        }
+        {   // the filter and the clamp
+            sim::SimulationEngine sim;
+            build_world(sim, 5);
+            RecordingSink sink(sim);
+            BotController c(sim, 5);
+            c.set_start_hold(0);
+            const std::vector<uint32_t> mine = ants_of(sim, 0);
+            int look = 0;
+            ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
+                if (++look != 1) return;
+                o.move({mine[0], mine[1]}, tc(26, 26));
+                o.edit().back().volley = true;                                                                // (a group: refused)
+                o.volley(mine[2], tc(-5, 20), {0});                                                           // (off the map: refused)
+                o.pick_up(mine[3], tc(20, 20));
+                o.edit().back().volley = true;                                                                // (a pick-up: refused)
+                o.volley(mine[4], tc(30, 30), {0, 1000});                                                     // (the second is put off no further than kVolleyMaxLater)
+            });
+            ASSERT_TRUE(bot != nullptr);
+            run_ticks(sim, c, kVolleyMaxLater + 60);
+            ASSERT_EQ(bot->count(Bot::Fate::Filtered), 3u);
+            ASSERT_EQ(sink.log.size(), 2u);
+            ASSERT_EQ(sink.log[1].first - sink.log[0].first, static_cast<uint64_t>(kVolleyMaxLater));
+        }
+    } TEST_END();
+
 
 }

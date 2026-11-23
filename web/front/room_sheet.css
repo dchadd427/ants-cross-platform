@@ -1,0 +1,40 @@
+/* The Rules sheet of the Room (front/room_sheet.js): a card in the middle of the page (a sheet from the bottom on a phone) with one row for each rule: who can join (web/home/games.js), Fog of War (front/room_fog.js), Direct connection
+   (front/lobby_direct.js), and the note about recordings. A row is its name and its control side by side, and one line of what it does under them; a guest sees the rows read-only. The colors are the page's own tokens (:root of web/lobby.html). */
+.rs-back { position: fixed; inset: 0; z-index: 62; display: grid; place-items: center; padding: 12px; background: rgba(3, 6, 5, .62); }
+.rs-back[hidden] { display: none; }
+.rs { width: 440px; max-width: 100%; max-height: 100%; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 12px; padding: 16px 18px; color: var(--cream); background: var(--inset);
+    border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 6px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
+.rs:focus { outline: none; }
+.rs-top { display: flex; align-items: center; justify-content: space-between; }
+.rs h3 { font-size: 20px; font-weight: 500; line-height: 1.2; }
+.rs-x { position: relative; width: 36px; height: 36px; padding: 0; cursor: pointer; background: none; border: 0; border-radius: 4px; }
+.rs-x::before, .rs-x::after { content: ""; position: absolute; left: 9px; top: 17px; width: 18px; height: 2.5px; background: var(--cream); border-radius: 1px; transform: rotate(45deg); }
+.rs-x::after { transform: rotate(-45deg); }
+.rs-by { margin: -4px 0 0; font-size: 13px; line-height: 17px; color: var(--muted); }
+.rs-rule { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 12px; padding-top: 10px; border-top: 1px solid #16302a; }
+.rs-rule > b { font-weight: 500; font-size: 17px; }
+.rs-rule .dr-row { display: contents; }
+.rs-rule .dr-label { font-size: 17px; }
+.rs-rule p { grid-column: 1 / -1; margin: 0; font-size: 13px; line-height: 17px; color: var(--muted); }
+.rs-rule .dr-note { grid-column: 1 / -1; margin-top: 6px; }
+.room-notice { margin: 0; padding-top: 10px; font-size: 12px; line-height: 16px; color: #7f9c92; border-top: 1px solid #16302a; }
+.rs > .btn { align-self: flex-end; min-width: 110px; }
+body.joining .rs-back { display: none; }
+@media (max-width: 700px) {
+    .rs-back { place-items: end stretch; padding: 0; }
+    .rs { width: auto; max-height: 92%; padding: 14px 16px 20px; border-radius: 12px 12px 0 0; padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
+    .rs-x { width: 44px; height: 44px; margin-right: -8px; } .rs-x::before, .rs-x::after { left: 13px; top: 21px; }
+    .room-notice { font-size: 13px; line-height: 17px; }
+    .rs > .btn { align-self: stretch; min-height: 48px; }
+}
+@media (min-width: 701px) and (max-height: 500px) {       /* (a phone held sideways: a card in the middle, low enough to hold the three rules and Done) */
+    .rs-back { place-items: center; padding: 6px; }
+    .rs { width: min(520px, 100%); max-height: 100%; border-radius: 6px; padding: 8px 16px 10px; gap: 5px; }
+    .rs h3 { font-size: 18px; }
+    .rs-rule { padding-top: 5px; row-gap: 0; }
+    .rs-rule > b, .rs-rule .dr-label { font-size: 16px; }
+    .rs-rule p { font-size: 12px; line-height: 15px; }
+    .room-notice { padding-top: 5px; font-size: 11px; line-height: 14px; }
+    .rs > .btn { min-height: 38px; padding-top: 2px; padding-bottom: 2px; }
+}
+@media (max-width: 700px) and (max-height: 500px) { .rs-back { place-items: center; padding: 6px; } .rs { width: auto; max-height: 100%; border-radius: 6px; padding: 8px 14px 10px; gap: 5px; } .rs-rule { padding-top: 5px; } }

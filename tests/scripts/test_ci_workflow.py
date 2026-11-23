@@ -125,7 +125,8 @@ class SameSuitesAsTheRunner(unittest.TestCase):
         cls.table = re.findall(r'^\s*suite "([^"]+)"\s+\w+\s+[01]\s+"([^"]*)"\s+"[^"]*"\s+"[^"]*"\s+(.*)$', cls.runner, re.M)
 
     def programs_of_the_table(self):
-        return set(re.findall(r'\./\$BUILD_DIR/tests/\w+/(\w+)"', self.runner))        # (the worker bot suite is a function of the script: it names its program there)
+        names = set(re.findall(r'\./\$BUILD_DIR/tests/\w+/(\w+)"', self.runner))        # (the worker bot suite is a function of the script: it names its program there)
+        return names | {name + "_part2" for name in re.findall(r'\./\$BUILD_DIR/tests/\w+/(\w+)" --part 2', self.runner)}      # (the second half of a program that runs in two: ctest knows it as <program>_part2)
 
     def test_every_test_program_of_the_runner_is_registered_with_ctest_and_the_other_way_round(self):
         programs = self.programs_of_the_table()
@@ -546,7 +547,7 @@ class TheJobsBehindTheRequiredNames(unittest.TestCase):
         first, second = [n for n in self.registered if re.search(alone, n)], [n for n in self.registered if re.search(long, n)]
         rest = [n for n in self.registered if not re.search(alone + "|" + long, n)]
         self.assertEqual(first, ["test_engine_lookups"], "the test that takes as long as the others of its leg together runs alone")
-        self.assertEqual(len(second), 4, second)
+        self.assertEqual(len(second), 5, second)
         self.assertEqual(set(first) & set(second), set())
         self.assertEqual(len(first) + len(second) + len(rest), len(self.registered))
         self.assertGreater(len(rest), 80, "every other test, among them the ones to come")

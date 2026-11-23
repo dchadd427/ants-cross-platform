@@ -40,8 +40,8 @@ ORIGIN = "https://site.example"
 TITLE = re.compile(r"^(?P<page>.+) — Ants \(1998\)$")
 FRONT_TITLE = re.compile(r"^Ants \(1998\) — (?P<line>.+)$")                                # (the front page names the game first, then says in a line what it is)
 LISTED = {"/", "/matches", "/mapmaker", "/changelog", "/legal"}
-NOT_LISTED = {"/match", "/play", "/asset_catalog/"}                 # (a match, the game page and the catalog of sprites and sounds: pages that are there, and ask not to be in a search engine)
-NO_CARD = {"/asset_catalog/"}                                       # (a page that is not made to be shared has no share card)
+NOT_LISTED = {"/match", "/play", "/asset_catalog/", "/test_3d/", "/test_3d/viewer.html"}                 # (a match, the game page, the sprite catalog, and the 3D viewer: pages that are there, and ask not to be in a search engine)
+NO_CARD = {"/asset_catalog/", "/test_3d/", "/test_3d/viewer.html"}                                       # (a page that is not made to be shared has no share card)
 CONF = stats.strip_comments(stats.read("docker", "nginx.conf"))
 
 
@@ -91,7 +91,12 @@ class Head(html.parser.HTMLParser):
 
 def served_pages():
     """{address: the page's text} of every page that docker/nginx.conf serves from a file of its own."""
-    files = {"/": stats.read("web", "lobby.html"), "/asset_catalog/": stats.read("asset_catalog", "index.html")}
+    files = {
+        "/": stats.read("web", "lobby.html"),
+        "/asset_catalog/": stats.read("asset_catalog", "index.html"),
+        "/test_3d/": stats.read("tools", "ant_models", "compare.html"),
+        "/test_3d/viewer.html": stats.read("tools", "ant_models", "viewer.html"),
+    }
     for address, name in re.findall(r"location = (/[a-z]+) \{\s*rewrite \^ /([a-z]+)\.html last;", CONF):
         files[address] = changelog_to_html.convert(stats.read("CHANGELOG.md"), changelog_to_html.DEFAULT_REPO_BLOB, version="v0.0.0", build_id="0000000") if address == "/changelog" \
             else stats.read("web", "shell.html" if name == "play" else name + ".html")

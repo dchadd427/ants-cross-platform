@@ -114,6 +114,7 @@ struct Rematch {
     uint8_t team_a{kNoTeam};
     uint8_t team_b{kNoTeam};
     uint8_t mode{0};
+    bool fog{false};                    // protocol 28: the match's Fog of War, which the lobby that follows has again
     uint32_t public_by{0};              // the place in the order of the leader who made the match's room public (0: it was private): the lobby that follows is public for as long as that person leads
     std::vector<Person> people;
 };
@@ -478,7 +479,7 @@ private:
     bool of_match(uint8_t seat) const noexcept;                           // ... the guest of this seat is a person of the match (its place in the order is the match's, match_order_)
     std::string not_back_notice() const;                                  // the rematch: the leader's notice of a START that waits for the persons who are not back
     void forgive(Guest& g, uint32_t now_ms) const noexcept;
-    void apply_plan(const PlanMsg& plan);
+    bool apply_plan(const PlanMsg& plan);                    // false: refused as a whole (fog with a computer player), the leader is told
     void apply_visibility(bool want_public, uint32_t now_ms);             // protocol 22: the leader's choice (already heard: the leader, an open room, within the budget)
     void apply_ready(uint8_t seat, bool want_ready);                       // protocol 27: a person's Ready (already heard: a page that does not lead, an open room, within the budget)
     bool must_ready(uint8_t seat) const noexcept;                          // protocol 27: a person who is a page and does not lead: the START waits for their Ready

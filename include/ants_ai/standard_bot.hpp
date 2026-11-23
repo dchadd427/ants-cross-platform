@@ -40,6 +40,7 @@
 #include "ants_ai/bot.hpp"
 #include "ants_ai/brawl_task.hpp"
 #include "ants_ai/field_task.hpp"
+#include "ants_ai/free_thief_task.hpp"
 #include "ants_ai/gate_task.hpp"
 #include "ants_ai/heal_task.hpp"
 #include "ants_ai/island_expedition.hpp"
@@ -49,6 +50,8 @@
 #include "ants_ai/island_tasks.hpp"
 #include "ants_ai/miner_flight_task.hpp"
 #include "ants_ai/opportunity_task.hpp"
+#include "ants_ai/plug_task.hpp"
+#include "ants_ai/refusal_memory.hpp"
 #include "ants_ai/thief_guard.hpp"
 #include "ants_ai/standard_tasks.hpp"
 #include "ants_ai/tactics.hpp"
@@ -97,7 +100,9 @@ private:
           heal_(kHeal, tactics_),
           flower_link_(kFlowerLink, tactics_),
           thief_guard_(kThiefGuard, tactics_),
-          swarm_(kSwarm, tactics_) {
+          swarm_(kSwarm, tactics_),
+          plugs_(kPlugs, tactics_),
+          free_thief_(kFreeThief) {
         thief_guard_.attach(&walls_);
         island_.attach(&harvest_);
         expedition_.attach(&island_);
@@ -146,6 +151,12 @@ public:
     const FlowerLinkTask& flower_link() const noexcept { return flower_link_; }
     const SwarmTask& swarm() const noexcept { return swarm_; }
     const HealTask& heal() const noexcept { return heal_; }
+    const PlugTask& plugs() const noexcept { return plugs_; }
+    const RefusalMemory& refusals() const noexcept { return refusals_; }
+    /// The plug task for a lab that changes its parameters (AI57.6 looks at every tick)
+    PlugTask& plugs_for_labs() noexcept { return plugs_; }
+    const FreeThiefTask& free_thief() const noexcept { return free_thief_; }
+    FreeThiefTask& free_thief_for_labs() noexcept { return free_thief_; }
     /// Whether the bot plays the gate goals on this map (Medium and Hard, a walled map that the island play does not own; known after the first look)
     bool gate_map() const noexcept { return tactics_.gate_map; }
     /// The gate goal for a lab that changes its parameters or cancels it (AI27)
@@ -196,6 +207,8 @@ public:
     static constexpr TaskId kFlowerLink = 25;
     static constexpr TaskId kThiefGuard = 26;
     static constexpr TaskId kSwarm = 27;
+    static constexpr TaskId kPlugs = 28;
+    static constexpr TaskId kFreeThief = 29;
     static constexpr TaskId kHeal = kHealTaskId;                  // (23: tasks.hpp names it for the tasks that leave a carrier to it)
 
 private:
@@ -352,6 +365,9 @@ private:
     FlowerLinkTask flower_link_;
     ThiefGuardTask thief_guard_;
     SwarmTask swarm_;
+    PlugTask plugs_;
+    FreeThiefTask free_thief_;
+    RefusalMemory refusals_;
     void note_repeat(const sim::Command& command, uint64_t tick);
     void update_progress(const BotView& view);
     bool detect_stall(const BotView& view);

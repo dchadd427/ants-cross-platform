@@ -9,8 +9,8 @@
 .chat-log { display: flex; flex-direction: column; gap: 5px; height: 272px; overflow-y: auto; overscroll-behavior: contain; padding: 10px 14px;
     background: #0a1016; border: 2px solid var(--edge); border-radius: 6px; box-shadow: inset 0 0 0 1px #17382f; }
 .chat-log > :first-child { margin-top: auto; }
-.chat-log > div { --accent: #79bf93; font-size: 16px; line-height: 1.35; color: var(--cream); overflow-wrap: anywhere; }
-.chat-log > div[data-c="red"] { --accent: #d4707f; } .chat-log > div[data-c="blue"] { --accent: #8f8fd6; } .chat-log > div[data-c="black"] { --accent: #b3afb9; }
+.chat-log > div { --accent: #86d0a4; font-size: 16px; line-height: 1.35; color: var(--cream); overflow-wrap: anywhere; }
+.chat-log > div[data-c="red"] { --accent: #ec7680; } .chat-log > div[data-c="blue"] { --accent: #9aa6f2; } .chat-log > div[data-c="black"] { --accent: #c4c6d0; }
 .chat-log .who { color: var(--accent); }
 .chat-log .sys { font-size: 14px; color: #a8c2b8; }
 .chat-log .empty { margin: auto; max-width: 40ch; text-align: center; font-size: 15px; color: var(--muted); }

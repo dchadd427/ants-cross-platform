@@ -155,6 +155,8 @@ void CantGoTally::command(const sim::Command& c, uint64_t tick) {
     if (c.type == sim::CommandType::GroupAttack) ++seats_[seat].attacks;
     refused_.push_back(0);
     order_seat_.push_back(seat);
+    order_key_.push_back((static_cast<uint64_t>(c.ants[0]) << 32) ^ (static_cast<uint64_t>(c.type) << 28) ^ (static_cast<uint64_t>(static_cast<uint16_t>(c.tile_y) & 0x3FFFu) << 14) ^
+                         static_cast<uint64_t>(static_cast<uint16_t>(c.tile_x) & 0x3FFFu));
     const uint32_t number = static_cast<uint32_t>(refused_.size());                  // 1, 2, ...
     for (const uint32_t id : c.ants) {
         if (id > (1u << 20)) continue;                                               // (the engine counts the ants from 1: a number like this names no ant)
@@ -177,13 +179,16 @@ void CantGoTally::scan(const sim::SimulationEngine& sim, const std::vector<sim::
     for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
         if (a.id > (1u << 20)) continue;
         if (a.id >= in_cantgo_.size()) in_cantgo_.resize(static_cast<size_t>(a.id) + 1, 0);
-        const bool now = a.state == sim::UnitState::CantGo;
+        // (from the rules number 14 the ant of a can't-go loop shows its idle label for the tick between the end of one clip and the engine's answer to the walk that follows: the walk is still asked and not answered, so
+        // that tick is no end of the state, and a loop is the one beginning that it always was)
+        const bool now = a.state == sim::UnitState::CantGo || (in_cantgo_[a.id] != 0 && sim.has_pending_path(a.id));
         flagged += now ? 1u : 0u;
         if (now && in_cantgo_[a.id] == 0 && a.player_id < sim::MAX_PLAYERS) {
             ++seats_[a.player_id].began;
             if (a.id < last_.size() && last_[a.id].order != 0 && tick >= last_[a.id].tick && tick - last_[a.id].tick <= kRefusedWindow && refused_[last_[a.id].order - 1] == 0) {
                 refused_[last_[a.id].order - 1] = 1;
                 ++seats_[order_seat_[last_[a.id].order - 1]].refused;
+                if (refused_keys_[order_key_[last_[a.id].order - 1]]++ != 0) ++seats_[order_seat_[last_[a.id].order - 1]].again;
             }
         }
         in_cantgo_[a.id] = now ? 1 : 0;
@@ -309,9 +314,11 @@ void IdleTally::scan(sim::SimulationEngine& sim) {
         if (a.id >= idle_since_.size()) {
             idle_since_.resize(static_cast<size_t>(a.id) + 1, 0);
             target_team_.resize(static_cast<size_t>(a.id) + 1, 255);
+            loot_.resize(static_cast<size_t>(a.id) + 1, 0);
         }
         if (a.hp == 0 || a.state == sim::UnitState::Dead || a.state == sim::UnitState::Drowning) {
             idle_since_[a.id] = 0;
+            loot_[a.id] = 0;                                                         // (the loot of a Thief that died is lost)
             continue;
         }
         Seat& seat = seats_[a.player_id];
@@ -319,12 +326,23 @@ void IdleTally::scan(sim::SimulationEngine& sim) {
         seat.after_ant_ticks += kPeriod;
         bool standing = (a.state == sim::UnitState::Idle || a.state == sim::UnitState::GuardIdle || a.state == sim::UnitState::Swimming) && !a.is_holding && a.carried_points <= 0;
         int32_t raid_amount = 0;
+        bool loot_now = false;                                                       // a Thief that holds loot (points and no food)
         try {
             const sim::AntUnit& u = sim.get_unit(a.id);
             standing = standing && u.orig_order == sim::AntUnit::kOrderNone && u.home_state == 0 && u.waypoints.empty();
             raid_amount = u.raid_amount;
+            loot_now = a.type == sim::AntType::Thief && u.is_holding() && u.carried_food == 0 && a.carried_points > 0 && a.carried_points < 32768;
         } catch (const std::runtime_error&) {
             standing = false;
+        }
+        if (a.type == sim::AntType::Thief) {                                         // a steal is completed when a Thief that held loot has empty hands again (it banked it at the hill's entrance)
+            if (loot_now) {
+                loot_[a.id] = static_cast<uint16_t>(a.carried_points);
+            } else if (loot_[a.id] != 0 && !a.is_holding) {                         // (the deposit clears the hands: nothing else takes the loot of a living Thief)
+                ++seat.steals;
+                seat.steal_points += loot_[a.id];
+                loot_[a.id] = 0;
+            }
         }
         if (a.type == sim::AntType::Thief && a.target_team_id < sim::MAX_PLAYERS && target_team_[a.id] >= sim::MAX_PLAYERS) {     // (the field names a team only while a Thief raids its hill)
             ++seat.raids;
@@ -339,6 +357,103 @@ void IdleTally::scan(sim::SimulationEngine& sim) {
         if (tick - idle_since_[a.id] >= kIdleTicks) {
             seat.idle_ticks += kPeriod;
             seat.after_idle_ticks += kPeriod;
+        }
+    }
+}
+
+namespace {
+
+// Whether the tile is within kQueueTiles of the mound of the team's own hill: the carriers that wait for the gate stand about it, and a long queue reaches that far (a wait of 700 ticks is legitimate), so a
+// carrier with no order there is not counted as stuck
+constexpr int32_t kQueueTiles = 8;
+bool near_own_hill(const sim::SimulationEngine& sim, uint8_t team, int32_t x, int32_t y) {
+    for (const auto& ah : sim.grid().anthills()) {
+        if (ah.team_id != team) continue;
+        const int32_t bx = static_cast<int32_t>(ah.x);
+        const int32_t by = static_cast<int32_t>(ah.y);
+        if (x >= bx - kQueueTiles && x <= bx + 3 + kQueueTiles && y >= by - kQueueTiles && y <= by + 3 + kQueueTiles) return true;
+    }
+    return false;
+}
+
+}  // namespace
+
+void StuckTally::scan(sim::SimulationEngine& sim) {
+    const uint64_t tick = sim.current_tick();
+    if (tick % kPeriod != 0) return;
+    for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
+        if (a.id > (1u << 20) || a.player_id >= sim::MAX_PLAYERS) continue;
+        if (a.id >= tracks_.size()) tracks_.resize(static_cast<size_t>(a.id) + 1);
+        Track& t = tracks_[a.id];
+        if (a.hp == 0) {
+            t = Track{};
+            continue;
+        }
+        bool nowhere = false;
+        bool carrier = false;
+        uint8_t order = 0;
+        sim::TileCoord order_tile{};
+        try {
+            const sim::AntUnit& u = sim.get_unit(a.id);
+            order = u.orig_order;
+            order_tile = u.orig_order_tile;
+            carrier = a.is_holding || a.carried_points > 0;
+            const bool queueing = u.home_state != 0;                               // (the hill's queue and its entrance have their own waits)
+            switch (a.state) {
+                case sim::UnitState::CantGo:
+                    nowhere = !queueing;
+                    break;
+                case sim::UnitState::Walking:
+                    nowhere = !queueing && order != sim::AntUnit::kOrderNone;
+                    break;
+                case sim::UnitState::Idle:
+                case sim::UnitState::GuardIdle:
+                case sim::UnitState::Swimming:
+                    nowhere = !queueing && (order != sim::AntUnit::kOrderNone || (carrier && u.waypoints.empty() && !near_own_hill(sim, a.player_id, a.tile_x, a.tile_y)));
+                    break;
+                default:
+                    break;                                                         // (a clip of its own work, a fall, a stun, a death: not stuck)
+            }
+        } catch (const std::runtime_error&) {
+            nowhere = false;
+        }
+        if (!nowhere) {
+            t = Track{};
+            continue;
+        }
+        if (t.since == 0 || t.x != a.tile_x || t.y != a.tile_y) {
+            t.x = a.tile_x;
+            t.y = a.tile_y;
+            t.since = tick;
+            t.counted = false;
+            continue;
+        }
+        if (tick - t.since < kStuckTicks) continue;
+        Seat& seat = seats_[a.player_id];
+        if (!t.counted) {
+            t.counted = true;
+            ++seat.ants;
+            if (a.state == sim::UnitState::CantGo) ++seat.looping;
+            else if (order != sim::AntUnit::kOrderNone) ++seat.blocked;
+            else ++seat.carriers;
+            if (episodes_.size() < kMaxEpisodes) {
+                Episode e;
+                e.tick = tick;
+                e.seat = a.player_id;
+                e.ant = a.id;
+                e.type = a.type;
+                e.x = a.tile_x;
+                e.y = a.tile_y;
+                e.state = a.state;
+                e.order = order;
+                e.order_x = order_tile.x;
+                e.order_y = order_tile.y;
+                e.holding = a.is_holding;
+                e.carried = a.carried_points;
+                episodes_.push_back(e);
+            }
+        } else {
+            seat.ticks += kPeriod;
         }
     }
 }
@@ -412,6 +527,7 @@ ArenaResult play_match(const ArenaSpec& spec) {
     FlowerTally flowers;
     DropTally drop_tally;
     IdleTally idle_tally;
+    StuckTally stuck_tally;
     Recorder rec;
     rec.log = spec.record ? &out.log : nullptr;
     rec.steps = &steps;
@@ -444,6 +560,7 @@ ArenaResult play_match(const ArenaSpec& spec) {
         const size_t audio = sim.poll_audio_events().size();
         tally.scan(sim, news);
         idle_tally.scan(sim);
+        stuck_tally.scan(sim);
         if (sim.current_tick() % kFlowerScanPeriod == 0) {
             drop_tally.scan(sim);                       // (before the flower tally: both read the types of the last look)
             flowers.scan(sim);
@@ -464,6 +581,7 @@ ArenaResult play_match(const ArenaSpec& spec) {
     flowers.scan(sim);                                   // (the last ticks, when the match ended between two looks)
     out.landings = flowers.landings();
     out.drops = drop_tally.drops();
+    out.stuck = stuck_tally.episodes();
     out.last_food = idle_tally.last_food();
     for (size_t k = 1; k < out.landed.size(); ++k) out.landed[k] = flowers.landed(static_cast<sim::AntType>(k));
     {
@@ -501,14 +619,22 @@ ArenaResult play_match(const ArenaSpec& spec) {
         r.orders = tally.seat(b.seat).orders;
         r.attack_orders = tally.seat(b.seat).attacks;
         r.refused_orders = tally.seat(b.seat).refused;
+        r.refused_again = tally.seat(b.seat).again;
         r.took = flowers.seat(b.seat).took;
         r.took_at_flowers = flowers.seat(b.seat).at_flowers;
         r.ant_ticks = idle_tally.seat(b.seat).ant_ticks;
         r.idle_ticks = idle_tally.seat(b.seat).idle_ticks;
         r.after_ant_ticks = idle_tally.seat(b.seat).after_ant_ticks;
         r.after_idle_ticks = idle_tally.seat(b.seat).after_idle_ticks;
+        r.steals = idle_tally.seat(b.seat).steals;
+        r.steal_points = idle_tally.seat(b.seat).steal_points;
         r.raids = idle_tally.seat(b.seat).raids;
         r.raid_points = idle_tally.seat(b.seat).raid_points;
+        r.stuck_ants = stuck_tally.seat(b.seat).ants;
+        r.stuck_ticks = stuck_tally.seat(b.seat).ticks;
+        r.stuck_looping = stuck_tally.seat(b.seat).looping;
+        r.stuck_blocked = stuck_tally.seat(b.seat).blocked;
+        r.stuck_carriers = stuck_tally.seat(b.seat).carriers;
         r.stats = controller.stats(b.seat);
         out.seats.push_back(r);
     }

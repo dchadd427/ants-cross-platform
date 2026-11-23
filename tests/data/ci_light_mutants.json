@@ -83,8 +83,8 @@
   {
    "id": "the_map_picker_is_light",
    "file": "tools/ci_light.sh",
-   "old": " | web/front/game_type.js | web/front/map_picker.js) return 1 ;;",
-   "new": " | web/front/game_type.js) return 1 ;;",
+   "old": " | web/front/room_fog.js | web/front/room_sheet.js | web/front/seat_menu.js | web/front/map_picker.js) return 1 ;;",
+   "new": " | web/front/room_fog.js | web/front/room_sheet.js | web/front/seat_menu.js) return 1 ;;",
    "test": "python3 tests/scripts/test_ci_light.py",
    "expect": "test_a_page_that_the_skipped_jobs_read_makes_a_pull_request_full_whatever_else_it_changes"
   },
@@ -210,7 +210,7 @@
    "id": "a_commit_id_may_have_a_letter_that_is_not_ascii",
    "file": "tools/ci_light.sh",
    "old": "\"\" | *[!0123456789abcdef]*) return 1 ;;",
-   "new": "\"\" | *[!0123456789abcdefé]*) return 1 ;;",
+   "new": "\"\" | *[!0123456789abcdef\u00e9]*) return 1 ;;",
    "test": "python3 tests/scripts/test_ci_light.py"
   },
   {
@@ -265,6 +265,22 @@
    "new": "    \"\" | *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-]*x) finish false",
    "test": "python3 tests/scripts/test_ci_light.py",
    "expect": "test_a_pull_request_into_main_is_always_full_and_the_name_of_the_base_is_read_strictly"
+  },
+  {
+   "id": "the_four_colors_check_of_the_server_script_is_light",
+   "file": "tools/ci_light.sh",
+   "old": "tests/scripts/web_lobby_four_colors_check.js | tests/scripts/web_home_games_rig.js",
+   "new": "tests/scripts/web_home_games_rig.js",
+   "test": "python3 tests/scripts/test_ci_light.py",
+   "expect": "test_a_page_that_the_skipped_jobs_read_makes_a_pull_request_full_whatever_else_it_changes"
+  },
+  {
+   "id": "the_rig_of_the_four_colors_check_is_light",
+   "file": "tools/ci_light.sh",
+   "old": "tests/scripts/web_lobby_four_colors_check.js | tests/scripts/web_home_games_rig.js",
+   "new": "tests/scripts/web_lobby_four_colors_check.js",
+   "test": "python3 tests/scripts/test_ci_light.py",
+   "expect": "test_a_page_that_the_skipped_jobs_read_makes_a_pull_request_full_whatever_else_it_changes"
   }
  ]
 }

@@ -30,6 +30,8 @@
 //   follow-up lane  the next attack click of an ant that is in a fight (Intent::follow_up, the bot asks for it) leaves Profile::follow_up_reaction ticks after the look (Hard 4, Medium and Easy none: 0) instead of
 //                   the reaction delay, when every ant of it had an attack click released within kFollowUpWindow ticks, and never before an older click that names one of its ants. It costs a token and leaves in the
 //                   priority order like any command: only the delay is the shorter (docs/BOT_FIGHT.md, "Hits without pauses")
+//   volley          the clicks of a volley (Intent::volley: one ant, plain moves a few ticks apart, as a person clicks an ant that does not move) are each released `later` ticks after the look's release time,
+//                   never sooner, and are each paid for, held back by the bucket and dropped after the time to live like any command (docs/BOT_UNSTUCK.md)
 //   timed chains    the clicks of a chain (Orders::chain: one ant, a few clicks, each at a moment counted from the moment the click before is APPLIED) are not released by the clock of the
 //                   decision: the first leaves like any order, every later one at the first tick at which the sink (CommandSink::applied_at) would apply it inside its window, and never
 //                   outside it (a click that would be late is dropped with the rest of the chain: Fate::Expired). They skip the reaction delay, the queue and the cool-down, as the
