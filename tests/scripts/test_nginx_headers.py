@@ -44,6 +44,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import quick_http  # noqa: E402  (the stdlib server asks the network for a name when it binds)
 import test_nginx_stats as stats  # noqa: E402  (the helpers that read the file)
+sys.path.insert(0, os.path.join(stats.REPO, "tools"))
+import seo_files  # noqa: E402  (the two files for search engines, made as the image's build makes them)
 
 RAW = stats.read("docker", "nginx.conf")
 CONF = stats.strip_comments(RAW)
@@ -51,6 +53,7 @@ HEAD = CONF[:CONF.index("server {")]
 DOCKERFILE = stats.read("Dockerfile")
 
 SITE = "beta.playants.org"
+SITE_ORIGIN = "https://" + SITE
 HSTS = "max-age=604800"
 HSTS_LINE = 'add_header Strict-Transport-Security "max-age=604800" always;'
 PERMISSIONS = ("camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), hid=(), midi=(), magnetometer=(), gyroscope=(), accelerometer=(), display-capture=(), interest-cohort=()")
@@ -351,13 +354,15 @@ def expected(kind, host=SITE):
         return dict(cross, **no_page)
     if kind == "manifest":                                   # (the web app's manifest: the four headers of any static file, revalidated, its own type; no page header)
         return dict(cross, **dict(no_page, **{"cache-control": "no-cache, must-revalidate", "content-type": "application/manifest+json"}))
+    if kind in ("robots", "sitemap"):                        # (the files for search engines: as the manifest, revalidated, each with its own type and character set; no page header)
+        return dict(cross, **dict(no_page, **{"cache-control": "no-cache, must-revalidate", "content-type": "text/plain; charset=utf-8" if kind == "robots" else "application/xml; charset=utf-8"}))
     if kind == "data":                                       # (the update notice's data file: as the manifest, revalidated, JSON)
         return dict(cross, **dict(no_page, **{"cache-control": "no-cache, must-revalidate", "content-type": "application/json"}))
     if kind == "icon":                                       # (the web app's icons: the picture rule, a week)
         return dict(cross, **dict(no_page, **{"cache-control": "public, max-age=604800, no-transform", "content-type": "image/png"}))
     if kind == "open":                                       # (the sprites and sounds that any site may use: their own cross-origin headers, none of the page's)
         return dict(no_page, **{"cross-origin-resource-policy": "cross-origin", "access-control-allow-origin": "*", "x-content-type-options": "nosniff", "strict-transport-security": HSTS,
-                                "cross-origin-opener-policy": None, "cross-origin-embedder-policy": None})
+                                "cross-origin-opener-policy": None, "cross-origin-embedder-policy": None, "x-robots-tag": "noindex"})
     if kind == "named":                                      # (the JSON answers for a server that is not there)
         return dict(no_page, **{"x-content-type-options": "nosniff", "strict-transport-security": HSTS, "cache-control": "no-store", "cross-origin-opener-policy": None, "cross-origin-embedder-policy": None})
     if kind == "hubpage":                                    # (the small pages of the login)
@@ -404,6 +409,8 @@ LIVE_ROWS = [
     ("the changelog page, old file, no redirect", "GET", "/changelog.html", (), 200, "page"),
     ("the changelog page with a slash", "GET", "/changelog/", (), 301, "plain"),
     ("a page that is not there", "GET", "/nothing.html", (), 404, "page"),
+    ("the robots file", "GET", "/robots.txt", (), 200, "robots"),
+    ("the sitemap", "GET", "/sitemap.xml", (), 200, "sitemap"),
     ("the asset catalog", "GET", "/asset_catalog/", (), 200, "page"),
     ("the asset catalog's file", "GET", "/asset_catalog/index.html", (), 301, "plain"),
     ("the asset catalog's data script", "GET", "/asset_catalog/catalog_data.js", (), 200, "plain"),
@@ -502,6 +509,7 @@ def docroot_files():
     big = (b"ANTS " + bytes(range(32, 120))) * 4000
     files = {name: page % name for name in ("lobby.html", "index.html", "play.html", "matches.html", "match.html", "legal.html", "changelog.html", "mapmaker.html", "admin.html", "asset_catalog/index.html")}
     files.update({"404.html": stats.read("web", "404.html"), "50x.html": stats.read("web", "50x.html")})                  # (the real error pages)
+    files.update({"robots.txt": seo_files.robots_txt(SITE_ORIGIN), "sitemap.xml": seo_files.sitemap_xml(SITE_ORIGIN)})   # (the real files' text, as the build makes them)
     files.update({"front/classic.css": "body { color: #222; }\n" * 80, "front/big.css": ".a { color: red; }\n" * 400, "shapes.js": "var shapes = 1;\n" * 80, "home/home.js": "var home = 1;\n" * 80, "asset_catalog/catalog_data.js": "var data = 1;\n" * 80,
                   "front/logo.png": "\x89PNG stand-in", "manifest.webmanifest": stats.read("web", "manifest.webmanifest"), "whats_new.json": WHATS_NEW, "app/icon-192.png": "\x89PNG stand-in", "app/apple-touch-icon.png": "\x89PNG stand-in", "favicon.png": "\x89PNG stand-in", "favicon.ico": "ico stand-in", "front/click.wav": "RIFF stand-in", "mapmaker_atlas/atlas.json": '{"v":1}', "mapmaker_atlas/ground.png": "\x89PNG stand-in",
                   "asset_catalog/sprites/s1.png": "\x89PNG stand-in", "asset_catalog/sounds/a.wav": "RIFF stand-in", "lvl_core.wasm": "\0asm stand-in", "index.js": big[:50000], "index.wasm": big[:120000], "index.data": big})
@@ -658,9 +666,27 @@ class TheFileRuns(unittest.TestCase):
         self.assertEqual(fetch(self.live.port, "/whats_new.json", "HEAD").status, 200)
         self.assertEqual(fetch(self.live.port, "/whats_new.json", "POST", body=b"x").status, 405)
 
+    def test_the_files_for_search_engines_are_the_files_and_never_the_game_page_even_when_a_file_is_missing(self):
+        for name, text in (("robots.txt", seo_files.robots_txt(SITE_ORIGIN)), ("sitemap.xml", seo_files.sitemap_xml(SITE_ORIGIN))):
+            path = "/" + name
+            answer = fetch(self.live.port, path)
+            self.assertEqual(answer.body, text.encode("utf-8"), name)
+            self.assertNotIn(b"<html", answer.body.lower(), name)
+            self.assertEqual(fetch(self.live.port, path, "HEAD").status, 200, name)
+            self.assertEqual(fetch(self.live.port, path, "POST", body=b"x").status, 405, name)
+            full = os.path.join(self.docroot, name)
+            os.rename(full, full + ".away")
+            try:
+                gone = fetch(self.live.port, path)
+                self.assertEqual(gone.status, 404, name)                                              # (a plain 404, as a file that is gone: a crawler never reads a page of HTML as its robots file)
+                self.assertNotIn(b"a stand-in page", gone.body, name)
+                self.assertNotIn(b"Page not found", gone.body, name)
+            finally:
+                os.rename(full + ".away", full)
+
     def test_an_address_that_is_nothing_is_the_page_of_a_404_never_the_game_and_under_the_name_of_a_door_it_is_a_plain_404(self):
         page = stats.read("web", "404.html").encode("utf-8")
-        for path in ("/no/such/page", "/nothing?room=k7m2xq", "/playx", "/front/", "/robots.txt", "/nothing.html", "/front/nothing.css", "/nothing.js"):
+        for path in ("/no/such/page", "/nothing?room=k7m2xq", "/playx", "/front/", "/robots.txt.x", "/sitemap.xml.x", "/nothing.html", "/front/nothing.css", "/nothing.js"):
             answer = fetch(self.live.port, path)
             self.assertEqual(answer.status, 404, path)
             self.assertEqual(answer.body, page, path)                                              # (the page of the site as it is in web/: its status is the error's, its body the file's)

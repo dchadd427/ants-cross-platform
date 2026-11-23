@@ -58,10 +58,11 @@ class ThePagesAndTheImage(unittest.TestCase):
             for tag in re.findall(r"<link\b[^>]*>", read("web", os.path.basename(page))):
                 if re.search(r"""\brel=["']canonical["']""", tag):
                     found.setdefault(os.path.basename(page), []).append(re.search(r"""\bhref=["']([^"']*)["']""", tag).group(1))
-        self.assertEqual(sorted(found), ["legal.html", "matches.html"], "the pages of web/ that name a canonical address (the changelog page is made by tools/changelog_to_html.py)")
+        self.assertEqual(sorted(found), ["legal.html", "lobby.html", "mapmaker.html", "matches.html"], "the pages of web/ that name a canonical address (the changelog page is made by tools/changelog_to_html.py)")
         for page, hrefs in found.items():
-            self.assertEqual(hrefs, ["/" + page[:-5]], page)                              # (one, the page's own clean address: a page that answers at its file too says which address is the one)
-            self.assertEqual(clean[hrefs[0]], page, page)                                 # (and that address serves this page: tests/scripts/test_nginx_clean_urls.py asks the real server for a 200)
+            address = "/" if page == "lobby.html" else "/" + page[:-5]
+            self.assertEqual(hrefs, ["@@SITE_ORIGIN@@" + address], page)                  # (one, the page's own clean address on the site's one address, which the build writes in: a page that answers at its file too says which address is the one)
+            self.assertEqual(clean.get(address, "lobby.html"), page, page)                # (and that address serves this page: tests/scripts/test_nginx_clean_urls.py asks the real server for a 200)
         self.assertNotIn("legal", loaded_files())
         self.assertNotIn("matches", loaded_files())
 

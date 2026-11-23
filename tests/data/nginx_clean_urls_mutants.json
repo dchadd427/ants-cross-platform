@@ -298,29 +298,29 @@
   {
    "id": "legal_page_loses_its_canonical",
    "file": "web/legal.html",
-   "old": "<link rel=\"canonical\" href=\"/legal\">\n",
+   "old": "<link rel=\"canonical\" href=\"@@SITE_ORIGIN@@/legal\">\n",
    "new": "",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
    "id": "matches_page_loses_its_canonical",
    "file": "web/matches.html",
-   "old": "    <link rel=\"canonical\" href=\"/matches\">\n",
+   "old": "    <link rel=\"canonical\" href=\"@@SITE_ORIGIN@@/matches\">\n",
    "new": "",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
    "id": "changelog_page_loses_its_canonical",
    "file": "tools/changelog_to_html.py",
-   "old": "<link rel=\"canonical\" href=\"/changelog\">\n",
+   "old": "<link rel=\"canonical\" href=\"@@SITE_ORIGIN@@/changelog\">\n",
    "new": "",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
    "id": "legal_canonical_is_the_file",
    "file": "web/legal.html",
-   "old": "<link rel=\"canonical\" href=\"/legal\">",
-   "new": "<link rel=\"canonical\" href=\"/legal.html\">",
+   "old": "<link rel=\"canonical\" href=\"@@SITE_ORIGIN@@/legal\">",
+   "new": "<link rel=\"canonical\" href=\"@@SITE_ORIGIN@@/legal.html\">",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {

@@ -379,8 +379,9 @@ class TheRealDockerfileReplayed(Scratch):
         self.assertIn("parseInt('1100000', 10)", text)
 
     def test_the_site_placeholders_become_nothing_in_the_titles_and_the_footers(self):
-        self.assertIn("<title>Ants (1998)</title>", self.page("plain", "lobby.html"))
-        self.assertIn("<title>Ants (1998) \u2014 beta.playants.org</title>", self.page("plain", "index.html"))
+        self.assertRegex(self.page("plain", "lobby.html"), r"<title>Ants \(1998\) \u2014 [^<]+</title>")
+        for name in ("index.html", "play.html", "matches.html", "match.html", "legal.html", "mapmaker.html", "changelog.html"):
+            self.assertRegex(self.page("plain", name), r"<title>[^<]+ \u2014 Ants \(1998\)</title>", name)      # (the form of every page's title, in the finished image: tests/scripts/test_web_seo.py reads the sources)
         for name in ("index.html", "play.html", "lobby.html"):
             if os.path.exists(self.html("plain", name)):
                 text = self.page("plain", name)
@@ -402,6 +403,15 @@ class TheRealDockerfileReplayed(Scratch):
         self.assertIn("v" + read("VERSION").strip(), page)
         self.assertIn("Generated from CHANGELOG.md when the site image is built", page)
         self.assertEqual(sorted(name for name in os.listdir(self.html("plain")) if name.startswith("changelog")), ["changelog.html"])
+
+    def test_the_pages_carry_the_sites_one_address_and_the_files_for_search_engines_are_made_from_it(self):
+        origin = read("web", "SITE_ORIGIN").strip()
+        for name in ("lobby.html", "matches.html", "match.html", "legal.html", "mapmaker.html", "index.html", "play.html", "changelog.html"):
+            self.assertNotIn("@@SITE_ORIGIN@@", self.page("plain", name), name)
+        self.assertIn('<link rel="canonical" href="%s/legal">' % origin, self.page("plain", "legal.html"))
+        self.assertIn('<meta property="og:image" content="%s/front/preview_treasure.png">' % origin, self.page("plain", "index.html"))
+        self.assertIn("<loc>%s/</loc>" % origin, self.page("plain", "sitemap.xml"))
+        self.assertIn("Sitemap: %s/sitemap.xml" % origin, self.page("plain", "robots.txt"))
 
     def test_the_data_file_of_the_update_notice_is_made_beside_the_changelog_page_with_the_live_version(self):
         with open(os.path.join(self.html("plain"), "whats_new.json"), encoding="utf-8") as f:

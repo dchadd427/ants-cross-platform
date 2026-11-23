@@ -17,6 +17,7 @@ the game page has the stage (id="game-stage"; the build writes it with or withou
 /front/classic.css, the font          the Classic look's own files: served as files (an unknown address is the page of a 404, so the type is checked), the stylesheet with the pages' revalidation
 /matches, /match, their stylesheet and the code that they and the game page in replay mode (play?replay=<file>) share; /matches.html and /match.html
                                       (and the old /watch.html, to /matches) go to the clean address with the query (a 301); /live-now, /live-now/ and /live.html go to / with no query (a 301); /live is the game server's list, not a page
+/robots.txt, /sitemap.xml             the files for search engines (docs/BUILD_AND_RUN.md "Search engines and share cards"): files with their own types, revalidated; an address that only starts like one is a 404 with the page
 /manifest.webmanifest, /app/icon-192.png, /favicon.png, /favicon.ico  the web app's manifest (revalidated), an icon and the browser-tab icon (with or without ?v=): files, not the game page; /?vp is the front page and /home/vp.js its script of numbers
 /changelog, /legal, /mapmaker,        the other pages of the site: each is its own page with the pages' headers (the map maker has its own policy) and links /front/classic.css (not the map maker);
 /asset_catalog/                         the .html address of each (not changelog.html, legal.html, matches.html: they answer 200, as before; and /asset_catalog/index.html, to /asset_catalog/) is a 301 to the clean one with the query, a slash after the clean one goes to it; /catalog, /viewer and /asset_catalog go to the catalog;
@@ -142,6 +143,11 @@ def main():
     check(status == 200 and headers.get("content-type", "").split(";")[0] == "application/manifest+json" and '"name": "Ants!"' in body and not GAME.search(body),
           "/manifest.webmanifest is the manifest (%s, %s)" % (status, headers.get("content-type")))
     check(headers.get("cache-control") == "no-cache, must-revalidate" and names.count("cache-control") == 1, "/manifest.webmanifest: Cache-Control is exactly one line, no-cache, must-revalidate (%s)" % headers.get("cache-control"))
+    print("[web routes] robots.txt and sitemap.xml are files of the site with their own types, revalidated, never the page that an unknown address gets")
+    for path, kind, marker in (("/robots.txt", "text/plain; charset=utf-8", "User-agent:"), ("/sitemap.xml", "application/xml; charset=utf-8", "<urlset")):
+        status, headers, names, body = get(path)
+        check(status == 200 and headers.get("content-type") == kind and marker in body and not GAME.search(body) and not LOBBY.search(body) and not NOT_FOUND.search(body), "%s is the file (%s, %s)" % (path, status, headers.get("content-type")))
+        check(headers.get("cache-control") == "no-cache, must-revalidate" and names.count("cache-control") == 1 and headers.get("x-content-type-options") == "nosniff", "%s: Cache-Control is exactly one line, no-cache, must-revalidate, and nosniff is sent (%s)" % (path, headers.get("cache-control")))
     status, headers, names, body = get("/app/icon-192.png")
     check(status == 200 and headers.get("content-type", "").split(";")[0] == "image/png" and body[1:4] == "PNG", "/app/icon-192.png is the icon (%s, %s)" % (status, headers.get("content-type")))
     for path in ("/favicon.png?v=0", "/favicon.png", "/favicon.ico?v=0"):
@@ -228,7 +234,7 @@ def main():
             continue
         check(not (status == 200 and "text/html" in headers.get("content-type", "")) and "location" not in headers, "%s is not a page and is not redirected (%s)" % (path, status))
     print("[web routes] an address that is nothing is a 404 with the page of the site (web/404.html), revalidated like every page, and never the game; a name that only starts like a page's is one too")
-    for path in ("/no/such/page", "/nothing", "/nothing?room=k7m2xq", "/playx", "/matchesx", "/legal/x", "/mapmaker/x", "/changelogs", "/match/x", "/robots.txt", "/front/", "/app", "/index"):
+    for path in ("/no/such/page", "/nothing", "/nothing?room=k7m2xq", "/playx", "/matchesx", "/legal/x", "/mapmaker/x", "/changelogs", "/match/x", "/robots.txt.x", "/sitemap.xml.x", "/front/", "/app", "/index"):
         status, headers, names, body = get(path)
         check(status == 404 and "location" not in headers and bool(NOT_FOUND.search(body)) and not GAME.search(body) and not LOBBY.search(body), "%s is a 404 with the page of the site, not a game or the front page (%s)" % (path, status))
         check(headers.get("content-type", "").startswith("text/html") and headers.get("cache-control") == "no-cache, must-revalidate" and names.count("cache-control") == 1, "%s: the page is html, Cache-Control is exactly one line, no-cache, must-revalidate (%s)" % (path, headers.get("cache-control")))
