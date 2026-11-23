@@ -5,7 +5,7 @@
 //     Typing the first letters of a name jumps to that mode.
 //   * ES5 and no module system: a page gets the global AntsGameType, node gets module.exports (the DOM comes in as `doc`).
 //   * Nothing here puts a name into markup: every text is set with textContent.
-//   * The ids (gt-label, gt-combo, gt-list, gt-name, gt-line, gt-note, gt-opt-N) are fixed, so the control exists once on a page.
+//   * The ids (gt-label, gt-combo, gt-list, gt-name, gt-gline, gt-opt-N) are fixed, so the control exists once on a page.
 //   * Tab on the open list takes the option under the cursor (as the select-only pattern says) and the focus goes on; Escape and a click outside choose nothing.
 (function (root, factory) {
     var api = factory();
@@ -33,7 +33,7 @@
         var combo = el('div', 'gt-combo'); combo.id = 'gt-combo';
         combo.setAttribute('role', 'combobox'); combo.setAttribute('tabindex', '0');
         combo.setAttribute('aria-haspopup', 'listbox'); combo.setAttribute('aria-expanded', 'false'); combo.setAttribute('aria-controls', 'gt-list');
-        combo.setAttribute('aria-labelledby', 'gt-label'); combo.setAttribute('aria-describedby', 'gt-line gt-note');
+        combo.setAttribute('aria-labelledby', 'gt-label'); combo.setAttribute('aria-describedby', 'gt-gline');
         var name = el('span', 'gt-name'); name.id = 'gt-name';
         var arrow = el('i', 'gt-arrow'); arrow.setAttribute('aria-hidden', 'true');
         combo.appendChild(name); combo.appendChild(arrow);
@@ -53,13 +53,11 @@
         });
         pop.appendChild(title); pop.appendChild(list);
         field.appendChild(combo); field.appendChild(pop);
-        var line = el('p', 'gt-line'); line.id = 'gt-line';
-        var note = el('p', 'gt-note'); note.id = 'gt-note';
-        var guest = el('p', 'gt-guest'); var glabel = el('span', 'gt-glabel', 'Game type:'); var gname = el('b', 'gt-gname');
+        var guest = el('p', 'gt-guest'); var glabel = el('span', 'gt-glabel', 'Game type'); var gname = el('b', 'gt-gname');
         guest.appendChild(glabel); guest.appendChild(doc.createTextNode(' ')); guest.appendChild(gname);
-        var gline = el('p', 'gt-gline');
+        var gline = el('p', 'gt-gline'); gline.id = 'gt-gline';
         var scrim = el('div', 'gt-scrim');
-        [label, field, line, note, guest, gline, scrim].forEach(function (n) { host.appendChild(n); });
+        [label, field, guest, gline, scrim].forEach(function (n) { host.appendChild(n); });
 
         function selectedIndex() { for (var i = 0; i < rows.length; i++) if (rows[i].id === state.id) return i; return -1; }
         function setActive(i) {
@@ -131,10 +129,8 @@
             var v = M.viewOf(s.id, s.serverName);
             if (state.guest || state.disabled) close();
             host.classList.toggle('guest', state.guest);
-            field.hidden = line.hidden = state.guest; label.hidden = state.guest;
-            note.hidden = state.guest || !v.note; guest.hidden = !state.guest; gline.hidden = !state.guest || !v.line;
-            name.textContent = v.name; line.textContent = v.line; line.hidden = line.hidden || !v.line; note.textContent = v.note;
-            gname.textContent = v.name; gline.textContent = v.line;
+            field.hidden = label.hidden = state.guest; guest.hidden = !state.guest; gline.hidden = !state.guest || !v.line;
+            name.textContent = v.name; gname.textContent = v.name; gline.textContent = v.line;
             combo.setAttribute('aria-disabled', String(state.disabled)); combo.setAttribute('tabindex', state.disabled ? '-1' : '0');
             items.forEach(function (li, i) { li.setAttribute('aria-selected', String(rows[i].id === s.id)); li.classList.toggle('sel', rows[i].id === s.id); });
         }

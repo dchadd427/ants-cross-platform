@@ -1,5 +1,6 @@
 // Tests of the lock-step network core: the fixes of the review of release A, protocols 13, 15 and 16
 #include "lockstep_fixtures.hpp"
+#include "../common/protocol_pin.hpp"
 
 void run_reconnect_session_tests_2() {
     // ---- the fixes of the review of release A, through whole matches (N2.80 - N2.87) --------------------------------------------------------------------------------------------
@@ -755,7 +756,7 @@ void run_reconnect_session_tests_2() {
 
 void run_protocol13_tests() {
     TEST_CASE("N2.100 Protocol 13, The Messages: StartRequest Is The Type, A Level For Each Seat (0 .. 3) And Two Team Bytes (None Both, Or Two Different Seats 0 .. 3), Seven Bytes And Nothing Else; Start Ends With The Same Two Bytes And Its Decoder Takes Only Teams That Its Own Roster Can Make; The Notice Fits A Line Of Chat") {
-        ASSERT_EQ(kProtocolVersion, 27);                                                       // (the messages of protocol 13 are the messages of protocols 14 to 17 too: 14 added the SeatMove, N2.101; 15 the platform and the create block, N2.102 - N2.104; 16 the lobby room, N2.105 - N2.107; 17 the game mode, N2.112)
+        ASSERT_EQ(kProtocolVersion, ants_test::kPinnedProtocol);                                                       // (the messages of protocol 13 are the messages of protocols 14 to 17 too: 14 added the SeatMove, N2.101; 15 the platform and the create block, N2.102 - N2.104; 16 the lobby room, N2.105 - N2.107; 17 the game mode, N2.112)
         ASSERT_TRUE(kNoTeam == 255 && kFillLevelLast == 3);
         StartRequestMsg out;
         // the layout, byte by byte: the type, the levels of seats 0 to 3, team_a, team_b
@@ -941,7 +942,7 @@ void run_protocol13_tests() {
     } TEST_END();
 
     TEST_CASE("N2.101 Protocol 14 And 15, The Message: SeatMove Is The Type 31, Two Different Seats 0 .. 3 And The Guard (A 32-Bit Number That Is Never 0, Little Endian), Seven Bytes And Nothing Else; Every Other Pair Of Seats, A Guard Of 0, Every Truncation, Every Extra Byte And Every Other Type Is Refused, A Refused Message Leaves Its Target Alone, The Layout Of Protocol 14 Is Refused, And No Other Message Is Taken For It; The Guard Is The Seating Hash: The State And The Name Of Each Seat, Nothing Else Of The Room Message") {
-        ASSERT_EQ(kProtocolVersion, 27);
+        ASSERT_EQ(kProtocolVersion, ants_test::kPinnedProtocol);
         ASSERT_TRUE(static_cast<int>(MsgType::SeatMove) == 31 && static_cast<int>(MsgType::Last) == 41);
         // the layout, byte by byte: the type, the seat of the player that moves, the seat that it takes, the guard
         ASSERT_TRUE(encode(SeatMoveMsg{0, 1, 0x04030201u}) == (std::vector<uint8_t>{31, 0, 1, 1, 2, 3, 4}));
@@ -1116,7 +1117,7 @@ void run_protocol15_tests() {
     };
 
     TEST_CASE("N2.102 Protocol 15 And 16, The Hello: The Platform Byte Follows The Turns, A Create Block (A Map Name, The Seats, The Two Team Bytes And The Rule Flags) Ends The Message When The Hello Makes A Room; The Decoder Reads The Block Strictly, Refuses Every Value An Honest Client Does Not Send, Every Truncation Of The Block And Every Extra Byte; The Layout Of Protocol 14 Is No Hello Of This Protocol But Its Version And Name Are Read") {
-        ASSERT_EQ(kProtocolVersion, 27);
+        ASSERT_EQ(kProtocolVersion, ants_test::kPinnedProtocol);
         ASSERT_TRUE(kCreateLeaderStarts == 1 && kRoomLeaderStarts == kCreateLeaderStarts && kNoTeam == 255);
         // the layout, byte by byte, without a block: the platform byte and the client kind are the last two (Linux in a browser: 3 + 0x10; a game)
         {
@@ -1275,7 +1276,7 @@ void run_protocol15_tests() {
         RoomMsg room;
         room.slots[0] = {SlotState::Client, "Ann", 30, static_cast<uint8_t>(kOsWindows)};
         room.slots[1] = {SlotState::Client, "Bob", 40, static_cast<uint8_t>(kOsAndroid | kPlatformBrowser)};
-        room.slots[2] = {SlotState::Bot, "Bot (Easy)", 0, 0};
+        room.slots[2] = {SlotState::Client, "Cat", 50, 0};                                                 // (a person who did not say: a room with fog has no computer player, N2.115)
         room.map_name = "TINY.LVL";
         room.fog = true;
         room.you = 1;
@@ -1359,9 +1360,12 @@ void run_protocol15_tests() {
         }
         // the leader of the room is still a person that holds a seat as a guest, whatever the new fields say
         {
-            std::vector<uint8_t> one = bytes;
-            one[end - 4] = 2;                                                                            // the leader's seat 2 is a bot
-            ASSERT_FALSE(decode(one, back));
+            RoomMsg with_bot = room;                                                                     // (no fog here: a room with fog has no computer player, N2.115)
+            with_bot.fog = false;
+            with_bot.slots[2] = {SlotState::Bot, "Bot (Easy)", 0, 0};
+            ASSERT_TRUE(decode(encode(with_bot), back));                                                 // (the leader is the guest of seat 0: a room)
+            with_bot.leader = 2;                                                                         // the leader's seat 2 is a bot
+            ASSERT_FALSE(decode(encode(with_bot), back));
         }
 
         // ---- the Start: the platforms of the seats are its last four bytes before the mode (protocol 17: the very last byte) ----
@@ -1506,7 +1510,7 @@ void run_protocol15_tests() {
 
 void run_protocol16_tests() {
     TEST_CASE("N2.105 Protocol 16, The Hello And The Welcome: The Client Kind (A Game Or A Lobby Page) Follows The Platform Byte And Leads The Create Block; The Lobby Flag Of The Block Needs A Leader Who Starts And All Four Colors; The Welcome Says When Its Hello Made The Room, And Only For A Seat That Has A Key; Every Other Value, Truncation And Extra Byte Is Refused, And The Layout Of Protocol 15 Is No Hello Of This Protocol") {
-        ASSERT_EQ(kProtocolVersion, 27);
+        ASSERT_EQ(kProtocolVersion, ants_test::kPinnedProtocol);
         ASSERT_TRUE(kClientGame == 0 && kClientPage == 1 && kCreateLeaderStarts == 1 && kCreateLobby == 2 && kWelcomeRejoin == 1 && kWelcomeCreated == 2);
         // a lobby page's Hello that makes a lobby room, byte by byte: the platform byte, the client kind, then the block (map, seats, team_a, team_b, flags)
         HelloMsg h;
@@ -1643,14 +1647,14 @@ void run_protocol16_tests() {
             ASSERT_TRUE(m.team_a == 1 && m.team_b == 3 && m.teams() == sim::StartTeams({true, 1, 3}));
             std::vector<uint8_t> want = {32, 12};
             for (const char c : std::string("TREASURE.LVL")) want.push_back(static_cast<uint8_t>(c));
-            for (const uint8_t b : {uint8_t{0}, uint8_t{1}, uint8_t{3}, uint8_t{4}, uint8_t{1}, uint8_t{3}, uint8_t{0}}) want.push_back(b);        // (protocol 17: the game mode is the last byte, N2.112)
+            for (const uint8_t b : {uint8_t{0}, uint8_t{1}, uint8_t{3}, uint8_t{4}, uint8_t{1}, uint8_t{3}, uint8_t{0}, uint8_t{0}}) want.push_back(b);        // (protocol 17: the game mode, N2.112; protocol 28: Fog of War is the last byte, N2.115)
             ASSERT_TRUE(encode(m) == want);
             ASSERT_EQ(peek_type(want), MsgType::Plan);
             PlanMsg back;
             ASSERT_TRUE(decode(want, back) && back.map_name == "TREASURE.LVL" && back.plan == m.plan && back.team_a == 1 && back.team_b == 3);
             ASSERT_TRUE(encode(back) == want);
             PlanMsg none;                                                                               // the map stays the room's, every color is open, free for all
-            ASSERT_TRUE(encode(none) == (std::vector<uint8_t>{32, 0, 0, 0, 0, 0, 255, 255, 0}));
+            ASSERT_TRUE(encode(none) == (std::vector<uint8_t>{32, 0, 0, 0, 0, 0, 255, 255, 0, 0}));
             ASSERT_TRUE(decode(encode(none), back) && back.map_name.empty() && !back.teams().set);
             m.set_teams(sim::StartTeams{});
             ASSERT_TRUE(m.team_a == kNoTeam && m.team_b == kNoTeam && !m.teams().set);
@@ -1729,7 +1733,7 @@ void run_protocol16_tests() {
             const auto with_map = [](const std::string& map) {
                 std::vector<uint8_t> bytes = {32, static_cast<uint8_t>(map.size())};
                 bytes.insert(bytes.end(), map.begin(), map.end());
-                for (const uint8_t b : {uint8_t{0}, uint8_t{0}, uint8_t{0}, uint8_t{0}, uint8_t{255}, uint8_t{255}, uint8_t{0}}) bytes.push_back(b);
+                for (const uint8_t b : {uint8_t{0}, uint8_t{0}, uint8_t{0}, uint8_t{0}, uint8_t{255}, uint8_t{255}, uint8_t{0}, uint8_t{0}}) bytes.push_back(b);
                 return bytes;
             };
             PlanMsg got;
@@ -2055,6 +2059,9 @@ void run_protocol16_tests() {
             PlanMsg d;
             d.map_name = "TINY.LVL"; d.plan = {PlanKind::Open, PlanKind::Hard, PlanKind::Open, PlanKind::Nobody}; d.mode = 1;           // (protocol 17: the game mode "187")
             add("plan", "plan-187", encode(d));
+            PlanMsg e;
+            e.map_name = "SMALL.LVL"; e.plan = {PlanKind::Open, PlanKind::Nobody, PlanKind::Open, PlanKind::Open}; e.team_a = 0; e.team_b = 2; e.fog = true;           // (protocol 28: Fog of War)
+            add("plan", "plan-fog", encode(e));
         }
         add("name", "name-plain", encode(NameMsg{"Priya"}));
         add("name", "name-32-chars-with-spaces", encode(NameMsg{"Sam the Great, 3rd of his name!!"}));
@@ -2117,6 +2124,10 @@ void run_protocol16_tests() {
             y.slots[0] = seat(SlotState::Client, "Priya", 12, 0); y.slots[1] = seat(SlotState::Client, "Sam", 40, 0); y.slots[2] = seat(SlotState::Client, "Juniper", 9, 0); y.slots[3] = seat(SlotState::Bot, "Bot (Hard)", 0, 0);
             y.map_name = "TINY.LVL"; y.you = 2; y.leader = 0; y.flags = kRoomLeaderStarts | kRoomLobby; y.plan = {PlanKind::Open, PlanKind::Open, PlanKind::Open, PlanKind::Hard}; y.ready = 0x02;       // (protocol 27: Sam is ready, Juniper is not, Priya leads, the bot is never asked)
             rooms.emplace_back("room-lobby-ready", y);
+            RoomMsg f;
+            f.slots[0] = seat(SlotState::Client, "Priya", 12, 0); f.slots[1] = seat(SlotState::Client, "Sam", 40, 0); f.slots[2] = seat(SlotState::Empty, "", kRttUnknown, 0); f.slots[3] = seat(SlotState::Empty, "", kRttUnknown, 0);
+            f.map_name = "TINY.LVL"; f.you = 1; f.leader = 0; f.flags = kRoomLeaderStarts | kRoomLobby; f.plan = {PlanKind::Open, PlanKind::Open, PlanKind::Nobody, PlanKind::Open}; f.fog = true;       // (protocol 28: the plan has fog, so no bot)
+            rooms.emplace_back("room-lobby-fog", f);
         }
         for (const auto& r : rooms) add("room", r.first.c_str(), encode(r.second));
         add("chat", "chat-notice-from-room", encode(ChatMsg{kRoomSender, false, "Priya's game did not come in time."}));
@@ -2213,7 +2224,7 @@ void run_protocol16_tests() {
     } TEST_END();
 
     TEST_CASE("N2.113 Protocol 22, The Visibility: VisibilityMsg Is The Type 35 And One Byte, 0 (Private) Or 1 (Public), Two Bytes And Nothing Else; Every Other Value, Every Truncation, Every Extra Byte And Every Other Type Byte Is Refused; MsgType::Last Is 35; The Room's Flag kRoomPublic (8) Is A Lobby Room's: The Decoder Refuses It In Any Other Room And Every Flag Byte Outside The Four Rule Bits; The Protocol Number Is 22") {
-        ASSERT_EQ(kProtocolVersion, uint16_t{27});
+        ASSERT_EQ(kProtocolVersion, ants_test::kPinnedProtocol);
         ASSERT_TRUE(static_cast<int>(MsgType::Visibility) == 35 && static_cast<int>(MsgType::Last) == 41 && static_cast<int>(MsgType::Remove) == 34 && kRoomPublic == 8);
         // the layout, byte by byte: the type and the choice
         ASSERT_TRUE(encode(VisibilityMsg{true}) == (std::vector<uint8_t>{35, 1}));
@@ -2294,7 +2305,7 @@ void run_protocol16_tests() {
         }
     } TEST_END();
     TEST_CASE("N2.114 Protocol 27, Ready Up: ReadyMsg Is The Type 41 And One Byte, 0 Or 1, Two Bytes And Nothing Else (Every Other Value, Truncation, Extra Byte And Type Byte Is Refused); The Room Message Ends With The Ready Mask, A Byte That The Decoder Takes Only For A Lobby Room's Person Who Is A Page And Does Not Lead; The Seating Guard Does Not See It") {
-        ASSERT_EQ(kProtocolVersion, uint16_t{27});
+        ASSERT_EQ(kProtocolVersion, ants_test::kPinnedProtocol);
         ASSERT_TRUE(static_cast<int>(MsgType::Ready) == 41 && static_cast<int>(MsgType::Last) == 41 && static_cast<int>(MsgType::Signal) == 40);
         ASSERT_TRUE(encode(ReadyMsg{true}) == (std::vector<uint8_t>{41, 1}));
         ASSERT_TRUE(encode(ReadyMsg{false}) == (std::vector<uint8_t>{41, 0}));
@@ -2379,6 +2390,74 @@ void run_protocol16_tests() {
             nolead.flags = kRoomLeaderStarts | kRoomLobby;
             nolead.ready = 0x01;
             ASSERT_TRUE(decode(encode(nolead), got));                                                                // (no leader: every person's mark may be shown)
+        }
+    } TEST_END();
+    TEST_CASE("N2.115 Protocol 28, Fog Of War: PlanMsg Ends With One More Byte, 0 Or 1 (Every Other Value, And A Plan Of Protocol 27 With No Such Byte, Is Refused); A Room Message Has The Byte Already And Is None When It Shows Fog Together With A Color For A Computer Player Or A Computer Player In A Seat") {
+        ASSERT_EQ(kProtocolVersion, ants_test::kPinnedProtocol);
+        PlanMsg m;
+        m.map_name = "SMALL.LVL";
+        m.plan = {PlanKind::Open, PlanKind::Nobody, PlanKind::Open, PlanKind::Open};
+        m.set_teams(sim::StartTeams{true, 0, 2});
+        m.fog = true;
+        const std::vector<uint8_t> on = encode(m);
+        ASSERT_TRUE(on.back() == 1 && on[on.size() - 2] == 0);                                                  // (the mode is the byte before it)
+        PlanMsg back;
+        ASSERT_TRUE(decode(on, back) && back.fog && back.map_name == "SMALL.LVL" && back.plan == m.plan && back.team_a == 0 && back.team_b == 2 && encode(back) == on);
+        m.fog = false;
+        const std::vector<uint8_t> off = encode(m);
+        ASSERT_TRUE(off.size() == on.size() && off.back() == 0 && std::equal(on.begin(), on.end() - 1, off.begin()));        // (fog is the only byte that differs)
+        ASSERT_TRUE(decode(off, back) && !back.fog && encode(back) == off);
+        ASSERT_FALSE(PlanMsg{}.fog);
+        for (unsigned value = 2; value < 256; ++value) {
+            std::vector<uint8_t> loud = on;
+            loud.back() = static_cast<uint8_t>(value);
+            PlanMsg keep;
+            keep.fog = true;
+            ASSERT_FALSE(decode(loud, keep));
+            ASSERT_TRUE(keep.fog);                                                                              // (the target is left alone)
+        }
+        ASSERT_FALSE(decode(std::vector<uint8_t>(on.begin(), on.end() - 1), back));                             // (a plan of protocol 27 ends with the mode)
+        // has_bot: a color whose kind is Easy, Medium or Hard, in any of the 625 plans
+        for (unsigned code = 0; code < 625; ++code) {
+            PlanMsg p;
+            unsigned rest = code;
+            bool want = false;
+            for (PlanKind& kind : p.plan) {
+                kind = static_cast<PlanKind>(rest % 5u);
+                want = want || (kind == PlanKind::Easy || kind == PlanKind::Medium || kind == PlanKind::Hard);
+                rest /= 5u;
+            }
+            ASSERT_EQ(p.has_bot(), want);
+        }
+        // the Room message: fog is shown with colors that are Open or Nobody; a color of a computer player makes it no Room message, in every color and with every level
+        for (const bool lobby : {true, false}) {
+            RoomMsg room = server_room_of(0);
+            room.flags = lobby ? static_cast<uint8_t>(kRoomLeaderStarts | kRoomLobby) : uint8_t{0};
+            room.fog = true;
+            RoomMsg got;
+            ASSERT_TRUE(decode(encode(room), got) && got.fog && encode(got) == encode(room));
+            if (!lobby) continue;                                                                               // (a room that is no lobby room has no plan)
+            room.plan = {PlanKind::Open, PlanKind::Nobody, PlanKind::Open, PlanKind::Nobody};
+            ASSERT_TRUE(decode(encode(room), got) && got.fog);
+            for (const PlanKind bot : {PlanKind::Easy, PlanKind::Medium, PlanKind::Hard}) {
+                for (size_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+                    RoomMsg with = room;
+                    with.plan[seat] = bot;
+                    with.fog = true;
+                    ASSERT_FALSE(decode(encode(with), got));
+                    with.fog = false;
+                    ASSERT_TRUE(decode(encode(with), got) && !got.fog && got.plan[seat] == bot);              // (the same room without fog is a room: bots plan freely)
+                }
+            }
+            for (size_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {                                          // a computer player in a seat is no more a room with fog than a color for one (the colors say Open or Nobody here)
+                RoomMsg seated = room;
+                seated.leader = kNoLeader;                                                                    // (a bot never leads: a leader in the seat would make the room fail for that reason)
+                seated.slots[seat] = {SlotState::Bot, "Pip (bot, Hard)", 0};
+                seated.fog = true;
+                ASSERT_FALSE(decode(encode(seated), got));
+                seated.fog = false;
+                ASSERT_TRUE(decode(encode(seated), got) && !got.fog && got.slots[seat].state == SlotState::Bot);
+            }
         }
     } TEST_END();
 }

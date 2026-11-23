@@ -25,7 +25,6 @@ const playersPath = path.join(lobbyDir, 'home', 'players.js');
 const playersSource = fs.readFileSync(playersPath, 'utf8');
 const Pure = require(playersPath);
 const Chat = require(path.join(lobbyDir, 'home', 'chat.js'));
-const Home = require(path.join(lobbyDir, 'home', 'home.js'));
 const H = require('./web_page_harness.js')(lobbyPath);
 const { El, runLobby, KEY, E, C, roomMessage } = H;
 const Rules = H.RULES0;
@@ -77,11 +76,11 @@ const W = (o) => Object.assign({ t: 'welcome', v: 1, you: { name: 'maple', mod: 
 const row = (i, name, at, more) => Object.assign({ i, name, at: at || 'look' }, more || {});
 const FULL = (rows, o) => Object.assign({ t: 'who', full: true, n: rows.length + 1, g: 0, more: 0, rows }, o);
 const MAP_OF = { 'TREASURE.LVL': 'Treasure' };
-// the page's room, as the page's LobbyClient has it (client.room: a Room message of the server, decoded), and Home's count of it
+// the page's room, as the page's LobbyClient has it (client.room: a Room message of the server, decoded), and the count of its seats
 const ROOM = (o) => Object.assign({ lobby: true, starting: false, isPublic: false, map: 'TREASURE.LVL', slots: [] }, o);
 const CLIENT = (room, code, guest) => ({ room, code: code || 'c1v3rr', isLeader: () => !guest });
 
-// one list on a fake page: o.width and o.height (the window), o.client, o.count (Home's count of the room), o.handing, o.noQuick, o.popover
+// one list on a fake page: o.width and o.height (the window), o.client, o.count (the seats of the room: { people, size }, made into the Room's model that the page hands over), o.handing, o.noQuick, o.popover
 function rig(o) {
     o = o || {};
     const env = { elements: {}, innerHTMLWrites: [] };
@@ -89,8 +88,9 @@ function rig(o) {
     const Players = loadPlayers(clock);
     const doc = { hidden: false, listeners: {}, activeElement: null, createElement: (t) => new El(env, t), getElementById: () => null, addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); } };
     env.doc = doc;
-    const state = { client: o.client || null, count: o.count || null, handing: !!o.handing };
-    const win = { innerWidth: o.width || 1280, innerHeight: o.height || 800, listeners: {}, addEventListener(t, fn) { (win.listeners[t] = win.listeners[t] || []).push(fn); }, AntsHomeChat: Chat, AntsLobbyRules: Rules, AntsHome: Object.assign({}, Home, { countOf: () => state.count }) };
+    const state = { client: o.client || null, count: o.count || null, handing: !!o.handing };       // (count: { people, size } stands for the Room's model: that many persons, then open colors up to size, then Closed ones)
+    const modelOf = (c) => (c ? { slots: [0, 1, 2, 3].map((i) => ({ kind: i < c.people ? 'person' : i < c.size ? 'open' : 'nobody' })) } : null);
+    const win = { innerWidth: o.width || 1280, innerHeight: o.height || 800, listeners: {}, addEventListener(t, fn) { (win.listeners[t] = win.listeners[t] || []).push(fn); }, AntsHomeChat: Chat, AntsLobbyRules: Rules };
     const store = { items: {}, getItem(k) { return Object.prototype.hasOwnProperty.call(store.items, k) ? store.items[k] : null; }, setItem(k, v) { store.items[k] = String(v); }, removeItem(k) { delete store.items[k]; } };
     win.sessionStorage = store;
     const host = new El(env, 'div', 'home'), yard = new El(env, 'main', 'yard'), right = new El(env, 'div'), quick = new El(env, 'button'), gamesButton = new El(env, 'button');
@@ -101,7 +101,7 @@ function rig(o) {
     quick.click = () => pressed.push('quick host');
     const sent = [], taps = [], errors = [], link = { open: true };
     const dock = { tap(fn) { taps.push(fn); }, send(obj) { if (!link.open) return false; sent.push(JSON.parse(JSON.stringify(obj))); return true; } };
-    const page = { client: () => state.client, info: () => ({ client: !!state.client, model: null }), handing: () => state.handing };
+    const page = { client: () => state.client, info: () => ({ client: !!state.client, model: modelOf(state.count) }), handing: () => state.handing };
     const list = Players.mount({ doc, win, host, dock, page, yard, quickHost: quick, games: gamesButton, now: clock.now, error: (e) => errors.push(e) });
     const r = { store, env, clock, Players, doc, win, host, yard, right, quick, games: gamesButton, list, dock, sent, taps, errors, state, pressed, found, link };
     r.emit = (kind, m) => taps.forEach((fn) => fn(kind, m));
@@ -184,6 +184,9 @@ function rig(o) {
     same('... a match by its map and its players, "In a game" when nothing is known or the hub says nothing of it, and "Private game" only on the visitor\'s own row', [P.metaOf(m({ at: 'play', pub: true, mapName: 'Islands', n: 3 }), false), P.metaOf(m({ at: 'play', pub: true, mapName: 'Islands', n: 1 }), false), P.metaOf(m({ at: 'play', pub: true }), false), P.metaOf(m({ at: 'play' }), false), P.metaOf(m({ at: 'play' }), true), P.metaOf(m({ at: 'play' }), true, true), P.metaOf(m({ at: 'play', pub: true, n: 0 }), false)], ['Islands · 3 players', 'Islands · 1 player', 'In a game', 'In a game', 'In a game', 'Private game', '0 players']);
     same('a name in the possessive: "Sage’s", "Tess’" after an s', [P.possessive('sage'), P.possessive('tess'), P.possessive('Tess')], ['sage’s', 'tess’', 'Tess’']);
 
+    const slots = (kinds) => ({ slots: kinds.map((kind) => ({ kind })) });
+    same('the seats of a room: persons and computer players are people, a Closed color is no seat, no model of four colors is no count', [P.countOf(slots(['person', 'open', 'open', 'open'])), P.countOf(slots(['person', 'bot', 'open', 'nobody'])), P.countOf(slots(['person', 'person', 'bot', 'bot'])), P.countOf(null), P.countOf({}), P.countOf(slots(['person', 'open']))],
+        [{ people: 1, size: 4 }, { people: 2, size: 3 }, { people: 4, size: 4 }, null, null, null]);
     const say = P.announceOf;
     same('no room: looking', [say(null, null, false), say({}, null, false), say({ room: null }, null, false)], [{ at: 'look' }, { at: 'look' }, { at: 'look' }]);
     same('a private room that waits says only that: no map, no seats, no code', say(CLIENT(ROOM({ isPublic: false })), { people: 2, size: 4 }, false), { at: 'wait', pub: false });
@@ -611,16 +614,16 @@ function bringPlayers(env) {
     env.win.AntsHomePlayers = H.loadFile('home/players.js', env.scope).AntsHomePlayers;
     filesOf(env, 'players')[0].onload();
     const yard = home.children.find((c) => c.id === 'hmain');
-    check('... then its box is in Home\'s body, and Home\'s own parts are where they were', yard.children.some((c) => cls(c).indexOf('pl-root') !== -1) && home.children.slice(0, 4).map((c) => c.tagName).join() === 'header,main,div,nav' && home.children[4].id === 'gchat');
+    check('... then its box is in Home\'s body, and Home\'s own parts are where they were', yard.children.some((c) => cls(c).indexOf('pl-root') !== -1) && home.children.slice(0, 3).map((c) => c.tagName).join() === 'header,main,nav' && home.children[3].id === 'gchat');
     hub[0].readyState = 1; hub[0].onmessage({ data: JSON.stringify(W({ you: { name: 'maya', mod: false }, online: 2 })) });
     check('the dock\'s socket carries the list\'s words: the visitor says where it is and asks for the list, on the same socket (no second socket)', hub.length === 1 && hub[0].sent.map((x) => JSON.parse(x)).filter((m) => m.t === 'here' || m.t === 'who').map((m) => m.t).join() === 'here,who');
     hub[0].onmessage({ data: JSON.stringify(FULL([row(1, 'maya'), row(2, 'sage')], { n: 2 })) });
     const box = yard.children.find((c) => cls(c).indexOf('pl-root') !== -1);
-    check('a list from the hub shows (the chat dock\'s count says the same number, 2 here now)', box.hidden === false && one(box, 'pl-count').textContent === '2' && one(home.children[4], 'gc-on').textContent === '2 here now');
+    check('a list from the hub shows (the chat dock\'s count says the same number, 2 here now)', box.hidden === false && one(box, 'pl-count').textContent === '2' && one(home.children[3], 'gc-on').textContent === '2 here now');
     env.advance(10);
     check('the page does not ask for the list again (the same two files)', filesOf(env, 'players').length === 2);
-    env.home('mine').click();
-    env.roomBar('rhome').click();
+    env.makeRoom();
+    env.toggleRoom();
     env.advance(10);
     check('Home shown again asks for nothing more', filesOf(env, 'players').length === 2 && filesOf(env, 'chat').length === 2);
 }
@@ -632,7 +635,7 @@ function bringPlayers(env) {
     hubFor(broken); broken.advance(0); bringChat(broken);
     broken.win.AntsHomePlayers = { mount() { throw new Error('a list that breaks'); } };
     filesOf(broken, 'players').forEach((n) => { if (n.onload) n.onload(); });
-    check('a list that throws when it mounts: Home goes on (My room still makes the room, the dock is there)', broken.$('home').children[4].id === 'gchat' && (broken.home('mine').click(), broken.sockets.length === 1) && broken.screen() === 'room');
+    check('a list that throws when it mounts: Home goes on (the page still makes a room, the dock is there)', broken.$('home').children[3].id === 'gchat' && (broken.makeRoom(), broken.sockets.length === 1) && broken.screen() === 'room');
     const seen = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
     hubFor(seen); seen.advance(0); bringChat(seen);
     let given = null;
@@ -642,10 +645,10 @@ function bringPlayers(env) {
     const none = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
     hubFor(none); none.advance(0); bringChat(none);
     filesOf(none, 'players').forEach((n) => { if (n.onload) n.onload(); });
-    check('a script that did not define the list (no AntsHomePlayers) mounts nothing', none.win.AntsHomePlayers === undefined && none.$('home').children.length === 5);
+    check('a script that did not define the list (no AntsHomePlayers) mounts nothing', none.win.AntsHomePlayers === undefined && none.$('home').children.length === 4);
     const gone = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
     hubFor(gone); gone.advance(0); bringChat(gone);
-    check('(a style that never comes: nothing is mounted, as for the others)', filesOf(gone, 'players').length === 2 && gone.$('home').children.length === 5);
+    check('(a style that never comes: nothing is mounted, as for the others)', filesOf(gone, 'players').length === 2 && gone.$('home').children.length === 4);
 }
 {   // the hand-off to the game: the list is inert with the bars and the dock; a list mounted late is inert from the start
     const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, picker: true });
@@ -653,13 +656,13 @@ function bringPlayers(env) {
     const yard = env.$('home').children.find((c) => c.id === 'hmain');
     const box = yard.children.find((c) => cls(c).indexOf('pl-root') !== -1);
     check('(the list is there and takes presses)', !!box && !box.hasAttribute('inert'));
-    env.home('mine').click();
+    env.makeRoom();
     env.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']] });
     env.$('change-map').click();
     check('a dialog over the page makes the list inert with the bars and the dock', box.hasAttribute('inert') && env.home('hbar').hasAttribute('inert'));
     const late = runLobby('', { 'ants.name': 'Sam' }, { stayHome: true });
     hubFor(late); late.advance(0); bringChat(late);
-    late.home('mine').click();
+    late.makeRoom();
     const sock = late.arrive({ key: KEY, seats: [[C, 'Sam'], [E, ''], [E, ''], [E, '']] });
     sock.receive(roomMessage([[C, 'Sam'], [C, 'Maya'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
     bringPlayers(late);

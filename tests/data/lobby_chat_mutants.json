@@ -788,8 +788,8 @@
   {
    "id": "css_rows_do_not_wrap",
    "file": "web/front/lobby_chat.css",
-   "old": ".chat-log > div { --accent: #79bf93; font-size: 16px; line-height: 1.35; color: var(--cream); overflow-wrap: anywhere; }",
-   "new": ".chat-log > div { --accent: #79bf93; font-size: 16px; line-height: 1.35; color: var(--cream); }",
+   "old": ".chat-log > div { --accent: #86d0a4; font-size: 16px; line-height: 1.35; color: var(--cream); overflow-wrap: anywhere; }",
+   "new": ".chat-log > div { --accent: #86d0a4; font-size: 16px; line-height: 1.35; color: var(--cream); }",
    "test": "python3 -m unittest tests.scripts.test_web_lobby_chat.ThePage tests.scripts.test_web_lobby_chat.TheStylesheet"
   },
   {
@@ -857,9 +857,9 @@
   },
   {
    "id": "page_room_notice_is_hidden_by_style",
-   "file": "web/home/room.css",
-   "old": ".room-notice { margin: 3px 0 0;",
-   "new": ".room-notice { display: none; margin: 3px 0 0;",
+   "file": "web/front/room_sheet.css",
+   "old": ".room-notice { margin: 0; padding-top: 10px;",
+   "new": ".room-notice { display: none; margin: 0; padding-top: 10px;",
    "test": "python3 -m unittest tests.scripts.test_web_lobby_chat.ThePage tests.scripts.test_web_lobby_chat.TheStylesheet"
   },
   {

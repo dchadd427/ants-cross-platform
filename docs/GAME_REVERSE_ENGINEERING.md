@@ -2558,6 +2558,37 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `inc
     `0x1028b26` the Stop button) were read: none looks for an idle carrier, and ANTHILLQ only dispatches ants with `+0x68 == 2` (queued): an ant whose dispatch failed has `+0x68 == 0` again
     (the goal check of `GoTo` clears it) and nothing will ever dispatch it. A human has to click it; a bot has to do the same.
 
+  * **A thief with loot whose way home is refused loops in the original too** *(read in `Ants.exe` with Capstone on 2026-11-21)*:
+    * The end of the raid clip (case 0xd, `0x101efbd`): `SetActionDefault(0)` first runs the cleanup of action 0xd (the loot moves, `FUN_0101e27f`, so the holding flag `+0xe8` is set), then the path is cleared, and for an ant of
+      the local team with `+0xe8 != 0` `GoTo(own entrance +0x2e, 0, 0, 0)` is called (`0x101f190`); a thief with no loot stays idle on the raid tile.
+    * When that walk is refused (count 0 at `0x100cbe7`) the ant plays the can't-go clip (`htcg301`, 890 ms for a carrying thief). At its end (`0x101f123`) `FUN_0101d822` asks the special tiles of all four teams (the entrance,
+      the raid tile, the three tiles above the mound), not only the ant's own: a thief that stands on an enemy's raid tile is on one, so it gets `GoTo(+0x42)` of its own hill (`+0x42` is (row + 3, column + 3) from the entrance,
+      `0x100ee11`), and a refusal repeats the cycle with no counter, flag or other exit. It ends when a walk exists, when the ant is ordered onto an ordinary tile (its next refusal ends in `StopSync`), or when it dies.
+    * No input cancels the clip. The accept predicate `FUN_0101ff5a` takes the actions 0, 1 and 3 and has three callers (`0x101fc7d` GoTo with the player flag, `0x102880d` the group order, `0x1028ab8` Stop); action 0xb fails all
+      three, and nothing else writes an ant's order (the loot has no drop command: `SetHolding`, `0x101ac8c`, is called only by the deposit, the raid cleanup and the harvest cleanup).
+
+  * **The gap before the path manager's answer** *(the same reading; remake rules number 14 of the original's game and 15 of 187, `SimulationEngine::set_path_answers_after_commands`, `src/ants_sim/movement_system.cpp` `pathmgr_run`)*:
+    * `GoTo` (`FUN_0101fc50`) does `SetActionDefault(0)`, clears the path and queues the request (`0x10246e8`, call at `0x101ff11`); the answer is delivered by a run of PATHMGR. Until that run the ant has action 0, no path and
+      `+0x84 == 0`, so the predicate passes and a click is taken; the click's `GoTo` replaces the ant's queued request (the first request with the ant's number is removed, `0x10246f8` .. `0x102473b`). Stop does not help in the gap:
+      the loop of the Stop button (`0x1028a60`) skips an ant whose path count `+0xd8` is 0 and whose action `+0xe4` is 0 (`0x1028aef` .. `0x1028b00`, read again with Capstone on 2026-11-21), so the ant is not stopped and walks as soon
+      as the answer comes.
+    * PATHMGR is a task of the list scheduler, added with a delay of 0 and a period of 0x32 (`0x100e4ff` .. `0x100e50f`). The scheduler's `AddTask` (`0x1030e7b`) sets the first due time to `timeGetTime()` plus the delay; after a run that
+      returns 1 the task is due again at `timeGetTime()` plus the interval, taken after the run (`0x10311a8` .. `0x10311b7`); its `Tick` (`0x10310e8`) runs only the head task, and only if it is due. The message loop (`0x1031916`)
+      handles every waiting window message (the clicks) first and calls `Tick` only on a pass with none waiting. A run takes one request and gives it one slice of 1,000 expansions (`0x10247ac`): a search whose region has up to
+      1,000 reachable tiles ends with its answer in the first run after the request, a larger one needs a run for each 1,000 pops and keeps the ant in the gap 50 ms longer for each.
+    * In time: the can't-go clip starts inside a run (the answer) and its last frame is handled by the first scheduler pass after it is due (the animation step runs on every pass, 5.59), so the request of the clip's end is made at
+      about 890 ms after the answer and the 18th run after it falls at about 900 ms plus 18 times the run time and the pass latency: the gap is some 10 to 50 ms of each cycle of 900 to 950 ms. Not measured on the running program.
+    * **The remake** applied the commands of a turn and then ran the tick, whose last act was one run of each team's manager: the request of a clip end was answered at the end of the same tick, before the next commands, so no
+      command ever met the ant in the gap and the loop could not be left by an order. From the rules number 14 (187: 15) the answer of a run to a request that an EVENT made (a clip end, an arrival, the hill queue), a path that is
+      found as well as "no path", is held at the end of the tick and given at the start of the next one, after the turn's commands and the ants' sync (`pathmgr_answer`; the held answer is in the state hash): the task's delay of 0 and
+      period of 50 ms put its runs on the tick boundaries, and at an instant of a boundary the original handles the waiting clicks first. An ant that an event sent is therefore idle with no path while the commands of the next turn
+      are applied: a move order is taken and replaces its request and the held answer, and a Stop is skipped (the ant has no path and action 0, `0x1028aef`), so that the ant walks when the answer comes, found or refused. The answer
+      is given at the instant at which it was found (the clock of a tick's start is the clock of the previous tick's end), so the walk begins at the same time as before. An order that a command gave is answered at the end of the
+      tick as before (the original answers it at the run of its own boundary, before the commands of the next one: the remake's tick has the same order), the searches run at the same instants and give the same paths, and a play
+      in which no event asks for a walk is the same play. For the thief of the loop it is one turn of the 18 of each cycle (900 ms: 17 ticks in the clip, then the gap); the order is taken if its goal can be reached, and the loop is
+      over; every other turn finds the clip, which refuses as in the original. A search that needs k slices keeps k boundaries open. The numbers 5 to 13 (187: 6, 7, 10, 11 and 12) give every answer at once. On the 540 maps of the library (the scripted play of `hash_ledger`, 2,400 ticks) the ledger of the numbers 5 to 13 (`--answers-at-end`) is the one that main had, byte for byte, with the held answer and the mark of an event's request in the state hash (neither is ever set before 14); under 14, 81 maps differ at tick 200 and 519 at tick 2,400, because an event asks for a walk in nearly every play (a clip's end, an arrival, a hatch).
+      Tests: `test_pathmgr_gap` (2.9.11), `test_rules_cantgo` (2.29.9).
+
   * **What frees such an ant in the remake** (probed on TREASURE seed 1, tick 1000, the carrier on the waiting tile with `home_state` 0): a group order to the entrance sets `home_state` 1, the
     path of length 1 completes at once, the arrival sets `home_state` 2 (queued, priority) and ANTHILLQ dispatches it about 100 ticks later; it enters and delivers (the entrance is replaced by the
     waiting tile for an ant that is already there: the goal check is the same). When the queue around the gate is long, the dispatch can fail the same way (idle queued ants cost 8000 on the way)

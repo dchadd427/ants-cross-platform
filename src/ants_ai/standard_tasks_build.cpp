@@ -229,7 +229,7 @@ void WallTask::step(TaskContext& c) {
             const auto b = counter_black_.find(static_cast<int64_t>(w.tile.y) * 4096 + w.tile.x);
             if (ours || (b != counter_black_.end() && b->second > now)) continue;
             if (plan.fire_defence && fired_in_wall(v, hill, plan, w.tile, hold_over)) continue;          // a wall of the ring round the own gate: not before the Fire Ant that lights it is dealt with
-            const int harm = harm_to(v, c.map, plan, w.tile);                              // the own economy first, then the ally's
+            const int harm = harm_to(v, c.map, plan, w.tile, false, &tactics_.shut_in);                              // the own economy first, then the ally's
             if (harm == 0) continue;
             if (plan.own_ground_counters && harm >= 1) {
                 if (tactics_.wall_demand && w.tile.chebyshev_dist(hill.origin) > plan.counter_keeper_leash) continue;        // the keeper stays at its hole while the walls are wanted
@@ -355,8 +355,14 @@ void WallTask::step(TaskContext& c) {
 
 // ---- BombTask -------------------------------------------------------------------------------------------------------------------------------------------
 
-int harm_to(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile, bool map_owned) noexcept {
+int harm_to(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile, bool map_owned, const std::vector<sim::TileCoord>* shut_in) noexcept {
     if (harms_economy(view, map, plan, tile, map_owned)) return 1;
+    if (plan.rescue_thief && shut_in != nullptr && shuts_in_own_thief(*shut_in, map, tile)) {                  // (the wall that shuts in an own Thief: the points in its hands are the economy's too)
+        for (const AntView& e : view.others()) {                                                   // (an ant of another team beside the wall: the Fire Ant that walks there is lost with the loot it was sent for)
+            if (plan.rescue_guard != 0 && e.hp > 0 && e.tile.chebyshev_dist(tile) <= static_cast<int32_t>(plan.rescue_guard)) return 0;
+        }
+        return 1;
+    }
     const uint8_t ally = view.ally();
     if (!plan.ally_help || ally >= sim::MAX_PLAYERS) return 0;
     if (plan.own_ground_counters && !map_owned && ally_hazard_ground(view, map, plan, tile) == HazardGround::Foreign) return 0;      // nor is a third team's base the ally's business
@@ -462,7 +468,7 @@ void BombTask::step(TaskContext& c) {
         if (b.owner == c.seat || (v.ally() < sim::MAX_PLAYERS && b.owner == v.ally()) || (plan.gate_spare_map_bombs && tactics_.gate_goals_live && b.owner >= sim::MAX_PLAYERS)) continue;   // an own or an allied bomb is no enemy's; a gate map's own bombs (no team, 255) are its gate, which the live gate goals defuse on their way (goals exhausted or in the fallback: countered as on any map)
         const auto bl = black_.find(key_of(b.tile));
         if (bl != black_.end() && bl->second > now) continue;
-        const int harm = harm_to(v, c.map, plan, b.tile, b.owner >= sim::MAX_PLAYERS);                 // the own economy first, then the ally's (only a Bomber goes there)
+        const int harm = harm_to(v, c.map, plan, b.tile, b.owner >= sim::MAX_PLAYERS, &tactics_.shut_in);                 // the own economy first, then the ally's (only a Bomber goes there)
         if (harm == 0) continue;
         HazardGround ground = HazardGround::Own;
         if (plan.own_ground_counters && b.owner < sim::MAX_PLAYERS) {
@@ -504,7 +510,7 @@ void BombTask::step(TaskContext& c) {
             if (b.owner == c.seat || (ally < sim::MAX_PLAYERS && b.owner == ally) || (b.owner >= sim::MAX_PLAYERS && plan.gate_spare_map_bombs && tactics_.gate_goals_live)) continue;
             const auto bl = black_.find(key_of(b.tile));
             if (bl != black_.end() && bl->second > now) continue;
-            const int harm = harm_to(v, c.map, plan, b.tile, b.owner >= sim::MAX_PLAYERS);
+            const int harm = harm_to(v, c.map, plan, b.tile, b.owner >= sim::MAX_PLAYERS, &tactics_.shut_in);
             if (harm == 0) continue;
             if (plan.own_ground_counters && b.owner < sim::MAX_PLAYERS && few_ants && (hazard_ground(v, c.map, plan, b.tile) != HazardGround::Own || harm == 2)) continue;
             cands.push_back(Cand{&b, harm});

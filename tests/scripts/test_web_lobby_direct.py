@@ -30,7 +30,7 @@ def read(*parts):
 class ThePage(unittest.TestCase):
     def test_the_front_page_has_the_place_loads_the_script_and_the_sheet_and_makes_the_switch_from_the_players_storage(self):
         page = read("web", "lobby.html")
-        self.assertEqual(page.count('<div id="direct"></div>'), 1)
+        self.assertEqual(page.count('<div class="rs-rule" id="direct"></div>'), 1, "the switch is a row of the Rules sheet")
         self.assertEqual(page.count('<script src="front/lobby_direct.js"></script>'), 1)
         self.assertEqual(page.count('href="front/lobby_direct.css"'), 1)
         call = re.search(r"AntsLobbyDirect\.create\(\{[^}]*\}\)", page)

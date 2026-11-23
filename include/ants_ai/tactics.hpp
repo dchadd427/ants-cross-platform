@@ -277,6 +277,17 @@ struct LevelPlan {
     uint32_t raid_black_ticks{600};      // a hill that could not be reached is left alone this long
     bool raid_unjam{true};               // two thieves on one hole: when the one that has raided is shut in on the raid tile because an own ant stands on the last free tile in front of the hole, that ant
                                          // steps aside, and no second thief is sent to a hole while an own thief is still on its raid tile (RaidTask::unjam; false, the ablation unjam=0: the bot as it was; it is part of the can't-go fixes: cantgo_aware off, cg=0, switches it off too)
+    bool refusal_memory{true};           // a click that the engine refused twice (the ant stood where it stood) is not given again for a while, longer after every refusal (RefusalMemory, docs/BOT_UNSTUCK.md; false, the
+                                         // ablation refmem=0: the bot as it was)
+    bool rescue_thief{true};             // a wall that shuts in an own Thief on the raid tile of a hole is one that harms the economy: the Fire Ant puts it out (and the plan wants a Fire Ant for it); false, the ablation
+                                         // rescue=0: the bot as it was (docs/BOT_UNSTUCK.md)
+    bool free_thief{true};               // a Thief with loot that shows the engine's can't-go loop is clicked onto an ordinary tile again and again, a volley of plain moves a few ticks apart, each paid from the budget (FreeThiefTask,
+                                         // Orders::volley, docs/BOT_UNSTUCK.md, "The click of a person who sees a Thief in the loop"; Hard's: the volley is eight tokens, more than the budget of the others can spare; false, the ablation
+                                         // freethief=0: the bot as it was)
+    uint32_t rescue_guard{5};            // the Fire Ant is not sent to put out the walls of a hole while an ant of another team stands within this many tiles of the wall (a person looks first; 0: never looks)
+    uint32_t rescue_after{200};          // a Thief with loot is walled in (and the Fire Ant sent for the walls) when it has shown the can't-go clip on the raid tile of a hole for this many ticks: a refusal that ends by itself is not
+    bool plugs{true};                    // a power-up that plugs the way between the own hill and an ant or a pile of the seat is taken by one ant, which opens it (PlugTask, docs/BOT_UNSTUCK.md; false, the ablation plugs=0:
+                                         // the bot as it was)
     // the stall detector (StandardBot, docs/BOTS.md; 0 switches a trigger off): stall_ticks without a point, or repeat_limit equal orders within repeat_window with nothing banked, send the seat to the
     // plain economy for fallback_ticks (doubled at every stall, at most 9,600)
     uint32_t stall_ticks{3600};
@@ -496,6 +507,9 @@ void without_home_mines(LevelPlan& plan) noexcept;
 void without_kill_batch(LevelPlan& plan) noexcept;
 /// The thief batch off (docs/BOTS.md, "Thieves: the answer to a raid"): the bot as it was before it
 void without_thief_batch(LevelPlan& plan) noexcept;
+/// The unstick batch off (docs/BOT_UNSTUCK.md): no plug task, no refusal memory, no rescue of a walled-in Thief: the bot as it was before it. For `bot_arena --tune unstick=0` and
+/// the tests whose subject is an older rule
+void without_unstick_batch(LevelPlan& plan) noexcept;
 /// The plan without the defence batch (docs/BOT_PEOPLE.md, "Step 1: everyone hits back"): the fights that answer a blow take the own default type and Combat Ants only, as many as the level's defenders, and
 /// end at the target's hit clip unless a kill is in reach. For `bot_arena --tune defence=0` and the tests whose subject is an older rule.
 void without_defence_batch(LevelPlan& plan) noexcept;
@@ -744,7 +758,19 @@ struct Tactics {
     /// indices), and the gate goals leave them to it, also once the work has changed their gates. Decided once with gate_map.
     bool field_map{false};
     std::vector<uint32_t> field_piles;
+    /// The power-up tiles that the plug task has an ant on its way to (set by PlugTask at every look) and those that the trip task has (set by PowerUpTask): neither sends a second ant to the other's tile
+    std::vector<sim::TileCoord> plug_tiles;
+    std::vector<sim::TileCoord> trip_tiles;
+    /// The raid tiles on which an own Thief with loot has shown the can't-go clip for LevelPlan::rescue_after ticks (set by note_shut_in_thieves at every look; docs/BOT_UNSTUCK.md): the plan wants a Fire Ant for the walls in front of them
+    std::vector<sim::TileCoord> shut_in;
+    std::map<uint32_t, std::pair<uint64_t, uint64_t>> shut_seen;       // Thief -> the first and the latest look of its streak in the clip on a raid tile
 };
+
+/// Updates Tactics::shut_in at a look: the raid tiles of the hills (any team's) on which an own Thief with loot has stood in the can't-go clip for LevelPlan::rescue_after ticks (a streak ends when the Thief has not shown the
+/// clip for 60 ticks or has left the tile)
+void note_shut_in_thieves(Tactics& tactics, const BotView& view, const MapInfo& map);
+/// Whether the fire wall on `wall` is one of the three in front of the hole of a hill on whose raid tile (one of `shut_in`) an own Thief with loot is walled in (no order frees it, a wall that is put out does; docs/BOT_UNSTUCK.md)
+bool shuts_in_own_thief(const std::vector<sim::TileCoord>& shut_in, const MapInfo& map, sim::TileCoord wall) noexcept;
 
 /// Whether the fire walls in front of the own thief hole are wanted at this look, by the level's trigger: an enemy Thief ant has been seen lately (Easy, Medium, Hard), an enemy that
 /// plays can reach a Thief power-up (Medium, Hard) or some enemy plays at all (Hard); never for a hole that no wall can shut (mud), never in the last 400 ticks of the match

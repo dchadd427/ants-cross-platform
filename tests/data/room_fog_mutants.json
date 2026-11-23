@@ -1,0 +1,378 @@
+{
+ "note": "Mutants of Fog of War in a lobby room's plan (network protocol 28, docs/PLAY_IN_BROWSER.md 'Fog of War') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the room's rules (only the leader's plan sets fog, a plan with fog and a computer player is refused as a whole and the leader is told, bots and fog never mix in a Room message, the rematch keeps fog, the list says it, the restart record's head and the live board say what the match's Start says) and the page's (a plan that says nothing of fog keeps the room's, the switch is the leader's, the question that turning fog on asks, the bot choices of the menus, the tag of a card, the exchange of two colors keeps the room's game type and fog). Page mutants run their node checks; the others build test_lobby, test_lockstep and test_server first.",
+ "mutants": [
+  {
+   "id": "page_plan_without_fog_is_clear",
+   "file": "web/front/lobby_net.js",
+   "old": "var fog = plan.fog === undefined ? !!r.fog : plan.fog;",
+   "new": "var fog = plan.fog === undefined ? false : plan.fog;",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "page_sends_bots_with_fog",
+   "file": "web/front/lobby_net.js",
+   "old": "if (typeof fog !== 'boolean' || (fog && hasBotKind(kinds))) return false;",
+   "new": "if (typeof fog !== 'boolean') return false;",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "page_room_with_fog_and_bot_is_read",
+   "file": "web/front/lobby_net.js",
+   "old": "if (m.fog === 1 && ((m.plan[p] >= PLAN.Easy && m.plan[p] <= PLAN.Hard) || slots[p].state === SLOT.Bot)) return null;",
+   "new": "",
+   "test": "node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_room_with_fog_and_a_seated_bot_is_read",
+   "file": "web/front/lobby_net.js",
+   "old": "((m.plan[p] >= PLAN.Easy && m.plan[p] <= PLAN.Hard) || slots[p].state === SLOT.Bot)",
+   "new": "(m.plan[p] >= PLAN.Easy && m.plan[p] <= PLAN.Hard)",
+   "test": "node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_fog_byte_is_not_the_plans_last",
+   "file": "web/front/lobby_net.js",
+   "old": "u8(gameMode).u8(fog ? 1 : 0).done();",
+   "new": "u8(fog ? 1 : 0).u8(gameMode).done();",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_fog_event_is_missing",
+   "file": "web/front/lobby_net.js",
+   "old": "if (prev.fog !== next.fog && next.leader !== NO_LEADER) events.push({ type: 'fog',",
+   "new": "if (false) events.push({ type: 'fog',",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "rules_plan_drops_fog",
+   "file": "web/front/lobby_rules.js",
+   "old": "plan.fog = change && typeof change.fog === 'boolean' ? change.fog : !!room.fog;",
+   "new": "plan.fog = change && typeof change.fog === 'boolean' ? change.fog : false;",
+   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "rules_pending_fog_is_not_applied",
+   "file": "web/front/lobby_rules.js",
+   "old": "        out.fog = pending === 1;",
+   "new": "        out.fog = !!room.fog;",
+   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "rules_bot_colors_count_nobody",
+   "file": "web/front/lobby_rules.js",
+   "old": "if (model.slots[s].kind === 'bot') out.push(COLORS[s].name); return out; }",
+   "new": "if (model.slots[s].kind === 'bot' || model.slots[s].kind === 'nobody') out.push(COLORS[s].name); return out; }",
+   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html && node tests/scripts/web_room_fog_check.js web/lobby.html"
+  },
+  {
+   "id": "rules_question_keeps_the_bots",
+   "file": "web/front/lobby_rules.js",
+   "old": "return room.plan.map(function (k) { return k >= 1 && k <= 3 ? 0 : k; });",
+   "new": "return room.plan.slice();",
+   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html && node tests/scripts/web_room_fog_check.js web/lobby.html"
+  },
+  {
+   "id": "room_pending_fog_is_not_carried",
+   "file": "web/lobby.html",
+   "old": "Rules.planWith(Rules.withFog(Rules.withMode(client.room, pendingMode), pendingFog), Rules.modelOf(client.room), change)",
+   "new": "Rules.planWith(Rules.withMode(client.room, pendingMode), Rules.modelOf(client.room), change)",
+   "test": "node tests/scripts/web_room_fog_check.js web/lobby.html"
+  },
+  {
+   "id": "room_switch_works_while_start_waits",
+   "file": "web/front/room_fog.js",
+   "old": "sw.disabled = !!s.disabled;",
+   "new": "sw.disabled = false;",
+   "test": "node tests/scripts/web_room_fog_check.js web/lobby.html"
+  },
+  {
+   "id": "room_press_with_bots_does_not_ask",
+   "file": "web/lobby.html",
+   "old": "            if (!bots.length) { setFog(on, null); return; }",
+   "new": "            if (true) { setFog(on, null); return; }",
+   "test": "node tests/scripts/web_room_fog_check.js web/lobby.html"
+  },
+  {
+   "id": "room_yes_keeps_the_bots",
+   "file": "web/lobby.html",
+   "old": "setFog(true, Rules.kindsWithoutBots(client.room));",
+   "new": "setFog(true, null);",
+   "test": "node tests/scripts/web_room_fog_check.js web/lobby.html"
+  },
+  {
+   "id": "room_bot_choices_stay_open_with_fog",
+   "file": "web/lobby.html",
+   "old": "off: model.fog ? ['easy', 'medium', 'hard'] : [],",
+   "new": "off: [],",
+   "test": "node tests/scripts/web_room_fog_check.js web/lobby.html"
+  },
+  {
+   "id": "room_card_ignores_fog_when_repainting",
+   "file": "web/lobby.html",
+   "old": "fresh[seat] === true, !!m.fog]);",
+   "new": "fresh[seat] === true]);",
+   "test": "node tests/scripts/web_room_fog_check.js web/lobby.html"
+  },
+  {
+   "id": "room_pending_fog_is_never_cleared",
+   "file": "web/lobby.html",
+   "old": "pendingFog = Rules.pendingFogAfter(pendingFog, room, model);",
+   "new": "",
+   "test": "node tests/scripts/web_room_fog_check.js web/lobby.html"
+  },
+  {
+   "id": "room_a_key_picks_a_bot_with_fog",
+   "file": "web/lobby.html",
+   "old": "if (model && model.fog && /^(easy|medium|hard)$/.test(word)) { say(window.AntsRoomFog.TEXT.refusal); render(); return; }",
+   "new": "",
+   "test": "node tests/scripts/web_room_fog_check.js web/lobby.html"
+  },
+  {
+   "id": "room_swap_drops_the_game_type",
+   "file": "web/lobby.html",
+   "old": "if (typeof meant.mode === 'number') plan.mode = meant.mode; ",
+   "new": "",
+   "test": "node tests/scripts/web_room_fog_check.js web/lobby.html"
+  },
+  {
+   "id": "room_swap_drops_the_pending_picks",
+   "file": "web/lobby.html",
+   "old": "var meant = Rules.withFog(Rules.withMode(room, pendingMode), pendingFog);",
+   "new": "var meant = room;",
+   "test": "node tests/scripts/web_room_fog_check.js web/lobby.html"
+  },
+  {
+   "id": "room_swap_drops_fog",
+   "file": "web/lobby.html",
+   "old": " plan.fog = meant.fog; return plan; }",
+   "new": " return plan; }",
+   "test": "node tests/scripts/web_room_fog_check.js web/lobby.html"
+  },
+  {
+   "id": "games_fog_is_any_truthy_value",
+   "file": "web/home/games.js",
+   "old": "size: raw.size, fog: raw.fog === true };",
+   "new": "size: raw.size, fog: !!raw.fog };",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html"
+  },
+  {
+   "id": "games_open_card_has_no_fog_tag",
+   "file": "web/home/games.js",
+   "old": "if (row.fog && !lock) top.appendChild(el('span', 'gfog', TEXT.fogTag));",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html"
+  },
+  {
+   "id": "games_locked_card_has_no_fog_tag",
+   "file": "web/home/games.js",
+   "old": "if (row.fog) marks.appendChild(el('span', 'gfog', TEXT.fogTag));",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html"
+  },
+  {
+   "id": "games_list_is_not_repainted_when_fog_flips",
+   "file": "web/home/games.js",
+   "old": "return [r.code, r.host, r.map, r.people, r.bots, r.free, r.size, r.fog]; })",
+   "new": "return [r.code, r.host, r.map, r.people, r.bots, r.free, r.size]; })",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html"
+  },
+  {
+   "id": "chat_does_not_say_the_switch",
+   "file": "web/front/lobby_chat.js",
+   "old": "            c.on('fog', function (e) { if (c === current) add('sys', -1, '', fogText(e.on, e.name), false); });\n",
+   "new": "",
+   "test": "node tests/scripts/web_room_fog_check.js web/lobby.html"
+  },
+  {
+   "id": "lobby_plan_takes_fog_with_a_bot",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "if (plan.fog && (plan.has_bot() || has_bot())) {",
+   "new": "if (false) {",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_refusal_takes_the_rest_of_the_plan",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "        notify(room_.leader, kNoticeFillFog);\n        return false;\n    }\n    bool changed = false;",
+   "new": "        notify(room_.leader, kNoticeFillFog);\n    }\n    bool changed = false;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_refusal_is_silent",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "        notify(room_.leader, kNoticeFillFog);\n        return false;\n    }\n    bool changed = false;",
+   "new": "        return false;\n    }\n    bool changed = false;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_refusal_is_not_an_ignored_plan",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "                        if (apply_plan(m)) return;                           // (a plan that the room refuses is an ignored plan, counted below: no offence at first)\n                        break;",
+   "new": "                        apply_plan(m);\n                        return;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_plan_does_not_set_fog",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    if (room_.fog != plan.fog) {                                 // (protocol 28)\n        room_.fog = plan.fog;\n        changed = true;\n    }",
+   "new": "    if (room_.fog != plan.fog) {                                 // (protocol 28)\n        changed = true;\n    }",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_fog_change_is_not_shown",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "        room_.fog = plan.fog;\n        changed = true;\n    }\n    if (!changed) return true;",
+   "new": "        room_.fog = plan.fog;\n    }\n    if (!changed) return true;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_a_guest_sets_fog",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "if (phase_ == Phase::Room && !starting_.active && seat == room_.leader) {\n                switch (guests_[seat].plans.take",
+   "new": "if (phase_ == Phase::Room && !starting_.active) {\n                switch (guests_[seat].plans.take",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_rematch_drops_fog",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    r.fog = room_.fog;                                                                   // (protocol 28: the lobby that follows a fog match is a fog lobby until its leader says otherwise)\n",
+   "new": "",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_reopen_forgets_fog",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    room_.mode = r.mode;\n    room_.fog = r.fog;\n",
+   "new": "    room_.mode = r.mode;\n",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_reopen_takes_fog_with_a_bot",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "if (static_cast<uint8_t>(k) > kPlanKindLast || (r.fog && plan_fill_level(k) != FillLevel::None)) return false;",
+   "new": "if (static_cast<uint8_t>(k) > kPlanKindLast) return false;",
+   "build": [
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "codec_room_with_fog_and_a_bot_decodes",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "    if (fog == 1) {\n        for (const PlanKind kind : m.plan) {\n            if (plan_fill_level(kind) != FillLevel::None) return false;\n        }\n        for (const RoomMsg::Slot& slot : m.slots) {\n            if (slot.state == SlotState::Bot) return false;\n        }\n    }\n",
+   "new": "",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=N2.11 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "codec_room_with_fog_and_a_seated_bot_decodes",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "        for (const RoomMsg::Slot& slot : m.slots) {\n            if (slot.state == SlotState::Bot) return false;\n        }\n",
+   "new": "",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=N2.11 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "codec_plan_takes_a_fog_byte_of_two",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "    m.mode = r->u8();\n    const uint8_t fog = r->u8();\n    if (!r->done() || fog > 1 || ",
+   "new": "    m.mode = r->u8();\n    const uint8_t fog = r->u8();\n    if (!r->done() || ",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=N2.11 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "codec_plan_never_says_fog",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "    w.u8(m.fog ? 1 : 0);                                                                // (protocol 28)",
+   "new": "    w.u8(0);                                                                            // (protocol 28)",
+   "build": [
+    "test_lockstep",
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N2.11 timeout 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=N4.6 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "server_list_row_without_fog",
+   "file": "src/ants_server/room.cpp",
+   "old": "    out.fog = lobby_.fog();\n",
+   "new": "",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.30 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "server_public_row_without_fog",
+   "file": "src/ants_server/control.cpp",
+   "old": "        e.set(\"fog\", JsonValue::make_bool(l.fog));\n        e.set(\"people\", JsonValue::make_int(l.people));\n        e.set(\"bots\", JsonValue::make_int(l.bots));\n        e.set(\"free\", JsonValue::make_int(l.free_colors));\n        e.set(\"size\", JsonValue::make_int(l.size));\n        e.set(\"age\"",
+   "new": "        e.set(\"people\", JsonValue::make_int(l.people));\n        e.set(\"bots\", JsonValue::make_int(l.bots));\n        e.set(\"free\", JsonValue::make_int(l.free_colors));\n        e.set(\"size\", JsonValue::make_int(l.size));\n        e.set(\"age\"",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.30 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "server_locked_row_without_fog",
+   "file": "src/ants_server/control.cpp",
+   "old": "        e.set(\"fog\", JsonValue::make_bool(l.fog));\n        e.set(\"people\", JsonValue::make_int(l.people));\n        e.set(\"bots\", JsonValue::make_int(l.bots));\n        e.set(\"free\", JsonValue::make_int(l.free_colors));\n        e.set(\"size\", JsonValue::make_int(l.size));\n        list.push_back",
+   "new": "        e.set(\"people\", JsonValue::make_int(l.people));\n        e.set(\"bots\", JsonValue::make_int(l.bots));\n        e.set(\"free\", JsonValue::make_int(l.free_colors));\n        e.set(\"size\", JsonValue::make_int(l.size));\n        list.push_back",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.30 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "server_head_fog_from_spec",
+   "file": "src/ants_server/room.cpp",
+   "old": "h.fog = h.start.fog;",
+   "new": "h.fog = spec_.fog;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.310 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "server_replay_head_fog_from_spec",
+   "file": "src/ants_server/room.cpp",
+   "old": "head.fog = start.fog;",
+   "new": "head.fog = spec_.fog;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.30 timeout 900 ./build/tests/test_server/test_server"
+  }
+ ]
+}

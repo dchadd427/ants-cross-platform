@@ -144,6 +144,7 @@ bool BotController::allowed(const sim::SimulationEngine& sim, const Seat& s, con
     }
     if (c.type == CommandType::GroupSpecial && c.ants.size() != 1) return false;           // the HUD sends a special order for one selected ant only
     if (in.pickup && (c.type != CommandType::GroupMove || c.ants.size() != 1)) return false;   // a planned pick-up is ONE ant's plain click (never a group, never an attack or a special order)
+    if (in.volley && (c.type != CommandType::GroupMove || c.ants.size() != 1 || in.pickup || in.chain != 0 || in.follow_up)) return false;   // a volley click is ONE ant's plain move (never a group, a pick-up, a chain's click or an attack)
     if (sim::is_group_order(c.type)) {
         if (!sim.grid().in_bounds(c.tile_x, c.tile_y)) return false;
         const sim::TileCoord tile{c.tile_x, c.tile_y};
@@ -248,7 +249,7 @@ void BotController::decide(const sim::SimulationEngine& sim, Seat& s, uint64_t t
             s.last_release = release;
             release_drawn = true;
         }
-        const uint64_t at = lane ? follow_up_release(s, in.command.ants, tick) : release;
+        const uint64_t at = (lane ? follow_up_release(s, in.command.ants, tick) : release) + (in.volley ? std::min<uint32_t>(in.later, kVolleyMaxLater) : 0u);   // (a volley click: later than the look's own time, never sooner)
         const size_t total = in.command.ants.size();
         const size_t step = sim::has_ant_list(in.command.type) ? cap : std::max<size_t>(total, 1u);
         for (size_t from = 0; from < std::max<size_t>(total, 1u); from += step) {

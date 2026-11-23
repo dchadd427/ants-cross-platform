@@ -704,4 +704,28 @@ void run_lobby_rematch_tests() {
         room.run(200);
         ASSERT_EQ(notices_of(ap), (std::vector<std::string>{n2 + kNoticeNotBack}));
     } TEST_END();
+    TEST_CASE("N4.68 The Rematch Keeps Fog Of War (Protocol 28): A Match That Was Played With Fog Gives It To The Lobby That Follows (The Start Had It, The Rematch Has It, The Reopened Room Shows It To Its Leader), And A Match Without Fog Gives None") {
+        {   // a match with fog
+            Room room(lobby_room_config(160));
+            PlanMsg plan = plan_of({K::Open, K::Open, K::Nobody, K::Nobody});
+            plan.fog = true;
+            play_to_begun(room, plan);
+            ASSERT_EQ(room.host.phase(), HostLobby::Phase::Begun);
+            ASSERT_TRUE(room.host.start_info().fog);                                                   // (the Start that every engine of the match gets)
+            const Rematch r = room.host.rematch();
+            ASSERT_TRUE(r.fog && r.plan == (std::array<K, 4>{K::Open, K::Open, K::Nobody, K::Nobody}));
+            Room next(lobby_room_config(161), false);
+            ASSERT_TRUE(reopened(next, r));
+            ASSERT_TRUE(next.host.fog() && next.host.room().fog);
+        }
+        {   // a match without
+            Room room(lobby_room_config(162));
+            play_to_begun(room, plan_of({K::Open, K::Open, K::Easy, K::Nobody}));
+            ASSERT_FALSE(room.host.start_info().fog);
+            const Rematch r = room.host.rematch();
+            ASSERT_FALSE(r.fog);
+            Room next(lobby_room_config(163), false);
+            ASSERT_TRUE(reopened(next, r) && !next.host.fog());
+        }
+    } TEST_END();
 }

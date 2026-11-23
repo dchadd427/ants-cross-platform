@@ -1332,13 +1332,6 @@
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "opening_card_below_the_dock",
-   "file": "web/home/home.css",
-   "old": "translate(-50%, -50%); z-index: 8;",
-   "new": "translate(-50%, -50%); z-index: 5;",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
    "id": "narrow_phone_heading_wraps",
    "file": "web/home/chat.css",
    "old": "@media (max-width: 359px) { .gc-head { gap: 6px; } .gc-title { font-size: 19px; white-space: nowrap; } .gc-online { gap: 6px; font-size: 13px; } }\n",
@@ -1479,13 +1472,6 @@
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "fold_button_is_small",
-   "file": "web/home/chat.css",
-   "old": "min-width: 46px; min-height: 46px; padding: 0; }",
-   "new": "min-width: 30px; min-height: 30px; padding: 0; }",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
    "id": "send_is_short",
    "file": "web/home/chat.css",
    "old": ".gc-send { min-height: 48px; }",
@@ -1495,8 +1481,8 @@
   {
    "id": "header_is_short",
    "file": "web/home/chat.css",
-   "old": "gap: 10px; min-height: 50px;",
-   "new": "gap: 10px; min-height: 30px;",
+   "old": "gap: 8px; min-height: 38px;",
+   "new": "gap: 8px; min-height: 30px;",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {

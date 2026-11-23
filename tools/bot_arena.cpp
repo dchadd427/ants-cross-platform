@@ -235,6 +235,7 @@ void print_usage(std::FILE* to) {
         "  --ally-pairs       every two seats that have the same standard spec team up (2 + 2 for [A, A, B, B]; the lower seat of a pair invites; test-only)\n"
         "  --repeat N         play every match N times and require identical results\n"
         "  --replay-check     replay the applied commands into a fresh engine without any bot: same hash at every 20th tick and at the end\n"
+        "  --stuck-detail     after every match one STUCK line for each of the first stuck spans (when, seat, ant, place, state, order, what it holds): see docs/BOT_UNSTUCK.md\n"
         "  --swimmer-trace    one SWT line per seat after every match (Swimmers, score, idle ants, power-ups taken) and one SWL line (power-ups left on the ground): see the top of tools/bot_arena.cpp\n"
         "  --save-replays DIR keep every match that was played as a replay file (.antsrep) in DIR, named as the game server names its own (ants-MAP-DATE-TIMEZ.antsrep; docs/REPLAYS.md): the\n"
         "                     players are \"Bot (Level)\". Pointed at the replay folder of a game server, the matches show in the site's list of matches (Matches) like any other\n"
@@ -391,6 +392,7 @@ bool parse_args(const std::vector<std::string>& a, Options& o, std::string& err)
         else if (s == "--ally-pairs") o.ally_pairs = true;
         else if (s == "--replay-check") o.replay_check = true;
         else if (s == "--swimmer-trace") o.swimmer_trace = true;
+        else if (s == "--stuck-detail") o.stuck_detail = true;
         else if (s == "--save-replays") {
             if (!value("--save-replays", v)) return false;
             if (v.empty()) { err = "--save-replays needs a folder"; return false; }
@@ -596,7 +598,7 @@ bool same_match(const ai::ArenaResult& a, const ai::ArenaResult& b) {
             x.banked != y.banked || x.raided != y.raided || x.kills != y.kills || x.losses != y.losses || x.stats.decisions != y.stats.decisions || x.stats.intents != y.stats.intents ||
             x.stats.released != y.stats.released || x.stats.expired != y.stats.expired || x.stats.pruned != y.stats.pruned || x.stats.superseded != y.stats.superseded ||
             x.stats.filtered != y.stats.filtered || x.stats.rejected != y.stats.rejected || x.stalls != y.stalls || x.cantgo != y.cantgo || x.cantgo_began != y.cantgo_began ||
-            x.orders != y.orders || x.attack_orders != y.attack_orders || x.bombs_planted != y.bombs_planted || x.fires_lit != y.fires_lit || x.war_ticks != y.war_ticks || x.fire_hunts != y.fire_hunts || x.mines_planted != y.mines_planted || x.ramp_unjams != y.ramp_unjams || x.rushes != y.rushes || x.rush_ticks != y.rush_ticks || x.rush_attacks != y.rush_attacks || x.refused_orders != y.refused_orders || x.took != y.took || x.took_at_flowers != y.took_at_flowers || x.ant_ticks != y.ant_ticks || x.idle_ticks != y.idle_ticks || x.after_ant_ticks != y.after_ant_ticks || x.after_idle_ticks != y.after_idle_ticks || x.raids != y.raids || x.raid_points != y.raid_points || !(x.expedition == y.expedition) || !(x.miner_flight == y.miner_flight)) {
+            x.orders != y.orders || x.attack_orders != y.attack_orders || x.bombs_planted != y.bombs_planted || x.fires_lit != y.fires_lit || x.war_ticks != y.war_ticks || x.fire_hunts != y.fire_hunts || x.mines_planted != y.mines_planted || x.ramp_unjams != y.ramp_unjams || x.rushes != y.rushes || x.rush_ticks != y.rush_ticks || x.rush_attacks != y.rush_attacks || x.refused_orders != y.refused_orders || x.refused_again != y.refused_again || x.took != y.took || x.took_at_flowers != y.took_at_flowers || x.ant_ticks != y.ant_ticks || x.idle_ticks != y.idle_ticks || x.after_ant_ticks != y.after_ant_ticks || x.after_idle_ticks != y.after_idle_ticks || x.raids != y.raids || x.raid_points != y.raid_points || x.steals != y.steals || x.steal_points != y.steal_points || x.stuck_ants != y.stuck_ants || x.stuck_ticks != y.stuck_ticks || x.stuck_looping != y.stuck_looping || x.stuck_blocked != y.stuck_blocked || x.stuck_carriers != y.stuck_carriers || !(x.expedition == y.expedition) || !(x.miner_flight == y.miner_flight)) {
             return false;
         }
     }
@@ -828,6 +830,18 @@ void print_swimmer_trace(const LoadedMap& m, const Job& job, const SwimmerTrace&
     std::fprintf(g_out, "%s\n", line.c_str());
 }
 
+// --stuck-detail: the spans of the stuck tally (ArenaResult::stuck), one line each
+void print_stuck_detail(const LoadedMap& m, const Job& job, const ai::ArenaResult& result) {
+    static const char* const kType[] = {"Worker", "Bomber", "Fire", "Thief", "Combat", "Swimmer"};
+    static const char* const kOrder[] = {"none", "move", "home", "attack", "powerup", "harvest", "ignite", "extinguish", "plant", "defuse", "bomb", "raid", "?", "bridge", "demolish"};
+    for (const ai::StuckTally::Episode& e : result.stuck) {
+        const size_t type = static_cast<size_t>(e.type);
+        std::fprintf(g_out, "STUCK %s seed %u rot %u t=%llu seat %u ant %u %s at (%d,%d) state %d order %s (%d,%d) hold %d carried %d\n", m.name.c_str(), job.seed, job.rotation,
+                     static_cast<unsigned long long>(e.tick), static_cast<unsigned>(e.seat), e.ant, type < 6 ? kType[type] : "?", e.x, e.y, static_cast<int>(e.state),
+                     e.order < 15 ? kOrder[e.order] : "?", e.order_x, e.order_y, e.holding ? 1 : 0, e.carried);
+    }
+}
+
 MatchReport run_job(const Options& o, const std::vector<LoadedMap>& maps, const Job& job, std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)> factory) {
     MatchReport r;
     r.job = job;
@@ -843,6 +857,7 @@ MatchReport run_job(const Options& o, const std::vector<LoadedMap>& maps, const 
     if (o.swimmer_trace) spec.on_tick = [&trace](const sim::SimulationEngine& sim) { trace.look(sim); };
     r.result = ai::play_match(spec);
     if (o.swimmer_trace && r.result.error.empty()) print_swimmer_trace(m, job, trace, r.result);
+    if (o.stuck_detail && r.result.error.empty()) print_stuck_detail(m, job, r.result);
     r.plays = 1;
     if (r.result.error.empty() && o.replay_check) {
         r.replay_checked = true;
@@ -955,7 +970,7 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
     JsonWriter j(&out);
     j.begin_object();
     j.field("tool", "bot_arena");
-    j.field("format", uint64_t{7});                                   // 2: banked and raided replace the engine's food_deposited, food_stolen and food_lost (never fed, always 0); 3: the can't-go counts per seat; 4: the flowers (landings per match, the power-ups taken per seat); 5: the expedition per seat; 6: the Bomber flight to the ring pile per seat; 7: the idle tally per seat, last_food and reachable_units_left per match
+    j.field("format", uint64_t{8});                                   // 2: banked and raided replace the engine's food_deposited, food_stolen and food_lost (never fed, always 0); 3: the can't-go counts per seat; 4: the flowers (landings per match, the power-ups taken per seat); 5: the expedition per seat; 6: the Bomber flight to the ring pile per seat; 7: the idle tally per seat, last_food and reachable_units_left per match; 8: the stuck tally per seat and the steals completed (idle.steals, idle.steal_points)
     j.field("note", kKindsNote);
     j.key("options");
     j.begin_object();
@@ -1054,6 +1069,7 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
             j.field("rush_attacks", uint64_t{s.rush_attacks});
             j.end_object();
             j.field("refused_orders", uint64_t{s.refused_orders});
+            j.field("refused_again", uint64_t{s.refused_again});
             j.field("cantgo", uint64_t{s.cantgo});
             j.field("cantgo_began", uint64_t{s.cantgo_began});
             j.key("took");                                                  // the power-ups the seat's ants took, by the kind of ant they became
@@ -1069,6 +1085,16 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
             j.field("after_idle_ticks", s.after_idle_ticks);
             j.field("raids", uint64_t{s.raids});
             j.field("raid_points", uint64_t{s.raid_points});
+            j.field("steals", uint64_t{s.steals});
+            j.field("steal_points", uint64_t{s.steal_points});
+            j.end_object();
+            j.key("stuck");                                                 // the stuck tally (docs/BOT_UNSTUCK.md): the ants that stood nowhere for 10 seconds, the ant-ticks past them, and the spans by what the ant was doing (looping in the can't-go clip, blocked with an order, a carrier with no order)
+            j.begin_object();
+            j.field("ants", uint64_t{s.stuck_ants});
+            j.field("ticks", s.stuck_ticks);
+            j.field("looping", uint64_t{s.stuck_looping});
+            j.field("blocked", uint64_t{s.stuck_blocked});
+            j.field("carriers", uint64_t{s.stuck_carriers});
             j.end_object();
             j.key("expedition");                                            // the flights over water of a standard bot (all 0 where it made none); the ticks are 0 for what never happened
             j.begin_object();
@@ -1236,19 +1262,39 @@ int run_tool(const Options& o, const std::function<std::unique_ptr<ai::Bot>(cons
     }
     {
         // what the seats' ants said "Can't go there." (docs/BOTS.md, "The can't-go loop"): all reactions, the first of each, the orders given and the orders that were refused
-        uint64_t cantgo = 0, began = 0, orders = 0, refused = 0;
+        uint64_t cantgo = 0, began = 0, orders = 0, refused = 0, again = 0;
         for (const MatchReport& r : reports) {
             for (const ai::ArenaSeatResult& s : r.result.seats) {
                 cantgo += s.cantgo;
                 began += s.cantgo_began;
                 orders += s.orders;
                 refused += s.refused_orders;
+                again += s.refused_again;
             }
         }
         if (cantgo != 0 || orders != 0) {
-            std::fprintf(g_out, "bot_arena: can't-go: %llu reactions (%llu first ones, the rest repeats), %llu orders, %llu refused (%.1f per 1,000 orders)\n", static_cast<unsigned long long>(cantgo),
-                         static_cast<unsigned long long>(began), static_cast<unsigned long long>(orders), static_cast<unsigned long long>(refused),
-                         orders == 0 ? 0.0 : 1000.0 * static_cast<double>(refused) / static_cast<double>(orders));
+            std::fprintf(g_out, "bot_arena: can't-go: %llu reactions (%llu first ones, the rest repeats), %llu orders, %llu refused (%.1f per 1,000 orders), %llu of them again an order that was refused before\n",
+                         static_cast<unsigned long long>(cantgo), static_cast<unsigned long long>(began), static_cast<unsigned long long>(orders), static_cast<unsigned long long>(refused),
+                         orders == 0 ? 0.0 : 1000.0 * static_cast<double>(refused) / static_cast<double>(orders), static_cast<unsigned long long>(again));
+        }
+    }
+    {
+        // the ants that stood nowhere for 10 seconds (docs/BOT_UNSTUCK.md): the spans, the ant-minutes past the first 10 seconds, the ones that held food or loot, per seat-match
+        uint64_t spans = 0, stuck_ticks = 0, looping = 0, blocked = 0, carriers = 0, seat_matches = 0;
+        for (const MatchReport& r : reports) {
+            for (const ai::ArenaSeatResult& s : r.result.seats) {
+                spans += s.stuck_ants;
+                stuck_ticks += s.stuck_ticks;
+                looping += s.stuck_looping;
+                blocked += s.stuck_blocked;
+                carriers += s.stuck_carriers;
+                ++seat_matches;
+            }
+        }
+        if (spans != 0) {
+            std::fprintf(g_out, "bot_arena: stuck: %llu spans of an ant that stood nowhere for 10 s (%.2f per seat and match; %llu looping in the can't-go clip, %llu blocked with an order, %llu carriers with no order), %.1f ant-minutes past the first 10 s\n",
+                         static_cast<unsigned long long>(spans), seat_matches == 0 ? 0.0 : static_cast<double>(spans) / static_cast<double>(seat_matches), static_cast<unsigned long long>(looping),
+                         static_cast<unsigned long long>(blocked), static_cast<unsigned long long>(carriers), static_cast<double>(stuck_ticks) / 1200.0);
         }
     }
     {

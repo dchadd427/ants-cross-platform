@@ -26,6 +26,19 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.21.0 - 2026-11-23 - A new room, Fog of War switch, the can't-go gap
+
+**For players:**
+- **A new, simpler room.** The colors are slim rows with the map card and one big START! or READY button beside them; Share, Rules and Leave sit in the room's header, and a press on an open color opens a short menu (Open, Easy, Medium or Hard bot, Closed). Match history is in the top bar.
+- **Phones.** Held upright, the room shows the colors as big tiles, two by two, with a sheet for each color; START stays in reach at the bottom.
+- **Fog of War switch.** The room's leader can turn Fog of War on in the Rules sheet; everyone sees it, and the Games list marks rooms with fog. Computer players and fog don't mix yet.
+- **The can't-go gap, as in the original.** A Thief shut out of its hill can be clicked free in the short gap between its "Can't go there" clips, the way the 1998 game allows.
+- **Computer players get unstuck.** They take a power-up that blocks the way, stop repeating refused clicks, free a walled-in Thief with a Fire Ant, and click a looping Thief away like a person would (Hard).
+
+**Rules / network:** rules number 14 (game mode 187: 15): the path manager answers an event's request after the turn's commands, as in the original. Network protocol 28 (the Fog of War byte in the leader's plan): a v0.20 game cannot join a v0.21 room. Older recordings still play.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5ed83928...d0e1305a)
+
 ## v0.20.6 - 2026-11-22 - 3D ant models test page
 
 **For players:**
@@ -551,30 +564,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/76545ba9...b86dab0c)
 
-## v0.13.2 - 2026-11-06 - Per-visitor limits, page headers and a chat store that keeps its size
+## Older versions (v0.13.2 and before)
 
-**For players:**
-- **Page headers and checks.** Every page sends a content policy, a framing rule, a referrer policy and a permissions policy; browsers are asked to use https for a week; a game connection from another site's page is refused; the access log keeps paths without queries; the three big game files are compressed once, at build time.
-- **Limits per visitor behind a reverse proxy.** The web image's default list of proxy addresses (the private and internal ranges) lets the limits count each visitor's own address behind a proxy at one of them. `ANTS_TRUSTED_PROXIES_FILE` names your own list for a proxy at another address; `ANTS_WEB_BIND_PREFIX` (for example `127.0.0.1:`) publishes the web port on one address. With neither set, the web port is published as before and the image's list applies.
-- **Rooms on the server.** A seat whose game state differs from the referee's is dropped alone; the others play on. Room codes use the operating system's random generator. A match whose recording was not kept says why; result files are written whole, and a room named like the statistics file writes `<code>.room.json`.
-- **Online rooms play maps of at most 1,000 starting ants (was 8,000).** A room also limits the work that a map sets up (plants and waypoints, food objects, power-ups); every library map is within the limits. A map above a limit stays listed and plays on your own device. A restart record of a match on such a map is refused at server start. A test-map door switched off with `ANTS_TEST_MAP_PORT=0` comes back when that setting is removed.
-- **The chat store keeps its size.** When the database nears its limit the oldest lines go (moderators' lines last, the newest 1,000 never); a first start on an almost full store does the same once. Each account has an hourly and a daily line budget. Staff run `python -m hub.admin status` and `purge`. The Legal page says lines are kept up to 7 days.
-- **Project files.** `SECURITY.md` (how to report a problem privately), `CODEOWNERS`, tidier deployment notes, and a hygiene check that also looks at file names.
-
-**Rules / network:** none: network protocol 22 and the simulation rules are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ad0a35d9...316b62a4)
-
-## v0.13.1 - 2026-11-03 - Home: the phone's chat strip is not cut off, and the first page shows the open games
-
-**For players:**
-- **The phone's bottom chat strip is no longer cut off.** On some phones the strip along the bottom of Home sat under the phone's own bottom bar and part of it was hidden; it now stays above it.
-- **The first page shows the open games right away.** Under the top bar, Home now lists the open games (host, map, seats, bots and **Join**, with **Join by code** at the bottom) without a press. The **Games** button stays and takes you to the list.
-
-**Rules / network:** none: network protocol 22 and the simulation rules are unchanged (the web page only).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/7fa87f91...6b936a10)
-
-## Older versions (v0.13.0 and before)
-
-Every release before v0.13.1, and the long notes of v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.14.0, and the long notes of v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

@@ -449,6 +449,21 @@ target_include_directories(test_closed_hill_187 PRIVATE
 
 add_test(NAME test_closed_hill_187 COMMAND test_closed_hill_187)
 
+# The gap before the path manager's answer (rules number 14 of the original's game, 15 of 187): the answer of the manager's run to a walk that an event asked for is given at the start of the next tick, after the turn's commands, so an ant that an event has just sent takes an order and a Stop is skipped
+add_executable(test_pathmgr_gap
+    test_pathmgr_gap.cpp
+)
+
+target_link_libraries(test_pathmgr_gap PRIVATE
+    ants_sim
+)
+
+target_include_directories(test_pathmgr_gap PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_pathmgr_gap COMMAND test_pathmgr_gap)
+
 # The last side standing of the original's game (rules number 8): one side left and no food left to score ends the match; the rules number 5 and 187 are as they were
 add_executable(test_last_side
     test_last_side.cpp

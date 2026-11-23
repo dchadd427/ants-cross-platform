@@ -63,6 +63,20 @@
    "old": "'data-screen', 'hidden']",
    "new": "'data-screen']",
    "test": "node tests/scripts/web_home_toast_browser.js"
+  },
+  {
+   "id": "toast_over_the_sticky_start_bar_above_the_strip",
+   "file": "web/home/games.js",
+   "old": "if (y !== null && win.innerWidth <= 700 && (go = rectOf('.go')) && go.top < y) y = go.top;",
+   "new": "",
+   "test": "node tests/scripts/web_home_toast_browser.js"
+  },
+  {
+   "id": "toast_leaves_the_window_when_squeezed",
+   "file": "web/home/games.js",
+   "old": "if (up < 8) up = 8;",
+   "new": "",
+   "test": "node tests/scripts/web_home_toast_browser.js"
   }
  ]
 }

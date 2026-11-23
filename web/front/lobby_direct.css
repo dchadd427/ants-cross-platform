@@ -1,23 +1,20 @@
-/* The "Direct connection" switch of the front page's Room (front/lobby_direct.js): a label with a switch, one line of help, and, the first time it is turned on, the explanation with its two buttons.
-   Not in web/lobby.html, which is over the size that tools/check_hygiene.py warns at; the page links this sheet after its own <style>. The colors are the page's own tokens (:root of web/lobby.html). */
-.direct { display: grid; gap: 6px; margin: 10px 0 2px; }
-.dr-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.dr-label { font-size: 16px; color: var(--cream); }
-.dr-switch { position: relative; flex: 0 0 auto; width: 64px; min-width: 64px; height: 36px; padding: 0; cursor: pointer; background: var(--inset); border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
+/* The "Direct connection" switch of the front page's Room (front/lobby_direct.js), and the switch of Fog of War (front/room_fog.js), which has the same look: a label with a switch, one line of help, and, the first time it is turned on,
+   the explanation with its two buttons. They are rows of the Rules sheet (front/room_sheet.css lays the rows out). Not in web/lobby.html, which is over the size that tools/check_hygiene.py warns at; the page links this sheet after its
+   own <style>. The colors are the page's own tokens (:root of web/lobby.html). */
+.dr-label { font-size: 17px; color: var(--cream); }
+.dr-switch { position: relative; flex: 0 0 auto; width: 52px; min-width: 52px; height: 30px; padding: 0; cursor: pointer; background: #06100d; border: 2px solid var(--frame); border-radius: 6px; }
 .dr-switch:disabled { cursor: default; opacity: .6; }
-.dr-knob { position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; background: #7f8f89; border: 2px solid var(--edge); border-radius: 3px; }
-.direct.is-on .dr-switch { background: #14332b; }
-.direct.is-on .dr-knob { left: 31px; background: var(--gold); }
+.dr-knob { position: absolute; top: 4px; left: 4px; width: 18px; height: 18px; background: #8a9a95; border-radius: 3px; }
+.is-on .dr-switch { background: #123a2a; border-color: #44e08a; }
+.is-on .dr-knob { left: 26px; background: #44e08a; }
 .dr-switch:focus-visible, .direct .btn:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
-.dr-help { font-size: 14px; line-height: 1.3; color: var(--cream); }
-.dr-note { display: grid; gap: 8px; padding: 10px 12px; font-size: 15px; line-height: 1.35; color: var(--cream); background: var(--inset); border: 2px solid var(--edge); border-radius: 4px; }
+.dr-note { display: grid; gap: 8px; padding: 10px 12px; font-size: 15px; line-height: 1.35; color: var(--cream); background: #0a1216; border: 2px solid var(--edge); border-radius: 4px; }
 .dr-title { font-size: 17px; color: var(--gold); }
 .dr-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
 body.joining .direct { visibility: hidden; }
-@media (max-width: 600px) {
-    .dr-switch { width: 72px; min-width: 72px; height: 44px; }
-    .dr-knob { width: 30px; height: 30px; }
-    .direct.is-on .dr-knob { left: 35px; }
-    .dr-label { font-size: 17px; }
+@media (max-width: 700px), (max-height: 500px) {
+    .dr-switch { width: 60px; min-width: 60px; height: 36px; }
+    .dr-knob { top: 4px; left: 4px; width: 24px; height: 24px; }
+    .is-on .dr-knob { left: 28px; }
     .dr-buttons .btn { min-height: 44px; flex: 1 1 120px; }
 }
