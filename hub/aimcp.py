@@ -33,12 +33,6 @@ def initialize(params):
     return {"protocolVersion": asked if asked in PROTOCOLS else PROTOCOLS[0], "capabilities": {"tools": {"listChanged": False}}, "serverInfo": dict(SERVER), "instructions": INSTRUCTIONS}
 
 
-def client_name(params):
-    """The name of the AI app that `initialize` says (cleaned), or None when it says none: a later initialize that names nobody does not take the name away."""
-    info = params.get("clientInfo") if isinstance(params, dict) else None
-    return aitools.clean_client(info.get("name")) if isinstance(info, dict) and isinstance(info.get("name"), str) else None
-
-
 def tool_description(tool):
     return {"name": tool.name, "title": tool.title, "description": tool.description, "inputSchema": tool.schema, "annotations": tool.annotations()}
 
@@ -61,8 +55,15 @@ def tool_result(name, result):
     return {"content": content, "isError": False}
 
 
-def error_result(code, message):
-    return {"content": [{"type": "text", "text": json.dumps({"error": code, "message": message}, separators=(",", ":"))}], "isError": True}
+def error_result(code, message, tab=False):
+    """The MCP result of a tool that failed. The sentence of a refusal that the Map Maker's tab wrote (`tab`) is data like any text of a page that a person can change: it is named and the fixed sentence is in front."""
+    said = {"error": code, "message": message}
+    content = []
+    if tab:
+        said.update(untrusted=True, untrusted_fields=["message"])
+        content.append({"type": "text", "text": aitools.UNTRUSTED_SENTENCE})
+    content.append({"type": "text", "text": json.dumps(said, separators=(",", ":"))})
+    return {"content": content, "isError": True}
 
 
 def openapi(origin):

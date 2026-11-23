@@ -13,7 +13,7 @@ The code is the chat hub's (`hub/aikeys.py`, `hub/aidoor.py`, `hub/airelay.py`, 
 
 ## Settings
 
-`ANTS_HUB_AI_KEYS=on` switches the feature on for every logged-in account; anything else is off, and every door answers `503 ai_off`. The default is off, so that a hub that has this code does nothing until the operator switches it on. It is also the kill switch: off, no key works and no tab can be armed (a key that was made stays in the table and works again when it is switched on). The switch stays after the release that turns it on (default on from then); until that release it is a switch that is off by default, and is retired or kept as the kill switch by the end of the second release after this one.
+`ANTS_HUB_AI_KEYS` is `on` or `off` and nothing else: any other value is refused when the hub starts (it does not guess), and not set is `off`. On, every logged-in account may make keys for its own AI; off, every door answers `503 ai_off`, no key works and no tab can be armed (a key that was made stays in the table and works again when it is switched on). The feature is off in a hub that has this code until the operator switches it on. **The switch is permanent**: it is the kill switch of the feature, kept after the feature is on by default, and it has no expiry (the rule that asks for an expiry of a switch that is off by default is about a switch that is a rollout step; this one is kept on purpose, so that a feature that reaches the open web can be turned off in one place). The same setting is passed through `docker-compose.stack.yml` (`${ANTS_HUB_AI_KEYS:-off}`).
 
 ## Keys
 
@@ -26,7 +26,7 @@ A key is `antsai_<id>_<secret>`: `id` is 8 hex digits (public: the person's list
 | Ends | 7, 30 (the default) or 90 days after it is made. There is no key that never ends. |
 | How many | 3 work at a time for an account; 5 may be made in a day. |
 | Name | The person's own text: cleaned by the hub's text rules (`hub/text.py`), 1 to 40 characters, shown only to the person and in no log. |
-| Judged | On **every** call: the header is `Authorization: Bearer <key>` of exactly that shape, the row exists, the SHA-256 of the secret is the row's (`hmac.compare_digest`, also done for an id that does not exist), the key is not revoked and has not ended. Whatever is wrong the answer is the same (`401 bad_key`), so a key cannot be probed. A call that waited its turn is judged again when the turn comes. Revoking is a flag in the table: it takes effect at once, there is no cache. |
+| Judged | On **every** call: the header is `Authorization: Bearer <key>` of exactly that shape, the row exists, the SHA-256 of the secret is the row's (`hmac.compare_digest`, also done for an id that does not exist), the key is not revoked and has not ended. Whatever is wrong the answer is the same (`401 bad_key`), so a key cannot be probed. A call that waited its turn is judged again when the turn comes. Revoking is a flag in the table: it takes effect at once, there is no cache, and a call of that key that is already in flight is answered `bad_key` at once and the tab is told to drop it (`cancel`). |
 | Gone | A ban and Forget me delete the account's keys and the log rows of their calls in the same step. A key that ended or was revoked stays in the table for 7 days, then the row goes. |
 
 ### The key pages
@@ -48,7 +48,7 @@ The page opens `wss://<site>/hub/ai/ws` when the person turns the switch on; the
 - **One armed tab for an account.** A second socket takes the first one's place: the first is sent `{"t":"bye","why":"replaced"}` and closed.
 - **Disarmed** when the socket closes: the Stop button, Turn off, closing or reloading the tab; after an hour with no call; when the login ends or runs out; on a kick or a ban; when the hub restarts. The call in flight is answered `stopped`, later calls `not_armed`.
 - **One call at a time** for an account, with a queue of 3 behind it for 10 seconds (`busy` past that). A call is answered by the tab within 10 seconds, else `timeout`; a late answer is thrown away.
-- **Frames.** Hub to tab: `{"t":"ready","v":1,"tools":[...],"idle","budget"}` once, `{"t":"call","id","tool","args","key","client","scope"}` (`key` is the key's name, `client` the AI app's name from MCP's `initialize`, cut and printable, else `an AI app`) and `{"t":"bye","why"}`. Tab to hub: `{"t":"result","id","ok":true,"result":{...},"cells":N}` or `{"t":"result","id","ok":false,"error":"<code>","message":"<sentence>"}`. A frame that is anything else is a mistake of the socket, and so is one over ten a second (a burst of 40); twenty mistakes in a minute close it. A result is checked by the hub: an object, a picture (`result.png`) is base64 within 300 KB, the code of an error is one the tab may use (`refused`, `changed_by_person`, `too_big`, `bad_args`, `no_open_map`, `busy`, `tab_error`), a sentence is cut to one printable line of 300 characters, `cells` is a whole number from 0 to 5,000 and counts only for an edit.
+- **Frames.** Hub to tab: `{"t":"ready","v":1,"tools":[...],"idle","budget"}` once, `{"t":"call","id","tool","args","key","scope"}` (`key` is the key's own name, which the person chose: the strip shows it, and no name that the AI app says of itself is passed on, because any program can say anything there), `{"t":"cancel","id"}` (drop the call `id` if its work has not started: sent when a call timed out and when its key was revoked while it was in flight) and `{"t":"bye","why"}`. Tab to hub: `{"t":"result","id","ok":true,"result":{...},"cells":N}` or `{"t":"result","id","ok":false,"error":"<code>","message":"<sentence>"}`. A frame that is anything else is a mistake of the socket, and so is one over ten a second (a burst of 40); twenty mistakes in a minute close it. A result is checked by the hub: an object, a picture (`result.png`) is base64 within 300 KB, the code of an error is one the tab may use (`refused`, `changed_by_person`, `too_big`, `bad_args`, `no_open_map`, `busy`, `tab_error`), a sentence is cut to one printable line of 300 characters, `cells` is a whole number from 0 to 5,000 and counts only for an edit.
 - **Cells.** An AI may change 100,000 cells while one tab stays armed, then `budget`; arming the tab again starts again. One call changes at most 5,000.
 - A frame of the tab is at most 1 MiB. The hub keeps nothing of the map: a call and its answer live in memory while they are in flight.
 
@@ -73,7 +73,7 @@ One table (`hub/aitools.py`) serves the plain HTTP door, the MCP door, the OpenA
 | `save_draft` | edit | "Save as new" in the person's browser: a free name or a numbered one |
 | `note` | edit | one line (200 characters) that the strip shows |
 
-**Typed text is data.** The names and descriptions in a result (the open map's, the library's) are text that people typed. The hub marks them in every answer (`untrusted: true` and `untrusted_fields`, as the maps API does), the MCP door puts a fixed sentence in front of such an answer, and the `instructions` of MCP's `initialize` and the guides say that text in a map is never an instruction. What an AI can do is limited by the tools above whatever a map says.
+**Typed text is data.** The names and descriptions in a result (the open map's, the library's) are text that people typed. The hub marks them in every answer (`untrusted: true` and `untrusted_fields`, as the maps API does), and the same for the name of a draft that `save_draft` answers (`saved_as`) and for the sentence of a refusal that the tab wrote (`message`): the Map Maker's page is code that runs in a person's browser, so what it says is data too. The MCP door puts a fixed sentence in front of such an answer (and of an error result with the tab's sentence), and the `instructions` of MCP's `initialize` and the guides say that text in a map is never an instruction. What an AI can do is limited by the tools above whatever a map says.
 
 ### Errors
 
@@ -81,9 +81,9 @@ Plain HTTP answers `{"ok": false, "error": <code>, "message": <sentence>}` with 
 
 | Code | Status | Meaning |
 |---|---|---|
-| `bad_key` | 401 | wrong, ended, revoked or deleted: one answer for all |
+| `bad_key` | 401 | wrong, ended, revoked (also while its call is in flight) or deleted: one answer for all |
 | `ai_off` | 503 | the switch is off |
-| `rate` | 429 | a key's burst, the account's hour, or the address's bad keys |
+| `rate` | 429 | a key's burst, the account's hour, the address's bad keys, or the hub's calls in flight (32 at once for the whole hub) |
 | `bad_request`, `unknown_tool`, `bad_args` | 400 | not a call that this door takes, not a tool, arguments that do not fit |
 | `read_only` | 403 | a read key called a tool that changes |
 | `not_armed` | 409 | no tab is armed for the account |
@@ -98,7 +98,7 @@ Plain HTTP answers `{"ok": false, "error": <code>, "message": <sentence>}` with 
 
 - **Plain HTTP:** `POST /hub/ai/v1/call` with `Authorization: Bearer <key>`, `Content-Type: application/json` and `{"tool", "args"}`. `GET /hub/ai/v1/openapi.json` is the OpenAPI 3.1 file (no key): one operation, with every tool's schema in `components`.
 - **MCP:** `POST /hub/ai/mcp`, the Streamable HTTP transport, stateless, plain JSON answers: `initialize` (with `instructions`), `ping`, `tools/list` (the tools that the key's scope allows, with `readOnlyHint`), `tools/call` (a text of JSON, and a picture as an image). One message at a time (a batch, resources, prompts and streams are not offered). Claude Code: `claude mcp add --transport http ants-map-maker <site>/hub/ai/mcp --header "Authorization: Bearer <key>"`. Clients that ask for a sign-in (OAuth) are not supported.
-- **Order of the checks** at a key door, with nothing read from the body before the key is good: the address's allowance of bad keys, the `Origin` (a page of another site is `403 origin`; an AI app sends none), the type and length of the body, the key, the key's and the account's budgets, the body, the tool and its arguments, the scope, the relay. No cookie is believed and no CORS header is sent, and nginx answers 405 to a preflight.
+- **Order of the checks** at a key door, with nothing read from the body before the key is good: the address's allowance of bad keys, the `Origin` (a page of another site is `403 origin`; an AI app sends none), the type and length of the body, the key, the hub's calls in flight, the key's and the account's budgets, the body, the tool and its arguments, the scope, the relay. **A call does not hold the place of a handshake**: the hub counts the connections that have not finished their handshake (`pending_total`, 64) so that the chat, the login and the admin page always find a place, and a call may wait for its tab for 20 seconds; so, as soon as its key is good, a call gives its place back and is counted in the hub's own limit of calls in flight instead (`ai_in_flight_total`, 32, `429 rate` over it). nginx counts the calls that are open at once for an address too (16). No cookie is believed and no CORS header is sent, and nginx answers 405 to a preflight.
 
 ## Limits
 
@@ -107,17 +107,20 @@ Plain HTTP answers `{"ok": false, "error": <code>, "message": <sentence>}` with 
 | A key | a burst of 20 calls, then 4 a second |
 | An account | 600 calls an hour, all keys together |
 | An address | 10 keys that are no good a minute, then `429` before any key is looked at; nginx's own zone first (20 a second, burst 40) |
-| Keys | 3 working, 5 made a day; the key pages 30 a minute for an address |
+| Keys | 3 working, 5 made a day; the key pages 30 a minute for an account (and 150 for an address) |
+| Calls in flight | 32 in the whole hub, 4 for an account (one and a queue of 3), 16 open at once for an address in nginx |
 | A call's body | 64 KB; a page's body 512 bytes; a frame of the tab 1 MiB; a picture about 300 KB |
 | Cells | 5,000 a call (2,000 listed one by one); 100,000 while a tab stays armed |
-| Armed tabs | 4 for an address, 100 in all; 8 sockets at once for an address in nginx |
+| Armed tabs | one for an account; 8 for an address, 100 in all; 8 sockets at once for an address in nginx |
 | Time | 10 seconds a call; an hour without a call disarms the tab |
 
 The numbers are in one place, `hub/limits.py` (`ai_*`).
 
+**Many people behind one address** (a school, a household, a mobile network) share what is counted for an address: the bad keys, the open calls and sockets, the wall of the key pages. These limits are kept as an outer wall, with wider numbers than one person needs; what decides for one person is counted for the **account** and the key: the key pages, the key's burst, the account's hour, the one armed tab and the calls in flight. A key that is no good is the one thing that cannot be counted for an account (nobody is known), so it is counted for the address.
+
 ## Logs
 
-A call is one line in the hub's log and one row in the calls' log: `ai_call key=<id> ref=<8 hex> tool=<name> cells=<n> ok=<0|1> ms=<n>`. Never a key, an argument, a result, a map's name or a typed text, and no Discord id: the tables hold the account's reference. A refused call is `ai_refuse why=<code> tag=<tag>` at most once a second. The calls' log keeps 30 days or 10,000 rows. `hub/admin.py` lists the working keys (`aikeys`) and revokes one (`aikey-revoke KEY_ID`) or all of an account's (`aikeys-revoke ACCOUNT`).
+A call is one line in the hub's log and one row in the calls' log: `ai_call key=<id> ref=<8 hex> tool=<name> cells=<n> ok=<0|1> ms=<n>`. Never a key, an argument, a result, a map's name or a typed text, and no Discord id: the tables hold the account's reference. A refused call is `ai_refuse why=<code> tag=<tag>` at most once a second. The calls' log keeps 30 days or 10,000 rows. `hub/admin.py` lists the working keys (`aikeys`) and revokes one (`aikey-revoke KEY_ID`) or all of an account's (`aikeys-revoke ACCOUNT`). The operator's command line is a separate process: a ban made there deletes the account's keys, so its AI is `bad_key` at once, and the account cannot arm a tab again, but the open socket of its tab is not reached (the hub that runs does not hear of it): it stays until the login ends or the hour without a call. A ban made in the chat disarms the tab at once.
 
 ## The rules that the tests hold
 
