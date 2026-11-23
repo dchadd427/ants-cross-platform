@@ -932,7 +932,7 @@ class ThePage(unittest.TestCase):
 
     def test_every_button_that_the_page_has_is_wired_and_starts_off_until_the_core_is_there(self):
         acts = re.findall(r'data-act="([a-z-]+)"', self.page)
-        self.assertEqual(sorted(set(acts)), ["check", "convert", "copy", "download", "menu", "mine", "new", "open", "play", "props", "resize", "save", "submit", "zoom-in", "zoom-out"])
+        self.assertEqual(sorted(set(acts)), ["ai", "check", "convert", "copy", "download", "menu", "mine", "new", "open", "play", "props", "resize", "save", "submit", "zoom-in", "zoom-out"])
         for button in re.findall(r"<button[^>]*data-act[^>]*>", self.page):
             self.assertIn(" disabled", button, button)
         self.assertIn("'new': function () { leave(newMap); }, open: function () { leave(openMap); }, download: download, check: showChecks,", self.app)
@@ -1250,10 +1250,11 @@ class ThePage(unittest.TestCase):
         Download, Open, Submit, Play and the work that is kept never change a word, so a map that is opened and saved again under its own name is not upgraded"""
         convert = read("web", "front", "mapmaker_convert.js")
         lines = [l.strip() for l in self.app.splitlines() if "withLongOrders(" in l]
-        self.assertEqual(len(lines), 3, lines)
+        self.assertEqual(len(lines), 4, lines)
         self.assertTrue(lines[0].startswith("function withLongOrders(bytes) {"))
         self.assertIn("var bytes = withLongOrders(made.bytes);", lines[1], "Save as a new map")
         self.assertIn("setMap(withLongOrders(bytes), NEW_NAME)", lines[2], "New map")
+        self.assertIn("setMap(withLongOrders(made.bytes), name)", lines[3], "New map, as the AI's tool new_map makes it (the same rule; the person's unsaved work was kept first)")
         self.assertIn("if (!f.ok || f.kind !== 'extended' || MapSizes.newRules(f.rules, f.rows) === f.rules) return bytes;", self.app, "only an Extended map whose word is not the one the rule gives")
         self.assertEqual(self.app.count("core.convertToLongOrders("), 1, "the page's own call: in withLongOrders")
         self.assertIn("MapSizes.resizedRules(f.rules, f.rows, newRows)", self.app, "Resize")

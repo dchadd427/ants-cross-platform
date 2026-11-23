@@ -385,7 +385,7 @@ class TheText(unittest.TestCase):
         page = block_of(CONF, "location = /mapmaker.html ")
         policy = re.search(r'add_header Content-Security-Policy "([^"]+)" always;', page).group(1)
         directives = dict((d.split(" ", 1)[0], d.split(" ", 1)[1] if " " in d else "") for d in policy.split("; "))
-        self.assertEqual(directives, {"default-src": "'self'", "script-src": "'self' 'wasm-unsafe-eval'", "style-src": "'self' 'unsafe-inline'", "img-src": "'self' data: blob:", "connect-src": "'self'", "object-src": "'none'",
+        self.assertEqual(directives, {"default-src": "'self'", "script-src": "'self' 'wasm-unsafe-eval'", "style-src": "'self' 'unsafe-inline'", "img-src": "'self' data: blob:", "connect-src": "'self' $ants_ws_sources", "object-src": "'none'",
                                       "base-uri": "'none'", "frame-ancestors": "'none'"})
         self.assertNotIn("'unsafe-eval'", policy)
         self.assertNotRegex(policy, r"script-src[^;]*unsafe-inline")                         # (no inline script, ever)
