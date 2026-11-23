@@ -362,7 +362,7 @@ def expected(kind, host=SITE):
         return dict(cross, **dict(no_page, **{"cache-control": "public, max-age=604800, no-transform", "content-type": "image/png"}))
     if kind == "open":                                       # (the sprites and sounds that any site may use: their own cross-origin headers, none of the page's)
         return dict(no_page, **{"cross-origin-resource-policy": "cross-origin", "access-control-allow-origin": "*", "x-content-type-options": "nosniff", "strict-transport-security": HSTS,
-                                "cross-origin-opener-policy": None, "cross-origin-embedder-policy": None})
+                                "cross-origin-opener-policy": None, "cross-origin-embedder-policy": None, "x-robots-tag": "noindex"})
     if kind == "named":                                      # (the JSON answers for a server that is not there)
         return dict(no_page, **{"x-content-type-options": "nosniff", "strict-transport-security": HSTS, "cache-control": "no-store", "cross-origin-opener-policy": None, "cross-origin-embedder-policy": None})
     if kind == "hubpage":                                    # (the small pages of the login)

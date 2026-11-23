@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the files for search engines (tools/seo_files.py: robots.txt and sitemap.xml) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose and a test of tests/scripts/test_web_seo.py must notice - the sitemap lists exactly the pages that ask to be listed, by their canonical addresses; a door of the game server, the chat hub or the admin page is shut to a crawler, and so is every address that holds a room; no page and no file that a page loads is shut; the address that goes into the files and into a shell command is an origin and nothing else. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/web_seo_mutants.json --keep-going --jobs 1.",
+ "note": "Mutants of the files for search engines (tools/seo_files.py: robots.txt and sitemap.xml) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose and a test of tests/scripts/test_web_seo.py must notice - the sitemap lists exactly the pages that ask to be listed, by their canonical addresses; a door of the game server or the chat hub is shut to a crawler, and so is every address that holds a room; the admin page is not named; no page and no file that a page loads is shut; the address that goes into the files and into a shell command is an origin and nothing else. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/web_seo_mutants.json --keep-going --jobs 1.",
  "mutants": [
   {
    "id": "a_listed_page_is_missing_from_the_sitemap",
@@ -30,10 +30,10 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo"
   },
   {
-   "id": "the_admin_page_is_open_to_a_crawler",
+   "id": "robots_txt_names_the_admin_page",
    "file": "tools/seo_files.py",
-   "old": "(\"/admin\",)",
-   "new": "()",
+   "old": "(\"/ws\", \"/busy\", \"/live\"",
+   "new": "(\"/admin\", \"/ws\", \"/busy\", \"/live\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo"
   },
   {
@@ -46,7 +46,7 @@
   {
    "id": "the_chat_hub_is_open_to_a_crawler",
    "file": "tools/seo_files.py",
-   "old": "FOLDERS = ((\"The chat hub: the login, the connection, the pictures and images, the admin API\", (\"/hub/\",)),)",
+   "old": "FOLDERS = ((\"The chat hub: the login, the connection, the pictures and images\", (\"/hub/\",)),)",
    "new": "FOLDERS = ()",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo"
   },

@@ -16,13 +16,13 @@ import sys
 PUBLIC_PAGES = ("/", "/matches", "/mapmaker", "/changelog", "/legal")
 
 # What a crawler is asked not to fetch, as paths of robots.txt (RFC 9309: a prefix; * and $ as it has them). Nothing here is a page or a file that a page loads to draw itself: a door is closed as the address
-# itself, with a query, and as a folder (/history, /history?limit=3, /history/deaths), so that /history_page.js, a script of the pages, stays open.
+# itself, with a query, and as a folder (/history, /history?limit=3, /history/deaths), so that /history_page.js, a script of the pages, stays open. The admin page is not named: it says noindex itself, and a
+# robots file that named it would only advertise its address.
 DOORS = (
-    ("The admin page and its API", ("/admin",)),
     ("The game server's doors: the game connection, the status, the live matches, the recorded matches and their data, the list of rooms, the maps, the numbers, the submissions",
      ("/ws", "/busy", "/live", "/replays", "/history", "/lobbies", "/maps", "/stats", "/submissions", "/test-maps")),
 )
-FOLDERS = (("The chat hub: the login, the connection, the pictures and images, the admin API", ("/hub/",)),)
+FOLDERS = (("The chat hub: the login, the connection, the pictures and images", ("/hub/",)),)
 QUERIES = ("Addresses that hold a room (room=, join=, code=), a live match (live=) or a recording (replay=): a link that someone pasted into the chat is not for a search engine",
            ("/*room=", "/*join=", "/*code=", "/*live=", "/*replay="))
 
@@ -38,7 +38,7 @@ def check_origin(origin):
 
 def robots_txt(origin):
     check_origin(origin)
-    lines = ["# What a search engine may read of this site. The pages are open; the doors of the game server, the chat hub and the admin page are not for crawlers.", "User-agent: *"]
+    lines = ["# What a search engine may read of this site. The pages are open; the doors of the game server and the chat hub are not for crawlers.", "User-agent: *"]
     for why, paths in DOORS:
         lines.append("# " + why)
         for path in paths:

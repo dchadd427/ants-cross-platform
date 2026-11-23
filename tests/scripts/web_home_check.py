@@ -601,7 +601,7 @@ def main():
                 footer: document.querySelector('footer').textContent, notice: document.getElementById('room-notice').textContent, noticeShown: document.getElementById('room-notice').getBoundingClientRect().height > 0, footerShown: getComputedStyle(document.querySelector('footer')).display !== 'none',
                 nav: Array.prototype.map.call(document.querySelectorAll('footer nav > *'), function (a) { return [a.tagName, a.textContent.trim(), a.getAttribute('href'), a.getAttribute('target'), a.id]; }),
                 version: [document.getElementById('game-version').textContent, document.getElementById('game-build-id').textContent], scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth})"""))
-            check(info["title"].endswith("Ants (1998)") and info["path"] == "/" and info["h1"] == 1, "the front page is at / and is titled Ants (1998) (%r)" % info["title"])
+            check(info["title"].startswith("Ants (1998)") and info["path"] == "/" and info["h1"] == 1, "the front page is at / and is titled Ants (1998) (%r)" % info["title"])
             check(info["logo"] is not None and info["logo"][0] and info["logo"][1] == "Ants!" and info["tag"] == "Four colonies, one picnic." and info["sub"] == "The 1998 ant war game, rebuilt for your browser.",
                   "the mast has the name as words (no picture) and the two lines under it, and nothing else: no header bar of links (%r)" % (info["tag"],))
             check(bool(info["font"]), "the game's own font, Libre Franklin, is loaded from the site")

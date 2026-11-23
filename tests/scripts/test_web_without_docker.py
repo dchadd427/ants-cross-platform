@@ -379,8 +379,9 @@ class TheRealDockerfileReplayed(Scratch):
         self.assertIn("parseInt('1100000', 10)", text)
 
     def test_the_site_placeholders_become_nothing_in_the_titles_and_the_footers(self):
-        self.assertRegex(self.page("plain", "lobby.html"), r"<title>[^<]+ \u2014 Ants \(1998\)</title>")
-        self.assertIn("<title>Play \u2014 Ants (1998)</title>", self.page("plain", "index.html"))
+        self.assertRegex(self.page("plain", "lobby.html"), r"<title>Ants \(1998\) \u2014 [^<]+</title>")
+        for name in ("index.html", "play.html", "matches.html", "match.html", "legal.html", "mapmaker.html", "changelog.html"):
+            self.assertRegex(self.page("plain", name), r"<title>[^<]+ \u2014 Ants \(1998\)</title>", name)      # (the form of every page's title, in the finished image: tests/scripts/test_web_seo.py reads the sources)
         for name in ("index.html", "play.html", "lobby.html"):
             if os.path.exists(self.html("plain", name)):
                 text = self.page("plain", name)

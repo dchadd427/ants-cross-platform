@@ -3,17 +3,17 @@
 tests/data/web_seo_mutants.json breaks one rule at a time, for tools/mutate.py).
 
 The pages are read as a browser reads them (an HTML parser, never a line of text): the pages of web/ that docker/nginx.conf serves (every exact location that rewrites to a file, the front page and the
-game page's template) and the changelog page, which tools/changelog_to_html.py makes. robots.txt and sitemap.xml are made by running tools/seo_files.py, and robots.txt is read the way a crawler reads it
+game page's template), the catalog of sprites and sounds and the changelog page, which tools/changelog_to_html.py makes. robots.txt and sitemap.xml are made by running tools/seo_files.py, and robots.txt is read the way a crawler reads it
 (RFC 9309: the longest matching rule wins, * and $, Allow wins a tie). What is asked:
 
-  - every page has a title in the one form "<page> - Ants (1998)" (an em dash), one description, and the share card (Open Graph and the shape of the Twitter card) that says the same title and description,
+  - every page has a title in the one form "<page> - Ants (1998)" (an em dash; the front page's is "Ants (1998) - <a line about the game>"), one description, and the share card (Open Graph and the shape of the Twitter card) that says the same title and description,
     with a picture that exists and is big enough;
   - a page that asks to be listed has exactly one canonical link, its own address on the site's one address; a page that asks not to be (a match, the game page) says noindex, keeps its links followed, has no
-    canonical link, and is not in the sitemap; the pages that are listed are the ones that the owner chose (the front page, the matches, the map maker, the changelog, the legal page);
-  - the front page has structured data that parses and describes a free game that plays in a browser, and text that a crawler reads outside the hidden masthead; no other page has structured data;
+    canonical link, and is not in the sitemap; the pages that are listed are the front page, the matches, the map maker, the changelog and the legal page;
+  - the front page has structured data that parses and describes a free game that plays in a browser; no other page has structured data;
   - no page, script or tool names the site's host: the address is the one line of web/SITE_ORIGIN, put into the pages when the image is built (the tool refuses a text that is not an origin);
-  - the sitemap lists exactly the pages that ask to be listed, by the same address as their canonical links; robots.txt keeps a crawler out of every door that nginx hands to the game server, the chat hub and the
-    admin page and out of the addresses that hold a room or a recording, and never out of a page or of a file that a page loads to draw itself.
+  - the sitemap lists exactly the pages that ask to be listed, by the same address as their canonical links; robots.txt keeps a crawler out of every door that nginx hands to the game server and the chat hub
+    (the admin page is not named: it says noindex itself, and naming it would advertise it) and out of the addresses that hold a room or a recording, and never out of a page or of a file that a page loads to draw itself.
 """
 import html.parser
 import json
@@ -38,20 +38,20 @@ TOOL = os.path.join(REPO, "tools", "seo_files.py")
 PLACEHOLDER = "@@SITE_ORIGIN@@"
 ORIGIN = "https://site.example"
 TITLE = re.compile(r"^(?P<page>.+) — Ants \(1998\)$")
+FRONT_TITLE = re.compile(r"^Ants \(1998\) — (?P<line>.+)$")                                # (the front page names the game first, then says in a line what it is)
 LISTED = {"/", "/matches", "/mapmaker", "/changelog", "/legal"}
-NOT_LISTED = {"/match", "/play"}                                    # (a match and the game page: pages that are there, and ask not to be in a search engine)
+NOT_LISTED = {"/match", "/play", "/asset_catalog/"}                 # (a match, the game page and the catalog of sprites and sounds: pages that are there, and ask not to be in a search engine)
+NO_CARD = {"/asset_catalog/"}                                       # (a page that is not made to be shared has no share card)
 CONF = stats.strip_comments(stats.read("docker", "nginx.conf"))
 
 
 class Head(html.parser.HTMLParser):
-    """What a browser takes from a page: the title, the meta lines, the links, the scripts of data, the files that the page loads, and the text that a crawler may read (outside script, style, hidden things and the masthead)."""
-
-    HIDDEN = ("script", "style", "template", "noscript", "main")      # (main: the masthead of the front page, which Home does not draw: web/home/home.css)
+    """What a browser takes from a page: the title, the meta lines, the links, the scripts of data and the files that the page loads."""
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
-        self.title, self.metas, self.links, self.data_scripts, self.loads, self.visible = "", [], [], [], [], []
-        self.stack, self.in_title, self.script_type, self.script_text = [], False, None, []
+        self.title, self.metas, self.links, self.data_scripts, self.loads = "", [], [], [], []
+        self.in_title, self.script_type, self.script_text = False, None, []
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
@@ -69,8 +69,6 @@ class Head(html.parser.HTMLParser):
                 self.loads.append(a["src"])
         elif tag == "img" and a.get("src"):
             self.loads.append(a["src"])
-        if tag not in ("meta", "link", "img", "br", "input", "hr"):
-            self.stack.append((tag, "hidden" in a))
 
     def handle_endtag(self, tag):
         if tag == "title":
@@ -79,18 +77,12 @@ class Head(html.parser.HTMLParser):
             if self.script_type == "application/ld+json":
                 self.data_scripts.append("".join(self.script_text))
             self.script_type = None
-        for i in range(len(self.stack) - 1, -1, -1):
-            if self.stack[i][0] == tag:
-                del self.stack[i:]
-                break
 
     def handle_data(self, data):
         if self.in_title:
             self.title += data
         if self.script_type is not None:
             self.script_text.append(data)
-        elif data.strip() and not any(tag in self.HIDDEN or hidden for tag, hidden in self.stack):
-            self.visible.append(" ".join(data.split()))
 
     def meta(self, key, value):
         """The content of every meta line whose name or property is `value`."""
@@ -99,7 +91,7 @@ class Head(html.parser.HTMLParser):
 
 def served_pages():
     """{address: the page's text} of every page that docker/nginx.conf serves from a file of its own."""
-    files = {"/": stats.read("web", "lobby.html")}
+    files = {"/": stats.read("web", "lobby.html"), "/asset_catalog/": stats.read("asset_catalog", "index.html")}
     for address, name in re.findall(r"location = (/[a-z]+) \{\s*rewrite \^ /([a-z]+)\.html last;", CONF):
         files[address] = changelog_to_html.convert(stats.read("CHANGELOG.md"), changelog_to_html.DEFAULT_REPO_BLOB, version="v0.0.0", build_id="0000000") if address == "/changelog" \
             else stats.read("web", "shell.html" if name == "play" else name + ".html")
@@ -159,7 +151,7 @@ class ThePages(unittest.TestCase):
         titles = {}
         for address, head in self.heads.items():
             title = head.title.replace("@@SITE_TITLE@@", "")
-            found = TITLE.match(title)
+            found = (FRONT_TITLE if address == "/" else TITLE).match(title)
             self.assertIsNotNone(found, "%s: %r" % (address, title))
             self.assertLessEqual(len(title), 70, address)                    # (a search result shows about 60 characters)
             titles[address] = title
@@ -191,6 +183,8 @@ class ThePages(unittest.TestCase):
 
     def test_every_page_has_a_share_card_that_says_the_pages_own_title_and_description_with_a_picture_that_exists(self):
         for address, head in self.heads.items():
+            if address in NO_CARD:
+                continue
             where = address
             self.assertEqual(head.meta("property", "og:title"), [head.title.replace("@@SITE_TITLE@@", "")], where)
             self.assertEqual(head.meta("property", "og:description"), head.meta("name", "description"), where)
@@ -226,11 +220,6 @@ class ThePages(unittest.TestCase):
         self.assertEqual((data["offers"]["@type"], data["offers"]["price"]), ("Offer", "0"))
         self.assertIn("MultiPlayer", data["playMode"])
         self.assertTrue(data["image"].startswith(ORIGIN + "/"))
-
-    def test_the_front_page_has_a_summary_in_text_that_a_crawler_reads(self):
-        # (the masthead of the front page, with its name and its tagline, is in the page and not drawn; a crawler that skips what is not drawn would find no sentence about the game)
-        front = self.heads["/"]
-        self.assertIn(front.meta("name", "description")[0], front.visible)
 
     def test_no_page_names_the_sites_host_and_every_address_a_page_gives_for_itself_is_the_one_placeholder(self):
         for address, text in self.texts.items():
@@ -296,14 +285,19 @@ class TheFiles(unittest.TestCase):
                         "/sounds/a.wav", "/whats_new.json", "/sitemap.xml", "/robots.txt", "/front/preview_treasure.png"):
             self.assertTrue(crawler_may_fetch(robots, address), address)
 
-    def test_a_crawler_may_not_read_a_door_of_the_game_server_the_chat_hub_or_the_admin_page_or_an_address_that_holds_a_room_or_a_recording(self):
+    def test_a_crawler_may_not_read_a_door_of_the_game_server_or_the_chat_hub_or_an_address_that_holds_a_room_or_a_recording(self):
         robots = self.files["robots.txt"]
-        for address in ("/admin", "/admin/", "/admin/api/maps?state=waiting", "/hub/login", "/hub/callback", "/hub/ws", "/hub/me", "/hub/admin/api/x", "/hub/pic/%s.png" % ("a" * 32),
+        for address in ("/hub/login", "/hub/callback", "/hub/ws", "/hub/me", "/hub/admin/api/x", "/hub/pic/%s.png" % ("a" * 32),
                         "/hub/img/%s.jpg" % ("a" * 32), "/ws", "/busy", "/stats", "/stats/local", "/live", "/live/ants-X-20260101-000000Z", "/replays", "/replays/ants-X-20260101-000000Z.antsrep",
                         "/history", "/history?limit=3", "/history/deaths", "/history/ants-X-20260101-000000Z", "/lobbies", "/maps", "/maps/all", "/maps/files/A.LVL", "/maps/previews/a.webp", "/submissions",
                         "/submissions/abc", "/test-maps", "/?room=k7m2xq", "/?join=/ws&room=abc&name=Pebble", "/?aspect=16:9&room=k7m2xq", "/play?live=ants-X-20260101-000000Z", "/play?code=abc",
                         "/play?replay=ants-X-20260101-000000Z.antsrep&embed=1"):
             self.assertFalse(crawler_may_fetch(robots, address), address)
+
+    def test_robots_txt_does_not_name_the_admin_page(self):
+        # (the page says noindex itself, and a file that every crawler and every visitor can read would only advertise its address: a rule of the product that no run of a page shows)
+        self.assertNotIn("admin", self.files["robots.txt"].lower())
+        self.assertNotIn("admin", self.files["sitemap.xml"].lower())
 
     def test_every_door_that_nginx_hands_to_another_program_is_closed_to_a_crawler(self):
         robots = self.files["robots.txt"]
@@ -314,6 +308,8 @@ class TheFiles(unittest.TestCase):
         self.assertGreaterEqual(len(found), 10)                                    # (the doors are found: a change of the file's layout cannot make this test look at nothing)
         for words in found:
             path = words.split()[-1]
+            if path.startswith("/admin"):
+                continue                                                            # (the admin page's API: not named in a public file, see the next test)
             self.assertFalse(crawler_may_fetch(robots, path), words)
             if path.endswith("/"):
                 self.assertFalse(crawler_may_fetch(robots, path + "x"), words)

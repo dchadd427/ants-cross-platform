@@ -80,7 +80,7 @@ class TheFrontPageMarkup(PageCase):
         return found[0]
 
     def test_it_is_titled_ants_1998_and_has_the_placeholders_once(self):
-        self.assertRegex(self.page, r"<title>[^<]+ \u2014 Ants \(1998\)@@SITE_TITLE@@</title>")
+        self.assertRegex(self.page, r"<title>Ants \(1998\) \u2014 [^<]+@@SITE_TITLE@@</title>")
         for placeholder in ("@@SITE_TITLE@@", "@@SITE_FOOTER@@", "@@GAME_VERSION@@", "@@BUILD_ID@@", "@@BUILD_DATE@@"):
             self.assertEqual(self.page.count(placeholder), 1, placeholder)
 

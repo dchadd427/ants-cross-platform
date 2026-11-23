@@ -104,7 +104,7 @@ class TheLegalPage(unittest.TestCase):
 
     def test_it_is_a_page_in_the_changelog_pages_look(self):
         self.assertTrue(self.page.startswith("<!DOCTYPE html>"))
-        self.assertIn("<title>Legal \u2014 Ants (1998)</title>", self.page)
+        self.assertRegex(self.page, r"<title>[^<]+ \u2014 Ants \(1998\)</title>")                      # (the form of every title: tests/scripts/test_web_seo.py reads them all)
         self.assertIn('<link rel="stylesheet" href="/front/classic.css">', self.page)
         self.assertIn('<div class="pt"><h1>Legal</h1><p>', self.page)
         self.assertIn('<link rel="stylesheet" href="/site_nav.css">', self.page)
