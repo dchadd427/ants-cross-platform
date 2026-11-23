@@ -29,16 +29,24 @@ Work that is not released yet is written in the same template under a heading th
 ## Next
 
 **For players:**
-- The bell shows your recent alerts, newest first, with the number of unread ones on it: invitations, mentions, people who joined your room and your own finished match (with a View link). The settings are behind a gear in that list; a visitor keeps a short list in the browser.
-- Right-click a player in the list, or a name in the chat (long-press on a phone), to invite them to your room: **Invite to my room**. They see the invitation as a line in their chat (or a toast, when the chat is not on screen) and in their bell, with a Join button; it turns grey when the room closes.
-- A new chat command, **/invite NAME**, with the helper: the names of the people who are here narrow as you type.
-- Type **@** in the chat to pick a player. A mention shows as a pill for everyone, in gold for the person named, and becomes an alert in their bell. There is no @here and no @everyone.
+- The bell shows your recent alerts, newest first, with the number of unread ones: invitations, mentions, people who joined your room and your own finished match (with a View link). The settings are behind a gear in that list; a visitor keeps a short list in the browser.
+- Right-click a player in the list, or a name in the chat (long-press on a phone), to **Invite to my room**. They see it as a line in their chat (a toast when the chat is not on screen) and in their bell, with Join; it turns grey when the room closes.
+- **/invite NAME**, with a helper that narrows the names as you type.
+- Type **@** in the chat to pick a player: a mention is a pill for everyone, gold for the person named, and an alert in their bell. No @here, no @everyone.
+
+**For operators:**
+- The hub keeps an account's last 30 alerts of 7 days and its `/ignore` list (new `alerts` and `ignores` tables, made by the first one; Forget me deletes them), and limits invitations and mentions ([the hub's document](docs/HUB_PEOPLE.md)).
+
+## v0.21.1 - 2026-11-23 - Connect an AI in the Map Maker
+
+**For players:**
 - **Connect an AI in the Map Maker.** A new Connect an AI sheet makes a key (look only, or look and edit; it ends after 7, 30 or 90 days) for your own AI assistant (Claude Code, Cursor, any program that speaks MCP or plain web calls). Turn on "Let an AI work in this tab" and it can look at the map you have open and, with an edit key, change it while you watch: a strip with Stop and Undo AI changes stays on top, and each change is one step of your own history.
 - **Six skills for your AI**, to download from /ai/skills/ (one zip with all of them): the map file's words, the terrain, the layout of a fair map, the Map Maker's tools, and how to check and fix a map.
 
 **For operators:**
 - The keys are off until the hub is started with `ANTS_HUB_AI_KEYS=on`; with it off every key door answers 503 and no tab can be armed ([`docs/MAP_AI.md`](docs/MAP_AI.md)).
-- The hub keeps each logged-in account's last 30 alerts of 7 days (new `alerts` and `ignores` tables, made by the first one; Forget me deletes them), keeps `/ignore` lists over a restart, and limits invitations and mentions ([the hub's document](docs/HUB_PEOPLE.md)).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2bdfe98e...d65954fa)
 
 ## v0.21.0 - 2026-11-23 - A new room, Fog of War switch, the can't-go gap
 
