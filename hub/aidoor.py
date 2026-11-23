@@ -16,6 +16,9 @@ THE KEY DOORS take no cookie and no CORS: the key is the right to ask (hub/aikey
 nothing is read from the body before the key is good: the address's allowance of bad keys (429 `rate`, the key is not looked at), the Origin (a browser's page of another site is 403 `origin`; there is none from
 an AI app), the type and the length of the body, the key (401 `bad_key`, one answer for every wrong), the key's and the account's budgets (429 `rate`), the body, the tool and its arguments (hub/aitools.py), the
 scope (403 `read_only`), then the relay. A call is one line in the log and one row in the calls' log, never a key, an argument, a result or a name.
+
+A CALL DOES NOT HOLD THE PLACE OF A HANDSHAKE. The hub counts the connections that have not finished their handshake (`pending_total`); a call may wait for its tab for twenty seconds, so as soon as the key is good the
+connection gives its place back (`release`) and is counted in its own, hub-wide limit instead (`ai_in_flight_total`, 429 `rate` over it): silent tabs cannot fill the places that the chat, the login and the admin page need.
 """
 import asyncio
 import hashlib
@@ -47,12 +50,15 @@ class Door:
         self.hub = hub
         self.relay = airelay.Relay(hub)
         self.budgets = aikeys.Budgets(hub.limits, hub.clock)
-        self.pages = limitmod.RateByAddress(hub.limits.ai_pages_burst, hub.limits.ai_pages_refill_seconds)
+        self.pages = limitmod.RateByAddress(hub.limits.ai_pages_address_burst, hub.limits.ai_pages_address_refill_seconds)     # (the key pages, for each client address: a wall that many people behind one address share)
+        self.pages_account = limitmod.RateByAccount(hub.limits.ai_pages_burst, hub.limits.ai_pages_refill_seconds)             # (and for each account: the limit that decides for one person)
+        self.in_flight = 0                                          # the calls of the key doors that are being served, from a good key until the answer
         self.csrf_key = None
         self.next_log = float("-inf")
 
     def forget_idle(self, now):
         self.pages.forget_idle(now)
+        self.pages_account.forget_idle(now)
         self.budgets.forget_idle(now)
 
     # ---- answers -----------------------------------------------------------------------------------------------------------------------------
@@ -62,15 +68,18 @@ class Door:
         return http.response(status, {"error": code}, headers)
 
     @staticmethod
-    def refusal(code, message="", headers=None):
-        """The answer of the plain HTTP door to a call that did not work: the status of the code, and the code and the sentence."""
+    def refusal(code, message="", headers=None, tab=False):
+        """The answer of the plain HTTP door to a call that did not work: the status of the code, and the code and the sentence (`tab`: the sentence is the Map Maker page's own, so it is marked as data)."""
         status, own = aitools.ERRORS[code]
         extra = dict(headers or {})
         if status == 429:
             extra.setdefault("Retry-After", "5")
         if status == 401:
             extra.setdefault("WWW-Authenticate", "Bearer")
-        return http.response(status, {"ok": False, "error": code, "message": message or own}, extra)
+        body = {"ok": False, "error": code, "message": message or own}
+        if tab:                                                     # (the sentence is the tab's own, written in a page that a person can change: data, never instructions)
+            body.update(untrusted=True, untrusted_fields=["message"])
+        return http.response(status, body, extra)
 
     def noted(self, why, address):
         """One line in the log a second at the most for a refused call: the word and the address's short tag, never what was sent."""
@@ -81,8 +90,9 @@ class Door:
 
     # ---- one request -------------------------------------------------------------------------------------------------------------------------
 
-    async def serve(self, request, reader, address):
-        """The bytes of the whole answer to a request for a path under /hub/ai/ (the socket's path is not here). The body of a POST is read here, after the cheap checks."""
+    async def serve(self, request, reader, address, release=None):
+        """The bytes of the whole answer to a request for a path under /hub/ai/ (the socket's path is not here). The body of a POST is read here, after the cheap checks. `release()` gives back the place of the
+        connection among those that have not finished their handshake: a call of the key doors does it as soon as its key is good."""
         try:
             path = request.split()[0]
             methods = ROUTES.get(path)
@@ -97,7 +107,7 @@ class Door:
                 return await self.page(request, reader, address, path, length)
             if path == "/hub/ai/v1/openapi.json":
                 return http.response(200, aimcp.openapi(self.hub.cfg.origin))
-            return await self.key_door(request, reader, address, path, length)
+            return await self.key_door(request, reader, address, path, length, release or (lambda: None))
         except Refused as e:
             return e.answer
         except (asyncio.IncompleteReadError, asyncio.TimeoutError):
@@ -160,6 +170,8 @@ class Door:
             return self.fail(401, "login")
         if hub.store.is_banned(who.account_id):
             return self.fail(403, "banned")
+        if not self.pages_account.take(hub.chat.ref(who.account_id), hub.clock()):
+            return self.fail(429, "rate", {"Retry-After": "5"})
         if post and not (h.get(CSRF_HEADER) and hmac.compare_digest(h[CSRF_HEADER].encode("latin-1"), self.token(who).encode("ascii"))):
             return self.fail(403, "csrf")
         if not post:
@@ -175,6 +187,7 @@ class Door:
                 return self.fail(400, "bad")
             if not hub.store.ai_key_revoke(who.account_id, key_id):
                 return self.fail(404, "no_key")
+            self.relay.cut(hub.chat.ref(who.account_id), key_id)       # (a call of this key that is in flight is answered `bad_key` at once, and the tab is told to drop it)
             hub.log.event("ai_revoke", key=key_id, ref=hub.chat.ref(who.account_id)[:8])
             return http.response(200, {"ok": True})
         return self.make(who, data)
@@ -203,7 +216,7 @@ class Door:
 
     # ---- the doors of an AI ------------------------------------------------------------------------------------------------------------------
 
-    async def key_door(self, request, reader, address, path, length):
+    async def key_door(self, request, reader, address, path, length, release):
         hub, h = self.hub, request.headers
         mcp = path == "/hub/ai/mcp"
         if self.budgets.address_spent(address):
@@ -218,12 +231,20 @@ class Door:
             self.budgets.bad_key(address)
             self.noted("bad_key", address)
             return self.refusal("bad_key")
+        if self.in_flight >= hub.limits.ai_in_flight_total:
+            self.noted("rate", address)
+            return self.refusal("rate")
         if not self.budgets.take(key.id, key.ref):
             self.noted("rate", address)
             return self.refusal("rate")
-        data = aitools.parse(await self.body(reader, length))
-        hub.store.ai_key_use(key.id)
-        return await (self.mcp(key, data) if mcp else self.plain(key, data))
+        self.in_flight += 1
+        release()                                                   # (from here the call waits for a tab, up to twenty seconds: it is counted in `in_flight`, not among the handshakes)
+        try:
+            data = aitools.parse(await self.body(reader, length))
+            hub.store.ai_key_use(key.id)
+            return await (self.mcp(key, data) if mcp else self.plain(key, data))
+        finally:
+            self.in_flight -= 1
 
     async def plain(self, key, data):
         if not isinstance(data, dict) or not set(data) <= {"tool", "args"} or not isinstance(data.get("tool"), str):
@@ -232,7 +253,7 @@ class Door:
         try:
             result = await self.run(key, data["tool"], args)
         except airelay.Refusal as e:
-            return self.refusal(e.code, e.message)
+            return self.refusal(e.code, e.message, tab=e.tab)
         return http.response(200, {"ok": True, "result": result})
 
     async def run(self, key, name, args):
@@ -275,9 +296,6 @@ class Door:
         if not isinstance(params, dict):
             return http.response(200, aimcp.rpc_error(ident, -32602, "Invalid params"))
         if method == "initialize":
-            name = aimcp.client_name(params)
-            if name:
-                self.relay.clients[key.id] = name
             return http.response(200, aimcp.rpc_result(ident, aimcp.initialize(params)))
         if method == "ping":
             return http.response(200, aimcp.rpc_result(ident, {}))
@@ -291,5 +309,5 @@ class Door:
         try:
             result = await self.run(key, name, args)
         except airelay.Refusal as e:
-            return http.response(200, aimcp.rpc_result(ident, aimcp.error_result(e.code, e.message)))
+            return http.response(200, aimcp.rpc_result(ident, aimcp.error_result(e.code, e.message, e.tab)))
         return http.response(200, aimcp.rpc_result(ident, aimcp.tool_result(name, result)))

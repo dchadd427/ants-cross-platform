@@ -197,7 +197,12 @@ class Hub:
                 pending = False
                 return await tab.run(reader)
             if request.split()[0].startswith(aidoor.PREFIX):
-                return await self.ai_page(request, reader, writer)
+                def release():                                       # (a call of an AI waits for its tab for seconds: once its key is good it gives back its place among the handshakes, hub/aidoor.py)
+                    nonlocal pending
+                    if pending:
+                        self.pending -= 1
+                        pending = False
+                return await self.ai_page(request, reader, writer, release)
             if request.split()[0].startswith(admindoor.ROUTE_PREFIX):             # (the place of the connection is kept until it is answered: a body that is promised and not sent holds a place, not a free one)
                 return await self.admin_page(request, reader, writer)
             if request.split()[0] == imgdoor.UP_PATH:
@@ -252,9 +257,9 @@ class Hub:
         """One request of the admin page's door: the gate, or the page's API (its POST has a body, which hub/admindoor.py reads); the answer ends the connection."""
         writer.write(await self.admin.serve(request, reader, self.address_of(request.headers, writer)))
 
-    async def ai_page(self, request, reader, writer):
+    async def ai_page(self, request, reader, writer, release):
         """One request of the AI keys' doors (hub/aidoor.py): the key pages of the Map Maker and the doors that an AI uses with a key; the body of a POST is read there, the answer ends the connection."""
-        writer.write(await self.ai.serve(request, reader, self.address_of(request.headers, writer)))
+        writer.write(await self.ai.serve(request, reader, self.address_of(request.headers, writer), release))
 
     async def image_page(self, request, reader, writer):
         """The upload of an image (hub/imgdoor.py): the body is read there, after the cheap checks; the answer ends the connection, and the place of the connection is kept until it is answered."""

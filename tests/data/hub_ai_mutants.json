@@ -168,8 +168,8 @@
   {
    "id": "the_tab_is_told_the_digest",
    "file": "hub/airelay.py",
-   "old": "\"key\": key.name, \"client\"",
-   "new": "\"key\": key.digest, \"client\"",
+   "old": "\"key\": key.name, \"scope\"",
+   "new": "\"key\": key.digest, \"scope\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
   },
   {
@@ -402,6 +402,167 @@
    "old": "env.get(\"ANTS_HUB_AI_KEYS\", \"\").strip().lower() or \"off\"",
    "new": "env.get(\"ANTS_HUB_AI_KEYS\", \"\").strip().lower() or \"on\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyPages"
+  },
+  {
+   "id": "a_call_keeps_the_place_of_a_handshake",
+   "file": "hub/aidoor.py",
+   "old": "        release()                                                   # (from here the call waits for a tab, up to twenty seconds: it is counted in `in_flight`, not among the handshakes)",
+   "new": "        pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheHubKeepsItsPlaces"
+  },
+  {
+   "id": "the_handshake_place_is_not_given_back",
+   "file": "hub/server.py",
+   "old": "                    if pending:\n                        self.pending -= 1\n                        pending = False\n                return await self.ai_page(",
+   "new": "                    if False:\n                        self.pending -= 1\n                        pending = False\n                return await self.ai_page(",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheHubKeepsItsPlaces"
+  },
+  {
+   "id": "the_calls_in_flight_are_not_limited",
+   "file": "hub/aidoor.py",
+   "old": "        if self.in_flight >= hub.limits.ai_in_flight_total:",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheHubKeepsItsPlaces"
+  },
+  {
+   "id": "the_calls_in_flight_are_never_given_back",
+   "file": "hub/aidoor.py",
+   "old": "        finally:\n            self.in_flight -= 1",
+   "new": "        finally:\n            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheHubKeepsItsPlaces"
+  },
+  {
+   "id": "a_revoked_key_leaves_its_call_in_flight",
+   "file": "hub/aidoor.py",
+   "old": "            self.relay.cut(hub.chat.ref(who.account_id), key_id)       # (a call of this key that is in flight is answered `bad_key` at once, and the tab is told to drop it)",
+   "new": "            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "a_revoke_cuts_the_call_of_any_key",
+   "file": "hub/airelay.py",
+   "old": "pending[2] == key_id and not pending[1].done()",
+   "new": "True and not pending[1].done()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "a_call_that_timed_out_is_not_cancelled_in_the_page",
+   "file": "hub/airelay.py",
+   "old": "                tab.send({\"t\": \"cancel\", \"id\": call_id})            # (the tab drops the work that has not started: a late answer is thrown away, and a retry must not apply the change twice)",
+   "new": "                pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "the_tabs_sentence_is_not_marked",
+   "file": "hub/aidoor.py",
+   "old": "            body.update(untrusted=True, untrusted_fields=[\"message\"])",
+   "new": "            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheTools"
+  },
+  {
+   "id": "the_tabs_sentence_is_not_marked_in_mcp",
+   "file": "hub/aimcp.py",
+   "old": "        said.update(untrusted=True, untrusted_fields=[\"message\"])\n        content.append({\"type\": \"text\", \"text\": aitools.UNTRUSTED_SENTENCE})",
+   "new": "        pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheTools"
+  },
+  {
+   "id": "a_draft_name_is_not_marked",
+   "file": "hub/aitools.py",
+   "old": ", \"save_draft\": (\"saved_as\",)}",
+   "new": "}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheTools"
+  },
+  {
+   "id": "a_waiting_call_is_asked_with_another_secret",
+   "file": "hub/aidoor.py",
+   "old": "row.digest == key.digest and ",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "a_waiting_call_is_asked_after_its_key_ended",
+   "file": "hub/aidoor.py",
+   "old": " and row.ends > self.hub.store.clock()",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "an_answer_with_the_id_in_another_type_is_taken",
+   "file": "hub/airelay.py",
+   "old": " or type(frame.get(\"id\")) is not int",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "the_socket_ignores_the_fetch_site",
+   "file": "hub/airelay.py",
+   "old": "        if h.get(\"sec-fetch-site\", \"same-origin\") != \"same-origin\":",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "a_read_key_may_change_the_map_over_mcp",
+   "file": "hub/aidoor.py",
+   "old": "if tool.scope == aitools.EDIT and key.scope != aitools.EDIT:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyRule.test_a_read_key_sees_only_the_tools_that_look"
+  },
+  {
+   "id": "a_key_may_have_a_tail",
+   "file": "hub/aikeys.py",
+   "old": "{43})\\Z\")",
+   "new": "{43})\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyRule"
+  },
+  {
+   "id": "the_pages_of_an_account_are_not_limited",
+   "file": "hub/aidoor.py",
+   "old": "        if not self.pages_account.take(",
+   "new": "        if False and not self.pages_account.take(",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyPages.test_the_page_limit_is_for_each_account_and_a_wider_wall_for_each_address"
+  },
+  {
+   "id": "the_pages_of_an_address_are_not_limited",
+   "file": "hub/aidoor.py",
+   "old": "        if not self.pages.take(address, hub.clock()):",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyPages.test_the_page_limit_is_for_each_account_and_a_wider_wall_for_each_address"
+  },
+  {
+   "id": "any_other_value_of_the_switch_is_off",
+   "file": "hub/config.py",
+   "old": "    if ai not in (\"on\", \"off\"):",
+   "new": "    if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyPages.test_the_switch_is_off_unless_it_is_on"
+  },
+  {
+   "id": "the_open_calls_are_not_counted_at_the_plain_door",
+   "file": "docker/nginx.conf",
+   "old": "    location = /hub/ai/v1/call {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        limit_req zone=ants_hub_ai burst=40 nodelay;\n        limit_req_status 429;\n        limit_conn ants_hub_aicalls 16;\n        limit_conn_status 429;\n",
+   "new": "    location = /hub/ai/v1/call {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        limit_req zone=ants_hub_ai burst=40 nodelay;\n        limit_req_status 429;\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_nginx_hub_ai.TheText"
+  },
+  {
+   "id": "the_open_calls_are_not_counted_at_the_mcp_door",
+   "file": "docker/nginx.conf",
+   "old": "    location = /hub/ai/mcp {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        limit_req zone=ants_hub_ai burst=40 nodelay;\n        limit_req_status 429;\n        limit_conn ants_hub_aicalls 16;\n        limit_conn_status 429;\n",
+   "new": "    location = /hub/ai/mcp {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        limit_req zone=ants_hub_ai burst=40 nodelay;\n        limit_req_status 429;\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_nginx_hub_ai.TheText"
+  },
+  {
+   "id": "a_key_has_a_secret_of_another_length",
+   "file": "hub/aikeys.py",
+   "old": "[A-Za-z0-9_-]{43})",
+   "new": "[A-Za-z0-9_-]{42})",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyRule"
+  },
+  {
+   "id": "a_key_has_an_id_of_another_length",
+   "file": "hub/aikeys.py",
+   "old": "([0-9a-f]{8})",
+   "new": "([0-9a-f]{7})",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyRule"
   }
  ]
 }

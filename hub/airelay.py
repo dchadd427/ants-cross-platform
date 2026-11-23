@@ -6,7 +6,7 @@ in this tab", and everything the AI asks for goes through that socket to that ta
     tab) disarms at once: the call in flight is answered `stopped` and later calls get `not_armed`. A tab that has had no call for an hour is disarmed, a login that ends takes its tab with it.
   - ONE CALL AT A TIME for an account, with a short queue behind it (`busy` past that): the call's own check of the key is made again when its turn comes. A call is answered by the tab within ten seconds,
     else `timeout`; a late answer of the tab is thrown away.
-  - WHAT GOES TO THE TAB is `{"t":"call","id","tool","args","key","client","scope"}` and only for a tool of hub/aitools.py whose arguments fit its schema. What comes back is `{"t":"result","id","ok",...}`:
+  - WHAT GOES TO THE TAB is `{"t":"call","id","tool","args","key","scope"}` (`key` is the key's own name, the person's text) and only for a tool of hub/aitools.py whose arguments fit its schema. What comes back is `{"t":"result","id","ok",...}`:
     checked again here (a result is an object, a picture is base64 and within its size, the code of an error is one the tab may use, a sentence is cut to one printable line), and what the AI is given is
     that and nothing else of the frame. The tab's `cells` of an edit are counted: 100,000 in all while the tab stays armed, then `budget`.
   - NO MAP IS KEPT, no text of the map is written to a log: a call is one line (`ai_call key=<id> ref=<8 hex> tool=<name> cells=<n> ok=<0|1> ms=<n>`), never an argument, a result, a name or a key.
@@ -26,10 +26,11 @@ FRAME_KEYS = {"result": {"t", "id", "ok", "result", "cells", "error", "message"}
 class Refusal(Exception):
     """A call that is answered with a code of hub/aitools.py ERRORS (and, for the codes that are the tab's own, with the tab's sentence)."""
 
-    def __init__(self, code, message=""):
+    def __init__(self, code, message="", tab=False):
         super().__init__(code)
         self.code = code
         self.message = message or aitools.ERRORS[code][1]
+        self.tab = tab                              # the sentence is the page's own (text that a person could have changed), not the hub's
 
 
 class Tab:
@@ -136,7 +137,6 @@ class Relay:
         self.hub = hub
         self.tabs = {}                              # the account's reference (hub/pseudo.py) -> its armed Tab
         self.per_address = limitmod.PerAddress(hub.limits.ai_sockets_address)
-        self.clients = {}                           # key id -> the name of the AI app that last said `initialize` over MCP (memory only: what the strip shows)
 
     # ---- the socket ---------------------------------------------------------------------------------------------------------------------------
 
@@ -224,8 +224,6 @@ class Relay:
             elif now - tab.last_ping >= limits.ping_seconds:
                 tab.last_ping = now
                 tab.write(ws.encode_frame(ws.PING))
-        if len(self.clients) > limits.ai_clients_max:
-            self.clients.clear()
 
     # ---- a call -------------------------------------------------------------------------------------------------------------------------------
 
@@ -260,12 +258,13 @@ class Relay:
             tab.last_active = now
             call_id, tab.next_id = tab.next_id, tab.next_id + 1
             future = asyncio.get_running_loop().create_future()
-            tab.pending = (call_id, future)
-            tab.send({"t": "call", "id": call_id, "tool": tool, "args": args, "key": key.name, "client": self.clients.get(key.id, "an AI app"), "scope": key.scope})
+            tab.pending = (call_id, future, key.id)
+            tab.send({"t": "call", "id": call_id, "tool": tool, "args": args, "key": key.name, "scope": key.scope})
             try:
                 frame = await asyncio.wait_for(future, limits.ai_call_seconds)
             except asyncio.TimeoutError:
                 tab.pending = None
+                tab.send({"t": "cancel", "id": call_id})            # (the tab drops the work that has not started: a late answer is thrown away, and a retry must not apply the change twice)
                 raise Refusal("timeout")
             finally:
                 tab.pending = None
@@ -274,13 +273,21 @@ class Relay:
         finally:
             tab.lock.release()
 
+    def cut(self, ref, key_id):
+        """A key was revoked: the call of that key that is in flight on the account's tab is answered `bad_key` at once and the tab is told to drop it (the calls that wait are asked again at their turn)."""
+        tab = self.tabs.get(ref)
+        pending = tab.pending if tab is not None else None
+        if pending is not None and pending[2] == key_id and not pending[1].done():
+            pending[1].set_exception(Refusal("bad_key"))
+            tab.send({"t": "cancel", "id": pending[0]})
+
     def accept(self, tab, tool, frame, edit):
         """What the tab answered, checked: (result, cells) or a Refusal."""
         limits = self.hub.limits
         if frame.get("ok") is not True:
             code = frame.get("error")
             code = code if code in aitools.TAB_CODES else "tab_error"
-            raise Refusal(code, aitools.sentence(frame.get("message")) if code in aitools.TAB_SENTENCE else "")
+            raise Refusal(code, aitools.sentence(frame.get("message")) if code in aitools.TAB_SENTENCE else "", tab=code in aitools.TAB_SENTENCE)
         result = frame.get("result")
         if not isinstance(result, dict):
             raise Refusal("tab_error")
