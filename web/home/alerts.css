@@ -3,7 +3,8 @@
 .al-ico { display: block; width: 24px; height: 24px; margin: auto; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 /* ---- the panel: under the bell in a wide window (no dimming; a press outside closes it), a sheet from the bottom on a phone ---- */
-.al-shade { position: fixed; inset: 0; z-index: 70; background: none; }
+.al-shade { position: fixed; inset: 0; z-index: 70; }
+.gshade.al-shade { background: none; }                                                          /* (the page's own .gshade, web/home/games.css, loads after this file and dims: the wide panel does not) */
 .al-panel { box-sizing: border-box; display: flex; flex-direction: column; color: var(--cream); background: #050b0e; border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow);
     padding: 12px 14px 14px; overflow-y: auto; overscroll-behavior: contain; text-align: left; }
 .al-shade:not(.phone) .al-panel { position: fixed; top: 76px; right: 30px; width: min(410px, calc(100vw - 20px)); max-height: calc(100vh - 90px); }

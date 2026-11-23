@@ -1,17 +1,16 @@
-// OPT-IN, not part of ./run_tests.sh: the alerts of the front page (web/alert_core.js, web/home/alerts.js; docs/HOME_SCREEN.md "Alerts") in a REAL browser (Chromium through Playwright), behind a small stand-in for the
-// site (the files of web/ stamped as the Dockerfile stamps them, a fake /lobbies, and a fake game server on /ws that welcomes the page into a room and lets this script seat a person or a computer player). No hub:
-// the chat says that it is offline, which is a guest's page. At a desktop window (1000 x 720) and a phone (390 x 844, pixel ratio 2) it checks:
-//   1. the Menu has the row Alerts; it opens the sheet; the sheet lies inside the window (a phone scrolls inside it), every row is a target of 44 px at least, nothing is wider than the window, there is no row for a
-//      sound and no part for notifications; a press turns a switch, it stays turned after a reload (kept in this browser); Escape and the dimmed page close it and the focus goes back to the Menu's button;
-//   2. a person who joins the room while Home shows: the toast is up, inside the window, not over the chat's field or the phone's strip of views, with Open, which shows the Room; the page's own toast is not up;
-//      a computer player makes none; with the switch off there is none;
+// OPT-IN, not part of ./run_tests.sh: the alerts of the front page (web/alert_core.js, web/home/alerts.js; docs/HOME_SCREEN.md "Alerts"), the invitations and the mentions (docs/HOME_CHAT.md "Invitations and mentions") in a REAL browser
+// (Chromium through Playwright), behind a small stand-in for the site (the files of web/ stamped as the Dockerfile stamps them, a fake /lobbies, a fake game server on /ws that welcomes the page into a room and lets this script seat a person
+// or a computer player, and, for a logged in visitor, the fake chat hub of tests/scripts/fake_hub.js with a players list). At 1920 x 1080, 1366 x 768, 1280 x 800 and a phone (390 x 844, pixel ratio 2) it checks:
+//   1. a visitor (no hub: the chat says that it is offline): the bell in the bar opens the list (a panel under the bell, a sheet from the bottom on a phone), inside the window, nothing wider than the window, no dimming of a wide page;
+//      the gear shows the switches (one row each, 44 px at least, none for a sound, no part for notifications); a press turns a switch, it stays after a reload (kept in this browser); Escape goes back, then closes, and the focus goes back to
+//      the bell; a press on the page outside the panel closes it;
+//   2. a person who joins the room while the Room shows: the page's own toast says who and where, Home's alert is not drawn; a computer player makes none;
 //   3. the background (the page is made to say that it is hidden): the title alternates with the line and the icon is a real picture with a red dot; shown again, the title and the icon are the page's own;
-//   4. the page never asks the browser for anything: no permission is requested, no service worker is registered, the permission is still "default".
-//   5. the bell in the top bar (a site with a fake chat hub, so that the visitor is logged in or not): for a logged in visitor the dot (not set up), the plain bell (on), the struck bell (blocked by the browser),
-//      the arrow of an iPhone that has not installed the app, none where the browser has no notifications; the plain bell for a visitor who is not logged in; at 320, 390, 721, 1000 and 1280 px wide, with and without
-//      a room held: the bell and Quick host, Quick join, Match history, the account button and the Menu's button lie inside the window and none is over another, every target is 44 px or more; the bell stands right
-//      beside the Menu's button (one gap to its left, the same top and height) for a visitor who is logged in or not, with or without a room, at those widths and held sideways, and the account button comes before
-//      the bell; a press opens the sheet, the dot goes for good (also after a reload) once the sheet has been opened, and no press and no load asks the browser for anything.
+//   4. the page never asks the browser for anything: no permission is requested, no service worker is registered, the permission is still "default";
+//   5. the bell in the bar, for a visitor who is logged in or not and for the longest name, with and without a room held, at 320, 390, 721, 1000 and 1280 px wide and a phone held sideways: the bell and the other buttons lie inside the
+//      window and none is over another, the bell is a target of 44 px or more and stands right beside the Menu's button (one gap to its left, the same top and height), the account button before it;
+//   6. a logged in visitor with the hub's alerts: the number on the bell, the list, the settings, the invitation as a toast (the chat folded), the sheet of a person to invite (a room held), the two helper lists (`/invite ` and `@`): each lies
+//      inside the window, every target is 44 px or more, no word is cut, the page does not scroll sideways.
 //   --shots DIR takes the pictures of the build (alerts_*.png).
 //   node tests/scripts/web_home_alerts_browser.js [--web DIR] [--shots DIR]      (CHROME=/path/to/chromium names a browser; as root it runs with --no-sandbox)
 // Needs `playwright` (npm) and a Chromium that it can start; without them it says so and exits 0 (nothing was checked). Exit status: 0 every check passed (or none could be made), 1 a check failed.
@@ -39,7 +38,11 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 const LOBBIES = { format: 1, count: 2, lobbies: [
     { code: 'c1v3rr', host: 'Clover', map: 'TREASURE.LVL', mode: 'highest-score', people: 2, bots: 1, free: 1, size: 4, age: 200 },
     { code: 'p4n8dz', host: 'Pebble', map: 'ISLANDS.LVL', mode: 'highest-score', people: 3, bots: 0, free: 1, size: 4, age: 312 }] };
-const SIZES = [['desktop', 1000, 720, 1, false], ['phone', 390, 844, 2, true]];
+const SIZES = [['1920', 1920, 1080, 1, false], ['1366', 1366, 768, 1, false], ['1280', 1280, 800, 1, false], ['phone', 390, 844, 2, true]];
+const NOW = () => Math.floor(Date.now() / 1000);
+const WHO = { t: 'who', full: true, n: 6, g: 2, more: 0, rows: [{ i: 2, name: 'Wren', at: 'wait' }, { i: 3, name: 'maple.leaf', at: 'look' }, { i: 4, name: 'Clover', at: 'wait' }, { i: 7, name: 'juniper', at: 'look' }, { i: 9, name: 'tess', at: 'look' }] };
+const invite = (id, from, o) => Object.assign({ id, at: NOW() - 40, k: 'invite', u: 1, from, map: 'TREASURE.LVL', n: 3, of: 4, o: 1, code: 'abc234' }, o || {});
+const LIST = () => [invite(6, 'Clover'), { id: 5, at: NOW() - 840, k: 'join', u: 1, name: 'juniper', seat: 'Red' }, { id: 4, at: NOW() - 1920, k: 'mention', u: 1, from: 'tess', text: 'which map are we on, @Maya? This one is a long line of words that goes on and on to see that it wraps' }, invite(3, 'Pebble', { u: 0, o: undefined, code: undefined, at: NOW() - 26 * 3600 })];
 
 let checks = 0;
 let failures = 0;
@@ -92,8 +95,8 @@ function startSite(hubYou) {                                                    
     });
     return new Promise((resolve) => site.listen(0, '127.0.0.1', async () => {
         emitter.address = () => site.address();
-        if (hubYou !== undefined) hub = await startHub({ server: emitter, login: true, you: hubYou, history: [], online: 3 });
-        resolve({ site, state, origin: 'http://127.0.0.1:' + site.address().port, close: () => { state.sockets.forEach((s) => s.destroy()); if (hub) hub.drop(); site.close(); } });
+        if (hubYou !== undefined) hub = await startHub({ server: emitter, login: true, you: hubYou, history: [], online: 9, welcomeExtra: { presence: true, me: 1 }, who: WHO });
+        resolve({ site, state, hub: () => hub, alerts: (rows) => hub.peers.forEach((q) => hub.send(q, { t: 'alerts', rows })), alert: (row) => hub.peers.forEach((q) => hub.send(q, { t: 'alert', row })), origin: 'http://127.0.0.1:' + site.address().port, close: () => { state.sockets.forEach((s) => s.destroy()); if (hub) hub.drop(); site.close(); } });
     }));
 }
 
@@ -122,36 +125,38 @@ const over = (a, b) => a && b && a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b
             await page.goto(origin + '/', { waitUntil: 'load' });
             const phone = name === 'phone';
             const label = (s) => name + ': ' + s;
-            await until('the alerts part is loaded', () => page.evaluate(() => !!window.AntsHomeAlerts && !!document.querySelector('.hbar .hmenu')));
+            await until('the alerts part is loaded', () => page.evaluate(() => !!window.AntsHomeAlerts && !!document.querySelector('.hbar .al-bell')));
 
-            // ---- 1. the Menu and the sheet ----
-            await page.click('.hbar .hmenu');
-            const row = await box(page, '.hmenubox .al-menu');
-            check(label('the Menu has the row Alerts, a target of 44 px at least, inside the Menu'), !!row && row.h >= 44 && await page.evaluate(() => /Alerts/.test(document.querySelector('.hmenubox .al-menu').textContent) && !/sounds/.test(document.querySelector('.hmenubox .al-menu').textContent)));
-            await shot(page, name + '_menu');
-            await page.click('.hmenubox .al-menu');
-            await until('the sheet', () => box(page, '.al-card'));
-            const card = await box(page, '.al-card');
-            check(label('the sheet lies inside the window and nothing is wider than it'), card.l >= 0 && card.r <= w && card.t >= 0 && card.b <= h && await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), JSON.stringify(card));
-            const lines = await page.evaluate(() => Array.from(document.querySelectorAll('.al-line')).map((e) => ({ sw: e.getAttribute('data-switch'), h: e.getBoundingClientRect().height, on: e.getAttribute('aria-checked') })));
-            check(label('two rows, each 44 px high at least and on: no row for a sound'), lines.length === 2 && lines.every((l) => l.h >= 44 && l.on === 'true') && lines.map((l) => l.sw).join() === 'join,start', JSON.stringify(lines));
-            const text = await page.evaluate(() => document.querySelector('.al-card').textContent);
-            check(label('the words of the sheet, and nothing about notifications'), /On this page/.test(text) && /Alert when someone joins my room/.test(text) && /Flash the tab when my match starts/.test(text) && !/When Ants is closed|notification|Log in/i.test(text));
-            check(label('the focus is on the first row'), await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('data-switch') === 'join'));
-            await shot(page, name + '_sheet');
-            await page.click('.al-line[data-switch="join"]');
+            // ---- 1. the bell, the list and the switches ----
+            const bellBox = await box(page, '.hbar .al-bell');
+            check(label('the bell is in the bar, a target of 44 px or more, with no number (nothing is unread)'), !!bellBox && bellBox.w >= 44 && bellBox.h >= 44 && await page.evaluate(() => !document.querySelector('.hbar .al-bell .al-mark')), JSON.stringify(bellBox));
+            await page.click('.hbar .al-bell');
+            await until('the panel', () => box(page, '.al-panel'));
+            const panel = await box(page, '.al-panel');
+            check(label('the list lies inside the window and nothing is wider than it'), panel.l >= 0 && panel.r <= w && panel.t >= 0 && panel.b <= h && await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), JSON.stringify(panel));
+            check(label('nothing yet: the words of an empty list, where it is kept, and the line that says to log in'), await page.evaluate(() => { const t = document.querySelector('.al-panel').textContent; return /No alerts yet/.test(t) && /Kept in this browser/.test(t) && /Log in to get invitations/.test(t); }));
+            check(label(phone ? 'a phone: the list is a sheet from the bottom over a dimmed page' : 'a wide window: the page behind the panel is not dimmed'), await page.evaluate((ph) => { const e = document.querySelector('.al-shade'), dim = !/rgba\(0, 0, 0, 0\)|transparent/.test(getComputedStyle(e).backgroundColor); return ph ? e.classList.contains('phone') && dim : !e.classList.contains('phone') && !dim; }, phone));
+            await shot(page, name + '_list');
+            await page.click('.al-panel .al-gear');
+            const lines = await page.evaluate(() => Array.from(document.querySelectorAll('.al-panel .al-line')).map((e) => ({ sw: e.getAttribute('data-switch'), h: e.getBoundingClientRect().height, on: e.getAttribute('aria-checked') })));
+            check(label('the settings: two rows for a visitor, each 44 px high at least and on, none for a sound'), lines.length === 2 && lines.every((l) => l.h >= 44 && l.on === 'true') && lines.map((l) => l.sw).join() === 'join,start', JSON.stringify(lines));
+            check(label('and nothing about notifications'), await page.evaluate(() => !/notification|When Ants is closed|sounds/i.test(document.querySelector('.al-panel').textContent)));
+            await shot(page, name + '_settings');
+            await page.click('.al-panel .al-line[data-switch="join"]');
             check(label('a press turns the switch off'), await page.evaluate(() => document.querySelector('.al-line[data-switch="join"]').getAttribute('aria-checked') === 'false' && document.querySelector('.al-line[data-switch="start"]').getAttribute('aria-checked') === 'true'));
-            await shot(page, name + '_sheet_join_off');
             await page.keyboard.press('Escape');
-            check(label('Escape closes it and the focus is on the Menu\'s button'), !(await box(page, '.al-card')) && await page.evaluate(() => document.activeElement === document.querySelector('.hbar .hmenu')));
+            check(label('Escape goes back from the settings to the list'), !!(await box(page, '.al-panel')) && await page.evaluate(() => !document.querySelector('.al-line')));
+            await page.keyboard.press('Escape');
+            check(label('Escape closes the list and the focus is on the bell'), !(await box(page, '.al-panel')) && await page.evaluate(() => document.activeElement === document.querySelector('.hbar .al-bell')));
             await page.reload({ waitUntil: 'load' });
-            await until('the alerts part is loaded again', () => page.evaluate(() => !!window.AntsHomeAlerts));
-            await page.click('.hbar .hmenu'); await page.click('.hmenubox .al-menu');
+            await until('the alerts part is loaded again', () => page.evaluate(() => !!window.AntsHomeAlerts && !!document.querySelector('.hbar .al-bell')));
+            await page.click('.hbar .al-bell'); await page.click('.al-panel .al-gear');
             check(label('after a reload the switch is still off (kept in this browser)'), await page.evaluate(() => document.querySelector('.al-line[data-switch="join"]').getAttribute('aria-checked') === 'false' && JSON.parse(localStorage.getItem('ants.alerts.v1')).join === false));
-            const dim = await box(page, '.al-shade');
-            await page.mouse.click(Math.min(dim.r - 3, 3), Math.min(dim.b - 3, 3));
-            check(label('a press on the dimmed page closes it'), !(await box(page, '.al-card')));
-            await page.click('.hbar .hmenu'); await page.click('.hmenubox .al-menu'); await page.click('.al-line[data-switch="join"]'); await page.keyboard.press('Escape');       // (the switch is on again)
+            await page.click('.al-panel .al-line[data-switch="join"]');                 // (the switch is on again)
+            await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+            await page.click('.hbar .al-bell'); await until('the panel', () => box(page, '.al-panel'));
+            await page.mouse.click(5, 5);
+            check(label('a press on the page outside the panel closes it'), !(await box(page, '.al-panel')));
 
             // ---- 2. a person joins while the Room shows (the page never shows Home while it holds a room): the page's own toast says it, and Home's own alert is not drawn ----
             await page.click('.hbar .quick.host');
@@ -198,23 +203,17 @@ const over = (a, b) => a && b && a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b
             check(label('no permission was asked, none is given, no service worker'), asked.asked === 0 && asked.permission !== 'granted' && asked.workers === 0, JSON.stringify(asked));
             await context.close();
         }
-        // ---- 5. the bell ----
-        const signed = await startSite({ name: 'Maya', mod: false, role: 'none' }), guest = await startSite(null), longName = await startSite({ name: 'LongestNameOfThirtyTwoCharacters', mod: false, role: 'none' });
-        const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1';
-        async function bellPage(site, w, h, ratio, touch, scenario) {
-            const context = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: ratio, hasTouch: touch, isMobile: touch, userAgent: scenario.ua });
+        // ---- 5. the bell's place ----
+        const signed = await startSite({ name: 'Maya', mod: false, role: 'none', k: 'k_maya' }), guest = await startSite(null), longName = await startSite({ name: 'LongestNameOfThirtyTwoCharacters', mod: false, role: 'none', k: 'k_long' });
+        async function bellPage(site, w, h, ratio, touch) {
+            const context = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: ratio, hasTouch: touch, isMobile: touch });
             const page = await context.newPage();
             page.on('pageerror', (e) => errors.push('bell ' + w + ': ' + String(e && e.message || e)));
-            await context.addInitScript((sc) => {
-                window.__asked = 0;
-                try {
-                    if (sc.none) { delete window.Notification; }
-                    else if (window.Notification) { Object.defineProperty(Notification, 'permission', { configurable: true, get: () => sc.permission }); Notification.requestPermission = function () { window.__asked++; return Promise.resolve(sc.permission); }; }
-                } catch (e) { /* none */ }
-            }, scenario);
+            await context.addInitScript(() => { window.__asked = 0; try { if (window.Notification) { const real = Notification.requestPermission; Notification.requestPermission = function () { window.__asked++; return real.apply(this, arguments); }; } } catch (e) { /* none */ } });
             await fetch(site.origin + '/__reset');
             await page.goto(site.origin + '/', { waitUntil: 'load' });
-            await until('the alerts part', () => page.evaluate(() => !!window.AntsHomeAlerts && !!document.querySelector('.hbar .hmenu')));
+            await until('the bell is drawn', () => page.evaluate(() => { const b = document.querySelector('.hbar .al-bell'); return !!b && b.getClientRects().length > 0; }));
+            await sleep(300);
             return { context, page };
         }
         const controls = (page) => page.evaluate(() => {
@@ -224,96 +223,99 @@ const over = (a, b) => a && b && a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b
         });
         const clash = (c) => { const names = Object.keys(c), bad = []; for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) if (over(c[names[i]], c[names[j]])) bad.push(names[i] + '/' + names[j]); return bad; };
         // the gap between neighbors in the bar: the column gap of the bar's own row (a phone's bar, where the right-hand group is `display: contents`) or of the group (a wide bar)
-const gapOf = (page) => page.evaluate(() => { const g = document.querySelector('.hbar .hright'), bar = document.querySelector('.hbar'); return parseFloat(getComputedStyle(getComputedStyle(g).display === 'contents' ? bar : g).columnGap) || 0; });
-const BESIDE = (c, gap) => !!c.bell && !!c.menu && Math.abs(c.menu.l - c.bell.r - gap) < 0.75 && Math.abs(c.bell.t - c.menu.t) < 0.5 && Math.abs(c.bell.h - c.menu.h) < 0.5 && (!c.chip || c.chip.r <= c.bell.l + 0.5);
-const bellState = (page) => page.evaluate(() => { const b = document.querySelector('.hbar .al-bell'); return b ? { hidden: b.hidden || !b.getClientRects().length, state: b.getAttribute('data-state'), label: b.getAttribute('aria-label'), marks: b.querySelectorAll('.al-mark').length, menuDot: document.querySelector('.hbar .hmenu').classList.contains('al-dot') || getComputedStyle(document.querySelector('.hbar .hmenu'), '::after').content !== 'none' && getComputedStyle(document.querySelector('.hbar .hmenu'), '::after').content !== 'normal' } : null; });
-        for (const [name, w, h, ratio, touch] of [['w320', 320, 640, 2, true], ['phone', 390, 844, 2, true], ['w721', 721, 800, 1, false], ['desktop', 1000, 720, 1, false], ['wide', 1280, 800, 1, false]]) {
-            const upright = touch && h > w;
-            const { context, page } = await bellPage(signed, w, h, ratio, touch, { permission: 'default' });
-            await until('the dock knows the visitor', () => page.evaluate(() => { const b = document.querySelector('.hbar .al-bell'); return b && b.getAttribute('data-state') === 'off'; }));
-            let c = await controls(page), st = await bellState(page);
-            const label = (x) => 'bell ' + name + ': ' + x;
-            check(label('a logged in visitor who has not set notifications up: the bell with a dot, named for a reader'), !!c.bell && st.state === 'off' && st.marks === 1 && st.label === 'Alerts: not set up on this device' && c.bell.w >= 44 && c.bell.h >= 44, JSON.stringify(st) + JSON.stringify(c.bell));
-            check(label('Quick host, Quick join, the account button, the Menu and the bell are inside the window and none is over another'), c.host && c.join && c.menu && c.chip && [c.host, c.join, c.menu, c.chip, c.bell].every((r) => r.l >= -0.5 && r.r <= w + 0.5 && r.t >= -0.5 && r.b <= h + 0.5) && clash(c).length === 0, clash(c).join() + ' ' + JSON.stringify(c));
-            const last = (k) => k.menu;                                              // the Menu's button is in the corner, whoever else is in the bar
-            check(label('the group of the account button, the bell and the Menu is at the right edge of the bar, the Menu last'), last(c).r >= w - 36 && last(c).r <= w, JSON.stringify(last(c)));
-            check(label('the bell stands right beside the Menu\'s button (one gap to its left, same top and height), the account button before the bell'), BESIDE(c, await gapOf(page)), JSON.stringify([c.chip, c.bell, c.menu, await gapOf(page)]));
-            check(label('the Menu\'s button has no dot of its own'), st.menuDot === false, JSON.stringify(st));
-            await shot(page, 'bell_' + name + '_off');
-            // a room held: Match history stays in the row
+        const gapOf = (page) => page.evaluate(() => { const g = document.querySelector('.hbar .hright'), bar = document.querySelector('.hbar'); return parseFloat(getComputedStyle(getComputedStyle(g).display === 'contents' ? bar : g).columnGap) || 0; });
+        const BESIDE = (c, gap) => !!c.bell && !!c.menu && Math.abs(c.menu.l - c.bell.r - gap) < 0.75 && Math.abs(c.bell.t - c.menu.t) < 0.5 && Math.abs(c.bell.h - c.menu.h) < 0.5 && (!c.chip || c.chip.r <= c.bell.l + 0.5);
+        const holdRoom = async (page) => {
             await page.click('.hbar .quick.host');
             await until('the host card', () => page.evaluate(() => !!document.querySelector('.gshade .gyes')));
             await page.evaluate(() => document.querySelector('.gshade .gyes').click());
             await until('the Room', () => page.evaluate(() => document.body.dataset.screen === 'room' && document.getElementById('code') && document.getElementById('code').textContent.length > 3));
             await sleep(300);
-            c = await controls(page); st = await bellState(page);
-            check(label('with a room held: Quick host, Quick join, Match history, the account button and the Menu are inside the window and none is over another (or over the bell)'), !!c.hist && [c.host, c.join, c.hist, c.menu, c.chip].every((r) => r && r.l >= -0.5 && r.r <= w + 0.5 && r.t >= -0.5 && r.b <= h + 0.5) && clash(c).length === 0, clash(c).join() + ' ' + JSON.stringify(c));
-            check(label('with a room held the last button of the group is still at the right edge'), last(c).r >= w - 36 && last(c).r <= w, JSON.stringify(last(c)));
-            check(label('a room held: the bell keeps its place right beside the Menu\'s button, and both are targets of 44 px'), BESIDE(c, await gapOf(page)) && c.bell.w >= 44 && c.bell.h >= 44 && c.menu.w >= 44 && c.menu.h >= 44, JSON.stringify([c.bell, c.menu, await gapOf(page)]));
-            check(label('a room held: the Menu\'s button has no dot of its own'), st.menuDot === false, JSON.stringify(st));
-            await shot(page, 'bell_' + name + '_room');
-            await page.click('.hbar .hmenu'); await sleep(150);
-            check(label('the Menu\'s button opens the Menu as before'), await page.evaluate(() => !!document.querySelector('.hmenubox') && !document.querySelector('.hmenubox').hidden && !!document.querySelector('.hmenubox .al-menu')));
-            await page.keyboard.press('Escape');
-            await page.click('.hbar .al-bell');
-            check(label('a press on the bell opens the sheet, and the browser was not asked'), !!(await box(page, '.al-card')) && await page.evaluate(() => window.__asked === 0 && Notification.permission === 'default'));
-            await page.keyboard.press('Escape');
-            check(label('Escape closes it and the focus is on the bell'), await page.evaluate(() => document.activeElement === document.querySelector('.hbar .al-bell')));
-            await page.click('.hbar .hmenu'); await sleep(150); await page.click('.hmenubox .al-menu'); await sleep(150);
-            check(label('the Menu\'s row opens the sheet too'), !!(await box(page, '.al-card')));
-            await page.keyboard.press('Escape');
-            st = await bellState(page);
-            check(label('the sheet has been opened: the dot is gone for good from the bell'), st.menuDot === false && st.marks === 0 && st.state === 'off', JSON.stringify(st));
-            await page.reload({ waitUntil: 'load' });
-            await until('the dock knows the visitor again', () => page.evaluate(() => { const b = document.querySelector('.hbar .al-bell'); return b && b.getAttribute('data-state') === 'off'; }));
-            await sleep(300);
-            st = await bellState(page);
-            check(label('and after a reload (kept in this browser): no dot on the bell, none on the Menu\'s button'), st.marks === 0 && st.menuDot === false, JSON.stringify(st));
-            check(label('the browser was never asked: not on load, not by a press'), await page.evaluate(() => window.__asked === 0));
-            await context.close();
-        }
+        };
         // the bell's place: right beside the Menu's button for a visitor who is logged in or not, with or without a room, at five widths and a phone held sideways (two compact rows at 600 x 360, one low row at 844 x 390)
-        for (const [name, w, h, ratio, touch] of [['w320', 320, 640, 2, true], ['phone', 390, 844, 2, true], ['w721', 721, 800, 1, false], ['desktop', 1000, 720, 1, false], ['wide', 1280, 800, 1, false], ['sideways600', 600, 360, 2, true], ['sideways844', 844, 390, 3, true]]) {
-            for (const [who, site, want] of [['logged in', signed, 'off'], ['not logged in', guest, 'guest'], ['logged in with the longest name', longName, 'off']]) {
-                const { context, page } = await bellPage(site, w, h, ratio, touch, { permission: 'default' });
-                await until('the bell is drawn', () => page.evaluate((s) => { const b = document.querySelector('.hbar .al-bell'); return b && b.getAttribute('data-state') === s && b.getClientRects().length > 0; }, want));
-                await sleep(200);
+        for (const [name, w, h, ratio, touch] of [['w320', 320, 640, 2, true], ['phone', 390, 844, 2, true], ['w721', 721, 800, 1, false], ['desktop', 1000, 720, 1, false], ['wide', 1280, 800, 1, false], ['sideways600', 600, 360, 2, true], ['sideways844', 844, 390, 2, true]]) {
+            for (const [who, site] of [['logged in', signed], ['not logged in', guest], ['logged in with the longest name', longName]]) {
+                const { context, page } = await bellPage(site, w, h, ratio, touch);
                 let c = await controls(page);
-                check('bell place ' + name + ', ' + who + ': right beside the Menu\'s button, one gap to its left, the same top and height' + (who !== 'not logged in' ? ', the account button before it' : ''), BESIDE(c, await gapOf(page)) && (who === 'not logged in' || !!c.chip) && c.menu.r >= w - 36 && c.menu.r <= w && clash(c).length === 0, JSON.stringify([c, await gapOf(page)]));
-                await shot(page, 'place_' + name + '_' + (who === 'not logged in' ? 'out' : who === 'logged in' ? 'in' : 'long'));
-                await page.click('.hbar .quick.host');
-                await until('the host card', () => page.evaluate(() => !!document.querySelector('.gshade .gyes')));
-                await page.evaluate(() => document.querySelector('.gshade .gyes').click());
-                await until('the Room', () => page.evaluate(() => document.body.dataset.screen === 'room' && document.getElementById('code') && document.getElementById('code').textContent.length > 3));
-                await sleep(300);
+                const place = 'bell place ' + name + ', ' + who;
+                check(place + ': the bell is 44 px or more, inside the window, over no other button, right beside the Menu\'s button (one gap to its left, the same top and height)' + (who !== 'not logged in' ? ', the account button before it' : ''), !!c.bell && c.bell.w >= 44 && c.bell.h >= 44 && c.bell.l >= 0 && c.bell.r <= w && clash(c).length === 0 && BESIDE(c, await gapOf(page)) && (who === 'not logged in' || !!c.chip), clash(c).join() + JSON.stringify(c));
+                await holdRoom(page);
                 c = await controls(page);
-                check('bell place ' + name + ', ' + who + ', a room held: right beside the Menu\'s button, one gap to its left, the same top and height, Match history and the others inside the window and over no other', BESIDE(c, await gapOf(page)) && !!c.hist && c.menu.r >= w - 36 && c.menu.r <= w && clash(c).length === 0 && [c.host, c.join, c.hist, c.menu, c.bell].every((r) => r && r.l >= -0.5 && r.r <= w + 0.5 && r.t >= -0.5 && r.b <= h + 0.5), JSON.stringify([c, await gapOf(page)]));
-                await shot(page, 'place_' + name + '_' + (who === 'not logged in' ? 'out' : who === 'logged in' ? 'in' : 'long') + '_room');
+                check(place + ', a room held: the same, with Match history in the row (a phone has no Quick host and Quick join in its bar then)', !!c.hist && !!c.bell && c.bell.w >= 44 && Object.keys(c).every((k) => c[k].l >= -0.5 && c[k].r <= w + 0.5 && c[k].t >= -0.5 && c[k].b <= h + 0.5) && clash(c).length === 0 && BESIDE(c, await gapOf(page)), clash(c).join() + JSON.stringify(c));
+                check(place + ': the browser was never asked for anything', await page.evaluate(() => window.__asked === 0));
                 await context.close();
             }
         }
-        // the states, on a phone and on a wide window
-        for (const [name, w, h, ratio, touch] of [['phone', 390, 844, 2, true], ['wide', 1280, 800, 1, false]]) {
-            for (const [label, site, scenario, want] of [
-                ['on', signed, { permission: 'granted' }, { state: 'on', marks: 0, text: 'Alerts: on for this device' }],
-                ['blocked', signed, { permission: 'denied' }, { state: 'blocked', marks: 0, text: 'Alerts: blocked in this browser' }],
-                ['an iPhone that has not installed the app', signed, { none: true, ua: IPHONE }, { state: 'needs', marks: 1, text: 'Alerts: need the app on the Home Screen' }],
-                ['a visitor who is not logged in', guest, { permission: 'default' }, { state: 'guest', marks: 0, text: 'Alerts' }],
-            ]) {
-                const { context, page } = await bellPage(site, w, h, ratio, touch, scenario);
-                await until('the bell is in its state', () => page.evaluate((s) => { const b = document.querySelector('.hbar .al-bell'); return b && b.getAttribute('data-state') === s; }, want.state));
-                const st = await bellState(page), c = await controls(page);
-                check('bell ' + name + ', ' + label + ': the state, its name and its marks', st.state === want.state && st.label === want.text && st.marks === want.marks && st.menuDot === false && !st.hidden, JSON.stringify(st));
-                check('bell ' + name + ', ' + label + ': lies inside the window, over no other button, 44 px or more', c.bell && c.bell.w >= 44 && c.bell.h >= 44 && c.bell.l >= 0 && c.bell.r <= w && clash(c).length === 0, clash(c).join() + JSON.stringify(c.bell));
-                await shot(page, 'bell_' + name + '_' + want.state);
-                await page.click('.hbar .al-bell');
-                check('bell ' + name + ', ' + label + ': a press opens the sheet, and the browser is not asked', !!(await box(page, '.al-card')) && await page.evaluate(() => window.__asked === 0));
-                await context.close();
+
+        // ---- 6. the hub's alerts, the invitation, the sheet of a person and the helper, at the four sizes ----
+        async function measure(page, selector, label, w, h, o) {
+            const r = await page.evaluate(([sel, targets]) => {
+                const root = document.querySelector(sel);
+                if (!root) return null;
+                const q = root.getBoundingClientRect(), out = { box: [q.left, q.top, q.right, q.bottom], small: [], clipped: [], page: document.documentElement.scrollWidth > window.innerWidth + 1 };
+                root.querySelectorAll('button, [role="switch"], a[href], input').forEach((e) => { const b = e.getBoundingClientRect(); if (targets && b.width && b.height && (b.height < 43.5 || b.width < 43.5) && getComputedStyle(e).visibility !== 'hidden') out.small.push((e.className || e.tagName) + ' ' + Math.round(b.width) + 'x' + Math.round(b.height)); });
+                root.querySelectorAll('*').forEach((e) => { if (e.clientWidth && e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).overflowX === 'visible' && !/^(svg|path|circle|line)$/i.test(e.tagName)) out.clipped.push(String(e.className && e.className.baseVal === undefined ? e.className : e.tagName) + ' ' + e.scrollWidth + '>' + e.clientWidth); });
+                return out;
+            }, [selector, !o || o.targets !== false]);
+            check(label + ': it is there', !!r);
+            if (!r) return;
+            check(label + ': inside the window, targets of 44 px or more, no word cut, no sideways scroll of the page', r.box[0] >= -0.5 && r.box[1] >= -0.5 && r.box[2] <= w + 0.5 && r.box[3] <= h + 0.5 && r.small.length === 0 && r.clipped.length === 0 && !r.page, JSON.stringify(r));
+        }
+        for (const [name, w, h, ratio, touch] of SIZES) {
+            const label = (x) => name + ': ' + x;
+            async function hubPage(o) {
+                signed.state.seats = [[C, 'Maya'], [C, 'Wren'], [E, ''], [E, '']];
+                const context = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: ratio, hasTouch: touch, isMobile: touch });
+                const page = await context.newPage();
+                page.on('pageerror', (e) => errors.push('hub ' + name + ': ' + String(e && e.message || e)));
+                await context.addInitScript(() => { try { localStorage.setItem('ants.name', 'Maya'); } catch (e) { /* none */ } });
+                await page.goto(signed.origin + '/', { waitUntil: 'load' });
+                await until('the bell is drawn', () => page.evaluate(() => { const b = document.querySelector('.hbar .al-bell'); return !!b && b.getClientRects().length > 0; }));
+                await sleep(800);
+                if (o && o.host) { await holdRoom(page); await sleep(800); }
+                if (o && o.tab) await page.evaluate((t) => { const b = document.querySelector('.htab.t-' + t); if (b) b.click(); }, o.tab);
+                return { context, page };
             }
-            const none = await bellPage(signed, w, h, ratio, touch, { none: true });
-            await sleep(600);
-            check('bell ' + name + ', a browser with no notifications: no bell, and the Menu still has the row', !(await box(none.page, '.hbar .al-bell')) && await none.page.evaluate(() => { document.querySelector('.hbar .hmenu').click(); return !!document.querySelector('.hmenubox .al-menu'); }));
-            await none.context.close();
+            let { context, page } = await hubPage();
+            signed.alerts(LIST());
+            await until('the number is on the bell', () => page.evaluate(() => { const m = document.querySelector('.hbar .al-bell .al-mark'); return !!m && m.textContent === '3'; }));
+            const mark = await box(page, '.hbar .al-bell .al-mark');
+            check(label('the hub\'s list: three unread, the number on the bell, inside the window'), mark.l >= 0 && mark.t >= 0 && mark.r <= w, JSON.stringify(mark));
+            await page.click('.hbar .al-bell'); await until('the panel', () => box(page, '.al-panel')); await sleep(200);
+            await measure(page, '.al-panel', label('the list'), w, h);
+            check(label('the list: an invitation with Join, a person who joined and a mention with Open, an old invitation dim, with no button'), await page.evaluate(() => { const it = Array.from(document.querySelectorAll('.al-panel .al-item')); return it.length === 4 && /Join/.test(it[0].textContent) && /Open/.test(it[1].textContent) && /Open/.test(it[2].textContent) && /dim/.test(it[3].className) && !it[3].querySelector('button'); }));
+            await shot(page, name + '_hub_list');
+            await page.click('.al-panel .al-gear'); await sleep(200);
+            await measure(page, '.al-panel', label('the settings of a logged in visitor'), w, h);
+            check(label('the settings: four rows (an invitation, a mention, a person who joined, my match) and the button that empties the list'), await page.evaluate(() => Array.from(document.querySelectorAll('.al-panel .al-line')).map((e) => e.getAttribute('data-switch')).join() === 'invite,mention,join,start' && !!document.querySelector('.al-panel [data-clear]')));
+            await shot(page, name + '_hub_settings');
+            await page.keyboard.press('Escape'); await page.keyboard.press('Escape'); await sleep(200);
+            const fold = await page.$('.gc-fold[aria-expanded="true"]'); if (fold) { await fold.click(); await sleep(300); }
+            signed.alert(invite(9, 'Pebble'));
+            await until('the toast', () => box(page, '.al-toast:not([hidden])'));
+            await measure(page, '.al-toast:not([hidden])', label('the invitation as a toast'), w, h);
+            check(label('the toast says who invited you and to what, with Join'), await page.evaluate(() => /Pebble invited you to Treasure \(3 of 4\)\./.test(document.querySelector('.al-toast:not([hidden])').textContent) && /Join/.test(document.querySelector('.al-toast:not([hidden])').textContent)));
+            await shot(page, name + '_invite_toast');
+            await context.close();
+            // the sheet of a person to invite (a room held), on a phone in the Players view
+            ({ context, page } = await hubPage({ host: true, tab: touch ? 'players' : null }));
+            await page.locator('.pl-card', { has: page.locator('.pl-name', { hasText: /^juniper$/ }) }).last().click({ button: 'right' });
+            await until('the sheet', () => box(page, '.gm-box')); await sleep(250);
+            await measure(page, '.gm-box', label('the sheet of a person'), w, h);
+            check(label('the sheet offers Invite to my room, with the room and the free seats'), await page.evaluate(() => { const b = document.querySelector('.gm-box button[aria-describedby="gm-d-invite"]'); return !!b && /Invite to my room/.test(b.textContent) && /Treasure . 2 of 4 . 2 seats free/.test(b.textContent) && b.getAttribute('aria-disabled') !== 'true'; }));
+            await shot(page, name + '_person_sheet');
+            await context.close();
+            // the helper lists in the chat box: the names of /invite, the people of @
+            ({ context, page } = await hubPage({ host: true, tab: touch ? 'chat' : null }));
+            await page.click('.gc-input'); await page.keyboard.type('/invite '); await sleep(450);
+            await measure(page, '.gh-pop', label('the names of /invite'), w, h, { targets: false });
+            check(label('/invite: the people to invite, the ones who cannot be invited now dim with the reason'), await page.evaluate(() => /People here, to invite/.test(document.querySelector('.gh-pop').textContent) && /juniper/.test(document.querySelector('.gh-pop').textContent) && /In your room/.test(document.querySelector('.gh-pop').textContent)));
+            await shot(page, name + '_invite_names');
+            await page.keyboard.press('Escape'); await page.fill('.gc-input', ''); await page.keyboard.type('hey @'); await sleep(450);
+            await measure(page, '.gh-pop', label('the people of @'), w, h, { targets: false });
+            check(label('@: the people to mention'), await page.evaluate(() => /People to mention/.test(document.querySelector('.gh-pop').textContent)));
+            await shot(page, name + '_mention_names');
+            await context.close();
         }
         signed.close(); guest.close(); longName.close();
         check('no error on any page', errors.length === 0, errors.join(' | '));
