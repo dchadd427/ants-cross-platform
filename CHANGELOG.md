@@ -26,6 +26,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.20.6 - 2026-11-22 - 3D ant models test page
+
+**For players:**
+- A test page at /test_3d/ shows stylized 3D models of the six ant types, with their animations, next to the original 1998 sprites.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/857ce588...3519146b)
+
 ## v0.20.5 - 2026-11-22 - Real error pages, clean addresses, share cards
 
 **For players:**
