@@ -1,5 +1,5 @@
 {
- "note": "Mutants of .github/workflows/ci.yml: slips of the pen that a reader of the file could make (a typo in the part or the conclusion that a step asks for, a name used twice, a renamed check, a small job that does not always run, a ctest that may find no test, the light checks, the Linux jobs back on the default image), each of which the tests of tests/scripts/test_ci_workflow.py must notice. No build: python3 tools/mutate.py tests/data/ci_workflow_mutants.json --keep-going --jobs 1, from the repository folder (a few seconds for each mutant). Every mutant must be caught; the first ones are the four that used to pass unnoticed.",
+ "note": "Mutants of .github/workflows/ci.yml: slips of the pen that a reader of the file could make (a typo in the part or the conclusion that a step asks for, a name used twice, a renamed check, a small job that does not always run, a ctest that may find no test (also in the two Windows halves, which must be every test once on each compiler), the light checks, the Linux jobs back on the default image), each of which the tests of tests/scripts/test_ci_workflow.py must notice. No build: python3 tools/mutate.py tests/data/ci_workflow_mutants.json --keep-going --jobs 1, from the repository folder (a few seconds for each mutant). Every mutant must be caught; the first ones are the four that used to pass unnoticed.",
  "mutants": [
   {
    "id": "typo_part_of_ctest_long",
@@ -100,8 +100,8 @@
   {
    "id": "typo_conclusion_of_the_build_on_windows",
    "file": ".github/workflows/ci.yml",
-   "old": "steps.build.conclusion == 'success' }}\n        run: ctest",
-   "new": "steps.build.conclusion == 'sucess' }}\n        run: ctest",
+   "old": "steps.build.conclusion == 'success' && matrix.part == 'long' }}\n        run: ctest",
+   "new": "steps.build.conclusion == 'sucess' && matrix.part == 'long' }}\n        run: ctest",
    "test": "python3 tests/scripts/test_ci_workflow.py",
    "expect": "test_the_answer_of_the_first_job_skips_macos_and_the_builds_of_windows_and_nothing_else"
   },
@@ -148,7 +148,7 @@
   {
    "id": "two_legs_of_windows_keep_their_logs_under_one_name",
    "file": ".github/workflows/ci.yml",
-   "old": "name: windows-${{ matrix.os }}-test-logs",
+   "old": "name: windows-${{ matrix.id }}-test-logs",
    "new": "name: windows-test-logs",
    "test": "python3 tests/scripts/test_ci_workflow.py",
    "expect": "test_every_check_and_every_artifact_of_the_logs_has_a_name_of_its_own_and_the_five_required_names_are_reported_once"
@@ -262,10 +262,18 @@
    "expect": "test_no_ctest_passes_with_no_test_run"
   },
   {
-   "id": "ctest_on_windows_may_find_none",
+   "id": "ctest_of_the_windows_long_tests_may_find_none",
    "file": ".github/workflows/ci.yml",
-   "old": "run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4 --no-tests=error\n\n      - name: Tool self-tests (map_sweep, bot_arena, replay_tool, lvl_tool)\n",
-   "new": "run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4\n\n      - name: Tool self-tests (map_sweep, bot_arena, replay_tool, lvl_tool)\n",
+   "old": "--parallel 4 --no-tests=error -R \"$CTEST_WINDOWS_LONG\"",
+   "new": "--parallel 4 -R \"$CTEST_WINDOWS_LONG\"",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_no_ctest_passes_with_no_test_run"
+  },
+  {
+   "id": "ctest_of_the_windows_other_tests_may_find_none",
+   "file": ".github/workflows/ci.yml",
+   "old": "--parallel 4 --no-tests=error -E \"$CTEST_WINDOWS_LONG\"",
+   "new": "--parallel 4 -E \"$CTEST_WINDOWS_LONG\"",
    "test": "python3 tests/scripts/test_ci_workflow.py",
    "expect": "test_no_ctest_passes_with_no_test_run"
   },
@@ -275,6 +283,46 @@
    "old": "CTEST_LONG: \"^(test_ai|test_ai_part2|test_lockstep|test_ai_worker|test_engine_copy)$\"",
    "new": "CTEST_LONG: \"^(test_ai|test_ai_part2|test_lockstep|test_ai_worker|test_engine_copies)$\"",
    "test": "python3 tests/scripts/test_ci_workflow.py"
+  },
+  {
+   "id": "a_name_of_the_windows_long_tests_matches_no_test",
+   "file": ".github/workflows/ci.yml",
+   "old": "test_app_integration|test_replay_app|",
+   "new": "test_app_integration|test_replay_apps|",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_legs_of_the_windows_job_are_every_test_of_ctest_once_on_each_compiler"
+  },
+  {
+   "id": "the_windows_other_half_runs_the_long_tests_again",
+   "file": ".github/workflows/ci.yml",
+   "old": "-E \"$CTEST_WINDOWS_LONG\"",
+   "new": "-R \"$CTEST_WINDOWS_LONG\"",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_legs_of_the_windows_job_are_every_test_of_ctest_once_on_each_compiler"
+  },
+  {
+   "id": "typo_part_of_the_windows_long_tests",
+   "file": ".github/workflows/ci.yml",
+   "old": "matrix.part == 'long' }}\n        run: ctest",
+   "new": "matrix.part == 'lang' }}\n        run: ctest",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_legs_are_every_part_run_by_steps_that_exist_and_every_leg_runs_a_test"
+  },
+  {
+   "id": "typo_part_of_the_windows_e2e_runner_build",
+   "file": ".github/workflows/ci.yml",
+   "old": "        id: build_e2e\n        if: ${{ matrix.part == 'rest' }}\n",
+   "new": "        id: build_e2e\n        if: ${{ matrix.part == 'rst' }}\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_legs_are_every_part_run_by_steps_that_exist_and_every_leg_runs_a_test"
+  },
+  {
+   "id": "a_windows_compiler_runs_one_half_only",
+   "file": ".github/workflows/ci.yml",
+   "old": "          - id: msvc2026-rest\n            name: \"MSVC 2026: ctest, all the other tests, tool self-tests, E2E runner\"\n            os: windows-latest\n            part: rest\n",
+   "new": "          - id: msvc2026-rest\n            name: \"MSVC 2026: ctest, all the other tests, tool self-tests, E2E runner\"\n            os: windows-latest\n            part: long\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_legs_of_the_windows_job_are_every_test_of_ctest_once_on_each_compiler"
   },
   {
    "id": "a_slice_runs_a_fixed_part",
