@@ -1,0 +1,127 @@
+{
+ "note": "Mutants of the skills for a person's AI (tools/make_ai_skills.py and the hub's tool table, hub/aitools.py; docs/MAP_AI.md 'The skills') for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose (a generated block that is stale and not found, a check that passes on it, marker lines that are served, a zip that is not reproducible or not sorted, an index that says a wrong size or a wrong topic, a skill that does not name itself, a team, an ant type or a topic of the hub that is not compared, a palette name that is not the game's, a map that is read wrongly, a tool of the hub that is renamed or a limit that moves while the skills say the old one), and a test of tests/scripts/test_ai_skills.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/ai_skills_mutants.json --keep-going --jobs 1; every mutant must be caught.",
+ "baseline": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 timeout 300 python3 -m unittest tests.scripts.test_ai_skills"
+ },
+ "mutants": [
+  {
+   "id": "a_stale_block_is_not_found",
+   "file": "tools/make_ai_skills.py",
+   "old": "        if fresh != text:\n            now = {",
+   "new": "        if False:\n            now = {",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 300 python3 -m unittest -f tests.scripts.test_ai_skills"
+  },
+  {
+   "id": "the_check_passes_when_a_block_is_stale",
+   "file": "tools/make_ai_skills.py",
+   "old": "        if bad:\n            return 1\n",
+   "new": "        if False:\n            return 1\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 300 python3 -m unittest -f tests.scripts.test_ai_skills"
+  },
+  {
+   "id": "the_marker_lines_are_served",
+   "file": "tools/make_ai_skills.py",
+   "old": "    return MARKER_LINE.sub(\"\", text).replace(\"\\n\\n\\n\", \"\\n\\n\")",
+   "new": "    return text",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 300 python3 -m unittest -f tests.scripts.test_ai_skills"
+  },
+  {
+   "id": "a_zip_has_the_time_of_the_build",
+   "file": "tools/make_ai_skills.py",
+   "old": "info = zipfile.ZipInfo(path, ZIP_TIME)",
+   "new": "info = zipfile.ZipInfo(path, __import__(\"time\").localtime()[:6])",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 300 python3 -m unittest -f tests.scripts.test_ai_skills"
+  },
+  {
+   "id": "a_zip_is_not_sorted",
+   "file": "tools/make_ai_skills.py",
+   "old": "        for path in sorted(entries):\n            info",
+   "new": "        for path in reversed(sorted(entries)):\n            info",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 300 python3 -m unittest -f tests.scripts.test_ai_skills"
+  },
+  {
+   "id": "a_zip_has_another_system",
+   "file": "tools/make_ai_skills.py",
+   "old": "info.create_system = 3",
+   "new": "info.create_system = 0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 300 python3 -m unittest -f tests.scripts.test_ai_skills"
+  },
+  {
+   "id": "the_index_says_a_wrong_size",
+   "file": "tools/make_ai_skills.py",
+   "old": "\"bytes\": len(data), \"files\"",
+   "new": "\"bytes\": len(data) + 1, \"files\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 300 python3 -m unittest -f tests.scripts.test_ai_skills"
+  },
+  {
+   "id": "the_index_topic_is_the_name",
+   "file": "tools/make_ai_skills.py",
+   "old": "\"topic\": topic, \"description\"",
+   "new": "\"topic\": name, \"description\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 300 python3 -m unittest -f tests.scripts.test_ai_skills"
+  },
+  {
+   "id": "a_skill_that_does_not_name_itself_is_built",
+   "file": "tools/make_ai_skills.py",
+   "old": "if meta.get(\"name\") != name or not meta.get(\"description\"):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 300 python3 -m unittest -f tests.scripts.test_ai_skills"
+  },
+  {
+   "id": "the_topics_of_the_hub_are_not_compared",
+   "file": "tools/make_ai_skills.py",
+   "old": "if list(TOPICS) != list(tools.GUIDE_TOPICS):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 300 python3 -m unittest -f tests.scripts.test_ai_skills"
+  },
+  {
+   "id": "the_teams_of_the_hub_are_not_compared",
+   "file": "tools/make_ai_skills.py",
+   "old": "if [t[\"key\"] for t in blocks[\"teams\"]] != list(tools.TEAMS):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 300 python3 -m unittest -f tests.scripts.test_ai_skills"
+  },
+  {
+   "id": "the_ant_types_of_the_hub_are_not_compared",
+   "file": "tools/make_ai_skills.py",
+   "old": "if [t[0] for t in props[\"types\"]] != list(tools.ANT_TYPES):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 300 python3 -m unittest -f tests.scripts.test_ai_skills"
+  },
+  {
+   "id": "a_palette_name_is_not_compared_with_the_games",
+   "file": "tools/make_ai_skills.py",
+   "old": "        if names[tile] != name:\n            raise ValueError(\"palette name of tile %d is not the game's\" % tile)\n        what = \"rock\"",
+   "new": "        what = \"rock\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 300 python3 -m unittest -f tests.scripts.test_ai_skills"
+  },
+  {
+   "id": "every_plant_is_a_dropper",
+   "file": "tools/make_ai_skills.py",
+   "old": "droppers = len(plants & {(r, c) for r, c, f in waypoints if f})",
+   "new": "droppers = len(plants)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 300 python3 -m unittest -f tests.scripts.test_ai_skills"
+  },
+  {
+   "id": "the_points_are_only_the_bites",
+   "file": "tools/make_ai_skills.py",
+   "old": "\"points\": sum(p[\"units\"] * p[\"points\"] for p in piles)",
+   "new": "\"points\": sum(p[\"units\"] for p in piles)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 300 python3 -m unittest -f tests.scripts.test_ai_skills"
+  },
+  {
+   "id": "a_tool_of_the_hub_is_renamed",
+   "file": "hub/aitools.py",
+   "old": "Tool(\"note\", EDIT, \"Say something\",",
+   "new": "Tool(\"notes\", EDIT, \"Say something\",",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 300 python3 -m unittest -f tests.scripts.test_ai_skills"
+  },
+  {
+   "id": "a_limit_of_the_hub_changes",
+   "file": "hub/aitools.py",
+   "old": "MAX_CELLS = 5000 ",
+   "new": "MAX_CELLS = 4000 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 300 python3 -m unittest -f tests.scripts.test_ai_skills"
+  }
+ ]
+}

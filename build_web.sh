@@ -93,6 +93,7 @@ cp -f "${SCRIPT_DIR}/web/home"/* "${DIST_DIR}/home/"              # the front pa
 cp -f "${SCRIPT_DIR}/web/manifest.webmanifest" "${DIST_DIR}/"             # the installable web app: its manifest (served at /manifest.webmanifest) ...
 cp -f "${SCRIPT_DIR}/web/app"/* "${DIST_DIR}/app/"                  # ... and its icons (tools/make_app_icons.py), served at /app/
 python3 "${SCRIPT_DIR}/tools/map_atlas.py" "${DIST_DIR}/mapmaker_atlas"        # the map maker's sprite atlas (docs/MAP_EDITOR.md, "Sprites"); the few big toys that it fetches one by one come from /asset_catalog/sprites/, which the image has and this folder does not
+python3 "${SCRIPT_DIR}/tools/make_ai_skills.py" --build "${DIST_DIR}"        # the skills for a person's AI (docs/MAP_AI.md, "The skills"), served at /ai/skills/
 
 echo "========================================================"
 echo " Build Succeeded! Web distribution ready in: ${DIST_DIR}"
