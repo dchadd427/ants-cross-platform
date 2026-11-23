@@ -715,6 +715,48 @@ endif()
 
 add_test(NAME test_png_encode COMMAND test_png_encode)
 
+# The desktop game's icon (app_icon.hpp): the original's picture and its zooms, and the window that is given it (SDL's dummy video driver, no screen)
+add_executable(test_app_icon
+    test_app_icon.cpp
+)
+
+target_include_directories(test_app_icon PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_app_icon PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_app_icon PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_app_icon PRIVATE ws2_32 winmm)
+    if(DEFINED SDL2_DLL)
+        add_custom_command(TARGET test_app_icon POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SDL2_DLL}" "$<TARGET_FILE_DIR:test_app_icon>"
+        )
+    endif()
+    if(DEFINED SDL2_TTF_DLL)
+        add_custom_command(TARGET test_app_icon POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SDL2_TTF_DLL}" "$<TARGET_FILE_DIR:test_app_icon>"
+        )
+    endif()
+endif()
+
+add_test(NAME test_app_icon COMMAND test_app_icon)
+set_tests_properties(test_app_icon PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # Wide setup screen (the setup / map selection screen at 960 x 540 with a map preview): the layout against the mock-ups, the seams against the art, the composed screens pixel for pixel,
 # the preview, the screens' state, the pointer through the application, the picture per screen, fingerprints
 add_executable(test_wide_setup

@@ -1,4 +1,4 @@
-# Changelog
+# What’s new
 
 What changed in each release of the Ants remake, newest first, a few lines each: what a player sees and, only when it changed, the rules or the network protocol. The version is the one line of the file `VERSION` (how it moves: [`docs/WORKFLOW.md`](docs/WORKFLOW.md)); every build also has a build id, the short git commit, shown by `ants --version`, `ants_server --version` and the footer of the web page.
 
@@ -25,6 +25,23 @@ Template of an entry (copy it, keep the labels and the order, leave out a paragr
 Work that is not released yet is written in the same template under a heading that says only "## Next" (no version, no date), above the newest release;
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
+
+## v0.20.5 - 2026-11-22 - Real error pages, clean addresses, share cards
+
+**For players:**
+- The desktop game has the original Ants icon too.
+- Chat images in the installed app: Share, Copy link and Save, instead of a link that trapped you in the app; Copy link in the browser as well.
+- An address that does not exist shows a "Page not found" page instead of starting a solo game; old .html addresses go to their clean ones.
+- "What's new" replaces "Changelog" in the menus.
+- Links to the site show a preview card, and search engines get a proper title and description for each page.
+
+**Fixes:**
+- The moderator menu on a chat image says "An image" instead of an empty box.
+
+**For operators:**
+- The web image builds with Emscripten 3.1.74 and the server image runs on Debian 13; /robots.txt and /sitemap.xml are real files.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/a56438f6...236540e7)
 
 ## v0.20.4 - 2026-11-21 - Encrypted desktop joins, fairer limits, the original icon
 

@@ -62,7 +62,7 @@ same('the address of the Room is the hash #room', Home.HASH, '#room');
     same('the Menu has the links of the header and the footer, in the order of the picture: Home, Matches, Map maker, How it works (a button), Discord server',
         Home.MENU_MAIN, [['Home', '/'], ['Matches', matches], ['Map maker', mapMaker], ['How it works', ''], ['Discord server', discord]]);
     check('... and none of them is the page of the matches that run now (the front page lists them itself)', !links.some((l) => l[1].indexOf('live-now') !== -1) && !Home.MENU_MAIN.some((m) => m[1].indexOf('live-now') !== -1));
-    same('... and the small links are the footer\'s own, in its order', Home.MENU_SMALL, ['Sprites and sounds', 'Changelog', 'GitHub', 'Feedback', 'Legal'].map((t) => [t, want(t)]));
+    same('... and the small links are the footer\'s own, in its order', Home.MENU_SMALL, ['Sprites and sounds', 'What’s new', 'GitHub', 'Feedback', 'Legal'].map((t) => [t, want(t)]));
     check('... and the footer has a button for How it works (the Menu opens the page\'s own list)', /<button class="lnk" type="button" id="how-open">How it works<\/button>/.test(footer));
 }
 
@@ -314,7 +314,7 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     const box = env.body.findAll((e) => classes(e).indexOf('hmenubox') !== -1)[0];
     check('the Menu opens under the bar, as a list of links named Menu, and the button says that it is open', !!box && box.hidden === false && menuButton.getAttribute('aria-expanded') === 'true' && box.getAttribute('aria-label') === 'Menu');
     same('... Home, Matches, Map maker, How it works, Discord server, then the small links', box.children.slice(0, 5).map((c) => c.textContent).concat(box.children[5].children.map((c) => c.textContent)),
-        ['Home', 'Matches', 'Map maker', 'How it works', 'Discord server', 'Sprites and sounds', 'Changelog', 'GitHub', 'Feedback', 'Legal']);
+        ['Home', 'Matches', 'Map maker', 'How it works', 'Discord server', 'Sprites and sounds', 'What’s new', 'GitHub', 'Feedback', 'Legal']);
     same('... then the live numbers and the version, as the footer has them', box.children[6].textContent, '3 matches being played · 7 players online\nVersion v0.12.150');
     check('the links of the Menu that leave the site open in a new tab without handing over the page; the ones of the site do not', box.children[4].getAttribute('target') === '_blank' && box.children[4].getAttribute('rel') === 'noopener noreferrer' && box.children[1].getAttribute('target') === null);
     check('Home is the first item and marks the page it is on; no item carries a count of live matches (the games list shows them)',

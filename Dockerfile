@@ -6,7 +6,7 @@
 # flags of src/ants_app/CMakeLists.txt, the map core's of CMakeLists.txt), so that its layers are reused by every build until the version below or the program changes. The build log of the
 # stage after it must show no "generating system library" and no "retrieving port" line. ccache (the compile of the stage after it uses it through EM_COMPILER_WRAPPER) is installed here too.
 # The base image is pinned by tag and digest: the digest is what is pulled, the tag is for the reader and for Dependabot (.github/dependabot.yml), which raises the pair to a newer one in a pull request that CI builds.
-FROM emscripten/emsdk:3.1.58@sha256:b640884dffe6ffd6270b4e61548dc2c597f01aaf2c8d7b788009cb7f4719dd20 AS emsdk-warm
+FROM emscripten/emsdk:3.1.74@sha256:af45409f3199d88db4b1b03af0098532c8fb33a375ac257463eeb0a622870d06 AS emsdk-warm
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ccache && \
@@ -141,7 +141,7 @@ RUN cp /src/web/lobby.html /src/lobby.html && \
     cp /src/web/matches.html /src/matches.html && cp /src/web/match.html /src/match.html && cp /src/web/legal.html /src/legal.html && if [ -f /src/web/mapmaker.html ]; then cp /src/web/mapmaker.html /src/mapmaker.html; fi && \
     for PAGE in /src/build_web/src/ants_app/index.html /src/lobby.html /src/matches.html /src/match.html; do \
         sed -i "s|@@SITE_TITLE@@||g; s|@@SITE_FOOTER@@||g" "$PAGE" || exit 1; \
-        if grep -q '@@SITE_' "$PAGE"; then echo "a site placeholder is left in $PAGE" >&2; exit 1; fi; \
+        if grep -q -e '@@SITE_TITLE@@' -e '@@SITE_FOOTER@@' "$PAGE"; then echo "a site placeholder is left in $PAGE" >&2; exit 1; fi; \
     done
 
 # Build the changelog page (CHANGELOG.md -> changelog.html; no dependencies) after the compile layers so that editing the changelog does not rebuild the game, and with it the data file of the update notice
@@ -154,6 +154,18 @@ RUN cd /src/changelog && \
     BUILD_DATE="$(cat /src/build_date.txt)" && \
     python3 changelog_to_html.py CHANGELOG.md changelog.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --build-date "${BUILD_DATE}" --whats-new whats_new.json && \
     test -s changelog.html && test -s whats_new.json
+
+# The address that the pages name themselves by (web/SITE_ORIGIN, one line): the canonical link, the share card's address and picture and the structured data of a page carry @@SITE_ORIGIN@@, which becomes that address here, in the finished pages
+# (after the stamps and the changelog above, so that none of them depends on it; docs/BUILD_AND_RUN.md "Search engines and share cards"), and tools/seo_files.py makes robots.txt and sitemap.xml with the same address. It refuses an address that is not
+# an origin before anything uses it. The build stops if a placeholder is left or a file is empty.
+COPY tools/seo_files.py /src/tools/seo_files.py
+RUN ORIGIN="$(head -n 1 /src/web/SITE_ORIGIN | tr -d '[:space:]')" && \
+    python3 tools/seo_files.py "${ORIGIN}" /src && \
+    for PAGE in /src/build_web/src/ants_app/index.html /src/lobby.html /src/matches.html /src/match.html /src/legal.html /src/mapmaker.html /src/changelog/changelog.html; do \
+        sed -i "s|@@SITE_ORIGIN@@|${ORIGIN}|g" "$PAGE" || exit 1; \
+        if grep -q '@@SITE_ORIGIN@@' "$PAGE"; then echo "the site's address is left as a placeholder in $PAGE" >&2; exit 1; fi; \
+    done && \
+    test -s /src/robots.txt && test -s /src/sitemap.xml
 
 # The map maker's sprite atlas (docs/MAP_EDITOR.md, "Sprites"): the game's pictures of the ground and of the objects that the editor offers, in two small sheets and an index, made by tools/map_atlas.py (Python
 # standard library only) from the public decoded sprites and the animation table that the sprite viewer's data holds (asset_catalog/catalog_data.js); the repository keeps no generated picture. After the
@@ -189,6 +201,8 @@ COPY web/favicon.* /usr/share/nginx/html/
 
 # The pictures and the font of the front page (web/front/, served at /front/): the game's own art, made by tools/front_page_art/make_art.py, and its own font with its licence
 COPY web/front/ /usr/share/nginx/html/front/
+# The two pages for an address that is not there (404) and for an error of the web server itself (500, 502, 503, 504): static, in the Classic look, named by the error_page lines of docker/nginx.conf, which send them with the status of the error
+COPY web/404.html web/50x.html /usr/share/nginx/html/
 # The installable web app: its manifest (one exact location of nginx.conf serves it) and its icons (served by the picture rule, a week; named with ?v= and a hash of the file).
 COPY web/manifest.webmanifest /usr/share/nginx/html/manifest.webmanifest
 COPY web/app/ /usr/share/nginx/html/app/
@@ -275,6 +289,9 @@ COPY --from=builder /src/legal.html /usr/share/nginx/html/legal.html
 # The changelog page (built from CHANGELOG.md, linked from the game page); it is in the Classic look of the front page: it links
 # /front/classic.css, which the web/front/ copy above puts in the image
 COPY --from=builder /src/changelog/changelog.html /src/changelog/whats_new.json /usr/share/nginx/html/
+
+# The two files for search engines (docs/BUILD_AND_RUN.md "Search engines and share cards"): what a crawler may read, and the pages that it should list, made in the builder stage from the site's address; two exact locations of docker/nginx.conf serve them
+COPY --from=builder /src/robots.txt /src/sitemap.xml /usr/share/nginx/html/
 
 # Copy Asset Catalog & Viewer for reference on beta site
 COPY asset_catalog/ /usr/share/nginx/html/asset_catalog/

@@ -880,7 +880,7 @@ class ThePage(unittest.TestCase):
     def test_the_page_is_in_the_classic_look_and_has_one_title_and_its_own_style(self):
         self.assertIn('<link rel="stylesheet" href="/front/classic.css">\n<link rel="stylesheet" href="/front/mapmaker.css">', self.page)
         self.assertEqual(self.page.count("<title>"), 1)
-        self.assertIn("<title>Ants (1998) - Map maker</title>", self.page)
+        self.assertRegex(self.page, r"<title>[^<]+ \u2014 Ants \(1998\)</title>")                      # (the form of every title: tests/scripts/test_web_seo.py reads them all)
         self.assertNotIn("<style", self.page, "the page's style is web/front/mapmaker.css")
         self.assertIn('name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"', self.page)
 
@@ -1707,7 +1707,7 @@ class TheImageCarriesThePage(unittest.TestCase):
         self.assertRegex(ver, r"^\d+\.\d+\.\d+$", "web/MAPMAKER_VERSION is MAJOR.MINOR.PATCH")
         page = read("web", "mapmaker.html")
         self.assertIn(' data-maker="v%s"' % ver, page)
-        self.assertEqual(sorted(re.findall(r"@@\w+@@", page)), ["@@BUILD_DATE@@", "@@BUILD_ID@@", "@@GAME_VERSION@@"])
+        self.assertEqual(sorted(set(re.findall(r"@@\w+@@", page)) - {"@@SITE_ORIGIN@@"}), ["@@BUILD_DATE@@", "@@BUILD_ID@@", "@@GAME_VERSION@@"])
         for href in ('href="/"', 'href="/matches"'):                                            # (the footer's links that the bar has too; the Menu has the Changelog and Legal)
             self.assertIn(href, page)
 

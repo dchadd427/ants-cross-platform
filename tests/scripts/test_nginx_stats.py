@@ -72,7 +72,7 @@ CACHE_LINES = ("proxy_cache ants_stats_cache;", 'proxy_cache_key "ants-stats";',
 class TheLocations(unittest.TestCase):
     def test_each_is_an_exact_location_and_these_are_the_only_ones_of_their_name(self):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", CONF, re.M)
-        self.assertEqual([l for l in locations if "stats" in l], ["= /stats", "= /stats/local"])      # (no prefix or regular-expression location could also catch /stats/x or /statsx)
+        self.assertEqual([l for l in locations if "stats" in l], ["= /stats", "= /stats/local", "^~ /stats/"])      # (the prefix is the plain 404 of the neighbours, never a pass to the server; no regular-expression location could also catch /stats/x or /statsx)
         self.assertTrue(STATS and LOCAL)
 
     def test_only_the_one_method_without_a_query_goes_through_and_the_checks_come_first(self):
@@ -629,11 +629,11 @@ class TheBlocksRun(Rig, unittest.TestCase):
         self.assertTrue(1 <= again.count(204) <= 3, again)
         self.assertEqual(len(self.stub_requests("/stats/local", before + allowed + again.count(204))) - before, allowed + again.count(204))
 
-    def test_the_neighbours_of_the_two_addresses_are_the_game_page_and_nothing_is_passed_on(self):
+    def test_the_neighbours_of_the_two_addresses_are_a_404_and_nothing_is_passed_on(self):
         for path in ("/stats/", "/stats/local/", "/stats/x", "/statsx", "/stat"):
             status, headers, body = self.ask("GET", path)
-            self.assertEqual(status, 200, path)                                               # (the try_files of the site: the game page, as any unknown address)
-            self.assertIn(b"a stand-in page", body, path)
+            self.assertEqual(status, 404, path)                                               # (the plain 404 under the name of the door, the site's 404 for the rest: never the game page, as any unknown address once was)
+            self.assertNotIn(b"a stand-in page", body, path)
         for path in ("/stats/", "/stats/local/", "/stats/x", "/statsx", "/stat"):
             self.assertEqual(self.stub_requests(path), [], path)                             # (nothing was passed on)
 
