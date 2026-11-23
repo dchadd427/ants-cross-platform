@@ -223,7 +223,7 @@ class TheWebImage(unittest.TestCase):
         outputs = sorted(w for s in self.runner if s.op == "COPY" and "from" in s.flags for w in s.words[:-1])
         self.assertEqual(outputs, sorted([
             "/src/build_web/src/ants_app/index.*", "/src/build_web/lvl_core/lvl_core.js", "/src/build_web/lvl_core/lvl_core.wasm", "/src/lobby.html", "/src/matches.html", "/src/match.html", "/src/legal.html",
-            "/src/mapmaker.html", "/src/mapmaker_atlas/", "/src/test_3d/", "/src/changelog/changelog.html", "/src/changelog/whats_new.json", "/src/web/admin.html"]))
+            "/src/mapmaker.html", "/src/mapmaker_atlas/", "/src/test_3d/", "/src/changelog/changelog.html", "/src/changelog/whats_new.json", "/src/robots.txt", "/src/sitemap.xml", "/src/web/admin.html"]))
         text = self.docker.text[re.search(r"(?m)^FROM nginx:alpine(@\S+)? AS runner", self.docker.text).start():]
         self.assertEqual(len(re.findall(r"(?m)^USER ", text)), 0)
         self.assertEqual(re.findall(r"(?m)^EXPOSE .*$", text), ["EXPOSE 80"])
@@ -345,7 +345,7 @@ class TheServerImage(unittest.TestCase):
         self.assertEqual(sorted(w for s in self.runner if s.op == "COPY" for w in s.words[:-1]),
                          sorted(["Original-Ants/Maps/", "Original-Ants/ants.chd", "Community-Maps/*.lvl", "Community-Maps/*.LVL", "Community-Maps/maps.json", "Community-Maps/previews.json", "/src/build/src/ants_thumb/ants_thumb",
                                  "/src/build/src/ants_server/ants_server"]))
-        text = self.docker.text[re.search(r"(?m)^FROM debian:12-slim(@\S+)? AS runner", self.docker.text).start():]
+        text = self.docker.text[re.search(r"(?m)^FROM debian:\d+-slim(@\S+)? AS runner", self.docker.text).start():]
         self.assertEqual(re.findall(r"(?m)^USER .*$", text), ["USER ants"])
         self.assertEqual(re.findall(r"(?m)^EXPOSE .*$", text), ["EXPOSE 4001 4002 4010 4020"])
         self.assertIn('exec 3<>/dev/tcp/127.0.0.1/4001', text)

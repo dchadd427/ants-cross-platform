@@ -109,7 +109,9 @@ class TheFolderAndTheScripts(unittest.TestCase):
 
     def test_the_only_network_is_the_one_upload_and_the_files_it_names(self):
         for code in (self.pics, self.post):
-            self.assertIsNone(re.search(r"\bfetch\(|WebSocket|sendBeacon|EventSource|importScripts|\.src\s*=\s*['\"]http", code))
+            self.assertIsNone(re.search(r"WebSocket|sendBeacon|EventSource|importScripts|\.src\s*=\s*['\"]http", code))
+        self.assertIsNone(re.search(r"\bfetch\(", self.post))
+        self.assertEqual(len(re.findall(r"\bfetch\(", self.pics)), 1, "the viewer's Save is the one request of the reader (for the file's own address: tests/scripts/web_home_images_check.js)")
         self.assertEqual(self.pics.count("XMLHttpRequest"), 0)
         self.assertEqual(self.post.count("new win.XMLHttpRequest()"), 1)
         self.assertEqual(self.post.count(".send("), 1)
@@ -126,7 +128,7 @@ class TheStyle(unittest.TestCase):
         cls.post = read("web", "home", "post.css")
 
     def test_every_target_is_at_least_44_px(self):
-        for css, selector in ((self.pics, r"\.gc-thumb\.gc-nopic"), (self.pics, r"\.gv-x"), (self.pics, r"\.gv-foot \.btn"), (self.post, r"\.gp-x"), (self.post, r"\.gp-card \.gp-again")):
+        for css, selector in ((self.pics, r"\.gc-thumb\.gc-nopic"), (self.pics, r"\.gv-x"), (self.pics, r"\.gv-foot \.btn"), (self.pics, r"\.gv-foot \.gv-url"), (self.post, r"\.gp-x"), (self.post, r"\.gp-card \.gp-again")):
             block = "".join(re.findall(selector + r"\s*\{([^}]*)\}", css))
             sized = [int(n) for n in re.findall(r"(?:^|[ ;])(?:min-)?(?:width|height):\s*(\d+)px", block)]
             self.assertTrue(sized and max(sized) >= 44, selector + " " + block)
@@ -166,7 +168,7 @@ class TheDocument(unittest.TestCase):
         self.assertIn("## The page", doc)
         for name in ("pics.js", "post.js", "chat.js"):
             self.assertIn("web/home/" + name, doc)
-        for word in ("Play animated images", "prefers-reduced-motion", "Open in a new tab", "Delete my image"):
+        for word in ("Play animated images", "prefers-reduced-motion", "Open in a new tab", "Copy link", "Delete my image"):
             self.assertIn(word, doc)
 
 

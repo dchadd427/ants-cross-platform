@@ -1,4 +1,5 @@
 #include "ants_app/application.hpp"
+#include "ants_app/app_icon.hpp"
 #include "ants_app/net_overlay.hpp"
 #include "ants_app/version.hpp"
 #include "ants_ai/bot.hpp"
@@ -193,6 +194,9 @@ bool Application::init(const ApplicationConfig& config) {
     }
 
     window_title_ = config_.title;
+#if !defined(__EMSCRIPTEN__)
+    window_icon_set_ = app_icon::set_window_icon(window_);     // (the original's icon: the title bar, the taskbar and the Dock; the page has its own on the web)
+#endif
     apply_window_layout();
     if (!config_.headless) {
         SDL_RaiseWindow(window_);

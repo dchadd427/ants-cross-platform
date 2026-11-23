@@ -450,7 +450,7 @@ class TheFullscreenStageIsStillBlack(PageCase):
 class ThePicturesAndTheFont(PageCase):
     def test_every_picture_the_page_names_is_in_the_folder_and_every_img_has_the_size_of_its_file(self):
         named = set(re.findall(r"front/([\w.-]+\.(?:png|ttf))", self.page))
-        self.assertEqual(named, {"logo.png", "clay.png", "LibreFranklin-Medium.ttf"})
+        self.assertEqual(named, {"logo.png", "clay.png", "LibreFranklin-Medium.ttf", "preview_treasure.png"})       # (the last is the picture of the page's share card, named in its head: tests/scripts/test_web_seo.py)
         for name in named:
             self.assertTrue(os.path.exists(os.path.join(FRONT, name)), name)
         tags = re.findall(r"<img [^>]*>", self.page)

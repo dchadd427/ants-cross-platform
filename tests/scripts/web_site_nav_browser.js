@@ -34,7 +34,7 @@ const CHECKS = process.argv.indexOf('--no-checks') === -1;
 const SIZES = [['320', 320, 640], ['390', 390, 844], ['450', 450, 800], ['721', 721, 900], ['768', 768, 900], ['1280', 1280, 800], ['667x375', 667, 375]];
 const PAGES = [   // name, address, what the row marks (null: in the Menu), the Menu's mark
     ['matches', '/matches', 'Matches', null], ['match', '/match?id=ants-TINY-20261015-051557Z', 'Matches', null],
-    ['legal', '/legal', null, 'Legal'], ['changelog', '/changelog', null, 'Changelog'], ['mapmaker', '/mapmaker', 'Map maker', null], ['catalog', '/asset_catalog/', null, 'Sprites and sounds'],
+    ['legal', '/legal', null, 'Legal'], ['changelog', '/changelog', null, 'What’s new'], ['mapmaker', '/mapmaker', 'Map maker', null], ['catalog', '/asset_catalog/', null, 'Sprites and sounds'],
 ];
 let checks = 0;
 let failures = 0;

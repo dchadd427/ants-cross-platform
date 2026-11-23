@@ -23,7 +23,7 @@ import unittest
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DISCORD = "https://discord.gg/WaWrXQnKPj"
 ROW = ["/", "/matches", "/mapmaker", DISCORD]
-SMALL = [("Sprites and sounds", "/asset_catalog/"), ("Changelog", "/changelog"), ("GitHub", "https://github.com/dchadd427/ants-cross-platform"),
+SMALL = [("Sprites and sounds", "/asset_catalog/"), ("What’s new", "/changelog"), ("GitHub", "https://github.com/dchadd427/ants-cross-platform"),
          ("Feedback", "https://github.com/dchadd427/ants-cross-platform/issues"), ("Legal", "/legal")]
 sys.path.insert(0, os.path.join(REPO, "tools"))
 from size_limits import NAV_CSS_BUDGET as CSS_BUDGET, NAV_CSS_GZIP_BUDGET as CSS_GZIP_BUDGET, NAV_JS_BUDGET as JS_BUDGET, NAV_JS_GZIP_BUDGET as JS_GZIP_BUDGET  # noqa: E402  (every byte budget: tools/size_limits.py)
@@ -61,6 +61,11 @@ JS = read("web", "site_nav.js")
 def bar_of(page):
     return re.search(r'<header class="sb"([^>]*)>(.*?)</header>', page, re.S)
 
+
+
+def js_pairs(source):
+    """The ['name', 'address'] pairs of a list in a script, its \\uXXXX escapes read as the browser reads them (the scripts are ASCII)."""
+    return [tuple(re.sub(r"\\u([0-9a-fA-F]{4})", lambda m: chr(int(m.group(1), 16)), x) for x in pair) for pair in re.findall(r"\['([^']*)', '([^']*)'\]", source)]
 
 class ThePages(unittest.TestCase):
     def test_every_page_has_one_bar_with_the_same_four_links_in_the_same_order(self):
@@ -136,8 +141,7 @@ class TheHomeMenu(unittest.TestCase):
         text = read("web", "home", "home.js")
         main = re.search(r"var MENU_MAIN = \[(.*?)\];", text).group(1)
         small = re.search(r"var MENU_SMALL = \[(.*?)\];", text).group(1)
-        pair = lambda s: re.findall(r"\['([^']*)', '([^']*)'\]", s)
-        return pair(main), pair(small)
+        return js_pairs(main), js_pairs(small)
 
     def test_the_main_links_are_the_row_and_the_small_ones_are_the_same_list(self):
         main, small = self.home_lists()
@@ -145,7 +149,7 @@ class TheHomeMenu(unittest.TestCase):
         self.assertEqual([m[1] for m in main if m[1]], ROW)
         self.assertEqual(small, SMALL)
         js_small = re.search(r"var SMALL = \[(.*?)\];", JS).group(1)
-        self.assertEqual(re.findall(r"\['([^']*)', '([^']*)'\]", js_small), SMALL)
+        self.assertEqual(js_pairs(js_small), SMALL)
         for name, (page, marked, live) in PAGES.items():
             nav = re.search(r'<nav aria-label="Pages">(.*?)</nav>', bar_of(page).group(2), re.S).group(1)
             labels = [re.sub(r"<[^>]*>", "", x).strip() or "Discord server" for x in re.findall(r"<a [^>]*>(.*?)</a>", nav, re.S)]

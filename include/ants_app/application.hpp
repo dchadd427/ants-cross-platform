@@ -287,6 +287,8 @@ public:
     /// The reason that a lost match gave ("The connection to the other players was lost."); a network game that the menu led to returns to the menu with it and leaves none behind
     const std::string& net_notice() const noexcept { return net_notice_; }
     const std::string& window_title() const noexcept { return window_title_; }
+    /// The window was given the original game's icon (app_icon.hpp); false on the web, where the page has its own
+    bool window_icon_set() const noexcept { return window_icon_set_; }
     /// The keys, the text and the mouse of the start menu (what the event loop does with an event while the menu is up; public for the tests)
     void handle_menu_event(const SDL_Event& event);
     bool start_game(const std::string& map_path);
@@ -816,6 +818,7 @@ private:
     std::string player_name_;
     std::string local_player_name_;                       // the name of a local game (the system user, --name): what a single-player game after a network game shows again
     std::string window_title_;                            // what the window's title says now
+    bool window_icon_set_{false};                         // init() gave the window the original's icon (app_icon.hpp)
     StartMenu start_menu_;                                // the desktop start menu: its model (always there; it is part of a run only when menu_enabled_)
     HostLookup host_lookup_;                              // the menu's name lookup, on a worker thread
     bool menu_enabled_{false};                            // this run shows the start menu: a network game that ends brings the player back to it
