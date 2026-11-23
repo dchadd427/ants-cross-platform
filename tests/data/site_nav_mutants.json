@@ -43,7 +43,7 @@
   {
    "id": "small_links_lose_one",
    "file": "web/site_nav.js",
-   "old": "['Changelog', '/changelog'], ",
+   "old": "['What\\u2019s new', '/changelog'], ",
    "new": "",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
   },
@@ -134,7 +134,7 @@
   {
    "id": "home_menu_orders_differ",
    "file": "web/home/home.js",
-   "old": "['Changelog', '/changelog'], ['GitHub'",
+   "old": "['What\\u2019s new', '/changelog'], ['GitHub'",
    "new": "['GitHub'",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
   },
