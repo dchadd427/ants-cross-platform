@@ -680,7 +680,7 @@ bot_arena --map ISLANDS --seeds 1..40 --seat 0=standard:hard --seat 1=standard:h
 
 ## Testing
 
-The bot suites (2.20 to 2.22 and 2.28) are listed in [`TESTING.md`](TESTING.md). The plans that ship are pinned (AI9.5, AI11.6: every tactic that the tournaments measured as a loss is off, every one that pays is on), the tactics that are off are tested with their flag on (so that they stay correct for the next round), and the arena's whole matches are checked for commands that a person could not give (none filtered, none rejected).
+The bot suites (2.20 to 2.22 and 2.28) are listed in [`TESTING.md`](TESTING.md). Suite 2.20 runs in two halves, `test_ai --part 1` (2.20) and `test_ai --part 2` (2.20.1; ctest names `test_ai` and `test_ai_part2`), at the same time: a CI leg cuts a test off at 900 seconds and the whole of it took 860 on a slow Windows runner. `test_ai` with no part runs both, and `ANTS_TEST_FILTER` selects a case of either half. The plans that ship are pinned (AI9.5, AI11.6: every tactic that the tournaments measured as a loss is off, every one that pays is on), the tactics that are off are tested with their flag on (so that they stay correct for the next round), and the arena's whole matches are checked for commands that a person could not give (none filtered, none rejected).
 
 ## Known limits
 

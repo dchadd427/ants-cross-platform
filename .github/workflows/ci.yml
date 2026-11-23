@@ -49,10 +49,10 @@ env:
   SDL_AUDIODRIVER: dummy
   CTEST_OUTPUT_ON_FAILURE: "1"
   # How the Linux legs share ctest (names of tests, as regular expressions; the times are those of a run of the whole of ctest, in seconds): test_engine_lookups takes 530 and decides the time of a
-  # leg that has it, so it runs alone; the next legs take the four tests that take 160 to 290 seconds, and every other test (test_server, test_network_app and the 95 that are short: a new test lands
+  # leg that has it, so it runs alone; the next legs take the five tests that take 160 to 290 seconds, and every other test (test_server, test_network_app and the 95 that are short: a new test lands
   # here, and a name that matches nothing is an error because of --no-tests=error).
   CTEST_ALONE: "^test_engine_lookups$"
-  CTEST_LONG: "^(test_ai|test_lockstep|test_ai_worker|test_engine_copy)$"
+  CTEST_LONG: "^(test_ai|test_ai_part2|test_lockstep|test_ai_worker|test_engine_copy)$"
 
 defaults:
   run:
