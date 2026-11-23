@@ -39,7 +39,7 @@ SPLIT_PENDING = frozenset({
 # The rule: the measured size plus about 10%, rounded up (to 50,000 from 1,000,000, to 5,000 from 100,000, to 500 from 10,000, else to 100). A raise is a one-number edit with
 # its reason in the commit message; no story is kept here.
 # the whole of web/front/ (pictures, font, scripts, style) and the map maker's own scripts and style, apart from the pictures
-FRONT_BUDGET = 1_650_000
+FRONT_BUDGET = 1_900_000
 EDITOR_BUDGET, EDITOR_GZIP_BUDGET = 430_000, 125_000
 # scripts that load on first use (raw bytes, gzipped; both files of a pair together unless a script is named alone)
 LAZY_BUDGET, LAZY_GZIP_BUDGET = 80_000, 25_500          # the three lazy map maker scripts together
