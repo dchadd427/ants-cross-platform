@@ -175,6 +175,12 @@ COPY asset_catalog/catalog_data.js /src/asset_catalog/catalog_data.js
 COPY tools/map_atlas.py /src/tools/map_atlas.py
 RUN python3 tools/map_atlas.py mapmaker_atlas && test -s mapmaker_atlas/atlas.json && test -s mapmaker_atlas/ground.png && test -s mapmaker_atlas/objects.png
 
+# The skills that teach a person's own AI to make maps (docs/MAP_AI.md, "The skills"): the committed folders of ai_skills/ packed by tools/make_ai_skills.py --build (Python standard library only; it reads nothing but
+# ai_skills/, the tests hold the numbers inside the skills to their sources) into one zip for each skill, all.zip, the folders and index.json, served at /ai/skills/. After the compile layers, so that it does not rebuild the game.
+COPY ai_skills/ /src/ai_skills/
+COPY tools/make_ai_skills.py /src/tools/make_ai_skills.py
+RUN python3 tools/make_ai_skills.py --build ai_site && test -s ai_site/ai/skills/index.json && test -s ai_site/ai/skills/all.zip && test -s ai_site/ai/skills/ants-map-guide/SKILL.md
+
 # =============================================================================
 # Stage 2: High-Performance Lightweight Nginx Web Server
 # =============================================================================
@@ -282,6 +288,9 @@ COPY --from=builder /src/mapmaker.html /usr/share/nginx/html/mapmaker.html
 
 # The map maker's sprite atlas (made in the builder stage; the page fetches it when the editor opens, and a few big toys one by one from /asset_catalog/sprites/, copied below): served at /mapmaker_atlas/
 COPY --from=builder /src/mapmaker_atlas/ /usr/share/nginx/html/mapmaker_atlas/
+
+# The skills for a person's AI (made in the builder stage): served at /ai/skills/ (docker/nginx.conf)
+COPY --from=builder /src/ai_site/ai/ /usr/share/nginx/html/ai/
 
 # The Legal page (docs/PLAY_IN_BROWSER.md "The Legal page"): a page of its own in the changelog page's look, linked from the Menu of every page and from the footers; the builder stage stamped the version and the build into its bar
 COPY --from=builder /src/legal.html /usr/share/nginx/html/legal.html
