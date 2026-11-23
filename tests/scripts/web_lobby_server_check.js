@@ -269,6 +269,7 @@ const pressReady = (env) => { const button = env.$('slots').findAll((e) => e.tag
         const A3 = page('Ada', code('rb'), { key: Uint8Array.from(A.key) });  // (the page that comes back with the key of a seat that ended)
         A3.connect();
         await step('a key that the room does not know seats the page as a newcomer: a new key, and "replaced"', () => () => online(A3)() && A3.of('welcome').length === 1 && A3.of('welcome')[0].replaced === true && N.hexOf(A3.key) !== first);
+        await step('Bea hears of the newcomer (her news can come after the newcomer\'s welcome)', () => () => B.count('joined') >= 1);
         check('... it is not the host (Bea is, she was there first), and the room has two people, not three', !A3.isLeader() && B.isLeader() && names(B).split('|').filter((n) => n !== '-').length === 2, names(B));
         A3.leave();
         B.leave();
