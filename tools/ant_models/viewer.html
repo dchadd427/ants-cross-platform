@@ -4,135 +4,80 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
+  <meta name="robots" content="noindex">
+  <meta name="description" content="Interactive 3D studio for inspecting stylized Ants (1998) unit models with turntable views, team colors, lighting, and glTF export.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23183825'/%3E%3Ccircle cx='16' cy='12' r='5' fill='%23e0b029'/%3E%3Ccircle cx='16' cy='21' r='6' fill='%23297040'/%3E%3C/svg%3E">
-  <title>Ants 3D Model Viewer</title>
+  <title>3D Ant Studio — Ants (1998)</title>
   <link rel="stylesheet" href="viewer.css">
   <script src="viewer_gltf.js" defer></script>
   <script src="viewer_render.js" defer></script>
   <script src="viewer_actions.js" defer></script>
   <script src="viewer.js" defer></script>
   <script src="viewer_version.js" defer></script>
-  <script src="viewer_status.js" defer></script>
 </head>
 <body>
   <div class="app-shell">
-    <header class="app-header">
-      <div class="title-block">
-        <h1>Ants 3D Model Viewer</h1>
-        <p class="subtitle">Stylized 3D Studio &middot; glTF 2.0</p>
+    <header class="app-topbar">
+      <div class="topbar-left">
+        <h1 class="brand-title">Ants 3D</h1>
+        <nav class="segmented view-tabs" aria-label="Viewer mode">
+          <a class="view-tab" id="tab-compare" href="./">Compare 1998</a>
+          <a class="view-tab" id="tab-studio" href="viewer.html" aria-current="page">3D Studio</a>
+        </nav>
       </div>
-      <nav class="view-tabs" aria-label="Viewer mode">
-        <a class="view-tab" id="tab-studio" href="viewer.html" aria-current="page">3D Studio</a>
-        <a class="view-tab" id="tab-compare" href="compare.html">Compare 1998</a>
-      </nav>
-      <div class="active-summary" id="active-summary" aria-label="Active selection summary">
-        <span class="badge" id="badge-ant">All 6 Lineup</span>
-        <span class="badge" id="badge-team">Green</span>
-        <span class="badge" id="badge-angle">301 S</span>
+
+      <div
+        class="topbar-toolbar"
+        id="viewer-toolbar"
+        role="toolbar"
+        aria-label="Ant class and team controls"
+        focusgroup="toolbar wrap"
+        aria-controls="stage"
+      >
+        <div class="segmented" role="group" aria-label="Ant class">
+          <button type="button" data-ant="lineup" aria-pressed="true">All 6</button>
+          <button type="button" data-ant="worker" aria-pressed="false">Worker</button>
+          <button type="button" data-ant="combat" aria-pressed="false">Combat</button>
+          <button type="button" data-ant="thief" aria-pressed="false">Thief</button>
+          <button type="button" data-ant="bomber" aria-pressed="false">Bomber</button>
+          <button type="button" data-ant="swimmer" aria-pressed="false">Swimmer</button>
+          <button type="button" data-ant="fire" aria-pressed="false">Fire</button>
+        </div>
+
+        <div class="team-swatches" role="group" aria-label="Team color">
+          <button type="button" class="team-dot swatch-green" data-team="green" aria-pressed="true" aria-label="Green team" title="Green team"></button>
+          <button type="button" class="team-dot swatch-red" data-team="red" aria-pressed="false" aria-label="Red team" title="Red team"></button>
+          <button type="button" class="team-dot swatch-blue" data-team="blue" aria-pressed="false" aria-label="Blue team" title="Blue team"></button>
+          <button type="button" class="team-dot swatch-black" data-team="black" aria-pressed="false" aria-label="Black team" title="Black team"></button>
+          <button type="button" class="team-dot swatch-custom" id="btn-team-custom" data-team="custom" aria-pressed="false" aria-label="Custom team color" title="Use custom team color">
+            <span class="swatch-custom-fill" id="swatch-custom" aria-hidden="true"></span>
+          </button>
+          <input
+            type="color"
+            id="input-team-color"
+            class="team-color-input"
+            value="#7c3aed"
+            aria-label="Pick custom team color"
+            title="Pick custom team color"
+          >
+        </div>
+      </div>
+
+      <div class="topbar-right">
         <span class="badge badge-version" id="badge-version" title="Loaded 3D build version" hidden></span>
-        <button type="button" class="status-pill-btn" id="btn-status" hidden aria-haspopup="dialog" aria-controls="status-dialog" data-busy="false" title="View live build progress and queue">
-          <span class="status-dot" aria-hidden="true"></span>
-          <span id="status-btn-label">Status</span>
+        <button
+          type="button"
+          class="panel-toggle-btn"
+          id="btn-toggle-panel"
+          aria-expanded="true"
+          aria-controls="inspector-panel"
+          title="Show or hide controls panel"
+        >
+          <span>Controls</span>
+          <span class="panel-chevron" aria-hidden="true">&#x276F;</span>
         </button>
       </div>
     </header>
-
-    <div
-      class="toolbar"
-      id="viewer-toolbar"
-      role="toolbar"
-      aria-label="Ant model viewer controls"
-      focusgroup="toolbar wrap"
-      aria-controls="stage"
-    >
-      <div class="toolbar-group" role="group" aria-label="Ant class">
-        <span class="group-label" aria-hidden="true">Class</span>
-        <button type="button" data-ant="worker" aria-pressed="false">Worker</button>
-        <button type="button" data-ant="combat" aria-pressed="false">Combat</button>
-        <button type="button" data-ant="thief" aria-pressed="false">Thief</button>
-        <button type="button" data-ant="bomber" aria-pressed="false">Bomber</button>
-        <button type="button" data-ant="swimmer" aria-pressed="false">Swimmer</button>
-        <button type="button" data-ant="fire" aria-pressed="false">Fire</button>
-        <button type="button" data-ant="lineup" aria-pressed="true">All 6 Lineup</button>
-      </div>
-
-      <span class="toolbar-sep" role="separator" aria-orientation="vertical"></span>
-
-      <div class="toolbar-group" role="group" aria-label="Team color">
-        <span class="group-label" aria-hidden="true">Team</span>
-        <button type="button" data-team="green" aria-pressed="true">
-          <span class="swatch swatch-green" aria-hidden="true"></span>Green
-        </button>
-        <button type="button" data-team="red" aria-pressed="false">
-          <span class="swatch swatch-red" aria-hidden="true"></span>Red
-        </button>
-        <button type="button" data-team="blue" aria-pressed="false">
-          <span class="swatch swatch-blue" aria-hidden="true"></span>Blue
-        </button>
-        <button type="button" data-team="black" aria-pressed="false">
-          <span class="swatch swatch-black" aria-hidden="true"></span>Black
-        </button>
-        <button type="button" id="btn-team-custom" data-team="custom" aria-pressed="false" title="Use custom team color">
-          <span class="swatch swatch-custom" id="swatch-custom" aria-hidden="true"></span>Custom
-        </button>
-        <input
-          type="color"
-          id="input-team-color"
-          class="team-color-input"
-          value="#7c3aed"
-          aria-label="Pick custom team color"
-          title="Pick custom team color"
-        >
-      </div>
-
-      <span class="toolbar-sep" role="separator" aria-orientation="vertical"></span>
-
-      <div class="toolbar-group" role="group" aria-label="Camera angle">
-        <span class="group-label" aria-hidden="true">Angle</span>
-        <button type="button" data-angle="301" aria-pressed="true" title="301 South Front (yaw 0, pitch 45)">301 S</button>
-        <button type="button" data-angle="201" aria-pressed="false" title="201 South-East 3/4 (yaw -45, pitch 45)">201 SE</button>
-        <button type="button" data-angle="901" aria-pressed="false" title="901 East Side (yaw -90, pitch 45)">901 E</button>
-        <button type="button" data-angle="801" aria-pressed="false" title="801 North-East Back 3/4 (yaw -135, pitch 45)">801 NE</button>
-        <button type="button" data-angle="701" aria-pressed="false" title="701 North Back (yaw 180, pitch 45)">701 N</button>
-        <button type="button" data-angle="hero" aria-pressed="false" title="Hero Showcase (yaw -28, pitch 22)">Hero</button>
-      </div>
-
-      <span class="toolbar-sep" role="separator" aria-orientation="vertical"></span>
-
-      <div class="toolbar-group" role="group" aria-label="Animation action">
-        <span class="group-label" aria-hidden="true">Action</span>
-        <button type="button" data-action="idle" aria-pressed="true" title="Idle stance animation">Idle</button>
-        <button type="button" data-action="walk" aria-pressed="false" title="Walk cycle (W)">Walk</button>
-        <button type="button" data-action="attack" aria-pressed="false" title="Attack animation sequence (A)">Attack</button>
-        <button type="button" data-action="hit" aria-pressed="false" title="Get-hit knockback sequence (H)">Hit</button>
-        <select id="select-action" class="action-select" aria-label="All 1998 ant animations" title="Choose any 1998 shared or class-specific animation"></select>
-      </div>
-
-      <span class="toolbar-sep" role="separator" aria-orientation="vertical"></span>
-
-      <div class="toolbar-group" role="group" aria-label="Projection and viewport options">
-        <span class="group-label" aria-hidden="true">View</span>
-        <button type="button" data-projection="ortho" aria-pressed="true" title="Orthographic isometric projection">Ortho</button>
-        <button type="button" data-projection="persp" aria-pressed="false" title="Perspective studio lens">Persp</button>
-        <button type="button" id="btn-turntable" aria-pressed="false" title="Slow studio turntable rotation">Turntable</button>
-        <button type="button" id="btn-idle" aria-pressed="true" title="Toggle animation playback loop (I)">Play</button>
-        <button type="button" id="btn-sprite-scale" aria-pressed="true" title="Toggle 48px game-sprite scale inset">Sprite Scale</button>
-        <button type="button" id="btn-silhouette" aria-pressed="false" title="Toggle high-contrast silhouette view (S)">Silhouette</button>
-        <button type="button" id="btn-retro-fps" aria-pressed="false" title="Step ant animations at authentic 1998 per-class sprite FPS (F)">1998 FPS</button>
-        <button type="button" id="btn-blink-hold" aria-pressed="false" title="Hold eyelids closed to inspect blink pose">Eyes Closed</button>
-        <select id="select-lighting" class="action-select" aria-label="3D lighting preset" title="Switch 3D lighting preset (L)"></select>
-      </div>
-
-      <span class="toolbar-sep" role="separator" aria-orientation="vertical"></span>
-
-      <div class="toolbar-group" role="group" aria-label="Export and file actions">
-        <button type="button" id="btn-blink" class="action-btn" title="Trigger eye blink">Blink</button>
-        <button type="button" id="btn-export-sheet" class="action-btn">Export 5-Angle Sheet</button>
-        <button type="button" id="btn-download-glb" class="action-btn">Download .GLB</button>
-        <button type="button" id="btn-reset-view" class="action-btn">Reset View</button>
-        <button type="button" id="btn-load-glb" class="action-btn">Load .GLB</button>
-      </div>
-    </div>
 
     <input
       type="file"
@@ -142,69 +87,191 @@
       hidden
     >
 
-    <main class="stage-wrap" id="stage-wrap">
-      <canvas
-        id="stage"
-        tabindex="0"
-        aria-label="Interactive 3D ant model viewport. Drag to orbit, scroll or pinch to zoom. Press arrow keys to orbit, plus or minus to zoom, I to toggle idle animation, B to blink, R to reset view, and 1 through 5 for canonical camera angles."
-      ></canvas>
+    <div class="workspace">
+      <div class="stage-column">
+        <main class="stage-wrap" id="stage-wrap">
+          <canvas
+            id="stage"
+            tabindex="0"
+            aria-label="Interactive 3D ant model viewport. Drag to orbit, scroll or pinch to zoom. Press arrow keys to orbit, plus or minus to zoom, I to toggle animation, B to blink, R to reset view, and 1 through 5 for canonical camera angles."
+          ></canvas>
 
-      <div class="drop-overlay" id="drop-overlay" aria-hidden="true">
-        <div class="drop-card">Drop .GLB ant model file(s) to load</div>
-      </div>
+          <div class="drop-overlay" id="drop-overlay" aria-hidden="true">
+            <div class="drop-card">Drop .GLB ant model file(s) to load</div>
+          </div>
 
-      <div class="empty-overlay" id="empty-overlay" hidden>
-        <div class="empty-card">
-          <h2 id="empty-title">No .GLB model loaded</h2>
-          <p id="empty-message">
-            Serve this folder over HTTP or click Load .GLB (or drag and drop .glb files here).
-          </p>
+          <div class="empty-overlay" id="empty-overlay" hidden>
+            <div class="empty-card">
+              <h2 id="empty-title">No .GLB model loaded</h2>
+              <p id="empty-message">
+                Serve this folder over HTTP or click Load .GLB (or drag and drop .glb files here).
+              </p>
+            </div>
+          </div>
+
+          <aside class="sprite-inset" id="sprite-inset" aria-label="Pixel-scale game sprite preview">
+            <div class="sprite-inset-head">
+              <span class="sprite-title">48px Sprite</span>
+              <span class="sprite-sub" id="sprite-angle-tag">301 S</span>
+            </div>
+            <div class="sprite-tile-bg">
+              <canvas id="sprite-canvas" width="48" height="48" aria-hidden="true"></canvas>
+            </div>
+          </aside>
+
+          <div class="controls-hint" aria-hidden="true">
+            Drag: Orbit &middot; Scroll/Pinch: Zoom &middot; 1&ndash;5: Angles &middot; L: Light &middot; B: Blink &middot; R: Reset
+          </div>
+        </main>
+
+        <div
+          class="playback-dock"
+          id="playback-dock"
+          role="toolbar"
+          aria-label="Animation playback controls"
+          focusgroup="toolbar wrap"
+          aria-controls="stage"
+        >
+          <div class="dock-group">
+            <button type="button" id="btn-idle" class="play-btn" aria-pressed="true" aria-label="Play animation" title="Play or pause animation loop (I)">
+              <svg class="icon-pause" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="3" y="2.5" width="3.5" height="11" rx="1" fill="currentColor"/><rect x="9.5" y="2.5" width="3.5" height="11" rx="1" fill="currentColor"/></svg>
+              <svg class="icon-play" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4.2 2.6L13.2 8L4.2 13.4Z" fill="currentColor"/></svg>
+            </button>
+
+            <div class="segmented" role="group" aria-label="Quick animation actions">
+              <button type="button" data-action="idle" aria-pressed="true" title="Idle stance animation">Idle</button>
+              <button type="button" data-action="walk" aria-pressed="false" title="Walk cycle (W)">Walk</button>
+              <button type="button" data-action="attack" aria-pressed="false" title="Attack animation sequence (A)">Attack</button>
+              <button type="button" data-action="hit" aria-pressed="false" title="Get-hit knockback sequence (H)">Hit</button>
+            </div>
+
+            <select id="select-action" class="dock-select action-select" aria-label="All 1998 ant animations" title="Choose any 1998 shared or class-specific animation"></select>
+          </div>
+
+          <div class="dock-group">
+            <button type="button" id="btn-blink" class="dock-btn" title="Trigger eye blink (B)">Blink</button>
+            <button type="button" id="btn-reset-view" class="icon-btn" aria-label="Reset camera view" title="Reset camera view (R)">
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3.2 7.8a4.8 4.8 0 1 1 1.2 3.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M2.2 4.3v3.8h3.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
         </div>
       </div>
 
-      <aside class="sprite-inset" id="sprite-inset" aria-label="Pixel-scale game sprite preview">
-        <div class="sprite-inset-head">
-          <span class="sprite-title">48px Sprite</span>
-          <span class="sprite-sub" id="sprite-angle-tag">301 S</span>
+      <div class="inspector-backdrop" id="inspector-backdrop" hidden></div>
+      <aside class="inspector-panel" id="inspector-panel" aria-label="Camera, lighting, display, and export controls">
+        <div class="inspector-drawer-head">
+          <span class="inspector-drawer-title">Controls</span>
+          <button type="button" id="btn-close-panel" class="icon-btn" aria-label="Close controls panel">&times;</button>
         </div>
-        <div class="sprite-tile-bg">
-          <canvas id="sprite-canvas" width="48" height="48" aria-hidden="true"></canvas>
+
+        <section class="inspector-section" aria-label="Camera angle compass">
+          <div class="inspector-section-head">
+            <span class="inspector-heading">Camera Angle</span>
+            <span class="inspector-readout" id="badge-angle">301 S</span>
+          </div>
+          <div class="compass-grid" role="group" aria-label="Camera angle presets">
+            <button type="button" class="compass-btn" data-angle="801_nw" aria-pressed="false" title="801 North-West (yaw +135, pitch 45)">NW</button>
+            <button type="button" class="compass-btn" data-angle="701" aria-pressed="false" title="701 North Back (yaw 180, pitch 45)">N</button>
+            <button type="button" class="compass-btn" data-angle="801" aria-pressed="false" title="801 North-East Back 3/4 (yaw -135, pitch 45)">NE</button>
+            <button type="button" class="compass-btn" data-angle="901_w" aria-pressed="false" title="901 West Side (yaw +90, pitch 45)">W</button>
+            <button type="button" class="compass-btn compass-center" data-angle="hero" aria-pressed="false" title="Hero Showcase (yaw -28, pitch 22)">Hero</button>
+            <button type="button" class="compass-btn" data-angle="901" aria-pressed="false" title="901 East Side (yaw -90, pitch 45)">E</button>
+            <button type="button" class="compass-btn" data-angle="201_sw" aria-pressed="false" title="201 South-West (yaw +45, pitch 45)">SW</button>
+            <button type="button" class="compass-btn" data-angle="301" aria-pressed="true" title="301 South Front (yaw 0, pitch 45)">S</button>
+            <button type="button" class="compass-btn" data-angle="201" aria-pressed="false" title="201 South-East 3/4 (yaw -45, pitch 45)">SE</button>
+          </div>
+        </section>
+
+        <section class="inspector-section" aria-label="Lighting preset">
+          <div class="inspector-section-head">
+            <span class="inspector-heading">Lighting</span>
+            <kbd class="hotkey-chip" aria-hidden="true">L</kbd>
+          </div>
+          <div class="lighting-stepper">
+            <button type="button" id="btn-light-prev" class="stepper-btn" aria-label="Previous lighting preset" title="Previous lighting preset">&#x276E;</button>
+            <select id="select-lighting" class="inspector-select action-select" aria-label="3D lighting preset" title="Switch 3D lighting preset (L)"></select>
+            <button type="button" id="btn-light-next" class="stepper-btn" aria-label="Next lighting preset" title="Next lighting preset (L)">&#x276F;</button>
+          </div>
+        </section>
+
+        <section class="inspector-section" aria-label="Display options">
+          <div class="inspector-section-head">
+            <span class="inspector-heading">Display</span>
+          </div>
+          <div class="segmented segmented-full" role="group" aria-label="Camera projection">
+            <button type="button" data-projection="ortho" aria-pressed="true" title="Orthographic isometric projection">Ortho</button>
+            <button type="button" data-projection="persp" aria-pressed="false" title="Perspective studio lens">Persp</button>
+          </div>
+          <div class="toggle-list">
+            <button type="button" class="toggle-row" id="btn-turntable" aria-pressed="false" title="Slow studio turntable rotation">
+              <span class="toggle-label">Turntable</span>
+              <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+            </button>
+            <button type="button" class="toggle-row" id="btn-sprite-scale" aria-pressed="true" title="Toggle 48px game-sprite scale inset">
+              <span class="toggle-label">48px Sprite</span>
+              <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+            </button>
+            <button type="button" class="toggle-row" id="btn-silhouette" aria-pressed="false" title="Toggle high-contrast silhouette view (S)">
+              <span class="toggle-label">Silhouette</span>
+              <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+            </button>
+            <button type="button" class="toggle-row" id="btn-retro-fps" aria-pressed="false" title="Step animations at authentic 1998 sprite FPS (F)">
+              <span class="toggle-label">1998 FPS</span>
+              <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+            </button>
+            <button type="button" class="toggle-row" id="btn-blink-hold" aria-pressed="false" title="Hold eyelids closed to inspect blink pose (Shift+B)">
+              <span class="toggle-label">Eyes Closed</span>
+              <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+            </button>
+          </div>
+        </section>
+
+        <section class="inspector-section" aria-label="Export and files">
+          <div class="inspector-section-head">
+            <span class="inspector-heading">Export &amp; Files</span>
+          </div>
+          <div class="inspector-actions-grid">
+            <button type="button" id="btn-export-sheet" class="inspector-action-btn inspector-action-wide">Export 5-Angle PNG</button>
+            <button type="button" id="btn-download-glb" class="inspector-action-btn">Download .GLB</button>
+            <button type="button" id="btn-load-glb" class="inspector-action-btn">Load .GLB</button>
+          </div>
+        </section>
+
+        <div class="inspector-foot">
+          <details class="inspector-details">
+            <summary>
+              <span>Model Info</span>
+              <span class="details-summary-meta"><span id="badge-ant">All 6</span> &middot; <span id="badge-team">Green</span></span>
+            </summary>
+            <dl class="meta-list" aria-label="Loaded model metadata">
+              <div class="meta-row">
+                <dt>Triangles</dt>
+                <dd id="meta-tris">&mdash;</dd>
+              </div>
+              <div class="meta-row">
+                <dt>Meshes / Nodes</dt>
+                <dd id="meta-nodes">&mdash;</dd>
+              </div>
+              <div class="meta-row">
+                <dt>Bounds</dt>
+                <dd id="meta-bounds">&mdash;</dd>
+              </div>
+              <div class="meta-row">
+                <dt>Camera</dt>
+                <dd id="meta-camera">&mdash;</dd>
+              </div>
+              <div class="meta-row">
+                <dt>Active</dt>
+                <dd id="meta-active">All 6 Lineup &middot; Green &middot; 301 S</dd>
+              </div>
+            </dl>
+          </details>
+          <p role="status" class="status-region" id="status-region">Initializing 3D viewer&hellip;</p>
         </div>
       </aside>
-
-      <div class="controls-hint" aria-hidden="true">
-        Drag: Orbit &middot; Scroll/Pinch: Zoom &middot; Arrows: Orbit &middot; +/-: Zoom &middot; 1&ndash;5: Angles &middot; A: Action &middot; I: Play &middot; B: Blink &middot; R: Reset
-      </div>
-    </main>
-
-    <footer class="app-footer">
-      <dl class="meta-grid" aria-label="Loaded model metadata">
-        <div class="meta-item">
-          <dt>Triangles</dt>
-          <dd id="meta-tris">&mdash;</dd>
-        </div>
-        <div class="meta-item">
-          <dt>Meshes / Nodes</dt>
-          <dd id="meta-nodes">&mdash;</dd>
-        </div>
-        <div class="meta-item">
-          <dt>Bounds (W &times; H &times; D)</dt>
-          <dd id="meta-bounds">&mdash;</dd>
-        </div>
-        <div class="meta-item">
-          <dt>Camera</dt>
-          <dd id="meta-camera">&mdash;</dd>
-        </div>
-        <div class="meta-item">
-          <dt>Active</dt>
-          <dd id="meta-active">All 6 Lineup &middot; Green &middot; 301 S</dd>
-        </div>
-      </dl>
-      <p role="status" class="status-region" id="status-region">Initializing 3D viewer&hellip;</p>
-    </footer>
+    </div>
   </div>
 
-  <dialog id="status-dialog" class="status-dialog" closedby="any" aria-labelledby="status-dialog-title"></dialog>
   <div id="update-toast" class="update-toast" aria-hidden="true" hidden></div>
 </body>
 </html>

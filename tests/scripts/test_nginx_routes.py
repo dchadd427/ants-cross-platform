@@ -131,10 +131,13 @@ class TheRoutesRun(unittest.TestCase):
         os.makedirs(html)
         os.makedirs(os.path.join(html, "front"))
         os.makedirs(os.path.join(html, "asset_catalog"))
+        os.makedirs(os.path.join(html, "test_3d"))
         for name, text in (("lobby.html", LOBBY_PAGE), ("matches.html", MATCHES_PAGE), ("match.html", MATCH_PAGE), ("matches.css", ":root { --won: #f6d058; }\n"), ("replay_stats.css", "body.embed { padding-top: 10px; }\n"), ("replay_page.js", "window.AntsReplay = {};\n"),
                            ("history_page.js", "window.AntsHistory = {};\n"), ("match_stats.js", "window.AntsMatchStats = {};\n"), ("match_stats.css", ".chips { display: grid; }\n"), ("death_map.js", "window.AntsDeathMap = {};\n"), ("death_map.css", ".dm-stage { position: relative; }\n"), ("index.html", GAME_PAGE), ("play.html", GAME_PAGE), ("changelog.html", CLASSIC_PAGE), ("legal.html", CLASSIC_PAGE), ("mapmaker.html", MAPMAKER_PAGE),
                            ("404.html", read(os.path.join(REPO, "web", "404.html"))), ("50x.html", read(os.path.join(REPO, "web", "50x.html"))),         # (the real pages: the checks read their words)
-                           (os.path.join("asset_catalog", "index.html"), CLASSIC_PAGE), (os.path.join("front", "classic.css"), ":root { --clay: #db4b13; }\n")):
+                           (os.path.join("asset_catalog", "index.html"), CLASSIC_PAGE),
+                           (os.path.join("test_3d", "compare.html"), CLASSIC_PAGE), (os.path.join("test_3d", "viewer.html"), CLASSIC_PAGE),
+                           (os.path.join("front", "classic.css"), ":root { --clay: #db4b13; }\n")):
             with open(os.path.join(html, name), "w", encoding="utf-8") as f:
                 f.write(text)
         with open(os.path.join(html, "front", "LibreFranklin-Medium.ttf"), "wb") as f:

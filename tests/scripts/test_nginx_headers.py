@@ -340,6 +340,10 @@ def expected(kind, host=SITE):
     no_page = {name: None for name in PAGE_HEADERS}
     if kind == "page":
         return dict(cross, **{"content-security-policy": csp_is(page_policy(host)), "x-frame-options": "DENY", "referrer-policy": "same-origin", "permissions-policy": PERMISSIONS, "cache-control": "no-cache, must-revalidate"})
+    if kind == "test_3d_page":
+        return dict(expected("page", host), **{"x-robots-tag": "noindex"})
+    if kind == "test_3d_plain":
+        return dict(expected("plain", host), **{"x-robots-tag": "noindex", "cache-control": "no-cache, must-revalidate"})
     if kind == "lobby":
         return dict(expected("page", host), **{"permissions-policy": LOBBY_PERMISSIONS})
     if kind == "game":
@@ -414,11 +418,13 @@ LIVE_ROWS = [
     ("the asset catalog", "GET", "/asset_catalog/", (), 200, "page"),
     ("the asset catalog's file", "GET", "/asset_catalog/index.html", (), 301, "plain"),
     ("the asset catalog's data script", "GET", "/asset_catalog/catalog_data.js", (), 200, "plain"),
-    ("the 3D viewer redirect", "GET", "/test_3d", (), 302, "plain"),
-    ("the 3D viewer", "GET", "/test_3d/", (), 200, "page"),
-    ("the 3D viewer studio page", "GET", "/test_3d/viewer.html", (), 200, "page"),
-    ("the 3D viewer script", "GET", "/test_3d/compare.js", (), 200, "plain"),
-    ("the 3D viewer manifest", "GET", "/test_3d/models/manifest.json", (), 200, "plain"),
+    ("the 3D viewer redirect", "GET", "/test_3d", (), 301, "plain"),
+    ("the 3D viewer's index file", "GET", "/test_3d/compare.html", (), 301, "plain"),
+    ("the 3D viewer", "GET", "/test_3d/", (), 200, "test_3d_page"),
+    ("the 3D viewer studio page", "GET", "/test_3d/viewer.html", (), 200, "test_3d_page"),
+    ("the 3D viewer script", "GET", "/test_3d/compare.js", (), 200, "test_3d_plain"),
+    ("the 3D viewer manifest", "GET", "/test_3d/models/manifest.json", (), 200, "test_3d_plain"),
+    ("a missing file under the 3D viewer", "GET", "/test_3d/nothing.png", (), 404, "page"),
     ("the map maker", "GET", "/mapmaker", (), 200, "mapmaker"),
     ("the map maker, old address", "GET", "/mapmaker.html", (), 301, "plain"),
     ("the admin page", "GET", "/admin", (), 200, "admin"),
@@ -691,7 +697,7 @@ class TheFileRuns(unittest.TestCase):
 
     def test_an_address_that_is_nothing_is_the_page_of_a_404_never_the_game_and_under_the_name_of_a_door_it_is_a_plain_404(self):
         page = stats.read("web", "404.html").encode("utf-8")
-        for path in ("/no/such/page", "/nothing?room=k7m2xq", "/playx", "/front/", "/robots.txt.x", "/sitemap.xml.x", "/nothing.html", "/front/nothing.css", "/nothing.js"):
+        for path in ("/no/such/page", "/nothing?room=k7m2xq", "/playx", "/front/", "/robots.txt.x", "/sitemap.xml.x", "/nothing.html", "/front/nothing.css", "/nothing.js", "/test_3d/nothing.png"):
             answer = fetch(self.live.port, path)
             self.assertEqual(answer.status, 404, path)
             self.assertEqual(answer.body, page, path)                                              # (the page of the site as it is in web/: its status is the error's, its body the file's)

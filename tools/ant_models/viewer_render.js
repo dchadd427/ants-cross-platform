@@ -27,6 +27,9 @@
     "901": { label: "901 E", full: "901 E (Side)", yaw: -90, pitch: 45 },
     "801": { label: "801 NE", full: "801 NE (Back 3/4)", yaw: -135, pitch: 45 },
     "701": { label: "701 N", full: "701 N (Back)", yaw: 180, pitch: 45 },
+    "801_nw": { label: "801 NW", full: "801 NW (Back-Left)", yaw: 135, pitch: 45 },
+    "901_w": { label: "901 W", full: "901 W (Side Left)", yaw: 90, pitch: 45 },
+    "201_sw": { label: "201 SW", full: "201 SW (Front-Left)", yaw: 45, pitch: 45 },
     hero: { label: "Hero", full: "Hero Showcase", yaw: -28, pitch: 22 },
   };
   const SHEET_ANGLES = ["301", "201", "901", "801", "701"];
@@ -762,6 +765,7 @@
 
   // --- Toolbar Roving-Tabindex Fallback (ONLY when native focusGroup is unsupported) ---
   function installToolbarRovingTabindex(toolbarEl) {
+    if (!toolbarEl) return;
     const sel = "button:not(:disabled), input.team-color-input:not(:disabled), select.action-select:not(:disabled)";
     const getItems = () => Array.from(toolbarEl.querySelectorAll(sel));
     const init = getItems();
@@ -775,8 +779,9 @@
     toolbarEl.addEventListener("keydown", (e) => {
       const list = getItems(), idx = list.indexOf(document.activeElement);
       if (idx < 0) return;
-      const next = e.key === "ArrowRight" ? list[(idx + 1) % list.length]
-        : e.key === "ArrowLeft" ? list[(idx - 1 + list.length) % list.length]
+      const rtl = getComputedStyle(toolbarEl).direction === "rtl";
+      const step = e.key === "ArrowRight" ? (rtl ? -1 : 1) : (e.key === "ArrowLeft" ? (rtl ? 1 : -1) : 0);
+      const next = step ? list[(idx + step + list.length) % list.length]
         : e.key === "Home" ? list[0] : e.key === "End" ? list[list.length - 1] : null;
       if (next) { e.preventDefault(); activate(next, true); }
     });

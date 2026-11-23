@@ -5,10 +5,10 @@
   const {
     ANT_CLASSES, ANT_LABELS, DEFAULT_CUSTOM_HEX, TEAMS, ANGLES, SHEET_ANGLES,
     LIGHTING_ORDER, validLighting, getLightingPreset, populateLightingSelect,
-    wrapAngleDeg, normalizeHex, resolveTeam, selectActionAnims, AntRenderer, installToolbarRovingTabindex,
+    wrapAngleDeg, normalizeHex, resolveTeam, selectActionAnims, AntRenderer,
   } = window.__antRender;
   const {
-    QUICK_ACTIONS, validAction, getAction, actionSupportsClass, stepSecFor, populateActionSelect,
+    QUICK_ACTIONS, validAction, getAction, actionSupportsClass, stepSecFor, populateActionSelect, initViewerChrome,
   } = window.__antActions;
 
   const emptyScene = () => ({
@@ -18,7 +18,7 @@
 
   function initViewer() {
     const $ = (id) => document.getElementById(id);
-    const stageCanvas = $("stage"), stageWrap = $("stage-wrap"), toolbarEl = $("viewer-toolbar");
+    const stageCanvas = $("stage"), stageWrap = $("stage-wrap");
     const statusEl = $("status-region"), spriteInset = $("sprite-inset");
     const spriteCanvas = $("sprite-canvas"), spriteCtx = spriteCanvas.getContext("2d");
     const emptyOverlay = $("empty-overlay"), fileInput = $("glb-file-input");
@@ -26,7 +26,6 @@
     const actionSelect = $("select-action");
     const lightSelect = $("select-lighting");
     const compareTab = $("tab-compare");
-    if (!("focusGroup" in HTMLElement.prototype)) installToolbarRovingTabindex(toolbarEl);
 
     const RELOAD_STORAGE_KEY = "ants_viewer_reload_state_v1";
     let savedView = null;
@@ -152,14 +151,15 @@
       const q = new URLSearchParams();
       if (ANT_CLASSES.includes(state.ant)) q.set("ant", state.ant);
       if (TEAMS[state.team]) q.set("team", state.team);
-      if (SHEET_ANGLES.includes(state.angle)) q.set("angle", state.angle);
+      if (ANGLES[state.angle] && state.angle !== "hero") q.set("angle", state.angle);
       else if (state.angle === "custom") q.set("yaw", String(Math.round(state.cam.yaw)));
       if (state.action !== "idle") q.set("action", state.action);
       if (state.lighting !== "studio") q.set("light", state.lighting);
       if (state.silhouette) q.set("silhouette", "1");
       if (state.retroFps) q.set("retrofps", "1");
       const qs = q.toString();
-      compareTab.setAttribute("href", qs ? ("compare.html?" + qs) : "compare.html");
+      const base = window.location.pathname.startsWith("/test_3d/") ? "./" : "compare.html";
+      compareTab.setAttribute("href", qs ? (base + "?" + qs) : base);
     }
 
     function syncDebugState() {
@@ -183,7 +183,7 @@
 
     function updateUiState() {
       for (const [attr, val] of [["ant", state.ant], ["team", state.team], ["angle", state.angle], ["action", state.action], ["projection", state.cam.projection]]) {
-        toolbarEl.querySelectorAll("button[data-" + attr + "]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset[attr] === val)));
+        document.querySelectorAll("button[data-" + attr + "]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset[attr] === val)));
       }
       if (actionSelect) {
         populateActionSelect(actionSelect, {
@@ -204,22 +204,24 @@
       populateLightingSelect(lightSelect, state.lighting);
       if (colorInput && colorInput.value.toLowerCase() !== state.customColor) colorInput.value = state.customColor;
       if (customSwatch) customSwatch.style.backgroundColor = state.customColor;
-      $("btn-turntable").setAttribute("aria-pressed", String(state.turntable));
-      $("btn-idle").setAttribute("aria-pressed", String(state.idleAnim));
-      $("btn-sprite-scale").setAttribute("aria-pressed", String(state.spritePreview));
+      if ($("btn-turntable")) $("btn-turntable").setAttribute("aria-pressed", String(state.turntable));
+      if ($("btn-idle")) $("btn-idle").setAttribute("aria-pressed", String(state.idleAnim));
+      if ($("btn-sprite-scale")) $("btn-sprite-scale").setAttribute("aria-pressed", String(state.spritePreview));
       if ($("btn-silhouette")) $("btn-silhouette").setAttribute("aria-pressed", String(state.silhouette));
       if ($("btn-retro-fps")) $("btn-retro-fps").setAttribute("aria-pressed", String(state.retroFps));
-      $("btn-blink-hold").setAttribute("aria-pressed", String(state.blinkMode === "closed"));
+      if ($("btn-blink-hold")) $("btn-blink-hold").setAttribute("aria-pressed", String(state.blinkMode === "closed"));
       spriteInset.hidden = !state.spritePreview;
       const antLabel = state.ant === "custom" ? (state.customLabel || "Custom .GLB") : (ANT_LABELS[state.ant] || state.ant);
       const teamLabel = activeTeam().label, angleLabel = ANGLES[state.angle] ? ANGLES[state.angle].label : "Custom";
-      $("badge-ant").textContent = antLabel; $("badge-team").textContent = teamLabel;
-      $("badge-angle").textContent = angleLabel; $("sprite-angle-tag").textContent = angleLabel;
-      $("meta-active").textContent = antLabel + " · " + teamLabel + " · " + angleLabel;
+      if ($("badge-ant")) $("badge-ant").textContent = state.ant === "lineup" ? "All 6" : antLabel;
+      if ($("badge-team")) $("badge-team").textContent = teamLabel;
+      if ($("badge-angle")) $("badge-angle").textContent = angleLabel;
+      if ($("sprite-angle-tag")) $("sprite-angle-tag").textContent = angleLabel;
+      if ($("meta-active")) $("meta-active").textContent = antLabel + " · " + teamLabel + " · " + angleLabel;
       const s = state.scene, has = s.instances.length > 0;
-      $("meta-tris").textContent = has ? s.triCount.toLocaleString() : "—";
-      $("meta-nodes").textContent = has ? (s.meshCount + " / " + s.nodeCount) : "—";
-      $("meta-bounds").textContent = has ? (s.boundsSize.map((v) => v.toFixed(2)).join(" × ") + " u") : "—";
+      if ($("meta-tris")) $("meta-tris").textContent = has ? s.triCount.toLocaleString() : "—";
+      if ($("meta-nodes")) $("meta-nodes").textContent = has ? (s.meshCount + " / " + s.nodeCount) : "—";
+      if ($("meta-bounds")) $("meta-bounds").textContent = has ? (s.boundsSize.map((v) => v.toFixed(2)).join(" × ") + " u") : "—";
       syncTabLinks();
       updateCameraReadout();
     }
@@ -451,41 +453,45 @@
       }
     }
 
-    toolbarEl.addEventListener("click", (e) => {
-      const btn = e.target.closest("button");
-      if (!btn) return;
-      if (btn.dataset.ant) selectAnt(btn.dataset.ant);
-      else if (btn.dataset.team === "custom") {
-        if (state.team === "custom" && colorInput) colorInput.click();
-        else { state.team = "custom"; updateUiState(); markDirty(); announce("Team color set to " + activeTeam().label + "."); }
-      }
-      else if (btn.dataset.team && TEAMS[btn.dataset.team]) { state.team = btn.dataset.team; updateUiState(); markDirty(); announce("Team color set to " + TEAMS[state.team].label + "."); }
-      else if (btn.dataset.angle) { setAnglePreset(btn.dataset.angle); announce("Camera set to " + ANGLES[btn.dataset.angle].full + "."); }
-      else if (btn.dataset.action) selectAction(btn.dataset.action);
-      else if (btn.dataset.projection) { state.cam.projection = btn.dataset.projection === "ortho" ? "ortho" : "persp"; updateUiState(); markDirty(); announce("Projection set to " + (state.cam.projection === "ortho" ? "Orthographic." : "Perspective.")); }
-      else if (btn.id === "btn-turntable") { state.turntable = !state.turntable; state.camTarget = null; updateUiState(); markDirty(false); announce("Turntable spin " + (state.turntable ? "enabled." : "paused.")); }
-      else if (btn.id === "btn-idle") toggleIdle();
-      else if (btn.id === "btn-sprite-scale") { state.spritePreview = !state.spritePreview; updateUiState(); markDirty(true); announce("48px sprite-scale preview " + (state.spritePreview ? "shown." : "hidden.")); }
-      else if (btn.id === "btn-silhouette") toggleSilhouette();
-      else if (btn.id === "btn-retro-fps") toggleRetroFps();
-      else if (btn.id === "btn-blink-hold") toggleBlinkHold();
-      else if (btn.id === "btn-blink") triggerBlink();
-      else if (btn.id === "btn-export-sheet") exportFiveAngleSheet();
-      else if (btn.id === "btn-download-glb") downloadActiveGlb();
-      else if (btn.id === "btn-reset-view") { const key = ANGLES[state.angle] ? state.angle : "301"; setAnglePreset(key); announce("View reset to " + ANGLES[key].full + "."); }
-      else if (btn.id === "btn-load-glb") fileInput.click();
-    });
-
-    if (actionSelect) {
-      actionSelect.addEventListener("change", () => selectAction(actionSelect.value));
-    }
     const selectLighting = (id) => {
       const next = validLighting(id) || "studio";
       state.lighting = next;
       updateUiState(); markDirty();
       announce("Lighting set to " + getLightingPreset(next).label + ".");
     };
-    const cycleLighting = () => selectLighting(LIGHTING_ORDER[(LIGHTING_ORDER.indexOf(state.lighting) + 1) % LIGHTING_ORDER.length]);
+    const stepLighting = (dir) => selectLighting(LIGHTING_ORDER[(LIGHTING_ORDER.indexOf(state.lighting) + dir + LIGHTING_ORDER.length) % LIGHTING_ORDER.length]);
+    const cycleLighting = () => stepLighting(1);
+
+    initViewerChrome({
+      onResize: () => markDirty(false),
+      onLightStep: stepLighting,
+      onControlClick: (btn) => {
+        if (btn.dataset.ant) selectAnt(btn.dataset.ant);
+        else if (btn.dataset.team === "custom") {
+          if (state.team === "custom" && colorInput) colorInput.click();
+          else { state.team = "custom"; updateUiState(); markDirty(); announce("Team color set to " + activeTeam().label + "."); }
+        }
+        else if (btn.dataset.team && TEAMS[btn.dataset.team]) { state.team = btn.dataset.team; updateUiState(); markDirty(); announce("Team color set to " + TEAMS[state.team].label + "."); }
+        else if (btn.dataset.angle && ANGLES[btn.dataset.angle]) { setAnglePreset(btn.dataset.angle); announce("Camera set to " + ANGLES[btn.dataset.angle].full + "."); }
+        else if (btn.dataset.action) selectAction(btn.dataset.action);
+        else if (btn.dataset.projection) { state.cam.projection = btn.dataset.projection === "ortho" ? "ortho" : "persp"; updateUiState(); markDirty(); announce("Projection set to " + (state.cam.projection === "ortho" ? "Orthographic." : "Perspective.")); }
+        else if (btn.id === "btn-turntable") { state.turntable = !state.turntable; state.camTarget = null; updateUiState(); markDirty(false); announce("Turntable spin " + (state.turntable ? "enabled." : "paused.")); }
+        else if (btn.id === "btn-idle") toggleIdle();
+        else if (btn.id === "btn-sprite-scale") { state.spritePreview = !state.spritePreview; updateUiState(); markDirty(true); announce("48px sprite-scale preview " + (state.spritePreview ? "shown." : "hidden.")); }
+        else if (btn.id === "btn-silhouette") toggleSilhouette();
+        else if (btn.id === "btn-retro-fps") toggleRetroFps();
+        else if (btn.id === "btn-blink-hold") toggleBlinkHold();
+        else if (btn.id === "btn-blink") triggerBlink();
+        else if (btn.id === "btn-export-sheet") exportFiveAngleSheet();
+        else if (btn.id === "btn-download-glb") downloadActiveGlb();
+        else if (btn.id === "btn-reset-view") { const key = ANGLES[state.angle] ? state.angle : "301"; setAnglePreset(key); announce("View reset to " + ANGLES[key].full + "."); }
+        else if (btn.id === "btn-load-glb") fileInput.click();
+      },
+    });
+
+    if (actionSelect) {
+      actionSelect.addEventListener("change", () => selectAction(actionSelect.value));
+    }
     if (lightSelect) {
       lightSelect.addEventListener("change", () => selectLighting(lightSelect.value));
     }
@@ -578,9 +584,12 @@
       if (e.key === "w" || e.key === "W") { e.preventDefault(); toggleAction("walk"); }
       else if (e.key === "a" || e.key === "A") { e.preventDefault(); toggleAction("attack"); }
       else if (e.key === "h" || e.key === "H") { e.preventDefault(); toggleAction("hit"); }
+      else if (e.key === "i" || e.key === "I") { e.preventDefault(); toggleIdle(); }
+      else if (e.key === "b" || e.key === "B") { e.preventDefault(); if (e.shiftKey) toggleBlinkHold(); else triggerBlink(); }
       else if (e.key === "s" || e.key === "S") { e.preventDefault(); toggleSilhouette(); }
       else if (e.key === "f" || e.key === "F") { e.preventDefault(); toggleRetroFps(); }
       else if (e.key === "l" || e.key === "L") { e.preventDefault(); cycleLighting(); }
+      else if (e.key === "r" || e.key === "R") { e.preventDefault(); const key = ANGLES[state.angle] ? state.angle : "301"; setAnglePreset(key); announce("View reset to " + ANGLES[key].full + "."); }
     });
 
     new ResizeObserver(() => markDirty(false)).observe(stageCanvas);

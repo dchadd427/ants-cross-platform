@@ -6,11 +6,11 @@
   const {
     ANT_CLASSES, ANT_LABELS, TEAMS, ANGLES, SHEET_ANGLES, DEG,
     LIGHTING_ORDER, validLighting, getLightingPreset, populateLightingSelect, paintPresetBackdrop2d,
-    wrapAngleDeg, selectActionAnims, AntRenderer, installToolbarRovingTabindex,
+    wrapAngleDeg, selectActionAnims, AntRenderer,
   } = window.__antRender;
   const {
     QUICK_ACTIONS, validAction, getAction, actionSupportsClass,
-    stepSecFor, nearestAvailableAngle, populateActionSelect,
+    stepSecFor, nearestAvailableAngle, populateActionSelect, initViewerChrome,
   } = window.__antActions;
 
   const ORIGINAL_TEAMS = ["green", "red", "blue", "black"];
@@ -79,7 +79,6 @@
   }
 
   function initCompare() {
-    const toolbarEl = document.getElementById("compare-toolbar");
     const gridEl = document.getElementById("compare-grid");
     const soloEl = document.getElementById("compare-solo");
     const stageMain = document.getElementById("compare-stage");
@@ -90,10 +89,6 @@
     const soloAnimEl = document.getElementById("solo-anim");
     const soloOrigPill = document.getElementById("solo-orig-pill");
     const solo3dPill = document.getElementById("solo-3d-pill");
-    const soloHintEl = soloEl ? soloEl.querySelector(".solo-hint") : null;
-    if (soloHintEl) {
-      soloHintEl.textContent = "Drag: Synced 360\u00b0 Turn (Pitch locked 45\u00b0) \u00b7 Scroll/Pinch: Zoom \u00b7 Arrows: Turn \u00b7 R: Reset \u00b7 Esc: All 6";
-    }
     if (solo3dCanvas) {
       solo3dCanvas.setAttribute(
         "aria-label",
@@ -120,8 +115,6 @@
     const metaScale = document.getElementById("meta-scale");
     const metaProj = document.getElementById("meta-proj");
     const metaPlay = document.getElementById("meta-play");
-
-    if (!("focusGroup" in HTMLElement.prototype)) installToolbarRovingTabindex(toolbarEl);
 
     const cardCanvases = new Map();
     const cardCycles = new Map();
@@ -280,9 +273,9 @@
       const q = new URLSearchParams();
       q.set("ant", state.ant === "all" ? "lineup" : state.ant);
       q.set("team", state.team);
-      const exactCanon = !state.flipped && Math.abs(wrapAngleDeg(state.yaw - state.compass.yaw)) < 1.0;
+      const exactCanon = Math.abs(wrapAngleDeg(state.yaw - state.compass.yaw)) < 1.0;
       if (exactCanon) {
-        q.set("angle", state.angle);
+        q.set("angle", state.compass.id);
       } else {
         q.set("yaw", String(Math.round(state.yaw)));
         q.set("proj", "ortho");
@@ -433,16 +426,16 @@
       const offPitch = Math.abs(state.pitch - CANONICAL_PITCH) >= 0.5;
       const yawDisp = Math.round(state.yaw);
 
-      toolbarEl.querySelectorAll("button[data-ant]").forEach((b) => {
+      document.querySelectorAll("button[data-ant]").forEach((b) => {
         b.setAttribute("aria-pressed", String(b.dataset.ant === state.ant));
       });
-      toolbarEl.querySelectorAll("button[data-team]").forEach((b) => {
+      document.querySelectorAll("button[data-team]").forEach((b) => {
         b.setAttribute("aria-pressed", String(b.dataset.team === state.team));
       });
-      toolbarEl.querySelectorAll("button[data-angle]").forEach((b) => {
+      document.querySelectorAll("button[data-angle]").forEach((b) => {
         b.setAttribute("aria-pressed", String(b.dataset.angle === comp.id));
       });
-      toolbarEl.querySelectorAll("button[data-action]").forEach((b) => {
+      document.querySelectorAll("button[data-action]").forEach((b) => {
         b.setAttribute("aria-pressed", String(b.dataset.action === state.action));
       });
       if (actionSelect) {
@@ -457,10 +450,10 @@
         });
         actionSelect.dataset.extended = String(!QUICK_ACTIONS.includes(state.action));
       }
-      toolbarEl.querySelectorAll("button[data-speed]").forEach((b) => {
+      document.querySelectorAll("button[data-speed]").forEach((b) => {
         b.setAttribute("aria-pressed", String(Number(b.dataset.speed) === state.speed));
       });
-      btnIdle.setAttribute("aria-pressed", String(state.idle));
+      if (btnIdle) btnIdle.setAttribute("aria-pressed", String(state.idle));
       if (btnPixelMode) btnPixelMode.setAttribute("aria-pressed", String(state.pixelMode));
       if (btnSilhouette) btnSilhouette.setAttribute("aria-pressed", String(state.silhouette));
       if (btnRetroFps) btnRetroFps.setAttribute("aria-pressed", String(state.retroFps));
@@ -470,11 +463,13 @@
       gridEl.hidden = isSolo;
       soloEl.hidden = !isSolo;
 
-      badgeAnt.textContent = isSolo ? ANT_LABELS[state.ant] : "All 6";
-      badgeTeam.textContent = TEAMS[state.team].label;
-      badgeAngle.textContent = offYaw
-        ? `${comp.dir} (${comp.angle}${comp.flip ? " flip" : ""}) \u00b7 ${yawDisp}\u00b0`
-        : comp.label;
+      if (badgeAnt) badgeAnt.textContent = isSolo ? ANT_LABELS[state.ant] : "All 6";
+      if (badgeTeam) badgeTeam.textContent = TEAMS[state.team].label;
+      if (badgeAngle) {
+        badgeAngle.textContent = offYaw
+          ? `${comp.dir} (${comp.angle}${comp.flip ? " flip" : ""}) \u00b7 ${yawDisp}\u00b0`
+          : comp.label;
+      }
       if (metaProj) {
         const modeBits = [
           `Ortho ${Math.round(CANONICAL_PITCH)}\u00b0 (Locked)`,
@@ -1101,22 +1096,26 @@
     }
 
     // --- Event Wiring ---
-    toolbarEl.addEventListener("click", (e) => {
-      const btn = e.target.closest("button");
-      if (!btn) return;
-      if (btn.dataset.ant) selectAnt(btn.dataset.ant);
-      else if (btn.dataset.team) selectTeam(btn.dataset.team);
-      else if (btn.dataset.angle) selectAngle(btn.dataset.angle);
-      else if (btn.dataset.action) selectAction(btn.dataset.action);
-      else if (btn.dataset.speed) selectSpeed(Number(btn.dataset.speed));
-      else if (btn === btnPixelMode) togglePixelMode();
-      else if (btn === btnSilhouette) toggleSilhouette();
-      else if (btn === btnRetroFps) toggleRetroFps();
-      else if (btn === btnIdle) toggleIdle();
-      else if (btn === btnSyncReset) syncReset();
+    const selectLighting = (id) => { state.lighting = validLighting(id) || "studio"; updateUiState(); markDirty(); announce("Lighting set to " + getLightingPreset(state.lighting).label + "."); };
+    const stepLighting = (dir) => selectLighting(LIGHTING_ORDER[(LIGHTING_ORDER.indexOf(state.lighting) + dir + LIGHTING_ORDER.length) % LIGHTING_ORDER.length]);
+    initViewerChrome({
+      onResize: markDirty,
+      onLightStep: stepLighting,
+      onControlClick: (btn) => {
+        if (btn.dataset.ant) selectAnt(btn.dataset.ant);
+        else if (btn.dataset.team) selectTeam(btn.dataset.team);
+        else if (btn.dataset.angle) selectAngle(btn.dataset.angle);
+        else if (btn.id === "btn-compass-center") selectAngle("301");
+        else if (btn.dataset.action) selectAction(btn.dataset.action);
+        else if (btn.dataset.speed) selectSpeed(Number(btn.dataset.speed));
+        else if (btn === btnPixelMode) togglePixelMode();
+        else if (btn === btnSilhouette) toggleSilhouette();
+        else if (btn === btnRetroFps) toggleRetroFps();
+        else if (btn === btnIdle) toggleIdle();
+        else if (btn === btnSyncReset) syncReset();
+      },
     });
     if (actionSelect) actionSelect.addEventListener("change", () => selectAction(actionSelect.value));
-    const selectLighting = (id) => { state.lighting = validLighting(id) || "studio"; updateUiState(); markDirty(); announce("Lighting set to " + getLightingPreset(state.lighting).label + "."); };
     if (lightSelect) lightSelect.addEventListener("change", () => selectLighting(lightSelect.value));
 
     let suppressStageClickUntil = 0;
@@ -1283,7 +1282,7 @@
         selectAngle(COMPASS_DIRS[Number(e.key) - 1].id);
       } else if ((e.key === "ArrowLeft" || e.key === "ArrowRight")
         && document.activeElement !== solo3dCanvas
-        && (!toolbarEl.contains(document.activeElement))) {
+        && (!document.activeElement || !document.activeElement.closest('[role="toolbar"]'))) {
         e.preventDefault();
         const step = e.shiftKey ? 5 : 15;
         state.yaw = wrapAngleDeg(state.yaw + (e.key === "ArrowLeft" ? step : -step));

@@ -52,7 +52,7 @@ VIRTUAL_ROOTS = ("/src", "/usr/share/nginx/html", "/etc/nginx", "/srv/community-
 BASE_FOLDERS = ("/src", "/usr/share/nginx/html", "/etc/nginx/conf.d")  # what the base images already have (the emsdk image's /src, the nginx image's two)
 HARMLESS_PATHS = ("/dev/null", "/bin/sh", "/usr/bin/env")
 IGNORED = ("EXPOSE", "HEALTHCHECK", "CMD", "ENTRYPOINT", "LABEL", "MAINTAINER", "STOPSIGNAL", "USER")
-SKIPPED_STAGES = ("emsdk-warm",)        # stages that only prepare the compiler's image (system packages, Emscripten's libraries and ports): here the emsdk is installed by ensure_emsdk and the ports by prepare_ports, and nothing is installed on this machine
+SKIPPED_STAGES = ("emsdk-warm", "ant-models-env")        # stages that only prepare a build image (system packages, Emscripten's libraries and ports): here the emsdk is installed by ensure_emsdk and the ports by prepare_ports, and nothing is installed on this machine
 CACHE_MOUNT = re.compile(r"^(?:--mount=type=cache(?:,[\w=/.-]+)*\s+)+")      # RUN --mount=type=cache,target=...: BuildKit's cache of the build (ccache); this tool has none, and the command runs as it is without it
 MOUSE = "--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2"       # a fine pointer that hovers: a desktop's
 PORTS_OF_FLAGS = {("USE_SDL", "2"): "sdl2", ("USE_SDL_TTF", "2"): "sdl2_ttf"}   # -sUSE_SDL=2 -sUSE_SDL_TTF=2 of the CMake files; the other ports come from `deps` of the port files

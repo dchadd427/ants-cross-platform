@@ -139,6 +139,89 @@
     selectEl.value = prevValue;
   }
 
+  function initViewerChrome(opts) {
+    const { onResize, onLightStep, onControlClick } = opts || {};
+    const shell = document.querySelector(".app-shell");
+    const panel = document.getElementById("inspector-panel");
+    const toggleBtn = document.getElementById("btn-toggle-panel");
+    const closeBtn = document.getElementById("btn-close-panel");
+    const backdrop = document.getElementById("inspector-backdrop");
+    const renderApi = window.__antRender;
+
+    if (!("focusGroup" in HTMLElement.prototype) && renderApi && renderApi.installToolbarRovingTabindex) {
+      document.querySelectorAll('[role="toolbar"]').forEach((bar) => renderApi.installToolbarRovingTabindex(bar));
+    }
+
+    const mqNarrow = window.matchMedia("(max-width: 960px)");
+    const PANEL_KEY = "ants_3d_panel_collapsed_v1";
+    let desktopCollapsed = false;
+    try { desktopCollapsed = window.localStorage.getItem(PANEL_KEY) === "1"; } catch (_) {}
+    let drawerOpen = false;
+
+    function syncPanel() {
+      if (!shell || !panel) return;
+      const narrow = mqNarrow.matches;
+      shell.classList.toggle("panel-collapsed", !narrow && desktopCollapsed);
+      shell.classList.toggle("drawer-open", narrow && drawerOpen);
+      if (backdrop) backdrop.hidden = !(narrow && drawerOpen);
+      const isExpanded = narrow ? drawerOpen : !desktopCollapsed;
+      if (toggleBtn) toggleBtn.setAttribute("aria-expanded", String(isExpanded));
+      if (typeof onResize === "function") requestAnimationFrame(onResize);
+    }
+
+    if (toggleBtn) {
+      toggleBtn.addEventListener("click", () => {
+        if (mqNarrow.matches) {
+          drawerOpen = !drawerOpen;
+        } else {
+          desktopCollapsed = !desktopCollapsed;
+          try { window.localStorage.setItem(PANEL_KEY, desktopCollapsed ? "1" : "0"); } catch (_) {}
+        }
+        syncPanel();
+      });
+    }
+    const closeDrawer = () => {
+      if (!drawerOpen) return;
+      drawerOpen = false;
+      syncPanel();
+      if (toggleBtn) toggleBtn.focus();
+    };
+    if (closeBtn) closeBtn.addEventListener("click", closeDrawer);
+    if (backdrop) backdrop.addEventListener("click", closeDrawer);
+    if (typeof mqNarrow.addEventListener === "function") mqNarrow.addEventListener("change", () => { drawerOpen = false; syncPanel(); });
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && mqNarrow.matches && drawerOpen) {
+        e.preventDefault();
+        closeDrawer();
+      }
+    });
+
+    const prevLight = document.getElementById("btn-light-prev");
+    const nextLight = document.getElementById("btn-light-next");
+    if (prevLight && typeof onLightStep === "function") prevLight.addEventListener("click", () => onLightStep(-1));
+    if (nextLight && typeof onLightStep === "function") nextLight.addEventListener("click", () => onLightStep(1));
+
+    if (typeof onControlClick === "function") {
+      const zones = [
+        document.getElementById("compare-toolbar"),
+        document.getElementById("viewer-toolbar"),
+        document.getElementById("playback-dock"),
+        panel,
+      ];
+      for (const zone of zones) {
+        if (!zone) continue;
+        zone.addEventListener("click", (e) => {
+          const btn = e.target.closest("button");
+          if (!btn || !zone.contains(btn)) return;
+          if (btn.id === "btn-toggle-panel" || btn.id === "btn-close-panel" || btn.id === "btn-light-prev" || btn.id === "btn-light-next") return;
+          onControlClick(btn);
+        });
+      }
+    }
+
+    syncPanel();
+  }
+
   window.__antActions = {
     QUICK_ACTIONS,
     ACTIONS,
@@ -149,5 +232,6 @@
     stepSecFor,
     nearestAvailableAngle,
     populateActionSelect,
+    initViewerChrome,
   };
 })();

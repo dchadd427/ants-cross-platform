@@ -88,7 +88,7 @@ class TheDockerfileIsRead(unittest.TestCase):
     def test_the_repositorys_dockerfile_is_read_to_the_end_and_no_step_is_lost(self):
         for op in ("FROM", "COPY", "RUN"):
             self.assertEqual(len([s for s in self.steps if s.op == op]), len(re.findall(r"^%s " % op, self.text, re.M)), op)
-        self.assertEqual([s.stage for s in self.steps if s.op == "FROM"], [0, 1, 2])
+        self.assertEqual([s.stage for s in self.steps if s.op == "FROM"], [0, 1, 2, 3, 4])
         self.assertTrue(all(s.text.strip() for s in self.steps))
 
     def test_the_emscripten_version_is_the_one_of_the_from_line(self):

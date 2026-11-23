@@ -1432,8 +1432,8 @@
   {
    "id": "unknown_html_address_has_no_page",
    "file": "docker/nginx.conf",
-   "old": "        error_page 404 /404.html;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n",
-   "new": "        add_header Cache-Control \"no-cache, must-revalidate\" always;\n",
+   "old": "        error_page 500 502 503 504 /50x.html;\n        error_page 404 /404.html;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n",
+   "new": "        error_page 500 502 503 504 /50x.html;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {

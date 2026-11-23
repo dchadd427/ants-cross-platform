@@ -9,7 +9,7 @@
 FROM emscripten/emsdk:3.1.74@sha256:af45409f3199d88db4b1b03af0098532c8fb33a375ac257463eeb0a622870d06 AS emsdk-warm
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ccache python3-numpy python3-pil && \
+    apt-get install -y --no-install-recommends ccache && \
     rm -rf /var/lib/apt/lists/*
 
 COPY docker/emsdk_warm.cpp /warm/emsdk_warm.cpp
@@ -175,15 +175,32 @@ COPY asset_catalog/catalog_data.js /src/asset_catalog/catalog_data.js
 COPY tools/map_atlas.py /src/tools/map_atlas.py
 RUN python3 tools/map_atlas.py mapmaker_atlas && test -s mapmaker_atlas/atlas.json && test -s mapmaker_atlas/ground.png && test -s mapmaker_atlas/objects.png
 
-# Stylized 3D Ant Models & 1998 Comparison Viewer (/test_3d/): built after the compile and atlas layers so edits to 3D models or viewer files never recompile the game, reading the public animation table from asset_catalog/catalog_data.js (never docs/).
-COPY tools/ant_models/ /src/tools/ant_models/
+# =============================================================================
+# Stage 3: Stylized 3D Ant Models & 1998 Comparison Viewer (/test_3d/)
+# =============================================================================
+# Kept in its own small stage so Emscripten's warm and builder stages stay untouched.
+# Pinned by tag and digest (same Debian base as Dockerfile.server; Dependabot updates it weekly).
+FROM debian:13-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS ant-models-env
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3 python3-numpy python3-pil && \
+    rm -rf /var/lib/apt/lists/*
+
+FROM ant-models-env AS ant-models
+
+WORKDIR /src
+
+# Only the inputs the 3D builder reads: the original sprite archive, the public animation table (never docs/), the CHD decoder, and the 3D model/viewer sources.
+COPY Original-Ants/ants.chd /src/Original-Ants/ants.chd
+COPY asset_catalog/catalog_data.js /src/asset_catalog/catalog_data.js
 COPY tools/front_page_art/artlib.py /src/tools/front_page_art/artlib.py
+COPY tools/ant_models/ /src/tools/ant_models/
 RUN mkdir -p test_3d/models && \
     python3 -m tools.ant_models.build_all --out test_3d/models && \
     cp tools/ant_models/compare.html tools/ant_models/viewer.html tools/ant_models/viewer.css \
        tools/ant_models/compare.js tools/ant_models/viewer.js tools/ant_models/viewer_actions.js \
        tools/ant_models/viewer_gltf.js tools/ant_models/viewer_render.js \
-       tools/ant_models/viewer_status.js tools/ant_models/viewer_version.js test_3d/ && \
+       tools/ant_models/viewer_version.js test_3d/ && \
     python3 -c 'import gzip, pathlib; [p.with_name(p.name+".gz").write_bytes(gzip.compress(p.read_bytes(), compresslevel=9, mtime=0)) for p in sorted(pathlib.Path("test_3d/models").iterdir()) if p.suffix in (".glb", ".json")]' && \
     test -s test_3d/compare.html && test -s test_3d/viewer.html && \
     test -s test_3d/models/manifest.json && test -s test_3d/models/orig_sprites.json && \
@@ -194,7 +211,7 @@ RUN mkdir -p test_3d/models && \
     done
 
 # =============================================================================
-# Stage 2: High-Performance Lightweight Nginx Web Server
+# Stage 4: High-Performance Lightweight Nginx Web Server
 # =============================================================================
 # Pinned by tag and digest, like the base image of the first stage.
 FROM nginx:alpine@sha256:fb4658584bd9a916ffb6f6e365f97c25cfdb2923801f551ea08356e695f14ff7 AS runner
@@ -315,7 +332,7 @@ COPY --from=builder /src/robots.txt /src/sitemap.xml /usr/share/nginx/html/
 COPY asset_catalog/ /usr/share/nginx/html/asset_catalog/
 
 # 3D Ant Models & 1998 Comparison Viewer (/test_3d/, Compare 1998 default + 3D Studio toggle)
-COPY --from=builder /src/test_3d/ /usr/share/nginx/html/test_3d/
+COPY --from=ant-models /src/test_3d/ /usr/share/nginx/html/test_3d/
 
 # The admin page (docs/MAP_SUBMISSIONS.md "The admin page"): the address /admin is typed, nothing links to it; its API and the logon are paths of docker/nginx.conf
 COPY --from=builder /src/web/admin.html /usr/share/nginx/html/admin.html
