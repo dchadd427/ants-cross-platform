@@ -183,7 +183,12 @@
             var facts = Blocks.facts(f, true), hills = facts.hills.filter(function (n) { return n > 0; }).length, ants = facts.ants.reduce(function (a, b) { return a + b; }, 0);
             return f.rows + ' x ' + f.columns + ', ' + plural(hills, 'hill', 'hills') + ', ' + plural(ants, 'starting ant', 'starting ants') + ', ' + plural(facts.piles, 'food pile', 'food piles');
         }
+        // A call that the person has stopped (Stop, Turn off, a closed socket) or that the hub has cancelled (it timed out, its key was revoked) must not change anything any more: the page says so with `alive()`
+        // (the arming's own number and socket, and the call's id), which is asked again at every point where work could start after a wait: each poll for the person's stroke, and when the safety copy is done
+        function stopped(done) { return !!done.alive && !done.alive(); }
+        function stoppedAnswer() { return refuse('refused', 'The person stopped the AI, or the call was cancelled: nothing was changed.'); }
         function waitFor(done, go, tries) {
+            if (stopped(done)) return done(stoppedAnswer());
             if (!env.stroking()) return go();
             if (tries >= WAIT_TRIES) return done(refuse('busy', 'The person is drawing: try again in a moment.'));
             env.later(function () { waitFor(done, go, tries + 1); }, WAIT_MS);
@@ -193,6 +198,7 @@
                 if (args.base !== undefined && args.base !== ver) return done(refuse('changed_by_person', 'The person changed the map since your last answer. It is version ' + ver + ' now: ' + summary(env.file()) + '. Look again with map_info before you change anything.'));
                 if ((copied && !copyAlways) || env.isSaved()) { copied = true; return done(work()); }
                 env.keepBefore(function (error) {
+                    if (stopped(done)) return done(stoppedAnswer());                         // (stopped while the copy was being kept: the copy stays, the map is not touched)
                     if (error) return done(refuse('refused', 'The browser could not keep a safety copy of the person\u2019s map, so nothing was changed.'));
                     copied = true;
                     done(work());
@@ -422,14 +428,15 @@
                 });
             }, 0);
         };
-        tools.note = function (args, done) { env.note(args.text); done(okay({ version: ver })); };
+        tools.note = function (args, done) { if (stopped(done)) return done(stoppedAnswer()); env.note(args.text); done(okay({ version: ver })); };
 
         return {
             tools: tools,
             // One call: `done(frame)` where frame is {ok: true, result, cells} or {ok: false, error, message}. A tool that is not in the table is refused (the hub does not send one).
-            run: function (name, args, done) {
+            run: function (name, args, done, alive) {
                 var tool = Object.prototype.hasOwnProperty.call(tools, name) ? tools[name] : null;
                 if (!tool) return done(refuse('bad_args', 'There is no such tool.'));
+                if (alive) done.alive = alive;                                              // (read by waitFor and guarded: the call's own check that it is still wanted)
                 try { tool(args || {}, done); } catch (e) { done(refuse('tab_error', 'The Map Maker could not do that.')); }
             },
             names: function () { return Object.keys(tools).sort(); },

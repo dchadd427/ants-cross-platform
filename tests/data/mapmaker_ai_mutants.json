@@ -178,6 +178,62 @@
    "old": "api('POST', '/hub/ai/keys/revoke', { id: key.id }",
    "new": "api('POST', '/hub/ai/keys/revoke', { }",
    "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "a_call_that_was_stopped_goes_on_after_its_stroke",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "            if (stopped(done)) return done(stoppedAnswer());\n            if (!env.stroking()) return go();",
+   "new": "            if (!env.stroking()) return go();",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "a_call_that_was_stopped_goes_on_after_its_copy",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "                    if (stopped(done)) return done(stoppedAnswer());                         // (stopped while the copy was being kept: the copy stays, the map is not touched)\n",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "a_note_is_shown_after_stop",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "if (stopped(done)) return done(stoppedAnswer()); env.note(args.text);",
+   "new": "env.note(args.text);",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "the_page_does_not_tell_a_call_whether_it_is_wanted",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "                if (alive) done.alive = alive;",
+   "new": "                if (false) done.alive = alive;",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "a_cancel_of_the_hub_is_ignored",
+   "file": "web/front/mapmaker_ai.js",
+   "old": "            else if (m.t === 'cancel' && typeof m.id === 'number') {",
+   "new": "            else if (false) {",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "a_cancelled_call_is_still_wanted",
+   "file": "web/front/mapmaker_ai.js",
+   "old": " && !cancelled[id]; }",
+   "new": "; }",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "the_strip_shows_the_name_that_the_app_gives_itself",
+   "file": "web/front/mapmaker_ai.js",
+   "old": "            who = { key: clean(m.key) };",
+   "new": "            who = { key: clean(m.client) + ' ' + clean(m.key) };",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "the_sheet_does_not_say_where_the_key_stays",
+   "file": "web/front/mapmaker_ai.js",
+   "old": " Running or saving it keeps the key on this computer (the terminal\\u2019s history, the AI app\\u2019s settings): if the computer is shared, revoke the key when you are done.",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
   }
  ]
 }

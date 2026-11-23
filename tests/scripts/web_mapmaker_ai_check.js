@@ -39,7 +39,7 @@ function map(rel) { const f = File.parse(new Uint8Array(fs.readFileSync(path.joi
 // ---- the page's side of the tools, made up ----
 function rig(rel, over) {
     over = over || {};
-    const sim = { saved: false, copies: [], kept: [], notes: [], acts: [], changed: 0, stroking: 0, fail: '', fetched: [] };
+    const sim = { saved: false, copies: [], kept: [], notes: [], acts: [], changed: 0, stroking: 0, fail: '', fetched: [], laters: [], keeps: [], maps: 0 };       // (laters and keeps: what a page that really waits holds, for `over.async`)
     const file0 = map(rel || 'Original-Ants/Maps/TINY.LVL');
     const ed = Edit.create(file0, { rebase: (b) => File.parse(b), erase: Blocks.eraseAt, guard: Blocks.blockedText });
     const core = {
@@ -51,9 +51,9 @@ function rig(rel, over) {
     const env = {
         core: core, limits: { classic: { rows: 90, columns: 90, cells: 8100, openCells: 16000 }, extended: { side: 2048, cells: 4194304, longest: 8192 } }, pictureMax: 4000,
         file: () => ed.file, name: () => 'My test map', editor: () => ed, changed: () => { sim.changed++; part.touch(); }, rebase: (b) => File.parse(b),
-        stroking: () => sim.stroking > 0 && sim.stroking--, later: (f) => f(), isSaved: () => sim.saved, numbered: (n) => n + ' 2',
-        keep: (name, done) => { sim.kept.push(name); done(sim.fail); }, keepBefore: (done) => { sim.copies.push(1); done(sim.fail); },
-        newMap: () => 'A made-up refusal',
+        stroking: () => sim.stroking > 0 && sim.stroking--, later: over.async ? (f) => { sim.laters.push(f); } : (f) => f(), isSaved: () => sim.saved, numbered: (n) => n + ' 2',
+        keep: (name, done) => { sim.kept.push(name); done(sim.fail); }, keepBefore: over.async ? (done) => { sim.copies.push(1); sim.keeps.push(done); } : (done) => { sim.copies.push(1); done(sim.fail); },
+        newMap: () => { sim.maps++; return 'A made-up refusal'; },
         mini: (f, w, h) => ({ w: w, h: h }), makeCanvas: (w, h) => { const c = { w: w, h: h, draws: [], getContext: () => ({ drawImage: (...a) => c.draws.push(a), imageSmoothingEnabled: true }), toDataURL: () => 'data:image/png;base64,' + 'A'.repeat(over.k ? Math.round(c.w * c.h * over.k) : 200) }; return c; },
         library: () => [{ name: 'Treasure', file: 'TREASURE.LVL', kind: 'classic', width: 60, height: 60, minutes: 12, players: 4 }, { name: 'Odd <b>one</b>', file: 'ODD.LVL', kind: 'classic' }],
         fetchMap: (file, done) => { sim.fetched.push(file); done(file === 'TREASURE.LVL' ? '' : 'failed', file === 'TREASURE.LVL' ? new Uint8Array(fs.readFileSync(path.join(ROOT, 'Original-Ants/Maps/TREASURE.LVL'))) : null); },
@@ -61,7 +61,7 @@ function rig(rel, over) {
         edges: () => null, note: (t) => sim.notes.push(t), onAct: (t) => sim.acts.push(t)
     };
     part = Tools.create(env);
-    const run = (name, args) => { let out = null; part.run(name, args || {}, (frame) => { out = frame; }); return out; };
+    const run = (name, args, alive) => { let out = null; part.run(name, args || {}, (frame) => { out = frame; }, alive); return out; };
     return { part, run, ed, sim, env, core };
 }
 const HILLS = (f) => Blocks.facts(f, true).hills;
@@ -242,6 +242,44 @@ console.log('RUNNING: C changing');
     const busy = r.run('paint', { layer: 'ground', tile: 476, cells: [[2, 2]] });
     check(busy.error === 'busy' && r.ed.file.tile1(2, 2) !== 476, 'a stroke that does not end is a busy answer, and nothing changed');
 
+    // Stop and a cancel reach a call that is still waiting, whatever it waits for: nothing is changed, kept or said after them
+    {
+        let on = true, got = null;
+        const start = (rr, name, args) => { got = null; rr.part.run(name, args, (f) => { got = f; }, () => on); };
+        const paintArgs = { layer: 'ground', tile: 476, cells: [[2, 2]] }, cell = (rr) => rr.ed.file.tile1(2, 2);
+        const untouched = (rr, before) => rr.sim.changed === 0 && rr.sim.kept.length === 0 && rr.sim.maps === 0 && rr.sim.notes.length === 0 && bytesOf(rr.ed.file) === before;
+        r = rig(null, { async: true }); r.sim.stroking = 1000; on = true; start(r, 'paint', paintArgs);
+        check(got === null && r.sim.laters.length === 1, 'a call waits for the person\u2019s stroke (a page that really waits)');
+        on = false; r.sim.laters.shift()();
+        check(got && got.ok === false && cell(r) !== 476 && r.sim.changed === 0 && r.sim.copies.length === 0, 'Stop while a call waits for the stroke: nothing is changed and no copy is made');
+        r = rig(null, { async: true }); on = true; start(r, 'paint', paintArgs);
+        check(got === null && r.sim.keeps.length === 1, 'a call waits for the safety copy');
+        on = false; r.sim.keeps.shift()('');
+        check(got && got.ok === false && cell(r) !== 476 && r.sim.changed === 0, 'Stop while the safety copy is being kept: nothing is changed');
+        r = rig(null, { async: true }); on = true; start(r, 'paint', paintArgs); r.sim.keeps.shift()('');
+        check(got && got.ok === true && cell(r) === 476 && r.sim.changed === 1, 'a call that is still wanted goes on when its copy is done');
+        for (const [name, args] of [['paint', paintArgs], ['resize_map', { rows: 40, columns: 40 }], ['new_map', { kind: 'classic', rows: 20, columns: 20 }], ['save_draft', {}], ['note', { text: 'hi' }]]) {
+            r = rig(null, { async: true }); r.sim.saved = true; r.sim.stroking = 1; on = true;
+            const before = bytesOf(r.ed.file);
+            if (name === 'note') on = false;                                         // (a note does not wait: it is stopped before it comes)
+            start(r, name, args);
+            on = false; while (r.sim.laters.length) r.sim.laters.shift()();
+            check(got && got.ok === false && untouched(r, before), name + ': stopped while it waits for a stroke, it does nothing: ' + JSON.stringify(got));
+            r = rig(null, { async: true }); r.sim.saved = true; r.sim.stroking = 1; on = true;
+            start(r, name, args);
+            while (r.sim.laters.length) r.sim.laters.shift()();
+            check(got !== null && !untouched(r, before), name + ': the same call that is still wanted does its work (the check is not for a call that never ends)');
+        }
+        // the hub cancelled a call that timed out: the retry is made once, and the first one does nothing when its wait ends
+        r = rig(null, { async: true }); r.sim.saved = true; r.sim.stroking = 1;
+        let first = null, second = null, firstWanted = true;
+        r.part.run('paint', paintArgs, (f) => { first = f; }, () => firstWanted);
+        firstWanted = false;
+        r.part.run('paint', paintArgs, (f) => { second = f; }, () => true);
+        while (r.sim.laters.length) r.sim.laters.shift()();
+        check(first && first.ok === false && second && second.ok === true && r.sim.changed === 1 && cell(r) === 476, 'a cancelled call and its retry: the change is made once');
+    }
+
     // more than 5,000 cells: refused and undone
     r = rig();
     const flood = rig(); flood.ed.act(Blocks.resizeMap(flood.ed.file, 90, 90, 0, 0)); flood.part.touch(); flood.sim.saved = true;
@@ -321,6 +359,7 @@ console.log('RUNNING: D the sheet, the strip and the socket');
         buttonNamed('Copy key').click(); await flush();
         check(win.copied === KEY, 'shown: Copy key copies it');
         buttonNamed('Next: connect your AI').click();
+        check(/this computer/.test(text()) && /revoke the key/.test(text()), 'connect: it says that the key stays on this computer and to revoke it if the computer is shared');
         check(doc.querySelectorAll('pre').some((p) => p.textContent.includes('claude mcp add --transport http ants-map-maker') && p.textContent.includes('https://site.example/hub/ai/mcp') && p.textContent.includes('Bearer ' + KEY)), 'connect: the command holds the key');
         check(/Teach it to make good maps/.test(text()) && doc.querySelectorAll('a').some((a) => a.getAttribute('href') === '/ai/skills/all.zip'), 'connect: the skills link');
         const tabs = doc.querySelectorAll('button').filter((b) => b.getAttribute('role') === 'tab');
@@ -343,10 +382,10 @@ console.log('RUNNING: D the sheet, the strip and the socket');
         check(ai.state() === 'armed' && /This tab is open to an AI/.test(text()) && /Waiting for your AI to connect/.test(text()) && /AI is on/.test(lbl.textContent), 'ready: the strip says that the tab is open');
         sockets[0].onmessage({ data: 'not json' }); sockets[0].onmessage({ data: JSON.stringify([1]) }); sockets[0].onmessage({ data: JSON.stringify({ t: 'call', id: 'x', tool: 'map_info', args: {} }) }); sockets[0].onmessage({ data: JSON.stringify({ t: 'call', id: 1, tool: 'map_info' }) });
         equal(sockets[0].sent, [], 'frames that are not calls are ignored');
-        sockets[0].onmessage({ data: JSON.stringify({ t: 'call', id: 7, tool: 'map_info', args: {}, key: 'Home <b>laptop</b>', client: 'Claude Code' }) });
+        sockets[0].onmessage({ data: JSON.stringify({ t: 'call', id: 7, tool: 'map_info', args: {}, key: 'Home <b>laptop</b>', client: 'Ants staff check' }) });
         const first = sockets[0].sent[0];
         check(first && first.t === 'result' && first.id === 7 && first.ok === true && first.result.kind === 'classic' && first.cells === 0, 'a call is run and answered: ' + JSON.stringify(first).slice(0, 120));
-        check(ai.state() === 'working' && /An AI is working on this map/.test(text()) && /Claude Code/.test(text()) && /Home <b>laptop<\/b>/.test(text()) && !doc.querySelectorAll('b').some((b) => /laptop/.test(b.textContent)), 'the strip names the app and the key as text');
+        check(ai.state() === 'working' && /An AI is working on this map/.test(text()) && !/Ants staff check/.test(text()) && /Home <b>laptop<\/b>/.test(text()) && !doc.querySelectorAll('b').some((b) => /laptop/.test(b.textContent)), 'the strip names the key as text and no name that the app gives itself');
         sockets[0].onmessage({ data: JSON.stringify({ t: 'call', id: 8, tool: 'submit', args: {} }) });
         check(sockets[0].sent[1].ok === false && sockets[0].sent[1].error === 'bad_args', 'a tool that is not one is refused to the hub');
         sockets[0].onmessage({ data: JSON.stringify({ t: 'call', id: 9, tool: 'paint', args: { layer: 'ground', tile: 476, rect: { row: 1, column: 1, rows: 2, columns: 2 } } }) });
@@ -357,7 +396,26 @@ console.log('RUNNING: D the sheet, the strip and the socket');
         // Undo AI changes and Stop
         buttonNamed('Undo AI changes').click();
         check(r.ed.file.tile1(1, 1) !== 476, 'Undo AI changes takes the AI\u2019s steps back');
+        // a call that waits for the person's stroke is dropped when the hub cancels it, and when Stop is pressed: nothing is changed and nothing is answered
+        const laters = [];
+        r.env.later = (f) => { laters.push(f); };
+        const paintAt = (id, at) => JSON.stringify({ t: 'call', id: id, tool: 'paint', args: { layer: 'ground', tile: 476, cells: [at] } });
+        let spot = freeCell(r.ed.file), sentBefore = sockets[0].sent.length;
+        sim.stroking = 1000000;
+        sockets[0].onmessage({ data: paintAt(30, spot) });
+        check(laters.length === 1 && sockets[0].sent.length === sentBefore, 'a call waits for the stroke');
+        sockets[0].onmessage({ data: JSON.stringify({ t: 'cancel', id: 30 }) });
+        sim.stroking = 0; laters.shift()();
+        check(sockets[0].sent.length === sentBefore && r.ed.file.tile1(spot[0], spot[1]) !== 476, 'cancel: the call that waited changes nothing and answers nothing');
+        sockets[0].onmessage({ data: paintAt(31, spot) });
+        check(sockets[0].sent.length === sentBefore + 1 && sockets[0].sent[sentBefore].id === 31 && sockets[0].sent[sentBefore].ok && r.ed.file.tile1(spot[0], spot[1]) === 476, 'the next call is not affected by a cancelled one');
+        spot = freeCell(r.ed.file); sentBefore = sockets[0].sent.length; sim.stroking = 1000000;
+        sockets[0].onmessage({ data: paintAt(32, spot) });
+        check(laters.length === 1, 'another call waits for the stroke');
         buttonNamed('Stop').click();
+        sim.stroking = 0; while (laters.length) laters.shift()();
+        check(sockets[0].sent.length === sentBefore && r.ed.file.tile1(spot[0], spot[1]) !== 476, 'Stop: the call that waited changes nothing and answers nothing');
+        r.env.later = (f) => f();
         check(sockets[0].closed && sockets[0].closed[0] === 1000 && ai.state() === 'off' && /Connect an AI/.test(lbl.textContent), 'Stop closes the socket at once');
         const n = sockets[0].sent.length;
         sockets[0].onmessage({ data: JSON.stringify({ t: 'call', id: 11, tool: 'map_info', args: {} }) });
