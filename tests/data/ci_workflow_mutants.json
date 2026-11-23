@@ -272,8 +272,8 @@
   {
    "id": "a_part_of_ctest_matches_no_test",
    "file": ".github/workflows/ci.yml",
-   "old": "CTEST_LONG: \"^(test_ai|test_lockstep|test_ai_worker|test_engine_copy)$\"",
-   "new": "CTEST_LONG: \"^(test_ai|test_lockstep|test_ai_worker|test_engine_copies)$\"",
+   "old": "CTEST_LONG: \"^(test_ai|test_ai_part2|test_lockstep|test_ai_worker|test_engine_copy)$\"",
+   "new": "CTEST_LONG: \"^(test_ai|test_ai_part2|test_lockstep|test_ai_worker|test_engine_copies)$\"",
    "test": "python3 tests/scripts/test_ci_workflow.py"
   },
   {
