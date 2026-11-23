@@ -99,9 +99,10 @@ class TheText(unittest.TestCase):
 
     def test_the_socket_is_the_chat_doors_upgrade_with_its_own_connection_zone(self):
         block = BLOCKS[SOCKET]
-        for line in ("limit_conn ants_hub_aiconn 8;", "limit_req zone=ants_hub_req burst=10 nodelay;", "proxy_http_version 1.1;", 'proxy_set_header Connection "upgrade";', "proxy_buffering off;", "proxy_read_timeout 120s;"):
+        for line in ("limit_req zone=ants_hub_req burst=10 nodelay;", "proxy_http_version 1.1;", 'proxy_set_header Connection "upgrade";', "proxy_buffering off;", "proxy_read_timeout 120s;"):
             self.assertIn(line, block, line)
         self.assertRegex(HEAD, r"limit_conn_zone \$binary_remote_addr zone=ants_hub_aiconn:1m;")
+        self.assertRegex(block, r"limit_conn ants_hub_aiconn \d+;\s+limit_conn_status 429;")
 
     def test_the_zones_are_there_and_the_doors_wait_as_long_as_the_hub_does(self):
         for zone in ("ants_hub_aikeys", "ants_hub_ai"):
@@ -110,11 +111,34 @@ class TheText(unittest.TestCase):
             wait = int(re.search(r"proxy_read_timeout (\d+)s;", BLOCKS[path]).group(1))
             self.assertGreater(wait, LIMITS.ai_call_seconds + LIMITS.ai_queue_seconds, path)
 
+    def test_the_outer_wall_of_nginx_is_looser_than_the_hubs_own_limits_for_an_address(self):
+        # (many people can sit behind one address: nginx is a wall for the address, and the hub's limits for the account and the key do the real work; the numbers are in docs/MAP_AI.md, "Limits")
+        def rate(zone):
+            found = re.search(r"limit_req_zone \$binary_remote_addr zone=%s:1m rate=(\d+)r/([sm]);" % zone, HEAD)
+            return int(found.group(1)) / (1.0 if found.group(2) == "s" else 60.0)
+
+        def burst(path):
+            return int(re.search(r"limit_req zone=\w+ burst=(\d+) nodelay;", BLOCKS[path]).group(1))
+
+        def conn(path, zone):
+            return int(re.search(r"limit_conn %s (\d+);" % zone, BLOCKS[path]).group(1))
+        for path in PAGES:
+            self.assertGreater(burst(path), LIMITS.ai_pages_address_burst, path)
+            self.assertGreater(rate("ants_hub_aikeys"), 1.0 / LIMITS.ai_pages_address_refill_seconds, path)
+        for path in DOORS + (FILE,):
+            self.assertGreaterEqual(burst(path), 5 * LIMITS.ai_key_burst, path)                     # (five keys that are busy at once behind one address)
+            self.assertGreaterEqual(rate("ants_hub_ai"), 5.0 / LIMITS.ai_key_refill_seconds, path)
+        self.assertGreater(conn(SOCKET, "ants_hub_aiconn"), LIMITS.ai_sockets_address)
+        for path in DOORS:
+            open_calls = conn(path, "ants_hub_aicalls")
+            self.assertGreaterEqual(open_calls, 4 * (1 + LIMITS.ai_queue_max), "four busy people behind one address")
+            self.assertLess(open_calls, LIMITS.ai_in_flight_total, "one address cannot fill the hub's own limit alone")
+
     def test_the_calls_that_are_open_at_once_are_counted_for_an_address_at_both_doors(self):
         # (a call waits for its tab for seconds: the open ones are limited here and, for all addresses together, in the hub, tests/scripts/test_hub_ai.py)
         self.assertRegex(HEAD, r"limit_conn_zone \$binary_remote_addr zone=ants_hub_aicalls:1m;")
         for path in DOORS:
-            self.assertIn("limit_conn ants_hub_aicalls 16;", BLOCKS[path], path)
+            self.assertRegex(BLOCKS[path], r"limit_conn ants_hub_aicalls \d+;", path)
             self.assertIn("limit_conn_status 429;", BLOCKS[path], path)
         self.assertNotIn("ants_hub_aicalls", BLOCKS[SOCKET] + BLOCKS[FILE] + "".join(BLOCKS[p] for p in PAGES))
         self.assertEqual(aikeys.DAYS, (7, 30, 90))
@@ -261,32 +285,35 @@ class TheBlocksRun(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("nginx"), "nginx is not installed: the allowance of the doors of the AI keys was NOT run (tests/scripts/test_nginx_hub_ai.py)")
 class TheAllowance(unittest.TestCase):
-    def test_a_flood_at_the_key_pages_is_a_429_and_is_not_passed_on(self):
+    def flood(self, method, path, headers, body):
+        """Requests as fast as they go until the first 429: (the codes, the number of requests that the hub's stand was asked)."""
+        burst = int(re.search(r"limit_req zone=\w+ burst=(\d+) nodelay;", BLOCKS[path]).group(1))
         stand, server = adm.start_stand()
         rig = sub.Rig(hub_port=server.server_address[1], relaxed=False)
         try:
-            codes = [rig.ask("GET", "/hub/ai/keys", dict(PAGE, Cookie=COOKIE))[0] for _ in range(40)]
-            self.assertEqual(codes[:21], [200] * 21)
-            self.assertIn(429, codes[21:])
-            self.assertEqual(len(stand.seen), codes.count(200))
+            codes = []
+            while len(codes) < burst + 600 and 429 not in codes:
+                codes.append(rig.ask(method, path, headers, body)[0])
+            return codes, len(stand.seen), burst
         finally:
             rig.stop()
             server.shutdown()
             server.server_close()
 
+    def test_a_flood_at_the_key_pages_is_a_429_and_is_not_passed_on(self):
+        codes, asked, burst = self.flood("GET", "/hub/ai/keys", dict(PAGE, Cookie=COOKIE), None)
+        self.assertEqual(codes[-1], 429)
+        self.assertEqual(codes[:-1], [200] * (len(codes) - 1))
+        self.assertGreaterEqual(len(codes) - 1, burst + 1)                                            # (the burst goes through, then the rate)
+        self.assertEqual(asked, len(codes) - 1)
+
     def test_a_flood_at_the_doors_of_an_ai_is_a_429_and_is_not_passed_on(self):
-        stand, server = adm.start_stand()
-        rig = sub.Rig(hub_port=server.server_address[1], relaxed=False)
-        try:
-            headers = {"Authorization": "Bearer " + KEY, "Content-Type": "application/json"}
-            codes = [rig.ask("POST", "/hub/ai/mcp", headers, b"{}")[0] for _ in range(80)]
-            self.assertEqual(codes[:41], [200] * 41)
-            self.assertIn(429, codes[41:])
-            self.assertEqual(len(stand.seen), codes.count(200))
-        finally:
-            rig.stop()
-            server.shutdown()
-            server.server_close()
+        headers = {"Authorization": "Bearer " + KEY, "Content-Type": "application/json"}
+        codes, asked, burst = self.flood("POST", "/hub/ai/mcp", headers, b"{}")
+        self.assertEqual(codes[-1], 429)
+        self.assertEqual(codes[:-1], [200] * (len(codes) - 1))
+        self.assertGreaterEqual(len(codes) - 1, burst + 1)
+        self.assertEqual(asked, len(codes) - 1)
 
 
 @unittest.skipUnless(shutil.which("nginx"), "nginx is not installed: a hub that is not there was NOT run (tests/scripts/test_nginx_hub_ai.py)")
