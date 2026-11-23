@@ -9,7 +9,7 @@
 //   4. the page never asks the browser for anything: no permission is requested, no service worker is registered, the permission is still "default";
 //   5. the bell in the bar, for a visitor who is logged in or not and for the longest name, with and without a room held, at 320, 390, 721, 1000 and 1280 px wide and a phone held sideways: the bell and the other buttons lie inside the
 //      window and none is over another, the bell is a target of 44 px or more and stands right beside the Menu's button (one gap to its left, the same top and height), the account button before it;
-//   6. a logged in visitor with the hub's alerts: the number on the bell, the list, the settings, the invitation as a toast (the chat folded), the sheet of a person to invite (a room held), the two helper lists (`/invite ` and `@`): each lies
+//   6. a logged in visitor with the hub's alerts: the number on the bell, the list (three unread of five entries, the match that is over read), the invitation as a toast (the chat folded), the sheet of a person to invite (a room held), the two helper lists (`/invite ` and `@`): each lies
 //      inside the window, every target is 44 px or more, no word is cut, the page does not scroll sideways.
 //   --shots DIR takes the pictures of the build (alerts_*.png).
 //   node tests/scripts/web_home_alerts_browser.js [--web DIR] [--shots DIR]      (CHROME=/path/to/chromium names a browser; as root it runs with --no-sandbox)
@@ -42,7 +42,7 @@ const SIZES = [['1920', 1920, 1080, 1, false], ['1366', 1366, 768, 1, false], ['
 const NOW = () => Math.floor(Date.now() / 1000);
 const WHO = { t: 'who', full: true, n: 6, g: 2, more: 0, rows: [{ i: 2, name: 'Wren', at: 'wait' }, { i: 3, name: 'maple.leaf', at: 'look' }, { i: 4, name: 'Clover', at: 'wait' }, { i: 7, name: 'juniper', at: 'look' }, { i: 9, name: 'tess', at: 'look' }] };
 const invite = (id, from, o) => Object.assign({ id, at: NOW() - 40, k: 'invite', u: 1, from, map: 'TREASURE.LVL', n: 3, of: 4, o: 1, code: 'abc234' }, o || {});
-const LIST = () => [invite(6, 'Clover'), { id: 5, at: NOW() - 840, k: 'join', u: 1, name: 'juniper', seat: 'Red' }, { id: 4, at: NOW() - 1920, k: 'mention', u: 1, from: 'tess', text: 'which map are we on, @Maya? This one is a long line of words that goes on and on to see that it wraps' }, invite(3, 'Pebble', { u: 0, o: undefined, code: undefined, at: NOW() - 26 * 3600 })];
+const LIST = () => [invite(7, 'Clover'), { id: 6, at: NOW() - 840, k: 'join', u: 1, name: 'juniper', seat: 'Red' }, { id: 5, at: NOW() - 1920, k: 'mention', u: 1, from: 'tess', text: 'which map are we on, @Maya? This one is a long line of words that goes on and on to see that it wraps' }, { id: 4, at: NOW() - 3600, k: 'over', map: 'ISLANDS.LVL', place: 2, match: 'ants-ISLANDS-20261123-091500Z' }, invite(3, 'Pebble', { u: 0, o: undefined, code: undefined, at: NOW() - 26 * 3600 })];
 
 let checks = 0;
 let failures = 0;
@@ -283,7 +283,7 @@ const over = (a, b) => a && b && a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b
             check(label('the hub\'s list: three unread, the number on the bell, inside the window'), mark.l >= 0 && mark.t >= 0 && mark.r <= w, JSON.stringify(mark));
             await page.click('.hbar .al-bell'); await until('the panel', () => box(page, '.al-panel')); await sleep(200);
             await measure(page, '.al-panel', label('the list'), w, h);
-            check(label('the list: an invitation with Join, a person who joined and a mention with Open, an old invitation dim, with no button'), await page.evaluate(() => { const it = Array.from(document.querySelectorAll('.al-panel .al-item')); return it.length === 4 && /Join/.test(it[0].textContent) && /Open/.test(it[1].textContent) && /Open/.test(it[2].textContent) && /dim/.test(it[3].className) && !it[3].querySelector('button'); }));
+            check(label('the list: an invitation with Join, a person who joined and a mention with Open, a match that is over with View, an old invitation dim, with no button'), await page.evaluate(() => { const it = Array.from(document.querySelectorAll('.al-panel .al-item')); return it.length === 5 && /Join/.test(it[0].textContent) && /Open/.test(it[1].textContent) && /Open/.test(it[2].textContent) && /Your match is over/.test(it[3].textContent) && /2nd place/.test(it[3].textContent) && /View/.test(it[3].textContent) && /dim/.test(it[4].className) && !it[4].querySelector('button'); }));
             await shot(page, name + '_hub_list');
             await page.click('.al-panel .al-gear'); await sleep(200);
             await measure(page, '.al-panel', label('the settings of a logged in visitor'), w, h);

@@ -70,7 +70,7 @@ MOD_BUDGET, MOD_GZIP_BUDGET = 72_600, 21_000        # mod.js and mod.css: the sh
 CMDS_BUDGET, CMDS_GZIP_BUDGET = 57_500, 17_500       # cmds.js and cmds.css: the helper of the chat's commands (and of the names after /invite and an @), the /bots builder and the private answers (loaded for an account that has commands only)
 SPLIT_BUDGET, SPLIT_GZIP_BUDGET = 16_000, 5_200     # split.js and split.css: the drag handles of Home
 ROOM_BUDGET, ROOM_GZIP_BUDGET = 38_000, 11_200       # room.css, roomchat.js and roomchat.css: the room inside Home and the room's tab of the chat box
-ALERTS_BUDGET, ALERTS_GZIP_BUDGET = 45_000, 13_700   # alerts.js and alerts.css: the bell's list of alerts and its settings, the invitation and mention toasts and the join alert of Home
+ALERTS_BUDGET, ALERTS_GZIP_BUDGET = 48_500, 14_500   # alerts.js and alerts.css: the bell's list of alerts and its settings, the invitation and mention toasts, the join alert of Home and the entry of the match that is over
 ALERT_CORE_BUDGET, ALERT_CORE_GZIP_BUDGET = 13_000, 4_400   # web/alert_core.js: the switches, the tab alert and the sound table that the front page and the game page share
 SCRIPT_BUDGET, SCRIPT_GZIP_BUDGET = 13_000, 4_500       # player_name.js
 # the installable web app (web/app/, web/manifest.webmanifest): the four icons together (measured 5,922 bytes: the original game's icon, 12 colors and fine detail), and the manifest (measured 1,166, revalidated on every visit)

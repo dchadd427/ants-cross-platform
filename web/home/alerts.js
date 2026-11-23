@@ -21,6 +21,7 @@
     var NAME_MAX = 40;                                   // a name in the tab's title is cut to this
     var KEEP = 30, DAYS = 7, LIST_KEY = 'ants.alerts.list.v1';
     var SVG = 'http://www.w3.org/2000/svg';
+    var MATCH_ID = /^ants-[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?$/;       // a match's id: its replay's file name without .antsrep (web/history_page.js, web/front/rematch.js)
     var PHONE = '(max-width: 700px), (max-height: 500px)';
     var TEXT = {
         title: 'Alerts', settings: 'Alert settings', group: 'On this page', lead: 'Nothing to allow. These work while Ants is open, also in a background tab.', close: 'Close', back: 'Back', gear: 'Alert settings', open: 'Open', doJoin: 'Join',
@@ -29,6 +30,7 @@
         keptAccount: 'Kept on your account for 7 days.', keptBrowser: 'Kept in this browser for 7 days.', loginNote: 'Log in to get invitations from other players.', list: 'My list', clear: 'Clear my alerts',
         clearAccount: 'Kept on your account for 7 days, the last 30.', clearBrowser: 'Kept in this browser for 7 days, the last 30.', unread: ' unread',
         toastInvite: ' invited you to ', toastMention: ' mentioned you in the chat.', youInvited: 'You invited ', sent: 'Invitation sent to ', gone: 'That room is not open any more.',
+        over: 'Your match is over', view: 'View', places: ['1st place', '2nd place', '3rd place', '4th place'],
         invite: ['Alert when someone invites me', 'From a player who is logged in.'], mention: ['Alert when someone mentions me', 'Someone writes @ and my name in the chat.'],
         join: ['Alert when someone joins my room', 'A person, not a computer player.'], start: ['Flash the tab when my match starts', 'The tab title blinks while this page is in the background.'],
         soundJoin: ['Sound when someone joins my room', 'A person, not a computer player.'], soundStart: ['Sound when my match starts', 'Plays while this page is in the background.']
@@ -40,6 +42,7 @@
         invite: ['M10 11.2a3.4 3.4 0 1 0 0-6.8 3.4 3.4 0 0 0 0 6.8z', 'M3.5 19.5c.7-3.4 3.2-5.2 6.5-5.2s5.8 1.8 6.5 5.2', 'M19 8v6', 'M16 11h6'],
         chat: ['M5 5h14a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 16h-8l-4.5 3.5V16H5a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 5 5z'],
         gear: ['M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z', 'M19.4 13.5a7.6 7.6 0 0 0 0-3l1.9-1.5-1.9-3.3-2.3.9a7.5 7.5 0 0 0-2.6-1.5l-.4-2.4h-3.8l-.4 2.4a7.5 7.5 0 0 0-2.6 1.5l-2.3-.9-1.9 3.3 1.9 1.5a7.6 7.6 0 0 0 0 3l-1.9 1.5 1.9 3.3 2.3-.9a7.5 7.5 0 0 0 2.6 1.5l.4 2.4h3.8l.4-2.4a7.5 7.5 0 0 0 2.6-1.5l2.3.9 1.9-3.3z'],
+        flag: ['M6 21V4', 'M6 5h11l-2.2 4 2.2 4H6'],
         x: ['M6 6l12 12', 'M18 6L6 18'], back: ['M15 5l-7 7 7 7'], check: ['M5 12.5l4.5 4.5L19 7'], warn: ['M12 4l9 16H3z', 'M12 10v4', 'M12 17.2v.1']
     };
 
@@ -48,9 +51,9 @@
     // ---- the pure parts ----
     function whole(v, low, high) { return typeof v === 'number' && v === Math.floor(v) && v >= low && v <= high; }
     function possessive(name) { return name + (/s$/i.test(name) ? '\u2019' : '\u2019s'); }
-    // One row of a list, cleaned (a hub's, or this browser's own): { id, at, k, u (unread), and by kind: invite { from, map (a file name or ''), n, of, open, code }, mention { from, text }, join { name, seat } }, or null when it is no row of ours
+    // One row of a list, cleaned (a hub's, or this browser's own): { id, at, k, u (unread), and by kind: invite { from, map (a file name or ''), n, of, open, code }, mention { from, text }, join { name, seat }, over { map, place (0 when not said), match (an id, or '') } }, or null when it is no row of ours
     function rowOf(raw, Chat, rules) {
-        if (!raw || typeof raw !== 'object' || !whole(raw.id, 0, 1e15) || !whole(raw.at, 0, 4e9) || (raw.k !== 'invite' && raw.k !== 'mention' && raw.k !== 'join')) return null;
+        if (!raw || typeof raw !== 'object' || !whole(raw.id, 0, 1e15) || !whole(raw.at, 0, 4e9) || (raw.k !== 'invite' && raw.k !== 'mention' && raw.k !== 'join' && raw.k !== 'over')) return null;
         var plain = function (s, max, strict) { return typeof s === 'string' ? Chat.clip(Chat.plain(s.slice(0, max * 4), strict), max) : ''; };
         var row = { id: raw.id, at: raw.at, k: raw.k, u: raw.u === 1 };
         if (raw.k === 'invite') {
@@ -63,6 +66,9 @@
         } else if (raw.k === 'mention') {
             row.from = plain(raw.from, 32, true); row.text = plain(raw.text, 80, false);
             if (!row.from) return null;
+        } else if (raw.k === 'over') {
+            if (typeof raw.map !== 'string' || !rules || !rules.validMapFile(raw.map)) return null;
+            row.map = raw.map; row.place = whole(raw.place, 1, 4) ? raw.place : 0; row.match = typeof raw.match === 'string' && MATCH_ID.test(raw.match) ? raw.match : '';
         } else {
             row.name = plain(raw.name, 32, false); row.seat = typeof raw.seat === 'string' && /^(Green|Red|Blue|Black)$/.test(raw.seat) ? raw.seat : '';
             if (!row.name || !row.seat) return null;
@@ -84,6 +90,7 @@
             parts = [map, row.n + TEXT.of + row.of + TEXT.in, ago].filter(Boolean);
             return { title: row.from + TEXT.invited, sub: parts.join(' \u00b7 '), action: TEXT.doJoin, dim: false };
         }
+        if (row.k === 'over') return { title: TEXT.over, sub: [mapNameOf(row.map, rules), row.place ? TEXT.places[row.place - 1] : '', ago].filter(Boolean).join(' \u00b7 '), action: TEXT.view, dim: false };
         if (row.k === 'mention') return { title: row.from + TEXT.mentioned, sub: (row.text ? '\u201c' + row.text + '\u201d' : TEXT.inChat) + ' \u00b7 ' + ago, action: TEXT.open, dim: false };
         return { title: row.name + TEXT.joined, sub: TEXT.as + row.seat + ' \u00b7 ' + ago, action: TEXT.open, dim: false };
     }
@@ -126,11 +133,11 @@
             var C = Chat(), v, out = [];
             if (!C) return null;
             try { v = JSON.parse(win.localStorage.getItem(LIST_KEY) || '[]'); } catch (e) { v = []; }
-            (Array.isArray(v) ? v : []).forEach(function (raw) { var r = rowOf(raw, C, rules()); if (r && r.k === 'join') out.push(r); });
+            (Array.isArray(v) ? v : []).forEach(function (raw) { var r = rowOf(raw, C, rules()); if (r && (r.k === 'join' || r.k === 'over')) out.push(r); });
             return trim(out, now());
         }
         function mine() { if (local === null) local = loadLocal(); return local || []; }
-        function saveLocal() { try { win.localStorage.setItem(LIST_KEY, JSON.stringify(mine().map(function (r) { return { id: r.id, at: r.at, k: r.k, u: r.u ? 1 : 0, name: r.name, seat: r.seat }; }))); } catch (e) { /* the visit keeps it */ } }
+        function saveLocal() { try { win.localStorage.setItem(LIST_KEY, JSON.stringify(mine().map(function (r) { return { id: r.id, at: r.at, k: r.k, u: r.u ? 1 : 0, name: r.name, seat: r.seat, map: r.map, place: r.place || undefined, match: r.match || undefined }; }))); } catch (e) { /* the visit keeps it */ } }
         function rows() { return signedIn() ? hub : mine(); }
         function count() { return countOf(rows()); }
         function newest() { var m = 0; rows().forEach(function (r) { if (r.id > m) m = r.id; }); return m; }
@@ -139,10 +146,11 @@
             if (signedIn()) { var d = dock(); if (d && d.send) d.send({ t: 'seen', upto: newest() }); hub.forEach(function (r) { r.u = false; }); }
             else { mine().forEach(function (r) { r.u = false; }); saveLocal(); }
         }
-        function addLocal(name, seat) {
+        function addLocal(raw) {                           // a row of this browser's own list: { k: 'join', name, seat } (unread) or { k: 'over', map, place, match } (read: the page showed it already)
             var C = Chat(), id = 1, row;
             mine().forEach(function (r) { if (r.id >= id) id = r.id + 1; });
-            row = C ? rowOf({ id: id, at: now(), k: 'join', u: 1, name: name, seat: seat }, C, rules()) : null;
+            raw.id = id; raw.at = now(); raw.u = raw.k === 'join' ? 1 : 0;
+            row = C ? rowOf(raw, C, rules()) : null;
             if (!row) return;
             local = trim([row].concat(mine()), now()); saveLocal();
         }
@@ -175,10 +183,11 @@
             close();
             if (row.k === 'invite') { if (ctl.join) ctl.join(row, back); }
             else if (row.k === 'mention') { if (ctl.chat) ctl.chat(); }
+            else if (row.k === 'over') { try { win.open(row.match ? '/match?id=' + encodeURIComponent(row.match) : '/matches', '_blank', 'noopener,noreferrer'); } catch (e) { /* the page that shows the match is another tab: a browser that refuses it shows none */ } }
             else if (ctl.show) ctl.show('room', 'push');
         }
         function item(row) {
-            var w = wordsOf(row, rules(), now(), Chat().agoOf), li = el('div', 'al-item' + (unreadAtOpen[row.id] ? ' unread' : '') + (w.dim ? ' dim' : '')), ic = el('span', 'al-ic'), tx = el('span', 'al-tx'), i = icon(row.k === 'invite' ? 'invite' : row.k === 'mention' ? 'chat' : 'user');
+            var w = wordsOf(row, rules(), now(), Chat().agoOf), li = el('div', 'al-item' + (unreadAtOpen[row.id] ? ' unread' : '') + (w.dim ? ' dim' : '')), ic = el('span', 'al-ic'), tx = el('span', 'al-tx'), i = icon(row.k === 'invite' ? 'invite' : row.k === 'mention' ? 'chat' : row.k === 'over' ? 'flag' : 'user');
             li.setAttribute('data-id', String(row.id)); li.setAttribute('data-k', row.k);
             if (i) ic.appendChild(i);
             tx.appendChild(el('span', 'al-t', w.title)); tx.appendChild(el('span', 'al-s', w.sub));
@@ -317,12 +326,32 @@
 
         // ---- what happens: a person joins my room (the lobby's news), an invitation or a mention comes (the hub's) ----
         // alert('join', { name, text, seat }): a person joined the room. Says whether Home's own display took the place of the page's toast (it did when Home shows, with the switch on or off: off shows nothing); the Room screen keeps the page's own toast.
+        // alert('over', { map, place, match }): the account's own match is over (the page that came back from it says so, once the stats of the match are looked for): an entry of the list, kept read. It is told to the hub when the visitor is logged
+        // in (the account's list), kept in this browser when not; and held back until the chat dock has said which of the two the visitor is.
+        var liveKnown = false, waiting = [];
+        function deliverOver(data) {
+            var C = Chat(), row = C ? rowOf({ id: 1, at: 1, k: 'over', map: data.map, place: data.place, match: data.match }, C, rules()) : null, d = dock(), note;
+            if (!row) return;
+            if (signedIn()) {
+                if (!d || !d.send) return;
+                note = { t: 'note', k: 'over', map: row.map };
+                if (row.place) note.place = row.place;
+                if (row.match) note.match = row.match;
+                d.send(note);
+            } else if (!mine().some(function (r) { return r.k === 'over' && r.match && r.match === row.match; })) { addLocal({ k: 'over', map: row.map, place: row.place, match: row.match }); refresh(); }
+        }
+        function flushOver() { var q = waiting; waiting = []; liveKnown = true; q.forEach(deliverOver); }
         function alert(kind, data) {
+            if (kind === 'over') {
+                if (!data || typeof data.map !== 'string') return false;
+                if (liveKnown) deliverOver(data); else waiting.push(data);
+                return true;
+            }
             if (kind !== 'join' || !data) return false;
             var home = !!ctl.screen && ctl.screen() === 'home', seat = typeof data.seat === 'string' ? data.seat : '', d = dock();
             if (/^(Green|Red|Blue|Black)$/.test(seat)) {
                 if (signedIn() && d && d.send) d.send({ t: 'note', k: 'join', name: String(data.name || ''), seat: seat });      // (the hub keeps it in the account's list and sends it back to every page of the account)
-                else if (!signedIn()) { addLocal(String(data.name || ''), seat); refresh(); }
+                else if (!signedIn()) { addLocal({ k: 'join', name: String(data.name || ''), seat: seat }); refresh(); }
             }
             if (set.on('join')) {
                 flash.start('\u25cf ' + shorten(data.name || '') + ' joined your room');
@@ -333,7 +362,7 @@
         }
         function onChat() { var d = dock(); try { return !!(d && d.onScreen && d.onScreen()); } catch (e) { return false; } }
         function news(row) {                               // a new alert of the hub: where the person is looking decides how it is said
-            if (row.k === 'join') return;                  // (the page that holds the room said it already: alert('join'))
+            if (row.k === 'join' || row.k === 'over') return;       // (the page that holds the room said it already: alert('join'); the page that came back from the match showed it: alert('over'))
             var chat = onChat(), d = dock();
             if (row.k === 'invite') {
                 if (!set.on('invite')) return;
@@ -368,7 +397,7 @@
             });
         }
         function tap(kind, m) {                            // the chat dock's news: who the visitor is, the list, a new alert
-            if (kind === 'live') { hub = []; refresh(); }
+            if (kind === 'live') { hub = []; refresh(); flushOver(); }
             else if (kind === 'alerts') { var next = signedIn() ? fromHub(m && m.rows) : null; if (next) { hub = next; reflect(); if (shade) paint(); refresh(); } }
             else if (kind === 'alert') {
                 var C = Chat(), row = C && signedIn() && m ? rowOf(m.row, C, rules()) : null;
@@ -376,7 +405,7 @@
                 hub = [row].concat(hub).slice(0, KEEP);
                 if (shade) { unreadAtOpen[row.id] = true; paint(); }
                 refresh(); news(row);
-            } else if (kind === 'lost' || kind === 'you') refresh();
+            } else if (kind === 'lost' || kind === 'you') { refresh(); if (kind === 'lost') flushOver(); }
         }
 
         // ---- the bell ----
@@ -404,6 +433,7 @@
             if (hooked) return;
             if (dk && dk.tap) { hooked = true; dk.tap(tap); refresh(); return; }
             if (++tries < 40) setTimeout(hook, 500);
+            else flushOver();                              // (no chat on this page: the visitor keeps its list in this browser)
         }
         makeBell();
         hook();

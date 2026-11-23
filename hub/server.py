@@ -455,6 +455,7 @@ class Hub:
             self.next_checkpoint = now + self.limits.checkpoint_retry_seconds
             if gone:
                 self.log.event("purge", lines=gone)
+            self.chat.people.store_dropped()                           # (the mention of a line that the purge deleted went with it: the open pages are sent their lists again)
         elif self.store.unsettled and now >= self.next_checkpoint:
             self.next_checkpoint = now + self.limits.checkpoint_retry_seconds
             self.store.checkpoint()
@@ -467,6 +468,7 @@ class Hub:
                 self.next_room = now + self.limits.tick_seconds
                 if gone:
                     self.log.event("prune", lines=gone)
+                    self.chat.people.store_dropped()
                 elif self.store.size() >= self.limits.prune_from_bytes:           # (nothing went and it is still over the mark: it is not asked again at every tick)
                     held = self.store.unsettled                                    # (make_room has just tried to cut the log file: if that was refused, a reader holds the database)
                     self.next_room = now + (self.limits.checkpoint_retry_seconds if held else self.limits.purge_failure_seconds)

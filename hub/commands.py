@@ -198,10 +198,18 @@ class Commands:
                        "control": RateByAccount(limits.commands_control_burst, limits.commands_control_refill_seconds),
                        "other": RateByAccount(limits.commands_other_burst, limits.commands_other_refill_seconds)}      # per account, across all its tabs (keyed by the run's key of the account, never the id)
         self.unknown_frame = dumps({"t": "reply", "c": "unknown", "r": "unknown"})
-        self.ignores = {}                           # the reference of an account -> {the reference of a person that it ignores: the name that was shown when it did}; memory only
+        self.ignores = self.load_ignores()          # the reference of an account -> {the reference of a person that it ignores: the name that was shown when it did}; kept in the store (docs/HUB_PEOPLE.md), read at the start
         self.door = None                            # hub/gamedoor.py GameDoor (the hub makes it)
         self.is_owner = lambda account: False       # whether the account is the operator's (the hub sets it): the role in the game server's pass
         self.flights = {}                           # the run's key of an account -> its `/bots` task that waits for the game server (one at a time for an account)
+
+    def load_ignores(self):
+        try:
+            return self.chat.store.ignores()
+        except StoreError as e:                      # (a store that cannot be read at the start: the lists are empty, and the hub says so; a new /ignore is written again)
+            if getattr(self.chat, "on_store_error", None):
+                self.chat.on_store_error(e)
+            return {}
 
     def forget_idle(self, now):
         for limits in self.limits.values():
@@ -287,9 +295,13 @@ class Commands:
             return self.reply(peer, "ignore", "self")
         if chat.roles.role_of(target) != "none" or self.is_owner(target):
             return self.reply(peer, "ignore", "staff")
-        mine = self.ignores.setdefault(chat.ref(me), {})
-        if chat.ref(target) not in mine and len(mine) >= chat.limits.ignore_max:
+        try:
+            kept = chat.store.ignore_add(chat.ref(me), chat.ref(target), shown, chat.limits.ignore_max)        # (the store holds the number: a person that is on the list already is let in again)
+        except StoreError as e:
+            return chat.trouble(peer, e, "bad")
+        if not kept:
             return self.reply(peer, "ignore", "full")
+        mine = self.ignores.setdefault(chat.ref(me), {})
         mine[chat.ref(target)] = shown
         self.reply(peer, "ignore", "ok", n=len(mine))
 
@@ -298,6 +310,11 @@ class Commands:
         gone = [ref for ref, shown in mine.items() if shown.casefold() == name.casefold()]
         if not gone:
             return self.reply(peer, "unignore", "not")
+        try:
+            for ref in gone:
+                self.chat.store.ignore_remove(self.chat.ref(peer.identity.account_id), ref)
+        except StoreError as e:
+            return self.chat.trouble(peer, e, "bad")
         for ref in gone:
             del mine[ref]
         if not mine:

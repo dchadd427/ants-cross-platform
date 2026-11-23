@@ -29,7 +29,7 @@ Work that is not released yet is written in the same template under a heading th
 ## Next
 
 **For players:**
-- The bell shows your recent alerts, newest first, with the number of unread ones on it: invitations, mentions in the chat and people who joined your room. The alert settings moved behind a small gear in that list; a visitor who is not logged in keeps a short list in the browser.
+- The bell shows your recent alerts, newest first, with the number of unread ones on it: invitations, mentions, people who joined your room and your own finished match (with a View link). The settings are behind a gear in that list; a visitor keeps a short list in the browser.
 - Right-click a player in the list, or a name in the chat (long-press on a phone), to invite them to your room: **Invite to my room**. They see the invitation as a line in their chat (or a toast, when the chat is not on screen) and in their bell, with a Join button; it turns grey when the room closes.
 - A new chat command, **/invite NAME**, with the helper: the names of the people who are here narrow as you type.
 - Type **@** in the chat to pick a player. A mention shows as a pill for everyone, in gold for the person named, and becomes an alert in their bell. There is no @here and no @everyone.
@@ -38,7 +38,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **For operators:**
 - The keys are off until the hub is started with `ANTS_HUB_AI_KEYS=on`; with it off every key door answers 503 and no tab can be armed ([`docs/MAP_AI.md`](docs/MAP_AI.md)).
-- The hub keeps each logged-in account's last 30 alerts of 7 days (a new `alerts` table, added at the first start; Forget me deletes it) and limits invitations (5 a minute, one a minute to the same person) and mentions ([the hub's document](docs/HUB_PEOPLE.md)).
+- The hub keeps each logged-in account's last 30 alerts of 7 days (new `alerts` and `ignores` tables, made by the first one; Forget me deletes them), keeps `/ignore` lists over a restart, and limits invitations and mentions ([the hub's document](docs/HUB_PEOPLE.md)).
 
 ## v0.21.0 - 2026-11-23 - A new room, Fog of War switch, the can't-go gap
 

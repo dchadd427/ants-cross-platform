@@ -15,7 +15,7 @@ Action = collections.namedtuple("Action", "id at actor action target detail")   
 Usage = collections.namedtuple("Usage", "bytes free lines oldest log")         # (see StoreBase.usage)
 Profile = collections.namedtuple("Profile", "username display pick")
 Alert = collections.namedtuple("Alert", "id at kind body line unread")         # a row of an account's list of alerts (docs/HUB_PEOPLE.md): `body` is the small JSON text that hub/people.py made, `line` the chat line that a mention is of (or None)
-ALERT_KINDS = ("invite", "mention", "join")
+ALERT_KINDS = ("invite", "mention", "join", "over")
 ALERT_BODY_MAX = 600                        # the longest body that is kept (bytes): hub/people.py writes a few short fields, never more
 AiKey = collections.namedtuple("AiKey", "id ref name scope digest made ends used calls revoked")       # a key of a person's AI (docs/MAP_AI.md): `ref` is the account's reference (hub/pseudo.py), `digest` the SHA-256 of the secret; `revoked` is the time it was revoked, 0 for a key that was not
 AiKey.__repr__ = lambda self: "<AiKey %s>" % self.id                  # (the default shows the digest of the secret and the account's reference)
@@ -190,9 +190,9 @@ class StoreBase:
 
     # ---- alerts: the list that an account's bell shows (hub/people.py), keyed by the account's pseudonymous reference, never by its id ----
 
-    def add_alert(self, ref, kind, body, from_ref="", line=None, keep=30, days=7):
+    def add_alert(self, ref, kind, body, from_ref="", line=None, keep=30, days=7, unread=1):
         """Keep one alert for the account with this reference (`kind` is one of ALERT_KINDS, `body` a short JSON text, `from_ref` the reference of the person it is from, `line` the number of the chat line of a mention),
-        unread, and give back its Alert. The account keeps its newest `keep` alerts and none older than `days` days: the rest go with this call."""
+        unread unless `unread` is 0, and give back its Alert. The account keeps its newest `keep` alerts and none older than `days` days: the rest go with this call. The table is made by the first alert."""
         raise NotImplementedError
 
     def alerts(self, ref, keep=30, days=7):
@@ -213,6 +213,25 @@ class StoreBase:
 
     def drop_alerts_of_lines(self, line_ids):
         """The mentions of these chat lines go from every list. Returns the references of the accounts whose list changed."""
+        raise NotImplementedError
+
+    # An alert is kept `alert_days` days at the most (the regular purge cuts the ones past it, so that a quote of a line does not stay for longer than the page says), and the mention of a line that purge or
+    # make_room deleted goes with the line; `alerts_dropped` counts the alerts that went on the store's own account, and the hub sends the lists again when it grew.
+    alert_days = 7
+    alerts_dropped = 0
+
+    # ---- the people that an account ignores (hub/commands.py): by the references of both, never by an id ----
+
+    def ignores(self):
+        """{the reference of an account: {the reference of a person that it ignores: the name that was shown when it did}} for every account."""
+        raise NotImplementedError
+
+    def ignore_add(self, ref, other, name, most=50):
+        """The account `ref` ignores `other`, shown as `name`. False, and nothing kept, when it already ignores `most` other people. The table is made by the first one."""
+        raise NotImplementedError
+
+    def ignore_remove(self, ref, other):
+        """The account `ref` does not ignore `other` any more. False when it did not."""
         raise NotImplementedError
 
     # ---- pictures: the small copy of an account's Discord picture (hub/pictures.py), keyed by the account's pseudonymous reference, never by its id ----

@@ -2,15 +2,16 @@
 hub.chat talks to.
 
 An ALERT is one row of an account's own list (hub/store/: kept by the account's pseudonymous reference, the newest 30 of the last 7 days, the same on every device of the account): `invite` (somebody asked the
-account into their room), `mention` (somebody wrote the account's name after an `@`) and `join` (a person joined the account's room: the lobby's own news, told by the account's page). A page is sent the list
+account into their room), `mention` (somebody wrote the account's name after an `@`), `join` (a person joined the account's room: the lobby's own news, told by the account's page) and `over` (the account's own match
+is over: told by the page that came back from it, kept read). A page is sent the list
 (`{"t":"alerts","rows":[...]}`) after the welcome of a login and again whenever it changed, and every new alert at once (`{"t":"alert","row":{...}}`). A row is {"id", "at", "k", "u": 1 while it is unread}
-and the fields of its kind: invite {"from", "map", "n", "of", "code", "o": 1 while the room is open}, mention {"from", "text"}, join {"name", "seat"}. Up, an account with a login may say `{"t":"seen","upto":id}` (the
-list was looked at: everything up to that number is read), `{"t":"clearalerts"}` and `{"t":"note","k":"join","name":...,"seat":...}`; a guest has no list and says none of it (`login`).
+and the fields of its kind: invite {"from", "map", "n", "of", "code", "o": 1 while the room is open}, mention {"from", "text"}, join {"name", "seat"}, over {"map", "place", "match"}. Up, an account with a login may say `{"t":"seen","upto":id}` (the
+list was looked at: everything up to that number is read), `{"t":"clearalerts"}` and `{"t":"note","k":"join","name":...,"seat":...}` and `{"t":"note","k":"over","map":...[,"place":n][,"match":id]}`; a guest has no list and says none of it (`login`).
 
 INVITATIONS. `/invite NAME`, `/invite row:N` and `/invite #N` (a person of the list of the front page, the author of a line: the same words as a moderator's commands) invite the person to the room that the inviter's page
 said it waits in (hub/presence.py `inv`: the room's code, map and seats, which the hub keeps for this and nothing else). The answer is a private `reply` of the command `invite`: `ok` {to}, `usage`, `nobody` (no such person is
-here: a guest has no name, a banned account is no person here), `ambiguous` (two people show the name), `self`, `noroom`, `full` {n, of}, `inroom` {to}, `busy` {to} (playing a match), `person` {to, wait} (one invitation to a person in a minute) and
-`total` {wait} (five in a minute). A person who ignored the inviter (/ignore) is sent nothing and the inviter is told `ok`: the limits count it all the same, so the two cases cannot be told apart. The code of an invite-only
+here: a guest has no name, a banned account is no person here), `ambiguous` (two people show the name), `self`, `noroom`, `full` {n, of}, `busy` {to} (playing a match), `person` {to, wait} (one invitation to a person in a minute) and
+`total` {wait} (five in a minute). A person who ignored the inviter (/ignore), or who is in the inviter's room already (as its own page says), is sent nothing and the inviter is told `ok`: the limits count it all the same, so the cases cannot be told apart. The code of an invite-only
 room is in the invitation for as long as the room is open (the inviter's page keeps saying it is in it) and is taken out of the alert, and out of the database, when the room closes, fills or is left for more than a short
 grace (a page that connects again must not end it), and in an hour at the most.
 
@@ -26,6 +27,7 @@ import math
 import re
 
 from .limits import RateByAccount
+from .presence import map_file
 from .store import StoreError
 from . import text as textrules
 
@@ -34,6 +36,7 @@ ROW_WORD = re.compile(r"row:[0-9]{1,9}\Z")    # ... or by the number of their ro
 QUOTE_MAX = 80                                # the code points of a mention's line that its alert keeps
 SEATS = ("Green", "Red", "Blue", "Black")     # the colors of a room, as the lobby says them
 NUMBER = re.compile(r"[0-9]{1,18}\Z")
+MATCH_ID = re.compile(r"ants-[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?\Z")      # a match's id (its replay's file name without `.antsrep`: web/history_page.js)
 
 
 def utf16(text, upto):
@@ -56,11 +59,14 @@ class People:
         self.limits = limits
         self.clock = clock
         self.dumps = dumps
+        chat.store.alert_days = limits.alerts_days                  # (the regular purge cuts the alerts that are older: the page says that a list is kept for these days)
+        self.dropped_seen = 0                       # how many alerts the store had taken out on its own when the lists were last sent again (a line that purge or make_room deleted)
         self.totals = RateByAccount(limits.invite_burst, limits.invite_refill_seconds)               # an account's invitations, across all its tabs (keyed by the run's key of the account, never the id)
         self.invited = {}                           # (the inviter's key, the person's reference) -> when: one invitation to a person in `invite_person_seconds`
         self.pairs = {}                             # (the writer's reference, the person's reference) -> when the writer last alerted the person by a mention
         self.hours = RateByAccount(limits.mention_hour, 3600.0 / max(1, limits.mention_hour))        # the mention alerts that a person gets from everybody, by the person's reference
         self.notes = RateByAccount(limits.note_burst, limits.note_refill_seconds)                   # the `join` notes of an account's pages
+        self.overs = RateByAccount(limits.over_burst, limits.over_refill_seconds)                   # the `over` notes of an account's pages
         self.live = {}                              # alert id -> Live: the invitations whose rooms are open (memory: a hub that starts again closes them all, the first time a list is made)
         self.marks = {}                             # line id -> [[start, length, key]]: the names that a line marks (memory, as the lines' ring is)
 
@@ -68,6 +74,7 @@ class People:
         self.totals.forget_idle(now)
         self.hours.forget_idle(now)
         self.notes.forget_idle(now)
+        self.overs.forget_idle(now)
         for pair in [p for p, at in self.invited.items() if now - at >= self.limits.invite_person_seconds]:
             del self.invited[pair]
         for pair in [p for p, at in self.pairs.items() if now - at >= self.limits.mention_pair_seconds]:
@@ -98,6 +105,14 @@ class People:
             if not isinstance(body.get("from"), str) or not isinstance(body.get("text"), str):
                 return None
             row["from"], row["text"] = body["from"], body["text"]
+        elif alert.kind == "over":
+            if not isinstance(body.get("map"), str) or map_file(body["map"]) is None:
+                return None
+            row["map"] = body["map"]
+            if type(body.get("place")) is int and 1 <= body["place"] <= 4:
+                row["place"] = body["place"]
+            if isinstance(body.get("match"), str) and MATCH_ID.match(body["match"]):
+                row["match"] = body["match"]
         else:
             if not isinstance(body.get("name"), str) or body.get("seat") not in SEATS:
                 return None
@@ -141,6 +156,12 @@ class People:
         if rows or force:
             peer.send_text(self.dumps({"t": "alerts", "rows": rows}))
 
+    def store_dropped(self):
+        """After a purge or a make_room: when the store took alerts out on its own (the mention of a line that it deleted), every open page is sent its list again."""
+        if self.chat.store.alerts_dropped != self.dropped_seen:
+            self.dropped_seen = self.chat.store.alerts_dropped
+            self.refresh_all()
+
     def send_lists(self, account):
         """The account's list, to every socket of the account that is open."""
         for peer in self.chat.presence.sockets(account):
@@ -151,11 +172,11 @@ class People:
         for account in {p.identity.account_id for p in self.chat.peers if p.identity is not None and not getattr(p, "closed", False)}:
             self.send_lists(account)
 
-    def add(self, account, kind, body, from_account=None, line=None):
+    def add(self, account, kind, body, from_account=None, line=None, unread=1):
         """Keep an alert for the account and send it to its sockets at once: the new Alert, or None when the database refused it (the page that asked is not told: an alert is news, and a lost one is not a wrong answer)."""
         chat = self.chat
         try:
-            alert = chat.store.add_alert(chat.ref(account), kind, json.dumps(body, ensure_ascii=False, separators=(",", ":")), chat.ref(from_account) if from_account else "", line, self.limits.alerts_keep, self.limits.alerts_days)
+            alert = chat.store.add_alert(chat.ref(account), kind, json.dumps(body, ensure_ascii=False, separators=(",", ":")), chat.ref(from_account) if from_account else "", line, self.limits.alerts_keep, self.limits.alerts_days, unread)
         except StoreError as e:
             if chat.on_store_error:
                 chat.on_store_error(e)
@@ -205,71 +226,109 @@ class People:
             self.send_lists(who.account_id)
 
     def on_note(self, peer, msg):
-        """`{"t":"note","k":"join","name":...,"seat":...}`: the account's page says that a person joined its room (the lobby's own news); it becomes an alert of the account's own list. Anything else is `bad`."""
+        """`{"t":"note","k":"join","name":...,"seat":...}`: the account's page says that a person joined its room (the lobby's own news); it becomes an alert of the account's own list. `{"t":"note","k":"over","map":...[,"place":n]
+        [,"match":id]}`: the page that came back from the account's own match says so; it becomes an alert that is kept read (the page showed it already). Anything else is `bad`."""
         who = peer.identity
         if who is None:
             return self.chat.mistake(peer, "login")
+        if msg.get("k") == "over":
+            return self.on_over(peer, who, msg)
         name, seat = msg.get("name"), msg.get("seat")
         if set(msg) != {"t", "k", "name", "seat"} or msg.get("k") != "join" or seat not in SEATS:
             return self.chat.mistake(peer, "bad")
         text, why = textrules.clean_line(name)
         if why or len(text) > textrules.MAX_SHOWN:
-            return self.chat.mistake(peer, "bad")
+            return self.chat.mistake(peer, "bad", count=False)        # (the name is the lobby's, not the visitor's: the page tells what it was given, and a name that cannot be used is not a mistake of the socket)
         if not self.notes.take(self.chat.key_of(who.account_id), self.clock()):
             return self.chat.mistake(peer, "rate", count=False)
         alert = self.add(who.account_id, "join", {"name": text, "seat": seat})
         if alert is not None:
             self.deliver(who.account_id, alert)
 
+    def on_over(self, peer, who, msg):
+        chat = self.chat
+        file, place, match = msg.get("map"), msg.get("place"), msg.get("match")
+        if not set(msg) <= {"t", "k", "map", "place", "match"} or not isinstance(file, str) or map_file(file) is None:
+            return chat.mistake(peer, "bad")
+        if place is not None and not (type(place) is int and 1 <= place <= 4):
+            return chat.mistake(peer, "bad")
+        if match is not None and not (isinstance(match, str) and MATCH_ID.match(match)):
+            return chat.mistake(peer, "bad")
+        now, key = self.clock(), chat.key_of(who.account_id)
+        if not self.overs.take(key, now):
+            return chat.mistake(peer, "rate", count=False)
+        body = {"map": file}
+        if place is not None:
+            body["place"] = place
+        if match is not None:
+            body["match"] = match
+            try:
+                if any(r.get("match") == match for r in self.rows(who.account_id) if r["k"] == "over"):      # (the page that is shown again, or another tab of the account, says the same match: one alert)
+                    return
+            except StoreError as e:
+                return chat.trouble(peer, e, "bad")
+        alert = self.add(who.account_id, "over", body, unread=0)
+        if alert is not None:
+            self.deliver(who.account_id, alert)
+
     # ---- invitations -------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
     def target_of(self, word):
-        """(the account that the word means, or None): a shown name (any letter case; exactly one person who is here with it), `row:N` or `#N`. The second answer is `ambiguous` for two people with the name."""
+        """(the account that the word means, or None; `ambiguous` for two people with the name or None; the name to say for it or None): a shown name (any letter case; exactly one person who is here with it), `row:N`
+        or `#N` (the author of a line that is in the history that the pages are sent: the name is the line's own, never the account's name now)."""
         chat = self.chat
         banned = chat.presence.restricted()[0]
+        said = None
         if ROW_WORD.match(word):
             found = [a for a, i in chat.presence.ids.items() if i == int(word[4:]) and chat.presence.sockets(a)]
         elif LINE_WORD.match(word):
-            account = chat.store.account_of_line(int(word[1:]))
-            found = [account] if account and chat.presence.sockets(account) else []
+            entry = next((l for l in chat.recent() if l.id == int(word[1:])), None)
+            found = [entry.account] if entry is not None and entry.account and chat.presence.sockets(entry.account) else []
+            said = entry.name if entry is not None else None
         else:
             found = [a for a in chat.commands.named(word) if chat.presence.sockets(a)]
         found = [a for a in found if a not in banned]
         if len(found) > 1:
-            return None, "ambiguous"
-        return (found[0] if found else None), None
+            return None, "ambiguous", None
+        return (found[0] if found else None), None, said
 
     def invite(self, peer, word):
-        """`/invite WORD` (hub/commands.py): see the top of this file for every answer."""
+        """`/invite WORD` (hub/commands.py): see the top of this file for every answer. The room comes first (a person with no room, or a full one, learns nothing about anybody), and an answer that tells that a
+        person is here (`nobody`, `ambiguous`, `busy`) costs one of the account's five invitations a minute, so that nobody can look through the names or the lines for who is here."""
         chat, who = self.chat, peer.identity
         say = lambda code, **fields: chat.commands.reply(peer, "invite", code, **fields)
-        try:
-            target, refusal = self.target_of(word)
-        except StoreError as e:
-            return chat.trouble(peer, e, "bad")
-        if refusal or target is None:
-            return say(refusal or "nobody")
-        if target == who.account_id:
-            return say("self")
-        shown = chat.shown_name(target) or word
         room = chat.presence.room_of(who.account_id)
         if room is None:
             return say("noroom")
         if room.n >= room.of:
             return say("full", n=room.n, of=room.of)
+        key, now = chat.key_of(who.account_id), self.clock()
+
+        def probe(code, **fields):
+            if not self.totals.take(key, now):
+                return say("total", wait=self.totals.wait_seconds(key, now))
+            say(code, **fields)
+
+        try:
+            target, refusal, said = self.target_of(word)
+        except StoreError as e:
+            return chat.trouble(peer, e, "bad")
+        if refusal or target is None:
+            return probe(refusal or "nobody")
+        if target == who.account_id:
+            return say("self")
+        shown = said or chat.shown_name(target) or word
         if chat.presence.doing(target) == "play":
-            return say("busy", to=shown)
-        there = chat.presence.room_of(target)
-        if there is not None and there.code == room.code:
-            return say("inroom", to=shown)
-        key, tref, now = chat.key_of(who.account_id), chat.ref(target), self.clock()
+            return probe("busy", to=shown)
+        tref = chat.ref(target)
         last = self.invited.get((key, tref))
         if last is not None and now - last < self.limits.invite_person_seconds:
             return say("person", to=shown, wait=max(1, math.ceil(self.limits.invite_person_seconds - (now - last))))
         if not self.totals.take(key, now):
             return say("total", wait=self.totals.wait_seconds(key, now))
         self.invited[(key, tref)] = now
-        if not chat.commands.ignores_person(target, who.account_id):
+        there = chat.presence.room_of(target)
+        if not chat.commands.ignores_person(target, who.account_id) and not (there is not None and there.code == room.code):      # (a person who is in the room already, as its own page says, is sent nothing and the inviter is told `ok`, as for a person who ignored them: the answer says nothing of where a person is)
             body = {"from": who.name, "n": room.n, "of": room.of, "code": room.code, "open": 1}
             if room.map:
                 body["map"] = room.map

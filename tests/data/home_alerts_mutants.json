@@ -133,7 +133,7 @@
   {
    "id": "home_alert_is_dropped",
    "file": "web/home/home.js",
-   "old": "alert: function (kind, data) { try { return !!alerts && alerts.alert(kind, data); }",
+   "old": "alert: function (kind, data) { try { if (!alerts) { if (kind === 'over') waitingOver.push(data); return false; } return alerts.alert(kind, data); }",
    "new": "alert: function (kind, data) { try { return false; }",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   },
@@ -329,7 +329,7 @@
   {
    "id": "the_join_that_the_hub_sends_back_is_news",
    "file": "web/home/alerts.js",
-   "old": "if (row.k === 'join') return;",
+   "old": "if (row.k === 'join' || row.k === 'over') return;",
    "new": "if (false) return;",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   },
@@ -378,7 +378,7 @@
   {
    "id": "a_visitors_list_holds_what_a_member_gets",
    "file": "web/home/alerts.js",
-   "old": "if (r && r.k === 'join') out.push(r);",
+   "old": "if (r && (r.k === 'join' || r.k === 'over')) out.push(r);",
    "new": "if (r) out.push(r);",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   },
@@ -448,8 +448,8 @@
   {
    "id": "a_new_welcome_keeps_the_old_list",
    "file": "web/home/alerts.js",
-   "old": "if (kind === 'live') { hub = []; refresh(); }",
-   "new": "if (kind === 'live') { refresh(); }",
+   "old": "if (kind === 'live') { hub = []; refresh(); flushOver(); }",
+   "new": "if (kind === 'live') { refresh(); flushOver(); }",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   },
   {
@@ -492,6 +492,146 @@
    "file": "web/home/alerts.js",
    "old": "if (cur.open) { var b = el('button'",
    "new": "if (false) { var b = el('button'",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "an_over_entry_of_this_browser_is_unread",
+   "file": "web/home/alerts.js",
+   "old": "raw.id = id; raw.at = now(); raw.u = raw.k === 'join' ? 1 : 0;",
+   "new": "raw.id = id; raw.at = now(); raw.u = 1;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "view_always_opens_the_list_of_matches",
+   "file": "web/home/alerts.js",
+   "old": "row.match ? '/match?id=' + encodeURIComponent(row.match) : '/matches'",
+   "new": "'/matches'",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "view_opens_the_match_in_this_tab",
+   "file": "web/home/alerts.js",
+   "old": "'_blank', 'noopener,noreferrer'",
+   "new": "'_self', 'noopener,noreferrer'",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_match_is_told_before_the_dock_has_spoken",
+   "file": "web/home/alerts.js",
+   "old": "if (liveKnown) deliverOver(data); else waiting.push(data);",
+   "new": "deliverOver(data);",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_waiting_match_is_not_told_when_the_dock_is_live",
+   "file": "web/home/alerts.js",
+   "old": "refresh(); flushOver(); }",
+   "new": "refresh(); }",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_waiting_match_is_not_kept_when_the_link_is_lost",
+   "file": "web/home/alerts.js",
+   "old": "if (kind === 'lost') flushOver();",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_waiting_match_is_lost_when_there_is_no_dock",
+   "file": "web/home/alerts.js",
+   "old": "            else flushOver();                              // (no chat on this page",
+   "new": "            else if (false) flushOver();                              // (no chat on this page",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_visitor_tells_the_hub_of_the_match",
+   "file": "web/home/alerts.js",
+   "old": "            if (signedIn()) {\n                if (!d || !d.send) return;\n                note = ",
+   "new": "            if (true) {\n                if (!d || !d.send) return;\n                note = ",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_same_match_twice_is_two_entries_of_this_browser",
+   "file": "web/home/alerts.js",
+   "old": "!mine().some(function (r) { return r.k === 'over' && r.match && r.match === row.match; })",
+   "new": "true",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "any_place_of_a_match_is_taken",
+   "file": "web/home/alerts.js",
+   "old": "row.place = whole(raw.place, 1, 4) ? raw.place : 0;",
+   "new": "row.place = typeof raw.place === 'number' ? raw.place : 0;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "any_match_of_a_match_is_taken",
+   "file": "web/home/alerts.js",
+   "old": "typeof raw.match === 'string' && MATCH_ID.test(raw.match) ? raw.match : '';",
+   "new": "typeof raw.match === 'string' ? raw.match : '';",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "any_map_of_a_match_is_taken",
+   "file": "web/home/alerts.js",
+   "old": "if (typeof raw.map !== 'string' || !rules || !rules.validMapFile(raw.map)) return null;",
+   "new": "if (typeof raw.map !== 'string') return null;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_new_match_of_the_hub_is_said_like_a_mention",
+   "file": "web/home/alerts.js",
+   "old": "if (row.k === 'join' || row.k === 'over') return;",
+   "new": "if (row.k === 'join') return;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_words_of_a_match_leave_out_the_place",
+   "file": "web/home/alerts.js",
+   "old": "row.place ? TEXT.places[row.place - 1] : ''",
+   "new": "''",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_list_of_this_browser_holds_only_the_people_who_joined",
+   "file": "web/home/alerts.js",
+   "old": "if (r && (r.k === 'join' || r.k === 'over')) out.push(r);",
+   "new": "if (r && r.k === 'join') out.push(r);",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_list_of_this_browser_forgets_the_place_and_the_match",
+   "file": "web/home/alerts.js",
+   "old": "seat: r.seat, map: r.map, place: r.place || undefined, match: r.match || undefined };",
+   "new": "seat: r.seat, map: r.map };",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_match_told_before_the_part_is_lost",
+   "file": "web/home/home.js",
+   "old": "if (kind === 'over') waitingOver.push(data); return false;",
+   "new": "return false;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_match_that_waited_is_not_given_to_the_part",
+   "file": "web/home/home.js",
+   "old": "waitingOver.splice(0).forEach(function (d) { alerts.alert('over', d); });",
+   "new": "waitingOver.length = 0;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_match_is_told_to_the_bell_every_time_the_page_loads",
+   "file": "web/lobby.html",
+   "old": "if (note && Rematch.takeOver(window.sessionStorage, b)) Home.alert('over', note);",
+   "new": "if (note) Home.alert('over', note);",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_page_that_comes_back_never_tells_the_bell",
+   "file": "web/lobby.html",
+   "old": "Home.alert('over', note);",
+   "new": "void note;",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   }
  ]

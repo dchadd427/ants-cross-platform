@@ -165,7 +165,6 @@
         if (r === 'nobody') return bad(asked && !/^(row:|#)/.test(asked[1]) ? 'Nobody called \u201c' + clean(asked[1], LIMIT.name) + '\u201d is here. Type /invite and a space to see who is.' : INVITE_ERR.nobody);
         if (r === 'full') { n = Math.min(4, int(m.n)); size = Math.min(4, int(m.of)); return bad('Your room is full (' + n + ' of ' + size + ').'); }
         if (r === 'person') { w = Math.min(LIMIT.wait, Math.max(1, int(m.wait))); return bad('You invited ' + (to || 'that person') + ' a moment ago. Try again in ' + w + (w === 1 ? ' second.' : ' seconds.')); }
-        if (r === 'inroom') return bad((to || 'That person') + ' is in your room already.');
         if (r === 'busy') return bad((to || 'That person') + ' is playing a match.');
         return Object.prototype.hasOwnProperty.call(INVITE_ERR, r) ? bad(INVITE_ERR[r]) : bad(TEXT.generic);
     }

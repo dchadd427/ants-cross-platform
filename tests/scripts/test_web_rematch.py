@@ -76,7 +76,7 @@ class TheScript(unittest.TestCase):
         self.assertNotRegex(text, r"https?://")
         code = code_of(text)
         self.assertNotRegex(code, r"document\.cookie|indexedDB|postMessage|sendBeacon")
-        self.assertEqual(re.findall(r"(?<!function )storageSet\((\w+)", code), ["session", "session"], "only the session storage is written (the two hand-over entries)")
+        self.assertEqual(re.findall(r"(?<!function )storageSet\((\w+)", code), ["session", "session", "session"], "only the session storage is written (the two hand-over entries and the mark of the match that the bell was told of)")
 
 
 class ThePages(unittest.TestCase):

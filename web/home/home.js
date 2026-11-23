@@ -361,7 +361,7 @@
             lazy('home/players', function () { if (win.AntsHomePlayers) players = win.AntsHomePlayers.mount({ doc: doc, win: win, host: host, yard: main, quickHost: quickHost, games: gamesBtn, dock: dock, page: page }); if (players && dock && dock.directory) dock.directory(players.directory); wantMod(); meet(); inert(held); var c = players && players.root.querySelector ? players.root.querySelector('.pl-count') : null; if (c) mirror(c, tabBtns.players.pill); });
         }
 
-        var alerts = null, askedAlerts = false;
+        var alerts = null, askedAlerts = false, waitingOver = [];
         function openChat() {                               // an alert that is about the chat (a mention): the chat comes to the screen, the front page's own tab where the box has two
             closeMenu();
             if (screen !== 'home' && roomChat && roomChat.select) roomChat.select('global');
@@ -374,6 +374,7 @@
             lazy('home/alerts', function () {
                 if (!win.AntsHomeAlerts) return;
                 alerts = win.AntsHomeAlerts.mount({ doc: doc, win: win, core: win.AntsAlertCore, ctl: { show: show, screen: function () { return screen; }, join: joinInvite, chat: openChat }, bar: right, menuBtn: menuHome, dock: function () { return dock; }, signedIn: function () { return !!(dock && dock.you && dock.you()); } });
+                waitingOver.splice(0).forEach(function (d) { alerts.alert('over', d); });         // (the match that this tab came back from: told before the part was here)
             });
         }
 
@@ -403,7 +404,7 @@
             lazy('home/talk', function () { if (win.AntsHomeTalk) win.AntsHomeTalk.mount({ doc: doc, win: win, dock: dock }); });
         }
 
-        return { start: start, sync: sync, opening: say, joinInvite: joinInvite, openChat: openChat, alert: function (kind, data) { try { return !!alerts && alerts.alert(kind, data); } catch (e) { return false; } }, show: show, screen: function () { return screen; }, inert: inert, menu: function () { return menuOpen; }, dock: function () { return dock; },
+        return { start: start, sync: sync, opening: say, joinInvite: joinInvite, openChat: openChat, alert: function (kind, data) { try { if (!alerts) { if (kind === 'over') waitingOver.push(data); return false; } return alerts.alert(kind, data); } catch (e) { return false; } }, show: show, screen: function () { return screen; }, inert: inert, menu: function () { return menuOpen; }, dock: function () { return dock; },
             roomChatSeen: function () { try { return roomChat ? roomChat.seen() : null; } catch (e) { return null; } },
             roomChatNews: function (text) { try { return !!roomChat && roomChat.news(text); } catch (e) { return false; } },
             tell: function (kind, text, tone, actions) { try { return !!games && games.told(kind, text, tone, actions) === true; } catch (e) { return false; } } }; // (the Room's Fog of War question)

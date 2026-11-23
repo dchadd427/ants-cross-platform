@@ -115,7 +115,7 @@ class Limits:
     commands_control_refill_seconds: float = 2.0
     commands_other_burst: int = 10      # ... every other command of a person (`/help`, `/ignore`, `/unignore`) and every word that is no command of the account's own: a burst of 10, then one every 2 seconds
     commands_other_refill_seconds: float = 2.0
-    ignore_max: int = 50                # people that one account ignores (memory only)
+    ignore_max: int = 50                # people that one account ignores (kept in the store: docs/HUB_PEOPLE.md)
     alerts_keep: int = 30               # the alerts that an account's bell keeps (docs/HUB_PEOPLE.md): the newest 30 ...
     alerts_days: int = 7                # ... and none older than 7 days
     invite_burst: int = 5               # invitations to a room: an account (across all its tabs) may send this many at once ...
@@ -129,6 +129,8 @@ class Limits:
     mention_hour: int = 10              # mention alerts that one person gets in an hour, from everybody: a budget that fills up again steadily
     note_burst: int = 10                # `join` notes that an account's pages may send (the lobby's own news, kept in the account's list): a burst of 10 ...
     note_refill_seconds: float = 6.0            # ... then one every 6 seconds
+    over_burst: int = 3                 # `over` notes (the account's own match is over: the page that came back from it says so): a burst of 3, ...
+    over_refill_seconds: float = 60.0           # ... then one a minute
     door_connect_seconds: float = 3.0   # the hub's call to the game server's admin door (hub/gamedoor.py): the connection ...
     door_seconds: float = 10.0          # ... and the whole call (the head and the body read, the connection closed)
     door_body_max: int = 131072         # what is read of an answer (the head and the body together); more is an answer that is not the game server's

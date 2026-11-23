@@ -368,13 +368,14 @@ const buttonsOf = (root, label) => root.findAll((e) => e.tagName === 'button' &&
         const calls = [], sent = [], blocks = [], state = { signedIn: o.signedIn !== false, chat: !!o.chat, taps: [], dockUp: !o.late };
         const dock = { tap(fn) { state.taps.push(fn); }, send: o.noSend ? undefined : (obj) => { sent.push(obj); return true; }, onScreen: () => state.chat, note() {}, you: () => (state.signedIn ? { name: 'Maya' } : null),
             block: o.noBlock ? undefined : (draw, cls) => { const b = { draw, cls, redraws: 0 }; blocks.push(b); return { redraw() { b.redraws++; } }; } };
-        const win = Object.assign({}, env.win, { AntsHomeChat: Chat, innerHeight: 800, navigator: { userAgent: 'x' } });
+        const opened = [];
+        const win = Object.assign({}, env.win, { AntsHomeChat: Chat, innerHeight: 800, navigator: { userAgent: 'x' }, open: (...a) => { opened.push(a); return null; } });
         const m = A.mount({ doc: env.doc, win, core, ctl: { screen: () => o.screen || 'home', show: (n, how) => calls.push(['show', n, how]), join: (row, back) => { calls.push(['join', row.code, row.from]); return true; }, chat: () => calls.push(['chat']) },
             bar, menuBtn: menu, signedIn: () => state.signedIn, dock: () => (state.dockUp ? dock : null), now: () => NOW });
         const bell = bar.children.filter((e) => /(^|\s)al-bell(\s|$)/.test(e.className))[0];
         const tap = (kind, m1) => state.taps.forEach((f) => f(kind, m1));
         const marks = () => bell.findAll((e) => /al-mark/.test(e.className)).map((e) => e.textContent);
-        return { m, bar, bell, menu, calls, sent, blocks, state, tap, marks, dock };
+        return { m, bar, bell, menu, calls, sent, blocks, state, tap, marks, dock, opened };
     }
     const INVITE = (id, o) => Object.assign({ id, at: NOW - 60, k: 'invite', u: 1, from: 'Clover', map: 'TREASURE.LVL', n: 3, of: 4, o: 1, code: 'abc234' }, o || {});
     const MENTION = (id, o) => Object.assign({ id, at: NOW - 1920, k: 'mention', u: 1, from: 'tess', text: 'which map are we on?' }, o || {});
@@ -513,6 +514,64 @@ const buttonsOf = (root, label) => root.findAll((e) => e.tagName === 'button' &&
     same('the unread are counted, and nine is the most that the bell says', [A.countOf([{ u: true }, { u: false }, { u: true }]), A.countText(9), A.countText(10)], [2, '9', '9+']);
     same('a visitor\'s list: the last seven days, the newest thirty, newest first', A.trim([{ id: 1, at: NOW - 8 * 86400 }, { id: 2, at: NOW }, { id: 3, at: NOW }], NOW).map((r) => r.id), [3, 2]);
     check('the list is never a place for the browser to be asked for anything, and nothing is written as markup', env.innerHTMLWrites.length === 0);
+    // the match of the account that is over: an entry of the list that is read, told by the page that came back from it
+    const ID = 'ants-TREASURE-20261016-071320Z';
+    const OVER = (id, o) => Object.assign({ id, at: NOW - 120, k: 'over', map: 'TREASURE.LVL', place: 2, match: ID }, o || {});
+    same('a row of a match that is over: the map, the place and the match, and it is not unread (the page showed it)', [A.rowOf(OVER(1), Chat, rules), A.rowOf(OVER(2, { place: 0, match: '' }), Chat, rules).place, A.rowOf(OVER(3, { place: 5, match: '../x' }), Chat, rules)],
+        [{ id: 1, at: NOW - 120, k: 'over', u: false, map: 'TREASURE.LVL', place: 2, match: ID }, 0, { id: 3, at: NOW - 120, k: 'over', u: false, map: 'TREASURE.LVL', place: 0, match: '' }]);
+    same('... and no row without a map of the game', [A.rowOf(OVER(4, { map: '../x.lvl' }), Chat, rules), A.rowOf(OVER(5, { map: 7 }), Chat, rules), A.rowOf(OVER(6, { map: undefined }), Chat, rules)], [null, null, null]);
+    b = mountOf(); b.tap('alerts', { rows: [OVER(9), OVER(8, { place: 1, match: '' }), OVER(7, { place: 0 })] });
+    same('the hub\'s list with the matches that are over: none of them is on the bell, each says that the match is over, where and how it went, with View', [b.marks(), b.bell.getAttribute('aria-label')], [[], 'Alerts']);
+    b.bell.click();
+    const overs = items();
+    same('... the words', overs.map((i) => [i.getAttribute('data-k'), /Your match is over/.test(i.textContent), /Treasure/.test(i.textContent), /2nd place|1st place/.test(i.textContent), /View/.test(i.textContent), /unread/.test(i.className)]),
+        [['over', true, true, true, true, false], ['over', true, true, true, true, false], ['over', true, true, false, true, false]]);
+    check('... 2nd place, 1st place, and none when the place is not known', /2nd place/.test(overs[0].textContent) && /1st place/.test(overs[1].textContent) && !/place/.test(overs[2].textContent));
+    overs[0].findAll((e) => e.tagName === 'button')[0].click();
+    same('View opens the match\'s page in another tab and closes the list', [b.opened, !!shadeOf(env)], [[['/match?id=' + ID, '_blank', 'noopener,noreferrer']], false]);
+    b.bell.click(); items()[1].findAll((e) => e.tagName === 'button')[0].click();
+    same('a match with no id found opens the list of matches', b.opened[1], ['/matches', '_blank', 'noopener,noreferrer']);
+    b = mountOf(); env.doc.hidden = false;
+    b.tap('alert', { row: OVER(10) });
+    check('a new one from the hub (the page told it): in the list, no number, no toast, no blinking, no line in the chat', b.marks().length === 0 && !toast() && env.doc.title === 'Ants (1998)' && b.blocks.length === 0 && b.bell.getAttribute('aria-label') === 'Alerts');
+    // told by the page: to the hub when the visitor is logged in, kept in this browser when not, after the dock has said which
+    b = mountOf();
+    same('a call that is not one: nothing', [b.m.alert('over', null), b.m.alert('over', {}), b.m.alert('over', { map: 5 })], [false, false, false]);
+    same('the dock has not said who the visitor is yet: the match waits, nothing is sent', [b.m.alert('over', { map: 'TREASURE.LVL', place: 2, match: ID }), b.sent], [true, []]);
+    b.tap('live', {});
+    same('the dock is live and the visitor is logged in: the hub is told, with what the page knows, and nothing is kept in this browser', [b.sent, env.storage.data['ants.alerts.list.v1']], [[{ t: 'note', k: 'over', map: 'TREASURE.LVL', place: 2, match: ID }], undefined]);
+    b.m.alert('over', { map: 'ISLANDS.LVL' });
+    b.m.alert('over', { map: 'TREASURE.LVL', place: 9, match: '../x' });
+    same('later ones go at once, with only what is a place and a match', b.sent.slice(1), [{ t: 'note', k: 'over', map: 'ISLANDS.LVL' }, { t: 'note', k: 'over', map: 'TREASURE.LVL' }]);
+    b = mountOf({ noSend: true }); b.tap('live', {}); b.m.alert('over', { map: 'TREASURE.LVL' });
+    check('a dock that cannot send keeps nothing of an account\'s match in this browser', env.storage.data['ants.alerts.list.v1'] === undefined);
+    delete env.storage.data['ants.alerts.list.v1'];
+    b = mountOf({ signedIn: false });
+    b.m.alert('over', { map: 'TREASURE.LVL', place: 2, match: ID }); b.m.alert('over', { map: 'TREASURE.LVL', place: 2, match: ID });
+    check('a visitor who is not logged in: nothing yet while the dock has not spoken', env.storage.data['ants.alerts.list.v1'] === undefined);
+    b.tap('live', {});
+    same('then the match is in the list of this browser, once, read', JSON.parse(env.storage.data['ants.alerts.list.v1']).map((r) => [r.k, r.u, r.map, r.place, r.match]), [['over', 0, 'TREASURE.LVL', 2, ID]]);
+    check('... with no number on the bell and the words of the match in the list', b.marks().length === 0 && (b.bell.click(), /Your match is over/.test(shadeOf(env).textContent) && /2nd place/.test(shadeOf(env).textContent)));
+    escape();
+    const later2 = mountOf({ signedIn: false });                                   // (the page is loaded again: the list is read from this browser)
+    later2.bell.click();
+    const again2 = items();
+    later2.opened.length = 0;
+    again2[0].findAll((e) => e.tagName === 'button')[0].click();
+    same('a page that comes later has the match in its list, with its place and its link', [again2.length, /Your match is over/.test(again2[0].textContent), /Treasure/.test(again2[0].textContent), /2nd place/.test(again2[0].textContent), later2.opened], [1, true, true, true, [['/match?id=' + ID, '_blank', 'noopener,noreferrer']]]);
+    b.m.alert('over', { map: 'TREASURE.LVL', place: 2, match: ID });
+    b.m.alert('over', { map: 'SMALL.LVL' });
+    same('the same match again is not a second entry, another one is', JSON.parse(env.storage.data['ants.alerts.list.v1']).map((r) => r.map), ['SMALL.LVL', 'TREASURE.LVL']);
+    delete env.storage.data['ants.alerts.list.v1'];
+    b = mountOf({ signedIn: false }); b.m.alert('over', { map: 'TREASURE.LVL' }); b.tap('lost');
+    check('a dock that lost its link (no chat): the visitor keeps the match in this browser', JSON.parse(env.storage.data['ants.alerts.list.v1']).length === 1);
+    delete env.storage.data['ants.alerts.list.v1'];
+    b = mountOf({ signedIn: false, late: true }); b.m.alert('over', { map: 'TREASURE.LVL' });
+    env.advance(10000);
+    check('no dock yet', env.storage.data['ants.alerts.list.v1'] === undefined);
+    env.advance(11000);
+    check('a page that never has a chat dock: after twenty seconds the visitor keeps it in this browser', JSON.parse(env.storage.data['ants.alerts.list.v1']).length === 1);
+    delete env.storage.data['ants.alerts.list.v1'];
 }
 {   // a sound that is written in the table gets its row and plays with the alert; its switch obeys
     const env = homePage();
@@ -531,11 +590,46 @@ const buttonsOf = (root, label) => root.findAll((e) => e.tagName === 'button' &&
     env.win.AntsAlertCore.SOUNDS.join = '';
 }
 
+{   // the match that is told before the part of the alerts is on the page is kept, and given to it when it is
+    const env = runLobby('', { 'ants.name': 'Maya' }, { lazy: true, fakeClock: true, stayHome: true });
+    const note = { map: 'TREASURE.LVL', place: 1, match: 'ants-TREASURE-20261016-071320Z' };
+    check('told before the part is there: it is not shown yet (false), and it is not lost', env.homeApi.alert('over', note) === false && env.storage.data['ants.alerts.list.v1'] === undefined);
+    env.advance(0);
+    env.win.AntsHomeChat = H.loadFile('home/chat.js', env.scope).AntsHomeChat;
+    env.advance(21000);
+    same('the part comes, and the visitor with no chat keeps the match in this browser', JSON.parse(env.storage.data['ants.alerts.list.v1'] || '[]').map((r) => [r.k, r.map, r.place, r.match]), [['over', 'TREASURE.LVL', 1, 'ants-TREASURE-20261016-071320Z']]);
+    check('a call of another kind before the part is there is not kept', (() => { const e = runLobby('', {}, { lazy: true, fakeClock: true, stayHome: true }); e.homeApi.alert('join', { name: 'Sam', text: 'x', seat: 'Red' }); e.advance(0); e.win.AntsHomeChat = H.loadFile('home/chat.js', e.scope).AntsHomeChat; e.advance(21000); return e.storage.data['ants.alerts.list.v1'] === undefined; })());
+}
+
+const comeBackDone = (async () => {   // a tab that comes back from its match tells the bell once (the strip "Back from the match.", web/front/rematch.js), and a reload of it does not tell it again
+    const KEYHEX = H.hex(KEY);
+    const handed = (t) => ({ 'ants.lobby': JSON.stringify({ c: 'k7m2xq', k: KEYHEX, n: 'Maya', o: 0 }), 'ants.back': JSON.stringify({ c: 'k7m2xq', t, m: 'TREASURE.LVL', p: ['Maya', 'Sam', '', ''], w: 'Maya won with 2,040.', r: 2 }) });
+    const flush = () => new Promise((resolve) => setImmediate(resolve));
+    const comeBack = async (stored, session) => {
+        const env = runLobby('?room=k7m2xq', Object.assign({ 'ants.name': 'Maya' }, stored), { lazy: true, fakeClock: true, session });
+        env.advance(0);
+        env.win.AntsHomeChat = H.loadFile('home/chat.js', env.scope).AntsHomeChat;
+        for (let n = 0; n < 4; n++) { await flush(); await flush(); env.advance(4100); }          // (the strip looks for the match in the list of replays three times, four seconds apart, and then tells the bell without it)
+        await flush(); await flush();
+        env.advance(21000);
+        return env;
+    };
+    const first = await comeBack({}, handed(Date.now() - 5000));
+    same('the tab comes back from a match: the bell has it, read, with the map and the place that the game page handed over', JSON.parse(first.storage.data['ants.alerts.list.v1'] || '[]').map((r) => [r.k, r.u, r.map, r.place]), [['over', 0, 'TREASURE.LVL', 2]]);
+    check('... and the session says that the match was told', /^\d+$/.test(first.session.data['ants.over'] || ''));
+    const second = await comeBack(first.storage.data, Object.assign({}, first.session.data));
+    same('the same tab loads the page again: not a second entry', JSON.parse(second.storage.data['ants.alerts.list.v1']).length, 1);
+    const third = await comeBack(first.storage.data, handed(Date.now() - 1000));
+    same('another match: another entry', JSON.parse(third.storage.data['ants.alerts.list.v1']).length, 2);
+})();
+
 // ---- what the scripts never do ----
 {
     const files = ['alert_core.js', path.join('home', 'alerts.js')].map((f) => fs.readFileSync(path.join(web, f), 'utf8').replace(/\/\/.*/g, ''));
     check('the scripts read the notification permission and never ask for it, and use no worker, no network and no markup', files.every((t) => !/requestPermission|new\s+(window\.)?Notification|showNotification|serviceWorker|pushManager|fetch\(|XMLHttpRequest|WebSocket|sendBeacon|innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b/.test(t)));
 }
 
-console.log(checks + ' checks, ' + failures + ' failed');
-process.exit(failures ? 1 : 0);
+comeBackDone.then(() => {
+    console.log(checks + ' checks, ' + failures + ' failed');
+    process.exit(failures ? 1 : 0);
+}, (e) => { console.log('FAIL ' + (e && e.stack || e)); process.exit(1); });

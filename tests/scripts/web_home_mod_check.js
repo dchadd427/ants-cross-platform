@@ -1252,7 +1252,7 @@ const chatLine = (r, id, who, text, extra) => r.recv(Object.assign({ t: 'line', 
     }
     // the answers of the hub that are refusals: the words of the command, in a warning toast, and in the chat
     [[{ r: 'person', to: 'Pebble', wait: 45 }, 'You invited Pebble a moment ago. Try again in 45 seconds.'], [{ r: 'total', wait: 30 }, 'Too many invitations. Wait a minute, then try again.'], [{ r: 'full', n: 4, of: 4 }, 'Your room is full (4 of 4).'],
-        [{ r: 'noroom' }, 'You are not in a room. Use Quick host to open one, then invite.'], [{ r: 'nobody' }, 'Nobody here by that name. Type /invite and a space to see who is.'], [{ r: 'busy', to: 'Pebble' }, 'Pebble is playing a match.'], [{ r: 'inroom', to: 'Pebble' }, 'Pebble is in your room already.']].forEach(([reply, words], n) => {
+        [{ r: 'noroom' }, 'You are not in a room. Use Quick host to open one, then invite.'], [{ r: 'nobody' }, 'Nobody here by that name. Type /invite and a space to see who is.'], [{ r: 'busy', to: 'Pebble' }, 'Pebble is playing a match.']].forEach(([reply, words], n) => {
         said.length = 0; r.pmenu(20 + n); r.press('Invite to my room'); r.recv(Object.assign({ t: 'reply', c: 'invite' }, reply));
         same('the hub says ' + reply.r + ': a gold toast with the words, the same words in the chat', [said, r.privates().pop()], [[[words, 'warn']], words]);
     });

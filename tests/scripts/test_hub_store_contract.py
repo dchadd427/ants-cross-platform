@@ -1241,11 +1241,90 @@ class Contract(unittest.TestCase):
         self.assertEqual(self.store.alerts(ref), [])
         self.assertEqual([r.id for r in self.store.alerts(self.REF_B)], [keep.id])
 
-    def test_purge_drops_the_alerts_that_are_far_past_their_time(self):
+    def test_the_regular_purge_cuts_the_alerts_that_are_past_their_days_even_when_the_account_gets_no_other(self):
+        quote = self.store.add_alert(self.REF_A, "mention", '{"text":"what a person wrote"}')
+        self.clock.now += 7 * DAY - 60
+        fresh = self.store.add_alert(self.REF_B, "mention", "{}")
+        self.store.purge()
+        self.assertEqual([r.id for r in self.store.alerts(self.REF_A, days=365)], [quote.id])      # (still inside its days)
+        self.clock.now += 120
+        self.store.purge()
+        self.assertEqual(self.store.alerts(self.REF_A, days=365), [])                                # (past them: gone from the file, not only from the list)
+        self.assertEqual([r.id for r in self.store.alerts(self.REF_B, days=365)], [fresh.id])
+
+    def test_the_days_of_the_purge_are_the_stores_alert_days(self):
+        self.store.alert_days = 2
         self.store.add_alert(self.REF_A, "join", "{}")
-        self.clock.now += 31 * DAY
+        self.clock.now += 2 * DAY - 60
+        self.store.purge()
+        self.assertEqual(len(self.store.alerts(self.REF_A, days=365)), 1)
+        self.clock.now += 120
         self.store.purge()
         self.assertEqual(self.store.alerts(self.REF_A, days=365), [])
+
+    def test_the_mention_of_a_line_that_the_purge_deleted_goes_with_the_line_and_the_store_counts_it(self):
+        self.store.alert_days = 30                                                                    # (the alert has days left: it is the line's going that takes it)
+        gone = self.say(1)
+        self.store.add_alert(self.REF_A, "mention", '{"text":"line 1"}', "c" * 16, gone.id)
+        invite = self.store.add_alert(self.REF_A, "invite", "{}", "c" * 16)
+        self.clock.now += 3 * DAY
+        kept = self.say(2)
+        mention = self.store.add_alert(self.REF_B, "mention", '{"text":"line 2"}', "c" * 16, kept.id)
+        self.clock.now += 5 * DAY                                                                     # (the first line is 8 days old, the second 5)
+        before = self.store.alerts_dropped
+        self.assertEqual(self.store.purge(), 1)
+        self.assertEqual([r.id for r in self.store.alerts(self.REF_A, days=365)], [invite.id])       # (an alert that is of no line stays)
+        self.assertEqual([r.id for r in self.store.alerts(self.REF_B, days=365)], [mention.id])
+        self.assertEqual(self.store.alerts_dropped, before + 1)
+
+    def test_the_mention_of_a_line_that_make_room_deleted_goes_with_the_line(self):
+        lines = [self.say(n) for n in range(1, 6)]
+        for line in lines:
+            self.store.add_alert(self.REF_A, "mention", '{"text":"%s"}' % line.text, "c" * 16, line.id)
+        before = self.store.alerts_dropped
+        self.assertEqual(self.store.make_room(0, 3, 2), 3)                                          # (the three oldest go, the newest two stay)
+        self.assertEqual([r.body for r in self.store.alerts(self.REF_A)], ['{"text":"line 5"}', '{"text":"line 4"}'])
+        self.assertEqual(self.store.alerts_dropped, before + 3)
+
+    def test_an_alert_that_is_made_read_is_kept_read(self):
+        done = self.store.add_alert(self.REF_A, "over", "{}", unread=0)
+        self.assertEqual((done.unread, [r.unread for r in self.store.alerts(self.REF_A)]), (0, [0]))
+
+    def test_the_people_that_an_account_ignores_are_kept_by_references_up_to_a_number_and_listed(self):
+        a, b, c = self.REF_A, self.REF_B, "c" * 16
+        self.assertEqual(self.store.ignores(), {})
+        self.assertTrue(self.store.ignore_add(a, b, "Ben", 2))
+        self.assertTrue(self.store.ignore_add(a, c, "Cleo", 2))
+        self.assertFalse(self.store.ignore_add(a, "d" * 16, "Dan", 2))                              # (a third person: over the number)
+        self.assertTrue(self.store.ignore_add(a, b, "Benjamin", 2))                                   # (a person that is on the list already: the name is what changes)
+        self.assertTrue(self.store.ignore_add(b, a, "Anna", 2))                                       # (a list of its own: another account's does not count)
+        self.assertEqual(self.store.ignores(), {a: {b: "Benjamin", c: "Cleo"}, b: {a: "Anna"}})
+        self.assertTrue(self.store.ignore_remove(a, b))
+        self.assertFalse(self.store.ignore_remove(a, b))
+        self.assertEqual(self.store.ignores(), {a: {c: "Cleo"}, b: {a: "Anna"}})
+        with self.assertRaises(ValueError):
+            self.store.ignore_add(a, b, 5)
+
+    def test_forgetting_an_account_takes_its_ignore_list_and_its_place_on_the_lists_of_the_others(self):
+        me, other, third = self.store.ref("1001"), self.REF_B, "c" * 16
+        self.store.ignore_add(me, other, "Ben")
+        self.store.ignore_add(other, me, "Alice")
+        self.store.ignore_add(other, third, "Cleo")
+        self.store.forget("1001")
+        self.assertEqual(self.store.ignores(), {other: {third: "Cleo"}})
+
+    def test_a_refused_write_leaves_the_ignores_as_they_were_and_makes_no_table_half(self):
+        with self.refusing_writes(self.store):
+            with self.assertRaises(base.StoreError):
+                self.store.ignore_add(self.REF_A, self.REF_B, "Ben")
+            with self.assertRaises(base.StoreError):
+                self.store.add_alert(self.REF_A, "join", "{}")
+        self.assertEqual((self.store.ignores(), self.store.alerts(self.REF_A)), ({}, []))
+        self.assertTrue(self.store.ignore_add(self.REF_A, self.REF_B, "Ben"))
+        with self.refusing_writes(self.store):
+            with self.assertRaises(base.StoreError):
+                self.store.ignore_remove(self.REF_A, self.REF_B)
+        self.assertEqual(self.store.ignores(), {self.REF_A: {self.REF_B: "Ben"}})
 
     def test_an_alert_that_is_not_one_is_refused_and_a_refused_write_leaves_the_list_as_it_was(self):
         for kind, body in (("pm", "{}"), ("join", 5), ("join", "x" * 601)):
@@ -1277,6 +1356,42 @@ class SqliteContract(Contract):
             yield
         finally:
             blocker.close()
+
+    def tables(self):
+        return {r[0] for r in self.store.db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+
+    def test_the_tables_of_the_alerts_and_of_the_ignores_are_made_by_the_first_one_and_a_store_that_has_none_holds_none(self):
+        self.assertTrue({"alerts", "ignores"}.isdisjoint(self.tables()))
+        ref = self.store.ref("1001")
+        self.assertEqual((self.store.alerts(ref), self.store.read_alerts(ref, 5), self.store.clear_alerts(ref), self.store.change_alert(ref, 1, "{}"), self.store.drop_alerts_of_lines([1, 2]),
+                          self.store.ignores(), self.store.ignore_remove(ref, "c" * 16)), ([], 0, 0, False, set(), {}, False))
+        self.say(1)
+        self.clock.now += 40 * DAY
+        self.store.purge()
+        self.store.make_room(0, 10, 0)
+        self.store.forget("1001")
+        self.assertTrue({"alerts", "ignores"}.isdisjoint(self.tables()), "reading, purging and forgetting made a table")
+        self.store.add_alert(ref, "join", "{}")
+        self.assertIn("alerts", self.tables())
+        self.assertNotIn("ignores", self.tables())
+        self.store.ignore_add(ref, "c" * 16, "Cleo")
+        self.assertIn("ignores", self.tables())
+
+    def test_another_connection_makes_the_tables_and_this_one_notices(self):
+        other = storemod.Store(self.path, clock=self.clock, busy_ms=50)
+        self.addCleanup(other.close)
+        other.add_alert(self.REF_A, "join", "{}")
+        other.ignore_add(self.REF_A, self.REF_B, "Ben")
+        self.assertEqual((len(self.store.alerts(self.REF_A)), self.store.ignores()), (1, {self.REF_A: {self.REF_B: "Ben"}}))
+
+    def test_the_ignores_are_there_after_a_restart(self):
+        self.store.ignore_add(self.REF_A, self.REF_B, "Ben")
+        self.store.add_alert(self.REF_A, "join", "{}")
+        self.store.close()
+        again = storemod.Store(self.path, clock=self.clock, busy_ms=50)
+        self.addCleanup(again.close)
+        self.assertEqual((again.ignores(), len(again.alerts(self.REF_A))), ({self.REF_A: {self.REF_B: "Ben"}}, 1))
+        self.store = again
 
     def test_the_operations_that_only_this_backend_has_stay_on_its_class(self):
         for name in ("checkpoint", "unsettled"):

@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the alerts, invitations and mentions of the chat hub (hub/people.py, hub/presence.py `inv`, hub/commands.py `/invite`, hub/chat.py, hub/limits.py, hub/store/; docs/HUB_PEOPLE.md) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose (an invitation to oneself, to somebody who plays, to a full room, to the room that the person is in; the limits of one a minute per person and five a minute in all, per account and not per socket; a person who ignores the inviter who is invited or who tells; a banned account or a person who is not here who is invited; two people with one name told apart by luck; a room's code that stays after the room has gone, an invitation that never ends, that ends at once, that ends not for a full room or for another room; a hub that starts again that keeps invitations open; a name that is marked inside a word, past its end, for two people, shortest first, in one case only, in code points and not in the page's units, more than ten; the writer, more than three people, the same pair twice, more than ten an hour, a banned person, a person who ignores the writer who are alerted; a line that is deleted that keeps its marks or its alerts; an account that forgets itself that keeps its invitations or the alerts that are from it; a list that is cut at the wrong number or the wrong days or is somebody else's, a seen that reads too much or somebody else's, a clear that clears everybody's; a room that is not checked; the invitation as a command of a rank; the marks of a line), and a test of tests/scripts/test_hub_people.py or of the store's contract must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hub_people_mutants.json --keep-going --jobs 1 --baseline-every 15; every mutant must be caught.",
+ "note": "Mutants of the alerts, invitations and mentions of the chat hub (hub/people.py, hub/presence.py `inv`, hub/commands.py `/invite`, hub/chat.py, hub/limits.py, hub/store/; docs/HUB_PEOPLE.md) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose (an invitation to oneself, to somebody who plays, to a full room, to the room that the person is in; the limits of one a minute per person and five a minute in all, per account and not per socket; a person who ignores the inviter who is invited or who tells; a banned account or a person who is not here who is invited; two people with one name told apart by luck; a room's code that stays after the room has gone, an invitation that never ends, that ends at once, that ends not for a full room or for another room; a hub that starts again that keeps invitations open; a name that is marked inside a word, past its end, for two people, shortest first, in one case only, in code points and not in the page's units, more than ten; the writer, more than three people, the same pair twice, more than ten an hour, a banned person, a person who ignores the writer who are alerted; a line that is deleted that keeps its marks or its alerts; an account that forgets itself that keeps its invitations or the alerts that are from it; a list that is cut at the wrong number or the wrong days or is somebody else's, a seen that reads too much or somebody else's, a clear that clears everybody's; a room that is not checked; the invitation as a command of a rank; the marks of a line; an answer that tells who is here that costs nothing, a person looked up before the room, a line that is no more in the history that names a person or a renamed account that is shown by its new name; an alert that outlives its days or the line of a mention, the lists that are not sent again, the tables that are made before they are needed; the people that an account ignores that are not kept, not read, not let go, kept with no name or past the number or after the account forgot itself; a join note with a name that cannot be used that counts against the socket; a match that is over that is taken with any map, place or match, unread, twice, without a limit or for each socket), and a test of tests/scripts/test_hub_people.py or of the store's contract must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hub_people_mutants.json --keep-going --jobs 1 --baseline-every 15; every mutant must be caught.",
  "baseline": {
   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
  },
@@ -33,10 +33,10 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
   },
   {
-   "id": "invite_to_the_room_they_are_in",
+   "id": "a_person_in_the_room_already_is_sent_the_invitation",
    "file": "hub/people.py",
-   "old": "if there is not None and there.code == room.code:",
-   "new": "if False:",
+   "old": " and not (there is not None and there.code == room.code):",
+   "new": ":",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
   },
   {
@@ -56,22 +56,22 @@
   {
    "id": "five_a_minute_gone",
    "file": "hub/people.py",
-   "old": "if not self.totals.take(key, now):",
-   "new": "if False:",
+   "old": "if not self.totals.take(key, now):\n            return say(\"total\", wait=self.totals.wait_seconds(key, now))\n        self.invited[(key, tref)] = now",
+   "new": "if False:\n            return say(\"total\", wait=self.totals.wait_seconds(key, now))\n        self.invited[(key, tref)] = now",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
   },
   {
    "id": "five_a_minute_for_each_socket",
    "file": "hub/people.py",
-   "old": "key, tref, now = chat.key_of(who.account_id), chat.ref(target), self.clock()",
-   "new": "key, tref, now = str(id(peer)), chat.ref(target), self.clock()",
+   "old": "key, now = chat.key_of(who.account_id), self.clock()",
+   "new": "key, now = str(id(peer)), self.clock()",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
   },
   {
    "id": "a_person_who_ignores_is_invited",
    "file": "hub/people.py",
-   "old": "if not chat.commands.ignores_person(target, who.account_id):",
-   "new": "if True:",
+   "old": "if not chat.commands.ignores_person(target, who.account_id) and",
+   "new": "if True and",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
   },
   {
@@ -385,8 +385,8 @@
   {
    "id": "an_alert_of_any_kind_is_kept",
    "file": "hub/store/sqlite.py",
-   "old": "if kind not in ALERT_KINDS or not isinstance(body, str) or len(body.encode(\"utf-8\")) > ALERT_BODY_MAX:\n            raise ValueError(\"not an alert\")\n        now = int(self.clock())",
-   "new": "if False:\n            raise ValueError(\"not an alert\")\n        now = int(self.clock())",
+   "old": "if kind not in ALERT_KINDS or not isinstance(body, str) or len(body.encode(\"utf-8\")) > ALERT_BODY_MAX:\n            raise ValueError(\"not an alert\")\n        self.ensure_alerts()",
+   "new": "if False:\n            raise ValueError(\"not an alert\")\n        self.ensure_alerts()",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
   },
   {
@@ -464,6 +464,286 @@
    "file": "hub/presence.py",
    "old": "if (file is not None and map_file(file) is None) or not whole(n, 0, SEATS)",
    "new": "if False or not whole(n, 0, SEATS)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "an_answer_that_tells_who_is_here_costs_nothing",
+   "file": "hub/people.py",
+   "old": "if not self.totals.take(key, now):\n                return say(\"total\", wait=self.totals.wait_seconds(key, now))\n            say(code, **fields)",
+   "new": "if False:\n                return say(\"total\", wait=self.totals.wait_seconds(key, now))\n            say(code, **fields)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "busy_costs_nothing",
+   "file": "hub/people.py",
+   "old": "return probe(\"busy\", to=shown)",
+   "new": "return say(\"busy\", to=shown)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_person_with_no_room_is_told_nobody_before_noroom",
+   "file": "hub/people.py",
+   "old": "if room is None:\n            return say(\"noroom\")",
+   "new": "if room is None and self.target_of(word)[0] is not None:\n            return say(\"noroom\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_full_room_is_looked_at_after_the_person",
+   "file": "hub/people.py",
+   "old": "if room.n >= room.of:\n            return say(\"full\", n=room.n, of=room.of)\n        key,",
+   "new": "if False:\n            return say(\"full\", n=room.n, of=room.of)\n        key,",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_line_that_is_not_in_the_history_names_a_person",
+   "file": "hub/people.py",
+   "old": "entry = next((l for l in chat.recent() if l.id == int(word[1:])), None)\n            found = [entry.account] if entry is not None and entry.account and chat.presence.sockets(entry.account) else []\n            said = entry.name if entry is not None else None",
+   "new": "account = chat.store.account_of_line(int(word[1:]))\n            found = [account] if account and chat.presence.sockets(account) else []\n            said = None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_line_says_the_name_that_is_shown_now",
+   "file": "hub/people.py",
+   "old": "said = entry.name if entry is not None else None",
+   "new": "said = None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_note_with_a_name_that_cannot_be_used_is_a_mistake_of_the_socket",
+   "file": "hub/people.py",
+   "old": "return self.chat.mistake(peer, \"bad\", count=False)        # (the name is the lobby",
+   "new": "return self.chat.mistake(peer, \"bad\")        # (the name is the lobby",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_store_keeps_alerts_for_thirty_days",
+   "file": "hub/people.py",
+   "old": "chat.store.alert_days = limits.alerts_days",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_lists_are_not_sent_again_after_a_line_went",
+   "file": "hub/people.py",
+   "old": "if self.chat.store.alerts_dropped != self.dropped_seen:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_lists_are_sent_again_every_time",
+   "file": "hub/people.py",
+   "old": "            self.dropped_seen = self.chat.store.alerts_dropped\n",
+   "new": "            pass\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_purge_does_not_tell_the_people",
+   "file": "hub/server.py",
+   "old": "            self.chat.people.store_dropped()                           # (the mention of a line that the purge deleted went with it: the open pages are sent their lists again)\n",
+   "new": "            pass\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_prune_does_not_tell_the_people",
+   "file": "hub/server.py",
+   "old": "                    self.chat.people.store_dropped()\n",
+   "new": "                    pass\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "alerts_live_thirty_days_in_the_file",
+   "file": "hub/store/sqlite.py",
+   "old": "self.db.execute(\"DELETE FROM alerts WHERE at < ?\", (now - int(self.alert_days * 86400),))",
+   "new": "self.db.execute(\"DELETE FROM alerts WHERE at < ?\", (now - 30 * 86400,))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_purge_keeps_the_mention_of_a_deleted_line",
+   "file": "hub/store/sqlite.py",
+   "old": "        self.drop_orphan_alerts()\n\n    def drop_orphan_alerts(self):",
+   "new": "        pass\n\n    def drop_orphan_alerts(self):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "make_room_keeps_the_mention_of_a_deleted_line",
+   "file": "hub/store/sqlite.py",
+   "old": "            if gone and self.has_alerts():\n                self.drop_orphan_alerts()\n",
+   "new": "            pass\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_mention_is_dropped_with_a_line_that_is_still_there",
+   "file": "hub/store/sqlite.py",
+   "old": "line IS NOT NULL AND line NOT IN (SELECT id FROM lines)",
+   "new": "line IS NOT NULL AND line IN (SELECT id FROM lines)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "an_alert_of_no_line_is_dropped_with_the_lines",
+   "file": "hub/store/sqlite.py",
+   "old": "line IS NOT NULL AND line NOT IN (SELECT id FROM lines)",
+   "new": "line NOT IN (SELECT id FROM lines)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "reading_the_alerts_makes_the_table",
+   "file": "hub/store/sqlite.py",
+   "old": "        if not self.has_alerts():\n            return []\n",
+   "new": "        self.ensure_alerts()\n        if not self.has_alerts():\n            return []\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_purge_makes_the_alerts_table",
+   "file": "hub/store/sqlite.py",
+   "old": "            if self.has_alerts():\n                self.cut_alerts(now)\n",
+   "new": "            self.ensure_alerts()\n            if self.has_alerts():\n                self.cut_alerts(now)\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "an_alert_is_always_unread",
+   "file": "hub/store/sqlite.py",
+   "old": "(ref, now, kind, body, from_ref, line, 1 if unread else 0))",
+   "new": "(ref, now, kind, body, from_ref, line, 1))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_ignores_are_not_read_at_the_start",
+   "file": "hub/commands.py",
+   "old": "return self.chat.store.ignores()",
+   "new": "return {}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "an_ignore_is_not_kept",
+   "file": "hub/commands.py",
+   "old": "kept = chat.store.ignore_add(chat.ref(me), chat.ref(target), shown, chat.limits.ignore_max)",
+   "new": "kept = True",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "an_unignore_is_not_kept",
+   "file": "hub/commands.py",
+   "old": "                self.chat.store.ignore_remove(self.chat.ref(peer.identity.account_id), ref)\n",
+   "new": "                pass\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "an_ignore_is_kept_without_its_name",
+   "file": "hub/commands.py",
+   "old": "chat.ref(target), shown, chat.limits.ignore_max)",
+   "new": "chat.ref(target), \"\", chat.limits.ignore_max)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_most_that_may_be_ignored_is_one_more",
+   "file": "hub/store/sqlite.py",
+   "old": ">= int(most):\n                    return False",
+   "new": "> int(most):\n                    return False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "an_ignore_is_kept_after_the_account_forgot_itself",
+   "file": "hub/store/sqlite.py",
+   "old": "            if self.has_ignores():\n                self.db.execute(\"DELETE FROM ignores WHERE ref = ? OR other = ?\", (self.ref(account), self.ref(account)))",
+   "new": "            if False:\n                self.db.execute(\"DELETE FROM ignores WHERE ref = ? OR other = ?\", (self.ref(account), self.ref(account)))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_place_on_the_lists_of_the_others_stays_after_forgetting",
+   "file": "hub/store/sqlite.py",
+   "old": "\"DELETE FROM ignores WHERE ref = ? OR other = ?\"",
+   "new": "\"DELETE FROM ignores WHERE ref = ?\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_ignores_of_another_account_count_for_the_most",
+   "file": "hub/store/sqlite.py",
+   "old": "SELECT COUNT(*) FROM ignores WHERE ref = ?\"",
+   "new": "SELECT COUNT(*) FROM ignores\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "an_over_alert_is_unread",
+   "file": "hub/people.py",
+   "old": "alert = self.add(who.account_id, \"over\", body, unread=0)",
+   "new": "alert = self.add(who.account_id, \"over\", body, unread=1)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "an_over_note_takes_any_map",
+   "file": "hub/people.py",
+   "old": "not isinstance(file, str) or map_file(file) is None:\n            return chat.mistake(peer, \"bad\")",
+   "new": "not isinstance(file, str):\n            return chat.mistake(peer, \"bad\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "an_over_note_takes_any_place",
+   "file": "hub/people.py",
+   "old": "not (type(place) is int and 1 <= place <= 4)",
+   "new": "not (type(place) is int)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "an_over_note_takes_any_match",
+   "file": "hub/people.py",
+   "old": "not (isinstance(match, str) and MATCH_ID.match(match))",
+   "new": "not isinstance(match, str)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "an_over_note_takes_other_fields",
+   "file": "hub/people.py",
+   "old": "if not set(msg) <= {\"t\", \"k\", \"map\", \"place\", \"match\"} or",
+   "new": "if False or",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_same_match_is_two_alerts",
+   "file": "hub/people.py",
+   "old": "if any(r.get(\"match\") == match for r in self.rows(who.account_id) if r[\"k\"] == \"over\"):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "over_notes_are_not_limited",
+   "file": "hub/people.py",
+   "old": "if not self.overs.take(key, now):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "over_notes_are_limited_for_each_socket",
+   "file": "hub/people.py",
+   "old": "now, key = self.clock(), chat.key_of(who.account_id)\n        if not self.overs",
+   "new": "now, key = self.clock(), str(id(peer))\n        if not self.overs",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_refusal_of_an_over_note_is_a_mistake",
+   "file": "hub/people.py",
+   "old": "if not self.overs.take(key, now):\n            return chat.mistake(peer, \"rate\", count=False)",
+   "new": "if not self.overs.take(key, now):\n            return chat.mistake(peer, \"rate\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_stored_over_with_a_bad_map_is_sent",
+   "file": "hub/people.py",
+   "old": "if not isinstance(body.get(\"map\"), str) or map_file(body[\"map\"]) is None:",
+   "new": "if not isinstance(body.get(\"map\"), str):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_stored_over_with_any_place_is_sent",
+   "file": "hub/people.py",
+   "old": "if type(body.get(\"place\")) is int and 1 <= body[\"place\"] <= 4:",
+   "new": "if type(body.get(\"place\")) is int:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_stored_over_with_any_match_is_sent",
+   "file": "hub/people.py",
+   "old": "if isinstance(body.get(\"match\"), str) and MATCH_ID.match(body[\"match\"]):",
+   "new": "if isinstance(body.get(\"match\"), str):",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
   }
  ]
