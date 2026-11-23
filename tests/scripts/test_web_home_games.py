@@ -60,7 +60,7 @@ class ThePage(unittest.TestCase):
 
     def test_what_the_script_reads_of_the_page_is_there_once(self):
         js = read("web", "home", "games.js")
-        for ident in ("rejoin", "rejoin-go", "room-h", "r-notes"):
+        for ident in ("rejoin", "rejoin-go", "r-vis"):
             self.assertIn("getElementById('%s')" % ident, js, ident)
             self.assertEqual(self.page.count('id="%s"' % ident), 1, ident)
 
@@ -245,9 +245,11 @@ class TheStyle(unittest.TestCase):
         for selector, body in self.rules:
             for m in re.finditer(r"min-height: (\d+)px", body):
                 heights.setdefault(selector.strip(), []).append(int(m.group(1)))
-        for selector in (".gjoin", ".gcodelink", ".gcode .gcgo", ".gcode .gcx", ".gcode .joinbox input", ".vbtn", ".gcbtns .btn", ".gtoast .btn", ".gjoining .btn"):
+        for selector in (".gjoin", ".gcodelink", ".gcode .gcgo", ".gcode .gcx", ".gcode .joinbox input", ".gcbtns .btn", ".gtoast .btn", ".gjoining .btn"):
             self.assertIn(selector, heights, selector)
         for selector, values in heights.items():
+            if selector == ".vbtn":
+                continue       # (the two halves of Invite only | Public, a row of the Rules sheet, are as drawn: 38 px with a mouse, 40 px on a phone)
             for value in values:
                 self.assertGreaterEqual(value, 44, "%s has a min-height of %d" % (selector, value))
         self.assertIn(".gjoining[hidden] { display: none; }", self.css, "a Join that is not on its way shows no line (and no Cancel)")
@@ -276,16 +278,11 @@ class TheStyle(unittest.TestCase):
         self.assertIn("position: fixed;", next(body for sel, body in self.rules if sel.strip() == ".gpop"))
         self.assertIn("overflow-y: auto;", next(body for sel, body in self.rules if sel.strip() == ".gpop"), "the list scrolls inside itself")
 
-    def test_the_switch_has_a_layout_for_a_wide_window_and_for_a_phone(self):
-        self.assertIn("@media (min-width: 721px) {", self.css)
-        self.assertIn("@media (max-width: 720px) {", self.css)
+    def test_the_switch_is_two_halves_of_a_row_of_the_sheet_and_the_lit_half_is_the_state(self):
         self.assertIn(".vbtn[aria-pressed=\"true\"] {", self.css)
-        self.assertIn(".vwide { display: none; }", self.css)
-
-    def test_the_switch_label_is_centered_by_the_browser_not_hung_at_the_top_by_a_baseline_row(self):
-        vbtn = next(body for selector, body in self.rules if selector.strip() == ".vbtn")
-        self.assertIn("display: block;", vbtn, "a flex row with align-items: baseline hangs the label at the top of the 44 px button (tests/scripts/web_home_games_browser.js, part 1j, measures it)")
-        self.assertNotRegex(self.css, r"\.vbtn[^{]*\{[^}]*(baseline|inline-flex)")
+        self.assertIn("@media (max-width: 700px) {", self.css)
+        phone = self.css[self.css.index("@media (max-width: 700px) {"):]
+        self.assertGreaterEqual(int(re.search(r"\.vbtn \{[^}]*min-height: (\d+)px", phone).group(1)), 40, "a finger on the half of the switch")
 
     def test_the_classes_that_the_script_makes_are_the_styles_and_the_page_s_own(self):
         made = set()
@@ -375,7 +372,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     FILES = ["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/alert_core.js", "web/front/player_name.js", "web/home/home.js", "web/home/home.css", "web/home/chat.css", "web/home/games.js", "web/home/alerts.js", "web/home/alerts.css", "web/home/games.css", "web/shapes.js", "tests/scripts/test_web_home_games.py", "tests/scripts/web_home_games_check.js",
              "tests/data/home_games_thumbs.json", "Community-Maps/previews.json",
              "tests/scripts/web_home_games_room_check.js", "tests/scripts/web_home_games_quickjoin_check.js", "tests/scripts/web_home_games_rig.js", "tests/scripts/web_page_harness.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml"] \
-        + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")]
+        + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "room_fog.js", "room_sheet.js", "seat_menu.js", "map_picker.js", "map_maker_link.js")]
 
     @classmethod
     def setUpClass(cls):

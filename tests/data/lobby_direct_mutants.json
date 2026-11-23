@@ -105,8 +105,8 @@
   {
    "id": "the_help_leaves_out_the_address",
    "file": "web/front/lobby_direct.js",
-   "old": "Players you connect to directly can see your IP address.",
-   "new": "Players you connect to directly can see you.",
+   "old": "Players you connect to can see your IP address.",
+   "new": "Players you connect to can see you.",
    "test": "node tests/scripts/web_lobby_direct_check.js web/front/lobby_direct.js"
   },
   {

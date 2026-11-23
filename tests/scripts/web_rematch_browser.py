@@ -49,7 +49,7 @@ BAR = ("(function () { var b = document.getElementById('backbar'); if (!b || b.h
 CARDS = ("Array.prototype.map.call(document.querySelectorAll('#slots > li'), function (li) { var p = li.querySelector('.pstat'); return [li.getAttribute('data-i'), p ? p.textContent : '', p ? p.className : '']; })"
          ".sort(function (a, b) { return a[0] - b[0]; })")
 PUBLIC = ("(function () { var b = document.querySelectorAll('.vis .vbtn'); return b.length === 2 ? [b[0].getAttribute('aria-pressed'), b[1].getAttribute('aria-pressed')] : null; })()")      # (the leader's Private | Public switch: which one is pressed)
-NOTE = "(function () { var n = document.getElementById('start-note'); return n && !n.hidden ? n.textContent : ''; })()"
+NOTE = "(function () { var n = document.getElementById('go-status'); return n && /^START waits for /.test(n.textContent) ? n.textContent : ''; })()"       # (the line under START: the room's status line says whose return START waits for)
 SEAT_ENDED = "ended while you were away"                    # (the front page's notice for a key that found no seat: web/front/lobby_rules.js, banner seatgone)
 BANNER = "(function () { var b = document.getElementById('banner'); return b && !b.hidden ? [document.getElementById('banner-text').textContent, b.className] : null; })()"
 

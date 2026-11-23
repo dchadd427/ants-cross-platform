@@ -1,4 +1,4 @@
-// The front page's side of network protocol 26 (docs/NETWORK_PORT.md "Protocol 16", "Protocol 17", "Protocol 20" and "Protocol 22", docs/MATCH_COUNTDOWN.md; 18 to 21 and 23 to 26 moved no message layout that a lobby page uses: 21 gave the Begin a second byte, which a page leaves to the game page): the codec of the messages that a lobby page sends and hears, the guard of a color move, and the client that keeps
+// The front page's side of network protocol 28 (docs/NETWORK_PORT.md "Protocol 16", "Protocol 17", "Protocol 20" and "Protocol 22", docs/MATCH_COUNTDOWN.md; 18 to 21, 23 to 26 and 28 moved no message layout that a lobby page uses: 21 gave the Begin a second byte, which a page leaves to the game page): the codec of the messages that a lobby page sends and hears, the guard of a color move, and the client that keeps
 // a page in its lobby room (a keyed way back, the answers to the server's pings, what each refusal means). No screen is drawn here: the page reads the client's state and its events.
 //   * ES5 and no module system, as the site's other scripts: a page gets the global AntsLobbyNet, node gets module.exports (tests/scripts/web_lobby_net_check.js runs it).
 //   * Every layout is the C++ one (src/ants_net/protocol.cpp), little endian, and every decoder refuses what the C++ decoder refuses; tests/data/lobby_messages.txt holds bytes that the C++ encoders wrote,
@@ -10,7 +10,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    var PROTOCOL = 27;                                             // kProtocolVersion
+    var PROTOCOL = 28;                                             // kProtocolVersion
     var LAST_GAME_MODE = 1;                                        // sim::kLastGameMode: 0 the original's highest score, 1 "187"; a byte above it is refused, never played as another mode
     var MAX_NAME = 32, MAX_ROOM_CODE = 32, MAX_MAP_NAME = 64, MAX_CHAT = 100;
     var PLAYERS = 4;                                               // sim::MAX_PLAYERS
@@ -142,13 +142,15 @@
     }
     function encodeSeatMove(from, to, guard) { return new Writer().u8(MSG.SeatMove).u8(from).u8(to).u32(guard).done(); }
     // the leader's plan: the map ('' keeps the room's), what each color is (PLAN.*), the teams (NO_TEAM twice, or two seats a < b) and, since protocol 17, the game mode (0, the original's game, when none is given;
-    // a mode that is not 0 .. LAST_GAME_MODE is a mistake of the caller and throws: the server would refuse the message, and it is never sent as another mode)
-    function encodePlan(map, kinds, teamA, teamB, mode) {
+    // a mode that is not 0 .. LAST_GAME_MODE is a mistake of the caller and throws: the server would refuse the message, and it is never sent as another mode) and, since protocol 28, Fog of War (a boolean, off when none is given here:
+    // LobbyClient.setPlan fills in the room's own)
+    function encodePlan(map, kinds, teamA, teamB, mode, fog) {
         var gameMode = mode === undefined ? 0 : mode;
         if (!isWhole(gameMode) || gameMode < 0 || gameMode > LAST_GAME_MODE) throw new RangeError('game mode ' + mode);
+        if (fog !== undefined && typeof fog !== 'boolean') throw new RangeError('fog ' + fog);
         var w = new Writer().u8(MSG.Plan).str8(map || '');
         for (var i = 0; i < PLAYERS; i++) w.u8(kinds[i]);
-        return w.u8(teamA).u8(teamB).u8(gameMode).done();
+        return w.u8(teamA).u8(teamB).u8(gameMode).u8(fog ? 1 : 0).done();
     }
     function encodeName(name) { return new Writer().u8(MSG.Name).str8(name).done(); }
     function encodeRemove(seat, guard) { return new Writer().u8(MSG.Remove).u8(seat).u32(guard).done(); }
@@ -160,6 +162,7 @@
         for (var i = 0; i < PLAYERS; i++) w.u8(fill[i]);
         return w.u8(teamA).u8(teamB).done();
     }
+    function hasBotKind(kinds) { for (var i = 0; i < PLAYERS; i++) { if (kinds[i] >= PLAN.Easy && kinds[i] <= PLAN.Hard) return true; } return false; }
     function fillOfPlan(plan) {
         var out = [];
         for (var i = 0; i < PLAYERS; i++) out.push(plan[i] === PLAN.Easy ? FILL.Easy : plan[i] === PLAN.Medium ? FILL.Medium : plan[i] === PLAN.Hard ? FILL.Hard : FILL.None);
@@ -213,6 +216,7 @@
         if (m.lobby && !m.leaderStarts) return null;
         for (var p = 0; p < PLAYERS; p++) {
             if (m.plan[p] > PLAN.Nobody || (m.plan[p] !== 0 && !m.lobby)) return null;
+            if (m.fog === 1 && ((m.plan[p] >= PLAN.Easy && m.plan[p] <= PLAN.Hard) || slots[p].state === SLOT.Bot)) return null;       // (protocol 28: bots and Fog of War never mix: neither a color for a bot nor a bot in a seat)
             if (((m.inGame >> p) & 1) !== 0 && (!m.lobby || slots[p].state !== SLOT.Client)) return null;
             if (slots[p].state === SLOT.Empty && slots[p].name !== '' && (m.plan[p] < PLAN.Easy || m.plan[p] > PLAN.Hard || !/ \(bot(, (Easy|Medium|Hard))?\)$|^Bot \((Easy|Medium|Hard)\)$/.test(slots[p].name))) return null;       // (protocol 20: only a planned bot's label)
         }
@@ -250,7 +254,7 @@
 
     // ---- what changed between two Room messages ----------------------------------------------------------------------------------------------------------------------------------------------------------
     // The server sends a Room message for every change, so two in a row differ by one thing. A person has no number in the message, only a seat and a name: a person who is in another seat with the
-    // same name is a move, two seats that swapped their names are a swap. Events: { type: 'joined'|'left'|'renamed'|'moved'|'swapped'|'host'|'plan'|'starting'|'games', ... }.
+    // same name is a move, two seats that swapped their names are a swap. Events: { type: 'joined'|'left'|'renamed'|'moved'|'swapped'|'host'|'plan'|'fog'|'starting'|'games', ... }.
     function personIn(room, seat) { return room.slots[seat].state === SLOT.Client || room.slots[seat].state === SLOT.Host; }
     function diffRooms(prev, next) {
         var events = [];
@@ -285,9 +289,10 @@
                 events.push({ type: 'host', seat: next.leader, name: next.slots[next.leader].name, you: next.leader === next.you, before: before, back: back });
             }
         }
-        var planChanged = prev.map !== next.map || prev.teamA !== next.teamA || prev.teamB !== next.teamB || prev.mode !== next.mode;
+        var planChanged = prev.map !== next.map || prev.teamA !== next.teamA || prev.teamB !== next.teamB || prev.mode !== next.mode || prev.fog !== next.fog;
         for (s = 0; s < PLAYERS; s++) { if (prev.plan[s] !== next.plan[s]) planChanged = true; }
         if (planChanged) events.push({ type: 'plan' });
+        if (prev.fog !== next.fog && next.leader !== NO_LEADER) events.push({ type: 'fog', on: next.fog, name: next.slots[next.leader].name, you: next.leader === next.you });       // (protocol 28: the leader switched Fog of War)
         if (!prev.starting && next.starting) events.push({ type: 'starting' });
         if (prev.inGame !== next.inGame) events.push({ type: 'games', mask: next.inGame });
         if (prev.ready !== next.ready) events.push({ type: 'ready', mask: next.ready });
@@ -338,7 +343,7 @@
     //   'welcome' ({ seat, created, rejoin, replaced })   the room took us (created: our Hello made it; replaced: our Hello brought a key and the room seated us as a newcomer, because the seat of that key had ended: this
     //                               seat is a new one); the key is not in it (rejoinEntry() is how a page hands it to the game)
     //   'room' (room)               every Room message, then the events of diffRooms for it
-    //   'joined' | 'left' | 'renamed' | 'moved' | 'swapped' | 'host' | 'plan' | 'starting' | 'games'
+    //   'joined' | 'left' | 'renamed' | 'moved' | 'swapped' | 'host' | 'plan' | 'fog' | 'starting' | 'games'
     //   'notice' ({ text })         a line that the room itself says (the leader's notices, "<name>'s game did not come in time.")
     //   'chat' ({ sender, team, text })   a line of a player (a sender that is no color, and an empty line, are not heard: the game's own client drops them too)
     //   'gone'                      the room of our key does not exist any more (everybody left, a restart): the client makes the room again, without the key, and says 'welcome' with created set
@@ -619,7 +624,9 @@
         var kinds = plan.kinds;
         if (!kinds || kinds.length !== PLAYERS) return false;
         for (var i = 0; i < PLAYERS; i++) { if (!isWhole(kinds[i]) || kinds[i] < PLAN.Open || kinds[i] > PLAN.Nobody) return false; }
-        return this.send('plan', encodePlan(map, kinds, plan.teamA, plan.teamB, plan.mode));
+        var fog = plan.fog === undefined ? !!r.fog : plan.fog;           // (protocol 28: a plan that says nothing of fog keeps the room's, so a click on a map or a team never switches it off)
+        if (typeof fog !== 'boolean' || (fog && hasBotKind(kinds))) return false;        // (bots and Fog of War never mix: the room would refuse the whole plan, so nothing is sent)
+        return this.send('plan', encodePlan(map, kinds, plan.teamA, plan.teamB, plan.mode, fog));
     };
     // The leader makes the room public (listed on the server's list of games) or private; saying public to a public room is the refresh that keeps it so (the server makes an unused public room private after 30 minutes)
     LobbyClient.prototype.setPublic = function (isPublic) {

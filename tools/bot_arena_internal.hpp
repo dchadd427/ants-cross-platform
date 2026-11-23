@@ -34,6 +34,7 @@ struct Options {
     uint32_t repeat{1};
     bool replay_check{false};
     bool swimmer_trace{false};                     // --swimmer-trace: after every match one line per seat (its Swimmers, score, idle ants and power-ups taken) and one of the power-ups left on the ground
+    bool stuck_detail{false};                      // --stuck-detail: after every match one line for each of the first stuck spans (docs/BOT_UNSTUCK.md): when, which ant, where, what it was told
     sim::GameMode game_mode{sim::GameMode::HighestScore};   // --game-mode: the rules of every match of the run
     sim::StartTeams teams{};                       // --teams A+B: the pair of seats that starts as a team, the other two too when both play (the rooms' and the game's own way); free for all by default
     std::string save_replays;                      // a folder: every match is kept there as a replay (the server's store names and keeps them; the site's list shows them)

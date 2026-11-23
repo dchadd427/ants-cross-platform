@@ -221,14 +221,14 @@ const toastNode = (env) => env.body.findAll((e) => /(^|\s)al-toast(\s|$)/.test(e
 const shadeOf = (env) => env.body.findAll((e) => /(^|\s)al-shade(\s|$)/.test(e.className))[0] || null;
 const rows = (env) => shadeOf(env).findAll((e) => e.tagName === 'button' && e.hasAttribute('data-switch'));
 const joinRoom = (env, who) => env.last().receive(H.roomMessage([[C, 'Maya'], [who[0], who[1]], [E, ''], [E, '']], { you: 0, leader: 0 }));
-function inRoom(env) {                                                                   // Maya holds a room (made by My room), then goes to Home
-    env.home('mine').click();
+function inRoom(env) {                                                                   // Maya holds a room (made by the page), then goes to Home
+    env.makeRoom();
     env.arrive({ seat: 0, key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']], room: { you: 0, leader: 0 } });
 }
 {   // a person joins while Home shows
     const env = homePage();
     check('the part is loaded after the first paint', !!env.win.AntsHomeAlerts && env.lazyLoads.indexOf('home/alerts.js') !== -1 && env.lazyErrors.length === 0, env.lazyErrors.join());
-    inRoom(env); env.roomBar('rhome').click();
+    inRoom(env); env.toggleRoom();
     joinRoom(env, [C, 'Sam']);
     const t = toastOf(env);
     check('Home shows the alert for a person who joined: who and where, with Open', !!t && !t.hidden && /Sam joined as Red\./.test(t.textContent) && t.textContent.indexOf(env.win.AntsHomeAlerts.TEXT.open) !== -1);
@@ -236,7 +236,7 @@ function inRoom(env) {                                                          
     check('Open shows the Room', (t.findAll((e) => e.tagName === 'button')[0].click(), env.screen() === 'room') && t.hidden === true);
 }
 {   // the toast goes by itself
-    const env = homePage(); inRoom(env); env.roomBar('rhome').click(); joinRoom(env, [C, 'Sam']);
+    const env = homePage(); inRoom(env); env.toggleRoom(); joinRoom(env, [C, 'Sam']);
     const t = toastOf(env); check('it is up', !t.hidden); env.advance(5900); check('still up before six seconds', !t.hidden); env.advance(200); check('and gone after them', t.hidden === true);
     joinRoom(env, [C, 'Sam']); joinRoom(env, [E, '']); joinRoom(env, [C, 'Eve']);
     check('a later join is the same one toast with the new words', toastOf(env) === t && toastNode(env) === t && !t.hidden && /Eve joined as Red\./.test(t.textContent));
@@ -250,14 +250,14 @@ function inRoom(env) {                                                          
     check('a person joins while the Room shows: the page\'s own toast says it, and Home\'s alert stays away', env.$('toast').hidden === false && /Sam joined as Red\./.test(env.$('toast').textContent) && !toastOf(env));
 }
 {   // a computer player, and the room the page sees first
-    const env = homePage(); inRoom(env); env.roomBar('rhome').click();
+    const env = homePage(); inRoom(env); env.toggleRoom();
     joinRoom(env, [BOT, 'Pip (bot, Easy)']);
     check('a computer player sits down: no alert, no toast, no blinking', !toastOf(env) && env.$('toast').hidden === true && env.doc.title === 'Ants (1998)');
     env.hide(true); joinRoom(env, [BOT, 'Rex (bot, Hard)']);
     check('not even in the background', env.doc.title === 'Ants (1998)');
 }
 {   // the background
-    const env = homePage(); inRoom(env); env.roomBar('rhome').click(); env.hide(true);
+    const env = homePage(); inRoom(env); env.toggleRoom(); env.hide(true);
     joinRoom(env, [C, 'Sam']);
     check('a person joins while the page is in the background: the title says it', env.doc.title === '● Sam joined your room');
     env.advance(1000); check('and blinks', env.doc.title === 'Ants (1998)');
@@ -265,7 +265,7 @@ function inRoom(env) {                                                          
     check('the page is shown: it stops and the title is the page\'s own', env.doc.title === 'Ants (1998)' && (env.advance(5000), env.doc.title === 'Ants (1998)'));
 }
 {   // the switch for the join turns its alert off
-    const env = homePage({ 'ants.alerts.v1': '{"join":false}' }); inRoom(env); env.roomBar('rhome').click();
+    const env = homePage({ 'ants.alerts.v1': '{"join":false}' }); inRoom(env); env.toggleRoom();
     joinRoom(env, [C, 'Sam']);
     check('the switch off: no toast on Home, no second toast of the page, no blinking', !toastOf(env) && env.$('toast').hidden === true);
     env.hide(true); joinRoom(env, [E, '']); joinRoom(env, [C, 'Eve']);
@@ -305,7 +305,7 @@ function inRoom(env) {                                                          
     check('a press that began in the card and ended on the dimmed page does not', !!shadeOf(env));
     shadeOf(env).findAll((e) => e.tagName === 'button' && e.getAttribute('aria-label') === 'Close')[0].click();
     check('the Close button closes it', !shadeOf(env));
-    check('the switch kept in the sheet is what the join alert reads', (inRoom(env), env.roomBar('rhome').click(), joinRoom(env, [C, 'Sam']), !toastOf(env) && env.$('toast').hidden === true));
+    check('the switch kept in the sheet is what the join alert reads', (inRoom(env), env.toggleRoom(), joinRoom(env, [C, 'Sam']), !toastOf(env) && env.$('toast').hidden === true));
 }
 {   // a guest and a person who is logged in see the same sheet
     for (const me of ['guest', { login: true, you: { name: 'Maya', mod: false } }, undefined]) {
@@ -325,7 +325,7 @@ function inRoom(env) {                                                          
     env.body.findAll((e) => /(^|\s)al-menu(\s|$)/.test(e.className))[0].click();
     check('a sound in the table: its row is there, and the sheet is "Alerts and sounds"', rows(env).map((r) => r.getAttribute('data-switch')).join() === 'join,start,soundJoin' && shadeOf(env).textContent.indexOf(env.win.AntsAlertCore.TEXT.sheetSounds) !== -1);
     shadeOf(env).findAll((e) => e.tagName === 'button' && e.getAttribute('aria-label') === 'Close')[0].click();
-    inRoom(env); env.roomBar('rhome').click(); joinRoom(env, [C, 'Sam']);
+    inRoom(env); env.toggleRoom(); joinRoom(env, [C, 'Sam']);
     check('the sound plays with the alert, once', plays.length === 1 && plays[0] === '/home/alert_join.mp3');
     env.advance(2100); joinRoom(env, [E, '']); joinRoom(env, [C, 'Eve']);
     check('and again after two seconds', plays.length === 2);

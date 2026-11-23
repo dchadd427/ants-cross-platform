@@ -6,6 +6,7 @@ add_library(ants_ai STATIC
     map_info.cpp
     island_info.cpp
     reach_guard.cpp
+    refusal_memory.cpp
     bomb_detour.cpp
     gate_info.cpp
     gate_goal.cpp
@@ -35,6 +36,8 @@ add_library(ants_ai STATIC
     opportunity_task.cpp
     thief_guard.cpp
     miner_flight_task.cpp
+    plug_task.cpp
+    free_thief_task.cpp
     standard_bot.cpp
     brawl_task.cpp
     team_up.cpp

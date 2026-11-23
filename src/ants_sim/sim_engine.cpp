@@ -924,7 +924,7 @@ void SimulationEngine::set_match_time_remaining_ms(uint32_t ms) {
 
 void SimulationEngine::set_game_mode(GameMode mode) {
     impl_->game_mode_ = mode;
-    impl_->hill_open_187_ = false; impl_->end_fix_187_ = true; impl_->no_drops_187_ = true; impl_->last_side_rule_ = true; impl_->fire_wall_as_original_ = true; impl_->bite_skips_empty_record_ = true;       // (the rules of a match that is played now; the player of an old recording says otherwise after this: set_hill_open_187, set_end_fix_187, set_no_drops_187, set_last_side_rule, set_fire_wall_as_original, set_bite_skips_empty_record)
+    impl_->hill_open_187_ = false; impl_->end_fix_187_ = true; impl_->no_drops_187_ = true; impl_->last_side_rule_ = true; impl_->fire_wall_as_original_ = true; impl_->bite_skips_empty_record_ = true; impl_->path_answers_after_commands_ = true;       // (the rules of a match that is played now; the player of an old recording says otherwise after this: set_hill_open_187, set_end_fix_187, set_no_drops_187, set_last_side_rule, set_fire_wall_as_original, set_bite_skips_empty_record, set_path_answers_after_commands)
     impl_->world_state_dirty_ = true;
 }
 

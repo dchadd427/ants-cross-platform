@@ -465,7 +465,7 @@ bool harms_economy(const BotView& view, const MapInfo& map, const LevelPlan& pla
 
 /// Whose economy a bomb or a fire wall on `tile` is in the way of: 1 the own (harms_economy), 2 the ally's (with plan.ally_help: within counter_hill_radius of the ally's hill, or
 /// within counter_pile_radius of a pile that the ally's hill reaches), 0 nobody's
-int harm_to(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile, bool map_owned = false) noexcept;
+int harm_to(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile, bool map_owned = false, const std::vector<sim::TileCoord>* shut_in = nullptr) noexcept;
 
 // ---- rank 3: the raids -------------------------------------------------------------------------------------------------------------------------------------
 

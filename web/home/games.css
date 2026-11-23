@@ -123,24 +123,15 @@
 @keyframes gtoastin { from { opacity: 0; transform: translate(-50%, 10px); } }
 @media (prefers-reduced-motion: reduce) { .gtoast { animation: none; } }
 
-/* ---- the Room's card: the switch (a leader), the chip (a guest), the line under them ---- */
-.vis { display: inline-flex; gap: 10px; margin: 0 auto 0 18px; align-self: center; }
-.vbtn { min-height: 44px; display: block; padding: 5px 14px 3px; font-size: 17px; }
-.vbtn small { margin-left: 8px; font-size: 13px; opacity: .9; }
-.vbtn b { font-weight: 500; }
-.vbtn[aria-pressed="true"] { color: var(--gold); background-color: #0b1a17; box-shadow: inset 0 0 0 2px var(--frame-hi), 3px 4px 0 var(--shadow); cursor: default; }
+/* ---- the Rules sheet's first row: Invite only | Public, and the line under it (a guest reads it, the leader changes it; web/home/room.css has the row) ---- */
+.vis { display: flex; margin: 0; border: 2px solid var(--edge); border-radius: 8px; overflow: hidden; }
+.vbtn { flex: 1 1 0; min-width: 0; min-height: 38px; padding: 2px 12px; font-size: 15px; border: 0; border-radius: 0; box-shadow: var(--bevel-sm); white-space: nowrap; }
+.vbtn + .vbtn { border-left: 2px solid var(--edge); }
+.vbtn[aria-pressed="true"] { color: var(--gold); background-color: #0b1a17; box-shadow: inset 0 0 0 2px var(--frame-hi); cursor: default; }
 .vbtn[disabled] { cursor: default; }
-.vwide { display: none; }
-.visnote { margin: 0 0 8px; font-size: 15px; line-height: 1.35; color: #9fe0bd; }
-.vistag { display: inline-block; margin-left: 12px; padding: 0 10px; font-size: 14px; line-height: 1.7; vertical-align: middle; color: var(--gold); background: #2a2208; border: 1px solid #6b5a14; border-radius: 3px; }
-.vistag[hidden], .vis[hidden], .visnote[hidden] { display: none; }
-@media (min-width: 721px) { .vwide { display: inline; } .visnote { margin: -6px 0 12px; } }
-@media (max-width: 720px) {
-    .vis { display: flex; margin: 12px 0 0; }
-    .vbtn { flex: 1 1 0; min-width: 0; padding: 5px 8px 3px; }
-    .visnote { margin: 8px 0 0; }
-}
-@media (max-width: 359px) { .vbtn { padding: 5px 4px 3px; font-size: 4.7vw; } .vbtn small { margin-left: .47em; font-size: .765em; } }
+.visnote { margin: 0; font-size: 13px; line-height: 1.35; color: var(--muted); }
+.vis[hidden], .visnote[hidden] { display: none; }
+@media (max-width: 700px) { .vbtn { min-height: 40px; } }
 
 /* ---- a phone upright and a short window ---- */
 @media (max-width: 720px) { .gempty.gslim { grid-template-columns: minmax(0, 1fr); grid-template-areas: "t" "l" "b"; } .gempty.gslim .gemhost { justify-self: start; margin-top: 14px; } .gphead { align-items: center; } .gptitle { flex: 1 1 auto; } .gcodelink { order: 1; } .gpcount { order: 2; flex: 1 0 100%; margin-left: 0; text-align: left; } .gpop { padding: 12px 12px 14px; } .gitem { gap: 10px; padding: 8px 8px; } .gmap { width: 52px; height: 52px; } .gname { font-size: 19px; } .gcode .joinbox input { min-width: 0; } }
@@ -148,3 +139,5 @@
 @media (max-height: 350px), (max-width: 260px) { .gshade { padding: 8px; } .gmark { margin-bottom: 6px; } .gmark.shadow .ant { --k: 1; } .gcline { margin-bottom: 8px; } .gcbtns .gyes.big { min-height: 48px; font-size: 22px; } .gcnote { margin: 6px 0; } .gbar, .gconfirm .gitem { margin-bottom: 10px; } }       /* (a short window or a zoomed phone: the none card fits without a scroll) */
 @media (max-width: 260px) { .gconfirm { padding: 10px; } .gctitle { margin-bottom: 6px; font-size: 20px; } .gcline { font-size: 14px; } .gcnote { font-size: 13px; } }
 @media (max-height: 460px) { .gempty { padding: 8px 12px; gap: 2px; } .gempty .ant { display: none; } .gemtitle { font-size: 20px; } .gemhost { min-height: 44px; margin-top: 4px; } }       /* (a sideways phone: the empty state keeps its Host a game in view) */
+
+.gfog { display: inline-block; box-sizing: border-box; padding: 0 6px; font-size: 12px; letter-spacing: .06em; line-height: 16px; text-transform: uppercase; white-space: nowrap; color: #cfe3ee; background: #14232c; border: 1px solid #4a7388; border-radius: 3px; }       /* (Fog of War: the look of the 187 tag in a cool color) */

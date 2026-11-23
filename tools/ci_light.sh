@@ -48,14 +48,14 @@ is_light() {    # is_light PATH: 0 when the path is one of the light kinds and n
         # (test_map_list: they must exist)
         web/front/lobby_rules.js | web/front/preview_*.png) return 1 ;;
         # the server script of the macOS job (tests/scripts/test_ants_server.sh): it reads the two pages, web_fill_check.js runs their code, and web_lobby_server_check.js and
-        # web_lobby_handoff_check.js run the lobby page against the real server and the native game, in the fake browser of web_page_harness.js (shapes.js; the scripts of front/ and home/ that the
+        # web_lobby_handoff_check.js run the lobby page against the real server and the native game, and web_lobby_four_colors_check.js plays its four colors (with web_home_games_rig.js), in the fake browser of web_page_harness.js (shapes.js; the scripts of front/ and home/ that the
         # harness loads: the seat-key reader, the codec of the protocol, the name of the person, the chat, the rematch strip, the game modes and types, the map picker, Home and the Games list)
         web/lobby.html | web/shell.html | web/shapes.js | web/rejoin_key.js) return 1 ;;
-        web/front/lobby_net.js | web/front/lobby_chat.js | web/front/player_name.js | web/front/rematch.js | web/front/game_modes.js | web/front/game_type.js | web/front/map_picker.js) return 1 ;;
+        web/front/lobby_net.js | web/front/lobby_chat.js | web/front/player_name.js | web/front/rematch.js | web/front/game_modes.js | web/front/game_type.js | web/front/room_fog.js | web/front/room_sheet.js | web/front/seat_menu.js | web/front/map_picker.js) return 1 ;;
         web/home/home.js | web/home/games.js) return 1 ;;
         # the alerts (docs/HOME_SCREEN.md "Alerts"): the page harness loads the shared script, and the front page's part when it loads the parts after the first paint
         web/alert_core.js | web/home/alerts.js) return 1 ;;
-        tests/scripts/web_fill_check.js | tests/scripts/web_lobby_server_check.js | tests/scripts/web_lobby_handoff_check.js | tests/scripts/web_page_harness.js) return 1 ;;
+        tests/scripts/web_fill_check.js | tests/scripts/web_lobby_server_check.js | tests/scripts/web_lobby_handoff_check.js | tests/scripts/web_lobby_four_colors_check.js | tests/scripts/web_home_games_rig.js | tests/scripts/web_page_harness.js) return 1 ;;
         # ---- the light kinds ----
         web/* | docs/*) return 0 ;;
         CHANGELOG.md | README.md) return 0 ;;

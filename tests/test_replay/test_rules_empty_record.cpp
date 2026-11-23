@@ -84,6 +84,7 @@ Made make(uint16_t rules) {
     sim::SimulationEngine engine;
     engine.set_game_mode(sim::GameMode::HighestScore);
     engine.set_bite_skips_empty_record(bite_skips_empty_record_rules(rules));
+    engine.set_path_answers_after_commands(path_answers_after_commands_rules(rules));
     engine.init(level, scenario::kSeed, scenario::kRoster);
     Recorder rec(scenario_head(rules));
     uint32_t turn = 0;
@@ -131,19 +132,19 @@ int main() {
     const assets::LevelData level = scenario::level();
 
     TEST_CASE("RP17.1 The original's game is recorded under 13 and played under 5, 8, 9 and 13; only 13 has the rule of the empty record; 187 keeps its numbers; a refusal names all nine") {
-        ASSERT_TRUE(kSimRules == 13 && kSimRulesBeforeEmptyRecord == 9 && kSimRulesEmptyRecordFirst == 13 && kSimRulesBeforeFireWall == 8 && kSimRulesBeforeLastSide == 5 && kSimRulesMode187 == 12 && kSimRulesNewest == 13);
-        ASSERT_TRUE(sim_rules_for_mode(0) == 13 && sim_rules_for_mode(1) == 12);
-        for (uint16_t rules = 0; rules < 16; ++rules) {
-            ASSERT_EQ(plays_mode_rules(0, rules), rules == 5 || rules == 8 || rules == 9 || rules == 13);
-            ASSERT_EQ(plays_mode_rules(k187, rules), rules == 6 || rules == 7 || rules == 10 || rules == 11 || rules == 12);
+        ASSERT_TRUE(kSimRules == 14 && kSimRulesBeforeCantGo == 13 && kSimRulesBeforeEmptyRecord == 9 && kSimRulesEmptyRecordFirst == 13 && kSimRulesBeforeFireWall == 8 && kSimRulesBeforeLastSide == 5 && kSimRulesMode187 == 15 && kSimRulesMode187BeforeCantGo == 12 && kSimRulesNewest == 15);
+        ASSERT_TRUE(sim_rules_for_mode(0) == 14 && sim_rules_for_mode(1) == 15);
+        for (uint16_t rules = 0; rules < 18; ++rules) {
+            ASSERT_EQ(plays_mode_rules(0, rules), rules == 5 || rules == 8 || rules == 9 || rules == 13 || rules == 14);
+            ASSERT_EQ(plays_mode_rules(k187, rules), rules == 6 || rules == 7 || rules == 10 || rules == 11 || rules == 12 || rules == 15);
             ASSERT_EQ(bite_skips_empty_record_rules(rules), rules >= 13);                    // (187's 12 has no food on the ground: it plays the same with the original's lookup)
         }
-        ASSERT_EQ(played_rules_text(), std::string("5, 6, 7, 8, 9, 10, 11, 12 and 13"));
+        ASSERT_EQ(played_rules_text(), std::string("5, 6, 7, 8, 9, 10, 11, 12, 13, 14 and 15"));
         Header head;
         head.map_name = "TINY.LVL";
         head.roster = 0x0F;
-        ASSERT_EQ(head.sim_rules, 13);                                                       // (a head that nobody changed is a head of the original's game now)
-        for (const uint16_t rules : {uint16_t{5}, uint16_t{8}, uint16_t{9}, uint16_t{13}}) {
+        ASSERT_EQ(head.sim_rules, 14);                                                       // (a head that nobody changed is a head of the original's game now)
+        for (const uint16_t rules : {uint16_t{5}, uint16_t{8}, uint16_t{9}, uint16_t{13}, uint16_t{14}}) {
             Header h = head;
             h.sim_rules = rules;
             Replay r;
@@ -174,27 +175,28 @@ int main() {
         }
         Header plain = head;
         Recorder fresh(plain);
-        ASSERT_TRUE(fresh.replay().head.sim_rules == 13 && fresh.replay().head.mode == 0);
+        ASSERT_TRUE(fresh.replay().head.sim_rules == 14 && fresh.replay().head.mode == 0);
         plain.sim_rules = 9;
         Recorder old(plain);
         ASSERT_EQ(old.replay().head.sim_rules, 9);                                           // (a head that says 9 is recorded as 9: the engine that plays it is set up for it)
         Header foreign = head;
-        foreign.sim_rules = 14;
+        foreign.sim_rules = 16;
         ASSERT_FALSE(plays_here(foreign));
-        ASSERT_TRUE(rules_refusal(foreign).find("simulation rules 5, 6, 7, 8, 9, 10, 11, 12 and 13") != std::string::npos);
+        ASSERT_TRUE(rules_refusal(foreign).find("simulation rules 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 and 15") != std::string::npos);
         // the player of a recording sets the engine's rule up from the head's number
-        for (const uint16_t rules : {uint16_t{5}, uint16_t{8}, uint16_t{9}, uint16_t{13}}) {
+        for (const uint16_t rules : {uint16_t{5}, uint16_t{8}, uint16_t{9}, uint16_t{13}, uint16_t{14}}) {
             sim::SimulationEngine engine;
             Replay r;
             r.head = scenario_head(rules);
             begin_match(engine, r, level, false);
-            ASSERT_EQ(engine.bite_skips_empty_record(), rules == 13);
+            ASSERT_EQ(engine.bite_skips_empty_record(), rules >= 13);
         }
         {
             sim::SimulationEngine engine;
             Replay r;
             r.head = scenario_head(12);
             r.head.set_mode(k187);
+            r.head.sim_rules = 12;                                                           // (set_mode puts the number of the mode now)
             begin_match(engine, r, level, false);
             ASSERT_FALSE(engine.bite_skips_empty_record());                                  // (a 187 recording of 12 plays as the build before made of it)
         }
@@ -231,7 +233,7 @@ int main() {
 
     TEST_CASE("RP17.3 The same match recorded under 13 feeds the Workers only as many times as the objects hold units, and is another match; each file is another match under the other number") {
         const Made nine = make(kSimRulesBeforeEmptyRecord);
-        const Made thirteen = make(kSimRules);
+        const Made thirteen = make(kSimRulesBeforeCantGo);
         ASSERT_TRUE(thirteen.error.empty() && !thirteen.file.empty() && nine.error.empty());
         ASSERT_TRUE(thirteen.replay.complete && thirteen.replay.head.sim_rules == 13 && plays_here(thirteen.replay.head));
         ASSERT_EQ(thirteen.bites, scenario::kUnitsFirst + scenario::kUnitsSecond);           // (the first object's unit, then the three of the second; the last two Workers find the tile empty)
@@ -255,15 +257,16 @@ int main() {
         const Outcome thirteen_as_nine = play(with_rules(thirteen.replay, 9), level);
         ASSERT_FALSE(thirteen_as_nine.ok);
         // and a number nobody plays is not played at all
-        ASSERT_FALSE(play(with_rules(thirteen.replay, 14), level).ran);
+        ASSERT_FALSE(play(with_rules(thirteen.replay, 16), level).ran);
         ASSERT_FALSE(play(with_rules(thirteen.replay, 12), level).ran);
     } TEST_END();
 
     TEST_CASE("RP17.4 A copy of the engine in the middle of the match keeps the rule of its number and plays on to the same hash, under 13 and under 9 (a client's predicted engine is such a copy)") {
-        for (const uint16_t rules : {kSimRules, kSimRulesBeforeEmptyRecord}) {
+        for (const uint16_t rules : {kSimRulesBeforeCantGo, kSimRulesBeforeEmptyRecord}) {
             sim::SimulationEngine engine;
             engine.set_game_mode(sim::GameMode::HighestScore);
             engine.set_bite_skips_empty_record(bite_skips_empty_record_rules(rules));
+            engine.set_path_answers_after_commands(path_answers_after_commands_rules(rules));
             engine.init(level, scenario::kSeed, scenario::kRoster);
             uint32_t turn = 0;
             const auto step = [&](sim::SimulationEngine& e) {
@@ -279,7 +282,7 @@ int main() {
                 step(copy);
                 ASSERT_TRUE(engine.state_hash() == copy.state_hash());
             }
-            ASSERT_EQ(copy.bite_skips_empty_record(), rules == kSimRules);
+            ASSERT_EQ(copy.bite_skips_empty_record(), rules == kSimRulesBeforeCantGo);
             ASSERT_EQ(engine.bite_skips_empty_record(), copy.bite_skips_empty_record());
         }
     } TEST_END();

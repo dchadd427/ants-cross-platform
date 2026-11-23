@@ -161,9 +161,16 @@ def main():
         status, headers, names, body = get(path)
         page_headers(path, status, headers, names)
         check('href="/front/classic.css"' in body and not GAME.search(body) and not LOBBY.search(body), "%s is a page of its own that links the Classic stylesheet (not the game page, not the front page)" % path)
-    for path, want in (("/catalog", "/asset_catalog/"), ("/viewer", "/asset_catalog/"), ("/asset_catalog", "/asset_catalog/")):
+    for path, want in (("/catalog", "/asset_catalog/"), ("/viewer", "/asset_catalog/"), ("/asset_catalog", "/asset_catalog/"), ("/test_3d", "/test_3d/"), ("/test_3d/compare.html", "/test_3d/")):
         status, headers, names, body = get(path)
         check(status == 301 and headers.get("location") == want, "%s answers 301 to %s (%s %s)" % (path, want, status, headers.get("location")))
+    status, headers, names, body = get("/test_3d/")
+    page_headers("/test_3d/", status, headers, names)
+    check(headers.get("x-robots-tag") == "noindex" and not GAME.search(body) and not LOBBY.search(body), "/test_3d/ carries X-Robots-Tag: noindex and is not the game or front page")
+    status, headers, names, body = get("/test_3d/compare.html?x=1")
+    check(status == 301 and headers.get("location") == "/test_3d/?x=1", "/test_3d/compare.html?x=1 answers 301 to /test_3d/?x=1 (%s %s)" % (status, headers.get("location")))
+    status, headers, names, body = get("/test_3d/nothing.png")
+    check(status == 404 and bool(NOT_FOUND.search(body)) and not GAME.search(body), "/test_3d/nothing.png is a 404 with the site's 404 page (%s)" % status)
 
     print("[web routes] the match history: its two pages, their stylesheet and the code they share with the player are files of the site (/history, /live and /replays themselves are the game server's, tests/scripts/test_nginx_replays.py)")
     for path, marker in (("/matches", 'id="list-panel"'), ("/match", 'id="sections"')):

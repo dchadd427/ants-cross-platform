@@ -1,5 +1,6 @@
 // Tests of the lock-step network core: failures of peers, protocol 11 and 12, team chat at the wire, protocol 17 and the restart records
 #include "lockstep_fixtures.hpp"
+#include "../common/protocol_pin.hpp"
 
 void run_failure_tests() {
     TEST_CASE("S2.1 Dedicated Server: A Host Without A Seat Referees Four Clients Over 25 - 120 ms Links; Every Machine, The Referee Included, Stays Bit-Identical For 60 Seconds") {
@@ -1019,7 +1020,7 @@ void run_failure_tests() {
 
 void run_protocol11_tests() {
     TEST_CASE("N2.89 Protocol 11: StartRequest Carries A Fill Level (Every Level Round-Trips, Every Truncation, Trailing Byte And Level Above 3 Is Refused, The Names And Parsing Of The Levels), The Room's Notices Are Chat From Sender 255 (Round Trip, Limits), And 300000 Mutated StartRequests And Chat Lines Only Give Messages That Encode Back To The Same Bytes") {
-        ASSERT_EQ(kProtocolVersion, 27);                                 // (the Chat of protocol 11 is the Chat of protocol 17; the StartRequest grew in 13: a level for each seat and the teams, N2.100 has its rules, here the one level of protocol 11 is the same level in every seat)
+        ASSERT_EQ(kProtocolVersion, ants_test::kPinnedProtocol);                                 // (the Chat of protocol 11 is the Chat of protocol 17; the StartRequest grew in 13: a level for each seat and the teams, N2.100 has its rules, here the one level of protocol 11 is the same level in every seat)
         ASSERT_TRUE(kFillLevelLast == 3 && kRoomSender == 255 && static_cast<int>(MsgType::StartRequest) == 24 && static_cast<int>(MsgType::Chat) == 9);
         // every level
         const std::pair<FillLevel, const char*> levels[] = {{FillLevel::None, "none"}, {FillLevel::Easy, "easy"}, {FillLevel::Medium, "medium"}, {FillLevel::Hard, "hard"}};
@@ -1623,7 +1624,7 @@ void run_protocol12_tests() {
 
 void run_protocol17_tests() {
     TEST_CASE("N2.112 Protocol 17, The Game Mode: The Start, The Room And The Plan End With One Byte, 0 (The Original's Highest Score) Or 1 (187); Every Byte Above sim::kLastGameMode Is Refused In Each Of Them (Never Played As Another Mode), So Are The Layouts Of Protocol 16 (No Byte), A Byte More And Every Truncation; The Mode Is Not Part Of The Seating Hash; The Words Of The Modes Parse Exactly") {
-        ASSERT_TRUE(kProtocolVersion == 27 && sim::kLastGameMode == 1 && sim::valid_game_mode(0) && sim::valid_game_mode(1) && !sim::valid_game_mode(2) && !sim::valid_game_mode(255));
+        ASSERT_TRUE(kProtocolVersion == ants_test::kPinnedProtocol && sim::kLastGameMode == 1 && sim::valid_game_mode(0) && sim::valid_game_mode(1) && !sim::valid_game_mode(2) && !sim::valid_game_mode(255));
         ASSERT_TRUE(static_cast<uint8_t>(sim::GameMode::HighestScore) == 0 && static_cast<uint8_t>(sim::GameMode::Kills187) == 1);
         // the Start: the last byte, after the platforms of the four seats
         {
@@ -1653,7 +1654,7 @@ void run_protocol17_tests() {
             StartMsg keep;
             keep.mode = 1;
             std::vector<uint8_t> two = bytes;
-            two.back() = 2;
+            two[two.size() - 2] = 2;
             ASSERT_FALSE(decode(two, keep));
             ASSERT_EQ(keep.mode, 1);                                                                 // (a refused message leaves its target alone)
             std::vector<uint8_t> v16(bytes.begin(), bytes.end() - 1);                               // protocol 16's Start: no mode byte
@@ -1701,7 +1702,7 @@ void run_protocol17_tests() {
             other.mode = 0;
             ASSERT_EQ(seating_hash(plain), seating_hash(other));
         }
-        // the Plan: the last byte, after the two team bytes
+        // the Plan: the byte after the two team bytes (protocol 28 puts Fog of War after it: N2.115)
         {
             PlanMsg plan;
             plan.map_name = "TINY.LVL";
@@ -1711,13 +1712,13 @@ void run_protocol17_tests() {
             const std::vector<uint8_t> original = encode(plan);
             plan.mode = 1;
             const std::vector<uint8_t> bytes = encode(plan);
-            ASSERT_TRUE(bytes.size() == original.size() && bytes.back() == 1 && original.back() == 0 && std::equal(bytes.begin(), bytes.end() - 1, original.begin()));
+            ASSERT_TRUE(bytes.size() == original.size() && bytes[bytes.size() - 2] == 1 && original[original.size() - 2] == 0 && bytes.back() == original.back() && std::equal(bytes.begin(), bytes.end() - 2, original.begin()));
             PlanMsg back;
             ASSERT_TRUE(decode(bytes, back) && back.mode == 1 && back.map_name == "TINY.LVL" && back.plan == plan.plan && back.team_a == 0 && back.team_b == 1 && encode(back) == bytes);
             ASSERT_TRUE(decode(original, back) && back.mode == 0 && encode(back) == original);
             for (unsigned value = 0; value < 256; ++value) {
                 std::vector<uint8_t> one = bytes;
-                one.back() = static_cast<uint8_t>(value);
+                one[one.size() - 2] = static_cast<uint8_t>(value);
                 PlanMsg got;
                 ASSERT_EQ(decode(one, got), value <= sim::kLastGameMode);
                 if (value <= sim::kLastGameMode) ASSERT_TRUE(got.mode == value && encode(got) == one);
@@ -1729,7 +1730,7 @@ void run_protocol17_tests() {
             two.back() = 2;
             ASSERT_FALSE(decode(two, keep));
             ASSERT_TRUE(keep.map_name == "keep" && keep.mode == 1);
-            std::vector<uint8_t> v16(bytes.begin(), bytes.end() - 1);                               // protocol 16's Plan: no mode byte
+            std::vector<uint8_t> v16(bytes.begin(), bytes.end() - 2);                               // protocol 16's Plan: no mode byte (and none of fog)
             ASSERT_FALSE(decode(v16, back));
             std::vector<uint8_t> longer = bytes;
             longer.push_back(0);

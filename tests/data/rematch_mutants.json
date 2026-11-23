@@ -394,8 +394,8 @@
   {
    "id": "rules_note_for_a_player",
    "file": "web/front/lobby_rules.js",
-   "old": "            note: g || away ? '' : startNote(",
-   "new": "            note: away ? '' : startNote(",
+   "old": "if (!g && missing) return { text: missing, tone: 'warn' };",
+   "new": "if (missing) return { text: missing, tone: 'warn' };",
    "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
   },
   {
@@ -462,10 +462,10 @@
    "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
   },
   {
-   "id": "lobby_page_no_note_under_start",
+   "id": "lobby_page_no_line_under_start",
    "file": "web/lobby.html",
-   "old": "            setText($('start-note'), side.note); $('start-note').hidden = !side.note;\n",
-   "new": "",
+   "old": "setText($('go-status'), side.status); $('go-status').className = 'go-status' + (side.statusTone ? ' ' + side.statusTone : '');",
+   "new": "setText($('go-status'), ''); $('go-status').className = 'go-status' + (side.statusTone ? ' ' + side.statusTone : '');",
    "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
   },
   {
