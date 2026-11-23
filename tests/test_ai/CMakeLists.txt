@@ -72,9 +72,12 @@ target_include_directories(test_ai PRIVATE
 
 target_link_libraries(test_ai PRIVATE ants_test_paths)
 
-add_test(NAME test_ai COMMAND test_ai)
+# The suite is run in two halves (test_ai_main.cpp): the whole of it took 860 seconds on a slow Windows runner, which cuts a test off at 900
+add_test(NAME test_ai COMMAND test_ai --part 1)
+add_test(NAME test_ai_part2 COMMAND test_ai --part 2)
 # COST (seconds of a CI run): ctest starts the dearest tests first, so that the longest one does not start last and run alone at the end
-set_tests_properties(test_ai PROPERTIES COST 120)
+set_tests_properties(test_ai PROPERTIES COST 100)
+set_tests_properties(test_ai_part2 PROPERTIES COST 140)
 
 # The island matches (run_tests.sh suite 2.28): whole matches of four standard bots on ISLANDS and SMALL at every level (the expedition, the bridges and the ferry). Kept apart from test_ai: it plays
 # about a minute of matches.
