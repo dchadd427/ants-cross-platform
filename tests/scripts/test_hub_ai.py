@@ -515,7 +515,8 @@ class TheKeyRule(AiTest):
         for path in ("/hub/ai/v1/call", "/hub/ai/mcp"):
             r = hc.request(self.rig.port, "GET", path, [("X-Client-Address", self.address())])
             self.assertEqual(r.status, 405, path)
-            self.assertEqual(self.door(self.key, path=path, raw=b"x" * 65537).status, 413, path)
+            promised = [("X-Client-Address", self.address()), ("Content-Type", JSON), ("Authorization", "Bearer " + self.key), ("Content-Length", "65537")]
+            self.assertEqual(hc.request(self.rig.port, "POST", path, promised, b"", send_length=False).status, 413, path)          # (the length is promised and no byte of it is sent: the answer comes before any is read, and no reset can eat it)
             self.assertEqual(self.door(self.key, path=path, raw=b"").status, 400, path)
         self.assertEqual(self.door(self.key, "map_info", path="/hub/ai/v1/call?x=1").status, 404)
         with socket.create_connection(("127.0.0.1", self.rig.port), timeout=5) as s:                    # (a body that is promised and never sent holds nothing for a bad key: it is refused first)
