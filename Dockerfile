@@ -9,7 +9,7 @@
 FROM emscripten/emsdk:3.1.58@sha256:b640884dffe6ffd6270b4e61548dc2c597f01aaf2c8d7b788009cb7f4719dd20 AS emsdk-warm
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ccache && \
+    apt-get install -y --no-install-recommends ccache python3-numpy python3-pil && \
     rm -rf /var/lib/apt/lists/*
 
 COPY docker/emsdk_warm.cpp /warm/emsdk_warm.cpp
@@ -163,38 +163,22 @@ COPY asset_catalog/catalog_data.js /src/asset_catalog/catalog_data.js
 COPY tools/map_atlas.py /src/tools/map_atlas.py
 RUN python3 tools/map_atlas.py mapmaker_atlas && test -s mapmaker_atlas/atlas.json && test -s mapmaker_atlas/ground.png && test -s mapmaker_atlas/objects.png
 
-# =============================================================================
-# Stage 2b: Build Stylized 3D Ant Models & 1998 Comparison Viewer (/test_3d/)
-# =============================================================================
-# Isolated Debian/Python stage (independent of the Emscripten C++ compile layers above) so changes
-# to 3D models or viewer files never recompile the game, and git stays free of generated .glb files.
-FROM debian:bookworm-slim AS ant-models
-
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends python3 python3-numpy python3-pil && \
-    rm -rf /var/lib/apt/lists/*
-
-WORKDIR /src
-COPY tools/ant_models/ ./tools/ant_models/
-COPY tools/front_page_art/artlib.py ./tools/front_page_art/artlib.py
-COPY asset_catalog/catalog_data.js ./asset_catalog/catalog_data.js
-COPY docs/chd_table4_animations.json ./docs/chd_table4_animations.json
-COPY Original-Ants/ants.chd ./Original-Ants/ants.chd
-
-RUN rm -rf tools/ant_models/models && \
-    mkdir -p /ant_models_out/models && \
-    python3 -m tools.ant_models.build_all --out /ant_models_out/models && \
+# Stylized 3D Ant Models & 1998 Comparison Viewer (/test_3d/): built after the compile and atlas layers so edits to 3D models or viewer files never recompile the game, reading the public animation table from asset_catalog/catalog_data.js (never docs/).
+COPY tools/ant_models/ /src/tools/ant_models/
+COPY tools/front_page_art/artlib.py /src/tools/front_page_art/artlib.py
+RUN mkdir -p test_3d/models && \
+    python3 -m tools.ant_models.build_all --out test_3d/models && \
     cp tools/ant_models/compare.html tools/ant_models/viewer.html tools/ant_models/viewer.css \
        tools/ant_models/compare.js tools/ant_models/viewer.js tools/ant_models/viewer_actions.js \
        tools/ant_models/viewer_gltf.js tools/ant_models/viewer_render.js \
-       tools/ant_models/viewer_status.js tools/ant_models/viewer_version.js /ant_models_out/ && \
-    python3 -c 'import gzip, pathlib; [p.with_name(p.name+".gz").write_bytes(gzip.compress(p.read_bytes(), compresslevel=9, mtime=0)) for p in sorted(pathlib.Path("/ant_models_out/models").iterdir()) if p.suffix in (".glb", ".json")]' && \
-    test -s /ant_models_out/compare.html && test -s /ant_models_out/viewer.html && \
-    test -s /ant_models_out/models/manifest.json && test -s /ant_models_out/models/orig_sprites.json && \
+       tools/ant_models/viewer_status.js tools/ant_models/viewer_version.js test_3d/ && \
+    python3 -c 'import gzip, pathlib; [p.with_name(p.name+".gz").write_bytes(gzip.compress(p.read_bytes(), compresslevel=9, mtime=0)) for p in sorted(pathlib.Path("test_3d/models").iterdir()) if p.suffix in (".glb", ".json")]' && \
+    test -s test_3d/compare.html && test -s test_3d/viewer.html && \
+    test -s test_3d/models/manifest.json && test -s test_3d/models/orig_sprites.json && \
     for c in worker combat thief bomber swimmer fire; do \
-        test -s "/ant_models_out/models/${c}.glb" && test -s "/ant_models_out/models/${c}.glb.gz" && \
-        test -s "/ant_models_out/models/orig_sprites_extra_${c}.json" && \
-        test -s "/ant_models_out/models/orig_sprites_extra_${c}.json.gz" || exit 1; \
+        test -s "test_3d/models/${c}.glb" && test -s "test_3d/models/${c}.glb.gz" && \
+        test -s "test_3d/models/orig_sprites_extra_${c}.json" && \
+        test -s "test_3d/models/orig_sprites_extra_${c}.json.gz" || exit 1; \
     done
 
 # =============================================================================
@@ -314,7 +298,7 @@ COPY --from=builder /src/changelog/changelog.html /src/changelog/whats_new.json 
 COPY asset_catalog/ /usr/share/nginx/html/asset_catalog/
 
 # 3D Ant Models & 1998 Comparison Viewer (/test_3d/, Compare 1998 default + 3D Studio toggle)
-COPY --from=ant-models /ant_models_out/ /usr/share/nginx/html/test_3d/
+COPY --from=builder /src/test_3d/ /usr/share/nginx/html/test_3d/
 
 # The admin page (docs/MAP_SUBMISSIONS.md "The admin page"): the address /admin is typed, nothing links to it; its API and the logon are paths of docker/nginx.conf
 COPY --from=builder /src/web/admin.html /usr/share/nginx/html/admin.html

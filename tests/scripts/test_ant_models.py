@@ -1384,6 +1384,52 @@ class All1998ClipsAndViewerTests(unittest.TestCase):
         for aid in shared_extra_ids:
             self.assertTrue(by_id[aid].get("extra"), f"Shared extra action {aid!r} must set extra=true")
 
+    def test_orig_sprites_catalog_js_fallback_matches_docs_table(self):
+        from pathlib import Path
+        from tools.ant_models import orig_sprites
+
+        from_docs = orig_sprites._load_animations_by_name(orig_sprites.DEFAULT_ANIM_JSON)
+        from_catalog = orig_sprites._load_animations_from_catalog_js(orig_sprites.DEFAULT_CATALOG_JS)
+        self.assertEqual(len(from_catalog), len(from_docs))
+
+        # Every ant animation across all 6 classes (idle/attack/hit + all extra actions) must match identically.
+        checked = 0
+        for cls_name, letter in orig_sprites.CLASS_LETTERS.items():
+            prefixes = [
+                (f"a{letter}st", [(a, a) for a in orig_sprites.CANONICAL_ANGLES]),
+                (f"a{letter}at", [(a, a) for a in orig_sprites.CANONICAL_ANGLES]),
+                (f"a{letter}gh", [(a, a) for a in orig_sprites.CANONICAL_ANGLES]),
+            ]
+            for _, suf, pairs in orig_sprites.EXTRA_SHARED_SPECS:
+                prefixes.append((f"a{letter}{suf}", list(pairs)))
+            for _, pref, pairs in orig_sprites.EXTRA_CLASS_SPECS.get(cls_name, ()):
+                prefixes.append((pref, list(pairs)))
+            for pref, pairs in prefixes:
+                for _, suf in pairs:
+                    name = f"{pref}{suf}"
+                    if name not in from_docs:
+                        self.assertNotIn(name, from_catalog)
+                        continue
+                    self.assertIn(name, from_catalog, name)
+                    d_entry, c_entry = from_docs[name], from_catalog[name]
+                    self.assertEqual(c_entry["total_duration_ms"], d_entry["total_duration_ms"], name)
+                    d_subs = [(s["duration_ms"], [(f["sprite_index"], f["dx"], f["dy"]) for f in s["frames"]]) for s in d_entry["subitems"]]
+                    c_subs = [(s["duration_ms"], [(f["sprite_index"], f["dx"], f["dy"]) for f in s["frames"]]) for s in c_entry["subitems"]]
+                    self.assertEqual(c_subs, d_subs, name)
+                    checked += 1
+        self.assertGreaterEqual(checked, 200)
+
+        # Fallback activates automatically when DEFAULT_ANIM_JSON is absent (Docker / web_without_docker).
+        missing = Path("/nonexistent_docs_chd_table4_animations.json")
+        old_default = orig_sprites.DEFAULT_ANIM_JSON
+        try:
+            orig_sprites.DEFAULT_ANIM_JSON = missing
+            loaded = orig_sprites._load_animations_by_name(missing)
+            self.assertEqual(len(loaded), len(from_catalog))
+            self.assertEqual(loaded["agst301"]["subitems"], from_catalog["agst301"]["subitems"])
+        finally:
+            orig_sprites.DEFAULT_ANIM_JSON = old_default
+
 
 if __name__ == "__main__":
     unittest.main()

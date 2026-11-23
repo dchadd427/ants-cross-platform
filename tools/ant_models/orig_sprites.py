@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Deterministic 1998 original Ants sprite-sheet bundle generator (`orig_sprites.json`).
 
-Reads `docs/chd_table4_animations.json` and decodes authentic palette-shifted team
+Reads `docs/chd_table4_animations.json` (or `asset_catalog/catalog_data.js` when `docs/`
+is absent, such as inside Docker builds) and decodes authentic palette-shifted team
 sprites from `Original-Ants/ants.chd` via `tools/front_page_art/artlib.py` for all
 6 ant classes x 5 canonical isometric angles x 4 original teams.
 
@@ -14,6 +15,7 @@ import base64
 import io
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -21,6 +23,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 THIS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = THIS_DIR.parents[1]
 DEFAULT_ANIM_JSON = REPO_ROOT / "docs" / "chd_table4_animations.json"
+DEFAULT_CATALOG_JS = REPO_ROOT / "asset_catalog" / "catalog_data.js"
 DEFAULT_CHD_PATH = REPO_ROOT / "Original-Ants" / "ants.chd"
 DEFAULT_OUT_PATH = THIS_DIR / "models" / "orig_sprites.json"
 
@@ -100,13 +103,15 @@ def can_generate_orig_sprites(
     *,
     anim_json: Path = DEFAULT_ANIM_JSON,
     chd_path: Path = DEFAULT_CHD_PATH,
+    catalog_js: Path = DEFAULT_CATALOG_JS,
 ) -> bool:
     """Return True if Pillow and the original animation/CHD sources are available."""
     try:
         import PIL.Image  # noqa: F401
     except ImportError:
         return False
-    return anim_json.is_file() and chd_path.is_file()
+    has_anims = anim_json.is_file() or (anim_json == DEFAULT_ANIM_JSON and catalog_js.is_file())
+    return has_anims and chd_path.is_file()
 
 
 def _load_artlib():
@@ -149,7 +154,49 @@ def _png_data_uri(image: Any) -> str:
     return "data:image/png;base64," + base64.b64encode(raw).decode("ascii")
 
 
-def _load_animations_by_name(anim_json: Path) -> Dict[str, Dict[str, Any]]:
+def _load_animations_from_catalog_js(catalog_js: Path) -> Dict[str, Dict[str, Any]]:
+    """Parse the public animation table from `asset_catalog/catalog_data.js` (no docs/ needed)."""
+    text = catalog_js.read_text(encoding="utf-8")
+    start = text.find("animations: [")
+    if start < 0:
+        raise ValueError(f"No animations table found in {catalog_js}")
+    found = list(re.finditer(r'\n\s*\{ id: (\d+), name: "([^"]*)", subitems: \[', text[start:]))
+    sub_re = re.compile(
+        r'\{ val3: (\d+), sound_id: -?\d+, sound_name: "[^"]*", frames: \[(.*?)\n\s*\] \}',
+        re.S,
+    )
+    frame_re = re.compile(r"\{ dx: (-?\d+), dy: (-?\d+), sprite_id: (\d+),")
+    by_name: Dict[str, Dict[str, Any]] = {}
+    for k, match in enumerate(found):
+        name = match.group(2)
+        end_pos = found[k + 1].start() if k + 1 < len(found) else len(text) - start
+        block = text[start + match.end() : start + end_pos]
+        subitems: List[Dict[str, Any]] = []
+        total_ms = 0
+        for sm in sub_re.finditer(block):
+            dur_ms = int(sm.group(1))
+            frames = [
+                {"dx": int(fm.group(1)), "dy": int(fm.group(2)), "sprite_index": int(fm.group(3))}
+                for fm in frame_re.finditer(sm.group(2))
+            ]
+            subitems.append({"duration_ms": dur_ms, "frames": frames})
+            total_ms += dur_ms
+        by_name[name.lower()] = {
+            "id": int(match.group(1)),
+            "name": name,
+            "total_duration_ms": total_ms,
+            "subitems": subitems,
+        }
+    return by_name
+
+
+def _load_animations_by_name(
+    anim_json: Path,
+    *,
+    catalog_js: Path = DEFAULT_CATALOG_JS,
+) -> Dict[str, Dict[str, Any]]:
+    if not anim_json.is_file() and anim_json == DEFAULT_ANIM_JSON and catalog_js.is_file():
+        return _load_animations_from_catalog_js(catalog_js)
     raw = json.loads(anim_json.read_text(encoding="utf-8"))
     by_name: Dict[str, Dict[str, Any]] = {}
     items = raw if isinstance(raw, list) else raw.get("entries", raw.get("animations", []))

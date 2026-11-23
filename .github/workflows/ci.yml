@@ -129,10 +129,11 @@ jobs:
 
       # python3-yaml: tests/scripts/test_ci_workflow.py reads this file with PyYAML (its checks of the legs are skipped without it, and a test fails on these machines when it is missing)
       # python3-pil: tests/scripts/test_img_converter.py runs the image converter's real decoder (docs/HUB_IMAGES.md); this leg requires it (ANTS_REQUIRE_PILLOW below), a machine without it skips those tests
-      - name: Install SDL2, SDL2_ttf, ccache, Ninja, PyYAML, Pillow
+      # python3-numpy: tests/scripts/test_ant_models.py and tests/scripts/test_web_without_docker.py (replaying Dockerfile) build the 3D ant models (.glb) with NumPy
+      - name: Install SDL2, SDL2_ttf, ccache, Ninja, PyYAML, Pillow, NumPy
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libsdl2-dev libsdl2-ttf-dev ccache ninja-build python3-yaml python3-pil
+          sudo apt-get install -y --no-install-recommends libsdl2-dev libsdl2-ttf-dev ccache ninja-build python3-yaml python3-pil python3-numpy
 
       - name: Restore the compiler cache
         uses: actions/cache@v6

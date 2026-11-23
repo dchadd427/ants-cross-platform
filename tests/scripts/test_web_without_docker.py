@@ -346,7 +346,10 @@ class TheRealDockerfileReplayed(Scratch):
     def test_the_files_that_the_image_has_are_there(self):
         for name in ("index.html", "play.html", "lobby.html", "index.js", "index.wasm", "index.data", "lvl_core.js", "lvl_core.wasm", "lvl_core_api.js", "changelog.html", "favicon.png", os.path.join("front", "logo.png"),
                      os.path.join("front", "LibreFranklin-Medium.ttf"), os.path.join("front", "classic.css"), "manifest.webmanifest", os.path.join("app", "icon-192.png"), os.path.join("app", "icon-512.png"),
-                     os.path.join("app", "icon-maskable-512.png"), os.path.join("app", "apple-touch-icon.png")):
+                     os.path.join("app", "icon-maskable-512.png"), os.path.join("app", "apple-touch-icon.png"),
+                     os.path.join("test_3d", "compare.html"), os.path.join("test_3d", "viewer.html"),
+                     os.path.join("test_3d", "models", "manifest.json"), os.path.join("test_3d", "models", "orig_sprites.json"),
+                     os.path.join("test_3d", "models", "worker.glb"), os.path.join("test_3d", "models", "worker.glb.gz")):
             self.assertTrue(os.path.isfile(self.html("plain", name)), name)
         self.assertTrue(os.path.isdir(self.html("plain", "asset_catalog")))
         with open(self.html("plain", "index.html"), "rb") as a, open(self.html("plain", "play.html"), "rb") as b:
