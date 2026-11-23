@@ -94,6 +94,7 @@ class Chat:
         self.peers = presencemod.Peers()
         self.presence = presencemod.Presence(self, limits, clock, dumps)       # (who is here: the list of the front page)
         self.on_store_error = None                  # called with the error when the database cannot be used for a message (the hub logs it, not more than once in a while)
+        self.end_ai = None                          # end_ai(account): the hub's call that disarms the account's Map Maker tab (hub/airelay.py); a kick and a ban call it, whether or not a chat socket is open
         self.end_logins = None                      # end_logins(account=...): the hub's call that closes every socket of an account (a logout's and a forget's too); the hub sets it
         self.on_command_error = None                # called with the error when a command that waited for a lookup failed for a bug (the hub logs its class)
         self.busy = {}                              # peer -> the task of its command that waits for a lookup of roles (one at a time for a socket)
@@ -629,6 +630,8 @@ class Chat:
             sockets = self.sockets_of(target)
             shown = sockets[0].identity.name
             self.store.end_sessions(target, note=(by, "kick", whom, ""))
+            if self.end_ai:
+                self.end_ai(target)
             self.remove(sockets, "kicked")
             self.sync_pictures()
             self.announce("%s was kicked." % shown, me)
@@ -644,6 +647,8 @@ class Chat:
                 except StoreError as e:
                     if self.on_store_error:
                         self.on_store_error(e)                     # (the ban is done and stays: the person is removed and the answer is `ok`; the lines can be taken off with /del)
+            if self.end_ai:
+                self.end_ai(target)
             self.presence.forget(target)                           # (a ban takes the Away row too, whether or not a socket is open)
             self.remove(self.sockets_of(target), "banned")
             self.sync_pictures()

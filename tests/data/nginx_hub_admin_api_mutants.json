@@ -44,8 +44,8 @@
   {
    "id": "the_visitors_cookies_go_on",
    "file": "docker/nginx.conf",
-   "old": "        proxy_set_header Cookie $hub_cookie_session;\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header Content-Type $content_type;\n        proxy_set_header X-Ants-Csrf",
-   "new": "        proxy_set_header Cookie $http_cookie;\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header Content-Type $content_type;\n        proxy_set_header X-Ants-Csrf"
+   "old": "        proxy_pass http://$ants_hub$uri;                          # (the normalized path, never the raw request line: the map above has let nothing else through)\n        proxy_http_version 1.1;\n        proxy_next_upstream off;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Origin $http_origin;\n        proxy_set_header Cookie $hub_cookie_session;\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header Content-Type $content_type;\n        proxy_set_header X-Ants-Csrf",
+   "new": "        proxy_pass http://$ants_hub$uri;                          # (the normalized path, never the raw request line: the map above has let nothing else through)\n        proxy_http_version 1.1;\n        proxy_next_upstream off;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Origin $http_origin;\n        proxy_set_header Cookie $http_cookie;\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header Content-Type $content_type;\n        proxy_set_header X-Ants-Csrf"
   },
   {
    "id": "the_visitors_address_is_believed",
@@ -56,14 +56,14 @@
   {
    "id": "every_header_of_the_visitor_goes_on",
    "file": "docker/nginx.conf",
-   "old": "        proxy_next_upstream off;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Origin $http_origin;",
-   "new": "        proxy_next_upstream off;\n        proxy_pass_request_headers on;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Origin $http_origin;"
+   "old": "        proxy_pass http://$ants_hub$uri;                          # (the normalized path, never the raw request line: the map above has let nothing else through)\n        proxy_http_version 1.1;\n        proxy_next_upstream off;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Origin $http_origin;",
+   "new": "        proxy_pass http://$ants_hub$uri;                          # (the normalized path, never the raw request line: the map above has let nothing else through)\n        proxy_http_version 1.1;\n        proxy_next_upstream off;\n        proxy_pass_request_headers on;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Origin $http_origin;"
   },
   {
    "id": "the_origin_is_not_passed",
    "file": "docker/nginx.conf",
-   "old": "        proxy_set_header Origin $http_origin;\n        proxy_set_header Cookie $hub_cookie_session;\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header Content-Type",
-   "new": "        proxy_set_header Cookie $hub_cookie_session;\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header Content-Type"
+   "old": "        proxy_pass http://$ants_hub$uri;                          # (the normalized path, never the raw request line: the map above has let nothing else through)\n        proxy_http_version 1.1;\n        proxy_next_upstream off;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Origin $http_origin;\n        proxy_set_header Cookie $hub_cookie_session;\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header Content-Type",
+   "new": "        proxy_pass http://$ants_hub$uri;                          # (the normalized path, never the raw request line: the map above has let nothing else through)\n        proxy_http_version 1.1;\n        proxy_next_upstream off;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Cookie $hub_cookie_session;\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header Content-Type"
   },
   {
    "id": "the_token_is_not_passed",
@@ -80,8 +80,8 @@
   {
    "id": "a_big_body_goes_on",
    "file": "docker/nginx.conf",
-   "old": "        client_max_body_size 512;\n        error_page 502 504 = @hub_off;",
-   "new": "        client_max_body_size 8k;\n        error_page 502 504 = @hub_off;"
+   "old": "        limit_req zone=ants_admin_api burst=50 nodelay;\n        limit_req_status 429;\n        client_max_body_size 512;\n        error_page 502 504 = @hub_off;",
+   "new": "        limit_req zone=ants_admin_api burst=50 nodelay;\n        limit_req_status 429;\n        client_max_body_size 8k;\n        error_page 502 504 = @hub_off;"
   },
   {
    "id": "there_is_no_allowance",
@@ -104,8 +104,8 @@
   {
    "id": "the_hub_is_retried",
    "file": "docker/nginx.conf",
-   "old": "        proxy_next_upstream off;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Origin $http_origin;",
-   "new": "        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Origin $http_origin;"
+   "old": "        proxy_pass http://$ants_hub$uri;                          # (the normalized path, never the raw request line: the map above has let nothing else through)\n        proxy_http_version 1.1;\n        proxy_next_upstream off;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Origin $http_origin;",
+   "new": "        proxy_pass http://$ants_hub$uri;                          # (the normalized path, never the raw request line: the map above has let nothing else through)\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Origin $http_origin;"
   },
   {
    "id": "the_calls_are_logged",
@@ -116,8 +116,8 @@
   {
    "id": "a_hub_that_is_not_there_is_a_page",
    "file": "docker/nginx.conf",
-   "old": "        client_max_body_size 512;\n        error_page 502 504 = @hub_off;",
-   "new": "        client_max_body_size 512;"
+   "old": "        limit_req zone=ants_admin_api burst=50 nodelay;\n        limit_req_status 429;\n        client_max_body_size 512;\n        error_page 502 504 = @hub_off;",
+   "new": "        limit_req zone=ants_admin_api burst=50 nodelay;\n        limit_req_status 429;\n        client_max_body_size 512;"
   },
   {
    "id": "the_raw_request_line_is_passed_on",

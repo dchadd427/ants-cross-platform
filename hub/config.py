@@ -51,6 +51,7 @@ class Config:
     game_admin_url: str = ""                                                # where the game server's admin door is, `http://host:port` (hub/gamedoor.py: `/bots`); "" is none, and `/bots` answers `off`
     image_converter_url: str = ""                                           # where the image converter is, `http://host:port` (hub/imgdoor.py); "" is none, and images are off for everybody
     image_dir: str = "/images"                                              # the folder of the images' files (the volume that the site's web server reads, read only)
+    ai_keys: bool = False                                                   # ANTS_HUB_AI_KEYS=on: the keys that let a person's own AI work in the person's open Map Maker tab (docs/MAP_AI.md); off, every door of it answers 503 `ai_off`
 
     @property
     def login_on(self):
@@ -190,4 +191,8 @@ def load(env):
     if env.get("ANTS_HUB_IMAGE_CONVERTER_URL", "").strip():
         cfg.image_converter_url = parse_converter_url(env["ANTS_HUB_IMAGE_CONVERTER_URL"])
     cfg.image_dir = env.get("ANTS_HUB_IMAGE_DIR", "").strip() or cfg.image_dir
+    ai = env.get("ANTS_HUB_AI_KEYS", "").strip().lower() or "off"
+    if ai not in ("on", "off"):
+        raise ConfigError("ANTS_HUB_AI_KEYS must be on or off")
+    cfg.ai_keys = ai == "on"
     return cfg

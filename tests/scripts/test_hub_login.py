@@ -200,16 +200,16 @@ class TheStart(LoginTest):
         self.assertGreater(len({s[:6] for s in states}), 50)
 
     def test_the_return_address_is_a_word_of_a_list_and_never_what_was_sent(self):
-        for value in ("home", "room", "", "HOME", "Room", "https://evil.example", "//evil.example", "/\\evil.example", "room%0d%0aSet-Cookie:%20x=1", "home&next=room", "room&next=home", "%00", "../",
+        for value in ("home", "room", "mapmaker", "MapMaker", "mapmaker%20", "", "HOME", "Room", "https://evil.example", "//evil.example", "/\\evil.example", "room%0d%0aSet-Cookie:%20x=1", "home&next=room", "room&next=home", "%00", "../",
                       "javascript:alert(1)", "room%20", "ro%6fm", "http%3A%2F%2Fevil.example%2F", "evil.example", "/", "/#room", "home#x", "a" * 1400, "%c3%a9"):
             v = self.visitor()
             r = v.start(value)
             self.assertEqual(r.status, 302, value)
             r = v.callback(v.at_discord(r.get("location")))
             self.assertEqual(r.status, 302, value)
-            expect = "/#room" if value in ("room", "ro%6fm") else "/"                  # (the word room, as it is or with a letter written as %6f: the same word)
+            expect = "/#room" if value in ("room", "ro%6fm") else "/mapmaker" if value == "mapmaker" else "/"                  # (the word room, as it is or with a letter written as %6f: the same word; the Map Maker's word brings a person back to the Map Maker)
             self.assertEqual(r.get("location"), expect, value)
-            self.assertIn(r.get("location"), ("/", "/#room"))
+            self.assertIn(r.get("location"), ("/", "/#room", "/mapmaker"))
         self.assertEqual(self.visitor().start("a" * 3000).status, 400)             # (a request line of more than 2,000 characters is refused by the head reader)
         v = self.visitor()                                                       # a name that comes twice is nobody's
         v.start()
