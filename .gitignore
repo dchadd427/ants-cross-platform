@@ -107,3 +107,6 @@ control-secret.*
 
 # Output of tools/mutate.py (a run report of the mutation checks)
 tests/data/*_mutants.report.json
+
+# Generated 3D ant models, sprite bundles, and viewer status (rebuilt by tools/ant_models/build_all.py)
+tools/ant_models/models/

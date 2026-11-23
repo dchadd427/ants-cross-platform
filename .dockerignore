@@ -9,6 +9,7 @@ build_*
 dist
 tests
 docs
+tools/ant_models/models
 Original-Ants/*.exe
 Original-Ants/*.dll
 Original-Ants/ddraw.ini
