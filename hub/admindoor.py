@@ -498,6 +498,8 @@ class Door:
             if store.is_banned(target):
                 return self.fail(409, "bad")
             store.ban(target, by, shown, note=(by, "ban", whom, ""))
+            if chat.end_ai:
+                chat.end_ai(target)
             chat.remove(chat.sockets_of(target), "banned")
             chat.sync_pictures()
         elif name == "unban":

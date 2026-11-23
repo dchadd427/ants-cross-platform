@@ -1,0 +1,407 @@
+{
+ "note": "Mutants of the AI keys (hub/aikeys.py, hub/aidoor.py, hub/airelay.py, hub/aitools.py, hub/aimcp.py, the ai_* operations of hub/store/sqlite.py; docs/MAP_AI.md) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose (a key that is judged by less than its digest, its end and its revocation on every call, a read key that changes the map, a page that is not the page's own request, a ban or Forget me that keeps the keys, an address that is never refused, a tab of another person that is asked, a login or an Origin that the socket does not need, a result of the tab that is not checked, cells that are not counted, a tool that submits, text that is not marked as data, a key or a name in a log), and a test of tests/scripts/test_hub_ai.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hub_ai_mutants.json --keep-going --jobs 1; every mutant must be caught.",
+ "baseline": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest tests.scripts.test_hub_ai"
+ },
+ "mutants": [
+  {
+   "id": "a_wrong_secret_is_good",
+   "file": "hub/aikeys.py",
+   "old": "if row is None or not same or row.revoked or row.ends <= now:",
+   "new": "if row is None or row.revoked or row.ends <= now:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyRule"
+  },
+  {
+   "id": "a_revoked_key_is_good",
+   "file": "hub/aikeys.py",
+   "old": "if row is None or not same or row.revoked or row.ends <= now:",
+   "new": "if row is None or not same or row.ends <= now:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyRule"
+  },
+  {
+   "id": "a_key_that_ended_is_good",
+   "file": "hub/aikeys.py",
+   "old": "if row is None or not same or row.revoked or row.ends <= now:",
+   "new": "if row is None or not same or row.revoked:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyRule"
+  },
+  {
+   "id": "any_scheme_takes_a_key",
+   "file": "hub/aikeys.py",
+   "old": "found = KEY.match(value) if scheme.lower() == \"bearer\" and value == value.strip() else None",
+   "new": "found = KEY.match(value) if value == value.strip() else None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyRule"
+  },
+  {
+   "id": "a_key_has_no_burst_and_no_hour",
+   "file": "hub/aikeys.py",
+   "old": "if not (key.ready(now) and hour.ready(now)):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyRule"
+  },
+  {
+   "id": "the_hour_is_never_spent",
+   "file": "hub/aikeys.py",
+   "old": "        key.take(now)\n        hour.take(now)\n",
+   "new": "        key.take(now)\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyRule"
+  },
+  {
+   "id": "an_address_is_never_spent",
+   "file": "hub/aikeys.py",
+   "old": "return bucket is not None and not bucket.ready(self.clock())",
+   "new": "return False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyRule"
+  },
+  {
+   "id": "a_bad_key_costs_nothing",
+   "file": "hub/aikeys.py",
+   "old": "        self.bad.take(address, self.clock())\n",
+   "new": "        pass\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyRule"
+  },
+  {
+   "id": "a_read_key_may_change_the_map",
+   "file": "hub/aidoor.py",
+   "old": "if tool.scope == aitools.EDIT and key.scope != aitools.EDIT:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyRule"
+  },
+  {
+   "id": "a_page_of_another_site_may_call_a_door",
+   "file": "hub/aidoor.py",
+   "old": "if h.get(\"origin\") not in (None, hub.cfg.origin):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyRule"
+  },
+  {
+   "id": "a_spent_address_is_still_looked_at",
+   "file": "hub/aidoor.py",
+   "old": "if self.budgets.address_spent(address):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyRule"
+  },
+  {
+   "id": "the_token_is_not_asked",
+   "file": "hub/aidoor.py",
+   "old": "if post and not (h.get(CSRF_HEADER) and hmac.compare_digest(h[CSRF_HEADER].encode(\"latin-1\"), self.token(who).encode(\"ascii\"))):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyPages"
+  },
+  {
+   "id": "the_pages_own_request_is_not_asked",
+   "file": "hub/aidoor.py",
+   "old": "if not self.same_origin(request, post):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyPages"
+  },
+  {
+   "id": "the_type_of_a_post_is_not_asked",
+   "file": "hub/aidoor.py",
+   "old": "if post and h.get(\"content-type\", \"\").split(\";\")[0].strip().lower() != \"application/json\":",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyPages"
+  },
+  {
+   "id": "a_banned_account_makes_keys",
+   "file": "hub/aidoor.py",
+   "old": "if hub.store.is_banned(who.account_id):\n            return self.fail(403, \"banned\")",
+   "new": "if False:\n            return self.fail(403, \"banned\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyPages"
+  },
+  {
+   "id": "keys_are_not_limited",
+   "file": "hub/aidoor.py",
+   "old": "hub.limits.ai_keys_live, hub.limits.ai_keys_day)",
+   "new": "10 ** 6, 10 ** 6)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyPages"
+  },
+  {
+   "id": "any_number_of_days",
+   "file": "hub/aidoor.py",
+   "old": "or type(days) is not int or days not in aikeys.DAYS:",
+   "new": "or type(days) is not int:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyPages"
+  },
+  {
+   "id": "the_pages_are_not_limited",
+   "file": "hub/aidoor.py",
+   "old": "if not self.pages.take(address, hub.clock()):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyPages"
+  },
+  {
+   "id": "the_switch_is_ignored_at_the_doors",
+   "file": "hub/aidoor.py",
+   "old": "if not self.hub.cfg.ai_keys:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyPages"
+  },
+  {
+   "id": "a_door_has_no_limit_of_body",
+   "file": "hub/aidoor.py",
+   "old": "if int(length) > limit:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyRule"
+  },
+  {
+   "id": "a_key_name_is_not_cleaned",
+   "file": "hub/aikeys.py",
+   "old": "    cleaned, why = textrules.clean_line(text)\n    if cleaned is None or len(cleaned) > limit:",
+   "new": "    cleaned, why = (text, None) if isinstance(text, str) and text else (None, 'empty')\n    if cleaned is None or len(cleaned) > limit:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyPages"
+  },
+  {
+   "id": "the_log_holds_the_name_of_a_key",
+   "file": "hub/aidoor.py",
+   "old": "self.hub.log.event(\"ai_call\", key=key.id, ref=key.ref[:8], tool=tool,",
+   "new": "self.hub.log.event(\"ai_call\", key=key.id, ref=key.ref[:8], name=key.name, tool=tool,",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheLogs"
+  },
+  {
+   "id": "the_log_holds_the_whole_reference",
+   "file": "hub/aidoor.py",
+   "old": "self.hub.log.event(\"ai_call\", key=key.id, ref=key.ref[:8],",
+   "new": "self.hub.log.event(\"ai_call\", key=key.id, ref=key.ref,",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheLogs"
+  },
+  {
+   "id": "the_tab_is_told_the_digest",
+   "file": "hub/airelay.py",
+   "old": "\"key\": key.name, \"client\"",
+   "new": "\"key\": key.digest, \"client\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "a_person_may_revoke_another_persons_key",
+   "file": "hub/store/sqlite.py",
+   "old": "return bool(self.revoke_where(\"ref = ? AND id = ?\", (self.ref(account), key_id)))",
+   "new": "return bool(self.revoke_where(\"id = ?\", (key_id,)))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyPages"
+  },
+  {
+   "id": "a_ban_keeps_the_keys",
+   "file": "hub/store/sqlite.py",
+   "old": "            self.drop_ai(self.ref(account))                         # (and the keys of its AI stop at once: they are deleted, not only switched off)\n",
+   "new": "            pass\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyPages"
+  },
+  {
+   "id": "forget_me_keeps_the_keys",
+   "file": "hub/store/sqlite.py",
+   "old": "            self.drop_ai(self.ref(account))                          # (the keys of its AI go with it, and the log of their calls)\n",
+   "new": "            pass\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyPages"
+  },
+  {
+   "id": "a_key_that_ended_counts_for_the_three",
+   "file": "hub/store/sqlite.py",
+   "old": "WHERE ref = ? AND revoked = 0 AND ends > ?\", (ref, now)",
+   "new": "WHERE ref = ? AND revoked = 0 AND ends > ?\", (ref, 0)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyPages"
+  },
+  {
+   "id": "the_day_is_not_counted",
+   "file": "hub/store/sqlite.py",
+   "old": "WHERE ref = ? AND made > ?\", (ref, now - 86400))",
+   "new": "WHERE ref = ? AND made > ?\", (ref, now + 86400))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyPages"
+  },
+  {
+   "id": "the_key_row_holds_the_account_id",
+   "file": "hub/store/sqlite.py",
+   "old": "        ref, now = self.ref(account), int(self.clock())\n        ends = now + int(seconds)",
+   "new": "        ref, now = account, int(self.clock())\n        ends = now + int(seconds)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheLogs"
+  },
+  {
+   "id": "a_waiting_call_is_not_judged_again",
+   "file": "hub/airelay.py",
+   "old": "            if not valid():\n                raise Refusal(\"bad_key\")",
+   "new": "            if False:\n                raise Refusal(\"bad_key\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "a_second_tab_does_not_replace_the_first",
+   "file": "hub/airelay.py",
+   "old": "                old.close(1000, \"replaced\")",
+   "new": "                pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "the_tab_of_another_account_is_asked",
+   "file": "hub/airelay.py",
+   "old": "        tab = self.tabs.get(key.ref)\n        if tab is None or tab.closed:",
+   "new": "        tab = next(iter(self.tabs.values()), None)\n        if tab is None or tab.closed:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "the_socket_needs_no_login",
+   "file": "hub/airelay.py",
+   "old": "if who is None:\n                raise http.HttpError(401, \"login\")",
+   "new": "if False:\n                raise http.HttpError(401, \"login\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "the_socket_needs_no_origin",
+   "file": "hub/airelay.py",
+   "old": "if not hub.cfg.origin or h.get(\"origin\") != hub.cfg.origin:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "a_banned_account_arms_a_tab",
+   "file": "hub/airelay.py",
+   "old": "if banned:\n                raise http.HttpError(403, \"banned\")",
+   "new": "if False:\n                raise http.HttpError(403, \"banned\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyPages"
+  },
+  {
+   "id": "the_socket_ignores_the_switch",
+   "file": "hub/airelay.py",
+   "old": "if not hub.cfg.ai_keys:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyPages"
+  },
+  {
+   "id": "a_logout_leaves_the_tab_armed",
+   "file": "hub/airelay.py",
+   "old": "                tab.close(1000, \"logged out\")",
+   "new": "                pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "the_frames_of_a_tab_are_not_limited",
+   "file": "hub/airelay.py",
+   "old": "                    if not self.frames.take(now):\n                        self.strike()",
+   "new": "                    if False:\n                        self.strike()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "an_idle_tab_stays_armed",
+   "file": "hub/airelay.py",
+   "old": "elif now - tab.last_active >= limits.ai_idle_seconds:",
+   "new": "elif False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "stop_leaves_the_call_waiting",
+   "file": "hub/airelay.py",
+   "old": "            self.pending[1].set_exception(Refusal(\"stopped\"))",
+   "new": "            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "the_queue_is_not_short",
+   "file": "hub/airelay.py",
+   "old": "if tab.waiting >= limits.ai_queue_max:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "the_cells_are_not_counted",
+   "file": "hub/airelay.py",
+   "old": "        tab.cells += cells\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "the_cells_are_not_limited",
+   "file": "hub/airelay.py",
+   "old": "if edit and tab.cells >= limits.ai_cells_armed:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "a_picture_of_any_size_goes_on",
+   "file": "hub/airelay.py",
+   "old": "            if len(png) > limits.ai_picture_max:",
+   "new": "            if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "a_result_need_not_be_an_object",
+   "file": "hub/airelay.py",
+   "old": "        if not isinstance(result, dict):\n            raise Refusal(\"tab_error\")",
+   "new": "        if False:\n            raise Refusal(\"tab_error\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "a_code_of_the_tab_is_any_code",
+   "file": "hub/airelay.py",
+   "old": "code = code if code in aitools.TAB_CODES else \"tab_error\"",
+   "new": "code = code if isinstance(code, str) else 'tab_error'",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "the_sentence_of_the_tab_is_not_cut",
+   "file": "hub/airelay.py",
+   "old": "aitools.sentence(frame.get(\"message\")) if code in aitools.TAB_SENTENCE else \"\"",
+   "new": "frame.get(\"message\") if code in aitools.TAB_SENTENCE else \"\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "the_cells_of_a_result_are_any_number",
+   "file": "hub/airelay.py",
+   "old": "cells = min(max(cells, 0), aitools.MAX_CELLS) if type(cells) is int and edit else 0",
+   "new": "cells = cells if isinstance(cells, int) else 0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "there_is_a_tool_that_submits",
+   "file": "hub/aitools.py",
+   "old": "TOOLS = {t.name: t for t in T}",
+   "new": "TOOLS = dict({t.name: t for t in T}, submit=T[0])",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheTools"
+  },
+  {
+   "id": "the_arguments_are_not_checked",
+   "file": "hub/aitools.py",
+   "old": "    problem = validate(tool.schema, args)\n    if problem:\n        return \"bad_args\", problem",
+   "new": "    if False:\n        return \"bad_args\", None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheTools"
+  },
+  {
+   "id": "a_call_may_change_a_million_cells",
+   "file": "hub/aitools.py",
+   "old": "MAX_CELLS = 5000 ",
+   "new": "MAX_CELLS = 5000000 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheTools"
+  },
+  {
+   "id": "typed_text_is_not_marked",
+   "file": "hub/aitools.py",
+   "old": "    if not fields:\n        return result\n    return dict(result, untrusted=True, untrusted_fields=list(fields))",
+   "new": "    return result",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheTools"
+  },
+  {
+   "id": "a_property_may_be_added",
+   "file": "hub/aitools.py",
+   "old": "                return \"%s has no %s\" % (path, re.sub(r\"[^A-Za-z0-9_]\", \"?\", str(name))[:20])",
+   "new": "                pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheTools"
+  },
+  {
+   "id": "a_read_key_lists_every_tool",
+   "file": "hub/aimcp.py",
+   "old": "if scope == aitools.EDIT or t.scope == aitools.READ]}",
+   "new": "if True]}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyRule"
+  },
+  {
+   "id": "the_mcp_sentence_is_left_out",
+   "file": "hub/aimcp.py",
+   "old": "    if marked.get(\"untrusted\"):\n        content.append({\"type\": \"text\", \"text\": aitools.UNTRUSTED_SENTENCE})",
+   "new": "    pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheTools"
+  },
+  {
+   "id": "the_default_is_on",
+   "file": "hub/config.py",
+   "old": "env.get(\"ANTS_HUB_AI_KEYS\", \"\").strip().lower() or \"off\"",
+   "new": "env.get(\"ANTS_HUB_AI_KEYS\", \"\").strip().lower() or \"on\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyPages"
+  }
+ ]
+}

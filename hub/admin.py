@@ -8,6 +8,9 @@
     docker exec ants-hub python -m hub.admin pic ACCOUNT                 (lift that block: the picture then stays off until the person turns it on)
     docker exec ants-hub python -m hub.admin noimages ACCOUNT            (take away the account's posting of images, whatever its Discord role says; it survives Forget me)
     docker exec ants-hub python -m hub.admin images ACCOUNT              (give it back)
+    docker exec ants-hub python -m hub.admin aikeys                      (the keys of people's AIs that work now, docs/MAP_AI.md: key id, account reference, scope, when made and ended, last use, calls)
+    docker exec ants-hub python -m hub.admin aikey-revoke KEY_ID         (one key stops working at once)
+    docker exec ants-hub python -m hub.admin aikeys-revoke ACCOUNT       (every key of an account stops working at once)
     docker exec ants-hub python -m hub.admin del LINE_ID
     docker exec ants-hub python -m hub.admin log [--days N] [--lines N]
     docker exec ants-hub python -m hub.admin status
@@ -163,6 +166,14 @@ def show_images(store, limits, out):
     out.write("images: %s of %s kept, %s of %s; %s with posting taken away\n" % (format(count, ","), format(limits.image_files_max, ","), megabytes(size), megabytes(limits.image_bytes_max), format(len(store.noimages_marks()), ",")))
 
 
+def show_ai_keys(store, out):
+    """`aikeys`: one line for each key that works: its public id, the account's reference, its scope, the times it was made and ends, its last use and its calls. Never a secret, a digest or a name."""
+    rows = store.ai_keys_working()
+    for key in rows:
+        out.write("%s %s %s made %s ends %s used %s calls %d\n" % (key.id, key.ref, key.scope, when(key.made), when(key.ends), when(key.used) if key.used else "never", key.calls))
+    out.write("%d keys work\n" % len(rows))
+
+
 def purge(store, limits, keep_lines, out, err, sleep=time.sleep):
     """Delete the oldest lines a chunk at a time, with a pause between two chunks so that the hub's own writes go on: down to the hub's lower mark, or all but the newest `keep_lines`."""
     target, keep = (limits.prune_to_bytes, limits.keep_lines) if keep_lines is None else (0, keep_lines)
@@ -207,6 +218,9 @@ def run(argv, out=None, err=None, env=None):
     sub.add_parser("pic", help="lift the block of an account's Discord picture").add_argument("account")
     sub.add_parser("noimages", help="take away an account's posting of images").add_argument("account")
     sub.add_parser("images", help="give an account's posting of images back").add_argument("account")
+    sub.add_parser("aikeys", help="the keys of people's AIs that work now")
+    sub.add_parser("aikey-revoke", help="revoke one key of a person's AI by its id").add_argument("key_id")
+    sub.add_parser("aikeys-revoke", help="revoke every key of an account's AI").add_argument("account")
     sub.add_parser("del", help="delete a chat line by its id").add_argument("line_id", type=int)
     p = sub.add_parser("log", help="the moderators' log")
     p.add_argument("--days", type=int, default=30)
@@ -247,6 +261,15 @@ def run(argv, out=None, err=None, env=None):
             show_pictures(store, limitmod.Limits(), out)
             show_images(store, limitmod.Limits(), out)
             return 0
+        if args.command == "aikeys":
+            show_ai_keys(store, out)
+            return 0
+        if args.command == "aikey-revoke":
+            if not store.ai_key_revoke_id(args.key_id):
+                err.write("hub.admin: no such key, or it does not work any more\n")
+                return 1
+            out.write("the key %s is revoked\n" % args.key_id)
+            return 0
         if args.command == "purge":
             return purge(store, limitmod.Limits(), args.keep_lines, out, err)
         if args.command == "del":
@@ -266,6 +289,11 @@ def run(argv, out=None, err=None, env=None):
         if account is None:
             err.write("hub.admin: %s\n" % name)
             return 1
+        if args.command == "aikeys-revoke":
+            whom = ref(store, account)
+            count = store.ai_keys_revoke_ref(whom)
+            out.write("%s: %d keys revoked\n" % (whom, count))
+            return 0 if count else 1
         if args.command in ("noimages", "images"):
             whom = ref(store, account)
             return change_images(store, args.command, whom, lambda on, note: store.set_noimages(account, on, TERMINAL, note=note), out, err)

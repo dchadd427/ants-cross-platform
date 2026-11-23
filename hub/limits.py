@@ -147,6 +147,34 @@ class Limits:
     image_scan_files_max: int = 5000    # the most entries of the folder that one look reads
     image_scan_age_seconds: float = 900.0       # a file that has no row is deleted only when it is older than this (an upload that is being written has none yet)
 
+    ai_keys_live: int = 3               # the keys of one account that work at one time (docs/MAP_AI.md): a fourth is refused until one is revoked or ends
+    ai_keys_day: int = 5                # the keys that one account may make in a day, revoked ones too
+    ai_name_chars: int = 40             # the longest name of a key (the person's own text)
+    ai_key_burst: int = 20              # the calls of one key: a burst of 20, then four a second ...
+    ai_key_refill_seconds: float = 0.25
+    ai_account_hour: int = 600          # ... and, for all the keys of one account together, 600 calls an hour (a budget that fills up again steadily)
+    ai_bad_burst: int = 10              # keys that are no good, for each client address: a burst of 10, then one every 6 seconds (ten a minute); over it: 429, and the key is not even looked up
+    ai_bad_refill_seconds: float = 6.0
+    ai_pages_burst: int = 30            # the key pages (list, make, revoke) for each client address: a burst of 30, then one every 2 seconds
+    ai_pages_refill_seconds: float = 2.0
+    ai_body_max: int = 65536            # the body of a call (HTTP or MCP): 64 KB (nginx says the same in front)
+    ai_page_body_max: int = 512         # the body of the key pages
+    ai_frame_max: int = 1048576         # a frame that the armed tab sends (a result, a picture): 1 MiB at the most
+    ai_picture_max: int = 409600        # the base64 text of a picture in a result: about 300 KB of PNG
+    ai_call_seconds: float = 10.0       # a call is answered by the tab within this long, else `timeout`
+    ai_queue_max: int = 3               # calls of one account that wait for the one that is in flight ...
+    ai_queue_seconds: float = 10.0      # ... for this long at the most: then `busy`
+    ai_cells_armed: int = 100000        # the cells that an AI may change while one tab stays armed
+    ai_frames_burst: int = 40           # the frames that an armed tab may send at once (its answers to calls) ...
+    ai_frames_refill_seconds: float = 0.1       # ... then ten a second: a frame over it is a mistake of the socket, as in the chat
+    ai_idle_seconds: float = 3600.0     # an armed tab that has had no call for this long is disarmed
+    ai_sockets_address: int = 4         # armed tabs for each client address
+    ai_sockets_total: int = 100         # armed tabs in all
+    ai_clients_max: int = 500           # the app names of the MCP initialize that are kept (memory only), for the strip of the page
+    ai_log_days: int = 30               # the rows of the calls' log are kept this long ...
+    ai_log_rows: int = 10000            # ... and at most this many (the newest)
+    ai_ended_days: int = 7              # a key that ended or was revoked stays in the list of the operator's command this long, then the row goes
+
     @property
     def prune_from_bytes(self):
         return self.db_max_bytes * self.prune_from_percent // 100
