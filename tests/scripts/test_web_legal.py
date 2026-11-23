@@ -299,7 +299,7 @@ class TheRouteAndTheImage(unittest.TestCase):
             block = re.search(r"\n    location = /%s \{([^}]*)\}" % name, conf)
             self.assertIsNotNone(block, "location = /" + name)
             self.assertEqual(block.group(1).split(), ["rewrite", "^", "/%s.html" % name, "last;"])      # (no add_header: a header here would hide the server's own; the file's address sends the page's headers)
-        self.assertNotIn("    /legal.html /legal;\n", conf)                                         # (not in the map of old addresses: /legal used to redirect to the file, so the file answers 200, tests/scripts/test_nginx_clean_urls.py)
+        self.assertNotIn("    /legal.html /legal;\n", conf)                                         # (not in the map of old addresses: /legal used to redirect to the file, so the file answers 200 and names the clean address as canonical, tests/scripts/test_nginx_clean_urls.py)
         self.assertNotIn("    /changelog.html /changelog;\n", conf)
 
 

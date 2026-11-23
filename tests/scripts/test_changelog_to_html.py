@@ -250,7 +250,7 @@ class MadeUpFiles(unittest.TestCase):
         self.assertEqual(page.errors, [])
         self.assertEqual(page.stack, [])
         self.assertEqual([(l.get("rel"), l.get("href")) for l in page.links],
-                         [("icon", "/favicon.png?v=9ea2152a"), ("manifest", "/manifest.webmanifest"), ("apple-touch-icon", "/app/apple-touch-icon.png?v=82bef672"), ("preload", "/front/LibreFranklin-Medium.ttf"), ("stylesheet", "/front/classic.css"), ("stylesheet", "/site_nav.css"), ("stylesheet", "/update_notice.css")])
+                         [("canonical", "/changelog"), ("icon", "/favicon.png?v=9ea2152a"), ("manifest", "/manifest.webmanifest"), ("apple-touch-icon", "/app/apple-touch-icon.png?v=82bef672"), ("preload", "/front/LibreFranklin-Medium.ttf"), ("stylesheet", "/front/classic.css"), ("stylesheet", "/site_nav.css"), ("stylesheet", "/update_notice.css")])
         self.assertEqual([i.get("src") for i in page.imgs], [])
         self.assertEqual(page.scripts, ["script", "script", "script"])                             # (the one inline script that makes the pages: TheScript, below, and the site bar's file and the update notice's at the end)
         self.assertIn('</div>\n<script src="/site_nav.js"></script>\n<script src="/update_notice.js"></script>\n</body>', self.text)

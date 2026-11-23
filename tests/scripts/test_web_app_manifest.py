@@ -35,7 +35,7 @@ from size_limits import APP_ICONS_BUDGET, APP_MANIFEST_BUDGET, FAVICON_BUDGET  #
 
 THEME = "#2b5f43"                  # the outermost line of the pages' green frame (web/lobby.html)
 BACKGROUND = "#db4b13"             # the orange of the game's menus (web/front/clay.png is this with a little noise)
-PAGES = ["web/shell.html", "web/lobby.html", "web/matches.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "asset_catalog/index.html"]   # (and the changelog page, made by a tool)
+PAGES = ["web/shell.html", "web/lobby.html", "web/matches.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/404.html", "web/50x.html", "asset_catalog/index.html"]   # (and the changelog page, made by a tool)
 SHORTCUT_PAGES = {"/matches": "web/matches.html", "/mapmaker": "web/mapmaker.html", "/?vp": "web/lobby.html"}
 ICON_FILES = {"icon-192.png": 192, "icon-512.png": 512, "icon-maskable-512.png": 512, "apple-touch-icon.png": 180}
 
@@ -190,7 +190,7 @@ class TheHeadLines(unittest.TestCase):
     def test_every_page_but_the_admin_page_has_the_same_four_lines_once(self):
         pages = {name: read(*name.split("/")) for name in PAGES}
         pages["the changelog page"] = changelog_page()
-        self.assertEqual(len(pages), 8)
+        self.assertEqual(len(pages), 10)
         for name, text in pages.items():
             self.assertEqual(head_lines(text), WANT_HEAD, name)
 

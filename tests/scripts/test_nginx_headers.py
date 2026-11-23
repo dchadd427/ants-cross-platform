@@ -173,11 +173,11 @@ class TheText(unittest.TestCase):
 
     def test_the_manifest_has_one_exact_location_of_its_own(self):
         found = [words for words, _ in locations() if "manifest" in words]
-        self.assertEqual(found, ["= /manifest.webmanifest"])                                       # (an exact location: the fallback for an unknown address is the game page)
+        self.assertEqual(found, ["= /manifest.webmanifest"])                                       # (an exact location: the file or a plain 404, never the page of an address that is nothing)
 
     def test_the_update_notices_data_file_has_one_exact_location_of_its_own(self):
         found = [words for words, _ in locations() if "whats_new" in words]
-        self.assertEqual(found, ["= /whats_new.json"])                                             # (an exact location: the fallback for an unknown address is the game page)
+        self.assertEqual(found, ["= /whats_new.json"])                                             # (an exact location: the file or a plain 404, never the page of an address that is nothing)
 
     def test_the_documents_name_what_is_built(self):
         text = stats.read("docs", "BUILD_AND_RUN.md")
@@ -375,39 +375,44 @@ READ_ADDRESSES = READ_ROUTES + ("/history?limit=1", "/history?limit=3")
 LIVE_ROWS = [
     ("the front page", "GET", "/", (), 200, "lobby"),
     ("the front page, a room's link", "GET", "/?room=k7m2xq", (), 200, "lobby"),
-    ("the front page's old file", "GET", "/lobby.html?room=k7m2xq", (), 302, "plain"),
+    ("the front page's old file", "GET", "/lobby.html?room=k7m2xq", (), 301, "plain"),
     ("the old front page's address", "GET", "/four.html?room=k7m2xq", (), 301, "plain"),
     ("the game page", "GET", "/play", (), 200, "game"),
     ("the game page with a query", "GET", "/play?live=ants-X-20260101-000000Z", (), 200, "game"),
-    ("the game page's old address", "GET", "/play.html?live=ants-X-20260101-000000Z", (), 302, "plain"),
-    ("the game page's old file", "GET", "/index.html", (), 302, "plain"),
-    ("the game page with a slash", "GET", "/play/", (), 302, "plain"),
+    ("the game page's old address", "GET", "/play.html?live=ants-X-20260101-000000Z", (), 301, "plain"),
+    ("the game page's old file", "GET", "/index.html", (), 301, "plain"),
+    ("the game page with a slash", "GET", "/play/", (), 301, "plain"),
     ("a joined game", "GET", "/?join=/ws&room=abc&name=Pebble", (), 200, "game"),
     ("the replay in its frame", "GET", "/play?replay=ants-X-20260101-000000Z.antsrep&embed=1", (), 200, "game"),
-    ("the replay in its frame, old address", "GET", "/play.html?replay=ants-X-20260101-000000Z.antsrep&embed=1", (), 302, "plain"),
-    ("an address that is nothing", "GET", "/no/such/page", (), 200, "game"),
+    ("the replay in its frame, old address", "GET", "/play.html?replay=ants-X-20260101-000000Z.antsrep&embed=1", (), 301, "plain"),
+    ("an address that is nothing", "GET", "/no/such/page", (), 404, "page"),
+    ("an address that is nothing, with a query", "GET", "/nothing?room=k7m2xq", (), 404, "page"),
+    ("a folder of the site", "GET", "/front/", (), 404, "page"),
+    ("an address that starts like a page", "GET", "/playx", (), 404, "page"),
     ("the list of matches", "GET", "/matches?q=ann", (), 200, "page"),
     ("the list of matches, old file, no redirect", "GET", "/matches.html?q=ann", (), 200, "page"),
-    ("the old list of recordings", "GET", "/watch.html", (), 302, "plain"),
+    ("the old list of recordings", "GET", "/watch.html", (), 301, "plain"),
     ("a match", "GET", "/match?id=x", (), 200, "page"),
-    ("a match, old address", "GET", "/match.html?id=x", (), 302, "plain"),
-    ("the page of the matches that run now, which is gone", "GET", "/live-now", (), 302, "plain"),
-    ("the page of the matches that run now, old file address", "GET", "/live.html", (), 302, "plain"),
-    ("the page of the matches that run now, in capital letters", "GET", "/LIVE-NOW", (), 302, "plain"),
-    ("the page of the matches that run now, old file address in mixed case", "GET", "/Live.html", (), 302, "plain"),
+    ("a match, old address", "GET", "/match.html?id=x", (), 301, "plain"),
+    ("the page of the matches that run now, which is gone", "GET", "/live-now", (), 301, "plain"),
+    ("the page of the matches that run now, old file address", "GET", "/live.html", (), 301, "plain"),
+    ("the page of the matches that run now, in capital letters", "GET", "/LIVE-NOW", (), 301, "plain"),
+    ("the page of the matches that run now, old file address in mixed case", "GET", "/Live.html", (), 301, "plain"),
     ("the legal page", "GET", "/legal", (), 200, "page"),
     ("the legal page, old file, no redirect", "GET", "/legal.html", (), 200, "page"),
     ("the changelog page", "GET", "/changelog", (), 200, "page"),
     ("the changelog page, old file, no redirect", "GET", "/changelog.html", (), 200, "page"),
-    ("the changelog page with a slash", "GET", "/changelog/", (), 302, "plain"),
+    ("the changelog page with a slash", "GET", "/changelog/", (), 301, "plain"),
     ("a page that is not there", "GET", "/nothing.html", (), 404, "page"),
     ("the asset catalog", "GET", "/asset_catalog/", (), 200, "page"),
-    ("the asset catalog's file", "GET", "/asset_catalog/index.html", (), 200, "page"),
+    ("the asset catalog's file", "GET", "/asset_catalog/index.html", (), 301, "plain"),
     ("the asset catalog's data script", "GET", "/asset_catalog/catalog_data.js", (), 200, "plain"),
     ("the map maker", "GET", "/mapmaker", (), 200, "mapmaker"),
-    ("the map maker, old address", "GET", "/mapmaker.html", (), 302, "plain"),
+    ("the map maker, old address", "GET", "/mapmaker.html", (), 301, "plain"),
     ("the admin page", "GET", "/admin", (), 200, "admin"),
     ("the admin page's file", "GET", "/admin.html", (), 404, "plain"),
+    ("the file of the page of a 404", "GET", "/404.html", (), 404, "plain"),
+    ("the file of the page of an error of the server", "GET", "/50x.html", (), 404, "plain"),
     ("the admin page with a slash", "GET", "/admin/", (), 301, "plain"),
     ("a style sheet", "GET", "/front/classic.css", (), 200, "plain"),
     ("a script", "GET", "/shapes.js", (), 200, "plain"),
@@ -461,6 +466,17 @@ LIVE_ROWS = [
     ("the login", "GET", "/hub/login", (), 200, "door"),
     ("the login's way back", "GET", "/hub/callback?code=x&state=y", (), 200, "door"),
     ("the game door, refused", "GET", "/ws", (("Origin", "https://other.example"),), 403, "plain"),
+    ("under the game door", "GET", "/ws/x", (), 404, "plain"),
+    ("under the status door", "GET", "/busy/x", (), 404, "plain"),
+    ("under the numbers", "GET", "/stats/x", (), 404, "plain"),
+    ("under the report of a game for one", "GET", "/stats/local/x", (), 404, "plain"),
+    ("under the list of public games", "GET", "/lobbies/x", (), 404, "plain"),
+    ("under the test maps", "GET", "/test-maps/x", (), 404, "plain"),
+    ("under the chat", "GET", "/hub/x", (), 404, "plain"),
+    ("under the chat's door", "GET", "/hub/ws/", (), 404, "plain"),
+    ("a script under the chat", "GET", "/hub/x.js", (), 404, "plain"),
+    ("a page under the chat", "GET", "/hub/x.html", (), 404, "plain"),
+    ("a style sheet under the chat, in capitals", "GET", "/hub/X.CSS", (), 404, "plain"),
 ]
 # the same nginx with nothing behind it: the answers for a server that is not there
 DEAD_ROWS = [
@@ -485,6 +501,7 @@ def docroot_files():
     page = "<!doctype html><html><head><title>%s</title></head><body>" + "<p>a stand-in page of the site, long enough to be compressed on its way</p>" * 40 + "</body></html>\n"
     big = (b"ANTS " + bytes(range(32, 120))) * 4000
     files = {name: page % name for name in ("lobby.html", "index.html", "play.html", "matches.html", "match.html", "legal.html", "changelog.html", "mapmaker.html", "admin.html", "asset_catalog/index.html")}
+    files.update({"404.html": stats.read("web", "404.html"), "50x.html": stats.read("web", "50x.html")})                  # (the real error pages)
     files.update({"front/classic.css": "body { color: #222; }\n" * 80, "front/big.css": ".a { color: red; }\n" * 400, "shapes.js": "var shapes = 1;\n" * 80, "home/home.js": "var home = 1;\n" * 80, "asset_catalog/catalog_data.js": "var data = 1;\n" * 80,
                   "front/logo.png": "\x89PNG stand-in", "manifest.webmanifest": stats.read("web", "manifest.webmanifest"), "whats_new.json": WHATS_NEW, "app/icon-192.png": "\x89PNG stand-in", "app/apple-touch-icon.png": "\x89PNG stand-in", "favicon.png": "\x89PNG stand-in", "favicon.ico": "ico stand-in", "front/click.wav": "RIFF stand-in", "mapmaker_atlas/atlas.json": '{"v":1}', "mapmaker_atlas/ground.png": "\x89PNG stand-in",
                   "asset_catalog/sprites/s1.png": "\x89PNG stand-in", "asset_catalog/sounds/a.wav": "RIFF stand-in", "lvl_core.wasm": "\0asm stand-in", "index.js": big[:50000], "index.wasm": big[:120000], "index.data": big})
@@ -611,9 +628,12 @@ class TheFileRuns(unittest.TestCase):
         os.rename(path, path + ".away")
         try:
             gone = fetch(self.live.port, "/manifest.webmanifest")
-            self.assertEqual(gone.status, 404)                                                     # (an unknown address falls back to the game page: this one must not)
+            self.assertEqual(gone.status, 404)                                                     # (an address that is nothing is the page of a 404: this one is a plain 404, as a file that is gone)
             self.assertNotIn(b"a stand-in page", gone.body)
-            self.assertEqual(fetch(self.live.port, "/manifest.webmanifest.x").status, 200)         # (only the exact address is special: any other unknown address is still the game page)
+            self.assertNotIn(b"Page not found", gone.body)
+            other = fetch(self.live.port, "/manifest.webmanifest.x")                               # (only the exact address is special: any other unknown address is the page of a 404)
+            self.assertEqual(other.status, 404)
+            self.assertIn(b"Page not found", other.body)
         finally:
             os.rename(path + ".away", path)
         self.assertEqual(fetch(self.live.port, "/manifest.webmanifest", "HEAD").status, 200)
@@ -627,13 +647,60 @@ class TheFileRuns(unittest.TestCase):
         os.rename(path, path + ".away")
         try:
             gone = fetch(self.live.port, "/whats_new.json")
-            self.assertEqual(gone.status, 404)                                                     # (an unknown address falls back to the game page: this one must not)
+            self.assertEqual(gone.status, 404)                                                     # (an address that is nothing is the page of a 404: this one is a plain 404, as a file that is gone)
             self.assertNotIn(b"a stand-in page", gone.body)
-            self.assertEqual(fetch(self.live.port, "/whats_new.json.x").status, 200)               # (only the exact address is special: any other unknown address is still the game page)
+            self.assertNotIn(b"Page not found", gone.body)
+            other = fetch(self.live.port, "/whats_new.json.x")                                     # (only the exact address is special: any other unknown address is the page of a 404)
+            self.assertEqual(other.status, 404)
+            self.assertIn(b"Page not found", other.body)
         finally:
             os.rename(path + ".away", path)
         self.assertEqual(fetch(self.live.port, "/whats_new.json", "HEAD").status, 200)
         self.assertEqual(fetch(self.live.port, "/whats_new.json", "POST", body=b"x").status, 405)
+
+    def test_an_address_that_is_nothing_is_the_page_of_a_404_never_the_game_and_under_the_name_of_a_door_it_is_a_plain_404(self):
+        page = stats.read("web", "404.html").encode("utf-8")
+        for path in ("/no/such/page", "/nothing?room=k7m2xq", "/playx", "/front/", "/robots.txt", "/nothing.html", "/front/nothing.css", "/nothing.js"):
+            answer = fetch(self.live.port, path)
+            self.assertEqual(answer.status, 404, path)
+            self.assertEqual(answer.body, page, path)                                              # (the page of the site as it is in web/: its status is the error's, its body the file's)
+            self.assertNotIn(b"a stand-in page", answer.body, path)                                # (the stand-in game page, lobby and the others are not it)
+            self.assertEqual(answer.get("content-type"), "text/html", path)
+            self.assertEqual(answer.get("cache-control"), "no-cache, must-revalidate", path)
+            self.assertIsNotNone(answer.get("etag"), path)
+            self.assertEqual(parse_csp(answer.get("content-security-policy"))["default-src"], ["'self'"], path)       # (the policy of a page: this site only)
+            self.assertEqual(answer.get("cross-origin-opener-policy"), "same-origin", path)
+        self.assertEqual(fetch(self.live.port, "/nothing", "HEAD").status, 404)
+        self.assertEqual(fetch(self.live.port, "/nothing", "POST", body=b"x").body, page)          # (a POST gets the page too)
+        for path in ("/ws/x", "/busy/x", "/stats/x", "/lobbies/x", "/test-maps/x", "/hub/x", "/hub/ws/", "/hub/pic/x", "/admin/x", "/hub/x.js", "/hub/x.html", "/hub/x.css", "/hub/a/b.JS", "/hub/ws.html?x=1"):
+            answer = fetch(self.live.port, path)
+            self.assertEqual(answer.status, 404, path)
+            self.assertNotIn(b"Page not found", answer.body, path)                                 # (the nginx's own short 404: nothing of the site)
+            self.assertNotIn(b"a stand-in page", answer.body, path)
+            self.assertIsNone(answer.get("content-security-policy"), path)
+        for path in ("/", "/play", "/matches", "/legal", "/changelog", "/mapmaker", "/manifest.webmanifest", "/front/classic.css"):
+            answer = fetch(self.live.port, path)
+            self.assertEqual(answer.status, 200, path)                                             # (the pages and files that are the site's own: not the page of a 404)
+            self.assertNotIn(b"Page not found", answer.body, path)
+
+    def test_a_404_without_its_page_is_the_plain_404_and_the_two_files_are_no_addresses_of_the_site(self):
+        path = os.path.join(self.docroot, "404.html")
+        os.rename(path, path + ".away")
+        try:
+            for asked in ("/nothing", "/nothing.html"):
+                gone = fetch(self.live.port, asked)
+                self.assertEqual(gone.status, 404, asked)                                          # (no loop of internal redirects, no 500: the answer is nginx's own short 404)
+                self.assertNotIn(b"Page not found", gone.body, asked)
+                self.assertNotIn(b"a stand-in page", gone.body, asked)
+        finally:
+            os.rename(path + ".away", path)
+        self.assertEqual(fetch(self.live.port, "/nothing").status, 404)
+        for name in ("404.html", "50x.html", "404.html?x=1", "404.HTML", "50X.html", "%34%30%34.html", "404%2ehtml", "%35%30x.html", "/404.html", "./404.html", "a/../50x.html", "%34%30%34.html?x=1"):
+            answer = fetch(self.live.port, "/" + name)                                             # (only error_page asks for the two files: a visitor who asks for one by name gets the plain 404 of a file that is not there)
+            self.assertEqual(answer.status, 404, name)
+            self.assertNotIn(b"Page not found", answer.body, name)
+            self.assertNotIn(b"Something went wrong", answer.body, name)
+            self.assertIsNone(answer.get("content-security-policy"), name)
 
     def test_the_policy_of_the_pages_is_the_one_that_it_was_and_covers_the_manifest_and_the_icons_without_a_new_directive(self):
         for path in ("/", "/play", "/matches", "/legal"):
@@ -927,8 +994,8 @@ class TheFileRuns(unittest.TestCase):
             stock_before = f.read()
         secrets = ("ROOMSECRET1", "ROOMSECRET2", "NAMESECRET", "SEARCHSECRET", "HISTSECRET", "UNKNOWNSECRET", "REFSECRET", "COOKIESECRET", "AUTHSECRET", "XFFSECRET")
         extra = (("Referer", "https://other.example/?room=REFSECRET"), ("Cookie", "session=COOKIESECRET"), ("Authorization", "Bearer AUTHSECRET"), ("User-Agent", "agent-visible/1.0"), ("X-Forwarded-For", "1.2.3.4, XFFSECRET"))
-        asked = [("/?room=ROOMSECRET1", "/", 200), ("/play?join=/ws&room=ROOMSECRET2&name=NAMESECRET", "/play", 200), ("/matches?q=SEARCHSECRET", "/matches", 200), ("/play.html?live=SEARCHSECRET", "/play.html", 302),
-                 ("/history?q=HISTSECRET", "/history", 200), ("/nowhere/at/all?x=UNKNOWNSECRET", "/nowhere/at/all", 200), ("/wp-login.php?x=UNKNOWNSECRET", "/wp-login.php", 200), ("/busy", "/busy", 200)]
+        asked = [("/?room=ROOMSECRET1", "/", 200), ("/play?join=/ws&room=ROOMSECRET2&name=NAMESECRET", "/play", 200), ("/matches?q=SEARCHSECRET", "/matches", 200), ("/play.html?live=SEARCHSECRET", "/play.html", 301),
+                 ("/history?q=HISTSECRET", "/history", 200), ("/nowhere/at/all?x=UNKNOWNSECRET", "/nowhere/at/all", 404), ("/wp-login.php?x=UNKNOWNSECRET", "/wp-login.php", 404), ("/busy", "/busy", 200)]
         for target, _, _ in asked:
             fetch(self.live.port, target, headers=extra)
         lines = self.log_lines(self.live, "agent-visible/1.0", len(asked))
@@ -942,7 +1009,7 @@ class TheFileRuns(unittest.TestCase):
         for line, (_, path, status) in zip(lines, asked):
             m = shape.match(line)
             self.assertIsNotNone(m, line)
-            self.assertEqual((m.group(1), int(m.group(2))), (path, status), line)                  # (the path that was asked for, not the page that a fallback served)
+            self.assertEqual((m.group(1), int(m.group(2))), (path, status), line)                  # (the path that was asked for, not the page of the 404 that error_page served)
             self.assertGreater(int(m.group(3)), 0)
         with open(self.live.stock, encoding="utf-8") as f:
             self.assertEqual(f.read(), stock_before, "the image's stock log is not used for this server")

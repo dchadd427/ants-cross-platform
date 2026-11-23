@@ -68,7 +68,7 @@ def quote(name):
 class TheLocations(unittest.TestCase):
     def test_the_four_locations_of_the_name_are_the_only_ones_and_no_pattern_location_could_catch_them(self):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", CONF, re.M)
-        self.assertEqual([l for l in locations if "maps" in l], ["= /maps", "^~ /maps/previews/", "^~ /maps/files/", "^~ /maps/", "@maps_off", "= /maps/all", "= /test-maps", "@test_maps_off"])       # (/maps/all: the newest version's list, docs/MAP_SUBMISSIONS.md; the two last are the test-map door's, tests/scripts/test_nginx_test_maps.py)
+        self.assertEqual([l for l in locations if "maps" in l], ["= /maps", "^~ /maps/previews/", "^~ /maps/files/", "^~ /maps/", "@maps_off", "= /maps/all", "= /test-maps", "@test_maps_off", "^~ /test-maps/"])       # (/maps/all: the newest version's list, docs/MAP_SUBMISSIONS.md; the three last are the test-map door's and its plain 404, tests/scripts/test_nginx_test_maps.py)
         # (a regular-expression location would win over a prefix one only without ^~; the three prefix locations all have it, and an extension rule such as the one of images cannot answer first)
         for header in ("location ^~ /maps/previews/ {", "location ^~ /maps/files/ {", "location ^~ /maps/ {"):
             self.assertEqual(CONF.count(header), 1)
@@ -443,7 +443,7 @@ class TheBlocksRun(Asking, unittest.TestCase):
                        "/maps/files/" + "a" * 81 + ".lvl", "/maps/files/x.txt", "/maps/files/secret.lvl.txt", "/maps/previews/x.png", "/maps/previews/x.lvl"):
             status, _, body = self.ask("GET", target)
             self.assertNotIn(b"SECRET", body, target)
-            # (nginx resolves a dot-dot that is written with %2f BEFORE it picks the location: the request then leaves /maps/ and is the page's own business, here the site's fallback page; inside /maps/ it is a 404)
+            # (nginx resolves a dot-dot that is written with %2f BEFORE it picks the location: the request then leaves /maps/ and is the site's own business, here its 404 page; inside /maps/ it is a plain 404)
             self.assertTrue(status in (400, 404) or (status == 200 and b"<html" in body.lower() and not body.startswith(b"SECRET")), (target, status))
         status, headers, _ = self.ask("GET", "/maps/files/subdir.lvl")                         # (a folder that looks like a map: nginx adds the slash, and that address is a 404)
         self.assertIn(status, (301, 404))
