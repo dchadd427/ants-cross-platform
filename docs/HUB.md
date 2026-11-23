@@ -4,6 +4,8 @@
 
 The pages never need the hub: the site, the rooms and the games list work whether or not it runs, and the chat shows "offline" and retries.
 
+The hub also holds the keys that let a person's own AI work in the person's open Map Maker tab, and the relay to that tab: [`MAP_AI.md`](MAP_AI.md).
+
 ## The protocol
 
 Text frames, each a JSON object with a `t`. Version 1 (`v` in the welcome).

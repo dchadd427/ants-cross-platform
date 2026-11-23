@@ -149,6 +149,7 @@
 
     // The map has changed (a stroke, an undo, a name written in the dictionary): the numbers, and the check again soon
     function edited() {
+        if (aiPart) aiPart.touch();                                              // (the AI part counts every change of the map, whoever made it: a call that names an old version is refused)
         keepSoon();
         showFacts();
         $('check-dot').className = 'dot wait'; $('check-line').textContent = 'Checking\u2026';          // (not the old answer for the moment it takes)
@@ -176,6 +177,7 @@
         tools.setMap(file);
         keepSoon();
         if (mine) mine.hide();                               // (the list of My maps gives way to the map that took the screen)
+        if (aiPart) aiPart.touch();
         return '';
     }
 
@@ -471,13 +473,55 @@
         add('script', 'script', 'src', 'front/mapmaker_pickup.js');
         if (!left) done(win.MapPickup || null);
     }
+    // Connect an AI (mapmaker_ai.js, mapmaker_ai_tools.js and the style): loaded the first time the button is pressed, then kept. then(part), or then(null) when a file did not load.
+    var aiPart = null, aiWaiting = null;
+    function freeName(wanted) { return store.has(wanted) || MapStore.key(wanted) === MapStore.key(map.name) ? MapStore.numbered(wanted, function (n) { return MapStore.key(n) === MapStore.key(map.name) || store.has(n); }) : wanted; }
+    function aiEnv() {
+        return {
+            doc: doc, win: win, dialogs: dialogs, fetch: win.fetch ? win.fetch.bind(win) : null, host: $('top'), entry: doc.querySelector('[data-act="ai"]'), announce: function (t) { $('announce').textContent = t; },
+            view: function () { return canvas.state(); }, toScreen: MapView.toScreen, wrap: $('cv'), canvasNode: $('map'),
+            tools: {
+                core: core, limits: limits, pictureMax: 409600, file: function () { return map.file; }, name: function () { return map.name; }, editor: function () { return tools.editor(); }, changed: function (d) { tools.changed(d); },
+                rebase: rebase, stroking: function () { return canvas.isStroking(); }, later: function (f, ms) { win.setTimeout(f, ms); }, isSaved: function () { return tools.isSaved(); }, numbered: freeName,
+                keep: function (name, done) { keepAs(name, function (error) { done(error); }); },
+                keepBefore: function (done) { keepAs(freeName(Array.from(map.name).slice(0, 28).join('') + ' (before AI)'), function (error) { done(error); }); },
+                newMap: function (kind, rows, columns, name) {
+                    var made = kind === 'classic' ? core.blank(rows, columns, GROUND, EGGS, MINUTES, 'new_map') : core.blankExtended(rows, columns, GROUND, EGGS, MINUTES);
+                    if (made.status === 2) alive();
+                    return made.status !== 0 ? MapSizes.refusal(made.error).text : (setMap(withLongOrders(made.bytes), name) || '');
+                },
+                mini: function (file, w, h) { return MapView.miniBase(file, w, h, canvasOf); }, makeCanvas: canvasOf,
+                library: function () { return store.libraryList(); }, fetchMap: function (file, done) { store.fetchMap(file, done); },
+                edges: function () { return win.MapEdges && win.MapGround ? { MapEdges: win.MapEdges, MapGround: win.MapGround } : null; }
+            }
+        };
+    }
+    function withAi(then) {
+        if (aiPart) return then(aiPart);
+        if (aiWaiting) return aiWaiting.push(then);
+        aiWaiting = [then];
+        var left = 2, bad = false, c = el('link'), t = el('script'), p = el('script');
+        function one(ok) {
+            bad = bad || !ok;
+            if (--left) return;
+            var waiting = aiWaiting; aiWaiting = null;
+            if (!bad && win.MapAi && !aiPart) aiPart = win.MapAi.create(aiEnv());
+            waiting.forEach(function (f) { f(bad ? null : aiPart); });
+        }
+        c.rel = 'stylesheet'; c.href = 'front/mapmaker_ai.css'; c.onload = function () { one(true); }; c.onerror = function () { one(false); };
+        t.src = 'front/mapmaker_ai_tools.js';
+        t.onload = function () { p.src = 'front/mapmaker_ai.js'; p.onload = function () { one(true); }; p.onerror = function () { one(false); }; doc.head.appendChild(p); };
+        t.onerror = function () { one(false); };
+        doc.head.appendChild(c); doc.head.appendChild(t);
+    }
     function antsAbout() { showSummary(); var p = summed && summed.props; return p && !p.error ? { ant: win.MapProps.summary(p).ant, eggs: p.eggs } : null; }
 
     var ACTIONS = {
         play: playMap,
+        ai: function () { if (dialogs.isOpen() || canvas.isStroking()) return; withAi(function (part) { if (part) part.open(); else dialogs.message('This part did not load', 'The part of the page that connects an AI did not load. Check your connection and try again.'); }); },
         submit: function () { if (!dialogs.isOpen() && !canvas.isStroking()) submitOr(function () { sent.open(); }); }, subs: function () { if (!dialogs.isOpen() && !canvas.isStroking()) mine.show('sent'); },
         'new': function () { leave(newMap); }, open: function () { leave(openMap); }, download: download, check: showChecks, props: openProps, resize: openResize, mine: function () { if (!dialogs.isOpen() && !canvas.isStroking()) mine.show(); }, copy: convertWith('copy'), save: convertWith('save'), convert: convertWith('convert'),
-        menu: function () { dialogs.menu([{ text: 'New', onClick: ACTIONS['new'] }, { text: 'Open', onClick: ACTIONS.open }, { text: 'My maps', onClick: ACTIONS.mine }, { text: 'Copy...', onClick: ACTIONS.copy }, { text: 'Save as new...', onClick: ACTIONS.save }, { text: 'Properties...', onClick: ACTIONS.props }, { text: 'Resize...', onClick: ACTIONS.resize }, { text: 'Download', onClick: download }, { text: 'Submit for approval...', onClick: ACTIONS.submit }, { text: 'My submissions', onClick: ACTIONS.subs }, { text: '\u25b6 Play this map', cls: 'gold', hint: 'Play this map: a test game against bots. You come back here with the map as you left it.', onClick: ACTIONS.play }, { head: 'Settings for this browser' }, { text: 'Auto edges: ' + (tools.state().autoEdges ? 'On' : 'Off'), cls: 'tog' + (tools.state().autoEdges ? ' on' : ''), role: 'switch', checked: tools.state().autoEdges, disabled: !win.MapEdges || !win.MapGround, keepOpen: true, hint: 'Painting ground also sets the edge pieces. Remembered in this browser.', onClick: function (b) { tools.setAutoEdges(!tools.state().autoEdges); var on = tools.state().autoEdges, lbl = 'Auto edges: ' + (on ? 'On' : 'Off'); if (b.children && b.children.length >= 2) b.children[1].textContent = lbl; else b.textContent = lbl; b.setAttribute('aria-checked', String(on)); b.classList.toggle('on', on); } }]); }
+        menu: function () { dialogs.menu([{ text: 'New', onClick: ACTIONS['new'] }, { text: 'Open', onClick: ACTIONS.open }, { text: 'My maps', onClick: ACTIONS.mine }, { text: 'Copy...', onClick: ACTIONS.copy }, { text: 'Save as new...', onClick: ACTIONS.save }, { text: 'Properties...', onClick: ACTIONS.props }, { text: 'Resize...', onClick: ACTIONS.resize }, { text: 'Download', onClick: download }, { text: 'Connect an AI...', onClick: ACTIONS.ai }, { text: 'Submit for approval...', onClick: ACTIONS.submit }, { text: 'My submissions', onClick: ACTIONS.subs }, { text: '\u25b6 Play this map', cls: 'gold', hint: 'Play this map: a test game against bots. You come back here with the map as you left it.', onClick: ACTIONS.play }, { head: 'Settings for this browser' }, { text: 'Auto edges: ' + (tools.state().autoEdges ? 'On' : 'Off'), cls: 'tog' + (tools.state().autoEdges ? ' on' : ''), role: 'switch', checked: tools.state().autoEdges, disabled: !win.MapEdges || !win.MapGround, keepOpen: true, hint: 'Painting ground also sets the edge pieces. Remembered in this browser.', onClick: function (b) { tools.setAutoEdges(!tools.state().autoEdges); var on = tools.state().autoEdges, lbl = 'Auto edges: ' + (on ? 'On' : 'Off'); if (b.children && b.children.length >= 2) b.children[1].textContent = lbl; else b.textContent = lbl; b.setAttribute('aria-checked', String(on)); b.classList.toggle('on', on); } }]); }
     };
 
     function start(module) {
