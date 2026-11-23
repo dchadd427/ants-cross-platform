@@ -26,6 +26,19 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.21.0 - 2026-11-23 - A new room, Fog of War switch, the can't-go gap
+
+**For players:**
+- **A new, simpler room.** The colors are slim rows with the map card and one big START! or READY button beside them; Share, Rules and Leave sit in the room's header, and a press on an open color opens a short menu (Open, Easy, Medium or Hard bot, Closed). Match history is in the top bar.
+- **Phones.** Held upright, the room shows the colors as big tiles, two by two, with a sheet for each color; START stays in reach at the bottom.
+- **Fog of War switch.** The room's leader can turn Fog of War on in the Rules sheet; everyone sees it, and the Games list marks rooms with fog. Computer players and fog don't mix yet.
+- **The can't-go gap, as in the original.** A Thief shut out of its hill can be clicked free in the short gap between its "Can't go there" clips, the way the 1998 game allows.
+- **Computer players get unstuck.** They take a power-up that blocks the way, stop repeating refused clicks, free a walled-in Thief with a Fire Ant, and click a looping Thief away like a person would (Hard).
+
+**Rules / network:** rules number 14 (game mode 187: 15): the path manager answers an event's request after the turn's commands, as in the original. Network protocol 28 (the Fog of War byte in the leader's plan): a v0.20 game cannot join a v0.21 room. Older recordings still play.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5ed83928...d0e1305a)
+
 ## v0.20.6 - 2026-11-22 - 3D ant models test page
 
 **For players:**
