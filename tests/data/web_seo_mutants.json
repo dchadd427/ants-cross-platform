@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the files for search engines (tools/seo_files.py: robots.txt and sitemap.xml) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose and a test of tests/scripts/test_web_seo.py must notice - the sitemap lists exactly the pages that ask to be listed, by their canonical addresses; a door of the game server or the chat hub is shut to a crawler, and so is every address that holds a room; the admin page is not named; no page and no file that a page loads is shut; the address that goes into the files and into a shell command is an origin and nothing else. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/web_seo_mutants.json --keep-going --jobs 1.",
+ "note": "Mutants of the files for search engines (tools/seo_files.py: robots.txt and sitemap.xml) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose and a test of tests/scripts/test_web_seo.py must notice - the sitemap lists exactly the pages that ask to be listed, by their canonical addresses; a door of the game server or the chat hub is shut to a crawler, and so is every address that holds a room; the admin page is not named; no page and no file that a page loads is shut; the address that goes into the files and into a shell command is an origin and nothing else; the pictures of the maps are open to a crawler and the files of the maps are not. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/web_seo_mutants.json --keep-going --jobs 1.",
  "mutants": [
   {
    "id": "a_listed_page_is_missing_from_the_sitemap",
@@ -18,8 +18,8 @@
   {
    "id": "the_sitemap_names_another_address",
    "file": "tools/seo_files.py",
-   "old": "% (origin, path) for path in PUBLIC_PAGES",
-   "new": "% (\"https://example.org\", path) for path in PUBLIC_PAGES",
+   "old": "% (origin, path) for path in list(PUBLIC_PAGES)",
+   "new": "% (\"https://example.org\", path) for path in list(PUBLIC_PAGES)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo"
   },
   {
@@ -81,8 +81,22 @@
   {
    "id": "a_bad_address_is_written_anyway",
    "file": "tools/seo_files.py",
-   "old": "        robots, sitemap = robots_txt(argv[1]), sitemap_xml(argv[1])\n    except ValueError as e:\n        sys.stderr.write(\"seo_files.py: %s\\n\" % e)\n        return 1",
-   "new": "        robots, sitemap = robots_txt(argv[1].rstrip('/')), sitemap_xml(argv[1].rstrip('/'))\n    except ValueError as e:\n        sys.stderr.write(\"seo_files.py: %s\\n\" % e)\n        return 1",
+   "old": "        robots, sitemap = robots_txt(argv[1]), sitemap_xml(argv[1], more)\n    except (ValueError, OSError) as e:\n        sys.stderr.write(\"seo_files.py: %s\\n\" % e)\n        return 1",
+   "new": "        robots, sitemap = robots_txt(argv[1].rstrip('/')), sitemap_xml(argv[1].rstrip('/'), more)\n    except (ValueError, OSError) as e:\n        sys.stderr.write(\"seo_files.py: %s\\n\" % e)\n        return 1",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo"
+  },
+  {
+   "id": "the_pictures_of_the_maps_are_shut_to_a_crawler",
+   "file": "tools/seo_files.py",
+   "old": "lines.extend(\"Allow: \" + path for path in OPEN_BELOW[1])",
+   "new": "lines.extend(\"# \" + path for path in OPEN_BELOW[1])",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo"
+  },
+  {
+   "id": "the_files_of_the_maps_are_open_to_a_crawler",
+   "file": "tools/seo_files.py",
+   "old": "(\"/maps/previews/\",))",
+   "new": "(\"/maps/\",))",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo"
   }
  ]

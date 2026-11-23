@@ -30,9 +30,11 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - **Connect an AI in the Map Maker.** A new Connect an AI sheet makes a key (look only, or look and edit; it ends after 7, 30 or 90 days) for your own AI assistant (Claude Code, Cursor, any program that speaks MCP or plain web calls). Turn on "Let an AI work in this tab" and it can look at the map you have open and, with an edit key, change it while you watch: a strip with Stop and Undo AI changes stays on top, and each change is one step of your own history.
+- **A page for every map.** The six maps of the 1998 game and the players' maps each have a page at /map/NAME (picture, size, game length, food and power-ups, the map's own line, the maker when its line names one) with Play it and Open in Map maker, and /map-library lists them with a search and filters. The Map Maker opens a library map from /mapmaker?mapfile=NAME.lvl.
 - **Six skills for your AI**, to download from /ai/skills/ (one zip with all of them): the map file's words, the terrain, the layout of a fair map, the Map Maker's tools, and how to check and fix a map.
 
 **For operators:**
+- The map pages are made when the image is built (`tools/map_pages.py`, [`docs/MAP_PAGES.md`](docs/MAP_PAGES.md)) and listed in the sitemap; the maps that players send and you approve have no page yet.
 - The keys are off until the hub is started with `ANTS_HUB_AI_KEYS=on`; with it off every key door answers 503 and no tab can be armed ([`docs/MAP_AI.md`](docs/MAP_AI.md)).
 
 ## v0.21.0 - 2026-11-23 - A new room, Fog of War switch, the can't-go gap

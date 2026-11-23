@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """robots.txt and sitemap.xml of the site (docs/BUILD_AND_RUN.md, "Search engines and share cards").
 
-usage: seo_files.py ORIGIN OUT_DIR
+usage: seo_files.py ORIGIN OUT_DIR [--pages FILE]
 
 ORIGIN is the address that the pages name themselves by, the one line of web/SITE_ORIGIN (https://host, no path, no slash at the end); the files are written to OUT_DIR as robots.txt and
-sitemap.xml. The image's build (Dockerfile) and build_web.sh run it after the pages have the same address in their canonical links and share cards, so that the sitemap, the pages and the
+sitemap.xml. FILE lists more pages for the sitemap, an address a line (tools/map_pages.py writes it: the map index and the map pages, made from the map library, never written by hand). The image's build (Dockerfile) and build_web.sh run it after the pages have the same address in their canonical links and share cards, so that the sitemap, the pages and the
 robots file never name different addresses. The two lists below are the one home of what a crawler may and may not read: tests/scripts/test_web_seo.py runs this file and the pages and checks that the
 sitemap lists exactly the pages that ask to be indexed, and that no page, and nothing a page loads, is closed to a crawler.
 """
@@ -26,6 +26,11 @@ FOLDERS = (("The chat hub: the login, the connection, the pictures and images", 
 QUERIES = ("Addresses that hold a room (room=, join=, code=), a live match (live=) or a recording (replay=): a link that someone pasted into the chat is not for a search engine",
            ("/*room=", "/*join=", "/*code=", "/*live=", "/*replay="))
 
+# What a crawler may read below a path that is closed: the pictures of the maps (the map pages show them and a share card names one; a crawler that may not fetch the picture shows the page without it).
+# The longest rule wins (RFC 9309), so this opens /maps/previews/ and nothing else under /maps/ (the files of the maps stay closed).
+OPEN_BELOW = ("The pictures of the maps: the map pages and their share cards show them", ("/maps/previews/",))
+
+ADDRESS = re.compile(r"/(?:[A-Za-z0-9_~-][A-Za-z0-9._~-]*(?:/[A-Za-z0-9_~-][A-Za-z0-9._~-]*)*)?")      # (a path of clean segments: none empty, none that starts with a dot)
 ORIGIN = re.compile(r"https?://[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?(?::[0-9]{1,5})?")
 
 
@@ -46,25 +51,35 @@ def robots_txt(origin):
     for why, paths in FOLDERS + (QUERIES,):
         lines.append("# " + why)
         lines.extend("Disallow: " + path for path in paths)
+    lines.append("# " + OPEN_BELOW[0])
+    lines.extend("Allow: " + path for path in OPEN_BELOW[1])
     lines += ["", "Sitemap: %s/sitemap.xml" % origin, ""]
     return "\n".join(lines)
 
 
-def sitemap_xml(origin):
+def sitemap_xml(origin, more=()):
+    """The sitemap: the fixed pages, then `more` (addresses that begin with a slash and hold nothing but the characters of a clean address), each once."""
     check_origin(origin)
+    for path in more:
+        if not ADDRESS.fullmatch(path):
+            raise ValueError("not a page address: %r" % path)
     lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
-    lines.extend("  <url><loc>%s%s</loc></url>" % (origin, path) for path in PUBLIC_PAGES)
+    lines.extend("  <url><loc>%s%s</loc></url>" % (origin, path) for path in list(PUBLIC_PAGES) + [p for p in dict.fromkeys(more) if p not in PUBLIC_PAGES])
     lines += ["</urlset>", ""]
     return "\n".join(lines)
 
 
 def main(argv):
-    if len(argv) != 3:
+    if len(argv) not in (3, 5) or (len(argv) == 5 and argv[3] != "--pages"):
         sys.stderr.write(__doc__)
         return 2
     try:
-        robots, sitemap = robots_txt(argv[1]), sitemap_xml(argv[1])
-    except ValueError as e:
+        more = []
+        if len(argv) == 5:
+            with open(argv[4], encoding="utf-8") as f:
+                more = [line.strip() for line in f if line.strip()]
+        robots, sitemap = robots_txt(argv[1]), sitemap_xml(argv[1], more)
+    except (ValueError, OSError) as e:
         sys.stderr.write("seo_files.py: %s\n" % e)
         return 1
     os.makedirs(argv[2], exist_ok=True)

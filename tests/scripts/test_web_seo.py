@@ -287,14 +287,15 @@ class TheFiles(unittest.TestCase):
                 self.assertTrue(crawler_may_fetch(robots, path), "%s loads %s" % (address, loaded))
         for address in ("/front/classic.css", "/home/home.js", "/home/home.css", "/site_nav.js", "/update_notice.js", "/app/icon-192.png", "/manifest.webmanifest", "/favicon.png", "/favicon.ico",
                         "/mapmaker_atlas/atlas.json", "/index.js", "/index.wasm", "/index.data", "/lvl_core.wasm", "/asset_catalog/", "/asset_catalog/sprites/sprite_0726.png", "/sprites/a.png",
-                        "/sounds/a.wav", "/whats_new.json", "/sitemap.xml", "/robots.txt", "/front/preview_treasure.png"):
+                        "/sounds/a.wav", "/whats_new.json", "/sitemap.xml", "/robots.txt", "/front/preview_treasure.png", "/maps/previews/a.webp", "/maps/previews/%21Crossed%20Lake.webp",
+                        "/map/treasure", "/map-library", "/map-library?page=2", "/map_library_data.js", "/map_pages.css", "/map_library.js"):
             self.assertTrue(crawler_may_fetch(robots, address), address)
 
     def test_a_crawler_may_not_read_a_door_of_the_game_server_or_the_chat_hub_or_an_address_that_holds_a_room_or_a_recording(self):
         robots = self.files["robots.txt"]
         for address in ("/hub/login", "/hub/callback", "/hub/ws", "/hub/me", "/hub/admin/api/x", "/hub/pic/%s.png" % ("a" * 32),
                         "/hub/img/%s.jpg" % ("a" * 32), "/ws", "/busy", "/stats", "/stats/local", "/live", "/live/ants-X-20260101-000000Z", "/replays", "/replays/ants-X-20260101-000000Z.antsrep",
-                        "/history", "/history?limit=3", "/history/deaths", "/history/ants-X-20260101-000000Z", "/lobbies", "/maps", "/maps/all", "/maps/files/A.LVL", "/maps/previews/a.webp", "/submissions",
+                        "/history", "/history?limit=3", "/history/deaths", "/history/ants-X-20260101-000000Z", "/lobbies", "/maps", "/maps/all", "/maps/files/A.LVL", "/maps/previews", "/submissions",
                         "/submissions/abc", "/test-maps", "/?room=k7m2xq", "/?join=/ws&room=abc&name=Pebble", "/?aspect=16:9&room=k7m2xq", "/play?live=ants-X-20260101-000000Z", "/play?code=abc",
                         "/play?replay=ants-X-20260101-000000Z.antsrep&embed=1"):
             self.assertFalse(crawler_may_fetch(robots, address), address)

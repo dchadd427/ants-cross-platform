@@ -155,12 +155,22 @@ RUN cd /src/changelog && \
     python3 changelog_to_html.py CHANGELOG.md changelog.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --build-date "${BUILD_DATE}" --whats-new whats_new.json && \
     test -s changelog.html && test -s whats_new.json
 
-# The address that the pages name themselves by (web/SITE_ORIGIN, one line): the canonical link, the share card's address and picture and the structured data of a page carry @@SITE_ORIGIN@@, which becomes that address here, in the finished pages
-# (after the stamps and the changelog above, so that none of them depends on it; docs/BUILD_AND_RUN.md "Search engines and share cards"), and tools/seo_files.py makes robots.txt and sitemap.xml with the same address. It refuses an address that is not
-# an origin before anything uses it. The build stops if a placeholder is left or a file is empty.
-COPY tools/seo_files.py /src/tools/seo_files.py
+# The pages of the map library (docs/MAP_PAGES.md): one page for each map at /map/NAME and the index at /map-library, made by tools/map_pages.py (Python standard library only) from the six maps of /src/Original-Ants/Maps (the folder that the link above packed) and the players' maps of
+# Community-Maps (read only; the pictures are the ones the runner stage below copies), from the template web/map_pages/page.html, with the same stamps as the other pages (the files of the layers above) and the site's address (web/SITE_ORIGIN, which
+# the tool checks). It also writes the other names of the maps that were shared under several (nginx/moved.map: a 301 each) and the addresses for the sitemap (addresses.txt, read by the layer after this one). After the compile layers, so that it
+# does not rebuild the game. The build stops if the tool fails, a page is missing or a slot of the template is left.
+COPY tools/seo_files.py tools/map_pages.py tools/library_guard.py /src/tools/
+COPY Community-Maps/maps.json Community-Maps/*.lvl Community-Maps/*.LVL /src/Community-Maps/
 RUN ORIGIN="$(head -n 1 /src/web/SITE_ORIGIN | tr -d '[:space:]')" && \
-    python3 tools/seo_files.py "${ORIGIN}" /src && \
+    python3 tools/map_pages.py "${ORIGIN}" /src/map_site --version "v$(head -n 1 /src/VERSION | tr -d '[:space:]')" --build-id "$(cat /src/build_id.txt)" --build-date "$(cat /src/build_date.txt)" && \
+    test -s /src/map_site/html/map_pages/map/treasure.html && test -s /src/map_site/html/map_pages/library/1.html && test -s /src/map_site/html/map_library_data.js && test -s /src/map_site/addresses.txt && \
+    ! grep -rlE '@@(TITLE|DESCRIPTION|CANONICAL|IMAGE|BODY|SCRIPTS|GAME_VERSION|BUILD_ID|BUILD_DATE)@@' /src/map_site/html
+
+# The address that the pages name themselves by (web/SITE_ORIGIN, one line): the canonical link, the share card's address and picture and the structured data of a page carry @@SITE_ORIGIN@@, which becomes that address here, in the finished pages
+# (after the stamps and the changelog above, so that none of them depends on it; docs/BUILD_AND_RUN.md "Search engines and share cards"), and tools/seo_files.py makes robots.txt and sitemap.xml with the same address, the map pages included
+# (the addresses that the layer above wrote). It refuses an address that is not an origin before anything uses it. The build stops if a placeholder is left or a file is empty.
+RUN ORIGIN="$(head -n 1 /src/web/SITE_ORIGIN | tr -d '[:space:]')" && \
+    python3 tools/seo_files.py "${ORIGIN}" /src --pages /src/map_site/addresses.txt && \
     for PAGE in /src/build_web/src/ants_app/index.html /src/lobby.html /src/matches.html /src/match.html /src/legal.html /src/mapmaker.html /src/changelog/changelog.html; do \
         sed -i "s|@@SITE_ORIGIN@@|${ORIGIN}|g" "$PAGE" || exit 1; \
         if grep -q '@@SITE_ORIGIN@@' "$PAGE"; then echo "the site's address is left as a placeholder in $PAGE" >&2; exit 1; fi; \
@@ -251,6 +261,12 @@ COPY web/app/ /usr/share/nginx/html/app/
 # The front page, the lobby (lobby.html): a room on the game server that is ready when the page opens (a link to send, a code to type, START), or a game for one on this computer,
 # with the site label, the version and the build put in. nginx serves it at "/"; the old address /four.html redirects there.
 COPY --from=builder /src/lobby.html /usr/share/nginx/html/lobby.html
+
+# The map pages (docs/MAP_PAGES.md; made in the builder stage): the pages and the list that the index reads, in /usr/share/nginx/html/map_pages/ and map_library_data.js (the locations of docker/nginx.conf serve /map/NAME and /map-library from them),
+# the other names of the maps for nginx's `map` (/etc/nginx/ants-map-pages/moved.map), and the index's own script and style, which are files of the repository like matches.css
+COPY --from=builder /src/map_site/html/ /usr/share/nginx/html/
+COPY --from=builder /src/map_site/nginx/ /etc/nginx/ants-map-pages/
+COPY web/map_pages.css web/map_library.js /usr/share/nginx/html/
 
 # The players' maps for the browser (docs/SERVER.md "The list of maps"): the preview pictures (534 small WebP files) and the .lvl files themselves, served by docker/nginx.conf at /maps/previews/ and /maps/files/ from
 # a folder outside the web root, so that only those two locations can reach them. The six originals' pictures are the front page's own (web/front/): no second copy.

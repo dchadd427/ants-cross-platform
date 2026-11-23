@@ -46,7 +46,12 @@ BUILD_ID="$(sh "${SCRIPT_DIR}/docker/resolve_build_id.sh" "${ANTS_BUILD_ID:-}" "
 BUILD_DATE="$(TZ=PST8PDT,M3.2.0,M11.1.0 date '+%Y-%m-%d %H:%M PT')"
 # The address that the pages name themselves by (web/SITE_ORIGIN: their canonical links and share cards; docs/BUILD_AND_RUN.md "Search engines and share cards"); robots.txt and sitemap.xml are made with it too
 SITE_ORIGIN="$(head -n 1 "${SCRIPT_DIR}/web/SITE_ORIGIN" | tr -d '[:space:]')"
-python3 "${SCRIPT_DIR}/tools/seo_files.py" "${SITE_ORIGIN}" "${DIST_DIR}"
+# The map pages (docs/MAP_PAGES.md: one for each map of the library, and the index), made from the library with the same stamps and address; the sitemap names them (the image's nginx, docker/nginx.conf, serves /map/NAME and /map-library from them)
+MAP_SITE="${BUILD_DIR}/map_site"
+python3 "${SCRIPT_DIR}/tools/map_pages.py" "${SITE_ORIGIN}" "${MAP_SITE}" --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --build-date "${BUILD_DATE}"
+cp -R "${MAP_SITE}/html/." "${DIST_DIR}/"
+cp -f "${SCRIPT_DIR}/web/map_pages.css" "${SCRIPT_DIR}/web/map_library.js" "${DIST_DIR}/"
+python3 "${SCRIPT_DIR}/tools/seo_files.py" "${SITE_ORIGIN}" "${DIST_DIR}" --pages "${MAP_SITE}/addresses.txt"
 sed -e "s/@@GAME_VERSION@@/${GAME_VERSION}/g" -e "s/@@BUILD_ID@@/${BUILD_ID}/g" -e "s/@@BUILD_DATE@@/${BUILD_DATE}/g" -e "s/@@SITE_TITLE@@//g" -e "s/@@SITE_FOOTER@@//g" -e "s|@@SITE_ORIGIN@@|${SITE_ORIGIN}|g" "${BUILD_DIR}/src/ants_app/index.html" > "${DIST_DIR}/index.html"
 cp -f "${DIST_DIR}/index.html" "${DIST_DIR}/play.html"            # the game page at its own path (the games on this computer), as the image has it
 sed -e "s/@@GAME_VERSION@@/${GAME_VERSION}/g" -e "s/@@BUILD_ID@@/${BUILD_ID}/g" -e "s/@@BUILD_DATE@@/${BUILD_DATE}/g" -e "s/@@SITE_TITLE@@//g" -e "s/@@SITE_FOOTER@@//g" -e "s|@@SITE_ORIGIN@@|${SITE_ORIGIN}|g" "${SCRIPT_DIR}/web/lobby.html" > "${DIST_DIR}/lobby.html"
