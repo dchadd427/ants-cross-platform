@@ -163,7 +163,7 @@
   {
    "id": "head_check_accepts_rules_8",
    "file": "include/ants_replay/replay.hpp",
-   "old": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeNoDrops || rules == kSimRulesMode187BeforeEndFix || rules == kSimRulesMode187BeforeFireWall || rules == kSimRulesMode187Heal)",
+   "old": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeCantGo || rules == kSimRulesMode187BeforeNoDrops || rules == kSimRulesMode187BeforeEndFix || rules == kSimRulesMode187BeforeFireWall || rules == kSimRulesMode187Heal)",
    "new": "(rules >= kSimRulesMode187Heal)",
    "build": "test_rules_187",
    "test": "timeout 600 ./build/tests/test_replay/test_rules_187",
@@ -172,8 +172,8 @@
   {
    "id": "head_check_refuses_rules_6",
    "file": "include/ants_replay/replay.hpp",
-   "old": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeNoDrops || rules == kSimRulesMode187BeforeEndFix || rules == kSimRulesMode187BeforeFireWall || rules == kSimRulesMode187Heal)",
-   "new": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeNoDrops || rules == kSimRulesMode187BeforeEndFix || rules == kSimRulesMode187BeforeFireWall)",
+   "old": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeCantGo || rules == kSimRulesMode187BeforeNoDrops || rules == kSimRulesMode187BeforeEndFix || rules == kSimRulesMode187BeforeFireWall || rules == kSimRulesMode187Heal)",
+   "new": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeCantGo || rules == kSimRulesMode187BeforeNoDrops || rules == kSimRulesMode187BeforeEndFix || rules == kSimRulesMode187BeforeFireWall)",
    "build": "test_rules_187",
    "test": "timeout 600 ./build/tests/test_replay/test_rules_187",
    "expect": "RP12.1"
