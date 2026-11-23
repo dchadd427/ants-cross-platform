@@ -235,7 +235,7 @@
                 row.setAttribute('data-n', String(e.id));
                 if (e.id === s.line.id) row.className += ' gm-here';
                 put(row, [t, x, can ? icon('chev', 'gm-ico gm-chev') : null]);
-                if (can) row.setAttribute('aria-label', (w ? (multi ? w.day + ' ' : '') + w.time + '. ' : '') + cut(e.text, LIMIT.quote) + (e.id === s.line.id ? '. ' + TEXT.thisLine : ''));
+                if (can) row.setAttribute('aria-label', (w ? (multi ? w.day + ' ' : '') + w.time + '. ' : '') + said(e) + (e.id === s.line.id ? '. ' + TEXT.thisLine : ''));
                 box.appendChild(row);
             });
             if (!list.length) box.appendChild(el('p', 'gm-none', TEXT.recentNone));
@@ -472,7 +472,7 @@
         hintBox = el('p', 'gc-news', TEXT.logHint); hintBox.id = 'gchat-mod-hint';
         statusBox = el('p', 'gc-news'); statusBox.setAttribute('role', 'status'); statusBox.setAttribute('aria-live', 'polite');
         dock.root.appendChild(hintBox); dock.root.appendChild(statusBox);
-        lines = surface({ kind: 'line', el: log, row: '.gc-line[data-n]', attr: 'data-n', keep: 'a', rowHint: TEXT.rowHint, hint: hintBox, status: statusBox, find: function (id) { return dock.line(id); }, say: function (l) { return l.who + ': ' + cut(l.text, 80) + '. ' + TEXT.rowHint; } });
+        lines = surface({ kind: 'line', el: log, row: '.gc-line[data-n]', attr: 'data-n', keep: 'a', rowHint: TEXT.rowHint, hint: hintBox, status: statusBox, find: function (id) { return dock.line(id); }, say: function (l) { return l.who + ': ' + (String(l.text || '').trim() ? cut(l.text, 80) : l.img ? TEXT.image : '') + '. ' + TEXT.rowHint; } });
         watch(lines);
         dock.rows(function (id, row) { lines.decorate(row, id); });
         function attach(p) {                                           // the players list (its own script), once it is there: its rows open the sheet of a person in the same ways; the person is named to the hub by the NUMBER of the row (`row:<n>`), never by a name
