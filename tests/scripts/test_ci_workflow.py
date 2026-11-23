@@ -10,6 +10,7 @@ is checked too):
   - the small jobs behind the five names: each passes only when the job `changes` succeeded and every job behind it passed, or (macOS, the two Windows names) when `changes` said the change needs
     none of them and they were skipped; they are RUN here in bash against every combination of results (a failed, cancelled or skipped job, a failed `changes`, a light answer that is not true)
   - the legs: ctest in three parts that are every test once, the tool self-tests and script suites, the python tests in slices that are every test once; macOS: the system-dependent python tests;
+    Windows: each compiler in two halves (the tests of CTEST_WINDOWS_LONG, and ctest's other tests with the tool self-tests and the E2E runner), every test once on each compiler;
     the web job in two legs (the web image; the server and hub images and the stack files) behind the name
   - the image of the Linux jobs: Ubuntu 24.04 for the legs and for the small job behind "Linux (GCC)" (so that the compiler under the required check changes only with the workflow)
   - the light checks of a pull request that changes pages, documents and page tests only: what skips (the macOS and Windows legs, at job level; their small jobs report the names), what does
@@ -76,8 +77,10 @@ class RequiredChecks(unittest.TestCase):
     def test_both_msvc_compilers_run_for_every_event_so_that_neither_name_passes_without_its_compiler(self):
         block = "\n".join(job_block("windows_tests"))
         self.assertNotIn("fromJSON", block)
-        self.assertIn("        include:\n          - name: MSVC 2022\n            os: windows-2022\n          - name: MSVC 2026\n            os: windows-latest\n", block)
-        self.assertEqual(len(re.findall(r"(?m)^          - name: ", block)), 2)
+        legs = re.findall(r"(?m)^          - id: (\S+)\n            name: \"(MSVC \d+): [^\"]*\"\n            os: (\S+)\n            part: (\S+)$", block)
+        self.assertEqual(legs, [("msvc2022-long", "MSVC 2022", "windows-2022", "long"), ("msvc2022-rest", "MSVC 2022", "windows-2022", "rest"),
+                                ("msvc2026-long", "MSVC 2026", "windows-latest", "long"), ("msvc2026-rest", "MSVC 2026", "windows-latest", "rest")])      # (each compiler in its two halves)
+        self.assertEqual(len(re.findall(r"(?m)^          - id: ", block)), 4)
 
     def test_every_job_has_a_time_limit_and_the_matrices_do_not_stop_at_the_first_failure(self):
         for job in job_ids():
@@ -402,7 +405,7 @@ class Windows(unittest.TestCase):
         self.assertIn("SCCACHE_DIR: ${{ github.workspace }}/.sccache", block)
         self.assertIn("sccache --show-stats", block)
         self.assertIn("sccache --stop-server", block)
-        self.assertLess(block.index("sccache --stop-server"), block.index("Test programs (ctest)"))
+        self.assertLess(block.index("sccache --stop-server"), block.index("Test programs (ctest"))
         for job in ("linux_tests", "macos_tests"):
             self.assertIn("key: ccache-${{ runner.os }}-${{ github.sha }}", "\n".join(job_block(job)))
             self.assertIn("restore-keys: ccache-${{ runner.os }}-", "\n".join(job_block(job)))
@@ -565,6 +568,20 @@ class TheJobsBehindTheRequiredNames(unittest.TestCase):
         self.assertIn('run_python_tests.py --shard "$SLICE"', text)
         self.assertNotIn("--skip-linux-only", text, "Linux runs every python test")
         self.assertNotIn(" -R ", "\n".join(job_block("macos_tests")), "macOS runs all of ctest")
+
+    def test_the_legs_of_the_windows_job_are_every_test_of_ctest_once_on_each_compiler(self):
+        text = "\n".join(job_block("windows_tests"))
+        long = re.search(r'(?m)^  CTEST_WINDOWS_LONG: "(.*)"$', TEXT).group(1)
+        first, rest = [n for n in self.registered if re.search(long, n)], [n for n in self.registered if not re.search(long, n)]
+        listed = re.fullmatch(r"\^\((.*)\)\$", long).group(1).split("|")
+        self.assertEqual(sorted(first), sorted(listed), "every name of the list is a test that ctest has (a renamed test would fall into the other leg, and the list would be one test short)")
+        self.assertEqual(len(first) + len(rest), len(self.registered))
+        self.assertGreater(len(rest), 100, "every other test, among them the ones to come")
+        self.assertIn('-R "$CTEST_WINDOWS_LONG"', text)
+        self.assertIn('-E "$CTEST_WINDOWS_LONG"', text)
+        self.assertEqual(text.count("--no-tests=error"), 2, "a half that matches no test (a renamed test) must fail, not pass with nothing run")
+        legs = re.findall(r"(?m)^            os: (\S+)\n            part: (\S+)$", text)
+        self.assertEqual(sorted(legs), [("windows-2022", "long"), ("windows-2022", "rest"), ("windows-latest", "long"), ("windows-latest", "rest")], "both halves on each compiler")
 
     def test_macos_runs_all_of_ctest_and_the_python_tests_that_depend_on_the_system(self):
         text = "\n".join(job_block("macos_tests"))
@@ -854,12 +871,13 @@ def title(step):
 
 
 def problems_of_the_legs(doc):
-    """What is wrong with the legs of linux_tests and macos_tests, as a list of sentences (none: nothing)."""
+    """What is wrong with the legs of linux_tests, macos_tests and windows_tests, as a list of sentences (none: nothing). The legs of windows_tests are the parts once for each compiler (`os`)."""
     problems = []
-    for job_id in ("linux_tests", "macos_tests"):
+    for job_id in ("linux_tests", "macos_tests", "windows_tests"):
         job = doc["jobs"][job_id]
         legs = legs_of(job)
         parts = {leg["part"] for leg in legs}
+        runners = len({leg.get("os") for leg in legs})                                         # (a part is one leg, or one for each compiler)
         for key in ("id", "name"):
             values = [leg.get(key) for leg in legs]
             if None in values or len(set(values)) != len(values):
@@ -898,8 +916,8 @@ def problems_of_the_legs(doc):
                 problems.append("%s: the test step %r runs in no leg" % (job_id, title(step)))
             elif len({leg["part"] for leg in where}) != 1:
                 problems.append("%s: the test step %r runs in the legs of more than one part" % (job_id, title(step)))
-            elif re.search(r"\bctest\b", step["run"]) and len(where) != 1:
-                problems.append("%s: the ctest step %r runs in %d legs (each part of ctest is one leg)" % (job_id, title(step), len(where)))
+            elif re.search(r"\bctest\b", step["run"]) and len(where) != runners:
+                problems.append("%s: the ctest step %r runs in %d legs (each part of ctest is %d leg(s))" % (job_id, title(step), len(where), runners))
         selected = {leg["part"] for leg in legs if any(is_test_step(step) for step in running.get(leg["id"], []))}
         if selected != parts:
             problems.append("%s: no test step is selected by the part(s) %s" % (job_id, sorted(parts - selected)))
@@ -1024,13 +1042,15 @@ def problems_of_the_light_checks(doc):
         for job_id in [j for j in jobs if j not in ("macos_tests", "windows_tests")]:
             if not job_runs(doc, job_id, light, changes):
                 problems.append("%s is skipped when the first job says %s" % (job_id, said))
-    for leg in legs_of(doc["jobs"]["windows_tests"]):
-        ran = steps_that_run(doc["jobs"]["windows_tests"], leg, "false")
-        tests = [step for step in ran if is_test_step(step)]
-        if len(tests) != 3:
-            problems.append("windows %s: it must run its three kinds of test on %s: %s" % (leg["name"], leg["os"], [title(s) for s in tests]))
-        if str(doc["jobs"]["windows_tests"]["runs-on"]) != "${{ matrix.os }}":
-            problems.append("windows %s: it runs on %s" % (leg["name"], doc["jobs"]["windows_tests"]["runs-on"]))
+    windows, tests_of = doc["jobs"]["windows_tests"], {}
+    for leg in legs_of(windows):
+        tests_of.setdefault(leg["os"], []).extend(str(step["run"]) for step in steps_that_run(windows, leg, "false") if is_test_step(step))
+        if str(windows["runs-on"]) != "${{ matrix.os }}":
+            problems.append("windows %s: it runs on %s" % (leg["name"], windows["runs-on"]))
+    for os_name, runs in tests_of.items():                          # (the two halves of a compiler together run its three kinds of test: ctest twice, the tool self-tests, the E2E runner)
+        kinds = (len([r for r in runs if re.search(r"\bctest\b", r)]), len([r for r in runs if "--selftest" in r]), len([r for r in runs if "e2e_runner" in r]))
+        if kinds != (2, 1, 1) or len(runs) != 4:
+            problems.append("windows %s: its two halves must run ctest twice, the tool self-tests and the E2E runner, once each: %s" % (os_name, runs))
     return problems
 
 
@@ -1133,6 +1153,9 @@ class TheLegsRunTheirTests(unittest.TestCase):
         self.assertEqual(len(ran["python-1"]), 1)
         macos = self.doc["jobs"]["macos_tests"]
         self.assertEqual({leg["id"]: len([s for s in steps_that_run(macos, leg) if is_test_step(s)]) for leg in legs_of(macos)}, {"ctest": 1, "scripts-python": 4})
+        windows = self.doc["jobs"]["windows_tests"]
+        self.assertEqual({leg["id"]: len([s for s in steps_that_run(windows, leg) if is_test_step(s)]) for leg in legs_of(windows)},
+                         {"msvc2022-long": 1, "msvc2022-rest": 3, "msvc2026-long": 1, "msvc2026-rest": 3})          # (the long tests; ctest's other tests with the tool self-tests and the E2E runner)
 
     def test_every_check_and_every_artifact_of_the_logs_has_a_name_of_its_own_and_the_five_required_names_are_reported_once(self):
         self.assertEqual(problems_of_the_names(self.doc), [])
@@ -1160,13 +1183,13 @@ class TheLegsRunTheirTests(unittest.TestCase):
     def test_no_ctest_passes_with_no_test_run(self):
         self.assertEqual(problems_of_ctest(self.doc), [])
         calls = sum(len(re.findall(r"\bctest\b", str(step.get("run", "")))) for job in self.doc["jobs"].values() for step in job.get("steps", []))
-        self.assertEqual(calls, 5, "three Linux parts, macOS, Windows: where is the other one?")
+        self.assertEqual(calls, 6, "three Linux parts, macOS, two Windows halves: where is the other one?")
 
     def test_the_answer_of_the_first_job_skips_macos_and_the_builds_of_windows_and_nothing_else(self):
         self.assertEqual(problems_of_the_light_checks(self.doc), [])
         windows = self.doc["jobs"]["windows_tests"]
-        self.assertEqual([leg["name"] for leg in legs_of(windows)], ["MSVC 2022", "MSVC 2026"])
-        self.assertEqual([leg["os"] for leg in legs_of(windows)], ["windows-2022", "windows-latest"])        # (both compilers for every event: a name never passes without its compiler)
+        self.assertEqual([leg["id"] for leg in legs_of(windows)], ["msvc2022-long", "msvc2022-rest", "msvc2026-long", "msvc2026-rest"])
+        self.assertEqual([leg["os"] for leg in legs_of(windows)], ["windows-2022", "windows-2022", "windows-latest", "windows-latest"])        # (both compilers for every event: a name never passes without its compiler)
 
 
 @unittest.skipUnless(yaml, "PyYAML is needed")
@@ -1187,6 +1210,9 @@ class TheChecksCanFail(unittest.TestCase):
                 ("steps.build.conclusion == 'success' && matrix.part == 'scripts' }}\n        run: |\n          status=0\n          build/map_sweep --selftest", "steps.build.conclusion == 'success' && matrix.part == 'script' }}\n        run: |\n          status=0\n          build/map_sweep --selftest", "script"),
                 ("!cancelled() && matrix.part == 'python' }}", "!cancelled() && matrix.part == 'pyhton' }}", "pyhton"),
                 ("matrix.part == 'ctest-lookups' }}", "matrix.part == 'ctest-lookup' }}", "ctest-lookup"),
+                ("matrix.part == 'long' }}\n        run: ctest", "matrix.part == 'lang' }}\n        run: ctest", "lang"),
+                ("matrix.part == 'rest' }}\n        run: ctest", "matrix.part == 'rst' }}\n        run: ctest", "rst"),
+                ("steps.build_e2e.conclusion == 'success' && matrix.part == 'rest' }}", "steps.build_e2e.conclusion == 'success' && matrix.part == 'rets' }}", "rets"),
                 ("matrix.part == 'scripts-python' }}\n        run: |\n          status=0\n          python3 tools/check", "matrix.part == 'scripts_python' }}\n        run: |\n          status=0\n          python3 tools/check", "scripts_python")):
             with self.subTest(word):
                 problems = self.judged(old, new, problems_of_the_legs)
@@ -1213,8 +1239,14 @@ class TheChecksCanFail(unittest.TestCase):
         self.assertTrue(any("two legs upload the artifact 'linux-test-logs-python'" in p for p in problems), problems)
         problems = self.judged("name: macos-test-logs-${{ matrix.id }}", "name: macos-test-logs", problems_of_the_names)
         self.assertTrue(any("two legs upload the artifact 'macos-test-logs'" in p for p in problems), problems)
-        problems = self.judged("name: windows-${{ matrix.os }}-test-logs", "name: windows-test-logs", problems_of_the_names)
+        problems = self.judged("name: windows-${{ matrix.id }}-test-logs", "name: windows-test-logs", problems_of_the_names)
         self.assertTrue(any("two legs upload the artifact 'windows-test-logs'" in p for p in problems), problems)
+        problems = self.judged("name: windows-${{ matrix.id }}-test-logs", "name: windows-${{ matrix.os }}-test-logs", problems_of_the_names)
+        self.assertTrue(any("two legs upload the artifact 'windows-windows-2022-test-logs'" in p for p in problems), problems)
+        problems = self.judged("- id: msvc2022-rest\n", "- id: msvc2022-long\n", problems_of_the_legs)
+        self.assertTrue(any(p.startswith("windows_tests") and "own id" in p for p in problems), problems)
+        problems = self.judged('name: "MSVC 2026: ctest, the long tests"', 'name: "MSVC 2022: ctest, the long tests"', problems_of_the_legs)
+        self.assertTrue(any(p.startswith("windows_tests") and "own name" in p for p in problems), problems)
         problems = self.judged('- id: ctest-rest\n            name: "ctest: all the other tests"', '- id: ctest-rest\n            name: "ctest: the next longest tests"', problems_of_the_legs)
         self.assertTrue(any("own name" in p for p in problems), problems)
         problems = self.judged("- id: python-3\n", "- id: python-2\n", problems_of_the_legs)
@@ -1227,7 +1259,7 @@ class TheChecksCanFail(unittest.TestCase):
         self.assertTrue(any("two checks are named 'Linux (GCC)'" in p for p in problems), problems)
         problems = self.judged("    name: Windows (MSVC 2022)\n", "    name: Windows (MSVC 2022 x64)\n", problems_of_the_names)
         self.assertTrue(any("'Windows (MSVC 2022)' is reported 0 times" in p for p in problems), problems)
-        problems = self.judged("    name: Windows tests (${{ matrix.name }})\n", "    name: Windows (${{ matrix.name }})\n", problems_of_the_names)
+        problems = self.judged("    name: Windows tests (${{ matrix.name }})\n", "    name: Windows (MSVC 2022)\n", problems_of_the_names)        # (the legs take the name of a required check)
         self.assertTrue(any("'Windows (MSVC 2022)' is reported" in p or "two checks are named 'Windows (MSVC 2022)'" in p for p in problems), problems)
 
     def test_a_small_job_that_misses_a_job_of_its_system_or_does_not_always_run_is_found(self):
@@ -1294,7 +1326,7 @@ class TheChecksCanFail(unittest.TestCase):
         flag = " --no-tests=error"
         for where, old in (("linux_tests", '--parallel 4 --no-tests=error -R "$CTEST_ALONE"'), ("linux_tests", '--parallel 4 --no-tests=error -E "${CTEST_ALONE}|${CTEST_LONG}"'),
                            ("macos_tests", "--parallel 4 --no-tests=error\n\n      - name: Tool self-tests (map_sweep, bot_arena, replay_tool, lvl_tool) and the community maps\n        if: ${{ !cancelled() && steps.build.conclusion == 'success' && matrix.part == 'scripts-python' }}"),
-                           ("windows_tests", "--parallel 4 --no-tests=error\n\n      - name: Tool self-tests (map_sweep, bot_arena, replay_tool, lvl_tool)\n")):
+                           ("windows_tests", '--parallel 4 --no-tests=error -R "$CTEST_WINDOWS_LONG"'), ("windows_tests", '--parallel 4 --no-tests=error -E "$CTEST_WINDOWS_LONG"')):
             with self.subTest(where):
                 problems = self.judged(old, old.replace(flag, "", 1), problems_of_ctest)
                 self.assertTrue(any(p.startswith(where) and "a ctest without --no-tests=error" in p for p in problems), problems)
