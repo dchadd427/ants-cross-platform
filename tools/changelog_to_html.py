@@ -216,8 +216,19 @@ PAGE = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ants (1998) - What\u2019s new</title>
-<link rel="canonical" href="/changelog">
+<title>What\u2019s new \u2014 Ants (1998)</title>
+<meta name="description" content="What changed in each version of the Ants (1998) remake: new features, fixes and changes to the rules, newest first.">
+<link rel="canonical" href="@@SITE_ORIGIN@@/changelog">
+<meta property="og:site_name" content="Ants (1998)">
+<meta property="og:type" content="website">
+<meta property="og:title" content="What\u2019s new \u2014 Ants (1998)">
+<meta property="og:description" content="What changed in each version of the Ants (1998) remake: new features, fixes and changes to the rules, newest first.">
+<meta property="og:url" content="@@SITE_ORIGIN@@/changelog">
+<meta property="og:image" content="@@SITE_ORIGIN@@/front/preview_treasure.png">
+<meta property="og:image:width" content="300">
+<meta property="og:image:height" content="300">
+<meta property="og:image:alt" content="The Treasure map of Ants, seen from above.">
+<meta name="twitter:card" content="summary">
 <link rel="icon" type="image/png" href="/favicon.png?v=9ea2152a">
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#2b5f43">

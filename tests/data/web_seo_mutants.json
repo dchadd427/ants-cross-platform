@@ -1,0 +1,89 @@
+{
+ "note": "Mutants of the files for search engines (tools/seo_files.py: robots.txt and sitemap.xml) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose and a test of tests/scripts/test_web_seo.py must notice - the sitemap lists exactly the pages that ask to be listed, by their canonical addresses; a door of the game server, the chat hub or the admin page is shut to a crawler, and so is every address that holds a room; no page and no file that a page loads is shut; the address that goes into the files and into a shell command is an origin and nothing else. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/web_seo_mutants.json --keep-going --jobs 1.",
+ "mutants": [
+  {
+   "id": "a_listed_page_is_missing_from_the_sitemap",
+   "file": "tools/seo_files.py",
+   "old": "\"/changelog\", \"/legal\")",
+   "new": "\"/changelog\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo"
+  },
+  {
+   "id": "a_page_that_is_not_listed_is_in_the_sitemap",
+   "file": "tools/seo_files.py",
+   "old": "PUBLIC_PAGES = (\"/\", ",
+   "new": "PUBLIC_PAGES = (\"/\", \"/match\", ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo"
+  },
+  {
+   "id": "the_sitemap_names_another_address",
+   "file": "tools/seo_files.py",
+   "old": "% (origin, path) for path in PUBLIC_PAGES",
+   "new": "% (\"https://example.org\", path) for path in PUBLIC_PAGES",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo"
+  },
+  {
+   "id": "the_robots_file_names_no_sitemap",
+   "file": "tools/seo_files.py",
+   "old": "lines += [\"\", \"Sitemap: %s/sitemap.xml\" % origin, \"\"]",
+   "new": "lines += [\"\"]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo"
+  },
+  {
+   "id": "the_admin_page_is_open_to_a_crawler",
+   "file": "tools/seo_files.py",
+   "old": "(\"/admin\",)",
+   "new": "()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo"
+  },
+  {
+   "id": "a_door_of_the_game_server_is_open_to_a_crawler",
+   "file": "tools/seo_files.py",
+   "old": "\"/ws\", \"/busy\", \"/live\", \"/replays\", \"/history\", \"/lobbies\"",
+   "new": "\"/ws\", \"/busy\", \"/live\", \"/replays\", \"/lobbies\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo"
+  },
+  {
+   "id": "the_chat_hub_is_open_to_a_crawler",
+   "file": "tools/seo_files.py",
+   "old": "FOLDERS = ((\"The chat hub: the login, the connection, the pictures and images, the admin API\", (\"/hub/\",)),)",
+   "new": "FOLDERS = ()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo"
+  },
+  {
+   "id": "an_address_that_holds_a_room_is_open_to_a_crawler",
+   "file": "tools/seo_files.py",
+   "old": "\"/*room=\", \"/*join=\", \"/*code=\"",
+   "new": "\"/*join=\", \"/*code=\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo"
+  },
+  {
+   "id": "a_door_is_shut_as_a_prefix_and_takes_a_script_of_the_pages_with_it",
+   "file": "tools/seo_files.py",
+   "old": "lines.extend([\"Disallow: %s$\" % path, \"Disallow: %s?\" % path, \"Disallow: %s/\" % path])",
+   "new": "lines.append(\"Disallow: %s\" % path)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo"
+  },
+  {
+   "id": "the_address_may_have_a_path",
+   "file": "tools/seo_files.py",
+   "old": "(?::[0-9]{1,5})?\")",
+   "new": "(?::[0-9]{1,5})?(?:/.*)?\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo"
+  },
+  {
+   "id": "the_address_may_end_in_a_newline",
+   "file": "tools/seo_files.py",
+   "old": "ORIGIN.fullmatch(origin)",
+   "new": "ORIGIN.match(origin + '$')",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo"
+  },
+  {
+   "id": "a_bad_address_is_written_anyway",
+   "file": "tools/seo_files.py",
+   "old": "        robots, sitemap = robots_txt(argv[1]), sitemap_xml(argv[1])\n    except ValueError as e:\n        sys.stderr.write(\"seo_files.py: %s\\n\" % e)\n        return 1",
+   "new": "        robots, sitemap = robots_txt(argv[1].rstrip('/')), sitemap_xml(argv[1].rstrip('/'))\n    except ValueError as e:\n        sys.stderr.write(\"seo_files.py: %s\\n\" % e)\n        return 1",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_seo"
+  }
+ ]
+}

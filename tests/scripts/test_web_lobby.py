@@ -66,7 +66,7 @@ class PageCase(unittest.TestCase):
 class TheFrontPageMarkup(PageCase):
     def setUp(self):
         self.page = read("web", "lobby.html")
-        self.markup = self.page[:self.page.index("<script")]                                             # the style and the body: what the browser has before any script runs
+        self.markup = self.page[:re.search(r"<script(?![^>]*ld\+json)", self.page).start()]               # the style and the body: what the browser has before any script runs (the head's structured data is text: it runs nothing)
         room = read("web", "home", "room.css")                                                           # (the Room is a panel of Home: its look is web/home/room.css)
         self.style = re.sub(r"/\*.*?\*/", "", self.page[:self.page.index("</style>")] + "\n" + room, flags=re.S)       # (the rules, with their comments taken out)
         self.wide = without_media(self.style)                                                                # (the rules of a wide page: the media queries of the other windows taken out)
@@ -80,7 +80,7 @@ class TheFrontPageMarkup(PageCase):
         return found[0]
 
     def test_it_is_titled_ants_1998_and_has_the_placeholders_once(self):
-        self.assertIn("<title>Ants (1998)@@SITE_TITLE@@</title>", self.page)
+        self.assertRegex(self.page, r"<title>[^<]+ \u2014 Ants \(1998\)@@SITE_TITLE@@</title>")
         for placeholder in ("@@SITE_TITLE@@", "@@SITE_FOOTER@@", "@@GAME_VERSION@@", "@@BUILD_ID@@", "@@BUILD_DATE@@"):
             self.assertEqual(self.page.count(placeholder), 1, placeholder)
 

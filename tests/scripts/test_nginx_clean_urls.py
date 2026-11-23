@@ -142,7 +142,7 @@ class TheText(unittest.TestCase):
         for gone in ("location = /changelog {\n        return", "location = /legal {\n        return", "location = /matches {\n        return"):
             self.assertNotIn(gone, CONF)
 
-    def test_each_of_the_three_pages_that_answer_at_their_file_too_names_its_clean_address_as_canonical_and_no_other_page_does(self):
+    def test_each_of_the_three_pages_that_answer_at_their_file_too_names_its_clean_address_as_canonical_and_the_pages_that_are_not_listed_name_none(self):
         sys.path.insert(0, os.path.join(REPO, "tools"))
         try:
             import changelog_to_html
@@ -151,10 +151,10 @@ class TheText(unittest.TestCase):
         pages = {"/legal": stats.read("web", "legal.html"), "/matches": stats.read("web", "matches.html"),
                  "/changelog": changelog_to_html.convert(stats.read("CHANGELOG.md"), changelog_to_html.DEFAULT_REPO_BLOB, version="v0.0.0", build_id="0000000")}
         for clean, text in pages.items():
-            self.assertEqual(re.findall(r'<link rel="canonical"[^>]*>', text), ['<link rel="canonical" href="%s">' % clean], clean)
+            self.assertEqual(re.findall(r'<link rel="canonical"[^>]*>', text), ['<link rel="canonical" href="@@SITE_ORIGIN@@%s">' % clean], clean)         # (the site's address is put in when the image is built: docs/BUILD_AND_RUN.md "Search engines and share cards")
             self.assertLess(text.index('rel="canonical"'), text.index("</head>"), clean)
-        for name in ("lobby", "match", "mapmaker", "404", "50x", "admin", "shell"):
-            self.assertNotIn('rel="canonical"', stats.read("web", name + ".html"), name)                  # (the other pages have one address: a redirect from the file or no file)
+        for name in ("match", "404", "50x", "admin", "shell"):
+            self.assertNotIn('rel="canonical"', stats.read("web", name + ".html"), name)                  # (a match and the game page ask not to be listed; the pages of an error and the admin page are no address)
 
     def test_the_page_headers_still_come_from_the_file_s_address(self):
         # (the clean address is an internal rewrite to the file, so the maps that read $uri see the file: the policy, the framing rule, the referrer policy and the permissions policy of a page)
@@ -225,7 +225,7 @@ class TheText(unittest.TestCase):
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------------ the run
 def fill(text):
-    return text.replace("@@GAME_VERSION@@", "0.0.0").replace("@@BUILD_ID@@", "test").replace("@@BUILD_DATE@@", "today").replace("@@BUILD_TIMESTAMP@@", "1").replace("@@SITE_TITLE@@", "").replace("@@SITE_FOOTER@@", "")
+    return text.replace("@@GAME_VERSION@@", "0.0.0").replace("@@BUILD_ID@@", "test").replace("@@BUILD_DATE@@", "today").replace("@@BUILD_TIMESTAMP@@", "1").replace("@@SITE_TITLE@@", "").replace("@@SITE_FOOTER@@", "").replace("@@SITE_ORIGIN@@", "https://site.example")
 
 
 class TheRealPagesRun(unittest.TestCase):
@@ -238,6 +238,7 @@ class TheRealPagesRun(unittest.TestCase):
         try:
             docroot = os.path.join(cls.tmp, "html")
             shutil.copytree(os.path.join(REPO, "web"), docroot, ignore=shutil.ignore_patterns("*.map"))
+            subprocess.run([sys.executable, os.path.join(REPO, "tools", "seo_files.py"), "https://site.example", docroot], check=True)       # (the two files for search engines: the image's build makes them with this tool)
             for name in ("lobby.html", "matches.html", "match.html", "mapmaker.html", "shell.html"):
                 path = os.path.join(docroot, name)
                 with open(path, encoding="utf-8") as f:
