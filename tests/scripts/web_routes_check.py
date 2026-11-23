@@ -21,7 +21,7 @@ the game page has the stage (id="game-stage"; the build writes it with or withou
 /changelog, /legal, /mapmaker,        the other pages of the site: each is its own page with the pages' headers (the map maker has its own policy) and links /front/classic.css (not the map maker);
 /asset_catalog/                         the .html address of each (not changelog.html, legal.html, matches.html: they answer 200, as before; and /asset_catalog/index.html, to /asset_catalog/) is a 301 to the clean one with the query, a slash after the clean one goes to it; /catalog, /viewer and /asset_catalog go to the catalog;
                                         /admin.html, /404.html and /50x.html are plain 404s (no page has a .html address of its own)
-an address that is nothing                a 404 with web/404.html (the page of the site, no game started, revalidated like every page); under the name of a door (/ws/, /busy/, /stats/, /lobbies/, /test-maps/, /hub/) a short plain 404 with no page
+an address that is nothing                a 404 with web/404.html (the page of the site, no game started, revalidated like every page); under the name of a door (/ws/, /busy/, /stats/, /lobbies/, /test-maps/, /hub/) a short plain 404 with no page (a file of a page's kind there too)
 Exit status 0: every check passed; 1: a check failed; 3: nothing answers at the address.
 """
 import argparse
@@ -236,7 +236,7 @@ def main():
     check(status == 404 and bool(NOT_FOUND.search(body)), "a POST to an address that is nothing is a 404 with the page too (%s)" % status)
     check(all(href in get("/no/such/page")[3] for href in ('href="/"', 'href="/play"', 'href="/matches"', 'href="/mapmaker"')), "the page of a 404 links the front page, the game, the matches and the map maker")
     print("[web routes] under the name of a door, an address that is none of the door's own is a short plain 404: no page, no policy of a page, never the game")
-    for path in ("/ws/", "/ws/x", "/busy/", "/busy/x", "/stats/", "/stats/x", "/lobbies/", "/lobbies/x", "/test-maps/", "/test-maps/x", "/hub/", "/hub/x", "/hub/ws/", "/hub/login/", "/hub/me/", "/hub/admin/gate"):
+    for path in ("/ws/", "/ws/x", "/busy/", "/busy/x", "/stats/", "/stats/x", "/lobbies/", "/lobbies/x", "/test-maps/", "/test-maps/x", "/hub/", "/hub/x", "/hub/ws/", "/hub/login/", "/hub/me/", "/hub/admin/gate", "/hub/x.js", "/hub/x.html", "/hub/x.css", "/hub/a/b.JS"):
         status, headers, names, body = get(path)
         check(status == 404 and not NOT_FOUND.search(body) and not GAME.search(body) and not LOBBY.search(body) and "content-security-policy" not in headers, "%s is a short plain 404, not a page (%s)" % (path, status))
     print("[web routes] the pages and files that people have kept links to still open what they opened")
@@ -247,7 +247,7 @@ def main():
         status, headers, names, body = get(path)
         check(status == 301 and headers.get("location") == want, "%s still goes to %s (%s %s)" % (path, want, status, headers.get("location")))
     print("[web routes] a file that is no address of the site is a plain 404: the admin page's, and the two pages of an error")
-    for path in ("/admin.html", "/404.html", "/50x.html", "/404.html?x=1"):
+    for path in ("/admin.html", "/404.html", "/50x.html", "/404.html?x=1", "/%34%30%34.html", "/%35%30x.html", "//404.html", "/./50x.html"):
         status, headers, names, body = get(path)
         check(status == 404 and not NOT_FOUND.search(body) and "Something went wrong" not in body and "content-security-policy" not in headers, "%s is a plain 404 (%s)" % (path, status))
     status, headers, names, body = get("/hub/admin/gate", {"Cookie": "__Host-ants_hub=" + "a" * 32})

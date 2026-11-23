@@ -474,6 +474,9 @@ LIVE_ROWS = [
     ("under the test maps", "GET", "/test-maps/x", (), 404, "plain"),
     ("under the chat", "GET", "/hub/x", (), 404, "plain"),
     ("under the chat's door", "GET", "/hub/ws/", (), 404, "plain"),
+    ("a script under the chat", "GET", "/hub/x.js", (), 404, "plain"),
+    ("a page under the chat", "GET", "/hub/x.html", (), 404, "plain"),
+    ("a style sheet under the chat, in capitals", "GET", "/hub/X.CSS", (), 404, "plain"),
 ]
 # the same nginx with nothing behind it: the answers for a server that is not there
 DEAD_ROWS = [
@@ -665,9 +668,11 @@ class TheFileRuns(unittest.TestCase):
             self.assertEqual(answer.get("content-type"), "text/html", path)
             self.assertEqual(answer.get("cache-control"), "no-cache, must-revalidate", path)
             self.assertIsNotNone(answer.get("etag"), path)
+            self.assertEqual(parse_csp(answer.get("content-security-policy"))["default-src"], ["'self'"], path)       # (the policy of a page: this site only)
+            self.assertEqual(answer.get("cross-origin-opener-policy"), "same-origin", path)
         self.assertEqual(fetch(self.live.port, "/nothing", "HEAD").status, 404)
         self.assertEqual(fetch(self.live.port, "/nothing", "POST", body=b"x").body, page)          # (a POST gets the page too)
-        for path in ("/ws/x", "/busy/x", "/stats/x", "/lobbies/x", "/test-maps/x", "/hub/x", "/hub/ws/", "/hub/pic/x", "/admin/x"):
+        for path in ("/ws/x", "/busy/x", "/stats/x", "/lobbies/x", "/test-maps/x", "/hub/x", "/hub/ws/", "/hub/pic/x", "/admin/x", "/hub/x.js", "/hub/x.html", "/hub/x.css", "/hub/a/b.JS", "/hub/ws.html?x=1"):
             answer = fetch(self.live.port, path)
             self.assertEqual(answer.status, 404, path)
             self.assertNotIn(b"Page not found", answer.body, path)                                 # (the nginx's own short 404: nothing of the site)
@@ -690,7 +695,7 @@ class TheFileRuns(unittest.TestCase):
         finally:
             os.rename(path + ".away", path)
         self.assertEqual(fetch(self.live.port, "/nothing").status, 404)
-        for name in ("404.html", "50x.html", "404.html?x=1", "404.HTML", "50X.html"):
+        for name in ("404.html", "50x.html", "404.html?x=1", "404.HTML", "50X.html", "%34%30%34.html", "404%2ehtml", "%35%30x.html", "/404.html", "./404.html", "a/../50x.html", "%34%30%34.html?x=1"):
             answer = fetch(self.live.port, "/" + name)                                             # (only error_page asks for the two files: a visitor who asks for one by name gets the plain 404 of a file that is not there)
             self.assertEqual(answer.status, 404, name)
             self.assertNotIn(b"Page not found", answer.body, name)

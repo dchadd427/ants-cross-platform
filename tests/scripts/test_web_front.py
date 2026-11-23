@@ -413,7 +413,10 @@ class TheWayIntoTheImage(unittest.TestCase):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", conf, re.M)
         self.assertEqual([l for l in locations if "front" in l and "four" not in l], [])                              # (the folder is served by the default rules: files, the week for pictures)
         before = locations[:locations.index("~* \\.(html|css|js)$")]
-        self.assertFalse([l for l in before if l.startswith("~*") and "css" in l], "an earlier regular-expression location would catch the stylesheet")
+        for l in before:
+            if l.startswith("~*") and "css" in l:                                 # (an earlier pattern that names css: it must not match the stylesheet's own address; one under /hub/ does not)
+                pattern = l[2:].strip().strip('"').replace("\\z", "\\Z")
+                self.assertIsNone(re.search(pattern, "/front/classic.css", re.I), "an earlier regular-expression location would catch the stylesheet: " + l)
 
 
 class TheSharedStylesheet(unittest.TestCase):

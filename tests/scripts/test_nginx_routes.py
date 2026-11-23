@@ -99,30 +99,18 @@ class TheFile(unittest.TestCase):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", self.conf, re.M)
         self.assertEqual([l for l in locations if "stats" in l], ["= /stats", "= /stats/local", "^~ /stats/"])          # (their blocks are checked in test_nginx_stats.py, run against a stand-in server there; the last is the plain 404 of the neighbours)
 
-    def test_an_address_that_is_nothing_is_a_404_with_the_page_of_the_site_and_not_the_game(self):
+    def test_the_error_pages_are_files_of_the_image_and_the_blocks_that_serve_pages_name_the_one_for_the_server_s_own_errors(self):
+        # (the 404 page is run in test_nginx_headers.py and web_routes_check.py; an error that nginx makes itself for a page cannot be started from outside, so its page is the one line that is read here)
         blocks = location_blocks(self.conf)
-        self.assertEqual(blocks["/"].split()[:3], ["try_files", "$uri", "=404;"])           # (no fallback to a page: the game page answered every unknown address, with a 200)
-        self.assertNotIn("index.html", blocks["/"])
-        self.assertEqual(re.findall(r"error_page ([^;]*);", blocks["/"]), ["404 /404.html", "500 502 503 504 /50x.html"])
-        page_blocks = ("/", "~* \\.(html|css|js)$")                                      # (the catch-all and the block that serves every .html, .css and .js: a file of those kinds that is not there is the same 404)
-        for words, body in blocks.items():
-            if words not in page_blocks:
-                self.assertNotIn("404.html", body, words)                                   # (the page is named there only: the 404 of a door, plain or the game server's, stays what it was)
-        self.assertEqual(len(re.findall(r"error_page [^;]*/404\.html;", self.conf)), len(page_blocks))
-        for words in page_blocks + ("= /mapmaker.html",):
-            self.assertIn("error_page 500 502 503 504 /50x.html;", blocks[words], words)  # (an error that nginx makes for a page: the three blocks that serve pages)
+        for words in ("/", "~* \\.(html|css|js)$", "= /mapmaker.html"):
+            self.assertIn("error_page 500 502 503 504 /50x.html;", blocks[words], words)
+        dockerfile = read(os.path.join(REPO, "Dockerfile"))
         for page in ("404.html", "50x.html"):
             self.assertTrue(os.path.isfile(os.path.join(REPO, "web", page)), page)
-            self.assertIn("COPY web/404.html web/50x.html /usr/share/nginx/html/", read(os.path.join(REPO, "Dockerfile")))
             html = read(os.path.join(REPO, "web", page))
             self.assertIn('href="/front/classic.css"', html)                                 # (the Classic look: the page links nothing else of the site, so it works without the game's files)
             self.assertNotRegex(html, r"<script|\.wasm|index\.js")
-
-    def test_the_neighbours_of_the_doors_are_plain_404s_and_no_other_location_is_one(self):
-        locations = location_blocks(self.conf)
-        for door in ("^~ /ws/", "^~ /busy/", "^~ /stats/", "^~ /lobbies/", "^~ /test-maps/", "/hub/"):
-            self.assertEqual(locations[door].split(), ["return", "404;"], door)
-        self.assertNotIn("^~ /hub/", locations)                                              # (a ^~ prefix would stop the regular expressions of the hub's pictures and images from being tried)
+        self.assertIn("COPY web/404.html web/50x.html /usr/share/nginx/html/", dockerfile)
 
     def test_no_other_location_could_catch_the_front_page_or_the_old_address(self):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", self.conf, re.M)

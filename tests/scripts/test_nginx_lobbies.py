@@ -58,7 +58,6 @@ class TheText(unittest.TestCase):
     def test_the_location_is_there_once_exact_and_the_only_one_of_its_name(self):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", CONF, re.M)
         self.assertEqual([l for l in locations if "lobbies" in l], ["= /lobbies", "@lobbies_off", "^~ /lobbies/"])     # (the prefix is the plain 404 of the neighbours, never a pass to the server; no regular-expression location could also catch /lobbies/x)
-        self.assertEqual(block_of(CONF, "location ^~ /lobbies/ ").split(), ["return", "404;"])
         self.assertEqual(len(re.findall(r"location\s+= /lobbies\s*\{", CONF)), 1)
         self.assertEqual(len(re.findall(r"location\s+@lobbies_off\s*\{", CONF)), 1)
         self.assertNotRegex(CONF, r"location\s+(\^~|~\*?)\s+(?!/lobbies/ \{)[^\n]*lobbies")        # (no other prefix or pattern location: the plain 404 of the neighbours is the one, checked above)

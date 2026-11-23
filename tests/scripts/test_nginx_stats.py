@@ -73,7 +73,6 @@ class TheLocations(unittest.TestCase):
     def test_each_is_an_exact_location_and_these_are_the_only_ones_of_their_name(self):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", CONF, re.M)
         self.assertEqual([l for l in locations if "stats" in l], ["= /stats", "= /stats/local", "^~ /stats/"])      # (the prefix is the plain 404 of the neighbours, never a pass to the server; no regular-expression location could also catch /stats/x or /statsx)
-        self.assertEqual(block_of(CONF, "location ^~ /stats/ ").split(), ["return", "404;"])
         self.assertTrue(STATS and LOCAL)
 
     def test_only_the_one_method_without_a_query_goes_through_and_the_checks_come_first(self):

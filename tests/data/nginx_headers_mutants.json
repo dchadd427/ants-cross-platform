@@ -1435,6 +1435,27 @@
    "old": "        error_page 404 /404.html;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n",
    "new": "        add_header Cache-Control \"no-cache, must-revalidate\" always;\n",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "under_the_chat_a_script_is_the_page",
+   "file": "docker/nginx.conf",
+   "old": "    location ~* ^/hub/.*\\.(html|css|js)$ {\n        return 404;\n    }\n",
+   "new": "",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "under_the_chat_a_script_is_the_page_in_lower_case_only",
+   "file": "docker/nginx.conf",
+   "old": "    location ~* ^/hub/.*\\.(html|css|js)$ {",
+   "new": "    location ~ ^/hub/.*\\.(html|css|js)$ {",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "error_page_file_is_read_by_its_raw_name",
+   "file": "docker/nginx.conf",
+   "old": "map \"$status $uri\" $ants_error_page_file {",
+   "new": "map \"$status $ants_path\" $ants_error_page_file {",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   }
  ]
 }

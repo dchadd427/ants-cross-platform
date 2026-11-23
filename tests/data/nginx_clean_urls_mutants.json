@@ -284,8 +284,8 @@
   {
    "id": "error_page_file_is_an_address",
    "file": "docker/nginx.conf",
-   "old": "    \"~*^/(?:404|50x)\\.html\\z\" 1;\n",
-   "new": "    \"~*^/(?:404)\\.html\\z\" 1;\n",
+   "old": "    \"~*^000 /(?:404|50x)\\.html\\z\" 1;\n",
+   "new": "    \"~*^000 /(?:404)\\.html\\z\" 1;\n",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
@@ -321,6 +321,13 @@
    "file": "web/legal.html",
    "old": "<link rel=\"canonical\" href=\"/legal\">",
    "new": "<link rel=\"canonical\" href=\"/legal.html\">",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "error_page_file_is_read_by_its_raw_name",
+   "file": "docker/nginx.conf",
+   "old": "map \"$status $uri\" $ants_error_page_file {",
+   "new": "map \"$status $ants_path\" $ants_error_page_file {",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   }
  ]

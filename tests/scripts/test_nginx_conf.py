@@ -58,7 +58,6 @@ class TheLocation(unittest.TestCase):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", CONF, re.M)
         busy = [l for l in locations if "busy" in l]
         self.assertEqual(busy, ["= /busy", "^~ /busy/"])                                   # nothing but the exact location is a door: the prefix is the plain 404 of the neighbours, never a pass to the server, and no regular-expression location could catch /busy/x or /busyness
-        self.assertEqual(block_or_empty(CONF, "location ^~ /busy/").split(), ["return", "404;"])
         self.assertEqual(len(re.findall(r"location\s+= /busy\s*\{", CONF)), 1)
 
     def test_it_is_an_address_of_the_site_and_the_server_answers(self):

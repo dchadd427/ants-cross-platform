@@ -142,14 +142,6 @@ class TheText(unittest.TestCase):
         for gone in ("location = /changelog {\n        return", "location = /legal {\n        return", "location = /matches {\n        return"):
             self.assertNotIn(gone, CONF)
 
-    def test_the_files_of_the_error_pages_and_of_the_admin_page_are_no_addresses_and_are_plain_404s(self):
-        body = stats.block_of(HEAD, "map $ants_path $ants_error_page_file ")
-        self.assertEqual(re.findall(r'^\s*"(~\*[^"]*)"\s+1;', body, re.M), [r"~*^/(?:404|50x)\.html\z"])
-        self.assertIn("default 0;", body)
-        self.assertEqual(re.findall(r"^\s*if \(\$ants_error_page_file\) \{\s*return 404;\s*\}", SERVER, re.M).__len__(), 1)
-        self.assertLess(SERVER.index("if ($ants_error_page_file)"), SERVER.index("location "))          # (before any location: the answer is the server block's own, which has no error_page)
-        self.assertEqual(stats.block_of(CONF, "location = /admin.html ").split(), ["return", "404;"])      # (the admin page is /admin)
-
     def test_each_of_the_three_pages_that_answer_at_their_file_too_names_its_clean_address_as_canonical_and_no_other_page_does(self):
         sys.path.insert(0, os.path.join(REPO, "tools"))
         try:
@@ -364,9 +356,10 @@ class TheRealPagesRun(unittest.TestCase):
                 self.assertNotIn("content-security-policy", answer[1], old + query)                       # (a redirect: no page)
                 self.assertEqual(self.ask(old + query, "HEAD")[0], 301, old + query)
             self.assertEqual(self.ask(clean + "?x=1")[0], 200, clean)
-        for plain in ("/admin.html", "/404.html", "/50x.html"):
-            self.assertEqual(self.ask(plain)[0], 404, plain)
+        for plain in ("/admin.html", "/404.html", "/50x.html", "/%34%30%34.html", "/%35%30x.html", "//404.html", "/./50x.html", "/x/../404.html"):
+            self.assertEqual(self.ask(plain)[0], 404, plain)                                                 # (by its decoded name too: the files are no addresses)
             self.assertNotIn("Page not found", self.ask(plain)[2], plain)
+            self.assertNotIn("Something went wrong", self.ask(plain)[2], plain)
         self.assertEqual(self.ask("/four.html?room=k7m2xq")[:2][0], 301)
 
     def test_the_three_files_that_an_earlier_redirect_led_to_answer_200_at_their_old_address_and_so_does_the_clean_address(self):
