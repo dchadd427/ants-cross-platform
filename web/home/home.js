@@ -163,7 +163,6 @@
                 if (m[1] === '/') { item.setAttribute('aria-current', 'page'); item.addEventListener('click', function (e) { e.preventDefault(); show(screenOf(holds()), 'push'); }); }      // (this page: the Room's Home goes back to the front page's own screen)
                 menuBox.appendChild(item);
             });
-            if (alerts) menuBox.appendChild(alertsRow());
             var small = el('p', 'msmall');
             MENU_SMALL.forEach(function (m) { small.appendChild(link(m[0], m[1], 'mlink')); });
             menuBox.appendChild(small);
@@ -264,6 +263,7 @@
         function away() { return !quickHost.disabled ? quickHost : menuHome; }       // (where the focus goes when a screen changes under it: the first button that takes a press)
         function sync() {
             var info = page.info();
+            if (!askedSheet && askedMod) wantSheet();       // (a room was made or joined: the sheet that invites comes with it)
             tabBtns.games.name.textContent = screen === 'room' && info.client ? TEXT.room : TEXT.games;
             marks();
             gamesCall('sync');
@@ -358,18 +358,22 @@
         function wantPlayers() {                            // the players list (players.js, players.css), after the dock: it uses its socket
             if (askedPlayers || !dock) return;
             askedPlayers = true;
-            lazy('home/players', function () { if (win.AntsHomePlayers) players = win.AntsHomePlayers.mount({ doc: doc, win: win, host: host, yard: main, quickHost: quickHost, games: gamesBtn, dock: dock, page: page }); meet(); inert(held); var c = players && players.root.querySelector ? players.root.querySelector('.pl-count') : null; if (c) mirror(c, tabBtns.players.pill); });
+            lazy('home/players', function () { if (win.AntsHomePlayers) players = win.AntsHomePlayers.mount({ doc: doc, win: win, host: host, yard: main, quickHost: quickHost, games: gamesBtn, dock: dock, page: page }); if (players && dock && dock.directory) dock.directory(players.directory); wantMod(); meet(); inert(held); var c = players && players.root.querySelector ? players.root.querySelector('.pl-count') : null; if (c) mirror(c, tabBtns.players.pill); });
         }
 
         var alerts = null, askedAlerts = false;
-        function alertsRow() { return alerts.row(function () { var back = menuFor; closeMenu(); return back; }); }      // (the Menu's row of the alerts sheet, alerts.js: it closes the Menu and the sheet gives the focus back to the Menu's button)
-        function wantAlerts() {                             // the alerts sheet and the join alert (alerts.js, alerts.css, with web/alert_core.js): after the first paint
+        function openChat() {                               // an alert that is about the chat (a mention): the chat comes to the screen, the front page's own tab where the box has two
+            closeMenu();
+            if (screen !== 'home' && roomChat && roomChat.select) roomChat.select('global');
+            if (phone()) pick('chat'); else if (dock) dock.open(true);
+        }
+        function joinInvite(row, back) { try { return !!games && !!games.joinInvite && !!games.joinInvite({ code: row.code, host: row.from, opener: back }); } catch (e) { return false; } }       // (the Games list's own Join, with its question, for the room of an invitation)
+        function wantAlerts() {                             // the bell, its list of alerts and the toasts (alerts.js, alerts.css, with web/alert_core.js): after the first paint
             if (askedAlerts) return;
             askedAlerts = true;
             lazy('home/alerts', function () {
                 if (!win.AntsHomeAlerts) return;
-                alerts = win.AntsHomeAlerts.mount({ doc: doc, win: win, core: win.AntsAlertCore, ctl: { show: show, screen: function () { return screen; } }, bar: right, menuBtn: menuHome, dock: function () { return dock; }, signedIn: function () { return !!(dock && dock.you && dock.you()); } });
-                if (alerts && menuBox) menuBox.insertBefore(alertsRow(), menuBox.querySelector('.msmall'));       // (the Menu was opened before the part came)
+                alerts = win.AntsHomeAlerts.mount({ doc: doc, win: win, core: win.AntsAlertCore, ctl: { show: show, screen: function () { return screen; }, join: joinInvite, chat: openChat }, bar: right, menuBtn: menuHome, dock: function () { return dock; }, signedIn: function () { return !!(dock && dock.you && dock.you()); } });
             });
         }
 
@@ -379,15 +383,17 @@
 
         var askedMod = false, askedSheet = false, mod = null;
         function meet() { if (mod && players && mod.people) mod.people(players); }       // (the sheet and the list, whichever is second)
-        function wantMod() {                                // the moderation sheet (mod.js, mod.css): once, and only after the dock names a visitor with a role; a person with no role never asks for it
+        function loadMod() {
+            if (askedSheet) return;
+            askedSheet = true;
+            lazy('home/mod', function () { if (win.AntsHomeMod) mod = win.AntsHomeMod.mount({ doc: doc, win: win, dock: dock, say: function (words, tone) { return !!alerts && alerts.say(words, tone) === true; } }); meet(); });
+        }
+        function wantSheet() { var y = dock && dock.you ? dock.you() : null; if ((y && y.role !== 'none') || (players && holds())) loadMod(); }       // (the sheet of a person: for staff, and for anybody who holds a room, so that they can invite; nobody else downloads it)
+        function wantMod() {                                // the sheet (mod.js, mod.css): once, after the dock names a visitor with a role, or after the page holds a room
             if (askedMod || !dock || !dock.tap || !dock.you) return;
             askedMod = true;
-            dock.tap(function (kind) {
-                var y;
-                if (askedSheet || (kind !== 'live' && kind !== 'you') || !(y = dock.you()) || y.role === 'none') return;
-                askedSheet = true;
-                lazy('home/mod', function () { if (win.AntsHomeMod) mod = win.AntsHomeMod.mount({ doc: doc, win: win, dock: dock }); meet(); });
-            });
+            dock.tap(function (kind) { if (kind === 'live' || kind === 'you') wantSheet(); });
+            wantSheet();
         }
         function wantTalk() {                               // the emoji and microphone buttons (talk.js, talk.css), after the dock: they stand in its form
             if (askedTalk || !dock) return;
@@ -397,7 +403,7 @@
             lazy('home/talk', function () { if (win.AntsHomeTalk) win.AntsHomeTalk.mount({ doc: doc, win: win, dock: dock }); });
         }
 
-        return { start: start, sync: sync, opening: say, alert: function (kind, data) { try { return !!alerts && alerts.alert(kind, data); } catch (e) { return false; } }, show: show, screen: function () { return screen; }, inert: inert, menu: function () { return menuOpen; }, dock: function () { return dock; },
+        return { start: start, sync: sync, opening: say, joinInvite: joinInvite, openChat: openChat, alert: function (kind, data) { try { return !!alerts && alerts.alert(kind, data); } catch (e) { return false; } }, show: show, screen: function () { return screen; }, inert: inert, menu: function () { return menuOpen; }, dock: function () { return dock; },
             roomChatSeen: function () { try { return roomChat ? roomChat.seen() : null; } catch (e) { return null; } },
             roomChatNews: function (text) { try { return !!roomChat && roomChat.news(text); } catch (e) { return false; } },
             tell: function (kind, text, tone, actions) { try { return !!games && games.told(kind, text, tone, actions) === true; } catch (e) { return false; } } }; // (the Room's Fog of War question)

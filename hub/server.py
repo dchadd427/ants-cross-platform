@@ -279,6 +279,7 @@ class Hub:
             writer.write(http.response(101, headers={"Upgrade": "websocket", "Connection": "Upgrade", "Sec-WebSocket-Accept": ws.accept_key(key)}))
             peer.send_text(chatmod.dumps(self.chat.welcome(peer)))
             self.chat.commands.send_list(peer)                       # (the commands that the account has: none for a reader)
+            self.chat.people.send_list(peer, force=False)            # (the account's alerts, for the bell: none for a reader, and nothing when the list is empty)
         except BaseException:
             self.per_address.remove(address)
             if peer is not None:
@@ -402,6 +403,7 @@ class Hub:
                 self.online_shown, self.online_at = count, now
                 self.chat.online()
             self.chat.presence.flush(now)
+            self.chat.people.sweep(now)                                # (an invitation whose room is gone ends)
         except Exception as e:
             self.presence_trouble(now, e)
         if now >= self.next_deletions:
@@ -417,6 +419,7 @@ class Hub:
             self.image_door.forget_idle(now)
             self.chat.named_limits.forget_idle(now)
             self.chat.commands.forget_idle(now)
+            self.chat.people.forget_idle(now)
             self.admin.forget_idle(now)
             if hasattr(self.sessions, "forget_idle"):
                 self.sessions.forget_idle(now, wall)

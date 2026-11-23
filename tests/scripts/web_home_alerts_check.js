@@ -69,7 +69,7 @@ function clockPage(o) {
 {
     const p = clockPage();
     const s = p.core.settings(p.win);
-    same('every switch is on until it is turned off', p.core.NAMES.map((n) => s.on(n)), [true, true, true, true]);
+    same('every switch is on until it is turned off', p.core.NAMES.map((n) => s.on(n)), [true, true, true, true, true, true]);
     check('a name that is no switch is off and cannot be set', s.on('nonsense') === false && s.set('nonsense', true) === false);
     check('turning a switch off is kept in this browser', s.set('join', false) === true && p.core.settings(p.win).on('join') === false && p.core.settings(p.win).on('start') === true);
     check('and on again', (s.set('join', true), p.core.settings(p.win).on('join') === true));
@@ -214,6 +214,7 @@ function clockPage(o) {
 function homePage(stored, options) {
     const env = runLobby('', Object.assign({ 'ants.name': 'Maya' }, stored || {}), Object.assign({ lazy: true, fakeClock: true, stayHome: true }, options || {}));
     env.advance(0);                                                                       // (the first paint: the page loads its parts)
+    env.win.AntsHomeChat = H.loadFile('home/chat.js', env.scope).AntsHomeChat;             // (the chat dock's script, which the alerts read their text rules from, is on the page a moment later; the dock itself is not mounted here)
     return env;
 }
 const toastOf = (env) => env.body.findAll((e) => /(^|\s)al-toast(\s|$)/.test(e.className) && !e.hidden)[0] || null;
@@ -271,187 +272,263 @@ function inRoom(env) {                                                          
     env.hide(true); joinRoom(env, [E, '']); joinRoom(env, [C, 'Eve']);
     check('and none in the background', env.doc.title === 'Ants (1998)');
 }
-{   // the Menu's row and the sheet
-    function open(env) { env.home('hmenu').click(); const box = env.body.findAll((e) => /(^|\s)hmenubox(\s|$)/.test(e.className))[0]; const item = box.findAll((e) => /(^|\s)al-menu(\s|$)/.test(e.className))[0]; item.click(); return { box, item }; }
+const bellOfPage = (env) => env.home('hright').children.filter((e) => /(^|\s)al-bell(\s|$)/.test(e.className))[0];
+const escapeKey = (env) => env.doc.listeners.keydown.forEach((f) => f({ key: 'Escape', preventDefault() {} }));
+const panelOf = (env) => (shadeOf(env) ? shadeOf(env).findAll((e) => /(^|\s)al-panel(\s|$)/.test(e.className))[0] : null);
+const buttonsOf = (root, label) => root.findAll((e) => e.tagName === 'button' && e.getAttribute('aria-label') === label);
+{   // the bell opens the list, the gear in it the settings (the switches are the same for a visitor)
     const env = homePage();
-    const { box, item } = open(env);
-    check('the Menu has a row for the alerts, after the main links and before the small ones', !!item && item.textContent.indexOf(env.win.AntsAlertCore.TEXT.sheet) !== -1 && item.textContent.indexOf(env.win.AntsAlertCore.TEXT.sheetSounds) === -1 && box.children.indexOf(item) < box.children.findIndex((c) => /msmall/.test(c.className)));
-    check('it opens the sheet and the Menu goes', !!shadeOf(env) && box.hidden === true);
-    check('the sheet has the two rows that work today, both on, and no row for a sound', rows(env).map((r) => r.getAttribute('data-switch')).join() === 'join,start' && rows(env).every((r) => r.getAttribute('aria-checked') === 'true'));
-    const T = env.win.AntsHomeAlerts.TEXT, sheetText = shadeOf(env).textContent;
-    check('the sheet says the part, its lead and the two rows, and nothing about notifications', sheetText.indexOf(T.group) !== -1 && sheetText.indexOf(T.lead) !== -1 && sheetText.indexOf(T.join[0]) !== -1 && sheetText.indexOf(T.start[0]) !== -1 && !/notification|bell|Turn on|closed/i.test(sheetText));
-    const dialog = shadeOf(env).children[0];
-    check('it is a dialog that holds the focus, and each row is a switch with its state', dialog.getAttribute('role') === 'dialog' && dialog.getAttribute('aria-modal') === 'true' && rows(env).every((r) => r.getAttribute('role') === 'switch'));
+    const bell = bellOfPage(env), T = env.win.AntsHomeAlerts.TEXT;
+    check('the bar has the bell between its other buttons and the Menu\'s, and the Menu has no row of alerts any more', !!bell && env.home('hright').children.indexOf(bell) === env.home('hright').children.length - 2 && (env.home('hmenu').click(), !env.body.findAll((e) => /(^|\s)al-menu(\s|$)/.test(e.className)).length));
+    env.home('hmenu').click();
+    bell.click();
+    const list = shadeOf(env);
+    check('a press opens the panel with the list: nothing yet, one line of where it is kept, and a line that says to log in', !!list && /No alerts yet/.test(list.textContent) && list.textContent.indexOf(T.keptBrowser) !== -1 && list.textContent.indexOf(T.loginNote) !== -1 && rows(env).length === 0);
+    const dialog = panelOf(env);
+    check('it is a dialog that holds the focus, with a gear and a close button', dialog.getAttribute('role') === 'dialog' && dialog.getAttribute('aria-modal') === 'true' && buttonsOf(dialog, T.gear).length === 1 && buttonsOf(dialog, T.close).length === 1);
+    buttonsOf(dialog, T.gear)[0].click();
+    check('the gear shows the settings in the same panel: the two switches that a visitor has, both on, and no row for a sound or for an invitation', rows(env).map((r) => r.getAttribute('data-switch')).join() === 'join,start' && rows(env).every((r) => r.getAttribute('aria-checked') === 'true'));
+    const sheetText = shadeOf(env).textContent;
+    check('the settings say the part, its lead, the rows, where the list is kept and the button that empties it, and nothing about notifications', sheetText.indexOf(T.settings) !== -1 && sheetText.indexOf(T.group) !== -1 && sheetText.indexOf(T.lead) !== -1 && sheetText.indexOf(T.join[0]) !== -1 && sheetText.indexOf(T.start[0]) !== -1 && sheetText.indexOf(T.clearBrowser) !== -1 && !/notification|permission/i.test(sheetText.replace(T.lead, '')));
+    check('each row is a switch with its state', rows(env).every((r) => r.getAttribute('role') === 'switch'));
     const controls = shadeOf(env).findAll((e) => e.tagName === 'button');
     env.doc.activeElement = env.body; env.doc.listeners.keydown.forEach((f) => f({ key: 'Tab', preventDefault() {} }));
-    check('Tab with the focus nowhere in the sheet (a press on its text) goes to its first control', env.doc.activeElement === controls[0]);
+    check('Tab with the focus nowhere in the panel goes to its first control', env.doc.activeElement === controls[0]);
     controls[controls.length - 1].focus(); env.doc.listeners.keydown.forEach((f) => f({ key: 'Tab', preventDefault() {} }));
     check('Tab from the last control goes to the first', env.doc.activeElement === controls[0]);
     env.doc.listeners.keydown.forEach((f) => f({ key: 'Tab', shiftKey: true, preventDefault() {} }));
     check('Shift and Tab from the first goes to the last', env.doc.activeElement === controls[controls.length - 1]);
-    check('the page wrote no markup of its own for the sheet and the toast', env.innerHTMLWrites.length === 0);
+    check('the page wrote no markup of its own for the panel and the toast', env.innerHTMLWrites.length === 0);
     rows(env)[0].click();
     check('a press turns the switch off, shows it, and keeps it in this browser', rows(env)[0].getAttribute('aria-checked') === 'false' && JSON.parse(env.storage.data['ants.alerts.v1']).join === false && JSON.parse(env.storage.data['ants.alerts.v1']).start === undefined);
     rows(env)[1].click();
     check('the other switch is its own', rows(env)[1].getAttribute('aria-checked') === 'false' && JSON.parse(env.storage.data['ants.alerts.v1']).start === false);
     rows(env)[1].click(); check('and turns back on', rows(env)[1].getAttribute('aria-checked') === 'true');
-    env.body.fire('keydown', { key: 'Escape' }); env.doc.listeners.keydown.forEach((f) => f({ key: 'Escape', preventDefault() {} }));
-    check('Escape closes the sheet and gives the focus back to the button that had it', !shadeOf(env) && env.doc.activeElement === env.home('hmenu'));
-    open(env); const shade = shadeOf(env);
+    escapeKey(env);
+    check('Escape goes back from the settings to the list', !!shadeOf(env) && rows(env).length === 0 && /No alerts yet/.test(shadeOf(env).textContent));
+    escapeKey(env);
+    check('Escape closes the list and gives the focus back to the bell', !shadeOf(env) && env.doc.activeElement === bell);
+    bell.click(); const shade = shadeOf(env);
     shade.fire('pointerdown', { target: shade }); shade.fire('pointerup', { target: shade }); shade.fire('click', { target: shade });
-    check('a press on the dimmed page closes it', !shadeOf(env));
-    open(env); const card = shadeOf(env).children[0], sh = shadeOf(env);
+    check('a press on the page outside the panel closes it', !shadeOf(env));
+    bell.click(); const card = panelOf(env), sh = shadeOf(env);
     sh.fire('pointerdown', { target: card }); sh.fire('pointerup', { target: sh }); sh.fire('click', { target: sh });
-    check('a press that began in the card and ended on the dimmed page does not', !!shadeOf(env));
-    shadeOf(env).findAll((e) => e.tagName === 'button' && e.getAttribute('aria-label') === 'Close')[0].click();
+    check('a press that began in the panel and ended outside it does not', !!shadeOf(env));
+    buttonsOf(shadeOf(env), T.close)[0].click();
     check('the Close button closes it', !shadeOf(env));
-    check('the switch kept in the sheet is what the join alert reads', (inRoom(env), env.toggleRoom(), joinRoom(env, [C, 'Sam']), !toastOf(env) && env.$('toast').hidden === true));
+    bell.click(); bell.click();
+    check('a second press on the bell closes it', !shadeOf(env));
+    check('the switch kept in the settings is what the join alert reads', (inRoom(env), env.toggleRoom(), env.doc.title = 'Ants (1998)', env.advance(7000), env.storage.data['ants.alerts.v1'] = '{"join":false}', joinRoom(env, [C, 'Sam']), !toastOf(env) && env.$('toast').hidden === true));
+    env.storage.data['ants.alerts.v1'] = '{}';
 }
-{   // a guest and a person who is logged in see the same sheet
-    for (const me of ['guest', { login: true, you: { name: 'Maya', mod: false } }, undefined]) {
-        const env = homePage({}, { me });
-        env.home('hmenu').click();
-        const item = env.body.findAll((e) => /(^|\s)al-menu(\s|$)/.test(e.className))[0]; item.click();
-        const text = shadeOf(env).textContent;
-        check('the sheet for ' + (me === 'guest' ? 'a guest' : me ? 'a person who is logged in' : 'a page with no hub') + ': the top part of the picture and nothing about a login', /On this page/.test(text) && rows(env).length === 2 && !/Log in|Discord|When Ants is closed/.test(text));
+{   // a person who joins the room is an alert of the visitor's own list, kept in this browser
+    const env = homePage(); inRoom(env); env.toggleRoom();
+    const bell = bellOfPage(env), marks = () => bell.findAll((e) => /al-mark/.test(e.className)).map((e) => e.textContent);
+    joinRoom(env, [C, 'Sam']);
+    same('a person joined: the bell has a 1, and the list is kept in this browser', [marks(), JSON.parse(env.storage.data['ants.alerts.list.v1']).map((r) => [r.k, r.name, r.seat, r.u])], [['1'], [['join', 'Sam', 'Red', 1]]]);
+    bell.click();
+    const item = shadeOf(env).findAll((e) => /(^|\s)al-item(\s|$)/.test(e.className))[0];
+    check('the list says who joined and where, in gold while it is unread, with Open', /Sam joined your room/.test(item.textContent) && /as Red/.test(item.textContent) && /unread/.test(item.className) && /Open/.test(item.textContent));
+    check('the number is still on the bell while the list is open', marks().join() === '1');
+    escapeKey(env);
+    check('the list is closed: the alert is read and the number goes, in the list and in the storage', marks().length === 0 && JSON.parse(env.storage.data['ants.alerts.list.v1'])[0].u === 0);
+    bell.click(); const again = shadeOf(env).findAll((e) => /(^|\s)al-item(\s|$)/.test(e.className))[0];
+    check('and the next time the entry is plain', !/unread/.test(again.className));
+    again.findAll((e) => e.tagName === 'button')[0].click();
+    check('Open shows the Room and closes the list', env.screen() === 'room' && !shadeOf(env));
+    joinRoom(env, [E, '']); joinRoom(env, [C, 'Eve']);
+    bell.click(); buttonsOf(panelOf(env), env.win.AntsHomeAlerts.TEXT.gear)[0].click();
+    shadeOf(env).findAll((e) => e.hasAttribute('data-clear'))[0].click();
+    same('the settings\' button that empties the list empties a visitor\'s own list too: the bell, the list and what this browser keeps', [marks(), JSON.parse(env.storage.data['ants.alerts.list.v1']), /No alerts yet/.test(shadeOf(env).textContent)], [[], [], true]);
+}
+{   // what the hub's list does for a visitor who is not logged in is never kept: a reload has the same list, a 7-day limit and 30 rows
+    const stored = [];
+    for (let n = 1; n <= 35; n++) stored.push({ id: n, at: 1700000000 - (n === 1 ? 8 * 86400 : 0) + n, k: 'join', u: 0, name: 'P' + n, seat: 'Blue' });
+    stored.push({ id: 99, at: 1700000000, k: 'mention', u: 1, from: 'x', text: 'y' }, { id: 98, at: 1700000000, k: 'join', u: 1, name: '<b>', seat: 'Purple' });
+    const env = homePage({ 'ants.alerts.list.v1': JSON.stringify(stored) }, {});
+    const bell = bellOfPage(env);
+    bell.click();
+    const items = shadeOf(env).findAll((e) => /(^|\s)al-item(\s|$)/.test(e.className));
+    check('a list in this browser: only the alerts of a visitor (a person joined), the newest 30 of the last 7 days, newest first', items.length === 30 && /P35 joined/.test(items[0].textContent) && !/P1 joined/.test(shadeOf(env).textContent) && !/mentioned/.test(shadeOf(env).textContent));
+    escapeKey(env);
+    const broken = homePage({ 'ants.alerts.list.v1': 'not json' }, {});
+    check('a list that is rubbish is an empty one', bellOfPage(broken).findAll((e) => /al-mark/.test(e.className)).length === 0);
+}
+
+// ---- 6. the list of a person who is logged in: the hub's rows, the bell, the toasts, what a press does ----
+{
+    const env = homePage();
+    const A = env.win.AntsHomeAlerts, core = env.win.AntsAlertCore, T = A.TEXT;
+    const Chat = H.loadFile('home/chat.js', { WebSocket: null, setTimeout() { return 0; }, clearTimeout() {} }).AntsHomeChat;
+    const NOW = 1700000000;
+    // a mount of its own on a bar of its own, with a fake dock: o = { signedIn (default true), chat (the chat is on the screen), screen, noBlock }
+    function mountOf(o) {
+        o = o || {};
+        const bar = new H.El(env, 'div', ''), menu = new H.El(env, 'button', ''); menu.className = 'btn hmenu'; bar.appendChild(menu);
+        const calls = [], sent = [], blocks = [], state = { signedIn: o.signedIn !== false, chat: !!o.chat, taps: [], dockUp: !o.late };
+        const dock = { tap(fn) { state.taps.push(fn); }, send: o.noSend ? undefined : (obj) => { sent.push(obj); return true; }, onScreen: () => state.chat, note() {}, you: () => (state.signedIn ? { name: 'Maya' } : null),
+            block: o.noBlock ? undefined : (draw, cls) => { const b = { draw, cls, redraws: 0 }; blocks.push(b); return { redraw() { b.redraws++; } }; } };
+        const win = Object.assign({}, env.win, { AntsHomeChat: Chat, innerHeight: 800, navigator: { userAgent: 'x' } });
+        const m = A.mount({ doc: env.doc, win, core, ctl: { screen: () => o.screen || 'home', show: (n, how) => calls.push(['show', n, how]), join: (row, back) => { calls.push(['join', row.code, row.from]); return true; }, chat: () => calls.push(['chat']) },
+            bar, menuBtn: menu, signedIn: () => state.signedIn, dock: () => (state.dockUp ? dock : null), now: () => NOW });
+        const bell = bar.children.filter((e) => /(^|\s)al-bell(\s|$)/.test(e.className))[0];
+        const tap = (kind, m1) => state.taps.forEach((f) => f(kind, m1));
+        const marks = () => bell.findAll((e) => /al-mark/.test(e.className)).map((e) => e.textContent);
+        return { m, bar, bell, menu, calls, sent, blocks, state, tap, marks, dock };
     }
+    const INVITE = (id, o) => Object.assign({ id, at: NOW - 60, k: 'invite', u: 1, from: 'Clover', map: 'TREASURE.LVL', n: 3, of: 4, o: 1, code: 'abc234' }, o || {});
+    const MENTION = (id, o) => Object.assign({ id, at: NOW - 1920, k: 'mention', u: 1, from: 'tess', text: 'which map are we on?' }, o || {});
+    const JOIN = (id, o) => Object.assign({ id, at: NOW - 840, k: 'join', u: 0, name: 'juniper', seat: 'Red' }, o || {});
+    const items = (b) => (shadeOf(env) ? shadeOf(env).findAll((e) => /(^|\s)al-item(\s|$)/.test(e.className)) : []);
+    const escape = () => escapeKey(env);
+    const toast = () => { const all = env.body.findAll((e) => /(^|\s)al-toast(\s|$)/.test(e.className)), last = all[all.length - 1]; return last && !last.hidden ? last : null; };       // (the toast of the newest mount: every mount of this section makes its own)
+    let b = mountOf();
+    same('no alerts: the plain bell with no number, named for a screen reader', [b.marks(), b.bell.getAttribute('aria-label'), b.bell.getAttribute('aria-haspopup')], [[], 'Alerts', 'dialog']);
+    b.tap('alerts', { rows: [MENTION(3), INVITE(4), JOIN(2, { u: 1 }), INVITE(1, { u: 0, o: undefined, code: undefined })] });
+    same('the list from the hub: three unread, the number on the bell, named with it', [b.marks(), b.bell.getAttribute('aria-label')], [['3'], 'Alerts, 3 unread']);
+    b.bell.click();
+    same('the list is as the hub sent it, newest first, each with its words and its button', items().map((i) => [i.getAttribute('data-k'), i.getAttribute('data-id')]), [['mention', '3'], ['invite', '4'], ['join', '2'], ['invite', '1']]);
+    const words = items().map((i) => i.textContent);
+    check('an invitation says who, the map, how many are in and how long ago, with Join', /Clover invited you/.test(words[1]) && /Treasure/.test(words[1]) && /3 of 4 in/.test(words[1]) && /1 min ago/.test(words[1]) && /Join/.test(words[1]));
+    check('a mention says who, the start of the line and how long ago, with Open', /tess mentioned you/.test(words[0]) && /which map are we on\?/.test(words[0]) && /32 min ago/.test(words[0]) && /Open/.test(words[0]));
+    check('a person who joined says who and as which color, with Open', /juniper joined your room/.test(words[2]) && /as Red/.test(words[2]) && /14 min ago/.test(words[2]));
+    check('an invitation whose room is gone is dim, with no button and the words of the picture', /dim/.test(items()[3].className) && /The room has closed\./.test(words[3]) && items()[3].findAll((e) => e.tagName === 'button').length === 0);
+    check('the unread ones are marked, the read ones are plain', items().map((i) => /unread/.test(i.className)).join() === 'true,true,true,false' && shadeOf(env).textContent.indexOf(T.keptAccount) !== -1 && shadeOf(env).textContent.indexOf(T.loginNote) === -1);
+    check('the number is on the bell while the list is open', b.marks().join() === '3');
+    escape();
+    same('the list is closed: the hub is told that everything up to the newest is read, and the number goes', [b.sent, b.marks()], [[{ t: 'seen', upto: 4 }], []]);
+    b.bell.click(); b.sent.length = 0; escape();
+    check('nothing unread: nothing is told again', b.sent.length === 0);
+    // a press on a button
+    b = mountOf(); b.tap('alerts', { rows: [MENTION(3), INVITE(4), JOIN(2, { u: 1 })] });
+    b.bell.click(); items()[1].findAll((e) => e.tagName === 'button')[0].click();
+    same('Join on an invitation closes the list, counts as read and asks Home to join that room', [!!shadeOf(env), b.calls, b.sent, b.marks()], [false, [['join', 'abc234', 'Clover']], [{ t: 'seen', upto: 4 }], []]);
+    b.bell.click(); items()[0].findAll((e) => e.tagName === 'button')[0].click();
+    check('Open on a mention shows the chat', b.calls.pop().join() === 'chat' && !shadeOf(env));
+    b.bell.click(); items()[2].findAll((e) => e.tagName === 'button')[0].click();
+    check('Open on a person who joined shows the Room', b.calls.pop().join() === 'show,room,push');
+    // the number
+    b = mountOf(); b.tap('alerts', { rows: Array.from({ length: 12 }, (_, i) => JOIN(i + 1, { u: 1 })) });
+    check('more than nine unread: "9+"', b.marks().join() === '9+' && /12 unread/.test(b.bell.getAttribute('aria-label')));
+    // a row that cannot be (more people in the room than it has seats), and a list that is not for a visitor
+    b = mountOf(); b.tap('alerts', { rows: [INVITE(5, { n: 4, of: 2 }), MENTION(6)] });
+    same('a row whose room holds more people than it has seats is dropped, the others are kept', b.marks(), ['1']);
+    b = mountOf({ signedIn: false }); b.tap('alerts', { rows: [MENTION(6)] });
+    b.state.signedIn = true; b.tap('you');
+    same('a list that comes while the page does not know the visitor is not kept: when the visitor is known, the bell waits for the hub\'s own list', b.marks(), []);
+    // the dock comes after the bell: the bell asks it to tell, a while later
+    b = mountOf({ late: true });
+    same('the dock is not there yet: no tap is made', b.state.taps.length, 0);
+    b.state.dockUp = true; env.advance(600);
+    same('the dock comes a little later: the bell asks it, and takes its news', [b.state.taps.length, (b.tap('alerts', { rows: [MENTION(3)] }), b.marks())], [1, ['1']]);
+    // the news that the hub sends back of a person who joined the room is not news again (the page that holds the room said it)
+    b = mountOf(); env.doc.hidden = false;
+    b.tap('alert', { row: JOIN(8, { u: 1 }) });
+    check('a join that the hub sends back is in the list and on the bell, and says nothing again: no toast, no blinking', b.marks().join() === '1' && !toast() && env.doc.title === 'Ants (1998)');
+    // a member's own list is the account's: the join is told to the hub, and nothing of it is kept in this browser
+    delete env.storage.data['ants.alerts.list.v1'];
+    b = mountOf({ noSend: true }); b.m.alert('join', { name: 'Sam', text: 'Sam joined as Red.', seat: 'Red' });
+    check('a member whose dock cannot send yet keeps nothing of the account\'s list in this browser', !env.storage.data['ants.alerts.list.v1'] && b.marks().length === 0);
+    b = mountOf(); b.m.alert('join', { name: 'Sam', text: 'Sam joined as Red.', seat: 'Red' });
+    same('a member: the join goes to the hub as a note, and not into this browser', [b.sent, env.storage.data['ants.alerts.list.v1']], [[{ t: 'note', k: 'join', name: 'Sam', seat: 'Red' }], undefined]);
+    // a new alert from the hub
+    b = mountOf();
+    b.tap('alert', { row: INVITE(7) });
+    const t = toast();
+    check('an invitation while the chat is not on the screen: a toast that says who and where, with Join', !!t && /Clover invited you to Treasure \(3 of 4\)\./.test(t.textContent) && /Join/.test(t.textContent) && b.marks().join() === '1');
+    env.advance(9900); check('it stays for ten seconds', !t.hidden); env.advance(200); check('and goes after them', t.hidden === true);
+    b.tap('alert', { row: INVITE(8) }); toast().findAll((e) => e.tagName === 'button')[0].click();
+    same('Join on the toast asks Home to join the room, and the toast goes', [b.calls.pop(), toast()], [['join', 'abc234', 'Clover'], null]);
+    b.tap('alert', { row: INVITE(8) });
+    check('the same alert twice is one entry', b.marks().join() === '2');
+    b.tap('alert', { row: MENTION(9) });
+    check('a mention while the chat is not on the screen: a toast with Open (6 seconds)', /tess mentioned you in the chat\./.test(toast().textContent) && /Open/.test(toast().textContent) && (env.advance(5900), !toast().hidden) && (env.advance(200), toast() === null));
+    b.tap('alert', { row: MENTION(10) }); toast().findAll((e) => e.tagName === 'button')[0].click();
+    check('Open on that toast shows the chat', b.calls.pop().join() === 'chat');
+    // the chat is on the screen: one place at a time
+    b = mountOf({ chat: true });
+    b.tap('alert', { row: INVITE(7) });
+    same('the chat is on the screen: the invitation is a line of the chat (the dock\'s own block), no toast, the bell has it', [b.blocks.length, toast(), b.marks()], [1, null, ['1']]);
+    const line = new H.El(env, 'div', ''); b.blocks[0].draw(line);
+    check('the line says who invited, where, how many are in, with Join', /Clover/.test(line.textContent) && /invited you to their room/.test(line.textContent) && /Treasure/.test(line.textContent) && /3 of 4 in/.test(line.textContent) && line.findAll((e) => e.tagName === 'button').map((e) => e.textContent).join() === 'Join');
+    line.findAll((e) => e.tagName === 'button')[0].click();
+    check('its Join does what the toast\'s does', b.calls.pop().join() === 'join,abc234,Clover');
+    b.tap('alerts', { rows: [INVITE(7, { o: undefined, code: undefined })] });
+    const dim = new H.El(env, 'div', ''); b.blocks[0].draw(dim);
+    check('the hub says the room is gone: the line is drawn again, dim, with no button and the words of the picture', b.blocks[0].redraws === 1 && /The room has closed\./.test(dim.textContent) && dim.findAll((e) => e.tagName === 'button').length === 0 && /dim/.test(dim.className));
+    b.tap('alert', { row: MENTION(9) });
+    same('a mention with the chat on the screen is the line\'s own mark: no toast, no second block, the bell has it', [toast(), b.blocks.length, b.marks()], [null, 1, ['2']]);
+    // the switches: the entry is kept, nothing is shown
+    env.storage.data['ants.alerts.v1'] = '{"invite":false,"mention":false}';
+    b = mountOf(); env.doc.hidden = false;
+    b.tap('alert', { row: INVITE(7) }); b.tap('alert', { row: MENTION(9) });
+    same('the switches off: both are in the list and on the bell, and nothing is shown, in the chat or over it', [b.marks(), toast(), b.blocks.length], [['2'], null, 0]);
+    b = mountOf({ chat: true }); b.tap('alert', { row: INVITE(7) });
+    check('and not as a line of the chat either', b.blocks.length === 0);
+    env.storage.data['ants.alerts.v1'] = '{}';
+    // the background
+    env.hide(true); b = mountOf();
+    b.tap('alert', { row: INVITE(7) });
+    check('an invitation while the page is in the background: the tab\'s title says who', env.doc.title === '● Clover invited you');
+    env.hide(false); env.doc.title = 'Ants (1998)';
+    env.hide(true); b.tap('alert', { row: MENTION(9) });
+    check('a mention in the background says so too', env.doc.title === '● tess mentioned you');
+    env.hide(false); env.doc.title = 'Ants (1998)';
+    // the settings of a person who is logged in
+    b = mountOf(); b.bell.click();
+    buttonsOf(shadeOf(env), T.gear)[0].click();
+    same('a person who is logged in has the two new switches before the other two', rows(env).map((r) => r.getAttribute('data-switch')).join(), 'invite,mention,join,start');
+    check('they say what they are', shadeOf(env).textContent.indexOf(T.invite[0]) !== -1 && shadeOf(env).textContent.indexOf(T.mention[0]) !== -1 && shadeOf(env).textContent.indexOf(T.clearAccount) !== -1);
+    rows(env)[0].click();
+    check('the switch is kept in this browser', JSON.parse(env.storage.data['ants.alerts.v1']).invite === false);
+    env.storage.data['ants.alerts.v1'] = '{}';
+    b.tap('alerts', { rows: [MENTION(3)] });
+    shadeOf(env).findAll((e) => e.getAttribute('data-clear') === 'yes')[0].click();
+    same('Clear my alerts tells the hub, empties the list and shows it', [b.sent.pop(), b.marks(), /No alerts yet/.test(shadeOf(env).textContent)], [{ t: 'clearalerts' }, [], true]);
+    escape();
+    // a person joins the room of a person who is logged in: the hub keeps it, this page keeps none
+    b = mountOf(); b.sent.length = 0;
+    check('a person joined: told to the hub as a note, kept in no list of this browser', b.m.alert('join', { name: 'Sam', text: 'Sam joined as Red.', seat: 'Red' }) === true && b.sent.length === 1 && JSON.stringify(b.sent[0]) === JSON.stringify({ t: 'note', k: 'join', name: 'Sam', seat: 'Red' }) && !env.storage.data['ants.alerts.list.v1']);
+    b.sent.length = 0; b.m.alert('join', { name: 'Sam', text: 'x', seat: 'Purple' });
+    check('a seat that is no color is told to nobody', b.sent.length === 0);
+    b.tap('alert', { row: JOIN(5) });
+    same('and the row that the hub sends back is in the list without a second toast or blink', [b.marks(), env.doc.title], [[], 'Ants (1998)']);
+    // a visitor and a hub that stops
+    b = mountOf({ signedIn: false });
+    b.tap('alerts', { rows: [MENTION(3)] });
+    check('a list from a hub is not a visitor\'s: the visitor\'s own is in this browser', b.marks().length === 0);
+    b = mountOf(); b.tap('alerts', { rows: [MENTION(3)] }); b.tap('live', {});
+    check('a new welcome waits for the hub\'s list again', b.marks().length === 0);
+    b.tap('alerts', { rows: 'nonsense' }); b.tap('alerts', { rows: [{ id: 'x' }] }); b.tap('alert', { row: { id: 1, k: 'pm' } }); b.tap('alert', null);
+    check('a frame that is not a list is ignored', b.marks().length === 0);
+    // say(): the page's own words
+    b = mountOf(); check('say(words) is a toast; the gold one is a refusal', b.m.say('Invitation sent to juniper.') === true && /Invitation sent to juniper\./.test(toast().textContent) && !/warn/.test(toast().className) && (b.m.say('Too many invitations.', 'warn'), /warn/.test(toast().className)));
+    check('a toast with no action has no button', toast().findAll((e) => e.tagName === 'button').length === 0);
+    // the words of a row, and the rows themselves
+    const rules = env.win.AntsLobbyRules;
+    same('a row that is not one is dropped, a field of strangers is cleaned, a map that is not a file name is none', [
+        A.rowOf({ id: 1, at: NOW, k: 'invite', from: 'A', n: 5, of: 4 }, Chat, rules), A.rowOf({ id: 1, at: NOW, k: 'pm', from: 'A' }, Chat, rules), A.rowOf({ id: 1, at: 'now', k: 'mention', from: 'A' }, Chat, rules), A.rowOf(null, Chat, rules),
+        A.rowOf({ id: 2, at: NOW, k: 'invite', from: 'Bo‏b', n: 1, of: 4, map: '../x', o: 1, code: 'Not A Code' }, Chat, rules)], [null, null, null, null, { id: 2, at: NOW, k: 'invite', u: false, from: 'Bob', n: 1, of: 4, map: '', code: '', open: false }]);
+    same('a mention keeps its words as text, cut to eighty and the dots', [A.rowOf(MENTION(1, { text: '<b>x</b> ' + 'w'.repeat(200) }), Chat, rules).text.length, A.rowOf(MENTION(1, { text: '<b>x</b>' }), Chat, rules).text], [81, '<b>x</b>']);
+    same('the unread are counted, and nine is the most that the bell says', [A.countOf([{ u: true }, { u: false }, { u: true }]), A.countText(9), A.countText(10)], [2, '9', '9+']);
+    same('a visitor\'s list: the last seven days, the newest thirty, newest first', A.trim([{ id: 1, at: NOW - 8 * 86400 }, { id: 2, at: NOW }, { id: 3, at: NOW }], NOW).map((r) => r.id), [3, 2]);
+    check('the list is never a place for the browser to be asked for anything, and nothing is written as markup', env.innerHTMLWrites.length === 0);
 }
 {   // a sound that is written in the table gets its row and plays with the alert; its switch obeys
     const env = homePage();
     const plays = [];
     env.win.Audio = function (src) { this.play = () => { plays.push(src); }; };
     env.win.AntsAlertCore.SOUNDS.join = '/home/alert_join.mp3';
-    env.home('hmenu').click();
-    env.body.findAll((e) => /(^|\s)al-menu(\s|$)/.test(e.className))[0].click();
-    check('a sound in the table: its row is there, and the sheet is "Alerts and sounds"', rows(env).map((r) => r.getAttribute('data-switch')).join() === 'join,start,soundJoin' && shadeOf(env).textContent.indexOf(env.win.AntsAlertCore.TEXT.sheetSounds) !== -1);
-    shadeOf(env).findAll((e) => e.tagName === 'button' && e.getAttribute('aria-label') === 'Close')[0].click();
+    bellOfPage(env).click();
+    check('a sound in the table: the list is "Alerts and sounds"', shadeOf(env).textContent.indexOf(env.win.AntsAlertCore.TEXT.sheetSounds) !== -1);
+    buttonsOf(shadeOf(env), env.win.AntsHomeAlerts.TEXT.gear)[0].click();
+    check('and its row is in the settings', rows(env).map((r) => r.getAttribute('data-switch')).join() === 'join,start,soundJoin');
+    escapeKey(env); escapeKey(env);
     inRoom(env); env.toggleRoom(); joinRoom(env, [C, 'Sam']);
     check('the sound plays with the alert, once', plays.length === 1 && plays[0] === '/home/alert_join.mp3');
     env.advance(2100); joinRoom(env, [E, '']); joinRoom(env, [C, 'Eve']);
     check('and again after two seconds', plays.length === 2);
     env.win.AntsAlertCore.SOUNDS.join = '';
-}
-
-// ---- 6. the bell ----
-{
-    const env = homePage();
-    const A = env.win.AntsHomeAlerts, core = env.win.AntsAlertCore;
-    const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1';
-    function bellOf(o) {                                                                  // a mount of its own on a bar of its own: o = { permission (none: the browser has no notifications), signedIn, ua, platform, touch, standalone (display-mode), iosStandalone }
-        const calls = { asked: 0, constructed: 0, queries: 0 };
-        const bar = new H.El(env, 'div', ''), menu = new H.El(env, 'button', ''), other = new H.El(env, 'button', ''); menu.className = 'btn hmenu'; other.className = 'btn hlogin'; bar.appendChild(other); bar.appendChild(menu);          // (the bar of Home's right end: the account button, then the Menu's button)
-        const state = { signedIn: o.signedIn !== false, permission: o.permission, dock: null };
-        const watchers = [];
-        const win = Object.assign({}, env.win, {
-            innerHeight: 800, addEventListener(t, f) { (watchers[t] = watchers[t] || []).push(f); },
-            navigator: { userAgent: o.ua || 'Mozilla/5.0 (X11; Linux x86_64)', platform: o.platform || 'Linux x86_64', maxTouchPoints: o.touch || 0, standalone: o.iosStandalone === true ? true : undefined,
-                permissions: { query() { calls.queries++; return { then(ok) { const st = {}; watchers.status = st; ok(st); } }; } } },
-            matchMedia: (q) => ({ matches: /standalone/.test(q) && o.standalone === true }),
-        });
-        if (o.permission !== undefined) win.Notification = { get permission() { return state.permission; }, requestPermission() { calls.asked++; return { then() {} }; } };
-        else delete win.Notification;
-        if (o.noStorage) win.localStorage = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };         // a browser that refuses its storage
-        const m = A.mount({ doc: env.doc, win, core, ctl: { screen: () => 'home', show() {} }, bar, menuBtn: menu, signedIn: () => state.signedIn, dock: () => state.dock });
-        const bell = bar.children.filter((e) => /(^|\s)al-bell(\s|$)/.test(e.className))[0];
-        return { m, bar, bell, menu, chip: other, state, calls, watchers, win, marks: () => bell.findAll((e) => /al-mark/.test(e.className)) };
-    }
-    const named = (b) => ({ state: b.bell.getAttribute('data-state'), label: b.bell.getAttribute('aria-label'), hidden: b.bell.hidden });
-    let b = bellOf({ permission: 'default' });
-    same('logged in, notifications not set up: the bell with a dot', [named(b), b.marks().length, /dot/.test(b.marks()[0] ? b.marks()[0].className : '')], [{ state: 'off', label: 'Alerts: not set up on this device', hidden: false }, 1, true]);
-    const at = (x) => b.bar.children.indexOf(x);
-    check('the bell is the Menu\'s button\'s neighbor on its left, behind the account button, whoever is in the bar, and the Menu\'s button is left as it was (no dot of its own)', at(b.bell) === at(b.menu) - 1 && at(b.chip) < at(b.bell) && b.menu.className === 'btn hmenu');
-    check('the bar holds the account button, the bell and the Menu\'s button, in that order, and nothing else', b.bar.children.length === 3 && b.bar.children[0] === b.chip && b.bar.children[1] === b.bell && b.bar.children[2] === b.menu);
-    b = bellOf({ permission: 'granted' });
-    same('notifications on: the plain bell, no dot', [named(b), b.marks().length], [{ state: 'on', label: 'Alerts: on for this device', hidden: false }, 0]);
-    b = bellOf({ permission: 'denied' });
-    same('the browser blocks them: the struck bell, no dot', [named(b), b.marks().length], [{ state: 'blocked', label: 'Alerts: blocked in this browser', hidden: false }, 0]);
-    for (const p of ['default', 'granted', 'denied']) { b = bellOf({ permission: p, signedIn: false }); same('not logged in (' + p + '): the plain bell of the sheet, no dot, whatever the permission says', [named(b), b.marks().length], [{ state: 'guest', label: core.TEXT.sheet, hidden: false }, 0]); }
-    b = bellOf({ ua: IPHONE, platform: 'iPhone' });
-    same('an iPhone that has not installed the app (it has no notifications yet): the bell that needs the app, with its arrow', [named(b), b.marks().length], [{ state: 'needs', label: 'Alerts: need the app on the Home Screen', hidden: false }, 1]);
-    b = bellOf({ ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', platform: 'MacIntel', touch: 5 });
-    check('an iPad that says it is a Mac, with a touch screen, is the same', named(b).state === 'needs');
-    b = bellOf({ ua: IPHONE, platform: 'iPhone', permission: 'default', iosStandalone: true });
-    check('the installed app on an iPhone (navigator.standalone) reads the permission like any browser', named(b).state === 'off');
-    b = bellOf({ ua: IPHONE, platform: 'iPhone', permission: 'granted', standalone: true });
-    check('and so does the display mode "standalone"', named(b).state === 'on');
-    b = bellOf({ ua: IPHONE, platform: 'iPhone', iosStandalone: true });
-    check('the installed app of an iOS that has no notifications: no bell', named(b).hidden === true && b.marks().length === 0);
-    for (const signedIn of [true, false]) { b = bellOf({ signedIn }); check('a browser with no notifications at all (' + (signedIn ? 'logged in' : 'not logged in') + '): no bell', named(b).hidden === true && b.marks().length === 0); }
-    // the state is read again
-    b = bellOf({ permission: 'default', signedIn: false });
-    b.state.signedIn = true; b.m.refresh();
-    check('the visitor logs in: the state is read again', named(b).state === 'off' && b.marks().length === 1);
-    b.state.permission = 'granted'; b.m.refresh();
-    check('the permission changes: the bell and the dot follow', named(b).state === 'on' && b.marks().length === 0 && b.bell.getAttribute('title') === b.bell.getAttribute('aria-label'));
-    b.state.permission = 'denied'; (b.watchers.status.onchange)();
-    check('the browser says that the permission changed: the bell follows', named(b).state === 'blocked');
-    b.state.permission = 'default'; (b.watchers.focus || []).forEach((f) => f({}));
-    check('the window gets the focus again: the bell is read again', named(b).state === 'off');
-    // the chat dock comes after the bell: the bell asks it to tell who the visitor is, and reads again when it does
-    b = bellOf({ permission: 'default', signedIn: false });
-    check('the dock is not there yet: the plain bell', named(b).state === 'guest');
-    b.state.signedIn = true; b.state.dock = { tap(fn) { b.state.tapped = fn; } }; env.advance(600);
-    check('the dock comes: the bell asks it to tell, and reads again', typeof b.state.tapped === 'function' && named(b).state === 'off');
-    b.state.signedIn = false; b.state.tapped('who'); check('a list of players is not news of the visitor', named(b).state === 'off');
-    b.state.tapped('lost'); check('the link was lost and the visitor is not known: the plain bell', named(b).state === 'guest');
-    b.state.signedIn = true; b.state.tapped('live'); check('the welcome says who the visitor is: the dot', named(b).state === 'off');
-    b.state.signedIn = false; b.state.tapped('you'); check('the visitor logs out: the plain bell', named(b).state === 'guest');
-    // a press opens the sheet, and the browser is never asked
-    b = bellOf({ permission: 'default' });
-    (b.watchers.focus || []).forEach((f) => f({})); (b.win.document || env.doc).listeners.visibilitychange && env.doc.listeners.visibilitychange.forEach((f) => f({}));
-    check('reading the state asks the browser for nothing', b.calls.asked === 0 && b.calls.constructed === 0);
-    b.bell.click();
-    check('a press opens the sheet of the alerts', !!shadeOf(env) && /Alerts/.test(shadeOf(env).textContent));
-    check('and the browser is still not asked', b.calls.asked === 0 && b.win.Notification.permission === 'default');
-    env.doc.listeners.keydown.forEach((f) => f({ key: 'Escape', preventDefault() {} }));
-    check('Escape closes it and the focus is on the bell', !shadeOf(env) && env.doc.activeElement === b.bell);
-    for (const k of ['granted', 'denied']) { b = bellOf({ permission: k }); b.bell.click(); check('a press while ' + k + ' is the same: the sheet, no question', !!shadeOf(env) && b.calls.asked === 0); env.doc.listeners.keydown.forEach((f) => f({ key: 'Escape', preventDefault() {} })); }
-    b = bellOf({ ua: IPHONE, platform: 'iPhone' }); b.bell.click();
-    check('a press on the iPhone bell opens the sheet too (the explanation of the app comes with the install button)', !!shadeOf(env));
-    env.doc.listeners.keydown.forEach((f) => f({ key: 'Escape', preventDefault() {} }));
-    // in step 1 the dot means "not looked yet": it goes for good, in this browser, once the Alerts sheet has been opened
-    const escape = () => env.doc.listeners.keydown.forEach((f) => f({ key: 'Escape', preventDefault() {} }));
-    env.storage.removeItem(core.LOOKED_KEY);
-    b = bellOf({ permission: 'default' });
-    check('a browser that has not looked at the alerts: the dot on the bell', b.marks().length === 1);
-    (b.watchers.focus || []).forEach((f) => f({})); b.m.refresh();
-    check('reading the state again is not looking at the sheet: the dot stays', b.marks().length === 1 && !shadeOf(env));
-    b.bell.click();
-    same('the sheet is opened with the bell: the dot is gone from the bell, and the bell is there, named as before', [named(b), b.marks().length], [{ state: 'off', label: 'Alerts: not set up on this device', hidden: false }, 0]);
-    escape();
-    (b.watchers.focus || []).forEach((f) => f({})); b.m.refresh();
-    check('and it stays gone when the bell is read again', b.marks().length === 0 && named(b).state === 'off');
-    b = bellOf({ permission: 'default' });
-    check('a later visit of this browser: no dot on the bell', b.marks().length === 0 && named(b).state === 'off' && b.bell.hidden === false);
-    check('what is kept is that the sheet was looked at, and nothing else (no switch is written by it)', env.storage.getItem(core.LOOKED_KEY) === '1' && env.storage.getItem(core.KEY) === null);
-    b.state.permission = 'granted'; b.m.refresh(); b.state.permission = 'default'; b.m.refresh();
-    check('a permission that comes and goes does not bring the dot back', b.marks().length === 0);
-    env.storage.removeItem(core.LOOKED_KEY);
-    b = bellOf({ permission: 'default' });
-    b.m.row(() => null).click();
-    check('the Menu\'s row opens the sheet, and that is looking at it too: the dot is gone', !!shadeOf(env) && b.marks().length === 0);
-    escape();
-    env.storage.removeItem(core.LOOKED_KEY);
-    b = bellOf({ permission: 'default' }); b.m.open(null); escape();
-    check('the sheet opened any other way is the same', b.marks().length === 0);
-    env.storage.removeItem(core.LOOKED_KEY);
-    b = bellOf({ ua: IPHONE, platform: 'iPhone' }); b.bell.click(); escape();
-    check('the arrow of an iPhone that has not installed the app is not that dot: it stays', b.marks().length === 1 && named(b).state === 'needs');
-    env.storage.removeItem(core.LOOKED_KEY);
-    b = bellOf({ permission: 'default', noStorage: true });
-    check('a browser that refuses its storage: the dot at first', b.marks().length === 1);
-    b.bell.click(); escape(); b.m.refresh();
-    check('and it goes for this visit', b.marks().length === 0);
-    env.storage.removeItem(core.LOOKED_KEY);
-}
-{   // the page's own run: Home builds the bell in front of its account button, and the Menu's button gets the dot
-    const asked = [];
-    const env = runLobby('', { 'ants.name': 'Maya' }, { lazy: true, fakeClock: true, stayHome: true, win: { Notification: { permission: 'default', requestPermission() { asked.push(1); } }, navigator: { userAgent: 'Mozilla/5.0 (X11; Linux x86_64)', platform: 'Linux x86_64', maxTouchPoints: 0 } } });
-    env.advance(0);
-    const right = env.home('hright'), first = right.children[1];
-    check('on the page, the bell is between the account button and the Menu\'s button, and the visitor is not logged in (the chat dock is not here): the plain bell', right.children.length === 3 && /hlogin/.test(right.children[0].className) && /al-bell/.test(first.className) && /hmenu/.test(right.children[2].className) && first.getAttribute('data-state') === 'guest');
-    first.click();
-    check('its press opens the sheet and asks nothing of the browser', !!shadeOf(env) && asked.length === 0);
 }
 
 // ---- what the scripts never do ----

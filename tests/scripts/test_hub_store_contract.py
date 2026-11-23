@@ -1182,6 +1182,83 @@ class Contract(unittest.TestCase):
         self.assertEqual(self.store.picture(name), b"\x89PNG-one")
         self.assertEqual(self.store.picture_state("1002"), base.SHOW_ON)
 
+    # ---- alerts: the list of an account's bell (hub/people.py), by the account's reference ----
+
+    REF_A, REF_B = "a" * 16, "b" * 16
+
+    def test_an_alert_is_kept_unread_and_the_list_is_the_newest_30_of_the_last_7_days_newest_first(self):
+        start = self.clock.now
+        first = self.store.add_alert(self.REF_A, "join", '{"name":"x","seat":"Red"}')
+        self.assertEqual((first.kind, first.unread, first.line), ("join", 1, None))
+        for n in range(34):
+            self.clock.now += 1
+            self.store.add_alert(self.REF_A, "mention", '{"n":%d}' % n, "c" * 16, 7)
+        rows = self.store.alerts(self.REF_A)
+        self.assertEqual([r.body for r in rows], ['{"n":%d}' % n for n in range(33, 3, -1)])
+        self.assertEqual(len(self.store.alerts(self.REF_A, keep=5)), 5)
+        self.clock.now = start + 7 * DAY + 10
+        self.assertEqual(len(self.store.alerts(self.REF_A)), 25)                   # (the ones that are past 7 days go from the list ...)
+        self.clock.now = start + 7 * DAY + 40
+        self.assertEqual(self.store.alerts(self.REF_A), [])
+        self.store.add_alert(self.REF_A, "join", "{}", keep=3, days=7)
+        self.assertEqual(len(self.store.alerts(self.REF_A)), 1)                    # (... and from the file with the next one that is added)
+
+    def test_a_list_is_the_accounts_own_and_what_one_account_does_to_its_list_never_touches_another(self):
+        mine = self.store.add_alert(self.REF_A, "invite", "{}")
+        other = self.store.add_alert(self.REF_B, "invite", "{}")
+        self.assertEqual([r.id for r in self.store.alerts(self.REF_A)], [mine.id])
+        self.assertEqual(self.store.read_alerts(self.REF_B, mine.id), 0)
+        self.assertEqual(self.store.read_alerts(self.REF_A, other.id), 1)
+        self.assertEqual(self.store.read_alerts(self.REF_A, other.id), 0)         # (read already: nothing changes)
+        self.assertEqual([r.unread for r in self.store.alerts(self.REF_B)], [1])
+        self.assertFalse(self.store.change_alert(self.REF_B, mine.id, '{"x":1}'))
+        self.assertTrue(self.store.change_alert(self.REF_A, mine.id, '{"x":1}'))
+        self.assertEqual([r.body for r in self.store.alerts(self.REF_A)], ['{"x":1}'])
+        self.assertEqual(self.store.clear_alerts(self.REF_B), 1)
+        self.assertEqual((len(self.store.alerts(self.REF_A)), self.store.alerts(self.REF_B)), (1, []))
+
+    def test_read_alerts_reads_up_to_the_number_and_no_further(self):
+        a = self.store.add_alert(self.REF_A, "join", "{}")
+        b = self.store.add_alert(self.REF_A, "join", "{}")
+        self.assertEqual(self.store.read_alerts(self.REF_A, a.id), 1)
+        self.assertEqual([r.unread for r in self.store.alerts(self.REF_A)], [1, 0])
+        self.assertEqual(self.store.read_alerts(self.REF_A, b.id), 1)
+
+    def test_the_mentions_of_deleted_lines_go_from_every_list_and_the_references_of_the_lists_are_told(self):
+        self.store.add_alert(self.REF_A, "mention", "{}", "c" * 16, 5)
+        self.store.add_alert(self.REF_B, "mention", "{}", "c" * 16, 5)
+        keep = self.store.add_alert(self.REF_B, "mention", "{}", "c" * 16, 6)
+        self.assertEqual(self.store.drop_alerts_of_lines([5, 9]), {self.REF_A, self.REF_B})
+        self.assertEqual([r.id for r in self.store.alerts(self.REF_B)], [keep.id])
+        self.assertEqual(self.store.drop_alerts_of_lines([5]), set())
+
+    def test_forgetting_an_account_takes_its_list_and_every_alert_that_is_from_it(self):
+        ref = self.store.ref("1001")
+        self.store.add_alert(ref, "join", "{}")
+        self.store.add_alert(self.REF_B, "invite", "{}", ref)
+        keep = self.store.add_alert(self.REF_B, "invite", "{}", "c" * 16)
+        self.store.forget("1001")
+        self.assertEqual(self.store.alerts(ref), [])
+        self.assertEqual([r.id for r in self.store.alerts(self.REF_B)], [keep.id])
+
+    def test_purge_drops_the_alerts_that_are_far_past_their_time(self):
+        self.store.add_alert(self.REF_A, "join", "{}")
+        self.clock.now += 31 * DAY
+        self.store.purge()
+        self.assertEqual(self.store.alerts(self.REF_A, days=365), [])
+
+    def test_an_alert_that_is_not_one_is_refused_and_a_refused_write_leaves_the_list_as_it_was(self):
+        for kind, body in (("pm", "{}"), ("join", 5), ("join", "x" * 601)):
+            with self.assertRaises(ValueError):
+                self.store.add_alert(self.REF_A, kind, body)
+        mine = self.store.add_alert(self.REF_A, "join", "{}")
+        with self.refusing_writes(self.store):
+            for write in (lambda: self.store.add_alert(self.REF_A, "join", "{}"), lambda: self.store.read_alerts(self.REF_A, 9), lambda: self.store.clear_alerts(self.REF_A),
+                          lambda: self.store.change_alert(self.REF_A, mine.id, "{}"), lambda: self.store.drop_alerts_of_lines([1])):
+                with self.assertRaises(base.StoreError):
+                    write()
+        self.assertEqual([(r.id, r.unread) for r in self.store.alerts(self.REF_A)], [(mine.id, 1)])
+
 
 class SqliteContract(Contract):
     """The default backend: one file."""

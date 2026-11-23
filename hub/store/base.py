@@ -14,6 +14,9 @@ Image.__repr__ = lambda self: "<Image>"
 Action = collections.namedtuple("Action", "id at actor action target detail")         # a row of the moderators' log (see StoreBase.actions)
 Usage = collections.namedtuple("Usage", "bytes free lines oldest log")         # (see StoreBase.usage)
 Profile = collections.namedtuple("Profile", "username display pick")
+Alert = collections.namedtuple("Alert", "id at kind body line unread")         # a row of an account's list of alerts (docs/HUB_PEOPLE.md): `body` is the small JSON text that hub/people.py made, `line` the chat line that a mention is of (or None)
+ALERT_KINDS = ("invite", "mention", "join")
+ALERT_BODY_MAX = 600                        # the longest body that is kept (bytes): hub/people.py writes a few short fields, never more
 PICKS = ("display", "username")
 MAX_LINES = 200                                # the store keeps the newest this many chat lines (every line counts, a moderator's and a deleted one too), and no line older than `retention`: whichever limit is smaller deletes first
 MODLOG_DAYS = 30                        # the moderators' log keeps an action this long ...
@@ -178,6 +181,33 @@ class StoreBase:
 
     def last_noimages_change(self):
         """The number of the last change of the flags, by this process or by another (the command line): it only goes up."""
+        raise NotImplementedError
+
+    # ---- alerts: the list that an account's bell shows (hub/people.py), keyed by the account's pseudonymous reference, never by its id ----
+
+    def add_alert(self, ref, kind, body, from_ref="", line=None, keep=30, days=7):
+        """Keep one alert for the account with this reference (`kind` is one of ALERT_KINDS, `body` a short JSON text, `from_ref` the reference of the person it is from, `line` the number of the chat line of a mention),
+        unread, and give back its Alert. The account keeps its newest `keep` alerts and none older than `days` days: the rest go with this call."""
+        raise NotImplementedError
+
+    def alerts(self, ref, keep=30, days=7):
+        """The account's alerts, newest first: at most `keep`, none older than `days` days."""
+        raise NotImplementedError
+
+    def read_alerts(self, ref, upto):
+        """The account's alerts up to the number `upto` are read now. Returns how many were unread."""
+        raise NotImplementedError
+
+    def clear_alerts(self, ref):
+        """Every alert of the account goes. Returns how many there were."""
+        raise NotImplementedError
+
+    def change_alert(self, ref, alert_id, body):
+        """The body of one of the account's alerts is another text (an invitation that has ended loses its room's code). False when the account has no such alert."""
+        raise NotImplementedError
+
+    def drop_alerts_of_lines(self, line_ids):
+        """The mentions of these chat lines go from every list. Returns the references of the accounts whose list changed."""
         raise NotImplementedError
 
     # ---- pictures: the small copy of an account's Discord picture (hub/pictures.py), keyed by the account's pseudonymous reference, never by its id ----

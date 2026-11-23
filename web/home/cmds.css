@@ -80,3 +80,7 @@
 .gc-fine { margin-top: 2px; font-size: 13px; line-height: 1.35; color: #8fb3a6; }
 .gc-status .gc-pl + .gc-pl, .gc-status .gc-nums + .gc-pl, .gc-status .gc-fine + .gc-pl { margin-top: 8px; }
 @media (prefers-reduced-motion: reduce) { .gh-row, .gb-in { transition: none; } }
+/* the people in the helper (after `/invite ` and after an `@`): a person who cannot be invited now is dim, with the reason in gold */
+.gh-row.gh-dim .gh-w { color: #8fb3a6; }
+.gh-row.gh-dim .gh-d { color: var(--gold); }
+.gh-row.gh-dim[aria-selected="true"] .gh-w { color: var(--cream); }

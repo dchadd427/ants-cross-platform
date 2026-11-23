@@ -11,12 +11,13 @@ import os
 import sqlite3
 import time
 
-from .base import IMAGE_NAME, IMAGE_TYPES, MAX_LINES, NOIMAGES_MAX, PICKS, PICTURE_DAYS, PICTURE_NAME, PROFILE_DAYS, PUBLIC, SHOW_BLOCKED, SHOW_OFF, SHOW_ON, Action, Image, ImageGone, Line, Profile, StoreBase, StoreError, Usage, check_note
+from .base import ALERT_BODY_MAX, ALERT_KINDS, IMAGE_NAME, IMAGE_TYPES, MAX_LINES, NOIMAGES_MAX, PICKS, PICTURE_DAYS, PICTURE_NAME, PROFILE_DAYS, PUBLIC, SHOW_BLOCKED, SHOW_OFF, SHOW_ON, Action, Alert, Image, ImageGone, Line, Profile, StoreBase, StoreError, Usage, check_note
 from ..pseudo import reference
 
 SCHEMA = 4
 PICTURE_MARKS = 100000                              # the rows of a person's `off` that are kept in all (the ones written longest ago go first)
 IMAGE_PENDING_SECONDS = 600                         # an upload that no line has taken is deleted after this long (hub/images.py says the same)
+ALERT_DAYS_MAX = 30                                 # no alert stays in the file longer than this, whatever days a list asks for (hub/people.py asks for 7)
 TRIM_ROWS = 8                                       # the most lines that a new line takes out: one is the rule, a few make up for a limit that was lowered
 
 
@@ -130,6 +131,16 @@ class Store(StoreBase):
                 CREATE TABLE IF NOT EXISTS noimages (ref TEXT PRIMARY KEY, at INTEGER NOT NULL, by TEXT NOT NULL);
                 COMMIT;""")
 
+        # (the alerts of the bell are an additive table as well, keyed by the account's reference: an older hub never looks at it; docs/HUB_PEOPLE.md)
+        if self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'alerts'").fetchone() is None:
+            self.db.executescript("""
+                BEGIN;
+                CREATE TABLE IF NOT EXISTS alerts (id INTEGER PRIMARY KEY AUTOINCREMENT, ref TEXT NOT NULL, at INTEGER NOT NULL, kind TEXT NOT NULL, body TEXT NOT NULL, from_ref TEXT NOT NULL DEFAULT '',
+                                                   line INTEGER, unread INTEGER NOT NULL DEFAULT 1);
+                CREATE INDEX IF NOT EXISTS alerts_ref ON alerts (ref, id);
+                CREATE INDEX IF NOT EXISTS alerts_line ON alerts (line);
+                COMMIT;""")
+
     def close(self):
         self.db.close()
 
@@ -238,6 +249,7 @@ class Store(StoreBase):
                 self.count_picture_change()
             self.db.execute("DELETE FROM modlog WHERE at < ?", (now - int(self.modlog_days * 86400),))
             self.db.execute("DELETE FROM modlog WHERE id IN (SELECT id FROM modlog ORDER BY id DESC LIMIT -1 OFFSET ?)", (self.max_modlog,))
+            self.db.execute("DELETE FROM alerts WHERE at < ?", (now - ALERT_DAYS_MAX * 86400,))        # (a list is cut to its own days when it is read or added to; this is the cap of the file)
         self.checkpoint()
         return gone
 
@@ -360,11 +372,50 @@ class Store(StoreBase):
             self.db.execute("UPDATE images SET at = 0 WHERE ref = ? AND line IS NULL", (self.ref(account),))        # (an upload that waits is stale now: the hub's sweep deletes its files, as it does for the images of the lines that went)
             self.db.execute("UPDATE mutes SET name = '' WHERE account = ?", (account,))
             self.db.execute("UPDATE bans SET name = '' WHERE account = ?", (account,))
+            self.db.execute("DELETE FROM alerts WHERE ref = ? OR from_ref = ?", (self.ref(account), self.ref(account)))      # (its own list, and every alert of the others that is from it: an invitation or a mention carries its name)
         try:
             self.checkpoint()
         except StoreError:            # (the forgetting is done and is told: the cut is tried again by the hub's clock)
             self.unsettled = True
         return ids
+
+    # ---- alerts ---------------------------------------------------------------------------------------------------------------------------
+
+    def add_alert(self, ref, kind, body, from_ref="", line=None, keep=30, days=7):
+        if kind not in ALERT_KINDS or not isinstance(body, str) or len(body.encode("utf-8")) > ALERT_BODY_MAX:
+            raise ValueError("not an alert")
+        now = int(self.clock())
+        with self.transaction():
+            cur = self.db.execute("INSERT INTO alerts (ref, at, kind, body, from_ref, line) VALUES (?, ?, ?, ?, ?, ?)", (ref, now, kind, body, from_ref, line))
+            self.db.execute("DELETE FROM alerts WHERE ref = ? AND (at < ? OR id NOT IN (SELECT id FROM alerts WHERE ref = ? ORDER BY id DESC LIMIT ?))", (ref, now - int(days * 86400), ref, int(keep)))
+        return Alert(cur.lastrowid, now, kind, body, line, 1)
+
+    def alerts(self, ref, keep=30, days=7):
+        rows = self.db.execute("SELECT id, at, kind, body, line, unread FROM alerts WHERE ref = ? AND at >= ? ORDER BY id DESC LIMIT ?", (ref, int(self.clock()) - int(days * 86400), int(keep))).fetchall()
+        return [Alert(*r) for r in rows]
+
+    def read_alerts(self, ref, upto):
+        with self.transaction():
+            return self.db.execute("UPDATE alerts SET unread = 0 WHERE ref = ? AND id <= ? AND unread = 1", (ref, int(upto))).rowcount
+
+    def clear_alerts(self, ref):
+        with self.transaction():
+            return self.db.execute("DELETE FROM alerts WHERE ref = ?", (ref,)).rowcount
+
+    def change_alert(self, ref, alert_id, body):
+        if not isinstance(body, str) or len(body.encode("utf-8")) > ALERT_BODY_MAX:
+            raise ValueError("not an alert")
+        with self.transaction():
+            return self.db.execute("UPDATE alerts SET body = ? WHERE ref = ? AND id = ?", (body, ref, int(alert_id))).rowcount > 0
+
+    def drop_alerts_of_lines(self, line_ids):
+        refs = set()
+        with self.transaction():
+            for line_id in line_ids:
+                for ref, in self.db.execute("SELECT DISTINCT ref FROM alerts WHERE line = ?", (int(line_id),)).fetchall():
+                    refs.add(ref)
+                self.db.execute("DELETE FROM alerts WHERE line = ?", (int(line_id),))
+        return refs
 
     # ---- profiles -------------------------------------------------------------------------------------------------------------------------
 

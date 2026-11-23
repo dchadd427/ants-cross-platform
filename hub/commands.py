@@ -95,6 +95,10 @@ def run_unignore(commands, peer, name):
     commands.unignore(peer, name)
 
 
+def run_invite(commands, peer, word):
+    commands.chat.people.invite(peer, word)
+
+
 def collapsed(words):
     return " ".join(w for w in words if w)
 
@@ -158,6 +162,7 @@ def run_bots(commands, peer, args):
 
 REGISTRY = (
     Command("help", 0, "", "list your commands", GROUPS[0], "other", parse_help, run_help),
+    Command("invite", 0, "NAME", "invite someone to your room", GROUPS[0], "other", parse_person, run_invite),
     Command("ignore", 0, "NAME", "hide a person's lines", GROUPS[0], "other", parse_person, run_ignore),
     Command("unignore", 0, "NAME", "show their lines again", GROUPS[0], "other", parse_person, run_unignore),
     Command("mute", 1, "NAME MINUTES", "stop a person writing for a while", GROUPS[1], None, parse_staff, run_staff),
@@ -308,6 +313,12 @@ class Commands:
         if not mine or self.chat.ref(entry.account) not in mine:
             return False
         return not self.chat.is_mod(entry.account)
+
+    def ignores_person(self, owner, person):
+        """Whether the account `owner` has the account `person` on its /ignore list and `person` holds no role (a person who held none when they were ignored may hold one now): an invitation or a mention of `person`
+        is then not sent to `owner`, and nothing tells `person`."""
+        mine = self.ignores.get(self.chat.ref(owner))
+        return bool(mine) and self.chat.ref(person) in mine and not self.chat.is_mod(person)
 
     def forget(self, account):
         """The account forgot itself: its own list is gone, and so is its place on the lists of the others (what Forget me deletes: nothing of it is kept)."""

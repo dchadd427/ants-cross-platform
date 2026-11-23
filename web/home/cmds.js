@@ -19,8 +19,10 @@
         role: 'Could not confirm your role, try again in a moment', title: 'Start bot matches', close: 'Close', cancel: 'Cancel', write: 'Write the command', howMany: 'How many', every: 'One every', unit: 'minutes (0: as fast as there is room)',
         up: 'Up to 10,000. What the server cannot run at once waits in a queue.', map: 'Map', rotation: 'The rotation', rules: 'Rules', bots: 'Bots', level: 'Level', teams: 'Teams', loading: 'Loading the maps\u2026',
         badCount: 'Matches: use a number from 1 to 10,000.', badEvery: 'One every: 0 to 120 minutes, in whole or half minutes.', badMap: 'That map\u2019s name cannot be typed into the chat (it is too long, or holds a < or >). Choose another map.',
-        noMaps: 'The list of maps did not come. The batch uses the rotation.', mapTitle: 'Choose a map'
+        sent: 'Invitation sent to ', noMaps: 'The list of maps did not come. The batch uses the rotation.', mapTitle: 'Choose a map',
+        peopleInvite: 'People here, to invite', peopleHere: 'People here', peopleMention: 'People to mention', online: ' online', people: ' people', person: ' person', here: 'Here now', lately: 'Wrote lately', wrote: 'Wrote ', notHere: 'not here', or: ' or ', nobody: 'Nobody here by that name.'
     };
+    var WHERE = { look: 'Looking', wait: 'In a room', play: 'Playing a match' };
     var RULES = [['random', 'A coin'], ['highest', 'Highest score'], ['187', '187']], BOTS = [['random', '2 to 4'], ['2', '2'], ['3', '3'], ['4', '4']];
     var LEVELS = [['mixed', 'Medium or Hard'], ['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard'], ['any', 'Any']], PRESETS = [1, 10, 100, 1000];
     var SPLITS = { 4: [['12-34', 'Bots 1 and 2 against 3 and 4'], ['13-24', 'Bots 1 and 3 against 2 and 4'], ['14-23', 'Bots 1 and 4 against 2 and 3']], 3: [['1-23', 'Bot 1 against 2 and 3'], ['2-13', 'Bot 2 against 1 and 3'], ['3-12', 'Bot 3 against 1 and 2']] };
@@ -121,6 +123,10 @@
         usage: ['Type /ignore NAME, for example /ignore pebble.', 'Type /unignore NAME, for example /unignore pebble.'], nobody: 'Nobody in the chat has that name.', ambiguous: 'Several people show that name, so it cannot be told which one you mean.',
         self: 'You cannot ignore yourself.', staff: 'A moderator or an administrator cannot be ignored.', full: 'Your list is full (50 people). Type /unignore NAME to make room.', not: 'That person is not on your list.'
     };
+    var INVITE_ERR = {
+        usage: 'Type /invite NAME, for example /invite pebble.', nobody: 'Nobody here by that name. Type /invite and a space to see who is.', ambiguous: 'Several people show that name, so it cannot be told which one you mean.',
+        self: 'You cannot invite yourself.', noroom: 'You are not in a room. Use Quick host to open one, then invite.', total: 'Too many invitations. Wait a minute, then try again.'
+    };
     function heldWords(why, atOnce, busy) {
         if (why === 'cap') return atOnce ? 'the limit of ' + atOnce + ' bot matches at once is reached' : 'the limit of bot matches at once is reached';
         if (why === 'places') return 'the server has no places left for more bot matches';
@@ -152,6 +158,17 @@
         if (fin) fine.push(kept + ' of the ' + n1(fin) + ' that ended ' + (kept === 1 ? 'is' : 'are') + ' kept as replays (' + KEEP + ' an hour); the rest could only be watched live.');
         return { title: 'Batch of ' + matchesOf(total), by: typeof q.by === 'string' ? clean(q.by, LIMIT.name) : '', done: done, running: going, nums: nums, fine: fine };
     }
+    function inviteReply(m, typed, say, bad) {   // the hub's answer to /invite: a code and the name of the person, this page says the words (the typed command is read for the name that was typed, never the hub's)
+        var r = m.r, to = typeof m.to === 'string' ? clean(m.to, LIMIT.name) : '', asked = /^\/invite[ \u00a0]+(.+)$/i.exec(String(typed || '')), n, size, w;
+        if (r === 'ok') return say(TEXT.sent + to + '.');
+        if (r === 'usage') return bad(INVITE_ERR.usage);
+        if (r === 'nobody') return bad(asked && !/^(row:|#)/.test(asked[1]) ? 'Nobody called \u201c' + clean(asked[1], LIMIT.name) + '\u201d is here. Type /invite and a space to see who is.' : INVITE_ERR.nobody);
+        if (r === 'full') { n = Math.min(4, int(m.n)); size = Math.min(4, int(m.of)); return bad('Your room is full (' + n + ' of ' + size + ').'); }
+        if (r === 'person') { w = Math.min(LIMIT.wait, Math.max(1, int(m.wait))); return bad('You invited ' + (to || 'that person') + ' a moment ago. Try again in ' + w + (w === 1 ? ' second.' : ' seconds.')); }
+        if (r === 'inroom') return bad((to || 'That person') + ' is in your room already.');
+        if (r === 'busy') return bad((to || 'That person') + ' is playing a match.');
+        return Object.prototype.hasOwnProperty.call(INVITE_ERR, r) ? bad(INVITE_ERR[r]) : bad(TEXT.generic);
+    }
     function replyOf(m, typed, now, clock) {   // a `reply` frame as { cls, lines, batches }, { help: true }, or null
         var c = typeof m.c === 'string' ? m.c : '', r = typeof m.r === 'string' ? m.r : '', say = function (t, cls) { return { cls: cls || '', lines: [t], batches: [] }; }, bad = function (t) { return say(t, 'gc-err'); }, n, at, list;
         clock = clock || function (d) { return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); };
@@ -164,6 +181,7 @@
             if (r === 'usage') return bad(IGNORE_ERR.usage[c === 'ignore' ? 0 : 1]);
             return Object.prototype.hasOwnProperty.call(IGNORE_ERR, r) && r !== 'usage' ? bad(IGNORE_ERR[r]) : bad(TEXT.generic);
         }
+        if (c === 'invite') return inviteReply(m, typed, say, bad);
         if (c !== 'bots') return bad(TEXT.generic);
         if (r === 'started') return { cls: '', lines: startedOf(m, now, clock), batches: [] };
         if (r === 'stopped') {
@@ -202,21 +220,52 @@
             try { return new win.Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(d); } catch (e) { return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
         }
 
-        // ---- the helper ----
+        // ---- the helper: the account's commands after a slash, the people after `/invite ` and after an `@` (a word's first character, anywhere in the line) ----
+        var mode = 'cmd', anchor = -1, query = '';       // what the open list is: 'cmd', 'invite' or 'mention'; where the `@` is in the field; what was typed after the slash, the space or the `@`
+        function directory() { try { return dock.people ? dock.people() : null; } catch (e) { return null; } }
+        function hasInvite() { return rows.some(function (r) { return r.w === '/invite'; }); }
+        function peopleItems(q, invite) {   // the people of the list of the front page (the visitor's own row and a person who is away left out), the ones who can be invited first
+            var dir = directory(), out = [], want = q.toLowerCase();
+            ((dir && dir.rows) || []).forEach(function (r) {
+                if (r.me || r.at === 'away' || (want && r.name.toLowerCase().indexOf(want) !== 0)) return;
+                var why = invite && dir.why ? dir.why(r) : '';
+                out.push({ w: r.name, name: r.name, d: why || WHERE[r.at] || '', a: (invite ? '/invite ' : '@') + r.name, dim: !!why, g: TEXT.here, at: r.at });
+            });
+            if (invite) out = out.filter(function (c) { return !c.dim; }).concat(out.filter(function (c) { return c.dim; }));
+            return out;
+        }
+        function laterItems(q, here) {      // the people who wrote in the chat lately and are not here (newest first), for a mention: the entry waits in their list; a person who is away is one of them
+            var want = q.toLowerCase(), out = [], seen = {};
+            here.forEach(function (h) { seen[h.name.toLowerCase()] = true; });
+            (dock.authors ? dock.authors() : []).forEach(function (a) {
+                var low = a.name.toLowerCase();
+                if (seen[low] || (want && low.indexOf(want) !== 0)) return;
+                seen[low] = true;
+                out.push({ w: a.name, name: a.name, a: '@' + a.name, d: (typeof a.at === 'number' && dock.agoOf ? TEXT.wrote + dock.agoOf(a.at, Math.floor(now() / 1000)).replace(/^just now$/, 'a moment ago') + ' \u00b7 ' : '') + TEXT.notHere, dim: false, g: TEXT.lately, at: 'later' });
+            });
+            return out;
+        }
+        function itemsFor(m, q) {
+            if (m === 'invite') return peopleItems(q, true);
+            if (m === 'mention') { var here = peopleItems(q, false); return here.concat(laterItems(q, here)); }
+            return narrow(rows, q.toLowerCase());
+        }
         function paint(q) {
-            var list = el('div', 'gh-body'), top = el('div', 'gh-top'), cap = '', foot = el('div', 'gh-foot'), how = el('span'), all = q === '/';
-            put(top, [el('b', '', all ? TEXT.top : TEXT.topNarrow), el('span', '', shown.length + (shown.length === 1 ? TEXT.match : all ? TEXT.inAll : TEXT.matches))]);
-            if (!shown.length) list.appendChild(el('p', 'gh-none', TEXT.none + q + TEXT.noneEnd));
+            var list = el('div', 'gh-body'), top = el('div', 'gh-top'), cap = '', foot = el('div', 'gh-foot'), how = el('span'), all = mode === 'cmd' && q === '/', shownCap = mode === 'mention' || all, left, right;
+            if (mode === 'cmd') { left = all ? TEXT.top : TEXT.topNarrow; right = shown.length + (shown.length === 1 ? TEXT.match : all ? TEXT.inAll : TEXT.matches); }
+            else { left = mode === 'invite' ? (query ? TEXT.peopleHere : TEXT.peopleInvite) : TEXT.peopleMention; right = shown.length + (query ? (shown.length === 1 ? TEXT.match : TEXT.matches) : mode === 'invite' ? TEXT.online : shown.length === 1 ? TEXT.person : TEXT.people); }
+            put(top, [el('b', '', left), el('span', '', right)]);
+            if (!shown.length) list.appendChild(el('p', 'gh-none', mode === 'cmd' ? TEXT.none + q + TEXT.noneEnd : TEXT.nobody));
             shown.forEach(function (c, i) {
-                if (all && c.g !== cap) { cap = c.g; list.appendChild(el('p', 'gh-cap', cap)); }
-                var r = el('button', 'gh-row'), w = el('span', 'gh-w');
+                if (shownCap && c.g !== cap) { cap = c.g; list.appendChild(el('p', 'gh-cap', cap)); }
+                var r = el('button', 'gh-row' + (c.dim ? ' gh-dim' : '')), w = el('span', 'gh-w'), len = mode === 'cmd' ? q.length : query.length, hint = c.a ? (mode === 'cmd' ? c.w + ' ' + c.a : c.a) : '';
                 r.type = 'button'; r.id = POP + '-' + i; r.tabIndex = -1; r.setAttribute('role', 'option'); r.setAttribute('aria-selected', i === sel ? 'true' : 'false');
-                if (q.length > 1) put(w, [el('mark', '', c.w.slice(0, q.length)), doc.createTextNode(c.w.slice(q.length))]); else w.textContent = c.w;
-                put(r, [w, el('span', 'gh-d', c.d), c.a ? el('span', 'gh-a', c.w + ' ' + c.a) : null]);
+                if (len > (mode === 'cmd' ? 1 : 0)) put(w, [el('mark', '', c.w.slice(0, len)), doc.createTextNode(c.w.slice(len))]); else w.textContent = c.w;
+                put(r, [w, el('span', 'gh-d', c.d), hint ? el('span', 'gh-a', hint) : null]);
                 r.addEventListener('click', function () { choose(c); });
                 list.appendChild(r);
             });
-            put(how, [doc.createTextNode(TEXT.choose), el('kbd', '', '\u2191'), doc.createTextNode(' '), el('kbd', '', '\u2193'), doc.createTextNode(TEXT.then), el('kbd', '', 'Tab')]);
+            put(how, mode === 'mention' ? [el('kbd', '', '\u2191'), doc.createTextNode(' '), el('kbd', '', '\u2193'), doc.createTextNode(TEXT.then), el('kbd', '', 'Tab'), doc.createTextNode(TEXT.or), el('kbd', '', 'Enter')] : [doc.createTextNode(TEXT.choose), el('kbd', '', '\u2191'), doc.createTextNode(' '), el('kbd', '', '\u2193'), doc.createTextNode(TEXT.then), el('kbd', '', 'Tab')]);
             put(foot, [how, el('span', '', TEXT.esc)]);
             pop.textContent = '';
             put(pop, [top, list, foot]);
@@ -227,11 +276,13 @@
             var s = pop.querySelector('[aria-selected="true"]');
             if (s && s.scrollIntoView) s.scrollIntoView({ block: 'nearest' });
         }
-        function openFor(v) {
-            var q = v.toLowerCase();
-            shown = narrow(rows, q); sel = 0;
+        function openFor(m, q) {
+            mode = m; query = m === 'cmd' ? '' : q;
+            shown = itemsFor(m, m === 'cmd' ? q.toLowerCase() : q); sel = 0;
+            if (m === 'mention' && !shown.length) { close(); return; }                            // (nobody to name, or a name that matches nobody: the `@` and the letters are words)
             if (!pop) { pop = el('div', 'gh-pop'); pop.id = POP; pop.addEventListener('pointerdown', function (e) { if (e && e.preventDefault) e.preventDefault(); });       // (a press keeps the focus in the field: a phone's keyboard stays up)
-                pop.setAttribute('role', 'listbox'); pop.setAttribute('aria-label', TEXT.listLabel); form.appendChild(pop); field.setAttribute('aria-controls', POP); }
+                pop.setAttribute('role', 'listbox'); form.appendChild(pop); field.setAttribute('aria-controls', POP); }
+            pop.setAttribute('aria-label', m === 'cmd' ? TEXT.listLabel : m === 'invite' ? TEXT.peopleInvite : TEXT.peopleMention);
             paint(q);
         }
         function close() {
@@ -239,41 +290,63 @@
             pop = null; shown = [];
             field.removeAttribute('aria-activedescendant'); field.removeAttribute('aria-controls');
         }
-        function sync() {   // the list follows the field: open for a slash and letters, closed for any other text; only a changed text counts (Escape stays closed)
-            var v = field.value;
+        function caretOf() { return typeof field.selectionStart === 'number' ? field.selectionStart : field.value.length; }
+        function kindOf() {   // what the field says now: { mode, q, at } or null (no list)
+            var v = field.value, m, before;
+            if (field.disabled) return null;
+            if (rows.length && /^\/[A-Za-z]*$/.test(v)) return { mode: 'cmd', q: v };
+            if (hasInvite() && (m = /^\/invite[ \u00a0](.*)$/i.exec(v))) return { mode: 'invite', q: m[1].replace(/^\s+/, '') };
+            if (v.charAt(0) === '/') return null;
+            before = v.slice(0, caretOf());
+            m = /(^|\s)@([^@\n]{0,32})$/.exec(before);
+            return m ? { mode: 'mention', q: m[2], at: before.length - m[2].length - 1 } : null;
+        }
+        function sync() {   // the list follows the field: open for a slash and letters, for `/invite ` and a name, for an `@` and letters, closed for any other text; only a changed text or caret counts (Escape stays closed)
+            var v = field.value + '\u0000' + caretOf();
             if (v === last) return;
             last = v;
-            if (!rows.length || field.disabled || !/^\/[A-Za-z]*$/.test(v)) close(); else openFor(v);
+            var k = kindOf();
+            if (!k) { close(); return; }
+            anchor = k.at === undefined ? -1 : k.at;
+            openFor(k.mode, k.q);
         }
-        function setField(v) {
+        function setField(v, caret) {
             field.value = v;
             if (dock.grow) dock.grow();
             field.focus();
-            if (field.setSelectionRange) field.setSelectionRange(v.length, v.length);
+            var at = typeof caret === 'number' ? caret : v.length;
+            if (field.setSelectionRange) field.setSelectionRange(at, at);
             sync();
         }
-        function choose(c) {   // a row chosen: its word goes into the field (a space where names follow); /bots opens the builder
-            close();
-            if (c.w === '/bots') { setField('/bots '); builder(); return; }
-            setField(c.w + (c.a ? ' ' : ''));
+        function choose(c) {   // a row chosen: a command's word goes into the field (a space where names follow; /bots opens the builder), a person's name goes after `/invite ` or in place of the `@` and the letters (with a space after it)
+            var v = field.value, caret = caretOf();
+            if (mode === 'cmd') {
+                close();
+                if (c.w === '/bots') { setField('/bots '); builder(); return; }
+                setField(c.w + (c.a ? ' ' : ''));
+            } else if (mode === 'invite') { close(); setField('/invite ' + c.name); }
+            else if (anchor >= 0) { close(); var tail = v.slice(caret), put1 = '@' + c.name + ' ', next = v.slice(0, anchor) + put1 + tail.replace(/^ /, ''); setField(next, anchor + put1.length); }
         }
         function key(e) {   // the dock's field asks first: true when the list took the key
             var k = e && e.key, v, c;
             if (!pop || !k) return false;
             var stop = function () { if (e.preventDefault) e.preventDefault(); };
-            if (k === 'ArrowDown' || k === 'ArrowUp') { if (shown.length) { sel = Math.max(0, Math.min(shown.length - 1, sel + (k === 'ArrowDown' ? 1 : -1))); paint(field.value.toLowerCase()); } stop(); return true; }
+            if (k === 'ArrowDown' || k === 'ArrowUp') { if (shown.length) { sel = Math.max(0, Math.min(shown.length - 1, sel + (k === 'ArrowDown' ? 1 : -1))); paint(mode === 'cmd' ? field.value.toLowerCase() : query); } stop(); return true; }
             if (k === 'Escape') { close(); stop(); if (e.stopPropagation) e.stopPropagation(); return true; }
             if (!shown.length || e.shiftKey || e.isComposing) return false;
             c = shown[sel];
             if (k === 'Tab') { choose(c); stop(); return true; }
             if (k === 'Enter') {
                 v = field.value.replace(/^\s+|\s+$/g, '').toLowerCase();
-                if (v === c.w && !c.a) return false;   // a whole word of a command that takes nothing more is sent, not chosen again
-                choose(c); stop(); return true;
+                if (mode === 'cmd' && v === c.w && !c.a) return false;   // a whole word of a command that takes nothing more is sent, not chosen again
+                if (mode === 'invite' && query.toLowerCase() === c.name.toLowerCase()) return false;   // a whole name after /invite is sent, not chosen again
+                choose(c); stop(); return true;   // (a name after an `@` is chosen: Enter does not send while the list is open)
             }
             return false;
         }
         field.addEventListener('blur', function () { if (pop && !(pop.contains && doc.activeElement && pop.contains(doc.activeElement))) close(); });
+        field.addEventListener('keyup', function (e) { if (e && /^(ArrowLeft|ArrowRight|Home|End)$/.test(e.key)) sync(); });       // (the caret moved: the `@` that it is after may be another)
+        field.addEventListener('click', function () { sync(); });
 
         // ---- the builder ----
         function closeBuilder() {
@@ -408,8 +481,9 @@
         // ---- the private answers ----
         function echo(typed) { var d = el('div', 'gc-pl gc-echo'); d.appendChild(el('bdi', '', clean(typed, 200))); return d; }
         function reply(m, typed) {
-            var r = replyOf(m, typed, now(), clock);
+            var r = replyOf(m, typed, now(), clock), dir;
             if (!r) return;
+            if (m && m.c === 'invite' && m.r === 'ok' && typeof m.to === 'string') { dir = directory(); if (dir && dir.invited) dir.invited(m.to); }       // (the list of people greys this person for the minute that the hub holds a second invitation back)
             if (r.help) { setField('/'); return; }
             dock.block(function (row) {
                 if (typed && r.cls !== 'gc-status') row.appendChild(echo(typed));          // (a status says what it is: its first line is the batch, so that a short log shows the bar)
@@ -427,7 +501,7 @@
         }
         return {
             rows: function (list) { rows = rowsOf(list); last = null; if (!rows.length) { close(); closeBuilder(); } else sync(); },
-            reply: reply, key: key, sync: sync, builder: builder, closeBuilder: closeBuilder, state: function () { return { rows: rows.slice(), open: pop !== null, shown: shown.slice(), selected: sel, builder: box !== null, atOnce: atOnce }; }
+            reply: reply, words: function (m) { var r = replyOf(m, '', now(), clock); return r && r.lines && r.lines[0] ? r.lines[0] : ''; }, key: key, sync: sync, builder: builder, closeBuilder: closeBuilder, state: function () { return { rows: rows.slice(), open: pop !== null, shown: shown.slice(), selected: sel, builder: box !== null, atOnce: atOnce }; }
         };
     }
 

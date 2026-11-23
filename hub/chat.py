@@ -35,7 +35,7 @@ import json
 import os
 import re
 
-from . import PROTOCOL, admin as adminmod, commands as commandsmod, images as imagesmod, presence as presencemod, pseudo, session as sessionmod, text as textrules
+from . import PROTOCOL, admin as adminmod, commands as commandsmod, images as imagesmod, people as peoplemod, presence as presencemod, pseudo, session as sessionmod, text as textrules
 from .commands import NEEDS, RANK
 from .limits import AccountLimits, RateByAccount, TokenBucket
 from .store import PICKS, StoreError
@@ -93,6 +93,7 @@ class Chat:
         self.salt = os.urandom(16)                  # the key of an account (key_of) is made with this: it changes with every start, so it names nobody for longer than the hub runs
         self.peers = presencemod.Peers()
         self.presence = presencemod.Presence(self, limits, clock, dumps)       # (who is here: the list of the front page)
+        self.people = peoplemod.People(self, limits, clock, dumps)              # (the alerts of an account's bell, invitations to a room, mentions: hub/people.py)
         self.on_store_error = None                  # called with the error when the database cannot be used for a message (the hub logs it, not more than once in a while)
         self.end_logins = None                      # end_logins(account=...): the hub's call that closes every socket of an account (a logout's and a forget's too); the hub sets it
         self.on_command_error = None                # called with the error when a command that waited for a lookup failed for a bug (the hub logs its class)
@@ -277,6 +278,9 @@ class Chat:
         username = names.get(line.account) if names else None
         if username and username != line.name:
             out["u"] = username
+        marks = self.people.marks.get(line.id)
+        if marks:
+            out["m"] = marks                           # (the names that the line marks: [start, length, key] in UTF-16 units of `text`; hub/people.py)
         return out
 
     def broadcast(self, obj):
@@ -310,6 +314,12 @@ class Chat:
             self.presence.on_here(peer, msg)
         elif kind == "pick":
             self.on_pick(peer, msg)
+        elif kind == "seen":
+            self.people.on_seen(peer, msg)
+        elif kind == "clearalerts":
+            self.people.on_clear(peer, msg)
+        elif kind == "note":
+            self.people.on_note(peer, msg)
         elif kind == "pics" and self.pictures is not None:
             self.on_pics(peer, msg)
         else:
@@ -398,7 +408,11 @@ class Chat:
             self.global_limit.give_back()
             return self.trouble(peer, e, "rate")
         self.ring.append(entry)
+        marks, named = self.people.scan(entry.text)                # (the names that the line marks, found before it goes out: every screen draws the same ones)
+        if marks:
+            self.people.remember(entry.id, marks)
         self.send_line(entry, who.username)
+        self.people.mentions(entry, who, named)
 
     def send_line(self, entry, username):
         """A new line to everybody; a moderator gets it with its author's username (`u`) where that is not the name shown, and nobody else ever gets a username."""
@@ -717,6 +731,7 @@ class Chat:
         gone = set(ids)
         for line in [l for l in self.ring if l.id in gone]:
             self.ring.remove(line)
+        self.people.lines_gone(gone)                               # (their marks, and the mention alerts that were of them)
         self.sweep_images()                                        # (the files of their images go first: a page that is told that a line is gone never finds its file)
         for line_id in sorted(gone)[-self.limits.deleted_announce_max:]:
             self.broadcast({"t": "del", "id": line_id})

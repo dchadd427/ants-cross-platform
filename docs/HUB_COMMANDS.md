@@ -8,7 +8,7 @@ A line that starts with a single `/` is a command, and **a command is never a li
 
 | Who | Commands |
 |---|---|
-| everybody who is logged in | `/help`, `/ignore NAME`, `/unignore NAME` |
+| everybody who is logged in | `/help`, `/invite NAME`, `/ignore NAME`, `/unignore NAME` |
 | a moderator (the role comes from Discord: [Roles](HUB.md#roles)), and the above | `/mute NAME MINUTES`, `/unmute NAME`, `/del NUMBER`, `/kick NAME`, `/mutes` |
 | an administrator (the role, or the operator's account), and all the above | `/ban NAME [purge]`, `/unban NAME`, `/bans`, `/nopic NAME`, `/pic NAME`, `/noimages NAME`, `/images NAME`, `/bots ...` |
 | a reader | none: it cannot write, and it is sent no list |
@@ -28,6 +28,7 @@ The moderators' words and `/nopic` and `/pic` are described in [Moderation](#mod
 | `unknown` | `unknown` | **a word that is not a command of the account's own**: a stray word, a bare `/`, and a command of a higher role (a moderator's `/bots`, a player's `/mute`). One frame, byte for byte, whichever of them it was |
 | any | `rate` | `wait`: the whole seconds (at least 1) until the account may try again; a word that is no command of the account's own says `unknown` in `c` here too |
 | `help` | `list` | the page opens its list |
+| `invite` | `ok`, `usage`, `nobody`, `ambiguous`, `self`, `noroom`, `full`, `inroom`, `busy`, `person`, `total` | the answers of an invitation to a room, with `to` (the person's shown name), `n` and `of`, `wait`: [HUB_PEOPLE.md](HUB_PEOPLE.md#invitations) says every one |
 | `ignore`, `unignore` | `ok`, `usage`, `nobody`, `ambiguous`, `self`, `staff`, `full`, `not` | `ok` has `n`, how many people the account ignores now |
 | `bots` | `started` | `asked`, `started`, `queued`, `at_once` (when known), `every_s` (when the batch has a spacing), `held` (`cap`, `places`, `people` or `busy`: why the first start waits, when it does) |
 | `bots` | `status` | `at_once`, `running`, `waiting`, `busy` (percent), `queues`: at most five, the oldest first, each `total`, `remaining`, `finished`, `running`, `kept`, `every_s`, `next_in` (seconds, -1 for none), `held`, `by` (the name of who started it, plain text of 40 characters at most) |

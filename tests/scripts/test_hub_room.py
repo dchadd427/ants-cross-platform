@@ -340,7 +340,7 @@ class TheRoomInTheFile(StoreTest):
         fill(other, 2000, length=700)                                                  # (1.7 MB)
         for store in (self.store, other):
             store.checkpoint()
-            while store.make_room(400_000, 100, 10):
+            while store.make_room(400_000, 20, 10):                                    # (a step of 20 lines: the tables of the file, empty ones too, hold some pages, and a step of 100 would sit on the edge of the window below)
                 pass
         self.assertEqual(self.store.usage().lines, 2000)
         self.assertLessEqual(other.used_bytes(), 400_000)

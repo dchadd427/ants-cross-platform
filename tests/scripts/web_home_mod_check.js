@@ -143,11 +143,13 @@ function rig(o) {
     }
     const host = new El(env, 'div', 'home');
     body.appendChild(host);
-    const dock = ChatApi.mount({ doc, win, host, chip: null, screen: () => 'home', fetch: undefined, now: () => clock.t, random: () => 0, WebSocket: HubSocket, error: (e) => { throw e; } });
+    const CmdsApi = o.room ? loadScript(fs.readFileSync(path.join(lobbyDir, 'home', 'cmds.js'), 'utf8'), 'AntsHomeCmds', clock) : null;       // (a room to invite to: the helper is on the dock as home.js loads it, and says the words of an invitation's answer)
+    const dock = ChatApi.mount({ doc, win, host, chip: null, screen: () => 'home', fetch: undefined, now: () => clock.t, random: () => 0, WebSocket: HubSocket, error: (e) => { throw e; }, load: CmdsApi ? (base, done) => { win.AntsHomeCmds = CmdsApi; clock.setTimeout(done, 0); } : undefined });
     dock.shown(true);
     const mine = (l) => (l.who === 'Me' ? Object.assign({}, l, { role: role === 'none' ? undefined : role, mod: role !== 'none' }) : l);       // (the viewer's own line says the viewer's own role)
     win.AntsHomeChat = ChatApi; win.AntsLobbyRules = H.RULES0;
-    sockets[0].open().recv(Object.assign({ t: 'welcome', v: 1, you: { name: 'Me', mod: role !== 'none', role, k: 'k-me' }, login: false, online: 3, history: (o.history || HISTORY).map(mine) }, o.people ? { presence: true, me: 3 } : {}));
+    sockets[0].open().recv(Object.assign({ t: 'welcome', v: 1, you: o.guest ? null : { name: 'Me', mod: role !== 'none', role, k: 'k-me' }, login: !!o.guest, online: 3, history: (o.history || HISTORY).map(mine) }, o.people ? { presence: true, me: 3 } : {}));
+    if (CmdsApi && !o.guest) { sockets[0].recv({ t: 'cmds', rows: [{ w: '/invite', a: 'NAME', d: 'invite someone to your room', g: 'Everyone' }] }); clock.advance(1); }
     const Mod = loadScript(modSource, 'AntsHomeMod', clock);
     const r = { env, doc, win, body, host, dock, sockets, clock, buzzes, Mod, HubSocket };
     r.sock = () => sockets[sockets.length - 1];
@@ -156,15 +158,20 @@ function rig(o) {
     r.row = (id) => r.rows().find((c) => c.getAttribute('data-n') === String(id));
     r.acts = () => r.rows().filter((c) => c.getAttribute('data-act') === 'true').map((c) => Number(c.getAttribute('data-n')));
     r.marked = () => r.rows().filter((c) => cls(c).indexOf('gm-on') !== -1).map((c) => Number(c.getAttribute('data-n')));
+    // the room that the page holds (o.room: { people, size, names, code, guest, map }), or none: the page's client as the list reads it, and its model of four colors
+    r.room = o.room || null;
+    r.client = () => (r.room ? { room: { lobby: true, starting: false, isPublic: false, map: r.room.map || 'TREASURE.LVL', you: 0, leader: r.room.guest ? 1 : 0, slots: [0, 1, 2, 3].map((i) => ({ state: i < r.room.names.length ? 1 : 0, name: r.room.names[i] || '' })) }, code: r.room.code || 'c1v3rr', isLeader: () => !r.room.guest } : null);
+    r.model = () => (r.room ? { slots: [0, 1, 2, 3].map((i) => ({ kind: i < r.room.people ? 'person' : i < r.room.size ? 'open' : 'nobody' })) } : null);
     const taps = [], spyDock = Object.assign({}, dock, { tap: (fn) => { taps.push(fn); return dock.tap(fn); } });       // (the sheet's own taps, so that a test can tell it what the dock would)
     r.tell = (kind, m) => taps.forEach((fn) => fn(kind, m));
-    r.mount = () => { r.mod = Mod.mount({ doc, win, dock: spyDock, now: () => clock.t, error: (e) => { throw e; } }); return r.mod; };
+    r.mount = () => { r.mod = Mod.mount({ doc, win, dock: spyDock, say: o.say, now: () => clock.t, error: (e) => { throw e; } }); return r.mod; };
     if (!o.noMod && !o.modLast) r.mount();
     if (o.people) {
         const yard = new El(env, 'main'), quick = new El(env, 'button'), games = new El(env, 'button');
         host.appendChild(yard);
         const PlayersApi = loadScript(playersSource, 'AntsHomePlayers', clock);
-        r.players = PlayersApi.mount({ doc, win, host, yard, quickHost: quick, games, dock, page: { client: () => null, info: () => ({ client: false, model: null }), handing: () => false }, now: () => clock.t, error: (e) => { throw e; } });
+        r.players = PlayersApi.mount({ doc, win, host, yard, quickHost: quick, games, dock, page: { client: () => r.client(), info: () => ({ client: !!r.client(), model: r.model() }), handing: () => false }, now: () => clock.t, error: (e) => { throw e; } });
+        dock.directory(r.players.directory);       // (what home.js does: the list lends the dock who is here and the room)
         if (o.modLast) r.mount();       // (the list came first: its taps are told of a socket that goes before the sheet's are)
         if (r.mod && !o.noLink) r.mod.people(r.players);
     }
@@ -261,7 +268,7 @@ function rig(o) {
     same('rows(fn): told of a new person\'s line with its element, and not of a private answer or a line of the hub\'s own', seenRows, ['151:151']);
     const z = rig({ role: 'none', noMod: true }), none = [];
     z.dock.rows((id) => none.push(id)); z.recv({ t: 'line', id: 151, at: T0 + 151, who: 'Fern', text: 'hello', mod: false });
-    same('rows(fn): not told anything for a visitor with no role', none, []);
+    same('rows(fn): told of a line for a visitor with no role too (the sheet marks the name of a line for anybody who is in a room), and of nothing else', none, [151]);
     const b = rig({ noMod: true }), by = b.dock.by(148);
     same('by(id): for staff, the lines of the log that the author of line `id` wrote, newest first, as { id, text, at, img } and nothing else (no key, no name)', [by, b.dock.by(150).length, b.dock.by(147), b.dock.by(999), b.dock.by(null), b.dock.by('148')],
         [[{ id: 148, text: 'FREE ant gold!!! see my page', at: T0 + 148, img: false }], 1, [], [], [], []]);
@@ -1197,6 +1204,109 @@ const answer = (r, code) => (code === 'ok' ? r.recv({ t: 'ok', c: 'x' }) : r.rec
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 5d. The invitation: the first row of a person's sheet, for anybody who is in a room (docs/HUB_PEOPLE.md)
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const P = Pure;
+    same('actionsOf with a room to invite to: the invitation first for anybody, then what the role gives; never on one\'s own line or on the hub\'s', [
+        P.actionsOf('none', { id: 4, who: 'Clover', role: 'none' }, true), P.actionsOf('', { id: 4, who: 'Clover', role: 'none' }, false), P.actionsOf('mod', { id: 4, who: 'Clover', role: 'none', person: true }, true), P.actionsOf('admin', { id: 148, who: 'Clover', role: 'none' }, true),
+        P.actionsOf('none', { id: 4, who: 'Me', own: true }, true), P.actionsOf('admin', { id: 4, who: 'Me', own: true }, true), P.actionsOf('none', { id: 4, who: 'system', sys: true }, true), P.actionsOf('mod', { id: 4, who: 'Tess', role: 'admin' }, true), P.actionsOf('mod', { id: 4, who: 'Sage', role: 'mod' }, true)], [
+        ['invite'], [], ['invite', 'mute', 'kick'], ['invite', 'del', 'mute', 'kick', 'ban'], [], ['del'], [], ['invite'], ['invite']]);
+    same('the command names the row of the list or the number of a line, never a name', [P.inviteCommand({ id: 4, who: 'Clover', person: true }), P.inviteCommand({ id: 148, who: 'Clover' })], ['/invite row:4', '/invite #148']);
+}
+const ROOM2 = { people: 2, size: 4, names: ['Me', 'Wren'], code: 'c1v3rr' };
+const ROWS5 = [{ i: 1, name: 'Tess', at: 'look', mod: true, role: 'admin' }, { i: 3, name: 'Me', at: 'look' }, { i: 4, name: 'Wren', at: 'wait' }, { i: 5, name: 'Juniper', at: 'look' }, { i: 6, name: 'Moss', at: 'play' }, { i: 7, name: 'Pebble', at: 'look' }].concat([0, 1, 2, 3, 4, 5, 6].map((n) => ({ i: 20 + n, name: 'Pal' + n, at: 'look' })));
+const withRoom = (role, o) => { const r = rig(Object.assign({ role, people: true, room: ROOM2, history: [] }, o || {})); r.who(ROWS5); return r; };
+const titles = (r) => r.buttons().map((b) => b.getAttribute('aria-label') || b.textContent);
+const chatLine = (r, id, who, text, extra) => r.recv(Object.assign({ t: 'line', id, at: T0 + id, who, text, mod: false, k: 'k-' + who.toLowerCase() }, extra));
+{   // a person with no role: the sheet is for the room that is held, on the list and on the name of a line
+    const said = [], r = withRoom('none', { say: (words, tone) => { said.push([words, tone]); return true; } });
+    chatLine(r, 200, 'Juniper', 'hello there'); chatLine(r, 201, 'Pebble', 'and me'); chatLine(r, 202, 'Ghost', 'gone now');
+    check('a person with no role, in a room: the rows of the list can be pressed, and the lines in the log can be pressed at the name only', sortedIds(r.pacts()) === '4,5,6,7,20,21,22,23,24,25,26,1'.split(',').sort((x, y) => x - y).join() && one(r.row(200), 'gc-who').getAttribute('data-act') === 'true' && r.row(200).getAttribute('data-act') === null);
+    same('a right click on a row of the list opens the sheet', [r.pmenu(5), r.shade() !== null], [true, true]);
+    same('it has the person\'s name, where they are, the one row with the room under it, and Cancel; nothing of moderation', [titles(r), one(r.box(), 'gm-name').textContent, one(r.box(), 'gm-sub').textContent, r.box().findAll((e) => e.tagName === 'small').map((e) => e.textContent)], [
+        ['Invite to my room', 'Cancel'], 'Juniper', 'Looking', ['Treasure · 2 of 4 · 2 seats free']]);
+    r.press('Invite to my room');
+    same('the press sends the hub\'s command by the number of the row, and waits for the answer (the buttons are off)', [r.said(), r.buttons().every((b) => b.getAttribute('aria-disabled') === 'true')], [['/invite row:5'], true]);
+    r.recv({ t: 'reply', c: 'invite', r: 'ok', to: 'Juniper' });
+    same('the answer: the sheet goes, the page says it in a toast, and the chat has a private line (the same sent words are not a second command)', [r.shade(), said, r.privates()], [null, [['Invitation sent to Juniper.', '']], ['You invited Juniper.']]);
+    r.pmenu(5);
+    same('the person is dim for the minute that the hub holds a second one back: the row is there and says why, and does nothing', [titles(r)[0], /^Invited \d+ s ago\. Again in \d+ s\.$/.test(r.box().findAll((e) => e.tagName === 'small')[0].textContent), r.buttons()[0].getAttribute('aria-disabled')], ['Invite to my room', true, 'true']);
+    r.press('Invite to my room'); r.key('Escape');
+    check('a press on it sends nothing', r.said().length === 1);
+    r.shade() && r.press('Cancel');
+    r.pmenu(4);
+    same('a person who is in the room: dim, "In your room"', r.box().findAll((e) => e.tagName === 'small')[0].textContent, 'In your room');
+    r.press('Cancel'); r.pmenu(6);
+    same('a person in a match: dim, "Playing a match"', r.box().findAll((e) => e.tagName === 'small')[0].textContent, 'Playing a match');
+    r.press('Cancel');
+    const hint = (x) => x.players.root.findAll((e) => e.id === 'gchat-mod-list-hint')[0];
+    same('the words for a screen reader are the invitation\'s for a person with no role, and the moderators\' for staff', [hint(r).textContent, hint(withRoom('mod')).textContent, hint(withRoom('none')).hidden], [Pure.TEXT.inviteList, Pure.TEXT.listHint, false]);
+    {   // the room goes to the hub in front of the invitation, as it is now (not as it was a few seconds ago)
+        const q = withRoom('none', { room: Object.assign({}, ROOM2) });
+        q.room.people = 3; q.players.sync();
+        const frames = () => q.sock().sent.map((x) => JSON.parse(x));
+        q.pmenu(5); q.press('Invite to my room');
+        const all = frames(), at = all.findIndex((m) => m.t === 'say' && m.text === '/invite row:5'), here = all.map((m, i) => (m.t === 'here' && m.inv && m.inv.n === 3 ? i : -1)).filter((i) => i >= 0)[0];
+        check('the room as it is now is told to the hub first, then the invitation asks', at > 0 && here !== undefined && here < at, 'here ' + here + ' say ' + at);
+    }
+    // the answers of the hub that are refusals: the words of the command, in a warning toast, and in the chat
+    [[{ r: 'person', to: 'Pebble', wait: 45 }, 'You invited Pebble a moment ago. Try again in 45 seconds.'], [{ r: 'total', wait: 30 }, 'Too many invitations. Wait a minute, then try again.'], [{ r: 'full', n: 4, of: 4 }, 'Your room is full (4 of 4).'],
+        [{ r: 'noroom' }, 'You are not in a room. Use Quick host to open one, then invite.'], [{ r: 'nobody' }, 'Nobody here by that name. Type /invite and a space to see who is.'], [{ r: 'busy', to: 'Pebble' }, 'Pebble is playing a match.'], [{ r: 'inroom', to: 'Pebble' }, 'Pebble is in your room already.']].forEach(([reply, words], n) => {
+        said.length = 0; r.pmenu(20 + n); r.press('Invite to my room'); r.recv(Object.assign({ t: 'reply', c: 'invite' }, reply));
+        same('the hub says ' + reply.r + ': a gold toast with the words, the same words in the chat', [said, r.privates().pop()], [[[words, 'warn']], words]);
+    });
+    said.length = 0; r.pmenu(7); r.press('Invite to my room'); r.clock.advance(8100);
+    same('a hub that says nothing for eight seconds: the words of the sheet\'s own "silent", in a gold toast', said.map((x) => x[1]), ['warn']);
+    // a line of the log: the name only
+    check('a right click on the text of a line is the browser\'s (Copy stays); on the name it opens the sheet', r.menu(one(r.row(200), 'gc-text')) === false && r.shade() === null && r.menu(one(r.row(200), 'gc-who')) === true && r.shade() !== null);
+    same('the sheet of a line: the name, where the person is (from the list, by the name), the invitation, Cancel, and no quote of the line', [titles(r), one(r.box(), 'gm-sub').textContent, byClass(r.box(), 'gm-quote').length], [['Invite to my room', 'Cancel'], 'Looking', 0]);
+    r.press('Cancel');
+    r.menu(one(r.row(201), 'gc-who')); r.press('Invite to my room');
+    same('it asks for the line\'s number, never a name', r.said().pop(), '/invite #201');
+    r.recv({ t: 'reply', c: 'invite', r: 'ok', to: 'Pebble' });
+    r.menu(one(r.row(202), 'gc-who'));
+    check('a person who is not in the list at all (not here now) has the row, dim, with the words', /Ghost is not here now\./.test(r.box().textContent) && r.buttons()[0].getAttribute('aria-disabled') === 'true');
+    r.press('Cancel');
+    check('the keys: the arrows keep scrolling the list for a person with no role, and the menu key opens the first person', r.pkey('ArrowDown') === false && r.shade() === null && r.pkey('ContextMenu') === true && r.shade() !== null);
+    r.press('Cancel');
+    // the room goes: the sheet and the marks go with it
+    r.who(ROWS5); r.pmenu(5);
+    r.room = null; r.players.sync();
+    check('the room is left while the sheet is open: it closes, and no row of the list is marked any more', r.shade() === null && r.pacts().length === 0 && one(r.row(200), 'gc-who').getAttribute('data-act') === null && r.pmenu(5) === false && r.shade() === null);
+    // a room that is full
+    const f = withRoom('none', { room: { people: 4, size: 4, names: ['Me', 'Wren', 'Moss', 'Tam'] } });
+    f.pmenu(5);
+    same('a room that is full: the row is dim, with how full', f.box().findAll((e) => e.tagName === 'small')[0].textContent, 'Your room is full (4 of 4).');
+    // a guest in somebody\'s room
+    const g = withRoom('none', { room: { people: 2, size: 4, names: ['Me', 'Wren'], guest: true } });
+    g.pmenu(5);
+    same('a guest in another\'s room: the host\'s room is named', g.box().findAll((e) => e.tagName === 'small')[0].textContent, 'Wren’s room · Treasure · 2 of 4');
+    // a visitor who is not logged in
+    const v = withRoom('none', { guest: true });
+    check('a visitor who is not logged in has the sheet in a room, the row is dim with the way out, and a press sends nothing', v.pmenu(5) === true && v.box().findAll((e) => e.tagName === 'small')[0].textContent === 'Log in to invite people. Share sends your link.' && (v.press('Invite to my room'), v.said().length === 0 && v.shade() !== null));
+    // no room: no sheet at all
+    const n = withRoom('none', { room: null });
+    check('no room: the browser\'s own menu, no mark, no description', n.pmenu(5) === false && n.shade() === null && n.pacts().length === 0 && n.players.list.getAttribute('aria-describedby') === null);
+    // the visitor's own row and own line
+    const own = withRoom('none', { history: [] }); chatLine(own, 300, 'Me', 'my own line', { k: 'k-me' });
+    check('the visitor\'s own line has no sheet', own.menu(one(own.row(300), 'gc-who')) === false && own.shade() === null);
+}
+{   // staff: the invitation is the first row, and the moderation is what it was
+    const a = withRoom('admin', { history: [line(148, 'Clover', 'FREE ant gold!!! see my page', { u: 'clover.4782' })] });
+    a.pmenu(5);
+    same('an administrator on a person of the list: the invitation, then Mute, Kick and Ban', titles(a).filter((x) => x !== 'Cancel').map((x) => x.replace(/ Juniper.*/, '')), ['Invite to my room', 'Mute', 'Kick', 'Ban']);
+    a.press('Cancel'); a.menu(148);
+    same('on a line: the invitation first of the actions, before Delete, Mute, Kick and Ban, with the quote and the number of the line', [titles(a).slice(1, 3), byClass(a.box(), 'gm-quote').length, one(a.box(), 'gm-sub').textContent.indexOf('line #148') !== -1], [['Invite to my room', 'Delete this line'], 1, true]);
+    a.press('Cancel');
+    const no = withPeople('admin');
+    no.pmenu(5);
+    check('with no room the sheet is what it was: no invitation', titles(no).indexOf('Invite to my room') === -1);
+    const m = withRoom('mod'); m.pmenu(1);
+    same('on an administrator, a moderator has only the invitation', titles(m), ['Invite to my room', 'Cancel']);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 6. The page
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 const filesOf = (env, name) => env.body.children.filter((c) => (c.tagName === 'script' || c.tagName === 'link') && new RegExp('^home/' + name + '\\.(js|css)$').test(String(c.src || c.href || '')));
@@ -1252,6 +1362,31 @@ function welcomeWith(sock, role) {
     check('a script that is not there when the files "load": nothing mounts and nothing breaks', none.$('home').children.find((c) => c.id === 'gchat') !== undefined);
 }
 
+{   // a visitor with no role who holds a room gets the sheet too (it is the invitation's), and nobody else does
+    const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
+    const socks = hubFor(env);
+    env.advance(0); bring(env, 'chat', 'AntsHomeChat'); env.advance(0);
+    env.win.AntsHomePlayers = { mount() { return { root: new El(env, 'div'), list: new El(env, 'div'), person: () => null, drawn() {}, directory: () => ({}) }; } };
+    welcomeWith(socks[0], 'none'); env.advance(0);
+    filesOf(env, 'players').forEach((n) => { if (n.onload) n.onload(); });
+    env.advance(0);
+    check('a visitor with no role who holds no room: no sheet', filesOf(env, 'mod').length === 0);
+    env.makeRoom();
+    env.arrive({ seat: 0, key: H.KEY, seats: [[H.C, 'Maya'], [H.E, ''], [H.E, ''], [H.E, '']], room: { you: 0, leader: 0 } });
+    env.advance(0);
+    same('the page holds a room: the style and the script of the sheet are asked for, once', filesOf(env, 'mod').map((n) => n.tagName + ':' + (n.href || n.src)), ['link:home/mod.css', 'script:home/mod.js']);
+    env.advance(10); check('...and not again', filesOf(env, 'mod').length === 2);
+    const guest = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
+    const gs = hubFor(guest);
+    guest.advance(0); bring(guest, 'chat', 'AntsHomeChat'); guest.advance(0);
+    guest.win.AntsHomePlayers = { mount() { return { root: new El(guest, 'div'), list: new El(guest, 'div'), person: () => null, drawn() {}, directory: () => ({}) }; } };
+    welcomeWith(gs[0], null); guest.advance(0);
+    filesOf(guest, 'players').forEach((n) => { if (n.onload) n.onload(); });
+    guest.makeRoom();
+    guest.arrive({ seat: 0, key: H.KEY, seats: [[H.C, 'Maya'], [H.E, ''], [H.E, ''], [H.E, '']], room: { you: 0, leader: 0 } });
+    guest.advance(0);
+    check('a visitor who is not logged in and holds a room has the sheet as well: its row is dim, with the way out', filesOf(guest, 'mod').length === 2);
+}
 {   // the sheet and the players list find each other, whichever of them comes second
     for (const first of ['the sheet', 'the list', 'a sheet that cannot take the list']) {
         const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });

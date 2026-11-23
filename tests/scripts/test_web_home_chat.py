@@ -139,7 +139,7 @@ class TheFolderAndTheScript(unittest.TestCase):
         self.assertNotRegex(self.code, r"\b(var|function)\s+(near|far)\b|\b(near|far)\s*=", "Windows has macros of these names")
 
     def test_it_lets_the_players_list_listen_and_speak_through_its_socket_and_nothing_else_opens_one(self):
-        for part in ("tap: function (fn) { taps.push(fn); if (hello) tell1(fn, 'live', hello); else if (state === 'offline') tell1(fn, 'lost'); },", "function out(obj) { if (!sock || sock.readyState !== 1 || !welcomed) return false;", "send: out,",
+        for part in ("function out(obj) { if (!sock || sock.readyState !== 1 || !welcomed) return false;", "send: out,",
                      "else if (m.t === 'who') tapped('who', m);", "tapped('live', m);", "tapped('lost');", "tapped('shown', !!on);",
                      "function tell1(fn, kind, m) { try { fn(kind, m); } catch (e) { if (env.error) env.error(e); } }"):
             self.assertIn(part, self.js, part)

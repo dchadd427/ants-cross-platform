@@ -13,8 +13,8 @@
 // `/ban who purge` also takes the person's lines of the last hour (the hub's own `del` frames are sent for the lines of `hub.lines` of that person), `/mutes` is answered the private `mutes` frame from `o.mutes` (after `o.mutesDelay` ms, if it is set), and a done `/del`
 // sends the `del` frame to every socket before the `ok`, as the hub does. A line that is not there is `bad`, a line of the hub's own is `power`, a row that is not there is `who`.
 // The commands (docs/HUB_COMMANDS.md): a line that starts with ONE slash is a command, never a line. The account is sent `{"t":"cmds","rows":[{w,a,d,g}...]}` after the welcome and again with every `you` (the rows of its role: everybody
-// /help /ignore /unignore, a moderator + /mute /unmute /del /kick /mutes, an administrator + /ban /unban /bans /nopic /pic /bots; `o.cmds: false` sends none, `o.cmdRows` gives other rows), and a word that is not in its rows (a
-// word that is no command, a command of a higher role, an empty `/`) is answered `{"t":"reply","c":"unknown","r":"unknown"}`. `/help` is answered `reply help list`; `/ignore NAME` and `/unignore NAME` `reply ... ok` (`n`: how many
+// /help /invite /ignore /unignore, a moderator + /mute /unmute /del /kick /mutes, an administrator + /ban /unban /bans /nopic /pic /bots; `o.cmds: false` sends none, `o.cmdRows` gives other rows), and a word that is not in its rows (a
+// word that is no command, a command of a higher role, an empty `/`) is answered `{"t":"reply","c":"unknown","r":"unknown"}`. `/help` is answered `reply help list`; `/invite NAME` `reply invite ok` with `to: NAME` (no name: `usage`); `/ignore NAME` and `/unignore NAME` `reply ... ok` (`n`: how many
 // are ignored; no name: `usage`); `/bots` as the hub reads it (a count of 1 to 10,000: `started`, `status`, `stop`: `stopped`, anything else: `bad_count` or `usage`; `o.botsReply(text)` may answer with a frame of its own), and
 // `o.replyRate: n` makes every command `reply rate` with `wait: n`. `//x` is posted as the ordinary line `/x`. `hub.slashed` keeps every command line that was sent.
 //   const hub = await startHub({ you: { name: 'maple.leaf', mod: false }, login: true, history: [line(1, 'pebble', 'hello')] });  hub.url; hub.say('pebble', 'hi'); hub.drop(); await hub.close();
@@ -32,7 +32,7 @@ function frame(opcode, payload) {                       // a server's frame: who
     return Buffer.concat([head, payload]);
 }
 
-const ROWS = [['/help', '', 'list your commands', 'Everyone'], ['/ignore', 'NAME', 'hide a person\u2019s lines', 'Everyone'], ['/unignore', 'NAME', 'show their lines again', 'Everyone'],
+const ROWS = [['/help', '', 'list your commands', 'Everyone'], ['/invite', 'NAME', 'invite someone to your room', 'Everyone'], ['/ignore', 'NAME', 'hide a person\u2019s lines', 'Everyone'], ['/unignore', 'NAME', 'show their lines again', 'Everyone'],
     ['/mute', 'NAME MINUTES', 'stop a person writing for a while', 'Moderators'], ['/unmute', 'NAME', 'let a muted person write again', 'Moderators'], ['/del', 'NUMBER', 'take one line off every screen', 'Moderators'],
     ['/kick', 'NAME', 'remove a person from the chat', 'Moderators'], ['/mutes', '', 'list the people who are muted', 'Moderators'],
     ['/ban', 'NAME [purge]', 'ban a person from writing', 'Administrators'], ['/unban', 'NAME', 'lift a ban', 'Administrators'], ['/bans', '', 'list the people who are banned', 'Administrators'],
@@ -140,6 +140,7 @@ function startHub(options) {
         if (!rowsOf().some((r) => r.w === word)) { hub.send(peer, { t: 'reply', c: 'unknown', r: 'unknown' }); return; }
         if (o.replyRate) { reply('rate', { wait: o.replyRate }); return; }
         if (word === '/help') { reply('list'); return; }
+        if (word === '/invite') { if (parts.length < 2) { reply('usage'); return; } reply('ok', { to: parts.slice(1).join(' ') }); return; }
         if (word === '/ignore' || word === '/unignore') { if (parts.length !== 2) { reply('usage'); return; } hub.ignored = Math.max(0, hub.ignored + (word === '/ignore' ? 1 : -1)); reply('ok', { n: hub.ignored }); return; }
         if (word === '/bots') {
             const custom = o.botsReply && o.botsReply(text);

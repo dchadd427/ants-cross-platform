@@ -785,7 +785,7 @@
         function onJoined(e) {
             if (!model || e.seat === model.you) return;
             var text = e.name + ' joined as ' + COLORS[e.seat].name + '.';
-            if (!Home.alert('join', { name: e.name, text: text })) say(text);      // (Home's own alert, web/home/alerts.js, takes the place of the toast on Home, and the tab's title blinks in the background; the Room keeps this toast)
+            if (!Home.alert('join', { name: e.name, text: text, seat: COLORS[e.seat].name })) say(text);      // (Home's own alert, web/home/alerts.js, takes the place of the toast on Home, and the tab's title blinks in the background; the Room keeps this toast)
             glow([e.seat]);
         }
         function onStatus(status) {
