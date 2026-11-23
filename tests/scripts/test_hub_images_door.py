@@ -11,6 +11,7 @@ name and byte here is made up.
   TheAdminDoor   the admin page's list of the people whose posting is taken away, and its two changes, with the page's token and the table of the powers
   NoId           no Discord id, no id of a role, no cookie in a frame, an answer, a log line, a row or a file name
 """
+import asyncio
 import http.server
 import json
 import os
@@ -20,6 +21,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.abspath(os.path.join(HERE, "..", "..")))
@@ -522,6 +524,56 @@ class TheUpload(ImgTest):
         self.assertTrue(0 <= first["last"] < 30, first)
         self.assertEqual((first["files"], first["converter"]), (1, "ok"))
         self.assertEqual(sorted(first), ["bytes", "bytes_max", "converter", "files", "files_max", "last", "off", "on"], "no account, no name")
+
+
+class Far:
+    """The writer of a call to the converter, whose other end says that it is at another address (the real socket is used for everything else)."""
+
+    def __init__(self, writer, peername):
+        self.writer, self.peername = writer, peername
+
+    def get_extra_info(self, name, default=None):
+        return self.peername if name == "peername" else self.writer.get_extra_info(name, default)
+
+    def __getattr__(self, name):
+        return getattr(self.writer, name)
+
+
+class TheConvertersNetwork(ImgTest):
+    """The converter's network has no visitor: what a request from the converter's own address says about the visitor's address is not believed (hub/server.py `address_of`)."""
+    options = dict(image_address_burst=2, image_address_refill_seconds=1000.0)
+
+    def setUp(self):
+        super().setUp()
+        self.know(HOLDER)
+
+    def test_a_request_from_the_converters_address_is_counted_under_that_address_whatever_the_header_says(self):
+        self.rig.call(self.rig.hub.converter.remember, "127.0.0.1")           # (the rig's converter is at the address of its callers, as a container's would be at a 172 address)
+        self.assertEqual(self.upload(HOLDER).status, 200)
+        self.assertEqual(self.upload(HOLDER).status, 200)
+        r = self.upload(HOLDER)                                                # (the header of each says another visitor: all three are one address)
+        self.assertEqual((r.status, r.json()), (429, {"error": "rate"}))
+
+    def test_other_requests_count_the_address_the_header_gives(self):
+        for _ in range(3):
+            self.assertEqual(self.upload(HOLDER).status, 200)                  # (a header of its own for each: the burst of two is not reached)
+
+    def test_the_address_that_the_converter_answers_from_is_kept_unless_it_is_on_this_machine(self):
+        converter = self.rig.hub.converter
+        self.assertEqual(self.upload(HOLDER).status, 200)
+        self.assertFalse(self.rig.call(converter.speaks_for_nobody, "127.0.0.1"), "a converter on the loopback is a rig: it is not remembered, or every caller of a rig would be taken for it")
+        real = asyncio.open_connection
+
+        async def from_far_away(*args, **kw):
+            reader, writer = await real(*args, **kw)
+            return reader, Far(writer, ("172.20.0.9", 4050))
+        with mock.patch("hub.imgdoor.asyncio.open_connection", from_far_away):
+            self.assertEqual(self.upload(HOLDER).status, 200)
+        for address, expected in (("172.20.0.9", True), ("::ffff:172.20.0.9", True), ("172.20.0.10", False), ("198.51.100.1", False), ("127.0.0.1", False), ("not an address", False)):
+            self.assertEqual(self.rig.call(converter.speaks_for_nobody, address), expected, address)
+        self.rig.call(converter.remember_peer, ("not an address", 1))          # (never an error)
+        self.rig.call(converter.remember_peer, None)
+        self.assertTrue(self.rig.call(converter.speaks_for_nobody, "172.20.0.9"))
 
 
 class TheConverter(ImgTest):

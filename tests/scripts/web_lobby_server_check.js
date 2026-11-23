@@ -14,8 +14,8 @@ if (!modulePath || !wsUrl) { console.log('usage: web_lobby_server_check.js lobby
 const N = require(path.resolve(modulePath));
 
 // The WebSocket client for a page's code: over a plain socket, the same on every node (the global WebSocket arrived in node 22); mini_websocket.js
-const MiniWebSocket = require('./mini_websocket.js');
-// ANTS_NATIVE_WEBSOCKET=1 runs the same scenarios with node's own WebSocket (node 22 or later), as a browser does
+const MiniWebSocket = require('./mini_websocket.js').visitors();           // (every connection is a visitor of its own to the server's limits per address, as behind the site's nginx)
+// ANTS_NATIVE_WEBSOCKET=1 runs the same scenarios with node's own WebSocket (node 22 or later), as a browser does (it cannot name a visitor's address: every page then comes from one address, so start the server with --no-address-limits)
 const WS = process.env.ANTS_NATIVE_WEBSOCKET && typeof WebSocket !== 'undefined' ? WebSocket : MiniWebSocket;
 
 let checks = 0;
@@ -296,6 +296,7 @@ const pressReady = (env) => { const button = env.$('slots').findAll((e) => e.tag
         const A3 = page('Ada', code('rb'), { key: Uint8Array.from(A.key) });  // (the page that comes back with the key of a seat that ended)
         A3.connect();
         await step('a key that the room does not know seats the page as a newcomer: a new key, and "replaced"', () => () => online(A3)() && A3.of('welcome').length === 1 && A3.of('welcome')[0].replaced === true && N.hexOf(A3.key) !== first);
+        await step('Bea hears of the newcomer (her news can come after the newcomer\'s welcome)', () => () => B.count('joined') >= 1);
         check('... it is not the host (Bea is, she was there first), and the room has two people, not three', !A3.isLeader() && B.isLeader() && names(B).split('|').filter((n) => n !== '-').length === 2, names(B));
         A3.leave();
         B.leave();

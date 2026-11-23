@@ -4,7 +4,9 @@
 .gc-pic { display: block; margin: 5px 0 3px; }
 .gc-thumb { position: relative; display: inline-block; max-width: 100%; margin: 0; padding: 0; font: inherit; line-height: 0; color: inherit; background: #0b1117; border: 2px solid #24574a; border-radius: 6px; box-shadow: 0 0 0 1px #000; cursor: zoom-in; overflow: hidden; }
 /* the picture's box is made from the sizes that the hub gave (--tw and --th, set by the script) before the file has come, so that the log does not jump when it loads: the thumbnail's own size, at most --mw wide and --mh high */
-.gc-thumb img { --mw: 180px; --mh: 104px; display: block; height: auto; aspect-ratio: var(--tw) / var(--th); width: min(calc(var(--tw) * 1px), var(--mw), calc(var(--mh) * var(--tw) / var(--th))); }
+.gc-thumb img { --mw: 180px; --mh: 104px; display: block; height: auto; max-width: 100%; aspect-ratio: var(--tw) / var(--th); width: min(calc(var(--tw) * 1px), var(--mw), calc(var(--mh) * var(--tw) / var(--th))); }
+/* (every term of `width` is a length, so the frame, which takes the picture's width, is exactly as wide as the picture: a percentage there is ignored when the frame measures
+   its content, and the frame came out wider than a picture that its height then made narrower; a narrow column is `max-width`'s) */
 .gc-thumb:hover { border-color: var(--gold); }
 .gc-thumb:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 .gc-thumb .gc-zoom { position: absolute; right: 4px; bottom: 4px; width: 22px; height: 22px; padding: 3px; box-sizing: border-box; color: var(--cream); background: rgba(5, 9, 12, .78); border-radius: 4px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
@@ -14,7 +16,7 @@
     .gc-pic { display: inline-block; vertical-align: top; margin: 1px 0 3px 10px; }
     .gc-thumb img { --mw: 144px; --mh: var(--img-mh, 81px); }
 }
-@media (max-width: 700px) { .gc-thumb img { --mw: 100%; --mh: 150px; } .gc-pic { margin-top: 6px; } .gp-card .gp-th { width: 96px; height: 64px; } }
+@media (max-width: 700px) { .gc-thumb img { --mw: 100vw; --mh: 150px; } .gc-pic { margin-top: 6px; } .gp-card .gp-th { width: 96px; height: 64px; } }
 @media (max-height: 500px) and (orientation: landscape) { .gc-thumb img { --mh: min(84px, var(--img-mh, 84px)); } }
 
 /* ---- the picture opened full size: a box over the page (a sheet that fills the screen on a phone) ---- */
@@ -34,11 +36,14 @@
 .gv-foot .gv-del { color: #ffd9d9; background: #8a2c2c; border-color: #b84a4a; }
 .gv-ask { flex: 1 1 100%; margin: 0; font-size: 16px; line-height: 1.35; }
 .gv-foot a.btn { display: inline-flex; align-items: center; text-decoration: none; }
+.gv-foot .gv-note { font-size: 15px; color: #9fe0b8; }                   /* a few words in the place of the size ("Link copied"), for a moment */
+.gv-foot .gv-url { flex: 1 1 100%; min-height: 46px; box-sizing: border-box; padding: 0 12px; font: inherit; font-size: 14px; color: var(--cream); background: #0b1117; border: 2px solid #24574a; border-radius: 6px; }
 @media (max-width: 700px) {
     .gv-scrim { padding: 10px 10px 14px; align-items: stretch; }
     .gv { width: 100%; max-width: none; justify-content: center; }
     .gv-img { max-height: calc(100vh - 230px); }
     .gv-foot .btn { flex: 1 1 140px; justify-content: center; }
+    .gv-foot .gv-size { flex: 1 1 100%; }
 }
 /* ---- the reader's switch for animation, a row of the account's dropdown (the picture switch's own classes) ---- */
 .gp-sw { margin-top: 6px; }

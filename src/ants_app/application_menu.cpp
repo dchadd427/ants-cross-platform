@@ -198,7 +198,7 @@ void Application::begin_menu_connection(bool hosting, const std::string& room, c
     menu_conn_.room = room;
     menu_conn_.name = name;
     menu_conn_.server = server != nullptr ? *server : start_menu_.server();
-    menu_conn_.label = server_label(menu_conn_.server);
+    menu_conn_.label = server_display(menu_conn_.server);
     menu_conn_.players = players;
     menu_conn_.map = map;
     if (create != nullptr) menu_conn_.create = *create;
@@ -263,8 +263,14 @@ void Application::pump_menu_connection() {
             attach_net();                                                    // (a guest announces nothing on the LAN: only a host's room does, so neither the announcement nor its version is set)
             if (config_.net_platform != 0) net_->set_platform(config_.net_platform);
             if (menu_conn_.create) net_->set_create(*menu_conn_.create);     // (the room that the server makes from this Hello when it has none of the code)
-            if (!net_->join(host_lookup_.address(), menu_conn_.server.port, menu_conn_.name, menu_conn_.rejoin ? menu_conn_.seat : uint8_t{255}, menu_conn_.room, std::string(), menu_conn_.key)) {
-                menu_connection_failed(unreachable_text(menu_conn_.label));            // (no socket could be made for the address: the same to the player as a server that does not answer)
+            if (!config_.net_extra_ca_pem.empty()) net_->set_extra_trusted_ca_pem(config_.net_extra_ca_pem);
+            // An encrypted door (the default) joins by its wss URL with the address that the lookup gave; the certificate is checked for the name. A plain TCP server joins by that address.
+            const uint8_t seat = menu_conn_.rejoin ? menu_conn_.seat : uint8_t{255};
+            const bool joined = menu_conn_.server.tcp ? net_->join(host_lookup_.address(), menu_conn_.server.port, menu_conn_.name, seat, menu_conn_.room, std::string(), menu_conn_.key)
+                                                      : net_->join_url(server_url(menu_conn_.server), menu_conn_.name, seat, menu_conn_.room, std::string(), menu_conn_.key, host_lookup_.address());
+            if (!joined) {
+                // (no link could be made for the address: the same to the player as a server that does not answer; a refusal that has its own words, a plain link to the Internet or a TLS client that cannot start, says them)
+                menu_connection_failed(net_->join_refusal().empty() ? unreachable_text(menu_conn_.label) : net_->join_refusal());
                 break;
             }
             menu_conn_.stage = Stage::Joining;
@@ -360,8 +366,10 @@ std::string Application::menu_failure_text() const {
     if (!net_) return "The connection to " + server + " failed.";
     if (menu_conn_.rejoin && net_->fail_reason() == net::NetGame::FailReason::Rejected) return net_->status_text();      // the words of the way back (NetGame::way_back_text): the seat was dropped, the match is over, the server does not hold the seat ...
     switch (net_->fail_reason()) {
-        case net::NetGame::FailReason::Unreachable:
-            return unreachable_text(server);
+        case net::NetGame::FailReason::Unreachable: {
+            const std::string cause = net_->link_failure_text();                  // (an encrypted link says why it was not made: a certificate that is not trusted, ...)
+            return cause.empty() ? unreachable_text(server) : cause;
+        }
         case net::NetGame::FailReason::NoAnswer:
             return no_answer_text(server);
         case net::NetGame::FailReason::Lost:
@@ -388,7 +396,7 @@ std::string Application::menu_failure_text() const {
                 case net::RejectReason::Superseded:
                     return "This game was taken over by another window.";
                 case net::RejectReason::NoSuchRoom:
-                    if (menu_conn_.hosting) return "The server could not make a room now: it is busy, or it does not host online matches. Try again in a few minutes.";
+                    if (menu_conn_.hosting) return "The server could not make a room now: it is busy, or your network made many rooms. Try again in a minute.";
                     return "There is no room with the code " + menu_conn_.room + " on " + server + ". Check the code (capital letters matter).";
             }
             break;

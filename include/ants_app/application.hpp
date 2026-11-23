@@ -140,7 +140,8 @@ struct ApplicationConfig {
     std::string net_address{"127.0.0.1"};       // Join: the host's address
     uint16_t net_port{4001};                    // the original's port
     std::function<std::unique_ptr<net::Connection>()> net_link_maker;    // The tests: every link of a game that this application joins (the first one and the way back's) is made by this function (net::NetGame::set_link_maker_for_test); empty: TCP to net_address, as always
-    std::string net_url;                        // Join through a WebSocket (--join-url ws://host/path or wss://...): the browser build's only way, and the one a server's proxy offers
+    std::string net_url;                        // Join through a WebSocket (--join-url wss://host/path; the web build also takes ws://): the browser build's only way, and the encrypted one that the desktop game uses for a server on the Internet (TLS, the certificate is checked)
+    std::string net_extra_ca_pem;               // More certificate authorities (PEM) that the encrypted link trusts besides the system's: a private server's CA, a test's. They only add to what is trusted; nothing skips the check.
     bool net_loopback_only{false};              // Host: accept only this machine (two copies on one computer, tests)
     uint16_t lan_port{net::kLanDiscoveryPort};  // the UDP port on which an open room announces itself to the local network (--lan-port N; 0 = not at all, --no-lan)
     std::string net_room;                       // Join: the room of a server (--room CODE); "" for a LAN / direct host
@@ -219,7 +220,7 @@ struct ApplicationConfig {
     /// --seat, --bot, --headless, --screenshot, --player / -pnum, --select-ant, --select-base, --open-options, --scorecard) and with --start-menu, which forces it (also headless, for the tests
     /// and the screenshots). A config that is made by hand has it off, which is the game without a menu exactly; the web build never shows it (its page has its own controls).
     bool start_menu{false};
-    /// --server HOST[:PORT]: the game server of the menu's Join and Host. Empty: the settings key `server`, else beta.playants.org:4001 (start_menu.hpp parse_server).
+    /// --server wss://HOST[/PATH] or HOST[:PORT]: the game server of the menu's Join and Host. Empty: the settings key `server`, else wss://beta.playants.org/ws (start_menu.hpp parse_server).
     std::string server;
     /// For the tests: the system clipboard that the menu pastes from and copies the room's code to (empty: SDL's), and the name lookup of the menu's connection (empty: the system's)
     std::function<std::string()> clipboard_get;
@@ -286,6 +287,8 @@ public:
     /// The reason that a lost match gave ("The connection to the other players was lost."); a network game that the menu led to returns to the menu with it and leaves none behind
     const std::string& net_notice() const noexcept { return net_notice_; }
     const std::string& window_title() const noexcept { return window_title_; }
+    /// The window was given the original game's icon (app_icon.hpp); false on the web, where the page has its own
+    bool window_icon_set() const noexcept { return window_icon_set_; }
     /// The keys, the text and the mouse of the start menu (what the event loop does with an event while the menu is up; public for the tests)
     void handle_menu_event(const SDL_Event& event);
     bool start_game(const std::string& map_path);
@@ -815,6 +818,7 @@ private:
     std::string player_name_;
     std::string local_player_name_;                       // the name of a local game (the system user, --name): what a single-player game after a network game shows again
     std::string window_title_;                            // what the window's title says now
+    bool window_icon_set_{false};                         // init() gave the window the original's icon (app_icon.hpp)
     StartMenu start_menu_;                                // the desktop start menu: its model (always there; it is part of a run only when menu_enabled_)
     HostLookup host_lookup_;                              // the menu's name lookup, on a worker thread
     bool menu_enabled_{false};                            // this run shows the start menu: a network game that ends brings the player back to it

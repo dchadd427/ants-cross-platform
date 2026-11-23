@@ -4,8 +4,9 @@
 What is checked:
   - the entry point: the port that coturn is told to listen on is ANTS_TURN_PORT (3478 when it is not set) and nothing else, the address that it listens on and sends from is ANTS_TURN_EXTERNAL_IP and
     nothing else (an address that is not an IPv4 address of the machine is refused), a port that is not one is refused, a start without the secret, the address or the name is refused, a name that
-    carries a port is refused (the port is one number), and `--health` asks for a STUN binding on that same address and port; it is run for real, with the image's own entry point and the STUN client
-    replaced by programs that write down what they were given, and the kernel's list of the machine's addresses by a file of its own;
+    carries a port is refused (the port is one number), the shared secret goes into a configuration file that only the relay's user can read and into no argument (a secret that a file would cut or
+    read as another line is refused), and `--health` asks for a STUN binding on that same address and port; it is run for real, with the image's own entry point and the STUN client replaced by programs
+    that write down what they were given, and the kernel's list of the machine's addresses by a file of its own;
   - the configuration: the relay binds one listening port and its relay range and no other port that coturn knows (an alternative listener, the TLS ports, the command-line interface, the web admin,
     the metrics), neither in docker/turnserver.conf nor on the command line of the stack, so that a second TURN server on the machine meets none of its ports; the range is the one that the documents
     tell the operator to open;
@@ -116,6 +117,11 @@ class Sandbox:
         self.image_entry = os.path.join(self.dir, "docker-entrypoint.sh")
         self._program(self.image_entry, 'printf "%s\\n" "$@" > "$RECORD"\n')
         self._program(os.path.join(bin_dir, "turnutils_stunclient"), 'printf "%s\\n" "$@" > "$RECORD"\nexit "${FAKE_STUN_EXIT:-0}"\n')
+        self.base_conf = os.path.join(self.dir, "turnserver.conf")
+        with open(self.base_conf, "w", encoding="utf-8") as f:
+            f.write("# the repository's configuration\nno-tls\n")
+        os.makedirs(os.path.join(self.dir, "tmp"))
+        self.conf_out = os.path.join(self.dir, "tmp", "ants-turnserver.conf")
         self.addresses = os.path.join(self.dir, "fib_trie")
         with open(self.addresses, "w", encoding="utf-8") as f:
             f.write(FIB_TRIE)
@@ -125,6 +131,10 @@ class Sandbox:
         assert count == 1, "the entry point hands over to the image's own entry point exactly once"
         replaced, count = re.subn(r"/proc/net/fib_trie", self.addresses, replaced)
         assert count == 1, "the entry point reads the machine's addresses from the kernel's list, once"
+        replaced, count = re.subn(r"/etc/coturn/turnserver\.conf", self.base_conf, replaced)
+        assert count == 1, "the entry point reads the repository's configuration from its place in the image, once"
+        replaced, count = re.subn(r"/tmp/ants-turnserver\.conf", self.conf_out, replaced)
+        assert count == 1, "the entry point writes the configuration that holds the secret to one place on the memory file system"
         with open(self.script, "w", encoding="utf-8") as f:
             f.write(replaced)
         self.path = bin_dir + os.pathsep + os.environ.get("PATH", "")
@@ -148,7 +158,7 @@ class Sandbox:
 
 
 GOOD = {"ANTS_TURN_SECRET": "a-made-up-secret", "ANTS_TURN_EXTERNAL_IP": "203.0.113.9", "ANTS_TURN_HOST": "turn.example.org"}
-ARGS = ["-c", "/etc/coturn/turnserver.conf", "--static-auth-secret=$ANTS_TURN_SECRET", "--realm=$ANTS_TURN_HOST"]
+ARGS = ["--external-ip=$ANTS_TURN_EXTERNAL_IP", "--realm=$ANTS_TURN_HOST"]                  # (what the stack gives: no secret, no configuration file; the entry point adds both)
 ADDRESS_ARGS = ["--listening-ip=" + GOOD["ANTS_TURN_EXTERNAL_IP"], "--relay-ip=" + GOOD["ANTS_TURN_EXTERNAL_IP"]]       # what the entry point adds for the address: where the relay listens and where its sessions send from
 
 
@@ -160,11 +170,50 @@ class TheEntryPoint(unittest.TestCase):
     def test_coturn_listens_on_the_port_of_the_variable_and_3478_without_one(self):
         code_, _, called = self.box.run(GOOD, ARGS)
         self.assertEqual(code_, 0)
-        self.assertEqual(called, ARGS + ["--listening-port=3478"] + ADDRESS_ARGS, "the arguments of the stack reach the image's entry point as they are (the `$` is the image's to expand), and the port and the address are added")
+        self.assertEqual(called, ["-c", self.box.conf_out] + ARGS + ["--listening-port=3478"] + ADDRESS_ARGS, "the arguments of the stack reach the image's entry point as they are (the `$` is the image's to expand), after the configuration file, and the port and the address are added")
         for value, expected in (("3480", "3480"), ("1", "1"), ("65535", "65535"), ("", "3478")):
             code_, _, called = self.box.run(dict(GOOD, ANTS_TURN_PORT=value), ARGS)
             self.assertEqual(code_, 0, value)
-            self.assertEqual(called, ARGS + ["--listening-port=" + expected] + ADDRESS_ARGS, value)
+            self.assertEqual(called, ["-c", self.box.conf_out] + ARGS + ["--listening-port=" + expected] + ADDRESS_ARGS, value)
+
+    def test_the_secret_is_in_a_file_that_only_the_relays_user_can_read_and_in_no_argument(self):
+        """Defect caught: a secret on the command line is in the process list of the machine, which every user of it can read (the relay runs on the host's network). The entry point puts it into the
+        configuration file that coturn is told to read, with no permission for anybody else, and a file that was there before is not written into with the permissions it had."""
+        with open(self.box.conf_out, "w", encoding="utf-8") as f:
+            f.write("an earlier file\n")
+        os.chmod(self.box.conf_out, 0o644)
+        code_, _, called = self.box.run(GOOD, ARGS)
+        self.assertEqual(code_, 0)
+        self.assertNotIn(GOOD["ANTS_TURN_SECRET"], "\n".join(called), "the secret is in no argument")
+        self.assertEqual([a for a in called if "secret" in a.lower()], [], "no argument names the secret at all")
+        self.assertEqual(called[:2], ["-c", self.box.conf_out])
+        text = read(self.box.conf_out)
+        self.assertTrue(text.startswith(read(self.box.base_conf)), "the repository's file comes first, whole")
+        self.assertEqual(options(text)["static-auth-secret"], GOOD["ANTS_TURN_SECRET"])
+        self.assertEqual(text.count("static-auth-secret"), 1)
+        self.assertNotIn("an earlier file", text)
+        self.assertEqual(stat.S_IMODE(os.stat(self.box.conf_out).st_mode), 0o600)
+        secret = "k7$(x)`y`=%s\\z"                                                           # (a secret that a shell would read: it is written as it is, never evaluated)
+        code_, _, called = self.box.run(dict(GOOD, ANTS_TURN_SECRET=secret), ARGS)
+        self.assertEqual(code_, 0)
+        self.assertEqual(options(read(self.box.conf_out))["static-auth-secret"], secret)
+
+    def test_a_secret_that_a_file_would_cut_or_read_as_another_line_is_refused_and_nothing_starts(self):
+        for bad in ("two words", " leading", "trailing ", "tab\there", "line\nbreak", "a\rb", "x\nstatic-auth-secret=other", "\n"):
+            if os.path.exists(self.box.conf_out):
+                os.remove(self.box.conf_out)
+            code_, err, called = self.box.run(dict(GOOD, ANTS_TURN_SECRET=bad), ARGS)
+            self.assertEqual(code_, 1, repr(bad))
+            self.assertIsNone(called, "nothing was started for %r" % bad)
+            self.assertFalse(os.path.exists(self.box.conf_out), "no file was written for %r" % bad)
+            self.assertIn("ANTS_TURN_SECRET", err)
+
+    def test_a_configuration_that_cannot_be_written_is_a_refusal_not_a_relay_without_its_secret(self):
+        shutil.rmtree(os.path.dirname(self.box.conf_out))
+        code_, err, called = self.box.run(GOOD, ARGS)
+        self.assertEqual(code_, 1)
+        self.assertIsNone(called)
+        self.assertIn("configuration", err)
 
     def test_a_port_that_is_not_one_is_refused_and_nothing_starts(self):
         for bad in ("abc", "0", "65536", "99999999999", "34 78", "3480x", "-1", "3478.5", "3478:3479", "0x10", " "):
@@ -245,9 +294,15 @@ class TheConfiguration(unittest.TestCase):
         for name in ("listening-ip", "relay-ip", "aux-server", "relay-device"):
             self.assertNotRegex(command, r"--%s\b" % re.escape(name), "the stack's command line names no address: the entry point adds the one of the variable")
 
-    def test_the_one_file_that_the_relay_writes_is_on_a_memory_file_system_of_the_stack(self):
+    def test_the_stack_gives_the_relay_no_secret_on_its_command_line(self):
+        command = service(self.stack, "ants-turn")
+        self.assertNotRegex(command, r"static-auth-secret|\$\$ANTS_TURN_SECRET", "the secret reaches coturn through the file that the entry point writes, never as an argument")
+        self.assertNotIn("static-auth-secret", self.opts, "the repository's file holds no secret: the entry point adds the line")
+        self.assertEqual(re.findall(r'command: (\[[^\]]*\])', command), ['["--external-ip=$$ANTS_TURN_EXTERNAL_IP", "--realm=$$ANTS_TURN_HOST"]'])
+
+    def test_the_files_that_the_relay_writes_are_on_a_memory_file_system_of_the_stack(self):
         """Defect caught: a process id file in a place that the read-only container cannot write ends in a warning at every start (coturn goes on without it), a file system that is writable for everything
-        would let the relay write anywhere. The stack says read-only and mounts a small memory file system on the folder of the file."""
+        would let the relay write anywhere. The stack says read-only and mounts a small memory file system on the folder of the file (which also holds the configuration file with the secret)."""
         pidfile = self.opts["pidfile"]
         folder = os.path.dirname(pidfile)
         relay = service(self.stack, "ants-turn")

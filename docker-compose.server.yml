@@ -3,7 +3,6 @@
 #   ANTS_SERVER_SECRET=<a long random secret>       the bearer secret of the control interface (optional: without it the server makes one the first time it starts,
 #                                                   prints it once in its log and keeps it in /results/control-secret of the volume ants-server-results)
 #   ANTS_MAPS_DIR=/path/to/the/maps                 a folder of .lvl files that rooms may use instead of the six maps of the original game in the image (optional, mounted read-only)
-#   ANTS_SERVER_PORT=4001                           the public TCP game port of native clients (optional)
 #
 #   docker compose -f docker-compose.server.yml up -d --build
 #
@@ -45,11 +44,13 @@ services:
     # command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--replay-demo", "--replay-port", "4020"]
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}
+      # the reverse proxies whose X-Client-Address the WebSocket door believes for its limits per address (docs/ADDRESS_LIMITS.md; empty: the private networks, where the site's nginx connects from)
+      ANTS_TRUSTED_PROXIES: ${ANTS_TRUSTED_PROXIES:-}
     volumes:
       - ${ANTS_MAPS_DIR:-ants-maps}:/maps:ro
       - ants-server-results:/results
     ports:
-      - "${ANTS_SERVER_PORT:-4001}:4001"
+      # (no port for the TCP game port 4001: it is not encrypted; a LAN or development server adds a line `- "4001:4001"` in a file of its own. The browser page and the desktop game use the proxy's /ws)
       - "127.0.0.1:${ANTS_SERVER_WS_PORT:-4002}:4002"
       - "127.0.0.1:${ANTS_SERVER_CTL_PORT:-4010}:4010"
     # the site's nginx (docker-compose.yml) reaches the WebSocket port by this name on the shared network

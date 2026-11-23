@@ -181,6 +181,7 @@ struct WsHandshakeResult {
     size_t consumed{0};                 // the request's length through the blank line; what follows belongs to the WebSocket frames
     bool subprotocol{false};            // "ants" was offered and echoed
     bool posted{false};                 // Answered: it was the post path's POST (the listener runs WsServerOptions::post_action)
+    std::string client_address;         // Accepted: the value of the X-Client-Address header when the request had exactly one, else "" (the proxy's word for the visitor's address: whether it is believed is the server's to say)
 };
 
 /// Judges the bytes received so far of a handshake request. Pure: the same bytes give the same answer. Stricter than HTTP needs to be (CRLF line ends
@@ -206,14 +207,16 @@ public:
     /// Says goodbye with a close frame (best effort, nothing is waited for) and closes the socket
     void close() override;
 
-    /// The peer's address as text (diagnostics; behind a proxy it is the proxy's)
+    /// The peer's address as text (behind a proxy it is the proxy's)
     const std::string& peer() const noexcept { return peer_; }
+    /// What the handshake's one X-Client-Address header said ("" when it had none or more than one). It is the peer's word: a server that counts by it believes it only from a proxy that it trusts
+    const std::string& client_address() const noexcept { return client_address_; }
     /// Bytes waiting to be written (diagnostics)
     size_t backlog() const noexcept { return out_.size() - out_pos_; }
 
 private:
     friend class WsListener;
-    WsConnection(int fd, std::string peer, uint32_t ping_interval_ms, const std::string& answer, const std::string& early_bytes);
+    WsConnection(int fd, std::string peer, std::string client_address, uint32_t ping_interval_ms, const std::string& answer, const std::string& early_bytes);
     void pump();
     bool drain_parser();
     bool enqueue(WsOpcode opcode, const uint8_t* data, size_t size);
@@ -225,6 +228,7 @@ private:
     int fd_{-1};
     State state_{State::Open};
     std::string peer_;
+    std::string client_address_;
     uint32_t ping_interval_ms_{0};
     uint64_t last_send_ms_{0};
     WsFrameParser parser_;

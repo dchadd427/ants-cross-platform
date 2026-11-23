@@ -136,6 +136,15 @@ void run_start_menu_app_play_tests() {
             ASSERT_TRUE(app.init(menu_config("", settings)));
             ASSERT_TRUE(app.start_menu().server() == ServerAddress{});
         }
+        {   // the form of the first versions' default, the plain game port of the site: the site does not open it, so the menu uses the default (the site's door) and says why on the console
+            std::ofstream out(settings, std::ios::app | std::ios::binary);
+            out << "server=beta.playants.org:4001\n";
+        }
+        {
+            Application app;
+            ASSERT_TRUE(app.init(menu_config("", settings)));
+            ASSERT_TRUE(app.start_menu().server() == ServerAddress{});
+        }
         // the server of the command line must parse: a bad one never gets to the menu (parse_arguments refuses it, init refuses the config)
         std::vector<std::string> args = {"ants", "--headless", "--start-menu", "--server", "no good", "--settings", settings};
         std::vector<char*> storage;
@@ -143,6 +152,9 @@ void run_start_menu_app_play_tests() {
         ASSERT_HAS(bad.startup_error, "--server no good");
         Application refused;
         ASSERT_FALSE(refused.init(bad));
+        args = {"ants", "--headless", "--start-menu", "--server", "beta.playants.org:4001", "--settings", settings};   // (what a launcher of the first versions passes: refused with the way to write it now)
+        const ApplicationConfig plain_port = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, storage));
+        ASSERT_HAS(plain_port.startup_error, "wss://beta.playants.org/ws");
     } TEST_END();
 
     TEST_CASE("A2.1 Single player with nobody: the match is the original's single-player game exactly: the same four teams, no bot code, the same state after the get-ready dialog (5 s in which the simulation waits) and 100 ticks as the game that never saw the menu") {
@@ -609,6 +621,101 @@ void run_start_menu_app_play_tests() {
         ASSERT_TRUE(hall.identical(app.sim(), guest.sim));
     } TEST_END();
 
+    TEST_CASE("A4.1b Host an online match through the server's encrypted door (the menu's default kind of server): wss://, a name looked up once, TLS with a certificate that the game trusts, the room's code, a guest who joins, the match; the key of the seat names the server by its URL") {
+        TempDir temp;
+        write_no_quick_help(temp.file("s.ini"));
+        Server server;
+        SecureDoor& door = server.open_secure_door();
+        Application app;
+        Peer guest;
+        Hall hall{&server, &app, {&guest}, nullptr, false};
+        ApplicationConfig cfg = menu_config(door.url(), temp.file("s.ini"));
+        cfg.net_extra_ca_pem = door.ca.pem();                                                // the test's authority, trusted explicitly
+        cfg.host_resolver = [](const std::string&, std::string& address, std::string&) {
+            address = "127.0.0.1";
+            return true;
+        };
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.start_menu().server() == (ServerAddress{"localhost", door.port()}));       // wss, not plain TCP
+        menu_host(app, "Hostess", 1, 2);                                                     // Small, three players
+        ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 12000));
+        const std::string code = shown_code(app);
+        ASSERT_EQ(code.size(), kRoomCodeChars);
+        ASSERT_TRUE(app.net() != nullptr && app.net()->is_leader() && app.net()->my_seat() == 0);
+        ASSERT_TRUE(app.net()->join_target().url == door.url() && app.net()->join_target().address.empty());
+        ASSERT_EQ(door.term->handshakes, 1u);
+        ASSERT_TRUE(guest.join("127.0.0.1", server.port(), "Guest", code));                    // (a bare NetGame of the local network joins the same room over TCP)
+        ASSERT_TRUE(hall.until([&]() { return guest.net.phase() == net::NetGame::Phase::Room; }, 8000));
+        click(app, MenuId::EnterRoom);
+        hall.step(700);
+        ASSERT_TRUE(app.map_select().leads_server_room() && app.map_select().has_start_button());
+        app.map_select().handle_key_down(SDLK_RETURN);
+        ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && guest.net.phase() == net::NetGame::Phase::Playing; }, 20000));
+        hall.step(3000);
+        ASSERT_TRUE(hall.identical(app.sim(), guest.sim));
+        ASSERT_TRUE(door.term->raw_in().find("Hostess") == std::string::npos && door.term->raw_out().find("Guest") == std::string::npos);     // (nothing readable crossed the wire)
+        ASSERT_TRUE(door.term->app_bytes_up > 0);
+    } TEST_END();
+
+    TEST_CASE("A4.1c The command line joins through the encrypted door too: --join-url wss://... --room CODE makes the same TLS link (the certificate checked for the name, the written URL kept for the key), and the same game runs as with the menu") {
+        TempDir temp;
+        Server server;
+        SecureDoor& door = server.open_secure_door();
+        ASSERT_TRUE(server.make_room("cli-wss-1", 2));
+        Application app;
+        Hall hall{&server, &app, {}, nullptr, false};
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.lan_port = 0;
+        cfg.settings_path = temp.file("s.ini");
+        cfg.player_name = "Cli";
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_url = door.url();
+        cfg.net_room = "cli-wss-1";
+        cfg.net_extra_ca_pem = door.ca.pem();
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(hall.until([&]() { return app.net() != nullptr && app.net()->phase() == net::NetGame::Phase::Room; }, 12000));
+        ASSERT_TRUE(app.net()->join_target().url == door.url() && app.net()->join_target().address.empty());
+        ASSERT_EQ(door.term->handshakes, 1u);
+        ASSERT_EQ(server.status("cli-wss-1").joined, 1u);
+        Application untrusting;                                                              // the same without the authority: the game does not start, and says why on the console (init fails)
+        ApplicationConfig bad = cfg;
+        bad.net_extra_ca_pem.clear();
+        bad.settings_path = temp.file("t.ini");
+        ASSERT_TRUE(untrusting.init(bad));                                                   // (the link is made later: the room never comes)
+        Hall hall2{&server, &untrusting, {}, nullptr, false};
+        ASSERT_TRUE(hall2.until([&]() { return untrusting.net() != nullptr && untrusting.net()->phase() == net::NetGame::Phase::Failed; }, 12000));
+        ASSERT_FALSE(untrusting.net()->link_failure_text().empty());
+        ASSERT_EQ(server.status("cli-wss-1").joined, 1u);                                    // (the refused one never reached the room)
+    } TEST_END();
+
+    TEST_CASE("A5.5 A server whose certificate the game does not trust ends the attempt on the panel with a line that says so, before any byte of the game goes out: no room, no name, nothing reached the server") {
+        TempDir temp;
+        Server server;
+        SecureDoor& door = server.open_secure_door();
+        Application app;
+        Hall hall{&server, &app, {}, nullptr, false};
+        ApplicationConfig cfg = menu_config(door.url(), temp.file("s.ini"));                 // (no net_extra_ca_pem: the authority of the test is not in any system store)
+        cfg.host_resolver = [](const std::string& host, std::string& address, std::string&) {
+            address = host == "public.example.test" ? "203.0.113.9" : "127.0.0.1";
+            return true;
+        };
+        ASSERT_TRUE(app.init(cfg));
+        menu_join(app, "Dave", "abc-123");
+        ASSERT_TRUE(hall.until([&]() { return failed_on(app, MenuPanel::Join); }, 12000));
+        ASSERT_HAS(app.start_menu().message(), "certificate");
+        ASSERT_TRUE(app.net() == nullptr && !app.network_active());                          // nothing of the attempt stays
+        hall.step(200);
+        ASSERT_EQ(door.term->app_bytes_up, 0u);
+        ASSERT_EQ(door.term->handshakes, 0u);
+        ASSERT_EQ(app.start_menu().name(), std::string("Dave"));
+        ASSERT_EQ(app.start_menu().code(), std::string("abc-123"));
+        app.start_menu().set_server(ServerAddress{"public.example.test", 4001, true});       // plain TCP to a name that stands for an address of the Internet is refused when the connection is made
+        click(app, MenuId::Join);
+        ASSERT_TRUE(hall.until([&]() { return failed_on(app, MenuPanel::Join) && app.start_menu().message().find("unencrypted") != std::string::npos; }, 8000));
+        ASSERT_TRUE(app.net() == nullptr);
+    } TEST_END();
+
     TEST_CASE("A4.2 Host: Esc / Back on the room's panel leaves the room (the server sees the player go, the title is the program's again) and returns to the Host panel; the server that cannot make a room (its public rooms are all taken) is told in words; a single-player game after that is the local player's, not the name that was typed for the room") {
         TempDir temp;
         write_no_quick_help(temp.file("s.ini"));
@@ -789,7 +896,7 @@ void run_start_menu_app_play_tests() {
             auto l = net::TcpListener::listen(0, true);
             return l ? l->port() : uint16_t{1};
         }();
-        app.start_menu().set_server(ServerAddress{"127.0.0.1", closed});
+        app.start_menu().set_server(ServerAddress{"127.0.0.1", closed, true});
         menu_join(app, "Dave", "abc-123");
         ASSERT_TRUE(hall.until([&]() { return failed_on(app, MenuPanel::Join); }, 8000));
         ASSERT_HAS(app.start_menu().message(), "Cannot reach 127.0.0.1:" + std::to_string(closed));
@@ -797,7 +904,7 @@ void run_start_menu_app_play_tests() {
         ASSERT_EQ(app.start_menu().name(), std::string("Dave"));                             // the fields are as they were
         ASSERT_EQ(app.start_menu().code(), std::string("abc-123"));
         // the real server: no room with that code (the case of the code is kept: the server tells the code that was sent)
-        app.start_menu().set_server(ServerAddress{"127.0.0.1", server.port()});
+        app.start_menu().set_server(ServerAddress{"127.0.0.1", server.port(), true});
         fill(app, MenuId::Code, "Zz-Nope-1");
         click(app, MenuId::Join);
         ASSERT_TRUE(hall.until([&]() { return failed_on(app, MenuPanel::Join); }, 8000));
@@ -805,7 +912,7 @@ void run_start_menu_app_play_tests() {
         ASSERT_HAS(app.start_menu().message(), server.address());
         ASSERT_HAS(app.start_menu().message(), "capital letters matter");
         // a name that looks like a bot's never reaches any server (the one that would rename it is not asked)
-        app.start_menu().set_server(ServerAddress{"127.0.0.1", raw.port()});
+        app.start_menu().set_server(ServerAddress{"127.0.0.1", raw.port(), true});
         fill(app, MenuId::Name, "Bot (Easy)");
         click(app, MenuId::Join);
         hall.step(300);
@@ -881,7 +988,7 @@ void run_start_menu_app_play_tests() {
         RawServer raw;
         Hall hall{&server, &app, {}, &raw, false};
         const auto lookup = std::make_shared<Lookup>();
-        ApplicationConfig cfg = menu_config("slow.example.org:" + std::to_string(raw.port()), temp.file("s.ini"));
+        ApplicationConfig cfg = menu_config("tcp://slow.example.org:" + std::to_string(raw.port()), temp.file("s.ini"));
         cfg.host_resolver = lookup_of(lookup);
         cfg.menu_connect_timeout_ms = 3000;
         ASSERT_TRUE(app.init(cfg));
@@ -914,13 +1021,13 @@ void run_start_menu_app_play_tests() {
         ASSERT_TRUE(app.net() == nullptr && !app.network_active());
         ASSERT_TRUE(hall.until([&]() { return raw.connected() == 0; }, 4000));               // the connection is closed
         // (3) the next attempt works: the real server answers (no such room)
-        app.start_menu().set_server(ServerAddress{"127.0.0.1", server.port()});
+        app.start_menu().set_server(ServerAddress{"127.0.0.1", server.port(), true});
         click(app, MenuId::Join);
         ASSERT_TRUE(hall.until([&]() { return failed_on(app, MenuPanel::Join); }, 8000));
         ASSERT_HAS(app.start_menu().message(), "no room with the code abc-1");
         // (4) a lookup that never ends: the time limit of the attempt says so
         lookup->release = false;
-        app.start_menu().set_server(ServerAddress{"slow.example.org", raw.port()});
+        app.start_menu().set_server(ServerAddress{"slow.example.org", raw.port(), true});
         click(app, MenuId::Join);
         ASSERT_TRUE(hall.until([&]() { return failed_on(app, MenuPanel::Join) && app.start_menu().message().find("did not answer") != std::string::npos; }, 8000));
         ASSERT_HAS(app.start_menu().message(), "The server slow.example.org:" + std::to_string(raw.port()) + " did not answer");
@@ -935,7 +1042,7 @@ void run_start_menu_app_play_tests() {
         ASSERT_HAS(app.start_menu().message(), "Cannot find slow.example.org");
         ASSERT_TRUE(lookup->calls >= 3);
         // (6) a server that accepts and never answers: the time limit of the attempt ends the wait
-        app.start_menu().set_server(ServerAddress{"127.0.0.1", raw.port()});
+        app.start_menu().set_server(ServerAddress{"127.0.0.1", raw.port(), true});
         click(app, MenuId::Join);
         ASSERT_TRUE(hall.until([&]() { return failed_on(app, MenuPanel::Join); }, 30000));
         ASSERT_HAS(app.start_menu().message(), "did not answer");
@@ -1159,7 +1266,7 @@ void run_start_menu_app_play_tests() {
         ASSERT_EQ(app.state(), AppState::StartMenu);
         ASSERT_EQ(app.window_title(), std::string("Ants test"));
         // a failed attempt leaves it alone
-        app.start_menu().set_server(ServerAddress{"127.0.0.1", 1});
+        app.start_menu().set_server(ServerAddress{"127.0.0.1", 1, true});
         click(app, MenuId::JoinWithCode);
         click(app, MenuId::Join);
         ASSERT_TRUE(hall.until([&]() { return failed_on(app, MenuPanel::Join); }, 8000));

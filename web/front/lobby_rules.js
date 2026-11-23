@@ -51,14 +51,20 @@
     }
 
     // ---- names ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    // A name that reads as a computer player's label (ai::is_reserved_bot_name; the name is printable ASCII here): the word bot first and a bracket after it ("Bot (Hard)"), or a bracket, the word bot and then a sign or a blank
+    // ("Pip (bot, Hard)", "Pip [bot]", "Pip (bot) x"); case, blanks and signs between the letters are looked through, and 0 reads as o; the letters are one after the other or each pair parted ("b o t", not "Bo T"), and a word that is parted is one only when no letter follows its blanks ("(b o t h)" is a name).
+    function readsAsBot(name) {
+        var s = name.toLowerCase().replace(/0/g, 'o');
+        return /^[^a-z0-9()\[\]{}<>]*(?:bot|b[^a-z0-9()\[\]{}<>]+o[^a-z0-9()\[\]{}<>]+t)[^a-z0-9()\[\]{}<>]*[(\[{<]/.test(s) || /[(\[{<][^a-z0-9()\[\]{}<>]*(?:bot(?=[^a-z0-9])|b[^a-z0-9()\[\]{}<>]+o[^a-z0-9()\[\]{}<>]+t(?=[^a-z0-9])(?! +[a-z0-9]))/.test(s);
+    }
     // The rules of a name, the same as the game page's own name step (the NAME block of web/shell.html and web/lobby.html, which tests/scripts/web_lobby_rules_check.js compares with this): printable ASCII only,
-    // the blanks at both ends cut off, at most 32 characters, nothing that starts with "Bot (" or ends with "(bot)" or "(bot, ...)" (blanks and case ignored). Empty is fine: it is no name. { ok: true, name } or { ok: false, why }.
+    // the blanks at both ends cut off, at most 32 characters, nothing that reads as a computer player's label: "Bot (...)", "Pip (bot)", "Pip (bot, Hard)" (blanks, signs between the letters and case ignored). Empty is fine: it is no name. { ok: true, name } or { ok: false, why }.
     function nameCheck(text) {
         var raw = typeof text === 'string' ? text.replace(/[\t\r\n]/g, '') : '';
         if (/[^\x20-\x7e]/.test(raw)) return { ok: false, why: 'A name can hold printable ASCII characters only: letters, digits and signs without accents.' };
         var name = raw.replace(/^ +/, '').replace(/ +$/, '');
         if (name.length > 32) return { ok: false, why: 'A name has at most 32 characters.' };
-        if (/^bot\(|\(bot(,[^()]+)?\)$/.test(name.replace(/ /g, '').toLowerCase())) return { ok: false, why: 'A name like "Bot (...)" or "Pip (bot)" is for computer players. Please choose another name.' };
+        if (readsAsBot(name)) return { ok: false, why: 'A name like "Bot (...)" or "Pip (bot)" is for computer players. Please choose another name.' };
         return { ok: true, name: name };
     }
 
@@ -435,7 +441,7 @@
         removed: function () { return 'The host removed you from the room, so this one is yours now. Send the link on if you like.'; },
         full: function () { return 'That room is full, so this one is yours now. Send the link on if you like.'; },
         running: function () { return 'The match in that room has already started, so this room is yours instead. Send the link on if you like.'; },
-        busy: function () { return 'The server is full right now, so there is no room for you yet. Try again in a minute.'; },
+        busy: function () { return 'The server is full right now, or your network made many rooms, so there is no room for you yet. Try again in a minute.'; },
         seatgone: function (a) { return 'Your seat in this room ended while you were away, so you joined again.' + (a && a.host ? ' ' + a.host + ' is the host.' : ' You are the host.'); },      // (the room kept the seat for a minute; the person came back with its key after that)
         lost: function () { return 'Connection lost. Getting you back in…'; },
         unreachable: function () { return 'Cannot reach the game server. Check your connection; trying again…'; },

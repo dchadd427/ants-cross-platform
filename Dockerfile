@@ -5,7 +5,8 @@
 # a build that starts from a clean emsdk. This stage does it with a small program (docker/emsdk_warm.cpp) before any file of the game is copied, in the two flavours that CMake builds (the game's
 # flags of src/ants_app/CMakeLists.txt, the map core's of CMakeLists.txt), so that its layers are reused by every build until the version below or the program changes. The build log of the
 # stage after it must show no "generating system library" and no "retrieving port" line. ccache (the compile of the stage after it uses it through EM_COMPILER_WRAPPER) is installed here too.
-FROM emscripten/emsdk:3.1.58 AS emsdk-warm
+# The base image is pinned by tag and digest: the digest is what is pulled, the tag is for the reader and for Dependabot (.github/dependabot.yml), which raises the pair to a newer one in a pull request that CI builds.
+FROM emscripten/emsdk:3.1.74@sha256:af45409f3199d88db4b1b03af0098532c8fb33a375ac257463eeb0a622870d06 AS emsdk-warm
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ccache && \
@@ -140,7 +141,7 @@ RUN cp /src/web/lobby.html /src/lobby.html && \
     cp /src/web/matches.html /src/matches.html && cp /src/web/match.html /src/match.html && cp /src/web/legal.html /src/legal.html && if [ -f /src/web/mapmaker.html ]; then cp /src/web/mapmaker.html /src/mapmaker.html; fi && \
     for PAGE in /src/build_web/src/ants_app/index.html /src/lobby.html /src/matches.html /src/match.html; do \
         sed -i "s|@@SITE_TITLE@@||g; s|@@SITE_FOOTER@@||g" "$PAGE" || exit 1; \
-        if grep -q '@@SITE_' "$PAGE"; then echo "a site placeholder is left in $PAGE" >&2; exit 1; fi; \
+        if grep -q -e '@@SITE_TITLE@@' -e '@@SITE_FOOTER@@' "$PAGE"; then echo "a site placeholder is left in $PAGE" >&2; exit 1; fi; \
     done
 
 # Build the changelog page (CHANGELOG.md -> changelog.html; no dependencies) after the compile layers so that editing the changelog does not rebuild the game, and with it the data file of the update notice
@@ -154,6 +155,18 @@ RUN cd /src/changelog && \
     python3 changelog_to_html.py CHANGELOG.md changelog.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --build-date "${BUILD_DATE}" --whats-new whats_new.json && \
     test -s changelog.html && test -s whats_new.json
 
+# The address that the pages name themselves by (web/SITE_ORIGIN, one line): the canonical link, the share card's address and picture and the structured data of a page carry @@SITE_ORIGIN@@, which becomes that address here, in the finished pages
+# (after the stamps and the changelog above, so that none of them depends on it; docs/BUILD_AND_RUN.md "Search engines and share cards"), and tools/seo_files.py makes robots.txt and sitemap.xml with the same address. It refuses an address that is not
+# an origin before anything uses it. The build stops if a placeholder is left or a file is empty.
+COPY tools/seo_files.py /src/tools/seo_files.py
+RUN ORIGIN="$(head -n 1 /src/web/SITE_ORIGIN | tr -d '[:space:]')" && \
+    python3 tools/seo_files.py "${ORIGIN}" /src && \
+    for PAGE in /src/build_web/src/ants_app/index.html /src/lobby.html /src/matches.html /src/match.html /src/legal.html /src/mapmaker.html /src/changelog/changelog.html; do \
+        sed -i "s|@@SITE_ORIGIN@@|${ORIGIN}|g" "$PAGE" || exit 1; \
+        if grep -q '@@SITE_ORIGIN@@' "$PAGE"; then echo "the site's address is left as a placeholder in $PAGE" >&2; exit 1; fi; \
+    done && \
+    test -s /src/robots.txt && test -s /src/sitemap.xml
+
 # The map maker's sprite atlas (docs/MAP_EDITOR.md, "Sprites"): the game's pictures of the ground and of the objects that the editor offers, in two small sheets and an index, made by tools/map_atlas.py (Python
 # standard library only) from the public decoded sprites and the animation table that the sprite viewer's data holds (asset_catalog/catalog_data.js); the repository keeps no generated picture. After the
 # compile layers, so that it does not rebuild the game.
@@ -163,9 +176,45 @@ COPY tools/map_atlas.py /src/tools/map_atlas.py
 RUN python3 tools/map_atlas.py mapmaker_atlas && test -s mapmaker_atlas/atlas.json && test -s mapmaker_atlas/ground.png && test -s mapmaker_atlas/objects.png
 
 # =============================================================================
-# Stage 2: High-Performance Lightweight Nginx Web Server
+# Stage 3: Stylized 3D Ant Models & 1998 Comparison Viewer (/test_3d/)
 # =============================================================================
-FROM nginx:alpine AS runner
+# Kept in its own small stage so Emscripten's warm and builder stages stay untouched.
+# Pinned by tag and digest (same Debian base as Dockerfile.server; Dependabot updates it weekly).
+FROM debian:13-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS ant-models-env
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3 python3-numpy python3-pil && \
+    rm -rf /var/lib/apt/lists/*
+
+FROM ant-models-env AS ant-models
+
+WORKDIR /src
+
+# Only the inputs the 3D builder reads: the original sprite archive, the public animation table (never docs/), the CHD decoder, and the 3D model/viewer sources.
+COPY Original-Ants/ants.chd /src/Original-Ants/ants.chd
+COPY asset_catalog/catalog_data.js /src/asset_catalog/catalog_data.js
+COPY tools/front_page_art/artlib.py /src/tools/front_page_art/artlib.py
+COPY tools/ant_models/ /src/tools/ant_models/
+RUN mkdir -p test_3d/models && \
+    python3 -m tools.ant_models.build_all --out test_3d/models && \
+    cp tools/ant_models/compare.html tools/ant_models/viewer.html tools/ant_models/viewer.css \
+       tools/ant_models/compare.js tools/ant_models/viewer.js tools/ant_models/viewer_actions.js \
+       tools/ant_models/viewer_gltf.js tools/ant_models/viewer_render.js \
+       tools/ant_models/viewer_version.js test_3d/ && \
+    python3 -c 'import gzip, pathlib; [p.with_name(p.name+".gz").write_bytes(gzip.compress(p.read_bytes(), compresslevel=9, mtime=0)) for p in sorted(pathlib.Path("test_3d/models").iterdir()) if p.suffix in (".glb", ".json")]' && \
+    test -s test_3d/compare.html && test -s test_3d/viewer.html && \
+    test -s test_3d/models/manifest.json && test -s test_3d/models/orig_sprites.json && \
+    for c in worker combat thief bomber swimmer fire; do \
+        test -s "test_3d/models/${c}.glb" && test -s "test_3d/models/${c}.glb.gz" && \
+        test -s "test_3d/models/orig_sprites_extra_${c}.json" && \
+        test -s "test_3d/models/orig_sprites_extra_${c}.json.gz" || exit 1; \
+    done
+
+# =============================================================================
+# Stage 4: High-Performance Lightweight Nginx Web Server
+# =============================================================================
+# Pinned by tag and digest, like the base image of the first stage.
+FROM nginx:alpine@sha256:fb4658584bd9a916ffb6f6e365f97c25cfdb2923801f551ea08356e695f14ff7 AS runner
 
 # Clear default static files
 RUN rm -rf /usr/share/nginx/html/*
@@ -187,6 +236,8 @@ COPY web/favicon.* /usr/share/nginx/html/
 
 # The pictures and the font of the front page (web/front/, served at /front/): the game's own art, made by tools/front_page_art/make_art.py, and its own font with its licence
 COPY web/front/ /usr/share/nginx/html/front/
+# The two pages for an address that is not there (404) and for an error of the web server itself (500, 502, 503, 504): static, in the Classic look, named by the error_page lines of docker/nginx.conf, which send them with the status of the error
+COPY web/404.html web/50x.html /usr/share/nginx/html/
 # The installable web app: its manifest (one exact location of nginx.conf serves it) and its icons (served by the picture rule, a week; named with ?v= and a hash of the file).
 COPY web/manifest.webmanifest /usr/share/nginx/html/manifest.webmanifest
 COPY web/app/ /usr/share/nginx/html/app/
@@ -274,8 +325,14 @@ COPY --from=builder /src/legal.html /usr/share/nginx/html/legal.html
 # /front/classic.css, which the web/front/ copy above puts in the image
 COPY --from=builder /src/changelog/changelog.html /src/changelog/whats_new.json /usr/share/nginx/html/
 
+# The two files for search engines (docs/BUILD_AND_RUN.md "Search engines and share cards"): what a crawler may read, and the pages that it should list, made in the builder stage from the site's address; two exact locations of docker/nginx.conf serve them
+COPY --from=builder /src/robots.txt /src/sitemap.xml /usr/share/nginx/html/
+
 # Copy Asset Catalog & Viewer for reference on beta site
 COPY asset_catalog/ /usr/share/nginx/html/asset_catalog/
+
+# 3D Ant Models & 1998 Comparison Viewer (/test_3d/, Compare 1998 default + 3D Studio toggle)
+COPY --from=ant-models /src/test_3d/ /usr/share/nginx/html/test_3d/
 
 # The admin page (docs/MAP_SUBMISSIONS.md "The admin page"): the address /admin is typed, nothing links to it; its API and the logon are paths of docker/nginx.conf
 COPY --from=builder /src/web/admin.html /usr/share/nginx/html/admin.html

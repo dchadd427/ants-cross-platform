@@ -13,6 +13,7 @@
 // changing anything (no known type, an ant order with no ant or with too many) is left out and counted, and does not spoil the recording. A command that the engine would apply but that the
 // wire form cannot hold (one without an ant list that names ants) is not left out: it spoils the recording, because a file without it would not play the match that was played.
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -25,7 +26,8 @@ namespace ants::replay {
 
 class Recorder {
 public:
-    explicit Recorder(Header head);
+    /// `max_bytes` is what the commands may take in the file (kMaxFileBytes: a match whose orders pass it is no recording, and finish() says so); a smaller one is for a test of that failure
+    explicit Recorder(Header head, size_t max_bytes = kMaxFileBytes);
 
     /// A command that the engine is given now, before the tick of turn `turns()`. In a lock-step match on_turn does this; a game on one machine calls it itself.
     void on_command(const sim::Command& command);
@@ -45,6 +47,13 @@ public:
     uint32_t skipped_commands() const noexcept { return skipped_; }
     /// Why the recording cannot be a replay ("" while it can)
     const std::string& failure() const noexcept { return failure_; }
+    /// True when the recording failed because the commands would pass the size limit (the one failure that says whose commands filled it: largest_sender())
+    bool over_size_limit() const noexcept { return over_limit_; }
+    /// The bytes of commands that a seat has sent into the recording (what each took in the file, about: the same count that the limit is held to; a command of the system, the drop of a peer that left, is nobody's).
+    /// The counts stop where the recording fails, so they are what each seat had sent when the limit was passed, the command that passed it included.
+    size_t sent_bytes(uint8_t seat) const noexcept { return seat < sim::MAX_PLAYERS ? sent_[seat] : 0u; }
+    /// The seat that has sent the most bytes (the lowest of those that tie), -1 when no seat has sent any
+    int largest_sender() const noexcept;
     bool finished() const noexcept { return finished_; }
 
     /// Ends the recording: the file's bytes, or empty when there is nothing to write (no turn ran, the recording failed, it is finished already); `error` says why. The engine is read for
@@ -56,6 +65,10 @@ public:
     /// `live` of 0). Empty, with `error`, when the recording failed, is finished, or `shown_turns` is more than the match has run. It changes nothing in the recorder (the engine is not read, and the recording goes on).
     /// The server makes one at most once a second for a match (ants_server/live_board.hpp).
     std::vector<uint8_t> snapshot(uint32_t shown_turns, std::string& error) const;
+
+    /// The seats whose orders went over their budget in this match (a bit for each seat; Header::heavy_orders): the room says so before finish(), which writes it into the head. Whatever the mask is, the commands
+    /// and the match are the same.
+    void set_heavy_orders(uint8_t seats) noexcept { replay_.head.heavy_orders = seats; }
 
     /// Keeps the bytes of the map file to be written into the file (the tmap chunk, replay.hpp) when the recording is finished; never into a snapshot. True when they are kept: not empty, at most
     /// kMaxEmbeddedMapBytes and the file that the head's map_hash names. False keeps nothing and changes nothing else (the recording goes on without the map; the caller says what that means).
@@ -72,6 +85,9 @@ private:
     uint32_t skipped_{0};
     size_t own_{0};                    // of the commands held, those of the recorder's seat
     size_t bytes_{0};                  // what the commands will take in the file, about
+    std::array<size_t, sim::MAX_PLAYERS> sent_{};      // ... of which each seat's commands took this much
+    bool over_limit_{false};
+    size_t max_bytes_{kMaxFileBytes};
     std::string failure_;
     bool finished_{false};
 };

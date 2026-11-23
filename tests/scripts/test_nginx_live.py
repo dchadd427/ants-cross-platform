@@ -407,11 +407,11 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
             self.wait_stub(True)
         self.assertEqual(self.ask("GET", "/live")[0], 200)                                    # the server is back: the next answer is its own
 
-    def test_the_neighbours_of_the_two_addresses_are_the_game_page_and_nothing_is_passed_on(self):
+    def test_the_neighbours_of_the_two_addresses_are_a_404_and_nothing_is_passed_on(self):
         for path in ("/liv", "/live2", "/live.json", "/livex/", "/lives"):
             status, _, body = self.ask("GET", path)
-            self.assertEqual(status, 200, path)                                               # (the try_files of the site: the game page, as any unknown address)
-            self.assertIn(b"a stand-in page", body, path)
+            self.assertEqual(status, 404, path)                                               # (an address that is nothing: a 404, never the game page that it once fell back to)
+            self.assertNotIn(b"a stand-in page", body, path)
             self.assertEqual(self.sent(path), [], path)
 
 

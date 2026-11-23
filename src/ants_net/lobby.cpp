@@ -21,8 +21,7 @@ std::string printable(const std::string& s, size_t max) {
     return out;
 }
 
-// Whether a name looks like a bot's (ai::is_reserved_bot_name, protocol 20): it starts with "Bot (" or ends with "(bot)" or "(bot, ...)", blanks, tabs and case left out: none of them
-// may pass for a person, and none may be taken by one
+// Whether a name reads as a bot's label (ai::is_reserved_bot_name, protocol 20: docs/BOT_NAMES.md says how a name is read): none of them may pass for a person, and none may be taken by one
 bool bot_like(const std::string& name) { return ai::is_reserved_bot_name(name); }
 
 std::string trimmed(const std::string& s) {

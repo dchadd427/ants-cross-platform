@@ -327,6 +327,14 @@ JsonValue economy(const MatchStats& st) {
 }
 
 // `shed` makes the text smaller, step by step: 1 no list of kills, 2 no list of raids either, 3 and 4 a series of half and a quarter the points, 5 no combat and no economy
+JsonValue heavy_seats(uint8_t mask) {
+    JsonValue seats = JsonValue::make_array();
+    for (int seat = 0; seat < 4; ++seat) {
+        if ((mask & (1u << seat)) != 0) seats.push_back(num(seat));
+    }
+    return seats;
+}
+
 std::string build(const MatchStats& st, const HistoryRecord& record, int shed) {
     JsonValue d = JsonValue::make_object();
     d.set("v", num(kDetailsVersion));
@@ -336,6 +344,7 @@ std::string build(const MatchStats& st, const HistoryRecord& record, int shed) {
     if (!st.samples.empty() && st.turns >= step) d.set("over_time", over_time(st, record, step));
     d.set("highlights", highlights(st, record));
     d.set("activity", activity(st));
+    if (record.heavy_orders != 0) d.set("heavy_orders", heavy_seats(record.heavy_orders));
     if (shed < 5) {
         d.set("combat", combat(st, shed < 1, shed < 2));
         d.set("economy", economy(st));
@@ -352,9 +361,18 @@ std::string make_history_details(const replay::MatchStats& stats, const HistoryR
         text = build(stats, record, shed);
         if (text.size() <= kDetailsMaxBytes) return text;
     }
-    return history_details_marker();                                  // (a match so long, with numbers so large, that its minutes of orders alone do not fit: told as not counted, the cap is never passed)
+    return history_details_marker(record.heavy_orders);               // (a match so long, with numbers so large, that its minutes of orders alone do not fit: told as not counted, the cap is never passed)
 }
 
-std::string history_details_marker() { return "{\"v\":1,\"n\":1}"; }
+std::string history_details_marker(uint8_t heavy_orders, int largest_sender) {
+    const bool sender = largest_sender >= 0 && largest_sender < static_cast<int>(sim::MAX_PLAYERS);
+    if (heavy_orders == 0 && !sender) return "{\"v\":1,\"n\":1}";
+    JsonValue d = JsonValue::make_object();
+    d.set("v", num(kDetailsVersion));
+    d.set("n", num(1));
+    if (heavy_orders != 0) d.set("heavy_orders", heavy_seats(heavy_orders));
+    if (sender) d.set("largest_sender", num(largest_sender));
+    return ctl::to_json(d);
+}
 
 }  // namespace ants::server

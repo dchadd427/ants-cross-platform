@@ -752,14 +752,15 @@ WsHandshakeResult ws_parse_handshake(const std::string& request, const WsServerO
     r.response = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + ws_accept_key(key) + "\r\n";
     if (r.subprotocol) r.response += "Sec-WebSocket-Protocol: ants\r\n";
     r.response += "\r\n";
+    if (header_count(headers, "x-client-address") == 1) r.client_address = header_joined(headers, "x-client-address");
     return r;
 }
 
 // ------------------------------------------------------------------------------------------------
 // WsConnection
 
-WsConnection::WsConnection(int fd, std::string peer, uint32_t ping_interval_ms, const std::string& answer, const std::string& early_bytes)
-    : fd_(fd), peer_(std::move(peer)), ping_interval_ms_(ping_interval_ms), last_send_ms_(now_ms()), parser_(true) {
+WsConnection::WsConnection(int fd, std::string peer, std::string client_address, uint32_t ping_interval_ms, const std::string& answer, const std::string& early_bytes)
+    : fd_(fd), peer_(std::move(peer)), client_address_(std::move(client_address)), ping_interval_ms_(ping_interval_ms), last_send_ms_(now_ms()), parser_(true) {
     out_.assign(answer.begin(), answer.end());              // the 101 goes out before anything the game sends
     if (!early_bytes.empty()) parser_.feed(reinterpret_cast<const uint8_t*>(early_bytes.data()), early_bytes.size());   // frames that came with the request
 }
@@ -1006,7 +1007,7 @@ bool WsListener::advance(Pending& p, uint64_t now) {
     if (judge) {
         const WsHandshakeResult r = ws_parse_handshake(p.request, options_);
         if (r.status == WsHandshakeResult::Status::Accepted) {
-            std::unique_ptr<WsConnection> c(new WsConnection(p.fd, p.peer, options_.ping_interval_ms, r.response, p.request.substr(r.consumed)));
+            std::unique_ptr<WsConnection> c(new WsConnection(p.fd, p.peer, r.client_address, options_.ping_interval_ms, r.response, p.request.substr(r.consumed)));
             p.fd = -1;                                              // the connection owns the socket now
             c->pump();                                              // sends the 101 and reads frames that came with the request
             ready_.push_back(std::move(c));

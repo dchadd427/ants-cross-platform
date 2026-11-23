@@ -1,4 +1,4 @@
-// The front page's side of network protocol 26 (docs/NETWORK_PORT.md "Protocol 16", "Protocol 17", "Protocol 20" and "Protocol 22", docs/MATCH_COUNTDOWN.md; 18 to 21 and 23 to 26 moved no message layout that a lobby page uses: 21 gave the Begin a second byte, which a page leaves to the game page): the codec of the messages that a lobby page sends and hears, the guard of a color move, and the client that keeps
+// The front page's side of network protocol 28 (docs/NETWORK_PORT.md "Protocol 16", "Protocol 17", "Protocol 20" and "Protocol 22", docs/MATCH_COUNTDOWN.md; 18 to 21, 23 to 26 and 28 moved no message layout that a lobby page uses: 21 gave the Begin a second byte, which a page leaves to the game page): the codec of the messages that a lobby page sends and hears, the guard of a color move, and the client that keeps
 // a page in its lobby room (a keyed way back, the answers to the server's pings, what each refusal means). No screen is drawn here: the page reads the client's state and its events.
 //   * ES5 and no module system, as the site's other scripts: a page gets the global AntsLobbyNet, node gets module.exports (tests/scripts/web_lobby_net_check.js runs it).
 //   * Every layout is the C++ one (src/ants_net/protocol.cpp), little endian, and every decoder refuses what the C++ decoder refuses; tests/data/lobby_messages.txt holds bytes that the C++ encoders wrote,
@@ -99,8 +99,12 @@
         for (var i = 0; i < s.length && out.length < max; i++) { var c = s.charCodeAt(i); if (c >= 0x20 && c <= 0x7E) out += s.charAt(i); }
         return out;
     }
-    // the names that are a computer player's (ai::is_reserved_bot_name; the page's nameCheck says the same): starts with "Bot (" or ends with "(bot)" or "(bot, ...)", blanks and case ignored
-    function reservedName(name) { return /^bot\(|\(bot(,[^()]+)?\)$/.test(String(name).replace(/[ \t\r\n]/g, '').replace(/[A-Z]/g, function (c) { return c.toLowerCase(); })); }
+    // the names that are a computer player's (ai::is_reserved_bot_name; the page's nameCheck says the same, and tests/scripts/web_lobby_rules_check.js compares them): the word bot first and a bracket after it, or a bracket, the word bot
+    // and then a sign or a blank; blanks, signs between the letters and case ignored, a 0 reads as o; the letters stand one after the other or each pair parted ("b o t", not "Bo T"), and a parted word is one only when no letter follows its blanks
+    function reservedName(name) {
+        var s = String(name).toLowerCase().replace(/0/g, 'o');
+        return /^[^a-z0-9()\[\]{}<>]*(?:bot|b[^a-z0-9()\[\]{}<>]+o[^a-z0-9()\[\]{}<>]+t)[^a-z0-9()\[\]{}<>]*[(\[{<]/.test(s) || /[(\[{<][^a-z0-9()\[\]{}<>]*(?:bot(?=[^a-z0-9])|b[^a-z0-9()\[\]{}<>]+o[^a-z0-9()\[\]{}<>]+t(?=[^a-z0-9])(?! +[a-z0-9]))/.test(s);
+    }
     // a name that a person may go by: 1 - 32 printable characters, no space at either end (NameMsg)
     function validPersonName(name) { return printable(name, MAX_NAME) && name.length > 0 && name.charAt(0) !== ' ' && name.charAt(name.length - 1) !== ' '; }
     function validTeams(a, b) { return (a === NO_TEAM && b === NO_TEAM) || (isWhole(a) && isWhole(b) && a >= 0 && a < b && b < PLAYERS); }

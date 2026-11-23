@@ -33,8 +33,8 @@ The menu joins and hosts through a game server ([The server](#the-server)). A ro
 
 ### Join with a code
 
-- **Your name** is remembered ("Player" at first) and has at most 32 printable characters. A name that starts with "Bot (" or ends with "(bot)" or "(bot, ...)", whatever its blanks and capitals, is refused on the panel with the reason: the server would rename such a player, and a person is never shown as a bot.
-- **Room code**: up to 32 letters, digits, `-` and `_`, as the screens show it (`k7m 2xq`, in two groups of three: the blanks are dropped). `Ctrl+V` / `Cmd+V` pastes. **The case is never changed**: the server's codes are case sensitive. A code alone makes no room (use Host): one that no room has is told "There is no room with the code k7m2xq on beta.playants.org:4001. Check the code (capital letters matter)." (the web page and the command line say "There is no such room on this server.")
+- **Your name** is remembered ("Player" at first) and has at most 32 printable characters. A name that reads as a computer player's label ("Bot (Hard)", "Pip (bot, Hard)": [`BOT_NAMES.md`](BOT_NAMES.md#who-may-be-called-what) says how a name is read) is refused on the panel with the reason: the server would rename such a player, and a person is never shown as a bot.
+- **Room code**: up to 32 letters, digits, `-` and `_`, as the screens show it (`k7m 2xq`, in two groups of three: the blanks are dropped). `Ctrl+V` / `Cmd+V` pastes. **The case is never changed**: the server's codes are case sensitive. A code alone makes no room (use Host): one that no room has is told "There is no room with the code k7m2xq on beta.playants.org. Check the code (capital letters matter)." (the web page and the command line say "There is no such room on this server.")
 - **Join** connects to the game server ([The server](#the-server)), the same way as `--join HOST:PORT --room CODE --name NAME`. It ends in the guest's screen, or in the leader's host screen with START when you are the first in the room. "Connecting to <server>..." has a Cancel button (`Esc`).
 
 ### Host an online match
@@ -66,7 +66,7 @@ A click on the entry, or `Up` from Single player (the first panel preselects Sin
 
 ### The server
 
-- The server is **beta.playants.org, port 4001** (the public server's TCP game port). `--server HOST[:PORT]` (host name, IPv4 or `[IPv6]`) uses another one for this run, and the settings key `server` makes another one the default. The panels show which one they use.
+- The server is **wss://beta.playants.org/ws** (the public server's encrypted door: the connection is TLS, the certificate is checked for the name, and nothing is sent in the clear). `--server wss://HOST[/PATH]`, or `--server HOST[:PORT]` (host name, IPv4 or `[IPv6]`: a host of the Internet means its wss door, a server of this machine or the local network means plain TCP on 4001), uses another one for this run, and the settings key `server` makes another one the default. The panels show which one they use. A certificate that is not trusted, is for another name or has expired ends the attempt with a sentence that says so. A `server` of the settings file or a `--server` of the form `HOST:4001` for a host of the Internet (the first versions' default) is refused with a sentence that says to write `HOST` or `wss://HOST/ws`; the menu then uses the default.
 - A `--server` that is not an address stops the game at the start, with the reason.
 - The name is looked up on a worker thread, so the window stays alive and `Esc` cancels at any moment.
 - The steps of an attempt are in [`NETWORK_PORT.md`](NETWORK_PORT.md) "Joining and hosting from the desktop start menu".

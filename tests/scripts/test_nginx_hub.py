@@ -45,7 +45,7 @@ class TheText(unittest.TestCase):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", CONF, re.M)
         self.assertEqual([l for l in locations if "hub" in l].count("= /hub/ws"), 1)
         self.assertEqual(sorted(l for l in locations if "hub" in l and "/hub/pic" not in l and "/hub/img/" not in l),                       # (the pages of the login and the admin's gate are tests/scripts/test_nginx_hub_login.py, the pictures' door test_nginx_hub_pic.py, the images' two doors test_nginx_hub_img.py)
-                         sorted(["= /hub/ws", "@hub_off", "= /hub/login", "= /hub/callback", "= /hub/me", "= /hub/logout", "= /hub/forget", "@hub_page_off", "@hub_page_limit", "@hub_page_site", "= /hub/admin/gate", "= /hub/admin/api", "^~ /hub/admin/api/"]))
+                         sorted(["= /hub/ws", "@hub_off", "= /hub/login", "= /hub/callback", "= /hub/me", "= /hub/logout", "= /hub/forget", "@hub_page_off", "@hub_page_limit", "@hub_page_site", "= /hub/admin/gate", "= /hub/admin/api", "^~ /hub/admin/api/", "/hub/", "~* ^/hub/.*\\.(html|css|js)$"]))        # (the last two are the plain 404 of every other address under /hub/ and of a file of a page's kind there, tests/scripts/test_nginx_headers.py and web_routes_check.py run them; /hub/ has no ^~ so that the regular expressions of the pictures and images are tried first)
         self.assertTrue(HUB and OFF)
 
     def test_only_a_get_without_a_query_goes_through_and_the_checks_come_first(self):

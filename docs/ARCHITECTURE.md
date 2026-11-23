@@ -161,7 +161,9 @@ ants-cross-platform/
 │   │                                   # browser drivers
 │   └── data/                           # Golden sample data (edge scrolling)
 ├── third_party/                        # Code that is not ours, built from source: sqlite/ (the SQLite amalgamation, public
-│                                       # domain, with its README and its CMake target ants_sqlite)
+│                                       # domain, with its README and its CMake target ants_sqlite) and mbedtls/ (Mbed TLS,
+│                                       # the Apache-2.0 option, the TLS library of the desktop game's encrypted link; its README
+│                                       # and its CMake target ants_mbedtls)
 ├── tools/                              # Reverse-engineering, generator and release tools, and the headless programs
 │                                       # that are built on request
 │   ├── analyze_binary.py               # Capstone function map of Ants.exe (needs your own copy of the program)
@@ -315,7 +317,7 @@ The big boxes are the layers. Solid arrows show what feeds what; dotted arrows a
 |---|---|---|
 | `ants_assets` | Readers for the archive `ants.chd` (palette, sprites, sounds, animations), the reader and the writer of the `.LVL` maps ([`MAP_FORMAT.md`](MAP_FORMAT.md)), sprite mirroring | Everywhere |
 | `ants_sim` | The simulation: the tile grid, ants, movement and pathfinding, combat, abilities, food, power-ups, the 20 Hz tick, the command layer (`Command`, `apply_command`) and the state hash | Everywhere |
-| `ants_net` | Lock-step play: the protocol, the host's sequencer, the runner, sessions, the room before a match, prediction of one's own orders, the jitter buffer, the reconnect rules, LAN discovery; transports for TCP, WebSocket and in-memory tests | Everywhere. TCP, LAN discovery and the WebSocket server are native only; the browser's WebSocket client is web only |
+| `ants_net` | Lock-step play: the protocol, the host's sequencer, the runner, sessions, the room before a match, prediction of one's own orders, the jitter buffer, the reconnect rules, LAN discovery; transports for TCP, WebSocket and in-memory tests, and the desktop game's encrypted link to a game server (a WebSocket client over TLS) | Everywhere. TCP, LAN discovery, the WebSocket server and the encrypted WebSocket client (`wss.hpp`, `tls.hpp`) are native only; the browser's WebSocket client is web only |
 | `ants_ai` | Computer players as virtual clients: view, map analysis, controller (reaction delay, command budget), task model, worker bot, standard bot, match runner. No SDL, no sockets, no threads | Everywhere: in the game and in the server's rooms |
 | `ants_replay` | The replay file (`.antsrep`), the recorder that a game or a room of the server feeds, and the player that plays a file out and lists its orders ([`REPLAYS.md`](REPLAYS.md)). No SDL, no sockets, no threads | Everywhere |
 | `ants_db` | The game server's database: a thin C++17 wrapper over SQLite (`Database`, `Statement`, `Transaction`, the online backup, no exceptions) and the schema migrations. SQLite itself is vendored in `third_party/sqlite/` as the static library `ants_sqlite` ([`SERVER.md`](SERVER.md#the-database)). No SDL, no sockets, no threads | Native only |
@@ -323,7 +325,7 @@ The big boxes are the layers. Solid arrows show what feeds what; dotted arrows a
 | `ants_server` | The dedicated game server: map store, rooms (a referee per room that also runs the room's bots), the door, control calls, restart records, site statistics, the store of the replays of its rooms' matches, the schema of its database. The program `ants_server` is `main.cpp` plus the library `ants_server_core` | Native only |
 | `ants_app` | The game: SDL2 window and main loop, renderer, HUD, audio mixer, start menu and the other screens, touch controls, zoom | Native and web |
 
-`third_party/` holds code that is not ours and is built from source (SQLite today; the music decoder `dr_mp3.h` is in `include/ants_app/`). Two small libraries sit beside them: `ants_version` (the generated `ants_app/version.hpp` and `ants::BUILD_ID`, linked by the game and the server) and `ants_test_paths` (where the checkout is, for tests and tools).
+`third_party/` holds code that is not ours and is built from source (SQLite and Mbed TLS today; the music decoder `dr_mp3.h` is in `include/ants_app/`). Two small libraries sit beside them: `ants_version` (the generated `ants_app/version.hpp` and `ants::BUILD_ID`, linked by the game and the server) and `ants_test_paths` (where the checkout is, for tests and tools).
 
 ### Lookups in the tick loop
 

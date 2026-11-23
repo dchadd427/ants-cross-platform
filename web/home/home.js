@@ -23,7 +23,7 @@
     };
     // The Menu's links: the footer's and the header's (test_web_home_screen.py keeps them equal), and the page's How it works (no address)
     var MENU_MAIN = [['Home', '/'], ['Matches', '/matches'], ['Map maker', '/mapmaker'], ['How it works', ''], ['Discord server', 'https://discord.gg/WaWrXQnKPj']];
-    var MENU_SMALL = [['Sprites and sounds', '/asset_catalog/'], ['Changelog', '/changelog'], ['GitHub', 'https://github.com/dchadd427/ants-cross-platform'], ['Feedback', 'https://github.com/dchadd427/ants-cross-platform/issues'], ['Legal', '/legal']];
+    var MENU_SMALL = [['Sprites and sounds', '/asset_catalog/'], ['What\u2019s new', '/changelog'], ['GitHub', 'https://github.com/dchadd427/ants-cross-platform'], ['Feedback', 'https://github.com/dchadd427/ants-cross-platform/issues'], ['Legal', '/legal']];
     var TABS = [['games', 'Games'], ['players', 'Players'], ['chat', 'Chat']];      // the phone's strip (a window up to 700 px wide or up to 500 px high): one view at a time
     var PHONE = '(max-width: 700px), (max-height: 500px)';
 

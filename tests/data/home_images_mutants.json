@@ -439,6 +439,132 @@
    "old": "Math.max(44, Math.min(81, h - 28))",
    "new": "81",
    "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_app_in_minimal_ui_keeps_the_tab_link",
+   "file": "web/home/pics.js",
+   "old": "(display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui)",
+   "new": "(display-mode: standalone), (display-mode: fullscreen)",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_app_in_fullscreen_keeps_the_tab_link",
+   "file": "web/home/pics.js",
+   "old": "(display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui)",
+   "new": "(display-mode: standalone), (display-mode: minimal-ui)",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_iphone_app_keeps_the_tab_link",
+   "file": "web/home/pics.js",
+   "old": "(win.navigator && win.navigator.standalone === true) ||",
+   "new": "false ||",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "a_browser_has_the_apps_buttons",
+   "file": "web/home/pics.js",
+   "old": "app = installed()",
+   "new": "app = true",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_copied_link_is_the_thumbnails",
+   "file": "web/home/pics.js",
+   "old": "url = absolute(address(img))",
+   "new": "url = absolute(address(img, true))",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_copied_link_is_not_the_whole_address",
+   "file": "web/home/pics.js",
+   "old": "return (at && at !== 'null' ? at : '') + path;",
+   "new": "return path;",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_shared_link_is_not_the_whole_address",
+   "file": "web/home/pics.js",
+   "old": "nav.share({ url: url })",
+   "new": "nav.share({ url: address(img) })",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "a_person_who_closes_the_share_sheet_is_told_off",
+   "file": "web/home/pics.js",
+   "old": "if (!err || err.name !== 'AbortError') say(TEXT.wrong);",
+   "new": "say(TEXT.wrong);",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_saved_file_is_the_thumbnail",
+   "file": "web/home/pics.js",
+   "old": "win.fetch(address(img), {",
+   "new": "win.fetch(address(img, true), {",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "a_file_the_server_refuses_is_downloaded",
+   "file": "web/home/pics.js",
+   "old": "if (!r || r.ok !== true) throw new Error('status');",
+   "new": "if (!r) throw new Error('status');",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "save_can_run_twice_at_once",
+   "file": "web/home/pics.js",
+   "old": "if (saving) return;",
+   "new": "if (false) return;",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "save_forgets_it_is_done",
+   "file": "web/home/pics.js",
+   "old": "}).then(function () { saving = false; }, function () { saving = false; say(TEXT.wrong); });",
+   "new": "}).then(function () { }, function () { say(TEXT.wrong); });",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_saved_address_is_never_let_go",
+   "file": "web/home/pics.js",
+   "old": "win.setTimeout(function () { win.URL.revokeObjectURL(made); }, 10000);",
+   "new": "",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_note_stays",
+   "file": "web/home/pics.js",
+   "old": "size.textContent = sizeWords(img); size.className = 'gv-size'; }, 2600);",
+   "new": "size.className = 'gv-size'; }, 2600);",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_note_is_not_a_status",
+   "file": "web/home/pics.js",
+   "old": "size.setAttribute('role', 'status');",
+   "new": "",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "a_refusing_clipboard_shows_no_field",
+   "file": "web/home/pics.js",
+   "old": "}, byHand); return; }",
+   "new": "}, function () {}); return; }",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "the_field_is_not_selected",
+   "file": "web/home/pics.js",
+   "old": "field.focus(); field.select(); try { field.setSelectionRange(0, url.length); } catch (x) { /* a field that cannot be ranged is selected already */ }",
+   "new": "field.focus();",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
+  },
+  {
+   "id": "closing_leaves_the_notes_timer",
+   "file": "web/home/pics.js",
+   "old": "stop: function () { win.clearTimeout(timer); }",
+   "new": "stop: function () {}",
+   "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
   }
  ]
 }

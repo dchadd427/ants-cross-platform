@@ -4,8 +4,10 @@
 //   * The hub names an image by 32 lower-case hex digits and a type (`img` of a `line`); chat.js has checked both, and this file checks them again: the only address that it makes is /hub/img/<name>.<jpg|png|gif> or
 //     <name>.t.jpg, from constants and those two checked parts. No text of a line is ever an address of an image; nothing is put in the page as markup (createElement, textContent, setAttribute only).
 //   * A thumbnail is a button with an img of the thumbnail's own size (width and height from the frame, so that the log does not jump), loading lazily, with the caption (or "Image from NAME") for its alt. A press
-//     opens the viewer: a dialog over the page with the caption, the size, "Open in a new tab" (a plain link to the file), Close, and, for a moderator or an administrator or the image's own author, Delete (a question
-//     first; a moderator's is the hub's own /del, the author's is the hub's `delimg`).
+//     opens the viewer: a dialog over the page with the caption, the size, "Open in a new tab" (a plain link to the file) and Copy link, Close, and, for a moderator or an administrator or the image's own author, Delete
+//     (a question first; a moderator's is the hub's own /del, the author's is the hub's `delimg`). In the installed app (display-mode standalone, fullscreen or minimal-ui, or iOS's navigator.standalone) an address of
+//     the site opens in the app's own window with no way back, so there the viewer has no such link: it offers Share (where the browser has navigator.share: the link), Copy link (the clipboard, and a selected field to
+//     copy by hand where the clipboard refuses) and Save (the file is fetched from its own address and handed to the browser as a download).
 //   * An animated image is a GIF. In the log it shows the still thumbnail and swaps to the GIF only while it is on the screen (an IntersectionObserver on the log), the window is visible, the reader's switch is on and
 //     the device does not ask for reduced motion (prefers-reduced-motion): otherwise the still. The switch is a box in the account's dropdown, kept in this browser only.
 (function (root, factory) {
@@ -16,7 +18,7 @@
     'use strict';
 
     var DIR = '/hub/img/', NAME = /^[0-9a-f]{32}$/, TYPES = { jpg: 1, png: 1, gif: 1 }, KEY = 'ants.chat.animate';
-    var TEXT = { open: 'Open the image', from: 'Image from ', gone: 'Image not available', close: 'Close', tab: 'Open in a new tab', del: 'Delete this image', delOwn: 'Delete my image', cancel: 'Cancel', yes: 'Delete',
+    var TEXT = { open: 'Open the image', from: 'Image from ', gone: 'Image not available', close: 'Close', tab: 'Open in a new tab', share: 'Share', copy: 'Copy link', copied: 'Link copied', save: 'Save', linkOf: 'Link to the image', del: 'Delete this image', delOwn: 'Delete my image', cancel: 'Cancel', yes: 'Delete',
         ask: 'Delete this image? It goes from every screen and its file is deleted from the site’s server. This cannot be undone.', viewer: 'Image', animate: 'Play animated images', wrong: 'That did not work, try again',
         rate: 'Too fast: wait a moment and try again.' };
     var SVG = 'http://www.w3.org/2000/svg';
@@ -39,6 +41,10 @@
             p.setAttribute('d', d); s.appendChild(p); return s;
         }
         function plays() { return on && !reduced && !doc.hidden; }
+        function installed() {
+            try { return (win.navigator && win.navigator.standalone === true) || (!!win.matchMedia && win.matchMedia('(display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui)').matches); } catch (e) { return false; }
+        }
+        function absolute(path) { var at = win.location && win.location.origin; return (at && at !== 'null' ? at : '') + path; }
 
         // ---- the animated images that are in the log: each is a thumbnail whose picture is the still, or the GIF while it is on the screen
         function paint() { many.forEach(function (m) { show(m, plays() && m.visible); }); }
@@ -81,12 +87,12 @@
         function close(back) {
             if (!viewer) return;
             if (viewer.node.parentNode) viewer.node.parentNode.removeChild(viewer.node);
-            doc.removeEventListener('keydown', viewer.keys, true);
+            doc.removeEventListener('keydown', viewer.keys, true); viewer.stop();
             var focus = viewer.back; viewer = null;
             if (back !== false && focus && focus.focus) focus.focus();
         }
         function open(e, back) {
-            var img = e.img, scrim, card, head, who, close1, im, foot, size, link, gone = null, closeB, askP;
+            var img = e.img, scrim, card, head, who, close1, im, foot, size, link = null, closeB, askP, app = installed(), nav = win.navigator, shareB = null, copyB, saveB = null, field = null, timer = 0, saving = false, url = absolute(address(img));
             if (viewer) close(false);
             scrim = el('div', 'gv-scrim'); scrim.setAttribute('role', 'dialog'); scrim.setAttribute('aria-modal', 'true'); scrim.setAttribute('aria-label', TEXT.viewer + ' · ' + e.who);
             card = el('div', 'gv'); head = el('div', 'gv-head'); who = el('div', 'gv-who');
@@ -96,11 +102,39 @@
             close1 = el('button', 'btn gv-x'); close1.type = 'button'; close1.setAttribute('aria-label', TEXT.close); close1.appendChild(icon('M6 6l12 12M18 6L6 18'));
             head.appendChild(who); head.appendChild(close1);
             im = el('img', 'gv-img'); im.setAttribute('alt', e.text || TEXT.from + e.who); im.setAttribute('src', address(img, img.a && !plays()));
-            foot = el('div', 'gv-foot'); size = el('span', 'gv-size', sizeWords(img));
-            link = el('a', 'btn', TEXT.tab); link.setAttribute('href', address(img)); link.setAttribute('target', '_blank'); link.setAttribute('rel', 'noopener noreferrer');
+            foot = el('div', 'gv-foot'); size = el('span', 'gv-size', sizeWords(img)); size.setAttribute('role', 'status');
             closeB = el('button', 'btn', TEXT.close); closeB.type = 'button';
+            function say(text) {                                                  // a few words in the place of the size, for a moment
+                size.textContent = text; size.className = 'gv-size gv-note'; win.clearTimeout(timer);
+                timer = win.setTimeout(function () { size.textContent = sizeWords(img); size.className = 'gv-size'; }, 2600);
+            }
+            function button(text, fn) { var b = el('button', 'btn', text); b.type = 'button'; b.addEventListener('click', fn); return b; }
+            function copy() {
+                var clip = nav && nav.clipboard;
+                function byHand() {                                               // where the clipboard refuses: the link in a field, selected, to copy by hand
+                    if (!field || field.parentNode !== foot) { field = el('input', 'gv-url'); field.type = 'text'; field.readOnly = true; field.value = url; field.setAttribute('aria-label', TEXT.linkOf); foot.insertBefore(field, foot.firstChild); }
+                    field.focus(); field.select(); try { field.setSelectionRange(0, url.length); } catch (x) { /* a field that cannot be ranged is selected already */ } field.scrollLeft = 0;
+                }
+                if (clip && typeof clip.writeText === 'function') { try { clip.writeText(url).then(function () { say(TEXT.copied); }, byHand); return; } catch (x) { /* byHand */ } }
+                byHand();
+            }
+            function share() { try { nav.share({ url: url }).then(null, function (err) { if (!err || err.name !== 'AbortError') say(TEXT.wrong); }); } catch (x) { say(TEXT.wrong); } }
+            function save() {
+                if (saving) return;
+                if (typeof win.fetch !== 'function') { say(TEXT.wrong); return; }
+                saving = true;
+                win.fetch(address(img), { credentials: 'same-origin' }).then(function (r) { if (!r || r.ok !== true) throw new Error('status'); return r.blob(); }).then(function (blob) {
+                    var made = win.URL.createObjectURL(blob), a = el('a');
+                    a.setAttribute('href', made); a.setAttribute('download', 'ants-' + img.n.slice(0, 8) + '.' + img.x); (doc.body || dock.root).appendChild(a); a.click(); a.parentNode.removeChild(a);
+                    win.setTimeout(function () { win.URL.revokeObjectURL(made); }, 10000);
+                }).then(function () { saving = false; }, function () { saving = false; say(TEXT.wrong); });
+            }
+            copyB = button(TEXT.copy, copy);
+            if (app) { if (nav && typeof nav.share === 'function') shareB = button(TEXT.share, share); saveB = button(TEXT.save, save); }
+            else { link = el('a', 'btn', TEXT.tab); link.setAttribute('href', address(img)); link.setAttribute('target', '_blank'); link.setAttribute('rel', 'noopener noreferrer'); }
             function normal() {
-                foot.textContent = ''; foot.appendChild(size); foot.appendChild(link);
+                foot.textContent = ''; foot.appendChild(size);
+                [link, shareB, copyB, saveB].forEach(function (b) { if (b) foot.appendChild(b); });
                 var line = dock.line ? dock.line(e.id) : null, mine = !!(line && line.own), staff = !!(dock.you && dock.you() && dock.you().role !== 'none');
                 if (line && (mine || staff)) { var d = el('button', 'btn gv-del', mine && !staff ? TEXT.delOwn : TEXT.del); d.type = 'button'; d.addEventListener('click', ask); foot.appendChild(d); }
                 foot.appendChild(closeB);
@@ -121,10 +155,10 @@
             card.appendChild(head); card.appendChild(im); card.appendChild(foot); scrim.appendChild(card);
             close1.addEventListener('click', function () { close(); }); closeB.addEventListener('click', function () { close(); });
             scrim.addEventListener('click', function (ev) { if (ev.target === scrim) close(); });
-            viewer = { node: scrim, back: back, id: e.id, keys: function (ev) {
+            viewer = { node: scrim, back: back, id: e.id, stop: function () { win.clearTimeout(timer); }, keys: function (ev) {
                 if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); close(); return; }
                 if (ev.key !== 'Tab') return;
-                var all = [close1].concat(Array.prototype.slice.call(foot.querySelectorAll('a, button')));
+                var all = [close1].concat(Array.prototype.slice.call(foot.querySelectorAll('a, button, input')));
                 var at = all.indexOf(doc.activeElement), next = ev.shiftKey ? (at <= 0 ? all.length - 1 : at - 1) : (at < 0 || at === all.length - 1 ? 0 : at + 1);
                 ev.preventDefault(); all[next].focus();
             } };

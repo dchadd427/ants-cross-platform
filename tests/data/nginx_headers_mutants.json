@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the headers, the origin check, the one page of another site that may read three routes, the headers passed to the game server, the access log and the compressed files of docker/nginx.conf and the Dockerfile, for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with the program nginx installed: python3 tools/mutate.py tests/data/nginx_headers_mutants.json --keep-going --jobs 1. Every mutant must be caught by tests/scripts/test_nginx_headers.py: each breaks one rule - Strict-Transport-Security on every kind of answer (and only for this host), the four headers of a page and the policy directive by directive (the game page against the others), which address is which kind, the permissions policy (what is switched off and what the game needs), the sockets of the policy, the origin of a game connection (none, the site's own host with or without a port or the final dot of a fully qualified name, anything else refused), what the game server is given, the access log (the path that was asked for, no query, no referrer, cookie or Authorization header), the compressed copies and their step in the Dockerfile, that every Host name is served, and what the front page at https://playants.org may read (that one Origin and no other, a GET of /live, /stats and /history and no other address, no credentials and no preflight answer, Vary: Origin, the headers the three routes already had).",
+ "note": "Mutants of the headers, the origin check, the one page of another site that may read three routes, the headers passed to the game server, the access log and the compressed files of docker/nginx.conf and the Dockerfile, for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with the program nginx installed: python3 tools/mutate.py tests/data/nginx_headers_mutants.json --keep-going --jobs 1. Every mutant must be caught by tests/scripts/test_nginx_headers.py: each breaks one rule - Strict-Transport-Security on every kind of answer (and only for this host), the four headers of a page and the policy directive by directive (the game page against the others), which address is which kind, the permissions policy (what is switched off and what the game needs), the sockets of the policy, the origin of a game connection (none, the site's own host with or without a port or the final dot of a fully qualified name, anything else refused), what the game server is given, the access log (the path that was asked for, no query, no referrer, cookie or Authorization header), the compressed copies and their step in the Dockerfile, that every Host name is served, and what the front page at https://playants.org may read (that one Origin and no other, a GET of /live, /stats and /history and no other address, no credentials and no preflight answer, Vary: Origin, the headers the three routes already had). The page of an address that is nothing (a 404 with web/404.html, never the game page; a folder, and an .html, .css or .js file that is not there, are the same 404), and the short plain 404 under the name of a door (/ws/, /busy/, /stats/, /hub/, ...), are rules of this file too: the page is named by the catch-all location only, not by the whole server.",
  "mutants": [
   {
    "id": "hsts_missing_at_the_server",
@@ -81,8 +81,8 @@
   {
    "id": "hsts_missing_in_the_sprites_block",
    "file": "docker/nginx.conf",
-   "old": "    location ^~ /sprites/ {\n        alias /usr/share/nginx/html/asset_catalog/sprites/;\n        add_header Cache-Control \"public, max-age=604800, no-transform\" always;\n        add_header Access-Control-Allow-Origin \"*\" always;\n        add_header Cross-Origin-Resource-Policy \"cross-origin\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
-   "new": "    location ^~ /sprites/ {\n        alias /usr/share/nginx/html/asset_catalog/sprites/;\n        add_header Cache-Control \"public, max-age=604800, no-transform\" always;\n        add_header Access-Control-Allow-Origin \"*\" always;\n        add_header Cross-Origin-Resource-Policy \"cross-origin\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "old": "    location ^~ /sprites/ {\n        alias /usr/share/nginx/html/asset_catalog/sprites/;\n        add_header X-Robots-Tag \"noindex\" always;\n        add_header Cache-Control \"public, max-age=604800, no-transform\" always;\n        add_header Access-Control-Allow-Origin \"*\" always;\n        add_header Cross-Origin-Resource-Policy \"cross-origin\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location ^~ /sprites/ {\n        alias /usr/share/nginx/html/asset_catalog/sprites/;\n        add_header X-Robots-Tag \"noindex\" always;\n        add_header Cache-Control \"public, max-age=604800, no-transform\" always;\n        add_header Access-Control-Allow-Origin \"*\" always;\n        add_header Cross-Origin-Resource-Policy \"cross-origin\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {
@@ -123,8 +123,8 @@
   {
    "id": "page_block_without_content_security_policy",
    "file": "docker/nginx.conf",
-   "old": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
-   "new": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "old": "    location ~* \\.(html|css|js)$ {\n        error_page 500 502 503 504 /50x.html;\n        error_page 404 /404.html;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location ~* \\.(html|css|js)$ {\n        error_page 500 502 503 504 /50x.html;\n        error_page 404 /404.html;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {
@@ -137,8 +137,8 @@
   {
    "id": "page_block_without_x_frame_options",
    "file": "docker/nginx.conf",
-   "old": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
-   "new": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "old": "    location ~* \\.(html|css|js)$ {\n        error_page 500 502 503 504 /50x.html;\n        error_page 404 /404.html;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location ~* \\.(html|css|js)$ {\n        error_page 500 502 503 504 /50x.html;\n        error_page 404 /404.html;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {
@@ -151,8 +151,8 @@
   {
    "id": "page_block_without_referrer_policy",
    "file": "docker/nginx.conf",
-   "old": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
-   "new": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "old": "    location ~* \\.(html|css|js)$ {\n        error_page 500 502 503 504 /50x.html;\n        error_page 404 /404.html;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location ~* \\.(html|css|js)$ {\n        error_page 500 502 503 504 /50x.html;\n        error_page 404 /404.html;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {
@@ -165,8 +165,8 @@
   {
    "id": "page_block_without_permissions_policy",
    "file": "docker/nginx.conf",
-   "old": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
-   "new": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "old": "    location ~* \\.(html|css|js)$ {\n        error_page 500 502 503 504 /50x.html;\n        error_page 404 /404.html;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location ~* \\.(html|css|js)$ {\n        error_page 500 502 503 504 /50x.html;\n        error_page 404 /404.html;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {
@@ -179,22 +179,22 @@
   {
    "id": "page_block_sends_the_policy_in_a_header_that_is_not_one",
    "file": "docker/nginx.conf",
-   "old": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
-   "new": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy-Report-Only $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "old": "    location ~* \\.(html|css|js)$ {\n        error_page 500 502 503 504 /50x.html;\n        error_page 404 /404.html;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location ~* \\.(html|css|js)$ {\n        error_page 500 502 503 504 /50x.html;\n        error_page 404 /404.html;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy-Report-Only $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {
    "id": "page_block_loses_the_isolation",
    "file": "docker/nginx.conf",
-   "old": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
-   "new": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "old": "    location ~* \\.(html|css|js)$ {\n        error_page 500 502 503 504 /50x.html;\n        error_page 404 /404.html;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location ~* \\.(html|css|js)$ {\n        error_page 500 502 503 504 /50x.html;\n        error_page 404 /404.html;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {
    "id": "page_block_loses_nosniff",
    "file": "docker/nginx.conf",
-   "old": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
-   "new": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "old": "    location ~* \\.(html|css|js)$ {\n        error_page 500 502 503 504 /50x.html;\n        error_page 404 /404.html;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location ~* \\.(html|css|js)$ {\n        error_page 500 502 503 504 /50x.html;\n        error_page 404 /404.html;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {
@@ -1371,6 +1371,139 @@
    "file": "docker/nginx.conf",
    "old": "        limit_req zone=ants_live burst=100 nodelay;\n",
    "new": "        limit_req zone=ants_live burst=100 nodelay;\n        add_header Access-Control-Allow-Origin $ants_site_read_origin always;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "unknown_address_is_the_game_page",
+   "file": "docker/nginx.conf",
+   "old": "        try_files $uri =404;\n        error_page 404 /404.html;\n",
+   "new": "        try_files $uri $uri/ /index.html;\n        error_page 404 /404.html;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "unknown_address_has_no_page",
+   "file": "docker/nginx.conf",
+   "old": "        try_files $uri =404;\n        error_page 404 /404.html;\n",
+   "new": "        try_files $uri =404;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "unknown_address_is_answered_200",
+   "file": "docker/nginx.conf",
+   "old": "        try_files $uri =404;\n        error_page 404 /404.html;\n",
+   "new": "        try_files $uri =404;\n        error_page 404 =200 /404.html;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "under_the_chat_is_the_page",
+   "file": "docker/nginx.conf",
+   "old": "    location /hub/ {\n",
+   "new": "    location /hubx/ {\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "under_the_numbers_is_the_page",
+   "file": "docker/nginx.conf",
+   "old": "    location ^~ /stats/ {\n",
+   "new": "    location ^~ /statsx/ {\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "under_the_status_door_is_the_page",
+   "file": "docker/nginx.conf",
+   "old": "    location ^~ /busy/ {\n",
+   "new": "    location ^~ /busyx/ {\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "under_the_game_door_is_the_page",
+   "file": "docker/nginx.conf",
+   "old": "    location ^~ /ws/ {\n",
+   "new": "    location ^~ /wsx/ {\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "the_404_page_is_named_for_the_whole_server",
+   "file": "docker/nginx.conf",
+   "old": "    absolute_redirect off;\n",
+   "new": "    absolute_redirect off;\n    error_page 404 /404.html;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "unknown_html_address_has_no_page",
+   "file": "docker/nginx.conf",
+   "old": "        error_page 500 502 503 504 /50x.html;\n        error_page 404 /404.html;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n",
+   "new": "        error_page 500 502 503 504 /50x.html;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "under_the_chat_a_script_is_the_page",
+   "file": "docker/nginx.conf",
+   "old": "    location ~* ^/hub/.*\\.(html|css|js)$ {\n        return 404;\n    }\n",
+   "new": "",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "under_the_chat_a_script_is_the_page_in_lower_case_only",
+   "file": "docker/nginx.conf",
+   "old": "    location ~* ^/hub/.*\\.(html|css|js)$ {",
+   "new": "    location ~ ^/hub/.*\\.(html|css|js)$ {",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "error_page_file_is_read_by_its_raw_name",
+   "file": "docker/nginx.conf",
+   "old": "map \"$status $uri\" $ants_error_page_file {",
+   "new": "map \"$status $ants_path\" $ants_error_page_file {",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "robots_file_is_kept_by_a_browser_for_good",
+   "file": "docker/nginx.conf",
+   "old": "default_type \"text/plain; charset=utf-8\";\n        add_header Cache-Control \"no-cache, must-revalidate\" always;",
+   "new": "default_type \"text/plain; charset=utf-8\";\n        add_header Cache-Control \"public, max-age=31536000\" always;",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "robots_file_has_the_stock_type_without_a_character_set",
+   "file": "docker/nginx.conf",
+   "old": "        types { }\n        default_type \"text/plain; charset=utf-8\";",
+   "new": "        default_type \"text/plain; charset=utf-8\";",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "sitemap_is_not_xml",
+   "file": "docker/nginx.conf",
+   "old": "default_type \"application/xml; charset=utf-8\";",
+   "new": "default_type \"text/html\";",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "sitemap_is_kept_by_a_browser_for_good",
+   "file": "docker/nginx.conf",
+   "old": "default_type \"application/xml; charset=utf-8\";\n        add_header Cache-Control \"no-cache, must-revalidate\" always;",
+   "new": "default_type \"application/xml; charset=utf-8\";\n        add_header Cache-Control \"public, max-age=31536000\" always;",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "robots_file_is_the_page_of_a_404_when_it_is_missing",
+   "file": "docker/nginx.conf",
+   "old": "    location = /robots.txt {\n        types { }",
+   "new": "    location = /robots.txt {\n        error_page 404 /404.html;\n        types { }",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "sprites_are_open_to_the_index_of_a_search_engine",
+   "file": "docker/nginx.conf",
+   "old": "        alias /usr/share/nginx/html/asset_catalog/sprites/;\n        add_header X-Robots-Tag \"noindex\" always;\n",
+   "new": "        alias /usr/share/nginx/html/asset_catalog/sprites/;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "the_catalogs_sounds_are_open_to_the_index_of_a_search_engine",
+   "file": "docker/nginx.conf",
+   "old": "    location ^~ /asset_catalog/sounds/ {\n        root /usr/share/nginx/html;\n        try_files $uri =404;\n        add_header X-Robots-Tag \"noindex\" always;\n",
+   "new": "    location ^~ /asset_catalog/sounds/ {\n        root /usr/share/nginx/html;\n        try_files $uri =404;\n",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   }
  ]

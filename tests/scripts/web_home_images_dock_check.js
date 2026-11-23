@@ -57,7 +57,7 @@ function rig(o) {
     env.doc = doc;
     const requests = [];
     class XHR { constructor() { this.headers = {}; this.upload = {}; requests.push(this); } open(m, u) { this.method = m; this.url = u; } setRequestHeader(k, v) { this.headers[k] = v; } send(b) { this.body = b; } abort() {} }
-    const win = { innerWidth: 1280, innerHeight: 800, location: { protocol: 'https:', host: 'play.test' }, listeners: {}, XMLHttpRequest: XHR, URL: { createObjectURL: () => 'blob:made', revokeObjectURL() {} }, setTimeout: clock.setTimeout,
+    const win = { innerWidth: 1280, innerHeight: 800, location: { protocol: 'https:', host: 'play.test' }, listeners: {}, XMLHttpRequest: XHR, URL: { createObjectURL: () => 'blob:made', revokeObjectURL() {} }, setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout,
         addEventListener(t, fn) { (win.listeners[t] = win.listeners[t] || []).push(fn); } };
     const sockets = [];
     class HubSocket {

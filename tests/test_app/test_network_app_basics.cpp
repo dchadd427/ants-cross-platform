@@ -37,10 +37,18 @@ void run_command_line_tests() {
         args = {"ants", "--join", "host"};
         ASSERT_EQ(Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st)).net_url, "");
         ASSERT_EQ(Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st)).net_address, "host");
-        {                                                                                  // a native NetGame cannot join through a WebSocket (it joins with TCP)
+        args = {"ants", "--join-url", "WSS://Play.Example.org:443/ws?x=1", "--room", "ROOM-42"};              // the one written form: what the rejoin keys call the server
+        ASSERT_EQ(Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st)).net_url, "wss://play.example.org/ws?x=1");
+        for (const char* bad : {"ws://play.example.org/ws", "http://play.example.org/ws", "play.example.org", "wss://", "wss://play.example.org:0/ws"}) {      // the desktop game speaks the encrypted door only
+            args = {"ants", "--join-url", bad, "--room", "ROOM-42"};
+            c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+            ASSERT_FALSE(c.startup_error.empty());
+        }
+        {                                                                                  // a native NetGame joins through wss:// only, and says why it did not
             ants::sim::SimulationEngine sim;
             ants::net::NetGame game(sim);
-            ASSERT_FALSE(game.join_url("wss://play.example.org/ws", "Web"));
+            ASSERT_FALSE(game.join_url("ws://play.example.org/ws", "Web"));
+            ASSERT_FALSE(game.join_refusal().empty());
             ASSERT_FALSE(game.active());
         }
         args = {"ants", "--room", "no spaces allowed"};                                  // not a room code: ignored
@@ -205,6 +213,52 @@ void run_command_line_tests() {
         ApplicationConfig none = headless_config();
         ASSERT_TRUE(none.player_name.empty());
     } TEST_END();
+
+    TEST_CASE("N5.1c Command Line: A Number That Is No Number Is A Startup Error That Names The Option, Not An Exception That Ends The Program; A Seed Or A Port Out Of Range Is One Too; The Good Numbers Are Kept") {
+        std::vector<std::string> args;
+        std::vector<char*> st;
+        struct Bad {
+            std::vector<std::string> options;
+            const char* named;
+        };
+        const std::vector<Bad> bad = {
+            {{"--seed", "abc"}, "--seed"}, {{"--seed", "-1"}, "--seed"}, {{"--seed", "4294967296"}, "--seed"}, {{"--seed", "99999999999999999999"}, "--seed"}, {{"--seed", ""}, "--seed"},
+            {{"--frames", "x"}, "--frames"}, {{"--frames", "1.5"}, "--frames"}, {{"--frames", "-2"}, "--frames"}, {{"--select-ant", "ant"}, "--select-ant"}, {{"--select-base", "9999999999"}, "--select-base"},
+            {{"--player", "1000"}, "--player"}, {{"--player", "-3"}, "--player"}, {{"--player", "two"}, "--player"}, {{"--host", "4002x"}, "--host"}, {{"--host", "70000"}, "--host"},
+            {{"--join", "play.example.org:"}, "--join"}, {{"--join", "play.example.org:port"}, "--join"}, {{"--join", "play.example.org:0"}, "--join"}, {{"--join", "play.example.org:65536"}, "--join"},
+            {{"--port", "http"}, "--port"}, {{"--port", "65536"}, "--port"}, {{"--port", " 80"}, "--port"}, {{"--lan-port", "-1"}, "--lan-port"}};
+        for (const Bad& b : bad) {
+            args = {"ants"};
+            args.insert(args.end(), b.options.begin(), b.options.end());
+            const ApplicationConfig c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));          // (it returns: nothing is thrown)
+            ASSERT_TRUE(c.startup_error.find(b.named) != std::string::npos && c.startup_error.find("needs") != std::string::npos);
+        }
+        // the first refusal is the one that is reported, and the program does not start with it
+        args = {"ants", "--seed", "x", "--port", "y", "--headless"};
+        ApplicationConfig c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.startup_error.find("--seed") != std::string::npos && c.startup_error.find("--port") == std::string::npos);
+        {
+            Application app;
+            ASSERT_FALSE(app.init(c));
+        }
+        // the numbers that are good are kept, at their edges too
+        args = {"ants", "--seed", "4294967295", "--frames", "0", "--player", "255", "--port", "65535", "--lan-port", "0", "--select-ant", "-1", "--select-base", "3"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.startup_error.empty());
+        ASSERT_EQ(c.random_seed, 4294967295u);
+        ASSERT_EQ(c.screenshot_frames, 0);
+        ASSERT_EQ(c.local_player_id, 255);
+        ASSERT_EQ(c.net_port, 65535);
+        ASSERT_EQ(c.lan_port, 0);
+        ASSERT_EQ(c.select_ant_id, -1);
+        ASSERT_EQ(c.select_base_team, 3);
+        args = {"ants", "--join", "play.example.org:4002", "--seed", "0"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.startup_error.empty() && c.net_address == "play.example.org" && c.net_port == 4002 && c.random_seed == 0u);
+        args = {"ants", "--host", "4003"};
+        c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        ASSERT_TRUE(c.startup_error.empty() && c.net_port == 4003);
+    } TEST_END();
 }
 
 namespace {
@@ -326,7 +380,7 @@ void run_bot_tests() {
         {   // a room takes --teams too (protocol 13: it is the choice of the START that this machine leads; changed on purpose: protocol 12 refused it with "--teams is for a game on this computer"),
             // whatever the order of the options; ffa is the default of a room too
             for (const std::vector<std::string>& line : {std::vector<std::string>{"ants", "--teams", "0+1", "--host"}, std::vector<std::string>{"ants", "--host", "--teams", "0+1"},
-                                                          std::vector<std::string>{"ants", "--join", "127.0.0.1", "--teams", "0+1"}, std::vector<std::string>{"ants", "--teams", "0+1", "--join-url", "ws://example.test/ws"}}) {
+                                                          std::vector<std::string>{"ants", "--join", "127.0.0.1", "--teams", "0+1"}, std::vector<std::string>{"ants", "--teams", "0+1", "--join-url", "wss://example.test/ws"}}) {
                 const ApplicationConfig c = parsed(line);
                 ASSERT_TRUE(c.startup_error.empty() && c.teams.set && c.teams.a == 0 && c.teams.b == 1 && c.net_role != ApplicationConfig::NetRole::None);
             }

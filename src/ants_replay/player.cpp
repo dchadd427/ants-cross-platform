@@ -167,15 +167,28 @@ void begin_match(sim::SimulationEngine& engine, const Replay& replay, const asse
     engine.set_game_mode(static_cast<sim::GameMode>(replay.head.mode));       // (before init, like every machine of the match did; plays_here and the head's checks have made sure that the mode is one this build knows)
     engine.set_hill_open_187(replay.head.mode == static_cast<uint8_t>(sim::GameMode::Kills187) && sim_rules_of(replay.head) == kSimRulesMode187Heal);       // (a 187 match recorded before the closed hill plays with the hill that works)
     engine.set_end_fix_187(!(replay.head.mode == static_cast<uint8_t>(sim::GameMode::Kills187) && sim_rules_of(replay.head) < kSimRulesMode187BeforeNoDrops));       // (a 187 match recorded before the end-rule fixes, 6, 7 or 10, counts the seats of the roster and any egg)
-    engine.set_no_drops_187(!(replay.head.mode == static_cast<uint8_t>(sim::GameMode::Kills187) && sim_rules_of(replay.head) < kSimRulesMode187));       // (a 187 match recorded before the no-drop rule, 6, 7, 10 or 11, leaves the power-up of a special ant that dies on the ground as the original's game does)
+    engine.set_no_drops_187(!(replay.head.mode == static_cast<uint8_t>(sim::GameMode::Kills187) && sim_rules_of(replay.head) < kSimRulesMode187BeforeCantGo));       // (a 187 match recorded before the no-drop rule, 6, 7, 10 or 11, leaves the power-up of a special ant that dies on the ground as the original's game does)
     engine.set_last_side_rule(!(replay.head.mode == 0 && sim_rules_of(replay.head) == kSimRulesBeforeLastSide));       // (a match of the original's game recorded before the last-side rule ends by the original's CHECKGO alone)
     engine.set_fire_wall_as_original(fire_wall_as_original_rules(sim_rules_of(replay.head)));       // (a match recorded before the loader of the original reads a named fire wall with the remake's obstacle overlay, in either mode)
     engine.set_bite_skips_empty_record(bite_skips_empty_record_rules(sim_rules_of(replay.head)));       // (a match recorded before the rule of the empty record takes every bite from the first object of the food tile, as the original does, in either mode)
+    engine.set_path_answers_after_commands(path_answers_after_commands_rules(sim_rules_of(replay.head)));       // (a match recorded before the rule of the can't-go gap gives the path manager's answer at once, at the end of the tick, in either mode)
     engine.init(level, replay.head.seed, replay.head.roster);
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         engine.set_player_name(seat, ((replay.head.roster >> seat) & 1u) != 0 ? replay.head.names[seat] : std::string());
     }
     if (replay.head.teams.set) sim::apply_start_teams(engine, replay.head.teams);
+}
+
+void take_result_of(uint8_t roster, sim::SimulationEngine& engine, Outcome& out) {
+    out.hash = engine.state_hash().total;
+    out.match_over = engine.is_match_over();
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        const bool plays = ((roster >> seat) & 1u) != 0;
+        out.scores[seat] = plays ? engine.get_display_score(seat) : 0;
+        if (plays && engine.is_player_dropped(seat)) out.dropped_mask = static_cast<uint8_t>(out.dropped_mask | (1u << seat));
+    }
+    out.result = engine.get_world_state().match_result;                 // (the engine's own make_match_result: also the side that is left in mode 187, which a bare evaluate_victory does not know)
+    out.ran = true;
 }
 
 Outcome play(const Replay& replay, const assets::LevelData& level, const Hooks& hooks) {
@@ -218,15 +231,7 @@ Outcome play(const Replay& replay, const assets::LevelData& level, const Hooks& 
         }
     }
     for (; next < replay.commands.size() && replay.commands[next].turn == replay.total_turns; ++next) give(replay.commands[next]);     // (after the last tick: a Quit that ends the match)
-    out.hash = engine.state_hash().total;
-    out.match_over = engine.is_match_over();
-    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
-        const bool plays = ((replay.head.roster >> seat) & 1u) != 0;
-        out.scores[seat] = plays ? engine.get_display_score(seat) : 0;
-        if (plays && engine.is_player_dropped(seat)) out.dropped_mask = static_cast<uint8_t>(out.dropped_mask | (1u << seat));
-    }
-    out.result = engine.get_world_state().match_result;                 // (the engine's own make_match_result: also the side that is left in mode 187, which a bare evaluate_victory does not know)
-    out.ran = true;
+    take_result_of(replay.head.roster, engine, out);
     if (replay.complete && out.hash != replay.final_hash) {
         out.first_bad_turn = replay.total_turns;
         out.error = "this replay does not reproduce here: the final state differs";

@@ -4,7 +4,8 @@
 
 The Dockerfile copies the web files ONE BY ONE (COPY web/<name> ...), and the routes of the site are checked against the real image (tests/scripts/web_routes_check.py) and against a stub root
 (tests/scripts/test_nginx_routes.py). A page that loads a file that none of them knows works on a developer's machine and is broken on the site, which no other quick test sees; this one reads the pages:
-  - every local <script src> and <link href> of web/*.html is a file of web/ and is copied by the Dockerfile (a folder copy such as web/front/ covers its files, web/favicon.* the icons);
+  - every local <script src> and <link href> of web/*.html is a file of web/ and is copied by the Dockerfile (a folder copy such as web/front/ covers its files, web/favicon.* the icons); a <link rel="canonical"> loads nothing: it is
+    skipped here, and checked on its own (it names the clean address of the page that has it, which is a page of the site);
   - the check of the image in .github/workflows/ci.yml lists it and build_web.sh copies it;
   - every script or stylesheet that web_routes_check.py asks the site for has a stand-in in the stub root of the routes test (the real image is only built by the web job).
 """
@@ -26,11 +27,16 @@ BUILT = {"lvl_core.js": ("COPY --from=builder /src/build_web/lvl_core/lvl_core.j
 
 
 def loaded_files():
-    """{path in web/: [pages that load it]} for every local script and stylesheet of web/*.html"""
+    """{path in web/: [pages that load it]} for every local script and stylesheet of web/*.html (a canonical link loads nothing)"""
     found = {}
     for page in sorted(glob.glob(os.path.join(REPO, "web", "*.html"))):
         text = read("web", os.path.basename(page))
-        for m in re.finditer(r"""<(?:script|link)\b[^>]*?\b(?:src|href)=["']([^"']+)["']""", text):
+        for tag in re.finditer(r"<(?:script|link)\b[^>]*>", text):
+            if re.search(r"""\brel=["']canonical["']""", tag.group(0)):
+                continue
+            m = re.search(r"""\b(?:src|href)=["']([^"']+)["']""", tag.group(0))
+            if m is None:
+                continue
             ref = m.group(1).split("?")[0].split("#")[0]
             if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:|^//", ref):
                 continue
@@ -42,6 +48,23 @@ class ThePagesAndTheImage(unittest.TestCase):
     dockerfile = read("Dockerfile")
     ci = read(".github", "workflows", "ci.yml")
     build = read("build_web.sh")
+
+    def test_a_canonical_link_names_the_clean_address_of_its_own_page_and_loads_nothing(self):
+        conf = read("docker", "nginx.conf")
+        clean = {"/" + name: name + ".html" for name in re.findall(r"location = /(\w+) \{\s*rewrite \^ /\1\.html last;", conf)}        # (the pages that have a clean address: /legal serves legal.html)
+        self.assertTrue({"/legal", "/matches", "/play"} <= set(clean), sorted(clean))
+        found = {}
+        for page in sorted(glob.glob(os.path.join(REPO, "web", "*.html"))):
+            for tag in re.findall(r"<link\b[^>]*>", read("web", os.path.basename(page))):
+                if re.search(r"""\brel=["']canonical["']""", tag):
+                    found.setdefault(os.path.basename(page), []).append(re.search(r"""\bhref=["']([^"']*)["']""", tag).group(1))
+        self.assertEqual(sorted(found), ["legal.html", "lobby.html", "mapmaker.html", "matches.html"], "the pages of web/ that name a canonical address (the changelog page is made by tools/changelog_to_html.py)")
+        for page, hrefs in found.items():
+            address = "/" if page == "lobby.html" else "/" + page[:-5]
+            self.assertEqual(hrefs, ["@@SITE_ORIGIN@@" + address], page)                  # (one, the page's own clean address on the site's one address, which the build writes in: a page that answers at its file too says which address is the one)
+            self.assertEqual(clean.get(address, "lobby.html"), page, page)                # (and that address serves this page: tests/scripts/test_nginx_clean_urls.py asks the real server for a 200)
+        self.assertNotIn("legal", loaded_files())
+        self.assertNotIn("matches", loaded_files())
 
     def test_the_pages_load_something(self):
         refs = loaded_files()

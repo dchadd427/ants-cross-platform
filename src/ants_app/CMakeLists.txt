@@ -39,6 +39,7 @@ add_library(ants_app STATIC
     renderer_art.cpp
     hud_art.cpp
     window_art.cpp
+    app_icon.cpp
     png_decode.cpp
     renderer_numbers.cpp
     renderer_text.cpp
@@ -152,6 +153,12 @@ set_target_properties(ants_app PROPERTIES
 add_executable(ants
     main.cpp
 )
+
+# The program file's icon on Windows: the original's icon (ants.ico, which tools/make_app_icons.py writes), set by the resource ants.rc
+if(MSVC)
+    enable_language(RC)
+    target_sources(ants PRIVATE ants.rc)
+endif()
 
 target_link_libraries(ants PRIVATE
     ants_app

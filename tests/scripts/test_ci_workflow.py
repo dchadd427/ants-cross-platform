@@ -416,6 +416,23 @@ class Windows(unittest.TestCase):
         self.assertIn("name: Install sccache %s" % version, TEXT)
 
 
+def checkouts_that_keep_credentials(text):
+    """The lines of the `actions/checkout` steps of a workflow that do not say `persist-credentials: false` in their own `with` block."""
+    lines = text.splitlines()
+    found = []
+    for i, line in enumerate(lines):
+        if re.match(r"^\s+- uses: actions/checkout@", line):
+            indent = len(line) - len(line.lstrip())
+            step = []
+            for later in lines[i + 1:]:
+                if later.strip() and len(later) - len(later.lstrip()) <= indent:
+                    break
+                step.append(later.strip())
+            if "persist-credentials: false" not in step:
+                found.append(i + 1)
+    return found
+
+
 class Actions(unittest.TestCase):
     def test_every_action_is_first_party_at_a_major_version_or_pinned_to_a_commit(self):
         uses = re.findall(r"^\s+- uses: (\S+)|^\s+uses: (\S+)", TEXT, re.M)
@@ -426,6 +443,15 @@ class Actions(unittest.TestCase):
                 self.assertRegex(name, r"^actions/[a-z-]+@v\d+$", name)
             else:
                 self.assertRegex(name, r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$", "an action that is not first-party must be pinned to a commit: " + name)
+
+    def test_every_checkout_keeps_no_credentials_because_every_job_runs_the_code_of_the_pull_request_and_none_pushes(self):
+        """The token of a job is written into the checkout's .git/config unless the checkout is told not to keep it, and then it is readable by every step that runs afterwards, the code of the pull
+        request among them. No job of this workflow pushes (it deploys nothing, and its token is read-only), so no checkout needs it. A run cannot show the difference: it is a setting with nothing to run."""
+        self.assertEqual(checkouts_that_keep_credentials(TEXT), [])
+        self.assertGreater(len(re.findall(r"uses: actions/checkout@", TEXT)), 6)
+        self.assertEqual(len(checkouts_that_keep_credentials(TEXT.replace("          persist-credentials: false\n", "", 1))), 1, "one checkout that keeps them is found")
+        self.assertEqual(len(checkouts_that_keep_credentials(TEXT.replace("persist-credentials: false", "persist-credentials: true"))), len(re.findall(r"uses: actions/checkout@", TEXT)))
+        self.assertEqual(len(checkouts_that_keep_credentials(re.sub(r"(?m)^        with:\n          persist-credentials: false\n", "", TEXT, count=1))), 1, "a checkout with no `with` at all keeps them")
 
     def test_the_workflow_asks_for_no_more_permissions_than_it_needs(self):
         self.assertRegex(TEXT, r"(?m)^permissions:\n  contents: read\n")

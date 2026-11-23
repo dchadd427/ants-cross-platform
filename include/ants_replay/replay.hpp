@@ -8,7 +8,8 @@
 //   file  := magic chunk*                  magic = 89 41 52 50 4C 0D 0A 1A (a transfer that changes line ends is noticed)
 //   chunk := tag[4] u32 length payload u32 crc32(tag + payload)       a tag whose first letter is UPPER case is critical (a reader that does not know it refuses the file), lower case is skipped
 //   HEAD  := u16 format_version, u16 engine_rules, then fields { varint id, varint length, bytes }; unknown ids are skipped (field 16: sim_rules, u16; field 17: the game mode, u8, written only when it is not 0 (the
-//            original's game) and then always with a sim_rules that only a mode of its own has (kSimRulesMode187), so that a build that skips field 17 refuses the file for its rules number)
+//            original's game) and then always with a sim_rules that only a mode of its own has (kSimRulesMode187), so that a build that skips field 17 refuses the file for its rules number; field 18: the seats whose orders
+//            went over their budget in this match, u8, a bit for each seat, written only when it is not 0: the "heavy order rate" mark, which changes nothing in the match)
 //   CMDS  := u32 first_turn, u32 count, then count records { varint gap, the command in its wire form (ants_sim/command.hpp, 8 + 4 n bytes) }
 //            gap = turns since the record before it (the first record: since first_turn); a chunk spans at most 30 s of game time and 4,096 commands
 //   hash  := u32 period, then u32 values: the low 32 bits of the state hash after period, 2 period, 3 period ... turns
@@ -41,10 +42,10 @@ namespace ants::replay {
 
 inline constexpr uint16_t kFormatVersion = 1;
 inline constexpr uint32_t kHashPeriodTurns = 100;      // the state hash is kept after every 100th turn (5 s of play)
-inline constexpr size_t kMaxFileBytes = 1u << 20;      // 1 MiB: a heavy half hour of four people is under 200 KiB (a click on a big selection adds up to 6.4 KiB: docs/CONTROLS.md). It is the size of the MATCH: a file that holds a map (tmap) may be that much longer than the map's chunk (max_file_bytes)
+inline constexpr size_t kMaxFileBytes = 16u << 20;     // 16 MiB: a heavy half hour of four people is under 200 KiB (a click on a big selection adds up to 6.4 KiB: docs/CONTROLS.md; five minutes of an army of 200 ants clicked four times a second are about 1 MiB), and the most that one seat can put into a match under the server's budget of orders (12.1 MiB in the longest match: net::Sequencer::Config), so that no seat can make a recording fail. It is the size of the MATCH: a file that holds a map (tmap) may be that much longer than the map's chunk (max_file_bytes)
 inline constexpr size_t kChunkFrameBytes = 4 + 4 + 4;  // a chunk's tag, length and checksum
 inline constexpr size_t kMaxEmbeddedMapBytes = 1u << 20;   // 1 MiB: a map of 65,536 cells (the most that a room plays) is about 0.8 MB, a Classic map at most 512 KB
-inline constexpr size_t kMaxFileBytesWithMap = kMaxFileBytes + kMaxEmbeddedMapBytes + kChunkFrameBytes;   // the longest file there can be: 2 MiB and the frame of the map's chunk (a reader refuses more before it reads a byte)
+inline constexpr size_t kMaxFileBytesWithMap = kMaxFileBytes + kMaxEmbeddedMapBytes + kChunkFrameBytes;   // the longest file there can be: 17 MiB and the frame of the map's chunk (a reader refuses more before it reads a byte)
 /// The most starting ants (the start markers of the four colors added up) that a map carried in a file may start. A viewer sets the match up on its own machine, in one thread, and setting the ants up grows with the square
 /// of their number (natively 6,000 ants take about 50 ms, 10,000 about 0.5 s, 40,000 about 9 s: ants_server/online_limits.hpp; WebAssembly is several times slower, and the page's timers cannot run meanwhile, so no card
 /// could say what is wrong). 8,000 is above every map of the library (at most 248) and of the players (the largest, 6,000); a map above it is refused with one sentence (fits_a_replay in player.cpp, which
@@ -72,14 +73,18 @@ inline constexpr uint8_t kNoSeat = 255;
 /// tests/test_replay (RP7.x) fail when the reference match's final hash changes and this number does not.
 /// History: 1 and 2 (game mode 187) were the numbers until the bombs of a map file (the layer-2 ids 129 .. 132) became the planted bombs of their colors (Grid::init_from_level, docs/reverse_engineering/map_file_bombs.md), which moves the plays of
 /// the community maps that hold them: the original's game was 3 then and game mode 187 (which plays on those maps too) 4. The loader as the original's (docs/reverse_engineering/map_loader_fidelity.md, v0.12.10) moved the plays of the community maps again: 5 and 6. A file of 1 to 4 is an earlier version's.
-/// The rules of the original's game and of game mode 187 are numbered in one row, each number belonging to ONE mode: the next change of either takes the next number of the row (14 now), whichever mode it changes.
+/// The rules of the original's game and of game mode 187 are numbered in one row, each number belonging to ONE mode: the next change of either takes the next number of the row (16 now), whichever mode it changes.
 /// Since v0.14 the original's game (mode 0) was 9: a match also ends when one side is left and nothing is left to score (8, SimulationEngine::set_last_side_rule, docs/GAMEPLAY.md, "The last side standing"), and a fire wall
 /// of a map file loads as the original loads it (9, SimulationEngine::set_fire_wall_as_original, docs/reverse_engineering/map_loader_fidelity.md, section 8). The number 8 (the original's game with the last-side
 /// rule and the old loader) and the number 5, the original's game as released until v0.13 (ended by the original's CHECKGO alone, with the old loader), are played too, and a recording of either plays as it always did.
 /// The original's game is 13 now: a bite takes its unit from the first object of its food tile that still has one (SimulationEngine::set_bite_skips_empty_record, docs/GAME_REVERSE_ENGINEERING.md 5.40, "A lunchbox on
 /// the anchor of an emptied record"), so a lunchbox that falls on the anchor of an emptied pile or of an earlier lunchbox is eaten once; the original takes the first object whatever it holds, and a recording of 9 (or 8
-/// or 5) plays so. Game mode 187 keeps 12: it has no food on the ground (no pile of the map and, since 12, no lunchbox), so the rule changes none of its matches.
-inline constexpr uint16_t kSimRules = 13;
+/// or 5) plays so. Game mode 187 kept 12 for it: it has no food on the ground (no pile of the map and, since 12, no lunchbox), so the rule changed none of its matches.
+/// The original's game is 14 now, and 187 is 15: the path manager's answer to a walk that an event asked for, a path or "no path", is given at the start of the next tick, after the turn's commands (SimulationEngine::set_path_answers_after_commands,
+/// docs/GAME_REVERSE_ENGINEERING.md 5.40, "The gap before the path manager's answer"), so that an ant that an event has just sent is idle with no path when the commands come, and takes an order (a Stop is skipped), as the original takes
+/// a click between a GoTo and the manager's next run. It moves the plays of both modes, so each took a number: a recording of 13 (187's 12 and the numbers before them) plays with the answer at once, at the end of the tick, as it always did.
+inline constexpr uint16_t kSimRules = 14;
+inline constexpr uint16_t kSimRulesBeforeCantGo = 13;
 inline constexpr uint16_t kSimRulesBeforeEmptyRecord = 9;
 inline constexpr uint16_t kSimRulesBeforeFireWall = 8;
 inline constexpr uint16_t kSimRulesBeforeLastSide = 5;
@@ -88,21 +93,25 @@ inline constexpr uint16_t kSimRulesBeforeLastSide = 5;
 /// this takes the next number that is none of these (the static_assert below stops the one that would collide).
 /// kSimRulesMode187Heal (6) is 187 as it was first released: the hill works, an ant that enters it is healed, an ant at 1 hp walks home and the waiting ring queues. kSimRulesMode187BeforeFireWall (7) is 187 with the hill
 /// closed: an ant cannot enter its hill (docs/GAMEPLAY.md, "187"). kSimRulesMode187BeforeEndFix (10) is the same with a fire wall of a map file loaded as the original loads it. kSimRulesMode187BeforeNoDrops (11) is the same, and
-/// the end rule counts the teams that began and a team that has only eggs that cannot hatch is not standing (SimulationEngine::set_end_fix_187). kSimRulesMode187 (12) is 187 now: the same, and nothing is put on the ground, no power-up from
-/// an ant of a special type that dies or that takes another and no lunchbox (SimulationEngine::set_no_drops_187). This build plays all five: a file of 6 plays with the hill open (SimulationEngine::set_hill_open_187, replay::begin_match),
-/// a file of 6 or 7 with the old loader, a file of 6, 7 or 10 without the end-rule fixes, a file of 6, 7, 10 or 11 with the drops of the original's game, and a match is recorded under kSimRulesMode187 (sim_rules_for_mode).
+/// the end rule counts the teams that began and a team that has only eggs that cannot hatch is not standing (SimulationEngine::set_end_fix_187). kSimRulesMode187BeforeCantGo (12) is the same, and nothing is put on the ground, no power-up from
+/// an ant of a special type that dies or that takes another and no lunchbox (SimulationEngine::set_no_drops_187). kSimRulesMode187 (15) is 187 now: the same, and the path manager's answer to what an event asked for is given after the turn's commands (kSimRulesCantGoFirst). This build plays all six: a file of 6 plays with the hill open (SimulationEngine::set_hill_open_187, replay::begin_match),
+/// a file of 6 or 7 with the old loader, a file of 6, 7 or 10 without the end-rule fixes, a file of 6, 7, 10 or 11 with the drops of the original's game, a file of 6 to 12 with the path manager's answer at once, and a match is recorded under kSimRulesMode187 (sim_rules_for_mode).
 /// The last-side rule (8) is the original's game's: 187 has its own end rule and never reads it. The loader knows no mode, so its change took one number of each mode (9 and 10), not one for both.
 inline constexpr uint16_t kSimRulesMode187Heal = 6;
 inline constexpr uint16_t kSimRulesMode187BeforeFireWall = 7;
 inline constexpr uint16_t kSimRulesMode187BeforeEndFix = 10;
 inline constexpr uint16_t kSimRulesMode187BeforeNoDrops = 11;
-inline constexpr uint16_t kSimRulesMode187 = 12;
+inline constexpr uint16_t kSimRulesMode187BeforeCantGo = 12;
+inline constexpr uint16_t kSimRulesMode187 = 15;
 /// The first number whose loader reads a fire wall of a map file as the original does (Grid::init_from_level): every number from here on has it, because the numbers are issued in one row and each change keeps the ones
 /// before it; the numbers below it (5 to 8) keep the remake's name-based overlay on a named fire wall. replay::begin_match asks fire_wall_as_original_rules.
 inline constexpr uint16_t kSimRulesFireWallFirst = 9;
 /// The first number whose bite skips an emptied object of its food tile (SimulationEngine::set_bite_skips_empty_record): every number from here on has it; the numbers below it, 187's 12 included (it has no food on the
 /// ground, so it plays the same either way), take the first object of the tile whatever it holds, as the original does. replay::begin_match asks bite_skips_empty_record_rules.
 inline constexpr uint16_t kSimRulesEmptyRecordFirst = 13;
+/// The first number whose path manager gives its answer to what an event asked for after the turn's commands (SimulationEngine::set_path_answers_after_commands): every number from here on has it, in either mode (the original's 14, 187's 15); the numbers below it
+/// (5 to 13, 187's 6, 7, 10, 11 and 12) give it at once. replay::begin_match asks path_answers_after_commands_rules.
+inline constexpr uint16_t kSimRulesCantGoFirst = 14;
 /// The newest number of the row, whichever mode it belongs to: a file of a higher number is a newer build's, one of a lower number that this build does not play is an older one's
 inline constexpr uint16_t kSimRulesNewest = kSimRulesMode187 > kSimRules ? kSimRulesMode187 : kSimRules;
 static_assert(kSimRulesMode187BeforeEndFix != kSimRules && kSimRulesMode187BeforeEndFix != kSimRulesMode187 && kSimRulesMode187BeforeEndFix != kSimRulesMode187Heal && kSimRulesMode187BeforeEndFix != kSimRulesMode187BeforeFireWall
@@ -120,7 +129,20 @@ static_assert(kSimRulesNewest >= kSimRules && kSimRulesNewest >= kSimRulesMode18
 static_assert(kSimRulesBeforeEmptyRecord != kSimRules && kSimRulesBeforeEmptyRecord != kSimRulesBeforeFireWall && kSimRulesBeforeEmptyRecord != kSimRulesBeforeLastSide && kSimRulesBeforeEmptyRecord != kSimRulesMode187
                   && kSimRulesBeforeEmptyRecord != kSimRulesMode187Heal && kSimRulesBeforeEmptyRecord != kSimRulesMode187BeforeFireWall && kSimRulesBeforeEmptyRecord != kSimRulesMode187BeforeEndFix
                   && kSimRulesBeforeEmptyRecord != kSimRulesMode187BeforeNoDrops, "a number belongs to one mode");
-static_assert(kSimRulesEmptyRecordFirst == kSimRules && kSimRulesEmptyRecordFirst > kSimRulesBeforeEmptyRecord && kSimRulesEmptyRecordFirst > kSimRulesMode187, "the rule of the empty record is the newest number's");
+static_assert(kSimRulesEmptyRecordFirst == kSimRulesBeforeCantGo && kSimRulesEmptyRecordFirst > kSimRulesBeforeEmptyRecord && kSimRulesEmptyRecordFirst > kSimRulesMode187BeforeCantGo, "the rule of the empty record is the original's number before the path manager's");
+static_assert(kSimRulesCantGoFirst == kSimRules && kSimRulesCantGoFirst > kSimRulesBeforeCantGo && kSimRulesCantGoFirst > kSimRulesMode187BeforeCantGo && kSimRulesMode187 > kSimRulesCantGoFirst && kSimRulesMode187BeforeCantGo >= kSimRulesMode187BeforeNoDrops,
+              "the path manager's rule is the original's newest number, and 187's number after it");
+constexpr bool rules_numbers_distinct() noexcept {       // every named number belongs to one mode and one meaning
+    const uint16_t all[] = {kSimRules, kSimRulesBeforeCantGo, kSimRulesBeforeEmptyRecord, kSimRulesBeforeFireWall, kSimRulesBeforeLastSide, kSimRulesMode187Heal, kSimRulesMode187BeforeFireWall,
+                            kSimRulesMode187BeforeEndFix, kSimRulesMode187BeforeNoDrops, kSimRulesMode187BeforeCantGo, kSimRulesMode187};
+    for (size_t i = 0; i < sizeof all / sizeof all[0]; ++i) {
+        for (size_t j = i + 1; j < sizeof all / sizeof all[0]; ++j) {
+            if (all[i] == all[j]) return false;
+        }
+    }
+    return true;
+}
+static_assert(rules_numbers_distinct(), "a number belongs to one mode");
 static_assert(kSimRulesFireWallFirst > kSimRulesBeforeFireWall && kSimRulesFireWallFirst > kSimRulesMode187BeforeFireWall && kSimRules >= kSimRulesFireWallFirst && kSimRulesMode187BeforeEndFix >= kSimRulesFireWallFirst && kSimRulesMode187BeforeNoDrops >= kSimRulesFireWallFirst && kSimRulesMode187 >= kSimRulesFireWallFirst,
               "the numbers from kSimRulesFireWallFirst on have the loader of the original, the ones before it do not");
 
@@ -129,11 +151,11 @@ constexpr uint16_t sim_rules_for_mode(uint8_t mode) noexcept {
     return mode == static_cast<uint8_t>(sim::GameMode::HighestScore) ? kSimRules : mode == static_cast<uint8_t>(sim::GameMode::Kills187) ? kSimRulesMode187 : uint16_t{0};
 }
 
-/// Whether this build plays a match of game mode `mode` under the rules number `rules`: the original's game under kSimRules, kSimRulesBeforeEmptyRecord, kSimRulesBeforeFireWall or kSimRulesBeforeLastSide, 187 under kSimRulesMode187,
-/// kSimRulesMode187BeforeNoDrops, kSimRulesMode187BeforeEndFix, kSimRulesMode187BeforeFireWall or kSimRulesMode187Heal (a mode that this build does not know: never)
+/// Whether this build plays a match of game mode `mode` under the rules number `rules`: the original's game under kSimRules, kSimRulesBeforeCantGo, kSimRulesBeforeEmptyRecord, kSimRulesBeforeFireWall or kSimRulesBeforeLastSide, 187 under kSimRulesMode187,
+/// kSimRulesMode187BeforeCantGo, kSimRulesMode187BeforeNoDrops, kSimRulesMode187BeforeEndFix, kSimRulesMode187BeforeFireWall or kSimRulesMode187Heal (a mode that this build does not know: never)
 constexpr bool plays_mode_rules(uint8_t mode, uint16_t rules) noexcept {
-    return mode == static_cast<uint8_t>(sim::GameMode::HighestScore) ? (rules == kSimRules || rules == kSimRulesBeforeEmptyRecord || rules == kSimRulesBeforeFireWall || rules == kSimRulesBeforeLastSide)
-         : mode == static_cast<uint8_t>(sim::GameMode::Kills187) ? (rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeNoDrops || rules == kSimRulesMode187BeforeEndFix || rules == kSimRulesMode187BeforeFireWall || rules == kSimRulesMode187Heal)
+    return mode == static_cast<uint8_t>(sim::GameMode::HighestScore) ? (rules == kSimRules || rules == kSimRulesBeforeCantGo || rules == kSimRulesBeforeEmptyRecord || rules == kSimRulesBeforeFireWall || rules == kSimRulesBeforeLastSide)
+         : mode == static_cast<uint8_t>(sim::GameMode::Kills187) ? (rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeCantGo || rules == kSimRulesMode187BeforeNoDrops || rules == kSimRulesMode187BeforeEndFix || rules == kSimRulesMode187BeforeFireWall || rules == kSimRulesMode187Heal)
          : false;
 }
 
@@ -145,6 +167,11 @@ constexpr bool fire_wall_as_original_rules(uint16_t rules) noexcept {
 /// Whether a match of the rules number `rules` takes a bite's unit from the first object of the food tile that has one (SimulationEngine::set_bite_skips_empty_record): every number from kSimRulesEmptyRecordFirst on
 constexpr bool bite_skips_empty_record_rules(uint16_t rules) noexcept {
     return rules >= kSimRulesEmptyRecordFirst;
+}
+
+/// Whether a match of the rules number `rules` gives the path manager's answer to what an event asked for after the turn's commands (SimulationEngine::set_path_answers_after_commands): every number from kSimRulesCantGoFirst on, in either mode
+constexpr bool path_answers_after_commands_rules(uint16_t rules) noexcept {
+    return rules >= kSimRulesCantGoFirst;
 }
 
 /// What the start of the match was: with the commands it is the whole match.
@@ -160,6 +187,7 @@ struct Header {
     uint32_t seed{0};
     uint8_t roster{0};                                 // bit p: seat p takes part
     bool fog{false};
+    uint8_t heavy_orders{0};                           // head field 18, written only when it is not 0: the seats (a bit for each) that went over the budget of orders (net::Sequencer::Config::order_burst) at some time of the match: their orders beyond it were not sealed, so they are not in the file. Information only: nothing plays differently
     uint8_t mode{0};                                   // sim::GameMode as a byte (head field 17, written only when it is not 0): the rules the match was played by; set_mode() keeps it and sim_rules together
     std::array<std::string, sim::MAX_PLAYERS> names;   // printable ASCII, at most 32 characters (the game makes a '?' of any other); empty: the color word
     sim::StartTeams teams;                             // the teams that the match started with (applied before the first tick)
