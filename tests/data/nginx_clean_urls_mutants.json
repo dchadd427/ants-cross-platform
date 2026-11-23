@@ -329,6 +329,13 @@
    "old": "map \"$status $uri\" $ants_error_page_file {",
    "new": "map \"$status $ants_path\" $ants_error_page_file {",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "old_addresses_are_read_by_the_raw_path",
+   "file": "docker/nginx.conf",
+   "old": "map $uri $ants_clean_address {",
+   "new": "map $ants_path $ants_clean_address {",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   }
  ]
 }

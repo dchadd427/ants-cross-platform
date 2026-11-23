@@ -112,12 +112,12 @@ class TheText(unittest.TestCase):
             self.assertIsNone(re.search(r"^/live(?:-now/?|\.html)$", other, re.I), other)          # (the game server's list and snapshots are not caught)
         self.assertEqual(chosen("/live"), ("=", "/live"))
         self.assertEqual(chosen("/live/R-20260101-000000Z")[0], "^~")
-        body = stats.block_of(HEAD, "map $ants_path $ants_clean_address ")
+        body = stats.block_of(HEAD, "map $uri $ants_clean_address ")
         self.assertNotIn("live", body)
         self.assertIn("proxy_pass http://$ants_replays;", stats.block_of(CONF, "location = /live "))   # (/live is still the server's list)
 
     def test_the_old_addresses_are_one_map_of_exact_paths_that_the_servers_if_turns_into_a_redirect_with_the_query(self):
-        body = stats.block_of(HEAD, "map $ants_path $ants_clean_address ")
+        body = stats.block_of(HEAD, "map $uri $ants_clean_address ")
         rules = dict(re.findall(r"^\s*(/\S*)\s+(/\S*);", body, re.M))
         want = {"/%s" % name: clean for clean, name in PAGES if clean not in KEPT_FILES}
         want.update({"/index.html": "/", "/lobby.html": "/", "/watch.html": "/matches", "/asset_catalog/index.html": "/asset_catalog/"})      # (every page but the three kept files has its old address in the map)
@@ -133,8 +133,6 @@ class TheText(unittest.TestCase):
         rule = re.findall(r"^\s*if \(\$ants_clean_address\) \{\s*return 301 \$ants_clean_address\$is_args\$args;\s*\}", SERVER, re.M)
         self.assertEqual(len(rule), 1)                                                                  # (the server block's own `if`, once: before any location; the query goes with it)
         self.assertLess(SERVER.index("if ($ants_clean_address)"), SERVER.index("location "))
-        self.assertIn("map $request_uri $ants_path {", HEAD)                                           # (the key is the path as it was sent: never the path after a rewrite or a fallback)
-        self.assertNotRegex(HEAD[HEAD.index("map $ants_path $ants_clean_address"):HEAD.index("map $ants_path $ants_clean_address") + 40], r"\$uri")
 
     def test_the_play_online_page_redirects_with_its_query_and_the_old_list_of_recordings_is_in_the_map(self):
         self.assertNotIn("location = /watch.html", CONF)                                                # (the map has it: one home for the old addresses that keep their query)
@@ -356,6 +354,13 @@ class TheRealPagesRun(unittest.TestCase):
                 self.assertNotIn("content-security-policy", answer[1], old + query)                       # (a redirect: no page)
                 self.assertEqual(self.ask(old + query, "HEAD")[0], 301, old + query)
             self.assertEqual(self.ask(clean + "?x=1")[0], 200, clean)
+        for written, clean in (("/%70lay.html", "/play"), ("/%70%6Cay%2Ehtml", "/play"), ("/./play.html", "/play"), ("//play.html", "/play"), ("/x/../match.html", "/match"), ("/%6Dapmaker.html", "/mapmaker"),
+                               ("/%69ndex.html", "/"), ("/%6Cobby.html", "/"), ("/%77atch.html", "/matches"), ("/%61sset_catalog/index.html", "/asset_catalog/"), ("/%70lay/", "/play"), ("/%50LAY.HTML", "/play")):
+            for query in ("", "?x=1&room=k7m2xq"):
+                answer = self.ask(written + query)
+                self.assertEqual((answer[0], answer[1].get("location")), (301, clean + query), written + query)       # (the old name by what nginx would serve, not by how it was written; the query goes with it)
+        for kept in ("/%6Cegal.html", "/%63hangelog.html", "//matches.html"):
+            self.assertEqual(self.ask(kept)[0], 200, kept)                                                          # (the three files that answer 200 do so by any spelling)
         for plain in ("/admin.html", "/404.html", "/50x.html", "/%34%30%34.html", "/%35%30x.html", "//404.html", "/./50x.html", "/x/../404.html"):
             self.assertEqual(self.ask(plain)[0], 404, plain)                                                 # (by its decoded name too: the files are no addresses)
             self.assertNotIn("Page not found", self.ask(plain)[2], plain)
