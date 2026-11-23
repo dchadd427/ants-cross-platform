@@ -169,14 +169,14 @@
         if (!curve || !env.rail || !env.tl) return null;
         function el(tag, cls) { var n = doc.createElement(tag); if (cls) n.className = cls; return n; }
         function svg(tag, attrs) { var n = doc.createElementNS(NS, tag); for (var k in attrs) n.setAttribute(k, attrs[k]); return n; }
-        var heat = el('div', 'heat'), line = el('i', 'hline'), dot = el('i', 'hdot'), tip = el('div', 'htip'), tb = el('b'), tw = doc.createTextNode('');
+        var heat = el('div', 'act'), line = el('i', 'act-line'), dot = el('i', 'act-dot'), tip = el('div', 'act-tip'), tb = el('b'), tw = doc.createTextNode('');
         var box = svg('svg', { viewBox: '0 0 ' + WIDTH + ' 100', preserveAspectRatio: 'none', focusable: 'false' });
-        var defs = svg('defs', {}), cp = svg('clipPath', { id: 'heat-played' }), cu = svg('clipPath', { id: 'heat-rest' });
+        var defs = svg('defs', {}), cp = svg('clipPath', { id: 'act-played-clip' }), cu = svg('clipPath', { id: 'act-rest-clip' });
         var rp = svg('rect', { x: 0, y: -10, width: 0, height: 120 }), ru = svg('rect', { x: 0, y: -10, width: WIDTH, height: 120 });
         cp.appendChild(rp); cu.appendChild(ru); defs.appendChild(cp); defs.appendChild(cu); box.appendChild(defs);
-        box.appendChild(svg('path', { 'class': 'ar', d: curve.area, 'clip-path': 'url(#heat-rest)' }));
-        box.appendChild(svg('path', { 'class': 'ap', d: curve.area, 'clip-path': 'url(#heat-played)' }));
-        box.appendChild(svg('path', { 'class': 'al', d: curve.line }));
+        box.appendChild(svg('path', { 'class': 'act-rest', d: curve.area, 'clip-path': 'url(#act-rest-clip)' }));
+        box.appendChild(svg('path', { 'class': 'act-played', d: curve.area, 'clip-path': 'url(#act-played-clip)' }));
+        box.appendChild(svg('path', { 'class': 'act-curve', d: curve.line }));
         heat.setAttribute('aria-hidden', 'true');
         tip.appendChild(tb); tip.appendChild(tw);
         heat.appendChild(box); heat.appendChild(line); heat.appendChild(dot); heat.appendChild(tip);
@@ -189,7 +189,7 @@
             var live = pressed || inside;                                                           // (the pointer is on the timeline, or a finger is: solid, with the line and the label)
             heat.classList.remove('on'); heat.classList.remove('faint'); heat.classList.remove('hov');
             if (live) { heat.classList.add('on'); heat.classList.add('hov'); } else if (touching()) heat.classList.add('faint');          // (at rest a computer shows nothing and a touch screen, which has no hover, shows it faint)
-            if (env.bar) { if (live) env.bar.classList.add('heathov'); else env.bar.classList.remove('heathov'); }
+            if (env.bar) { if (live) env.bar.classList.add('acthov'); else env.bar.classList.remove('acthov'); }
         }
         function place(clientX) {
             var r = env.rail.getBoundingClientRect(), w = r.width > 0 ? r.width : 1, x = Math.max(0, Math.min(w, clientX - r.left)), fraction = x / w, tp = tipOf(series, fraction * series.total);

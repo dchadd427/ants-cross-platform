@@ -92,7 +92,7 @@ class TheCurve(unittest.TestCase):
         "a move with no pointer on the timeline is followed": ("if (pressed || (inside && mouseLike(ev))) place(ev.clientX);", "place(ev.clientX);"),
         "the label leaves the bar": ("tip.style.left = Math.max(half - 11, Math.min(w + 11 - half, x)) + 'px';", "tip.style.left = x + 'px';"),
         "a pointer beyond the rail is beyond the match": ("x = Math.max(0, Math.min(w, clientX - r.left))", "x = clientX - r.left"),
-        "the tag stays under the curve": ("if (live) env.bar.classList.add('heathov'); else", "if (false) env.bar.classList.add('heathov'); else"),
+        "the tag stays under the curve": ("if (live) env.bar.classList.add('acthov'); else", "if (false) env.bar.classList.add('acthov'); else"),
         "the bar does not say it has a curve": ("if (env.bar) env.bar.classList.add('has-activity');", ""),
         "the curve is read aloud": ("heat.setAttribute('aria-hidden', 'true');", ""),
         "a rail with no width divides by zero": ("w = r.width > 0 ? r.width : 1,", "w = r.width,"),
@@ -174,11 +174,11 @@ class TheNumbersTheTwoSidesShare(unittest.TestCase):
     def test_a_computer_shows_nothing_at_rest_and_the_curve_never_takes_the_pointer(self):
         """the curve is hidden until the script says `on` or `faint` (a computer at rest shows nothing: the pointer rule is in the script and run above, but whether the class has an effect is the stylesheet's)"""
         css = read("web", "replay_activity.css")
-        base = re.search(r"\n\.heat \{([^}]*)\}", css).group(1)
+        base = re.search(r"\n\.act \{([^}]*)\}", css).group(1)
         self.assertIn("opacity: 0;", base)
         self.assertIn("pointer-events: none;", base)
-        self.assertRegex(css, r"\.heat\.on \{ opacity: 1; \}")
-        self.assertRegex(css, r"\.heat\.faint \{ opacity: \.\d+; \}")
+        self.assertRegex(css, r"\.act\.on \{ opacity: 1; \}")
+        self.assertRegex(css, r"\.act\.faint \{ opacity: \.\d+; \}")
 
 
 class TheFiles(unittest.TestCase):

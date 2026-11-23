@@ -6,8 +6,8 @@
  },
  "baseline": [
   {
-   "build": "test_history_deaths test_history_service",
-   "test": "./build/tests/test_server/test_history_deaths && ./build/tests/test_server/test_history_service"
+   "build": "test_history_deaths test_history_details test_history_service",
+   "test": "./build/tests/test_server/test_history_deaths && ./build/tests/test_server/test_history_details && ./build/tests/test_server/test_history_service"
   }
  ],
  "mutants": [
@@ -40,8 +40,9 @@
    "file": "src/ants_replay/match_stats.cpp",
    "old": "                    count(MatchStats::Action::Bomb, turns);\n",
    "new": "",
-   "test": "ANTS_TEST_FILTER=DD7.1 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.1"
+   "test": "ANTS_TEST_FILTER=HD1.6 ./build/tests/test_server/test_history_details",
+   "expect": "HD1.6",
+   "build": "test_history_details"
   },
   {
    "id": "collector_no_hits",
@@ -151,7 +152,7 @@
    "id": "field_nothing_is_a_field",
    "file": "src/ants_server/history_action.cpp",
    "old": "    if (events == 0) return std::string();\n",
-   "new": "",
+   "new": "    if (events == 0 && false) return std::string();\n",
    "test": "ANTS_TEST_FILTER=DD7.4 ./build/tests/test_server/test_history_deaths",
    "expect": "DD7.4"
   },

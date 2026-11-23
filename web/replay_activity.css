@@ -1,27 +1,27 @@
 /* The activity curve over the timeline of the replay page (web/replay_activity.js, docs/REPLAYS.md "The activity curve"): a soft curve in the room above the bar. On a computer it shows only while the pointer is over the
    timeline (class `on`), with a line, a dot on the curve and a small label; on a touch screen it is always there, faint (`faint`), and solid while a finger is on the timeline. It uses the page's own tokens. */
-.heat { --heat-h: 22px; position: absolute; left: 0; right: 0; top: calc(6px - var(--heat-h)); height: var(--heat-h); z-index: 2; opacity: 0; pointer-events: none; transition: opacity .15s ease; }
-.heat.on { opacity: 1; }
-.heat.faint { opacity: .72; }
-.heat svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
-.heat .ar { fill: rgba(7, 11, 15, .6); }
-.heat .ap { fill: var(--frame-hi, #3b976f); fill-opacity: .92; }
-.heat .al { fill: none; stroke: var(--cream, #f4ece2); stroke-opacity: .9; stroke-width: 1.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-.hline { position: absolute; top: 0; width: 2px; height: calc(var(--heat-h) + 23px); margin-left: -1px; background: var(--cream, #f4ece2); box-shadow: 0 0 0 1px rgba(5, 10, 8, .55); opacity: 0; }
-.hdot { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; box-sizing: border-box; border-radius: 50%; background: var(--cream, #f4ece2); border: 2px solid var(--edge, #050a08); opacity: 0; }
-.heat.hov .hline, .heat.hov .hdot { opacity: 1; }
-.htip { position: absolute; bottom: calc(100% + 3px); transform: translateX(-50%); padding: 1px 10px; font-size: 13px; line-height: 1.5; white-space: nowrap; font-variant-numeric: tabular-nums;
+.act { --act-h: 22px; position: absolute; left: 0; right: 0; top: calc(6px - var(--act-h)); height: var(--act-h); z-index: 2; opacity: 0; pointer-events: none; transition: opacity .15s ease; }
+.act.on { opacity: 1; }
+.act.faint { opacity: .72; }
+.act svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+.act .act-rest { fill: rgba(7, 11, 15, .6); }
+.act .act-played { fill: var(--frame-hi, #3b976f); fill-opacity: .92; }
+.act .act-curve { fill: none; stroke: var(--cream, #f4ece2); stroke-opacity: .9; stroke-width: 1.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.act-line { position: absolute; top: 0; width: 2px; height: calc(var(--act-h) + 23px); margin-left: -1px; background: var(--cream, #f4ece2); box-shadow: 0 0 0 1px rgba(5, 10, 8, .55); opacity: 0; }
+.act-dot { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; box-sizing: border-box; border-radius: 50%; background: var(--cream, #f4ece2); border: 2px solid var(--edge, #050a08); opacity: 0; }
+.act.hov .act-line, .act.hov .act-dot { opacity: 1; }
+.act-tip { position: absolute; bottom: calc(100% + 3px); transform: translateX(-50%); padding: 1px 10px; font-size: 13px; line-height: 1.5; white-space: nowrap; font-variant-numeric: tabular-nums;
         color: var(--cream, #f4ece2); background: rgba(5, 10, 8, .9); border: 2px solid var(--edge, #050a08); border-radius: 4px; box-shadow: 0 0 0 1px var(--frame, #2b6b4f); opacity: 0; }
-.htip b { font-weight: 500; color: var(--gold, #f6d058); }
-.heat.hov .htip { opacity: 1; }
+.act-tip b { font-weight: 500; color: var(--gold, #f6d058); }
+.act.hov .act-tip { opacity: 1; }
 /* the REPLAY tag lies in the same room: it gives way while the curve is shown */
 .rtag { transition: opacity .15s ease; }
-.rbar.heathov .rtag { opacity: 0; }
+.rbar.acthov .rtag { opacity: 0; }
 /* a phone: the curve has a band of its own above the timeline (the tag and the Settings gear are above the band), and the line stops at the timeline so that the finger's thumb stays clear */
 @media (max-width: 700px) {
-    .heat { --heat-h: 28px; }
-    .hline { height: calc(var(--heat-h) + 3px); }
+    .act { --act-h: 28px; }
+    .act-line { height: calc(var(--act-h) + 3px); }
     .rbar.has-activity .tl { height: 78px; }
     .rbar.has-activity .tl .rail { top: 26px; }
 }
-@media (prefers-reduced-motion: reduce) { .heat, .rtag { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .act, .rtag { transition: none; } }
