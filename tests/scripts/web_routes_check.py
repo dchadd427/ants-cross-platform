@@ -211,6 +211,9 @@ def main():
         for query in QUERIES + ("?join=/ws&room=abc",):
             status, headers, names, body = get(old + query)
             check(status == 301 and headers.get("location") == "/" + query, "%s%s answers 301 to /%s (%s)" % (old, query, query, headers.get("location")))
+    for written, want in (("/%70lay.html", "/play"), ("/./match.html", "/match"), ("/%6Cobby.html", "/"), ("//mapmaker.html", "/mapmaker"), ("/%61sset_catalog/index.html", "/asset_catalog/")):
+        status, headers, names, body = get(written + "?x=1")
+        check(status == 301 and headers.get("location") == want + "?x=1", "%s (an old address written another way) answers 301 to %s?x=1, as /play.html does (%s %s)" % (written, want, status, headers.get("location")))
     for query in QUERIES:
         status, headers, names, body = get("/watch.html" + query)
         check(status == 301 and headers.get("location") == "/matches" + query, "/watch.html%s answers 301 to /matches%s, the query kept (%s %s)" % (query, query, status, headers.get("location")))
