@@ -10,8 +10,9 @@
 #   - `linux`, `macos`, `windows_2022`, `windows_2026` and `web` are small jobs that carry the required names. Each looks at the result of the jobs behind it and at the job `changes`, and it
 #     passes only when `changes` succeeded and every job behind it passed, or (macOS and the two Windows names only) when `changes` said that the change needs none of them and they were skipped.
 #     They run whatever the legs did (`if: always()`), because a job whose needs failed would otherwise be skipped, and a skipped job counts as passing for a required check: the explicit test is what
-#     keeps a failed leg, a cancelled one, or a job that failed to decide, from passing. `windows_tests` is one matrix (MSVC 2022 and MSVC 2026) behind the two names, so a failed Windows leg turns
-#     both names red; `web_image` and `web_stack` are the two legs behind the Web name (the web image and its checks; the game server and hub images and the stack files), which run side by side.
+#     keeps a failed leg, a cancelled one, or a job that failed to decide, from passing. `windows_tests` is one matrix of four legs behind the two names (MSVC 2022 and MSVC 2026, each in two
+#     halves, see the job), so a failed Windows leg turns both names red; `web_image` and `web_stack` are the two legs behind the Web name (the web image and its checks; the game server and hub
+#     images and the stack files), which run side by side.
 #   - `changes`, the first job, decides for a pull request (never for a push or a manual run) whether the change is of documents, web pages and page tests only, apart from the few files that the C++ tests
 #     and the macOS script suite read (tools/ci_light.sh; the rules are in docs/WORKFLOW.md). It judges the change against the base branch of the pull request (not against main), and a run starts again
 #     when a pull request is edited (`edited`: a new base branch is one of the edits), so that the decision is made for the base that the pull request has now. Then `macos_tests` and `windows_tests` are
@@ -53,6 +54,10 @@ env:
   # here, and a name that matches nothing is an error because of --no-tests=error).
   CTEST_ALONE: "^test_engine_lookups$"
   CTEST_LONG: "^(test_ai|test_ai_part2|test_lockstep|test_ai_worker|test_engine_copy)$"
+  # How the two Windows legs of each compiler share ctest (the times are those of a run of the whole of ctest on a Windows runner, in seconds): test_ai_part2 takes 620 and decides the time of the
+  # leg that has it; that leg takes the eight tests that take 90 to 620 seconds (together 2,070), and the other one takes every other test (test_engine_lookups, 550, and the 120 that are short: a new
+  # test lands there, which has the room, and a name that matches nothing is an error because of --no-tests=error), the tool self-tests and the E2E runner.
+  CTEST_WINDOWS_LONG: "^(test_ai|test_ai_part2|test_lockstep|test_network_app|test_server|test_app_integration|test_replay_app|test_ai_worker)$"
 
 defaults:
   run:
@@ -391,6 +396,9 @@ jobs:
           exit 1
 
   # The legs behind the required names "Windows (MSVC 2022)" and "Windows (MSVC 2026)" (the jobs windows_2022 and windows_2026 below carry the names, as `linux` and `macos` do for theirs).
+  # Each compiler runs in two legs side by side (one job that built and then ran all of ctest took 30 to 39 of its 40 minutes): `long` runs ctest for the tests of CTEST_WINDOWS_LONG, `rest` runs ctest
+  # for every other test, the tool self-tests and the E2E runner, so every test runs once on each compiler. As on Linux, every leg builds everything and passes nothing on: a build handed over as an
+  # artifact would start the tests later than a second build beside it does. A Windows build takes 13 to 22 minutes (the compiler cache hits about a third of the compiles), the tests of a leg about ten.
   windows_tests:
     name: Windows tests (${{ matrix.name }})
     needs: changes
@@ -403,12 +411,24 @@ jobs:
       fail-fast: false
       matrix:
         # Visual Studio 2022 (MSVC 19.4x) is what developers build with (windows-2022); windows-latest (and windows-2025) have Visual Studio 2026, the newest compiler.
-        # Both compilers run for every event, so that neither required name can pass without its compiler.
+        # Both compilers run for every event, so that neither required name can pass without its compiler. The `part` of a leg says which of the two halves it runs (the steps below ask for it).
         include:
-          - name: MSVC 2022
+          - id: msvc2022-long
+            name: "MSVC 2022: ctest, the long tests"
             os: windows-2022
-          - name: MSVC 2026
+            part: long
+          - id: msvc2022-rest
+            name: "MSVC 2022: ctest, all the other tests, tool self-tests, E2E runner"
+            os: windows-2022
+            part: rest
+          - id: msvc2026-long
+            name: "MSVC 2026: ctest, the long tests"
             os: windows-latest
+            part: long
+          - id: msvc2026-rest
+            name: "MSVC 2026: ctest, all the other tests, tool self-tests, E2E runner"
+            os: windows-latest
+            part: rest
     env:
       # The compiler cache: sccache (with the Ninja generator under the MSVC environment, as the Visual Studio generators cannot use a launcher), its folder cached like the
       # ccache folder of the Linux job (keyed by the runner image and the commit, restored from the latest older one).
@@ -463,6 +483,7 @@ jobs:
 
       - name: Build the E2E runner (Release)
         id: build_e2e
+        if: ${{ matrix.part == 'rest' }}
         run: |
           cmake -S tests/e2e -B build_e2e -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
           cmake --build build_e2e
@@ -473,12 +494,16 @@ jobs:
           sccache --show-stats || true
           sccache --stop-server || true
 
-      - name: Test programs (ctest)
-        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
-        run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4 --no-tests=error
+      - name: Test programs (ctest, the long tests)
+        if: ${{ !cancelled() && steps.build.conclusion == 'success' && matrix.part == 'long' }}
+        run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4 --no-tests=error -R "$CTEST_WINDOWS_LONG"
+
+      - name: Test programs (ctest, all the other tests)
+        if: ${{ !cancelled() && steps.build.conclusion == 'success' && matrix.part == 'rest' }}
+        run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4 --no-tests=error -E "$CTEST_WINDOWS_LONG"
 
       - name: Tool self-tests (map_sweep, bot_arena, replay_tool, lvl_tool)
-        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
+        if: ${{ !cancelled() && steps.build.conclusion == 'success' && matrix.part == 'rest' }}
         run: |
           status=0
           build/map_sweep.exe --selftest || status=1
@@ -488,14 +513,14 @@ jobs:
           exit $status
 
       - name: Opaque-box E2E runner
-        if: ${{ !cancelled() && steps.build_e2e.conclusion == 'success' }}
+        if: ${{ !cancelled() && steps.build_e2e.conclusion == 'success' && matrix.part == 'rest' }}
         run: build_e2e/e2e_runner.exe --all
 
       - name: Keep the test logs of a failed run
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: windows-${{ matrix.os }}-test-logs
+          name: windows-${{ matrix.id }}-test-logs
           path: build/Testing/Temporary/
           if-no-files-found: ignore
 
