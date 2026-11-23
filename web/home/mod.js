@@ -29,7 +29,7 @@
         kickText: ' is logged out of the chat and can log in again at once. Everyone sees ', banText: ' can still read the chat but cannot write until an administrator lifts the ban. Everyone sees ',
         banNote: 'The second red button also removes everything that person wrote in the hour before the ban, from every screen. That cannot be undone.', banPurge: 'Ban and delete their lines from the last hour',
         recent: 'Recent messages from ', recentSmall: 'Their lines in this chat, newest first', recentSub: ' in this chat', one: ' message', more: ' messages', thisLine: 'this line', recentNone: 'None of their lines is in the chat now.', recentName: 'Recent messages, newest first', recentKeys: 'Up and Down move between the lines, Home and End go to the first and the last.',
-        ok: 'OK', example: 'for example 45', admin: 'administrator', mod: 'moderator', you: 'you', line: 'line #',
+        ok: 'OK', example: 'for example 45', admin: 'administrator', mod: 'moderator', you: 'you', line: 'line #', image: 'An image',
         unmute: 'Unmute ', until: 'Muted until ', today: ' today', checking: 'Checking whether ', checkingEnd: ' is muted', again: 'Check again', againSmall: 'Could not tell whether ',
         listHint: 'For moderators: Up and Down choose a person, Enter opens the actions.', personHint: 'Moderation: press Enter, the menu key or Shift and F10 on this person for the actions.'
     };
@@ -102,6 +102,7 @@
         return NOTE.generic;
     }
     function cut(text, n) { text = String(text); return text.length > n ? text.slice(0, n - 1).replace(/[\ud800-\udbff]$/, '') + '\u2026' : text; }
+    function said(l) { var t = String(l.text || '').trim(); return t ? cut(t, LIMIT.quote) : l.img ? TEXT.image : ''; }       // (what a line says, for a quote: its words, or for a line that is only an image, that it is one)
     function firstOf(name) { var c = String(name).charCodeAt(0); return (c >= 0xd800 && c <= 0xdbff ? String(name).slice(0, 2) : String(name).charAt(0)).toUpperCase(); }
 
     // ---- the sheet ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -227,14 +228,14 @@
             list.forEach(function (e) {
                 var w = e.at === undefined ? null : dock.when(e.at), l = dock.line(e.id), can = !!l && actionsOf(viewer(), l).length > 0, row, t = el('span', 'gm-rt', w ? w.time : ''), x = el('span', 'gm-rx');
                 if (multi && w && w.key !== last) { box.appendChild(el('p', 'gm-day', w.day)); last = w.key; }
-                x.appendChild(el('span', 'gm-rq', cut(e.text, LIMIT.quote)));
+                x.appendChild(el('span', 'gm-rq', said(e)));
                 if (e.id === s.line.id) x.appendChild(el('small', 'gm-this', TEXT.thisLine));
                 if (can) { row = button('gm-ri', '', function () { jump(e.id); }); fresh.push(row); } else row = el('div', 'gm-ri');
                 if (w) row.setAttribute('title', w.full);
                 row.setAttribute('data-n', String(e.id));
                 if (e.id === s.line.id) row.className += ' gm-here';
                 put(row, [t, x, can ? icon('chev', 'gm-ico gm-chev') : null]);
-                if (can) row.setAttribute('aria-label', (w ? (multi ? w.day + ' ' : '') + w.time + '. ' : '') + cut(e.text, LIMIT.quote) + (e.id === s.line.id ? '. ' + TEXT.thisLine : ''));
+                if (can) row.setAttribute('aria-label', (w ? (multi ? w.day + ' ' : '') + w.time + '. ' : '') + said(e) + (e.id === s.line.id ? '. ' + TEXT.thisLine : ''));
                 box.appendChild(row);
             });
             if (!list.length) box.appendChild(el('p', 'gm-none', TEXT.recentNone));
@@ -287,7 +288,7 @@
             box.appendChild(el('div', 'gm-grab'));
             if (name === 'line') {
                 var person = !!l.person;
-                quote = person ? null : el('p', 'gm-quote', cut(l.text, LIMIT.quote));
+                quote = person || !said(l) ? null : el('p', 'gm-quote', said(l));
                 if (quote) quote.id = 'gm-quote';
                 box.setAttribute('aria-describedby', quote ? quote.id : 'gm-sub');          // (the dialog is described by the quoted line, or for a person by where they are)
                 list = el('div', 'gm-acts');
@@ -329,7 +330,7 @@
                 var kind = arg, mark = el('div', 'gm-mark'), chip, text, no, yes, btns = el('div', 'gm-btns'), h = el('h2', 'gm-title', kind === 'del' ? TEXT.delTitle : (kind === 'kick' ? 'Kick ' : 'Ban ') + who + '?'), named = who + (l.u ? ' (@' + l.u + ')' : '');
                 h.id = 'gm-title';
                 mark.appendChild(icon(kind === 'del' ? 'del' : kind === 'kick' ? 'kick' : 'ban', 'gm-ico gm-mi'));
-                if (kind === 'del') { chip = el('div', 'gm-chip gm-q'); put(chip, [el('span', 'gm-qw', named + ' \u00b7 ' + TEXT.line + l.id), el('span', 'gm-qt', cut(l.text, LIMIT.quote))]); }
+                if (kind === 'del') { chip = el('div', 'gm-chip gm-q'); put(chip, [el('span', 'gm-qw', named + ' \u00b7 ' + TEXT.line + l.id), said(l) ? el('span', 'gm-qt', said(l)) : null]); }
                 else chip = put(el('div', 'gm-chip'), [circle(l), el('div', 'gm-cn', named)]);
                 text = el('p', 'gm-text', kind === 'del' ? TEXT.delText : who + (kind === 'kick' ? TEXT.kickText + '\u201c' + who + ' was kicked.\u201d' : TEXT.banText + '\u201c' + who + ' was banned.\u201d')); text.id = 'gm-text';
                 box.className = 'gm-box gm-conf'; box.setAttribute('aria-describedby', text.id);
@@ -471,7 +472,7 @@
         hintBox = el('p', 'gc-news', TEXT.logHint); hintBox.id = 'gchat-mod-hint';
         statusBox = el('p', 'gc-news'); statusBox.setAttribute('role', 'status'); statusBox.setAttribute('aria-live', 'polite');
         dock.root.appendChild(hintBox); dock.root.appendChild(statusBox);
-        lines = surface({ kind: 'line', el: log, row: '.gc-line[data-n]', attr: 'data-n', keep: 'a', rowHint: TEXT.rowHint, hint: hintBox, status: statusBox, find: function (id) { return dock.line(id); }, say: function (l) { return l.who + ': ' + cut(l.text, 80) + '. ' + TEXT.rowHint; } });
+        lines = surface({ kind: 'line', el: log, row: '.gc-line[data-n]', attr: 'data-n', keep: 'a', rowHint: TEXT.rowHint, hint: hintBox, status: statusBox, find: function (id) { return dock.line(id); }, say: function (l) { return l.who + ': ' + (String(l.text || '').trim() ? cut(l.text, 80) : l.img ? TEXT.image : '') + '. ' + TEXT.rowHint; } });
         watch(lines);
         dock.rows(function (id, row) { lines.decorate(row, id); });
         function attach(p) {                                           // the players list (its own script), once it is there: its rows open the sheet of a person in the same ways; the person is named to the hub by the NUMBER of the row (`row:<n>`), never by a name
