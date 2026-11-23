@@ -1,12 +1,14 @@
 /* The room's tab in the chat box of Home (web/home/roomchat.js, docs/HOME_CHAT.md "The Room tab"): two tabs in the box's header while the page holds a room, a dot on the one that has news. The box itself, the colors and .btn
-   are the page's (chat.css, web/lobby.html). Every tab is at least 44 px high. */
-.rc-tabs { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; min-width: 0; }
+   are the page's (chat.css, web/lobby.html). A tab is plain text with a gold line under the chosen one; its press area is 44 px high. */
+.rc-tabs { display: flex; align-items: stretch; align-self: stretch; gap: 18px; flex: 0 1 auto; min-width: 0; }
 .rc-tabs[hidden], .rc-note[hidden], .rc-body[hidden], .rc-dot[hidden] { display: none; }
 .gc[data-rc="global"] .gc-title, .gc[data-rc="room"] .gc-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }       /* (the tabs name the two chats: the heading stays for a screen reader) */
-.gc[data-rc="global"] .gc-head, .gc[data-rc="room"] .gc-head { gap: 8px; }
-.rc-tab { position: relative; min-height: 44px; padding: 4px 18px; font-size: 18px; letter-spacing: .01em; }
-.rc-tab[aria-selected="true"] { color: var(--gold); background-color: #0b1a17; background-image: none; box-shadow: inset 0 0 0 2px var(--frame-hi), 3px 4px 0 var(--shadow); }
-.rc-dot { position: absolute; top: -5px; right: -5px; width: 15px; height: 15px; border-radius: 50%; background: var(--gold); border: 2px solid #050a08; box-shadow: 0 0 0 1px #8a6f14; }
+.rc-tab { position: relative; min-height: 36px; padding: 2px 2px 0; font-size: 15px; letter-spacing: .01em; color: #a8cfc0; background: none; border: 0; border-bottom: 3px solid transparent; border-radius: 0; box-shadow: none; text-shadow: none; }       /* (plain text tabs with a gold line under the chosen one) */
+.rc-tab::before { content: ""; position: absolute; left: -8px; right: -8px; top: -4px; bottom: -4px; }       /* (the press area is 44 px high though the drawn tab is lower) */
+.rc-tab:hover { color: var(--cream); background: none; }
+.rc-tab:active:not([disabled]) { transform: none; box-shadow: none; }
+.rc-tab[aria-selected="true"] { color: var(--gold); border-bottom-color: var(--gold); }
+.rc-dot { position: absolute; top: 3px; right: -12px; width: 12px; height: 12px; border-radius: 50%; background: var(--gold); border: 2px solid #050a08; box-shadow: 0 0 0 1px #8a6f14; }
 .rc-note { flex: 1 1 auto; min-width: 0; margin-left: auto; font-size: 14px; text-align: right; color: var(--muted); }
 .gc[data-rc="room"] .gc-online, .gc[data-rc="room"] .gc-unread { display: none; }
 .gc[data-rc="global"] .gc-unread, .gc[data-rc="room"] .gc-unread { display: none; }       /* (the dot on a tab says it) */
@@ -19,14 +21,12 @@
 .rc-body > #chat .chat-log { flex: 1 1 auto; min-height: 0; height: auto; }
 .rc-body > #chat .chat-form { flex: none; margin-top: 10px; }
 .rc-body > #chat .hint { flex: none; }
-@media (max-width: 700px), (max-height: 500px) {
-    .rc-tab { padding: 4px 12px; font-size: 16px; }
-    .rc-body { padding: 0 12px 10px; }
-}
+@media (max-width: 700px), (max-height: 500px) { .rc-body { padding: 0 12px 10px; } }
 @media (max-width: 700px) { .rc-note { display: none; } }       /* (a wider, low window keeps the note in the header's row, at the right) */
 @media (max-width: 700px) and (min-height: 501px) {       /* (a phone held upright: the header is a line of 36 px for the heading; with a room it holds the tabs, 44 px high, and under them the note of the Room tab) */
-    .gc[data-rc="global"] .gc-head, .gc[data-rc="room"] .gc-head { height: auto; flex-wrap: wrap; row-gap: 2px; padding: 6px 10px 4px 12px; }
+    .gc[data-rc="global"] .gc-head, .gc[data-rc="room"] .gc-head { height: auto; flex-wrap: wrap; row-gap: 2px; padding: 4px 10px 0 12px; }
+    .rc-tab { min-height: 44px; font-size: 16px; }
     .gc[data-rc="room"] .rc-note { display: block; flex: 1 1 100%; order: 3; margin: 0; text-align: left; }
 }
-@media (max-height: 500px) { .gc[data-rc="global"] .gc-head, .gc[data-rc="room"] .gc-head { display: flex; } }       /* (a phone held sideways: chat.css leaves the heading out; with a room the tabs are the way between the two chats) */
+@media (max-height: 500px) { .gc[data-rc="global"] .gc-head, .gc[data-rc="room"] .gc-head { display: flex; } .rc-tab { min-height: 44px; } }       /* (a phone held sideways: chat.css leaves the heading out; with a room the tabs are the way between the two chats) */
 @media (forced-colors: active) { .rc-tab[aria-selected="true"] { outline: 2px solid Highlight; } .rc-dot { background: Highlight; } }

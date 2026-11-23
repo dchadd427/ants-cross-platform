@@ -1245,7 +1245,7 @@ function welcomeWith(sock, role) {
     check('a visitor who is an administrator from the welcome: the page asks for the two files at once', filesOf(env, 'mod').length === 2);
     env.win.AntsHomeMod = { mount() { throw new Error('a sheet that breaks'); } };
     filesOf(env, 'mod').forEach((n) => { if (n.onload) n.onload(); });
-    check('a sheet that throws when it mounts: Home goes on (the dock is there, My room still makes the room)', env.$('home').children.find((c) => c.id === 'gchat') !== undefined && (env.home('mine').click(), env.screen() === 'room'));
+    check('a sheet that throws when it mounts: Home goes on (the dock is there, the page still makes a room)', env.$('home').children.find((c) => c.id === 'gchat') !== undefined && (env.makeRoom(), env.screen() === 'room'));
     const none = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
     const s2 = hubFor(none); none.advance(0); bring(none, 'chat', 'AntsHomeChat'); none.advance(0); welcomeWith(s2[0], 'mod'); none.advance(0);
     filesOf(none, 'mod').forEach((n) => { if (n.onload) n.onload(); });

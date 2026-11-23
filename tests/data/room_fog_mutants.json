@@ -79,27 +79,6 @@
    "test": "node tests/scripts/web_room_fog_check.js web/lobby.html"
   },
   {
-   "id": "room_guest_has_the_switch",
-   "file": "web/front/room_fog.js",
-   "old": "var top = head.parentNode, shown = !s.guest;",
-   "new": "var top = head.parentNode, shown = true;",
-   "test": "node tests/scripts/web_room_fog_check.js web/lobby.html"
-  },
-  {
-   "id": "room_guest_has_no_chip",
-   "file": "web/front/room_fog.js",
-   "old": "chip.hidden = !(s.guest && on);",
-   "new": "chip.hidden = true;",
-   "test": "node tests/scripts/web_room_fog_check.js web/lobby.html"
-  },
-  {
-   "id": "room_note_is_always_shown",
-   "file": "web/front/room_fog.js",
-   "old": "note.hidden = !on;",
-   "new": "note.hidden = false;",
-   "test": "node tests/scripts/web_room_fog_check.js web/lobby.html"
-  },
-  {
    "id": "room_switch_works_while_start_waits",
    "file": "web/front/room_fog.js",
    "old": "sw.disabled = !!s.disabled;",
@@ -123,8 +102,8 @@
   {
    "id": "room_bot_choices_stay_open_with_fog",
    "file": "web/lobby.html",
-   "old": "if (m.fog && /^(easy|medium|hard)$/.test(o[0])) option.disabled = true;",
-   "new": "",
+   "old": "off: model.fog ? ['easy', 'medium', 'hard'] : [],",
+   "new": "off: [],",
    "test": "node tests/scripts/web_room_fog_check.js web/lobby.html"
   },
   {

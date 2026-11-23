@@ -272,8 +272,8 @@
   {
    "id": "rules_start_ignores_ready",
    "file": "web/front/lobby_rules.js",
-   "old": "startDisabled: g || busy || !!away || waiting.names.length > 0 || waiting.you,",
-   "new": "startDisabled: g || busy || !!away,",
+   "old": "startDisabled: g ? !asks : busy || !!away || waiting.names.length > 0 || waiting.you,",
+   "new": "startDisabled: g ? !asks : busy || !!away,",
    "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
   },
   {

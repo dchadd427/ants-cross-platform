@@ -1,8 +1,8 @@
 // Runs the Room's FOG OF WAR switch (web/front/room_fog.js with web/lobby.html's own script and web/home/games.js, docs/PLAY_IN_BROWSER.md "Fog of War", network protocol 28) in the fake browser of
 // tests/scripts/web_page_harness.js against a scripted game server:
-//   1. the leader's switch: its place in the header, its state the Room message's and never the press's, the plan that a press sends (every byte, fog last), a press that is a double press, a guest who has none;
-//   2. everybody else: the guest's chip and the note under the link while fog is on (and nothing when it is off), the line of the room's chat when the leader switches it;
-//   3. computer players: the question that turning fog on asks (and what its button sends), the colors' menus with the three bot choices off while fog is on, a bot that a key picks anyway;
+//   1. the leader's switch: its row in the Rules sheet, its state the Room message's and never the press's, the plan that a press sends (every byte, fog last), a press that is a double press, a guest who has none;
+//   2. everybody else: the guest reads the switch (it takes no press) and the Rules button says Fog while fog is on, the line of the room's chat when the leader switches it;
+//   3. computer players: the question that turning fog on asks (and what its button sends), the colors' menus with the three bot choices off while fog is on, a bot that is picked anyway;
 //   4. every other plan of the page carries the room's fog (a map, a color, the teams) and its game type (also when two colors swap their plans), also before the room has answered the leader's own pick (the pending pick);
 //   5. the Room that the server refuses to say (fog with a bot) and the server's refusal of a plan.
 // tests/scripts/test_web_room_fog.py runs this with node (the quick tier). usage: node web_room_fog_check.js web/lobby.html     (exit 0: every check holds; every failure is printed)
@@ -18,8 +18,11 @@ const modeByte = (bytes) => bytes[bytes.length - 2];
 const kindsOf = (bytes) => { const at = 2 + bytes[1]; return Array.from(bytes.slice(at, at + 4)); };
 const switchOf = (env) => find(env.root, 'dr-switch').filter((e) => e.id === 'fg-switch')[0] || null;
 const noteOf = (env) => find(env.root, 'fg-note')[0] || null;
-const chipOf = (env) => find(env.root, 'fg-chip')[0] || null;
 const rowOf = (env) => find(env.root, 'fogsw')[0] || null;
+const stateOf = (env) => env.$('rules-state').textContent;       // (what the Rules button says: who can join, and Fog while it is on)
+const modeButtons = (env) => find(env.root, 'mode');
+const itemsOf = (env) => env.body.findAll((e) => e.tagName === 'li' && String(e.className).split(/\s+/).indexOf('sm-item') !== -1);
+const choose = (env, word, which) => { env.press(modeButtons(env)[which || 0]); const item = itemsOf(env).filter((e) => e.getAttribute('data-word') === word)[0]; item.click(); };       // (a press on a color's button opens its menu; an item of it is the choice)
 const checked = (env) => switchOf(env).getAttribute('aria-checked');
 const seatsOf = (names) => R.seatsOf(names);
 const room = (sock, names, o) => sock.receive(roomMessage(seatsOf(names), Object.assign({ you: 0, leader: 0, flags: PRIVATE }, o || {})));
@@ -35,13 +38,12 @@ const advance = async (env, ms) => { await wait(env, ms); };
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
     const env = await page();
-    check('before the page has a room the switch is not shown (nothing of it)', rowOf(env) !== null && (rowOf(env).hidden === true || switchOf(env).disabled === true));
+    check('before the page has a room the switch cannot be pressed', rowOf(env) !== null && switchOf(env).disabled === true);
     const sock = myRoom(env, ['Maya', 'Sage']);
     const sw = switchOf(env);
-    check('the leader of a room sees the switch: a button with the role switch, named Fog of War, off', rowOf(env).hidden === false && sw.getAttribute('role') === 'switch' && sw.getAttribute('aria-labelledby') === 'fg-label' && checked(env) === 'false' && sw.disabled === false);
-    check('the switch is in the header of the Room, right after the room\'s own switch (Invite only | Public)', (() => { const kids = rowOf(env).parent.children; const at = kids.indexOf(rowOf(env)); return at > 0 && String(kids[at - 1].className).split(/\s+/).indexOf('vis') !== -1; })());
-    check('the state word says Off, and there is no note while fog is off', textOf(find(rowOf(env), 'fg-word')[0]) === FOG.TEXT.off && noteOf(env).hidden === true);
-    check('a room that is fog-free shows no chip and no heading change', chipOf(env).hidden === true);
+    check('the leader of a room has the switch: a button with the role switch, named Fog of War, off', sw.getAttribute('role') === 'switch' && sw.getAttribute('aria-labelledby') === 'fg-label' && checked(env) === 'false' && sw.disabled === false);
+    check('the switch is the fog row of the Rules sheet, and its line says what it does', rowOf(env) === env.$('r-fog') && textOf(noteOf(env)) === FOG.TEXT.note);
+    check('a room that is fog-free says nothing of fog on the Rules button', !/Fog/.test(stateOf(env)));
     // a press sends a plan that has fog on, and nothing else of the plan moves; the switch shows what the room said, not the press
     const before = plansOf(sock).length;
     press(env);
@@ -50,15 +52,15 @@ const advance = async (env, ms) => { await wait(env, ms); };
     check('a press sends one plan with fog on (the last byte), the room\'s map, colors and mode as they were', plansOf(sock).length === before + 1 && fogByte(sent) === 1 && modeByte(sent) === 0 && kindsOf(sent).join() === '0,0,0,0');
     check('the switch still shows Off: the Room message has not come', checked(env) === 'false');
     room(sock, ['Maya', 'Sage'], { fog: true });
-    check('the Room message says fog: the switch is on, the word says On, the note is there with its words', checked(env) === 'true' && textOf(find(rowOf(env), 'fg-word')[0]) === FOG.TEXT.on && noteOf(env).hidden === false && textOf(noteOf(env)) === FOG.TEXT.note);
-    check('the note is the honest one: the map is hidden from the screens and it is not cheat-proof yet', /not cheat-proof yet/.test(FOG.TEXT.note) && /screens/.test(FOG.TEXT.note));
-    check('the note is the switch\'s description (aria-describedby names it)', switchOf(env).getAttribute('aria-describedby') === noteOf(env).id);
+    check('the Room message says fog: the switch is on and the Rules button says Fog', checked(env) === 'true' && /Fog/.test(stateOf(env)));
+    check('the line is the honest one: the map is hidden from the screens, it is not cheat-proof yet, and there are no bots', /Not cheat-proof yet/.test(FOG.TEXT.note) && /screens/.test(FOG.TEXT.note) && /No bots/.test(FOG.TEXT.note));
+    check('the line is the switch\'s description (aria-describedby names it)', switchOf(env).getAttribute('aria-describedby') === noteOf(env).id);
     await advance(env, 1500);
     press(env);
     await flush();
     check('a press on a switch that is on sends a plan with fog off', fogByte(lastPlan(sock)) === 0 && kindsOf(lastPlan(sock)).join() === '0,0,0,0');
     room(sock, ['Maya', 'Sage'], { fog: false });
-    check('the Room message says it is off: the note goes, the switch is off', checked(env) === 'false' && noteOf(env).hidden === true);
+    check('the Room message says it is off: the switch is off and the Rules button says no more of fog', checked(env) === 'false' && !/Fog/.test(stateOf(env)));
     // a double press: the plan is sent with the page's pace (it is the same request twice, and the second goes with the room's own fog, which has not changed)
     const n = plansOf(sock).length;
     press(env); press(env);
@@ -81,18 +83,17 @@ const advance = async (env, ms) => { await wait(env, ms); };
 {
     const env = await page({ search: '?room=k7m2xq', options: { stayHome: false } });
     const sock = R.guestRoom(env, 'Sage');
-    check('a guest has no switch', rowOf(env).hidden === true);
-    check('... no chip and no note while fog is off', chipOf(env).hidden === true && noteOf(env).hidden === true);
+    check('a guest reads the switch: it is off and takes no press', checked(env) === 'false' && switchOf(env).disabled === true);
+    check('... and the Rules button says nothing of fog while it is off', !/Fog/.test(stateOf(env)));
     sock.receive(roomMessage(seatsOf(['Sage', 'Maya']), { you: 1, leader: 0, flags: PRIVATE, fog: true }));
-    check('the room says fog: the guest has the chip Fog of War and the note under the link', chipOf(env).hidden === false && textOf(chipOf(env)) === FOG.TEXT.chip && noteOf(env).hidden === false && textOf(noteOf(env)) === FOG.TEXT.note);
-    check('the chip is beside the room\'s heading (the same box as the other chip)', chipOf(env).parent === first(env.root, 'vistag').parent || first(env.root, 'vistag') === null || chipOf(env).parent !== null);
-    check('a guest still has no switch with fog on, and nothing to press', rowOf(env).hidden === true);
+    check('the room says fog: the guest reads the switch as on, and the Rules button says Fog', checked(env) === 'true' && /Fog/.test(stateOf(env)));
+    check('a guest still has nothing to press with fog on', switchOf(env).disabled === true);
     const n = plansOf(sock).length;
     switchOf(env).click();
     await flush();
-    check('a click on the guest\'s hidden switch sends nothing', plansOf(sock).length === n);
+    check('a click on the guest\'s switch sends nothing', plansOf(sock).length === n);
     sock.receive(roomMessage(seatsOf(['Sage', 'Maya']), { you: 1, leader: 0, flags: PRIVATE, fog: false }));
-    check('fog off again: the chip and the note go', chipOf(env).hidden === true && noteOf(env).hidden === true);
+    check('fog off again: the switch is off and the Rules button says no more of it', checked(env) === 'false' && !/Fog/.test(stateOf(env)));
     // the line of the chat: everybody is told who switched it (the room's chat box is the page's own)
     sock.receive(roomMessage(seatsOf(['Sage', 'Maya']), { you: 1, leader: 0, flags: PRIVATE, fog: true }));
     const said = find(env.root, 'sys').map(textOf);
@@ -103,7 +104,7 @@ const advance = async (env, ms) => { await wait(env, ms); };
     const sock = R.guestRoom(env, 'Sage');
     sock.receive(roomMessage(seatsOf(['Sage', 'Maya']), { you: 1, leader: 0, flags: PRIVATE, fog: true }));
     sock.receive(roomMessage(seatsOf(['', 'Maya']), { you: 1, leader: 1, flags: PRIVATE, fog: true }));
-    check('the guest leads now: the switch is there, on, and the chip is gone', rowOf(env).hidden === false && checked(env) === 'true' && chipOf(env).hidden === true);
+    check('the guest leads now: the switch takes presses, and is on', switchOf(env).disabled === false && checked(env) === 'true');
     switchOf(env).click();
     await flush();
     check('... and a press sends fog off', lastPlan(sock) !== null && fogByte(lastPlan(sock)) === 0);
@@ -157,18 +158,19 @@ const advance = async (env, ms) => { await wait(env, ms); };
     const env = await page();
     const sock = myRoom(env, ['Maya', 'Sage'], PRIVATE, { fog: true });
     await flush();
-    const menus = find(env.root, 'mode');
-    check('the empty colors have a menu', menus.length >= 2);
-    const choices = (menu) => find(menu, '').length ? [] : menu.children.map((o) => o.value + (o.disabled ? ':off' : ''));
-    same('with fog on each menu offers Open and Nobody and shows Easy, Medium and Hard off', menus.map((m) => m.children.map((o) => o.value + (o.disabled ? ':off' : '')).join()), menus.map(() => 'open,easy:off,medium:off,hard:off,nobody'));
+    const menus = modeButtons(env);
+    check('the empty colors have a menu (a button that opens it)', menus.length >= 2);
+    env.press(menus[0]);
+    same('with fog on the menu offers Open and Closed and shows Easy, Medium and Hard off', itemsOf(env).map((o) => o.getAttribute('data-word') + (o.getAttribute('aria-disabled') === 'true' ? ':off' : '')).join(), 'open,easy:off,medium:off,hard:off,nobody');
     const n = plansOf(sock).length;
-    const m2 = menus[0];
-    m2.value = 'medium';
-    env.$('slots').fire('change', { target: m2 });
+    itemsOf(env).filter((o) => o.getAttribute('data-word') === 'medium')[0].click();
     await flush();
-    check('a bot picked by a key is refused with the page\'s words and no plan is sent', plansOf(sock).length === n && env.$('toast').hidden === false && env.$('toast').textContent === FOG.TEXT.refusal);
+    check('a bot that is picked anyway is refused with the page\'s words and no plan is sent', plansOf(sock).length === n && env.$('toast').hidden === false && env.$('toast').textContent === FOG.TEXT.refusal);
+    env.press(modeButtons(env)[0]);
     room(sock, ['Maya', 'Sage'], { fog: false });
-    same('with fog off every menu has all five choices', find(env.root, 'mode').map((m) => m.children.map((o) => o.value + (o.disabled ? ':off' : '')).join()), find(env.root, 'mode').map(() => 'open,easy,medium,hard,nobody'));
+    check('the menu that was open when fog went off is closed (its choices were those of the fog)', env.body.findAll((e) => String(e.className).split(/\s+/).indexOf('sm-menu') !== -1)[0].hidden === true);
+    env.press(modeButtons(env)[0]);
+    same('with fog off the menu has all five choices', itemsOf(env).map((o) => o.getAttribute('data-word') + (o.getAttribute('aria-disabled') === 'true' ? ':off' : '')).join(), 'open,easy,medium,hard,nobody');
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -178,10 +180,8 @@ const advance = async (env, ms) => { await wait(env, ms); };
     const env = await page();
     const sock = myRoom(env, ['Maya', 'Sage'], PRIVATE, { fog: true });
     await flush();
-    const menus = find(env.root, 'mode');
     const n = plansOf(sock).length;
-    menus[0].value = 'nobody';
-    env.$('slots').fire('change', { target: menus[0] });
+    choose(env, 'nobody');
     await flush();
     check('a color that the leader sets is a plan that keeps the room\'s fog (on)', plansOf(sock).length === n + 1 && fogByte(lastPlan(sock)) === 1 && kindsOf(lastPlan(sock)).indexOf(4) !== -1);
 }
@@ -193,21 +193,17 @@ const advance = async (env, ms) => { await wait(env, ms); };
     await flush();
     check('the press sends fog on', fogByte(lastPlan(sock)) === 1);
     await advance(env, 400);
-    const menus = find(env.root, 'mode');
-    menus[0].value = 'nobody';
-    env.$('slots').fire('change', { target: menus[0] });
+    choose(env, 'nobody');
     await flush();
     check('a color set before the Room has answered carries the pending fog (on), not the room\'s old (off)', fogByte(lastPlan(sock)) === 1 && kindsOf(lastPlan(sock)).indexOf(4) !== -1);
     room(sock, ['Maya', 'Sage'], { fog: true, plan: [4, 0, 0, 0] });
     await advance(env, 800);
-    menus[0].value = 'open';
-    env.$('slots').fire('change', { target: menus[0] });
+    choose(env, 'open');
     await flush();
     check('once the room says fog the pending pick is gone and a plan carries the room\'s own', fogByte(lastPlan(sock)) === 1);
     room(sock, ['Maya', 'Sage'], { fog: false });
     await advance(env, 800);
-    menus[0].value = 'nobody';
-    env.$('slots').fire('change', { target: menus[0] });
+    choose(env, 'nobody');
     await flush();
     check('a room that says fog is off carries off in the next plan: nothing is held back that the room does not say', fogByte(lastPlan(sock)) === 0);
 }

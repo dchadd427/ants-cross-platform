@@ -6,12 +6,12 @@ A room of the front page ([Play in the browser](PLAY_IN_BROWSER.md#your-room)) d
 
 | Who | Ready |
 |---|---|
-| A person in the room who is not the host | Says it with the **Ready up** switch on their own card, and takes it back with the same switch. Their mark shows on every screen as **Ready** or **Not ready**. |
+| A person in the room who is not the host | Says it with the big button, which is their **READY** (a switch: pressed is ready), and takes it back with the same button. Their mark shows on every screen as **Ready** or **Not ready**. |
 | The host | Does not ready. Pressing START is the host's Ready, and the host's card shows **Ready** by itself. |
 | A computer player | Is always ready (the mark says so, and nobody waits for it). |
 | A person whose game is open already (a desktop player who joined the room) | Needs none: the game is open. |
 
-- **START** of the host is off until every person who has to say it has. Under it the room says whose Ready it waits for ("Waiting for Wren to ready up", "Waiting for 3 players to ready up") and, when all have said it, "Everyone is ready." A guest sees START as "Waiting for the host" and, under it, "Waiting for you to ready up" until they have pressed theirs.
+- **START** of the host is off until every person who has to say it has. Under it the room says whose Ready it waits for ("Waiting for Wren to ready up", "Waiting for 3 players to ready up") and, when all have said it, "Everyone is ready." A guest sees the big button as READY (pressed once they have said it) and, under it, who starts the match; a guest whom nothing asks (a game of the desktop) sees it off, "Waiting for <host>".
 - **The marks stay when the host changes things.** A new map, another game type, Fog of War, a computer player in a color, the teams, a color moved or swapped (the mark goes with the person): nobody has to say it again.
 - **The marks go** when a person's link ends (a person who drops is not ready, and says it again after coming back, also after reloading the page), when a person comes to lead the room (the next host starts with no mark: the host does not ready), and for a person who is removed or leaves. A START that waits for the games to open keeps them.
 - A room with no person to wait for (the host alone, or with computer players) starts at once, as before.

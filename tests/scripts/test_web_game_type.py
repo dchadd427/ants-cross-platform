@@ -47,12 +47,12 @@ class ThePage(unittest.TestCase):
         self.assertIn('<span class="hl"><h2 id="room-h">Your room</h2><span class="modetag" id="mode-tag" hidden></span></span>', self.page)
 
     def test_the_scripts_and_the_stylesheet_are_loaded_in_their_places(self):
-        self.assertIn('<script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script><script src="front/room_fog.js"></script>\n<script src="front/map_picker.js"></script>', self.page)
+        self.assertIn('<script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script><script src="front/room_fog.js"></script><script src="front/room_sheet.js"></script><script src="front/seat_menu.js"></script>\n<script src="front/map_picker.js"></script>', self.page)
         self.assertEqual(self.page.count('<link rel="stylesheet" href="front/game_type.css">'), 1)
         self.assertGreater(self.page.index('href="front/game_type.css"'), self.page.index("</style>"), "the sheet comes after the page's own style")
 
     def test_the_page_stops_with_its_line_when_the_new_scripts_did_not_come(self):
-        self.assertIn("if (!Rules || !Net || !Chat || !Rematch || !Modes || !GameType || !PlayerName || !window.AntsHome) {", self.page)
+        self.assertIn("if (!Rules || !Net || !Chat || !Rematch || !Modes || !GameType || !PlayerName || !RoomSheet || !SeatMenu || !window.AntsHome) {", self.page)
 
     def test_a_choice_is_a_plan_with_the_mode_and_is_kept_in_the_browser(self):
         self.assertIn("onChoose: function (id) { Modes.remember(storage, id); if (sendPlan({ mode: id })) pendingMode = id; else render(); }", self.page)
@@ -93,7 +93,7 @@ class ThePage(unittest.TestCase):
         self.assertNotIn("innerHTML", self.control)
 
     def test_the_words_are_the_approved_ones_and_american(self):
-        for words in ("Game type", "Highest score", "The original game. Food and power-ups; the highest score wins.", "A fight with no food. Kills decide.", "No food and no power-ups. The most kills wins.", "New mode"):
+        for words in ("Game type", "Highest score", "Food and power-ups. The highest score wins.", "No food. Most kills win.", "New mode"):
             self.assertIn(words, self.modes + self.control)
         for text in (self.modes, self.control, self.css):
             self.assertIsNone(re.search("colo" + "ur", text, re.I))
@@ -132,12 +132,12 @@ class TheCheckIsNotVacuous(unittest.TestCase):
 
     MODES_MUTANTS = {
         "a remembered word that no mode has is not turned into the default": ("return byWord(word) || defaultMode();", "return byWord(word);"),
-        "a mode that is not known has no tag": ("return { known: false, id: id, name: name, tag: UNKNOWN_NAME, line: '', note: '' };", "return { known: false, id: id, name: name, tag: '', line: '', note: '' };"),
+        "a mode that is not known has no tag": ("return { known: false, id: id, name: name, tag: UNKNOWN_NAME, line: '' };", "return { known: false, id: id, name: name, tag: '', line: '' };"),
         "a mode that is not known has no plain name": ("var UNKNOWN_NAME = 'New mode';", "var UNKNOWN_NAME = '';"),
         "the server's name is not used for a guest": ("var name = typeof serverName === 'string' && serverName !== '' ? serverName : UNKNOWN_NAME;", "var name = UNKNOWN_NAME;"),
         "storage that refuses a read throws": ("try { return storage ? storage.getItem(STORAGE_KEY) : null; } catch (e) { return null; }", "return storage ? storage.getItem(STORAGE_KEY) : null;"),
         "storage that refuses a write throws": ("try { storage.setItem(STORAGE_KEY, m.word); return true; } catch (e) { return false; }", "storage.setItem(STORAGE_KEY, m.word); return true;"),
-        "the default mode has a tag": ("tag: '', line: 'The original game.", "tag: 'HS', line: 'The original game."),
+        "the default mode has a tag": ("tag: '', line: 'Food and power-ups.", "tag: 'HS', line: 'Food and power-ups."),
         "the room that has the mode already is told to change": ("return id === roomId ? -1 : id;", "return id;"),
     }
     CONTROL_MUTANTS = {

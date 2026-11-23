@@ -105,7 +105,18 @@
         var meta = row.at === 'look' || row.at === 'away' ? '' : metaOf(row, false, false);
         return meta ? WORD[row.at] + ' · ' + meta : WORD[row.at];
     }
-    // What this page tells the hub it is doing, from its own room (client: the page's LobbyClient or null; count: Home's { people, size } of the room or null; handing: the page is on its way to a game).
+    // The seats of a room as the Room's model says them: { people, size } (persons and computer players of the colors that are in the match, and how many colors are in it: a Closed color is not a seat), or null where there is no model of four colors.
+    function countOf(model) {
+        if (!model || !model.slots || model.slots.length !== 4) return null;
+        var people = 0, size = 0;
+        for (var i = 0; i < 4; i++) {
+            var kind = model.slots[i].kind;
+            if (kind !== 'nobody') size++;
+            if (kind === 'person' || kind === 'bot') people++;
+        }
+        return { people: people, size: size };
+    }
+    // What this page tells the hub it is doing, from its own room (client: the page's LobbyClient or null; count: countOf of the room's model, or null; handing: the page is on its way to a game).
     // Looking: no room. Waiting: a room that has not started. Playing: it has (or the page is on its way to it). A public room adds its map and seats, and its code if the visitor is its host; a private one says `pub`:false and nothing more.
     function announceOf(client, count, handing) {
         var room = client && client.room;
@@ -138,7 +149,7 @@
     // mount({ doc, win, host (Home's div), yard (the box that it mounts into), games (the bar's button), dock (the chat dock: tap(fn), send(obj)), page (the bridge: client(), info(), handing()), now, error }) returns { root, list (the scrolling list: the moderation sheet's way in), state, model, person(i), drawn(fn), sync }, or null
     function mount(env) {
         var doc = env.doc, win = env.win, host = env.host, dock = env.dock, page = env.page || {};
-        var Chat = win.AntsHomeChat, rules = win.AntsLobbyRules, Home = win.AntsHome;
+        var Chat = win.AntsHomeChat, rules = win.AntsLobbyRules;
         if (!dock || typeof dock.tap !== 'function' || !Chat || !rules || !doc.createElement) return null;
         var now = env.now || function () { return Date.now(); };
         var yard = env.yard || host;
@@ -288,7 +299,7 @@
         // ---- what the page says, and what the hub says ----------------------------------------------------------------------------------------------------------------------------------------------
         function look() {
             var client = page.client ? page.client() : null, info = client && page.info ? page.info() : {};
-            return announceOf(client, client && Home && Home.countOf ? Home.countOf(info.model) : null, !!(page.handing && page.handing()));
+            return announceOf(client, client ? countOf(info.model) : null, !!(page.handing && page.handing()));
         }
         function tell() {                                                // the hub is told what the page does, when it changed and not oftener than every 3 seconds
             if (!live || !supported || !you) return;
@@ -345,5 +356,5 @@
         return { root: root, list: list, state: function () { return phase; }, model: function () { return model; }, person: person, drawn: function (fn) { drawnFns.push(fn); }, sync: guard(sync) };
     }
 
-    return { LIMIT: LIMIT, MS: MS, TEXT: TEXT, GROUPS: GROUPS, rowOf: rowOf, apply: apply, listOf: listOf, metaOf: metaOf, whereOf: whereOf, seatsText: seatsText, announceOf: announceOf, noteOf: noteOf, hashOf: hashOf, possessive: possessive, roleOf: roleOf, mount: mount };
+    return { LIMIT: LIMIT, MS: MS, TEXT: TEXT, GROUPS: GROUPS, rowOf: rowOf, apply: apply, listOf: listOf, metaOf: metaOf, whereOf: whereOf, seatsText: seatsText, announceOf: announceOf, countOf: countOf, noteOf: noteOf, hashOf: hashOf, possessive: possessive, roleOf: roleOf, mount: mount };
 });

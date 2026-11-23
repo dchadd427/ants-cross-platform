@@ -1,4 +1,4 @@
-// The "Direct connection" switch of the front page's Room (web/lobby.html; protocol 26, docs/P2P_HINTS.md): one switch, for this player only, off by default, remembered by this browser
+// The "Direct connection" switch of the front page's Room (web/lobby.html; protocol 26, docs/P2P_HINTS.md), one row of the Rules sheet (front/room_sheet.js): one switch, for this player only, off by default, remembered by this browser
 // (localStorage `ants.direct`, which the game page reads when it opens the match: web/p2p.js). Off, every connection to the other players goes through the operator's relay and no player's address
 // reaches another. On, a connection to a player who has turned it on too may be direct, which can lower the delay with players who are near, and those players can see this player's IP address.
 //   * The first time a person turns it on, a short explanation says so in plain words and asks (Turn it on / Keep it off); the switch changes only on the answer. Turning it off again is one press, and
@@ -15,7 +15,7 @@
     // the words of the control (the wording the maintainer chose; "relay" is the only technical word, and it is explained by what it does)
     var WORDS = {
         label: 'Direct connection',
-        help: 'Can lower delay with players near you. Players you connect to directly can see your IP address.',
+        help: 'Can lower delay. Players you connect to can see your IP address.',
         askTitle: 'Turn on a direct connection?',
         ask: 'A direct connection links your browser to the browsers of other players in a match, with nothing in between. It can lower the delay with players who are near you. Those players can see your IP address, which tells roughly where you are. With the switch off, everything goes through our relay and nobody sees it. You can turn it off again at any time.',
         yes: 'Turn it on',
