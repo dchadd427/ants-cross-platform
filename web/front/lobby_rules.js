@@ -372,6 +372,20 @@
         return { guest: g, busy: busy, ro: ro, offline: off, heading: off === 'join' ? 'Joining a room' : g ? hostName(model) + '’s room' : 'Your room', cards: cards, removing: removing, sides: sides, play: play, side: sideView(model, ctx, play),
             rules: { state: (model.isPublic ? 'Public' : 'Invite only') + (model.fog ? ' · Fog' : '') } };
     }
+    // The leader's sheet for one color (a phone held upright: front/seat_menu.js draws it, docs/HOME_SCREEN.md "The Room"): the color's own card, with what the desktop's controls say, in the sheet's words. `card` is a card of
+    // viewOf(); the sheet is for a color that can be changed (card.grip). { seat, id, name (the color's), kind, title (the person's name or the computer player's own name; '' where the card says no words of its own: the sheet says what the choice is), parts (the words after
+    // the color's name: You, Host, Ready or Not ready), teams (the card's buttons, or null), colors (a person's: the four colors, each with the words of a press on it, `here` for the person's own), mode (an open color's or a
+    // computer player's: the plan's word, else ''), remove (0: none, 1: the button, 2: the question is open) }
+    function sheetOf(model, card) {
+        var s = model.slots[card.seat], person = s.kind === 'person', parts = [], title = card.who.length ? card.who[0].text : '';
+        if (person) {
+            if (s.me) parts.push('You');
+            if (s.leader) parts.push('Host'); else if (card.ready) parts.push(card.ready.on ? READY.chip : READY.chipOff);
+        }
+        return { seat: card.seat, id: card.color.id, name: card.color.name, kind: s.kind, title: title, parts: parts, teams: card.teams,
+            colors: person ? COLORS.map(function (c, i) { var x = model.slots[i]; return { seat: i, id: c.id, name: c.name, kind: x.kind, here: i === card.seat, label: i === card.seat ? c.name + ', where ' + title + ' is' : x.kind === 'person' ? 'Swap places with ' + x.name + ' on ' + c.name : 'Move ' + title + ' to ' + c.name }; }) : null,
+            mode: person ? '' : card.mode, remove: card.ask ? 2 : card.remove ? 1 : 0 };
+    }
     // The one line under the big button: what is happening now, the thing that matters most first. START that is on its way, no room, a color that was tapped (the leader's), a refused team, whose Ready START waits for,
     // who is not back from the match; else who is in (a guest: who starts). tone: '' (plain), 'ok' (everybody is ready) or 'warn' (a refused press, a wait that the leader can end)
     function statusOf(model, ctx, play, away, host, line, missing) {
@@ -482,7 +496,7 @@
         mapByKey: mapByKey, mapOfFile: mapOfFile, validMapFile: validMapFile, communityName: communityName, nameCheck: nameCheck, makeCode: makeCode, codeText: codeText, typedCode: typedCode,
         levelWord: levelWord, article: article, listOf: listOf, modelOf: modelOf, playing: playing, hostName: hostName, nameOf: nameOf, nameAt: nameAt,
         sidesFix: sidesFix, pairOf: pairOf, shownOf: shownOf, sideOpen: sideOpen, pressSide: pressSide, teamBytes: teamBytes, teamsText: teamsText, reconcileSides: reconcileSides,
-        planWith: planWith, withMode: withMode, pendingAfter: pendingAfter, withFog: withFog, pendingFogAfter: pendingFogAfter, botColors: botColors, kindsWithoutBots: kindsWithoutBots, teamNeedsFix: teamNeedsFix, moveOf: moveOf, startsAlone: startsAlone, viewOf: viewOf, sideView: sideView, noticeKind: noticeKind, banner: banner,
+        planWith: planWith, withMode: withMode, pendingAfter: pendingAfter, withFog: withFog, pendingFogAfter: pendingFogAfter, botColors: botColors, kindsWithoutBots: kindsWithoutBots, teamNeedsFix: teamNeedsFix, moveOf: moveOf, startsAlone: startsAlone, viewOf: viewOf, sheetOf: sheetOf, sideView: sideView, noticeKind: noticeKind, banner: banner,
         notBack: notBack, startNote: startNote, statusOf: statusOf, pingQuality: pingQuality
     };
 });

@@ -55,7 +55,7 @@ const N = require(path.join(path.dirname(path.resolve(rulesPath)), 'lobby_net.js
 same('the library exports exactly these names (a new one needs a table here)', Object.keys(RAW).sort(), [
     'ACTS', 'CODE_CHARS', 'COLORS', 'DEFAULT_MAP_KEY', 'GRID', 'HINT', 'KINDS', 'MAPS', 'META', 'READY', 'TEXT',
     'article', 'banner', 'botColors', 'codeText', 'communityName', 'hostName', 'kindsWithoutBots', 'levelWord', 'listOf', 'makeCode', 'mapByKey', 'mapOfFile', 'modelOf', 'moveOf', 'nameAt', 'nameCheck', 'nameOf', 'notBack', 'noticeKind', 'pairOf', 'pendingAfter', 'pendingFogAfter',
-    'pingQuality', 'planWith', 'playing', 'pressSide', 'reconcileSides', 'shownOf', 'sideOpen', 'sideView', 'sidesFix', 'startNote', 'startsAlone', 'statusOf', 'teamBytes', 'teamNeedsFix', 'teamsText', 'typedCode', 'validMapFile', 'viewOf', 'withFog', 'withMode'
+    'pingQuality', 'planWith', 'playing', 'pressSide', 'reconcileSides', 'sheetOf', 'shownOf', 'sideOpen', 'sideView', 'sidesFix', 'startNote', 'startsAlone', 'statusOf', 'teamBytes', 'teamNeedsFix', 'teamsText', 'typedCode', 'validMapFile', 'viewOf', 'withFog', 'withMode'
 ]);
 
 // The colors: the server's seats (Green 0, Red 1, Blue 2, Black 3); the cards lie Black, Green, Red, Blue
@@ -1187,6 +1187,34 @@ check('the random rooms were many and of every kind (the generator is not stuck)
     check('the table of the ping scale holds its boundaries (79, 80, 149, 150, none, zero, huge)', [79, 80, 149, 150, -1, 0, 2147483647].every((ms) => table.cases.some((c) => c.ms === ms)), String(table.cases.length));
     table.cases.forEach((c) => same('pingQuality(' + c.ms + ')', R.pingQuality(c.ms), c.quality));
     same('what is no number is none', [R.pingQuality(undefined), R.pingQuality(null), R.pingQuality(NaN), R.pingQuality('40')], ['none', 'none', 'none', 'none']);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 12. The leader's sheet for a color (a phone held upright: front/seat_menu.js draws it): what it says of a person, a computer player, an open color and a closed one
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const sheet = (room, seat, o) => { const m = model(room), v = R.viewOf(m, ctx(o)); return R.sheetOf(m, v.cards[seat]); };
+    const pick = (x, keys) => { const o = {}; keys.forEach((k) => { o[k] = x[k]; }); return o; };
+    const sam = sheet(S5, 1);        // Juniper leads (Green, this page), Sam in Red has said Ready, a Medium bot is in Blue, Priya in Black has said Ready, Green + Blue against Red + Black
+    same('a person: the color, the name as the title, Ready after the color, the Remove button, and no choice of what the color is', pick(sam, ['seat', 'id', 'name', 'kind', 'title', 'parts', 'mode', 'remove']), { seat: 1, id: 'red', name: 'Red', kind: 'person', title: 'Sam', parts: ['Ready'], mode: '', remove: 1 });
+    same('... the four colors, in the order of the seats, with what a press on each does: the own color is marked, a color with a player swaps, any other is a move', sam.colors, [
+        { seat: 0, id: 'green', name: 'Green', kind: 'person', here: false, label: 'Swap places with Juniper on Green' }, { seat: 1, id: 'red', name: 'Red', kind: 'person', here: true, label: 'Red, where Sam is' },
+        { seat: 2, id: 'blue', name: 'Blue', kind: 'bot', here: false, label: 'Move Sam to Blue' }, { seat: 3, id: 'black', name: 'Black', kind: 'person', here: false, label: 'Swap places with Priya on Black' }]);
+    same('... and the two team buttons as the card has them (Red is on the team that Green + Blue are against)', sam.teams, view(S5).cards[1].teams);
+    same('the leader\'s own color: You and Host, and no Remove', pick(sheet(S5, 0), ['title', 'parts', 'remove']), { title: 'Juniper', parts: ['You', 'Host'], remove: 0 });
+    same('a person who has not said Ready says so', sheet(mk([P('Juniper'), P('Sam'), O, O]), 1).parts, ['Not ready']);
+    same('the question about removing a person is open: remove is 2, and 1 before it', [sheet(S5, 1, { removing: 1 }).remove, sheet(S5, 1).remove], [2, 1]);
+    const bot = sheet(S5, 2);
+    same('a computer player with no name of its own: the card says none (the sheet says what the level is), the level is what the color is, there is no Color row and no Remove, the team buttons stay', [pick(bot, ['kind', 'title', 'parts', 'mode', 'colors', 'remove']), bot.teams !== null], [{ kind: 'bot', title: '', parts: [], mode: 'medium', colors: null, remove: 0 }, true]);
+    same('a computer player with a name of its own is shown by it', sheet(mk([P('Juniper'), [E, 'Pip (bot, Hard)'], O, O], { plan: [0, 3, 0, 0] }), 1).title, 'Pip (bot, Hard)');
+    const open = sheet(S2, 3);
+    same('an open color: the choice is open, no Color row, no teams (it does not play)', pick(open, ['id', 'kind', 'title', 'mode', 'colors', 'teams', 'remove']), { id: 'black', kind: 'open', title: '', mode: 'open', colors: null, teams: null, remove: 0 });
+    same('a closed color: the choice is closed', pick(sheet(mk([P('Juniper'), O, O, O], { plan: [0, 0, 0, 4] }), 3), ['kind', 'mode']), { kind: 'nobody', mode: 'nobody' });
+    same('with fewer than three players there are no team buttons on a person\'s sheet', sheet(mk([P('Juniper'), P('Sam'), O, O]), 1).teams, null);
+    check('a guest\'s card is not one that the page opens a sheet for (no grip: the page asks)', R.viewOf(R.modelOf(S4), ctx({})).cards.every((c) => c.grip === false));
+    const before = JSON.stringify(S5);
+    sheet(S5, 1);
+    check('the room is not changed by it', JSON.stringify(S5) === before);
 }
 
 // ---- END OF SECTIONS ----

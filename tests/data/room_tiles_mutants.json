@@ -1,0 +1,127 @@
+{
+ "note": "The Room on a phone held upright (the tiles and the leader's sheet: web/lobby.html with web/front/seat_menu.js, docs/HOME_SCREEN.md 'The Room') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): one thing changed at a time in the page, against tests/scripts/web_room_tiles_check.js (the page in the fake browser of web_page_harness.js): which window has tiles, the sheet's presses against the desktop's controls, the sheet when the room changes. The mutants of the tile and of the sheet's own code are in room_menus_mutants.json.",
+ "baseline": {
+  "test": "node tests/scripts/web_room_tiles_check.js web/lobby.html"
+ },
+ "mutants": [
+  {
+   "id": "tiles_on_every_window",
+   "file": "web/lobby.html",
+   "old": "tilesNow = !!tilesQuery && tilesQuery.matches === true;",
+   "new": "tilesNow = true;",
+   "test": "node tests/scripts/web_room_tiles_check.js web/lobby.html"
+  },
+  {
+   "id": "tiles_on_no_window",
+   "file": "web/lobby.html",
+   "old": "tilesNow = !!tilesQuery && tilesQuery.matches === true;",
+   "new": "tilesNow = false;",
+   "test": "node tests/scripts/web_room_tiles_check.js web/lobby.html"
+  },
+  {
+   "id": "sheet_remove_removes_at_once",
+   "file": "web/lobby.html",
+   "old": "spec.onRemove = act(function () { removing = seat; picked = -1; removeGuard = client ? client.guardNow() : 0; render(); });",
+   "new": "spec.onRemove = act(function () { removePerson(seat); });",
+   "test": "node tests/scripts/web_room_tiles_check.js web/lobby.html"
+  },
+  {
+   "id": "sheet_remove_has_no_guard",
+   "file": "web/lobby.html",
+   "old": "removing = seat; picked = -1; removeGuard = client ? client.guardNow() : 0; render(); });",
+   "new": "removing = seat; picked = -1; removeGuard = 0; render(); });",
+   "test": "node tests/scripts/web_room_tiles_check.js web/lobby.html"
+  },
+  {
+   "id": "sheet_team_is_the_other_team",
+   "file": "web/lobby.html",
+   "old": "spec.onTeam = act(function (side) { pressTeam(seat, side); });",
+   "new": "spec.onTeam = act(function (side) { pressTeam(seat, 3 - side); });",
+   "test": "node tests/scripts/web_room_tiles_check.js web/lobby.html"
+  },
+  {
+   "id": "sheet_choice_is_always_open",
+   "file": "web/lobby.html",
+   "old": "spec.onMode = act(function (word) { setMode(seat, word); });",
+   "new": "spec.onMode = act(function (word) { setMode(seat, 'open'); });",
+   "test": "node tests/scripts/web_room_tiles_check.js web/lobby.html"
+  },
+  {
+   "id": "sheet_does_not_say_why_a_bot_is_refused",
+   "file": "web/lobby.html",
+   "old": "sheetNote = window.AntsRoomFog.TEXT.refusal; setMode(seat, word);",
+   "new": "setMode(seat, word);",
+   "test": "node tests/scripts/web_room_tiles_check.js web/lobby.html"
+  },
+  {
+   "id": "sheet_moves_the_color_the_wrong_way",
+   "file": "web/lobby.html",
+   "old": "moveColor(seat, to, client ? client.guardNow() : 0);",
+   "new": "moveColor(to, seat, client ? client.guardNow() : 0);",
+   "test": "node tests/scripts/web_room_tiles_check.js web/lobby.html"
+  },
+  {
+   "id": "sheet_does_not_say_why_a_team_is_refused",
+   "file": "web/lobby.html",
+   "old": "if (refusal) sheetNote = refusal;",
+   "new": "",
+   "test": "node tests/scripts/web_room_tiles_check.js web/lobby.html"
+  },
+  {
+   "id": "sheet_stays_when_a_player_takes_its_open_color",
+   "file": "web/lobby.html",
+   "old": "else if (!sheetPerson && m && at.kind === 'person') seat = -1;",
+   "new": "",
+   "test": "node tests/scripts/web_room_tiles_check.js web/lobby.html"
+  },
+  {
+   "id": "sheet_stays_when_start_is_pressed",
+   "file": "web/lobby.html",
+   "old": "if (!tilesNow || !m || lastView.ro || seat < 0) { seatSheet.close(); return; }",
+   "new": "if (!tilesNow || !m || seat < 0) { seatSheet.close(); return; }",
+   "test": "node tests/scripts/web_room_tiles_check.js web/lobby.html"
+  },
+  {
+   "id": "sheet_stays_when_the_window_turns",
+   "file": "web/lobby.html",
+   "old": "if (!tilesNow || !m || lastView.ro || seat < 0) { seatSheet.close(); return; }",
+   "new": "if (!m || lastView.ro || seat < 0) { seatSheet.close(); return; }",
+   "test": "node tests/scripts/web_room_tiles_check.js web/lobby.html"
+  },
+  {
+   "id": "sheet_does_not_give_the_focus_back",
+   "file": "web/lobby.html",
+   "old": "if (keep && tile && tile.focus) tile.focus();",
+   "new": "if (false) tile.focus();",
+   "test": "node tests/scripts/web_room_tiles_check.js web/lobby.html"
+  },
+  {
+   "id": "sheet_does_not_follow_its_player",
+   "file": "web/lobby.html",
+   "old": "if (sheetPerson && m && !(at.kind === 'person' && at.name === sheetPerson)) { seat = -1; m.slots.forEach(function (x, i) { if (x.kind === 'person' && x.name === sheetPerson) seat = i; }); }",
+   "new": "if (sheetPerson && m && !(at.kind === 'person' && at.name === sheetPerson)) seat = -1;",
+   "test": "node tests/scripts/web_room_tiles_check.js web/lobby.html"
+  },
+  {
+   "id": "sheet_opens_for_a_color_that_is_not_the_leaders",
+   "file": "web/lobby.html",
+   "old": "if (!tilesNow || !model || !lastView.cards[seat].grip) return;",
+   "new": "if (!model) return;",
+   "test": "node tests/scripts/web_room_tiles_check.js web/lobby.html"
+  },
+  {
+   "id": "sheet_is_not_redrawn_with_the_room",
+   "file": "web/lobby.html",
+   "old": "            paintSheet(model);\n            Home.sync();",
+   "new": "            Home.sync();",
+   "test": "node tests/scripts/web_room_tiles_check.js web/lobby.html"
+  },
+  {
+   "id": "sheet_note_stays_after_an_accepted_press",
+   "file": "web/lobby.html",
+   "old": "return function (a) { sheetNote = ''; f(a); paintSheet(model); };",
+   "new": "return function (a) { f(a); paintSheet(model); };",
+   "test": "node tests/scripts/web_room_tiles_check.js web/lobby.html"
+  }
+ ]
+}

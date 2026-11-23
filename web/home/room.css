@@ -241,3 +241,44 @@ body.joining .maprow, body.joining .gtype { visibility: hidden; }      /* (the m
     .tv { width: 56px; } .map-name { font-size: 19px; }
 }
 @media (pointer: coarse) { .grip { width: 44px; margin: 0 -10px 0 -6px; } .rm { min-height: 40px; padding: 2px 12px; } }
+/* ---- a phone held upright (<body class="tiles">, set by the page; front/seat_menu.js tile() draws the colors): a one-row header, the colors as tiles two by two (a tile is one target of 56 px or more), the bar without Quick host and Quick join ---- */
+body.tiles[data-screen="room"] .hbar .quick.host, body.tiles[data-screen="room"] .hbar .quick.join { display: none; }
+body.tiles .hmain > #lobby { gap: 10px; }
+body.tiles .r-top { grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px 8px; }
+body.tiles .r-top .head { display: none; }
+body.tiles .share { grid-column: 1; grid-row: 1; } body.tiles .rules-open { grid-column: 2; grid-row: 1; } body.tiles .r-acts .leave { grid-column: 3; grid-row: 1; margin-left: 0; }
+body.tiles .rules-open small { display: none; }
+body.tiles .r-acts .btn { padding: 4px 10px; gap: 6px; }
+body.tiles .r-body { gap: 12px; }
+body.tiles .slots { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+body.tiles .slot { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; align-items: center; gap: 4px 8px; min-height: 104px; padding: 8px 10px 8px 8px; border-left-width: 1px; border-top: 4px solid var(--accent); }
+body.tiles .slot.k-open { border-top-style: solid; }
+body.tiles .slot .antbox { grid-column: 1; grid-row: 1; }
+body.tiles .slot .tail { grid-column: 2; grid-row: 1; justify-self: end; align-self: start; min-height: 28px; margin: 2px 0 0; gap: 5px; }
+body.tiles .slot .txt { grid-column: 1 / -1; grid-row: 2; flex-direction: column; align-items: stretch; flex-wrap: nowrap; gap: 3px; }
+.tline { display: flex; align-items: center; gap: 5px; min-height: 16px; }
+.tline > * { flex: none; }
+.tline .cname { width: auto; margin-right: 1px; font-size: 11px; }
+.tline .you, .tline .htag { padding: 0 4px; font-size: 10px; line-height: 15px; }
+body.tiles .pname, body.tiles .slot.k-open .pname, body.tiles .slot.k-nobody .pname, body.tiles .slot.k-bot .pname { display: block; overflow: hidden; font-size: 17px; line-height: 1.2; }
+body.tiles .slot.k-bot .pname { color: var(--cream); }
+body.tiles .pname .nm { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tteam { flex: none; padding: 0 5px; font-size: 10px; letter-spacing: .06em; line-height: 17px; text-transform: uppercase; color: #c9d6d0; border: 1px solid #28493e; border-radius: 3px; }
+.tteam.t1 { color: var(--gold); background: #2a2208; border-color: #6b5a14; }
+.tteam.t2 { color: #bfd4ff; background: #0f1a2c; border-color: #34507a; }
+.tmark { flex: none; display: grid; place-items: center; width: 26px; height: 26px; background: #0f2a1d; border: 1px solid #3b976f; border-radius: 50%; }
+.tmark.on::before { content: ""; width: 6px; height: 11px; margin-top: -3px; border: solid #44e08a; border-width: 0 2.5px 2.5px 0; transform: rotate(40deg); }
+.tmark.no { background: #0b1117; border: 1.5px dashed #4f6f64; }
+.tmark.no::before { content: ""; width: 12px; height: 3px; background: radial-gradient(circle, #8fb3a6 1.4px, transparent 1.7px) 0 0 / 4px 3px; }
+.tmark.bot { opacity: .72; }
+.tchev { flex: none; width: 9px; height: 9px; margin: 0 4px 0 2px; border: solid #8fb3a6; border-width: 0 2px 2px 0; transform: rotate(-45deg); }
+.tap { position: absolute; inset: 0; z-index: 2; padding: 0; cursor: pointer; background: none; border: 0; border-radius: 4px; }
+.tap:focus-visible { outline: 3px solid var(--gold); outline-offset: -3px; }
+@media (max-width: 379px) and (min-height: 501px) {          /* (narrow: tighter header, T1 and T2) */
+    body.tiles .r-top { gap: 6px; }
+    body.tiles .r-acts .btn { padding: 4px 8px; gap: 5px; }
+    body.tiles .share-code { padding: 0 5px; font-size: 13px; letter-spacing: 0; }
+    .tw { font-size: 0; } .tteam::before { content: "T"; }
+}
+@media (max-width: 359px) and (min-height: 501px) { .tchev { display: none; } body.tiles .slot .tail { gap: 4px; } body.tiles .r-acts .btn::before { display: none; } .tline { flex-wrap: wrap; row-gap: 2px; } }
+

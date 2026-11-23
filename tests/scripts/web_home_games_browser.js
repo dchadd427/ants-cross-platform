@@ -459,7 +459,9 @@ async function flows() {
                 const b = await newPage(browser, fake, 'Sage', size, '/?room=' + room);
                 await b.click('#name-step-go');
                 await until('Sage is in', async () => (await a.evaluate(() => document.getElementById('slots').textContent.indexOf('Sage') !== -1)), 10000);
-                await a.click('#slots .mode[data-mode="2"]'); await a.click('.sm-item[data-word="medium"]');       // (the color's menu: Medium bot)
+                const tiles = size[1] <= 700 && size[2] >= 501;       // (a phone upright: the colors are tiles, a tap opens the color's sheet, and the bar has no Quick host and no Quick join while a room is held)
+                if (tiles) { await a.click('#slots .tap[data-tap="2"]'); await a.click('.ss-item[data-word="medium"]'); await a.click('.ss .btn'); }       // (the sheet's choice: Medium bot; Done)
+                else { await a.click('#slots .mode[data-mode="2"]'); await a.click('.sm-item[data-word="medium"]'); }       // (the color's menu: Medium bot)
                 await a.waitForFunction(() => document.getElementById('slots').textContent.indexOf('Pip') !== -1 || document.getElementById('slots').textContent.indexOf('bot') !== -1);
                 await shot(a, 'room_private', size);
                 check(label + ': the Room card has the switch (private), 44 px high, inside the window, and the page does not scroll sideways', (await small(a, '.vis')).length === 0 && (await a.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)), JSON.stringify(await small(a, '.vis')));
@@ -467,11 +469,13 @@ async function flows() {
                 await a.waitForSelector('.vbtn[aria-pressed="true"] >> text=Public', { state: 'attached' });
                 await shot(a, 'room_public', size);
                 await shot(b, 'room_guest', size);
-                await a.click('.quick.join');
-                await a.waitForSelector('.gconfirm');
-                await shot(a, 'confirm', size);
-                check(label + ': the question card of Quick join ("Leave your room?") is inside the window with its two answers at least 44 px high', await a.evaluate(() => { const r = document.querySelector('.gconfirm').getBoundingClientRect(), ok = Array.from(document.querySelectorAll('.gconfirm button')).every((x) => x.getBoundingClientRect().height >= 44); return ok && r.left >= 0 && r.right <= window.innerWidth + 0.5 && r.top >= 0 && r.bottom <= window.innerHeight + 0.5; }));
-                await a.keyboard.press('Escape');
+                if (!tiles) {
+                    await a.click('.quick.join');
+                    await a.waitForSelector('.gconfirm');
+                    await shot(a, 'confirm', size);
+                    check(label + ': the question card of Quick join ("Leave your room?") is inside the window with its two answers at least 44 px high', await a.evaluate(() => { const r = document.querySelector('.gconfirm').getBoundingClientRect(), ok = Array.from(document.querySelectorAll('.gconfirm button')).every((x) => x.getBoundingClientRect().height >= 44); return ok && r.left >= 0 && r.right <= window.innerWidth + 0.5 && r.top >= 0 && r.bottom <= window.innerHeight + 0.5; }));
+                    await a.keyboard.press('Escape');
+                }
                 await a.context().close(); await b.context().close();
                 // a refusal in plain words (a game of the fake list that the real server does not have), and a Join that works (the real list)
                 const r = await newPage(browser, fake, 'Sage', size); await lit(r);

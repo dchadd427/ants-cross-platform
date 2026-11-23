@@ -9,9 +9,12 @@
 //   2. Ready: the guest's big button is their READY, the host has START; START of the host is off with the line that names whose Ready it waits for until the guest presses READY, then it is on and the line says that everyone is ready; the host
 //      changes the map and the marks stay; the guest takes the mark back and START is off again; the bot and the host show Ready by themselves; a guest's START says that it waits for the host;
 //   3. a window lower than the room needs (1366 x 650): the page does not scroll, the room's panel scrolls inside itself and START stays in view;
-//   4. the phone layout (up to 700 px wide or up to 500 px high): upright (390 x 844), held sideways (844 x 390, 932 x 430) and a wide, low window (1366 x 450): the strip has Room, Players and Chat; the Room view fits or scrolls inside itself with
-//      START at its end above the strip; every button of the room is 44 px each way (36 held sideways); the whole row of an open color is the target of its menu, and the menu is in the window with five choices of 44 px; the Rules sheet is in the
-//      window with Done reachable; the Chat view has the two tabs and a field in the window, the Players view has the list, no handle of the splitters is drawn;
+//   4. the phone layout (up to 700 px wide or up to 500 px high): upright (390 x 844 and 390 x 664), held sideways (844 x 390, 932 x 430) and a wide, low window (1366 x 450): the strip has Room, Players and Chat; the Room view fits or scrolls
+//      inside itself with START at its end above the strip; every button of the room is 44 px each way (36 held sideways); held sideways the whole row of an open color is the target of its menu, and the menu is in the window with five choices of
+//      44 px; the Rules sheet is in the window with Done reachable; the Chat view has the two tabs and a field in the window, the Players view has the list, no handle of the splitters is drawn;
+//   4b. a phone upright has tiles (docs/HOME_SCREEN.md "The Room"): the room fits with no scrolling at 844 and at 664 px high, START in the window; the bar is one row (no Quick host, no Quick join); the four colors are tiles two by two,
+//      each 56 px or more and one target for the leader (a press at its middle reaches its button), with no dots, Remove, Team buttons or drop-down; a guest's tiles have no button and open nothing; the leader's sheet is in the window with Done
+//      reachable and every target 44 px or more, and what it does reaches the real server: a team pair (the tiles show it on both screens), a color moved (the guest's screen follows), a computer player and Closed chosen, Remove asking first.
 //   --shots DIR writes the pictures of every scene (room_*.png).
 // usage: node web_room_in_home_browser.js --server PATH/ants_server --maps PATH/Original-Ants/Maps [--shots DIR]     (exit 0: every check holds; every failure is printed)
 'use strict';
@@ -68,7 +71,7 @@ async function startServer() {
     const [port, ws, ctl, replay] = [await freePort(), await freePort(), await freePort(), await freePort()];
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ants_room_browser.'));
     const child = spawn(path.resolve(serverPath), ['--maps', path.resolve(mapsPath), '--port', String(port), '--ws-port', String(ws), '--ctl-port', String(ctl), '--replay-port', String(replay), '--results-dir', dir, '--no-replays', '--no-db',
-        '--demo-rooms', '2', '--demo-map', 'TREASURE.LVL', '--demo-maps', 'TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL', '--demo-lobbies', '10'], { env: Object.assign({}, process.env, { ANTS_SERVER_SECRET: 'room-browser-secret' }), stdio: 'ignore' });
+        '--demo-rooms', '2', '--demo-map', 'TREASURE.LVL', '--demo-maps', 'TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL', '--demo-lobbies', '30'], { env: Object.assign({}, process.env, { ANTS_SERVER_SECRET: 'room-browser-secret' }), stdio: 'ignore' });
     const server = { child, port, ws, ctl, replay, dir, stop() { try { child.kill('SIGTERM'); } catch (e) { /* gone */ } try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* it stays */ } } };
     started.push(server);
     await until('the server answers', () => new Promise((resolve) => http.get({ host: '127.0.0.1', port: ctl, path: '/healthz' }, (res) => { res.resume(); resolve(res.statusCode === 200); }).on('error', () => resolve(false))), 15000);
@@ -237,8 +240,14 @@ async function makeRoom(chrome, site, w, h, bot, mobile) {
     if (await guestPage.eval('!document.getElementById("name-step").hidden')) await guestPage.press('#name-step-go');
     try { await hostPage.waitFor('the guest is in', 'document.querySelectorAll("#slots .k-person").length === 2', 15000); } catch (e) { await hostPage.shot('fail_host'); await guestPage.shot('fail_guest'); console.log('guest errors: ' + JSON.stringify(guestPage.errors)); throw e; }
     if (bot) {
-        await hostPage.press('.mode');
-        await hostPage.press('.sm-item', 'Medium bot');
+        if (w <= 700 && h >= 501) {                                       // (a phone upright: the colors are tiles, and the leader's sheet has the choices)
+            await hostPage.press('#slots .slot.k-open .tap');
+            await hostPage.press('.ss-item', 'Medium bot');
+            await hostPage.press('.ss-back .btn', 'Done');
+        } else {
+            await hostPage.press('.mode');
+            await hostPage.press('.sm-item', 'Medium bot');
+        }
         await hostPage.waitFor('the bot sits', 'document.querySelectorAll("#slots .k-bot").length === 1', 8000);
     }
     for (const page of [hostPage, guestPage]) await page.waitFor('the page\'s toast has gone (it is the picture\'s business: a toast hides the chat)', '(function () { return [".gtoast", "#toast"].every(function (q) { var t = document.querySelector(q); return !t || t.hidden; }); })()', 12000);
@@ -249,6 +258,99 @@ const chips = (page) => page.eval('[].map.call(document.querySelectorAll("#slots
 const readyLine = (page) => page.eval('document.getElementById("go-status").textContent');
 const startState = (page) => page.eval('(function () { var e = document.getElementById("start"); return { off: !!e.disabled || e.getAttribute("aria-disabled") === "true", text: e.textContent }; })()');
 const readySwitch = (page) => page.eval('(function () { var e = document.getElementById("start"); return e.getAttribute("aria-pressed") === null ? null : { on: e.getAttribute("aria-pressed") === "true", text: e.textContent }; })()');       // (a guest's big button is their Ready, a switch; the host's is START, no switch)
+
+// a phone upright (docs/HOME_SCREEN.md "The Room"): the bar, the four tiles and what a press at the middle of each reaches, and the leader's sheet for a color, as the browser laid them out
+const TILES = '(function () {' +
+    'var box = function (e) { var b = e.getBoundingClientRect(); return { l: Math.round(b.left), t: Math.round(b.top), w: Math.round(b.width), h: Math.round(b.height) }; };' +
+    'var vis = function (q) { var e = document.querySelector(q); return !!e && e.getClientRects().length > 0; };' +
+    'var slots = [].slice.call(document.querySelectorAll("#slots .slot"));' +
+    'return { bar: box(document.querySelector(".hbar")), quick: vis(".hbar .quick.host") || vis(".hbar .quick.join"), hist: vis(".hbar .quick.hist"),' +
+    ' tiles: slots.map(function (li) { var b = box(li), e = document.elementFromPoint(b.l + b.w / 2, b.t + b.h / 2); return { b: b, tap: !!e && !!e.closest(".tap"), inside: !!e && !!e.closest(".slot") }; }),' +
+    ' rows: document.querySelectorAll("#slots .grip, #slots .rm, #slots .teamset, #slots .mode, #slots .rdy-chip").length, taps: document.querySelectorAll("#slots .tap").length,' +
+    ' start: box(document.getElementById("start")), strip: box(document.querySelector(".htabs")) };' +
+    '})()';
+const SEAT_SHEET = '(function () {' +
+    'var back = document.querySelector(".ss-back"), box = document.querySelector(".ss");' +
+    'if (!back || back.hidden || !box.getClientRects().length) return { shown: false };' +
+    'var r = box.getBoundingClientRect(), done = [].filter.call(box.querySelectorAll(".btn"), function (e) { return e.textContent === "Done"; })[0], d = done.getBoundingClientRect();' +
+    'var small = [].filter.call(box.querySelectorAll("button"), function (e) { var b = e.getBoundingClientRect(); return b.width > 0 && (b.width < 44 || b.height < 44); }).map(function (e) { var b = e.getBoundingClientRect(); return e.className + " " + Math.round(b.width) + "x" + Math.round(b.height); });' +
+    'return { shown: true, fits: r.left >= 0 && r.right <= innerWidth + .5 && r.top >= 0 && r.bottom <= innerHeight + .5, done: d.top >= r.top && d.bottom <= r.bottom + .5, noScroll: document.documentElement.scrollWidth <= innerWidth && box.scrollHeight <= box.clientHeight + 1,' +
+    ' inert: document.getElementById("lobby").hasAttribute("inert"), small: small, title: box.querySelector("h3").textContent, sub: box.querySelector(".ss-sub").textContent, keys: [].map.call(box.querySelectorAll("[data-key]"), function (e) { return e.getAttribute("data-key"); }) };' +
+    '})()';
+async function tilesBlock(page, guestPage, at, phone) {
+    const L = 'phone ' + at + ': ';
+    const sheet = () => page.eval(SEAT_SHEET);
+    const seatSheetShown = async () => (await sheet()).shown;
+    const m = await page.eval(TILES);
+    check(L + 'while the room is held the bar is one row: no Quick host, no Quick join, Match history is there', !m.quick && m.hist && m.bar.h <= 80, JSON.stringify({ quick: m.quick, hist: m.hist, bar: m.bar }));
+    check(L + 'four tiles, two by two (two columns and two rows), each 56 px high or more and wide enough for a name', m.tiles.length === 4 && new Set(m.tiles.map((t) => t.b.l)).size === 2 && new Set(m.tiles.map((t) => t.b.t)).size === 2 && m.tiles.every((t) => t.b.h >= 56 && t.b.w >= 140), JSON.stringify(m.tiles.map((t) => t.b)));
+    check(L + 'a press at the middle of any tile of the leader reaches its button: the whole tile is the one target', m.tiles.every((t) => t.tap), JSON.stringify(m.tiles.map((t) => t.tap)));
+    check(L + 'no dots, no Remove, no Team buttons, no drop-down and no Ready pill on a tile; one button for each tile', m.rows === 0 && m.taps === 4, JSON.stringify({ rows: m.rows, taps: m.taps }));
+    check(L + 'START is in the window above the strip and 44 px high or more', m.start.t >= 0 && m.start.t + m.start.h <= m.strip.t + 1 && m.start.h >= 44, JSON.stringify({ start: m.start, strip: m.strip }));
+    await page.shot('phone_' + at + '_tiles_leader');
+    const g = await guestPage.eval(TILES);
+    check(L + 'a guest\'s tiles are pictures: four of them, no button over them, nothing of the rows', g.taps === 0 && g.rows === 0 && g.tiles.length === 4 && g.tiles.every((t) => !t.tap && t.inside), JSON.stringify({ taps: g.taps, rows: g.rows }));
+    await guestPage.press('#slots .slot.k-person');
+    await sleep(200);
+    check(L + 'a press on a guest\'s tile opens no sheet', !(await guestPage.eval(SEAT_SHEET)).shown);
+    await guestPage.shot('phone_' + at + '_tiles_guest');
+    // the sheet of a person (the guest, Wren, in Red: seat 1) is in the window with every target a finger's size
+    await page.press('.tap[data-tap="1"]');
+    await page.waitFor('the sheet opens', 'document.querySelector(".ss-back") && !document.querySelector(".ss-back").hidden', 3000);
+    const ss = await sheet();
+    check(L + 'the sheet of a person is in the window with Done reachable, nothing scrolls, the page behind it takes no press, and every target is 44 px or more', ss.shown && ss.fits && ss.done && ss.noScroll && ss.inert && ss.small.length === 0, JSON.stringify(ss));
+    check(L + 'it names the person and the color, and has the team, the color and the Remove rows', ss.title === 'Wren' && /^Red/.test(ss.sub) && ['team:1', 'team:2', 'color:0', 'color:1', 'color:2', 'color:3', 'rm', 'done'].every((k) => ss.keys.indexOf(k) !== -1), JSON.stringify({ title: ss.title, sub: ss.sub, keys: ss.keys }));
+    await page.shot('phone_' + at + '_sheet_player');
+    // a team pair (Hazel and Wren on Team 1): the server holds it, and both screens show the tags
+    await page.press('.ss-tb', 'Team 1');
+    await sleep(150);
+    await page.press('.ss-back .btn', 'Done');
+    await page.waitFor('the sheet is away', '!document.querySelector(".ss-back") || document.querySelector(".ss-back").hidden', 3000);
+    check(L + 'Done puts the sheet away, lets the page behind go, and the focus is on the tile of the color', await page.eval('!document.getElementById("lobby").hasAttribute("inert") && document.activeElement === document.querySelector(".tap[data-tap=\\"1\\"]")'));
+    await page.press('.tap[data-tap="0"]');
+    await page.press('.ss-tb', 'Team 1');
+    await page.waitFor('the pair is in the room', 'document.querySelectorAll("#slots .tteam.t1").length === 2', 8000);
+    await guestPage.waitFor('the guest sees the pair too', 'document.querySelectorAll("#slots .tteam.t1").length === 2', 8000);
+    check(L + 'a team pair set in the sheets is the room\'s: both screens show Team 1 on the two colors, and the sheet shows its own lit', await page.eval('document.querySelector(".ss-tb[data-key=\\"team:1\\"]").getAttribute("aria-pressed") === "true"'));
+    await page.shot('phone_' + at + '_tiles_teams');
+    await page.press('.ss-back .btn', 'Done');
+    // a color moved: Wren goes to Blue (seat 2), the guest's screen follows, and the sheet goes with Wren
+    await page.press('.tap[data-tap="1"]');
+    await page.press('.ss-cb[data-c="blue"]');
+    await guestPage.waitFor('the guest is in Blue', 'document.querySelector("#slots .slot[data-c=blue] .you") !== null', 8000);
+    await page.waitFor('the sheet went with Wren', '(function () { var h = document.querySelector(".ss h3"), s = document.querySelector(".ss-sub"); return !!h && h.textContent === "Wren" && /^Blue/.test(s.textContent); })()', 5000);
+    check(L + 'a color moved in the sheet is moved in the room (the guest\'s screen is in Blue), and the sheet is still open, for Blue now', await seatSheetShown() && (await page.eval('document.querySelector(".ss-cb[aria-pressed=\\"true\\"]").getAttribute("data-c")')) === 'blue');
+    await page.press('.ss-back .btn', 'Done');
+    check(L + 'Done gives the focus to the tile of Blue, where Wren is now', await page.eval('document.activeElement === document.querySelector(".tap[data-tap=\\"2\\"]")'));
+    // the color that Wren left is open: its sheet has the five choices (a computer player, Closed, Open again)
+    await page.press('.tap[data-tap="1"]');
+    const os = await sheet();
+    check(L + 'the sheet of an open color is in the window with the five choices of 44 px or more, and no team, color or Remove row', os.shown && os.fits && os.done && os.small.length === 0 && os.keys.filter((k) => /^mode:/.test(k)).length === 5 && os.keys.indexOf('rm') === -1 && os.keys.indexOf('team:1') === -1, JSON.stringify(os));
+    await page.shot('phone_' + at + '_sheet_open_color');
+    await page.press('.ss-item', 'Easy bot');
+    await page.waitFor('the bot sits in Red', 'document.querySelectorAll("#slots .k-bot").length === 2', 8000);
+    await page.waitFor('the sheet says who it is', '/Easy/.test(document.querySelector(".ss h3").textContent)', 5000);
+    await page.press('.ss-item', 'Closed');
+    await page.waitFor('Red is closed', 'document.querySelectorAll("#slots .k-nobody").length === 1', 8000);
+    check(L + 'Easy bot and Closed chosen in the sheet are the room\'s: the tiles show a second computer player and a closed color, and the sheet says Closed', await page.eval('document.querySelector(".ss h3").textContent === "Closed" && document.querySelector(".ss-item[data-word=\\"nobody\\"]").getAttribute("aria-checked") === "true"'));
+    await page.press('.ss-item', 'Open');
+    await page.waitFor('Red is open again', 'document.querySelectorAll("#slots .k-nobody").length === 0 && document.querySelectorAll("#slots .k-bot").length === 1', 8000);
+    await page.press('.ss-back .btn', 'Done');
+    // Remove asks first
+    await page.press('.tap[data-tap="2"]');
+    await page.press('.ss-remove');
+    await page.waitFor('the question is asked', '!!document.querySelector(".ss-ask")', 3000);
+    check(L + 'Remove asks first: the question names Wren, nobody has left, and the focus is on Keep', await page.eval('document.querySelector(".ss-ask p").textContent === "Remove Wren from the room?" && document.querySelectorAll("#slots .k-person").length === 2 && document.activeElement === document.querySelector(".ss-keep")'));
+    await page.shot('phone_' + at + '_sheet_remove');
+    await page.press('.ss-keep');
+    await sleep(300);
+    check(L + 'Keep puts the question away and Wren is still in the room', await page.eval('!document.querySelector(".ss-ask") && document.querySelectorAll("#slots .k-person").length === 2'));
+    await page.press('.ss-remove');
+    await page.press('.ss-yes');
+    await page.waitFor('Wren is out of the room', 'document.querySelectorAll("#slots .k-person").length === 1', 8000);
+    await page.waitFor('the sheet is away', '!document.querySelector(".ss-back") || document.querySelector(".ss-back").hidden', 3000);
+    check(L + 'Remove, then Remove, takes the person out of the room, and the sheet goes with them (the page behind is let go)', !(await seatSheetShown()) && await page.eval('!document.getElementById("lobby").hasAttribute("inert")'));
+}
 
 async function main() {
     const server = await startServer();
@@ -383,7 +485,7 @@ async function main() {
     // 4. the phone layout (a window up to 700 px wide or up to 500 px high): upright (390 x 844), held sideways (844 x 390, 932 x 430) and a wide window that is only low (1366 x 450). Home is one of three views and the strip
     //    along the bottom picks it: Games (Room, while a room is held), Players, Chat. The room's panel scrolls inside itself with START in view at its end, the chat is a view of its own with the two tabs and a field that
     //    is in the window, the players' list has its view, and no handle of the splitters is there.
-    const PHONES = [['390x844', 390, 844, true], ['844x390', 844, 390, true], ['932x430', 932, 430, true], ['1366x450', 1366, 450, false]];
+    const PHONES = [['390x844', 390, 844, true], ['390x664', 390, 664, true], ['844x390', 844, 390, true], ['932x430', 932, 430, true], ['1366x450', 1366, 450, false]];
     for (const phone of PHONES) {
         const at = phone[0];
         // the games' view, before there is a room: the strip is Games, Players, Chat; the list is shown and the chat and the splitters are not
@@ -398,21 +500,27 @@ async function main() {
         }
         // a room of three (the host, a guest who joined by the link, a Medium computer player): the cards are the fullest
         const { hostPage: page, guestPage } = await makeRoom(chrome, site, phone[1], phone[2], true, phone[3]);
-        const view = await page.eval('(function () { var l = document.getElementById("lobby"), d = document.documentElement; return { page: d.scrollHeight <= innerHeight + 1 && d.scrollWidth <= innerWidth, scrolls: l.scrollHeight > l.clientHeight }; })()');
+        const tiles = await page.eval('document.body.classList.contains("tiles")');
+        check('phone ' + at + ': ' + (phone[1] <= 700 && phone[2] >= 501 ? 'a phone upright draws the colors as tiles' : 'a window that is not a phone upright keeps the rows'), tiles === (phone[1] <= 700 && phone[2] >= 501), String(tiles));
+        const view = await page.eval('(function () { var l = document.getElementById("lobby"), d = document.documentElement; return { page: d.scrollHeight <= innerHeight + 1 && d.scrollWidth <= innerWidth, scrolls: l.scrollHeight > l.clientHeight + 1 }; })()');
         check('phone ' + at + ': the page does not scroll (the room fits, or its panel scrolls inside itself)', view.page, JSON.stringify(view));
+        if (tiles) check('phone ' + at + ': the tiles fit with no scrolling at all: the room\'s panel does not scroll', !view.scrolls, JSON.stringify(view));
         const finger = phone[2] >= 600 ? 44 : 36;       // (held upright every button is 44 px each way; held sideways the header's buttons are as drawn, 36 px, with the rows 40 and START 50)
         const fingers = await page.eval('[].filter.call(document.querySelectorAll("#lobby button:not(.mode), #lobby .rm"), function (e) { var b = e.getBoundingClientRect(); return b.width > 0 && getComputedStyle(e).visibility !== "hidden" && (b.height < (e.classList.contains("rm") ? 40 : ' + finger + ') - 0.5 || b.width < ' + finger + ' - 0.5); }).map(function (e) { var b = e.getBoundingClientRect(); return (e.className || e.tagName) + " " + Math.round(b.width) + "x" + Math.round(b.height); })');
         check('phone ' + at + ': every button of the room is ' + finger + ' px each way or more (Remove: 40 high)', fingers.length === 0, JSON.stringify(fingers));
-        const rows = await page.eval('[].map.call(document.querySelectorAll("#slots .slot.k-open, #slots .slot.k-bot"), function (li) { var b = li.getBoundingClientRect(), e = document.elementFromPoint(b.left + b.width / 2, b.top + Math.min(b.height / 2, 22)); return !!e && !!e.closest(".mode") && b.height >= ' + (finger - 4) + '; })');
-        check('phone ' + at + ': the whole row of an open color or a computer player is the target of its menu (a press at its middle reaches the button), and the row is ' + (finger - 4) + ' px high or more', rows.length >= 1 && rows.every(Boolean), JSON.stringify(rows));
-        await page.eval('(function () { window.__log = []; ["click", "scroll", "resize", "pointerdown"].forEach(function (t) { window.addEventListener(t, function (e) { window.__log.push(t + ":" + (e.target && (e.target.className || e.target.id || e.target.nodeName))); }, true); }); })()');
-        await page.press('#slots .slot.k-open');
-        await page.waitFor('the color\'s menu opens', '(function () { var m = document.querySelector(".sm-menu"); return !!m && !m.hidden && m.getClientRects().length > 0; })()', 3000).catch(async (e) => { console.log('log: ' + JSON.stringify(await page.eval('window.__log'))); console.log('menu state: ' + JSON.stringify(await page.eval('(function () { var m = document.querySelector(".sm-menu"), li = document.querySelector("#slots .slot.k-open"), b = li.getBoundingClientRect(), at = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2); return { menu: !!m, hidden: m && m.hidden, rects: m && m.getClientRects().length, row: [b.left, b.top, b.width, b.height], at: at && (at.className || at.tagName), vw: innerWidth, vh: innerHeight }; })()'))); throw e; });
-        const menu = await page.eval('(function () { var b = document.querySelector(".sm-menu").getBoundingClientRect(), items = [].map.call(document.querySelectorAll(".sm-item"), function (e) { return Math.round(e.getBoundingClientRect().height); }); return { fits: b.left >= 0 && b.right <= innerWidth + 0.5 && b.top >= 0 && b.bottom <= innerHeight + 0.5, items: items }; })()');
-        check('phone ' + at + ': the menu of a color is in the window with five choices of 44 px or more', menu.fits && menu.items.length === 5 && menu.items.every((h) => h >= 44), JSON.stringify(menu));
-        await page.shot('phone_' + at + '_seat_menu');
-        await page.press('.sm-item', 'Open');
-        await sleep(150);
+        if (tiles) await tilesBlock(page, guestPage, at, phone);
+        else {
+            const rows = await page.eval('[].map.call(document.querySelectorAll("#slots .slot.k-open, #slots .slot.k-bot"), function (li) { var b = li.getBoundingClientRect(), e = document.elementFromPoint(b.left + b.width / 2, b.top + Math.min(b.height / 2, 22)); return !!e && !!e.closest(".mode") && b.height >= ' + (finger - 4) + '; })');
+            check('phone ' + at + ': the whole row of an open color or a computer player is the target of its menu (a press at its middle reaches the button), and the row is ' + (finger - 4) + ' px high or more', rows.length >= 1 && rows.every(Boolean), JSON.stringify(rows));
+            await page.eval('(function () { window.__log = []; ["click", "scroll", "resize", "pointerdown"].forEach(function (t) { window.addEventListener(t, function (e) { window.__log.push(t + ":" + (e.target && (e.target.className || e.target.id || e.target.nodeName))); }, true); }); })()');
+            await page.press('#slots .slot.k-open');
+            await page.waitFor('the color\'s menu opens', '(function () { var m = document.querySelector(".sm-menu"); return !!m && !m.hidden && m.getClientRects().length > 0; })()', 3000).catch(async (e) => { console.log('log: ' + JSON.stringify(await page.eval('window.__log'))); console.log('menu state: ' + JSON.stringify(await page.eval('(function () { var m = document.querySelector(".sm-menu"), li = document.querySelector("#slots .slot.k-open"), b = li.getBoundingClientRect(), at = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2); return { menu: !!m, hidden: m && m.hidden, rects: m && m.getClientRects().length, row: [b.left, b.top, b.width, b.height], at: at && (at.className || at.tagName), vw: innerWidth, vh: innerHeight }; })()'))); throw e; });
+            const menu = await page.eval('(function () { var b = document.querySelector(".sm-menu").getBoundingClientRect(), items = [].map.call(document.querySelectorAll(".sm-item"), function (e) { return Math.round(e.getBoundingClientRect().height); }); return { fits: b.left >= 0 && b.right <= innerWidth + 0.5 && b.top >= 0 && b.bottom <= innerHeight + 0.5, items: items }; })()');
+            check('phone ' + at + ': the menu of a color is in the window with five choices of 44 px or more', menu.fits && menu.items.length === 5 && menu.items.every((h) => h >= 44), JSON.stringify(menu));
+            await page.shot('phone_' + at + '_seat_menu');
+            await page.press('.sm-item', 'Open');
+            await sleep(150);
+        }
         await page.press('#rules-open');
         await page.waitFor('the Rules sheet opens', '!document.getElementById("rules").hidden', 3000);
         const sh = await page.eval(SHEET);

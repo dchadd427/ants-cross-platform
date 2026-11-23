@@ -524,13 +524,15 @@
         }
         function context() { return { sides: localSides, picked: picked, removing: removing, offline: offline, refusal: refusal, community: communityOf, back: back }; }
         function setText(node, text) { if (node.textContent !== text) node.textContent = text; }      // (a live region says its text again whenever it is written: only a line that changed is)
-        var painted = {};
+        var painted = {}, lastView = null, tilesQuery = null, tilesNow = false;
+        try { tilesQuery = window.matchMedia ? window.matchMedia('(max-width: 700px) and (min-height: 501px)') : null; } catch (e) { tilesQuery = null; }       // (a phone held upright: the four colors are tiles, front/seat_menu.js; every other window has the rows)
         function render() {
             if (drag && drag.moved) { dirty = true; return; }
             dirty = false;
             var m = model || blankModel();
             var v = Rules.viewOf(m, context());
-            removing = v.removing;
+            removing = v.removing; lastView = v;
+            tilesNow = !!tilesQuery && tilesQuery.matches === true; document.body.classList.toggle('tiles', tilesNow);
             document.body.classList.toggle('guest', v.ro);
             document.body.classList.toggle('offline', !!v.offline);
             document.body.classList.toggle('joining', v.offline === 'join');
@@ -543,15 +545,17 @@
             var active = document.activeElement && $('slots').contains(document.activeElement) ? document.activeElement.getAttribute('data-key') : null;
             GRID.forEach(function (seat) { paintCard(v.cards[seat], m); });
             if (active) { var again = $('slots').querySelector('[data-key="' + active + '"]'); if (again && document.activeElement !== again) again.focus(); }
+            if (refusal) sheetNote = refusal;
             refusal = '';
             paintSide(v.side);
             gameType.paint({ id: m.mode, guest: v.guest, disabled: v.ro }); setText($('mode-tag'), Modes.tagOf(m.mode)); $('mode-tag').hidden = !Modes.tagOf(m.mode); backBar.sync(model, sendPlan, warmMap);
             if (fogSwitch) fogSwitch.paint({ on: m.fog, guest: v.guest, disabled: v.ro });
+            paintSheet(model);
             Home.sync();
         }
         function paintCard(card, m) {
             var li = lis[card.seat], seat = card.seat, c = card.color;
-            var stamp = JSON.stringify([card, picked === seat, picked >= 0, fresh[seat] === true, !!m.fog]);       // (fog is in it: the menu that is open has its bot choices as of when it opened, so it closes when fog changes)
+            var stamp = JSON.stringify([tilesNow, card, picked === seat, picked >= 0, fresh[seat] === true, !!m.fog]);       // (fog is in it: the menu that is open has its bot choices as of when it opened, so it closes when fog changes)
             if (painted[seat] === stamp) return;
             painted[seat] = stamp;
             if (menuSeat === seat) seatMenu.close();           // (this color changed under its open menu)
@@ -561,6 +565,7 @@
             li.setAttribute('aria-label', card.label);
             li.setAttribute('data-drop', card.drop);
             while (li.firstChild) li.removeChild(li.firstChild);
+            if (tilesNow) { SeatMenu.tile(document, li, card, { on: Rules.READY.chip, off: Rules.READY.chipOff }); return; }
             if (card.grip) {
                 var grip = el('button', 'grip');
                 grip.type = 'button';
@@ -960,6 +965,25 @@
             seatMenu.open({ anchor: button, value: slot.kind === 'bot' ? slot.level : slot.kind, off: model.fog ? ['easy', 'medium', 'hard'] : [], label: COLORS[seat].name + ' is',
                 onPick: function (word) { setMode(seat, word); }, onBlocked: function (word) { setMode(seat, word); }, onClose: function () { menuSeat = -1; } });
         }
+        var seatSheet = SeatMenu.createSheet({ doc: document, hold: inert }), sheetSeat = -1, sheetPerson = '', sheetNote = '';       // (the leader's sheet for a color, a phone upright, front/seat_menu.js: the tiles have no dots, no Remove and no Team buttons, so the sheet has them, and every press is the desktop control's own function)
+        function sheetSpec(seat) {
+            var spec = Rules.sheetOf(model, lastView.cards[seat]), act = function (f) { return function (a) { sheetNote = ''; f(a); paintSheet(model); }; };       spec.off = model.fog ? ['easy', 'medium', 'hard'] : []; spec.note = sheetNote;
+            spec.onTeam = act(function (side) { pressTeam(seat, side); }); spec.onColor = act(function (to) { moveColor(seat, to, client ? client.guardNow() : 0); }); spec.onMode = act(function (word) { setMode(seat, word); });
+            spec.onBlocked = function (word) { sheetNote = window.AntsRoomFog.TEXT.refusal; setMode(seat, word); };       spec.onRemove = act(function () { removing = seat; picked = -1; removeGuard = client ? client.guardNow() : 0; render(); }); spec.onRemoveYes = function () { removePerson(seat); }; spec.onRemoveNo = function () { removing = -1; render(); };
+            spec.onClose = function (keep) { var at = sheetSeat, tile = $('slots').querySelector('[data-key="tap:' + at + '"]'); sheetSeat = -1; sheetNote = ''; if (removing >= 0) { removing = -1; render(); } if (keep && tile && tile.focus) tile.focus(); };
+            return spec;
+        }
+        function openSheet(seat) {
+            if (!tilesNow || !model || !lastView.cards[seat].grip) return;
+            sheetSeat = seat; sheetNote = ''; sheetPerson = model.slots[seat].kind === 'person' ? model.slots[seat].name : '';       seatSheet.open(sheetSpec(seat));
+        }
+        function paintSheet(m) {       // the room changed under the sheet: it follows its player to another color, and closes when its color is no longer the leader's to change (the player left, START, the window turned)
+            if (!seatSheet.isOpen()) return;       var seat = sheetSeat, at = m && m.slots[seat];
+            if (sheetPerson && m && !(at.kind === 'person' && at.name === sheetPerson)) { seat = -1; m.slots.forEach(function (x, i) { if (x.kind === 'person' && x.name === sheetPerson) seat = i; }); }
+            else if (!sheetPerson && m && at.kind === 'person') seat = -1;
+            if (!tilesNow || !m || lastView.ro || seat < 0) { seatSheet.close(); return; }       sheetSeat = seat; seatSheet.paint(sheetSpec(seat));
+        }
+        if (tilesQuery && tilesQuery.addEventListener) tilesQuery.addEventListener('change', render);       // (the window turned: the colors are drawn again, and the sheet goes with the tiles)
 
         // Move a color onto another: the room exchanges a person with the other color (SeatMove); two colors that nobody holds exchange their plans
         function moveColor(from, to, guard) {
@@ -1048,6 +1072,8 @@
             if (skipClick) return;
             var t = e.target.closest ? e.target : null;
             if (!t) return;
+            var tap = t.closest('[data-tap]');
+            if (tap) { openSheet(+tap.getAttribute('data-tap')); return; }
             var mode = t.closest('[data-mode]');
             if (mode) { openMenu(+mode.getAttribute('data-mode'), mode); return; }
             var side = t.closest('[data-side]');

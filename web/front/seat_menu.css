@@ -11,3 +11,42 @@
 .sm-item:last-child { margin-top: 4px; border-top: 1px solid #16302a; border-radius: 0 0 5px 5px; }
 .sm-line { margin-left: auto; font-size: 12px; color: var(--muted); }
 @media (max-width: 700px), (max-height: 500px) { .sm-item { min-height: 44px; font-size: 18px; } .sm-menu { min-width: 220px; } }
+
+/* The leader's sheet for a color (a phone held upright; front/seat_menu.js createSheet): the Rules sheet's card (front/room_sheet.css, the sheet from the bottom) with the color's own rows: Team 1 and Team 2, the four colors (where a player goes), Remove with its
+   question, or the five choices of a color that no person holds. Every target is 44 px high at least. The colors are the page's own tokens (:root of web/lobby.html). */
+.ss { --k: 1; gap: 14px; }
+.ss .rs-top { align-items: flex-start; }
+.ss-who { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.ss-who .antbox { flex: none; display: flex; align-items: flex-end; justify-content: center; width: 30px; height: 41px; }
+.ss-who .ant { margin: 0; animation: none; }
+.ss .ant.ghost { filter: brightness(0) invert(1); opacity: .2; }
+.ss-who h3 { overflow-wrap: anywhere; }
+.ss-sub { margin: 2px 0 0; font-size: 13px; line-height: 17px; color: var(--muted); }
+.ss-sub b { font-weight: 500; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: #86d0a4; }
+.ss-sub b[data-c="red"] { color: #ec7680; } .ss-sub b[data-c="blue"] { color: #9aa6f2; } .ss-sub b[data-c="black"] { color: #c4c6d0; }
+.ss .rs-rule { padding-top: 14px; gap: 6px 12px; }
+.ss-team { display: flex; border: 2px solid var(--edge); border-radius: 8px; overflow: hidden; }
+.ss-tb { flex: 1 1 0; min-width: 88px; min-height: 44px; padding: 2px 12px; font-size: 16px; line-height: 1.1; white-space: nowrap; cursor: pointer; color: var(--cream); background: var(--sheen) var(--teal); border: 0; border-radius: 0; box-shadow: var(--bevel-sm); text-shadow: var(--btn-text); }
+.ss-tb + .ss-tb { border-left: 2px solid var(--edge); }
+.ss-tb[aria-pressed="true"] { color: var(--gold); background: #0b1a17; box-shadow: inset 0 0 0 2px var(--frame-hi); text-shadow: none; }
+.ss-tb[aria-disabled="true"] { color: #8da39a; background: #090d11; box-shadow: inset 0 0 0 2px #28493e; text-shadow: none; }
+.ss-colors { display: flex; gap: 8px; }
+.ss-cb { --accent: #86d0a4; width: 48px; height: 52px; padding: 0; display: grid; place-items: end center; cursor: pointer; background: #0a1216; border: 2px solid #28493e; border-bottom: 4px solid var(--accent); border-radius: 6px; }
+.ss-cb[data-c="red"] { --accent: #ec7680; } .ss-cb[data-c="blue"] { --accent: #9aa6f2; } .ss-cb[data-c="black"] { --accent: #c4c6d0; }
+.ss-cb[aria-pressed="true"] { border-color: var(--gold); border-bottom-color: var(--gold); background: #1c1b0e; cursor: default; }
+.ss-cb .ant { margin: 0 0 2px; animation: none; }
+.ss-remove, .ss-yes, .ss-keep { min-height: 48px; padding: 2px 12px; font-size: 17px; cursor: pointer; border-radius: 6px; }
+.ss-remove { align-self: stretch; color: #f6c9c0; background: #1f1011; border: 2px solid #7a3b34; }
+.ss-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.ss-ask p { flex: 1 1 100%; margin: 0; font-size: 15px; line-height: 20px; color: var(--bad-ink); overflow-wrap: anywhere; }
+.ss-yes, .ss-keep { flex: 1 1 0; border: 2px solid #7a3b34; }
+.ss-yes { color: #1a0a08; background: #e08a7d; }
+.ss-keep { color: var(--cream); background: #0b1117; border-color: var(--frame-hi); }
+.ss-list { display: flex; flex-direction: column; gap: 2px; }
+.ss-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 0 12px 0 10px; font-size: 18px; line-height: 1.2; text-align: left; cursor: pointer; color: var(--cream); background: none; border: 0; border-radius: 5px; }
+.ss-item::before { content: ""; flex: none; width: 6px; height: 11px; margin: -3px 4px 0 2px; border: solid transparent; border-width: 0 2.5px 2.5px 0; transform: rotate(40deg); }
+.ss-item.sel { color: var(--gold); background: #123a2a; } .ss-item.sel::before { border-color: #44e08a; }
+.ss-item.off { opacity: .45; cursor: default; }
+.ss-item.sep { margin-top: 6px; border-top: 1px solid #16302a; border-radius: 0 0 5px 5px; }
+.ss-item:focus-visible, .ss-cb:focus-visible, .ss-tb:focus-visible { outline-offset: -3px; }
+.ss-note { margin: 0; font-size: 14px; line-height: 18px; color: #f2c48c; }

@@ -181,6 +181,16 @@ class TheCheckIsNotVacuous(unittest.TestCase):
     def test_the_map_info_line_of_a_map(self):
         self.must_fail("web/front/lobby_rules.js", "Race for your life! (10 min)", "Race for your life! (9 min)")
 
+    # ---- the leader's sheet for a color (a phone held upright: docs/HOME_SCREEN.md "The Room")
+    def test_the_sheet_is_not_told_that_the_question_about_removing_is_open(self):
+        self.must_fail("web/front/lobby_rules.js", "remove: card.ask ? 2 : card.remove ? 1 : 0", "remove: card.remove ? 1 : 0")
+
+    def test_the_sheet_does_not_mark_the_color_that_the_person_is_in(self):
+        self.must_fail("web/front/lobby_rules.js", "here: i === card.seat,", "here: false,")
+
+    def test_the_sheet_of_an_open_color_has_a_row_of_colors_to_move_to(self):
+        self.must_fail("web/front/lobby_rules.js", "colors: person ? COLORS.map(", "colors: COLORS.map(")
+
     # ---- the scale of the ping colors (the table is the one that the C++ test of ping_quality() runs too)
     def test_a_round_trip_of_80_ms_is_good(self):
         self.must_fail("web/front/lobby_rules.js", "PING_FAIR_MS = 80,", "PING_FAIR_MS = 81,")

@@ -929,6 +929,19 @@ class TheCardsAtManyWidths(unittest.TestCase):
         self.assertIn("@media (min-width: 701px) and (max-height: 759px)", self.room)                           # (700 and 701: the same break, seen from both sides)
         self.assertIn("@media (max-width: 700px), (max-height: 500px)", self.room)                              # (a phone held sideways is a phone too)
 
+    def test_a_phone_upright_has_tiles_two_by_two_that_are_one_target_each_and_a_header_of_one_row(self):
+        tiles = Sheet(self.room)                                                                               # (the rules of room.css outside every @-rule: what <body class="tiles"> adds to the room)
+        self.assertEqual(tiles.value("body.tiles .slots", "grid-template-columns"), "minmax(0, 1fr) minmax(0, 1fr)")        # (two by two)
+        self.assertGreaterEqual(int(tiles.value("body.tiles .slot", "min-height").replace("px", "")), 56)      # (a tile is a target of 56 px or more)
+        self.assertEqual((tiles.value(".tap", "position"), tiles.value(".tap", "inset")), ("absolute", "0"))     # (the one button of a leader's tile covers all of it)
+        self.assertEqual(tiles.value(".tap", "z-index"), "2")                                                    # (above the tile's own words)
+        self.assertEqual(tiles.value("body.tiles .r-top .head", "display"), "none")                              # (one row: Share with the code, Rules, Leave)
+        self.assertEqual(tiles.value("body.tiles .r-top", "grid-template-columns"), "minmax(0, 1fr) auto auto")
+        for selector in ('body.tiles[data-screen="room"] .hbar .quick.host', 'body.tiles[data-screen="room"] .hbar .quick.join'):
+            self.assertEqual(tiles.value(selector, "display"), "none", selector + ": Quick host and Quick join are for people with no room")
+        self.assertEqual(tiles.value("body.tiles .pname .nm", "text-overflow"), "ellipsis")                       # (a long name ends in dots and never breaks letter by letter)
+        self.assertEqual(tiles.value("body.tiles .pname .nm", "white-space"), "nowrap")
+
     def test_a_phone_puts_the_map_beside_its_picture_and_keeps_start_in_reach(self):
         self.assertEqual(self.sheet.value(".maprow", "display"), "flex")                                       # (the picture beside the map's name, kind, facts and button)
         self.assertEqual(self.on_phone.value(".go", "position"), "sticky")                                      # (START and its line are a bar at the bottom of the room's panel)
