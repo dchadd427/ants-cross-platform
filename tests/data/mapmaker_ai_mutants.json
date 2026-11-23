@@ -1,0 +1,239 @@
+{
+ "note": "Mutants of the page's side of Connect an AI (web/front/mapmaker_ai_tools.js and mapmaker_ai.js; docs/MAP_AI.md) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose (a name that is not a tool that is run, a map that is changed over the person's changes, work that is not kept first, a stroke that is not waited for, more than 5,000 cells, an Undo that takes the person's steps, a picture of any size, a guide or a library map of any name, a Stop that does not close the socket, a frame that is not a call that is run, a call without the token or the login, a name written as markup, a key kept in storage, another address), and the check of tests/scripts/web_mapmaker_ai_check.js must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/mapmaker_ai_mutants.json --keep-going --jobs 1; every mutant must be caught.",
+ "baseline": {
+  "test": "node tests/scripts/web_mapmaker_ai_check.js"
+ },
+ "mutants": [
+  {
+   "id": "a_name_that_is_not_a_tool_is_run",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "var tool = Object.prototype.hasOwnProperty.call(tools, name) ? tools[name] : null;",
+   "new": "var tool = tools[name];",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "an_old_base_goes_through",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "if (args.base !== undefined && args.base !== ver) return done(refuse('changed_by_person', 'The person changed the map since your last answer. It is version '",
+   "new": "if (false) return done(refuse('changed_by_person', 'The person changed the map since your last answer. It is version '",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "the_persons_work_is_not_kept_first",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "if ((copied && !copyAlways) || env.isSaved()) { copied = true; return done(work()); }",
+   "new": "if (true) { copied = true; return done(work()); }",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "a_copy_that_failed_goes_on",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "                    if (error) return done(refuse('refused', 'The browser could not keep a safety copy",
+   "new": "                    if (false) return done(refuse('refused', 'The browser could not keep a safety copy",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "a_second_copy_is_made_in_a_session",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "if ((copied && !copyAlways) || env.isSaved()) {",
+   "new": "if (env.isSaved()) {",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "a_stroke_is_not_waited_for",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "if (!env.stroking()) return go();",
+   "new": "return go();",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "a_stroke_is_waited_for_for_ever",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "if (tries >= WAIT_TRIES) return done(refuse('busy', 'The person is drawing: try again in a moment.'));",
+   "new": "if (false) return done(refuse('busy', 'x'));",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "more_than_the_cells_is_let_through",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "if (n > MAX_CELLS) { var back",
+   "new": "if (false) { var back",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "a_fill_over_the_limit_is_not_undone",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "var back = stroke.cancel(); env.changed(back);",
+   "new": "var back = [];",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "the_ais_undo_takes_the_persons_steps",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "while (k < n && own.length && h.top() === own[own.length - 1]) {",
+   "new": "while (k < n && own.length) {",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "a_picture_is_not_made_smaller",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "if (png.length > env.pictureMax && tries++ < 4) { px = Math.floor(px * 0.7); return once(); }",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "a_picture_of_any_size_is_sent",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "if (png.length > env.pictureMax) return done(refuse('too_big',",
+   "new": "if (false) return done(refuse('too_big',",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "a_guide_of_any_name_is_asked_for",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "var skill = GUIDES[args.topic];",
+   "new": "var skill = GUIDES[args.topic] || args.topic;",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "a_library_map_of_any_name_is_asked_for",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "if (!entry) return done(refuse('refused', 'There is no library map with that name: see list_library_maps.'));",
+   "new": "if (!entry) entry = { name: args.name, file: args.name };",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "the_stop_does_not_close_the_socket",
+   "file": "web/front/mapmaker_ai.js",
+   "old": "if (s) { try { s.close(1000, 'stopped'); } catch (e) {} }",
+   "new": "if (s) {}",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "a_call_after_stop_is_run",
+   "file": "web/front/mapmaker_ai.js",
+   "old": "mine.onmessage = function (e) { if (sock === mine) onFrame(e.data); };",
+   "new": "mine.onmessage = function (e) { onFrame(e.data); };",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "a_frame_that_is_not_a_call_is_run",
+   "file": "web/front/mapmaker_ai.js",
+   "old": "if (typeof m.id !== 'number' || typeof m.tool !== 'string' || !m.args || typeof m.args !== 'object') return;",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "the_token_is_not_sent",
+   "file": "web/front/mapmaker_ai.js",
+   "old": "opts.headers['X-Ants-Csrf'] = csrf;",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "the_login_is_not_sent",
+   "file": "web/front/mapmaker_ai.js",
+   "old": "var opts = { method: method, credentials: 'same-origin', headers: {} };",
+   "new": "var opts = { method: method, credentials: 'omit', headers: {} };",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "a_name_is_written_as_markup",
+   "file": "web/front/mapmaker_ai.js",
+   "old": "name.appendChild(el('span', '', key.name));",
+   "new": "var sp = el('span'); sp.innerHTML = key.name; name.appendChild(sp);",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "the_strip_has_no_stop",
+   "file": "web/front/mapmaker_ai.js",
+   "old": "btns.appendChild(button('Stop', 'stop', disarm));",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "the_entry_label_stays_after_stop",
+   "file": "web/front/mapmaker_ai.js",
+   "old": "if (label) label.textContent = state === 'armed' ? 'AI is on' : state === 'working' ? 'AI is working' : 'Connect an AI...'; }",
+   "new": "if (label && state !== 'off') label.textContent = state === 'armed' ? 'AI is on' : 'AI is working'; }",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "a_key_is_kept_in_storage",
+   "file": "web/front/mapmaker_ai.js",
+   "old": "shownKey = made.key;",
+   "new": "shownKey = made.key; try { win.localStorage.setItem('key', made.key); } catch (e) {}",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "the_page_calls_another_address",
+   "file": "web/front/mapmaker_ai.js",
+   "old": "env.fetch('/ai/skills/index.json', { credentials: 'same-origin' })",
+   "new": "env.fetch('https://evil.example/index.json', { credentials: 'same-origin' })",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "the_revoke_sends_no_id",
+   "file": "web/front/mapmaker_ai.js",
+   "old": "api('POST', '/hub/ai/keys/revoke', { id: key.id }",
+   "new": "api('POST', '/hub/ai/keys/revoke', { }",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "a_call_that_was_stopped_goes_on_after_its_stroke",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "            if (stopped(done)) return done(stoppedAnswer());\n            if (!env.stroking()) return go();",
+   "new": "            if (!env.stroking()) return go();",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "a_call_that_was_stopped_goes_on_after_its_copy",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "                    if (stopped(done)) return done(stoppedAnswer());                         // (stopped while the copy was being kept: the copy stays, the map is not touched)\n",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "a_note_is_shown_after_stop",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "if (stopped(done)) return done(stoppedAnswer()); env.note(args.text);",
+   "new": "env.note(args.text);",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "the_page_does_not_tell_a_call_whether_it_is_wanted",
+   "file": "web/front/mapmaker_ai_tools.js",
+   "old": "                if (alive) done.alive = alive;",
+   "new": "                if (false) done.alive = alive;",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "a_cancel_of_the_hub_is_ignored",
+   "file": "web/front/mapmaker_ai.js",
+   "old": "            else if (m.t === 'cancel' && typeof m.id === 'number') {",
+   "new": "            else if (false) {",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "a_cancelled_call_is_still_wanted",
+   "file": "web/front/mapmaker_ai.js",
+   "old": " && !cancelled[id]; }",
+   "new": "; }",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "the_strip_shows_the_name_that_the_app_gives_itself",
+   "file": "web/front/mapmaker_ai.js",
+   "old": "            who = { key: clean(m.key) };",
+   "new": "            who = { key: clean(m.client) + ' ' + clean(m.key) };",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  },
+  {
+   "id": "the_sheet_does_not_say_where_the_key_stays",
+   "file": "web/front/mapmaker_ai.js",
+   "old": " Running or saving it keeps the key on this computer (the terminal\\u2019s history, the AI app\\u2019s settings): if the computer is shared, revoke the key when you are done.",
+   "new": "",
+   "test": "node tests/scripts/web_mapmaker_ai_check.js"
+  }
+ ]
+}

@@ -152,6 +152,7 @@
             undo: function (apply) { var p = undo.pop(); if (!p) return null; records -= weight(p); redo.push(p); return apply(p, false); },
             redo: function (apply) { var p = redo.pop(); if (!p) return null; undo.push(p); records += weight(p); return apply(p, true); },
             canUndo: function () { return undo.length > 0; },
+            top: function () { return lastId(); },                           // the number of the step that Undo would take back (0: none): the AI part tells its own steps from the person's by it
             canRedo: function () { return redo.length > 0; },
             // no change has been made since the map was opened (or the last change was undone and nothing was ever dropped)
             isClean: function () { return undo.length === 0 && dropped === 0; },

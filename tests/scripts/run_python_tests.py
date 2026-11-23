@@ -49,6 +49,7 @@ COSTS = {
     "test_web_shapes.TheMutantsOfThePicker": 6, "test_cmake_version.CcacheSupport": 5,
     "test_hub_roles.TheLiveRoles": 30, "test_hub_roles.TheLookup": 6, "test_hub_roles.TheSecrets": 5,
     "test_web_home_cmds.TheChecksAreNotVacuous": 6, "test_hub_powers.TheLiveHub": 45, "test_hub_powers.TheRealProcess": 31, "test_hub_powers.TheFreshCheck": 6, "test_hub_powers.TheIdIsLikeAPassword": 5,
+    "test_web_mapmaker_ai.TheChecksAreNotVacuous": 40,
 }
 
 # The mutation classes that run as several units (the groups of this table, `NAME[K/N]`, K from 1): each unit gets the environment variable SHARD_ENV, "K/N", and the class (through
@@ -70,7 +71,7 @@ LINUX_ONLY = {
     "test_web_lobby_rules.TheCheckIsNotVacuous", "test_web_rematch.TheChecksAreNotVacuous", "test_web_map_maker_link.TheChecksAreNotVacuous", "test_web_game_menu.TheMutants",
     "test_web_shapes.TheMutantsOfTheTable", "test_web_shapes.TheMutantsOfThePicker", "test_bot_names.TheMutants", "test_web_mapmaker.TheGroundAndTheSprites", "test_web_mapmaker.ThePage",
     "test_web_map_files.ThePagesOwnCode", "test_web_admin.ThePagesOwnCode", "test_web_death_map.TheCards",
-    "test_web_player_name.TheChecksAreNotVacuous",
+    "test_web_player_name.TheChecksAreNotVacuous", "test_web_mapmaker_ai.TheChecksAreNotVacuous",
 }
 
 

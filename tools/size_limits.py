@@ -39,7 +39,7 @@ SPLIT_PENDING = frozenset({
 # The rule: the measured size plus about 10%, rounded up (to 50,000 from 1,000,000, to 5,000 from 100,000, to 500 from 10,000, else to 100). A raise is a one-number edit with
 # its reason in the commit message; no story is kept here.
 # the whole of web/front/ (pictures, font, scripts, style) and the map maker's own scripts and style, apart from the pictures
-FRONT_BUDGET = 1_650_000
+FRONT_BUDGET = 1_900_000
 EDITOR_BUDGET, EDITOR_GZIP_BUDGET = 430_000, 125_000
 # scripts that load on first use (raw bytes, gzipped; both files of a pair together unless a script is named alone)
 LAZY_BUDGET, LAZY_GZIP_BUDGET = 80_000, 25_500          # the three lazy map maker scripts together
@@ -48,6 +48,7 @@ ANTS_BUDGET, ANTS_GZIP_BUDGET = 46_500, 14_000          # the Ants tool
 CONVERT_BUDGET, CONVERT_GZIP_BUDGET = 33_500, 10_500    # Copy, convert and Crop
 PICKUP_BUDGET, PICKUP_GZIP_BUDGET = 83_000, 23_500      # the Pick up tool
 PLAY_BUDGET, PLAY_GZIP_BUDGET = 36_500, 10_500          # Play this map
+AI_BUDGET, AI_GZIP_BUDGET = 84_000, 24_000              # Connect an AI: the sheet, the strip and the socket (mapmaker_ai.js), the tools (mapmaker_ai_tools.js) and the style
 # the game page
 GAME_BUDGET, GAME_GZIP_BUDGET = 12_000, 4_600           # the game page's side of Play this map
 GAME_MENU_BUDGET, GAME_MENU_GZIP_BUDGET = 53_000, 15_500  # the settings menu
