@@ -47,7 +47,7 @@ The page opens `wss://<site>/hub/ai/ws` when the person turns the switch on; the
 
 - **One armed tab for an account.** A second socket takes the first one's place: the first is sent `{"t":"bye","why":"replaced"}` and closed.
 - **Disarmed** when the socket closes: the Stop button, Turn off, closing or reloading the tab; after an hour with no call; when the login ends or runs out; on a kick or a ban; when the hub restarts. The call in flight is answered `stopped`, later calls `not_armed`.
-- **One call at a time** for an account, with a queue of 3 behind it for 10 seconds (`busy` past that). A call is answered by the tab within 10 seconds, else `timeout`; a late answer is thrown away.
+- **One call at a time** for an account, with one more waiting behind it (`busy` at once for a third, and for a waiting call that has waited too long). A call is answered by the tab within the time of the table below, else `timeout`; a late answer is thrown away.
 - **Frames.** Hub to tab: `{"t":"ready","v":1,"tools":[...],"idle","budget"}` once, `{"t":"call","id","tool","args","key","scope"}` (`key` is the key's own name, which the person chose: the strip shows it, and no name that the AI app says of itself is passed on, because any program can say anything there), `{"t":"cancel","id"}` (drop the call `id` if its work has not started: sent when a call timed out and when its key was revoked while it was in flight) and `{"t":"bye","why"}`. Tab to hub: `{"t":"result","id","ok":true,"result":{...},"cells":N}` or `{"t":"result","id","ok":false,"error":"<code>","message":"<sentence>"}`. A frame that is anything else is a mistake of the socket, and so is one over ten a second (a burst of 40); twenty mistakes in a minute close it. A result is checked by the hub: an object, a picture (`result.png`) is base64 within 300 KB, the code of an error is one the tab may use (`refused`, `changed_by_person`, `too_big`, `bad_args`, `no_open_map`, `busy`, `tab_error`), a sentence is cut to one printable line of 300 characters, `cells` is a whole number from 0 to 5,000 and counts only for an edit.
 - **Cells.** An AI may change 100,000 cells while one tab stays armed, then `budget`; arming the tab again starts again. One call changes at most 5,000.
 - A frame of the tab is at most 1 MiB. The hub keeps nothing of the map: a call and its answer live in memory while they are in flight.
@@ -83,7 +83,7 @@ Plain HTTP answers `{"ok": false, "error": <code>, "message": <sentence>}` with 
 |---|---|---|
 | `bad_key` | 401 | wrong, ended, revoked (also while its call is in flight) or deleted: one answer for all |
 | `ai_off` | 503 | the switch is off |
-| `rate` | 429 | a key's burst, the account's hour, the address's bad keys, or the hub's calls in flight (32 at once for the whole hub) |
+| `rate` | 429 | a key's burst, the account's hour, the address's bad keys, or the hub's calls in flight |
 | `bad_request`, `unknown_tool`, `bad_args` | 400 | not a call that this door takes, not a tool, arguments that do not fit |
 | `read_only` | 403 | a read key called a tool that changes |
 | `not_armed` | 409 | no tab is armed for the account |
@@ -98,25 +98,27 @@ Plain HTTP answers `{"ok": false, "error": <code>, "message": <sentence>}` with 
 
 - **Plain HTTP:** `POST /hub/ai/v1/call` with `Authorization: Bearer <key>`, `Content-Type: application/json` and `{"tool", "args"}`. `GET /hub/ai/v1/openapi.json` is the OpenAPI 3.1 file (no key): one operation, with every tool's schema in `components`.
 - **MCP:** `POST /hub/ai/mcp`, the Streamable HTTP transport, stateless, plain JSON answers: `initialize` (with `instructions`), `ping`, `tools/list` (the tools that the key's scope allows, with `readOnlyHint`), `tools/call` (a text of JSON, and a picture as an image). One message at a time (a batch, resources, prompts and streams are not offered). Claude Code: `claude mcp add --transport http ants-map-maker <site>/hub/ai/mcp --header "Authorization: Bearer <key>"`. Clients that ask for a sign-in (OAuth) are not supported.
-- **Order of the checks** at a key door, with nothing read from the body before the key is good: the address's allowance of bad keys, the `Origin` (a page of another site is `403 origin`; an AI app sends none), the type and length of the body, the key, the hub's calls in flight, the key's and the account's budgets, the body, the tool and its arguments, the scope, the relay. **A call does not hold the place of a handshake**: the hub counts the connections that have not finished their handshake (`pending_total`, 64) so that the chat, the login and the admin page always find a place, and a call may wait for its tab for 20 seconds; so, as soon as its key is good, a call gives its place back and is counted in the hub's own limit of calls in flight instead (`ai_in_flight_total`, 32, `429 rate` over it). nginx counts the calls that are open at once for an address too (16). No cookie is believed and no CORS header is sent, and nginx answers 405 to a preflight.
+- **Order of the checks** at a key door, with nothing read from the body before the key is good: the address's allowance of bad keys, the `Origin` (a page of another site is `403 origin`; an AI app sends none), the type and length of the body, the key, the key's and the account's budgets, the body, the tool and its arguments, the scope, the hub's calls in flight, the relay. **A call does not hold the place of a handshake**: the hub counts the connections that have not finished their handshake so that the chat, the login and the admin page always find a place, and a call may wait for its tab for a long time; so, when a call is about to ask its tab, it gives its place back and is counted in the hub's own limit of calls in flight instead (`429 rate` over it). What does no tab work (`initialize`, `ping`, `tools/list`, a notification, a call that is refused) is not counted. No cookie is believed and no CORS header is sent, and nginx answers 405 to a preflight.
 
 ## Limits
 
-| What | Limit |
-|---|---|
-| A key | a burst of 20 calls, then 4 a second |
-| An account | 600 calls an hour, all keys together |
-| An address | 10 keys that are no good a minute, then `429` before any key is looked at; nginx's own zone first (20 a second, burst 40) |
-| Keys | 3 working, 5 made a day; the key pages 30 a minute for an account (and 150 for an address) |
-| Calls in flight | 32 in the whole hub, 4 for an account (one and a queue of 3), 16 open at once for an address in nginx |
-| A call's body | 64 KB; a page's body 512 bytes; a frame of the tab 1 MiB; a picture about 300 KB |
-| Cells | 5,000 a call (2,000 listed one by one); 100,000 while a tab stays armed |
-| Armed tabs | one for an account; 8 for an address, 100 in all; 8 sockets at once for an address in nginx |
-| Time | 10 seconds a call; an hour without a call disarms the tab |
+| What | The hub | nginx, in front (a wall for each client address) |
+|---|---|---|
+| A key | a burst of 20 calls, then 4 a second | |
+| An account | 600 calls an hour, all keys together | |
+| Calls of an AI | | 200 at once, then 50 a second |
+| Bad keys of an address | 10, then one every 6 seconds; over it `429` before any key is looked at | |
+| Key pages | for an account: 30, then one every 2 seconds; for an address: 150, then one every 0.4 seconds | 300 at once, then 10 a second |
+| Keys | 3 working, 5 made a day | |
+| Calls in flight | one running and one waiting for an account (a third is `busy` at once); 32 in the whole hub, so it takes 16 accounts to fill it | 24 open at once for an address |
+| A call's body | 64 KB; a page's body 512 bytes; a frame of the tab 1 MiB; a picture about 300 KB | 64 KB (512 bytes for a key page) |
+| Cells | 5,000 a call (2,000 listed one by one); 100,000 while a tab stays armed | |
+| Armed tabs | one for an account; 8 for an address, 100 in all | 16 sockets at once for an address |
+| Time | 10 seconds a call; 10 seconds in the queue; an hour without a call disarms the tab | |
 
-The numbers are in one place, `hub/limits.py` (`ai_*`).
+This table is the one place where these numbers are written out for a reader; `hub/limits.py` (`ai_*`) and `docker/nginx.conf` hold the values that run, and where a limit of one is tied to a limit of the other their comments point here instead of saying figures. A test holds the relation, not the figures: nginx is a looser wall for an address than the hub's own limits for it (`tests/scripts/test_nginx_hub_ai.py`).
 
-**Many people behind one address** (a school, a household, a mobile network) share what is counted for an address: the bad keys, the open calls and sockets, the wall of the key pages. These limits are kept as an outer wall, with wider numbers than one person needs; what decides for one person is counted for the **account** and the key: the key pages, the key's burst, the account's hour, the one armed tab and the calls in flight. A key that is no good is the one thing that cannot be counted for an account (nobody is known), so it is counted for the address.
+**Many people behind one address** (a school, a household, a mobile network) share what is counted for an address: the bad keys, the open calls and sockets, the wall of the key pages. The limits for an address are kept as an outer wall, nginx's wider than the hub's, both with wider numbers than one person needs; what decides for one person is counted for the **account** and the key: the key pages, the key's burst, the account's hour, the one armed tab and the calls in flight. A key that is no good is the one thing that cannot be counted for an account (nobody is known), so it is counted for the address.
 
 ## Logs
 

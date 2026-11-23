@@ -420,7 +420,7 @@
   {
    "id": "the_calls_in_flight_are_not_limited",
    "file": "hub/aidoor.py",
-   "old": "        if self.in_flight >= hub.limits.ai_in_flight_total:",
+   "old": "        if self.in_flight >= self.hub.limits.ai_in_flight_total:",
    "new": "        if False:",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheHubKeepsItsPlaces"
   },
@@ -539,15 +539,15 @@
   {
    "id": "the_open_calls_are_not_counted_at_the_plain_door",
    "file": "docker/nginx.conf",
-   "old": "    location = /hub/ai/v1/call {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        limit_req zone=ants_hub_ai burst=40 nodelay;\n        limit_req_status 429;\n        limit_conn ants_hub_aicalls 16;\n        limit_conn_status 429;\n",
-   "new": "    location = /hub/ai/v1/call {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        limit_req zone=ants_hub_ai burst=40 nodelay;\n        limit_req_status 429;\n",
+   "old": "    location = /hub/ai/v1/call {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        limit_req zone=ants_hub_ai burst=200 nodelay;\n        limit_req_status 429;\n        limit_conn ants_hub_aicalls 24;\n        limit_conn_status 429;\n",
+   "new": "    location = /hub/ai/v1/call {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        limit_req zone=ants_hub_ai burst=200 nodelay;\n        limit_req_status 429;\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_nginx_hub_ai.TheText"
   },
   {
    "id": "the_open_calls_are_not_counted_at_the_mcp_door",
    "file": "docker/nginx.conf",
-   "old": "    location = /hub/ai/mcp {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        limit_req zone=ants_hub_ai burst=40 nodelay;\n        limit_req_status 429;\n        limit_conn ants_hub_aicalls 16;\n        limit_conn_status 429;\n",
-   "new": "    location = /hub/ai/mcp {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        limit_req zone=ants_hub_ai burst=40 nodelay;\n        limit_req_status 429;\n",
+   "old": "    location = /hub/ai/mcp {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        limit_req zone=ants_hub_ai burst=200 nodelay;\n        limit_req_status 429;\n        limit_conn ants_hub_aicalls 24;\n        limit_conn_status 429;\n",
+   "new": "    location = /hub/ai/mcp {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        limit_req zone=ants_hub_ai burst=200 nodelay;\n        limit_req_status 429;\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_nginx_hub_ai.TheText"
   },
   {
@@ -563,6 +563,55 @@
    "old": "([0-9a-f]{8})",
    "new": "([0-9a-f]{7})",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheKeyRule"
+  },
+  {
+   "id": "the_queue_of_an_account_is_three",
+   "file": "hub/limits.py",
+   "old": "    ai_queue_max: int = 1 ",
+   "new": "    ai_queue_max: int = 3 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheRelay"
+  },
+  {
+   "id": "a_message_that_does_no_tab_work_is_counted",
+   "file": "hub/aidoor.py",
+   "old": "        if method == \"initialize\":\n",
+   "new": "        if self.in_flight >= self.hub.limits.ai_in_flight_total:\n            return self.refusal(\"rate\")\n        if method == \"initialize\":\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_ai.TheHubKeepsItsPlaces"
+  },
+  {
+   "id": "the_key_pages_wall_of_nginx_is_tighter_than_the_hubs",
+   "file": "docker/nginx.conf",
+   "old": "zone=ants_hub_aikeys:1m rate=10r/s;",
+   "new": "zone=ants_hub_aikeys:1m rate=30r/m;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_nginx_hub_ai.TheText"
+  },
+  {
+   "id": "the_calls_wall_of_nginx_is_tighter_than_five_keys",
+   "file": "docker/nginx.conf",
+   "old": "zone=ants_hub_ai:1m rate=50r/s;",
+   "new": "zone=ants_hub_ai:1m rate=10r/s;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_nginx_hub_ai.TheText"
+  },
+  {
+   "id": "the_sockets_wall_of_nginx_is_no_wider_than_the_hubs",
+   "file": "docker/nginx.conf",
+   "old": "        limit_conn ants_hub_aiconn 16;\n        limit_conn_status 429;",
+   "new": "        limit_conn ants_hub_aiconn 8;\n        limit_conn_status 429;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_nginx_hub_ai.TheText"
+  },
+  {
+   "id": "the_open_calls_of_an_address_can_fill_the_hubs_limit",
+   "file": "docker/nginx.conf",
+   "old": "    location = /hub/ai/v1/call {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        limit_req zone=ants_hub_ai burst=200 nodelay;\n        limit_req_status 429;\n        limit_conn ants_hub_aicalls 24;\n",
+   "new": "    location = /hub/ai/v1/call {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        limit_req zone=ants_hub_ai burst=200 nodelay;\n        limit_req_status 429;\n        limit_conn ants_hub_aicalls 64;\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_nginx_hub_ai.TheText"
+  },
+  {
+   "id": "the_open_calls_of_an_address_are_fewer_than_four_busy_people",
+   "file": "docker/nginx.conf",
+   "old": "    location = /hub/ai/v1/call {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        limit_req zone=ants_hub_ai burst=200 nodelay;\n        limit_req_status 429;\n        limit_conn ants_hub_aicalls 24;\n",
+   "new": "    location = /hub/ai/v1/call {\n        if ($request_method != POST) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        limit_req zone=ants_hub_ai burst=200 nodelay;\n        limit_req_status 429;\n        limit_conn ants_hub_aicalls 4;\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_nginx_hub_ai.TheText"
   }
  ]
 }
