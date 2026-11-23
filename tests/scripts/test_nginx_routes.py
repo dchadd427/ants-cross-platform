@@ -51,6 +51,18 @@ def docker_ready():
     return ""
 
 
+def location_blocks(conf):
+    """{the words after `location`: the text between the braces of its block (nested braces counted)} of the server block."""
+    out = {}
+    for m in re.finditer(r"^\s*location\s+(.*?)\s*\{", conf, re.M):
+        depth, i = 1, m.end()
+        while depth:
+            depth += {"{": 1, "}": -1}.get(conf[i], 0)
+            i += 1
+        out[m.group(1)] = conf[m.end():i - 1]
+    return out
+
+
 class TheFile(unittest.TestCase):
     """What the file says (the routes' own behaviour is run below)."""
 
@@ -69,13 +81,12 @@ class TheFile(unittest.TestCase):
         self.assertRegex(self.conf, r"location = /four\.html \{\s*return 301 /\$is_args\$args;\s*\}")
 
     def test_the_list_of_matches_is_a_clean_address_and_the_old_watch_page_redirects_to_it(self):
-        """/matches serves matches.html (an exact location and an internal rewrite: tests/scripts/test_nginx_clean_urls.py has the rest); the old /watch.html is a 302 to /matches that keeps the query, with no header of its own (a location with an add_header of its own drops the server's)."""
+        """/matches serves matches.html (an exact location and an internal rewrite: tests/scripts/test_nginx_clean_urls.py has the rest); the old /watch.html is a 301 to /matches that keeps the query, from the map of the old addresses (no location of its own)."""
         blocks = re.findall(r"location = /matches \{([^{}]*)\}", self.conf)
         self.assertEqual([b.split() for b in blocks], [["rewrite", "^", "/matches.html", "last;"]])
-        blocks = re.findall(r"location = /watch\.html \{([^{}]*)\}", self.conf)
-        self.assertEqual([b.split() for b in blocks], [["return", "302", "/matches$is_args$args;"]])
+        self.assertRegex(self.conf, r"\n\s*/watch\.html /matches;")
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", self.conf, re.M)
-        self.assertEqual([l for l in locations if "matches" in l or "watch" in l], ["= /matches", "= /watch.html"])      # (no other location could catch them: the pages themselves are files of the html location)
+        self.assertEqual([l for l in locations if "matches" in l or "watch" in l], ["= /matches"])      # (no other location could catch them: the pages themselves are files of the html location)
         for page in ("matches", "match"):
             self.assertNotIn("location = /%s.html" % page, self.conf)            # (/live and /history are the game server's own JSON routes: the old page of the matches that run now has a redirect of its own; the .html addresses are the map's redirects)
 
@@ -86,7 +97,29 @@ class TheFile(unittest.TestCase):
 
     def test_the_numbers_of_the_front_page_have_their_two_exact_locations(self):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", self.conf, re.M)
-        self.assertEqual([l for l in locations if "stats" in l], ["= /stats", "= /stats/local"])          # (their blocks are checked in test_nginx_stats.py, run against a stand-in server there)
+        self.assertEqual([l for l in locations if "stats" in l], ["= /stats", "= /stats/local", "^~ /stats/"])          # (their blocks are checked in test_nginx_stats.py, run against a stand-in server there; the last is the plain 404 of the neighbours)
+
+    def test_an_address_that_is_nothing_is_a_404_with_the_page_of_the_site_and_not_the_game(self):
+        blocks = location_blocks(self.conf)
+        self.assertEqual(blocks["/"].split()[:3], ["try_files", "$uri", "=404;"])           # (no fallback to a page: the game page answered every unknown address, with a 200)
+        self.assertNotIn("index.html", blocks["/"])
+        self.assertEqual(re.findall(r"error_page ([^;]*);", blocks["/"]), ["404 /404.html", "500 502 503 504 /50x.html"])
+        for words, body in blocks.items():
+            if words != "/":
+                self.assertNotIn("404.html", body, words)                                   # (the page is named in the catch-all only: the 404 of a door, plain or the game server's, stays what it was)
+        self.assertEqual(len(re.findall(r"error_page [^;]*/404\.html;", self.conf)), 1)
+        for page in ("404.html", "50x.html"):
+            self.assertTrue(os.path.isfile(os.path.join(REPO, "web", page)), page)
+            self.assertIn("COPY web/404.html web/50x.html /usr/share/nginx/html/", read(os.path.join(REPO, "Dockerfile")))
+            html = read(os.path.join(REPO, "web", page))
+            self.assertIn('href="/front/classic.css"', html)                                 # (the Classic look: the page links nothing else of the site, so it works without the game's files)
+            self.assertNotRegex(html, r"<script|\.wasm|index\.js")
+
+    def test_the_neighbours_of_the_doors_are_plain_404s_and_no_other_location_is_one(self):
+        locations = location_blocks(self.conf)
+        for door in ("^~ /ws/", "^~ /busy/", "^~ /stats/", "^~ /lobbies/", "^~ /test-maps/", "/hub/"):
+            self.assertEqual(locations[door].split(), ["return", "404;"], door)
+        self.assertNotIn("^~ /hub/", locations)                                              # (a ^~ prefix would stop the regular expressions of the hub's pictures and images from being tried)
 
     def test_no_other_location_could_catch_the_front_page_or_the_old_address(self):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", self.conf, re.M)
@@ -109,6 +142,7 @@ class TheRoutesRun(unittest.TestCase):
         os.makedirs(os.path.join(html, "asset_catalog"))
         for name, text in (("lobby.html", LOBBY_PAGE), ("matches.html", MATCHES_PAGE), ("match.html", MATCH_PAGE), ("matches.css", ":root { --won: #f6d058; }\n"), ("replay_stats.css", "body.embed { padding-top: 10px; }\n"), ("replay_page.js", "window.AntsReplay = {};\n"),
                            ("history_page.js", "window.AntsHistory = {};\n"), ("match_stats.js", "window.AntsMatchStats = {};\n"), ("match_stats.css", ".chips { display: grid; }\n"), ("death_map.js", "window.AntsDeathMap = {};\n"), ("death_map.css", ".dm-stage { position: relative; }\n"), ("index.html", GAME_PAGE), ("play.html", GAME_PAGE), ("changelog.html", CLASSIC_PAGE), ("legal.html", CLASSIC_PAGE), ("mapmaker.html", MAPMAKER_PAGE),
+                           ("404.html", read(os.path.join(REPO, "web", "404.html"))), ("50x.html", read(os.path.join(REPO, "web", "50x.html"))),         # (the real pages: the checks read their words)
                            (os.path.join("asset_catalog", "index.html"), CLASSIC_PAGE), (os.path.join("front", "classic.css"), ":root { --clay: #db4b13; }\n")):
             with open(os.path.join(html, name), "w", encoding="utf-8") as f:
                 f.write(text)

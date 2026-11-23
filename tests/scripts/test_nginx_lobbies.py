@@ -57,10 +57,11 @@ SPELLINGS = ("/lobbies", "/lobbies?", "//lobbies", "///lobbies", "/./lobbies", "
 class TheText(unittest.TestCase):
     def test_the_location_is_there_once_exact_and_the_only_one_of_its_name(self):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", CONF, re.M)
-        self.assertEqual([l for l in locations if "lobbies" in l], ["= /lobbies", "@lobbies_off"])     # (no prefix and no regular-expression location could also catch /lobbies/x)
+        self.assertEqual([l for l in locations if "lobbies" in l], ["= /lobbies", "@lobbies_off", "^~ /lobbies/"])     # (the prefix is the plain 404 of the neighbours, never a pass to the server; no regular-expression location could also catch /lobbies/x)
+        self.assertEqual(block_of(CONF, "location ^~ /lobbies/ ").split(), ["return", "404;"])
         self.assertEqual(len(re.findall(r"location\s+= /lobbies\s*\{", CONF)), 1)
         self.assertEqual(len(re.findall(r"location\s+@lobbies_off\s*\{", CONF)), 1)
-        self.assertNotRegex(CONF, r"location\s+(\^~|~\*?)\s+[^\n]*lobbies")
+        self.assertNotRegex(CONF, r"location\s+(\^~|~\*?)\s+(?!/lobbies/ \{)[^\n]*lobbies")        # (no other prefix or pattern location: the plain 404 of the neighbours is the one, checked above)
         self.assertEqual([l for l in locations if "live" in l or "replays" in l], ['~* "^/live(?:-now/?|\\.html)\\z"', "= /replays", "^~ /replays/", "= /live", "^~ /live/", "@replays_off"])      # (the neighbours are as they were)
 
     def test_only_a_plain_get_without_a_query_goes_through_and_the_checks_come_first(self):
@@ -424,14 +425,14 @@ class TheBlockRuns(Running, unittest.TestCase):
         self.assertEqual(self.upstream.count(), before)
         self.assertEqual(self.get("/lobbies?")[0], 200)                                     # (a "?" with nothing behind it carries no query: nginx's $args is empty)
 
-    def test_the_neighbours_of_the_address_are_the_game_page_and_are_not_the_list_or_passed_on(self):
+    def test_the_neighbours_of_the_address_are_a_404_and_are_not_the_list_or_passed_on(self):
         self.assertEqual(self.get()[0], 200)                                                # (the list is kept: a prefix location would answer these from it)
         before = self.upstream.count()
         for path in ("/lobbies/", "/lobbies/x", "/lobbies/x/y", "/lobbies/..%2fx", "/lobbies.json", "/lobbies%2f", "/lobbies%20", "/lobbies%2e", "/lobbies;x=1", "/Lobbies", "/LOBBIES", "/lobbie",
                      "/lobbiess", "/lobbies_", "/x/lobbies", "/lobbies-off", "/lobby"):
             status, _, body = self.get(path)
-            self.assertEqual(status, 200, path)                                             # (the try_files of the site: the game page, as any unknown address)
-            self.assertIn(b"the page of the site", body, path)
+            self.assertEqual(status, 404, path)                                             # (an address that is nothing: a 404, never the game page that it once fell back to)
+            self.assertNotIn(b"the page of the site", body, path)
             self.assertNotIn(b"Ada", body, path)
         self.assertIn(self.get("/lobbies%00")[0], (400, 404))                              # (a NUL in the address: nginx refuses it itself)
         self.assertEqual(self.upstream.count(), before)                                     # none of these reached the server

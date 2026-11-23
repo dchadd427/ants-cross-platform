@@ -9,17 +9,19 @@ page ever had keeps opening it. The rules (docker/nginx.conf):
                                         those open the game page (index.html), as "/" always did. Every other query is the front page, an old ?map=... or ?embed=1 too
   /four.html[?query]                    a permanent redirect to /[?query] (the Play online page's own address, and its links with ?room=, ?aspect=)
   /play[?map=...&bots=...]              the game page, at a clean path of its own (the games on this computer: START for one on the front page)
-  /play.html, /index.html, /lobby.html  temporary redirects (302) with the query kept: /play.html to /play, the other two to /
+  /play.html, /index.html, /lobby.html  permanent redirects (301) with the query kept: /play.html to /play, the other two to /
 Every html answer has the headers that every page of the site has always had: Cache-Control "no-cache, must-revalidate" (exactly one line), the two cross-origin headers, an ETag (a conditional
 request is answered 304), and the redirect has the server's cross-origin headers too. The pages are recognised by one marker each: the lobby has the room (id="lobby"; the build writes it with or without quotes),
 the game page has the stage (id="game-stage"; the build writes it with or without quotes).
 /stats, /stats/local                  the numbers of the front page: a GET and a POST that go to the game server (only what nginx itself refuses is checked here: other methods, a query)
-/front/classic.css, the font          the Classic look's own files: served as files (an unknown address falls back to the game page, so the type is checked), the stylesheet with the pages' revalidation
+/front/classic.css, the font          the Classic look's own files: served as files (an unknown address is the page of a 404, so the type is checked), the stylesheet with the pages' revalidation
 /matches, /match, their stylesheet and the code that they and the game page in replay mode (play?replay=<file>) share; /matches.html and /match.html
-                                      (and the old /watch.html, to /matches) go to the clean address with the query (a 302); /live-now, /live-now/ and /live.html go to / with no query (a 302); /live is the game server's list, not a page
+                                      (and the old /watch.html, to /matches) go to the clean address with the query (a 301); /live-now, /live-now/ and /live.html go to / with no query (a 301); /live is the game server's list, not a page
 /manifest.webmanifest, /app/icon-192.png, /favicon.png, /favicon.ico  the web app's manifest (revalidated), an icon and the browser-tab icon (with or without ?v=): files, not the game page; /?vp is the front page and /home/vp.js its script of numbers
 /changelog, /legal, /mapmaker,        the other pages of the site: each is its own page with the pages' headers (the map maker has its own policy) and links /front/classic.css (not the map maker);
-/asset_catalog/                         the .html address of each (not changelog.html, legal.html, matches.html: they answer 200, as before) is a 302 to the clean one with the query, a slash after the clean one goes to it; /catalog, /viewer and /asset_catalog go to the catalog
+/asset_catalog/                         the .html address of each (and /asset_catalog/index.html, to /asset_catalog/) is a 301 to the clean one with the query, a slash after the clean one goes to it; /catalog, /viewer and /asset_catalog go to the catalog;
+                                        /admin.html, /404.html and /50x.html are plain 404s (no page has a .html address of its own)
+an address that is nothing                a 404 with web/404.html (the page of the site, no game started, revalidated like every page); under the name of a door (/ws/, /busy/, /stats/, /lobbies/, /test-maps/, /hub/) a short plain 404 with no page
 Exit status 0: every check passed; 1: a check failed; 3: nothing answers at the address.
 """
 import argparse
@@ -30,6 +32,7 @@ import urllib.parse
 
 LOBBY = re.compile(r'id="?lobby"?[ >]')
 GAME = re.compile(r'id="?game-stage"?')
+NOT_FOUND = re.compile(r'<h1>Page not found</h1>')           # (web/404.html: the page of an address that is nothing)
 
 
 def main():
@@ -112,27 +115,29 @@ def main():
                                ("PUT", "/stats/local", 405), ("DELETE", "/stats/local", 405), ("POST", "/stats/local?x=1", 404), ("POST", "/stats/local?a=b&c=d", 404)):
         status = get(path, method=method)[0]
         check(status == want, "%s %s is refused with %d (%s)" % (method, path, want, status))
-    for path in ("/stats/", "/stats/local/", "/stats/x", "/statsx"):
+    for path in ("/stats/", "/stats/local/", "/stats/x"):
         status, headers, names, body = get(path)
-        check(status == 200 and bool(GAME.search(body)), "%s is no address of the numbers: it is the game page like any unknown address (%s)" % (path, status))
+        check(status == 404 and not GAME.search(body) and not NOT_FOUND.search(body), "%s is no address of the numbers: it is a short plain 404, not a page (%s)" % (path, status))
+    status, headers, names, body = get("/statsx")
+    check(status == 404 and bool(NOT_FOUND.search(body)) and not GAME.search(body), "/statsx is no address of the numbers: it is a 404 with the page of the site, never the game (%s)" % status)
 
     print("[web routes] the Classic look: its stylesheet and font are files of the site, and the changelog page, the Legal page and Sprites and sounds are pages of their own that link the stylesheet")
     status, headers, names, body = get("/front/classic.css")
-    check(status == 200 and headers.get("content-type", "").startswith("text/css") and "--clay" in body, "/front/classic.css is the stylesheet, not the game page that an unknown address falls back to (%s, %s)" % (status, headers.get("content-type")))
+    check(status == 200 and headers.get("content-type", "").startswith("text/css") and "--clay" in body, "/front/classic.css is the stylesheet, not the page that an unknown address gets (%s, %s)" % (status, headers.get("content-type")))
     check(headers.get("cache-control") == "no-cache, must-revalidate" and names.count("cache-control") == 1, "/front/classic.css: Cache-Control is exactly one line, no-cache, must-revalidate (%s)" % headers.get("cache-control"))
     tag = headers.get("etag")
     status2 = get("/front/classic.css", {"If-None-Match": tag})[0] if tag else 0
     check(bool(tag) and status2 == 304, "/front/classic.css: an unchanged stylesheet is answered 304 to If-None-Match (%s)" % status2)
     status, headers, names, body = get("/front/LibreFranklin-Medium.ttf")
     check(status == 200 and not headers.get("content-type", "").startswith("text/html"), "/front/LibreFranklin-Medium.ttf is the font, not a page (%s, %s)" % (status, headers.get("content-type")))
-    print("[web routes] the map maker's sprite atlas: its index and two sheets are files of the site, revalidated (never the week that other PNG files get), and an unknown name in the folder is a 404, not the game page")
+    print("[web routes] the map maker's sprite atlas: its index and two sheets are files of the site, revalidated (never the week that other PNG files get), and an unknown name in the folder is a 404")
     for name, kind in (("atlas.json", "application/json"), ("ground.png", "image/png"), ("objects.png", "image/png")):
         status, headers, names, body = get("/mapmaker_atlas/" + name)
-        check(status == 200 and headers.get("content-type", "").startswith(kind) and not GAME.search(body), "/mapmaker_atlas/%s is the file, not the game page that an unknown address falls back to (%s, %s)" % (name, status, headers.get("content-type")))
+        check(status == 200 and headers.get("content-type", "").startswith(kind) and not GAME.search(body), "/mapmaker_atlas/%s is the file, not the page that an unknown address gets (%s, %s)" % (name, status, headers.get("content-type")))
         check(headers.get("cache-control") == "no-cache, must-revalidate" and names.count("cache-control") == 1 and "etag" in headers, "/mapmaker_atlas/%s: Cache-Control is exactly one line, no-cache, must-revalidate, with an ETag (%s)" % (name, headers.get("cache-control")))
     status, headers, names, body = get("/mapmaker_atlas/nothing.png")
     check(status == 404 and not GAME.search(body), "/mapmaker_atlas/nothing.png is a 404 (%s)" % status)
-    print("[web routes] the web app's manifest and an icon are files of the site, never the game page that an unknown address falls back to")
+    print("[web routes] the web app's manifest and an icon are files of the site, never the page that an unknown address gets")
     status, headers, names, body = get("/manifest.webmanifest")
     check(status == 200 and headers.get("content-type", "").split(";")[0] == "application/manifest+json" and '"name": "Ants!"' in body and not GAME.search(body),
           "/manifest.webmanifest is the manifest (%s, %s)" % (status, headers.get("content-type")))
@@ -145,7 +150,7 @@ def main():
     status, headers, names, body = get("/?vp")
     check(status == 200 and headers.get("content-type", "").split(";")[0] == "text/html" and bool(LOBBY.search(body)) and not GAME.search(body), "/?vp is the front page (the box of numbers is made by its script) (%s, %s)" % (status, headers.get("content-type")))
     status, headers, names, body = get("/home/vp.js")
-    check(status == 200 and "javascript" in headers.get("content-type", "") and "AntsHomeVp" in body and not GAME.search(body), "/home/vp.js is the script of the box of numbers, not the game page that an unknown address falls back to (%s, %s)" % (status, headers.get("content-type")))
+    check(status == 200 and "javascript" in headers.get("content-type", "") and "AntsHomeVp" in body and not GAME.search(body), "/home/vp.js is the script of the box of numbers, not the page that an unknown address gets (%s, %s)" % (status, headers.get("content-type")))
     for path in ("/changelog", "/legal", "/asset_catalog/"):
         status, headers, names, body = get(path)
         page_headers(path, status, headers, names)
@@ -162,14 +167,14 @@ def main():
         tag = headers.get("etag")
         check(bool(tag) and get(path, {"If-None-Match": tag})[0] == 304, "%s: an unchanged page is answered 304 to If-None-Match" % path)
     status, headers, names, body = get("/watch.html")
-    check(status == 302 and headers.get("location") == "/matches", "/watch.html answers 302 to /matches (%s %s)" % (status, headers.get("location")))
+    check(status == 301 and headers.get("location") == "/matches", "/watch.html answers 301 to /matches (%s %s)" % (status, headers.get("location")))
     for path, word, kind in (("/replay_page.js", "AntsReplay", "javascript"), ("/history_page.js", "AntsHistory", "javascript"), ("/match_stats.js", "AntsMatchStats", "javascript"), ("/death_map.js", "AntsDeathMap", "javascript"), ("/matches.css", "--won", "css"), ("/match_stats.css", ".chips", "css"), ("/death_map.css", ".dm-stage", "css"), ("/replay_stats.css", "body.embed", "css")):
         status, headers, names, body = get(path)
-        check(status == 200 and word in body and not headers.get("content-type", "").startswith("text/html"), "%s is the file, not the game page that an unknown address falls back to (%s, %s)" % (path, status, headers.get("content-type")))
+        check(status == 200 and word in body and not headers.get("content-type", "").startswith("text/html"), "%s is the file, not the page that an unknown address gets (%s, %s)" % (path, status, headers.get("content-type")))
         check(headers.get("cache-control") == "no-cache, must-revalidate" and names.count("cache-control") == 1, "%s: Cache-Control is exactly one line, no-cache, must-revalidate (%s)" % (path, headers.get("cache-control")))
         check(headers.get("cross-origin-opener-policy") == "same-origin" and headers.get("cross-origin-embedder-policy") == "require-corp", "%s carries the cross-origin isolation headers (%s, %s)" % (path, headers.get("cross-origin-opener-policy"), headers.get("cross-origin-embedder-policy")))
 
-    print("[web routes] clean addresses: every page is asked for without .html, its old address is a temporary redirect (302) that keeps the query, except the three files that an earlier redirect led to, which answer 200, and nothing else is caught")
+    print("[web routes] clean addresses: every page is asked for without .html, its old address is a permanent redirect (301) that keeps the query, and nothing else is caught")
     PAGES = (("/changelog", "/changelog.html"), ("/legal", "/legal.html"), ("/matches", "/matches.html"), ("/match", "/match.html"), ("/play", "/play.html"), ("/mapmaker", "/mapmaker.html"))
     QUERIES = ("", "?live=ants-X-20260101-000000Z", "?room=k7m2xq&roommap=small&roomseats=2", "?code=ab12cd", "?replay=ants-X-20260101-000000Z.antsrep&embed=1", "?id=ants-X-20260101-000000Z&x=%20%26", "?q=ann&page=2")
     for clean, old in PAGES:
@@ -177,35 +182,33 @@ def main():
         check(s_clean == 200 and h_clean.get("content-type", "").startswith("text/html"), "%s is a page (%s)" % (clean, s_clean))
         check(h_clean.get("cache-control") == "no-cache, must-revalidate" and n_clean.count("cache-control") == 1 and "etag" in h_clean, "%s: Cache-Control is exactly one line, no-cache, must-revalidate, with an ETag" % clean)
         check(n_clean.count("content-security-policy") == 1 and "frame-ancestors" in h_clean.get("content-security-policy", "") and n_clean.count("x-frame-options") == 1 and h_clean.get("strict-transport-security", "").startswith("max-age="), "%s carries the security headers of a page, each once" % clean)
-        kept = clean in ("/changelog", "/legal", "/matches")      # (these three clean addresses were redirects to their files: the files answer 200, so a browser that kept the old redirect lands on a page)
         s_old, h_old, n_old, b_old = get(old)
-        if kept:
-            check(s_old == 200 and "location" not in h_old and b_old == b_clean, "%s answers 200, the same page as %s, with no redirect (%s)" % (old, clean, s_old))
-        else:
-            check(s_old == 302 and h_old.get("location") == clean and "cache-control" not in h_old, "%s answers 302 to %s with no Cache-Control (%s %s)" % (old, clean, s_old, h_old.get("location")))
+        check(s_old == 301 and h_old.get("location") == clean and "cache-control" not in h_old and not NOT_FOUND.search(b_old), "%s answers 301 to %s with no Cache-Control and no page (%s %s)" % (old, clean, s_old, h_old.get("location")))
         for query in QUERIES:
             s_q, h_q, n_q, b_q = get(old + query)
-            if kept:
-                check(s_q == 200 and "location" not in h_q, "%s%s answers 200, not a redirect (%s)" % (old, query, s_q))
-            else:
-                check(s_q == 302 and h_q.get("location") == clean + query, "%s%s answers 302 to %s%s, the query kept (%s)" % (old, query, clean, query, h_q.get("location")))
+            check(s_q == 301 and h_q.get("location") == clean + query, "%s%s answers 301 to %s%s, the query kept (%s)" % (old, query, clean, query, h_q.get("location")))
             s_c, h_c, n_c, b_c = get(clean + query)
             check(s_c == 200 and b_c == b_clean, "%s%s is the same page as %s (%s)" % (clean, query, clean, s_c))
         tag = h_clean.get("etag")
         check(bool(tag) and get(clean, {"If-None-Match": tag})[0] == 304, "%s: an unchanged page is answered 304 to If-None-Match" % clean)
-        check(get(clean, method="HEAD")[0] == 200 and (get(old + "?a=b", method="HEAD")[0] == 200 if kept else get(old + "?a=b", method="HEAD")[1].get("location") == clean + "?a=b"), "HEAD works at %s and at %s" % (clean, old))
+        check(get(clean, method="HEAD")[0] == 200 and get(old + "?a=b", method="HEAD")[1].get("location") == clean + "?a=b", "HEAD works at %s and at %s" % (clean, old))
         check(get(clean + "/")[1].get("location") == clean and get(clean + "/?a=b")[1].get("location") == clean + "?a=b", "%s/ goes to %s (a slash after a page's address), the query kept" % (clean, clean))
-        check(get(clean + "/", method="HEAD")[0] == 302, "HEAD %s/ is the same redirect" % clean)
+        check(get(clean + "/", method="HEAD")[0] == 301, "HEAD %s/ is the same redirect" % clean)
     for old in ("/index.html", "/lobby.html"):
         for query in QUERIES + ("?join=/ws&room=abc",):
             status, headers, names, body = get(old + query)
-            check(status == 302 and headers.get("location") == "/" + query, "%s%s answers 302 to /%s (%s)" % (old, query, query, headers.get("location")))
+            check(status == 301 and headers.get("location") == "/" + query, "%s%s answers 301 to /%s (%s)" % (old, query, query, headers.get("location")))
+    for query in QUERIES:
+        status, headers, names, body = get("/watch.html" + query)
+        check(status == 301 and headers.get("location") == "/matches" + query, "/watch.html%s answers 301 to /matches%s, the query kept (%s %s)" % (query, query, status, headers.get("location")))
+        status, headers, names, body = get("/asset_catalog/index.html" + query)
+        check(status == 301 and headers.get("location") == "/asset_catalog/" + query, "/asset_catalog/index.html%s answers 301 to /asset_catalog/%s, the query kept (%s %s)" % (query, query, status, headers.get("location")))
     check(bool(GAME.search(get("/?join=/ws&room=abc")[3])), "a link that was shared before (/?join=/ws&room=...) still opens the game page")
     check(bool(LOBBY.search(get("/?room=k7m2xq")[3])), "a room link (/?room=...) still opens the front page")
-    print("[web routes] the page of the matches that run now is gone: its old addresses are a temporary redirect (302) to the front page with no query")
+    print("[web routes] the page of the matches that run now is gone: its old addresses are a permanent redirect (301) to the front page with no query")
     for old in ("/live-now", "/live-now/", "/live.html", "/live-now?x=1", "/live.html?join=/ws&room=k7m2xq&replay=a.antsrep", "/live-now/?room=k7m2xq", "/LIVE-NOW", "/Live.html"):
         status, headers, names, body = get(old)
-        check(status == 302 and headers.get("location") == "/" and "cache-control" not in headers, "%s answers 302 to / and drops the query (%s %s)" % (old, status, headers.get("location")))
+        check(status == 301 and headers.get("location") == "/" and "cache-control" not in headers, "%s answers 301 to / and drops the query (%s %s)" % (old, status, headers.get("location")))
         check(get(old, method="HEAD")[1].get("location") == "/", "HEAD %s is the same redirect" % old)
     print("[web routes] /live is the game server's list, not a page; the other paths of the server are not caught by a page's name")
     for path in ("/live", "/live/", "/replays", "/replays/", "/history", "/history/", "/lobbies", "/maps", "/maps/", "/submissions", "/stats", "/busy", "/admin/api/me", "/hub/me", "/ws"):
@@ -214,11 +217,32 @@ def main():
         except OSError:                 # (the path goes to the game server, which this check does not start: nginx waits for it, and that is not a page either)
             continue
         check(not (status == 200 and "text/html" in headers.get("content-type", "")) and "location" not in headers, "%s is not a page and is not redirected (%s)" % (path, status))
-    for path in ("/playx", "/matchesx", "/legal/x", "/mapmaker/x", "/changelogs", "/match/x"):
+    print("[web routes] an address that is nothing is a 404 with the page of the site (web/404.html), revalidated like every page, and never the game; a name that only starts like a page's is one too")
+    for path in ("/no/such/page", "/nothing", "/nothing?room=k7m2xq", "/playx", "/matchesx", "/legal/x", "/mapmaker/x", "/changelogs", "/match/x", "/robots.txt", "/front/", "/app", "/index"):
         status, headers, names, body = get(path)
-        check(status in (200, 404) and "location" not in headers and (status != 200 or bool(GAME.search(body))), "%s is no page: it is what any unknown address is (%s)" % (path, status))
-    status, headers, names, body = get("/admin.html")
-    check(status == 404, "/admin.html is still a 404 (the admin page is /admin) (%s)" % status)
+        check(status == 404 and "location" not in headers and bool(NOT_FOUND.search(body)) and not GAME.search(body) and not LOBBY.search(body), "%s is a 404 with the page of the site, not a game or the front page (%s)" % (path, status))
+        check(headers.get("content-type", "").startswith("text/html") and headers.get("cache-control") == "no-cache, must-revalidate" and names.count("cache-control") == 1, "%s: the page is html, Cache-Control is exactly one line, no-cache, must-revalidate (%s)" % (path, headers.get("cache-control")))
+        check(headers.get("cross-origin-opener-policy") == "same-origin" and headers.get("cross-origin-embedder-policy") == "require-corp" and names.count("content-security-policy") == 1 and "etag" in headers, "%s: the page has the headers of a page (cross-origin, one policy, an ETag)" % path)
+    status, headers, names, body = get("/no/such/page", method="HEAD")
+    check(status == 404 and body == "", "HEAD of an address that is nothing is a 404 with no body (%s)" % status)
+    status, headers, names, body = get("/no/such/page", method="POST")
+    check(status == 404 and bool(NOT_FOUND.search(body)), "a POST to an address that is nothing is a 404 with the page too (%s)" % status)
+    check(all(href in get("/no/such/page")[3] for href in ('href="/"', 'href="/play"', 'href="/matches"', 'href="/mapmaker"')), "the page of a 404 links the front page, the game, the matches and the map maker")
+    print("[web routes] under the name of a door, an address that is none of the door's own is a short plain 404: no page, no policy of a page, never the game")
+    for path in ("/ws/", "/ws/x", "/busy/", "/busy/x", "/stats/", "/stats/x", "/lobbies/", "/lobbies/x", "/test-maps/", "/test-maps/x", "/hub/", "/hub/x", "/hub/ws/", "/hub/login/", "/hub/me/", "/hub/admin/gate"):
+        status, headers, names, body = get(path)
+        check(status == 404 and not NOT_FOUND.search(body) and not GAME.search(body) and not LOBBY.search(body) and "content-security-policy" not in headers, "%s is a short plain 404, not a page (%s)" % (path, status))
+    print("[web routes] the pages and files that people have kept links to still open what they opened")
+    for path in ("/", "/play", "/matches", "/match", "/legal", "/changelog", "/mapmaker", "/asset_catalog/", "/manifest.webmanifest", "/favicon.png", "/front/classic.css"):
+        status, headers, names, body = get(path)
+        check(status == 200 and not NOT_FOUND.search(body), "%s still answers 200 and is not the page of a 404 (%s)" % (path, status))
+    for path, want in (("/play.html", "/play"), ("/index.html", "/"), ("/lobby.html", "/"), ("/four.html", "/"), ("/watch.html", "/matches"), ("/catalog", "/asset_catalog/"), ("/viewer", "/asset_catalog/")):
+        status, headers, names, body = get(path)
+        check(status == 301 and headers.get("location") == want, "%s still goes to %s (%s %s)" % (path, want, status, headers.get("location")))
+    print("[web routes] a file that is no address of the site is a plain 404: the admin page's, and the two pages of an error")
+    for path in ("/admin.html", "/404.html", "/50x.html", "/404.html?x=1"):
+        status, headers, names, body = get(path)
+        check(status == 404 and not NOT_FOUND.search(body) and "Something went wrong" not in body and "content-security-policy" not in headers, "%s is a plain 404 (%s)" % (path, status))
     status, headers, names, body = get("/hub/admin/gate", {"Cookie": "__Host-ants_hub=" + "a" * 32})
     check(status == 404 and "x-ants-admin-pass" not in headers, "the hub's gate for the admin page is internal: a browser that asks for it gets a 404 (%s)" % status)
     status, headers, names, body = get("/nothing.html")

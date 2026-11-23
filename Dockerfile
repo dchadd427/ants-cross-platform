@@ -189,6 +189,8 @@ COPY web/favicon.* /usr/share/nginx/html/
 
 # The pictures and the font of the front page (web/front/, served at /front/): the game's own art, made by tools/front_page_art/make_art.py, and its own font with its licence
 COPY web/front/ /usr/share/nginx/html/front/
+# The two pages for an address that is not there (404) and for an error of the web server itself (500, 502, 503, 504): static, in the Classic look, named by the error_page lines of docker/nginx.conf, which send them with the status of the error
+COPY web/404.html web/50x.html /usr/share/nginx/html/
 # The installable web app: its manifest (one exact location of nginx.conf serves it) and its icons (served by the picture rule, a week; named with ?v= and a hash of the file).
 COPY web/manifest.webmanifest /usr/share/nginx/html/manifest.webmanifest
 COPY web/app/ /usr/share/nginx/html/app/

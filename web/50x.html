@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ants! - Something went wrong</title>
+<link rel="icon" type="image/png" href="/favicon.png">
+<meta name="theme-color" content="#2b5f43">
+<link rel="stylesheet" href="/front/classic.css">
+<style>
+.wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; padding-bottom: 36px; }
+.err { width: min(600px, 100%); padding: 22px 28px 28px; }
+.err .code { margin: 0 0 4px; font-size: 14px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.err h1 { margin: 0 0 10px; font-size: 32px; font-weight: 500; line-height: 1.2; color: var(--gold); }
+.err p { margin: 0; font-size: 18px; line-height: 1.5; }
+.err .links { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 22px; }
+.err .links .main { grid-column: 1 / -1; }
+.err .main span { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.err .main small { font-size: 14px; color: #cfe6dc; text-shadow: none; }
+.lost { --k: 4; position: relative; z-index: 1; margin: 0 0 -3px; }
+.lost .ant { display: block; width: calc(24px * var(--k)); height: calc(41px * var(--k)); background: url("/front/ants.png?v=ed388ed5") no-repeat 0 calc(-123px * var(--k)) / calc(168px * var(--k)) calc(164px * var(--k)); image-rendering: pixelated; }
+.lost .say { position: absolute; left: calc(100% + 6px); top: 4px; min-width: 44px; padding: 0 12px; line-height: 40px; text-align: center; font-size: 26px; color: var(--gold); background: var(--inset); border: 3px solid var(--frame); border-color: var(--frame-bevel); border-radius: 4px; box-shadow: var(--box-shadow); }
+@media (max-width: 560px) {
+    .err { padding: 18px 18px 22px; }
+    .err h1 { font-size: 28px; }
+    .err p { font-size: 17px; }
+    .err .links { grid-template-columns: 1fr; gap: 12px; }
+    .lost { --k: 3; }
+    .lost .say { line-height: 34px; font-size: 22px; }
+}
+</style>
+</head>
+<body>
+<div class="screen">
+<div class="wrap">
+<div class="lost" aria-hidden="true"><span class="ant"></span><span class="say">&hellip;</span></div>
+<main class="panel err">
+<h1>Something went wrong</h1>
+<p>The server is restarting or busy. Please try again in a minute.</p>
+<nav class="links" aria-label="Pages">
+<a class="btn big main" href="">Try again</a>
+<a class="btn" href="/">Home</a>
+<a class="btn" href="/matches">Matches</a>
+<a class="btn" href="/mapmaker">Map maker</a>
+</nav>
+</main>
+</div>
+</div>
+</body>
+</html>

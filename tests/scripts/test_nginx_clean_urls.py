@@ -4,10 +4,10 @@ tests/data/nginx_clean_urls_mutants.json breaks one rule at a time, for tools/mu
 
 The text of docker/nginx.conf is checked everywhere:
   - every page has its own exact location, which serves the page's file by an internal rewrite and has no header of its own (the headers are those of the file's address);
-  - the old .html address of every page, and the same clean address with a slash, is in one map that the server block's `if` turns into a 302 that keeps the query (a browser does not keep a 302: going back needs nothing from a visitor); /index.html and /lobby.html go to "/"; changelog.html, legal.html and matches.html are the exception: /changelog, /legal and /matches were redirects to those files before, so the files answer 200 and are not in the map;
+  - the old .html address of every page (and /watch.html, /asset_catalog/index.html), and the same clean address with a slash, is in one map that the server block's `if` turns into a 301 that keeps the query; /index.html and /lobby.html go to "/"; nothing is answered 200 at a .html address, and the two files of the error pages (404.html, 50x.html) are plain 404s;
   - no other location can catch a page's address, and no page's address can catch another location's: a small model of nginx's choice of a location (exact, then the longest prefix, ^~ stops it,
     then the regular expressions in order) is asked about the pages and about every path of the game server, the hub and the admin page;
-  - the old addresses of the page of the matches that run now (/live-now, /live-now/, /live.html) are a 302 to the front page, "/", with no query, from locations of their own (not the map); /live and /live/<id> are still the game server's data;
+  - the old addresses of the page of the matches that run now (/live-now, /live-now/, /live.html) are a 301 to the front page, "/", with no query, from a location of its own (not the map); /live and /live/<id> are still the game server's data;
   - `server_tokens off` is in the http part of the file and in the server block, and nothing turns it on;
   - no page of the site, script or style builds an address with .html for one of these pages.
 Where an nginx program is installed the REAL file RUNS with the real pages of web/ (and stand-ins for the files that the image's build makes) and tests/scripts/web_routes_check.py asks it for every
@@ -36,8 +36,7 @@ HEAD = CONF[:CONF.index("server {")]
 SERVER = CONF[CONF.index("server {"):]
 CHECK = os.path.join(REPO, "tests", "scripts", "web_routes_check.py")
 
-# (the clean address, the file, the old address)
-KEPT_FILES = ("/changelog", "/legal", "/matches")        # (their files answer 200 at the old address: before this change these three clean addresses redirected to the files, and a browser may have kept that)
+# (the clean address, the file)
 PAGES = [("/play", "play.html"), ("/changelog", "changelog.html"), ("/legal", "legal.html"), ("/matches", "matches.html"), ("/match", "match.html"), ("/mapmaker", "mapmaker.html")]
 # every path that the file hands to the game server, the chat hub or the admin page, and one under each prefix: none of them may be a page
 OTHER_PATHS = ["/ws", "/busy", "/stats", "/stats/local", "/replays", "/replays/x.antsrep", "/live", "/live/R-20260101-000000Z", "/lobbies", "/history", "/history/deaths", "/history/x", "/maps", "/maps/all", "/maps/files/A.LVL",
@@ -101,11 +100,11 @@ class TheText(unittest.TestCase):
         for door in (("=", "/live"), ("^~", "/live/"), ("=", "/replays"), ("^~", "/replays/"), ("=", "/history"), ("^~", "/history/"), ("=", "/lobbies"), ("=", "/maps"), ("=", "/submissions"), ("=", "/admin"), ("^~", "/admin/api/")):
             self.assertIn(door, locations, door)
 
-    def test_the_old_addresses_of_the_page_of_the_matches_that_run_now_are_locations_that_redirect_to_the_front_page_and_are_not_in_the_map(self):
+    def test_the_old_addresses_of_the_page_of_the_matches_that_run_now_are_a_location_that_redirects_to_the_front_page_and_are_not_in_the_map(self):
         # (the server block's `if` runs before any location and keeps the query: an address in the map could not drop it. The old page took no query, and the front page acts on some, so none is passed on.)
         self.assertNotIn("/live-now", [c for c, _ in PAGES])
         rule = r'~* "^/live(?:-now/?|\.html)\z"'
-        self.assertEqual(stats.block_of(CONF, "location %s " % rule).split(), ["return", "302", "/;"])      # (one regular expression, not three exact locations: the case of the letters does not matter)
+        self.assertEqual(stats.block_of(CONF, "location %s " % rule).split(), ["return", "301", "/;"])      # (one regular expression, not three exact locations: the case of the letters does not matter)
         self.assertEqual([m for m in location_headers() if "live" in m[1] and m[0] != "^~"][0][:2], ("~*", rule[3:]))
         self.assertEqual([c for c in ("/live-now", "/live-now/", "/live.html") if re.search(r"^/live(?:-now/?|\.html)$", c, re.I) is None], [])
         for other in ("/live", "/live/", "/live/R-20260101-000000Z", "/live-now.html", "/live-now/x", "/live.htm", "/live.htmlx"):
@@ -119,8 +118,8 @@ class TheText(unittest.TestCase):
     def test_the_old_addresses_are_one_map_of_exact_paths_that_the_servers_if_turns_into_a_redirect_with_the_query(self):
         body = stats.block_of(HEAD, "map $ants_path $ants_clean_address ")
         rules = dict(re.findall(r"^\s*(/\S*)\s+(/\S*);", body, re.M))
-        want = {"/%s" % name: clean for clean, name in PAGES if clean not in KEPT_FILES}
-        want.update({"/index.html": "/", "/lobby.html": "/"})
+        want = {"/%s" % name: clean for clean, name in PAGES}
+        want.update({"/index.html": "/", "/lobby.html": "/", "/watch.html": "/matches", "/asset_catalog/index.html": "/asset_catalog/"})      # (every page has its old address in the map, none is answered 200)
         self.assertEqual(rules, want)
         self.assertEqual(re.findall(r"^\s*default\s+(\S+);", body, re.M), ['""'])
         regex = re.findall(r'^\s*"(~[^"]*)"\s+(\S+);', body, re.M)
@@ -130,17 +129,25 @@ class TheText(unittest.TestCase):
         self.assertTrue(regex[0][0].endswith("/\\z"))
         self.assertEqual(regex[0][1], "/$ants_page_name")
         self.assertEqual(len(re.findall(r"^map \S+ \$ants_clean_address \{", HEAD, re.M)), 1)
-        rule = re.findall(r"^\s*if \(\$ants_clean_address\) \{\s*return 302 \$ants_clean_address\$is_args\$args;\s*\}", SERVER, re.M)
+        rule = re.findall(r"^\s*if \(\$ants_clean_address\) \{\s*return 301 \$ants_clean_address\$is_args\$args;\s*\}", SERVER, re.M)
         self.assertEqual(len(rule), 1)                                                                  # (the server block's own `if`, once: before any location; the query goes with it)
         self.assertLess(SERVER.index("if ($ants_clean_address)"), SERVER.index("location "))
         self.assertIn("map $request_uri $ants_path {", HEAD)                                           # (the key is the path as it was sent: never the path after a rewrite or a fallback)
         self.assertNotRegex(HEAD[HEAD.index("map $ants_path $ants_clean_address"):HEAD.index("map $ants_path $ants_clean_address") + 40], r"\$uri")
 
-    def test_the_old_lists_of_matches_and_the_play_online_page_redirect_with_their_query(self):
-        self.assertRegex(CONF, r"location = /watch\.html \{\s*return 302 /matches\$is_args\$args;\s*\}")
+    def test_the_play_online_page_redirects_with_its_query_and_the_old_list_of_recordings_is_in_the_map(self):
+        self.assertNotIn("location = /watch.html", CONF)                                                # (the map has it: one home for the old addresses that keep their query)
         self.assertRegex(CONF, r"location = /four\.html \{\s*return 301 /\$is_args\$args;\s*\}")
         for gone in ("location = /changelog {\n        return", "location = /legal {\n        return", "location = /matches {\n        return"):
             self.assertNotIn(gone, CONF)
+
+    def test_the_files_of_the_error_pages_and_of_the_admin_page_are_no_addresses_and_are_plain_404s(self):
+        body = stats.block_of(HEAD, "map $ants_path $ants_error_page_file ")
+        self.assertEqual(re.findall(r'^\s*"(~\*[^"]*)"\s+1;', body, re.M), [r"~*^/(?:404|50x)\.html\z"])
+        self.assertIn("default 0;", body)
+        self.assertEqual(re.findall(r"^\s*if \(\$ants_error_page_file\) \{\s*return 404;\s*\}", SERVER, re.M).__len__(), 1)
+        self.assertLess(SERVER.index("if ($ants_error_page_file)"), SERVER.index("location "))          # (before any location: the answer is the server block's own, which has no error_page)
+        self.assertEqual(stats.block_of(CONF, "location = /admin.html ").split(), ["return", "404;"])      # (the admin page is /admin)
 
     def test_the_page_headers_still_come_from_the_file_s_address(self):
         # (the clean address is an internal rewrite to the file, so the maps that read $uri see the file: the policy, the framing rule, the referrer policy and the permissions policy of a page)
@@ -323,24 +330,28 @@ class TheRealPagesRun(unittest.TestCase):
         self.assertEqual(maker["referrer-policy"], "no-referrer")
         # the old address is a redirect with the site's cross-origin headers, nothing of a page
         old = self.ask("/play.html?live=abc")
-        self.assertEqual((old[0], old[1]["location"]), (302, "/play?live=abc"))
+        self.assertEqual((old[0], old[1]["location"]), (301, "/play?live=abc"))
         self.assertEqual(old[1]["cross-origin-opener-policy"], "same-origin")
         self.assertNotIn("content-security-policy", old[1])
-        self.assertNotIn("cache-control", old[1])                                                      # (a 302 with no freshness: a browser asks again, so a later change back needs nothing from a visitor)
-        for clean, name in PAGES:                                                                      # (every other redirect of a page is a 302 too, and /watch.html)
-            if clean not in KEPT_FILES:
-                self.assertEqual(self.ask("/" + name + "?x=1")[0], 302, name)
-            self.assertEqual(self.ask(clean + "/")[0], 302, clean + "/")
-        self.assertEqual(self.ask("/watch.html")[0], 302)
+        self.assertNotIn("cache-control", old[1])                                                      # (a redirect has no freshness of its own: it is the 301 itself that a browser keeps)
+        for clean, name in PAGES:                                                                      # (every other redirect of a page is a 301 too, and /watch.html)
+            self.assertEqual(self.ask("/" + name + "?x=1")[0], 301, name)
+            self.assertEqual(self.ask(clean + "/")[0], 301, clean + "/")
+        self.assertEqual(self.ask("/watch.html")[0], 301)
 
-    def test_the_three_files_that_an_earlier_redirect_led_to_answer_200_at_their_old_address_and_the_clean_address_answers_200_too(self):
-        for clean, name in PAGES:
-            if clean in KEPT_FILES:
-                file_answer, clean_answer = self.ask("/" + name + "?x=1"), self.ask(clean + "?x=1")
-                self.assertEqual((file_answer[0], clean_answer[0]), (200, 200), clean)
-                self.assertNotIn("location", file_answer[1], clean)
-                self.assertNotIn("location", clean_answer[1], clean)
-                self.assertEqual(file_answer[1]["content-security-policy"], clean_answer[1]["content-security-policy"], clean)
+    def test_every_old_address_with_dot_html_is_a_301_to_the_clean_address_with_the_query_and_the_clean_address_is_200(self):
+        olds = [("/" + name, clean) for clean, name in PAGES] + [("/index.html", "/"), ("/lobby.html", "/"), ("/watch.html", "/matches"), ("/asset_catalog/index.html", "/asset_catalog/")]
+        for old, clean in olds:
+            for query in ("", "?x=1", "?live=ants-X-20260101-000000Z&embed=1", "?q=a%20b"):
+                answer = self.ask(old + query)
+                self.assertEqual((answer[0], answer[1].get("location")), (301, clean + query), old + query)
+                self.assertNotIn("content-security-policy", answer[1], old + query)                       # (a redirect: no page)
+                self.assertEqual(self.ask(old + query, "HEAD")[0], 301, old + query)
+            self.assertEqual(self.ask(clean + "?x=1")[0], 200, clean)
+        for plain in ("/admin.html", "/404.html", "/50x.html"):
+            self.assertEqual(self.ask(plain)[0], 404, plain)
+            self.assertNotIn("Page not found", self.ask(plain)[2], plain)
+        self.assertEqual(self.ask("/four.html?room=k7m2xq")[:2][0], 301)
 
     def follow(self, path):
         """What a browser ends at when it opens an address: (the final address, the status, the body), following up to five redirects."""
@@ -366,7 +377,7 @@ class TheRealPagesRun(unittest.TestCase):
                  ("a link with a code", "/lobby.html?code=ab12cd&room=k7m2xq", "/?code=ab12cd&room=k7m2xq", lobby),
                  ("a rejoin or START link", "/?join=/ws&room=k7m2xq&seat=1&name=Bob&aspect=16:9", "/?join=/ws&room=k7m2xq&seat=1&name=Bob&aspect=16:9", game),
                  ("a rejoin link through the game page's file", "/index.html?join=/ws&room=k7m2xq&seat=1", "/?join=/ws&room=k7m2xq&seat=1", game),
-                 ("the list of matches with a search, by the file (it is not redirected: an earlier /matches was a redirect to it)", "/matches.html?q=ann&page=2", "/matches.html?q=ann&page=2", None),
+                 ("the list of matches with a search, by the file", "/matches.html?q=ann&page=2", "/matches?q=ann&page=2", None),
                  ("a match", "/match.html?id=" + live, "/match?id=" + live, None),
                  ("the old list of recordings", "/watch.html", "/matches", None),
                  ("the old page of the matches that run now, by its file", "/live.html", "/", lobby),
@@ -378,15 +389,15 @@ class TheRealPagesRun(unittest.TestCase):
                 self.assertTrue(marker.search(body), "%s opens the wrong page" % what)
                 self.assertFalse((lobby if marker is game else game).search(body), "%s opens the wrong page" % what)
 
-    def test_the_old_addresses_of_the_matches_that_run_now_are_a_temporary_redirect_to_the_front_page_with_no_query(self):
+    def test_the_old_addresses_of_the_matches_that_run_now_are_a_permanent_redirect_to_the_front_page_with_no_query(self):
         for old in ("/live-now", "/live-now/", "/live.html", "/live-now?x=1", "/live.html?join=/ws&room=k7m2xq", "/live-now/?room=k7m2xq", "/LIVE-NOW", "/Live-Now/", "/Live.html", "/LIVE.HTML?x=1"):
             status, headers, _ = self.ask(old)
-            self.assertEqual((status, headers.get("location")), (302, "/"), old)                       # (a 302: a browser does not keep it; "/", whatever the query was)
+            self.assertEqual((status, headers.get("location")), (301, "/"), old)                       # ("/", whatever the query was)
             self.assertNotIn("content-security-policy", headers, old)
         for old in ("/live-now", "/live.html", "/Live-Now", "/LIVE.HTML"):
-            self.assertEqual(self.ask(old, "HEAD")[0], 302, old)
+            self.assertEqual(self.ask(old, "HEAD")[0], 301, old)
         for near in ("/live-now/x", "/live-nowx", "/live.htmlx", "/live.htm", "/live-now.html"):
-            self.assertNotEqual(self.ask(near)[0], 302, near)                                          # (only the old addresses are redirected, whatever the case: not a name that merely starts like one)
+            self.assertNotEqual(self.ask(near)[0], 301, near)                                          # (only the old addresses are redirected, whatever the case: not a name that merely starts like one)
 
     def test_only_get_and_head_are_served_as_before(self):
         for clean, _ in PAGES:

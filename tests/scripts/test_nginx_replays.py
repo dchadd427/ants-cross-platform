@@ -427,11 +427,11 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         again = [self.ask("GET", "/replays/" + FILE)[0] for _ in range(14)]
         self.assertTrue(1 <= again.count(200) <= int(10 * (time.monotonic() - flood_over)) + 2, again)
 
-    def test_the_neighbours_of_the_two_addresses_are_the_game_page_and_nothing_is_passed_on(self):
+    def test_the_neighbours_of_the_two_addresses_are_a_404_and_nothing_is_passed_on(self):
         for path in ("/replay", "/replays2", "/replays.json", "/replaysx/"):
             status, _, body = self.ask("GET", path)
-            self.assertEqual(status, 200, path)                                               # (the try_files of the site: the game page, as any unknown address)
-            self.assertIn(b"a stand-in page", body, path)
+            self.assertEqual(status, 404, path)                                               # (an address that is nothing: a 404, never the game page that it once fell back to)
+            self.assertNotIn(b"a stand-in page", body, path)
             self.assertEqual(self.sent(path), [], path)
 
 

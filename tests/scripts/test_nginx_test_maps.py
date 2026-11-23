@@ -42,9 +42,10 @@ class TheText(unittest.TestCase):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", CONF, re.M)
         self.assertEqual(locations.count("= /test-maps"), 1)
         self.assertEqual(locations.count("@test_maps_off"), 1)
-        self.assertEqual([l for l in locations if "test" in l and "map" in l], ["= /test-maps", "@test_maps_off"])      # (no prefix and no regular expression catches a path of the name)
+        self.assertEqual([l for l in locations if "test" in l and "map" in l], ["= /test-maps", "@test_maps_off", "^~ /test-maps/"])      # (the prefix is the plain 404 of the neighbours, never a pass to the door; no regular expression catches a path of the name)
+        self.assertEqual(block_of(CONF, "location ^~ /test-maps/ ").split(), ["return", "404;"])
         self.assertEqual(CONF.count("location = /test-maps {"), 1)
-        self.assertNotRegex(CONF, r"location\s+(\^~|~\*?)\s+[^\n]*test-maps")
+        self.assertNotRegex(CONF, r"location\s+(\^~|~\*?)\s+(?!/test-maps/ \{)[^\n]*test-maps")        # (no other prefix or pattern location: the plain 404 of the neighbours is the one, checked above)
 
     def test_the_block_checks_before_it_passes_and_names_what_it_passes_on(self):
         block = block_of(CONF, "location = /test-maps ")
