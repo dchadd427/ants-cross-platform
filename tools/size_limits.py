@@ -48,6 +48,7 @@ ANTS_BUDGET, ANTS_GZIP_BUDGET = 46_500, 14_000          # the Ants tool
 CONVERT_BUDGET, CONVERT_GZIP_BUDGET = 33_500, 10_500    # Copy, convert and Crop
 PICKUP_BUDGET, PICKUP_GZIP_BUDGET = 83_000, 23_500      # the Pick up tool
 PLAY_BUDGET, PLAY_GZIP_BUDGET = 36_500, 10_500          # Play this map
+AI_BUDGET, AI_GZIP_BUDGET = 80_000, 23_000              # Connect an AI: the sheet, the strip and the socket (mapmaker_ai.js), the tools (mapmaker_ai_tools.js) and the style
 # the game page
 GAME_BUDGET, GAME_GZIP_BUDGET = 12_000, 4_600           # the game page's side of Play this map
 GAME_MENU_BUDGET, GAME_MENU_GZIP_BUDGET = 53_000, 15_500  # the settings menu

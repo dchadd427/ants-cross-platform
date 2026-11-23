@@ -687,6 +687,7 @@
             useEdges: function (e) { edges = e || null; showButtons(); },
             setAutoEdges: setAutoEdges,
             act: act,
+            editor: function () { return editor; }, changed: changed,        // (for the AI part, mapmaker_ai_tools.js: strokes and the repaint after them)
             isClean: function () { return !editor || editor.history.isClean(); },
             isSaved: function () { return !editor || editor.history.isSaved(); },
             markSaved: function () { if (editor) editor.history.markSaved(); },

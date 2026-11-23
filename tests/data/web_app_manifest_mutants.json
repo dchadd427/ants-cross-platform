@@ -228,8 +228,8 @@
   {
    "id": "policy_gets_manifest_src",
    "file": "docker/nginx.conf",
-   "old": "connect-src 'self' $ants_ws_sources;",
-   "new": "connect-src 'self' $ants_ws_sources; manifest-src 'self';",
+   "old": "a:; connect-src 'self' $ants_ws_sources;",
+   "new": "a:; connect-src 'self' $ants_ws_sources; manifest-src 'self';",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {
