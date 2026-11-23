@@ -216,7 +216,7 @@ PAGE = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ants (1998) - Changelog</title>
+<title>Ants (1998) - What\u2019s new</title>
 <link rel="icon" type="image/png" href="/favicon.png?v=9ea2152a">
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#2b5f43">
@@ -308,7 +308,7 @@ def slug(heading):
 
 def convert(md, repo_blob, version="", build_id="", build_date="", source="CHANGELOG.md"):
     md = re.sub(r"<!--.*?-->", "", md, flags=re.S)
-    title = "Changelog"
+    title = "What\u2019s new"
     intro, sections, nav = [], [], []
     current = None                       # [id, heading html, blocks]
     paragraph, item = [], None

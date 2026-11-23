@@ -6,7 +6,7 @@
     'use strict';
     var d = document, bar = d.querySelector('.sb'), btn = bar && bar.querySelector('.sbtn');
     if (!btn) return;
-    var SMALL = [['Sprites and sounds', '/asset_catalog/'], ['Changelog', '/changelog'], ['GitHub', 'https://github.com/dchadd427/ants-cross-platform'], ['Feedback', 'https://github.com/dchadd427/ants-cross-platform/issues'], ['Legal', '/legal']];
+    var SMALL = [['Sprites and sounds', '/asset_catalog/'], ['What\u2019s new', '/changelog'], ['GitHub', 'https://github.com/dchadd427/ants-cross-platform'], ['Feedback', 'https://github.com/dchadd427/ants-cross-platform/issues'], ['Legal', '/legal']];
     var box = null, count = 0, asked = false, openWidth = 0;
     function make(tag, cls, text) { var n = d.createElement(tag); if (cls) n.className = cls; if (text) n.textContent = text; return n; }
     function item(text, href, cur) {
