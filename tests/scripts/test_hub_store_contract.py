@@ -1426,6 +1426,151 @@ class SqliteContract(Contract):
         self.store.purge()
         self.assertIsNone(self.store.profile("1001"))
 
+    # ---- the keys of a person's AI (hub/aikeys.py, docs/MAP_AI.md): by the account's reference, never its id ----
+
+    def key(self, n, account="1001", scope="edit", seconds=DAY, live=3, day=5):
+        return self.store.ai_key_add(account, "%08x" % n, "key %d" % n, scope, "%064x" % n, seconds, live, day)
+
+    def test_a_key_is_kept_by_its_digest_and_listed_for_its_account_only(self):
+        made = self.key(1)
+        self.assertEqual((made.id, made.scope, made.ends - made.made, made.revoked, made.calls), ("00000001", "edit", DAY, 0, 0))
+        self.assertEqual(made.ref, self.store.ref("1001"))
+        self.assertNotIn("1001", repr(made) + str(tuple(made)))
+        self.assertEqual([k.id for k in self.store.ai_keys("1001")], ["00000001"])
+        self.assertEqual(self.store.ai_keys("1002"), [])
+        self.assertEqual(self.store.ai_key("00000001").digest, "%064x" % 1)
+        for bad in (None, "", "1", "0000000g", "000000011", 5):
+            self.assertIsNone(self.store.ai_key(bad))
+        for args in (("1001", "x", "n", "edit", "%064x" % 2), ("1001", "00000002", "n", "root", "%064x" % 2), ("1001", "00000002", "n", "edit", "short")):
+            with self.assertRaises(ValueError):
+                self.store.ai_key_add(*args, DAY, 3, 5)
+
+    def test_three_work_at_a_time_and_five_are_made_in_a_day(self):
+        for n in (1, 2, 3):
+            self.assertEqual(self.key(n).id, "%08x" % n)
+        self.assertEqual(self.key(4), "live")
+        self.assertEqual(self.key(1), "live")                                       # (the three limit is asked before the id)
+        self.assertEqual(self.key(5, account="1002").id, "00000005")                 # (another account has its own three)
+        self.assertTrue(self.store.ai_key_revoke("1001", "00000001"))
+        self.assertEqual(self.key(6).id, "00000006")
+        self.assertTrue(self.store.ai_key_revoke("1001", "00000002"))
+        self.assertEqual(self.key(7).id, "00000007")                                 # (the fifth of the day)
+        self.assertTrue(self.store.ai_key_revoke("1001", "00000003"))
+        self.assertEqual(self.key(8), "day")
+        self.clock.now += DAY + 1
+        self.assertEqual(self.key(8).id, "00000008")
+        self.assertEqual((self.key(9).id, self.key(10).id, self.key(11)), ("00000009", "0000000a", "live"))      # (the others ended with the day: three work again)
+
+    def test_an_id_that_is_taken_is_said_and_nothing_is_written_over_it(self):
+        self.key(1)
+        self.assertTrue(self.store.ai_key_revoke("1001", "00000001"))
+        self.assertEqual(self.key(1), "id")
+        self.assertEqual(self.store.ai_key("00000001").digest, "%064x" % 1)
+
+    def test_a_key_that_ended_or_was_revoked_does_not_work_and_does_not_count(self):
+        self.key(1, seconds=100)
+        self.key(2)
+        self.key(3)
+        self.assertEqual(self.key(4), "live")
+        self.clock.now += 101
+        self.assertEqual([k.id for k in self.store.ai_keys("1001")], ["00000002", "00000003"])
+        self.assertEqual(self.key(4).id, "00000004")
+        self.assertEqual(self.store.ai_key("00000001").ends, int(self.clock.now) - 101 + 100)         # (the row of an ended key is still there, for the caller to judge)
+        self.assertTrue(self.store.ai_key_revoke_id("00000002"))
+        self.assertFalse(self.store.ai_key_revoke_id("00000002"))
+        self.assertFalse(self.store.ai_key_revoke_id("00000001"))                    # (it ended already)
+        self.assertGreater(self.store.ai_key("00000002").revoked, 0)
+
+    def test_only_the_owner_revokes_a_key_and_the_operator_by_id_or_by_account(self):
+        self.key(1)
+        self.key(2)
+        self.key(3, account="1002")
+        self.assertFalse(self.store.ai_key_revoke("1002", "00000001"))
+        self.assertTrue(self.store.ai_key_revoke("1001", "00000001"))
+        self.assertEqual(self.store.ai_keys_revoke_ref(self.store.ref("1001")), 1)
+        self.assertEqual(self.store.ai_keys_revoke_ref(self.store.ref("1001")), 0)
+        self.assertEqual([k.id for k in self.store.ai_keys_working()], ["00000003"])
+        self.assertTrue(self.store.ai_key_revoke_id("00000003"))
+        self.assertEqual(self.store.ai_keys_working(), [])
+
+    def test_a_use_is_counted_and_the_listing_of_the_working_keys_puts_the_last_used_first(self):
+        self.key(1)
+        self.key(2)
+        self.clock.now += 5
+        self.store.ai_key_use("00000001")
+        self.store.ai_key_use("00000001")
+        self.clock.now += 5
+        self.store.ai_key_use("00000002")
+        first = self.store.ai_key("00000001")
+        self.assertEqual((first.calls, first.used), (2, int(self.clock.now) - 5))
+        self.assertEqual([k.id for k in self.store.ai_keys_working()], ["00000002", "00000001"])
+
+    def test_a_ban_and_forget_me_delete_the_keys_and_the_rows_of_their_calls(self):
+        for account in ("1001", "1002", "1003"):
+            self.key(int(account), account=account)
+            self.store.ai_log_add("%08x" % int(account), self.store.ref(account), "paint", 3, True, 4)
+        self.store.ban("1001", "me")
+        self.store.set_profile("1002", "bob", "", 100)
+        self.store.forget("1002")
+        self.assertEqual([k.id for k in self.store.ai_keys_working()], ["000003eb"])
+        self.assertEqual([r[1] for r in self.store.ai_log_recent()], ["000003eb"])
+        self.assertEqual(self.store.ai_keys_drop("1003"), 1)
+        self.assertEqual((self.store.ai_keys_working(), self.store.ai_log_recent()), ([], []))
+        self.assertEqual(self.store.ai_keys_drop("1003"), 0)
+
+    def test_the_log_of_the_calls_holds_numbers_and_names_of_a_fixed_shape_and_is_kept_for_a_while(self):
+        ref = self.store.ref("1001")
+        self.store.ai_log_add("00000001", ref, "paint", 12, True, 3)
+        self.store.ai_log_add("00000001", ref, "map_info", 0, False, 40)
+        self.assertEqual([(r[1], r[2], r[3], r[4], r[5], r[6]) for r in self.store.ai_log_recent()], [("00000001", ref, "map_info", 0, 0, 40), ("00000001", ref, "paint", 12, 1, 3)])
+        self.assertEqual(len(self.store.ai_log_recent(1)), 1)
+        for args in (("00000001", "1001", "paint"), ("00000001", ref, "Paint"), ("00000001", ref, "a b"), ("zz", ref, "paint"), ("00000001", ref, "x" * 33), ("00000001", ref, "")):
+            with self.assertRaises(ValueError):
+                self.store.ai_log_add(*args[:3], 1, True, 1)
+        self.clock.now += (self.store.ai_log_days + 1) * DAY
+        self.store.purge()
+        self.assertEqual(self.store.ai_log_recent(), [])
+
+    def test_the_log_of_the_calls_keeps_the_newest_rows_only(self):
+        self.store.ai_log_rows = 3
+        ref = self.store.ref("1001")
+        for n in range(30):
+            self.store.ai_log_add("00000001", ref, "paint", n, True, 1)
+        self.assertLessEqual(len(self.store.ai_log_recent(100)), 3 + 8)
+        self.assertEqual(self.store.ai_log_recent(1)[0][4], 29)
+        self.store.purge()
+        self.assertEqual(len(self.store.ai_log_recent(100)), 3)
+
+    def test_a_key_that_ended_stays_a_week_and_then_the_purge_deletes_the_row(self):
+        made = self.key(1, seconds=100)
+        self.clock.now += 100 + (self.store.ai_ended_days - 1) * DAY
+        self.store.purge()
+        self.assertIsNotNone(self.store.ai_key("00000001"))
+        self.clock.now += 2 * DAY
+        self.store.purge()
+        self.assertIsNone(self.store.ai_key("00000001"))
+        revoked = self.key(2)
+        self.store.ai_key_revoke("1001", "00000002")
+        self.clock.now += (self.store.ai_ended_days + 1) * DAY
+        self.store.purge()
+        self.assertIsNone(self.store.ai_key("00000002"))
+
+    def test_the_tables_are_additive_and_make_the_file_neither_newer_nor_unreadable_to_an_earlier_hub(self):
+        self.key(1)
+        self.store.close()
+        db = sqlite3.connect(self.path, isolation_level=None)
+        try:
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], storemod.SCHEMA)
+            names = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+            self.assertLessEqual({"ai_keys", "ai_log"}, names)
+            columns = [r[1] for r in db.execute("PRAGMA table_info(ai_keys)")]
+            self.assertEqual(columns, ["id", "ref", "name", "scope", "digest", "made", "ends", "used", "calls", "revoked"])
+        finally:
+            db.close()
+        again = storemod.Store(self.path, clock=self.clock)
+        self.addCleanup(again.close)
+        self.assertEqual([k.id for k in again.ai_keys("1001")], ["00000001"])
+
     def test_the_default_store_is_the_sqlite_one(self):
         self.assertIs(storemod.Store, __import__("hub.store.sqlite", fromlist=["Store"]).Store)
 

@@ -151,7 +151,8 @@ class TheText(unittest.TestCase):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", CONF, re.M)
         allowed = {"= /hub/ws": "$hub_cookie_session", "= /hub/login": None, "= /hub/callback": "$hub_cookie_state", "= /hub/me": "$hub_cookie_session", "= /hub/logout": "$hub_cookie_session",
                    "= /hub/forget": "$hub_cookie_session", "= /hub/admin/gate": "$hub_cookie_session", "^~ /admin/api/": None, "^~ /hub/admin/api/": "$hub_cookie_session",
-                   "= /hub/img/up": "$hub_cookie_session"}      # (the images' upload: the login's cookie and nothing else of the visitor's, tests/scripts/test_nginx_hub_img.py)
+                   "= /hub/img/up": "$hub_cookie_session",      # (the images' upload: the login's cookie and nothing else of the visitor's, tests/scripts/test_nginx_hub_img.py)
+                   "= /hub/ai/keys": "$hub_cookie_session", "= /hub/ai/keys/revoke": "$hub_cookie_session", "= /hub/ai/ws": "$hub_cookie_session"}      # (the AI keys' pages and the socket of an armed tab: the login's cookie; the doors of an AI pass none, tests/scripts/test_nginx_hub_ai.py)
         checked = 0
         for location in locations:
             block = stats.block_of(CONF, "location %s " % location)

@@ -17,6 +17,11 @@ Profile = collections.namedtuple("Profile", "username display pick")
 Alert = collections.namedtuple("Alert", "id at kind body line unread")         # a row of an account's list of alerts (docs/HUB_PEOPLE.md): `body` is the small JSON text that hub/people.py made, `line` the chat line that a mention is of (or None)
 ALERT_KINDS = ("invite", "mention", "join")
 ALERT_BODY_MAX = 600                        # the longest body that is kept (bytes): hub/people.py writes a few short fields, never more
+AiKey = collections.namedtuple("AiKey", "id ref name scope digest made ends used calls revoked")       # a key of a person's AI (docs/MAP_AI.md): `ref` is the account's reference (hub/pseudo.py), `digest` the SHA-256 of the secret; `revoked` is the time it was revoked, 0 for a key that was not
+AiKey.__repr__ = lambda self: "<AiKey %s>" % self.id                  # (the default shows the digest of the secret and the account's reference)
+AI_KEY_ID = re.compile(r"[0-9a-f]{8}\Z")                              # the public part of a key: shown in lists and logs
+AI_DIGEST = re.compile(r"[0-9a-f]{64}\Z")
+AI_SCOPES = ("read", "edit")                                         # what a key may do: look, or look and change
 PICKS = ("display", "username")
 MAX_LINES = 200                                # the store keeps the newest this many chat lines (every line counts, a moderator's and a deleted one too), and no line older than `retention`: whichever limit is smaller deletes first
 MODLOG_DAYS = 30                        # the moderators' log keeps an action this long ...
@@ -279,6 +284,53 @@ class StoreBase:
 
     def logins(self, account):
         """How many logins the account has now."""
+        raise NotImplementedError
+
+    # ---- the keys of a person's AI (hub/aikeys.py, docs/MAP_AI.md): keyed by the account's pseudonymous reference, never by its id ----
+
+    def ai_key_add(self, account, key_id, name, scope, digest, seconds, live_max, day_max):
+        """Keep a key that works for `seconds` from now, for the account (`digest`: the SHA-256 in hex of the secret, which is never kept). The AiKey that was kept, or a word and nothing kept: `live` (the account has
+        `live_max` keys that work), `day` (it made `day_max` keys in the last day, revoked ones too) or `id` (that public id is taken: the caller makes another)."""
+        raise NotImplementedError
+
+    def ai_keys(self, account):
+        """The AiKey rows of the account's keys that work now (not revoked, not ended), oldest first."""
+        raise NotImplementedError
+
+    def ai_key(self, key_id):
+        """The AiKey with this public id, revoked or ended or not (the caller judges it), or None for an id that is not 8 hex digits or is not known."""
+        raise NotImplementedError
+
+    def ai_key_use(self, key_id):
+        """Note one call: the time of the last use is now and the count of calls is one more."""
+        raise NotImplementedError
+
+    def ai_key_revoke(self, account, key_id):
+        """Revoke the account's own key (the key of another account is not touched): True when a key that worked was revoked."""
+        raise NotImplementedError
+
+    def ai_key_revoke_id(self, key_id):
+        """Revoke a key by its public id, whoever's it is (the operator's command line): True when a key that worked was revoked."""
+        raise NotImplementedError
+
+    def ai_keys_revoke_ref(self, reference):
+        """Revoke every key that works of the account with this reference (the operator's command line); returns how many."""
+        raise NotImplementedError
+
+    def ai_keys_drop(self, account):
+        """Delete every key of the account, and the rows of the log of their calls: what a ban and Forget me do. Returns how many keys went."""
+        raise NotImplementedError
+
+    def ai_keys_working(self, limit=1000):
+        """The AiKey rows of every key that works now, the most recently used first (the operator's command line)."""
+        raise NotImplementedError
+
+    def ai_log_add(self, key_id, ref, tool, cells, ok, millis):
+        """One row of the log of the calls (never a secret, a map, a name or a text that a person typed): the key's public id, the account's reference, the tool's name, the cells that it changed, whether it worked, and how long it took."""
+        raise NotImplementedError
+
+    def ai_log_recent(self, limit=100):
+        """The newest rows of the log of the calls, newest first: (at, key id, reference, tool, cells, ok, millis)."""
         raise NotImplementedError
 
     # ---- mutes and bans ----

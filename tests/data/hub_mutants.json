@@ -1043,8 +1043,8 @@
   {
    "id": "nginx_passes_every_header",
    "file": "docker/nginx.conf",
-   "old": "        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Upgrade $http_upgrade;",
-   "new": "        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;",
+   "old": "        limit_conn ants_hub_conn 16;\n        limit_conn_status 429;\n        error_page 502 504 = @hub_off;\n        resolver 127.0.0.11 valid=10s ipv6=off;\n        set $ants_hub ants-hub:4040;\n        proxy_pass http://$ants_hub;\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Upgrade $http_upgrade;",
+   "new": "        limit_conn ants_hub_conn 16;\n        limit_conn_status 429;\n        error_page 502 504 = @hub_off;\n        resolver 127.0.0.11 valid=10s ipv6=off;\n        set $ants_hub ants-hub:4040;\n        proxy_pass http://$ants_hub;\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
   },
   {
@@ -1071,8 +1071,8 @@
   {
    "id": "nginx_hub_off_is_not_json",
    "file": "docker/nginx.conf",
-   "old": "limit_conn_status 429;\n        error_page 502 504 = @hub_off;",
-   "new": "limit_conn_status 429;\n        error_page 504 = @hub_off;",
+   "old": "        limit_conn ants_hub_conn 16;\n        limit_conn_status 429;\n        error_page 502 504 = @hub_off;",
+   "new": "        limit_conn ants_hub_conn 16;\n        limit_conn_status 429;\n        error_page 504 = @hub_off;",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
   },
   {
@@ -1085,15 +1085,15 @@
   {
    "id": "nginx_hub_name_fixed_at_start",
    "file": "docker/nginx.conf",
-   "old": "        set $ants_hub ants-hub:4040;\n        proxy_pass http://$ants_hub;\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Upgrade",
-   "new": "        proxy_pass http://ants-hub:4040;\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Upgrade",
+   "old": "        limit_conn ants_hub_conn 16;\n        limit_conn_status 429;\n        error_page 502 504 = @hub_off;\n        resolver 127.0.0.11 valid=10s ipv6=off;\n        set $ants_hub ants-hub:4040;\n        proxy_pass http://$ants_hub;\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Upgrade",
+   "new": "        limit_conn ants_hub_conn 16;\n        limit_conn_status 429;\n        error_page 502 504 = @hub_off;\n        resolver 127.0.0.11 valid=10s ipv6=off;\n        proxy_pass http://ants-hub:4040;\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Upgrade",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
   },
   {
    "id": "nginx_buffering_on",
    "file": "docker/nginx.conf",
-   "old": "        proxy_buffering off;\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 120s;",
-   "new": "        proxy_connect_timeout 3s;\n        proxy_read_timeout 120s;",
+   "old": "        proxy_set_header Cookie $hub_cookie_session;              # (the login's cookie and no other)\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header X-Client-Address $remote_addr;\n        proxy_pass_request_body off;\n        proxy_set_header Content-Length \"\";\n        proxy_buffering off;\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 120s;",
+   "new": "        proxy_set_header Cookie $hub_cookie_session;              # (the login's cookie and no other)\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header X-Client-Address $remote_addr;\n        proxy_pass_request_body off;\n        proxy_set_header Content-Length \"\";\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 120s;",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
   },
   {
@@ -1540,15 +1540,15 @@
   {
    "id": "nginx_no_rate_limit",
    "file": "docker/nginx.conf",
-   "old": "        limit_req zone=ants_hub_req burst=10 nodelay;\n        limit_req_status 503;\n",
-   "new": "",
+   "old": "    location = /hub/ws {\n        if ($request_method != GET) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        limit_req zone=ants_hub_req burst=10 nodelay;\n        limit_req_status 503;\n",
+   "new": "    location = /hub/ws {\n        if ($request_method != GET) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
   },
   {
    "id": "nginx_rate_limit_burst_100",
    "file": "docker/nginx.conf",
-   "old": "limit_req zone=ants_hub_req burst=10 nodelay;",
-   "new": "limit_req zone=ants_hub_req burst=100 nodelay;",
+   "old": "    location = /hub/ws {\n        if ($request_method != GET) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        limit_req zone=ants_hub_req burst=10 nodelay;",
+   "new": "    location = /hub/ws {\n        if ($request_method != GET) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        limit_req zone=ants_hub_req burst=100 nodelay;",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
   },
   {
@@ -1561,8 +1561,8 @@
   {
    "id": "nginx_logs_every_handshake",
    "file": "docker/nginx.conf",
-   "old": "        access_log off;\n        limit_req zone=ants_hub_req",
-   "new": "        limit_req zone=ants_hub_req",
+   "old": "    location = /hub/ws {\n        if ($request_method != GET) { return 405; }\n        if ($is_args) { return 404; }\n        access_log off;\n        limit_req zone=ants_hub_req",
+   "new": "    location = /hub/ws {\n        if ($request_method != GET) { return 405; }\n        if ($is_args) { return 404; }\n        limit_req zone=ants_hub_req",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub tests.scripts.test_hub_stack"
   },
   {

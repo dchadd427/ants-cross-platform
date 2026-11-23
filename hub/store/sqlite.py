@@ -8,16 +8,18 @@ room: `make_room` deletes the oldest lines, and the pages they free are reused b
 import contextlib
 import functools
 import os
+import re
 import sqlite3
 import time
 
-from .base import ALERT_BODY_MAX, ALERT_KINDS, IMAGE_NAME, IMAGE_TYPES, MAX_LINES, NOIMAGES_MAX, PICKS, PICTURE_DAYS, PICTURE_NAME, PROFILE_DAYS, PUBLIC, SHOW_BLOCKED, SHOW_OFF, SHOW_ON, Action, Alert, Image, ImageGone, Line, Profile, StoreBase, StoreError, Usage, check_note
+from .base import AI_DIGEST, AI_KEY_ID, AI_SCOPES, ALERT_BODY_MAX, ALERT_KINDS, IMAGE_NAME, IMAGE_TYPES, MAX_LINES, NOIMAGES_MAX, PICKS, PICTURE_DAYS, PICTURE_NAME, PROFILE_DAYS, PUBLIC, REFERENCE, SHOW_BLOCKED, SHOW_OFF, SHOW_ON, Action, AiKey, Alert, Image, ImageGone, Line, Profile, StoreBase, StoreError, Usage, check_note
 from ..pseudo import reference
 
 SCHEMA = 4
 PICTURE_MARKS = 100000                              # the rows of a person's `off` that are kept in all (the ones written longest ago go first)
 IMAGE_PENDING_SECONDS = 600                         # an upload that no line has taken is deleted after this long (hub/images.py says the same)
 ALERT_DAYS_MAX = 30                                 # no alert stays in the file longer than this, whatever days a list asks for (hub/people.py asks for 7)
+AI_TOOL = re.compile(r"[a-z_]{1,32}\Z")                           # the name of a tool in the calls' log
 TRIM_ROWS = 8                                       # the most lines that a new line takes out: one is the rule, a few make up for a limit that was lowered
 
 
@@ -140,6 +142,9 @@ class Store(StoreBase):
                 CREATE INDEX IF NOT EXISTS alerts_ref ON alerts (ref, id);
                 CREATE INDEX IF NOT EXISTS alerts_line ON alerts (line);
                 COMMIT;""")
+        # (the keys of a person's AI and the log of their calls are additive tables as well, made when the first key is made, so a hub that never has a key holds nothing of them: an older hub never looks at
+        # them, and rolling the hub back needs no step; docs/MAP_AI.md)
+        self.ai_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ai_keys'").fetchone() is not None
 
     def close(self):
         self.db.close()
@@ -250,6 +255,10 @@ class Store(StoreBase):
             self.db.execute("DELETE FROM modlog WHERE at < ?", (now - int(self.modlog_days * 86400),))
             self.db.execute("DELETE FROM modlog WHERE id IN (SELECT id FROM modlog ORDER BY id DESC LIMIT -1 OFFSET ?)", (self.max_modlog,))
             self.db.execute("DELETE FROM alerts WHERE at < ?", (now - ALERT_DAYS_MAX * 86400,))        # (a list is cut to its own days when it is read or added to; this is the cap of the file)
+            if self.has_ai():
+                self.db.execute("DELETE FROM ai_keys WHERE ends < ? OR (revoked > 0 AND revoked < ?)", (now - int(self.ai_ended_days * 86400), now - int(self.ai_ended_days * 86400)))
+                self.db.execute("DELETE FROM ai_log WHERE at < ?", (now - int(self.ai_log_days * 86400),))
+                self.db.execute("DELETE FROM ai_log WHERE id IN (SELECT id FROM ai_log ORDER BY id DESC LIMIT -1 OFFSET ?)", (self.ai_log_rows,))
         self.checkpoint()
         return gone
 
@@ -373,6 +382,7 @@ class Store(StoreBase):
             self.db.execute("UPDATE mutes SET name = '' WHERE account = ?", (account,))
             self.db.execute("UPDATE bans SET name = '' WHERE account = ?", (account,))
             self.db.execute("DELETE FROM alerts WHERE ref = ? OR from_ref = ?", (self.ref(account), self.ref(account)))      # (its own list, and every alert of the others that is from it: an invitation or a mention carries its name)
+            self.drop_ai(self.ref(account))                          # (the keys of its AI go with it, and the log of their calls)
         try:
             self.checkpoint()
         except StoreError:            # (the forgetting is done and is told: the cut is tried again by the hub's clock)
@@ -677,6 +687,121 @@ class Store(StoreBase):
     def logins(self, account):
         return self.db.execute("SELECT COUNT(*) FROM sessions WHERE account = ? AND expires > ?", (account, int(self.clock()))).fetchone()[0]
 
+
+    # ---- the keys of a person's AI (hub/aikeys.py, docs/MAP_AI.md) --------------------------------------------------------------------------
+
+    ai_log_days = 30                                # the calls' log: how long a row is kept, and how many rows; and how long a key that ended or was revoked stays (attributes, so that a test may lower them)
+    ai_log_rows = 10000
+    ai_ended_days = 7
+
+    def has_ai(self):
+        """Whether the tables of the AI keys are in the file (they are made by the first key; another process that made them is noticed here)."""
+        if not self.ai_tables:
+            self.ai_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ai_keys'").fetchone() is not None
+        return self.ai_tables
+
+    def ensure_ai(self):
+        """Make the tables of the AI keys and of the log of their calls when they are not there yet."""
+        if self.has_ai():
+            return
+        self.db.executescript("""
+            BEGIN;
+            CREATE TABLE IF NOT EXISTS ai_keys (id TEXT PRIMARY KEY, ref TEXT NOT NULL, name TEXT NOT NULL, scope TEXT NOT NULL, digest TEXT NOT NULL, made INTEGER NOT NULL, ends INTEGER NOT NULL,
+                                                used INTEGER NOT NULL DEFAULT 0, calls INTEGER NOT NULL DEFAULT 0, revoked INTEGER NOT NULL DEFAULT 0);
+            CREATE INDEX IF NOT EXISTS ai_keys_ref ON ai_keys (ref);
+            CREATE TABLE IF NOT EXISTS ai_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, key TEXT NOT NULL, ref TEXT NOT NULL, tool TEXT NOT NULL, cells INTEGER NOT NULL, ok INTEGER NOT NULL, ms INTEGER NOT NULL);
+            CREATE INDEX IF NOT EXISTS ai_log_at ON ai_log (at);
+            CREATE INDEX IF NOT EXISTS ai_log_ref ON ai_log (ref);
+            COMMIT;""")
+        self.ai_tables = True
+
+    def drop_ai(self, ref):
+        """Inside a transaction: every key of the account (by its reference) and the rows of the log of their calls go; the log file is cut by the hub's clock at its next look (`unsettled`)."""
+        if not self.has_ai():
+            return 0
+        gone = self.db.execute("DELETE FROM ai_keys WHERE ref = ?", (ref,)).rowcount
+        self.db.execute("DELETE FROM ai_log WHERE ref = ?", (ref,))
+        if gone:
+            self.unsettled = True
+        return gone
+
+    COLUMNS = "id, ref, name, scope, digest, made, ends, used, calls, revoked"
+
+    def ai_key_add(self, account, key_id, name, scope, digest, seconds, live_max, day_max):
+        if not (isinstance(key_id, str) and AI_KEY_ID.match(key_id) and scope in AI_SCOPES and isinstance(digest, str) and AI_DIGEST.match(digest) and isinstance(name, str)):
+            raise ValueError("not a key")
+        ref, now = self.ref(account), int(self.clock())
+        ends = now + int(seconds)
+        self.ensure_ai()
+        with self.transaction():
+            if self.db.execute("SELECT COUNT(*) FROM ai_keys WHERE ref = ? AND revoked = 0 AND ends > ?", (ref, now)).fetchone()[0] >= live_max:
+                return "live"
+            if self.db.execute("SELECT COUNT(*) FROM ai_keys WHERE ref = ? AND made > ?", (ref, now - 86400)).fetchone()[0] >= day_max:
+                return "day"
+            if self.db.execute("INSERT OR IGNORE INTO ai_keys (id, ref, name, scope, digest, made, ends) VALUES (?, ?, ?, ?, ?, ?, ?)", (key_id, ref, name, scope, digest, now, ends)).rowcount != 1:
+                return "id"
+        return AiKey(key_id, ref, name, scope, digest, now, ends, 0, 0, 0)
+
+    def ai_keys(self, account):
+        if not self.has_ai():
+            return []
+        rows = self.db.execute("SELECT %s FROM ai_keys WHERE ref = ? AND revoked = 0 AND ends > ? ORDER BY made, rowid" % self.COLUMNS, (self.ref(account), int(self.clock()))).fetchall()
+        return [AiKey(*r) for r in rows]
+
+    def ai_key(self, key_id):
+        if not (isinstance(key_id, str) and AI_KEY_ID.match(key_id)) or not self.has_ai():
+            return None
+        row = self.db.execute("SELECT %s FROM ai_keys WHERE id = ?" % self.COLUMNS, (key_id,)).fetchone()
+        return AiKey(*row) if row else None
+
+    def ai_key_use(self, key_id):
+        if not self.has_ai():
+            return
+        self.db.execute("UPDATE ai_keys SET used = ?, calls = calls + 1 WHERE id = ?", (int(self.clock()), key_id))
+
+    def revoke_where(self, clause, args):
+        if not self.has_ai():
+            return 0
+        now = int(self.clock())
+        with self.transaction():
+            gone = self.db.execute("UPDATE ai_keys SET revoked = ? WHERE revoked = 0 AND ends > ? AND " + clause, (max(now, 1), now) + args).rowcount
+        if gone:
+            self.unsettled = True
+        return gone
+
+    def ai_key_revoke(self, account, key_id):
+        return bool(self.revoke_where("ref = ? AND id = ?", (self.ref(account), key_id)))
+
+    def ai_key_revoke_id(self, key_id):
+        return bool(self.revoke_where("id = ?", (key_id,)))
+
+    def ai_keys_revoke_ref(self, reference):
+        return self.revoke_where("ref = ?", (reference,))
+
+    def ai_keys_drop(self, account):
+        with self.transaction():
+            gone = self.drop_ai(self.ref(account))
+        return gone
+
+    def ai_keys_working(self, limit=1000):
+        if not self.has_ai():
+            return []
+        rows = self.db.execute("SELECT %s FROM ai_keys WHERE revoked = 0 AND ends > ? ORDER BY used DESC, made DESC LIMIT ?" % self.COLUMNS, (int(self.clock()), int(limit))).fetchall()
+        return [AiKey(*r) for r in rows]
+
+    def ai_log_add(self, key_id, ref, tool, cells, ok, millis):
+        if not (isinstance(key_id, str) and AI_KEY_ID.match(key_id) and isinstance(ref, str) and REFERENCE.match(ref) and isinstance(tool, str) and AI_TOOL.match(tool)):
+            raise ValueError("not a row of the calls' log")
+        self.ensure_ai()
+        with self.transaction():
+            self.db.execute("INSERT INTO ai_log (at, key, ref, tool, cells, ok, ms) VALUES (?, ?, ?, ?, ?, ?, ?)", (int(self.clock()), key_id, ref, tool, int(cells), 1 if ok else 0, int(millis)))
+            self.db.execute("DELETE FROM ai_log WHERE id IN (SELECT id FROM ai_log WHERE id <= (SELECT id FROM ai_log ORDER BY id DESC LIMIT 1 OFFSET ?) ORDER BY id LIMIT ?)", (self.ai_log_rows, TRIM_ROWS))
+
+    def ai_log_recent(self, limit=100):
+        if not self.has_ai():
+            return []
+        return self.db.execute("SELECT at, key, ref, tool, cells, ok, ms FROM ai_log ORDER BY id DESC LIMIT ?", (int(limit),)).fetchall()
+
     # ---- mutes and bans -------------------------------------------------------------------------------------------------------------------
 
     def mute(self, account, minutes, by, name="", note=None):
@@ -703,7 +828,9 @@ class Store(StoreBase):
             self.count_restriction()
             self.db.execute("INSERT OR REPLACE INTO bans (account, at, by, name) VALUES (?, ?, ?, ?)", (account, int(self.clock()), by, name))
             self.drop_picture(self.ref(account))                    # (a banned account is a guest in the list: it shows no picture, and none is fetched while the ban stands)
+            self.drop_ai(self.ref(account))                         # (and the keys of its AI stop at once: they are deleted, not only switched off)
             self.write_note(note)
+        self.unsettled = True
 
     def unban(self, account, note=None):
         with self.transaction():
