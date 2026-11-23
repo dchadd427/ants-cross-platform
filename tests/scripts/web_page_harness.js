@@ -48,7 +48,7 @@ function roomMessage(seats, o) {
     const w = [12];
     for (const s of seats) { w.push(s[0]); str8(w, s[1]); w.push(20, 0, 0); }
     str8(w, o.map === undefined ? 'TREASURE.LVL' : o.map);
-    w.push(0, o.you === undefined ? 0 : o.you, o.leader === undefined ? 0 : o.leader, o.teamA === undefined ? 255 : o.teamA, o.teamB === undefined ? 255 : o.teamB, o.flags === undefined ? 3 : o.flags);
+    w.push(o.fog ? 1 : 0, o.you === undefined ? 0 : o.you, o.leader === undefined ? 0 : o.leader, o.teamA === undefined ? 255 : o.teamA, o.teamB === undefined ? 255 : o.teamB, o.flags === undefined ? 3 : o.flags);
     for (const k of (o.plan || [0, 0, 0, 0])) w.push(k);
     w.push(o.inGame || 0, o.mode || 0, o.ready || 0);                                 // (protocol 17: the game mode; protocol 27: the ready mask is the last byte)
     return Uint8Array.from(w);
@@ -88,6 +88,7 @@ class El {
     getBoundingClientRect() { return { top: 0, bottom: 100, left: 0, right: 100, width: 100, height: 100 }; }
     appendChild(c) { if (c.parent && c.parent.children) c.parent.children = c.parent.children.filter((x) => x !== c); c.parent = this; this.children.push(c); return c; }       // (a node that is somewhere moves, as in a browser)
     insertBefore(c, ref) {
+        if (ref === c) return c;                       // (a node put before itself stays where it is, as in a browser)
         if (c.parent && c.parent.children) c.parent.children = c.parent.children.filter((x) => x !== c);
         const at = this.children.indexOf(ref);
         c.parent = this;
@@ -314,6 +315,7 @@ function runLobby(search, stored, options) {
     win.AntsRematch = loadFront('rematch.js', scope).AntsRematch;
     win.AntsGameModes = loadFront('game_modes.js', scope).AntsGameModes;
     win.AntsGameType = loadFront('game_type.js', scope).AntsGameType;
+    win.AntsRoomFog = loadFront('room_fog.js', scope).AntsRoomFog;
     if (options.picker) { win.AntsMapPicker = loadFront('map_picker.js', scope).AntsMapPicker; win.AbortController = AbortController; win.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} }); }
     if (!options.noHome) win.AntsHome = loadFile('home/home.js', scope).AntsHome;
     const nav = { userAgent: options.ua || 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36', platform: 'Linux x86_64' };

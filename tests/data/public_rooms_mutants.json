@@ -1211,8 +1211,8 @@
   {
    "id": "listing_code_in_groups_as_the_host",
    "file": "src/ants_server/room.cpp",
-   "old": "out.mode = lobby_.mode();\n    out.people = static_cast<uint8_t>(lobby_.people_colors());\n    out.bots",
-   "new": "out.mode = lobby_.mode();\n    out.host += \" \" + spec_.code.substr(0, 3) + \" \" + spec_.code.substr(3);\n    out.people = static_cast<uint8_t>(lobby_.people_colors());\n    out.bots",
+   "old": "out.mode = lobby_.mode();\n    out.fog = lobby_.fog();\n    out.people = static_cast<uint8_t>(lobby_.people_colors());\n    out.bots",
+   "new": "out.mode = lobby_.mode();\n    out.fog = lobby_.fog();\n    out.host += \" \" + spec_.code.substr(0, 3) + \" \" + spec_.code.substr(3);\n    out.people = static_cast<uint8_t>(lobby_.people_colors());\n    out.bots",
    "build": [
     "test_server"
    ],
@@ -1221,8 +1221,8 @@
   {
    "id": "listing_code_in_capitals_in_the_map",
    "file": "src/ants_server/room.cpp",
-   "old": "out.map = lobby_.map_name();\n    out.mode = lobby_.mode();\n    out.people = static_cast<uint8_t>(lobby_.people_colors());\n    out.bots",
-   "new": "out.map = lobby_.map_name();\n    for (const char ch : spec_.code) out.map.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(ch))));\n    out.mode = lobby_.mode();\n    out.people = static_cast<uint8_t>(lobby_.people_colors());\n    out.bots",
+   "old": "out.map = lobby_.map_name();\n    out.mode = lobby_.mode();\n    out.fog = lobby_.fog();\n    out.people = static_cast<uint8_t>(lobby_.people_colors());\n    out.bots",
+   "new": "out.map = lobby_.map_name();\n    for (const char ch : spec_.code) out.map.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(ch))));\n    out.mode = lobby_.mode();\n    out.fog = lobby_.fog();\n    out.people = static_cast<uint8_t>(lobby_.people_colors());\n    out.bots",
    "build": [
     "test_server"
    ],

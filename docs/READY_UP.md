@@ -12,7 +12,7 @@ A room of the front page ([Play in the browser](PLAY_IN_BROWSER.md#your-room)) d
 | A person whose game is open already (a desktop player who joined the room) | Needs none: the game is open. |
 
 - **START** of the host is off until every person who has to say it has. Under it the room says whose Ready it waits for ("Waiting for Wren to ready up", "Waiting for 3 players to ready up") and, when all have said it, "Everyone is ready." A guest sees START as "Waiting for the host" and, under it, "Waiting for you to ready up" until they have pressed theirs.
-- **The marks stay when the host changes things.** A new map, another game type, a computer player in a color, the teams, a color moved or swapped (the mark goes with the person): nobody has to say it again.
+- **The marks stay when the host changes things.** A new map, another game type, Fog of War, a computer player in a color, the teams, a color moved or swapped (the mark goes with the person): nobody has to say it again.
 - **The marks go** when a person's link ends (a person who drops is not ready, and says it again after coming back, also after reloading the page), when a person comes to lead the room (the next host starts with no mark: the host does not ready), and for a person who is removed or leaves. A START that waits for the games to open keeps them.
 - A room with no person to wait for (the host alone, or with computer players) starts at once, as before.
 

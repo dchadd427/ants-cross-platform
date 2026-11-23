@@ -426,7 +426,8 @@
 
         return { start: start, sync: sync, opening: say, alert: function (kind, data) { try { return !!alerts && alerts.alert(kind, data); } catch (e) { return false; } }, show: show, screen: function () { return screen; }, inert: inert, menu: function () { return menuOpen; }, dock: function () { return dock; },
             roomChatSeen: function () { try { return roomChat ? roomChat.seen() : null; } catch (e) { return null; } },
-            roomChatNews: function (text) { try { return !!roomChat && roomChat.news(text); } catch (e) { return false; } } };
+            roomChatNews: function (text) { try { return !!roomChat && roomChat.news(text); } catch (e) { return false; } },
+            tell: function (kind, text, tone, actions) { try { return !!games && games.told(kind, text, tone, actions) === true; } catch (e) { return false; } } }; // (the Room's Fog of War question)
     }
 
     return { HASH: HASH, TEXT: TEXT, MENU_MAIN: MENU_MAIN, MENU_SMALL: MENU_SMALL, countOf: countOf, fitHeight: fitHeight, heightGuard: heightGuard, readout: readout, screenOf: screenOf, firstScreen: firstScreen, mount: mount };

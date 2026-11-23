@@ -51,6 +51,7 @@ NATIVE_READS = {
     "web/front/rematch.js": "test_ants_server.sh: the page harness",
     "web/front/game_modes.js": "test_ants_server.sh: the page harness",
     "web/front/game_type.js": "test_ants_server.sh: the page harness",
+    "web/front/room_fog.js": "test_ants_server.sh: the page harness",
     "web/front/map_picker.js": "test_ants_server.sh: the page harness (the checks that ask for the picker)",
     "web/home/home.js": "test_ants_server.sh: the page harness",
     "web/home/games.js": "test_ants_server.sh: the page harness (the Games list)",

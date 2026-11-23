@@ -164,7 +164,7 @@
 
 
     </style>
-<link rel="stylesheet" href="front/map_picker.css"><link rel="stylesheet" href="front/lobby_chat.css"><link rel="stylesheet" href="front/rematch.css"><link rel="stylesheet" href="front/game_type.css"><link rel="stylesheet" href="front/lobby_direct.css"><link rel="stylesheet" href="home/home.css"><link rel="stylesheet" href="home/room.css"><link rel="stylesheet" href="update_notice.css">
+<link rel="stylesheet" href="front/map_picker.css"><link rel="stylesheet" href="front/lobby_chat.css"><link rel="stylesheet" href="front/rematch.css"><link rel="stylesheet" href="front/game_type.css"><link rel="stylesheet" href="front/lobby_direct.css"><link rel="stylesheet" href="front/room_fog.css"><link rel="stylesheet" href="home/home.css"><link rel="stylesheet" href="home/room.css"><link rel="stylesheet" href="update_notice.css">
 </head>
 <body data-screen="home">
 <div class="screen" id="screen">
@@ -256,7 +256,7 @@
 <script src="front/lobby_direct.js"></script>
 <script src="front/map_maker_link.js"></script><script src="front/lobby_rules.js"></script>
 <script src="front/lobby_net.js"></script><script src="front/player_name.js"></script>
-<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script>
+<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script><script src="front/room_fog.js"></script>
 <script src="front/map_picker.js"></script>
 <script src="shapes.js"></script><script src="map_files.js"></script><script src="home/home.js"></script>
 <script>
@@ -265,7 +265,7 @@
         var Rules = window.AntsLobbyRules;
         var Net = window.AntsLobbyNet;
         var Chat = window.AntsLobbyChat;
-        var Rematch = window.AntsRematch, Modes = window.AntsGameModes, GameType = window.AntsGameType, PlayerName = window.AntsPlayerName, storage = null, newRoom = false, pendingMode = -1;
+        var Rematch = window.AntsRematch, Modes = window.AntsGameModes, GameType = window.AntsGameType, PlayerName = window.AntsPlayerName, storage = null, newRoom = false, pendingMode = -1, pendingFog = -1;
         try { storage = window.localStorage; } catch (e) { /* the leader's last game type is not kept: every room starts with the default */ }
         if (!Rules || !Net || !Chat || !Rematch || !Modes || !GameType || !PlayerName || !window.AntsHome) {           // the scripts of front/ did not come: the page cannot do anything, and says so
             document.getElementById('banner-text').textContent = 'This page could not load all of its parts. Reload it to try again.';
@@ -575,11 +575,12 @@
             refusal = '';
             paintSide(v.side);
             gameType.paint({ id: m.mode, guest: v.guest, disabled: v.ro }); setText($('mode-tag'), Modes.tagOf(m.mode)); $('mode-tag').hidden = !Modes.tagOf(m.mode); backBar.sync(model, sendPlan, warmMap);
+            if (fogSwitch) fogSwitch.paint({ on: m.fog, guest: v.guest, disabled: v.ro });
             Home.sync();
         }
         function paintCard(card, m) {
             var li = lis[card.seat], seat = card.seat, c = card.color;
-            var stamp = JSON.stringify([card, picked === seat, picked >= 0, fresh[seat] === true]);
+            var stamp = JSON.stringify([card, picked === seat, picked >= 0, fresh[seat] === true, !!m.fog]);       // (fog is in it: a color's menu has its bot choices off while fog is on)
             if (painted[seat] === stamp) return;
             painted[seat] = stamp;
             li.className = 'slot k-' + card.kind + (picked === seat ? ' picked' : '') + (picked >= 0 && picked !== seat ? ' picked-target' : '') + (card.ask ? ' removing' : '') + (fresh[seat] ? ' fresh' : '');
@@ -614,6 +615,7 @@
                     var option = el('option', '', o[1]);
                     option.value = o[0];
                     option.selected = o[0] === card.mode;
+                    if (m.fog && /^(easy|medium|hard)$/.test(o[0])) option.disabled = true;      // (protocol 28: no computer players with Fog of War)
                     select.appendChild(option);
                 });
                 txt.appendChild(select); botLabel = card.who.length ? card.who[0].text : '';      // (the bot's name is the line under the level switch, in place of "Computer player")
@@ -724,7 +726,7 @@
                 if (bannerKind === 'lost' || bannerKind === 'unreachable' || bannerKind === 'busy') hideBanner();
                 if (wasLost) say('You are back in the room.');
             }
-            pendingMode = -1; if (e.created) { newRoom = true; backBar.remade(); }      // (a room that this page made starts with the leader's last game type: onRoom; a pick that no Room has confirmed is dropped with the link)
+            pendingMode = -1; pendingFog = -1; if (e.created) { newRoom = true; backBar.remade(); }      // (a room that this page made starts with the leader's last game type: onRoom; a pick that no Room has confirmed is dropped with the link)
             if (e.created && (!ownRoom || (!wasOnline && lastParams && lastParams.key))) showBanner('old', { sameMap: false });      // (a page that came with a key to a room that had ended says so, whoever made the room)
             if (e.replaced) { ownRoom = false; seatLost = true; }      // (the key found no seat: this page is a newcomer in a room that went on without it, and it made none; the first Room says who leads)
             saveSession();
@@ -739,15 +741,15 @@
             }
             model = Rules.modelOf(room);
             if (seatLost) { seatLost = false; showBanner('seatgone', { host: model.guest ? Rules.hostName(model) : '' }); }
-            pendingMode = Rules.pendingAfter(pendingMode, room, model);      // (the leader's pick until a Room confirms it: every plan carries it)
-            if (newRoom) { if (room.leader !== room.you) newRoom = false; else if (!room.starting) { var want = Modes.wanted(storage, room.mode); if (want < 0 || client.setPlan(Rules.planWith(room, model, { mode: want }))) { newRoom = false; if (want >= 0) pendingMode = want; } } }
+            pendingMode = Rules.pendingAfter(pendingMode, room, model); pendingFog = Rules.pendingFogAfter(pendingFog, room, model);      // (the leader's pick until a Room confirms it: every plan carries it)
+            if (newRoom) { if (room.leader !== room.you) newRoom = false; else if (!room.starting) { var want = Modes.wanted(storage, room.mode); if (want < 0 || client.setPlan(Rules.planWith(Rules.withFog(room, pendingFog), model, { mode: want }))) { newRoom = false; if (want >= 0) pendingMode = want; } } }
             localSides = Rules.reconcileSides(localSides, model);
             if (model.guest) {
                 if (lastStarting && !room.starting) showBanner('lateplayer', { host: Rules.hostName(model) });      // the start was given up: everybody is back in the room
             } else if (room.starting) {
                 /* the correction waits for the start to end */
             } else if (Rules.teamNeedsFix(room, model)) {
-                var plan = Rules.planWith(Rules.withMode(room, pendingMode), model, { sides: [0, 0, 0, 0] });
+                var plan = Rules.planWith(Rules.withFog(Rules.withMode(room, pendingMode), pendingFog), model, { sides: [0, 0, 0, 0] });
                 var stamp = JSON.stringify(plan);
                 if (stamp !== fixSent && client.setPlan(plan)) fixSent = stamp;
             } else fixSent = '';                       // (the room is right: the next time that a team is left alone is a new case and is corrected again)
@@ -911,10 +913,26 @@
         // ---- the buttons and the cards ----
         function sendPlan(change) {
             if (!client || !client.room) return false; if (change.moveTo >= 0 && client.room.you !== change.moveTo) client.move(client.room.you, change.moveTo, client.guardNow());
-            return client.setPlan(Rules.planWith(Rules.withMode(client.room, pendingMode), Rules.modelOf(client.room), change));
+            return client.setPlan(Rules.planWith(Rules.withFog(Rules.withMode(client.room, pendingMode), pendingFog), Rules.modelOf(client.room), change));
         }
         var directSwitch = window.AntsLobbyDirect ? window.AntsLobbyDirect.create({ doc: document, host: $('direct'), storage: storage, rtc: !!window.RTCPeerConnection }) : null;      // (front/lobby_direct.js: protocol 26's switch, this player's own, off by default)
         var gameType = GameType.create({ doc: document, host: $('gtype'), modes: Modes, onChoose: function (id) { Modes.remember(storage, id); if (sendPlan({ mode: id })) pendingMode = id; else render(); } });      // (front/game_type.js)
+        // ---- the Fog of War switch (front/room_fog.js; protocol 28): a plan with fog; with computer players planned the leader is asked first, and "Turn fog on" sets their colors to Open in the same plan ----
+        function withRulesOf(plan, room) { var meant = Rules.withFog(Rules.withMode(room, pendingMode), pendingFog); if (typeof meant.mode === 'number') plan.mode = meant.mode; plan.fog = meant.fog; return plan; }       // (a plan that the page builds by another way, the exchange of two colors, keeps the room's game type and fog, or the leader's picks that no Room has confirmed: a plan with no game type is Highest score)
+        function setFog(on, kinds) {
+            var change = { fog: on };
+            if (kinds) change.kinds = kinds;
+            if (sendPlan(change)) pendingFog = on ? 1 : 0; else render();
+        }
+        function pressFog(on) {
+            if (!client || !client.room || !model || model.guest || model.starting) return;
+            var bots = on ? Rules.botColors(model) : [];
+            if (!bots.length) { setFog(on, null); return; }
+            var asked = Home.tell('fog', window.AntsRoomFog.question(bots), '', [{ text: window.AntsRoomFog.TEXT.yes, run: function () { if (client && client.room && !model.guest) setFog(true, Rules.kindsWithoutBots(client.room)); } }]);
+            if (!asked) say(window.AntsRoomFog.TEXT.refusal);         // (the Games list's part has not come: the page's own toast says why nothing happened)
+        }
+        var fogHead = (function () { var h = $('room-h'); return h && ((h.parentNode && h.parentNode.parentNode) || h.parentNode); })();       // (the header's .head: the heading's box is in it, like web/home/games.js placeVis finds it)
+        var fogSwitch = window.AntsRoomFog && fogHead ? window.AntsRoomFog.create({ doc: document, head: fogHead, notes: $('r-notes'), onPress: pressFog }) : null;
         // ---- the map card and the map list (front/map_picker.js): the card shows the room's map, and its Change map button (the host's) opens the list: the six originals first, then the players' maps ----
         var picker = null, warmed = {};
         function ensurePicker() {
@@ -976,6 +994,7 @@
             if (again) again.focus();
         }
         function setMode(seat, word) {
+            if (model && model.fog && /^(easy|medium|hard)$/.test(word)) { say(window.AntsRoomFog.TEXT.refusal); render(); return; }      // (a disabled choice cannot be picked; a key that gets there is told why)
             if (!sendPlan({ seat: seat, kind: word })) { render(); return; }
             say(COLORS[seat].name + ' is now ' + (word === 'open' ? 'open for a player' : word === 'nobody' ? 'out of the match' : Rules.article(word) + Rules.levelWord(word) + ' bot') + '.');
         }
@@ -990,7 +1009,7 @@
             var room = client.room, op = Rules.moveOf(room, model, from, to);
             if (!op) { render(); return; }
             if (op.op === 'move') client.move(op.from, op.to, guard);
-            else if (room.plan[from] !== room.plan[to] && client.setPlan(op.plan)) say(Rules.nameAt(model, to, false) + ' and ' + Rules.nameAt(model, from, false) + ' swapped colors.');
+            else if (room.plan[from] !== room.plan[to] && client.setPlan(withRulesOf(op.plan, room))) say(Rules.nameAt(model, to, false) + ' and ' + Rules.nameAt(model, from, false) + ' swapped colors.');
             render();
         }
         function tapSlot(i) {

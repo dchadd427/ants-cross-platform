@@ -148,3 +148,5 @@
 @media (max-height: 350px), (max-width: 260px) { .gshade { padding: 8px; } .gmark { margin-bottom: 6px; } .gmark.shadow .ant { --k: 1; } .gcline { margin-bottom: 8px; } .gcbtns .gyes.big { min-height: 48px; font-size: 22px; } .gcnote { margin: 6px 0; } .gbar, .gconfirm .gitem { margin-bottom: 10px; } }       /* (a short window or a zoomed phone: the none card fits without a scroll) */
 @media (max-width: 260px) { .gconfirm { padding: 10px; } .gctitle { margin-bottom: 6px; font-size: 20px; } .gcline { font-size: 14px; } .gcnote { font-size: 13px; } }
 @media (max-height: 460px) { .gempty { padding: 8px 12px; gap: 2px; } .gempty .ant { display: none; } .gemtitle { font-size: 20px; } .gemhost { min-height: 44px; margin-top: 4px; } }       /* (a sideways phone: the empty state keeps its Host a game in view) */
+
+.gfog { display: inline-block; box-sizing: border-box; padding: 0 6px; font-size: 12px; letter-spacing: .06em; line-height: 16px; text-transform: uppercase; white-space: nowrap; color: #cfe3ee; background: #14232c; border: 1px solid #4a7388; border-radius: 3px; }       /* (Fog of War: the look of the 187 tag in a cool color) */

@@ -32,7 +32,7 @@ const LIBRARY = /^\/maps\/previews\/(?:[A-Za-z0-9_~-]|%(?!2F|5C|00)[0-9A-F]{2})(
 {
     const good = row('k7m2xq', 'Pebble', { map: 'ISLANDS.LVL', people: 3, bots: 0, free: 1 });
     const parsed = Games.rowOf(good, RULES0);
-    same('a good row: the code, the host, the map (an original by its name and its key), the seats', parsed, { code: 'k7m2xq', host: 'Pebble', map: 'ISLANDS.LVL', mapKey: 'islands', mapName: 'Islands', people: 3, bots: 0, free: 1, size: 4, age: 10 });
+    same('a good row: the code, the host, the map (an original by its name and its key), the seats', parsed, { code: 'k7m2xq', host: 'Pebble', map: 'ISLANDS.LVL', mapKey: 'islands', mapName: 'Islands', people: 3, bots: 0, free: 1, size: 4, age: 10, fog: false });
     same('a map of the players has its file name without the ending and no picture of its own', [Games.rowOf(row('k7m2xq', 'A', { map: 'My Map.LVL' }), RULES0).mapKey, Games.rowOf(row('k7m2xq', 'A', { map: 'My Map.LVL' }), RULES0).mapName], ['', 'My Map']);
     check('fields that are not in the shape are ignored (the row stays)', Games.rowOf(Object.assign({}, good, { extra: '<script>', platform: 16, key: 'ff' }), RULES0) !== null && !('extra' in Games.rowOf(Object.assign({}, good, { extra: 1 }), RULES0)));
     same('a name of printable ASCII with every sign that markup uses stays as it is (text, never markup)', Games.rowOf(row('k7m2xq', '<b>"x"\\&</b>'), RULES0).host, '<b>"x"\\&</b>');
@@ -566,7 +566,7 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
 {
     const good = locked('Maple', { map: 'SMALL.LVL', mode: '187', people: 2, bots: 1, free: 1 });
     const parsed = Games.lockedOf(good, RULES0);
-    same('a locked row: the host, the map (an original by its name and its key), the mode, the seats; nothing else (no code, no age)', parsed, { host: 'Maple', map: 'SMALL.LVL', mapKey: 'small', mapName: 'Small', people: 2, bots: 1, free: 1, size: 4, mode187: true });
+    same('a locked row: the host, the map (an original by its name and its key), the mode, the seats; nothing else (no code, no age)', parsed, { host: 'Maple', map: 'SMALL.LVL', mapKey: 'small', mapName: 'Small', people: 2, bots: 1, free: 1, size: 4, fog: false, mode187: true });
     same('a mode that is not 187 is a plain match', Games.lockedOf(locked('A'), RULES0).mode187, false);
     same('a map of the players has its file name without the ending', Games.lockedOf(locked('A', { map: 'My Map.LVL' }), RULES0).mapName, 'My Map');
     const extra = Games.lockedOf(Object.assign({}, good, { url: '/room/x', id: 'abc', href: 'http://x', link: 'y', room: 'z', key: 'ff', age: 9 }), RULES0);
@@ -593,6 +593,29 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
         check('10,000 entries that are no locked rows are looked at only up to a bound (500), and the answer is an empty list', Games.parseLocked({ format: 1, lobbies: entries }, RULES0).length === 0 && touched.n <= 501, 'looked at ' + touched.n);
     }
     same('an answer that is no list has no locked rows', [Games.parseLocked(null, RULES0), Games.parseLocked({ format: 2, lobbies: [locked('A')] }, RULES0), Games.parseLocked({ format: 1, lobbies: 'x' }, RULES0), Games.parseLocked([locked('A')], RULES0)], [[], [], [], []]);
+}
+{   // Fog of War (protocol 28): a row says it with the boolean true and nothing else; a card shows the tag FOG, an open card and a locked one, and a row that flips repaints
+    same('a row\'s fog is true only for the boolean true', [true, false, 'true', 1, 0, null, undefined, {}, []].map((fog) => Games.rowOf(row('k7m2xq', 'Pebble', { fog }), RULES0).fog), [true, false, false, false, false, false, false, false, false]);
+    same('a locked row\'s fog is true only for the boolean true', [true, false, 'true', 1, null, undefined].map((fog) => Games.lockedOf(locked('Maple', { fog }), RULES0).fog), [true, false, false, false, false, false]);
+    same('a row with no fog key (an older server) is a room without fog', [Games.rowOf(row('k7m2xq', 'Pebble'), RULES0).fog, Games.lockedOf(locked('Maple'), RULES0).fog], [false, false]);
+    const site = fakeSite();
+    site.body = listOf([row('k7m2xq', 'Pebble', { fog: true }), row('abc234', 'Clover', { map: 'TREASURE.LVL', people: 2, bots: 1, free: 1 }), locked('Maple', { fog: true, mode: '187' }), locked('Rowan', { map: 'TINY.LVL' })]);
+    const env = await page({ site });
+    tap(env.home('games'));
+    await flush();
+    const fogOf = (li) => find(li, 'gfog').map(textOf).join();
+    const hostOf = (li) => textOf(first(li, 'gname'));
+    same('an open card with fog has the tag FOG beside the map\'s name, one without has none', rowsOf(env).slice(0, 2).map((li) => hostOf(li) + ':' + fogOf(li)).sort(), ['Clover:', 'Pebble:' + TEXT.fogTag]);
+    same('a locked card with fog has the tag after the invite-only tag and 187, one without has none', lockedCards(env).map((li) => [find(li, 'gmarks')[0].children.map(textOf).join('|'), fogOf(li)]), [[TEXT.privateTag + '|187|' + TEXT.fogTag, TEXT.fogTag], [TEXT.privateTag, '']]);
+    same('the tag is the word Fog', TEXT.fogTag, 'Fog');
+    check('a card still has its Join button and a locked one none, with fog or without', rowsOf(env).slice(0, 2).every((li) => joinOf(li) !== undefined) && rowsOf(env).slice(2).every((li) => joinOf(li) === undefined));
+    site.body = listOf([row('k7m2xq', 'Pebble', { fog: false }), row('abc234', 'Clover', { map: 'TREASURE.LVL', people: 2, bots: 1, free: 1 }), locked('Maple', { fog: true, mode: '187' }), locked('Rowan', { map: 'TINY.LVL' })]);
+    await wait(env, 8000);
+    same('an open room whose leader switched fog off is repainted without the tag, though nothing else of its row changed', rowsOf(env).slice(0, 2).map((li) => hostOf(li) + ':' + fogOf(li)).sort(), ['Clover:', 'Pebble:']);
+    same('... and the locked card that still has fog still has it', lockedCards(env).map(fogOf), [TEXT.fogTag, '']);
+    site.body = listOf([row('k7m2xq', 'Pebble', { fog: false }), row('abc234', 'Clover', { map: 'TREASURE.LVL', people: 2, bots: 1, free: 1 }), locked('Maple', { fog: false, mode: '187' }), locked('Rowan', { map: 'TINY.LVL' })]);
+    await wait(env, 8000);
+    same('a locked room whose leader switched fog off is repainted without the tag', lockedCards(env).map(fogOf), ['', '']);
 }
 {   // the cards in the list: joinable rooms first, locked ones after them; nothing to press on a locked one
     const site = fakeSite();

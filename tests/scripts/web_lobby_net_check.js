@@ -57,6 +57,7 @@ const sends = {
     'plan-teams-keep-map': () => N.encodePlan('', [N.PLAN.Open, N.PLAN.Medium, N.PLAN.Open, N.PLAN.Medium], 0, 1),
     'plan-teams-2-3': () => N.encodePlan('TREASURE.LVL', [N.PLAN.Nobody, N.PLAN.Nobody, N.PLAN.Open, N.PLAN.Open], 2, 3),
     'plan-187': () => N.encodePlan('TINY.LVL', [N.PLAN.Open, N.PLAN.Hard, N.PLAN.Open, N.PLAN.Nobody], 255, 255, 1),
+    'plan-fog': () => N.encodePlan('SMALL.LVL', [N.PLAN.Open, N.PLAN.Nobody, N.PLAN.Open, N.PLAN.Open], 0, 2, 0, true),
     'name-plain': () => N.encodeName('Priya'),
     'name-32-chars-with-spaces': () => N.encodeName('Sam the Great, 3rd of his name!!'),
     'name-one-char': () => N.encodeName('Z'),
@@ -128,6 +129,10 @@ const roomWant = {
     'room-lobby-public': {
         slots: [slot(C, 'Priya', 12, 0), slot(C, 'Sam', 40, 0), slot(E, '', 0xFFFF, 0), slot(E, '', 0xFFFF, 0)], map: 'TINY.LVL', fog: false, you: 1, leader: 0, teamA: 255, teamB: 255,
         flags: 11, plan: [0, 0, 0, 0], inGame: 0, mode: 0, ready: 0, lobby: true, starting: false, leaderStarts: true, isPublic: true
+    },
+    'room-lobby-fog': {
+        slots: [slot(C, 'Priya', 12, 0), slot(C, 'Sam', 40, 0), slot(E, '', 0xFFFF, 0), slot(E, '', 0xFFFF, 0)], map: 'TINY.LVL', fog: true, you: 1, leader: 0, teamA: 255, teamB: 255,
+        flags: 3, plan: [0, 0, 4, 0], inGame: 0, mode: 0, ready: 0, lobby: true, starting: false, leaderStarts: true, isPublic: false
     },
     'room-lobby-ready': {
         slots: [slot(C, 'Priya', 12, 0), slot(C, 'Sam', 40, 0), slot(C, 'Juniper', 9, 0), slot(B, 'Bot (Hard)', 0, 0)], map: 'TINY.LVL', fog: false, you: 2, leader: 0, teamA: 255, teamB: 255,
@@ -233,6 +238,8 @@ check('welcome flags 3 is refused', N.decode(mutate('welcome-created', 19, 3)) =
     check('room: teams 0,255 are refused', N.decode((() => { const c = Uint8Array.from(room); c[L - 10] = 0; c[L - 9] = 255; return c; })()) === null);
     check('room: teams 1,3 are fine', N.decode((() => { const c = Uint8Array.from(room); c[L - 10] = 1; c[L - 9] = 3; return c; })()) !== null);
     check('room: fog = 2', N.decode(with_(L - 13, 2)) === null);
+    check('room: fog with a bot in a seat is refused, though no color is a bot (protocol 28)', N.decode((() => { const c = Uint8Array.from(room); c[L - 13] = 1; c[L - 5] = 4; return c; })()) === null);
+    check('room: the same room without fog is a room (a bot in seat 2, its color Nobody)', N.decode((() => { const c = Uint8Array.from(room); c[L - 5] = 4; return c; })()) !== null);
     check('room: the mode byte 1 (187) is fine and decodes as the mode', (N.decode(with_(L - 2, 1)) || {}).mode === 1);
     check('room: the mode byte 2 is refused', N.decode(with_(L - 2, 2)) === null);
     check('room: the mode byte 255 is refused', N.decode(with_(L - 2, 255)) === null);
@@ -259,7 +266,20 @@ check('welcome flags 3 is refused', N.decode(mutate('welcome-created', 19, 3)) =
     const planWith = (m) => N.encodePlan('', [0, 0, 0, 0], 255, 255, m);
     const throwsRange = (m) => { try { planWith(m); return false; } catch (e) { return e instanceof RangeError; } };
     check('plan: a mode above the last (2, 3, 255), below 0 or no whole number throws a RangeError', [2, 3, 255, 256, -1, 1.5, '1', null, NaN, Infinity].every(throwsRange));
-    check('plan: no mode, 0 and 1 are fine, and the mode is the last byte', [undefined, 0, 1].every((m) => !throwsRange(m)) && planWith(undefined)[planWith(undefined).length - 1] === 0 && planWith(1)[planWith(1).length - 1] === 1);
+    const tail = (bytes, back) => bytes[bytes.length - back];
+    check('plan: no mode, 0 and 1 are fine, and the mode is the byte before the last (protocol 28 ends the plan with fog)', [undefined, 0, 1].every((m) => !throwsRange(m)) && tail(planWith(undefined), 2) === 0 && tail(planWith(1), 2) === 1);
+    // protocol 28: the plan's last byte is Fog of War, 0 when none is given; only a boolean is fog (the server would refuse any other byte, and a caller's mistake is not sent as another)
+    const fogWith = (f) => N.encodePlan('', [0, 0, 0, 0], 255, 255, 0, f);
+    const throwsFog = (f) => { try { fogWith(f); return false; } catch (e) { return e instanceof RangeError; } };
+    check('plan: fog is the last byte: none and false are 0, true is 1', tail(fogWith(undefined), 1) === 0 && tail(fogWith(false), 1) === 0 && tail(fogWith(true), 1) === 1 && fogWith(true).length === planWith(0).length);
+    check('plan: fog that is no boolean (1, 0, "true", null, 2) throws a RangeError', [1, 0, 'true', null, 2, NaN].every(throwsFog));
+    // a room that shows fog and a color for a computer player is no room (the C++ decoder says the same); fog without such a color is a room that shows fog
+    const lobby = Array.from(bytesOf('room-lobby-public'));
+    const fogRoom = (kinds) => { const c = Uint8Array.from(lobby); c[c.length - 13] = 1; kinds.forEach((k, i) => { c[c.length - 7 + i] = k; }); return N.decode(c); };
+    check('room: the fog byte is 13 from the end (before you, leader, the team pair, the flags, the plan, the games, the mode, the ready mask)', Uint8Array.from(lobby)[lobby.length - 13] === 0 && fogRoom([0, 0, 0, 0]) !== null && fogRoom([0, 0, 0, 0]).fog === true);
+    check('room: fog with Open and Nobody colors is a room', fogRoom([0, 4, 0, 4]) !== null && fogRoom([0, 4, 0, 4]).fog === true);
+    check('room: fog with an Easy, Medium or Hard color is no room', [1, 2, 3].every((k) => [0, 1, 2, 3].every((seat) => { const kinds = [0, 0, 0, 0]; kinds[seat] = k; return fogRoom(kinds) === null; })));
+    check('room: a fog byte of 2 is no room', (() => { const c = Uint8Array.from(lobby); c[c.length - 13] = 2; return N.decode(c) === null; })());
 }
 // a name with a character outside printable ASCII, a platform byte out of range, a platform on a bot
 {

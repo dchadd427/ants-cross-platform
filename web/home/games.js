@@ -56,7 +56,7 @@
         noneLine: 'Nobody is waiting for a player. Host one, and others can join you.', noneYours: 'Your room goes public with its map and your friends in it.', noneNew: 'A new room opens for you, and it goes public.', joiningCode: 'Joining the room…', joinFirst: ' Wait for it, or cancel it in the list.', opening: 'The game is opening. If it does not, reload this page.',
         already: 'Your room is already public.', running: 'Your match is running.', idle: 'Your room went invite only after 30 minutes. Make it public again?',
         hostChanged: 'This room is invite only again because the host changed.', stillPrivate: 'Your room is still invite only. Use the Public switch in the room.',
-        privateTag: 'Invite only', noneJoin: 'No open games to join right now.',
+        privateTag: 'Invite only', fogTag: 'Fog', noneJoin: 'No open games to join right now.',
         watch: 'Watch', liveMark: 'Live', mode187: '187', inProgress: 'In progress', soFar: ' so far', starting: 'Starting\u2026', nobodyNamed: 'Players not named',
         full: 'That room is full.', started: 'The match in that room has already started.', gone: 'That game is not open any more.', silent: 'The server did not answer. Try again in a moment.'
     };
@@ -71,14 +71,14 @@
         if (!whole(raw.people, 4) || !whole(raw.bots, 4) || !whole(raw.free, 4) || !whole(raw.size, 4)) return null;
         if (raw.size < 1 || raw.free < 1 || raw.people + raw.bots + raw.free !== raw.size) return null;
         var known = rules.mapOfFile(raw.map);
-        return { host: raw.host.replace(/^ +| +$/g, '') || 'Player', map: raw.map, mapKey: known ? known.key : '', mapName: known ? known.name : rules.communityName(raw.map).slice(0, 28), people: raw.people, bots: raw.bots, free: raw.free, size: raw.size };
+        return { host: raw.host.replace(/^ +| +$/g, '') || 'Player', map: raw.map, mapKey: known ? known.key : '', mapName: known ? known.name : rules.communityName(raw.map).slice(0, 28), people: raw.people, bots: raw.bots, free: raw.free, size: raw.size, fog: raw.fog === true };
     }
-    // One row of the list as the page may show it, or null. The nine fields of docs/PUBLIC_ROOMS.md, each of its type and in its range (unknown extra fields are ignored): code (what a room code may be, no capital), age, and the seven of seatsRow.
+    // One row of the list as the page may show it, or null. The ten fields of docs/PUBLIC_ROOMS.md, each of its type and in its range (unknown extra fields are ignored): code (what a room code may be, no capital), age, and the eight of seatsRow (fog is true only when the row says the boolean true).
     function rowOf(raw, rules) {
         if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
         if (typeof raw.code !== 'string' || !/^[a-z0-9_-]{1,32}$/.test(raw.code) || !whole(raw.age, 2147483647)) return null;
         var r = seatsRow(raw, rules);
-        return r && { code: raw.code, host: r.host, map: r.map, mapKey: r.mapKey, mapName: r.mapName, people: r.people, bots: r.bots, free: r.free, size: r.size, age: raw.age };
+        return r && { code: raw.code, host: r.host, map: r.map, mapKey: r.mapKey, mapName: r.mapName, people: r.people, bots: r.bots, free: r.free, size: r.size, age: raw.age, fog: r.fog };
     }
     // One match of the door's answer to GET /live as the page may show it, or null: the id of the server's shape, the map as the door sends it (the whole file name, like a room's: 'TREASURE.LVL', 'DRY LAND.lvl'; else the one in the id), the seconds it has run (or its turns / 20), and at most four
     // players as the door writes them ("Green (Ann)", "Red", "Blue (Bot (Medium))"): a color word and the name, printable ASCII only, and the game mode (the word '187' marks a match of mode 187; any other value, or none, is a plain match).
@@ -258,7 +258,7 @@
         function placeVis() {                              // the switch in the room's heading line (before the code) and its note with the room's other notes (web/home/room.css lays both out, a phone's too)
             var h = doc.getElementById('room-h'), notes = doc.getElementById('r-notes'), head = h && ((h.parentNode && h.parentNode.parentNode) || h.parentNode);
             if (!head) return;
-            head.insertBefore(visBox, (head.querySelector && head.querySelector('.code')) || null);
+            head.insertBefore(visBox, (head.querySelector && (head.querySelector('.fogsw') || head.querySelector('.code'))) || null);       // (before the Fog of War switch of front/room_fog.js, which is before the code)
             if (notes) notes.insertBefore(visNote, notes.firstChild || null);
         }
         (function () { var h = doc.getElementById('room-h'); if (h && h.parentNode) h.parentNode.appendChild(visTag); placeVis(); })();
@@ -525,7 +525,7 @@
             }
             for (var k = 0; k < priv.length; k++) {
                 var r = priv[k];
-                if (r.host === name && r.map === room.map && r.mode187 === (room.mode === 1) && r.people === people && r.bots === bots && r.free === free) return k;
+                if (r.host === name && r.map === room.map && r.mode187 === (room.mode === 1) && r.fog === !!room.fog && r.people === people && r.bots === bots && r.free === free) return k;
             }
             return -1;
         }
@@ -563,9 +563,10 @@
             line.appendChild(dots); line.appendChild(el('span', 'gcount', seats.count)); line.appendChild(el('span', 'gbots', seats.bots));
             if (lock) {
                 var marks = el('span', 'gmarks');
-                marks.appendChild(el('span', 'gprivtag', TEXT.privateTag)); if (lock === 'yours') marks.appendChild(el('span', 'gyours', TEXT.yours)); if (row.mode187) marks.appendChild(el('span', 'gmode', TEXT.mode187));
+                marks.appendChild(el('span', 'gprivtag', TEXT.privateTag)); if (lock === 'yours') marks.appendChild(el('span', 'gyours', TEXT.yours)); if (row.mode187) marks.appendChild(el('span', 'gmode', TEXT.mode187)); if (row.fog) marks.appendChild(el('span', 'gfog', TEXT.fogTag));
                 top.appendChild(marks); text.setAttribute('aria-hidden', 'true');
             }
+            if (row.fog && !lock) top.appendChild(el('span', 'gfog', TEXT.fogTag));       // (Fog of War: a mark beside the map's name; a narrow row wraps it under)
             if (best || yours) top.appendChild(el('span', yours ? 'gyours' : 'gbest', yours ? TEXT.yours : TEXT.best));       // (beside the map's name; a narrow row wraps it under)
             text.appendChild(top); text.appendChild(line); li.appendChild(pic); li.appendChild(text);
             if (lock) {
@@ -646,7 +647,7 @@
             popEmpty.className = locks.length ? 'gempty gslim' : 'gempty'; popEmptyTitle.textContent = locks.length ? TEXT.noneJoin : TEXT.emptyTitle;         // (private rooms but none to join: the card becomes a slim strip above the locked cards)
             popList.hidden = !(loaded && !off && (shown.length || locks.length)); popLegend.hidden = popList.hidden;
             popNote.hidden = !popNote.textContent;
-            var sig = JSON.stringify(shown.map(function (r) { return [r.code, r.host, r.map, r.people, r.bots, r.free, r.size]; }).concat(lead, locks.map(function (l) { return [l.row.host, l.row.map, l.row.mode187, l.row.people, l.row.bots, l.row.free, l.row.size, l.yours]; })));       // (the rows are made again only when what they show changed: a press that straddles a repaint is not lost, and a focus stays)
+            var sig = JSON.stringify(shown.map(function (r) { return [r.code, r.host, r.map, r.people, r.bots, r.free, r.size, r.fog]; }).concat(lead, locks.map(function (l) { return [l.row.host, l.row.map, l.row.mode187, l.row.people, l.row.bots, l.row.free, l.row.size, l.yours, l.row.fog]; })));       // (the rows are made again only when what they show changed: a press that straddles a repaint is not lost, and a focus stays)
             if (sig === paintedSig) return;
             paintedSig = sig;
             while (popList.firstChild) popList.removeChild(popList.firstChild);
@@ -961,7 +962,7 @@
         poll();
         pollLive();
         return {
-            sync: guard(sync), shown: guard(shown), leaving: leaving, said: guard(function (words) { notice('left', words, '', []); }), opening: opening, stalled: stalled, inert: inert, poll: poll,
+            sync: guard(sync), shown: guard(shown), leaving: leaving, said: guard(function (words) { notice('left', words, '', []); }), told: guard(function (kind, text, tone, actions) { notice(kind, text, tone, actions || []); return true; }), opening: opening, stalled: stalled, inert: inert, poll: poll,
             state: function () { return { rows: rows, loaded: loaded, off: off, failures: failures, open: isOpen, pending: !!pending, joining: joining, notice: noticeKind, live: live, liveOff: liveOff, liveLoaded: liveLoaded, showLive: showLive }; }
         };
     }

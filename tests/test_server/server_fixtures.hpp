@@ -1096,10 +1096,12 @@ struct PWorld : LinkSource {
     uint16_t announce_port{0};                              // the listen port that the machines made by connect() announce
     uint8_t announce_platform{0};                           // the platform byte that they tell (protocol 15: valid_platform; 0: not told)
     std::optional<net::CreateBlock> next_create;            // the block that the next connect() puts in its Hello (connect_creating sets it for one call)
+    uint8_t next_kind{net::kClientGame};                    // the client kind of the next connect()'s Hello (protocol 16): a game, or a lobby page (connect_page sets it for one call)
     RClient& connect(const std::string& name, const std::string& room, uint8_t seat = 255, const net::SeatKey& key = net::SeatKey{}) {
         net::Connection* end = open_link();
         clients.push_back(std::make_unique<RClient>());
         RClient& c = *clients.back();
+        c.kind = next_kind;
         c.name = name;
         c.room = room;
         c.want_seat = seat;
@@ -1113,6 +1115,15 @@ struct PWorld : LinkSource {
     RClient& connect_creating(const std::string& name, const std::string& room, const net::CreateBlock& block, uint8_t seat = 255) {
         next_create = block;
         RClient& c = connect(name, room, seat);
+        next_create.reset();
+        return c;
+    }
+    // The front page (protocol 16): a Hello that says "page" and carries the lobby block; it makes the lobby room when there is none, else it is seated in it
+    RClient& connect_page(const std::string& name, const std::string& room, const net::CreateBlock& block) {
+        next_kind = net::kClientPage;
+        next_create = block;
+        RClient& c = connect(name, room);
+        next_kind = net::kClientGame;
         next_create.reset();
         return c;
     }
