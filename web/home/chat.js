@@ -155,7 +155,7 @@
         if ((u.protocol !== 'http:' && u.protocol !== 'https:') || !u.hostname || u.hostname.indexOf('.') < 1 || u.username || u.password || /\s/.test(String(u))) return null;
         return { url: String(u), host: u.hostname };
     }
-    function shorten(typed) { return typed.length > TEXT.linkCut ? pairs(typed.slice(0, 30)) + '\u2026' + pairs(typed.slice(-17)) : typed; }
+    function shorten(typed, host) { return typed.length > TEXT.linkCut ? host + '/\u2026' + pairs(typed.slice(-17)) : typed; }
     function partsOf(text) {                                             // a line as [{ s } text, { s, href, host, title } link]: at most five links, the rest is text
         var out = [], at = 0, links = 0, m, typed, k, link;
         LINKRE.lastIndex = 0;
@@ -163,7 +163,7 @@
             typed = trimLink(m[2]); link = linkOf(typed); k = m.index + m[1].length;
             if (!link) continue;
             if (k > at) out.push({ s: text.slice(at, k) });
-            out.push({ s: shorten(typed), url: link.url, title: (/[^\x00-\x7f]/.test(typed) ? link.host + ' ' : '') + link.url });
+            out.push({ s: shorten(typed, link.host), url: link.url, title: (/[^\x00-\x7f]/.test(typed) ? link.host + ' ' : '') + link.url });
             at = k + typed.length; links++;
             LINKRE.lastIndex = at;
         }
@@ -743,12 +743,12 @@
             for (var i = 0; i < feed.length; i++) { var e = feed[i]; if (!e.priv && e.id === id) return { id: e.id, who: e.who, text: e.text, role: e.role, sys: e.sys, u: e.u, img: !!e.img, own: !!e.own }; }
             return null;
         }
-        function byAuthor(id) {                                                 // staff only: the lines of the log (no private answer, no hub line) that the account of line `id` wrote, newest first, as { id, text, at }; matched by the hub's key, never a name
+        function byAuthor(id) {                                                 // staff only: the lines of the log (no private answer, no hub line) that the account of line `id` wrote, newest first, as { id, text, at, img (whether it carries an image) }; matched by the hub's key, never a name
             var from = null, out = [], i, e;
             if (!tools()) return out;
             for (i = 0; i < feed.length; i++) if (!feed[i].priv && feed[i].id === id) from = feed[i];
             if (!from || from.sys || !from.k) return out;
-            for (i = feed.length - 1; i >= 0; i--) { e = feed[i]; if (!e.priv && !e.sys && e.k === from.k) out.push({ id: e.id, text: e.text, at: e.at }); }
+            for (i = feed.length - 1; i >= 0; i--) { e = feed[i]; if (!e.priv && !e.sys && e.k === from.k) out.push({ id: e.id, text: e.text, at: e.at, img: !!e.img }); }
             return out;
         }
         function clockOf(at) { return typeof at === 'number' && dayOf(at) !== '' ? { time: timeOf(at), full: fullOf(at), day: dayWord(at), key: localDay(new Date(at * 1000)) } : null; }       // the log's own words for a time of a line: the clock, the full date, the divider's word and a number per local day

@@ -23,7 +23,9 @@
 
 #ifndef _WIN32
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netinet/in.h>
+#include <sys/resource.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #endif
@@ -777,6 +779,41 @@ int main() {
             ASSERT_TRUE(arrived && got.size() == 5 && std::memcmp(got.data(), "LEAVE", 5) == 0);              // (macOS may drop what came before a reset in its kernel: nothing is asked of it here)
             ASSERT_EQ(srv->state(), Connection::State::Failed);
 #endif
+        }
+    } TEST_END();
+
+    TEST_CASE("N3.11 TCP: A Descriptor Of 1024 Or Above, Which select() Cannot Hold, Makes A Connection That Fails At Once Instead Of A Write Past The Set; Connections Are Made Again When The Descriptors Are Let Go") {
+        rlimit original{};
+        ASSERT_TRUE(::getrlimit(RLIMIT_NOFILE, &original) == 0);
+        rlimit raised = original;
+        raised.rlim_cur = std::min<rlim_t>(original.rlim_max, FD_SETSIZE + 512);
+        if (raised.rlim_cur < FD_SETSIZE + 64 || ::setrlimit(RLIMIT_NOFILE, &raised) != 0) {
+            std::cout << "(this machine does not let the test hold 1,100 descriptors: skipped) ";
+        } else {
+            std::vector<int> held;
+            for (;;) {                                                                                  // (descriptors up to 1032 are in use: the next socket of this process is above the set)
+                const int fd = ::open("/dev/null", O_RDONLY);
+                if (fd < 0) break;
+                held.push_back(fd);
+                if (fd >= FD_SETSIZE + 8) break;
+            }
+            const bool reached = !held.empty() && held.back() >= FD_SETSIZE + 8;
+            auto listener = TcpListener::listen(0, true);
+            std::unique_ptr<TcpConnection> c = listener ? TcpConnection::connect("127.0.0.1", listener->port()) : nullptr;
+            std::vector<uint8_t> dummy;
+            for (int i = 0; c && i < 2000 && c->state() == Connection::State::Connecting; ++i) {
+                c->poll(dummy);
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            const bool failed = c && c->state() == Connection::State::Failed;
+            c.reset();
+            listener.reset();
+            for (const int fd : held) ::close(fd);
+            ::setrlimit(RLIMIT_NOFILE, &original);
+            ASSERT_TRUE(reached);
+            ASSERT_TRUE(failed);
+            Pair p;                                                                                     // (the descriptors are let go: an ordinary connection works again)
+            ASSERT_TRUE(make_pair(p));
         }
     } TEST_END();
 #endif

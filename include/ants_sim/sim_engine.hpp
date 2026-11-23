@@ -530,6 +530,15 @@ public:
     /// lunchbox). It is chosen after set_game_mode (which sets it back to the rule of a match played now) and before init(), which keeps it. The state hash does not carry it (the object that the ant bites does).
     void set_bite_skips_empty_record(bool on);
     bool bite_skips_empty_record() const noexcept;
+    /// The rules number of the recording that is being played (replay::kSimRulesBeforeCantGo, kSimRulesMode187BeforeCantGo and the numbers before them): with `on` (the default, the rules of a match played now) the answer of a path
+    /// manager's run that ends a tick, for a walk that an event asked for (the end of a can't-go clip or a raid clip, an arrival, the hill queue), a path that is found as well as "no path", is held and given at the START of the next
+    /// tick, after the turn's commands, as the original's task (a delay of 0 and a period of 50 ms) runs on the turn boundaries and handles the waiting clicks first; an ant that an event sent in the tick before is then still waiting
+    /// for its answer when the commands come, idle with no path, and takes an order, which replaces its request and the answer that is held for it, while a Stop is skipped (an ant with no path and action 0, 0x1028aef), so that the ant
+    /// walks (docs/GAME_REVERSE_ENGINEERING.md 5.40); the answer to a walk that a command asked for is given at once, as always. With `on` unset every answer is given at once too, at the end of the tick and before the next commands,
+    /// and no command finds such an ant: a recording of 5 to 13 (187's 6, 7, 10, 11 and 12) plays so. The same for both game modes. It is chosen after set_game_mode (which sets it back to the rule of a match played now) and before
+    /// init(), which keeps it. The state hash carries an answer that is held while there is one, and the mark of a request that an event made (so a match under the rule has other hashes at the ticks that end with such an answer).
+    void set_path_answers_after_commands(bool on);
+    bool path_answers_after_commands() const noexcept;
     /// Whether an ant of this match can enter its own hill: always in the original's game, in 187 only while the rule of the old recordings is set (set_hill_open_187)
     bool own_hill_enterable() const noexcept;
 
@@ -565,6 +574,13 @@ public:
     /// (`level_start`) draw it as the original does, rand() % 7 + 1, which is never North.
     uint32_t spawn_unit(uint8_t player_id, AntType type, TileCoord pos, bool level_start = false);
     AntUnit& get_unit(uint32_t ant_id);
+    /// How an ant stands to a player who gives it an order (apply_command keeps an ant for an order only when it is Own and not removed). Own: an ant of `player`, alive or dead (the table of ants only grows and an
+    /// ant never changes hands, so Own and Foreign never change). Foreign: an ant of another player. Unborn: no ant has this id (0, or an id that has not been handed out yet: a later tick may give it to anybody).
+    /// Const and outside the state hash: the host's sequencer asks it before it seals an order (net/sequencer.hpp, Sequencer::set_vetter).
+    enum class AntClaim : uint8_t { Unborn, Own, Foreign };
+    AntClaim ant_claim(uint32_t ant_id, uint8_t player) const noexcept;
+    /// The id that the next ant born gets (ids below it were handed out); the table of ants grows with it
+    uint32_t next_ant_id() const noexcept;
     /// The ant type getter FUN_0100f9cb(ant, 0): what the ant IS (see AntSnapshot::type); AntUnit::type is the field itself.
     AntType ant_type(const AntUnit& ant) const noexcept;
     void kill_unit(uint32_t ant_id);

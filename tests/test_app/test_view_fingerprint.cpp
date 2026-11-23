@@ -393,12 +393,12 @@ const Golden kGoldens[] = {
     {"screen.menu.single.empty", 0x41cc425d3cb792cf, 218},                // the three Single panel goldens: regenerated for the name field (+ the Teams row of two_bots)
     {"screen.menu.single.two_bots", 0xc7548f9283cdd916, 242},
     {"screen.menu.single.own_seat_2", 0xb2edf0250758b271, 218},
-    {"screen.menu.join.empty", 0xa3719b0cf65673ec, 148},
-    {"screen.menu.join.typed", 0xee59ae3037c1cc35, 149},
-    {"screen.menu.join.caret_off", 0x02f6dbba4e83ab42, 148},
-    {"screen.menu.join.name_refused", 0xfb7d67f821102f61, 160},
-    {"screen.menu.connecting", 0xa95f45bb91fe2012, 114},
-    {"screen.menu.join.error", 0xdffb5d28277afaa0, 158},
+    {"screen.menu.join.empty", 0x5f5056d2a9e21c93, 148},
+    {"screen.menu.join.typed", 0x210a6db30df004d8, 149},
+    {"screen.menu.join.caret_off", 0x70f77c3fda486161, 148},
+    {"screen.menu.join.name_refused", 0x205108db1916dc0c, 160},
+    {"screen.menu.connecting", 0xd26617016d4c91c1, 114},
+    {"screen.menu.join.error", 0xb3f6f5d4c4ad494f, 158},
     // The host-panel rows below moved deliberately in bot games part B (network protocol 13: a level for each bot and teams chosen before the start were asked for): the panel has a row for
     // each seat after the leader's (the bot that START puts there) and, with three or four players, the Teams row, in rows of 18 px text, with the caption under them (the line says what the standard bot
     // does: "Bots gather food, raid and fight back."). screen.menu.room.fill_medium did NOT move: the room's panel for the same level in every seat is what it was; the rows with seats_and_teams and
@@ -408,16 +408,16 @@ const Golden kGoldens[] = {
     // room.three_players. Their scenarios now type and show the codes that the menu makes ("k7m2xq", "b7x2qk", where they had "demo-small-2p-x7k2" and the like), and the room panel shows a
     // code of six characters in two groups of three ("b7x 2qk"; room_code_display). The draw calls are the same (the counts did not move), the string in them is another; a code of another length
     // is shown as it is, so screen.menu.room.longest_code did not move.
-    {"screen.menu.host.default", 0x18b4d4169368ccd1, 282},
-    {"screen.menu.host.map_and_players", 0x3a08eeb197374920, 210},
+    {"screen.menu.host.default", 0xedc1bd62655b438e, 282},
+    {"screen.menu.host.map_and_players", 0x5b839f811af8b459, 210},
     {"screen.menu.room.code", 0x007724f8d78c993d, 150},
     {"screen.menu.room.full", 0x4acdd352530ed1be, 150},
     {"screen.menu.room.longest_code", 0x02e344112faca6ac, 150},
     {"screen.menu.room.fill_medium", 0x1544abeb764d9c2a, 150},
-    {"screen.menu.host.fill_medium", 0x3a6b94fd4d05862f, 282},
-    {"screen.menu.host.seats_and_teams", 0x4f4c7690d7c20560, 282},
+    {"screen.menu.host.fill_medium", 0x805be8f4d7fe864c, 282},
+    {"screen.menu.host.seats_and_teams", 0x098177cc5a022719, 282},
     {"screen.menu.room.seats_and_teams", 0x143c01485ed43d61, 151},
-    {"screen.menu.host.three_players", 0x30fe4a8bffb71fdf, 258},
+    {"screen.menu.host.three_players", 0x0859cdb1cb11299c, 258},
     {"screen.menu.room.three_players", 0x815f9e2122cf3d67, 151},
     // ---- the wide match screen (milestone M3, 960 x 540), computed at the commit that introduced it (the classic numbers above did not move); regenerate only deliberately, see the notes at the top.
     //      The review fixes of M3 moved 105 of these deliberately (all of the wide ones that draw the bottom strip or the options window and quick help, none of the classic): the score boxes are

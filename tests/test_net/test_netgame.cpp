@@ -713,7 +713,7 @@ void run_reject_tests() {
         // that does not exist, and it is told so; every other refusal, and NoSuchRoom for a Hello without a block, is as it was. So is NoSuchRoom for a block with a code that has a capital (variant 3: the
         // name of a room of the control interface, which a block never makes: a room that does not exist, not a place that is missing). The Hello also tells what the machine runs on (protocol 15): its
         // own platform unless it was told another (variant 0: never set; 1: the web's word, with a block; 2: a byte that is no platform, so the machine's own)
-        const std::string no_place = "The server cannot make a room now: it is busy, or hosts no online matches. Try again in a few minutes.";
+        const std::string no_place = "The server cannot make a room now: it is busy, or your network made many rooms. Try again in a minute.";
         for (const Case& c : cases) for (const int variant : {0, 1, 2, 3}) {
             const bool with_block = variant == 1 || variant == 3;
             const uint8_t told = variant == 1 ? static_cast<uint8_t>(kPlatformBrowser | kOsMacos) : native_platform();

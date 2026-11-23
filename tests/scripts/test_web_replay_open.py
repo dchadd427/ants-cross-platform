@@ -165,6 +165,14 @@ class ThePlayer(unittest.TestCase):
         self.assertEqual(player.count("fits_a_replay(level, error)"), 2)
         has(self, "var MARKER_FIRST = 152, MARKER_LAST = 155;", script)                                       # (the tiles of the start markers: include/ants_assets/lvl_parser.hpp)
 
+    def test_the_longest_file_that_the_page_takes_is_the_longest_file_there_can_be(self):
+        header, page = read("include", "ants_replay", "replay.hpp"), read("web", "replay_page.js")
+        match = re.search(r"kMaxFileBytes = (\d+)u << (\d+);", header)
+        map_bytes = re.search(r"kMaxEmbeddedMapBytes = (\d+)u << (\d+);", header)
+        frame = re.search(r"kChunkFrameBytes = (\d+) \+ (\d+) \+ (\d+);", header)
+        native = (int(match.group(1)) << int(match.group(2))) + (int(map_bytes.group(1)) << int(map_bytes.group(2))) + sum(int(frame.group(k)) for k in (1, 2, 3))
+        self.assertEqual(int(re.search(r"var LOCAL_MAX_BYTES = (\d+);", page).group(1)), native)          # (the page refuses what the game refuses, and no more: a match of 16 MiB and its map)
+
     def test_the_plants_that_the_page_counts_are_the_tiles_that_the_engine_looks_a_waypoint_up_for(self):
         table = read("src", "ants_sim", "movement_tables_data.inc")
         start = table.index("kTileFlags[1344] = {")
@@ -194,7 +202,7 @@ class TheDocument(unittest.TestCase):
         has(self, "## A file of your own", text)
         part = text[text.index("## A file of your own"):]
         part = part[:part.index("\n## ", 5)] if "\n## " in part[5:] else part
-        for needle in ("play?local=", "IndexedDB", "Nothing is uploaded", "2,097,164", "web/replay_page.js", "tests/data/replay_bots_tiny.antsrep", "ownfile", "test_web_replay_open.sh", "8,000", "kMaxEmbeddedStartAnts", "kMaxEmbeddedPlantWaypointPairs", "1,000,000", "fits_a_replay", "WHICHEVER copy"):
+        for needle in ("play?local=", "IndexedDB", "Nothing is uploaded", "17,825,804", "web/replay_page.js", "tests/data/replay_bots_tiny.antsrep", "ownfile", "test_web_replay_open.sh", "8,000", "kMaxEmbeddedStartAnts", "kMaxEmbeddedPlantWaypointPairs", "1,000,000", "fits_a_replay", "WHICHEVER copy"):
             has(self, needle, part)
 
     def test_the_tree_of_the_sources_lists_the_fuzz_script(self):

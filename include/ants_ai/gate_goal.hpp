@@ -41,6 +41,9 @@ struct GoalRules {
     std::vector<uint32_t> field_piles;           // the piles the field breach plays (Tactics::field_piles, MapInfo::piles() indices): no goal for them
 };
 
+/// What the look shows about the ants that a hop meets: the tiles of the ants that are not the seat's own, and of the Combat Ants of other teams that are not its ally's (GateInfo's tie-breaks)
+HopChoice hop_choice(const BotView& view);
+
 /// The goal for the look `view` shows, given the analysis of the map as it is (GateInfo::analyse of the current grid). GoalKind::None when the analysis is empty or some pile with units left is
 /// free of every gate.
 GateGoal plan_gate_goal(const GateInfo& gates, const BotView& view, const GoalRules& rules);

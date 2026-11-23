@@ -370,6 +370,14 @@ public:
     /// (a ping, a link that comes back, a seat that is held or gives up are not; a Visibility that was done is, protocol 22). A room in which it has stood still for a long time has people who are not using it: a link that answers its pings is alive and no use, and the server may give
     /// the place of such a room up when it needs it.
     uint32_t activity() const noexcept { return static_cast<uint32_t>(joins_ + seat_moves_ + plan_changes_ + renames_ + removals_ + start_arms_ + visibility_acts_ + ready_changes_ + chat_.total()); }
+    /// The part of activity() that sets a room up: somebody is welcomed, a color moves, the plan or a name changes, a person is removed, a START is asked for. A line of chat, a Ready mark and a page that says
+    /// "public" again are not: a program can keep a room "used" with one of those every few minutes, and the server's early close of a crowded address's lobby asks for this one (docs/ADDRESS_LIMITS.md).
+    uint32_t setup_activity() const noexcept { return static_cast<uint32_t>(joins_ + seat_moves_ + plan_changes_ + renames_ + removals_ + start_arms_); }
+    /// Where the connection of the guest in this seat came from, as the door was told ("" for an empty seat and for a room that was brought back from a record: those keep no address)
+    const std::string& seat_address(uint8_t seat) const noexcept {
+        static const std::string kNone;
+        return seat < sim::MAX_PLAYERS ? guests_[seat].address : kNone;
+    }
 
     /// The rematch (see (7) above). What this lobby room's match was made of: its plan and every person that its Start seated with a key whose game played in a web browser or did not say what it runs on (empty
     /// `people` for a room that is no lobby room or whose match has not begun). The color of a person whose game is not in a browser is left free (its plan is the match's: an open color).

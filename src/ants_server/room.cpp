@@ -126,6 +126,7 @@ Room::Room(RoomSpec spec, MapEntry map, assets::LevelData level, uint32_t seed, 
         retry_at_ms_ = now_ms + spec_.start_hold_ms;
     }
     active_ms_ = now_ms;
+    setup_ms_ = now_ms;
     lobby_.set_map(map_.name);
     lobby_.set_fog(spec_.fog);
     lobby_.set_mode(spec_.mode);
@@ -309,12 +310,14 @@ void Room::build_session(uint32_t restart_vote_after_ms, uint32_t start_delay_ms
     hc.attendance.countdown_hold_ms = spec_.countdown_hold_ms;
     hc.attendance.max_catch_up_ms = spec_.max_catch_up_ms;
     hc.attendance.resume_countdown_ms = spec_.resume_countdown_ms;
+    hc.sequencer = spec_.sequencer;
     hc.max_log_bytes = spec_.max_log_bytes;
     hc.log_budget = log_budget_;
     hc.turn = turn_;                                              // protocol 26: the relay's credential for a player of a match of two or more people who asks (a room made without one gives none)
     // a credential lives as long as the match can: its limit of play, the pauses that its seats may hold (a room that holds no seat has none) and a margin, never longer than the relay's own limit
     hc.relay_ttl_s = spec_.run_ms / 1000u + (spec_.reconnect ? spec_.max_pause_ms / 1000u : 0u) + kRelayMarginS;
     hc.random_bytes = [](uint8_t* out, size_t n) { return random_bytes(out, n); };
+    if (relay_gate_) hc.relay_take = [this](uint8_t seat) { return relay_gate_(lobby_.seat_address(seat)); };      // (the budget per address: the address of the seat that asks, which the lobby kept from its Hello)
     session_ = std::make_unique<net::HostSession>(*sim_, hc);
     session_->set_on_diverged([this](uint32_t turn, uint8_t differ, uint8_t agree) {       // (the line at the end of the room counts the drops; this one says when, and how many agreed)
         const auto seats = [](uint8_t n) { return std::to_string(static_cast<unsigned>(n)) + (n == 1 ? " seat" : " seats"); };
@@ -505,6 +508,12 @@ void Room::lobby_waiting_pass(uint32_t now_ms, uint8_t asked_by, const std::arra
         active_ms_ = now_ms;
     } else if (now_ms - active_ms_ > kMaxIdleMs) {
         active_ms_ = now_ms - kMaxIdleMs;                    // (the idle time stops growing: the 32-bit clock would read a much longer one as a short one)
+    }
+    if (lobby_.setup_activity() != seen_setup_) {
+        seen_setup_ = lobby_.setup_activity();
+        setup_ms_ = now_ms;
+    } else if (now_ms - setup_ms_ > kMaxIdleMs) {
+        setup_ms_ = now_ms - kMaxIdleMs;
     }
     if (cancels_ != 0 && now_ms - last_cancel_ms_ >= kCancelsForgottenMs) cancels_ = 0;       // (starts that failed long ago are forgotten)
     if (lobby_.present() > 0) {                              // (a seat that is reserved for a person of the match and that no results screen holds is nobody: the room still goes when nobody is in it)
@@ -830,7 +839,7 @@ void Room::replay_begin(const net::StartMsg& start) {
     }
     head.teams = start.teams();
     head.recorder_seat = replay::kNoSeat;                        // (the server plays nobody)
-    recorder_ = std::make_unique<replay::Recorder>(std::move(head));
+    recorder_ = std::make_unique<replay::Recorder>(std::move(head), spec_.max_recording_bytes);
     session_->runner().set_on_executed([this](const net::TurnMsg& turn) {
         if (recorder_ != nullptr && sim_ != nullptr) recorder_->on_turn(turn, *sim_);
     });
@@ -857,7 +866,10 @@ void Room::replay_end() {
         return;
     }
     std::unique_ptr<replay::Recorder> recorder = std::move(recorder_);
-    if (session_ != nullptr) session_->runner().set_on_executed(nullptr);
+    if (session_ != nullptr) {
+        session_->runner().set_on_executed(nullptr);
+        recorder->set_heavy_orders(static_cast<uint8_t>(session_->heavy_order_seats() & recorder->replay().head.roster));       // (the mark of a seat whose orders went over its budget: the head says so, the match is what it was)
+    }
     const std::string kept = replay_store_ != nullptr && sim_ != nullptr ? replay_keep(*recorder) : std::string();
     live_end(kept);                                              // (the recorder goes at the end of this function: the live board lets go of it first)
 }
@@ -883,6 +895,14 @@ std::string Room::replay_keep(replay::Recorder& recorder) {
     if (bytes.empty()) {
         replay_note_ = "the match could not be written as a replay: " + error;
         replay_store_->report("room " + spec_.code + ": the match could not be written as a replay: " + error);
+        if (unrecorded_sink_ != nullptr) {                      // (the result is the referee's own, so the history has it all the same)
+            UnrecordedMatch lost;
+            lost.head = recorder.replay().head;
+            lost.outcome.turns = last_ticks_;
+            if (recorder.over_size_limit()) lost.largest_sender = recorder.largest_sender();       // (a seat that filled it is named though the file is gone)
+            replay::take_result_of(lost.head.roster, *sim_, lost.outcome);
+            unrecorded_sink_(std::move(lost));
+        }
         return std::string();
     }
     const ReplaySave saved = replay_store_->save(bytes);
@@ -1314,6 +1334,11 @@ RoomStatus Room::status(uint32_t now_ms) const {
         s.drops_by_cap = a.drops_by_cap();
         s.drops_by_countdown_hold = a.drops_by_countdown_hold();
         s.drops_by_state = session_->diverged_drops();
+        s.heavy_order_seats = session_->heavy_order_seats();
+        for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+            s.orders_over_budget[seat] = session_->orders_over_budget(seat);
+            s.orders_without_ants[seat] = session_->orders_without_ants(seat);
+        }
         s.rejoins_refused = a.rejoins_refused();
         s.catch_up_expired = a.catch_up_expired();
         s.streamed_bytes = a.streamed_bytes();

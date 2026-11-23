@@ -6,7 +6,10 @@
 // a Hello for a room goes to that room's lobby together with the connection.
 //
 // Rooms are made from outside (create_room: the control interface calls it), update() runs every room and forgets the finished ones when their keep time is over.
-// Limits protect the server: the number of rooms, the number of connections that have not said Hello yet, the time they get for it.
+// Limits protect the server: the number of rooms, the number of connections that have not said Hello yet, the time they get for it. So do the limits per address (AddressGuard, docs/ADDRESS_LIMITS.md):
+// rooms made in a burst and rooms held open from one address are refused as a server that cannot make a room now refuses (NoSuchRoom), a Hello for a room that does not exist is answered later and
+// later when many come from one address, the lobbies of an address that holds many rooms are closed sooner when nobody is setting them up, and a connection that comes too fast is closed. A Hello for a room that
+// exists is never refused, and waits only when its address is over its allowance of wrong codes (then as a wrong code would: hold_hello).
 //
 // A Hello with a KEY (protocol 10) for a room whose match runs and that holds seats goes to that room (Room::rejoin: the session takes the connection over and gives the player the match
 // again); a key that fits no seat, a room that does not hold seats and a room that is loading are answered MatchRunning, as a Hello without a key is, so that nothing is revealed; a room
@@ -38,6 +41,7 @@
 #include "ants_net/protocol.hpp"
 #include "ants_net/transport.hpp"
 #include "ants_net/turnlog.hpp"
+#include "ants_server/address_limits.hpp"
 #include "ants_server/bot_match_spec.hpp"
 #include "ants_server/history_store.hpp"
 #include "ants_server/loop_load.hpp"
@@ -97,6 +101,7 @@ struct ServerLimits {
     size_t room_log_bytes{net::TurnLog::kDefaultMaxBytes};          // the limit of one room's turn log (16 MiB)
     uint64_t log_budget_bytes{256ull * 1024ull * 1024ull};          // the memory that all the rooms' logs may take together; a log that cannot grow is not kept (its room drops a lost seat at once)
     std::shared_ptr<const net::TurnSettings> turn;                  // protocol 26: the relay that the players' channels go through (--turn-host and ANTS_TURN_SECRET); null: none, and nobody opens a channel
+    AddressLimits address;                                          // the limits per address (--address-*, docs/ADDRESS_LIMITS.md); a Limits made by code has none (the ants_server default is AddressLimits::standard())
 };
 
 /// A public room's cap on the match's pauses: the match of a page's link that nobody comes back to must not hold one of the few public places for the server's 30 minutes. A public room takes the smaller of
@@ -321,6 +326,12 @@ public:
     /// then map, host and numbers) and of nothing else: the pass over the rooms goes by code, and no order may teach anything about a code.
     std::vector<PrivateListing> private_lobbies() const;
 
+    /// The limits per address in force, what they refused (never an address) and how many addresses are counted now; set_address_limits changes the numbers at once (the control interface's POST /limits)
+    const AddressLimits& address_limits() const noexcept { return guard_.limits(); }
+    const AddressRefusals& address_refusals() const noexcept { return guard_.refusals(); }
+    size_t addresses_tracked() const noexcept { return guard_.tracked(); }
+    void set_address_limits(const AddressLimits& limits) { guard_.set_limits(limits); limits_.address = limits; }
+
     size_t room_count() const noexcept { return rooms_.size(); }
     /// The rooms of matches that gave their code to the lobby of their rematch and answer their last connections (see the paragraph at the top), and the lobbies that were opened again so
     size_t retired_count() const noexcept { return retired_.size(); }
@@ -330,6 +341,9 @@ public:
     uint64_t connections_refused() const noexcept { return refused_; }
 
 private:
+    /// A match that was played and could not be recorded (Room::set_unrecorded_sink): its record goes into the history from the referee's own numbers, under an id that no recording has or will have; the record's
+    /// recording is "removed" (there is none). Nothing happens without a history. A line in the log when the database refuses it.
+    void keep_unrecorded(UnrecordedMatch&& match);
     struct Pending {
         std::unique_ptr<net::Connection> connection;
         std::string address;
@@ -338,6 +352,16 @@ private:
     struct Lingering {
         std::unique_ptr<net::Connection> connection;
         uint32_t since_ms{0};
+    };
+    struct Delayed {                             // the answer to a Hello for a room that does not exist (AddressGuard::wrong_code), or the Hello for a room that exists from an address that is over its allowance of wrong codes, held back
+        std::unique_ptr<net::Connection> connection;
+        std::string id;                          // the address, as the limits count it
+        net::RejectReason reason{net::RejectReason::NoSuchRoom};
+        uint32_t due_ms{0};
+        bool hello_waits{false};                 // a Hello for a room that exists: it goes through the door again when its time comes (else the Reject above is sent)
+        std::string address;                     // ... with the address that the door was given
+        std::vector<uint8_t> message;
+        net::HelloMsg hello;
     };
 
     // Restart records. A record that was judged good waits in `restoring_` (newest first) until update() has replayed it: the room is made when its replay starts and goes to `rooms_` when it ends.
@@ -386,16 +410,34 @@ private:
     JobEnd end_job(Restoring& job, const std::string& refusal, uint32_t now_ms);
     bool restoring_has(const std::string& code) const;
     /// A Hello (a decoded one, from a connection that no room has yet) finds its room: given to it, parked for a room that waits for its replay, or rejected
-    void route_hello(std::unique_ptr<net::Connection> connection, const std::string& address, const std::vector<uint8_t>& message, const net::HelloMsg& hello, uint32_t now_ms);
+    /// `held`: the Hello has waited for its turn (hold_hello) and goes through now
+    void route_hello(std::unique_ptr<net::Connection> connection, const std::string& address, const std::vector<uint8_t>& message, const net::HelloMsg& hello, uint32_t now_ms, bool held = false);
     void park(std::unique_ptr<net::Connection> connection, const std::string& address, const std::vector<uint8_t>& message, const net::HelloMsg& hello, const Restoring& job, uint32_t now_ms);
     void release_parked(const std::string& code, uint32_t now_ms);
     void reject(std::unique_ptr<net::Connection> connection, net::RejectReason reason, uint32_t now_ms);
+    // The limits per address (room_manager_limits.cpp)
+    /// A Hello for a room that does not exist: the Reject waits as long as the address's count of them asks (guard_.wrong_code), or goes at once when it asks none; a Hello that finds no place to wait is dropped
+    void answer_no_such_room(std::unique_ptr<net::Connection> connection, const std::string& id, net::RejectReason reason, uint32_t now_ms);
+    /// Puts an answer or a Hello in the list of those that wait, which is bounded (kWrongCodeHeldPerAddress for an address, kWrongCodeHeldTotal in all): with no place the connection is closed and the Hello
+    /// dropped without an answer
+    void queue_delayed(Delayed delayed);
+    /// A Hello for a room that exists, from an address that is over its allowance of wrong codes, waits as long as a wrong code would (the same list, the same bounds), so that a program that tries codes cannot
+    /// tell a right one by the time of the answer or try them faster than the wrong ones are answered. True when the Hello was taken (held or dropped); false when none is due and the caller goes on.
+    bool hold_hello(std::unique_ptr<net::Connection>& connection, const std::string& address, const std::string& id, const std::vector<uint8_t>& message, const net::HelloMsg& hello, uint32_t now_ms);
+    /// The held answers that are due are sent; one whose peer has gone is forgotten
+    void release_delayed(uint32_t now_ms);
+    /// The rooms of this address (RoomSpec::creator) that are open: a room that has not ended
+    size_t open_rooms_of(const std::string& id) const;
+    /// An address that holds more open rooms than `crowded_rooms` loses the waiting lobbies in which nobody has set anything up for `crowded_idle_s` (Room::quiet_ms)
+    void close_crowded_lobbies(uint32_t now_ms);
+    /// The once-a-minute work of the limits: forgets the addresses that have been quiet for an hour, and tells the log what was refused since the last line (counts, never an address)
+    void limits_upkeep(uint32_t now_ms);
     std::string new_code();           // "" when the operating system's generator fails (create_room then refuses the room: a code that can be guessed is not drawn instead)
     /// Makes the public room that a Hello with a create block names, when public rooms are on, the code is a valid one, the block is valid and there is a free place (or one can be had:
     /// evict_abandoned_public); false otherwise
-    bool make_public_room(const std::string& code, const net::CreateBlock& block, uint32_t now_ms);
+    bool make_public_room(const std::string& code, const net::CreateBlock& block, const std::string& creator, uint32_t now_ms);
     /// The same for a page's lobby block (protocol 16): the lobby room, when the server offers lobbies and one can be had (the pool has a free place, or the lobby that has been empty the longest gives its place up)
-    bool make_lobby_room(const std::string& code, const net::CreateBlock& block, uint32_t now_ms);
+    bool make_lobby_room(const std::string& code, const net::CreateBlock& block, const std::string& creator, uint32_t now_ms);
     /// The specification of a lobby room of this code on `map` (the server's own numbers), and a place for one more in the pool: the lobby that has been empty the longest, else the one that has been idle the longest,
     /// gives its place up; false when no place can be had
     RoomSpec lobby_spec(const std::string& code, const std::string& map) const;
@@ -435,6 +477,15 @@ private:
     std::vector<Parked> parked_;
     std::vector<Pending> pending_;
     std::vector<Lingering> lingering_;
+    std::vector<Delayed> delayed_;
+    AddressGuard guard_;                         // the limits per address (limits_.address) and what they know of the addresses seen lately
+    AddressRefusals noted_;                      // what the log has been told of the refusals so far
+    uint32_t next_upkeep_ms_{0};                 // the limits' once-a-minute work is due at this time ...
+    bool upkeep_armed_{false};                   // ... once there is a time (a flag and a time: a time that is older than 24.8 days reads as one to come)
+    uint32_t next_crowd_ms_{0};                  // the crowded addresses' lobbies are looked at once a second ...
+    bool crowd_armed_{false};
+    uint32_t now_hint_{0};                       // the time of the pass that runs (the relay's gate has no clock of its own)
+    std::vector<std::string> limit_notes_;       // what the limits said, for the log (take_notices)
     std::vector<RoomStatus> unreported_;     // the ends of rooms that were forgotten in the pass in which they ended
     uint64_t created_{0};
     uint64_t refused_{0};

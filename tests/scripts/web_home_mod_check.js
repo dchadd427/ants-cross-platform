@@ -263,8 +263,8 @@ function rig(o) {
     z.dock.rows((id) => none.push(id)); z.recv({ t: 'line', id: 151, at: T0 + 151, who: 'Fern', text: 'hello', mod: false });
     same('rows(fn): not told anything for a visitor with no role', none, []);
     const b = rig({ noMod: true }), by = b.dock.by(148);
-    same('by(id): for staff, the lines of the log that the author of line `id` wrote, newest first, as { id, text, at } and nothing else (no key, no name)', [by, b.dock.by(150).length, b.dock.by(147), b.dock.by(999), b.dock.by(null), b.dock.by('148')],
-        [[{ id: 148, text: 'FREE ant gold!!! see my page', at: T0 + 148 }], 1, [], [], [], []]);
+    same('by(id): for staff, the lines of the log that the author of line `id` wrote, newest first, as { id, text, at, img } and nothing else (no key, no name)', [by, b.dock.by(150).length, b.dock.by(147), b.dock.by(999), b.dock.by(null), b.dock.by('148')],
+        [[{ id: 148, text: 'FREE ant gold!!! see my page', at: T0 + 148, img: false }], 1, [], [], [], []]);
     const bb = rig({ noMod: true, history: [line(1, 'Clover', 'one', { k: 'k-c' }), line(2, 'Pebble', 'two', { k: 'k-p' }), line(3, 'Clover2', 'three', { k: 'k-c' }), line(4, 'Clover', 'four', { k: 'k-other' }), line(5, 'Fern', 'five', { k: '' }), line(6, 'Fern', 'six', { k: '' }), line(7, 'system', 'Dash was kicked.', { k: 'k-c', sys: true })] });
     same('...matched by the hub\'s key of the account: a changed name is the same person, the same name with another key is not, and a line with no key has no one to match', [bb.dock.by(1).map((x) => x.id), bb.dock.by(3).map((x) => x.id), bb.dock.by(4).map((x) => x.id), bb.dock.by(5).map((x) => x.id)], [[3, 1], [3, 1], [4], []]);
     same('...the hub\'s own line is nobody\'s, whatever key it carries, and it is never counted for anybody', [bb.dock.by(7), bb.dock.by(1).map((x) => x.id)], [[], [3, 1]]);
@@ -509,6 +509,12 @@ function rig(o) {
     const l = rig({ history: [line(148, 'Clover', 'x'.repeat(2000), { u: 'clover.4782' })] });
     l.open(148);
     check('a very long line is cut for the quote (the style sheet keeps three lines of it)', one(l.box(), 'gm-quote').textContent.length <= Pure.LIMIT.quote);
+    const p = rig({ history: [line(148, 'Clover', '', { u: 'clover.4782', img: { n: 'a'.repeat(32), x: 'jpg' } })] });
+    p.open(148);
+    const pq = one(p.box(), 'gm-quote');
+    check('a line that is only an image: the quote says so instead of an empty box', pq !== null && pq.textContent.trim() !== '' && p.box().getAttribute('aria-describedby') === 'gm-quote');
+    p.press('Delete this line');
+    check('... and so does the question before it is deleted', one(p.box(), 'gm-qt') !== null && one(p.box(), 'gm-qt').textContent === pq.textContent);
     const w = rig({ history: [line(148, '<b>Clover</b>', '<i>hi</i> & <script>x</script>', { u: 'clover.4782' })] });
     w.open(148); w.press('Delete this line');
     check('names and words with markup characters in them are text (nothing is made of them but text)', w.env.innerHTMLWrites.length === 0 && one(w.box(), 'gm-qt').textContent === '<i>hi</i> & <script>x</script>' && w.box().findAll((e) => e.tagName === 'b' || e.tagName === 'i' || e.tagName === 'script').filter((e) => e.textContent.indexOf('Clover') === 0 && e.tagName === 'b' && cls(e.parent).indexOf('gm-at') === -1).length === 0);
@@ -773,6 +779,10 @@ function rig(o) {
     check('...every line has its time in the log\'s own words, and the full date as its title', ids(q).every((id) => { const tt = q.row(id).findAll((e) => cls(e).indexOf('gc-t') !== -1)[0], mine = said(q, id); return tt && one(mine, 'gm-rt').textContent === tt.textContent && mine.getAttribute('title') === tt.getAttribute('title').replace(/^#\d+ /, ''); }), ids(q).map((id) => [one(said(q, id), 'gm-rt').textContent, q.row(id).findAll((e) => cls(e).indexOf('gc-t') !== -1)[0].textContent].join('=')).join());
     check('...words are text: markup characters and an address stay as typed, no link, no element made from them', one(said(q, 148), 'gm-rq').textContent === 'second: <b>free</b> & https://example.org/x' && q.box().findAll((e) => e.tagName === 'a' || e.tagName === 'b' || e.tagName === 'script').filter((e) => e.textContent.indexOf('free') !== -1 && cls(e.parent).indexOf('gm-at') === -1 && e.tagName !== 'b').length === 0 && q.env.innerHTMLWrites.length === 0);
     check('...the line that was opened is marked "this line" and nothing else is', one(said(q, 148), 'gm-this').textContent === 'this line' && byClass(q.box(), 'gm-this').length === 1 && cls(said(q, 148)).indexOf('gm-here') !== -1 && byClass(q.box(), 'gm-here').length === 1);
+    const qi = rig({ history: [line(147, 'Clover', '', { u: 'clover.4782', img: { n: 'b'.repeat(32), x: 'png' } }), line(148, 'Clover', 'words', { u: 'clover.4782' })] });
+    qi.open(148); qi.press('Recent messages from Clover (2)');
+    const qr = said(qi, 147), qt = qr && one(qr, 'gm-rq');
+    check('...a line that is only an image is listed as one, in its text and in its name for a screen reader', !!qt && qt.textContent.trim() !== '' && (qr.getAttribute('aria-label') || '').indexOf(qt.textContent) !== -1);
     const days = byClass(q.box(), 'gm-day').map((e) => e.textContent), logDays = byClass(q.log, 'gc-day').map((e) => e.textContent);
     check('...day headings only because the lines are on two days: the log\'s own words for them, the newest day first', days.length === 2 && days[0] === logDays[logDays.length - 1] && days[1] === logDays[0] && days[0] !== days[1], JSON.stringify([days, logDays]));
     same('...the order of the group: heading, three lines of the day, heading, the old line', one(q.box(), 'gm-rl').children.map((c) => (cls(c).indexOf('gm-day') !== -1 ? 'day' : c.getAttribute('data-n'))), ['day', '151', '148', '144', 'day', '139']);

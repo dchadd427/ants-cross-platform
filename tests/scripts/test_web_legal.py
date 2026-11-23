@@ -64,7 +64,7 @@ def addresses_that_leave_the_site(page):
     found = []
     for name, value in re.findall(r'\b(href|src|srcset|action|poster|data)="([^"]*)"', page):
         for address in ([part.split()[0] for part in value.split(",") if part.strip()] if name == "srcset" else [value]):
-            if address.startswith("/") and not address.startswith("//") or address.startswith("#"):
+            if address.startswith("/") and not address.startswith("//") or address.startswith("#") or address.startswith("@@SITE_ORIGIN@@/"):      # (the site's own address, which the build writes in for the placeholder)
                 continue
             if address == GITHUB or address.startswith(GITHUB + "/") or address == DISCORD:
                 continue
@@ -104,14 +104,14 @@ class TheLegalPage(unittest.TestCase):
 
     def test_it_is_a_page_in_the_changelog_pages_look(self):
         self.assertTrue(self.page.startswith("<!DOCTYPE html>"))
-        self.assertIn("<title>Ants (1998) - Legal</title>", self.page)
+        self.assertRegex(self.page, r"<title>[^<]+ \u2014 Ants \(1998\)</title>")                      # (the form of every title: tests/scripts/test_web_seo.py reads them all)
         self.assertIn('<link rel="stylesheet" href="/front/classic.css">', self.page)
         self.assertIn('<div class="pt"><h1>Legal</h1><p>', self.page)
         self.assertIn('<link rel="stylesheet" href="/site_nav.css">', self.page)
         self.assertEqual(re.findall(r"<script[^>]*>", self.page), ['<script src="/site_nav.js">', '<script src="/update_notice.js">'])               # (the site bar's Menu and the update notice: no other script)
         self.assertIn('<header class="sb" data-live="menu" ', self.page)
         self.assertEqual(re.findall(r'<nav aria-label="Pages">(.*?)</nav>', self.page, re.S)[0].count('aria-current'), 0)      # (Legal is not one of the bar's five: it is in the Menu)
-        self.assertEqual(sorted(re.findall(r"@@\w+@@", self.page)), ["@@BUILD_DATE@@", "@@BUILD_ID@@", "@@GAME_VERSION@@"])      # (what the build fills in: the bar's three stamps, for the last line of the Menu)
+        self.assertEqual(sorted(set(re.findall(r"@@\w+@@", self.page)) - {"@@SITE_ORIGIN@@"}), ["@@BUILD_DATE@@", "@@BUILD_ID@@", "@@GAME_VERSION@@"])      # (what the build fills in: the bar's three stamps, for the last line of the Menu; and the site's address, which the head names)
         for blank in re.findall(r"<a [^>]*target=\"_blank\"[^>]*>", self.page):
             self.assertIn('rel="noopener noreferrer"', blank)
 
@@ -124,7 +124,7 @@ class TheLegalPage(unittest.TestCase):
             "a protocol-relative style sheet": ('<link rel="stylesheet" href="/front/classic.css">', '<link rel="stylesheet" href="/front/classic.css"><link rel="stylesheet" href="//cdn.example/x.css">', "//cdn.example/x.css"),
             "a protocol-relative image": ('<div class="pt">', '<img src="//cdn.example/logo.png"><div class="pt">', "//cdn.example/logo.png"),
             "an image of another site": ('<div class="pt">', '<img src="https://cdn.example/logo.png"><div class="pt">', "https://cdn.example/logo.png"),
-            "a plain http address": ('<link rel="icon" type="image/png" href="/favicon.png?v=f34bea03">', '<link rel="icon" type="image/png" href="http://cdn.example/f.png">', "http://cdn.example/f.png"),
+            "a plain http address": ('<link rel="icon" type="image/png" href="/favicon.png?v=9ea2152a">', '<link rel="icon" type="image/png" href="http://cdn.example/f.png">', "http://cdn.example/f.png"),
             "an address that only starts like the repository's": ('href="https://github.com/dchadd427/ants-cross-platform/issues"', 'href="https://github.com/dchadd427/ants-cross-platform.evil.example/issues"', "ants-cross-platform.evil.example"),
             "an @import of a quoted address": ("main { margin: 26px 0 32px; }", '@import "https://cdn.example/x.css";\nmain { margin: 26px 0 32px; }', "@import"),
             "an @import url()": ("main { margin: 26px 0 32px; }", "@import url(//cdn.example/x.css);\nmain { margin: 26px 0 32px; }", "@import"),
@@ -299,7 +299,7 @@ class TheRouteAndTheImage(unittest.TestCase):
             block = re.search(r"\n    location = /%s \{([^}]*)\}" % name, conf)
             self.assertIsNotNone(block, "location = /" + name)
             self.assertEqual(block.group(1).split(), ["rewrite", "^", "/%s.html" % name, "last;"])      # (no add_header: a header here would hide the server's own; the file's address sends the page's headers)
-        self.assertNotIn("    /legal.html /legal;\n", conf)                                         # (not in the map of old addresses: /legal used to redirect to the file, so the file answers 200, tests/scripts/test_nginx_clean_urls.py)
+        self.assertNotIn("    /legal.html /legal;\n", conf)                                         # (not in the map of old addresses: /legal used to redirect to the file, so the file answers 200 and names the clean address as canonical, tests/scripts/test_nginx_clean_urls.py)
         self.assertNotIn("    /changelog.html /changelog;\n", conf)
 
 

@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the gate play for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_walls_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. The tests are AI26.4 and AI27.6 - AI27.14 of suite 2.20.",
+ "note": "Mutants of the gate play for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_walls_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. The tests are AI26.4 and AI27.6 - AI27.20 of suite 2.20.",
  "defaults": {
   "build": "test_ai"
  },
@@ -127,16 +127,16 @@
   {
    "id": "plant_tile_not_cleared",
    "file": "src/ants_ai/gate_task.cpp",
-   "old": "    else if (!tile_blocked(context, hop.bomb)) context.orders.special(ant_, hop.bomb);",
-   "new": "    else context.orders.special(ant_, hop.bomb);",
+   "old": "    else if (!tile_blocked(context, hop.bomb)) send(context, true, hop.bomb);",
+   "new": "    else send(context, true, hop.bomb);",
    "test": "timeout 600 env ANTS_TEST_FILTER=AI27.9b ./build/tests/test_ai/test_ai",
    "expect": "AI27.9b"
   },
   {
    "id": "step_tile_not_cleared",
    "file": "src/ants_ai/gate_task.cpp",
-   "old": "        } else if (!tile_blocked(context, hop.from)) {\n            context.orders.move({ant_}, hop.from);",
-   "new": "        } else {\n            context.orders.move({ant_}, hop.from);",
+   "old": "        } else if (!tile_blocked(context, hop.from)) {\n            send(context, false, hop.from);",
+   "new": "        } else {\n            send(context, false, hop.from);",
    "test": "timeout 600 env ANTS_TEST_FILTER=AI27.9b ./build/tests/test_ai/test_ai",
    "expect": "AI27.9b"
   },
@@ -337,6 +337,102 @@
    "new": "(false ||",
    "test": "timeout 600 env ANTS_TEST_FILTER=AI27.11 ./build/tests/test_ai/test_ai",
    "expect": "AI27.11"
+  },
+  {
+   "id": "plant_onto_foreign_bomb",
+   "file": "src/ants_ai/gate_task.cpp",
+   "old": "if (!landed_ && !thrown_ && (foreign_bomb_on(view, hop.bomb) || foreign_bomb_on(view, hop.from))) {",
+   "new": "if (false && !landed_ && !thrown_ && (foreign_bomb_on(view, hop.bomb) || foreign_bomb_on(view, hop.from))) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI27.16 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.16"
+  },
+  {
+   "id": "return_hop_onto_foreign_bomb",
+   "file": "src/ants_ai/gate_task.cpp",
+   "old": "if (return_hop_.bombs > 0 && (foreign_bomb_on(view, return_hop_.bomb) || foreign_bomb_on(view, return_hop_.from))) {",
+   "new": "if (false && return_hop_.bombs > 0 && (foreign_bomb_on(view, return_hop_.bomb) || foreign_bomb_on(view, return_hop_.from))) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI27.17 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.17"
+  },
+  {
+   "id": "choice_ignores_ants_on_tiles",
+   "file": "src/ants_ai/gate_info.cpp",
+   "old": "    if (choice.occupied.empty()) return false;\n",
+   "new": "    return false;\n",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI27.15 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.15"
+  },
+  {
+   "id": "choice_ignores_combat_ants",
+   "file": "src/ants_ai/gate_info.cpp",
+   "old": "    for (const sim::TileCoord& a : punchers) {\n",
+   "new": "    for (const sim::TileCoord& a : punchers) {\n        if (d >= 0) break;\n",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI27.15 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.15"
+  },
+  {
+   "id": "choice_ignores_straight_step",
+   "file": "src/ants_ai/gate_info.cpp",
+   "old": "    if (straight_a != straight_b) return straight_a;\n",
+   "new": "    if (false && straight_a != straight_b) return straight_a;\n",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI27.15 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.15"
+  },
+  {
+   "id": "choice_ignores_ally_side",
+   "file": "src/ants_ai/gate_info.cpp",
+   "old": "        if (mine_a != mine_b) return mine_a;\n",
+   "new": "        if (false && mine_a != mine_b) return mine_a;\n",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI27.15 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.15"
+  },
+  {
+   "id": "choice_ignores_power_up_landings",
+   "file": "src/ants_ai/gate_info.cpp",
+   "old": "    if (a.firm != b.firm) return a.firm;\n",
+   "new": "",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI27.15 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.15"
+  },
+  {
+   "id": "ally_side_power_up_never_taken",
+   "file": "src/ants_ai/standard_tasks_powerup.cpp",
+   "old": "(ally_side && !(tactics_.gate_map && !ally_reaches(v, c.map, p.tile)))",
+   "new": "(ally_side && !(tactics_.gate_map && !ally_reaches(v, c.map, p.tile) && false))",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI27.18 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.18"
+  },
+  {
+   "id": "ally_reaches_never",
+   "file": "src/ants_ai/standard_tasks_powerup.cpp",
+   "old": "                if (map.component(ally, sim::TileCoord{power_up.x + dx, power_up.y + dy}) == at) return true;",
+   "new": "                if (false && map.component(ally, sim::TileCoord{power_up.x + dx, power_up.y + dy}) == at) return true;",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI27.19 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.19"
+  },
+  {
+   "id": "ally_in_mound_cannot_reach",
+   "file": "src/ants_ai/standard_tasks_powerup.cpp",
+   "old": "            if (!inside) continue;\n",
+   "new": "            if (!inside || true) continue;\n",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI27.19 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.19"
+  },
+  {
+   "id": "stranded_never_waits",
+   "file": "src/ants_ai/gate_task.cpp",
+   "old": "                    if (shut) return;",
+   "new": "                    if (false && shut) return;",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI27.20 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.20"
+  },
+  {
+   "id": "stranded_waits_for_any_bomb",
+   "file": "src/ants_ai/gate_task.cpp",
+   "old": "shut = shut || (b.owner != context.seat && gates_.bomb_beside(b.tile, hop.to_comp));",
+   "new": "shut = shut || b.owner != context.seat;",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI27.20 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.20"
   }
  ]
 }

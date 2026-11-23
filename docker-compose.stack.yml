@@ -15,7 +15,8 @@
 #                                                   The path must name an existing FILE: for a path that does not exist Docker makes a directory there and nginx stops with "Is a directory"
 #   ANTS_WEB_BIND_PREFIX=127.0.0.1:                 put in front of the host port of the web page (optional; empty by default: the port is published as before). An address of this machine and a colon, such as 127.0.0.1:,
 #                                                   publishes it on that address only, so a reverse proxy on another machine, or one that reaches this machine by its public address, would no longer reach it (docs/SERVER.md "Behind a reverse proxy")
-#   ANTS_SERVER_PORT=4001                           the public TCP game port of native clients (optional; the browser page does not use it)
+#   ANTS_TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12   the reverse proxies whose X-Client-Address the game server's WebSocket door believes for its limits per address (docs/ADDRESS_LIMITS.md; optional): networks and
+#                                                   addresses separated by commas, `none` for nobody. Empty (the default): the private networks, which is where the web container connects from
 #   ANTS_BUILD_ID=<text>                            which build this is (the page's footer, the changelog pages, `ants_server --version`); optional: without it the images
 #                                                   take the commit that the clone's .git/HEAD and .git/refs name, and the UTC build time when the clone has no such files
 #   ANTS_DEMO_ROOMS=48 ANTS_DEMO_MAP=TREASURE.LVL   how many demo rooms the page web/lobby.html may make at a time, and the map of a room whose create block names none
@@ -127,7 +128,7 @@ services:
     stop_grace_period: 15s
     # The page web/lobby.html (the front page) makes rooms of its own: its Hello carries a create block (the map, the seats, the teams) and a code of six lower-case letters and digits: demo rooms are ON here, at most ANTS_DEMO_ROOMS at a time
     # (default 48) on the map ANTS_DEMO_MAP (default TREASURE.LVL) unless the block names one of ANTS_DEMO_MAPS (the page's choice; the maps folder must hold them
-    # all). A code with an upper-case letter makes no such room (the control interface draws those). Demo rooms are open to anyone who can reach a game port (the site, or TCP port 4001), so their number is bounded; rooms of the control interface keep their own places.
+    # all). A code with an upper-case letter makes no such room (the control interface draws those). Demo rooms are open to anyone who can reach a game port (the site's /ws), so their number is bounded; rooms of the control interface keep their own places.
     # ANTS_DEMO_ROOMS is 1 to 255 (see the header). To switch them off, delete the three demo options. A demo room waits ten minutes for its players; its first player can start it earlier with START (two players at least, or one alone with bots).
     # --log-mb 4: one room's turn log (what a returning player is given) is at most 4 MiB (a busy 30-minute match logs 0.65 MB), so that the demo rooms alone cannot use up the 256 MiB that
     # all the logs share (docs/NETWORK_PORT.md). Keep ANTS_DEMO_ROOMS times --log-mb under 256 (tests/scripts/test_default_map.py checks it).
@@ -145,11 +146,14 @@ services:
       ANTS_TURN_SECRET: ${ANTS_TURN_SECRET:-}
       # the relay's port, from the same variable as the relay's own (empty: TURN's 3478): it is the number in the addresses that the players are given
       ANTS_TURN_PORT: ${ANTS_TURN_PORT:-}
+      # the reverse proxies whose X-Client-Address the WebSocket door believes for its limits per address (empty: the private networks)
+      ANTS_TRUSTED_PROXIES: ${ANTS_TRUSTED_PROXIES:-}
     volumes:
       - ${ANTS_MAPS_DIR:-ants-maps}:/maps:ro
       - ants-server-results:/results
     ports:
-      - "${ANTS_SERVER_PORT:-4001}:4001"
+      # (no port for the TCP game port 4001: it is not encrypted and the site does not open it; the browser page and the desktop game reach the server through the site's /ws. A LAN or development server
+      # that wants it adds a line `- "4001:4001"` in a file of its own: docs/SERVER.md "The stack (Docker)")
       - "127.0.0.1:${ANTS_SERVER_WS_PORT:-4002}:4002"
       - "127.0.0.1:${ANTS_SERVER_CTL_PORT:-4010}:4010"
     networks:
@@ -240,8 +244,9 @@ services:
   # (COMPOSE_PROFILES=relay) and the three variables of the header (it exits at once without them): the stack deploys without them. Host networking: one public address, no port publishing (Docker publishes a range of 200 UDP ports one
   # rule at a time, slowly), and the relay sees the players' real addresses. It is NOT behind the web page's proxy and listens on UDP and TCP ANTS_TURN_PORT (3478 unless set) and sends from UDP 49160-49359, on the address ANTS_TURN_EXTERNAL_IP (an address of this machine; the entry point
   # refuses any other) and on no other address or port (docker/turnserver.conf).
-  # The image starts only with the capability to bind its port (the binary carries it); the process still runs as the user nobody. The configuration (docker/turnserver.conf) holds no secret: it comes on the
-  # command line, where `$$` reaches the container as `$` and the image's entry point expands it, so the secret is not written into the command.
+  # The image starts only with the capability to bind its port (the binary carries it); the process still runs as the user nobody. The configuration (docker/turnserver.conf) holds no secret: the entry point puts
+  # the secret into a file of its own on the memory file system at /tmp (readable by the relay's user only) and coturn reads it there, so that it is not in the process list of the machine. The name and the address
+  # are on the command line, where `$$` reaches the container as `$` and the image's entry point expands it.
   ants-turn:
     profiles: ["relay"]
     build:
@@ -255,10 +260,10 @@ services:
       ANTS_TURN_EXTERNAL_IP: ${ANTS_TURN_EXTERNAL_IP:-}
       ANTS_TURN_HOST: ${ANTS_TURN_HOST:-}
       ANTS_TURN_PORT: ${ANTS_TURN_PORT:-}
-    # (The image's entry point, docker/turn-entrypoint.sh, refuses to start unless all three are set, then expands `$` in the arguments below.)
-    command: ["-c", "/etc/coturn/turnserver.conf", "--static-auth-secret=$$ANTS_TURN_SECRET", "--external-ip=$$ANTS_TURN_EXTERNAL_IP", "--realm=$$ANTS_TURN_HOST"]
+    # (The image's entry point, docker/turn-entrypoint.sh, refuses to start unless all three are set, writes the configuration with the secret, then expands `$` in the arguments below.)
+    command: ["--external-ip=$$ANTS_TURN_EXTERNAL_IP", "--realm=$$ANTS_TURN_HOST"]
     read_only: true
-    # the process id file (pidfile in docker/turnserver.conf) is the only file that the process writes
+    # the process id file (pidfile in docker/turnserver.conf) and the configuration file that holds the secret are the only files that the container writes
     tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=1m"]
     cap_drop: [ALL]
     cap_add: [NET_BIND_SERVICE]

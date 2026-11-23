@@ -224,26 +224,27 @@ class Hub:
                 self.log.event("gone", tag=peer.tag, sockets=len(self.chat.peers))
             writer.close()
 
+    def address_of(self, headers, writer):
+        """The key that counts the visitor of a request: the X-Client-Address that the site's nginx sets, else the peer's own address. A request that comes from the image converter's address is counted under
+        that address whatever the header says: the converter's network has no visitor, and nothing on it names one."""
+        peername = writer.get_extra_info("peername")
+        peer = peername[0] if peername else ""
+        return limitmod.address_key(None if self.converter.speaks_for_nobody(peer) else headers.get("x-client-address"), peer)
+
     async def page(self, route, request, writer):
         """One of the login's pages: no body is read (one that is sent is refused), and the answer ends the connection."""
         h = request.headers
         if h.get("content-length", "0") != "0" or "transfer-encoding" in h:
             raise http.HttpError(400, "body")
-        peername = writer.get_extra_info("peername")
-        address = limitmod.address_key(h.get("x-client-address"), peername[0] if peername else "")
-        writer.write(await route(request, address))
+        writer.write(await route(request, self.address_of(h, writer)))
 
     async def admin_page(self, request, reader, writer):
         """One request of the admin page's door: the gate, or the page's API (its POST has a body, which hub/admindoor.py reads); the answer ends the connection."""
-        peername = writer.get_extra_info("peername")
-        address = limitmod.address_key(request.headers.get("x-client-address"), peername[0] if peername else "")
-        writer.write(await self.admin.serve(request, reader, address))
+        writer.write(await self.admin.serve(request, reader, self.address_of(request.headers, writer)))
 
     async def image_page(self, request, reader, writer):
         """The upload of an image (hub/imgdoor.py): the body is read there, after the cheap checks; the answer ends the connection, and the place of the connection is kept until it is answered."""
-        peername = writer.get_extra_info("peername")
-        address = limitmod.address_key(request.headers.get("x-client-address"), peername[0] if peername else "")
-        writer.write(await self.image_door.serve(request, reader, address))
+        writer.write(await self.image_door.serve(request, reader, self.address_of(request.headers, writer)))
 
     async def upgrade(self, request, reader, writer):
         """Check the handshake and take the socket in: an HttpError says no; otherwise the 101 and the welcome are written and the Peer is returned."""
@@ -265,8 +266,7 @@ class Hub:
             raise http.HttpError(400, "key")
         if len(self.chat.peers) >= self.limits.sockets_total:
             raise http.HttpError(503, "full", {"Retry-After": "30"})
-        peername = writer.get_extra_info("peername")
-        address = limitmod.address_key(h.get("x-client-address"), peername[0] if peername else "")
+        address = self.address_of(h, writer)
         if not self.per_address.try_add(address):
             raise http.HttpError(429, "address", {"Retry-After": "10"})
         peer = None

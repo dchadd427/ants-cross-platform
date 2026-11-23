@@ -90,7 +90,9 @@ void run_reconnect_session_tests_2() {
     } TEST_END();
 
     TEST_CASE("N2.81 Hold: A Key Holder Cannot Make The Server Stream Its Log Again And Again: With A Log Of More Than A Megabyte, 100 Hellos In 10 s Make Three Streams At Most (The Fourth Hello Of A Minute Is Refused), And With The Hellos Allowed The Bytes Stop It At Three Times The Log's Size; Every Refusal Is Counted And Streams Nothing") {
-        const auto big_match = [](const HoldOptions& o) {
+        const auto big_match = [](const HoldOptions& given) {
+            HoldOptions o = given;
+            o.host.sequencer.orders_per_second = 0;                                   // (a log of this size is made of more orders than a seat may have sealed: the budget of orders is S2.59's, here it is off)
             auto m = std::make_unique<HoldMatch>(3, o);
             std::vector<uint32_t> many;
             for (uint32_t i = 0; i < 32; ++i) many.push_back(1000 + i);

@@ -395,7 +395,7 @@ class ThePlacesThatCarryIt(unittest.TestCase):
         text = read("Dockerfile")
         make = text.index("RUN python3 tools/map_atlas.py mapmaker_atlas")
         self.assertGreater(make, text.rindex("cmake --build build_web"), "after the game is compiled and linked, so that it does not rebuild it")
-        self.assertLess(make, text.index("FROM nginx:alpine AS runner"))
+        self.assertLess(make, re.search(r"(?m)^FROM nginx:alpine(@\S+)? AS runner", text).start())
         for line in ("COPY asset_catalog/sprites/ /src/asset_catalog/sprites/", "COPY asset_catalog/catalog_data.js /src/asset_catalog/catalog_data.js", "COPY tools/map_atlas.py /src/tools/map_atlas.py",
                      "COPY --from=builder /src/mapmaker_atlas/ /usr/share/nginx/html/mapmaker_atlas/"):
             self.assertIn(line, text)

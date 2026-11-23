@@ -5,11 +5,13 @@
 #include <random>
 #include <utility>
 
+#include "ants_net/address.hpp"
 #include "ants_sim/game_strings.hpp"
 
 #ifndef __EMSCRIPTEN__
 #include "ants_net/lan.hpp"
 #include "ants_net/tcp.hpp"
+#include "ants_net/wss.hpp"
 #else
 #include "ants_net/wasm_ws.hpp"
 #endif
@@ -35,7 +37,7 @@ std::string match_lost_text(ClientSession::LostReason reason) {
 }
 
 struct NetGame::Transport {
-    std::unique_ptr<Connection> uplink;                     // client: the connection to the host (TCP) or to a server (TCP natively, a WebSocket in the browser)
+    std::unique_ptr<Connection> uplink;                     // client: the connection to the host (TCP) or to a server (a WebSocket over TLS natively, the page's WebSocket in the browser; TCP to a server on this machine or the local network)
     std::unique_ptr<Connection> relink;                     // client: the link that the way back made last (the session holds it; the one before it is let go when a new one is made). The lobby holds the first,
                                                             // `uplink`, for as long as this object lives, so that one is never replaced
 #ifndef __EMSCRIPTEN__
@@ -91,9 +93,9 @@ constexpr bool kInBrowser = false;
 #endif
 
 // A Hello with a create block is one that the server makes the room of when somebody comes (the front page's card and the start menu send them): the server answers NoSuchRoom when it cannot,
-// so it is mostly a place that is missing (the cap of public rooms, the server's limit, a server that makes none). The text is told only for a code that a block can make a room of
-// (public_room_code): a code with a capital is the name of a room of the control interface, which a block never makes, and the answer for it is a room that does not exist (or is over)
-constexpr const char* kTextNoPlace = "The server cannot make a room now: it is busy, or hosts no online matches. Try again in a few minutes.";
+// so it is mostly a place that is missing (the cap of public rooms, the server's limit), or the server's limit of rooms for the sender's network address (docs/ADDRESS_LIMITS.md), which it answers the same
+// way. The text is told only for a code that a block can make a room of (public_room_code): a code with a capital is the name of a room of the control interface, which a block never makes, and the answer for it is a room that does not exist (or is over)
+constexpr const char* kTextNoPlace = "The server cannot make a room now: it is busy, or your network made many rooms. Try again in a minute.";
 
 // "Green", "Red", "Blue", "Black": the color word of a seat (seat 0 is green, the engine's own numbering), as every page names a seat
 std::string seat_color(uint8_t seat) { return seat < sim::MAX_PLAYERS ? std::string(str::color_name(static_cast<uint8_t>(3u - seat))) : std::string(); }
@@ -227,6 +229,13 @@ bool NetGame::join(const std::string& address, uint16_t port, const std::string&
     // The name is looked up here, once: every link of the way back goes to this address (a lookup at every attempt would hold up the frame, and a name that points elsewhere by then would get the key)
     const std::string numeric = resolver_ ? resolver_(address) : resolve_host(address);
     if (numeric.empty()) return false;
+    join_refusal_.clear();
+    // A server's room (it has a code) carries the seat key, the name and the chat: they never travel in the clear over the Internet. Plain TCP to a server is for this machine and the local network;
+    // an address that is neither joins with join_url (wss://). A direct host (no code) has no key and is joined by its address as ever.
+    if (!room.empty() && !is_local_address(numeric)) {
+        join_refusal_ = "A plain, unencrypted link is only for this computer and the local network. Join a game server on the Internet through its wss:// address.";
+        return false;
+    }
     auto conn = link_maker_ ? link_maker_() : TcpConnection::connect(numeric, port);       // (the tests make the link themselves: set_link_maker_for_test)
     if (!conn) return false;
     std::unique_ptr<TcpListener> peer_listener;                         // where the other guests reach us during the match (host migration)
@@ -239,8 +248,9 @@ bool NetGame::join(const std::string& address, uint16_t port, const std::string&
 #endif
 }
 
-bool NetGame::join_url(const std::string& url, const std::string& name, uint8_t want_seat, const std::string& room, const std::string& token, const SeatKey& key) {
+bool NetGame::join_url(const std::string& url, const std::string& name, uint8_t want_seat, const std::string& room, const std::string& token, const SeatKey& key, const std::string& resolved) {
 #ifdef __EMSCRIPTEN__
+    (void)resolved;
     if (role_ != Role::None) return false;
     auto conn = WasmWsConnection::connect(url);
     if (!conn) return false;
@@ -253,13 +263,35 @@ bool NetGame::join_url(const std::string& url, const std::string& name, uint8_t 
     raw->set_on_wake(wake_function());                                    // news from the server (a message, an error, the close) reaches the application at once, also while the page is hidden
     return true;
 #else
-    (void)url;
-    (void)name;
-    (void)want_seat;
-    (void)room;
-    (void)token;
-    (void)key;
-    return false;                                                         // (a native client joins with TCP)
+    if (role_ != Role::None) return false;
+    join_refusal_.clear();
+    WssUrl parsed;
+    std::string why;
+    if (!parse_wss_url(url, parsed, why)) {
+        join_refusal_ = why;
+        return false;
+    }
+    // The name is looked up here, once, as join() does: every link of the way back goes to this address, and the certificate is checked for the NAME in the URL, whatever address it is reached at
+    std::string numeric = resolved;
+    if (numeric.empty()) numeric = resolver_ ? resolver_(parsed.host) : resolve_host(parsed.host);
+    if (numeric.empty()) {
+        join_refusal_ = "The server " + parsed.host + " could not be found. Check its name and your connection.";
+        return false;
+    }
+    std::unique_ptr<Connection> conn;
+    if (link_maker_) {
+        conn = link_maker_();
+    } else {
+        TlsTrust trust;
+        trust.system_roots = system_roots_trusted_;
+        trust.extra_pem = extra_ca_pem_;
+        conn = WssConnection::connect(parsed, numeric, trust, why);
+        if (!conn) join_refusal_ = why;
+    }
+    if (!conn) return false;
+    target_ = JoinTarget{std::string(), numeric, 0, wss_url_text(parsed), name, want_seat, room, token};     // (the way back of a server's room makes its links from this)
+    begin_client(std::move(conn), 0, key);                                // no port for the other guests: a server's room has no links between guests
+    return true;
 #endif
 }
 
@@ -800,6 +832,10 @@ void NetGame::update_client() {
                     fail_reason_ = phase_ != Phase::Connecting ? FailReason::Closed
                                    : (client_lobby_->welcome_timed_out() ? FailReason::NoAnswer : (client_lobby_->was_open() ? FailReason::Lost : FailReason::Unreachable));
                     status_ = phase_ == Phase::Connecting ? str::text(str::kUnableToConnect) : std::string("The host closed the room.");
+                    if (phase_ == Phase::Connecting) {
+                        const std::string cause = link_failure_text();                   // (an encrypted link says why it was not made: a certificate that is not trusted, ...)
+                        if (!cause.empty()) status_ = cause;
+                    }
                     phase_ = Phase::Failed;
                     events_.push_back(Event{Event::Type::Failed, 255});
                     break;
@@ -896,6 +932,15 @@ std::unique_ptr<Connection> NetGame::make_link(bool for_lobby) {
     return conn;
 #else
     (void)for_lobby;
+    if (!target_.url.empty()) {                                           // a server's encrypted door: the same URL and address as the first link, the certificate checked again for the name
+        WssUrl parsed;
+        std::string why;
+        if (!parse_wss_url(target_.url, parsed, why)) return nullptr;
+        TlsTrust trust;
+        trust.system_roots = system_roots_trusted_;
+        trust.extra_pem = extra_ca_pem_;
+        return WssConnection::connect(parsed, target_.resolved, trust, why);
+    }
     if (target_.address.empty()) return nullptr;
     return TcpConnection::connect(target_.resolved.empty() ? target_.address : target_.resolved, target_.port);
 #endif
@@ -907,6 +952,10 @@ void NetGame::attach_new_link() {
     Connection* raw = link.get();
     transport_->relink = std::move(link);                                 // (the session holds no pointer to the link before this one: it was let go when the attempt failed)
     client_session_->attach(raw, now_);                                   // null: no link could be made, the next attempt is due in two seconds
+}
+
+std::string NetGame::link_failure_text() const {
+    return transport_ && transport_->uplink && transport_->uplink->state() == Connection::State::Failed ? transport_->uplink->failure_text() : std::string();
 }
 
 // ---- the key, the way back's state for the screens -------------------------------------------------------------------------------------------------

@@ -63,7 +63,7 @@ GAMES_BUDGET, GAMES_GZIP_BUDGET = 105_000, 29_800
 PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET = 39_500, 12_300       # players.js and players.css: raised from 39,000 for the count of the room's seats, which Home used to give it (countOf)
 VP_BUDGET, VP_GZIP_BUDGET = 4_200, 1_900            # vp.js: the screen numbers of /?vp (loaded for that address only)
 CHAT_BUDGET, CHAT_GZIP_BUDGET = 105_500, 32_000     # chat.js and chat.css: raised from 98,500 and 30,000 for the images' part of the dock (a line's image, the answers, the author's delete, the paste of a file; docs/HUB_IMAGES.md), then to 105,500 and 32,000 for the chat box's header in the new look of the Room
-IMAGES_BUDGET, IMAGES_GZIP_BUDGET = 41_500, 14_500    # pics.js, pics.css, post.js and post.css: the thumbnails, the viewer and the poster of the chat's images (loaded when the first image is drawn; post.* for a person who may post only)
+IMAGES_BUDGET, IMAGES_GZIP_BUDGET = 46_000, 15_800    # pics.js, pics.css, post.js and post.css: the thumbnails, the viewer and the poster of the chat's images (loaded when the first image is drawn; post.* for a person who may post only); raised from 41,500 and 14,500 for the viewer's Share, Copy link and Save in the installed app
 TALK_BUDGET, TALK_GZIP_BUDGET = 80_600, 28_900
 MOD_BUDGET, MOD_GZIP_BUDGET = 71_300, 20_800        # mod.js and mod.css: the moderation sheet (loaded for a visitor with a role only)
 CMDS_BUDGET, CMDS_GZIP_BUDGET = 52_500, 16_000       # cmds.js and cmds.css: the helper of the chat's commands, the /bots builder and the private answers (loaded for an account that has commands only)
@@ -72,10 +72,10 @@ ROOM_BUDGET, ROOM_GZIP_BUDGET = 38_000, 11_200       # room.css, roomchat.js and
 ALERTS_BUDGET, ALERTS_GZIP_BUDGET = 25_000, 8_300   # alerts.js and alerts.css: the alerts sheet, the join alert and the bell of Home
 ALERT_CORE_BUDGET, ALERT_CORE_GZIP_BUDGET = 13_000, 4_400   # web/alert_core.js: the switches, the tab alert and the sound table that the front page and the game page share
 SCRIPT_BUDGET, SCRIPT_GZIP_BUDGET = 13_000, 4_500       # player_name.js
-# the installable web app (web/app/, web/manifest.webmanifest): the four icons together (measured 4,260 bytes), and the manifest (measured 1,166, revalidated on every visit)
-APP_ICONS_BUDGET = 4_700
-# the browser-tab icon (web/favicon.png 285 bytes + web/favicon.ico 1,212 bytes)
-FAVICON_BUDGET = 1_650
+# the installable web app (web/app/, web/manifest.webmanifest): the four icons together (measured 5,922 bytes: the original game's icon, 12 colors and fine detail), and the manifest (measured 1,166, revalidated on every visit)
+APP_ICONS_BUDGET = 6_500
+# the browser-tab icon (web/favicon.png 527 bytes + web/favicon.ico 1,530 bytes: the original game's icon at 32 and 64 px)
+FAVICON_BUDGET = 2_300
 APP_MANIFEST_BUDGET = 1_300
 # the game page's part of the bar (web/game_bar.js and web/game_bar.css together)
 GAME_BAR_BUDGET, GAME_BAR_GZIP_BUDGET = 12_800, 4_250

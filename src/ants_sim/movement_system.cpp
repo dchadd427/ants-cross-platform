@@ -19,6 +19,7 @@ namespace {
 constexpr int32_t kTile = 32;
 constexpr uint32_t kBlockedCost = 8000;          // impassable edge / tile (FUN_01020951)
 constexpr uint32_t kPauseMs = 300;
+constexpr uint32_t kEventRequestBit = 0x80000000u;   // in the serial of a path request: asked by an event of the tick (a clip's end, an arrival), not by a command (rules number 14 and later)
 constexpr uint32_t kAnthillqPeriodMs = 200;     // ANTHILLQ task period (0x100e556)               // ANTPAUSE wait (FUN_0101cc1e -> FUN_0103057b(task, 0, 300))
 // FDTASK (0x1025063 -> 0x100fc0d) is added with (delay 0, interval 3000); a list scheduler task runs again INTERVAL + its run time + the pass
 // latency after the last run, never exactly INTERVAL: the poll period is taken as 3001 ms, which also decides the strict `now - stamp > interval`
@@ -81,6 +82,7 @@ void SimulationEngineImpl::movement_reset() {
     claim_ants_.reset(occ_.size()); claim_cell_.clear();
     event_heap_.reset();
     for (auto& pm : path_managers_) pm.clear();
+    held_answers_ = {};
     path_request_serial_.clear();
     anthillq_next_ms_ = 200;
     fdtask_next_ms_ = 0;                                    // FDTASK (task, 0, 3000): its first run is at once
@@ -182,6 +184,9 @@ bool SimulationEngineImpl::is_special_base_tile(TileCoord t) const noexcept {
 bool SimulationEngineImpl::has_pending_path(uint32_t ant_id) const noexcept {
     for (const auto& pm : path_managers_) {
         if (pm.has_request_for(ant_id)) return true;
+    }
+    for (const HeldAnswer& a : held_answers_) {
+        if (a.present && a.ant_id == ant_id) return true;        // (asked and not answered yet: the manager's answer is held until after the commands)
     }
     return false;
 }
@@ -1440,9 +1445,10 @@ bool SimulationEngineImpl::go_to(AntUnit& a, TileCoord t, bool user_cmd, bool sp
         stop_sync(a);
         return false;
     }
+    pathmgr_forget_answer(a.id);
     path_managers_[a.player_id < MAX_PLAYERS ? a.player_id : 0].request(
         a.id, cur, t, static_cast<uint16_t>(grid_.height()), static_cast<uint16_t>(grid_.width()), grid_.rules() == 0, grid_.rules() == 2);   // rules 1 and 2: the wall at row 90 is down; rules 2: the wide search (path_planner.hpp)
-    path_request_serial_[a.id] = a.move_serial;
+    path_request_serial_[a.id] = a.move_serial | ((path_answers_after_commands_ && occ_in_tick_) ? kEventRequestBit : 0u);   // (an order of a command is made outside the tick scope, an event's inside it: only an event's request may have its answer held)
     // Remake bookkeeping: player orders (and the ability orders, which the re-path gives again) report the resolved destination;
     // orders from remake systems keep the tile they asked for, so that repeating the same order is recognised as such.
     a.final_dest = (user_cmd || special) ? t : requested;
@@ -1455,7 +1461,7 @@ void SimulationEngineImpl::deliver_path(uint32_t ant_id, const std::vector<TileC
     AntUnit* a = find_unit(ant_id);
     if (!a || !a->is_alive()) return;
     auto it = path_request_serial_.find(ant_id);
-    const bool stale = (it == path_request_serial_.end() || it->second != a->move_serial);
+    const bool stale = (it == path_request_serial_.end() || (it->second & ~kEventRequestBit) != a->move_serial);
     if (it != path_request_serial_.end()) path_request_serial_.erase(it);
     if (stale) return;                                     // cancelled by a remake clear_path()
     if (path.empty()) {                                    // "Can't go there."
@@ -1572,6 +1578,46 @@ void SimulationEngineImpl::loco_sync(AntUnit& a) {
     }
 }
 
+// PATHMGR (Ants.exe 0x1024786): one run per player every 50 ms; at most one path delivered per run. Rules 2: a search that has passed the original's limit gets a budget that grows with the map (PathManager::wide_budget), before that the original's 1,000; rules 0 and 1: 1,000.
+// The rules numbers 5 to 13 give the answer of a run at once. From the rules number 14 (docs/GAME_REVERSE_ENGINEERING.md 5.40, "The gap before the path manager's answer") the answer of a run that ends a tick, for a walk that an
+// event asked for (a clip end's GoTo, an arrival, the hill queue), is held, a path that is found as well as "no path", and given at the start of the next tick, after the turn's commands (pathmgr_answer): the original's task has a
+// delay of 0 and a period of 50 ms (0x100e4ff), so its runs fall on the boundaries of the turns, and at a boundary the original handles the waiting clicks before the scheduler's pass. A walk that an event asked for is therefore still
+// unanswered while the commands of the next turn are applied: the ant is idle with no path and takes the order (an order replaces the request), and a Stop at that boundary finds no path and action 0 and is skipped (0x1028aef .. 0x1028b00),
+// so that the ant walks as soon as the answer comes. The answer to what a command asked for is given at the end of the tick as before.
+void SimulationEngineImpl::pathmgr_run() {
+    for (uint8_t team = 0; team < MAX_PLAYERS; ++team) {
+        auto delivery = path_managers_[team].run([this](uint32_t ant_id, TileCoord from, TileCoord to) -> uint32_t {
+            const AntUnit* u = find_unit(ant_id);
+            if (!u) return kBlockedCost;
+            return step_cost(*u, from, to);
+        }, grid_.rules() == 2 ? PathManager::wide_budget(grid_.height(), grid_.width()) : PathSearch::kDefaultBudget);
+        if (!delivery) continue;
+        const auto serial = path_request_serial_.find(delivery->ant_id);
+        if (path_answers_after_commands_ && serial != path_request_serial_.end() && (serial->second & kEventRequestBit) != 0u) {
+            held_answers_[team] = HeldAnswer{true, delivery->ant_id, std::move(delivery->path)};   // (what an event asked for: the clip that a refusal starts is what refuses the orders, and a path that is found is what a Stop at the boundary does not stop)
+        } else {
+            deliver_path(delivery->ant_id, delivery->path);
+        }
+    }
+}
+
+// The answers that the runs of the last tick held (the rules numbers 14 and later): given now, in the order of the teams, as the runs gave them before
+void SimulationEngineImpl::pathmgr_answer() {
+    for (uint8_t team = 0; team < MAX_PLAYERS; ++team) {
+        if (!held_answers_[team].present) continue;
+        HeldAnswer held = std::move(held_answers_[team]);
+        held_answers_[team] = HeldAnswer{};
+        deliver_path(held.ant_id, held.path);
+    }
+}
+
+// An order replaces the ant's request, and with it the answer that has not been given yet (the first request with the ant's number is removed, 0x10246f8 .. 0x102473b)
+void SimulationEngineImpl::pathmgr_forget_answer(uint32_t ant_id) {
+    for (HeldAnswer& a : held_answers_) {
+        if (a.present && a.ant_id == ant_id) a = HeldAnswer{};
+    }
+}
+
 void SimulationEngineImpl::movement_tick() {
     occ_refresh();
     claims_catch_up_all();
@@ -1590,6 +1636,7 @@ void SimulationEngineImpl::movement_tick() {
         loco_sync(*up);
         event_catch_up(*up, this_slot);                     // (loco_sync writes some of the fields that decide the events)
     }
+    pathmgr_answer();                                       // (the rules numbers 14 and later: the answers that the last tick's runs held, after the turn's commands and the ants' sync; none before)
     // Animation steps and pause timers in exact due-time order (ties: the place in the table, the kind of event; the tasks after the ants).
     for (;;) {
         AntEventPick ev;
@@ -1658,15 +1705,7 @@ void SimulationEngineImpl::movement_tick() {
     }
     now_ms_ = t_end;
     anim_clock_ms_ = t_end;
-    // PATHMGR: one run per player every 50 ms; at most one path delivered per run. Rules 2: a search that has passed the original's limit gets a budget that grows with the map (PathManager::wide_budget), before that the original's 1,000; rules 0 and 1: 1,000.
-    for (uint8_t team = 0; team < MAX_PLAYERS; ++team) {
-        auto delivery = path_managers_[team].run([this](uint32_t ant_id, TileCoord from, TileCoord to) -> uint32_t {
-            const AntUnit* u = find_unit(ant_id);
-            if (!u) return kBlockedCost;
-            return step_cost(*u, from, to);
-        }, grid_.rules() == 2 ? PathManager::wide_budget(grid_.height(), grid_.width()) : PathSearch::kDefaultBudget);
-        if (delivery) deliver_path(delivery->ant_id, delivery->path);
-    }
+    pathmgr_run();
 #ifdef ANTS_SIM_LOOKUP_SHADOW
     static thread_local uint64_t ticks_run = 0;
     if (ants_.size() <= kFullCheckSize || (++ticks_run & 15u) == 0) tile_ants_verify();   // the whole lists against the ants (every tick while the table is small)

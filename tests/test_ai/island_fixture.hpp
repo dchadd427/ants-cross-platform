@@ -80,7 +80,9 @@ struct Match {
     std::map<size_t, std::pair<uint64_t, int>> blasts;   // tile -> (tick, seat) of the last bomb that left it (a mine that went off: the ant that stepped on it is thrown four tiles, into a lake too)
     int collapsed[4] = {0, 0, 0, 0};                     // per team: ants that started to drown on a tile that was a finished bridge a tick before
     int other_drowned[4] = {0, 0, 0, 0};                 // per team: ants that drowned elsewhere (a blow of an enemy that flung the ant into the water included: fought)
-    int fought[4] = {0, 0, 0, 0};                        // per team: of those, ants with an enemy ant within three tiles when they started to drown
+    int fought[4] = {0, 0, 0, 0};                        // per team: of those, ants with an enemy ant within three tiles when they started to drown, or that an enemy struck in the 80 ticks before (struck)
+    std::map<uint32_t, uint16_t> hp_seen;                // the hit points that each ant had in the tick before
+    std::map<uint32_t, uint64_t> struck;                 // ant -> the tick of the last time it lost hit points with an enemy ant within two tiles (a blow; the hits push the ant a tile each, and a mine of its own team that it is pushed onto throws it four tiles on)
     uint32_t swimmers[4] = {0, 0, 0, 0};                 // the ids of the Swimmers that were given
     bool expedition{false};                              // the bots fly a crew to the Swimmers (the level's plan has it on; the tests of the island task switch it off, they give the Swimmer)
     bool ferry{false};                                   // the Swimmers that dig no bridge carry food (the level's plan has it on)
@@ -142,6 +144,18 @@ struct Match {
         sim.clear_news_events();                                                                          // (after the bots looked, as the arena does: they read the news of the tick)
         sim.clear_audio_events();
         const ants::sim::Grid& grid = sim.grid();
+        for (const auto& a : sim.get_world_state().ants) {                                                // (the blows of this tick, before the drownings are classified)
+            uint16_t& seen = hp_seen[a.id];
+            if (a.hp < seen && a.hp > 0) {
+                for (const auto& o : sim.get_world_state().ants) {
+                    if (o.player_id != a.player_id && o.hp > 0 && std::abs(o.tile_x - a.tile_x) <= 2 && std::abs(o.tile_y - a.tile_y) <= 2) {
+                        struck[a.id] = sim.current_tick();
+                        break;
+                    }
+                }
+            }
+            seen = a.hp;
+        }
         for (const auto& a : sim.get_world_state().ants) {
             if (a.state != ants::sim::UnitState::Drowning || !drowning.insert(a.id).second) continue;
             const size_t idx = static_cast<size_t>(a.tile_y) * grid.width() + static_cast<size_t>(a.tile_x);
@@ -155,6 +169,11 @@ struct Match {
                 mined = mined || (b.second.second != a.player_id && sim.current_tick() <= b.second.first + 80 && std::abs(bx - a.tile_x) <= 6 && std::abs(by - a.tile_y) <= 6);
             }
             if (mined) {
+                fought[a.player_id] += 1;
+                continue;
+            }
+            const auto hit = struck.find(a.id);                                                           // an enemy's blows pushed it (a hit moves the ant a tile), perhaps onto a mine of its own team: the mine threw it, and the enemy is no longer near
+            if (hit != struck.end() && sim.current_tick() <= hit->second + 80) {
                 fought[a.player_id] += 1;
                 continue;
             }
@@ -186,7 +205,9 @@ struct Match {
     int total_collapsed() const { return collapsed[0] + collapsed[1] + collapsed[2] + collapsed[3]; }
     /// Ants that drowned for a reason of their own bot's making (a bridge that went under them, a flight): not the blows of an enemy. An ant that drowns with an enemy within three tiles counts
     /// as fought, whoever threw it; so does one that drowns within 80 ticks of an enemy's mine going off within six tiles (a mine throws the ant that steps on it four tiles, into a lake too; the stand
-    /// batch lays fields of them): a drowning in a crowded landing is not seen here when an enemy stands near (the matches of four bots, AI16, print how many were fought). The
+    /// batch lays fields of them), and one that an enemy struck in the 80 ticks before (it lost hit points with an enemy within two tiles: SMALL, Hard, seed 3, rules number 14: an enemy worker's hits pushed a
+    /// worker of seat 2 a tile each, onto a mine of its own team; the blast threw it four tiles on, onto the next mine of its own team, which threw it four tiles more, into the lake, with the enemy ten tiles behind): a drowning in a
+    /// crowded landing is not seen here when an enemy stands near (the matches of four bots, AI16, print how many were fought). The
     /// flights are covered by the matches of one seat, with no enemy on the map (AI17.3, AI17.10)
     int total_unforced() const {
         int n = 0;

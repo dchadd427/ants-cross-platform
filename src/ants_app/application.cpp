@@ -1,7 +1,9 @@
 #include "ants_app/application.hpp"
+#include "ants_app/app_icon.hpp"
 #include "ants_app/net_overlay.hpp"
 #include "ants_app/version.hpp"
 #include "ants_ai/bot.hpp"
+#include "ants_net/address.hpp"
 #include <iostream>
 #include <algorithm>
 #include <cstdlib>
@@ -192,6 +194,9 @@ bool Application::init(const ApplicationConfig& config) {
     }
 
     window_title_ = config_.title;
+#if !defined(__EMSCRIPTEN__)
+    window_icon_set_ = app_icon::set_window_icon(window_);     // (the original's icon: the title bar, the taskbar and the Dock; the page has its own on the web)
+#endif
     apply_window_layout();
     if (!config_.headless) {
         SDL_RaiseWindow(window_);
@@ -344,6 +349,13 @@ bool Application::init(const ApplicationConfig& config) {
         // newest entry of that server and room, or of the seat that --seat asks for. The key goes into the Hello only; the seat is the entry's, so that the key can be let go of by its seat.
         net::SeatKey join_key{};
         uint8_t join_seat = config_.net_seat;
+#ifndef __EMSCRIPTEN__
+        if (!host_role && !config_.net_url.empty()) {                                   // (a wss address as it was typed or configured, in the one written form that the key of a seat names the server by: wss_url_text)
+            net::WssUrl written;
+            std::string why;
+            if (net::parse_wss_url(config_.net_url, written, why)) config_.net_url = net::wss_url_text(written);
+        }
+#endif
         if (!host_role && !config_.net_room.empty() && rejoin_store_) {
             const std::string server = rejoin_server_text(config_.net_address, config_.net_port, config_.net_url);
             if (const std::optional<RejoinEntry> kept = rejoin_store_->find(server, config_.net_room, config_.net_seat)) {
@@ -351,6 +363,7 @@ bool Application::init(const ApplicationConfig& config) {
                 join_seat = kept->seat;
             }
         }
+        if (!config_.net_extra_ca_pem.empty()) net_->set_extra_trusted_ca_pem(config_.net_extra_ca_pem);
         const bool ok = host_role                   ? net_->host(config_.net_port, player_name, config_.net_loopback_only)
                         : !config_.net_url.empty() ? net_->join_url(config_.net_url, player_name, join_seat, config_.net_room, config_.net_token, join_key)
                                                    : net_->join(config_.net_address, config_.net_port, player_name, join_seat, config_.net_room, config_.net_token, join_key);
@@ -358,11 +371,15 @@ bool Application::init(const ApplicationConfig& config) {
 #if defined(__EMSCRIPTEN__)
             std::cerr << "[Application] Could not join " << config_.net_url << " (not a usable ws:// or wss:// address, or this browser has no WebSocket)" << std::endl;
 #else
-            std::cerr << "[Application] Could not join " << config_.net_url << ": --join-url works in the web build only, a native game joins with --join host[:port]" << std::endl;
+            std::cerr << "[Application] Could not join " << config_.net_url << ": " << (net_->join_refusal().empty() ? std::string("the link could not be made") : net_->join_refusal()) << std::endl;
 #endif
             return false;
         }
         if (!ok) {
+            if (!host_role && !net_->join_refusal().empty()) {
+                std::cerr << "[Application] Could not join " << config_.net_address << ":" << config_.net_port << ": " << net_->join_refusal() << std::endl;
+                return false;
+            }
             std::cerr << "[Application] Could not " << (host_role ? "open a room on port " : "reach the host at ")
                       << (host_role ? std::to_string(config_.net_port)
                                     : !config_.net_url.empty() ? config_.net_url : config_.net_address + ":" + std::to_string(config_.net_port))

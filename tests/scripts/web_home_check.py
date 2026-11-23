@@ -738,11 +738,11 @@ def main():
             check("Version" in info["footer"] and "@@" not in info["footer"] and "build" in info["footer"] and re.match(r"^\d+\.\d+\.\d+", info["version"][0]) is not None and info["version"][1] != "",
                   "the footer names the version and the build (%r)" % re.sub(r"\s+", " ", info["footer"]).strip()[:80])
             hrefs = {n[1]: (n[0], n[2], n[3]) for n in info["nav"]}
-            check([n[1] for n in info["nav"]] == ["How it works", "Matches", "Sprites and sounds", "Changelog", "GitHub", "Feedback", "Legal"] and hrefs["How it works"][0] == "BUTTON" and hrefs["Matches"][1] == "/matches"
-                  and hrefs["Sprites and sounds"][1] == "/asset_catalog/" and hrefs["Changelog"][1] == "/changelog" and "github.com" in hrefs["GitHub"][1] and "issues" not in hrefs["GitHub"][1] and hrefs["Feedback"][1].endswith("/issues")
+            check([n[1] for n in info["nav"]] == ["How it works", "Matches", "Sprites and sounds", "What’s new", "GitHub", "Feedback", "Legal"] and hrefs["How it works"][0] == "BUTTON" and hrefs["Matches"][1] == "/matches"
+                  and hrefs["Sprites and sounds"][1] == "/asset_catalog/" and hrefs["What’s new"][1] == "/changelog" and "github.com" in hrefs["GitHub"][1] and "issues" not in hrefs["GitHub"][1] and hrefs["Feedback"][1].endswith("/issues")
                   and hrefs["Legal"][1] == "/legal",
-                  "the footer links: How it works, Matches, Sprites and sounds, Changelog, GitHub, Feedback, Legal (%s)" % [n[1] for n in info["nav"]])
-            check(all(hrefs[k][2] == "_blank" for k in ("Sprites and sounds", "Changelog", "GitHub", "Feedback", "Legal")) and hrefs["Matches"][2] is None, "the links that leave the front page keep their new tab, the ones to the match pages do not")
+                  "the footer links: How it works, Matches, Sprites and sounds, What’s new, GitHub, Feedback, Legal (%s)" % [n[1] for n in info["nav"]])
+            check(all(hrefs[k][2] == "_blank" for k in ("Sprites and sounds", "What’s new", "GitHub", "Feedback", "Legal")) and hrefs["Matches"][2] is None, "the links that leave the front page keep their new tab, the ones to the match pages do not")
             top = json.loads(value("(function () { var b = document.getElementById('watch-top'), m = document.querySelector('header.mast'), r = b && b.getBoundingClientRect(), h = m.getBoundingClientRect(), l = m.querySelector('img').getBoundingClientRect(); return JSON.stringify({text: b && b.textContent.trim(), href: b && b.getAttribute('href'), target: b && b.getAttribute('target'), inHeader: !!b && m.contains(b), right: r && Math.round(h.right - r.right), after: r && r.left > l.right, vis: !!r && r.width > 0 && getComputedStyle(b).visibility === 'visible'}); })()"))
             check(top["text"] == "Matches" and top["href"] == "/matches" and top["target"] is None and top["inHeader"] and top["vis"] and top["after"] and 0 <= top["right"] <= 4, "the header has the one button, Matches, at the right of the row, in this tab (%s)" % top)
             check(info["notice"] == LOBBY_NOTICE and info["noticeShown"], "the Room says under START that online matches are recorded, the recordings kept for up to 90 days, the results and names kept for good and public (%r)" % info["notice"])
@@ -1868,7 +1868,7 @@ def main():
                 var mid = document.elementFromPoint((r.left + r.right) / 2, r.top + 8), picture = document.getElementById('game-container').getBoundingClientRect();
                 return { open: !list.hidden, items: items, list: [r.left, r.right, r.top, r.bottom], above: !!(mid && mid.closest('#sbm')), overPicture: r.top < picture.bottom && r.bottom > picture.top && r.left < picture.right };
             })())"""))
-            check(more["open"] and [i[0] for i in more["items"]] == ["Home", "Matches", "Map maker", "Discord server", "Sprites and sounds", "Changelog", "GitHub", "Feedback", "Legal", "Reload page"] and more["list"][0] >= 10 and more["list"][1] <= 390 - 10 and all(i[1] >= 10 and i[2] <= 380 for i in more["items"]),
+            check(more["open"] and [i[0] for i in more["items"]] == ["Home", "Matches", "Map maker", "Discord server", "Sprites and sounds", "What’s new", "GitHub", "Feedback", "Legal", "Reload page"] and more["list"][0] >= 10 and more["list"][1] <= 390 - 10 and all(i[1] >= 10 and i[2] <= 380 for i in more["items"]),
                   "the Menu opens every link (Reload page last), whole and inside the window (%s)" % ([i[0] for i in more["items"]],))
             check(more["above"] and more["overPicture"], "... over the picture and above it (the loading screen's layer does not cover it)")
             shot("game_390_menu")

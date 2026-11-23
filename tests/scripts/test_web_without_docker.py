@@ -88,11 +88,11 @@ class TheDockerfileIsRead(unittest.TestCase):
     def test_the_repositorys_dockerfile_is_read_to_the_end_and_no_step_is_lost(self):
         for op in ("FROM", "COPY", "RUN"):
             self.assertEqual(len([s for s in self.steps if s.op == op]), len(re.findall(r"^%s " % op, self.text, re.M)), op)
-        self.assertEqual([s.stage for s in self.steps if s.op == "FROM"], [0, 1, 2])
+        self.assertEqual([s.stage for s in self.steps if s.op == "FROM"], [0, 1, 2, 3, 4])
         self.assertTrue(all(s.text.strip() for s in self.steps))
 
     def test_the_emscripten_version_is_the_one_of_the_from_line(self):
-        self.assertEqual(wd.emscripten_version(self.steps), re.search(r"^FROM emscripten/emsdk:(\S+) AS emsdk-warm", self.text, re.M).group(1))
+        self.assertEqual(wd.emscripten_version(self.steps), re.search(r"^FROM emscripten/emsdk:([0-9.]+)(?:@\S+)? AS emsdk-warm", self.text, re.M).group(1))
 
     def test_a_dockerfile_without_the_emsdk_image_is_an_error(self):
         with self.assertRaises(wd.ToolError):
@@ -346,7 +346,10 @@ class TheRealDockerfileReplayed(Scratch):
     def test_the_files_that_the_image_has_are_there(self):
         for name in ("index.html", "play.html", "lobby.html", "index.js", "index.wasm", "index.data", "lvl_core.js", "lvl_core.wasm", "lvl_core_api.js", "changelog.html", "favicon.png", os.path.join("front", "logo.png"),
                      os.path.join("front", "LibreFranklin-Medium.ttf"), os.path.join("front", "classic.css"), "manifest.webmanifest", os.path.join("app", "icon-192.png"), os.path.join("app", "icon-512.png"),
-                     os.path.join("app", "icon-maskable-512.png"), os.path.join("app", "apple-touch-icon.png")):
+                     os.path.join("app", "icon-maskable-512.png"), os.path.join("app", "apple-touch-icon.png"),
+                     os.path.join("test_3d", "compare.html"), os.path.join("test_3d", "viewer.html"),
+                     os.path.join("test_3d", "models", "manifest.json"), os.path.join("test_3d", "models", "orig_sprites.json"),
+                     os.path.join("test_3d", "models", "worker.glb"), os.path.join("test_3d", "models", "worker.glb.gz")):
             self.assertTrue(os.path.isfile(self.html("plain", name)), name)
         self.assertTrue(os.path.isdir(self.html("plain", "asset_catalog")))
         with open(self.html("plain", "index.html"), "rb") as a, open(self.html("plain", "play.html"), "rb") as b:
@@ -379,8 +382,9 @@ class TheRealDockerfileReplayed(Scratch):
         self.assertIn("parseInt('1100000', 10)", text)
 
     def test_the_site_placeholders_become_nothing_in_the_titles_and_the_footers(self):
-        self.assertIn("<title>Ants (1998)</title>", self.page("plain", "lobby.html"))
-        self.assertIn("<title>Ants (1998) \u2014 beta.playants.org</title>", self.page("plain", "index.html"))
+        self.assertRegex(self.page("plain", "lobby.html"), r"<title>Ants \(1998\) \u2014 [^<]+</title>")
+        for name in ("index.html", "play.html", "matches.html", "match.html", "legal.html", "mapmaker.html", "changelog.html"):
+            self.assertRegex(self.page("plain", name), r"<title>[^<]+ \u2014 Ants \(1998\)</title>", name)      # (the form of every page's title, in the finished image: tests/scripts/test_web_seo.py reads the sources)
         for name in ("index.html", "play.html", "lobby.html"):
             if os.path.exists(self.html("plain", name)):
                 text = self.page("plain", name)
@@ -402,6 +406,15 @@ class TheRealDockerfileReplayed(Scratch):
         self.assertIn("v" + read("VERSION").strip(), page)
         self.assertIn("Generated from CHANGELOG.md when the site image is built", page)
         self.assertEqual(sorted(name for name in os.listdir(self.html("plain")) if name.startswith("changelog")), ["changelog.html"])
+
+    def test_the_pages_carry_the_sites_one_address_and_the_files_for_search_engines_are_made_from_it(self):
+        origin = read("web", "SITE_ORIGIN").strip()
+        for name in ("lobby.html", "matches.html", "match.html", "legal.html", "mapmaker.html", "index.html", "play.html", "changelog.html"):
+            self.assertNotIn("@@SITE_ORIGIN@@", self.page("plain", name), name)
+        self.assertIn('<link rel="canonical" href="%s/legal">' % origin, self.page("plain", "legal.html"))
+        self.assertIn('<meta property="og:image" content="%s/front/preview_treasure.png">' % origin, self.page("plain", "index.html"))
+        self.assertIn("<loc>%s/</loc>" % origin, self.page("plain", "sitemap.xml"))
+        self.assertIn("Sitemap: %s/sitemap.xml" % origin, self.page("plain", "robots.txt"))
 
     def test_the_data_file_of_the_update_notice_is_made_beside_the_changelog_page_with_the_live_version(self):
         with open(os.path.join(self.html("plain"), "whats_new.json"), encoding="utf-8") as f:

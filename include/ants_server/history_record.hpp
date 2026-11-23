@@ -73,6 +73,7 @@ struct HistoryRecord {
     bool computers_only{false};          // no person played
     std::vector<HistorySeat> seats;      // the seats that played, in seat order
     std::vector<HistoryRow> rows;        // the results, ranked
+    uint8_t heavy_orders{0};             // the seats (a bit for each) whose orders went over their budget (the replay head's field 18): given back in `details` as "heavy_orders", not kept in a column
     std::string details;                 // JSON text, "" when none: the stats that the replay pass keeps about a match (ants_server/history_details.hpp); stored and given back as it is
     std::string deaths;                  // JSON text, "" when none: where each ant died, a field of its own with its own cap (ants_server/history_deaths.hpp); stored in its own table, given back under "deaths"
     uint32_t seconds() const noexcept { return turns / 20; }

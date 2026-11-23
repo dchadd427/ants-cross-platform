@@ -3530,6 +3530,13 @@
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
+   "id": "link_cut_runs_through_the_host",
+   "file": "web/home/chat.js",
+   "old": "host + '/\\u2026' + pairs(typed.slice(-17))",
+   "new": "pairs(typed.slice(0, 30)) + '\\u2026' + pairs(typed.slice(-17))",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
    "id": "link_title_is_only_what_was_typed",
    "file": "web/home/chat.js",
    "old": "+ link.url });",

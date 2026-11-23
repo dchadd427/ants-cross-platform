@@ -46,4 +46,6 @@ src/ants_sim/*_data.inc             linguist-generated
 # the vendored SQLite: byte for byte as the official amalgamation (its hash is in third_party/sqlite/README.md)
 third_party/sqlite/sqlite3.c  -text
 third_party/sqlite/sqlite3.h  -text
+# the vendored Mbed TLS: byte for byte as the release (its hash is in third_party/mbedtls/README.md)
+third_party/mbedtls/**  -text
 third_party/**  linguist-vendored

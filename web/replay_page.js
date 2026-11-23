@@ -435,7 +435,7 @@
     // how big it is, the 8 bytes that open every replay, a HEAD chunk right after them that is not longer than a head can be and whose checksum is right. A file that fails them is no replay of ours and
     // costs nothing (the game, 15 MB, is not even asked for). The rest (the rules that made it, the map, every other chunk) is the game's to judge: it reads the whole file again with its strict reader and
     // says what it finds in a card.
-    var LOCAL_MAX_BYTES = 2097164;                                       // replay::kMaxFileBytesWithMap: 1 MiB for the match, 1 MiB for the map that it may carry, 12 bytes for the frame of the map's chunk
+    var LOCAL_MAX_BYTES = 17825804;                                      // replay::kMaxFileBytesWithMap: 16 MiB for the match, 1 MiB for the map that it may carry, 12 bytes for the frame of the map's chunk
     var HEAD_MAX_BYTES = 4096;                                           // replay::kMaxHeadBytes
     var MAGIC = [0x89, 0x41, 0x52, 0x50, 0x4c, 0x0d, 0x0a, 0x1a];        // 89 "ARPL" 0D 0A 1A: a transfer that changes line ends spoils it, and a file of another kind never begins so
     var HEAD_AT = 8;                                                     // the HEAD chunk follows the magic at once

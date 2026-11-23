@@ -16,6 +16,7 @@ A `200` is a line of JSON and then the image and its thumbnail; anything that is
 (docs/HUB_IMAGES.md): this file does not trust it more than it has to.
 """
 import asyncio
+import ipaddress
 import json
 
 from . import http, limits as limitmod
@@ -60,6 +61,7 @@ class Converter:
     def __init__(self, url, limits):
         self.limits = limits
         self.host = self.port = None
+        self.peer_key = None                              # (the address that the converter answered from, as hub/limits.py keys it: see `speaks_for_nobody`)
         if url:
             host, _, port = url[len("http://"):].rpartition(":")
             self.host, self.port = host, int(port)
@@ -80,10 +82,28 @@ class Converter:
             pass                                          # (raised below, outside the handler: what the cause said can hold an address)
         raise ConverterError("down")
 
+    def remember(self, address):
+        """Keep the address that the converter answers from (`address`: an IP address). The key is the one that counts a visitor (hub/limits.py `address_key`)."""
+        self.peer_key = limitmod.address_key(None, address)
+
+    def remember_peer(self, peername):
+        """Keep the address of the other end of the call (a loopback address is not kept: see `speaks_for_nobody`); never an error."""
+        try:
+            if peername and not ipaddress.ip_address(peername[0].partition("%")[0]).is_loopback:
+                self.remember(peername[0])
+        except ValueError:
+            pass
+
+    def speaks_for_nobody(self, address):
+        """Whether a request from `address` comes from the converter: the converter's network has no visitor on it, so what such a request says about the visitor's address (the header that the site's nginx
+        sets) is not believed. A converter on the loopback of this machine is a rig of tests and of development: it is never remembered, so every caller of a rig that has one is not taken for it."""
+        return self.peer_key is not None and limitmod.address_key(None, address) == self.peer_key
+
     async def exchange(self, body):
         head = "POST /convert HTTP/1.1\r\nHost: %s:%d\r\nUser-Agent: AntsHub/1\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\nConnection: close\r\n\r\n" % (self.host, self.port, len(body))
         reader, writer = await asyncio.wait_for(asyncio.open_connection(self.host, self.port, limit=65536), self.limits.image_connect_seconds)
         try:
+            self.remember_peer(writer.get_extra_info("peername"))
             writer.write(head.encode("ascii") + body)
             await writer.drain()
             raw = await reader.readuntil(b"\r\n\r\n")

@@ -17,8 +17,8 @@ const nodeCrypto = require('crypto');
 module.exports = function makeHarness(lobbyPath) {
 const lobbyText = fs.readFileSync(lobbyPath, 'utf8');
 const lobbyDir = path.dirname(path.resolve(lobbyPath));
-const lobbyMarkup = lobbyText.slice(lobbyText.indexOf('<body'), lobbyText.indexOf('<script'));
-const lobbyScripts = [...lobbyText.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)];
+const lobbyScripts = [...lobbyText.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)].filter(m => !/application\/ld\+json/.test(m[1]));      // (the code of the page: its structured data, in the head, is text for a search engine and runs nothing)
+const lobbyMarkup = lobbyText.slice(lobbyText.indexOf('<body'), lobbyText.indexOf('<script', lobbyText.indexOf('<body')));
 const lobbyScript = lobbyScripts[lobbyScripts.length - 1][2];
 
 // The scripts of front/ are run as they are, in a sandbox that has the fake WebSocket and the fake clock of one page (they are ES5 with no module system: a page gets a global, node gets module.exports)

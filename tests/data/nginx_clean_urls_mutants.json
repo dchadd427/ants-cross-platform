@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the clean addresses of the pages and of the web server that names no version (docker/nginx.conf and the pages' own links), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with the program nginx installed: python3 tools/mutate.py tests/data/nginx_clean_urls_mutants.json --keep-going --jobs 1. Every mutant must be caught by tests/scripts/test_nginx_clean_urls.py: each breaks one rule - a page's exact location and the file it serves, the old addresses of the page of the matches that run now (a temporary redirect to the front page, with no query), the one map of old addresses and its redirect that keeps the query (temporary, so no browser keeps it; the three files that an earlier redirect led to stay out of the map; paths only, the slash form only for the pages' names), /index.html and /lobby.html going to the front page, no header of a page's own, server_tokens off in the http part and in the server block, and no page of the site building an address with .html.",
+ "note": "Mutants of the clean addresses of the pages and of the web server that names no version (docker/nginx.conf and the pages' own links), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with the program nginx installed: python3 tools/mutate.py tests/data/nginx_clean_urls_mutants.json --keep-going --jobs 1. Every mutant must be caught by tests/scripts/test_nginx_clean_urls.py: each breaks one rule - a page's exact location and the file it serves, the old addresses of the page of the matches that run now (a permanent redirect to the front page, with no query), the one map of old addresses and its redirect that keeps the query (permanent, with every page's .html address in it but the three files that an earlier redirect led to, which answer 200 and name their clean address as canonical; the two files of the error pages are plain 404s; paths only, the slash form only for the pages' names), /index.html and /lobby.html going to the front page, no header of a page's own, server_tokens off in the http part and in the server block, and no page of the site building an address with .html.",
  "mutants": [
   {
    "id": "play_serves_the_wrong_file",
@@ -39,22 +39,22 @@
   {
    "id": "redirect_loses_the_query",
    "file": "docker/nginx.conf",
-   "old": "return 302 $ants_clean_address$is_args$args;",
-   "new": "return 302 $ants_clean_address;",
+   "old": "return 301 $ants_clean_address$is_args$args;",
+   "new": "return 301 $ants_clean_address;",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
    "id": "redirect_is_a_307",
    "file": "docker/nginx.conf",
-   "old": "return 302 $ants_clean_address$is_args$args;",
+   "old": "return 301 $ants_clean_address$is_args$args;",
    "new": "return 307 $ants_clean_address$is_args$args;",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
    "id": "redirect_if_is_gone",
    "file": "docker/nginx.conf",
-   "old": "    if ($ants_clean_address) {\n        return 302 $ants_clean_address$is_args$args;\n    }\n",
-   "new": "    if ($ants_clean_address = \"x\") {\n        return 302 $ants_clean_address$is_args$args;\n    }\n",
+   "old": "    if ($ants_clean_address) {\n        return 301 $ants_clean_address$is_args$args;\n    }\n",
+   "new": "    if ($ants_clean_address = \"x\") {\n        return 301 $ants_clean_address$is_args$args;\n    }\n",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
@@ -107,10 +107,10 @@
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
-   "id": "watch_redirect_loses_the_query",
+   "id": "old_list_of_recordings_goes_to_the_front_page",
    "file": "docker/nginx.conf",
-   "old": "return 302 /matches$is_args$args;",
-   "new": "return 302 /matches;",
+   "old": "    /watch.html /matches;\n",
+   "new": "    /watch.html /;\n",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
@@ -177,17 +177,17 @@
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
-   "id": "old_addresses_are_permanent_again",
+   "id": "old_addresses_are_temporary",
    "file": "docker/nginx.conf",
-   "old": "return 302 $ants_clean_address$is_args$args;",
-   "new": "return 301 $ants_clean_address$is_args$args;",
+   "old": "return 301 $ants_clean_address$is_args$args;",
+   "new": "return 302 $ants_clean_address$is_args$args;",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
-   "id": "old_list_of_recordings_is_permanent",
+   "id": "old_list_of_recordings_not_redirected",
    "file": "docker/nginx.conf",
-   "old": "return 302 /matches$is_args$args;",
-   "new": "return 301 /matches$is_args$args;",
+   "old": "    /watch.html /matches;\n",
+   "new": "",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
@@ -221,50 +221,120 @@
   {
    "id": "old_live_address_goes_to_the_matches_list",
    "file": "docker/nginx.conf",
-   "old": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 302 /;",
-   "new": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 302 /matches;",
+   "old": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 301 /;",
+   "new": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 301 /matches;",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
    "id": "old_live_file_address_keeps_the_query",
    "file": "docker/nginx.conf",
-   "old": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 302 /;",
-   "new": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 302 /$is_args$args;",
+   "old": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 301 /;",
+   "new": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 301 /$is_args$args;",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
-   "id": "old_live_address_is_a_permanent_redirect",
+   "id": "old_live_address_is_a_temporary_redirect",
    "file": "docker/nginx.conf",
-   "old": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 302 /;",
-   "new": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 301 /;",
+   "old": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 301 /;",
+   "new": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 302 /;",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
    "id": "old_live_addresses_are_case_sensitive",
    "file": "docker/nginx.conf",
-   "old": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 302 /;",
-   "new": "location ~ \"^/live(?:-now/?|\\.html)\\z\" {\n        return 302 /;",
+   "old": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 301 /;",
+   "new": "location ~ \"^/live(?:-now/?|\\.html)\\z\" {\n        return 301 /;",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
    "id": "old_live_addresses_redirect_names_that_start_like_them",
    "file": "docker/nginx.conf",
-   "old": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 302 /;",
-   "new": "location ~* \"^/live(?:-now/?|\\.html)\" {\n        return 302 /;",
+   "old": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 301 /;",
+   "new": "location ~* \"^/live(?:-now/?|\\.html)\" {\n        return 301 /;",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
    "id": "old_live_addresses_lose_the_file_address",
    "file": "docker/nginx.conf",
-   "old": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 302 /;",
-   "new": "location ~* \"^/live(?:-now/?)\\z\" {\n        return 302 /;",
+   "old": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 301 /;",
+   "new": "location ~* \"^/live(?:-now/?)\\z\" {\n        return 301 /;",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
    "id": "old_live_addresses_lose_the_slash_one",
    "file": "docker/nginx.conf",
-   "old": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 302 /;",
-   "new": "location ~* \"^/live(?:-now|\\.html)\\z\" {\n        return 302 /;",
+   "old": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 301 /;",
+   "new": "location ~* \"^/live(?:-now|\\.html)\\z\" {\n        return 301 /;",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "old_catalog_file_not_redirected",
+   "file": "docker/nginx.conf",
+   "old": "    /asset_catalog/index.html /asset_catalog/;\n",
+   "new": "",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "old_catalog_file_goes_to_the_front_page",
+   "file": "docker/nginx.conf",
+   "old": "    /asset_catalog/index.html /asset_catalog/;\n",
+   "new": "    /asset_catalog/index.html /;\n",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "error_page_file_is_an_address",
+   "file": "docker/nginx.conf",
+   "old": "    \"~*^000 /(?:404|50x)\\.html\\z\" 1;\n",
+   "new": "    \"~*^000 /(?:404)\\.html\\z\" 1;\n",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "error_page_files_answer_for_everybody",
+   "file": "docker/nginx.conf",
+   "old": "    if ($ants_error_page_file) {\n        return 404;\n    }\n",
+   "new": "    if ($ants_error_page_file = \"x\") {\n        return 404;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "legal_page_loses_its_canonical",
+   "file": "web/legal.html",
+   "old": "<link rel=\"canonical\" href=\"@@SITE_ORIGIN@@/legal\">\n",
+   "new": "",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "matches_page_loses_its_canonical",
+   "file": "web/matches.html",
+   "old": "    <link rel=\"canonical\" href=\"@@SITE_ORIGIN@@/matches\">\n",
+   "new": "",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "changelog_page_loses_its_canonical",
+   "file": "tools/changelog_to_html.py",
+   "old": "<link rel=\"canonical\" href=\"@@SITE_ORIGIN@@/changelog\">\n",
+   "new": "",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "legal_canonical_is_the_file",
+   "file": "web/legal.html",
+   "old": "<link rel=\"canonical\" href=\"@@SITE_ORIGIN@@/legal\">",
+   "new": "<link rel=\"canonical\" href=\"@@SITE_ORIGIN@@/legal.html\">",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "error_page_file_is_read_by_its_raw_name",
+   "file": "docker/nginx.conf",
+   "old": "map \"$status $uri\" $ants_error_page_file {",
+   "new": "map \"$status $ants_path\" $ants_error_page_file {",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "old_addresses_are_read_by_the_raw_path",
+   "file": "docker/nginx.conf",
+   "old": "map $uri $ants_clean_address {",
+   "new": "map $ants_path $ants_clean_address {",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   }
  ]

@@ -1,0 +1,43 @@
+{
+ "note": "The name in the game page's address (web/shell.html ANTS_PAGE.vouched and its startup, web/lobby.html vouchName; docs/PLAY_IN_BROWSER.md, the routes table): the game page believes the name of an address only when the front page of this tab vouched for it, once, and an address with a name that nobody vouched for comes back without it, so that the page asks. Each mutant breaks one part of that and web_name_check.js must notice. No build: python3 tools/mutate.py tests/data/name_vouch_mutants.json --keep-going --jobs 1, from the repository folder.",
+ "baseline": {
+  "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+ },
+ "mutants": [
+  {
+   "id": "vouched_name_always_believed",
+   "file": "web/shell.html",
+   "old": "return typeof kept === 'string' && kept === given ? text : withoutName(text);",
+   "new": "return text;",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "vouch_for_one_name_counts_for_every_name",
+   "file": "web/shell.html",
+   "old": "typeof kept === 'string' && kept === given ? text",
+   "new": "typeof kept === 'string' ? text",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "vouch_note_stays_after_the_game_page_took_it",
+   "file": "web/shell.html",
+   "old": "kept = storage.getItem('ants.joinas'); storage.removeItem('ants.joinas');",
+   "new": "kept = storage.getItem('ants.joinas');",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "game_page_does_not_bring_an_unvouched_address_back",
+   "file": "web/shell.html",
+   "old": "var search = ANTS_PAGE.vouched(window.location.search, storage);",
+   "new": "var search = window.location.search;",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "front_page_vouches_for_another_name",
+   "file": "web/lobby.html",
+   "old": "win.sessionStorage.setItem('ants.joinas', String(name));",
+   "new": "win.sessionStorage.setItem('ants.joinas', 'x');",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  }
+ ]
+}
