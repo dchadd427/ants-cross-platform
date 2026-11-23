@@ -3,7 +3,7 @@
 //   1. the pure parts: the address of an image is made only from a checked name and type (a name that is not 32 lower-case hex digits, a type that is not jpg, png or gif, a size that is not a number: no address);
 //      what the hub's answers to an upload mean in words; the sizes in words; which file is an image; which drag carries files; chat.js reads `img` and `you.img` and nothing else of them;
 //   2. the reader: a thumbnail for each line (a button with an img of the frame's own size, the still, lazy, the caption for its alt), none for an image that is not good; the viewer (a dialog, Escape, the
-//      focus back, Tab kept inside, "Open in a new tab" a plain link); Delete only for a moderator, an administrator or the image's own author, after a question, by `/del` or by `delimg`; an animated image
+//      focus back, Tab kept inside, "Open in a new tab" a plain link in a browser, and in the installed app Share, Copy link and Save instead of it, each by what it does); Delete only for a moderator, an administrator or the image's own author, after a question, by `/del` or by `delimg`; an animated image
 //      is the GIF only while it is on the screen, the window is shown, the reader's switch is on and the device does not ask for reduced motion; the switch is kept in the browser and works without storage;
 //   3. the poster: the button beside the microphone (and the phone's two rows), a paste or a drop or the chooser, a card for a good image and for a bad one (not an image, too big), the upload (the one request,
 //      its two headers, the bytes as they are, the progress), the line with the caption, and every answer of the hub in plain words; a paste of words is left alone;
@@ -22,6 +22,8 @@ const Pics = require(path.join(home, 'pics.js')), Post = require(path.join(home,
 let checks = 0, failures = 0;
 function check(label, ok, detail) { checks++; if (!ok) { failures++; console.log('FAIL ' + label + (detail === undefined ? '' : ' (' + detail + ')')); } }
 function same(label, got, want) { const a = JSON.stringify(got), b = JSON.stringify(want); check(label, a === b, 'got ' + a + ', wanted ' + b); }
+const pending = [];                                 // (the checks that wait for a promise: the end of the file waits for them)
+const flush = () => new Promise((resolve) => setImmediate(resolve));
 const NAME = '0123456789abcdef0123456789abcdef', OTHER = 'fedcba9876543210fedcba9876543210';
 const IMG = (o) => Object.assign({ n: NAME, x: 'png', w: 1280, h: 720, tw: 360, th: 203, a: false }, o || {});
 
@@ -49,6 +51,8 @@ class El {
     querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
     contains(o) { for (let n = o; n; n = n.parentNode) if (n === this) return true; return false; }
     getContext() { return { drawImage() {} }; }
+    select() { this.selection = [0, this.value.length]; }
+    setSelectionRange(a, b) { this.selection = [a, b]; }
     toBlob(cb, type, q) { this.doc.blobs.push({ w: this.width, h: this.height, type, q }); cb({ size: 123456, type }); }
 }
 function matcher(sel) { return (e) => sel.split(',').some((one) => { one = one.trim(); const m = /^([a-z]*)((?:\.[A-Za-z0-9_-]+)*)$/.exec(one); if (!m) return false; return (!m[1] || e.tagName === m[1]) && m[2].split('.').filter(Boolean).every((c) => String(e.className).split(/\s+/).indexOf(c) >= 0); }); }
@@ -62,7 +66,10 @@ function page(o) {
     doc.fire = (t, ev) => { ev = Object.assign({ preventDefault() { this.defaultPrevented = true; }, stopPropagation() { this.stopped = true; } }, ev || {}); for (const fn of (doc.listeners[t] || []).slice()) fn(ev); return ev; };
     const store = {}, observers = [];
     const win = { innerWidth: o.width || 1280, innerHeight: o.height || 800, localStorage: o.noStorage ? { getItem() { throw new Error('refused'); }, setItem() { throw new Error('refused'); } } : { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } }, store, observers,
-        matchMedia: () => ({ matches: !!o.reduced, addEventListener() {} }), setTimeout: () => 0, URL: { createObjectURL: () => 'blob:made', revokeObjectURL: (u) => { win.revoked.push(u); } }, revoked: [] };
+        matchMedia: 'matchMedia' in o ? o.matchMedia : (q) => ({ matches: /reduced-motion/.test(q) ? !!o.reduced : q.split(',').some((one) => { const m = /display-mode:\s*([a-z-]+)/.exec(one); return !!m && m[1] === (o.mode || 'browser'); }), addEventListener() {} }),       // (o.mode: the display mode that the device is in)
+        setTimeout: (fn, ms) => { win.timers.push({ fn, ms, cleared: false }); return win.timers.length; }, clearTimeout: (id) => { if (win.timers[id - 1]) win.timers[id - 1].cleared = true; }, timers: [],
+        location: { origin: 'https://site.test' }, navigator: o.navigator || {}, URL: { createObjectURL: (b) => { win.made.push(b); return 'blob:made'; }, revokeObjectURL: (u) => { win.revoked.push(u); } }, revoked: [], made: [] };
+    if (o.fetch) win.fetch = o.fetch;
     if (o.observer !== false) win.IntersectionObserver = class { constructor(fn, opts) { this.fn = fn; this.opts = opts; this.watched = []; observers.push(this); } observe(n) { this.watched.push(n); } unobserve(n) { this.watched = this.watched.filter((x) => x !== n); } };
     win.XMLHttpRequest = class { constructor() { this.headers = {}; this.upload = {}; win.requests.push(this); } open(m, u) { this.method = m; this.url = u; } setRequestHeader(k, v) { this.headers[k] = v; } send(b) { this.body = b; } abort() { this.aborted = true; } };
     win.requests = [];
@@ -202,6 +209,92 @@ for (const [who, role, own, word, how] of [['a moderator', 'mod', false, 'Delete
     check('a still image is never watched', (() => { const s = reader(); line(s, { id: 7, who: 'a', text: '', img: IMG() }); return s.p.win.observers.length === 0 || s.p.win.observers[0].watched.length === 0; })());
 }
 
+// ---- 2b. the viewer's buttons: a browser keeps the link that opens the file in a new tab and has Copy link; the installed app has no such link (an address of the site opens in the app's own window, with no way back) and
+//          offers Share (where the device has a share sheet), Copy link and Save --------------------------------------------------------------------------------------------------------------------------------
+const WORDS = Pics.TEXT, LINK = 'https://site.test/hub/img/' + NAME + '.png';
+function viewing(o) {                               // a reader with the viewer open on the image of line 7; the buttons are found by their words, which are the page's own (Pics.TEXT)
+    const r = reader(o), row = line(r, { id: 7, who: 'maple', text: 'a map', at: 1, img: IMG() });
+    byClass(row, 'gc-thumb')[0].click();
+    const foot = r.p.doc.body.querySelector('.gv-scrim').querySelector('.gv-foot');
+    const named = (word) => foot.all((e) => (e.tagName === 'button' || e.tagName === 'a') && e.textContent === word)[0] || null;
+    return Object.assign(r, { foot, named, win: r.p.win, doc: r.p.doc, size: () => foot.querySelector('.gv-size'), links: () => foot.all((e) => e.tagName === 'a'), told: () => has(foot.querySelector('.gv-size'), 'gv-note') });
+}
+const tick = (win) => { win.timers.filter((t) => !t.cleared).forEach((t) => { t.cleared = true; t.fn(); }); };       // (every timer that is waiting runs now)
+const clipboard = () => { const c = { wrote: [], writeText(t) { c.wrote.push(t); return Promise.resolve(); } }; return c; };
+pending.push((async () => {
+    {
+        const c = clipboard(), fetched = [], v = viewing({ navigator: { clipboard: c, share() { throw new Error('a browser tab has no use for it'); }, standalone: false }, fetch: (u) => { fetched.push(u); return Promise.reject(new Error('no')); } });
+        check('a normal browser: the link that opens the file in a new tab is there, and Copy link; the app\'s Share and Save are not', v.links().length === 1 && !!v.named(WORDS.tab) && !!v.named(WORDS.copy) && !v.named(WORDS.save) && !v.named(WORDS.share));
+        v.named(WORDS.copy).click(); await flush();
+        same('Copy link puts the whole address of the file (this site, the file itself, not the thumbnail) on the clipboard', c.wrote, [LINK]);
+        check('...and says so in the place of the size, as a status for a screen reader', v.size().textContent === WORDS.copied && v.told() && v.size().getAttribute('role') === 'status');
+        v.named(WORDS.copy).click(); await flush();
+        check('...a second press while it shows starts the moment again (one timer is waiting, not two)', v.win.timers.filter((t) => !t.cleared).length === 1);
+        tick(v.win);
+        check('...and after a moment the size is back', v.size().textContent === Pics.sizeWords(IMG()) && !v.told());
+        check('nothing is asked of the server by the viewer itself', fetched.length === 0);
+        v.named(WORDS.copy).click(); await flush(); v.api.close();
+        check('closing the viewer takes the moment\'s timer away', v.win.timers.filter((t) => !t.cleared).length === 0);
+    }
+    for (const [what, navigator] of [['a clipboard that says no', { clipboard: { writeText: () => Promise.reject(new Error('denied')) } }], ['a clipboard that throws', { clipboard: { writeText() { throw new Error('no'); } } }],
+        ['a clipboard with no way to write', { clipboard: {} }], ['no clipboard (a page that is not secure)', {}]]) {
+        const v = viewing({ navigator });
+        v.named(WORDS.copy).click(); await flush();
+        const f = v.foot.all((e) => e.tagName === 'input')[0];
+        check(what + ': the link stands in a field that cannot be typed in, selected and focused, and no "copied" is said', !!f && f.readOnly === true && f.value === LINK && !!f.selection && f.selection[1] === LINK.length && v.doc.activeElement === f && !v.told());
+        v.named(WORDS.copy).click(); await flush();
+        check('...a second press makes no second field, and Tab from the field stays inside the box', v.foot.all((e) => e.tagName === 'input').length === 1 && (v.doc.fire('keydown', { key: 'Tab' }), v.doc.body.querySelector('.gv-scrim').contains(v.doc.activeElement)));
+    }
+    for (const [what, o] of [['the display mode standalone', { mode: 'standalone' }], ['fullscreen', { mode: 'fullscreen' }], ['minimal-ui', { mode: 'minimal-ui' }], ['iOS\'s navigator.standalone (in a plain browser mode)', { mode: 'browser', standalone: true }]]) {
+        const v = viewing({ mode: o.mode, navigator: { share() {}, standalone: o.standalone } });
+        check('the installed app (' + what + '): no link at all that opens a tab; Share, Copy link and Save are there', v.links().length === 0 && !v.named(WORDS.tab) && !!v.named(WORDS.share) && !!v.named(WORDS.copy) && !!v.named(WORDS.save));
+    }
+    for (const [what, o] of [['no media queries', { matchMedia: null }], ['media queries that throw', { matchMedia() { throw new Error('no'); } }], ['a mode that is not an app\'s (browser)', { mode: 'browser' }], ['iOS\'s navigator.standalone false', { navigator: { standalone: false } }]]) {
+        const v = viewing(o);
+        check('a browser with ' + what + ' is a browser: the link stays, there is no Save', v.links().length === 1 && !!v.named(WORDS.tab) && !v.named(WORDS.save));
+    }
+    {
+        const v = viewing({ mode: 'standalone', navigator: {} });
+        check('where the device has no share sheet the app has Copy link and Save and no Share', !v.named(WORDS.share) && !!v.named(WORDS.copy) && !!v.named(WORDS.save));
+    }
+    {
+        const shared = [], v = viewing({ mode: 'standalone', navigator: { share: (d) => { shared.push(d); return Promise.resolve(); } } });
+        v.named(WORDS.share).click(); await flush();
+        same('Share hands the whole address of the file to the share sheet, and only that', shared, [{ url: LINK }]);
+        check('...and says nothing when it is done', !v.told());
+        const gone = viewing({ mode: 'standalone', navigator: { share: () => Promise.reject(Object.assign(new Error('closed'), { name: 'AbortError' })) } });
+        gone.named(WORDS.share).click(); await flush();
+        check('a person who closes the sheet without choosing is not told off', !gone.told());
+        for (const [what, share] of [['fails', () => Promise.reject(new Error('boom'))], ['throws', () => { throw new Error('boom'); }]]) {
+            const bad = viewing({ mode: 'standalone', navigator: { share } });
+            bad.named(WORDS.share).click(); await flush();
+            check('a share that ' + what + ' is said in words', bad.told() && bad.size().textContent === WORDS.wrong);
+        }
+    }
+    {
+        const calls = [];
+        let answer = () => Promise.resolve({ ok: true, blob: () => Promise.resolve({ size: 9 }) });
+        const v = viewing({ mode: 'standalone', navigator: { share() { return Promise.resolve(); }, clipboard: clipboard() }, fetch: (u, opts) => { calls.push([u, opts]); return answer(); } });
+        v.named(WORDS.copy).click(); v.named(WORDS.share).click(); await flush();
+        check('nothing is asked of the server until Save is pressed', calls.length === 0);
+        v.named(WORDS.save).click(); v.named(WORDS.save).click(); await flush();
+        check('Save asks for the file from its own address, once (a second press while it waits does nothing), with this site\'s own credentials', calls.length === 1 && calls[0][0] === '/hub/img/' + NAME + '.png' && calls[0][1].credentials === 'same-origin');
+        const pressed = v.doc.clicks.filter((e) => e.tagName === 'a');
+        check('...the answer becomes an address and a link that downloads it is pressed: a file name of the image\'s own type, and no link is left in the page',
+            v.win.made.length === 1 && v.win.made[0].size === 9 && pressed.length === 1 && pressed[0].getAttribute('href') === 'blob:made' && /\.png$/.test(pressed[0].getAttribute('download')) && !pressed[0].parentNode && v.doc.body.all((e) => e.tagName === 'a').length === 0);
+        check('...and the address is let go after a while, not at once', v.win.revoked.length === 0 && (tick(v.win), v.win.revoked.join() === 'blob:made'));
+        answer = () => Promise.resolve({ ok: false, blob: () => Promise.resolve({ size: 1 }) });
+        v.named(WORDS.save).click(); await flush();
+        check('a file that the server does not give is said in words, nothing is downloaded, and Save can be pressed again', calls.length === 2 && v.told() && v.size().textContent === WORDS.wrong && v.win.made.length === 1);
+        answer = () => Promise.reject(new Error('offline'));
+        v.named(WORDS.save).click(); await flush();
+        check('...so is a connection that fails', calls.length === 3 && v.told() && v.win.made.length === 1);
+        const none = viewing({ mode: 'standalone', navigator: {} });
+        none.named(WORDS.save).click(); await flush();
+        check('a browser with no fetch says so in words', none.told() && none.doc.clicks.filter((e) => e.tagName === 'a').length === 0);
+    }
+})());
+
 // ---- 3. the poster --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 function poster(o) {
     o = o || {};
@@ -325,5 +418,7 @@ check('pics.js keeps one thing in the browser (the switch), and post.js nothing'
 check('the only addresses of images are /hub/img/ (pics.js) and /hub/img/up (post.js), and no other site', (picsSource.match(/'\/hub\/[^']*'/g) || []).join() === "'/hub/img/'" && (postSource.match(/'\/hub\/[^']*'/g) || []).join() === "'/hub/img/up'"
     && !/https?:\/\/|\/\/[a-z]+\./.test((picsSource + postSource).replace(/^\s*\/\/.*$/gm, '').replace(/'http:\/\/www\.w3\.org\/2000\/svg'/g, '')));
 check('the upload is made with the two headers and only with them', (postSource.match(/setRequestHeader\(/g) || []).length === 2 && /'X-Ants-Image', '1'/.test(postSource) && /'Content-Type', 'application\/octet-stream'/.test(postSource));
-console.log('home chat images: ' + checks + ' checks, ' + failures + ' failed');
-process.exit(failures === 0 ? 0 : 1);
+Promise.all(pending).then(() => {
+    console.log('home chat images: ' + checks + ' checks, ' + failures + ' failed');
+    process.exit(failures === 0 ? 0 : 1);
+}, (e) => { console.log('FAIL a check threw: ' + (e && e.stack || e)); process.exit(1); });

@@ -36,11 +36,14 @@
 .gv-foot .gv-del { color: #ffd9d9; background: #8a2c2c; border-color: #b84a4a; }
 .gv-ask { flex: 1 1 100%; margin: 0; font-size: 16px; line-height: 1.35; }
 .gv-foot a.btn { display: inline-flex; align-items: center; text-decoration: none; }
+.gv-foot .gv-note { font-size: 15px; color: #9fe0b8; }                   /* a few words in the place of the size ("Link copied"), for a moment */
+.gv-foot .gv-url { flex: 1 1 100%; min-height: 46px; box-sizing: border-box; padding: 0 12px; font: inherit; font-size: 14px; color: var(--cream); background: #0b1117; border: 2px solid #24574a; border-radius: 6px; }
 @media (max-width: 700px) {
     .gv-scrim { padding: 10px 10px 14px; align-items: stretch; }
     .gv { width: 100%; max-width: none; justify-content: center; }
     .gv-img { max-height: calc(100vh - 230px); }
     .gv-foot .btn { flex: 1 1 140px; justify-content: center; }
+    .gv-foot .gv-size { flex: 1 1 100%; }
 }
 /* ---- the reader's switch for animation, a row of the account's dropdown (the picture switch's own classes) ---- */
 .gp-sw { margin-top: 6px; }
