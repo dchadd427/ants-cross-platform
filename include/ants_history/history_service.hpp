@@ -59,11 +59,12 @@ struct ImportReport {
     size_t seats{0};
     size_t markers{0};
     size_t deaths{0};
+    size_t action{0};
     size_t map_plays{0};
     std::string note;                                 // one line for the log
 };
 
-/// Copies the match history of the game server's database file (`source_path`, opened read only) into `target`, once: the matches, their seats, the markers of matches that the operator took out, the maps of deaths and the
+/// Copies the match history of the game server's database file (`source_path`, opened read only) into `target`, once: the matches, their seats, the markers of matches that the operator took out, the maps of deaths, the actions of the matches and the
 /// play counts of the maps, in ONE transaction together with the marker row `history_import` of `meta`. A target that has the marker is left as it is (`already_done`); one that has records and no marker is left as it
 /// is too (`not_empty`). False, with `why`, when the source cannot be read (it has no history, is not a database, is this very file) or the copy fails: the target is then as it was. `target` must have the schema of
 /// history_db_migrations().

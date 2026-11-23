@@ -13,6 +13,7 @@
 #include "ants_net/clock.hpp"
 #include "ants_replay/match_stats.hpp"
 #include "ants_replay/player.hpp"
+#include "ants_server/history_action.hpp"
 #include "ants_server/history_deaths.hpp"
 #include "ants_server/history_details.hpp"
 #include "ants_server/online_limits.hpp"
@@ -357,6 +358,7 @@ bool HistoryStore::put(const HistoryRecord& record, std::string& why) {
     db::Error e = scalar(db_, "SELECT (SELECT count(*) FROM history_matches WHERE id = ?1) + (SELECT count(*) FROM history_markers WHERE id = ?1)", {text_arg(record.id)}, known);
     if (e.ok()) e = run(db_, "DELETE FROM history_seats WHERE match_id = ?1", {text_arg(record.id)});
     if (e.ok()) e = run(db_, "DELETE FROM history_deaths WHERE id = ?1", {text_arg(record.id)});
+    if (e.ok()) e = run(db_, "DELETE FROM history_action WHERE id = ?1", {text_arg(record.id)});
     if (e.ok()) e = run(db_, "DELETE FROM history_matches WHERE id = ?1", {text_arg(record.id)});
     if (e.ok()) e = run(db_, "DELETE FROM history_markers WHERE id = ?1", {text_arg(record.id)});
     if (!e.ok()) return refused("a record could not be replaced", e);
@@ -383,6 +385,11 @@ bool HistoryStore::put(const HistoryRecord& record, std::string& why) {
                 {text_arg(record.id), text_arg(record.map), text_arg(map_hash_text(record.map_hash)), int_arg(record.ended_s), int_arg(deaths.width), int_arg(deaths.height), int_arg(deaths.total),
                  text_arg(record.deaths)});
         if (!e.ok()) return refused("a map of deaths could not be kept", e);
+    }
+    ActionView action;
+    if (!record.action.empty() && record.action.size() <= kActionMaxBytes && parse_history_action(record.action, action)) {      // (likewise: a text that is not an action, or is over its cap, is not kept: the match is)
+        e = run(db_, "INSERT INTO history_action (id, action) VALUES (?1, ?2)", {text_arg(record.id), text_arg(record.action)});
+        if (!e.ok()) return refused("the action of a match could not be kept", e);
     }
     if (known == 0 && record.counts_as_map_play()) {
         e = run(db_,
@@ -413,6 +420,7 @@ HistoryStore::Removal HistoryStore::remove(const std::string& id, bool keep_mark
     if (e.ok() && present == 0) return Removal::Missing;                                   // (the transaction rolls back: nothing was written)
     if (e.ok()) e = run(db_, "DELETE FROM history_seats WHERE match_id = ?1", {text_arg(id)});
     if (e.ok()) e = run(db_, "DELETE FROM history_deaths WHERE id = ?1", {text_arg(id)});
+    if (e.ok()) e = run(db_, "DELETE FROM history_action WHERE id = ?1", {text_arg(id)});
     if (e.ok()) e = run(db_, "DELETE FROM history_matches WHERE id = ?1", {text_arg(id)});
     if (e.ok() && keep_marker) e = run(db_, "INSERT OR REPLACE INTO history_markers (id, deleted_at) VALUES (?1, ?2)", {text_arg(id), int_arg(now_s())});
     if (e.ok()) e = tx.commit();
@@ -611,6 +619,16 @@ bool HistoryStore::find(const std::string& id, HistoryRecord& out) const {
             const db::Statement::Step step = st.step();
             if (step == db::Statement::Step::Failed) e = st.error();
             else if (step == db::Statement::Step::Row) out.deaths = st.column_text(0);
+        }
+        if (e.ok()) {                                                                      // (and so has the action)
+            db::Statement action;
+            e = db_.prepare(action, "SELECT action FROM history_action WHERE id = ?1");
+            if (e.ok()) e = action.bind_text(1, id);
+            if (e.ok()) {
+                const db::Statement::Step step = action.step();
+                if (step == db::Statement::Step::Failed) e = action.error();
+                else if (step == db::Statement::Step::Row) out.action = action.column_text(0);
+            }
         }
     }
     if (!e.ok()) {
@@ -842,7 +860,7 @@ HistoryPage HistoryStore::query(const HistoryQuery& q, const std::function<Recor
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 HistoryFeeder::HistoryFeeder(HistoryStore& history, const ReplayStore& replays, std::string maps_dir, std::function<uint64_t()> clock_us, std::string community_dir)
-    : history_(history), replays_(replays), map_dirs_{std::move(maps_dir)}, details_maker_(make_history_details), deaths_maker_(make_history_deaths), clock_us_(std::move(clock_us)) {
+    : history_(history), replays_(replays), map_dirs_{std::move(maps_dir)}, details_maker_(make_history_details), deaths_maker_(make_history_deaths), action_maker_(make_history_action), clock_us_(std::move(clock_us)) {
     if (!community_dir.empty()) map_dirs_.push_back(std::move(community_dir));
     if (!clock_us_) {
         clock_us_ = []() { return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count()); };
@@ -959,6 +977,12 @@ bool HistoryFeeder::work(const std::string& file) {
     } catch (const std::exception& ex) {
         record.deaths.clear();
         if (++skip_lines_ <= kMaxSkipLines) history_.report("history: " + id + " has no map of deaths: " + ex.what());
+    }
+    try {                                                                                // (and the action: a try of its own)
+        record.action = action_maker_ ? action_maker_(played.stats) : std::string();
+    } catch (const std::exception& ex) {
+        record.action.clear();
+        if (++skip_lines_ <= kMaxSkipLines) history_.report("history: " + id + " has no action: " + ex.what());
     }
     if (!no_stats.empty() && ++skip_lines_ <= kMaxSkipLines) history_.report("history: " + id + " has no stats: " + no_stats);
     if (!history_.put(record, why)) {

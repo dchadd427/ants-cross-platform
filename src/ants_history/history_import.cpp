@@ -20,7 +20,7 @@ struct Column {
 struct Table {
     const char* name;
     std::vector<Column> columns;
-    bool optional;                                     // a game database of an older schema may not have it (the map of deaths came with version 7)
+    bool optional;                                     // a game database of an older schema may not have it (the map of deaths came with version 7, the action of a match with version 11)
 };
 
 // The tables of the match history, in the order that foreign keys need (a seat after its match). The columns are those of the migrations in src/ants_server/db_schema.cpp: a column that a later migration adds
@@ -38,6 +38,7 @@ const std::vector<Table>& tables() {
          false},
         {"history_markers", {{"id", 't', false}, {"deleted_at", 'i', false}}, false},
         {"history_deaths", {{"id", 't', false}, {"map", 't', false}, {"hash", 't', false}, {"ended", 'i', false}, {"w", 'i', false}, {"h", 'i', false}, {"n", 'i', false}, {"deaths", 't', false}}, true},
+        {"history_action", {{"id", 't', false}, {"action", 't', false}}, true},
         {"map_plays", {{"map", 't', false}, {"hash", 't', false}, {"plays", 'i', false}, {"last_played", 'i', false}}, false},
     };
     return list;
@@ -205,10 +206,11 @@ bool import_game_history(db::Database& target, const std::string& source_path, I
             else if (name == "history_seats") counted.seats = rows;
             else if (name == "history_markers") counted.markers = rows;
             else if (name == "history_deaths") counted.deaths = rows;
+            else if (name == "history_action") counted.action = rows;
             else counted.map_plays = rows;
         }
         const std::string summary = std::to_string(counted.matches) + " match(es), " + std::to_string(counted.seats) + " seat(s), " + std::to_string(counted.markers) + " marker(s), " + std::to_string(counted.deaths) +
-                                    " map(s) of deaths, " + std::to_string(counted.map_plays) + " play count(s)";
+                                    " map(s) of deaths, " + std::to_string(counted.action) + " action(s), " + std::to_string(counted.map_plays) + " play count(s)";
         db::Statement mark;
         e = target.prepare(mark, "INSERT INTO meta (key, value) VALUES ('history_import', strftime('%Y-%m-%dT%H:%M:%SZ', 'now') || ' ' || ?1)");
         if (e.ok()) e = mark.bind_text(1, summary);

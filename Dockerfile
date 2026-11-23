@@ -261,7 +261,7 @@ COPY Community-Maps/*.lvl Community-Maps/*.LVL /srv/community-maps/files/
 COPY Original-Ants/Maps/*.LVL /srv/community-maps/files/
 
 # The match history and the replays (docs/REPLAYS.md "The match pages", "Watching a replay"): the list of every match (matches.html) and one match (match.html), linked from
-# the header of the front page and the footers (with the site label, the version and the build put in), their stylesheet (matches.css), the stats sections of the match page (match_stats.js and match_stats.css), the map of deaths (death_map.js and death_map.css, also on the game page in replay mode) and the helpers
+# the header of the front page and the footers (with the site label, the version and the build put in), their stylesheet (matches.css), the stats sections of the match page (match_stats.js and match_stats.css), the map of deaths (death_map.js and death_map.css, also on the game page in replay mode), the activity curve of the game page's timeline (replay_activity.js and replay_activity.css) and the helpers
 # that they share with the game page (replay_page.js, history_page.js, and replay_stats.css for the stats and the frame mode of the game page). The game page plays a recording as play?replay=<file> (and in the frame of match.html as play?replay=<file>&embed=1).
 COPY --from=builder /src/matches.html /usr/share/nginx/html/matches.html
 COPY --from=builder /src/match.html /usr/share/nginx/html/match.html
@@ -280,6 +280,8 @@ COPY web/history_page.js /usr/share/nginx/html/history_page.js
 COPY web/match_stats.js /usr/share/nginx/html/match_stats.js
 COPY web/death_map.css /usr/share/nginx/html/death_map.css
 COPY web/death_map.js /usr/share/nginx/html/death_map.js
+COPY web/replay_activity.css /usr/share/nginx/html/replay_activity.css
+COPY web/replay_activity.js /usr/share/nginx/html/replay_activity.js
 COPY web/replay_stats.css /usr/share/nginx/html/replay_stats.css
 
 # The keys of the seats that this browser holds, read in one place for the front page's Rejoin strip and the game page's name step (rejoin_key.js)

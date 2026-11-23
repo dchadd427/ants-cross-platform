@@ -319,7 +319,8 @@
     // ---- the stats of a match on the game page in replay mode (web/shell.html, web/replay_stats.css) ----
     // The server's record of the match on show (GET /history/<id>) as a panel: the "Stats" button of the header (a wide screen) opens it over the corner of the picture, a row under the controls (a phone)
     // opens it in the page. The numbers are the final ones of the match; they do not follow the picture. A recording with no record (or a server that does not answer) gets no button.
-    // env = { document, fetch, file, deathMap, redraw }; the elements are the page's own: stats-btn, mstats (the panel), mstats-flow (the row) and the header. `deathMap` (web/death_map.js create(), optional) makes the small
+    // env = { document, fetch, file, deathMap, redraw, onRecord }; the elements are the page's own: stats-btn, mstats (the panel), mstats-flow (the row) and the header. `onRecord` (optional) is given the record once it is
+    // known to be this match's, for the activity curve of the timeline (web/replay_activity.js): the one question to the server serves both. `deathMap` (web/death_map.js create(), optional) makes the small
     // card "Where ants died" under the table (a match without positions gets none); `redraw` draws it again for its size when a closed panel is opened (a card in a hidden box has no size).
     function replayStats(env) {
         var doc = env.document, id = idOfFile(env.file);
@@ -393,7 +394,10 @@
         var request;
         try { request = env.fetch('/history/' + id, { cache: 'no-store', credentials: 'omit' }); } catch (e) { return; }
         request.then(function (response) { return response.ok ? response.json() : null; }).then(function (rec) {
-            if (rec && typeof rec === 'object' && rec.id === id && Array.isArray(rec.seats)) mount(rec);
+            if (rec && typeof rec === 'object' && rec.id === id && Array.isArray(rec.seats)) {
+                if (typeof env.onRecord === 'function') { try { env.onRecord(rec); } catch (e) { /* the curve is one more thing: whatever it does, the panel is made */ } }
+                mount(rec);
+            }
         }).catch(function () { /* no stats: no button */ });
     }
 

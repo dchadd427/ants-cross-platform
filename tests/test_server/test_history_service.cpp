@@ -256,10 +256,10 @@ std::string dump_table(db::Database& d, const std::string& table, const std::str
     return out;
 }
 
-// The five tables of the history, as one text. The counted_at column is left out of the matches (the time a row was made): a row is copied with its own, and the rest must be equal
+// The six tables of the history, as one text. The counted_at column is left out of the matches (the time a row was made): a row is copied with its own, and the rest must be equal
 std::string dump_history(db::Database& d) {
     return dump_table(d, "history_matches", "id") + "--\n" + dump_table(d, "history_seats", "match_id, seat") + "--\n" + dump_table(d, "history_markers", "id") + "--\n" + dump_table(d, "history_deaths", "id") + "--\n" +
-           dump_table(d, "map_plays", "map, hash");
+           dump_table(d, "history_action", "id") + "--\n" + dump_table(d, "map_plays", "map, hash");
 }
 
 size_t table_rows(db::Database& d, const std::string& table) {
@@ -488,9 +488,10 @@ int main() {
         db::Database copy;
         ASSERT_TRUE(copy.open((work.path / "history.db").string()).ok());
         const std::string theirs = dump_history(copy);
-        ASSERT_EQ(dump_history(game.server.database), theirs);                       // (every table of the history, row for row, the play counts and the maps of deaths too)
-        std::cout << "\n    tables: " << theirs.size() << " bytes, " << table_rows(copy, "history_deaths") << " maps of deaths, " << table_rows(copy, "map_plays") << " play counts";
-        ASSERT_TRUE(theirs.size() > 1000 && table_rows(copy, "history_deaths") >= 1 && table_rows(copy, "map_plays") > 0);
+        ASSERT_EQ(dump_history(game.server.database), theirs);                       // (every table of the history, row for row, the play counts, the maps of deaths and the actions too)
+        std::cout << "\n    tables: " << theirs.size() << " bytes, " << table_rows(copy, "history_deaths") << " maps of deaths, " << table_rows(copy, "history_action") << " actions, " << table_rows(copy, "map_plays") << " play counts";
+        ASSERT_TRUE(theirs.size() > 1000 && table_rows(copy, "history_deaths") >= 1 && table_rows(copy, "history_action") >= 1 && table_rows(copy, "map_plays") > 0);
+        ASSERT_EQ(service.import_report().action, table_rows(copy, "history_action"));
     } TEST_END();
 
     TEST_CASE("HV1.3 The limits are the door's: a clock that runs on makes the same time box and the same budget answer, with the same words, and the plain list is not held back") {
@@ -1283,7 +1284,7 @@ int main() {
         {
             db::Database check;                                                                                     // (the file of the newer program is as it was: its row is the last)
             ASSERT_TRUE(check.open((work.path / "newer.db").string()).ok());
-            ASSERT_EQ(table_rows(check, "schema_version"), size_t{5});
+            ASSERT_EQ(table_rows(check, "schema_version"), size_t{6});
         }
         HistoryService never(base_config(work.path, work.path / "rec", log));                                       // (not started)
         const ctl::HttpResponse r = ask(never, "GET", "/history");
