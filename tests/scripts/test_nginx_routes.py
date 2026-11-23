@@ -104,10 +104,13 @@ class TheFile(unittest.TestCase):
         self.assertEqual(blocks["/"].split()[:3], ["try_files", "$uri", "=404;"])           # (no fallback to a page: the game page answered every unknown address, with a 200)
         self.assertNotIn("index.html", blocks["/"])
         self.assertEqual(re.findall(r"error_page ([^;]*);", blocks["/"]), ["404 /404.html", "500 502 503 504 /50x.html"])
+        page_blocks = ("/", "~* \\.(html|css|js)$")                                      # (the catch-all and the block that serves every .html, .css and .js: a file of those kinds that is not there is the same 404)
         for words, body in blocks.items():
-            if words != "/":
-                self.assertNotIn("404.html", body, words)                                   # (the page is named in the catch-all only: the 404 of a door, plain or the game server's, stays what it was)
-        self.assertEqual(len(re.findall(r"error_page [^;]*/404\.html;", self.conf)), 1)
+            if words not in page_blocks:
+                self.assertNotIn("404.html", body, words)                                   # (the page is named there only: the 404 of a door, plain or the game server's, stays what it was)
+        self.assertEqual(len(re.findall(r"error_page [^;]*/404\.html;", self.conf)), len(page_blocks))
+        for words in page_blocks + ("= /mapmaker.html",):
+            self.assertIn("error_page 500 502 503 504 /50x.html;", blocks[words], words)  # (an error that nginx makes for a page: the three blocks that serve pages)
         for page in ("404.html", "50x.html"):
             self.assertTrue(os.path.isfile(os.path.join(REPO, "web", page)), page)
             self.assertIn("COPY web/404.html web/50x.html /usr/share/nginx/html/", read(os.path.join(REPO, "Dockerfile")))

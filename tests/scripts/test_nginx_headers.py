@@ -390,7 +390,7 @@ LIVE_ROWS = [
     ("a folder of the site", "GET", "/front/", (), 404, "page"),
     ("an address that starts like a page", "GET", "/playx", (), 404, "page"),
     ("the list of matches", "GET", "/matches?q=ann", (), 200, "page"),
-    ("the list of matches, old file", "GET", "/matches.html?q=ann", (), 301, "plain"),
+    ("the list of matches, old file, no redirect", "GET", "/matches.html?q=ann", (), 200, "page"),
     ("the old list of recordings", "GET", "/watch.html", (), 301, "plain"),
     ("a match", "GET", "/match?id=x", (), 200, "page"),
     ("a match, old address", "GET", "/match.html?id=x", (), 301, "plain"),
@@ -399,9 +399,9 @@ LIVE_ROWS = [
     ("the page of the matches that run now, in capital letters", "GET", "/LIVE-NOW", (), 301, "plain"),
     ("the page of the matches that run now, old file address in mixed case", "GET", "/Live.html", (), 301, "plain"),
     ("the legal page", "GET", "/legal", (), 200, "page"),
-    ("the legal page, old file", "GET", "/legal.html", (), 301, "plain"),
+    ("the legal page, old file, no redirect", "GET", "/legal.html", (), 200, "page"),
     ("the changelog page", "GET", "/changelog", (), 200, "page"),
-    ("the changelog page, old file", "GET", "/changelog.html", (), 301, "plain"),
+    ("the changelog page, old file, no redirect", "GET", "/changelog.html", (), 200, "page"),
     ("the changelog page with a slash", "GET", "/changelog/", (), 301, "plain"),
     ("a page that is not there", "GET", "/nothing.html", (), 404, "page"),
     ("the asset catalog", "GET", "/asset_catalog/", (), 200, "page"),
@@ -657,7 +657,7 @@ class TheFileRuns(unittest.TestCase):
 
     def test_an_address_that_is_nothing_is_the_page_of_a_404_never_the_game_and_under_the_name_of_a_door_it_is_a_plain_404(self):
         page = stats.read("web", "404.html").encode("utf-8")
-        for path in ("/no/such/page", "/nothing?room=k7m2xq", "/playx", "/front/", "/robots.txt"):
+        for path in ("/no/such/page", "/nothing?room=k7m2xq", "/playx", "/front/", "/robots.txt", "/nothing.html", "/front/nothing.css", "/nothing.js"):
             answer = fetch(self.live.port, path)
             self.assertEqual(answer.status, 404, path)
             self.assertEqual(answer.body, page, path)                                              # (the page of the site as it is in web/: its status is the error's, its body the file's)
@@ -682,10 +682,11 @@ class TheFileRuns(unittest.TestCase):
         path = os.path.join(self.docroot, "404.html")
         os.rename(path, path + ".away")
         try:
-            gone = fetch(self.live.port, "/nothing")
-            self.assertEqual(gone.status, 404)                                                     # (no loop of internal redirects, no 500: the answer is nginx's own short 404)
-            self.assertNotIn(b"Page not found", gone.body)
-            self.assertNotIn(b"a stand-in page", gone.body)
+            for asked in ("/nothing", "/nothing.html"):
+                gone = fetch(self.live.port, asked)
+                self.assertEqual(gone.status, 404, asked)                                          # (no loop of internal redirects, no 500: the answer is nginx's own short 404)
+                self.assertNotIn(b"Page not found", gone.body, asked)
+                self.assertNotIn(b"a stand-in page", gone.body, asked)
         finally:
             os.rename(path + ".away", path)
         self.assertEqual(fetch(self.live.port, "/nothing").status, 404)

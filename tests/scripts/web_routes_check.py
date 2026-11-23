@@ -19,7 +19,7 @@ the game page has the stage (id="game-stage"; the build writes it with or withou
                                       (and the old /watch.html, to /matches) go to the clean address with the query (a 301); /live-now, /live-now/ and /live.html go to / with no query (a 301); /live is the game server's list, not a page
 /manifest.webmanifest, /app/icon-192.png, /favicon.png, /favicon.ico  the web app's manifest (revalidated), an icon and the browser-tab icon (with or without ?v=): files, not the game page; /?vp is the front page and /home/vp.js its script of numbers
 /changelog, /legal, /mapmaker,        the other pages of the site: each is its own page with the pages' headers (the map maker has its own policy) and links /front/classic.css (not the map maker);
-/asset_catalog/                         the .html address of each (and /asset_catalog/index.html, to /asset_catalog/) is a 301 to the clean one with the query, a slash after the clean one goes to it; /catalog, /viewer and /asset_catalog go to the catalog;
+/asset_catalog/                         the .html address of each (not changelog.html, legal.html, matches.html: they answer 200, as before; and /asset_catalog/index.html, to /asset_catalog/) is a 301 to the clean one with the query, a slash after the clean one goes to it; /catalog, /viewer and /asset_catalog go to the catalog;
                                         /admin.html, /404.html and /50x.html are plain 404s (no page has a .html address of its own)
 an address that is nothing                a 404 with web/404.html (the page of the site, no game started, revalidated like every page); under the name of a door (/ws/, /busy/, /stats/, /lobbies/, /test-maps/, /hub/) a short plain 404 with no page
 Exit status 0: every check passed; 1: a check failed; 3: nothing answers at the address.
@@ -174,7 +174,7 @@ def main():
         check(headers.get("cache-control") == "no-cache, must-revalidate" and names.count("cache-control") == 1, "%s: Cache-Control is exactly one line, no-cache, must-revalidate (%s)" % (path, headers.get("cache-control")))
         check(headers.get("cross-origin-opener-policy") == "same-origin" and headers.get("cross-origin-embedder-policy") == "require-corp", "%s carries the cross-origin isolation headers (%s, %s)" % (path, headers.get("cross-origin-opener-policy"), headers.get("cross-origin-embedder-policy")))
 
-    print("[web routes] clean addresses: every page is asked for without .html, its old address is a permanent redirect (301) that keeps the query, and nothing else is caught")
+    print("[web routes] clean addresses: every page is asked for without .html, its old address is a permanent redirect (301) that keeps the query, except the three files that an earlier redirect led to, which answer 200, and nothing else is caught")
     PAGES = (("/changelog", "/changelog.html"), ("/legal", "/legal.html"), ("/matches", "/matches.html"), ("/match", "/match.html"), ("/play", "/play.html"), ("/mapmaker", "/mapmaker.html"))
     QUERIES = ("", "?live=ants-X-20260101-000000Z", "?room=k7m2xq&roommap=small&roomseats=2", "?code=ab12cd", "?replay=ants-X-20260101-000000Z.antsrep&embed=1", "?id=ants-X-20260101-000000Z&x=%20%26", "?q=ann&page=2")
     for clean, old in PAGES:
@@ -182,16 +182,23 @@ def main():
         check(s_clean == 200 and h_clean.get("content-type", "").startswith("text/html"), "%s is a page (%s)" % (clean, s_clean))
         check(h_clean.get("cache-control") == "no-cache, must-revalidate" and n_clean.count("cache-control") == 1 and "etag" in h_clean, "%s: Cache-Control is exactly one line, no-cache, must-revalidate, with an ETag" % clean)
         check(n_clean.count("content-security-policy") == 1 and "frame-ancestors" in h_clean.get("content-security-policy", "") and n_clean.count("x-frame-options") == 1 and h_clean.get("strict-transport-security", "").startswith("max-age="), "%s carries the security headers of a page, each once" % clean)
+        kept = clean in ("/changelog", "/legal", "/matches")      # (these three clean addresses were redirects to their files: the files answer 200, so a browser that kept the old redirect lands on a page)
         s_old, h_old, n_old, b_old = get(old)
-        check(s_old == 301 and h_old.get("location") == clean and "cache-control" not in h_old and not NOT_FOUND.search(b_old), "%s answers 301 to %s with no Cache-Control and no page (%s %s)" % (old, clean, s_old, h_old.get("location")))
+        if kept:
+            check(s_old == 200 and "location" not in h_old and b_old == b_clean, "%s answers 200, the same page as %s, with no redirect (%s)" % (old, clean, s_old))
+        else:
+            check(s_old == 301 and h_old.get("location") == clean and "cache-control" not in h_old and not NOT_FOUND.search(b_old), "%s answers 301 to %s with no Cache-Control and no page (%s %s)" % (old, clean, s_old, h_old.get("location")))
         for query in QUERIES:
             s_q, h_q, n_q, b_q = get(old + query)
-            check(s_q == 301 and h_q.get("location") == clean + query, "%s%s answers 301 to %s%s, the query kept (%s)" % (old, query, clean, query, h_q.get("location")))
+            if kept:
+                check(s_q == 200 and "location" not in h_q, "%s%s answers 200, not a redirect (%s)" % (old, query, s_q))
+            else:
+                check(s_q == 301 and h_q.get("location") == clean + query, "%s%s answers 301 to %s%s, the query kept (%s)" % (old, query, clean, query, h_q.get("location")))
             s_c, h_c, n_c, b_c = get(clean + query)
             check(s_c == 200 and b_c == b_clean, "%s%s is the same page as %s (%s)" % (clean, query, clean, s_c))
         tag = h_clean.get("etag")
         check(bool(tag) and get(clean, {"If-None-Match": tag})[0] == 304, "%s: an unchanged page is answered 304 to If-None-Match" % clean)
-        check(get(clean, method="HEAD")[0] == 200 and get(old + "?a=b", method="HEAD")[1].get("location") == clean + "?a=b", "HEAD works at %s and at %s" % (clean, old))
+        check(get(clean, method="HEAD")[0] == 200 and (get(old + "?a=b", method="HEAD")[0] == 200 if kept else get(old + "?a=b", method="HEAD")[1].get("location") == clean + "?a=b"), "HEAD works at %s and at %s" % (clean, old))
         check(get(clean + "/")[1].get("location") == clean and get(clean + "/?a=b")[1].get("location") == clean + "?a=b", "%s/ goes to %s (a slash after a page's address), the query kept" % (clean, clean))
         check(get(clean + "/", method="HEAD")[0] == 301, "HEAD %s/ is the same redirect" % clean)
     for old in ("/index.html", "/lobby.html"):
@@ -245,8 +252,9 @@ def main():
         check(status == 404 and not NOT_FOUND.search(body) and "Something went wrong" not in body and "content-security-policy" not in headers, "%s is a plain 404 (%s)" % (path, status))
     status, headers, names, body = get("/hub/admin/gate", {"Cookie": "__Host-ants_hub=" + "a" * 32})
     check(status == 404 and "x-ants-admin-pass" not in headers, "the hub's gate for the admin page is internal: a browser that asks for it gets a 404 (%s)" % status)
-    status, headers, names, body = get("/nothing.html")
-    check(status == 404, "an .html file that is not there is a 404 (%s)" % status)
+    for path in ("/nothing.html", "/front/nothing.css", "/nothing.js"):
+        status, headers, names, body = get(path)
+        check(status == 404 and bool(NOT_FOUND.search(body)) and not GAME.search(body), "%s, a file that is not there, is a 404 with the page of the site (%s)" % (path, status))
     print("[web routes] no version of the web server: the Server header has no number, on a page, a redirect, a file and an error")
     for path in ("/", "/play", "/play.html", "/four.html", "/nothing.html", "/stats?x=1", "/front/classic.css", "/matches?x=1"):
         status, headers, names, body = get(path)

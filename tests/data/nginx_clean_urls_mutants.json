@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the clean addresses of the pages and of the web server that names no version (docker/nginx.conf and the pages' own links), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with the program nginx installed: python3 tools/mutate.py tests/data/nginx_clean_urls_mutants.json --keep-going --jobs 1. Every mutant must be caught by tests/scripts/test_nginx_clean_urls.py: each breaks one rule - a page's exact location and the file it serves, the old addresses of the page of the matches that run now (a permanent redirect to the front page, with no query), the one map of old addresses and its redirect that keeps the query (permanent, with every page's .html address in it; the two files of the error pages are plain 404s; paths only, the slash form only for the pages' names), /index.html and /lobby.html going to the front page, no header of a page's own, server_tokens off in the http part and in the server block, and no page of the site building an address with .html.",
+ "note": "Mutants of the clean addresses of the pages and of the web server that names no version (docker/nginx.conf and the pages' own links), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with the program nginx installed: python3 tools/mutate.py tests/data/nginx_clean_urls_mutants.json --keep-going --jobs 1. Every mutant must be caught by tests/scripts/test_nginx_clean_urls.py: each breaks one rule - a page's exact location and the file it serves, the old addresses of the page of the matches that run now (a permanent redirect to the front page, with no query), the one map of old addresses and its redirect that keeps the query (permanent, with every page's .html address in it but the three files that an earlier redirect led to, which answer 200 and name their clean address as canonical; the two files of the error pages are plain 404s; paths only, the slash form only for the pages' names), /index.html and /lobby.html going to the front page, no header of a page's own, server_tokens off in the http part and in the server block, and no page of the site building an address with .html.",
  "mutants": [
   {
    "id": "play_serves_the_wrong_file",
@@ -191,24 +191,24 @@
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
-   "id": "changelog_file_not_redirected",
+   "id": "changelog_file_redirects_again",
    "file": "docker/nginx.conf",
-   "old": "    /changelog.html /changelog;\n",
-   "new": "",
+   "old": "    /mapmaker.html /mapmaker;\n",
+   "new": "    /mapmaker.html /mapmaker;\n    /changelog.html /changelog;\n",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
-   "id": "legal_file_not_redirected",
+   "id": "legal_file_redirects_again",
    "file": "docker/nginx.conf",
-   "old": "    /legal.html /legal;\n",
-   "new": "",
+   "old": "    /mapmaker.html /mapmaker;\n",
+   "new": "    /mapmaker.html /mapmaker;\n    /legal.html /legal;\n",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
-   "id": "matches_file_not_redirected",
+   "id": "matches_file_redirects_again",
    "file": "docker/nginx.conf",
-   "old": "    /matches.html /matches;\n",
-   "new": "",
+   "old": "    /mapmaker.html /mapmaker;\n",
+   "new": "    /mapmaker.html /mapmaker;\n    /matches.html /matches;\n",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
@@ -293,6 +293,34 @@
    "file": "docker/nginx.conf",
    "old": "    if ($ants_error_page_file) {\n        return 404;\n    }\n",
    "new": "    if ($ants_error_page_file = \"x\") {\n        return 404;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "legal_page_loses_its_canonical",
+   "file": "web/legal.html",
+   "old": "<link rel=\"canonical\" href=\"/legal\">\n",
+   "new": "",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "matches_page_loses_its_canonical",
+   "file": "web/matches.html",
+   "old": "    <link rel=\"canonical\" href=\"/matches\">\n",
+   "new": "",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "changelog_page_loses_its_canonical",
+   "file": "tools/changelog_to_html.py",
+   "old": "<link rel=\"canonical\" href=\"/changelog\">\n",
+   "new": "",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "legal_canonical_is_the_file",
+   "file": "web/legal.html",
+   "old": "<link rel=\"canonical\" href=\"/legal\">",
+   "new": "<link rel=\"canonical\" href=\"/legal.html\">",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   }
  ]

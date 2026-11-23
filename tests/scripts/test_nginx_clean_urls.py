@@ -4,7 +4,7 @@ tests/data/nginx_clean_urls_mutants.json breaks one rule at a time, for tools/mu
 
 The text of docker/nginx.conf is checked everywhere:
   - every page has its own exact location, which serves the page's file by an internal rewrite and has no header of its own (the headers are those of the file's address);
-  - the old .html address of every page (and /watch.html, /asset_catalog/index.html), and the same clean address with a slash, is in one map that the server block's `if` turns into a 301 that keeps the query; /index.html and /lobby.html go to "/"; nothing is answered 200 at a .html address, and the two files of the error pages (404.html, 50x.html) are plain 404s;
+  - the old .html address of every page (and /watch.html, /asset_catalog/index.html), and the same clean address with a slash, is in one map that the server block's `if` turns into a 301 that keeps the query; /index.html and /lobby.html go to "/"; changelog.html, legal.html and matches.html are the exception (they answer 200, and name the clean address as canonical), and the two files of the error pages (404.html, 50x.html) are plain 404s;
   - no other location can catch a page's address, and no page's address can catch another location's: a small model of nginx's choice of a location (exact, then the longest prefix, ^~ stops it,
     then the regular expressions in order) is asked about the pages and about every path of the game server, the hub and the admin page;
   - the old addresses of the page of the matches that run now (/live-now, /live-now/, /live.html) are a 301 to the front page, "/", with no query, from a location of its own (not the map); /live and /live/<id> are still the game server's data;
@@ -37,6 +37,7 @@ SERVER = CONF[CONF.index("server {"):]
 CHECK = os.path.join(REPO, "tests", "scripts", "web_routes_check.py")
 
 # (the clean address, the file)
+KEPT_FILES = ("/changelog", "/legal", "/matches")        # (their files answer 200 at the old address: before the clean addresses these three redirected to the files, and a browser may have kept that; each names its clean address as canonical)
 PAGES = [("/play", "play.html"), ("/changelog", "changelog.html"), ("/legal", "legal.html"), ("/matches", "matches.html"), ("/match", "match.html"), ("/mapmaker", "mapmaker.html")]
 # every path that the file hands to the game server, the chat hub or the admin page, and one under each prefix: none of them may be a page
 OTHER_PATHS = ["/ws", "/busy", "/stats", "/stats/local", "/replays", "/replays/x.antsrep", "/live", "/live/R-20260101-000000Z", "/lobbies", "/history", "/history/deaths", "/history/x", "/maps", "/maps/all", "/maps/files/A.LVL",
@@ -118,8 +119,8 @@ class TheText(unittest.TestCase):
     def test_the_old_addresses_are_one_map_of_exact_paths_that_the_servers_if_turns_into_a_redirect_with_the_query(self):
         body = stats.block_of(HEAD, "map $ants_path $ants_clean_address ")
         rules = dict(re.findall(r"^\s*(/\S*)\s+(/\S*);", body, re.M))
-        want = {"/%s" % name: clean for clean, name in PAGES}
-        want.update({"/index.html": "/", "/lobby.html": "/", "/watch.html": "/matches", "/asset_catalog/index.html": "/asset_catalog/"})      # (every page has its old address in the map, none is answered 200)
+        want = {"/%s" % name: clean for clean, name in PAGES if clean not in KEPT_FILES}
+        want.update({"/index.html": "/", "/lobby.html": "/", "/watch.html": "/matches", "/asset_catalog/index.html": "/asset_catalog/"})      # (every page but the three kept files has its old address in the map)
         self.assertEqual(rules, want)
         self.assertEqual(re.findall(r"^\s*default\s+(\S+);", body, re.M), ['""'])
         regex = re.findall(r'^\s*"(~[^"]*)"\s+(\S+);', body, re.M)
@@ -148,6 +149,20 @@ class TheText(unittest.TestCase):
         self.assertEqual(re.findall(r"^\s*if \(\$ants_error_page_file\) \{\s*return 404;\s*\}", SERVER, re.M).__len__(), 1)
         self.assertLess(SERVER.index("if ($ants_error_page_file)"), SERVER.index("location "))          # (before any location: the answer is the server block's own, which has no error_page)
         self.assertEqual(stats.block_of(CONF, "location = /admin.html ").split(), ["return", "404;"])      # (the admin page is /admin)
+
+    def test_each_of_the_three_pages_that_answer_at_their_file_too_names_its_clean_address_as_canonical_and_no_other_page_does(self):
+        sys.path.insert(0, os.path.join(REPO, "tools"))
+        try:
+            import changelog_to_html
+        finally:
+            sys.path.pop(0)
+        pages = {"/legal": stats.read("web", "legal.html"), "/matches": stats.read("web", "matches.html"),
+                 "/changelog": changelog_to_html.convert(stats.read("CHANGELOG.md"), changelog_to_html.DEFAULT_REPO_BLOB, version="v0.0.0", build_id="0000000")}
+        for clean, text in pages.items():
+            self.assertEqual(re.findall(r'<link rel="canonical"[^>]*>', text), ['<link rel="canonical" href="%s">' % clean], clean)
+            self.assertLess(text.index('rel="canonical"'), text.index("</head>"), clean)
+        for name in ("lobby", "match", "mapmaker", "404", "50x", "admin", "shell"):
+            self.assertNotIn('rel="canonical"', stats.read("web", name + ".html"), name)                  # (the other pages have one address: a redirect from the file or no file)
 
     def test_the_page_headers_still_come_from_the_file_s_address(self):
         # (the clean address is an internal rewrite to the file, so the maps that read $uri see the file: the policy, the framing rule, the referrer policy and the permissions policy of a page)
@@ -335,12 +350,13 @@ class TheRealPagesRun(unittest.TestCase):
         self.assertNotIn("content-security-policy", old[1])
         self.assertNotIn("cache-control", old[1])                                                      # (a redirect has no freshness of its own: it is the 301 itself that a browser keeps)
         for clean, name in PAGES:                                                                      # (every other redirect of a page is a 301 too, and /watch.html)
-            self.assertEqual(self.ask("/" + name + "?x=1")[0], 301, name)
+            if clean not in KEPT_FILES:
+                self.assertEqual(self.ask("/" + name + "?x=1")[0], 301, name)
             self.assertEqual(self.ask(clean + "/")[0], 301, clean + "/")
         self.assertEqual(self.ask("/watch.html")[0], 301)
 
-    def test_every_old_address_with_dot_html_is_a_301_to_the_clean_address_with_the_query_and_the_clean_address_is_200(self):
-        olds = [("/" + name, clean) for clean, name in PAGES] + [("/index.html", "/"), ("/lobby.html", "/"), ("/watch.html", "/matches"), ("/asset_catalog/index.html", "/asset_catalog/")]
+    def test_every_old_address_with_dot_html_but_three_is_a_301_to_the_clean_address_with_the_query_and_the_clean_address_is_200(self):
+        olds = [("/" + name, clean) for clean, name in PAGES if clean not in KEPT_FILES] + [("/index.html", "/"), ("/lobby.html", "/"), ("/watch.html", "/matches"), ("/asset_catalog/index.html", "/asset_catalog/")]
         for old, clean in olds:
             for query in ("", "?x=1", "?live=ants-X-20260101-000000Z&embed=1", "?q=a%20b"):
                 answer = self.ask(old + query)
@@ -352,6 +368,16 @@ class TheRealPagesRun(unittest.TestCase):
             self.assertEqual(self.ask(plain)[0], 404, plain)
             self.assertNotIn("Page not found", self.ask(plain)[2], plain)
         self.assertEqual(self.ask("/four.html?room=k7m2xq")[:2][0], 301)
+
+    def test_the_three_files_that_an_earlier_redirect_led_to_answer_200_at_their_old_address_and_so_does_the_clean_address(self):
+        for clean, name in PAGES:
+            if clean in KEPT_FILES:
+                file_answer, clean_answer = self.ask("/" + name + "?x=1"), self.ask(clean + "?x=1")
+                self.assertEqual((file_answer[0], clean_answer[0]), (200, 200), clean)
+                self.assertNotIn("location", file_answer[1], clean)
+                self.assertNotIn("location", clean_answer[1], clean)
+                self.assertEqual(file_answer[1]["content-security-policy"], clean_answer[1]["content-security-policy"], clean)
+                self.assertEqual(file_answer[2], clean_answer[2], clean)                                   # (the same page; the canonical link of each is a text test above)
 
     def follow(self, path):
         """What a browser ends at when it opens an address: (the final address, the status, the body), following up to five redirects."""
@@ -377,7 +403,7 @@ class TheRealPagesRun(unittest.TestCase):
                  ("a link with a code", "/lobby.html?code=ab12cd&room=k7m2xq", "/?code=ab12cd&room=k7m2xq", lobby),
                  ("a rejoin or START link", "/?join=/ws&room=k7m2xq&seat=1&name=Bob&aspect=16:9", "/?join=/ws&room=k7m2xq&seat=1&name=Bob&aspect=16:9", game),
                  ("a rejoin link through the game page's file", "/index.html?join=/ws&room=k7m2xq&seat=1", "/?join=/ws&room=k7m2xq&seat=1", game),
-                 ("the list of matches with a search, by the file", "/matches.html?q=ann&page=2", "/matches?q=ann&page=2", None),
+                 ("the list of matches with a search, by the file (it is not redirected: an earlier /matches was a redirect to it)", "/matches.html?q=ann&page=2", "/matches.html?q=ann&page=2", None),
                  ("a match", "/match.html?id=" + live, "/match?id=" + live, None),
                  ("the old list of recordings", "/watch.html", "/matches", None),
                  ("the old page of the matches that run now, by its file", "/live.html", "/", lobby),
@@ -413,7 +439,10 @@ class TheRealPagesRun(unittest.TestCase):
             self.assertNotRegex(body, r"nginx/\d", path)
         status, headers, body = self.ask("/nothing.html")
         self.assertEqual(status, 404)
-        self.assertIn("nginx", body)                                                                   # (an error page that names the program and no number)
+        self.assertIn("Page not found", body)                                                          # (an address that is nothing: the page of the site)
+        status, headers, body = self.ask("/maps/")
+        self.assertEqual(status, 404)
+        self.assertIn("nginx", body)                                                                   # (an error page of the program itself: it names the program and no number)
         self.assertNotRegex(body, r"\d+\.\d+\.\d+")
         raw = socket.create_connection(("127.0.0.1", self.port), timeout=5)
         try:

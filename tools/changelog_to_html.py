@@ -217,6 +217,7 @@ PAGE = """<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ants (1998) - Changelog</title>
+<link rel="canonical" href="/changelog">
 <link rel="icon" type="image/png" href="/favicon.png?v=9ea2152a">
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#2b5f43">
