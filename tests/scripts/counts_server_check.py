@@ -268,7 +268,12 @@ class TheWholeWay(unittest.TestCase):
                         break
                     except OSError:
                         time.sleep(0.05)
+                time.sleep(1.0)                                                                            # (a server that stops because of the port stops within a moment of having bound the others)
                 self.assertIsNone(proc.poll())
+                conn = http.client.HTTPConnection("127.0.0.1", replay, timeout=10)
+                conn.request("GET", "/healthz")
+                self.assertEqual(conn.getresponse().status, 200)                                           # (the game's own doors are up)
+                conn.close()
             finally:
                 proc.send_signal(signal.SIGTERM)
                 out, err = proc.communicate(timeout=15)
