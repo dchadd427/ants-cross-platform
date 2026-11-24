@@ -160,9 +160,9 @@ void test_table() {
     }
     {   // HUD art: one New / Classic choice in Video right after the damage and heal numbers, New by default, in a match and while watching, in both skins
         const gm::Row* row = gm::find_row(gm::kHudArt);
-        check(row != nullptr && std::string(row->key) == "hud_art" && std::string(row->label) == "HUD art" && row->section == gm::Section::Video && row->kind == gm::Kind::Choice &&
+        check(row != nullptr && std::string(row->key) == "hud_art" && std::string(row->label) == "Art" && row->section == gm::Section::Video && row->kind == gm::Kind::Choice &&
                   row->def == 0 && row->min == 0 && row->max == 1 && std::string(row->words) == "New|Classic" && (row->show & gm::kShowWatch) && (row->show & gm::kShowWeb) && (row->show & gm::kShowDesktop),
-              "the HUD art row: a choice in Video, New first and by default, in both skins and in a recording");
+              "the Art row: a choice in Video, New first and by default, in both skins and in a recording");
         size_t n_rows = 0;
         const gm::Row* all = gm::rows(n_rows);
         size_t changes_at = n_rows, row_at = n_rows;

@@ -43,7 +43,7 @@ constexpr std::array<Row, 17> kRows = {{
     {kAntHealth, "ant_health", Section::Video, Kind::Choice, 0, 2, static_cast<int>(health::When::Hurt), kBoth | kShowWatch | kShowNew, "Ant health", "Shows hit points: a bar over the ant, or a number at its lower right. Every ant has 10 at most.", "Hurt ants|All ants|Off"},
     {kHealthStyle, "ant_health_style", Section::Video, Kind::Choice, 0, 1, static_cast<int>(health::Style::Bar), kBoth | kShowWatch | kShowNew, "Show health as", "A small bar over the ant, or a number at its lower right", "Bar|Number"},
     {kHealthChanges, "health_changes", Section::Video, Kind::Switch, 0, 1, 1, kBoth | kShowWatch | kShowNew, "Damage & heal numbers", "A small -N over an ant that loses hit points and +N over one that is healed at its hill", "On|Off"},
-    {kHudArt, "hud_art", Section::Video, Kind::Choice, 0, 1, 0, kBoth | kShowWatch | kShowNew, "HUD art", "The look of the frame, buttons and panel around the map: the new pictures, or the original's own", "New|Classic"},
+    {kHudArt, "hud_art", Section::Video, Kind::Choice, 0, 1, 0, kBoth | kShowWatch | kShowNew, "Art", "The look of the whole game: the frame, buttons and panel, and the ground, its edges and the bridge: the new pictures, or the original's own", "New|Classic"},
     {kScroll, "scroll", Section::Video, Kind::Slider, 0, 99, 50, kBoth | kShowWatch, "Map scroll speed", "Edge scrolling; the original's \"Scroll Speed\"", ""},
     {kChat, "chat", Section::Game, Kind::Switch, 0, 1, 1, kBoth, "Participate in chat", "The original's option", "On|Off"},
     {kQuickHelpAtStart, "quickhelp_start", Section::Game, Kind::Switch, 0, 1, 1, kBoth, "Show quick help at startup", "The original's option", "On|Off"},
