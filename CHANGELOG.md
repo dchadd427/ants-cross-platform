@@ -29,30 +29,38 @@ Work that is not released yet is written in the same template under a heading th
 ## Next
 
 **For players:**
+- **Where the action is, on a replay.** A soft curve over the replay's timeline shows the fights: deaths most of all, then bombs, thefts, fires and hits. On a computer it shows while the pointer is over the timeline, with the time and what happened ("2:41 · 3 deaths, 1 bomb"); on a phone it is always there, faint, and solid under your finger. The timeline has a row of its own on a computer now, as wide as the picture. Matches played before this version show a curve of their deaths alone.
+- **Follow** a player from the same menu (or **/follow NAME**): a **Following** tab in the players list, a star by their name, and an alert with Join when they open a public room. Nobody is told that you follow them, and nobody sees who follows whom.
+- Write to a player **privately**: **Message** in the menu, a **Messages** button in the chat (a panel, or a sheet on a phone), a count and a bell row for each new message. Messages are kept for 7 days and only the two of you can read them; **Ignore** blocks a person, and **Report** sends a message and the 5 before it to the admins.
+
+**For operators:**
+- The game server's database moves to schema version 11 (the table `history_action`, the counts that the activity curve is drawn from; the history service's own file to its version 5): an older program refuses the newer file, and the update does not copy it, so stop the server and copy `ants.db` before the update; that copy is the way back ([`docs/HEATMAPS.md`](docs/HEATMAPS.md#the-activity-curve)).
+- New `follows`, `dms` (private messages, 7 days) and `reports` tables, made by the first use and deleted by Forget me; reports are read with `python -m hub.admin reports` and closed with `report-close ID` ([private messages](docs/HUB_MESSAGES.md)). The Legal page has a section for them.
+
+## v0.21.2 - 2026-11-23 - Invites, mentions, the bell, map pages and Random map
+
+**For players:**
 - The bell shows your recent alerts, newest first, with the number of unread ones: invitations, mentions, people who joined your room and your own finished match (with a View link). The settings are behind a gear in that list; a visitor keeps a short list in the browser.
 - Right-click a player in the list, or a name in the chat (long-press on a phone), to **Invite to my room**. They see it as a line in their chat (a toast when the chat is not on screen) and in their bell, with Join; it turns grey when the room closes.
 - **/invite NAME**, with a helper that narrows the names as you type.
 - Type **@** in the chat to pick a player: a mention is a pill for everyone, gold for the person named, and an alert in their bell. No @here, no @everyone.
-- **Follow** a player from the same menu (or **/follow NAME**): a **Following** tab in the players list, a star by their name, and an alert with Join when they open a public room. Nobody is told that you follow them, and nobody sees who follows whom.
-- Write to a player **privately**: **Message** in the menu, a **Messages** button in the chat (a panel, or a sheet on a phone), a count and a bell row for each new message. Messages are kept for 7 days and only the two of you can read them; **Ignore** blocks a person, and **Report** sends a message and the 5 before it to the admins.
 - **Random map.** The map list of a room has a **Random map** row under the sorts: **Pick one** puts a random map from the maps shown into the room at once, **Pick another** picks again. The Maps page has a **Random map** button that opens the page of a random map of the whole library.
 - **A page for every map.** The six maps of the 1998 game and the players' maps each have a page at /map/NAME (picture, size, game length, food and power-ups, the map's own line, the maker when its line names one, and how often it was played here) with **Play it**, which opens a room on that map, and **Open in Map maker**; /map-library lists them with a search and filters. The Map Maker opens a library map from /mapmaker?mapfile=NAME.lvl.
 
 **For operators:**
 - The hub keeps an account's last 30 alerts of 7 days and its `/ignore` list (new `alerts` and `ignores` tables, made by the first one; Forget me deletes them), and limits invitations and mentions ([the hub's document](docs/HUB_PEOPLE.md)).
-- New `follows`, `dms` (private messages, 7 days) and `reports` tables, made by the first use and deleted by Forget me; reports are read with `python -m hub.admin reports` and closed with `report-close ID` ([private messages](docs/HUB_MESSAGES.md)). The Legal page has a section for them.
 - The map pages are made when the image is built (`tools/map_pages.py`, [`docs/MAP_PAGES.md`](docs/MAP_PAGES.md)) and listed in `sitemap-library.xml`; the maps that players send and you approve have no page yet.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/dc2bfafd...e0d5b1bf)
 
 ## v0.21.1 - 2026-11-23 - Connect an AI in the Map Maker
 
 **For players:**
 - **Connect an AI in the Map Maker.** A new Connect an AI sheet makes a key (look only, or look and edit; it ends after 7, 30 or 90 days) for your own AI assistant (Claude Code, Cursor, any program that speaks MCP or plain web calls). Turn on "Let an AI work in this tab" and it can look at the map you have open and, with an edit key, change it while you watch: a strip with Stop and Undo AI changes stays on top, and each change is one step of your own history.
 - **Six skills for your AI**, to download from /ai/skills/ (one zip with all of them): the map file's words, the terrain, the layout of a fair map, the Map Maker's tools, and how to check and fix a map.
-- **Where the action is, on a replay.** A soft curve over the replay's timeline shows the fights: deaths most of all, then bombs, thefts, fires and hits. On a computer it shows while the pointer is over the timeline, with the time and what happened ("2:41 · 3 deaths, 1 bomb"); on a phone it is always there, faint, and solid under your finger. The timeline has a row of its own on a computer now, as wide as the picture. Matches played before this version show a curve of their deaths alone.
 
 **For operators:**
 - The keys are off until the hub is started with `ANTS_HUB_AI_KEYS=on`; with it off every key door answers 503 and no tab can be armed ([`docs/MAP_AI.md`](docs/MAP_AI.md)).
-- The game server's database moves to schema version 11 (the table `history_action`, the counts that the activity curve is drawn from; the history service's own file to its version 5): an older program refuses the newer file, and the update does not copy it, so stop the server and copy `ants.db` before the update; that copy is the way back ([`docs/HEATMAPS.md`](docs/HEATMAPS.md#the-activity-curve)).
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2bdfe98e...d65954fa)
 
