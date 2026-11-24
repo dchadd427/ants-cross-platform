@@ -514,7 +514,7 @@ bool ExpeditionTask::plan_on_foot(TaskContext& c) {
         if (owner == kNoTask || owner == id() || c.ledger.rank(owner) < c.ledger.rank(id()) || waits) ants.push_back(&a);
     }
     if (ants.empty()) return false;
-    std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, c.seat, v.walk_context());
+    std::vector<uint8_t> mask = v.walkable_mask(c.seat);
     for (size_t i = 0; i < mask.size() && i < tactics_.shut_tiles.size(); ++i) {
         if (tactics_.shut_tiles[i] != 0) mask[i] = 0;
     }

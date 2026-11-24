@@ -43,7 +43,7 @@
   {
    "id": "return_for_whole_ants",
    "file": "src/ants_ai/island_bridge.cpp",
-   "old": "if (return_on && a->hp <= params_.return_hp) {",
+   "old": "if (return_on && (a->hp <= params_.return_hp || more)) {",
    "new": "if (return_on) {",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI54.5 ' ./build/tests/test_ai/test_ai",
    "expect": "AI54.5"
@@ -59,24 +59,24 @@
   {
    "id": "bridge_over_foreign_hill",
    "file": "src/ants_ai/island_bridge.cpp",
-   "old": "if (e.a == e.b || foreign_set[static_cast<size_t>(e.a)] || foreign_set[static_cast<size_t>(e.b)]) continue;",
-   "new": "if (e.a == e.b) continue;",
+   "old": "if (e.a != e.b && !foreign_set[static_cast<size_t>(e.a)] && !foreign_set[static_cast<size_t>(e.b)]) edges.push_back(e);",
+   "new": "if (e.a != e.b) edges.push_back(e);",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI54.10 ' ./build/tests/test_ai/test_ai",
    "expect": "AI54.10"
   },
   {
    "id": "bridge_with_few_swimmers",
    "file": "src/ants_ai/island_bridge.cpp",
-   "old": "if (swimmers < params_.min_swimmers || v.ticks_left() < params_.min_ticks_left) return nullptr;",
-   "new": "if (swimmers + 100u < params_.min_swimmers || v.ticks_left() < params_.min_ticks_left) return nullptr;",
+   "old": "if (swimmers < (more ? 1u : params_.min_swimmers) || v.ticks_left() < (more ? std::min<uint32_t>(params_.min_ticks_left, 1800u) : params_.min_ticks_left)) return nullptr;",
+   "new": "if (swimmers + 100u < (more ? 1u : params_.min_swimmers) || v.ticks_left() < (more ? std::min<uint32_t>(params_.min_ticks_left, 1800u) : params_.min_ticks_left)) return nullptr;",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI54.7 ' ./build/tests/test_ai/test_ai",
    "expect": "AI54.7"
   },
   {
    "id": "bridge_late_in_match",
    "file": "src/ants_ai/island_bridge.cpp",
-   "old": "if (swimmers < params_.min_swimmers || v.ticks_left() < params_.min_ticks_left) return nullptr;",
-   "new": "if (swimmers < params_.min_swimmers || v.ticks_left() + 100000u < params_.min_ticks_left) return nullptr;",
+   "old": "if (swimmers < (more ? 1u : params_.min_swimmers) || v.ticks_left() < (more ? std::min<uint32_t>(params_.min_ticks_left, 1800u) : params_.min_ticks_left)) return nullptr;",
+   "new": "if (swimmers < (more ? 1u : params_.min_swimmers) || v.ticks_left() + 100000u < (more ? std::min<uint32_t>(params_.min_ticks_left, 1800u) : params_.min_ticks_left)) return nullptr;",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI54.8 ' ./build/tests/test_ai/test_ai",
    "expect": "AI54.8"
   },
@@ -99,8 +99,8 @@
   {
    "id": "chain_one_hop_only",
    "file": "src/ants_ai/island_bridge.cpp",
-   "old": "if (usable && e.missing > 0 && e.missing <= static_cast<int32_t>(plan.island_bridge_tiles)) edges.push_back(e);",
-   "new": "if (usable && e.missing > 0 && e.missing <= static_cast<int32_t>(plan.island_bridge_tiles) && (sets.find(ch->a) == sets.find(hill_comp) || sets.find(ch->b) == sets.find(hill_comp))) edges.push_back(e);",
+   "old": "if (e.a != e.b && !foreign_set[static_cast<size_t>(e.a)] && !foreign_set[static_cast<size_t>(e.b)]) edges.push_back(e);",
+   "new": "if (e.a != e.b && !foreign_set[static_cast<size_t>(e.a)] && !foreign_set[static_cast<size_t>(e.b)] && (sets.find(ch->a) == sets.find(hill_comp) || sets.find(ch->b) == sets.find(hill_comp))) edges.push_back(e);",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI54.12 ' ./build/tests/test_ai/test_ai",
    "expect": "AI54.12"
   },
@@ -155,8 +155,8 @@
   {
    "id": "healed_ant_kept",
    "file": "src/ants_ai/island_bridge.cpp",
-   "old": "if (a->hp > params_.return_hp || !hill.present) {",
-   "new": "if (!hill.present) {",
+   "old": "if ((!fire_home && a->hp > params_.return_hp) || !hill.present || (fire_home && a->tile.chebyshev_dist(hill.entrance) <= 3)) {",
+   "new": "if (!hill.present || (fire_home && a->tile.chebyshev_dist(hill.entrance) <= 3)) {",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI54.3 ' ./build/tests/test_ai/test_ai",
    "expect": "AI54.3"
   },
@@ -171,7 +171,7 @@
   {
    "id": "job_far_swimmer",
    "file": "src/ants_ai/island_link.cpp",
-   "old": "if (best != nullptr && want_kind >= 0 && best->tile.chebyshev_dist(target) > static_cast<int32_t>(params_.job_max_swim)) return;",
+   "old": "if (best != nullptr && want_kind >= 0 && best->tile.chebyshev_dist(target) > static_cast<int32_t>(long_chain ? params_.chain_max_swim : params_.job_max_swim)) return;",
    "new": "if (best != nullptr && want_kind >= 0 && best->tile.chebyshev_dist(target) > 1000) return;",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI54.16 ' ./build/tests/test_ai/test_ai",
    "expect": "AI54.16"

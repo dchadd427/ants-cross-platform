@@ -90,8 +90,28 @@ std::vector<uint8_t> MapInfo::walkable_mask(const sim::Grid& grid, uint8_t team,
     const int w = static_cast<int>(grid.width());
     const int h = static_cast<int>(grid.height());
     std::vector<uint8_t> mask(static_cast<size_t>(std::max(w, 0)) * static_cast<size_t>(std::max(h, 0)), 0);
+    // The rules of walkable() for every tile, the tile's own ones first; the rules of the hills (R3 the mound, R5 the queue row of another live team) are rectangles and are taken off afterwards: the
+    // answer of every tile is the same as walkable()'s (the tests compare them on the shipped maps), without asking each hill for each tile
     for (int y = 0; y < h; ++y) {
-        for (int x = 0; x < w; ++x) mask[static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)] = walkable(grid, team, sim::TileCoord{x, y}, ctx) ? 1 : 0;
+        if (in_sentinel_row(grid, sim::TileCoord{0, y})) continue;
+        for (int x = 0; x < w; ++x) {
+            const sim::TileCoord tile{x, y};
+            if (!sim::movement::terrain_walkable(grid.terrain_class_at(tile))) continue;
+            if (grid.is_solid_object(tile)) continue;
+            const sim::TileCell& cell = grid.get_cell(tile);
+            if (cell.has_bomb() && (cell.interactive_owner == team || cell.interactive_owner == ctx.ally)) continue;
+            mask[static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)] = 1;
+        }
+    }
+    for (const assets::AnthillSpawn& ah : grid.anthills()) {
+        const int bx = static_cast<int>(ah.x);
+        const int by = static_cast<int>(ah.y);
+        for (int y = std::max(by, 0); y <= std::min(by + 3, h - 1); ++y) {
+            for (int x = std::max(bx, 0); x <= std::min(bx + 3, w - 1); ++x) mask[static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)] = 0;
+        }
+        if (ah.team_id != team && !ctx.dropped(ah.team_id) && by - 1 >= 0 && by - 1 < h) {
+            for (int x = std::max(bx, 0); x <= std::min(bx + 2, w - 1); ++x) mask[static_cast<size_t>(by - 1) * static_cast<size_t>(w) + static_cast<size_t>(x)] = 0;
+        }
     }
     return mask;
 }
@@ -394,8 +414,21 @@ MapInfo::NowField MapInfo::field_now(const sim::Grid& grid, uint8_t team, const 
     out.team = team;
     out.ctx = ctx;
     if (team >= sim::MAX_PLAYERS || !hills_[team].present || static_cast<int>(grid.width()) != w_ || static_cast<int>(grid.height()) != h_) return out;
-    const std::vector<uint8_t> mask = walkable_mask(grid, team, ctx);
+    return field_now(grid, team, ctx, walkable_mask(grid, team, ctx));
+}
+
+MapInfo::NowField MapInfo::field_now(const sim::Grid& grid, uint8_t team, const WalkContext& ctx, const std::vector<uint8_t>& mask) const {
+    NowField out;
+    out.team = team;
+    out.ctx = ctx;
+    if (team >= sim::MAX_PLAYERS || !hills_[team].present || static_cast<int>(grid.width()) != w_ || static_cast<int>(grid.height()) != h_) return out;
+    NowMemo& memo = now_memo_[team];
+    if (memo.made && memo.ctx.ally == ctx.ally && memo.ctx.dropped_mask == ctx.dropped_mask && memo.mask == mask) return memo.field;
     out.cost = cost_field(grid, mask, queue_starts(mask, w_, h_, hills_[team].origin));        // the queue row as it is now: a bomb or a fire wall may lie on a tile of it
+    memo.mask = mask;
+    memo.ctx = ctx;
+    memo.field = out;
+    memo.made = true;
     return out;
 }
 

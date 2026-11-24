@@ -43,6 +43,15 @@ inline LevelPlan peace_plan(Level level) {
     LevelPlan p = plan_for(level);
     without_war_batch(p);
     without_gone_batch(p);
+    without_idle_batch(p);                                  // (the idle batch, docs/BOT_IDLE.md: the tests of the older rules play the plan as it was; AI58 plays it on)
+    return p;
+}
+
+// The plan of a level as it was before the idle batch (docs/BOT_IDLE.md): the tests of the older rules play it, so that a blow of the contact rule, a post in front of the hole or a Thief at a strip takes no part
+// (AI58 plays the batch on)
+inline LevelPlan plan_as_was(Level level) {
+    LevelPlan p = plan_for(level);
+    without_idle_batch(p);
     return p;
 }
 
@@ -50,6 +59,7 @@ inline LevelPlan peace_plan(Level level) {
 inline LevelPlan plan_without_gone(Level level) {
     LevelPlan p = plan_for(level);
     without_gone_batch(p);
+    without_idle_batch(p);
     return p;
 }
 

@@ -117,6 +117,16 @@ WalkContext BotView::walk_context() const noexcept {
     return ctx;
 }
 
+const std::vector<uint8_t>& BotView::walkable_mask(uint8_t team) const {
+    static const std::vector<uint8_t> none;
+    if (grid_ == nullptr || team >= sim::MAX_PLAYERS) return none;
+    if ((walkable_made_ & (1u << team)) == 0) {
+        walkable_[team] = MapInfo::walkable_mask(*grid_, team, walk_context());
+        walkable_made_ = static_cast<uint8_t>(walkable_made_ | (1u << team));
+    }
+    return walkable_[team];
+}
+
 bool BotView::has_pending_path(uint32_t ant) const {
     if (sim_ == nullptr) return false;
     const auto it = std::lower_bound(mine_.begin(), mine_.end(), ant, [](const AntView& a, uint32_t id) { return a.id < id; });

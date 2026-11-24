@@ -245,7 +245,7 @@ void HarvestTask::reask(const TaskContext& c) {
     if (!c.map.hill(c.seat).present) return;
     // ONE walking field of the map as it is now, with the engine's rules of the moment for this seat (its own and its ally's bombs block, the queue row of a team that dropped
     // out is open ground: BotView::walk_context) and from every walkable tile of the hill's queue row, as the hill's ants leave it; then one cheap question per pile
-    MapInfo::NowField field = c.map.field_now(v.grid(), c.seat, v.walk_context());
+    MapInfo::NowField field = c.map.field_now(v.grid(), c.seat, v.walk_context(), v.walkable_mask(c.seat));
     for (const PileView& p : v.piles()) {
         const PileInfo* info = c.map.pile(p.index);
         if (info == nullptr || info->approach[c.seat].reachable()) continue;                // the start analysis could reach it: nothing to ask again
@@ -433,7 +433,7 @@ void HarvestTask::step(TaskContext& c) {
             else ++it;
         }
         if (params_.cantgo_aware && !home.empty() && v.has_grid()) {                         // a carrier that no walk joins to the hill (a ring of fire walls round its gate) is not sent: it would be refused
-            const MapInfo::NowField joined = c.map.field_now(v.grid(), c.seat, v.walk_context());
+            const MapInfo::NowField joined = c.map.field_now(v.grid(), c.seat, v.walk_context(), v.walkable_mask(c.seat));
             home.erase(std::remove_if(home.begin(), home.end(), [&](uint32_t id) {
                            const AntView* a = find_ant(v.mine(), id);
                            return a != nullptr && !c.map.reaches_hill(joined, a->tile, a->type);
@@ -481,7 +481,7 @@ void HarvestTask::step(TaskContext& c) {
     const auto ask_now = [&](uint32_t pile) {
         if (!v.has_grid()) return Approach{};
         if (!now_made) {
-            now_field = c.map.field_now(v.grid(), c.seat, v.walk_context());
+            now_field = c.map.field_now(v.grid(), c.seat, v.walk_context(), v.walkable_mask(c.seat));
             now_made = true;
         }
         return c.map.approach_now(v.grid(), pile, now_field);

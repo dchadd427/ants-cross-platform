@@ -38,6 +38,7 @@ using namespace b41;
 
 LevelPlan plan_of(Level level, bool gone) {
     LevelPlan p = plan_for(level);
+    without_idle_batch(p);                                                          // (the idle batch's heal is the food-gone batch's under another name: AI56 is the older rule's)
     if (!gone) without_gone_batch(p);
     return p;
 }

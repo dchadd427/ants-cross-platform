@@ -119,8 +119,8 @@
   {
    "id": "trip_bomb_mask_everywhere",
    "file": "src/ants_ai/standard_tasks_powerup.cpp",
-   "old": "        if (tactics_.gate_map) {\n            for (const BombView& b : v.bombs()) {",
-   "new": "        if (true) {\n            for (const BombView& b : v.bombs()) {",
+   "old": "            if (tactics_.gate_map) {\n                for (const BombView& b : v.bombs()) {",
+   "new": "            if (true) {\n                for (const BombView& b : v.bombs()) {",
    "test": "timeout 600 env ANTS_TEST_FILTER=AI27.11 ./build/tests/test_ai/test_ai",
    "expect": "AI27.11"
   },

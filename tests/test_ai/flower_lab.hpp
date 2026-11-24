@@ -33,6 +33,7 @@ struct Lab {
         sink = std::make_unique<RecordingSink>(sim, true);
         ctl = std::make_unique<BotController>(sim, 1);
         LevelPlan plan = plan_for(Level::Hard);
+        without_idle_batch(plan);                                                               // (the older rules are the lab's subject; the idle batch's own cases are AI58)
         plan.island_expedition = false;
         plan.island_fly_miner = false;
         plan.island_mines = false;
