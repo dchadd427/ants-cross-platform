@@ -165,7 +165,7 @@ int main() {
             r.clock += 3600;
             ASSERT_TRUE(r.mgr.create_room(bots_room("HIS-B", mode), r.now).ok);
             ASSERT_TRUE(r.until([&] { return r.mgr.history_store()->count() == 1; }, 4000));            // (in steps of a few milliseconds, within a moment of the room's start)
-            ASSERT_TRUE(r.status("HIS-B").state != RoomState::Finished);
+            ASSERT_TRUE(r.status("HIS-B").state == RoomState::Running);                                // (the first match is counted while the second one plays: a room of computer players holds nothing up)
             ASSERT_TRUE(r.until([&] { return r.status("HIS-B").state == RoomState::Running; }, 12000));
             r.run(8000);
             ASSERT_TRUE(r.status("HIS-B").state == RoomState::Running && r.mgr.history_store()->count() == 1);

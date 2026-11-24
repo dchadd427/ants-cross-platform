@@ -163,6 +163,7 @@ public:
     bool advance(uint32_t turns) { return playback_.advance(turns); }
     bool done() const noexcept { return playback_.done(); }
     uint32_t turns_played() const noexcept { return playback_.turns_played(); }
+    bool next_takes_hash() const noexcept { return playback_.next_takes_hash(); }       // (see Playback)
     /// The result of a play that is over; moves the stats out, so once
     StatsPlay take();
 

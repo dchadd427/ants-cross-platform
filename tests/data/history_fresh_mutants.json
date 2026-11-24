@@ -1,11 +1,11 @@
 {
- "note": "Mutants of how the match history counts a match that has just ended (docs/SERVER_REPLAYS.md \"The match history\", docs/REPLAYS.md \"The match history\"), for tools/mutate.py (docs/WORKFLOW.md \"Mutation checks\"). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/history_fresh_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught: a match that was just played is counted at any time, whatever runs, in steps that each work the budget at most; an older recording waits for a quiet server and goes back in its line when a person's match begins; a recording the history knows or that its owner took out is not counted; a database that stops answering makes a fresh recording wait; the game server counts in steps; and a play in pieces is the play.",
+ "note": "Mutants of how the match history counts a match that has just ended (docs/SERVER_REPLAYS.md \"The match history\", docs/REPLAYS.md \"The match history\"), for tools/mutate.py (docs/WORKFLOW.md \"Mutation checks\"). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/history_fresh_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught: a match that was just played is counted at any time, whatever runs, in steps that each work the budget at most; an older recording waits for a quiet server and goes back in its line when a person's match begins; a recording the history knows or that its owner took out is not counted; a database that stops answering makes a fresh recording wait; a match of computer players alone is no fresh one; a turn that takes the state hash starts a step of its own; a map over a room's cells is refused for good; the game server counts in steps; and a play in pieces is the play.",
  "mutants": [
   {
    "id": "fresh_waits_for_a_quiet_server",
    "file": "src/ants_server/history_store.cpp",
-   "old": "if (job_ && !job_->fresh && !idle()) {",
-   "new": "if (job_ && !idle()) {",
+   "old": "if (job_ && !job_->fresh && !idle()) paused_",
+   "new": "if (job_ && !idle()) paused_",
    "build": [
     "test_history_store"
    ],
@@ -81,19 +81,8 @@
   {
    "id": "a_part_way_old_recording_keeps_running_when_busy",
    "file": "src/ants_server/history_store.cpp",
-   "old": "if (job_ && !job_->fresh && !idle()) {",
-   "new": "if (false && job_ && !job_->fresh && !idle()) {",
-   "build": [
-    "test_history_store"
-   ],
-   "test": "ANTS_TEST_FILTER=HS5.11 ./build/tests/test_server/test_history_store",
-   "expect": "HS5.11"
-  },
-  {
-   "id": "a_part_way_old_recording_is_lost",
-   "file": "src/ants_server/history_store.cpp",
-   "old": "        requeue(*job_);\n        job_.reset();\n    }\n    if (!job_) {",
-   "new": "        job_.reset();\n    }\n    if (!job_) {",
+   "old": "if (job_ && !job_->fresh && !idle()) paused_ = std::move(job_);",
+   "new": "if (false && job_ && !job_->fresh && !idle()) paused_ = std::move(job_);",
    "build": [
     "test_history_store"
    ],
@@ -134,17 +123,6 @@
    "expect": "HS5.14"
   },
   {
-   "id": "a_step_that_plays_the_whole_recording_on_the_real_clock",
-   "file": "src/ants_server/history_store.cpp",
-   "old": "clock_us_() - began >= slice_us_) break;",
-   "new": "clock_us_() - began >= 1000u * slice_us_) break;",
-   "build": [
-    "test_history_store"
-   ],
-   "test": "ANTS_TEST_FILTER=HS5.13 ./build/tests/test_server/test_history_store",
-   "expect": "HS5.13"
-  },
-  {
    "id": "the_server_counts_whole_recordings",
    "file": "src/ants_server/room_manager.cpp",
    "old": "history_feeder_->set_slice(HistoryFeeder::kSliceUs);",
@@ -180,8 +158,8 @@
   {
    "id": "a_play_in_pieces_has_no_end",
    "file": "src/ants_replay/player.cpp",
-   "old": "    if (turn_ < replay_.total_turns) return false;\n    end();\n    return true;",
-   "new": "    if (turn_ < replay_.total_turns) return false;\n    done_ = true;\n    return true;",
+   "old": "    end();\n    return true;",
+   "new": "    done_ = true;\n    return true;",
    "build": [
     "test_replay"
    ],
@@ -198,6 +176,116 @@
    ],
    "test": "ANTS_TEST_FILTER=RP2.5b ./build/tests/test_replay/test_replay",
    "expect": "RP2.5b"
+  },
+  {
+   "id": "a_paused_recording_is_dropped",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "!idle()) paused_ = std::move(job_);",
+   "new": "!idle()) job_.reset();",
+   "build": [
+    "test_history_store"
+   ],
+   "test": "ANTS_TEST_FILTER=HS5.11 ./build/tests/test_server/test_history_store",
+   "expect": "HS5.11"
+  },
+  {
+   "id": "a_paused_recording_starts_over",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "job_ = std::move(paused_);",
+   "new": "job_ = std::move(paused_);\n        job_->phase = Job::Phase::Read;",
+   "build": [
+    "test_history_store"
+   ],
+   "test": "ANTS_TEST_FILTER=HS5.11 ./build/tests/test_server/test_history_store",
+   "expect": "HS5.11"
+  },
+  {
+   "id": "a_hash_turn_does_not_start_a_step",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "if (slice_us_ != 0 && worked && job.play->next_takes_hash()) break;",
+   "new": "if (slice_us_ != 0 && worked && false) break;",
+   "build": [
+    "test_history_store"
+   ],
+   "test": "ANTS_TEST_FILTER=HS5.15 ./build/tests/test_server/test_history_store",
+   "expect": "HS5.15"
+  },
+  {
+   "id": "a_match_of_computer_players_alone_is_fresh",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "e.bots_only || ",
+   "new": "",
+   "build": [
+    "test_history_store"
+   ],
+   "test": "ANTS_TEST_FILTER=HS5.16 ./build/tests/test_server/test_history_store",
+   "expect": "HS5.16"
+  },
+  {
+   "id": "a_map_that_is_too_big_waits_for_the_maps",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "skip(job.id, why, kind == Refusal::NoMap);",
+   "new": "skip(job.id, why, true);",
+   "build": [
+    "test_history_store"
+   ],
+   "test": "ANTS_TEST_FILTER=HS5.18 ./build/tests/test_server/test_history_store",
+   "expect": "HS5.18"
+  },
+  {
+   "id": "the_limits_of_the_caller_are_ignored",
+   "file": "src/ants_replay/player.cpp",
+   "old": "level.load_from_file(path, &verdict, limits)",
+   "new": "level.load_from_file(path, &verdict, limits.cells() == 0 ? limits : assets::LevelLimits::for_play_extended())",
+   "build": [
+    "test_replay"
+   ],
+   "test": "ANTS_TEST_FILTER=RP6.2 ./build/tests/test_replay/test_replay",
+   "expect": "RP6.2"
+  },
+  {
+   "id": "the_end_of_a_play_is_not_a_call_of_its_own",
+   "file": "src/ants_replay/player.cpp",
+   "old": "|| (played != 0 && played == turns)) return false;",
+   "new": "|| false) return false;",
+   "build": [
+    "test_replay"
+   ],
+   "test": "ANTS_TEST_FILTER=RP2.5c ./build/tests/test_replay/test_replay",
+   "expect": "RP2.5c"
+  },
+  {
+   "id": "the_end_of_a_play_takes_no_hash",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (turn_ >= replay_.total_turns) return true;",
+   "new": "if (turn_ >= replay_.total_turns) return false;",
+   "build": [
+    "test_replay"
+   ],
+   "test": "ANTS_TEST_FILTER=RP2.5c ./build/tests/test_replay/test_replay",
+   "expect": "RP2.5c"
+  },
+  {
+   "id": "a_hash_turn_is_taken_for_the_one_before",
+   "file": "src/ants_replay/player.cpp",
+   "old": "const uint32_t next = turn_ + 1;",
+   "new": "const uint32_t next = turn_;",
+   "build": [
+    "test_replay"
+   ],
+   "test": "ANTS_TEST_FILTER=RP2.5c ./build/tests/test_replay/test_replay",
+   "expect": "RP2.5c"
+  },
+  {
+   "id": "a_piece_skips_the_tick_hook_of_its_last_turn",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (hooks_.after_tick) hooks_.after_tick(turn_ + 1, *engine_);",
+   "new": "if (hooks_.after_tick && played + 1 < turns) hooks_.after_tick(turn_ + 1, *engine_);",
+   "build": [
+    "test_history_details"
+   ],
+   "test": "ANTS_TEST_FILTER=HD1.5b ./build/tests/test_server/test_history_details",
+   "expect": "HD1.5b"
   }
  ]
 }

@@ -24,11 +24,15 @@ namespace ants::replay {
 /// Finds the replay's map in `maps_dir` by the file name that the head holds (the name as written, else the same name in another case), checks that it is the same file (the head's hash)
 /// and loads it. False with `error` otherwise: a missing map is refused by name, a map of the same name that is another file with both hashes.
 bool load_map(const Header& head, const std::string& maps_dir, assets::LevelData& level, std::string& error);
-/// The same with several folders, asked in order (the server's maps folder, then its community folder): the first that holds the name is the map's, as in the server's own list of maps.
-bool load_map(const Header& head, const std::vector<std::string>& dirs, assets::LevelData& level, std::string& error);
+/// The same with several folders, asked in order (the server's maps folder, then its community folder): the first that holds the name is the map's, as in the server's own list of maps. `limits` are the map's limits as the
+/// loader applies them (the play limits by default: a caller that plays on less, the game server's feeder, hands its own, so that a map that is over them is refused at its header, before a cell of the grid is read); when the
+/// map cannot be loaded, `verdict` (if given) holds what the loader found, so that the caller can tell a grid that is too big from a file that is damaged.
+bool load_map(const Header& head, const std::vector<std::string>& dirs, assets::LevelData& level, std::string& error, const assets::LevelLimits& limits = assets::LevelLimits::for_play_extended(),
+              assets::LevelValidation* verdict = nullptr);
 
-/// The same for a map whose file is known: `path` is the file (a map the server keeps under a name of its own), it must be the file that the head's hash names, and it is loaded.
-bool load_map_file(const Header& head, const std::string& path, assets::LevelData& level, std::string& error);
+/// The same for a map whose file is known: `path` is the file (a map the server keeps under a name of its own), it must be the file that the head's hash names, and it is loaded (`limits` and `verdict` as above).
+bool load_map_file(const Header& head, const std::string& path, assets::LevelData& level, std::string& error, const assets::LevelLimits& limits = assets::LevelLimits::for_play_extended(),
+                   assets::LevelValidation* verdict = nullptr);
 
 /// The map of `replay`: the file in the folders (load_map) when one of that name is there and is the head's, else the map that the file carries (its tmap chunk, replay.hpp), loaded the same way (the head's hash,
 /// LevelLimits::for_play_extended). A folder is never written. With no embedded map this is load_map and says what it says; with one and no usable file in the folders, `error` is the embedded map's. A file that carries a
@@ -88,9 +92,14 @@ public:
     Playback(const Playback&) = delete;
     Playback& operator=(const Playback&) = delete;
 
-    /// Plays at most `turns` more turns (fewer when the replay ends or a hash differs; the commands after the last tick are given when the last turn is played). True when the play is over.
+    /// Plays at most `turns` more turns (fewer when the replay ends or a hash differs). True when the play is over. The end of the play (the commands that wait for it, the final state's hash and the checks) is done by the
+    /// first call that has no turn left to play, so a call that plays the last of the turns it was given and no more does not end it: the end is a step of its own, which is what a caller that spreads a play over many
+    /// calls wants (the final hash of a big map costs as much as a turn that takes one). A call that is given more turns than are left plays them and ends the play.
     bool advance(uint32_t turns);
     bool done() const noexcept { return done_; }
+    /// True when what the next call to advance() does first takes the state hash, which on a big map costs milliseconds (a 256 x 256 map: 2 - 5 ms): the next turn is one that the file holds a hash for (every hash
+    /// period), or the turns are all played and the end is next. A caller that must keep its steps short ends a step before such a call and starts the next with it.
+    bool next_takes_hash() const noexcept;
     /// The turns played so far
     uint32_t turns_played() const noexcept { return out_.turns; }
     /// How the play went; what play() returns once done() (before that: the turns so far, nothing else)

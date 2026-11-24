@@ -92,7 +92,7 @@
   {
    "id": "feeder_map_skip_not_marked",
    "file": "src/ants_server/history_store.cpp",
-   "old": "skip(job.id, why, true);",
+   "old": "skip(job.id, why, kind == Refusal::NoMap);",
    "new": "skip(job.id, why);",
    "test": "ANTS_TEST_FILTER=HS5.9 ./build/tests/test_server/test_history_store",
    "expect": "HS5.9"

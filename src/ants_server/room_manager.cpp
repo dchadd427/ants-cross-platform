@@ -618,9 +618,9 @@ void RoomManager::route_hello(std::unique_ptr<net::Connection> connection, const
     reject(std::move(connection), good ? net::RejectReason::Full : reason, now_ms);
 }
 
-// A match that a person plays is never slowed down by the counting (a whole recording takes the one thread for 0.4 - 0.5 s): the older recordings and the backfill, which the feeder plays a step at a time but without hurry, are
-// counted only while no room with a person in it runs or loads a match and no record of a restart is being played again. The server's own matches of computer players do not hold it: nobody waits on them. The match that
-// has just ended does not wait for it at all: the feeder counts it in steps of 2 ms at the most (HistoryFeeder, docs/SERVER_REPLAYS.md "The match history").
+// A match that a person plays is never slowed down by the counting (a whole recording takes the one thread for 0.4 - 0.5 s): the matches of computer players alone, the older recordings and the backfill, which the feeder plays a step at a time but without hurry, are
+// counted only while no room with a person in it runs or loads a match and no record of a restart is being played again. No match of computer players holds it: nobody waits on them. The match that
+// has just ended does not wait for it at all, when a person played in it: the feeder counts it in steps of about 2 ms (HistoryFeeder, docs/SERVER_REPLAYS.md "The match history").
 bool RoomManager::history_may_run() const {
     if (!restoring_.empty()) return false;
     for (const auto& kv : rooms_) {
@@ -633,7 +633,7 @@ bool RoomManager::history_may_run() const {
 void RoomManager::update(uint32_t now_ms) {
     now_hint_ = now_ms;
     if (replays_ != nullptr) replays_->update();                   // (the replays that are too old are deleted once an hour)
-    if (history_feeder_ != nullptr) {                              // (one match of the replay store at a time is counted for the history, in steps of 2 ms at the most: the match that was just played at any time, the older recordings only while nobody plays)
+    if (history_feeder_ != nullptr) {                              // (one match of the replay store at a time is counted for the history, in steps of about 2 ms: the match with a person in it that was just played at any time, the others only while nobody plays)
         history_feeder_->step([this]() { return history_may_run(); }, now_ms);
     }
     // 0. a record whose delete failed is tried again every 10 s (its room is over: a restart before it is deleted would bring the room back)

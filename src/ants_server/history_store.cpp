@@ -867,21 +867,28 @@ HistoryFeeder::HistoryFeeder(HistoryStore& history, const ReplayStore& replays, 
     }
 }
 
-// The map of a recording: an approved map of the players (a file of the submissions folder under a name of its own), else the maps folder and the community folder
-bool HistoryFeeder::load_map_of(const replay::Header& head, assets::LevelData& level, std::string& why) const {
-    if (approved_path_) {
-        const std::string path = approved_path_(head.map_name);
-        if (!path.empty()) return replay::load_map_file(head, path, level, why);
+// The map of a recording: an approved map of the players (a file of the submissions folder under a name of its own), else the maps folder and the community folder. A map that is over a limit of a room (its cells, starting
+// ants, pairs of a plant and a waypoint, food objects or power-ups: OnlineLimits) is not played here either: no room makes such a recording (one from elsewhere may be one), and setting such a map up would hold the one
+// thread for seconds. A grid over the cells of a room is refused at the map's header, before a cell of it is read; the other limits are judged on the map as loaded. Such a map never gets any better, so it is not
+// a map that is "not there" (`kind` says which: TooBig, or NoMap for a map that is missing, another file of the name, or a file that cannot be loaded).
+bool HistoryFeeder::load_level(const replay::Header& head, assets::LevelData& level, std::string& why, Refusal& kind) const {
+    kind = Refusal::NoMap;
+    assets::LevelLimits limits = assets::LevelLimits::for_play_extended();
+    limits.max_cells = OnlineLimits::kMaxCells;
+    assets::LevelValidation verdict;
+    const std::string approved = approved_path_ ? approved_path_(head.map_name) : std::string();
+    const bool loaded = approved.empty() ? replay::load_map(head, map_dirs_, level, why, limits, &verdict) : replay::load_map_file(head, approved, level, why, limits, &verdict);
+    if (!loaded) {
+        const assets::LevelProblem* fatal = verdict.first_fatal();
+        if (fatal != nullptr && fatal->kind == assets::LevelProblemKind::GridTooLarge) {
+            kind = Refusal::TooBig;
+            why = std::string("the map ") + OnlineLimits::info(Term::Cells).more + " than a room plays online";
+        }
+        return false;
     }
-    return replay::load_map(head, map_dirs_, level, why);
-}
-
-// ... and a map that is over a limit of a room (its cells, starting ants, pairs of a plant and a waypoint, food objects or power-ups: OnlineLimits) is not played here either: a recording is played in one piece on the one thread, and setting
-// such a map up would hold it for seconds (no room makes such a recording; one from elsewhere may be one)
-bool HistoryFeeder::load_level(const replay::Header& head, assets::LevelData& level, std::string& why) const {
-    if (!load_map_of(head, level, why)) return false;
     const Term over = OnlineLimits::first_over(OnlineLimits::counts_of(level));
     if (over != Term::None) {
+        kind = Refusal::TooBig;
         why = std::string("the map ") + OnlineLimits::info(over).more + " than a room plays online";
         return false;
     }
@@ -932,12 +939,12 @@ void HistoryFeeder::rebuild() {
 
 // The recording that a feeder is working on: what the steps carry from one call to the next (a whole feeder makes one and ends it in the same call)
 struct HistoryFeeder::Job {
-    enum class Phase : uint8_t { Open, Play, Finish };
+    enum class Phase : uint8_t { Read, Map, Setup, Play, Finish };            // one step each (a whole feeder goes through all of them in one call): the file is read and decoded, its map is loaded, the engine is set up, the turns, the record
     std::string file;
     std::string id;
     bool fresh{false};                                // a fresh recording (a sliced feeder works it at any time)
     bool backfill{false};                             // the details of a record that was counted without
-    Phase phase{Phase::Open};
+    Phase phase{Phase::Read};
     int64_t ended_s{0};
     replay::Replay rep;
     assets::LevelData level;
@@ -969,7 +976,7 @@ void HistoryFeeder::look_fresh() {
         }
         const std::string id = e.file.substr(0, e.file.size() - ext);
         seen.insert(id);
-        if (fresh_seen_.count(id) != 0 || !e.readable || !entry_plays_here(e) || skipped_.count(id) != 0) continue;
+        if (fresh_seen_.count(id) != 0 || e.bots_only || !e.readable || !entry_plays_here(e) || skipped_.count(id) != 0) continue;       // (a match of computer players alone, the server's own or the arena's, waits for a quiet server like the pile)
         if (history_.knows(id)) {
             if (!history_.available()) return;                                           // (the database stopped answering: nothing is kept of this look, the next one is made again)
             continue;
@@ -997,58 +1004,76 @@ void HistoryFeeder::requeue(const Job& job) {
     else queue_.push_back(job.file);
 }
 
-// The first step of a recording that is to be counted: read, decoded, its map loaded, the engine set up
-HistoryFeeder::Move HistoryFeeder::open_count(Job& job) {
+// A recording that cannot be worked on: one that is to be counted is left out with a line in the log (and told to wait for its map only when its map is what is missing); the details of an older record get the marker,
+// or nothing when the recording could not be tried at all (it could not be read, its map is not here or is one that a room does not play: the next start tries again)
+HistoryFeeder::Move HistoryFeeder::refuse(Job& job, Refusal kind, const std::string& why) {
+    if (!job.backfill) {
+        skip(job.id, why, kind == Refusal::NoMap);
+        return Move::Played;
+    }
+    job.why = why;
+    job.for_now = kind == Refusal::Unreadable || kind == Refusal::NoMap || kind == Refusal::TooBig;
+    return settle_backfill(job);
+}
+
+// The first step of a recording: read from the store and decoded (an older record whose details are to be made is looked up first)
+HistoryFeeder::Move HistoryFeeder::read_job(Job& job) {
     const ReplayEntry* entry = replays_.find(job.file);
-    if (entry == nullptr || !entry->readable) return Move::Dropped;                 // (it went in the meantime: its 30 days, or the owner)
+    if (entry == nullptr || !entry->readable) return Move::Dropped;                      // (it went in the meantime: its 30 days, or the owner)
+    if (job.backfill) {
+        if (!history_.find(job.id, job.record)) return Move::Dropped;                    // (the owner took it out, or the database does not answer)
+        if (!job.record.details.empty()) return Move::Played;                            // (it has some now)
+        job.details = history_details_marker();
+    }
     job.ended_s = entry->ended_s;
     std::vector<uint8_t> bytes;
     std::string why;
-    if (!replays_.read(job.file, bytes)) {
-        skip(job.id, "the recording cannot be read from the replay store");              // (it is listed but the read failed: told once, not tried again before the server starts again)
-        return Move::Played;
-    }
-    if (!replay::decode(bytes.data(), bytes.size(), job.rep, why)) {
-        skip(job.id, "the recording cannot be read: " + why);
-        return Move::Played;
-    }
-    if (!replay::plays_here(job.rep.head)) {
-        skip(job.id, replay::rules_refusal(job.rep.head));
-        return Move::Played;
-    }
-    if (!load_level(job.rep.head, job.level, why)) {
-        skip(job.id, why, true);
-        return Move::Played;
-    }
+    if (!replays_.read(job.file, bytes)) return refuse(job, Refusal::Unreadable, "the recording cannot be read from the replay store");        // (it is listed but the read failed)
+    if (!replay::decode(bytes.data(), bytes.size(), job.rep, why)) return refuse(job, Refusal::Damaged, "the recording cannot be read: " + why);
+    if (!replay::plays_here(job.rep.head)) return refuse(job, Refusal::Foreign, replay::rules_refusal(job.rep.head));
+    job.phase = Job::Phase::Map;
+    return Move::Go;
+}
+
+// The second step: the map of the recording is found, checked against the head's hash and loaded
+HistoryFeeder::Move HistoryFeeder::map_job(Job& job) {
+    std::string why;
+    Refusal kind = Refusal::NoMap;
+    if (!load_level(job.rep.head, job.level, why, kind)) return refuse(job, kind, why);
+    job.phase = Job::Phase::Setup;
+    return Move::Go;
+}
+
+// The third step: the engine is set up as the match began, with the stats pass as its hooks
+HistoryFeeder::Move HistoryFeeder::setup_job(Job& job) {
     try {                                                                                // (the engine refuses a recording that no room made: it must not take the server down)
+        if (job.backfill) job.record.heavy_orders = static_cast<uint8_t>(job.rep.head.heavy_orders & job.rep.head.roster);       // (the mark that the head carries goes into the details with the rest)
         job.play = std::make_unique<replay::StatsPlayback>(job.rep, job.level);
     } catch (const std::exception& ex) {
-        skip(job.id, std::string("the recording could not be played: ") + ex.what());
-        return Move::Played;
+        return refuse(job, Refusal::Engine, std::string("the recording could not be played: ") + ex.what());
     }
     job.phase = Job::Phase::Play;
     return Move::Go;
 }
 
-// The turns: all of them (whole work), or as many as fit in the slice (sliced work: the clock is looked at after every turn, so a step ends within one turn of its budget)
+// The turns: all of them (whole work), or as many as fit in the slice (sliced work: the clock is looked at after every turn, so a step ends within one turn of its budget). A turn that takes the state hash starts a step of
+// its own, and so does the end of the play (it takes the final hash): on a big map those are 2 - 5 ms each, and they must not come on top of a full slice.
 HistoryFeeder::Move HistoryFeeder::play_job(Job& job) {
     try {
         const uint64_t began = slice_us_ != 0 ? clock_us_() : 0;
         bool done = job.play->done();
+        bool worked = false;
         while (!done) {
+            if (slice_us_ != 0 && worked && job.play->next_takes_hash()) break;
             done = job.play->advance(slice_us_ != 0 ? 1u : ~uint32_t{0});
+            worked = true;
             if (!done && slice_us_ != 0 && clock_us_() - began >= slice_us_) break;
         }
         if (done) job.phase = Job::Phase::Finish;
         return Move::Go;
     } catch (const std::exception& ex) {
         job.play.reset();
-        if (job.backfill) {
-            job.why = std::string("the recording could not be played: ") + ex.what();
-            return settle_backfill(job);
-        }
-        skip(job.id, std::string("the recording could not be played: ") + ex.what());
-        return Move::Played;
+        return refuse(job, Refusal::Engine, std::string("the recording could not be played: ") + ex.what());
     }
 }
 
@@ -1115,35 +1140,6 @@ void HistoryFeeder::build_backfill() {
 
 // The details of one counted match, from its recording: played once more, with the stored record's own rows for who won. A recording that is read and cannot be played gets the marker (so that it is not
 // played again at every start); one that could not be tried (the store did not give it, its map is not here) gets nothing and is tried again when the server starts again.
-HistoryFeeder::Move HistoryFeeder::open_backfill(Job& job) {
-    const ReplayEntry* entry = replays_.find(job.file);
-    if (entry == nullptr || !entry->readable) return Move::Dropped;                 // (it went in the meantime)
-    if (!history_.find(job.id, job.record)) return Move::Dropped;                   // (the owner took it out, or the database does not answer)
-    if (!job.record.details.empty()) return Move::Played;                           // (it has some now)
-    job.details = history_details_marker();
-    std::vector<uint8_t> bytes;
-    if (!replays_.read(job.file, bytes)) {
-        job.why = "the recording cannot be read from the replay store";
-        job.for_now = true;
-    } else if (!replay::decode(bytes.data(), bytes.size(), job.rep, job.why)) {
-        job.why = "the recording cannot be read: " + job.why;
-    } else if (!replay::plays_here(job.rep.head)) {
-        job.why = replay::rules_refusal(job.rep.head);
-    } else if (!load_level(job.rep.head, job.level, job.why)) {
-        job.for_now = true;                                                              // (the recording could not be tried at all: the store did not give it, or its map is not here: no marker, the next start tries again)
-    } else {
-        try {
-            job.record.heavy_orders = static_cast<uint8_t>(job.rep.head.heavy_orders & job.rep.head.roster);       // (the mark that the head carries goes into the details with the rest)
-            job.play = std::make_unique<replay::StatsPlayback>(job.rep, job.level);
-            job.phase = Job::Phase::Play;
-            return Move::Go;
-        } catch (const std::exception& ex) {
-            job.why = std::string("the recording could not be played: ") + ex.what();
-        }
-    }
-    return settle_backfill(job);
-}
-
 HistoryFeeder::Move HistoryFeeder::finish_backfill(Job& job) {
     const replay::StatsPlay played = job.play->take();
     job.play.reset();
@@ -1184,7 +1180,9 @@ bool HistoryFeeder::run_job(uint32_t now_ms) {
     do {
         Job& job = *job_;
         switch (job.phase) {
-            case Job::Phase::Open: move = job.backfill ? open_backfill(job) : open_count(job); break;
+            case Job::Phase::Read: move = read_job(job); break;
+            case Job::Phase::Map: move = map_job(job); break;
+            case Job::Phase::Setup: move = setup_job(job); break;
             case Job::Phase::Play: move = play_job(job); break;
             case Job::Phase::Finish: move = job.backfill ? finish_backfill(job) : finish_count(job); break;
         }
@@ -1200,6 +1198,11 @@ bool HistoryFeeder::run_job(uint32_t now_ms) {
 
 // The work that waits for a quiet server: the pile (the files of the index that the history does not know), then the older records that have no details. Starts the next job of it, and says the summary of a run once.
 bool HistoryFeeder::start_waiting_job(const std::function<bool()>& idle) {
+    if (paused_) {                                                                       // (the recording that a person's match stopped goes on first, from the turn it had reached)
+        if (!idle()) return false;
+        job_ = std::move(paused_);
+        return true;
+    }
     const bool backfill_due = !backfill_built_ || !backfill_.empty() || backfilled_ != reported_backfilled_;
     if (replays_.revision() == seen_revision_ && queue_.empty() && counted_ == reported_counted_ && skipped_.size() == reported_skipped_ && !backfill_due) return false;      // (nothing to do: the usual pass)
     if (!idle()) return false;
@@ -1240,10 +1243,7 @@ bool HistoryFeeder::step(const std::function<bool()>& idle, uint32_t now_ms) {
         if (!history_.available()) return false;
     }
     if (paced_ && !net::time_reached(now_ms, next_ms_)) return false;
-    if (job_ && !job_->fresh && !idle()) {                                               // (a sliced feeder: a person's match began while a recording of the pile was part-way: it goes back in its line, a fresh recording may take the turn)
-        requeue(*job_);
-        job_.reset();
-    }
+    if (job_ && !job_->fresh && !idle()) paused_ = std::move(job_);                      // (a sliced feeder: a person's match began while a recording of the pile was part-way: it waits where it is, a fresh recording may take the turn)
     if (!job_) {
         if (slice_us_ != 0) look_fresh();
         if (!fresh_.empty()) {                                                           // (only a sliced feeder has any: the match that was just played, at any time)

@@ -122,7 +122,7 @@ struct MatchSpec {
     const std::string path = (spec.dir.empty() ? maps_dir() : spec.dir) + "/" + file;
     assets::LevelData level;
     uint64_t hash = 0;
-    if (!level.load_from_file(path) || !net::hash_file(path, hash)) return std::vector<uint8_t>();
+    if (!level.load_from_file(path, nullptr, assets::LevelLimits::for_play_extended()) || !net::hash_file(path, hash)) return std::vector<uint8_t>();       // (the play limits: a map of the players may be Extended)
     ai::ArenaSpec arena;
     arena.level = &level;
     arena.seed = spec.seed;

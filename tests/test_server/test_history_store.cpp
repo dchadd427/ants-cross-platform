@@ -8,6 +8,7 @@
 #include <iostream>
 
 #include "../common/test_assert.hpp"
+#include "big_map_fixtures.hpp"
 #include "history_fixtures.hpp"
 
 static int g_test_count = 0;
@@ -1511,6 +1512,21 @@ int main() {
                 return idle;
             }, rig.ms);
         };
+        int whole_steps = 0;                                                           // (what an old recording takes when nothing stops it)
+        {
+            Rig alone;
+            ASSERT_TRUE(alone.open());
+            alone.work_us = 50;
+            alone.feeder.set_slice(HistoryFeeder::kSliceUs);
+            alone.keep(match_file(1));
+            alone.now += 2 * 3600;
+            while (alone.history.count() == 0 && whole_steps < 400) {
+                alone.ms += 20;
+                alone.feeder.step([] { return true; }, alone.ms);
+                ++whole_steps;
+            }
+            ASSERT_TRUE(alone.history.count() == 1 && whole_steps > 20);
+        }
         const std::string old_id = rig.keep(match_file(1));
         rig.now += 2 * 3600;                                                           // (two hours on: it is no fresh recording any more)
         for (int i = 0; i < 60; ++i) step(false);
@@ -1519,11 +1535,13 @@ int main() {
         ASSERT_TRUE(rig.history.count() == 0 && rig.feeder.pending() == 1);
         const std::string fresh_id = rig.keep(match_file(2));                          // (a match that a person has just played ends while another person's match runs)
         for (int i = 0; i < 400 && rig.history.count() == 0; ++i) step(false);
-        ASSERT_TRUE(rig.history.knows(fresh_id) && !rig.history.knows(old_id) && rig.feeder.pending() == 1);     // (the old one is back in its line)
+        ASSERT_TRUE(rig.history.knows(fresh_id) && !rig.history.knows(old_id) && rig.feeder.pending() == 1);     // (the old one waits where it was)
         for (int i = 0; i < 100; ++i) step(false);
         ASSERT_TRUE(rig.history.count() == 1 && !rig.history.knows(old_id));          // (it waits as long as the server is not quiet)
-        for (int i = 0; i < 400 && rig.history.count() < 2; ++i) step(true);
+        int resumed_steps = 0;
+        for (; resumed_steps < 400 && rig.history.count() < 2; ++resumed_steps) step(true);
         ASSERT_TRUE(rig.history.count() == 2 && rig.history.knows(old_id) && rig.feeder.counted() == 2 && rig.feeder.pending() == 0);
+        ASSERT_LE(6 + resumed_steps, whole_steps + 1);                                 // (it went on from the turn it had reached: the six steps that it had made were not made again)
     } TEST_END();
 
     TEST_CASE("HS5.12 A database that stops answering while a fresh recording is counted makes it wait: nothing is left out, and it is counted when the database answers again, with no quiet server asked for") {
@@ -1557,13 +1575,20 @@ int main() {
     } TEST_END();
 
     TEST_CASE("HS5.13 On a real clock a recording of 7,000 turns and four players is counted in many steps, and all but a few of them are short (the steps that open the file and keep the record are the few): a match that is played on the same thread loses a few milliseconds at a time, never the half second that a whole recording takes") {
-        if (match_file(4).empty()) {
+        if (match_file(0).empty()) {
             std::cout << "SKIPPED (no map)\n";
             return;
         }
+        MatchSpec spec;                                                                // (the same match as match file 4, with people's names: a match of computer players alone is no fresh one)
+        spec.map = "TREASURE";
+        spec.seed = 23;
+        spec.turns = 7000;
+        spec.names = {"Ann", "Bob", "Cy", "Di"};
+        const std::vector<uint8_t> people = record_match(spec);
+        ASSERT_TRUE(!people.empty());
         Rig rig;
         ASSERT_TRUE(rig.open());
-        const std::string id = rig.keep(match_file(4));
+        const std::string id = rig.keep(people);
         HistoryFeeder real(rig.history, rig.replays, maps_dir());                      // (the clock of the process)
         real.set_slice(HistoryFeeder::kSliceUs);
         std::vector<double> took;
@@ -1615,6 +1640,129 @@ int main() {
         }
         ASSERT_TRUE(rig.history.knows(wanted) && rig.feeder.counted() == 1 && rig.history.count() == 2 && rig.history.marker_count() == 1);
         ASSERT_TRUE(rig.feeder.left_out() == 0 && rig.feeder.pending() == 0);
+    } TEST_END();
+
+    TEST_CASE("HS5.15 A turn that takes the state hash (every 100th) starts a step of its own, and so does the end of the play: a step never plays the turns before such a turn and then the turn itself, however much of its budget is left") {
+        if (match_file(1).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        Rig rig;
+        ASSERT_TRUE(rig.open());
+        rig.work_us = 5;                                                               // (a step of 2,000 us could play 400 turns)
+        rig.feeder.set_slice(HistoryFeeder::kSliceUs);
+        const std::string id = rig.keep(match_file(1));                                // (1,000 turns, a hash every 100)
+        uint64_t widest = 0;
+        int steps = 0;
+        while (rig.history.count() == 0 && steps < 200) {
+            rig.ms += 20;
+            const uint64_t before = rig.work_clock;
+            rig.feeder.step([] { return false; }, rig.ms);
+            widest = std::max(widest, rig.work_clock - before);
+            ++steps;
+        }
+        ASSERT_TRUE(rig.history.knows(id) && rig.feeder.counted() == 1);
+        ASSERT_LE(widest, uint64_t{110} * rig.work_us);                                // (the turn that hashes and the 99 after it, with the looks at the clock round them: not 400 turns)
+        ASSERT_GE(steps, 12);                                                          // (ten hashes and the end of the play make the steps that were not cut by the budget)
+    } TEST_END();
+
+    TEST_CASE("HS5.16 A sliced feeder counts a match of computer players alone, a file of the bot arena and a match that ended more than an hour ago only while the server is quiet: only a match with a person in it that has just ended is worked at any time") {
+        if (match_file(4).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        Rig rig;
+        ASSERT_TRUE(rig.open());
+        rig.work_us = 50;
+        rig.feeder.set_slice(HistoryFeeder::kSliceUs);
+        const std::string bots = rig.keep(match_file(4));                              // (four computer players)
+        const std::string people = rig.keep(match_file(1));
+        const ReplayEntry* bot_entry = rig.replays.find(history_recording_file(bots));
+        const ReplayEntry* people_entry = rig.replays.find(history_recording_file(people));
+        ASSERT_TRUE(bot_entry != nullptr && bot_entry->bots_only && people_entry != nullptr && !people_entry->bots_only);
+        int asked = 0;
+        const auto step = [&](bool idle) {
+            rig.ms += 20;
+            return rig.feeder.step([&, idle] {
+                ++asked;
+                return idle;
+            }, rig.ms);
+        };
+        for (int i = 0; i < 400 && rig.history.count() == 0; ++i) step(false);
+        ASSERT_TRUE(rig.history.knows(people) && !rig.history.knows(bots));
+        for (int i = 0; i < 100; ++i) step(false);
+        ASSERT_TRUE(rig.history.count() == 1 && asked > 0);                            // (the match of the computers waits as long as a person's match runs)
+        for (int i = 0; i < 600 && rig.history.count() < 2; ++i) step(true);
+        ASSERT_TRUE(rig.history.knows(bots) && rig.feeder.counted() == 2);
+    } TEST_END();
+
+    TEST_CASE("HS5.17 A recording on a 256 x 256 map with four players is counted in steps of a few milliseconds on a real clock: the turns that take the state hash and the step that opens the file are the long ones, and no step takes a tick") {
+        const std::string big = grown_tiny(256, 256);
+        if (big.empty() || match_file(0).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        TempDir players;
+        { std::ofstream out((players.path / "BIG256.LVL").string(), std::ios::binary); out << big; }
+        MatchSpec spec;
+        spec.map = "BIG256";
+        spec.dir = players.path.string();
+        spec.file = "BIG256.LVL";
+        spec.seed = 9;
+        spec.turns = 1200;                                                             // (twelve hashes)
+        spec.names = {"Ann", "Bob", "Cy", "Di"};
+        const std::vector<uint8_t> bytes = record_match(spec);
+        ASSERT_TRUE(!bytes.empty());
+        Rig rig(maps_dir(), players.path.string());
+        ASSERT_TRUE(rig.open());
+        const std::string id = rig.keep(bytes);
+        ASSERT_TRUE(!id.empty());
+        HistoryFeeder real(rig.history, rig.replays, maps_dir(), std::function<uint64_t()>(), players.path.string());
+        real.set_slice(HistoryFeeder::kSliceUs);
+        std::vector<double> took;
+        uint32_t t = rig.ms;
+        const auto began = std::chrono::steady_clock::now();
+        while (rig.history.count() == 0 && took.size() < 20000) {
+            t += 120;
+            const auto before = std::chrono::steady_clock::now();
+            real.step([] { return false; }, t);
+            took.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - before).count());
+        }
+        const double all_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - began).count();
+        ASSERT_TRUE(rig.history.count() == 1 && rig.history.knows(id) && real.counted() == 1);
+        std::vector<double> sorted = took;
+        std::sort(sorted.begin(), sorted.end());
+        const double p95 = sorted[sorted.size() * 95 / 100];
+        std::cout << "\n    " << took.size() << " steps, " << std::fixed << std::setprecision(1) << all_ms << " ms in all, the median step " << std::setprecision(2) << sorted[sorted.size() / 2] << " ms, the 95th percentile " << p95
+                  << " ms, the longest " << std::setprecision(1) << sorted.back() << " ms";
+        ASSERT_GE(took.size(), size_t{40});
+        ASSERT_LT(p95, 15.0);                                                          // (a turn of this map takes up to 5 ms and a hash turn is a step of its own: a tick is 50 ms; the bound is for a machine that is busy)
+    } TEST_END();
+
+    TEST_CASE("HS5.18 A recording on a map with more cells than a room plays (300 x 300) is left out for good: it is no map that is not there, so nothing waits for the maps to change, and the line in the log says that the map is bigger") {
+        const std::string big = grown_tiny(300, 300);
+        if (big.empty() || match_file(0).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        TempDir players;
+        { std::ofstream out((players.path / "BIG300.LVL").string(), std::ios::binary); out << big; }
+        MatchSpec spec;
+        spec.map = "BIG300";
+        spec.dir = players.path.string();
+        spec.file = "BIG300.LVL";
+        spec.seed = 9;
+        spec.turns = 300;
+        spec.names = {"Ann", "Bob", "Cy", "Di"};
+        const std::vector<uint8_t> bytes = record_match(spec);
+        ASSERT_TRUE(!bytes.empty());
+        Rig rig(maps_dir(), players.path.string());
+        ASSERT_TRUE(rig.open());
+        ASSERT_TRUE(!rig.keep(bytes).empty());
+        rig.drain(8);
+        ASSERT_TRUE(rig.history.count() == 0 && rig.feeder.left_out() == 1 && rig.feeder.left_out_for_map() == 0);
+        ASSERT_EQ(rig.feeder.retry_skipped_maps(), size_t{0});                         // (a map that a room does not play does not wait for the list of maps to change)
+        ASSERT_TRUE(lines_with(rig.history.take_notes(), "is bigger than a room plays online") == 1);
     } TEST_END();
 
     TEST_CASE("HS7.1 A store that only reads a file that another connection writes (the history service's HTTP side): a read scope sees what was committed before it, keeps one state to its end, and the next one sees the rest; the counts and the sums are made again") {

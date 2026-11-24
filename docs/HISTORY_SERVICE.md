@@ -6,7 +6,7 @@
 
 ## Why a program of its own
 
-The game server runs on one thread. Counting a match means playing its recording again with no screen (0.3 to 0.6 s), which the server does in steps of a few milliseconds (a match that has just ended at once, the older recordings only while no room with a person in it runs a match), and the lists and the files of the public door are made on the same thread. A busy server counts late, and the counting shares its thread with the games. The service moves all of that to another process: the game server writes each recording when a match ends, as before, and the service does the counting and the serving.
+The game server runs on one thread. Counting a match means playing its recording again with no screen (0.3 to 0.6 s), which the server does in steps of a few milliseconds (a match with a person in it that has just ended at once, the other recordings only while no room with a person in it runs a match), and the lists and the files of the public door are made on the same thread. A busy server counts late, and the counting shares its thread with the games. The service moves all of that to another process: the game server writes each recording when a match ends, as before, and the service does the counting and the serving.
 
 ## Starting it
 

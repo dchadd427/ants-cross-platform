@@ -78,7 +78,7 @@ bool load_map(const Header& head, const std::string& maps_dir, assets::LevelData
     return load_map(head, std::vector<std::string>{maps_dir}, level, error);
 }
 
-bool load_map(const Header& head, const std::vector<std::string>& dirs, assets::LevelData& level, std::string& error) {
+bool load_map(const Header& head, const std::vector<std::string>& dirs, assets::LevelData& level, std::string& error, const assets::LevelLimits& limits, assets::LevelValidation* verdict) {
     error.clear();
     if (!net::valid_map_name(head.map_name)) {
         error = "the replay's map name cannot name a map file";
@@ -95,10 +95,10 @@ bool load_map(const Header& head, const std::vector<std::string>& dirs, assets::
         error = "the map " + head.map_name + " is not in " + where + " (the replay needs it; --maps-dir says where the maps are)";
         return false;
     }
-    return load_map_file(head, path, level, error);
+    return load_map_file(head, path, level, error, limits, verdict);
 }
 
-bool load_map_file(const Header& head, const std::string& path, assets::LevelData& level, std::string& error) {
+bool load_map_file(const Header& head, const std::string& path, assets::LevelData& level, std::string& error, const assets::LevelLimits& limits, assets::LevelValidation* verdict_out) {
     error.clear();
     uint64_t hash = 0;
     if (!net::hash_file(path, hash)) {
@@ -110,8 +110,9 @@ bool load_map_file(const Header& head, const std::string& path, assets::LevelDat
         return false;
     }
     assets::LevelValidation verdict;
-    if (!level.load_from_file(path, &verdict, assets::LevelLimits::for_play_extended())) {
+    if (!level.load_from_file(path, &verdict, limits)) {
         error = "the map " + head.map_name + " cannot be loaded" + (verdict.first_fatal() ? ": " + verdict.reason() : std::string());
+        if (verdict_out != nullptr) *verdict_out = verdict;
         return false;
     }
     return true;
@@ -236,7 +237,8 @@ void Playback::end() {
 bool Playback::advance(uint32_t turns) {
     if (done_) return true;
     const uint32_t period = replay_.head.hash_period;
-    for (uint32_t played = 0; played < turns && turn_ < replay_.total_turns; ++played) {
+    uint32_t played = 0;
+    for (; played < turns && turn_ < replay_.total_turns; ++played) {
         for (; next_ < replay_.commands.size() && replay_.commands[next_].turn == turn_; ++next_) give(replay_.commands[next_]);
         engine_->tick();
         if (hooks_.after_tick) hooks_.after_tick(turn_ + 1, *engine_);
@@ -256,9 +258,16 @@ bool Playback::advance(uint32_t turns) {
             }
         }
     }
-    if (turn_ < replay_.total_turns) return false;
+    if (turn_ < replay_.total_turns || (played != 0 && played == turns)) return false;       // (the turns are played: the end is the next call's, when this one used up the turns it was given)
     end();
     return true;
+}
+
+bool Playback::next_takes_hash() const noexcept {
+    if (done_) return false;
+    if (turn_ >= replay_.total_turns) return true;                                                    // (the end: the final state's hash)
+    const uint32_t next = turn_ + 1;
+    return replay_.head.hash_period != 0 && next % replay_.head.hash_period == 0 && next / replay_.head.hash_period <= replay_.hashes.size();
 }
 
 Outcome play(const Replay& replay, const assets::LevelData& level, const Hooks& hooks) {

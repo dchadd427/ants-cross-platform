@@ -932,6 +932,34 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(refused.advance(10) && refused.turns_played() == 0);
     } TEST_END();
 
+    TEST_CASE("RP2.5c A Play In Pieces Says When The Next Call Takes The State Hash (The Turn That The File Holds A Hash For, And The End), And The End Is A Call Of Its Own When The Call Before It Used Up Its Turns") {
+        const Played p = play_scripted(tiny, 31, 450);
+        ASSERT_EQ(p.replay.head.hash_period, 100u);
+        Playback playback(p.replay, tiny.level);
+        std::vector<uint32_t> before_hash;                                                             // (the turns played so far when the next call hashes)
+        while (!playback.done()) {
+            if (playback.next_takes_hash()) before_hash.push_back(playback.turns_played());
+            playback.advance(1);
+        }
+        ASSERT_TRUE(before_hash == std::vector<uint32_t>({99u, 199u, 299u, 399u, 450u}));            // (the 100th turn, the 200th ... and the end after the 450th)
+        ASSERT_FALSE(playback.next_takes_hash());                                                      // (a play that is over takes nothing)
+        Playback exact(p.replay, tiny.level);
+        ASSERT_FALSE(exact.advance(450));                                                              // (the turns it was given are all of them: the end waits for the next call)
+        ASSERT_TRUE(!exact.done() && exact.turns_played() == 450u && exact.next_takes_hash());
+        ASSERT_TRUE(exact.advance(1) && exact.done() && exact.outcome().ok && exact.turns_played() == 450u);
+        Playback more(p.replay, tiny.level);
+        ASSERT_TRUE(more.advance(451) && more.done() && more.outcome().ok);                           // (more turns than are left: the end comes with them)
+        Replay changed = p.replay;
+        changed.hashes.resize(2);                                                                      // (a file that holds two hashes only: the turns after the 200th take none)
+        Playback two(changed, tiny.level);
+        std::vector<uint32_t> hashing;
+        while (!two.done()) {
+            if (two.next_takes_hash()) hashing.push_back(two.turns_played());
+            two.advance(1);
+        }
+        ASSERT_TRUE(hashing == std::vector<uint32_t>({99u, 199u, 450u}));
+    } TEST_END();
+
     TEST_CASE("RP2.6 Recorder: A Command That The Engine Turns Down Is Left Out And Counted, One That It Would Apply But The Wire Form Cannot Hold Spoils The Recording, A Missing Turn Spoils It, A Finished Recorder Takes Nothing More") {
         using Status = sim::CommandResult::Status;
         sim::SimulationEngine engine;
@@ -1468,6 +1496,34 @@ int main(int argc, char* argv[]) {
     } TEST_END();
 
     // ---- the map in the file (the optional chunk `tmap`) -------------------------------------------------------------------------
+
+    TEST_CASE("RP6.2 A Map Is Loaded Within The Limits That The Caller Gives: A Grid Over Them Is Refused At Its Header (The Verdict Says A Grid Too Large, Not A Map That Is Missing Or Damaged), One Within Them Loads, And The Play Limits Are The Default") {
+        const std::string bytes = grown_tiny(300, 300);                                               // (90,000 cells: within the play limits of 262,144, over a room's 65,536)
+        ASSERT_FALSE(bytes.empty());
+        TempDir dir;
+        { std::ofstream out((dir.path / "BIG300.LVL").string(), std::ios::binary); out.write(bytes.data(), static_cast<std::streamsize>(bytes.size())); }
+        Header h = head_for(tiny, "BIG300", 1, 0x0F);
+        h.map_hash = net::hash_bytes(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size());
+        assets::LevelData level;
+        std::string error;
+        ASSERT_TRUE(load_map(h, dir.path.string(), level, error) && level.width() == 300u && level.height() == 300u);          // (the default: the play limits)
+        assets::LevelLimits room = assets::LevelLimits::for_play_extended();
+        room.max_cells = 256u * 256u;
+        assets::LevelData refused;
+        assets::LevelValidation verdict;
+        ASSERT_FALSE(load_map(h, std::vector<std::string>{dir.path.string()}, refused, error, room, &verdict));
+        ASSERT_TRUE(contains(error, "cannot be loaded") && verdict.first_fatal() != nullptr && verdict.first_fatal()->kind == assets::LevelProblemKind::GridTooLarge);
+        ASSERT_FALSE(load_map_file(h, (dir.path / "BIG300.LVL").string(), refused, error, room, &verdict));
+        room.max_cells = 300u * 300u;                                                                  // (exactly the cells that it has)
+        ASSERT_TRUE(load_map_file(h, (dir.path / "BIG300.LVL").string(), refused, error, room, &verdict) && refused.width() == 300u);
+        assets::LevelValidation none;                                                                  // (a map that is not there, or another file of the name, is no grid too large)
+        assets::LevelData missing;
+        ASSERT_FALSE(load_map(h, std::vector<std::string>{(dir.path / "nowhere").string()}, missing, error, room, &none));
+        ASSERT_TRUE(none.first_fatal() == nullptr);
+        h.map_hash ^= 1u;
+        ASSERT_FALSE(load_map(h, std::vector<std::string>{dir.path.string()}, missing, error, assets::LevelLimits::for_play_extended(), &none));
+        ASSERT_TRUE(contains(error, "not the file") && none.first_fatal() == nullptr);
+    } TEST_END();
 
     TEST_CASE("RP9.1 hash_bytes Is FNV-1a 64 (The Map's Identity): The Known Values, In Pieces, And The Same As The Hash Of The Same File") {
         ASSERT_EQ(net::hash_bytes(nullptr, 0), 0xcbf29ce484222325ull);

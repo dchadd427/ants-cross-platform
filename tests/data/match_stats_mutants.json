@@ -517,7 +517,7 @@
   {
    "id": "the_pass_trusts_the_statement_to_guard_the_details",
    "file": "src/ants_server/history_store.cpp",
-   "old": "    if (!job.record.details.empty()) return Move::Played;                           // (it has some now)\n",
+   "old": "        if (!job.record.details.empty()) return Move::Played;                            // (it has some now)\n",
    "new": "\n",
    "build": "test_history_details",
    "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
@@ -525,8 +525,8 @@
   {
    "id": "a_missing_map_leaves_a_marker",
    "file": "src/ants_server/history_store.cpp",
-   "old": "load_level(job.rep.head, job.level, job.why)) {\n        job.for_now = true;",
-   "new": "load_level(job.rep.head, job.level, job.why)) {\n        job.for_now = false;",
+   "old": "job.for_now = kind == Refusal::Unreadable || kind == Refusal::NoMap || kind == Refusal::TooBig;",
+   "new": "job.for_now = kind == Refusal::Unreadable || kind == Refusal::TooBig;",
    "build": "test_history_details",
    "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
   },
