@@ -1,7 +1,8 @@
 /* The search and the filters of the map index (/map-library; docs/MAP_PAGES.md). The page is complete without this file: its list is one page of the library and its pager is plain links
    (what a search engine and a visitor without script get). With the list that the page loads before this file (window.ANTS_MAP_LIBRARY, made by tools/map_pages.py) this script shows the
    search and the filters, and while one is in use it draws the matching maps itself, 48 to a page; with all of them cleared it puts the page back as it was. Everything that came with the list
-   (a map's name, its line) is put in as text, never as markup. "Most played" asks the site's list of maps (GET /maps) once, when it is first chosen. Plain ES5, no globals. */
+   (a map's name, its line) is put in as text, never as markup. "Most played" asks the site's list of maps (GET /maps) once, when it is first chosen. The Random map link goes to the page of a map of the
+   whole library, a new one each time it is used. Plain ES5, no globals. */
 (function () {
     'use strict';
     var d = document, data = window.ANTS_MAP_LIBRARY;
@@ -111,5 +112,12 @@
     });
     var more = d.getElementById('filters');
     if (more) more.addEventListener('click', function () { tools.classList.add('open'); });
+    var random = d.getElementById('random');                    // Random map: a link to the page of a map of the whole library, made again whenever it is used (the page has none without script: the link is hidden)
+    if (random && maps.length) {
+        var roll = function () { random.href = '/map/' + maps[Math.floor(Math.random() * maps.length)].slug; };
+        roll();
+        random.addEventListener('click', roll);
+        random.hidden = false;
+    }
     tools.hidden = false;
 }());

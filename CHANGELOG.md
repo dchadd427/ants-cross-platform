@@ -33,6 +33,7 @@ Work that is not released yet is written in the same template under a heading th
 - Right-click a player in the list, or a name in the chat (long-press on a phone), to **Invite to my room**. They see it as a line in their chat (a toast when the chat is not on screen) and in their bell, with Join; it turns grey when the room closes.
 - **/invite NAME**, with a helper that narrows the names as you type.
 - Type **@** in the chat to pick a player: a mention is a pill for everyone, gold for the person named, and an alert in their bell. No @here, no @everyone.
+- **Random map.** The map list of a room has a **Random map** row under the sorts: **Pick one** puts a random map from the maps shown into the room at once, **Pick another** picks again. The Maps page has a **Random map** button that opens the page of a random map of the whole library.
 - **A page for every map.** The six maps of the 1998 game and the players' maps each have a page at /map/NAME (picture, size, game length, food and power-ups, the map's own line, the maker when its line names one, and how often it was played here) with **Play it**, which opens a room on that map, and **Open in Map maker**; /map-library lists them with a search and filters. The Map Maker opens a library map from /mapmaker?mapfile=NAME.lvl.
 
 **For operators:**

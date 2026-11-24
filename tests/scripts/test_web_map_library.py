@@ -42,7 +42,7 @@ class TheIndexScript(unittest.TestCase):
         done = run_node("web_map_library_check.js")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("0 failed", done.stdout)
-        for part in ("A the page stays as it is", "B the search and the filters", "C the order", "D more than 48, the text of a player", "E no list, no page"):
+        for part in ("A the page stays as it is", "B the search and the filters", "C the order", "D more than 48, the text of a player", "E no list, no page", "F the Random map link"):
             self.assertIn("RUNNING: %s ... done" % part, done.stdout)
 
 

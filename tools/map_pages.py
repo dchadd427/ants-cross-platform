@@ -493,7 +493,7 @@ def library_body(maps, page):
     intro = "The six maps of the 1998 game and %d maps that its players made. Open a map to see it, play it in your browser or change it in the Map maker." % (len(maps) - originals)
     first = (page - 1) * PAGE_SIZE + 1
     return (
-        '    <div class="pt"><h1>Maps</h1><p>%s</p></div>\n%s'
+        '    <div class="pt rnd"><div><h1>Maps</h1><p>%s</p></div><a class="btn big" id="random" href="/map-library" hidden><span class="die" aria-hidden="true"></span>Random map</a></div>\n%s'
         '    <section class="panel" aria-labelledby="list-h"><div class="head"><h2 id="list-h">All maps</h2><span class="count" id="count" aria-live="polite">%d maps \u00b7 %d to %d</span></div>\n'
         '    <ul class="grid" id="list">%s</ul>\n    %s</section>\n    <noscript></noscript>'
     ) % (esc(intro), tools_panel(maps), len(maps), first, first + len(shown) - 1, "".join(card(m) for m in shown), pager(page, pages)), originals

@@ -15,6 +15,7 @@ The pages are made from the real library (Original-Ants/Maps, Community-Maps) an
 import html
 import html.parser
 import json
+import math
 import os
 import re
 import shutil
@@ -744,6 +745,20 @@ class TheTool(unittest.TestCase):
             bar.feed(page)
             self.assertEqual(bar.attrs, {"data-version": "v1.2.3", "data-build": "abc1234", "data-built": "2026-01-01 09:00 PT"})        # (the stamps that the Menu of every page shows)
             self.assertNotRegex(page, r"@@[A-Z_]+@@")
+
+    def test_the_random_map_link_can_only_reach_a_page_that_the_tool_made_and_is_hidden_until_the_script_has_the_list(self):
+        with tempfile.TemporaryDirectory(prefix="ants_mp_") as out:
+            self.assertEqual(self.run_tool(ORIGIN, out).returncode, 0)
+            pages = os.path.join(out, "html", "map_pages")
+            data = json.loads(read_file(os.path.join(out, "html", "map_library_data.js"))[len("window.ANTS_MAP_LIBRARY="):].rstrip(";\n"))
+            self.assertGreater(len(data["maps"]), 480)                                         # (the whole library, not the first page of it)
+            for row in data["maps"]:
+                self.assertTrue(os.path.isfile(os.path.join(pages, "map", row[0] + ".html")), "the list holds %r, which has no page" % row[0])
+            for number in range(1, math.ceil(len(data["maps"]) / data["page"]) + 1):
+                link = body_of(read_file(os.path.join(pages, "library", "%d.html" % number))).ids.get("random")
+                self.assertIsNotNone(link, "page %d has no Random map link" % number)
+                self.assertIn("hidden", link, "without script the link has nowhere to go: it stays hidden")
+                self.assertTrue(link["href"] == "/map-library" or link["href"].startswith("/map/") and link["href"][len("/map/"):] in {row[0] for row in data["maps"]}, link["href"])       # (what it holds before the script is a page of the site)
 
     def test_an_address_that_is_not_an_origin_stops_it_before_anything_is_written(self):
         for bad in ("beta.playants.org", "https://site.example/", "https://site.example/x", "ftp://x.example"):

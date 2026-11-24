@@ -561,6 +561,7 @@
             var m = model || blankModel();
             var v = Rules.viewOf(m, context());
             removing = v.removing; lastView = v;
+            if (picker) picker.refresh();       // (the map list, when it is open, marks the room's map as it is now)
             tilesNow = !!tilesQuery && tilesQuery.matches === true; document.body.classList.toggle('tiles', tilesNow);
             document.body.classList.toggle('guest', v.ro);
             document.body.classList.toggle('offline', !!v.offline);

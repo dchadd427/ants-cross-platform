@@ -280,6 +280,34 @@
    "old": "function end() { keepReady = true; keepSoon(); addressMap(); }",
    "new": "function end() { keepReady = true; keepSoon(); }",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_random_link_goes_to_a_page_that_is_not_a_map_s",
+   "file": "web/map_library.js",
+   "old": "random.href = '/map/' + maps[",
+   "new": "random.href = '/maps/' + maps[",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_random_link_can_only_be_a_map_of_the_first_page",
+   "file": "web/map_library.js",
+   "old": "Math.random() * maps.length",
+   "new": "Math.random() * Math.min(maps.length, 48)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_random_link_shows_with_no_map_to_go_to",
+   "file": "web/map_library.js",
+   "old": "if (random && maps.length) {",
+   "new": "if (random) {",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_random_link_keeps_its_first_map_for_every_use",
+   "file": "web/map_library.js",
+   "old": "        random.addEventListener('click', roll);\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
   }
  ]
 }

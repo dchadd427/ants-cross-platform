@@ -43,3 +43,9 @@
     .maphero .tv { width: 300px; max-width: calc(100% - 8px); margin: 4px auto 6px 4px; }
     .maphero .acts .btn { flex: 1 1 100%; }
 }
+
+/* The map index's Random map link (web/map_library.js shows it): beside the title, under the line on a phone. The die is drawn in the text's color. */
+.pt.rnd { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; } .pt.rnd > div { min-width: 0; }
+.pt.rnd .btn:not([hidden]) { display: inline-flex; align-items: center; gap: 8px; flex: none; white-space: nowrap; }
+.die { flex: none; width: 22px; height: 22px; box-sizing: border-box; border: 2px solid currentColor; border-radius: 5px; background: radial-gradient(circle, currentColor 0 1.6px, transparent 1.8px) no-repeat, radial-gradient(circle, currentColor 0 1.6px, transparent 1.8px) 0 0 / 50% 50%; }
+@media (max-width: 720px) { .pt.rnd { display: block; } .pt.rnd .btn:not([hidden]) { display: flex; justify-content: center; margin-top: 12px; } }

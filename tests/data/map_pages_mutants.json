@@ -343,6 +343,20 @@
    "old": "SCRIPTS='<script src=\"/map_plays.js\"></script>\\n'",
    "new": "SCRIPTS=\"\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
+  },
+  {
+   "id": "the_list_holds_a_name_where_the_page_address_is",
+   "file": "tools/map_pages.py",
+   "old": "rows = [[m.slug, m.name, m.text,",
+   "new": "rows = [[m.name, m.name, m.text,",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
+  },
+  {
+   "id": "the_random_link_shows_without_script",
+   "file": "tools/map_pages.py",
+   "old": "id=\"random\" href=\"/map-library\" hidden>",
+   "new": "id=\"random\" href=\"/map-library\">",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   }
  ]
 }

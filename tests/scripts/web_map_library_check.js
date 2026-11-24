@@ -25,16 +25,17 @@ class El {
     find(tag, cls) { const out = []; (function walk(n) { n.children.forEach((c) => { if ((!tag || c.tagName === tag) && (!cls || c.className.split(' ').indexOf(cls) >= 0)) out.push(c); walk(c); }); })(this); return out; }
 }
 
-function setup(rows, withPlayers) {
+function setup(rows, withPlayers, math, withRandom) {
     const ids = {}, d = { createElement: (tag) => new El(tag), getElementById: (id) => ids[id] || null };
+    if (withRandom) { ids.random = new El('a'); ids.random.hidden = true; ids.random.href = '/map-library'; }
     for (const id of ['tools', 'list', 'count', 'pager', 'q', 'f-size', 'f-length', 'f-order', 'filters', 'list-h'].concat(withPlayers ? ['f-players'] : [])) { ids[id] = new El('x'); ids[id].parentNode = new El('label'); }
     ids.tools.hidden = true;
     ids.tools.kinds = ['', 'original', 'player'].map((k, i) => { const b = new El('button'); b.attrs['data-kind'] = k; b.attrs['aria-pressed'] = i === 0 ? 'true' : 'false'; return b; });
     ids.list._html = '<li>the static page</li>'; ids.count._text = '487 maps · 1 to 48'; ids.pager._html = '<a>1</a>';
     const asked = [];
-    const sandbox = { document: d, window: { ANTS_MAP_LIBRARY: { format: 1, page: 48, players: withPlayers ? [2, 4] : [4], sizes: [['small', 31], ['medium', 60], ['large', null]], lengths: [['short', 10], ['middle', 15], ['long', null]], maps: rows } }, fetch: (url) => { asked.push(url); return Promise.resolve({ ok: true, json: () => Promise.resolve(sandbox.answer) }); }, Object, Math, Infinity, Array, String };
+    const sandbox = { document: d, window: { ANTS_MAP_LIBRARY: { format: 1, page: 48, players: withPlayers ? [2, 4] : [4], sizes: [['small', 31], ['medium', 60], ['large', null]], lengths: [['short', 10], ['middle', 15], ['long', null]], maps: rows } }, fetch: (url) => { asked.push(url); return Promise.resolve({ ok: true, json: () => Promise.resolve(sandbox.answer) }); }, Object, Math: math || Math, Infinity, Array, String };
     sandbox.answer = { format: 1, maps: [] };
-    new Function('document', 'window', 'fetch', 'Object', 'Math', 'Infinity', 'Array', 'String', SOURCE)(sandbox.document, sandbox.window, sandbox.fetch, Object, Math, Infinity, Array, String);
+    new Function('document', 'window', 'fetch', 'Object', 'Math', 'Infinity', 'Array', 'String', SOURCE)(sandbox.document, sandbox.window, sandbox.fetch, Object, sandbox.Math, Infinity, Array, String);
     return { ids, asked, sandbox, d };
 }
 const row = (slug, name, say, w, minutes, original, file, players) => [slug, name, say, w, w, minutes, '/maps/previews/' + slug + '.webp', original ? 1 : 0, file || name + '.lvl', players || 4];
@@ -156,4 +157,27 @@ function E() {
     check(ids.tools.hidden === true, 'E without the list the filters stay hidden');
     console.log('RUNNING: E no list, no page ... done');
 }
-C().then(() => { D(); E(); console.log(failed + ' failed'); process.exit(failed ? 1 : 0); });
+// ---- F: the Random map link goes to the page of a map of the whole library, a new one each time it is used
+function F() {
+    const rows = []; for (let i = 0; i < 100; i++) rows.push(row('m' + i, i === 7 ? 'x/../y' : 'Map ' + i, '', 31, 12));
+    let next = 0;
+    const dice = { floor: Math.floor, max: Math.max, min: Math.min, random: () => next };
+    const c = setup(rows, false, dice, true), link = c.ids.random;
+    check(link.hidden === false, 'F the link shows when the list is there');
+    check(link.href === '/map/m0', 'F the link goes to the page of a map: ' + link.href);
+    const reached = new Set();
+    for (let i = 0; i < rows.length; i++) { next = (i + 0.5) / rows.length; link.fire('click'); reached.add(link.href); }
+    check(reached.size === 100 && rows.every((r) => reached.has('/map/' + r[0])), 'F every map of the library, past the first page of 48, can be the pick: ' + reached.size);
+    next = 0.99999999; link.fire('click');
+    check(link.href === '/map/m99', 'F the last map can be the pick even at the top of the dice: ' + link.href);
+    next = 0.075; link.fire('click');
+    check(link.href === '/map/m7', 'F the address is the map\'s page, whatever its name looks like: ' + link.href);
+    next = 0.5; link.fire('click'); const first = link.href; next = 0.51; link.fire('click');
+    check(first !== link.href, 'F each use asks the dice again');
+    const none = setup([], false, dice, true);
+    check(none.ids.random.hidden === true, 'F no map, no link');
+    const plain = setup(rows, false, dice, false);
+    check(plain.ids.tools.hidden === false, 'F a page without the link works as before');
+    console.log('RUNNING: F the Random map link ... done');
+}
+C().then(() => { D(); E(); F(); console.log(failed + ' failed'); process.exit(failed ? 1 : 0); });
