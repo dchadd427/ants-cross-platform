@@ -7,6 +7,9 @@ An entry is 5 - 15 lines in a fixed template: the heading `## vX.Y.Z - YYYY-MM-D
 <!--
 Template of an entry (copy it, keep the labels and the order, leave out a paragraph that has nothing to say):
 
+**Fixes:**
+- On a phone, the "What's new" window fits the screen, so its Close button is no longer below the bottom of the page.
+
 ## vX.Y.Z - YYYY-MM-DD - title
 
 **For players:**
