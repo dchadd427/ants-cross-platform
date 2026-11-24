@@ -3,11 +3,12 @@
 // pixels of the real renderer at whole-number scales, and the application's picture.
 //   [switch]   the new page with the art, the original's without it or when the art lacks a piece; the original's page is what it was after the art was given and taken away, to the byte
 //   [podium]   the title, the sentence, the winner's well, every team's row and numbers; the winner's score is gold; four separate teams; a name that is too long ends in three dots
-//   [counted]  a match whose numbers were counted: the tabs, the damage, the honors, the Play of the game and Watch, the second page; a match whose numbers were not shows the original's and nothing else
+//   [counted]  a match whose numbers were counted: the link "All stats", the damage, the honors, the Play of the game and Watch, the second page; a match whose numbers were not shows the original's and nothing else
 //   [waiting]  "Game Over" and its line, and Leave Game from the first moment
 //   [187]      the headline in the sentence, two tiles, Last stand, six columns of the second page
 //   [reflow]   a narrow picture stacks the page in one column and has the big button
-//   [buttons]  the three pictures of Leave Game, the tabs and Watch, their clicks
+//   [buttons]  the three pictures of Leave Game, the link to the other page and Watch, their clicks
+//   [room]     the match of a lobby room: "Back to the room" and "Back to Ants & Uncles" in place of Leave Game, on every page, until one is pressed
 //   [pixels]   the real renderer: the panel covers the picture, a piece is the sheet's own pixels at 1x, 2x and 3x, and no unit is lost at a unit of 4
 //   [app]      the application's picture is the whole canvas (the original's page is centred in a wider one), and the click on the button
 #include <memory>
@@ -79,8 +80,9 @@ MatchReport counted(bool with_play = true) {
 }
 
 void open(ScorecardModal& card, const hud_art::Art* art, const Screen& s, const sim::MatchResult& result, sim::GameMode mode = sim::GameMode::HighestScore, bool rows = true, const MatchReport* report = nullptr,
-          uint8_t local = 0) {
+          uint8_t local = 0, bool room_choice = false) {
     card.set_art(art);
+    card.set_room_choice(room_choice);
     card.set_screen(s.canvas_w, s.canvas_h, output_of(s));
     card.set_local_player_name("Ana");
     if (report != nullptr) {
@@ -129,14 +131,14 @@ bool is_utf8(const std::string& text) {
 struct Frozen {
     sl::Podium podium;
     sl::Scale scale;
-    LayoutRect leave, stats_tab, watch;
+    LayoutRect leave, hub, link, watch;
     bool operator==(const Frozen& o) const {
         return podium.leave == o.podium.leave && podium.winner_well == o.podium.winner_well && podium.others_well == o.podium.others_well && podium.title_base == o.podium.title_base &&
                podium.play == o.podium.play && podium.honor[0] == o.podium.honor[0] && podium.narrow == o.podium.narrow && scale.k == o.scale.k && scale.w == o.scale.w && scale.h == o.scale.h &&
-               leave == o.leave && stats_tab == o.stats_tab && watch == o.watch;
+               leave == o.leave && hub == o.hub && link == o.link && watch == o.watch;
     }
 };
-Frozen frozen_of(const ScorecardModal& card) { return Frozen{card.podium(), card.scale(), card.leave_rect(), card.tab_rect(ScorecardModal::Page::Stats), card.watch_rect()}; }
+Frozen frozen_of(const ScorecardModal& card) { return Frozen{card.podium(), card.scale(), card.leave_rect(), card.hub_rect(), card.link_rect(), card.watch_rect()}; }
 
 bool same_events(const ArtSpy& a, const ArtSpy& b) {
     if (a.events.size() != b.events.size()) return false;
@@ -223,7 +225,7 @@ void test_podium(const assets::AssetArchive& arc, const hud_art::Art& art) {
     int32_t ants = 0;
     for (const Spy::Ev& e : spy->events) ants += e.kind == Spy::Kind::Region ? 1 : 0;
     check(ants > 0, "the ants of the rows are the game's own pictures (" + std::to_string(ants) + " parts)");
-    check(count(*spy, art, "sc_tab_m_up") == 0 && count(*spy, art, "sc_k_mvp") == 0 && count(*spy, art, "sc_watch_up") == 0, "nothing was counted: no tabs, no honors, no Watch");
+    check(count(*spy, art, "sc_sm_m_up") == 0 && count(*spy, art, "sc_sw_allstats_up") == 0 && count(*spy, art, "sc_k_mvp") == 0 && count(*spy, art, "sc_watch_up") == 0, "nothing was counted: no link to a second page, no honors, no Watch");
 
     // the one that came second sees "Defeat" and its place, and its own row is marked
     ScorecardModal second;
@@ -288,7 +290,7 @@ void test_counted(const assets::AssetArchive& arc, const hud_art::Art& art) {
     check(has_ink(*spy, win + " win the match.   12:40 played"), "the sentence says how long the match was");
     check(has_line(*spy, "Damage") && has_line(*spy, "1,840"), "the winner's well has the damage tile (the winner's side: 1,240 and 600, added up, with its thousands grouped)");
     check(spy->face("Lost " + card.rows()[1].numbers[1] + "   Killed " + card.rows()[1].numbers[2] + "   Hatched " + card.rows()[1].numbers[3] + "   Damage 420") != nullptr, "a ranked row's small numbers end with its damage");
-    check(count(*spy, art, "sc_tab_m_up") == 2 && count(*spy, art, "sc_tw_results_lit_up") == 1 && count(*spy, art, "sc_tw_stats_up") == 1, "two tabs, the results page lit");
+    check(count(*spy, art, "sc_sm_m_up") == 1 && count(*spy, art, "sc_sw_allstats_up") == 1 && count(*spy, art, "sc_sw_back_up") == 0, "one link, \"All stats\", and no tabs");
     check(count(*spy, art, "sc_k_mvp") == 1 && count(*spy, art, "sc_k_blood") == 1 && count(*spy, art, "sc_k_raid") == 1 && count(*spy, art, "sc_k_stand") == 0 && count(*spy, art, "sc_k_play") == 1, "the labels of the three honors and of the Play of the game");
     check(has_line(*spy, "62% of the play") && has_line(*spy, "at 0:42") && has_line(*spy, "50 points at 9:10"), "the honors' numbers: the MVP's share of the play, First blood's time, the raid's loot and time");
     check(has_line(*spy, card.seat_name(0)) && has_line(*spy, card.seat_name(2)), "...and who earned them");
@@ -324,13 +326,14 @@ void test_counted(const assets::AssetArchive& arc, const hud_art::Art& art) {
     open(nobody, &art, kWide720, sample(), sim::GameMode::HighestScore, true, &none);
     check(has_line(*draw(arc, nobody, kWide720), "nobody"), "an honor that nobody earned says \"nobody\"");
 
-    // the second page: the tab shows it, every number of every seat, the best of a column in gold
+    // the second page: the link shows it, every number of every seat, the best of a column in gold
     int jumps = 0;
     card.set_on_watch([&](uint32_t, int32_t, int32_t) { ++jumps; });
-    click(card, card.tab_rect(ScorecardModal::Page::Stats));
-    check(card.page() == ScorecardModal::Page::Stats && jumps == 0, "a click on the Match stats tab shows the second page");
+    click(card, card.link_rect());
+    check(card.page() == ScorecardModal::Page::Stats && jumps == 0, "a click on \"All stats\" shows the second page");
     const auto page = draw(arc, card, kWide720);
-    check(count(*page, art, "sc_matchstats_15") == 1 && count(*page, art, "sc_victory_26") == 0 && count(*page, art, "sc_tw_stats_lit_up") == 1 && count(*page, art, "sc_tw_results_up") == 1, "the second page: its title, the Match stats tab lit");
+    check(count(*page, art, "sc_matchstats_15") == 1 && count(*page, art, "sc_victory_26") == 0 && count(*page, art, "sc_sw_back_up") == 1 && count(*page, art, "sc_sw_allstats_up") == 0 && count(*page, art, "sc_sm_m_up") == 1,
+          "the second page: its title, and the one link is \"Back to results\"");
     check(count(*page, art, "sc_g_damage") == 1 && count(*page, art, "sc_g_food") == 1 && count(*page, art, "sc_g_special") == 1 && count(*page, art, "sc_s_done") == 1 && count(*page, art, "sc_s_loot") == 1 && count(*page, art, "sc_s_trips") == 1, "...three groups of eight columns");
     check(count(*page, art, "sc_watch_up") == 0 && count(*page, art, "sc_k_mvp") == 0, "...and none of the first page's pieces");
     const ArtSpy::Face* done = page->face("1,240");
@@ -341,8 +344,8 @@ void test_counted(const assets::AssetArchive& arc, const hud_art::Art& art) {
     for (size_t t = 0; t < 4; ++t) check(has_line(*page, card.seat_name(static_cast<uint8_t>(t))), "a row for every player: " + card.seat_name(static_cast<uint8_t>(t)));
     check(has_line(*page, "900") && has_line(*page, "50") && has_line(*page, "30"), "the food and the special ants of the first seat are in its row");
     // back to the results
-    click(card, card.tab_rect(ScorecardModal::Page::Results));
-    check(card.page() == ScorecardModal::Page::Results && count(*draw(arc, card, kWide720), art, "sc_victory_26") == 1, "a click on the Results tab shows the podium again");
+    click(card, card.link_rect());
+    check(card.page() == ScorecardModal::Page::Results && count(*draw(arc, card, kWide720), art, "sc_victory_26") == 1, "a click on \"Back to results\" shows the podium again");
     // the Watch button
     uint32_t watched = 0;
     int32_t watched_x = -1, watched_y = -1;
@@ -365,20 +368,20 @@ void test_counted(const assets::AssetArchive& arc, const hud_art::Art& art) {
     failed.ok = false;
     open(bad, &art, kWide720, sample(), sim::GameMode::HighestScore, true, &failed);
     const auto spyb = draw(arc, bad, kWide720);
-    check(count(*spyb, art, "sc_tab_m_up") == 0 && count(*spyb, art, "sc_k_mvp") == 0 && count(*spyb, art, "sc_k_play") == 0 && count(*spyb, art, "sc_watch_up") == 0 && !has_line(*spyb, "Damage") && !has_line(*spyb, "1,240"),
-          "a report that is not ok: no tabs, no honors, no play, no damage");
+    check(count(*spyb, art, "sc_sm_m_up") == 0 && count(*spyb, art, "sc_k_mvp") == 0 && count(*spyb, art, "sc_k_play") == 0 && count(*spyb, art, "sc_watch_up") == 0 && !has_line(*spyb, "Damage") && !has_line(*spyb, "1,240"),
+          "a report that is not ok: no link, no honors, no play, no damage");
     check(has_ink(*spyb, bad.rows()[0].name + " win the match.") && has_line(*spyb, bad.rows()[0].numbers[0]) && has_line(*spyb, "Lost") && has_line(*spyb, "Hatched"), "...the sentence has no time, and the original's four numbers are all there");
     bad.show_page(ScorecardModal::Page::Stats);
-    check(bad.page() == ScorecardModal::Page::Results && bad.tab_rect(ScorecardModal::Page::Stats).w == 0, "...there is no second page to show");
+    check(bad.page() == ScorecardModal::Page::Results && bad.link_rect().w == 0, "...there is no second page to show");
     // the report that arrives after the screen opened is used at once, and one that is taken away is gone at once
     ScorecardModal late;
     open(late, &art, kWide720, sample());
     check(count(*draw(arc, late, kWide720), art, "sc_k_mvp") == 0, "before the report: nothing counted is shown");
     late.set_report(rep);
-    check(count(*draw(arc, late, kWide720), art, "sc_k_mvp") == 1 && late.tab_rect(ScorecardModal::Page::Stats).w > 0, "...a report that was counted adds the tabs and the honors");
+    check(count(*draw(arc, late, kWide720), art, "sc_k_mvp") == 1 && late.link_rect().w > 0, "...a report that was counted adds the link and the honors");
     late.show_page(ScorecardModal::Page::Stats);
     late.set_report(failed);
-    check(late.page() == ScorecardModal::Page::Results && count(*draw(arc, late, kWide720), art, "sc_tab_m_up") == 0, "...and one that was not takes the second page away");
+    check(late.page() == ScorecardModal::Page::Results && count(*draw(arc, late, kWide720), art, "sc_sm_m_up") == 0, "...and one that was not takes the second page away");
 }
 
 void test_waiting(const assets::AssetArchive& arc, const hud_art::Art& art) {
@@ -391,13 +394,13 @@ void test_waiting(const assets::AssetArchive& arc, const hud_art::Art& art) {
     const Frozen before = frozen_of(card);
     const auto spy = draw(arc, card, kWide720);
     check(card.is_waiting() && count(*spy, art, "sc_gameover_36") == 1 && has_ink(*spy, "The match has ended. Adding up the scores..."), "the waiting screen has \"Game Over\" and its line");
-    check(count(*spy, art, "sc_well_tl") == 0 && count(*spy, art, "sc_k_winner") == 0 && count(*spy, art, "sc_tab_m_up") == 0 && count(*spy, art, "sc_leave_up") == 1, "...no empty wells, no tabs, and Leave Game");
+    check(count(*spy, art, "sc_well_tl") == 0 && count(*spy, art, "sc_k_winner") == 0 && count(*spy, art, "sc_sm_m_up") == 0 && count(*spy, art, "sc_leave_up") == 1, "...no empty wells, no link, and Leave Game");
     check(frozen_of(card) == before, "drawing the waiting frame moves nothing");
     click(card, card.leave_rect());
     check(quits == 1, "a click on Leave Game leaves at once, before the scores are in");
     card.update(0.25f);
     const auto rows = draw(arc, card, kWide720);
-    check(!card.is_waiting() && count(*rows, art, "sc_gameover_36") == 0 && count(*rows, art, "sc_victory_26") == 1 && count(*rows, art, "sc_tab_m_up") == 2, "a quarter of a second later: the podium, with the tabs");
+    check(!card.is_waiting() && count(*rows, art, "sc_gameover_36") == 0 && count(*rows, art, "sc_victory_26") == 1 && count(*rows, art, "sc_sw_allstats_up") == 1, "a quarter of a second later: the podium, with the link");
     // the narrow page's waiting page has the big button
     ScorecardModal phone;
     open(phone, &art, kPhoneUp, sample(), sim::GameMode::HighestScore, false);
@@ -421,7 +424,7 @@ void test_187(const assets::AssetArchive& arc, const hud_art::Art& art) {
     check(has_line(*spy, "Lost") && has_line(*spy, "Left") && !has_line(*spy, "Killed") && !has_line(*spy, "Hatched") && has_line(*spy, "Damage"), "two tiles for the numbers (lost, left) and the damage");
     check(count(*spy, art, "sc_k_stand") == 1 && count(*spy, art, "sc_k_raid") == 0 && has_line(*spy, "out of ants at 2:10"), "the honors are MVP, First blood and Last stand (no raids)");
     check(spy->face("Lost " + card.rows()[1].numbers[1] + "   Left " + card.rows()[1].numbers[2] + "   Damage 420") != nullptr, "a ranked row has its numbers, without the hatched");
-    click(card, card.tab_rect(ScorecardModal::Page::Stats));
+    click(card, card.link_rect());
     const auto page = draw(arc, card, kWide720);
     check(count(*page, art, "sc_g_damage") == 1 && count(*page, art, "sc_g_food") == 0 && count(*page, art, "sc_g_special") == 1 && count(*page, art, "sc_s_trips") == 0 && count(*page, art, "sc_s_done") == 1 && count(*page, art, "sc_s_loot") == 1,
           "the second page of 187: damage and special ants, no food");
@@ -463,11 +466,11 @@ void test_reflow(const assets::AssetArchive& arc, const hud_art::Art& art) {
     check(card.new_look() && card.podium().narrow && card.scale().k == 3, "a phone held upright: one column, at 3 device pixels to the unit");
     check(count(*spy, art, "sc_victory_22") == 1 && count(*spy, art, "sc_leave_up") == 0 && count(*spy, art, "sc_btn_l_up") == 1 && count(*spy, art, "sc_btn_r_up") == 1 && count(*spy, art, "sc_btn_m_up") >= 1 && count(*spy, art, "sc_leave_word_up") == 1,
           "...the smaller title, and Leave Game as the big button: its ends, its run and its word");
-    check(count(*spy, art, "sc_tab_l_up") == 2 && count(*spy, art, "sc_tab_r_up") == 2, "...two tabs, half a column each");
+    check(count(*spy, art, "sc_sm_l_up") == 1 && count(*spy, art, "sc_sm_r_up") == 1 && count(*spy, art, "sc_sw_allstats_up") == 1, "...the link \"All stats\", one strip over the column");
     const LayoutRect big = card.leave_rect();
-    check(big.w > card.scale().canvas_w * 8 / 10, "the big button is most of the picture wide");
+    check(big.w > card.scale().canvas_w * 8 / 10 && card.link_rect().w > card.scale().canvas_w * 8 / 10, "the big button and the link are most of the picture wide");
     check(card.podium().play.w > 0 && count(*spy, art, "sc_watch_up") == 1, "...the Play of the game and Watch are there");
-    click(card, card.tab_rect(ScorecardModal::Page::Stats));
+    click(card, card.link_rect());
     const auto page = draw(arc, card, kPhoneUp);
     check(card.page() == ScorecardModal::Page::Stats && count(*page, art, "sc_g_damage") == 0 && has_line(*page, "Dmg done") && has_line(*page, "Loot"), "the second page of a narrow picture is cards: a little label under each number");
 
@@ -487,7 +490,7 @@ void test_reflow(const assets::AssetArchive& arc, const hud_art::Art& art) {
 }
 
 void test_buttons(const assets::AssetArchive& arc, const hud_art::Art& art) {
-    group("buttons", "Leave Game in its three states, the tabs and Watch");
+    group("buttons", "Leave Game in its three states, the link to the other page and Watch");
     ScorecardModal card;
     const MatchReport rep = counted();
     open(card, &art, kWide720, sample(), sim::GameMode::HighestScore, true, &rep);
@@ -520,24 +523,35 @@ void test_buttons(const assets::AssetArchive& arc, const hud_art::Art& art) {
     card.leave();
     check(quits == 3, "Enter, C, Q and X leave at any time (the application calls leave())");
 
-    // the tabs and Watch: a state each, a click sound, an action at the release only
-    const LayoutRect tab = card.tab_rect(ScorecardModal::Page::Stats);
-    check(tab.w > 60 && card.tab_rect(ScorecardModal::Page::Results).w == 0, "on the podium only the other page's tab is a button (" + str(tab) + ")");
+    // the link and Watch: a state each, a click sound, an action at the release only
+    const LayoutRect link = card.link_rect();
+    check(link.w > 60 && link == card.scale().rect(card.podium().link), "on the podium the link \"All stats\" is a button (" + str(link) + ")");
     const int sounds = clicks;
-    card.handle_mouse_motion(tab.x + 3, tab.y + 3);
-    check(count(*draw(arc, card, kWide720), art, "sc_tw_stats_hover") == 1, "a tab pointed at: its hover word");
-    card.handle_mouse_down(tab.x + 3, tab.y + 3);
-    check(count(*draw(arc, card, kWide720), art, "sc_tw_stats_down") == 1 && clicks == sounds + 1 && card.page() == ScorecardModal::Page::Results, "pressed: its pressed word, the click's sound, and the page has not changed");
-    card.handle_mouse_motion(tab.x - 30, tab.y + 3);
-    card.handle_mouse_up(tab.x - 30, tab.y + 3);
-    check(card.page() == ScorecardModal::Page::Results, "released away from the tab: the page stays");
-    card.handle_mouse_down(tab.x + 3, tab.y + 3);
-    card.handle_mouse_up(tab.x + 3, tab.y + 3);
-    check(card.page() == ScorecardModal::Page::Stats && card.tab_rect(ScorecardModal::Page::Results).w > 0 && card.tab_rect(ScorecardModal::Page::Stats).w == 0, "released on it: the second page, where the other tab is the button");
-    click(card, LayoutRect{tab.x, tab.y, tab.w, tab.h});
-    check(card.page() == ScorecardModal::Page::Stats, "a click where the tab of the page that shows is does nothing");
-    const auto lit = draw(arc, card, kWide720);
-    check(count(*lit, art, "sc_tw_stats_lit_up") + count(*lit, art, "sc_tw_stats_lit_hover") + count(*lit, art, "sc_tw_stats_lit_down") == 1, "the tab of the page that shows is lit, whatever the pointer does");
+    card.handle_mouse_motion(link.x + 3, link.y + 3);
+    check(count(*draw(arc, card, kWide720), art, "sc_sw_allstats_hover") == 1, "the link pointed at: its hover word");
+    card.handle_mouse_down(link.x + 3, link.y + 3);
+    check(count(*draw(arc, card, kWide720), art, "sc_sw_allstats_down") == 1 && clicks == sounds + 1 && card.page() == ScorecardModal::Page::Results, "pressed: its pressed word, the click's sound, and the page has not changed");
+    card.handle_mouse_motion(link.x + link.w + 30, link.y + 3);
+    card.handle_mouse_up(link.x + link.w + 30, link.y + 3);
+    check(card.page() == ScorecardModal::Page::Results, "released away from the link: the page stays");
+    card.handle_mouse_down(link.x + link.w, link.y + 3);
+    card.handle_mouse_up(link.x + link.w, link.y + 3);
+    check(card.page() == ScorecardModal::Page::Results, "the pixel right of the face is not the link");
+    card.handle_mouse_down(link.x + link.w - 1, link.y + link.h - 1);
+    card.handle_mouse_up(link.x + link.w - 1, link.y + link.h - 1);
+    check(card.page() == ScorecardModal::Page::Stats, "released on it (its last pixel): the second page");
+    const LayoutRect back = card.link_rect();
+    check(back.x == link.x && back.y == link.y && back.h == link.h && back.w > link.w && back == card.scale().rect(card.stats_layout().link), "on the second page \"Back to results\" is in the same place, as high, and wider (" + str(back) + ")");
+    check(card.leave_rect() == b, "...and Leave Game has not moved");
+    card.handle_mouse_motion(back.x + 3, back.y + 3);
+    check(count(*draw(arc, card, kWide720), art, "sc_sw_back_hover") == 1, "\"Back to results\" pointed at: its hover word");
+    click(card, back);
+    check(card.page() == ScorecardModal::Page::Results, "a click on it shows the podium again");
+    card.show_page(ScorecardModal::Page::Stats);
+    card.show_page(ScorecardModal::Page::Stats);
+    check(card.page() == ScorecardModal::Page::Stats, "asking for the second page twice is the second page");
+    card.show_page(ScorecardModal::Page::Results);
+    check(card.page() == ScorecardModal::Page::Results && card.link_target() == ScorecardModal::Page::Stats, "...and the link leads to the other one");
 
     // the big button of a narrow page
     ScorecardModal phone;
@@ -554,6 +568,120 @@ void test_buttons(const assets::AssetArchive& arc, const hud_art::Art& art) {
     phone.handle_mouse_down(pb.x + 5, pb.y + 5);
     phone.handle_mouse_up(pb.x + 5, pb.y + 5);
     check(phone_quits == 1, "a closed screen takes no click");
+}
+
+/// The match of a lobby room: the two buttons that stand where Leave Game stands, on every page, and the screen that waits for one of them
+void test_room(const assets::AssetArchive& arc, const hud_art::Art& art) {
+    group("room", "the match of a lobby room: \"Back to the room\" and \"Back to Ants & Uncles\" in place of Leave Game, on every page, until one is pressed");
+    const MatchReport rep = counted();
+    ScorecardModal card;
+    open(card, &art, kWide720, sample(), sim::GameMode::HighestScore, true, &rep, 0, true);
+    int quits = 0, rooms = 0, hubs = 0, clicks = 0;
+    card.set_on_quit([&]() { ++quits; });
+    card.set_on_back_to_room([&]() { ++rooms; });
+    card.set_on_back_to_hub([&]() { ++hubs; });
+    card.set_on_play_sfx([&](uint32_t) { ++clicks; });
+    check(card.room_choice(), "the new page of a lobby room's match has the choice");
+    const auto spy = draw(arc, card, kWide720);
+    check(count(*spy, art, "sc_leave_up") == 0 && count(*spy, art, "sc_sw_room_up") == 1 && count(*spy, art, "sc_sw_hub_up") == 1 && count(*spy, art, "sc_sm_l_up") == 3 && count(*spy, art, "sc_sm_r_up") == 3,
+          "...no Leave Game: \"Back to the room\" and \"Back to Ants & Uncles\" are two buttons of the art's small strip (with the link, three)");
+    const LayoutRect room = card.leave_rect(), hub = card.hub_rect(), link = card.link_rect();
+    check(room == card.scale().rect(card.podium().leave) && hub == card.scale().rect(card.podium().hub) && room.w > 0 && hub.w > room.w && hub.y == room.y && hub.x > room.right() + 8 && link.right() < room.x,
+          "...the rooms' face is where Leave Game stood, the other button right of it, the link left of both (" + str(room) + " " + str(hub) + " " + str(link) + ")");
+    check(hub.right() <= card.scale().canvas_w, "...all of it on the picture");
+    // each button does its own thing, once, at the release on it, with the click's sound
+    click(card, room);
+    check(rooms == 1 && hubs == 0 && quits == 0 && clicks == 1, "a click on \"Back to the room\" goes back to the room");
+    click(card, hub);
+    check(rooms == 1 && hubs == 1 && quits == 0 && clicks == 2, "a click on \"Back to Ants & Uncles\" goes to the front page, and nothing else happens");
+    card.handle_mouse_motion(hub.x + 3, hub.y + 3);
+    card.handle_mouse_down(hub.x + 3, hub.y + 3);
+    const auto pressed = draw(arc, card, kWide720);
+    check(count(*pressed, art, "sc_sw_hub_down") == 1 && count(*pressed, art, "sc_sw_room_up") == 1 && hubs == 1, "pressed: that button's pressed picture, the other still resting, and nothing happens yet");
+    card.handle_mouse_motion(room.x + 3, room.y + 3);
+    card.handle_mouse_up(room.x + 3, room.y + 3);
+    check(hubs == 1 && rooms == 1, "pressed on one and released on the other: neither");
+    card.handle_mouse_motion(room.x + 3, room.y + 3);
+    check(count(*draw(arc, card, kWide720), art, "sc_sw_room_hover") == 1 && count(*draw(arc, card, kWide720), art, "sc_sw_hub_up") == 1, "pointed at: that button's hover picture");
+    card.handle_mouse_down(room.right(), room.y + 3);
+    card.handle_mouse_up(room.right(), room.y + 3);
+    card.handle_mouse_down(hub.x - 1, hub.y + 3);
+    card.handle_mouse_up(hub.x - 1, hub.y + 3);
+    check(rooms == 1 && hubs == 1, "the pixel right of the first button's face and the one left of the second's are neither");
+    card.handle_mouse_down(hub.right() - 1, hub.bottom() - 1);
+    card.handle_mouse_up(hub.right() - 1, hub.bottom() - 1);
+    check(hubs == 2, "the last pixel of the second button's face is it");
+    card.leave();
+    check(rooms == 2 && hubs == 2 && quits == 0, "the keys Enter, C, Q and X take the way that keeps the seat: back to the room (and never Leave Game's)");
+
+    // no timer: the screen waits for a button, as long as it takes
+    card.handle_mouse_motion(2, 2);
+    for (int i = 0; i < 100; ++i) card.update(60.0f);
+    check(card.is_open() && rooms == 2 && hubs == 2 && quits == 0, "a hundred minutes later nothing was pressed for the player and the screen is still there");
+    check(count(*draw(arc, card, kWide720), art, "sc_sw_room_up") == 1 && count(*draw(arc, card, kWide720), art, "sc_sw_hub_up") == 1, "...with both buttons");
+
+    // the second page has them in the same place
+    click(card, link);
+    check(card.page() == ScorecardModal::Page::Stats && card.leave_rect() == room && card.hub_rect() == hub, "on the second page the two buttons have not moved");
+    const auto stats = draw(arc, card, kWide720);
+    check(count(*stats, art, "sc_sw_room_up") + count(*stats, art, "sc_sw_room_hover") == 1 && count(*stats, art, "sc_sw_hub_up") == 1 && count(*stats, art, "sc_leave_up") == 0, "...and are drawn there");
+    click(card, hub);
+    check(hubs == 3, "...and work there");
+    click(card, card.link_rect());
+    check(card.page() == ScorecardModal::Page::Results, "...the way back to the results is the same link");
+
+    // from the first moment: the waiting page has them too
+    ScorecardModal waiting;
+    open(waiting, &art, kWide720, sample(), sim::GameMode::HighestScore, false, &rep, 0, true);
+    int waiting_hubs = 0;
+    waiting.set_on_back_to_hub([&]() { ++waiting_hubs; });
+    const auto spyw = draw(arc, waiting, kWide720);
+    check(waiting.is_waiting() && count(*spyw, art, "sc_sw_room_up") == 1 && count(*spyw, art, "sc_sw_hub_up") == 1 && count(*spyw, art, "sc_leave_up") == 0, "the waiting page has the two buttons from the first moment");
+    click(waiting, waiting.hub_rect());
+    check(waiting_hubs == 1, "...and they work before the scores are in");
+
+    // a narrow page stacks them as the big buttons, the room's on top
+    ScorecardModal phone;
+    open(phone, &art, kPhoneUp, sample(), sim::GameMode::HighestScore, true, &rep, 0, true);
+    int phone_rooms = 0, phone_hubs = 0;
+    phone.set_on_back_to_room([&]() { ++phone_rooms; });
+    phone.set_on_back_to_hub([&]() { ++phone_hubs; });
+    const auto spyp = draw(arc, phone, kPhoneUp);
+    const LayoutRect pr = phone.leave_rect(), ph = phone.hub_rect();
+    check(count(*spyp, art, "sc_bw_room_up") == 1 && count(*spyp, art, "sc_bw_hub_up") == 1 && count(*spyp, art, "sc_leave_word_up") == 0 && count(*spyp, art, "sc_btn_l_up") == 2 && count(*spyp, art, "sc_sw_allstats_up") == 1,
+          "a phone held upright: two big buttons with their words, and the link");
+    check(pr.x == ph.x && pr.w == ph.w && ph.y > pr.bottom() + 8 && pr.w > phone.scale().canvas_w * 8 / 10 && ph.bottom() < phone.scale().canvas_h, "...one over the other, a column wide, the room's on top (" + str(pr) + " " + str(ph) + ")");
+    click(phone, ph);
+    click(phone, pr);
+    click(phone, LayoutRect{pr.x, ph.bottom() + 1, pr.w, 2});
+    check(phone_rooms == 1 && phone_hubs == 1, "...each is its own button, and the clay between and under them is none");
+    ScorecardModal phone_stats;
+    open(phone_stats, &art, kPhoneUp, sample(), sim::GameMode::HighestScore, true, &rep, 0, true);
+    phone_stats.show_page(ScorecardModal::Page::Stats);
+    check(phone_stats.page() == ScorecardModal::Page::Stats && phone_stats.leave_rect().w > 0 && phone_stats.hub_rect().w > 0 && phone_stats.hub_rect().y > phone_stats.leave_rect().bottom(), "the second page of a narrow picture has them too");
+
+    // a game on this computer keeps Leave Game, and so does the original's page
+    ScorecardModal local;
+    open(local, &art, kWide720, sample(), sim::GameMode::HighestScore, true, &rep);
+    int local_quits = 0, local_rooms = 0;
+    local.set_on_quit([&]() { ++local_quits; });
+    local.set_on_back_to_room([&]() { ++local_rooms; });
+    const auto spyl = draw(arc, local, kWide720);
+    check(!local.room_choice() && local.hub_rect().w == 0 && count(*spyl, art, "sc_leave_up") == 1 && count(*spyl, art, "sc_sw_room_up") == 0 && count(*spyl, art, "sc_sw_hub_up") == 0, "a game on this computer: Leave Game, and no other button");
+    click(local, local.leave_rect());
+    local.leave();
+    check(local_quits == 2 && local_rooms == 0, "...Leave Game and the keys leave the game, as ever");
+    local.set_room_choice(true);
+    check(local.room_choice() && local.hub_rect().w > 0 && count(*draw(arc, local, kWide720), art, "sc_leave_up") == 0, "the choice, set for the next match, replaces it");
+    local.set_room_choice(false);
+    check(!local.room_choice() && local.hub_rect().w == 0 && count(*draw(arc, local, kWide720), art, "sc_leave_up") == 1, "...and taken away again, Leave Game is back");
+    ScorecardModal classic;
+    open(classic, nullptr, kWide720, sample(), sim::GameMode::HighestScore, true, &rep, 0, true);
+    int classic_quits = 0, classic_rooms = 0;
+    classic.set_on_quit([&]() { ++classic_quits; });
+    classic.set_on_back_to_room([&]() { ++classic_rooms; });
+    classic.leave();
+    check(!classic.room_choice() && classic_quits == 1 && classic_rooms == 0, "the original's page has Leave Game only: the keys and the button leave, whatever the match was");
 }
 
 // ---- the real renderer ------------------------------------------------------------------------------------------------------------------------------------------------
@@ -830,9 +958,11 @@ void test_app() {
         check(rig.ok && rig.app.start_game("Original-Ants/Maps/SMALL.LVL"), at + "a match starts");
         int quits = 0;
         rig.app.scorecard().set_on_quit([&]() { ++quits; });
+        rig.app.set_page_exits([]() { return true; }, []() {});                          // (a page that has both exits: a game on this computer has no room to go back to)
         rig.results();
         const ScorecardModal& card = rig.app.scorecard();
         check(card.is_open() && !card.is_waiting() && card.new_look() && rig.app.picture() == canvas.rect(), at + "New art: the results are the new page and the picture is the whole canvas " + str(rig.app.picture()));
+        check(!rig.app.room_choice_applies() && !card.room_choice() && card.hub_rect().w == 0, at + "a game on this computer keeps Leave Game, whatever the page offers");
         const LayoutRect b = card.leave_rect();
         rig.click(b.x - 30, b.y + b.h / 2);
         check(quits == 0, at + "a click beside the button does nothing");
@@ -904,6 +1034,14 @@ void test_app() {
         shown.play.tile_y = static_cast<int32_t>(map.height / 2);
         card.set_report(shown);
         app.update_results(0.3f);
+        key(SDLK_RIGHT, 0);
+        check(card.page() == ScorecardModal::Page::Stats && card.report().ok, "the right arrow (the link's own) shows the second page");
+        key(SDLK_RIGHT, 0);
+        check(card.page() == ScorecardModal::Page::Stats, "...again: it stays there");
+        key(SDLK_LEFT, 0);
+        check(card.page() == ScorecardModal::Page::Results && card.is_open(), "the left arrow shows the results again");
+        key(SDLK_LEFT, 0);
+        check(card.page() == ScorecardModal::Page::Results && card.is_open(), "...again: it stays there");
         const LayoutRect watch = card.watch_rect();
         check(card.new_look() && watch.w > 0, "the Play of the game has its Watch button on the screen");
         click(card, watch);
@@ -920,9 +1058,9 @@ void test_app() {
         app.update_results(0.3f);
         const MatchReport& end = card.report();
         check(app.sim().is_match_over() && card.is_open() && card.new_look() && end.ok && end.turns == live.turns && end.mvp.present == live.mvp.present && end.mvp.seat == live.mvp.seat && end.first_blood.present == live.first_blood.present &&
-                  end.play.present == live.play.present && end.damage_done == live.damage_done && card.watch_available() && card.tab_rect(ScorecardModal::Page::Stats).w > 0,
+                  end.play.present == live.play.present && end.damage_done == live.damage_done && card.watch_available() && card.link_rect().w > 0,
               "the viewer's end page is the match's own Podium again, from the report that was kept: the honors, the Play of the game, Match stats");
-        click(card, card.tab_rect(ScorecardModal::Page::Stats));
+        click(card, card.link_rect());
         check(card.page() == ScorecardModal::Page::Stats, "...its second page opens");
         app.watch_play(200);                                                            // (what its Watch does, with the play that this match has)
         check(app.replay_mode() && !card.is_open() && app.replay_value(ReplayValue::JumpTarget) == 200, "...and Watch jumps to the moment again (turn 200)");
@@ -962,6 +1100,7 @@ void test_scorecard_look(const assets::AssetArchive& arc, const hud_art::Art& ar
     test_187(arc, art);
     test_reflow(arc, art);
     test_buttons(arc, art);
+    test_room(arc, art);
     test_pixels(arc, art);
     test_app();
 }

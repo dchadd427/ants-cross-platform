@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The pages' side of the rematch of a lobby room (web/front/rematch.js and rematch.css, wired into web/shell.html and web/lobby.html; run by ./run_tests.sh --fast, with the other python tests of
 tests/scripts, and by the CI). When the rules end the match that a lobby room began, the game server opens a lobby room with the same code at once, with the match's plan and a seat kept for each person
-of the match who played in a browser (docs/SERVER.md "Lobby rooms"); the game page shows "The match is over" under the picture with "Back to the lobby", and the front page that the button opens shows
+of the match who played in a browser (docs/SERVER.md "Lobby rooms"); the game page shows "The match is over" under the picture with "Back to the room" and "Back to Ants & Uncles", and the front page that the first button opens shows
 "Back from the match." at the top, with the words of each color and the note under START (docs/PLAY_IN_BROWSER.md "After a match").
 
   - tests/scripts/web_rematch_check.js runs the library without a browser, on tables and with a small fake of the DOM (a name is TEXT: the fake throws when markup is assigned), the game page's strip

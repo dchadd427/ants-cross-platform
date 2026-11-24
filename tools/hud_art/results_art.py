@@ -12,8 +12,9 @@ The game lays the screen out itself, in units of whole device pixels (include/an
   the well    sc_well_tl .. sc_well_br: the eight pieces of a well (an edit field's bezel of brushed steel round its dark ground) that the game stretches to any size: corners of WELL_CORNER, edges
               that are one repeat of the brushing (WELL_RUN) long; the dark ground in the middle is a fill
   buttons     sc_leave_<up|hover|down>: Leave Game as a whole picture (face 99 x 22, its cast shadow 3 across and 4 down); sc_watch_<state>: Watch (face 58 x 20); the buttons that are as wide as the
-              screen asks are an end, a run of the brushing that the game repeats and the other end: sc_btn_<l|m|r>_<state> (face 40 high: the narrow screen's Leave Game, with its word
-              sc_leave_word_<state> on it) and sc_tab_<l|m|r>_<state> (face 22 high: the two tabs, with sc_tw_<results|stats>[_lit]_<state> on them: the word, cream, or gold for the page that is shown)
+              screen asks are an end, a run of the brushing that the game repeats and the other end: sc_btn_<l|m|r>_<state> (face 40 high: the narrow screen's buttons, with the word on them:
+              sc_leave_word_<state> "Leave Game", sc_bw_<room|hub>_<state> "Back to the room" and "Back to Ants & Uncles") and sc_sm_<l|m|r>_<state> (face 22 high: the wide screen's buttons and the
+              link to the other page, with sc_sw_<allstats|back|room|hub>_<state> on them: "All stats ▸", "◂ Back to results", "Back to the room", "Back to Ants & Uncles")
 """
 import math
 
@@ -28,11 +29,11 @@ WELL_RUN = 128                    # the length of an edge piece: the brushing's 
 WELL_GROUND = (WELL_RUN + 2 * WELL_CORNER - 10, 32 + 2 * WELL_CORNER - 10)      # the ground of the drawn well: its picture is 10 larger each way
 WELL_BEZEL = '#1d4a3d'            # one color for the whole bezel: it must not fall from top to bottom, or an edge that is repeated would show the fall again and again
 BIG_FACE_H = 40                   # the face of the narrow screen's Leave Game button
-TAB_FACE_H = 22                   # the face of a tab
+SMALL_FACE_H = 22                 # the face of a button of the wide screen, and of the link to the other page
 BIG_END = 12                      # the size of the ends of both
 BIG_RUN = 128
 BIG_WORD = 17.0                   # the em of the word on the big button
-TAB_WORD = 11.5                   # ... and on a tab
+SMALL_WORD = 11.5                 # ... and on a small button
 SMALL_BUTTON = (99, 22, 11.5)     # the face and em of the button that stands in a wide screen's corner
 WATCH_BUTTON = (58, 20, 10.5)     # Watch
 STATES = ('up', 'hover', 'down')
@@ -70,11 +71,12 @@ LINES = (
     ('sc_k_stand', 'LAST STAND', 'gold', 9.5, None, 'middle'),
 )
 PLAYFUL = tuple(n for n, _, material, *_ in LINES if material == 'playful')
-TAB_WORDS = (('results', 'Results'), ('stats', 'Match stats'))
+SMALL_WORDS = (('allstats', 'All stats \u25b8'), ('back', '\u25c2 Back to results'), ('room', 'Back to the room'), ('hub', 'Back to Ants & Uncles'))
+BIG_WORDS = (('room', 'Back to the room'), ('hub', 'Back to Ants & Uncles'))
 
 NAMES = tuple(n for n, *_ in LINES) + tuple('sc_well_' + p for p in ('tl', 't', 'tr', 'l', 'r', 'bl', 'b', 'br')) + tuple('sc_leave_' + s for s in STATES) + tuple('sc_watch_' + s for s in STATES) + \
     tuple('sc_btn_%s_%s' % (p, s) for s in STATES for p in ('l', 'm', 'r')) + tuple('sc_leave_word_' + s for s in STATES) + \
-    tuple('sc_tab_%s_%s' % (p, s) for s in STATES for p in ('l', 'm', 'r')) + tuple('sc_tw_%s%s_%s' % (n, lit, s) for n, _ in TAB_WORDS for lit in ('', '_lit') for s in STATES)
+    tuple('sc_sm_%s_%s' % (p, s) for s in STATES for p in ('l', 'm', 'r')) + tuple('sc_sw_%s_%s' % (n, s) for n, _ in SMALL_WORDS for s in STATES) + tuple('sc_bw_%s_%s' % (n, s) for n, _ in BIG_WORDS for s in STATES)
 
 
 def _line_cell(words, material, size, space, align):
@@ -153,12 +155,15 @@ def drawings():
         w, h, svg, ax, base = _word_cell('Leave Game', BIG_WORD, st)
         cells['sc_leave_word_' + st] = (w, h, svg)
         trim['sc_leave_word_' + st] = (ax, base)
-        for key, words in TAB_WORDS:
-            for lit in ('', '_lit'):
-                w, h, svg, ax, base = _word_cell(words, TAB_WORD, st, gold=bool(lit))
-                cells['sc_tw_%s%s_%s' % (key, lit, st)] = (w, h, svg)
-                trim['sc_tw_%s%s_%s' % (key, lit, st)] = (ax, base)
-        for prefix, face_h in (('sc_btn', BIG_FACE_H), ('sc_tab', TAB_FACE_H)):
+        for key, words in SMALL_WORDS:
+            w, h, svg, ax, base = _word_cell(words, SMALL_WORD, st)
+            cells['sc_sw_%s_%s' % (key, st)] = (w, h, svg)
+            trim['sc_sw_%s_%s' % (key, st)] = (ax, base)
+        for key, words in BIG_WORDS:
+            w, h, svg, ax, base = _word_cell(words, BIG_WORD, st)
+            cells['sc_bw_%s_%s' % (key, st)] = (w, h, svg)
+            trim['sc_bw_%s_%s' % (key, st)] = (ax, base)
+        for prefix, face_h in (('sc_btn', BIG_FACE_H), ('sc_sm', SMALL_FACE_H)):
             w, h, svg = _strip(face_h, st)
             cells['_%s_%s' % (prefix, st)] = (w, h, svg)
             for part, (x0, x1) in (('l', (0, BIG_END)), ('m', (BIG_END, BIG_END + BIG_RUN)), ('r', (w - BIG_END, w))):

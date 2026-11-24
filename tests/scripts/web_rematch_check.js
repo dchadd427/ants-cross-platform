@@ -328,9 +328,10 @@ async function main() {
         check('nothing shows before the room has taken the seat', p.host.hidden && p.host.children.length === 0);
         p.w.last().receive(welcome(1, KEY, 0));
         check('the seat of the key is ours: the strip shows, and the page lays the picture out again', !p.host.hidden && p.win.resized === 1);
-        same('the strip\'s words (picture R1)', [byClass(p.host, 'rmt-title').textContent, byClass(p.host, 'rmt-text').textContent, byClass(p.host, 'btn').textContent, byClass(p.host, 'rmt-note').textContent], [
-            'The match is over', 'Everybody can go back to the room together: same host, same colors, same map. Your seat is kept for you.', 'Back to the lobby', 'The game’s own “Leave Game” brings you back here too.']);
-        same('the button is a button of the page\'s look', [byClass(p.host, 'btn').tag, byClass(p.host, 'btn').type, byClass(p.host, 'btn').className], ['button', 'button', 'btn big']);
+        const buttons = all(p.host, (x) => x.tag === 'button');
+        same('the strip\'s words (picture R1, and the two choices of picture Z5)', [byClass(p.host, 'rmt-title').textContent, byClass(p.host, 'rmt-text').textContent, buttons.map((b) => b.textContent), byClass(p.host, 'rmt-note').textContent], [
+            'The match is over', 'Everybody can go back to the room together: same host, same colors, same map. Your seat is kept for you.', ['Back to the room', 'Back to Ants & Uncles'], 'The same two buttons are on the game’s results screen.']);
+        same('the two buttons are buttons of the page\'s look, both big (two clear choices)', buttons.map((b) => [b.tag, b.type, b.className]), [['button', 'button', 'btn big'], ['button', 'button', 'btn big']]);
         p.w.last().receive(roomBytes([[C, 'Maple'], [C, 'Sam'], [C, '<b>Juniper</b>'], [E, '']], { you: 1, leader: 0, inGame: 6, platforms: [0x13, 0x13, 0x16, 0] }));
         const chips = all(p.host, (x) => (' ' + x.className + ' ').indexOf(' rmt-chip ') !== -1);
         same('the chips: who is back, who is on the results screen (a name is text)', chips.map((c) => [c.className, c.textContent, c.children[0].style.background]), [
@@ -340,7 +341,7 @@ async function main() {
         const socket = p.w.last();
         const sentBefore = socket.sent.length;
         byClass(p.host, 'btn').fire('click');
-        check('"Back to the lobby": the link goes quietly (no Leave: the seat is kept for the front page) and is not made again', socket.closed && socket.sent.length === sentBefore && p.gp.state.client.status === 'closed');
+        check('"Back to the room": the link goes quietly (no Leave: the seat is kept for the front page) and is not made again', socket.closed && socket.sent.length === sentBefore && p.gp.state.client.status === 'closed');
         same('... the front page of this tab is handed the room, the key, the name the room shows, and the match', [JSON.parse(p.session.items['ants.lobby']), JSON.parse(p.session.items['ants.back'])],
             [{ c: 'k7m2xq', k: KEYHEX, n: 'Sam', o: 0 }, { c: 'k7m2xq', t: 1760600000000, m: 'TREASURE.LVL', p: ['Maple', 'Sam', '', ''], w: 'Maple won with 2,040.', r: 2 }]);
         same('... and the tab goes to the room\'s address', p.loc.assigned, ['/?room=k7m2xq']);
@@ -368,9 +369,9 @@ async function main() {
         q.w.last().receive(welcome(2, seq(0x70), 0));
         check('... and a seat that was given up meanwhile (the room seats the page as a newcomer under another key) is the case that is replaced', gone.length === 1 && gone[0].replaced === true, JSON.stringify(gone));
     }
-    {   // the game's own Leave Game on the results screen: back to the room, as the strip's button does, while the strip works; else the game goes to the front page as it did
+    {   // the game's own "Back to the room" on the results screen: back to the room, as the strip's button does, while the strip works; else the game goes to the front page as it did
         const p = page();
-        check('a game page has the question that the game asks when its results screen\'s Leave Game is pressed', typeof p.win.antsLeaveToRoom === 'function');
+        check('a game page has the question that the game asks when its results screen\'s "Back to the room" is pressed', typeof p.win.antsLeaveToRoom === 'function');
         check('... a page that is no game page has none', page({ search: '' }).win.antsLeaveToRoom === undefined);
         check('... before the match is over: no, the game goes on its own way', p.win.antsLeaveToRoom() === false && p.loc.assigned.length === 0);
         p.win.antsMatchOver(golden['two-players']);
@@ -407,6 +408,54 @@ async function main() {
         t.w.last().receive(reject(N.REJECT.Superseded));
         check('a seat that another window took (the strip is gone): no', t.win.antsLeaveToRoom() === false && t.loc.assigned.length === 0);
     }
+    {   // "Back to Ants & Uncles": the strip's second button and the game's own on the results screen give the seat up and take the tab to the front page; nothing is chosen for a person who chooses nothing
+        const p = page();
+        check('a game page has the question that the game asks when its results screen\'s "Back to Ants & Uncles" is pressed, and it is no before the match is over', typeof p.win.antsLeaveToHub === 'function' && p.win.antsLeaveToHub() === false && p.loc.assigned.length === 0);
+        check('... a page that is no game page has none', page({ search: '' }).win.antsLeaveToHub === undefined);
+        p.win.antsMatchOver(golden['two-players']);
+        p.w.advance(R.ASK_AFTER_MS);
+        p.w.last().open();
+        p.w.last().receive(welcome(1, KEY, 0));
+        const socket = p.w.last();
+        const left = (page_) => page_.w.sockets.some((x) => x.sent.some((m) => N.hexOf(m) === N.hexOf(N.encodeLeave())));
+        const idle = page();
+        idle.win.antsMatchOver(golden['two-players']);
+        idle.w.advance(R.ASK_AFTER_MS);
+        idle.w.last().open();
+        idle.w.last().receive(welcome(1, KEY, 0));
+        idle.w.advance(24 * 3600 * 1000);
+        check('a person who chooses nothing stays where the game is: a day later no timer has taken the tab anywhere or given the seat up', idle.loc.assigned.length === 0 && !left(idle) && !idle.host.hidden && idle.session.items['ants.lobby'] === undefined);
+        const hub = all(p.host, (x) => x.tag === 'button')[1];
+        hub.fire('click');
+        check('the strip\'s "Back to Ants & Uncles": the seat is given up with a Leave, the link closes, nothing is handed to the front page, and the tab goes to its address',
+            socket.closed && N.hexOf(socket.sent[socket.sent.length - 1]) === N.hexOf(N.encodeLeave()) && p.session.items['ants.lobby'] === undefined && p.session.items['ants.back'] === undefined && p.loc.assigned.length === 1 && p.loc.assigned[0] === '/');
+        const q = page();
+        q.win.antsMatchOver(golden['two-players']);
+        q.w.advance(R.ASK_AFTER_MS);
+        q.w.last().open();
+        q.w.last().receive(welcome(1, KEY, 0));
+        const qs = q.w.last();
+        check('the game\'s own button does the same, and says that the seat is given up and the tab is on its way', q.win.antsLeaveToHub() === true && qs.closed && N.hexOf(qs.sent[qs.sent.length - 1]) === N.hexOf(N.encodeLeave()) && q.session.items['ants.lobby'] === undefined && q.loc.assigned.length === 1 && q.loc.assigned[0] === '/');
+        q.win.fire('pagehide');
+        check('... and the page that goes says nothing more (the Leave was said)', qs.sent.filter((m) => N.hexOf(m) === N.hexOf(N.encodeLeave())).length === 1 && q.w.sockets.length === 1);
+        const r = page();
+        r.win.antsMatchOver(golden['two-players']);
+        check('the game\'s button before the seat is asked for (no link yet): the tab goes, and the seat is never asked for afterwards', r.win.antsLeaveToHub() === true && r.loc.assigned.length === 1 && r.loc.assigned[0] === '/' && (r.w.advance(R.ASK_AFTER_MS * 4), r.w.sockets.length === 0));
+        const t = page();
+        t.win.antsMatchOver(golden['two-players']);
+        t.w.advance(R.ASK_AFTER_MS);
+        t.w.last().open();
+        t.w.last().receive(welcome(1, KEY, 0));
+        t.w.last().receive(reject(N.REJECT.Kicked));
+        check('a person whose seat the host took away can still go to the front page (the room has nothing more to give up)', t.win.antsLeaveToHub() === true && t.loc.assigned.length === 1 && t.loc.assigned[0] === '/');
+        const u = page();
+        u.session.setItem = () => { throw new Error('blocked'); };
+        u.win.antsMatchOver(golden['two-players']);
+        u.w.advance(R.ASK_AFTER_MS);
+        u.w.last().open();
+        u.w.last().receive(welcome(1, KEY, 0));
+        check('... and so can one whose browser refuses the storage', u.win.antsLeaveToHub() === true && u.loc.assigned.length === 1 && u.loc.assigned[0] === '/');
+    }
     {
         const p = page();
         p.win.antsMatchOver(golden['two-players']);
@@ -415,7 +464,7 @@ async function main() {
         p.w.last().receive(welcome(1, KEY, 0));
         const socket = p.w.last();
         p.win.fire('pagehide');
-        check('the page goes some other way (Leave Game, a closed tab, a reload): the seat is given up with a Leave, and the link closes', socket.closed && N.hexOf(socket.sent[socket.sent.length - 1]) === N.hexOf(N.encodeLeave())
+        check('the page goes some other way (the Home button, a closed tab, a reload): the seat is given up with a Leave, and the link closes', socket.closed && N.hexOf(socket.sent[socket.sent.length - 1]) === N.hexOf(N.encodeLeave())
             && p.gp.state.client.status === 'closed' && p.session.items['ants.lobby'] === undefined);
         const q = page();
         q.win.fire('pagehide');
@@ -457,6 +506,14 @@ async function main() {
         }
         q.w.advance(600000);
         check('the match answers every time: three tries in all, then nothing more, and nothing shows', q.w.sockets.length === 3 && q.w.sockets.every((x) => x.closed && x.sent.length === 1) && q.host.hidden);
+        const r = page();
+        r.win.antsMatchOver(golden['two-players']);
+        r.w.advance(R.ASK_AFTER_MS);
+        r.w.last().open();
+        r.w.last().receive(welcome(1, KEY, 1));
+        r.win.antsLeaveToHub();
+        r.w.advance(R.ASK_AFTER_MS * 4);
+        check('a person who went to the front page while the match still answered is not asked for again: the seat is not taken after they left', r.w.sockets.length === 1 && r.loc.assigned.length === 1 && r.loc.assigned[0] === '/');
     }
     {
         const p = page();
@@ -494,7 +551,7 @@ async function main() {
         p.w.last().receive(roomBytes([[C, 'Maple'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0, inGame: 2, platforms: [0x13, 0x13, 0, 0] }));
         p.w.last().receive(reject(N.REJECT.Kicked));
         check('the host took this player out (or the seat waited three hours): the strip says so, with no button and no chips', !p.host.hidden && byClass(p.host, 'rmt-go').hidden && byClass(p.host, 'rmt-who').children.length === 0
-            && byClass(p.host, 'rmt-text').textContent === 'Your seat in the room is not kept any more. The game’s own “Leave Game” goes to the menu.');
+            && byClass(p.host, 'rmt-text').textContent === 'Your seat in the room is not kept any more. The game’s buttons go to the front page.');
     }
     {
         const p = page();

@@ -116,12 +116,16 @@ struct Case {
     bool report{false};
     bool play{false};
     bool is_187{false};
+    bool choice{false};                             // the match of a lobby room: two buttons in place of Leave Game
 };
+
+/// A button's picture: its face and its cast shadow, 3 across and 4 down
+LayoutRect shadowed(const LayoutRect& face) { return LayoutRect{face.x, face.y, face.w + 3, face.h + 4}; }
 
 std::string describe(const Case& c) {
     std::string out = std::to_string(c.w) + " x " + std::to_string(c.h) + ", " + std::to_string(c.rows) + " rows (";
     for (size_t i = 0; i < c.rows; ++i) out += std::to_string(c.ants[i]);
-    return out + " ants)" + (c.report ? (c.play ? ", counted with a play" : ", counted") : ", not counted") + (c.is_187 ? ", 187" : "");
+    return out + " ants)" + (c.report ? (c.play ? ", counted with a play" : ", counted") : ", not counted") + (c.is_187 ? ", 187" : "") + (c.choice ? ", a room's match" : "");
 }
 
 sl::PodiumInput input_of(const hud_art::Art& art, const Case& c) {
@@ -134,6 +138,7 @@ sl::PodiumInput input_of(const hud_art::Art& art, const Case& c) {
     in.report = c.report;
     in.play = c.play;
     in.is_187 = c.is_187;
+    in.choice = c.choice;
     in.title_w = title_width(art, c.w >= sl::kNarrowBelow ? "sc_victory_26" : "sc_victory_22");
     return in;
 }
@@ -169,8 +174,9 @@ void check_podium(const hud_art::Art& art, const Case& c) {
     if (!p.narrow) check(p.sentence_x >= title_rect.right() && p.title_x >= p.content.x, at + ": the sentence stands after the title");
     else check(p.sentence_base - 11 >= title_rect.bottom() - 2, at + ": the sentence stands under the title");
     check(!overlap(title_rect, bezel(p.winner_well)), at + ": the title is over the winner's well " + str(title_rect));
-    check(!overlap(title_rect, LayoutRect{p.leave.x, p.leave.y, p.leave.w + 3, p.leave.h + 4}), at + ": the title is over Leave Game");
-    if (p.tabs) check(!overlap(title_rect, LayoutRect{p.tab_results.x, p.tab_results.y, p.tab_results.w + 3, p.tab_results.h + 4}) && !overlap(title_rect, LayoutRect{p.tab_stats.x, p.tab_stats.y, p.tab_stats.w + 3, p.tab_stats.h + 4}), at + ": the title is over a tab");
+    check(!overlap(title_rect, shadowed(p.leave)), at + ": the title is over Leave Game");
+    if (p.choice) check(!overlap(title_rect, shadowed(p.hub)), at + ": the title is over \"Back to Ants & Uncles\"");
+    if (p.link_shown) check(!overlap(title_rect, shadowed(p.link)), at + ": the title is over the link to the second page");
     const LayoutRect label = ink_letters(art, c.is_187 ? "sc_k_colony" : "sc_k_winner", p.winner_label_x, p.winner_label_base);
     check(contains(p.winner_well, label), at + ": the winner's label stands in its well " + str(label));
 
@@ -207,10 +213,18 @@ void check_podium(const hud_art::Art& art, const Case& c) {
         check(p.others_well.right() <= p.winner_well.x + 100000 && (p.narrow ? p.others_well.y >= p.winner_well.bottom() : p.others_well.x >= p.winner_well.right() + 8), at + ": the others' well is " + (p.narrow ? "under" : "beside") + " the winner's");
     }
 
-    // the Play of the game, the honors and the tabs: with the counted numbers only
-    check(p.tabs == c.report && (!p.tabs || (p.tab_results.right() + 3 < p.tab_stats.x && p.tab_stats.right() + 3 <= p.leave.x + (p.narrow ? 100000 : 0))), at + ": the two tabs are there when the match was counted, side by side");
-    check(p.leave_big == p.narrow && p.leave.w >= (p.narrow ? 200 : 99) && p.leave.h == (p.narrow ? sl::kBigFaceH : sl::kLeaveFaceH), at + ": Leave Game is the corner's button, or the big one of a narrow page");
-    if (p.narrow) check(p.leave.bottom() + 11 <= c.h && p.leave.y > p.winner_well.bottom(), at + ": the big button is at the bottom, with room for its shadow");
+    // the link to the second page, Leave Game or the two buttons of a room's match, the Play of the game and the honors: the link and what follows it with the counted numbers only
+    check(p.link_shown == c.report && (!p.link_shown || (p.link.h == sl::kSmallFaceH && p.link.x == p.content.x + 2 && p.link.w == (p.narrow ? p.content.w - 6 : sl::kAllStatsFaceW) &&
+                                                          (p.narrow || shadowed(p.link).right() < p.leave.x))), at + ": the link \"All stats\" is there when the match was counted, in the corner of a wide page, over the column of a narrow one");
+    check(p.choice == c.choice && p.leave_big == p.narrow, at + ": the buttons are the big ones of a narrow page, the small ones of a wide page");
+    if (!c.choice) {
+        check(p.leave.w >= (p.narrow ? 200 : 99) && p.leave.h == (p.narrow ? sl::kBigFaceH : sl::kLeaveFaceH) && p.hub.w == 0, at + ": Leave Game is the corner's button, or the big one of a narrow page");
+    } else {
+        check(p.leave.h == (p.narrow ? sl::kBigFaceH : sl::kSmallFaceH) && p.hub.h == p.leave.h, at + ": the two buttons are the same height");
+        if (p.narrow) check(p.leave.w == p.hub.w && p.leave.w >= 200 && p.hub.y >= p.leave.bottom() + 11 && p.hub.x == p.leave.x, at + ": a narrow page stacks them, the room's over the front page's");
+        else check(p.leave.w == sl::kRoomFaceW && p.hub.w == sl::kHubFaceW && p.hub.y == p.leave.y && p.hub.x >= shadowed(p.leave).right() + 8 && shadowed(p.hub).right() <= p.content.right() + 1, at + ": a wide page has them side by side in the corner, the room's first");
+    }
+    if (p.narrow) check((p.choice ? p.hub : p.leave).bottom() + 11 <= c.h && p.leave.y > p.winner_well.bottom(), at + ": the big buttons are at the bottom, with room for their shadow");
     if (!c.report) {
         check(p.play.w == 0 && !p.honors, at + ": nothing was counted: no play and no honors");
     } else {
@@ -246,17 +260,17 @@ void check_podium(const hud_art::Art& art, const Case& c) {
     }
 }
 
-/// The waiting page and the second page at one size
-void check_other_pages(const hud_art::Art& art, int32_t w, int32_t h, const std::string& at_size) {
-    const sl::Waiting wt = sl::compute_waiting(w, h);
-    const std::string at = at_size + ", waiting";
-    check(wt.ok && wt.narrow == (w < sl::kNarrowBelow), at + ": the waiting page is made");
+/// The waiting page and the second page at one size, for a game on this computer or for the match of a lobby room (two buttons in place of Leave Game)
+void check_other_pages_of(const hud_art::Art& art, int32_t w, int32_t h, const std::string& at_size, bool choice) {
+    const sl::Waiting wt = sl::compute_waiting(w, h, choice);
+    const std::string at = at_size + ", waiting" + (choice ? ", a room's match" : "");
+    check(wt.ok && wt.narrow == (w < sl::kNarrowBelow) && wt.choice == choice, at + ": the waiting page is made");
     if (wt.ok) {
         check_parts(wt.parts, w, h, at);
         const LayoutRect title = centered_letters(art, wt.title_big ? "sc_gameover_36" : "sc_gameover_26", wt.title_cx, wt.title_base);
         check(inside(title, w, h) && title.bottom() < wt.sentence_base - 4, at + ": \"Game Over\" is on the page, above its line " + str(title));
         check(wt.sentence_w > 150 && wt.sentence_base + 8 < h, at + ": the line has room");
-        check(wt.leave_big == wt.narrow && wt.leave.w >= 99, at + ": Leave Game is there from the first moment");
+        check(wt.leave_big == wt.narrow && wt.leave.w >= 99 && (wt.hub.w > 0) == choice, at + ": Leave Game (or the two buttons) is there from the first moment");
         if (wt.narrow) check(wt.sentence_base + 8 < wt.leave.y, at + ": the big button is under the line");
     }
     for (const bool is_187 : {false, true}) {
@@ -266,12 +280,15 @@ void check_other_pages(const hud_art::Art& art, int32_t w, int32_t h, const std:
             in.h = h;
             in.seats = seats;
             in.is_187 = is_187;
+            in.choice = choice;
             const sl::StatsPage s = sl::compute_stats(in);
-            const std::string sat = at_size + ", match stats, " + std::to_string(seats) + " seats" + (is_187 ? ", 187" : "");
+            const std::string sat = at_size + ", match stats, " + std::to_string(seats) + " seats" + (is_187 ? ", 187" : "") + (choice ? ", a room's match" : "");
             check(s.ok && s.seat_count == seats && s.columns == (is_187 ? 6u : 8u) && s.groups == (is_187 ? 2u : 3u), sat + ": the page is made (" + std::to_string(s.columns) + " columns)");
             if (!s.ok) continue;
             check_parts(s.parts, w, h, sat);
-            check(s.tab_results.right() + 3 < s.tab_stats.x && s.leave_big == s.narrow, sat + ": the tabs and Leave Game are there");
+            check(s.link.h == sl::kSmallFaceH && s.link.x == s.content.x + 2 && s.link.w == (s.narrow ? s.content.w - 6 : sl::kBackFaceW) && (s.narrow || shadowed(s.link).right() < s.leave.x) && s.leave_big == s.narrow && s.choice == choice && (s.hub.w > 0) == choice,
+                  sat + ": the link \"Back to results\" and Leave Game (or the two buttons) are there");
+            if (s.narrow) check(s.well.bottom() + 6 < s.leave.y, sat + ": the big buttons are under the well");
             check(contains(LayoutRect{0, 0, w, h}, well_picture(s.well)), sat + ": the well is on the page " + str(s.well));
             for (size_t q = 0; q < seats; ++q) {
                 const sl::StatsPage::Seat& seat = s.seat[q];
@@ -314,6 +331,11 @@ void check_other_pages(const hud_art::Art& art, int32_t w, int32_t h, const std:
             }
         }
     }
+}
+
+void check_other_pages(const hud_art::Art& art, int32_t w, int32_t h, const std::string& at_size) {
+    check_other_pages_of(art, w, h, at_size, false);
+    check_other_pages_of(art, w, h, at_size, true);
 }
 
 void test_scale() {
@@ -371,7 +393,10 @@ void test_podium(const hud_art::Art& art) {
                     c.play = state == 2;
                     for (const bool is_187 : {false, true}) {
                         c.is_187 = is_187;
-                        check_podium(art, c);
+                        for (const bool choice : {false, true}) {
+                            c.choice = choice;
+                            check_podium(art, c);
+                        }
                     }
                 }
             }
@@ -388,17 +413,17 @@ void test_podium(const hud_art::Art& art) {
     in.play = true;
     in.title_w = title_width(art, "sc_victory_26");
     const sl::Podium full = sl::compute_podium(in);
-    check(!full.narrow && !full.leave_big && full.leave.w == 99 && full.leave.h == 22 && full.honors && full.play.w > 0 && full.tabs, "720p, three rows, counted: the corner's button (99 x 22), the tabs, the play and the three honors");
+    check(!full.narrow && !full.leave_big && full.leave.w == 99 && full.leave.h == 22 && full.honors && full.play.w > 0 && full.link_shown, "720p, three rows, counted: the corner's button (99 x 22), the link to the second page, the play and the three honors");
     check(full.others_well.x > full.winner_well.right() && full.other_count == 2, "...the others are ranked beside the winner");
     in.report = false;
     in.play = false;
     const sl::Podium plain = sl::compute_podium(in);
-    check(!plain.tabs && !plain.honors && plain.play.w == 0 && plain.tile_count == 3, "...a match that was not counted has no tabs, no honors, no play and no damage tile");
+    check(!plain.link_shown && !plain.honors && plain.play.w == 0 && plain.tile_count == 3, "...a match that was not counted has no link to a second page, no honors, no play and no damage tile");
     in.rows = 1;
     const sl::Podium alone = sl::compute_podium(in);
     check(alone.other_count == 0 && alone.others_well.w == 0 && alone.winner_well.w > full.winner_well.w, "one row alone: no well of others, and the winner's well takes the width");
     const sl::Podium phone = sl::compute_podium([&] { sl::PodiumInput p = in; p.w = 390; p.h = 844; p.rows = 4; p.report = true; p.play = true; p.title_w = title_width(art, "sc_victory_22"); return p; }());
-    check(phone.narrow && phone.leave_big && phone.leave.w > 300 && phone.tabs && phone.honors && phone.play.w > 0, "a phone held upright, four rows, counted: one column, the big button, the tabs, the play and the honors");
+    check(phone.narrow && phone.leave_big && phone.leave.w > 300 && phone.link_shown && phone.honors && phone.play.w > 0, "a phone held upright, four rows, counted: one column, the big button, the link, the play and the honors");
     const sl::Podium empty = sl::compute_podium(sl::PodiumInput{0, 0});
     check(!empty.ok, "no size, no page");
     sl::PodiumInput many = in;
@@ -449,6 +474,9 @@ void test_sweep(const hud_art::Art& art) {
                         c.report = state > 0;
                         c.play = state == 2;
                         c.is_187 = rows == 3;
+                        c.choice = false;
+                        check_podium(art, c);
+                        c.choice = true;
                         check_podium(art, c);
                     }
                 }
@@ -472,12 +500,18 @@ void test_pieces(const hud_art::Art& art) {
         check(size(("sc_watch_" + st).c_str()) == std::make_pair(sl::kWatchW, sl::kWatchH), "Watch is its face of 58 x 20 and its cast shadow, " + st);
         check(size(("sc_btn_m_" + st).c_str()) == std::make_pair(sl::kBigRun, sl::kBigH) && size(("sc_btn_l_" + st).c_str()) == std::make_pair(sl::kBigEnd, sl::kBigH) && size(("sc_btn_r_" + st).c_str()) == std::make_pair(sl::kBigEnd, sl::kBigH),
               "the big button is its two ends and a run, " + st);
-        check(size(("sc_tab_m_" + st).c_str()) == std::make_pair(sl::kBigRun, sl::kTabH) && size(("sc_tab_l_" + st).c_str()) == std::make_pair(sl::kBigEnd, sl::kTabH) && size(("sc_tab_r_" + st).c_str()) == std::make_pair(sl::kBigEnd, sl::kTabH),
-              "a tab is its two ends and a run, " + st);
+        check(size(("sc_sm_m_" + st).c_str()) == std::make_pair(sl::kBigRun, sl::kSmallH) && size(("sc_sm_l_" + st).c_str()) == std::make_pair(sl::kBigEnd, sl::kSmallH) && size(("sc_sm_r_" + st).c_str()) == std::make_pair(sl::kBigEnd, sl::kSmallH),
+              "a small button is its two ends and a run, " + st);
+        // each button's face holds its word, with some air on either side
+        const std::array<std::pair<const char*, int32_t>, 4> faces = {{{"allstats", sl::kAllStatsFaceW}, {"back", sl::kBackFaceW}, {"room", sl::kRoomFaceW}, {"hub", sl::kHubFaceW}}};
+        for (const auto& f : faces) {
+            check(size(("sc_sw_" + std::string(f.first) + "_" + st).c_str()).first + 16 <= f.second, std::string("the face of the small button \"") + f.first + "\" holds its word, " + st);
+            check(std::string(f.first) == "allstats" || std::string(f.first) == "back" || size(("sc_bw_" + std::string(f.first) + "_" + st).c_str()).first + 16 <= 332 - 6, std::string("the big button \"") + f.first + "\" holds its word on the narrowest column, " + st);
+        }
     }
     check(size("sc_well_t") == std::make_pair(sl::kWellRun, sl::kWellCorner) && size("sc_well_l") == std::make_pair(sl::kWellCorner, sl::kWellRunY) && size("sc_well_br") == std::make_pair(sl::kWellCorner, sl::kWellCorner), "a well is its corners and the runs of its edges");
     // each lettering sprite holds its line: it shows something, and its baseline and alignment point are inside it
-    for (const char* name : {"sc_victory_26", "sc_defeat_22", "sc_gameover_36", "sc_matchstats_15", "sc_others", "sc_g_damage", "sc_s_loot", "sc_k_winner", "sc_k_play", "sc_k_mvp", "sc_k_stand", "sc_leave_word_up", "sc_tw_stats_lit_up"}) {
+    for (const char* name : {"sc_victory_26", "sc_defeat_22", "sc_gameover_36", "sc_matchstats_15", "sc_others", "sc_g_damage", "sc_s_loot", "sc_k_winner", "sc_k_play", "sc_k_mvp", "sc_k_stand", "sc_leave_word_up", "sc_sw_allstats_up", "sc_sw_back_down", "sc_sw_room_hover", "sc_bw_hub_up"}) {
         const hud_art::Sprite* s = art.sprite_at(art.find_sprite(name));
         check(s != nullptr && s->x >= 0 && s->x <= s->w && s->y > 0 && s->y < s->h && s->w > s->h / 2, std::string(name) + ": its alignment point and baseline are in the sprite");
     }
@@ -497,8 +531,10 @@ void test_pieces(const hud_art::Art& art) {
         return out;
     };
     check(cut.parse(without("sprite sc_victory_26 ")) && !window_art::has_results_page(cut), "a set without the title is not the new page");
-    hud_art::Art no_tab;
-    check(no_tab.parse(without("sprite sc_tab_m_hover ")) && !window_art::has_results_page(no_tab), "a set without a tab's run is not the new page");
+    hud_art::Art no_run;
+    check(no_run.parse(without("sprite sc_sm_m_hover ")) && !window_art::has_results_page(no_run), "a set without a small button's run is not the new page");
+    hud_art::Art no_word;
+    check(no_word.parse(without("sprite sc_bw_hub_up ")) && !window_art::has_results_page(no_word), "a set without the word of the room's second button is not the new page");
     const auto resized = [&](const char* prefix, int32_t dw) {
         std::string out;
         std::istringstream in(manifest);
@@ -517,8 +553,8 @@ void test_pieces(const hud_art::Art& art) {
     };
     hud_art::Art other;
     check(other.parse(resized("sprite sc_well_t ", -1)) && !window_art::has_results_page(other), "a set whose well has an edge of another length is not the new page");
-    hud_art::Art other_tab;
-    check(other_tab.parse(resized("sprite sc_tab_m_down ", 1)) && !window_art::has_results_page(other_tab), "a set whose tab has a run of another length is not the new page");
+    hud_art::Art other_run;
+    check(other_run.parse(resized("sprite sc_sm_m_down ", 1)) && !window_art::has_results_page(other_run), "a set whose small button has a run of another length is not the new page");
     hud_art::Art other_watch;
     check(other_watch.parse(resized("sprite sc_watch_down ", 1)) && !window_art::has_results_page(other_watch), "a set whose Watch is another size is not the new page");
     hud_art::Art none;

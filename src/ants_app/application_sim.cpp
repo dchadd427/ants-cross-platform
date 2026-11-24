@@ -210,6 +210,7 @@ void Application::check_match_over() {
     const auto& world = sim_.get_world_state();
     scorecard_.set_report(watching_own_match_ ? watched_report_ : live_stats_.report());     // (the counted numbers: the new page's honors, Play of the game and second page; a report that is not ok shows the original's numbers only; the viewer of the match just played has the report that was kept)
     scorecard_.set_watch_available(can_watch_play());            // (the Play of the game's Watch: only where the recording of this match can be opened)
+    scorecard_.set_room_choice(room_choice_applies());           // (a lobby room's match, on the page itself: "Back to the room" and "Back to Ants & Uncles" in place of Leave Game; checked while the seat is still known)
     scorecard_.show(world.match_result, local_player_id_, world.game_mode);       // "Waiting for scores..."; the cue plays when the rows appear (update_scorecard)
     update_picture();                                            // the results are the whole canvas (their wide page, or the original's own page)
     if (background_stepping_) pending_music_ = PendingMusic::Closed;     // (a hidden page changes no sound: the music closes when the page is shown)

@@ -29,6 +29,11 @@ EM_JS(void, ants_go_to_front_page, (), {
 EM_JS(int, ants_leave_to_room, (), {
     try { return typeof antsLeaveToRoom === "function" && antsLeaveToRoom() === true ? 1 : 0; } catch (e) { return 0; }
 });
+// The results' "Back to Ants & Uncles" (web/front/rematch.js, window.antsLeaveToHub): the page gives up the seat that it holds for the rematch and takes the tab to the front page. 0: the page has no such
+// function (no room's page), and the game takes the tab to the front page itself.
+EM_JS(int, ants_leave_to_hub, (), {
+    try { return typeof antsLeaveToHub === "function" && antsLeaveToHub() === true ? 1 : 0; } catch (e) { return 0; }
+});
 }
 #endif
 
@@ -377,6 +382,28 @@ void Application::leave_network_match() {
     if (net_) net_->leave();                                   // (Leave is sent, the key is let go of; the page navigates away in the same breath)
 }
 
+bool Application::room_choice_applies() const noexcept {
+    return on_back_to_room_ && on_back_to_hub_ && network_active() && !net_->join_target().room.empty() && net_->my_seat() < sim::MAX_PLAYERS;
+}
+
+void Application::back_to_room() {
+    if (on_back_to_room_ && on_back_to_room_()) return;        // (the page took the tab to the room: the seat is kept there for the rematch)
+    back_to_hub();                                             // (no seat is kept for this player: the way out is the front page, as the results' Leave Game went before the choice)
+}
+
+void Application::back_to_hub() {
+    leave_network_match();
+    if (on_back_to_hub_) on_back_to_hub_();
+}
+
+#if defined(__EMSCRIPTEN__)
+// The page that holds the game itself (not a frame of another page) has the room and the front page to go to
+void Application::connect_page_exits() {
+    if (ants_page_is_a_frame()) return;
+    set_page_exits([]() { return ants_leave_to_room() != 0; }, []() { if (ants_leave_to_hub() == 0) ants_go_to_front_page(); });
+}
+#endif
+
 void Application::quit() {
     if (replay_mode_) {                                        // (the results' Leave Game, the quit dialog's Yes: back to the page's list of matches)
         leave_replay();
@@ -386,7 +413,8 @@ void Application::quit() {
 #if defined(__EMSCRIPTEN__)
     // The browser leaves a game for the site's front page, where the page's Menu button goes too: a room is left at once (the seat is dropped, not held for a page that is gone). A game in a frame of
     // another page (web/lobby.html) has no menu to go to: it is back at its setup screen (return_to_map_select leaves the room), or the frame loads again.
-    // The results screen of a lobby room's match is the exception: its Leave Game goes back to the room (the seat is kept for the rematch: the page hands it to the front page, as its "Back to the lobby" does).
+    // The results screen of a lobby room's match is the exception: its "Back to the room" (and, on the original's page, Leave Game) goes back to the room (the seat is kept for the rematch: the page hands it to the
+    // front page, as the strip's own button does); its "Back to Ants & Uncles" is back_to_hub.
     if (!ants_page_is_a_frame()) {
         if (ants_leave_to_room()) return;
         leave_network_match();

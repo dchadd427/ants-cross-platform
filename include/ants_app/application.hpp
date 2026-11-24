@@ -566,9 +566,22 @@ public:
     /// the game for the front page's numbers (web/shell.html antsReportLocalGame, docs/SERVER.md, "The site statistics, GET /stats and POST /stats/local"). A native game sets nothing and so reports nothing.
     void set_on_local_match_started(std::function<void()> hook) { on_local_match_started_ = std::move(hook); }
     /// The match of a server's room is over (check_match_over: once for each match, BEFORE the key of the seat is let go of): `fn` is told what the results show, as the text of match_over_json. The web build
-    /// tells its page (window.antsMatchOver, web/front/rematch.js), which holds the seat that the rematch of a lobby room keeps for this player and offers "Back to the lobby" (docs/SERVER.md "Lobby rooms");
+    /// tells its page (window.antsMatchOver, web/front/rematch.js), which holds the seat that the rematch of a lobby room keeps for this player and offers "Back to the room" and "Back to Ants & Uncles" (docs/SERVER.md "Lobby rooms");
     /// the tests give a function of their own. Never called for a game of one machine, a room of the local network (no room code) or a recording.
     void set_on_match_over(std::function<void(const std::string&)> fn) { on_match_over_ = std::move(fn); }
+    /// The page that holds the game can take the player somewhere else at the end of a lobby room's match (the web build, on the page itself: connect_page_exits): `to_room` takes the tab back to the room and
+    /// says so (false: it cannot, no seat is kept for this player), `to_hub` takes it to the front page, "Ants & Uncles". With both, the results of a room's match have two buttons instead of Leave Game
+    /// (room_choice_applies). A game on this computer, a native game and a game in a frame of another page have none: Leave Game, as ever.
+    void set_page_exits(std::function<bool()> to_room, std::function<void()> to_hub) {
+        on_back_to_room_ = std::move(to_room);
+        on_back_to_hub_ = std::move(to_hub);
+    }
+    /// The results screen of this match has the choice: the match is a server room's (with a seat of this machine) and the page has both exits
+    bool room_choice_applies() const noexcept;
+    /// "Back to the room": the page takes the tab to the room, where the seat is kept for the rematch; where it cannot, the way is the other button's. The keys Enter, C, Q and X of the results do this
+    void back_to_room();
+    /// "Back to Ants & Uncles": the seat in the room is given up at once (leave_network_match: the room keeps the others, the host's role passes as ever), then the page takes the tab to the front page
+    void back_to_hub();
     /// The text that set_on_match_over's function is told: {"room","seat","map","mode","names":[the four seats' names, "" for a seat that did not play],"rows":[{"seats":[one, or two allies],"score","won"}]}.
     /// The rows are the results screen's as the server orders them (MatchResult::rows(255): no seat's own tie rule), `won` is true when the row's team plays the winner cue on its own screen (a tie: both rows).
     /// The names and the map are the Start's (printable ASCII: a quote and a backslash are escaped, anything else becomes '?').
@@ -671,6 +684,7 @@ public:
 private:
     void handle_events();
     void refresh_page_visibility();                       // web build: asks the browser whether the page is hidden (set_page_hidden); a native build has no page, nothing to ask
+    void connect_page_exits();                            // web build: the page itself (not a frame of another page) has the room and the front page to go to (set_page_exits)
     bool background_step();                               // background_pump without asking the browser first
     bool wake_may_step();                                 // the wake-ups drive the match now: hidden page, network, no step running, and the frame loop slower than the turns
     void background_run(double elapsed);                  // the step itself: the network for `elapsed` seconds (at most kMaxWakeSeconds for the clock, see there), no sound
@@ -796,6 +810,8 @@ private:
     double start_when_pressed_ms_{-1.0e9};                // --start-when: when the hook last pressed START
     std::function<void(uint8_t)> on_seat_known_;           // (set_on_seat_known)
     std::function<void(const std::string&)> on_match_over_;   // (set_on_match_over)
+    std::function<bool()> on_back_to_room_;                    // (set_page_exits)
+    std::function<void()> on_back_to_hub_;
     uint8_t seat_told_{255};                               // the seat that on_seat_known_ was last told (255: none, or the session ended)
     bool page_hidden_{false};                              // the browser's page is hidden (set_page_hidden): a network match belongs to the wake-ups, see background_pump
     bool advancing_{false};                                // a frame or a background step is advancing the clocks and the match: no other one may start inside it

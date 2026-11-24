@@ -16,46 +16,55 @@ void add(std::vector<Part>& parts, const char* name, const LayoutRect& r) {
     if (r.w > 0 && r.h > 0) parts.push_back(Part{name, r});
 }
 
-/// The header that every page has: Leave Game (the corner's button, or the big one at the bottom of a narrow page) and, when there is a second page, the two tabs
+/// The buttons that every page has: Leave Game (the corner's button, or the big one at the bottom of a narrow page) or, after a lobby room's match, its two ("Back to the room" where Leave Game stands, and
+/// "Back to Ants & Uncles" beside it: on a narrow page one above the other), and, when there is a second page, the link to it (a face as wide as `link_w`; a narrow page's is as wide as its column)
 struct Header {
+    LayoutRect link;
     LayoutRect leave;
+    LayoutRect hub;
+    bool choice{false};
     bool leave_big{false};
     int32_t leave_word_base{0};
-    bool tabs{false};
-    LayoutRect tab_results;
-    LayoutRect tab_stats;
+    int32_t hub_word_base{0};
 };
 
-Header header(int32_t w, int32_t h, bool narrow, int32_t x0, int32_t cw, bool tabs) {
+constexpr int32_t kStackPitch = kBigFaceH + 12;        // two big buttons one above the other: the face, its cast shadow and 8 of air
+constexpr int32_t kButtonGap = 11;                     // two buttons side by side: the cast shadow (3) and 8 of air
+
+Header header(int32_t h, bool narrow, int32_t x0, int32_t cw, int32_t link_w, bool choice) {
     Header out;
+    out.choice = choice;
     if (narrow) {
         out.leave_big = true;
-        out.leave = LayoutRect{x0 + 2, h - kLeaveBigTop, cw - 6, kBigFaceH};
+        const LayoutRect bottom{x0 + 2, h - kLeaveBigTop, cw - 6, kBigFaceH};
+        if (choice) {
+            out.hub = bottom;
+            out.leave = LayoutRect{bottom.x, bottom.y - kStackPitch, bottom.w, bottom.h};
+            out.hub_word_base = out.hub.y + 26;
+        } else {
+            out.leave = bottom;
+        }
         out.leave_word_base = out.leave.y + 26;
-        if (tabs) {
-            const int32_t half = (cw - 10) / 2;
-            out.tabs = true;
-            out.tab_results = LayoutRect{x0 + 2, 13, half, kTabFaceH};
-            out.tab_stats = LayoutRect{x0 + 6 + half, 13, half, kTabFaceH};
-        }
+        if (link_w > 0) out.link = LayoutRect{x0 + 2, 13, cw - 6, kSmallFaceH};
     } else {
-        out.leave = LayoutRect{x0 + cw - kLeaveW + 1, 13, kLeaveFaceW, kLeaveFaceH};
-        if (tabs) {
-            out.tabs = true;
-            out.tab_results = LayoutRect{x0 + 2, 13, 62, kTabFaceH};
-            out.tab_stats = LayoutRect{x0 + 70, 13, 88, kTabFaceH};
+        if (choice) {
+            out.hub = LayoutRect{x0 + cw - kHubFaceW - 2, 13, kHubFaceW, kSmallFaceH};
+            out.leave = LayoutRect{out.hub.x - kButtonGap - kRoomFaceW, 13, kRoomFaceW, kSmallFaceH};
+        } else {
+            out.leave = LayoutRect{x0 + cw - kLeaveW + 1, 13, kLeaveFaceW, kLeaveFaceH};
         }
+        if (link_w > 0) out.link = LayoutRect{x0 + 2, 13, link_w, kSmallFaceH};
     }
-    (void)w;
     return out;
 }
 
+/// A button's picture is its face with the cast shadow 3 across and 4 down
+LayoutRect with_shadow(const LayoutRect& face) { return LayoutRect{face.x, face.y, face.w + 3, face.h + 4}; }
+
 void put_header(const Header& hd, std::vector<Part>& parts) {
-    add(parts, "Leave Game", LayoutRect{hd.leave.x, hd.leave.y, hd.leave.w + 3, hd.leave.h + 4});
-    if (hd.tabs) {
-        add(parts, "the Results tab", LayoutRect{hd.tab_results.x, hd.tab_results.y, hd.tab_results.w + 3, hd.tab_results.h + 4});
-        add(parts, "the Match stats tab", LayoutRect{hd.tab_stats.x, hd.tab_stats.y, hd.tab_stats.w + 3, hd.tab_stats.h + 4});
-    }
+    add(parts, hd.choice ? "Back to the room" : "Leave Game", with_shadow(hd.leave));
+    if (hd.choice) add(parts, "Back to Ants & Uncles", with_shadow(hd.hub));
+    if (hd.link.w > 0) add(parts, "the link to the other page", with_shadow(hd.link));
 }
 
 /// The podium with everything from the title down moved `dy` lower (a wide page that has room to spare is centered in its height)
@@ -72,13 +81,15 @@ Podium podium_at(const PodiumInput& in, int32_t dy, int32_t& bottom) {
     const int32_t cw = std::min(in.w - 2 * margin, kMaxContent);
     const int32_t x0 = (in.w - cw) / 2;
     p.content = LayoutRect{x0, 0, cw, in.h};
-    const Header hd = header(in.w, in.h, p.narrow, x0, cw, in.report);
-    p.tabs = hd.tabs;
-    p.tab_results = hd.tab_results;
-    p.tab_stats = hd.tab_stats;
+    const Header hd = header(in.h, p.narrow, x0, cw, in.report ? kAllStatsFaceW : 0, in.choice);
+    p.link_shown = hd.link.w > 0;
+    p.link = hd.link;
     p.leave = hd.leave;
+    p.hub = hd.hub;
+    p.choice = hd.choice;
     p.leave_big = hd.leave_big;
     p.leave_word_base = hd.leave_word_base;
+    p.hub_word_base = hd.hub_word_base;
     put_header(hd, p.parts);
 
     // the title and its sentence
@@ -253,7 +264,7 @@ Podium compute_podium(const PodiumInput& in) {
     return podium_at(in, dy, moved);
 }
 
-Waiting compute_waiting(int32_t w, int32_t h) {
+Waiting compute_waiting(int32_t w, int32_t h, bool choice) {
     Waiting out;
     if (w <= 0 || h <= 0) return out;
     out.ok = true;
@@ -267,10 +278,13 @@ Waiting compute_waiting(int32_t w, int32_t h) {
     out.title_base = cy;
     out.sentence_base = cy + 30;
     out.sentence_w = cw;
-    const Header hd = header(w, h, out.narrow, x0, cw, false);
+    const Header hd = header(h, out.narrow, x0, cw, 0, choice);
     out.leave = hd.leave;
+    out.hub = hd.hub;
+    out.choice = hd.choice;
     out.leave_big = hd.leave_big;
     out.leave_word_base = hd.leave_word_base;
+    out.hub_word_base = hd.hub_word_base;
     put_header(hd, out.parts);
     const int32_t cap = out.title_big ? 36 : 26;
     add(out.parts, "the title", LayoutRect{w / 2 - 6 * cap, cy - cap * 11 / 10, 12 * cap, cap * 11 / 10 + 5});
@@ -289,12 +303,14 @@ StatsPage compute_stats(const StatsInput& in) {
     const int32_t cw = std::min(in.w - 2 * margin, kMaxContent);
     const int32_t x0 = (in.w - cw) / 2;
     s.content = LayoutRect{x0, 0, cw, in.h};
-    const Header hd = header(in.w, in.h, s.narrow, x0, cw, true);
-    s.tab_results = hd.tab_results;
-    s.tab_stats = hd.tab_stats;
+    const Header hd = header(in.h, s.narrow, x0, cw, kBackFaceW, in.choice);
+    s.link = hd.link;
     s.leave = hd.leave;
+    s.hub = hd.hub;
+    s.choice = hd.choice;
     s.leave_big = hd.leave_big;
     s.leave_word_base = hd.leave_word_base;
+    s.hub_word_base = hd.hub_word_base;
     put_header(hd, s.parts);
     // the numbers: Damage (done, taken), Food (trips, points), Special ants (bombs set, fires lit, raids, loot); the 187 page has no food
     std::vector<int32_t> counts = in.is_187 ? std::vector<int32_t>{2, 4} : std::vector<int32_t>{2, 2, 4};

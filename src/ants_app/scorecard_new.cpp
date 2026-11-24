@@ -227,8 +227,20 @@ void draw_team(const Ctx& c, const ScorecardModal::Row& row, double ux, double u
     if (row.has_second()) draw_ant(c, row.second, ux + pitch, uy, a, head);
 }
 
-/// Leave Game: the corner's button, or the big one of a narrow page
-void draw_leave(const Ctx& c, const LayoutRect& face, bool big, int32_t word_base) {
+/// A button made of a strip and a word: the wide page's small one (face 22 high, the word on the baseline 15 below its top), or the narrow page's big one (the word's baseline is given)
+void draw_button(const Ctx& c, const LayoutRect& face, bool big, int32_t word_base, const char* word, Look look) {
+    const char* st = state_of(look);
+    c.sheet.strip(big ? "sc_btn" : "sc_sm", face, st);
+    c.sheet.lettering(std::string(big ? "sc_bw_" : "sc_sw_") + word + "_" + st, face.x + face.w / 2, big ? word_base : face.y + 15);
+}
+
+/// Leave Game: the corner's button, or the big one of a narrow page; after the match of a lobby room "Back to the room" in its place and "Back to Ants & Uncles" beside it (a narrow page: under it)
+void draw_leave(const Ctx& c, const LayoutRect& face, const LayoutRect& hub, bool choice, bool big, int32_t word_base, int32_t hub_word_base) {
+    if (choice) {
+        draw_button(c, face, big, word_base, "room", c.m.leave_look());
+        draw_button(c, hub, big, hub_word_base, "hub", c.m.hub_look());
+        return;
+    }
     const char* st = state_of(c.m.leave_look());
     if (big) {
         c.sheet.strip("sc_btn", face, st);
@@ -238,12 +250,9 @@ void draw_leave(const Ctx& c, const LayoutRect& face, bool big, int32_t word_bas
     }
 }
 
-/// A tab: its button, and its word in cream, or in gold when it is the page that shows
-void draw_tab(const Ctx& c, Page which, const LayoutRect& face) {
-    const bool lit = c.m.page() == which;
-    const char* st = state_of(lit ? Look::Up : c.m.tab_look(which));
-    c.sheet.strip("sc_tab", face, st);
-    c.sheet.lettering(std::string("sc_tw_") + (which == Page::Results ? "results" : "stats") + (lit ? "_lit_" : "_") + st, face.x + face.w / 2, face.y + 15);
+/// The link to the other page: "All stats" on the podium, "Back to results" on the second page
+void draw_link(const Ctx& c, const LayoutRect& face) {
+    draw_button(c, face, false, 0, c.m.page() == Page::Results ? "allstats" : "back", c.m.link_look());
 }
 
 /// A bar of the score in the colors of the ants (an alliance: one half each)
@@ -433,11 +442,8 @@ void draw_podium(const Ctx& c) {
     }
     if (counted && rep.play.present && p.play.w > 0) draw_play(c, p);
     if (counted && p.honors) draw_honors(c, p);
-    if (p.tabs) {
-        draw_tab(c, Page::Results, p.tab_results);
-        draw_tab(c, Page::Stats, p.tab_stats);
-    }
-    draw_leave(c, p.leave, p.leave_big, p.leave_word_base);
+    if (p.link_shown) draw_link(c, p.link);
+    draw_leave(c, p.leave, p.hub, p.choice, p.leave_big, p.leave_word_base, p.hub_word_base);
 }
 
 // ---- the waiting page ---------------------------------------------------------------------------------------------------------------------------------------
@@ -446,7 +452,7 @@ void draw_waiting(const Ctx& c) {
     const Waiting& w = c.m.waiting_layout();
     c.sheet.centered(w.title_big ? "sc_gameover_36" : "sc_gameover_26", w.title_cx, w.title_base);
     ink(c, "The match has ended. Adding up the scores...", c.X(w.title_cx), c.Y(w.sentence_base), w.narrow ? 13.0 : 15.0, 1);
-    draw_leave(c, w.leave, w.leave_big, w.leave_word_base);
+    draw_leave(c, w.leave, w.hub, w.choice, w.leave_big, w.leave_word_base, w.hub_word_base);
 }
 
 // ---- the second page ----------------------------------------------------------------------------------------------------------------------------------------
@@ -521,9 +527,8 @@ void draw_stats(const Ctx& c) {
             if (s.narrow) c.pen.draw(is_187 ? kShort187[i] : kShort[i], c.X(seat.number_x[i]), c.Y(seat.label_base[i]), kDim, 8.6, 1);
         }
     }
-    draw_tab(c, Page::Results, s.tab_results);
-    draw_tab(c, Page::Stats, s.tab_stats);
-    draw_leave(c, s.leave, s.leave_big, s.leave_word_base);
+    draw_link(c, s.link);
+    draw_leave(c, s.leave, s.hub, s.choice, s.leave_big, s.leave_word_base, s.hub_word_base);
 }
 
 }  // namespace
@@ -538,21 +543,12 @@ int ScorecardModal::viewer_rank() const noexcept {
     return -1;
 }
 
-ScorecardModal::Look ScorecardModal::tab_look(Page which) const noexcept {
-    const ScreenButton& b = which == Page::Results ? tab_results_ : tab_stats_;
-    return b.pressed() ? Look::Down : b.hovered() ? Look::Hover : Look::Up;
-}
-
 static LayoutRect canvas_rect_of(const ButtonRect& r) { return LayoutRect{r.x, r.y, r.w, r.h}; }
 
 LayoutRect ScorecardModal::leave_rect() const noexcept { return canvas_rect_of(quit_.up_rect()); }
+LayoutRect ScorecardModal::hub_rect() const noexcept { return canvas_rect_of(hub_.up_rect()); }
+LayoutRect ScorecardModal::link_rect() const noexcept { return canvas_rect_of(link_.up_rect()); }
 LayoutRect ScorecardModal::watch_rect() const noexcept { return canvas_rect_of(watch_.up_rect()); }
-
-LayoutRect ScorecardModal::tab_rect(Page which) const noexcept {
-    if (!new_look_ || phase_ != Phase::Rows || !report_.ok) return LayoutRect{};
-    if (which == page_) return LayoutRect{};                       // (the tab of the page that shows is lit, not a button)
-    return scale_.rect(which == Page::Results ? stats_.tab_results : podium_.tab_stats);
-}
 
 void ScorecardModal::show_page(Page page) {
     if (!new_look_ || page == page_) return;
@@ -581,8 +577,9 @@ void ScorecardModal::update_new_look() {
         in.is_187 = mode_ == sim::GameMode::Kills187;
         const hud_art::Sprite* title = art_->sprite_at(art_->find_sprite(title_sprite_of(*this, in.w >= kNarrowBelow)));
         in.title_w = title != nullptr ? title->w - 2 * title->x : 0;
+        in.choice = room_choice_;
         podium_ = compute_podium(in);
-        waiting_ = compute_waiting(scale_.w, scale_.h);
+        waiting_ = compute_waiting(scale_.w, scale_.h, room_choice_);
         StatsInput st;
         st.w = scale_.w;
         st.h = scale_.h;
@@ -590,6 +587,7 @@ void ScorecardModal::update_new_look() {
         for (const Row& r : rows_) st.seats += r.has_second() ? 2u : 1u;
         st.seats = std::max<size_t>(1, st.seats);
         st.is_187 = in.is_187;
+        st.choice = room_choice_;
         stats_ = compute_stats(st);
     }
     update_button();
@@ -601,51 +599,53 @@ static void set_rect(ScreenButton& b, const LayoutRect& r) {
     b = ScreenButton(rect, rect);
 }
 
-// The new page's buttons stand where the layout of the page that shows puts them: Leave Game from the first moment, and with a report that is ok the tab of the other page and Watch
+// The new page's buttons stand where the layout of the page that shows puts them: Leave Game (or the two buttons of a room's match) from the first moment, and with a report that is ok the link to the other page and Watch
 void ScorecardModal::update_new_buttons() {
     const bool rows_shown = phase_ == Phase::Rows;
     const bool two_pages = rows_shown && report_.ok;
-    LayoutRect leave, other_tab, watch;
-    bool results_tab = false;
-    if (!rows_shown) leave = scale_.rect(waiting_.leave);
-    else if (page_ == Page::Stats) {
+    LayoutRect leave, hub, link, watch;
+    if (!rows_shown) {
+        leave = scale_.rect(waiting_.leave);
+        hub = scale_.rect(waiting_.hub);
+    } else if (page_ == Page::Stats) {
         leave = scale_.rect(stats_.leave);
-        other_tab = scale_.rect(stats_.tab_results);
-        results_tab = true;
+        hub = scale_.rect(stats_.hub);
+        link = scale_.rect(stats_.link);
     } else {
         leave = scale_.rect(podium_.leave);
-        if (two_pages) other_tab = scale_.rect(podium_.tab_stats);
+        hub = scale_.rect(podium_.hub);
+        if (two_pages) link = scale_.rect(podium_.link);
         if (two_pages && watch_available_ && report_.play.present && podium_.play.w > 0) watch = scale_.rect(podium_.watch);
     }
     set_rect(quit_, leave);
-    set_rect(tab_results_, results_tab ? other_tab : LayoutRect{});
-    set_rect(tab_stats_, !results_tab && two_pages ? other_tab : LayoutRect{});
+    set_rect(hub_, hub);
+    set_rect(link_, link);
     set_rect(watch_, watch);
 }
 
 bool ScorecardModal::new_mouse_down(int32_t x, int32_t y) {
-    if (quit_.on_press(x, y) || watch_.on_press(x, y) || tab_results_.on_press(x, y) || tab_stats_.on_press(x, y)) play_sfx(sim::SoundID::ButtonClick);
+    if (quit_.on_press(x, y) || hub_.on_press(x, y) || watch_.on_press(x, y) || link_.on_press(x, y)) play_sfx(sim::SoundID::ButtonClick);
     return true;                                                   // (the screen takes every click)
 }
 
 bool ScorecardModal::new_mouse_up(int32_t x, int32_t y) {
     if (quit_.on_release(x, y)) {
-        if (on_quit_) on_quit_();
+        leave();
+    } else if (hub_.on_release(x, y)) {
+        if (on_back_to_hub_) on_back_to_hub_();
     } else if (watch_.on_release(x, y)) {
         if (on_watch_) on_watch_(report_.play.watch_turn(), report_.play.tile_x, report_.play.tile_y);
-    } else if (tab_results_.on_release(x, y)) {
-        show_page(Page::Results);
-    } else if (tab_stats_.on_release(x, y)) {
-        show_page(Page::Stats);
+    } else if (link_.on_release(x, y)) {
+        show_page(link_target());
     }
     return true;
 }
 
 void ScorecardModal::new_mouse_motion(int32_t x, int32_t y) {
     quit_.on_move(x, y);
+    hub_.on_move(x, y);
     watch_.on_move(x, y);
-    tab_results_.on_move(x, y);
-    tab_stats_.on_move(x, y);
+    link_.on_move(x, y);
 }
 
 void ScorecardModal::render_new(IRenderer& renderer, const assets::AssetArchive& assets) {
