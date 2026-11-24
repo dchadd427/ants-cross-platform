@@ -10,7 +10,8 @@ import numpy as np
 
 from png_write import write_png
 
-MAX_WIDTH = 1024            # canvas pixels: 3x of it is 3072, under the 4096 that every graphics card holds
+MAX_WIDTH = 1200            # canvas pixels: 3x of it is 3600, under the 4096 that every graphics card holds (the sheet's height is held to the same: LIMIT)
+LIMIT = 4096                # the largest texture that every graphics card takes, in device pixels (the sheet at 3x)
 PAD = 2                     # canvas pixels of the sprite's own edge repeated round it (so that a scaled copy never picks up a neighbor)
 
 
@@ -82,9 +83,12 @@ def pack(images, rows, anims, out_dir, canvas=(960, 540), cursor_anims=(), deriv
         spots_top, band_h = skyline(sizes_top, width) if top else ({}, 0)
         spots_rest, rest_h = skyline(sizes_rest, width)
         height = band_h + rest_h
+        if height * max(scales) > LIMIT:
+            continue
         if best is None or width * height < best[0]:
             best = (width * height, width, height, dict(spots_top, **{n: (x, y + band_h) for n, (x, y) in spots_rest.items()}), band_h)
     _, sheet_w, sheet_h, spots, band_h = best
+    assert sheet_w * max(scales) <= LIMIT and sheet_h * max(scales) <= LIMIT, 'the sheet is %d x %d canvas pixels: at %dx it does not fit a texture of %d' % (sheet_w, sheet_h, max(scales), LIMIT)
     place = {n: (spots[n][0] + PAD, spots[n][1] + PAD) for n in cells}
     os.makedirs(out_dir, exist_ok=True)
     files = {}

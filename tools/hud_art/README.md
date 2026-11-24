@@ -1,6 +1,6 @@
 # The HUD art generator
 
-Draws the new pictures of the match screen's HUD (the frame, the buttons, the pedestals with their pictures, Stop, the egg tray, the lunch box, the Fullscreen button), the new cursors (the pointer, the hands, the edge-scroll arrows, move, target, attack, food and no entry) and the new windows (the clay panel in its green frame, the dialogs' buttons, the options window with its switches and slider thumbs, the quick help, the countdown card), and packs them into the sheets that the game reads. What the game does with them, the setting that chooses them and the files' format are in [`docs/VIEW_AND_HUD.md`](../../docs/VIEW_AND_HUD.md#hud-art) and at the top of `include/ants_app/hud_art.hpp`.
+Draws the new pictures of the match screen's HUD (the frame, the buttons, the pedestals with their pictures, Stop, the egg tray, the lunch box, the Fullscreen button), the new cursors (the pointer, the hands, the edge-scroll arrows, move, target, attack, food and no entry) and the new windows (the clay panel in its green frame, the dialogs' buttons, the options window with its switches and slider thumbs, the quick help, the countdown card, the results screen's lettering, wells and button), and packs them into the sheets that the game reads. What the game does with them, the setting that chooses them and the files' format are in [`docs/VIEW_AND_HUD.md`](../../docs/VIEW_AND_HUD.md#hud-art) and at the top of `include/ants_app/hud_art.hpp`.
 
 ```
 python3 tools/hud_art/make_hud_art.py            # writes assets/hud_art/sheet_1x.png, sheet_2x.png, sheet_3x.png and hud_art.txt (about a minute)
@@ -17,6 +17,7 @@ Needs Python 3 with Pillow and numpy, and Google Chrome or Chromium (headless: i
 | `pack.py` | the sheets and the manifest (`hud_art.txt`; its format is described at the top of the file); skyline packing, one cell for each different picture, each sprite's edge repeated round it |
 | `pieces.py`, `system.py`, `texture.py`, `ants.py`, `lettering.py` | the drawn pieces as SVG: the bars, strips, panel, windows, buttons and card, the one bevel system, the plate's texture tile, the ornament ants, the labels |
 | `dialog_kit.py`, `dialog_windows.py`, `dialog_pieces.py`, `dialogs.py` | the windows (below): the look (the panel, wells, buttons, switches, tracks, thumbs, edit fields and lettering as SVG), the geometry of each window, the sprites and the cutting of a window into pieces, and `dialogs.export()`, which renders them and gives the manifest rows and animations |
+| `results_art.py` | the results screen's pieces (below, "The results screen"): its lettering, the nine-slice well and the Leave Game buttons |
 | `fullscreen_button.py` | the Fullscreen button of the HUD's top right corner (six sprites) |
 | `relief.py`, `carve.py` | the carved pieces, built as height fields and lit from the top left: the pedestals and their eight pictures, the gold band and the rim flash, the socket, the eggs, the lunch box |
 | `cursors.py`, `crisp.py` | the cursors: one sprite for every sprite of the original's sixteen cursor animations, at 1x, 2x and 3x, drawn flat and hard-edged on each scale's own pixel grid (`crisp.py` is the canvas); the sizes, the offsets from the click point and the frame times are read from the catalog below, so a cursor's click point and timing are the original's; the animations are marked `cursor` in the manifest |
@@ -39,6 +40,16 @@ Every window is made of sprites, drawn in the window's own numbers (the original
 - **Animations** are one for each picture of the original that a piece replaces (`yes1`, `op_conu`, ...), with the places in window numbers, one for each fixed layer (`op_window`, `qh_window`, `cd_card`), and `cd_row`: one player's well, placed so that the animation's origin is the top left of the row's 268 x 21 ground (the game draws it at every row, and puts the color square, the names and the numbers on it).
 
 What the game does with them: it draws a window from the panel pieces and the window's animation, and the buttons, switches and thumbs from their own animations; the pictures of the original that are kept (ants, power-ups, bombs, fire, hills) and everything that the game writes (the edit fields' text, names, digits, sentences) are drawn over them by the game.
+
+## The results screen
+
+The new results screen ([`docs/VIEW_AND_HUD.md`](../../docs/VIEW_AND_HUD.md#the-new-look-of-the-results-screen)) is laid out by the game, in units of whole device pixels, so its pieces have no place of their own: `results_art.py` draws each one at the size it has in a unit and `dialogs.export()` renders them on a sheet of their own (the sprites above keep their pixels). Every one is a sprite named `sc_*`:
+
+- **Lettering**: the banner `sc_title`, `sc_score_38` / `_33` / `_28` / `_s` ("Your Score" in the playful letters at three big sizes and a small one), `sc_winner`, `sc_others`, the column headings `sc_h_score`, `sc_h_friendly`, `sc_h_enemy`, `sc_h_new` with `sc_s_lost`, `sc_s_killed`, `sc_s_hatched` under them, and the 187 page's `sc_h_kills`, `sc_h_antslost`, `sc_h_antsleft`. Each is cut to the box of what it shows. Its manifest place (x, y) is where its alignment point and its baseline are in the sprite, counted from its top left (the end of the line for a heading that stands over a column, the middle for the playful titles, the start for the rest): the game puts the line by that point.
+- **The well**: `sc_well_tl` .. `sc_well_br`, the eight pieces of an edit field's bezel (brushed steel, one flat color along the whole bezel, so an edge that is repeated shows no fall of light): corners of 12 units and edge pieces of 128 (across) or 32 (down), one period of the brushing, which the game repeats along an edge (the last copy cut). The dark ground inside is a fill.
+- **Leave Game**: `sc_leave_<up|hover|down>` is the button of a table's corner (a face of 99 x 22 units and its cast shadow, 3 across and 4 down); a card layout's button is as wide as its screen: `sc_btn_<l|m|r>_<state>` (a left end of 12 units, a run of 128 that the game repeats, a right end; a face 40 high) with its word `sc_leave_word_<state>` on it.
+
+The sizes are the numbers of `include/ants_app/scorecard_layout.hpp` (the test `test_scorecard_new` reads them from the shipped manifest), and the game draws the art only when every piece is there at those sizes.
 
 ## Size
 
