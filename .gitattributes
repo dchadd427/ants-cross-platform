@@ -21,6 +21,9 @@ tests/data/lvl_core/**  -text
 # a byte copy of the licence text beside the game's own font, which the front page serves (tools/front_page_art/make_art.py)
 web/front/LibreFranklin-OFL.txt  -text
 
+# the manifest of the world art: the game's reader takes the format exactly, with LF only, and a Windows checkout would give it CR LF
+assets/world_art/world_art.txt text eol=lf
+
 # Binary files (no end-of-line conversion, no textual diff or merge)
 *.chd   binary
 *.exe   binary

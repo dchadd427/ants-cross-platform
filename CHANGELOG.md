@@ -569,18 +569,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5b17384e...0a24e791)
 
-## v0.15.0 - 2026-11-10 - A three-panel Home, notices over the page, and games in progress with Watch
+## Older versions (v0.15.0 and before)
 
-**For players:**
-- **A new Home.** Games are on the left, Players on the right and the chat at the bottom; the Yard is no longer on the front page. On a phone you see one view at a time, with a strip of buttons to move between Games, Players and Chat, and a phone held sideways keeps the account line.
-- **Notices float over the page.** A notice such as "Your room is public now." is a small box over the page, so the page no longer moves when it comes; it goes after 6 seconds, and one that asks something (Rejoin, Make public) stays until you answer. OK closes it, and so does Escape while it has the focus.
-- **Games in progress stay in the Games list.** A match that is running is a row of the list with a Watch button, which opens the live match in a new tab. The switch "Show games in progress" at the top of the list hides these rows; this browser remembers the choice.
-- **The chat keeps the newest 200 lines.** Besides the limit of 7 days, the chat's history keeps the newest 200 lines; older lines are deleted for good (the Legal page says so).
-
-**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.14.1 page or game still joins. The rest of this release is internal: tests and documents.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f6969023...5aee057e)
-
-## Older versions (v0.14.1 and before)
-
-Every release before v0.15.0, and the long notes of v0.14.1, v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.15.1, and the long notes of v0.15.0, v0.14.1, v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
