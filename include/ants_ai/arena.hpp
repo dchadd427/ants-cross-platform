@@ -66,7 +66,7 @@ private:
     std::array<uint32_t, sim::MAX_PLAYERS> raided_{};
 };
 
-/// What the arena counts of the "Can't go there." reactions (docs/BOTS.md, "The can't-go loop"): per seat and match, from what a person sees of it; counted after every tick, once the tick's
+/// What the arena counts of the "Can't go there." reactions (docs/BOT_PLAY.md, "The can't-go loop"): per seat and match, from what a person sees of it; counted after every tick, once the tick's
 /// commands were applied. The refused orders are an indicator that the tests bound, not a proof of cause (an ant that walks on from an earlier order and meets a wall is counted too).
 class CantGoTally {
 public:
@@ -103,7 +103,7 @@ private:
     std::map<uint64_t, uint32_t> refused_keys_;   // the keys of the orders that were refused, and how often
 };
 
-/// What the arena counts of the flowers (docs/BOTS.md, "The flowers"): per match `landings` (the end of every droplet's fall; a landing replaces an untaken power-up) and `landed` (them by the
+/// What the arena counts of the flowers (docs/BOT_TACTICS.md, "The flowers"): per match `landings` (the end of every droplet's fall; a landing replaces an untaken power-up) and `landed` (them by the
 /// kind of ant they make); per seat `took` (the ants that changed type, by the kind they became) and `took_at_flowers` (those that stood within one tile of a drop tile). The arena scans every 4th tick and once when the match ends.
 class FlowerTally {
 public:
@@ -177,7 +177,7 @@ struct ArenaSpec {
     std::function<void(const sim::SimulationEngine&)> on_tick;
 };
 
-/// What the arena counts of the ants that stand still, and of the endgame (docs/BOTS.md, "When the food is gone"): per seat, from the engine's own state, looked at every 4th tick (each look
+/// What the arena counts of the ants that stand still, and of the endgame (docs/BOT_TACTICS.md, "When the food is gone"): per seat, from the engine's own state, looked at every 4th tick (each look
 /// counts 4). The yardstick is `bot_watch`'s: an ant is idle when it stands in an idle clip with no order, no waypoint and nothing in its hand, and has done so for kIdleTicks (5 s). The
 /// last food is the last look at which the units on the map's piles fell (a bite, from any pile, a lunchbox too): `after_*` count the ants and the idle ones from that look to the end
 /// (the whole match when no unit was ever taken). A raid is counted when a Thief's target becomes a team.
@@ -256,7 +256,7 @@ private:
 class ExpeditionTask;
 class MinerFlightTask;
 
-/// What a standard bot's expedition over water did (ExpeditionTask, docs/BOTS.md "Islands"); the ticks are 0 for what never happened, and everything is 0 for a seat that has no standard bot
+/// What a standard bot's expedition over water did (ExpeditionTask, docs/BOT_ISLANDS.md "Islands"); the ticks are 0 for what never happened, and everything is 0 for a seat that has no standard bot
 struct ExpeditionResult {
     uint32_t planned{0};                       // expeditions planned (one per attempt)
     uint32_t given_up{0};                      // ... of them, given up for want of progress or of a crew

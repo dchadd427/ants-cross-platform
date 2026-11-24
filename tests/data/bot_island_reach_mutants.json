@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the Bomber that is free to fly (src/ants_ai/standard_tasks_build.cpp, src/ants_ai/tactics.cpp, src/ants_ai/miner_flight_task.cpp, docs/BOTS.md 'Islands') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_island_reach_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect.",
+ "note": "Mutants of the Bomber that is free to fly (src/ants_ai/standard_tasks_build.cpp, src/ants_ai/tactics.cpp, src/ants_ai/miner_flight_task.cpp, docs/BOT_ISLANDS.md 'Islands') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_island_reach_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect.",
  "defaults": {
   "build": "test_ai"
  },

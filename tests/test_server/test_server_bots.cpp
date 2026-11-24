@@ -813,7 +813,7 @@ void run_bot_tests() {
                     v.get("bots").at(1).get("bot").str() == "idle:medium" && v.get("bots").at(2).get("bot").str() == "hard");     // (listed by seat)
         ASSERT_TRUE(v.get("bots").at(2).get("style").str() == "random");                   // (a standard bot without a pinned style draws its own at the start of the match)
         ASSERT_TRUE(!v.get("bots").at(0).has("style") && !v.get("bots").at(1).has("style"));       // (the worker and the idle bot have no style: the key is absent, it does not say "random")
-        // a pinned style (docs/BOTS.md, "Styles"): the text is what --bot takes, the style is listed, the name of the seat is still "Bot (Level)"; a style that the level may not play is refused
+        // a pinned style (docs/BOT_PLAY.md, "Styles"): the text is what --bot takes, the style is listed, the name of the seat is still "Bot (Level)"; a style that the level may not play is refused
         r = call("POST", "/rooms", R"({"map":"TINY.LVL","players":4,"code":"CB-3S","bots":[{"seat":3,"bot":"hard:raider"},{"seat":1,"bot":"standard:medium:defensive"}]})");
         ASSERT_EQ(r.status, 201);
         v = json_of(r);

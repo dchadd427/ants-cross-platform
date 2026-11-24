@@ -1,6 +1,6 @@
 #pragma once
 
-// Bombs on the way (docs/BOTS.md, "Bombs on the way"): the walk round a visible bomb of another team.
+// Bombs on the way (docs/BOT_PLAY.md, "Bombs on the way"): the walk round a visible bomb of another team.
 //
 // The engine's path finder walks straight over a bomb of ANOTHER team (only the ant's own and its ally's bombs are walls), and the bomb goes off under the walker. A person sees every bomb
 // (it is drawn in its owner's color) and clicks round it; a bot's orders were plain clicks on the target. BombDetour is the last look of a standard bot at the orders of a look (after the

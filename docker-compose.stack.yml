@@ -51,7 +51,7 @@
 #                                                   to POST /test-maps, which docker/nginx.conf passes here; it works with the submissions door OFF (it has no database, no accounts and no other route). Leave it at
 #                                                   4031, the one that nginx passes to, or set 0, which switches test rooms off (the site then says so). Not published on the host. The maps live in the folder test-maps of the
 #                                                   volume ants-server-results (at most 64 MiB, 6 hours each) and are wiped at every start.
-#   ANTS_ADMIN_GATE_SECRET=<32+ characters>         the ONE key of the admin page (docs/MAP_SUBMISSIONS.md, "The admin page"; docs/HUB.md, "The admin page's door"): this stack hands it to the chat hub, which signs the
+#   ANTS_ADMIN_GATE_SECRET=<32+ characters>         the ONE key of the admin page (docs/MAP_SUBMISSIONS.md, "The admin page"; docs/HUB_ROLES.md, "The admin page's door"): this stack hands it to the chat hub, which signs the
 #                                                   pass with it, and to the game server, which checks the pass (32 to 256 printable characters, no blank: openssl rand -hex 32). The page also needs
 #                                                   ANTS_SUBMIT_PORT=4030 above. Without a good key the hub's door is shut (nginx says door_off); without the key at the game server every /admin/api path
 #                                                   answers 403 closed. There are no accounts: the hub's login decides who may use the page. A stack that still sets the hub's old name for it
@@ -59,12 +59,12 @@
 #
 #   ANTS_HUB_PUBLIC_URL=https://beta.playants.org   the chat hub (service ants-hub, docs/HUB.md): the address of this site, the one Origin that a chat socket may come from, and the base of the Discord login's way back
 #                                                   (<this address>/hub/callback; optional; this is the default). Empty or wrong: the hub refuses every socket and the page says "Chat is offline"
-#   ANTS_HUB_DISCORD_CLIENT_ID, ANTS_HUB_DISCORD_CLIENT_SECRET    the Discord application of the chat's login (docs/HUB.md, "Login": the site's operator makes the application, adds the redirect
+#   ANTS_HUB_DISCORD_CLIENT_ID, ANTS_HUB_DISCORD_CLIENT_SECRET    the Discord application of the chat's login (docs/HUB_LOGIN.md, "Login": the site's operator makes the application, adds the redirect
 #                                                   <this address>/hub/callback, and puts the id and the secret here). BOTH come from this stack's environment and never from a file of
 #                                                   the repository; without them the chat is read-only for everybody and says so. The secret is read by the hub and printed nowhere
 #   ANTS_HUB_MIN_ACCOUNT_DAYS=7                     a Discord account younger than this many days cannot write in the chat (0 lets every account write; optional; this is the default)
 #   ANTS_HUB_DISCORD_BOT_TOKEN, ANTS_HUB_DISCORD_GUILD, ANTS_HUB_ROLE_ADMIN, ANTS_HUB_ROLE_MOD    who may moderate the chat: the hub asks the site's Discord server, with the bot's token, which
-#                                                   roles a logged-in person holds (docs/HUB.md, "Roles"): the server's id and the two roles' ids. ALL come from this stack's environment and never
+#                                                   roles a logged-in person holds (docs/HUB_ROLES.md, "Roles"): the server's id and the two roles' ids. ALL come from this stack's environment and never
 #                                                   from a file of the repository; the token is read by the hub and printed nowhere. Without them nobody moderates in the chat (optional)
 #   ANTS_HUB_ROLE_IMAGES=<role id>                  the Discord role whose holders may post images in the chat, besides the moderators, the administrators and the operator's account (docs/HUB_IMAGES.md); it needs the token and the server
 #                                                   above, and must be a different role from the other two. Its id comes from this stack's environment and never from a file of the repository. Without it only the staff post images (optional)

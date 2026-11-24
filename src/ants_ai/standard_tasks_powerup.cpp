@@ -236,7 +236,7 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
 }
 
 // The watcher (Hard): an ant waits beside the drop tile of the own side's flower, arrives about plan.flower_watch_early ticks before the landing that Memory::flower expects, takes a kind that
-// the plan lacks like any trip does, and goes home when the plan lacks nothing the flower is likely to drop or the wait is longer than a trip there and back (docs/BOTS.md, "The flowers").
+// the plan lacks like any trip does, and goes home when the plan lacks nothing the flower is likely to drop or the wait is longer than a trip there and back (docs/BOT_TACTICS.md, "The flowers").
 void PowerUpTask::watch(TaskContext& c) {
     const LevelPlan& plan = tactics_.plan;
     const BotView& v = c.view;

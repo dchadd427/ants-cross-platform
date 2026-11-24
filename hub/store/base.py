@@ -1,4 +1,4 @@
-"""The contract of the hub's data (docs/HUB.md, "Data"): what every backend does, and the two errors a caller may have to meet.
+"""The contract of the hub's data (docs/HUB_LOGIN.md, "Data"): what every backend does, and the two errors a caller may have to meet.
 
 The hub, the login and the command line talk to a store only through the operations below. A backend that cannot do one of them (it is refused, locked, full, or out of reach)
 raises StoreError, and callers catch that and nothing of the backend's own. Operations that only one backend has (for SQLite: checkpoint, unsettled, secure_delete) are not

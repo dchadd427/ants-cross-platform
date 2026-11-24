@@ -1,6 +1,6 @@
 #pragma once
 
-// The ferry of the standard bot (docs/BOTS.md, "Islands"): a Swimmer that digs no bridge carries food across the water. It is sent like a worker (one move onto a cell of the pile) to the pile
+// The ferry of the standard bot (docs/BOT_ISLANDS.md, "Islands"): a Swimmer that digs no bridge carries food across the water. It is sent like a worker (one move onto a cell of the pile) to the pile
 // that pays best per tick of ITS trip, a search over land and water with the Swimmer's step weights, and the engine's harvest loop does the rest. No bridge is needed, none can collapse and none
 // is jammed. Idle without a Swimmer that nobody else holds. Everything is read from the BotView; an order that did nothing is learned from the next look.
 

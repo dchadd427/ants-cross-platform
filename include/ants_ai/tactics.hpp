@@ -105,7 +105,7 @@ struct LevelPlan {
     int32_t reserve_threat_tiles{6};     // a reserve pile with an enemy ant this near it counts like a pile that several enemies want
     bool deny_fade{true};                // the weights fade to nothing as the match runs out
     bool skip_hopeless{false};           // (Medium, Hard) a pile of the class Hopeless (another team's hill is far nearer: it is eaten before the ants arrive) is left alone while any other pile has food (HarvestTask::Params::skip_hopeless; the ablation `--tune nohope=0`)
-    // bombs on the way (docs/BOTS.md, "Bombs on the way"; src/ants_ai/bomb_detour.cpp): a bomb of another team is seen on every screen, and the engine's walk goes straight over it
+    // bombs on the way (docs/BOT_PLAY.md, "Bombs on the way"; src/ants_ai/bomb_detour.cpp): a bomb of another team is seen on every screen, and the engine's walk goes straight over it
     uint8_t bomb_detour{0};              // an order whose walk would cross a visible bomb of another team goes round it first (one waypoint, the order given again on arrival): 0 never (Easy), 1 the economy walks, the power-up trips and the
                                          // fights (Medium), 2 also the raids, the mine trips and the way home of a carrier (Hard); the ablation `--tune det=0`
     uint32_t detour_extra_percent{100};  // ... a detour that makes the walk more than this percentage longer is not taken (the walk goes on over the bomb: a blast costs about 100 ticks, a stun and 2 hit points)
@@ -219,7 +219,7 @@ struct LevelPlan {
     bool harass_station{true};           // a Combat Ant without a target waits in the middle between the enemy hills (its reflex punches what passes within three tiles)
     uint32_t bench_idle_ticks{0};        // TOURNAMENTS ONLY (bot_arena --tune idle=N): the bot does nothing until this tick, so that it falls behind on purpose (a handicap); 0 in every level
     uint32_t fight_reserve{2};           // no ant is sent to fight while the bot has no more than this many (one more when no egg is left): the last ants stay out of it
-    // the bot's own fights (contest batch; docs/BOTS.md, "Fights of its own"): it reads the hit points that the view gives for every ant and plays for the kill ratio, and at Hard it does not wait to be hit
+    // the bot's own fights (contest batch; docs/BOT_TACTICS.md, "Fights of its own"): it reads the hit points that the view gives for every ant and plays for the kill ratio, and at Hard it does not wait to be hit
     bool health_aware{false};            // (every level) a fight reads the hit points: the target that dies soonest first, a wounded target is finished (the fight lingers on), an own ant that would
                                          // die before its target is relieved by another, and the blows are counted in the real numbers (10 hit points, a blow takes 1, a Combat Ant's punch 2)
     bool skirmish{false};                // (Hard) with the stronger force at a place it cares about (a carrier on its way, a worker at a pile) enemy ants are attacked without waiting for a blow (FightTask)
@@ -247,7 +247,7 @@ struct LevelPlan {
     bool hunt_wide{true};                // (Medium, Hard) the scope also holds what is within the leash of the own hill and what is at a pile that the own ants work
     bool hunt_leader_carriers{false};    // (Hard) ... and the carriers of the leading team wherever they are
     uint32_t hunt_ticks{400};            // a hunt lasts at most this long
-    // behind the leader and the endgame (contest batch; docs/BOTS.md, "Behind the leader and the endgame"): the bot that is behind escalates, scaled by level; in the last minute the leader guards and the bot
+    // behind the leader and the endgame (contest batch; docs/BOT_TACTICS.md, "Behind the leader and the endgame"): the bot that is behind escalates, scaled by level; in the last minute the leader guards and the bot
     // behind goes all-in. The pressure is the deficit (the leader's box above the own) in percent of what can still be earned (the food on the field in points or the time left at catchup_earn_milli,
     // the less of the two): a pressure from catchup_tier1 / 2 / 3 is a tier 1 / 2 / 3 (Hard 40, 80, 130 percent; Medium 1.5 times those, Easy 2.5 times: the weaker the level, the later it escalates)
     bool catchup{false};                 // (every level, scaled) the tiers: 1 a strike force of Combat Ants (and raids for a smaller loot), 2 a hill with a guard is raided, a plan that does not raid (Easy)
@@ -273,7 +273,7 @@ struct LevelPlan {
     int32_t ambush_distance{6};          // ... it waits this many tiles east of the three tiles in front of the hole
     uint32_t ambush_thieves{1};          // ... at most this many thieves wait at a time (the others harvest between raids)
     uint32_t raid_min_loot{30};          // a hill whose score box shows less is not raided (RaidTask)
-    uint32_t raid_min_free{1};           // a hole is raided only when at least this many of the three tiles in front of it are free (1: any; 2: the quiet variant, docs/BOTS.md "The can't-go loop")
+    uint32_t raid_min_free{1};           // a hole is raided only when at least this many of the three tiles in front of it are free (1: any; 2: the quiet variant, docs/BOT_PLAY.md "The can't-go loop")
     uint32_t raid_black_ticks{600};      // a hill that could not be reached is left alone this long
     bool raid_unjam{true};               // two thieves on one hole: when the one that has raided is shut in on the raid tile because an own ant stands on the last free tile in front of the hole, that ant
                                          // steps aside, and no second thief is sent to a hole while an own thief is still on its raid tile (RaidTask::unjam; false, the ablation unjam=0: the bot as it was; it is part of the can't-go fixes: cantgo_aware off, cg=0, switches it off too)
@@ -296,10 +296,10 @@ struct LevelPlan {
     uint32_t fallback_ticks{2400};
     bool stall_walkable{true};           // the no-point trigger counts the food that the hill walks to: a lunchbox that no walk joins to the hill (a dead ant's, in a field of bombs) is none of it (false, `stallwalk=0`: the bot as it was, for which any lunchbox was)
     uint32_t gate_user_fails{16};        // the gate stops guiding for 900 ticks after this many clicks onto the entrance in a row that delivered nothing (0: it never stops)
-    // islands (ISLANDS, SMALL: food beyond water; IslandTask, docs/BOTS.md "Islands"): a Swimmer digs bridges, the economy walks over them. Idle where nothing lies beyond water
+    // islands (ISLANDS, SMALL: food beyond water; IslandTask, docs/BOT_ISLANDS.md "Islands"): a Swimmer digs bridges, the economy walks over them. Idle where nothing lies beyond water
     bool islands{false};                 // the island task is on (every level of the standard bot; a plan made by hand, as the tests do, has it off)
     uint32_t island_swimmers{1};         // the Swimmers that the bot wants (taken from the map by the power-up task)
-    uint32_t island_builders{1};         // Swimmers that dig bridges at a time (a plan made by hand: the level plans have none, a bridge loses to the ferry: docs/BOTS.md "Islands")
+    uint32_t island_builders{1};         // Swimmers that dig bridges at a time (a plan made by hand: the level plans have none, a bridge loses to the ferry: docs/BOT_ISLANDS.md "Islands")
     uint32_t island_bridge_ants{1};      // ants that work the piles over one bridge at a time (two that meet head-on on a one-wide bridge stop for good: IslandTask "traffic")
     bool island_guard{true};             // false: the ants on a bridge that goes, and the ants that walk to one, are left alone (the ablation that the tests of the guard use)
     bool island_expedition{false};       // the expedition is on (ExpeditionTask: a crew is flown to the Swimmers that lie beyond water, bomb by bomb); the tests of the island task switch it off
@@ -316,9 +316,9 @@ struct LevelPlan {
     bool island_fly_on{true};            // the Bomber of an expedition's leg flies on after the crew (`--tune ifly=0`: it stays behind and every island of the route needs a Bomber to take, as before; the quicker hops stay)
     bool island_mine_reach{false};       // (Hard) a mine is laid by a Bomber that can walk to its tile: a Bomber on another island is not sent (it stood where it was and was not free for the flight to the ring pile; `--tune imreach=0`: off)
     bool island_walker_bridge{false};    // (Hard) the walkers eat over bridges: a Swimmer digs the chain from the hill to a pile only while a free ant has no pile and the plan has a chain, and goes back to the ferry when it is dug (`--tune iwb=1`)
-    bool island_flower_link{false};      // (Hard) the swarm (docs/BOTS.md, "The swarm"): a ferry Swimmer digs the one or two tiles from the ring half where the crew landed to the flower strips and renews them while an ant waits to cross, and the spare ants wait beside the drop tile of every strip and take the Swimmers that fall (`--tune iflink=0`: off)
+    bool island_flower_link{false};      // (Hard) the swarm (docs/BOT_ISLANDS.md, "The swarm"): a ferry Swimmer digs the one or two tiles from the ring half where the crew landed to the flower strips and renews them while an ant waits to cross, and the spare ants wait beside the drop tile of every strip and take the Swimmers that fall (`--tune iflink=0`: off)
     bool island_link_cost{false};        // (Hard) the flower link digs the cheapest link first: the fewest tiles to dig, the nearest Swimmer and waiting ant, the strip with the fewest foreign ants at its drop tile (IslandLinkCost; `--tune ilinkcost=0`: the first link of the list, as before)
-    bool island_return{false};           // (Hard) a Swimmer that carries nothing digs a bridge to the hill's island for an own ant that stands hurt and stranded, and the ant walks home to heal (docs/BOTS.md, "Bridges for ants"; `--tune iret=0`: off)
+    bool island_return{false};           // (Hard) a Swimmer that carries nothing digs a bridge to the hill's island for an own ant that stands hurt and stranded, and the ant walks home to heal (docs/BOT_ISLANDS.md, "Bridges for ants"; `--tune iret=0`: off)
     bool island_feeder{false};           // (Hard) the same for an ant that stands stranded on an island whose food the bridge opens to the economy (`--tune ifeed=0`: off)
     bool island_power_bridge{false};     // (Hard) the same for an ant that stands idle and a wanted power-up that lies on another island a short dig away (`--tune ipower=0`: off)
     uint8_t island_power_kinds{6};       // ... the kinds that it fetches (a bit for every sim::AntType: Fire and Bomber; a Combat Ant is an ant that does not harvest and the rule cost a map with Combat power-ups on the ring 70 points at minute 6; `--tune ipowerkinds=N`)
@@ -349,7 +349,7 @@ struct LevelPlan {
     bool field_wake{true};               // an ant that the field breach gave up (and the task that waited) tries again when the bombs, fire walls or bridges of the map change, not only after its rest
     bool gate_spare_map_bombs{true};     // on a gate map the counters leave the map's own bombs (no team, 255) alone while the gate goals are live (Tactics::gate_goals_live): they are the gate, and the goals defuse those on the way. A bomb of a
                                          // team is countered as on any map, and so is a map bomb once the goals are exhausted or the bot is in the fallback
-    // the flowers (docs/BOTS.md, "The flowers"; Hard's: Medium and Easy play none): what the bot does with the power-ups that the droppers let fall. `--tune flowers=0` switches all of it off (the bot as it was)
+    // the flowers (docs/BOT_TACTICS.md, "The flowers"; Hard's: Medium and Easy play none): what the bot does with the power-ups that the droppers let fall. `--tune flowers=0` switches all of it off (the bot as it was)
     bool flower_sides{false};            // a landed drop has a side, the nearest team's (MapInfo::flowers: the walking cost of every hill to the drop tile, as for a power-up of the start): the secure_kinds of the own side apply to it
     bool flower_fire{false};             // a bot without a Fire Ant takes a Fire drop that lies within reach, whoever's side it is (the Fire Ant at home: on SMALL, MEDIUM and GAUNTLET Fire only comes from a flower); the contest check decides who goes
     bool flower_recover{false};          // a pick-up trip whose ant took food on the way (a bite does not hear an order) is given up at once and tried again with another ant, instead of after minutes
@@ -361,7 +361,7 @@ struct LevelPlan {
     uint8_t drop_retake_kinds{0x3e};     // bit t = AntType t: the kinds that drop_retake takes back (all five)
     uint32_t drop_memory_ticks{4800};    // how long after its last ant of a kind was seen the team still counts the kind as lost
     uint32_t flower_watch_chance{150};   // the least chance in permille that the next landing is a kind the plan lacks, for the watcher to wait (every kind alike until three landings were seen)
-    // the war batch (docs/BOTS.md, "The war batch"): the bots fight over the food and after it. Every field is off in a plan made by hand; `--tune war=0` switches all of them off again (the bot as it was)
+    // the war batch (docs/BOT_TACTICS.md, "The war batch"): the bots fight over the food and after it. Every field is off in a plan made by hand; `--tune war=0` switches all of them off again (the bot as it was)
     uint32_t war_bombers{0};             // Bomber Ants wanted (at least this many; the wish is the larger of this and the opening's) for the mines (the drops of the flowers and the power-ups on the map; once an enemy plays)
     bool war_free_only{false};           // the Bomber Ants for the mines are fetched and the mines laid only while an ant has nothing to harvest (the economy is not slowed by the war)
     uint32_t war_fires{0};               // Fire Ants wanted besides the one of the walls, for the fire-in and the fire at the piles
@@ -384,7 +384,7 @@ struct LevelPlan {
     int32_t assault_chase{24};           // the target is not followed further than this from where it was first met
     uint32_t assault_ticks{900};         // an assault lasts at most this long
     uint32_t assault_after{600};         // no assault before this tick of the match
-    // the losers fight harder (docs/BOTS.md, "The war batch"; a request of 2026-10-09: the bots should become more aggressive, especially those that are losing, to try to gain a lead, because at that
+    // the losers fight harder (docs/BOT_TACTICS.md, "The war batch"; a request of 2026-10-09: the bots should become more aggressive, especially those that are losing, to try to gain a lead, because at that
     // point they are not going to out-eat the others). The war tier (Standing::war) is the same pressure as the catch-up tiers - the deficit in percent of what can still be earned - against lower marks, and
     // it raises the tier of the catch-up (raids for a smaller loot, the strike force, the Combat Ants) as well. Off in a plan made by hand; `--tune behind=0` switches it off again
     bool behind_war{false};
@@ -396,7 +396,7 @@ struct LevelPlan {
     uint32_t behind_odds_ease{12};       // the assault asks for this many percent less of the odds at every tier (a bot that is behind takes the even and the worse trade)
     uint32_t behind_assault_after{300};  // the assault of a bot that is behind begins this early at the latest
     uint32_t behind_sabotage_after{1800};  // ... and so does its fire-in (Medium; Hard lights from tick 600 anyway)
-    // the stand batch (docs/BOTS.md, "The stand batch"; requested 2026-10-10: the fire ants are aggressive when somebody fires in their base - kill the other fire ant, at least knock it off the fire
+    // the stand batch (docs/BOT_TACTICS.md, "The stand batch"; requested 2026-10-10: the fire ants are aggressive when somebody fires in their base - kill the other fire ant, at least knock it off the fire
     // and then get it with the other ants - and stand their ground; a bot that is down by a few hundred points is very unlikely to win by just continuing to eat, so it selects all its ants and takes them to
     // the enemy base, and puts bombs around its own base). Off in a plan made by hand; `--tune stand=0` switches all of it off again (the bot as it was)
     bool fire_duel{false};               // an own Fire Ant strikes the enemy Fire Ant that fires the own gate in even while it stands on a fire wall (nobody else's order reaches an ant on a wall; a Fire Ant walks onto one): the blow
@@ -447,11 +447,11 @@ struct LevelPlan {
     /// The order of the opening's power-up trips (PowerUpTask): by value, Fire first, the Bomber second, the Thief, the Combat Ant and the Swimmer equal (a style or
     /// the bot's own variations may put the equals in another order)
     std::array<sim::AntType, 5> opening_order{sim::AntType::Fire, sim::AntType::Bomber, sim::AntType::Thief, sim::AntType::Combat, sim::AntType::Swimmer};
-    /// The game type 187 (docs/BOTS.md, "187: the brawl"): when the match is played by the rules of 187 the bot plays BrawlTask instead of every task above (the food game has no food to
+    /// The game type 187 (docs/BOT_PLAY.md, "187: the brawl"): when the match is played by the rules of 187 the bot plays BrawlTask instead of every task above (the food game has no food to
     /// play with there). `bot_arena --tune brawl=0` is the bot before (it plays the food game's tasks in 187 too). The original game never reads these.
     bool brawl187{true};
     BrawlParams brawl;
-    // The thief batch (docs/BOTS.md, "Thieves: the answer to a raid"; Medium and Hard have raid_recheck and fire_home_only on, the meeting and the trap are off; `bot_arena --tune thief_batch=0`, or the keys below, is the bot before it):
+    // The thief batch (docs/BOT_TACTICS.md, "Thieves: the answer to a raid"; Medium and Hard have raid_recheck and fire_home_only on, the meeting and the trap are off; `bot_arena --tune thief_batch=0`, or the keys below, is the bot before it):
     bool raid_recheck{false};            // a thief on its way to a raid looks at the hole again at every look (fire walls, bombs, an ant on the raid tile, no walk, too little to take): when it is shut it goes to the best other hill, or home (RaidTask)
     uint32_t raid_recheck_black{300};    // ... a hill that was called off for walls, bombs, a box that shows too little or a missing walk is not chosen again for this long (the walls last 3,600 ticks, a bomb stays); an ant on the raid tile is gone in seconds and costs no wait
     bool thief_guard{false};             // an enemy Thief on its way to the own hole, standing at it or walking home with loot is met by the nearest free fighters (ThiefGuardTask)
@@ -466,7 +466,7 @@ struct LevelPlan {
     bool thief_trap{false};              // an enemy Thief shut in on the own raid tile by the own walls: one wall tile is put out on the side where fighters wait, and the Thief is struck as it comes out (never with nobody ready)
     uint32_t thief_trap_wait{200};       // ... the opened tile stays open this long (the walls are lit again after that)
     bool fire_home_only{false};          // the Fire power-up is not taken where the ant could not walk back to the own hill (a corner row of ISLANDS), and a wall order that the keeper cannot walk to is dropped
-    // The food-gone batch (docs/BOTS.md, "When the food is gone"; ON at every level, with the numbers of the level; `bot_arena --tune gone=0` is the bot before it, the keys below are one rule each). With no food that
+    // The food-gone batch (docs/BOT_TACTICS.md, "When the food is gone"; ON at every level, with the numbers of the level; `bot_arena --tune gone=0` is the bot before it, the keys below are one rule each). With no food that
     // the hill can walk to, and no island, gate or field work for the ants, a bot does not stand: after `gone_wait` ticks of it (Tactics::gone) its idle ants steal, fight and heal.
     bool gone{false};                    // the batch runs
     uint32_t gone_stall{3600};           // food is left that the hill cannot walk to and the island, gate or field work banks nothing for this long: the work counts as lost
@@ -497,7 +497,7 @@ LevelPlan plan_for(Level level) noexcept;
 LevelPlan plan_for(Level level, Style style, BotRng& rng) noexcept;
 /// One of the styles that the level allows, drawn from the generator
 Style draw_style(Level level, BotRng& rng) noexcept;
-/// The plan without the stand batch (docs/BOTS.md, "The stand batch"): no fire duel or draft, no ramp unjam, the mines of the war batch as they were, no mines at home, no rush. For `bot_arena --tune stand=0` and for the tests whose
+/// The plan without the stand batch (docs/BOT_TACTICS.md, "The stand batch"): no fire duel or draft, no ramp unjam, the mines of the war batch as they were, no mines at home, no rush. For `bot_arena --tune stand=0` and for the tests whose
 /// subject is an older rule (without_war_batch calls it).
 void without_stand_batch(LevelPlan& plan) noexcept;
 /// The plan without the home-mine batch (docs/BOT_PEOPLE.md, "Step 5: home mines on the lanes"): the home mines keep off the way of the own carriers to a pile and come only when no pile mine is wanted, as before. For
@@ -505,7 +505,7 @@ void without_stand_batch(LevelPlan& plan) noexcept;
 void without_home_mines(LevelPlan& plan) noexcept;
 /// The plan without the kill batch (docs/BOT_FIGHT.md): no opportunistic kills, fights at enemies that no walk reaches as before. For `bot_arena --tune kill=0` and the tests whose subject is an older rule.
 void without_kill_batch(LevelPlan& plan) noexcept;
-/// The thief batch off (docs/BOTS.md, "Thieves: the answer to a raid"): the bot as it was before it
+/// The thief batch off (docs/BOT_TACTICS.md, "Thieves: the answer to a raid"): the bot as it was before it
 void without_thief_batch(LevelPlan& plan) noexcept;
 /// The unstick batch off (docs/BOT_UNSTUCK.md): no plug task, no refusal memory, no rescue of a walled-in Thief: the bot as it was before it. For `bot_arena --tune unstick=0` and
 /// the tests whose subject is an older rule
@@ -522,7 +522,7 @@ void without_gone_batch(LevelPlan& plan) noexcept;
 /// The plan without the group batch (docs/BOT_PEOPLE.md, "Step 3: fight as a group"): the ants that answer a blow come from at most defend_reach tiles (and never from beyond the leash), and the fight is kept up at
 /// defend_keep_percent, as before the batch. For `bot_arena --tune group=0` and the tests whose subject is an older rule.
 void without_group_fight(LevelPlan& plan) noexcept;
-/// The plan without the war batch (docs/BOTS.md, "The war batch"): the assault, the raider hunt, the mines, the extra Bomber and Fire Ants and the fire-in of Medium and Hard are taken out again, so that
+/// The plan without the war batch (docs/BOT_TACTICS.md, "The war batch"): the assault, the raider hunt, the mines, the extra Bomber and Fire Ants and the fire-in of Medium and Hard are taken out again, so that
 /// the plan is what it was before (the fire-in stays where the Hard aggressive style has always had it, and is safe). For `bot_arena --tune war=0` and for the tests whose subject is an older rule.
 void without_war_batch(LevelPlan& plan) noexcept;
 

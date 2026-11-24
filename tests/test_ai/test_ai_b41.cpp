@@ -1045,7 +1045,7 @@ void run_b41_tests() {
             ASSERT_EQ(rig.as<StandardBot>().raids().raids_ordered(), 0u);
         }
         // (g) a Combat Ant of the leader next to its raid tile: the plan that avoids guarded hills goes to the next hill (no shipped plan does: the Combat Ant of the enemy is a worker that fights, not
-        //     a guard, and the tournaments measured 94.1 against 95.8 percent for avoiding it, docs/BOTS.md "Aggression")
+        //     a guard, and the tournaments measured 94.1 against 95.8 percent for avoiding it, docs/BOT_TACTICS.md "Aggression")
         for (const Level level : {Level::Medium, Level::Hard}) {
             for (const bool avoids : {false, true}) {
                 sim::SimulationEngine sim;
@@ -1089,7 +1089,7 @@ void run_b41_tests() {
         for (const TileCoord& e : east_tiles(hill)) ASSERT_TRUE(post0.chebyshev_dist(e) <= 3);
         for (const TileCoord& q : hill.starts) ASSERT_TRUE(post1.chebyshev_dist(q) <= 3);
         ASSERT_TRUE(post0 != post1 && post1 != post2 && post0 != post2);
-        // (the shipped plans do not park Combat Ants at home any more: a Combat Ant that harvests and fights what comes near is worth more, docs/BOTS.md "Aggression"; the guard is tested as the
+        // (the shipped plans do not park Combat Ants at home any more: a Combat Ant that harvests and fights what comes near is worth more, docs/BOT_TACTICS.md "Aggression"; the guard is tested as the
         // feature that it is, with a plan that switches it on)
         const auto guard_plan = [](Level level) {
             LevelPlan p = plan_for(level);

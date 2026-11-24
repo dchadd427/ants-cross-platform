@@ -369,7 +369,7 @@ def contrast(a, b):
 
 
 class TheRoles(unittest.TestCase):
-    """the page's side of the roles (docs/HUB.md "Roles" and "Moderation"): what it reads, what it draws, the words, and what it never does with a person's text; the behavior is run in
+    """the page's side of the roles (docs/HUB_ROLES.md "Roles" and docs/HUB_COMMANDS.md "Moderation"): what it reads, what it draws, the words, and what it never does with a person's text; the behavior is run in
     tests/scripts/web_home_chat_check.js (the fake clock) and web_home_chat_hub_check.js (a real socket)"""
     @classmethod
     def setUpClass(cls):

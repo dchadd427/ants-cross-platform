@@ -1,4 +1,4 @@
-// AI30: the brawl of game type 187 (docs/BOTS.md, "187: the brawl"; BrawlTask). In 187 the standard bot plays the fight and nothing else: it forms packs on the enemy ants it can reach, sends its
+// AI30: the brawl of game type 187 (docs/BOT_PLAY.md, "187: the brawl"; BrawlTask). In 187 the standard bot plays the fight and nothing else: it forms packs on the enemy ants it can reach, sends its
 // wounded home, orders a pack onto its victim again when the victim was thrown, and marches to the enemy hills when nobody can be struck. The worlds are made by hand (b41_helpers.hpp: four hills
 // on a field of grass); whole matches run on shipped maps.
 //

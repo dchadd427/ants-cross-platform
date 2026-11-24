@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""docker/nginx.conf routes the pages of the chat hub's Discord login (run by ./run_tests.sh --fast and by the CI; docs/HUB.md "Login", "The site's nginx").
+"""docker/nginx.conf routes the pages of the chat hub's Discord login (run by ./run_tests.sh --fast and by the CI; docs/HUB_LOGIN.md "Login", docs/HUB.md "The site's nginx").
 
 /hub/login, /hub/callback, /hub/me, /hub/logout and /hub/forget go to the hub, and the login's cookie (`__Host-ants_hub`, Path=/, so the browser sends it with EVERY request to the site) goes to those
 and to nothing else. The text of the file is checked everywhere:

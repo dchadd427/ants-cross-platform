@@ -1,4 +1,4 @@
-// The front page's map picker (docs/PLAY_IN_BROWSER.md "Choosing a map"): the maps that the game server offers (GET /maps/all), as a Detail list or a Thumbnails grid, with a search and four sorts, under two
+// The front page's map picker (docs/PLAY_MATCH_SETUP.md "Choosing a map"): the maps that the game server offers (GET /maps/all), as a Detail list or a Thumbnails grid, with a search and four sorts, under two
 // headings by default, the room's map marked In this room, and on a wide screen a preview of the map that is picked. The map card's Change map button opens it; choosing a map hands the entry to the page. Until
 // the list is there, and when it cannot be had, the six originals are shown from the page's own table (opts.originals). The Random map row under the sorts puts a map that the list shows into the room at once
 // (Pick one, then Pick another): a map that is shown, that the room can play and that is not the room's map now; the list stays open, so that it can be pressed again.

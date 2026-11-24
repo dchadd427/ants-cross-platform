@@ -10,7 +10,7 @@ Its method is reverse engineering of the original 1998 program (`Ants.exe`): Cap
 
 ## What comes from the original and what does not
 
-- **Read from the original's data files:** the artwork, animations and sounds of `Original-Ants/ants.chd` and the maps `Original-Ants/Maps/*.LVL` ([the asset catalog](PLAY_IN_BROWSER.md#interactive-asset-catalog) shows what is inside the archive).
+- **Read from the original's data files:** the artwork, animations and sounds of `Original-Ants/ants.chd` and the maps `Original-Ants/Maps/*.LVL` ([the asset catalog](PLAY_PICTURE.md#interactive-asset-catalog) shows what is inside the archive).
 - **Re-derived from the original:** the simulation's mechanics, timings and constants, to match the original exactly where that can be checked. This was done one system at a time over many releases, not in one step; [`../CHANGELOG.md`](../CHANGELOG.md) says which release did which (from v0.0.90; the earlier ones are only in git history).
 - **This project's own additions:** network play (lock-step turns, state hashes, the dedicated server), computer players, widescreen, zoom and touch control.
 - **Network play:** the original's game is not lock-step. The remake keeps its lobby flow, texts and rules, but not its transport, trust model or sync model ([`NETWORK_PORT.md`](NETWORK_PORT.md#what-the-original-does); the evidence is section 5.46 of [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md)).
@@ -61,7 +61,7 @@ The reverse-engineering tools read the program. When it is missing they stop wit
 
 ## Tests and the original program's bytes
 
-The test suites do not need the program. The two that compare the remake with static tables inside it, 1.1 `test_movement_tables` and 2.15 `test_movement_differential` (the suite ids of `./run_tests.sh`, see [`TESTING.md`](TESTING.md)), pin every byte of `Ants.exe` that they read: the address, size and SHA-256 digest of each region are fixed in `tests/common/original_program_bytes.hpp`.
+The test suites do not need the program. The two that compare the remake with static tables inside it, 1.1 `test_movement_tables` and 2.15 `test_movement_differential` (the suite ids of `./run_tests.sh`, see [`TESTING_SUITES.md`](TESTING_SUITES.md)), pin every byte of `Ants.exe` that they read: the address, size and SHA-256 digest of each region are fixed in `tests/common/original_program_bytes.hpp`.
 
 - **With your copy** in `Original-Ants/`, they check its layout and every region against the digests and read the bytes from it. A copy of a different build fails that check (test case 5.0 of `test_movement_tables`, 0.1 of `test_movement_differential`).
 - **Without it**, they lay the remake's own generated tables out like the program's, check that those bytes hash to the same digests (computed from the original program, so a match means the bytes are the original's, byte for byte) and read them instead. Each test prints which source it used ("Bytes of the original program: ...").

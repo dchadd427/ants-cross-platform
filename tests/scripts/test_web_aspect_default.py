@@ -137,7 +137,7 @@ class TheFirstVisitStartsNearTheScreen(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("node"), "node is not installed: the nearest shape was NOT compared with the game's table")
     def test_the_pages_nearest_shape_is_the_rule_worked_out_here_from_the_games_table(self):
-        """The rule in docs/PLAY_IN_BROWSER.md, written again here over the rows of kAspectTable (the game's table): the smallest ratio of ratios wins, the first row on a tie, upright is
+        """The rule in docs/PLAY_PICTURE.md, written again here over the rows of kAspectTable (the game's table): the smallest ratio of ratios wins, the first row on a tie, upright is
         16:9, a size that is none is 16:9. A row added to the C++ table is considered by this test and by the page's code with no other change."""
         header = read(os.path.join(REPO, "include", "ants_app", "canvas_layout.hpp"))
         table = re.search(r"kAspectTable = \{\{(.*?)\}\};", header, re.S).group(1)

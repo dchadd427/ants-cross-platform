@@ -559,7 +559,7 @@ private:
 
 // ---- rank 4: the strike -------------------------------------------------------------------------------------------------------------------------------------
 
-/// A losing side can try to swing the game back by forcing a team fight that it can win (docs/BOTS.md, "Strategy" 7). When the bot (with its ally, by the score boxes) is
+/// A losing side can try to swing the game back by forcing a team fight that it can win (docs/BOT_TACTICS.md, "Strategy" 7). When the bot (with its ally, by the score boxes) is
 /// clearly BEHIND the leader (Standing::behind) and a fight looks winnable, a strike force hunts the carriers of the leader near its hill: a blow on a carrier on its way home clears
 /// its walk (it stands idle with its food until its owner sends it on) and costs the leader the time, and a won fight costs it ants (and, at the last ant, an egg). One attack order is
 /// one blow, so a member is ordered again each time it is idle after a blow; between targets the force waits three tiles in front of the leader's hill on the side the carriers come from.
@@ -723,7 +723,7 @@ private:
 
 /// The harassment squad (Hard bots should be really aggressive): the Combat Ants of the bot (and, with harass_workers, workers that the economy can spare) hunt the carriers
 /// of the other teams. A blow clears the walk of a carrier and it stands with its food until its owner sends it on, so a squad that stays with its target keeps a team's income down:
-/// in the bench ONE Combat Ant of an aggressor costs a Medium bot half of its score and a Hard bot a quarter (docs/BOTS.md, "Aggression"). Targets are carriers that an attack order can
+/// in the bench ONE Combat Ant of an aggressor costs a Medium bot half of its score and a Hard bot a quarter (docs/BOT_TACTICS.md, "Aggression"). Targets are carriers that an attack order can
 /// reach (attackable()), the best opponent's first (by the score boxes: the margin to the best other is what a match is won by), the ones far from their hill and from help, near the
 /// squad; a target is not taken when the enemy's strength near it is above the squad's (odds). Orders: one attack order per blow per ant (a group of ants on one target is one command);
 /// a member that shows "can't go" after an attack is not sent at that ant again for a while; a member that is hurt (harass_min_hp), holds food or is taken by a fight leaves the squad.
@@ -802,7 +802,7 @@ private:
 
 /// "Guiding for eating" (bypassing the queue by manually controlling which ant deposits food). The engine's own queue sends an ant that finds the entrance busy to a
 /// waiting tile on the FAR side of the mound (bx - 1, by + 3), and the task ANTHILLQ dispatches it from there on a walk of 44 to 68 ticks around the mound: one deposit per 93 to 116
-/// ticks, 10 to 13 a minute for a hill however many workers feed it. By hand a deposit takes 55 to 65 ticks (docs/BOTS.md, "The gate": measured with a Hard-limited client in the
+/// ticks, 10 to 13 a minute for a hill however many workers feed it. By hand a deposit takes 55 to 65 ticks (docs/BOT_PLAY.md, "The gate": measured with a Hard-limited client in the
 /// engine, +23 percent on TREASURE for a lone seat, +55 to +86 percent for 8 to 12 workers on a pile 8 to 20 tiles away). The task owns every carrier of the seat (an ant that holds food):
 ///   stage      a fresh carrier (the engine's own order for it is the entrance or the far waiting tile) is taken over before it can claim the entrance: it goes to a free slot on the queue row
 ///              (bx .. bx + 2, by - 1; two of them are kept filled, never the tile the depositors leave by), else to a buffer tile four rows north of the ramp; more than max_staged are

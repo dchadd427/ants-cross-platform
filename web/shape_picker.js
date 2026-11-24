@@ -1,5 +1,5 @@
 // The picture's shape control, as the game page, the replay's Picture window and the settings menu have it: a button that shows the shape ("16:10 \u00b7 960 x 600") and a list of the rows of web/shapes.js's table under it
-// (or over it, where the screen has no room), made by this script and not by the browser (docs/PLAY_IN_BROWSER.md, "Which shape"; docs/GAME_MENU.md).
+// (or over it, where the screen has no room), made by this script and not by the browser (docs/PLAY_PICTURE.md, "Which shape"; docs/GAME_MENU.md).
 //   * Why not a <select>: its list is the system's, drawn by the browser outside the page. In fullscreen it can fail to open, and under the pointer lock of a fullscreen page (the page moves its own cursor and hands the
 //     replay's bar synthetic events: a script's click cannot open a native list) it never does. This list is a child of the control, so it is inside the fullscreen element, and a click, a tap or a key opens it.
 //     The front page keeps its native dropdown (web/lobby.html: never fullscreen).
@@ -11,7 +11,7 @@
 //     ArrowUp / Home / End move the mark, Enter and Space choose the marked row, a letter or a number marks the next row that starts with what was typed, Esc closes the list ALONE (the Picture window or the settings menu
 //     stays: the key is taken in the window's capture phase, ahead of theirs), Tab closes it and moves on. A click elsewhere and a scroll close it; a resize puts it by its button again. The focus stays on the button
 //     (aria-activedescendant names the marked row) and goes back to it when the list closes by a choice or by Esc. The pointer marks the row it is over (pointermove, which the replay bar's synthetic cursor makes too).
-//   * Choosing the row that is in use calls nothing. With Automatic in use, choosing the shape it shows is a choice (the page keeps that shape from then on: docs/PLAY_IN_BROWSER.md "Which shape").
+//   * Choosing the row that is in use calls nothing. With Automatic in use, choosing the shape it shows is a choice (the page keeps that shape from then on: docs/PLAY_PICTURE.md "Which shape").
 // ES5, no module system: a page gets the global AntsShapePicker, node gets module.exports (tests/scripts/web_shape_picker_check.js runs it on a fake of the DOM).
 (function (root, factory) {
     var api = factory();

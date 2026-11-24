@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The Discord login of the chat hub (hub/login.py, hub/discord.py; docs/HUB.md "Login"; run by ./run_tests.sh --fast and by the CI), against a FAKE Discord (tests/scripts/fake_discord.py): real
+"""The Discord login of the chat hub (hub/login.py, hub/discord.py; docs/HUB_LOGIN.md "Login"; run by ./run_tests.sh --fast and by the CI), against a FAKE Discord (tests/scripts/fake_discord.py): real
 sockets, the real hub, a browser that is a cookie jar (tests/scripts/login_flow.py). Real Discord is never asked.
 
   - /hub/login: the state (128 random bits, in the cookie and in the address), the cookie's flags, the return address as a word of a list (never what was sent), a link of another site, the limits;
@@ -671,7 +671,7 @@ class TheLimitsAreWhatTheDocsSay(unittest.TestCase):
         self.assertIn("10 logins kept for an account and 100,000 in all (the oldest go)", row)
 
     def test_the_cap_of_the_profiles_is_the_number_of_the_paragraph_on_the_data(self):
-        with open(os.path.join(REPO, "docs", "HUB.md"), encoding="utf-8") as f:
+        with open(os.path.join(REPO, "docs", "HUB_LOGIN.md"), encoding="utf-8") as f:
             self.assertIn("the table keeps at most 100,000 (the ones refreshed longest ago go, as the logins do)", f.read())
         self.assertEqual(limitmod.Limits().profiles_total, 100000)
 
@@ -2081,8 +2081,10 @@ class TheOldPythonIsRefused(unittest.TestCase):
 
 class TheDocumentsSayWhatAnOperatorNeedsToKnow(unittest.TestCase):
     def setUp(self):
-        with open(os.path.join(REPO, "docs", "HUB.md"), encoding="utf-8") as f:
-            self.text = f.read()
+        self.text = ""
+        for name in ("HUB.md", "HUB_ROLES.md", "HUB_LOGIN.md"):                                    # (the page and the two parts that were split from it)
+            with open(os.path.join(REPO, "docs", name), encoding="utf-8") as f:
+                self.text += f.read()
         with open(os.path.join(REPO, "Dockerfile.hub"), encoding="utf-8") as f:
             self.image = f.read()
 
@@ -2112,7 +2114,7 @@ class TheDocumentsSayWhatAnOperatorNeedsToKnow(unittest.TestCase):
         self.assertIn("schema 3", self.image)
 
     def test_the_one_exception_to_no_access_log_is_said(self):
-        nginx = self.paragraph("The pages of [the login](#login) are exact locations")
+        nginx = self.paragraph("The pages of [the login](HUB_LOGIN.md#login) are exact locations")
         self.assertIn("The one exception to \"no access log\"", nginx)
         self.assertIn("414", nginx)
         self.assertIn("query included", nginx)

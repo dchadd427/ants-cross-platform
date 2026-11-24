@@ -1,5 +1,5 @@
 // The offence that the tournaments measured as a loss (B4-1, AI12.x): the harassment squad, the sabotage of another team's gate and the ambush at a thief hole. They are switches of the plan
-// that are OFF at every level (AI11.6 pins that); the tests hold the features themselves in hand-made worlds, so that the numbers of docs/BOTS.md ("Aggression") can be reproduced and a
+// that are OFF at every level (AI11.6 pins that); the tests hold the features themselves in hand-made worlds, so that the numbers of docs/BOT_TACTICS.md ("Aggression") can be reproduced and a
 // later change of the engine's economy can be answered with another measurement instead of another implementation.
 //
 //   AI12.1  the harassment squad: Combat Ants hunt the carriers of other teams (one order per blow, the best opponent's first), not an enemy that is too strong near the target, not an ant

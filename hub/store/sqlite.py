@@ -1,4 +1,4 @@
-"""hub.db: the chat lines kept for moderation, who is muted or banned, the logins, and who each account is (its profile) (docs/HUB.md, "Data").
+"""hub.db: the chat lines kept for moderation, who is muted or banned, the logins, and who each account is (its profile) (docs/HUB_LOGIN.md, "Data").
 
 Everything is keyed by account id, so a mute or a ban survives a restart, a new session and a rename. The chat process and `python -m hub.admin` open the same file (WAL, so they
 do not block each other). A line is kept `retention_days` (7) days, and only while it is among the newest `max_lines` (200) lines (every line counts, a moderator's and a deleted one too), and then deleted for good: whichever limit is smaller deletes first. The delete zeroes the freed pages (secure_delete) and the log file is cut. A line that a
@@ -101,7 +101,7 @@ class Store(StoreBase):
                 PRAGMA user_version = 4;
                 COMMIT;""")
         self.db.execute("INSERT OR IGNORE INTO secrets (k, v) VALUES ('account', ?)", (os.urandom(32),))      # (the key of the pseudonymous references: made once, kept as long as the file)
-        # (the profiles are an additive table: no version of the schema came with it, so a hub of an earlier version opens the same file and never looks at it; docs/HUB.md, "Data")
+        # (the profiles are an additive table: no version of the schema came with it, so a hub of an earlier version opens the same file and never looks at it; docs/HUB_LOGIN.md, "Data")
         if self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'profiles'").fetchone() is None:
             self.db.executescript("""
                 BEGIN;
@@ -110,7 +110,7 @@ class Store(StoreBase):
                 CREATE INDEX IF NOT EXISTS profiles_updated ON profiles (updated);
                 COMMIT;""")
 
-        # (the pictures are an additive table too, the same way: no version of the schema came with it, so an older hub never looks at it; docs/HUB.md, "Data")
+        # (the pictures are an additive table too, the same way: no version of the schema came with it, so an older hub never looks at it; docs/HUB_LOGIN.md, "Data")
         if self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'pictures'").fetchone() is None:
             self.db.executescript("""
                 BEGIN;

@@ -1,6 +1,6 @@
 #pragma once
 
-// The teams of a game on this computer (docs/BOTS.md, "Alliances"): `--teams`, the start menu's Teams row, the web page's `&teams=`. The model lives in ants_sim/start_teams.hpp since protocol 13 (a room's
+// The teams of a game on this computer (docs/BOT_PLAY.md, "Alliances"): `--teams`, the start menu's Teams row, the web page's `&teams=`. The model lives in ants_sim/start_teams.hpp since protocol 13 (a room's
 // teams use it too); these are the names that a game on this computer has always used. Application::form_start_teams makes the teams at the match start with the original's own commands.
 
 #include <cstdint>

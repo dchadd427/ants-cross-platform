@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The players' maps in a REAL browser (opt-in; see tests/scripts/test_web_map_fetch.sh and docs/PLAY_IN_BROWSER.md "Players' maps in the browser").
+"""The players' maps in a REAL browser (opt-in; see tests/scripts/test_web_map_fetch.sh and docs/PLAY_MATCH_SETUP.md "Players' maps in the browser").
 
 The game's file system holds the six originals only. A room that plays a map of the community must therefore have the file fetched into every browser before the match loads. Only a browser shows that
 the whole chain works: the game (WebAssembly) asks the page, the page fetches /maps/files/<name> through the site's nginx, checks the FNV-1a 64 against the hash of the room's Start, writes the file where

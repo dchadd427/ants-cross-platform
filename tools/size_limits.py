@@ -30,7 +30,6 @@ DOC_LINE_WARN_CHARACTERS = 2000
 SPLIT_PENDING = frozenset({
     "docs/GAME_REVERSE_ENGINEERING.md",
     "docs/NETWORK_PORT.md",
-    "docs/BOTS.md",
     "web/shell.html",
     "tools/map_sweep.cpp",
 })

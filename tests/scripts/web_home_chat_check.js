@@ -1135,7 +1135,7 @@ function bring(env) {                                     // the two files arriv
 
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// 8. The login: the Log in button and the bar's chip, the account line with Log out and Forget me, and what the page may do about it (docs/HUB.md "Login", docs/HOME_CHAT.md)
+// 8. The login: the Log in button and the bar's chip, the account line with Log out and Forget me, and what the page may do about it (docs/HUB_LOGIN.md "Login", docs/HOME_CHAT.md)
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {   // a hub with a login, a visitor who is not logged in
     const r = rig({ chip: true });
@@ -1483,7 +1483,7 @@ const menuOf = (r) => { const live = r.live; r.live = (...args) => { const sock 
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// 9. The roles (docs/HUB.md "Roles", "Moderation"): the role of the visitor and its live change, the marks, /help and the private answers, the hub's own line, being removed
+// 9. The roles (docs/HUB_ROLES.md "Roles", docs/HUB_COMMANDS.md "Moderation"): the role of the visitor and its live change, the marks, /help and the private answers, the hub's own line, being removed
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 const ME = { name: 'maple.leaf', k: MINE };
 const asRole = (role) => Object.assign({}, ME, { role, mod: role !== 'none' });
