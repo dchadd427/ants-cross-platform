@@ -56,6 +56,8 @@ void group(const char* name, const char* what) {
 
 std::string pack_folder() { return std::string(ANTS_SOURCE_DIR) + "/assets/world_art"; }
 
+std::vector<std::string> g_copies;                              // the folders that pack_copy made (removed at the end of main)
+
 bool read_text(const std::string& path, std::string& out) {
     std::ifstream f(path, std::ios::binary);
     if (!f) return false;
@@ -88,6 +90,7 @@ std::string pack_copy(const std::string& tag, const std::function<std::string(co
         std::ofstream out(dir / name, std::ios::binary | std::ios::trunc);
         out.write(head.data(), in.gcount());
     }
+    g_copies.push_back(dir.string());
     return dir.string();
 }
 
@@ -771,6 +774,8 @@ int main(int argc, char* argv[]) {
     test_fallback(arc, pack);
     test_fog(arc, pack);
     test_hash(arc, pack);
+    std::error_code ignored;
+    for (const std::string& dir : g_copies) std::filesystem::remove_all(dir, ignored);
     std::printf("\nworld art: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }
