@@ -553,34 +553,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/635fcae2...7298d031)
 
-## v0.16.1 - 2026-11-12 - Clean page addresses, a clearer voice button, Have a code, Host a game, a hideable replay bar and one top bar
+## Older versions (v0.16.1 and before)
 
-**For players:**
-- **The voice button asks for the microphone and says why when it cannot work.** The front page now allows the microphone, and when voice to text cannot run the chat says why in plain words.
-- **Page addresses no longer end in .html.** The front page, the game, Matches and the other pages open at short addresses, and an old link with .html still opens the same page.
-- **"Have a code?" opens the Join by code box,** and you can paste a whole room link there instead of only the code.
-- **Host a game is a button in the empty Games list.** The hint in the Players list is gone.
-- **In a fullscreen replay the arrow hides the bar, and resting the pointer near the bottom brings it back.** Only one arrow shows at a time, and the B key hides and shows the bar too.
-- **One bar at the top of the other pages.** Matches, Live now, the map maker and the other pages share one bar with links to each other.
-
-**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.0 page or game still joins. The rest of this release is internal: unused code and staging leftovers removed, changes to the build checks, and nine tests made deterministic.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/47ca2367...71c9d830)
-
-## Older versions (v0.16.0 and before)
-
-**For players:**
-- **A top bar on phones.** The front page has a bar at the top with your name; the login chip is the name chip, and tapping it opens the account menu (the Forget me control is in that menu and asks once more).
-- **My room is there only when you have a room.** Quick host now asks Public or Private before it makes a room, and Host one! goes straight to a public room.
-- **The chat has an emoji picker and a voice-to-text button.** The voice button uses the browser's own speech service: Chrome, Edge and Safari send the audio to their maker; the site records nothing.
-- **The green buttons have a stamped look,** with a double frame, a weave and a deeper press. The Leave room button is red like Leave game.
-- **The Games list shows running games without a switch,** under the open games, so nothing needs scrolling when no game is open; the "Show games in progress" switch is gone.
-- **The Players list has no fold button,** and the chat no longer shows a second username next to a name to moderators.
-
-**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.15.1 page or game still joins. The stack no longer has the one-shot helper of the results folder; the operator may delete the exited container ants-results-init in Portainer. The rest of this release is internal: tests and documents.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/629baa19...4396bf2d)
-
-## Older versions (v0.15.1 and before)
-
-Every release before v0.16.0, and the long notes of v0.15.1, v0.15.0, v0.14.1, v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.16.2, and the long notes of v0.16.1, v0.16.0, v0.15.1, v0.15.0, v0.14.1, v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
