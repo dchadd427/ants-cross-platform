@@ -91,7 +91,7 @@
 //                      damaged, not writable) or that a newer program made stops the server; the file is never changed or deleted by that
 //   --no-db            keep no database, whatever --results-dir says
 //   --no-history       keep no match history (docs/REPLAYS.md "The match history": what every match came to, in the database, for good). Without this option the history is kept whenever there is a database; there is
-//                      no folder of its own (it lives in the database), and --no-db keeps none either. It counts the matches from the replays, while no match runs, so it needs those to add to it
+//                      no folder of its own (it lives in the database), and --no-db keeps none either. It counts the matches from the replays (a match that has just ended at once, the older recordings while no match with people runs), so it needs those to add to it
 //   --replay-demo      keep the matches of the demo rooms too (the games of the front page, bots only included); off by default, so that only the rooms of the control interface are kept
 //   --replays-days N   a replay is deleted N days after its match ended (1 - 3650, default 30)
 //   --replays-max-mb N all the replays together may take N MiB, the oldest are deleted first (1 - 4096, default 100); by default the folder is on the volume that also holds the control secret and the
@@ -869,7 +869,7 @@ int main(int argc, char** argv) {
         if (!rooms.enable_history(database, history_why)) log("the match history is off: " + history_why);
         for (const std::string& line : rooms.take_notices()) log(line);
         if (rooms.history_store() != nullptr) {
-            log(std::string("match history kept for good in the database") + (rooms.replay_store() != nullptr ? "; the matches of the replay store are counted while no match runs" : "; the server keeps no replays, so nothing is added"));
+            log(std::string("match history kept for good in the database") + (rooms.replay_store() != nullptr ? "; a match that has just ended is counted at once, the older recordings while no match with people runs" : "; the server keeps no replays, so nothing is added"));
         }
     }
     // The map submissions (submissions.hpp, docs/MAP_SUBMISSIONS.md): the store needs the database and a folder; the admin page needs one setting of the environment. What is missing switches a part off with a line in

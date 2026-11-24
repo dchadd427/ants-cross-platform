@@ -35,6 +35,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Fixes:**
 - Watching a replay on a match page has the Settings button too.
+- A match you played shows on the Matches page right after it ends, not only when the server is idle.
 
 **For operators:**
 - The game server's database moves to schema version 11 (the table `history_action`, the counts that the activity curve is drawn from; the history service's own file to its version 5): an older program refuses the newer file, and the update does not copy it, so stop the server and copy `ants.db` before the update; that copy is the way back ([`docs/HEATMAPS.md`](docs/HEATMAPS.md#the-activity-curve)).

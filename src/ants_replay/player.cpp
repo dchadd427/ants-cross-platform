@@ -78,7 +78,7 @@ bool load_map(const Header& head, const std::string& maps_dir, assets::LevelData
     return load_map(head, std::vector<std::string>{maps_dir}, level, error);
 }
 
-bool load_map(const Header& head, const std::vector<std::string>& dirs, assets::LevelData& level, std::string& error) {
+bool load_map(const Header& head, const std::vector<std::string>& dirs, assets::LevelData& level, std::string& error, const assets::LevelLimits& limits, assets::LevelValidation* verdict) {
     error.clear();
     if (!net::valid_map_name(head.map_name)) {
         error = "the replay's map name cannot name a map file";
@@ -95,10 +95,10 @@ bool load_map(const Header& head, const std::vector<std::string>& dirs, assets::
         error = "the map " + head.map_name + " is not in " + where + " (the replay needs it; --maps-dir says where the maps are)";
         return false;
     }
-    return load_map_file(head, path, level, error);
+    return load_map_file(head, path, level, error, limits, verdict);
 }
 
-bool load_map_file(const Header& head, const std::string& path, assets::LevelData& level, std::string& error) {
+bool load_map_file(const Header& head, const std::string& path, assets::LevelData& level, std::string& error, const assets::LevelLimits& limits, assets::LevelValidation* verdict_out) {
     error.clear();
     uint64_t hash = 0;
     if (!net::hash_file(path, hash)) {
@@ -110,8 +110,9 @@ bool load_map_file(const Header& head, const std::string& path, assets::LevelDat
         return false;
     }
     assets::LevelValidation verdict;
-    if (!level.load_from_file(path, &verdict, assets::LevelLimits::for_play_extended())) {
+    if (!level.load_from_file(path, &verdict, limits)) {
         error = "the map " + head.map_name + " cannot be loaded" + (verdict.first_fatal() ? ": " + verdict.reason() : std::string());
+        if (verdict_out != nullptr) *verdict_out = verdict;
         return false;
     }
     return true;
@@ -191,59 +192,89 @@ void take_result_of(uint8_t roster, sim::SimulationEngine& engine, Outcome& out)
     out.ran = true;
 }
 
-Outcome play(const Replay& replay, const assets::LevelData& level, const Hooks& hooks) {
-    Outcome out;
-    out.complete = replay.complete;
+Playback::Playback(const Replay& replay, const assets::LevelData& level, const Hooks& hooks) : replay_(replay), hooks_(hooks) {
+    out_.complete = replay.complete;
+    done_ = true;                                                       // (until the engine is set up: a refusal leaves it so)
     if (!plays_here(replay.head)) {
-        out.error = rules_refusal(replay.head);
-        return out;
+        out_.error = rules_refusal(replay.head);
+        return;
     }
     if (replay.head.hash_period == 0 || replay.total_turns > kMaxTurns) {      // (what encode and decode refuse; a replay made by hand could hold them)
-        out.error = "the replay's hash period or its length is out of range";
-        return out;
+        out_.error = "the replay's hash period or its length is out of range";
+        return;
     }
-    sim::SimulationEngine engine;
-    begin_match(engine, replay, level, replay.head.fog);
+    engine_ = std::make_unique<sim::SimulationEngine>();
+    begin_match(*engine_, replay, level, replay.head.fog);
+    done_ = false;
+}
 
-    size_t next = 0;
-    const auto give = [&](const TimedCommand& tc) {
-        if (hooks.before_command) hooks.before_command(tc.turn, tc.command, engine);
-        const sim::CommandResult result = engine.apply_command(tc.command);
-        if (hooks.after_command) hooks.after_command(tc.turn, tc.command, result, engine);
-    };
-    const uint32_t period = replay.head.hash_period;
-    for (uint32_t turn = 0; turn < replay.total_turns; ++turn) {
-        for (; next < replay.commands.size() && replay.commands[next].turn == turn; ++next) give(replay.commands[next]);
-        engine.tick();
-        if (hooks.after_tick) hooks.after_tick(turn + 1, engine);
-        engine.clear_news_events();                                     // (nobody reads them here, and they would pile up for the whole match)
-        engine.clear_audio_events();
-        out.turns = turn + 1;
-        if (out.turns % period == 0 && out.turns / period <= replay.hashes.size()) {
-            ++out.hashes_checked;
-            if (static_cast<uint32_t>(engine.state_hash().total & 0xFFFFFFFFu) != replay.hashes[out.turns / period - 1]) {
-                out.first_bad_turn = out.turns;
-                out.hash = engine.state_hash().total;
-                out.match_over = engine.is_match_over();
-                out.error = "this replay does not reproduce here: the match differs after " + format_time(out.turns) + " (turn " + std::to_string(out.turns) + ")";
-                return out;
+Playback::~Playback() = default;
+
+void Playback::give(const TimedCommand& tc) {
+    if (hooks_.before_command) hooks_.before_command(tc.turn, tc.command, *engine_);
+    const sim::CommandResult result = engine_->apply_command(tc.command);
+    if (hooks_.after_command) hooks_.after_command(tc.turn, tc.command, result, *engine_);
+}
+
+// After the last tick: the commands that wait for the end (a Quit that ends the match), the result and the checks of the final state
+void Playback::end() {
+    done_ = true;
+    for (; next_ < replay_.commands.size() && replay_.commands[next_].turn == replay_.total_turns; ++next_) give(replay_.commands[next_]);
+    take_result_of(replay_.head.roster, *engine_, out_);
+    if (replay_.complete && out_.hash != replay_.final_hash) {
+        out_.first_bad_turn = replay_.total_turns;
+        out_.error = "this replay does not reproduce here: the final state differs";
+        return;
+    }
+    if (replay_.complete && out_.match_over != replay_.match_over) {
+        out_.first_bad_turn = replay_.total_turns;
+        out_.error = "this replay does not reproduce here: the match ended differently";
+        return;
+    }
+    out_.ok = true;
+}
+
+bool Playback::advance(uint32_t turns) {
+    if (done_) return true;
+    const uint32_t period = replay_.head.hash_period;
+    uint32_t played = 0;
+    for (; played < turns && turn_ < replay_.total_turns; ++played) {
+        for (; next_ < replay_.commands.size() && replay_.commands[next_].turn == turn_; ++next_) give(replay_.commands[next_]);
+        engine_->tick();
+        if (hooks_.after_tick) hooks_.after_tick(turn_ + 1, *engine_);
+        engine_->clear_news_events();                                   // (nobody reads them here, and they would pile up for the whole match)
+        engine_->clear_audio_events();
+        out_.turns = turn_ + 1;
+        ++turn_;
+        if (out_.turns % period == 0 && out_.turns / period <= replay_.hashes.size()) {
+            ++out_.hashes_checked;
+            if (static_cast<uint32_t>(engine_->state_hash().total & 0xFFFFFFFFu) != replay_.hashes[out_.turns / period - 1]) {
+                out_.first_bad_turn = out_.turns;
+                out_.hash = engine_->state_hash().total;
+                out_.match_over = engine_->is_match_over();
+                out_.error = "this replay does not reproduce here: the match differs after " + format_time(out_.turns) + " (turn " + std::to_string(out_.turns) + ")";
+                done_ = true;
+                return true;
             }
         }
     }
-    for (; next < replay.commands.size() && replay.commands[next].turn == replay.total_turns; ++next) give(replay.commands[next]);     // (after the last tick: a Quit that ends the match)
-    take_result_of(replay.head.roster, engine, out);
-    if (replay.complete && out.hash != replay.final_hash) {
-        out.first_bad_turn = replay.total_turns;
-        out.error = "this replay does not reproduce here: the final state differs";
-        return out;
+    if (turn_ < replay_.total_turns || (played != 0 && played == turns)) return false;       // (the turns are played: the end is the next call's, when this one used up the turns it was given)
+    end();
+    return true;
+}
+
+bool Playback::next_takes_hash() const noexcept {
+    if (done_) return false;
+    if (turn_ >= replay_.total_turns) return true;                                                    // (the end: the final state's hash)
+    const uint32_t next = turn_ + 1;
+    return replay_.head.hash_period != 0 && next % replay_.head.hash_period == 0 && next / replay_.head.hash_period <= replay_.hashes.size();
+}
+
+Outcome play(const Replay& replay, const assets::LevelData& level, const Hooks& hooks) {
+    Playback playback(replay, level, hooks);
+    while (!playback.advance(replay.total_turns + 1u)) {
     }
-    if (replay.complete && out.match_over != replay.match_over) {
-        out.first_bad_turn = replay.total_turns;
-        out.error = "this replay does not reproduce here: the match ended differently";
-        return out;
-    }
-    out.ok = true;
-    return out;
+    return playback.outcome();
 }
 
 std::vector<OrderRecord> list_orders(const Replay& replay, const assets::LevelData& level, Outcome& outcome) {

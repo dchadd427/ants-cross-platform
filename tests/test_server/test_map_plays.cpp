@@ -300,7 +300,7 @@ int main() {
             one.kind = "classic";
             srv.mgr.mutable_store().set_approved({one});
             ASSERT_TRUE(!srv.keep(renamed).empty());
-            srv.run_updates(40);
+            ASSERT_TRUE(srv.run_until_counted(1));
             ASSERT_EQ(srv.mgr.history_store()->count(), size_t{1});
             ApprovedMap big = one;                                                                   // (the same file, listed as a map that is over the online limit: a recording on it is not played here in one piece)
             big.width = big.height = 300;
@@ -371,11 +371,11 @@ int main() {
         };
         ASSERT_EQ(plays_of_one(), int64_t{0});
         ASSERT_TRUE(keep_named(41, "approved one.lvl"));                                            // (another case)
-        srv.run_updates(40);
+        ASSERT_TRUE(srv.run_until_counted(1));
         ASSERT_EQ(srv.mgr.history_store()->count(), size_t{1});
         ASSERT_EQ(plays_of_one(), int64_t{1});
         ASSERT_TRUE(keep_named(42, "Approved One.lvl"));                                            // (the exact name)
-        srv.run_updates(40);
+        ASSERT_TRUE(srv.run_until_counted(2));
         ASSERT_EQ(srv.mgr.history_store()->count(), size_t{2});
         ASSERT_EQ(plays_of_one(), int64_t{2});
         ASSERT_TRUE(keep_named(43, "Approved_One.lvl"));                                            // (a different name: not a map of the list, left out as ever)

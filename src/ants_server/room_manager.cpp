@@ -618,9 +618,9 @@ void RoomManager::route_hello(std::unique_ptr<net::Connection> connection, const
     reject(std::move(connection), good ? net::RejectReason::Full : reason, now_ms);
 }
 
-// A match that a person plays is never slowed down by the counting (a recording takes the one thread for a moment): nothing is counted while a room with a person in it runs or loads a match, or while a record of
-// a restart is being played again. The server's own matches of computer players do not hold it: nobody waits on them, and the match of a person that ended in the meantime is counted at once, not after the
-// computer players' match that has run for ten minutes.
+// A match that a person plays is never slowed down by the counting (a whole recording takes the one thread for 0.4 - 0.5 s): the matches of computer players alone, the older recordings and the backfill, which the feeder plays a step at a time but without hurry, are
+// counted only while no room with a person in it runs or loads a match and no record of a restart is being played again. No match of computer players holds it: nobody waits on them. The match that
+// has just ended does not wait for it at all, when a person played in it: the feeder counts it in steps of about 2 ms (HistoryFeeder, docs/SERVER_REPLAYS.md "The match history").
 bool RoomManager::history_may_run() const {
     if (!restoring_.empty()) return false;
     for (const auto& kv : rooms_) {
@@ -633,7 +633,7 @@ bool RoomManager::history_may_run() const {
 void RoomManager::update(uint32_t now_ms) {
     now_hint_ = now_ms;
     if (replays_ != nullptr) replays_->update();                   // (the replays that are too old are deleted once an hour)
-    if (history_feeder_ != nullptr) {                              // (one match of the replay store at a time is counted for the history, and only while nobody plays: a recording takes 0.4 - 0.5 s for a match of 10 - 12 minutes, so the gap after it is four times that)
+    if (history_feeder_ != nullptr) {                              // (one match of the replay store at a time is counted for the history, in steps of about 2 ms: the match with a person in it that was just played at any time, the others only while nobody plays)
         history_feeder_->step([this]() { return history_may_run(); }, now_ms);
     }
     // 0. a record whose delete failed is tried again every 10 s (its room is over: a restart before it is deleted would bring the room back)
@@ -794,6 +794,7 @@ bool RoomManager::enable_history(db::Database& database, std::string& why, Histo
     history_ = std::move(store);
     if (replays_ != nullptr) {
         history_feeder_ = std::make_unique<HistoryFeeder>(*history_, *replays_, store_.directory(), std::function<uint64_t()>(), store_.community_directory());
+        history_feeder_->set_slice(HistoryFeeder::kSliceUs);                                // (this thread runs every match: a recording is counted in steps of a few milliseconds, and a match that was just played at any time)
         history_feeder_->set_approved_map_path([this](const std::string& name) {          // (the matches on an approved map of the players are counted too; one that a room could not play online is not: its recording would hold the one thread for seconds)
             const ApprovedMap* map = store_.approved_any_case(name);
             return map != nullptr && OnlineLimits::allows(map->counts()) ? map->path : std::string();

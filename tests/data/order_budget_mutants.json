@@ -324,7 +324,7 @@
   {
    "id": "backfill_loses_the_mark",
    "file": "src/ants_server/history_store.cpp",
-   "old": "            record.heavy_orders = static_cast<uint8_t>(rep.head.heavy_orders & rep.head.roster);        // (the mark that the head carries goes into the details with the rest)\n",
+   "old": "        if (job.backfill) job.record.heavy_orders = static_cast<uint8_t>(job.rep.head.heavy_orders & job.rep.head.roster);       // (the mark that the head carries goes into the details with the rest)\n",
    "new": "",
    "build": "test_history_details",
    "test": "timeout 900 env ANTS_TEST_FILTER=HD4.9 ./build/tests/test_server/test_history_details"

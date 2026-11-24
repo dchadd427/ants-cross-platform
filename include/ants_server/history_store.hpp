@@ -19,6 +19,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <set>
 #include <string>
 #include <unordered_map>
@@ -184,6 +185,9 @@ public:
         bool open_;
     };
 
+    /// The store's clock, seconds since 1970 UTC (Config::clock_s): the feeder judges which recordings are fresh by it
+    int64_t clock_seconds() const { return now_s(); }
+
     /// Lines for the server's log (a failure of the database, the way back), once each
     std::vector<std::string> take_notes();
     void report(const std::string& line) { note(line); }
@@ -221,24 +225,35 @@ private:
 
 /// Counts the matches that the replay store keeps and the history does not know yet, one at a time. A file is played again with no screen (0.4 - 0.5 s for a match of 10 - 12 minutes, more for a longer one) and its numbers go to the
 /// history in one transaction, with the details that the same play counted (match_stats.hpp, history_details.hpp). When no new file is left the records that were counted before the pass kept details, and whose
-/// recording is still kept and plays here, get theirs the same way, newest first (a recording that is read and cannot be played gets the marker, so that it is not tried again; one that cannot be tried, its map not being here, gets nothing and is tried at the next start). The work is never done on the server's loop in a burst: one file at most per call, the gap after it at least kPaceMs and kPaceFactor times what the file took, and only when the caller says the server is idle (no room
-/// runs or restores a match). The files that the replay store holds when the server starts (up to 30 days of them) are counted the same way, the newest first, and so are the matches that arrive later (the
+/// recording is still kept and plays here, get theirs the same way, newest first (a recording that is read and cannot be played gets the marker, so that it is not tried again; one that cannot be tried, its map not being here, gets nothing and is tried again at the next start). The files that the replay store holds when the server starts (up to 30 days of them) are counted the same way, the newest first, and so are the matches that arrive later (the
 /// room's own, and the files that the bot arena puts in the folder). A file that cannot be counted (another simulation's rules, a map that is not here, a file that does not play out the same here) is left out
 /// with one line in the log, and tried again only when the server starts again (a file that was left out because its map was not there is tried again when the caller says that the maps may have changed:
 /// retry_skipped_maps()). While the store is unavailable nothing is played.
+///
+/// Two ways to work, chosen by set_slice(). Whole (the default): a recording is played in one call, and only when the caller says the server is idle (no room with a person in it runs or restores a match), the gap after it at least
+/// kPaceMs and kPaceFactor times what the file took: the history service's counter, which has a thread of its own, works so. Sliced (the game server's, whose one thread runs every match): the work is cut into steps (the file is read,
+/// its map is loaded, the engine is set up, the turns are played a slice at a time, the record is made and kept), each step followed by a gap of kPaceFactor times its length, and a FRESH recording (a match with a person in it that ended
+/// less than kFreshWindowS ago: the match that was just played) is worked at any time, `idle` is not asked for it, so that it is in the history within seconds whatever runs; a match of computer players alone, a file of the bot
+/// arena, the older recordings and the backfill are still worked only while `idle` says yes, and one that a person's match stops part-way waits where it is and goes on first when the server is quiet again.
 class HistoryFeeder {
 public:
     static constexpr uint32_t kPaceMs = 250;          // the least gap between two recordings
     static constexpr uint32_t kPaceFactor = 4;        // ... and at least this many times the time that the last one took (a long match is paid for with a longer gap: the main thread is mostly free)
     static constexpr size_t kMaxSkipLines = 10;       // the lines about files that were left out, one each; the rest are counted in the summary
     static constexpr uint32_t kPruneEveryMs = 3600u * 1000u;
+    static constexpr uint32_t kSliceUs = 2000;        // a sliced feeder's step plays turns for this long and stops after the turn that crosses it (the clock is looked at after every turn); a turn that takes the state hash starts a step of its own, so a step is as long as one turn and its hash where that is dear: 2 - 5 ms on a 256 x 256 map, 0.03 ms on a shipped map
+    static constexpr uint32_t kSliceGapMs = 2;        // ... and the gap between two steps of one recording is at least this long (and kPaceFactor times the step)
+    static constexpr int64_t kFreshWindowS = 3600;    // a recording that ended less than this long ago is fresh (the older ones are the pile that a start finds, and wait for a quiet server)
 
     /// `maps_dir` is the folder that replay::load_map looks for the match's map in, then `community_dir` (the players' maps: a match on one of them is counted too; empty: none). The three objects must outlive
     /// the feeder. `clock_us` is a steady clock in microseconds that times the work of a pass (empty: std::chrono::steady_clock; the tests inject one).
     HistoryFeeder(HistoryStore& history, const ReplayStore& replays, std::string maps_dir, std::function<uint64_t()> clock_us = std::function<uint64_t()>(), std::string community_dir = std::string());
+    ~HistoryFeeder();
+    HistoryFeeder(const HistoryFeeder&) = delete;
+    HistoryFeeder& operator=(const HistoryFeeder&) = delete;
 
     /// The file of an approved map of the players that a recording was played on, by the name in its head: "" when the name is none of them (the maps folders are asked then). A match on an approved map is counted
-    /// (its plays, its stats) like any other; the server gives only the maps that a room plays (OnlineLimits), because the recording is played in one piece on the one thread. Unset: no approved map is known.
+    /// (its plays, its stats) like any other; the server gives only the maps that a room plays (OnlineLimits), because a room plays no other. Unset: no approved map is known.
     using ApprovedMapPath = std::function<std::string(const std::string& map_name)>;
     void set_approved_map_path(ApprovedMapPath fn) { approved_path_ = std::move(fn); }
 
@@ -248,6 +263,9 @@ public:
         pace_ms_ = min_gap_ms;
         pace_factor_ = factor;
     }
+
+    /// Sliced work (see the class): a step works `budget_us` microseconds at the most (kSliceUs for the game server). 0, the default, is whole work. Set it before the first step().
+    void set_slice(uint32_t budget_us) { slice_us_ = budget_us; }
 
     /// Whether the feeder deletes the markers whose recording has gone (once an hour; the default). A marker keeps a match that the operator took out from being counted again while its recording is still kept. The program that
     /// owns the recordings folder (the game server) deletes them, because it knows that its folder is the right one; a program that only reads the folder (the history service) must not: a folder that is empty or is not the
@@ -274,23 +292,40 @@ public:
     using ActionMaker = std::function<std::string(const replay::MatchStats&)>;
     void set_action_maker(ActionMaker maker) { action_maker_ = std::move(maker); }
 
-    /// One piece of work: at most one file. `idle` is asked only when a file is due (a quiet server: no room runs a match). True when a file was played (counted or left out).
+    /// One piece of work: at most one file (whole work) or one step of one file (sliced work). `idle` is asked only when work that waits for a quiet server is due (no room with a person in it runs a match); a fresh recording
+    /// of a sliced feeder never asks. True when a file was played to its end (counted or left out).
     bool step(const std::function<bool()>& idle, uint32_t now_ms);
 
-    size_t pending() const noexcept { return queue_.size() + backfill_.size(); }
+    size_t pending() const noexcept { return queue_.size() + backfill_.size() + fresh_.size() + (job_ ? 1u : 0u) + (paused_ ? 1u : 0u); }
     size_t counted() const noexcept { return counted_; }
     size_t left_out() const noexcept { return skipped_.size(); }
     /// Records that were counted before the replay pass kept any details and have them now (counted again from their recording, which is still kept)
     size_t backfilled() const noexcept { return backfilled_; }
 
 private:
+    struct Job;
+    /// What one step of a job came to: Go (the job goes on), Played (it is over and a file was counted or left out), Dropped (it is over and nothing was played: the file went, or it was counted already)
+    enum class Move : uint8_t { Go, Played, Dropped };
     void rebuild();
-    bool work(const std::string& file);
+    void look_fresh();
+    void start_job(const std::string& file, bool fresh, bool backfill);
+    bool start_waiting_job(const std::function<bool()>& idle);
+    bool run_job(uint32_t now_ms);
+    /// What a recording is refused for (refuse() says what becomes of it): Unreadable (the store did not give it), Damaged, Foreign (another simulation's rules), NoMap (its map is missing, is another file of the name or cannot be
+    /// loaded), TooBig (its map is over a limit of a room), Engine (the engine refused it)
+    enum class Refusal : uint8_t { Unreadable, Damaged, Foreign, NoMap, TooBig, Engine };
+    Move refuse(Job& job, Refusal kind, const std::string& why);
+    Move read_job(Job& job);
+    Move map_job(Job& job);
+    Move setup_job(Job& job);
+    Move play_job(Job& job);
+    Move finish_count(Job& job);
+    Move finish_backfill(Job& job);
+    Move settle_backfill(Job& job);
+    void requeue(const Job& job);
     void build_backfill();
-    bool backfill(const std::string& file);
     void skip(const std::string& id, const std::string& why, bool for_map = false);
-    bool load_map_of(const replay::Header& head, assets::LevelData& level, std::string& why) const;          // (the map of a recording: an approved map or the folders)
-    bool load_level(const replay::Header& head, assets::LevelData& level, std::string& why) const;
+    bool load_level(const replay::Header& head, assets::LevelData& level, std::string& why, Refusal& kind) const;          // (the map of a recording: an approved map or the folders, within what a room plays)
 
     ApprovedMapPath approved_path_;
     HistoryStore& history_;
@@ -302,6 +337,13 @@ private:
     std::function<uint64_t()> clock_us_;
     uint64_t seen_revision_{~uint64_t{0}};
     std::vector<std::string> queue_;                  // file names, the next one at the back (the newest are counted first)
+    std::vector<std::string> fresh_;                  // the fresh recordings that wait (a sliced feeder): file names, the next one at the back
+    std::set<std::string> fresh_seen_;                // the fresh recordings that were judged (queued, counted, known or left out): not looked at again
+    uint64_t fresh_revision_{~uint64_t{0}};           // the revision of the replay store at the last look for fresh recordings
+    bool fresh_retry_{false};                         // a recording of the window had no readable head yet: look again at the next step
+    std::unique_ptr<Job> job_;                        // the recording that is being worked on (a sliced feeder: between steps)
+    std::unique_ptr<Job> paused_;                     // a recording of the pile that a person's match stopped part-way (a sliced feeder): it goes on first when the server is quiet again
+    uint32_t slice_us_{0};
     std::set<std::string> skipped_;                   // ids that are left out (since the server started, less those that retry_skipped_maps() put back)
     std::set<std::string> map_skipped_;               // those of them that were left out for want of their map: the ones that retry_skipped_maps() puts back
     size_t other_rules_{0};                           // files of the replay store that another build's rules made: never queued
