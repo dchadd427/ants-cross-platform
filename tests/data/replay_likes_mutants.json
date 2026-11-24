@@ -1,0 +1,552 @@
+{
+ "note": "Mutants of the plays and hearts of the match pages (web/replay_likes.js; the sorts of web/history_page.js; docs/REPLAYS.md 'The match pages') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_likes_check.js (a strict fake of the DOM, a fake door and a fake clock) and tests/scripts/web_history_check.js (the sorts): a count that is a fraction, negative or huge, a play that is plural for one, the words of a failed call, a zero that is not dim, the count of the sort that is not brightened or brightened on the match page, a gone recording that has a button, is asked about or has no flat look, a heart that is not pressed when lit, the groups in the wrong places, likes that are off that leave buttons, a look that asks for too many ids or the same twice or omits the cookies, a heart lit for everyone, a token of any shape, a late look that undoes a like, a tap that does not wait for the look, a heart that does not change at once, does not go back on a failure or stays busy, a count of the answer that is not shown, two calls at once, a token that is not sent or has another name, a call that omits the cookies or is a GET, a tap on a lit heart that likes again, a token that is not asked for again, asked for again and again or that does not show the card, a call that says nothing, a visitor who is not logged in whose tap calls the door or shows no card, the words of the card, its small line, its way in, the keyboard, Escape, a press inside or outside, the line that stays for ever, a second card, a card that stays when the page is new, a card that leaves the window or ignores the scroll, and the sorts by plays and by likes (missing, named wrongly, first, or showing the plays as the big number); every one must be caught (tools/mutate.py tests/data/replay_likes_mutants.json --keep-going --jobs 1).",
+ "baseline": [
+  {
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "test": "node tests/scripts/web_history_check.js web/history_page.js"
+  }
+ ],
+ "mutants": [
+  {
+   "id": "a_fraction_is_a_count",
+   "file": "web/replay_likes.js",
+   "old": " && n === Math.floor(n) ? n : 0;",
+   "new": " ? n : 0;",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_negative_number_is_a_count",
+   "file": "web/replay_likes.js",
+   "old": "isFinite(n) && n >= 0 && n <= 1e9",
+   "new": "isFinite(n) && n <= 1e9",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_huge_number_is_a_count",
+   "file": "web/replay_likes.js",
+   "old": " && n <= 1e9 && ",
+   "new": " && ",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "one_play_is_plural",
+   "file": "web/replay_likes.js",
+   "old": "(n === 1 ? one : many)",
+   "new": "many",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_busy_door_is_a_slow_down",
+   "file": "web/replay_likes.js",
+   "old": "status === 429 ? SAY.slow : status === 409 ? SAY.limit",
+   "new": "status === 429 ? SAY.limit : status === 409 ? SAY.slow",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_shut_door_has_no_words",
+   "file": "web/replay_likes.js",
+   "old": "status === 503 ? SAY.off",
+   "new": "status === 503 ? SAY.other",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_replay_that_is_gone_has_no_words",
+   "file": "web/replay_likes.js",
+   "old": "status === 404 ? SAY.gone",
+   "new": "status === 404 ? SAY.other",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_network_that_is_down_has_no_words",
+   "file": "web/replay_likes.js",
+   "old": "status === 0 ? SAY.net",
+   "new": "status === 0 ? SAY.other",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_zero_of_plays_is_not_dim",
+   "file": "web/replay_likes.js",
+   "old": "var n = r.plays, s = el('span', 'pv' + (n ? '' : ' zero')",
+   "new": "var n = r.plays, s = el('span', 'pv'",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_zero_of_likes_is_not_dim",
+   "file": "web/replay_likes.js",
+   "old": "(n ? '' : ' zero') + (h.plain",
+   "new": "'' + (h.plain",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_sort_by_plays_does_not_brighten_the_plays",
+   "file": "web/replay_likes.js",
+   "old": "(r.key === 'plays' && !words ? ' key' : '')",
+   "new": "''",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_match_page_brightens_the_plays",
+   "file": "web/replay_likes.js",
+   "old": "(r.key === 'plays' && !words ? ' key' : '')",
+   "new": "(r.key === 'plays' ? ' key' : '')",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_sort_by_likes_does_not_brighten_the_heart",
+   "file": "web/replay_likes.js",
+   "old": "(r.key === 'likes' ? ' key' : '')",
+   "new": "''",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_list_says_plays_in_words",
+   "file": "web/replay_likes.js",
+   "old": "s.appendChild(doc.createTextNode(words ? plural(n, 'play', 'plays') : numberText(n)));",
+   "new": "s.appendChild(doc.createTextNode(plural(n, 'play', 'plays')));",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_match_page_says_the_number_only",
+   "file": "web/replay_likes.js",
+   "old": "s.appendChild(doc.createTextNode(words ? plural(n, 'play', 'plays') : numberText(n)));",
+   "new": "s.appendChild(doc.createTextNode(numberText(n)));",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_gone_recording_has_a_button",
+   "file": "web/replay_likes.js",
+   "old": "h.node = el(h.plain ? 'span' : 'button');",
+   "new": "h.node = el('button');",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_gone_recording_is_asked_about",
+   "file": "web/replay_likes.js",
+   "old": "if (!r.plain && ids.indexOf(r.id) === -1) ids.push(r.id);",
+   "new": "if (ids.indexOf(r.id) === -1) ids.push(r.id);",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_heart_is_lit_but_says_not_pressed",
+   "file": "web/replay_likes.js",
+   "old": "h.node.setAttribute('aria-pressed', String(on));",
+   "new": "h.node.setAttribute('aria-pressed', 'false');",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_plain_heart_has_the_flat_look_missing",
+   "file": "web/replay_likes.js",
+   "old": "(h.plain ? ' flat' : '')",
+   "new": "''",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_plays_card_goes_last_in_the_actions",
+   "file": "web/replay_likes.js",
+   "old": "act.insertBefore(group(r), act.firstChild);",
+   "new": "act.appendChild(group(r));",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_phone_has_no_group",
+   "file": "web/replay_likes.js",
+   "old": "if (info) info.appendChild(group(r));",
+   "new": "",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_heart_of_the_match_page_is_not_after_show",
+   "file": "web/replay_likes.js",
+   "old": "shown ? shown.nextSibling : acts.firstChild",
+   "new": "acts.firstChild",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "likes_that_are_off_leave_buttons",
+   "file": "web/replay_likes.js",
+   "old": "if (state.off && !h.plain && h.node.parentNode) {",
+   "new": "if (false) {",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_look_asks_for_every_id",
+   "file": "web/replay_likes.js",
+   "old": "ids.slice(0, MAX_IDS)",
+   "new": "ids",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_look_asks_for_51_ids",
+   "file": "web/replay_likes.js",
+   "old": "var MAX_IDS = 50;",
+   "new": "var MAX_IDS = 51;",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_replay_is_asked_for_twice",
+   "file": "web/replay_likes.js",
+   "old": "if (!r.plain && ids.indexOf(r.id) === -1) ids.push(r.id);",
+   "new": "if (!r.plain) ids.push(r.id);",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_look_omits_the_cookies",
+   "file": "web/replay_likes.js",
+   "old": "{ credentials: 'same-origin', cache: 'no-store' }",
+   "new": "{ credentials: 'omit', cache: 'no-store' }",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "everything_is_lit",
+   "file": "web/replay_likes.js",
+   "old": "state.liked[id] = a.liked.indexOf(id) !== -1;",
+   "new": "state.liked[id] = true;",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_token_of_any_shape_is_good",
+   "file": "web/replay_likes.js",
+   "old": "var CSRF = /^[0-9a-f]{32}$/;",
+   "new": "var CSRF = /^.*$/;",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "an_answer_with_no_word_of_who_is_logged_in_is_taken",
+   "file": "web/replay_likes.js",
+   "old": "typeof a.signed_in !== 'boolean'",
+   "new": "false",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_late_look_undoes_a_like",
+   "file": "web/replay_likes.js",
+   "old": "if (!(touched[id] > from))",
+   "new": "if (true)",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_tap_does_not_wait_for_the_look",
+   "file": "web/replay_likes.js",
+   "old": "if (state.known && !waiting) go();",
+   "new": "if (state.known) go();",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_page_that_does_not_know_does_not_ask",
+   "file": "web/replay_likes.js",
+   "old": "(waiting || ask([r.id])).then(go)",
+   "new": "(waiting || Promise.resolve()).then(go)",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_heart_does_not_change_at_once",
+   "file": "web/replay_likes.js",
+   "old": "r.liked = want; r.likes = Math.max(0, r.likes + (want ? 1 : -1)); show(r);",
+   "new": "",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_heart_does_not_go_back_on_a_failure",
+   "file": "web/replay_likes.js",
+   "old": "function back(r, was) { r.liked = was.liked; r.likes = was.likes; r.busy = false; show(r); }",
+   "new": "function back(r, was) { r.busy = false; show(r); }",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_heart_stays_busy_after_a_failure",
+   "file": "web/replay_likes.js",
+   "old": "function back(r, was) { r.liked = was.liked; r.likes = was.likes; r.busy = false; show(r); }",
+   "new": "function back(r, was) { r.liked = was.liked; r.likes = was.likes; show(r); }",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_count_of_the_answer_is_not_shown",
+   "file": "web/replay_likes.js",
+   "old": "if (typeof b.likes === 'number') r.likes = countOf(b.likes);",
+   "new": "",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_count_of_the_answer_may_be_text",
+   "file": "web/replay_likes.js",
+   "old": "if (typeof b.likes === 'number') r.likes = countOf(b.likes);",
+   "new": "if (b.likes !== undefined) r.likes = b.likes;",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_heart_stays_busy_after_an_answer",
+   "file": "web/replay_likes.js",
+   "old": "state.liked[r.id] = r.liked; touched[r.id] = ++stamp; r.busy = false; show(r);",
+   "new": "state.liked[r.id] = r.liked; touched[r.id] = ++stamp; show(r);",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "two_calls_at_once_for_a_replay",
+   "file": "web/replay_likes.js",
+   "old": "if (r.busy) return;",
+   "new": "",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_token_is_not_sent",
+   "file": "web/replay_likes.js",
+   "old": "headers: { 'X-Ants-Csrf': state.csrf }",
+   "new": "headers: {}",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_token_has_another_name",
+   "file": "web/replay_likes.js",
+   "old": "'X-Ants-Csrf': state.csrf",
+   "new": "'X-Csrf': state.csrf",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_call_omits_the_cookies",
+   "file": "web/replay_likes.js",
+   "old": "{ method: 'POST', credentials: 'same-origin', headers",
+   "new": "{ method: 'POST', credentials: 'omit', headers",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_like_is_a_get",
+   "file": "web/replay_likes.js",
+   "old": "{ method: 'POST', credentials: 'same-origin'",
+   "new": "{ method: 'GET', credentials: 'same-origin'",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_tap_on_a_lit_heart_likes_again",
+   "file": "web/replay_likes.js",
+   "old": "call(want ? 'like' : 'unlike', r.id)",
+   "new": "call('like', r.id)",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_refused_token_is_not_asked_for_again",
+   "file": "web/replay_likes.js",
+   "old": "if (a.status === 403 && !again) {",
+   "new": "if (false) {",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_refused_token_is_asked_for_again_and_again",
+   "file": "web/replay_likes.js",
+   "old": "if (a.status === 403 && !again) {",
+   "new": "if (a.status === 403) {",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_refused_token_that_cannot_be_asked_for_goes_on",
+   "file": "web/replay_likes.js",
+   "old": "if (!ok) { back(r, was); say(h, SAY.net); } else if",
+   "new": "if (false) { } else if",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_refused_token_and_a_logged_out_visitor_gets_no_card",
+   "file": "web/replay_likes.js",
+   "old": "else if (!state.signed) { back(r, was); wayIn(h, r); } else attempt(r, h, want, was, true);",
+   "new": "else if (!state.signed) { back(r, was); } else attempt(r, h, want, was, true);",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_logged_out_call_shows_no_card",
+   "file": "web/replay_likes.js",
+   "old": "sync(); wayIn(h, r); } else say(h, lineOf(a.status));",
+   "new": "sync(); } else say(h, lineOf(a.status));",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_failed_call_says_nothing",
+   "file": "web/replay_likes.js",
+   "old": "} else say(h, lineOf(a.status));",
+   "new": "}",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_tap_that_is_not_logged_in_calls_the_door",
+   "file": "web/replay_likes.js",
+   "old": "if (!state.signed) { r.busy = false; wayIn(h, r); return; }",
+   "new": "",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_tap_that_is_not_logged_in_shows_no_card",
+   "file": "web/replay_likes.js",
+   "old": "if (!state.signed) { r.busy = false; wayIn(h, r); return; }",
+   "new": "if (!state.signed) { r.busy = false; return; }",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_card_says_sign_in",
+   "file": "web/replay_likes.js",
+   "old": "login: 'Log in to like a replay.'",
+   "new": "login: 'Sign in to like a replay.'",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_card_button_says_sign_in",
+   "file": "web/replay_likes.js",
+   "old": "way: 'Log in with Discord'",
+   "new": "way: 'Sign in with Discord'",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_small_line_is_gone",
+   "file": "web/replay_likes.js",
+   "old": "p.appendChild(el('small', '', SAY.small)); box.appendChild(p);",
+   "new": "box.appendChild(p);",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_way_in_goes_home",
+   "file": "web/replay_likes.js",
+   "old": "a.href = loginHref(r.id);",
+   "new": "a.href = '/';",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_card_does_not_take_the_keyboard",
+   "file": "web/replay_likes.js",
+   "old": "try { a.focus({ preventScroll: true }); } catch (e) { /* the link is there to press */ }",
+   "new": "",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "escape_does_not_close_the_card",
+   "file": "web/replay_likes.js",
+   "old": "ev.key === 'Escape'",
+   "new": "ev.key === 'Enter'",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_press_inside_closes_the_card",
+   "file": "web/replay_likes.js",
+   "old": "if (popup && !inside(ev.target)) close();",
+   "new": "if (popup) close();",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_press_outside_keeps_the_card",
+   "file": "web/replay_likes.js",
+   "old": "if (popup && !inside(ev.target)) close();",
+   "new": "if (popup && inside(ev.target)) close();",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_line_stays_for_ever",
+   "file": "web/replay_likes.js",
+   "old": "popTimer = win.setTimeout(close, NOTE_MS);",
+   "new": "",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_second_card_joins_the_first",
+   "file": "web/replay_likes.js",
+   "old": "function open(box, anchor) {\n            close();",
+   "new": "function open(box, anchor) {",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_new_page_keeps_the_card",
+   "file": "web/replay_likes.js",
+   "old": "begin: function () { rows = []; close(); },",
+   "new": "begin: function () { rows = []; },",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_card_may_leave_the_window_at_the_left",
+   "file": "web/replay_likes.js",
+   "old": "Math.max(8, Math.min(wide - CARD_W - 12,",
+   "new": "Math.max(-100, Math.min(wide - CARD_W - 12,",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_card_may_leave_the_window_at_the_right",
+   "file": "web/replay_likes.js",
+   "old": "Math.max(8, Math.min(wide - CARD_W - 12,",
+   "new": "Math.max(8, Math.min(wide + 500,",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_card_ignores_the_scroll_across",
+   "file": "web/replay_likes.js",
+   "old": "(left + (win.scrollX || 0))",
+   "new": "left",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "the_card_ignores_the_scroll_down",
+   "file": "web/replay_likes.js",
+   "old": "(q.bottom + (win.scrollY || 0) + 12)",
+   "new": "(q.bottom + 12)",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "no_sort_by_plays",
+   "file": "web/history_page.js",
+   "old": ", ['plays', 'Most watched']",
+   "new": "",
+   "test": "node tests/scripts/web_history_check.js web/history_page.js"
+  },
+  {
+   "id": "no_sort_by_likes",
+   "file": "web/history_page.js",
+   "old": ", ['likes', 'Most liked']",
+   "new": "",
+   "test": "node tests/scripts/web_history_check.js web/history_page.js"
+  },
+  {
+   "id": "most_watched_is_called_something_else",
+   "file": "web/history_page.js",
+   "old": "'Most watched'",
+   "new": "'Most plays'",
+   "test": "node tests/scripts/web_history_check.js web/history_page.js"
+  },
+  {
+   "id": "most_liked_is_called_something_else",
+   "file": "web/history_page.js",
+   "old": "'Most liked'",
+   "new": "'Most hearts'",
+   "test": "node tests/scripts/web_history_check.js web/history_page.js"
+  },
+  {
+   "id": "the_sort_by_plays_comes_first",
+   "file": "web/history_page.js",
+   "old": "['new', 'Newest first'], ['old', 'Oldest first']",
+   "new": "['plays', 'Most watched'], ['new', 'Newest first'], ['old', 'Oldest first']",
+   "test": "node tests/scripts/web_history_check.js web/history_page.js"
+  },
+  {
+   "id": "a_sort_by_plays_shows_the_plays_as_the_big_number",
+   "file": "web/history_page.js",
+   "old": "hatched: ['Most hatched', 'hatched'] };",
+   "new": "hatched: ['Most hatched', 'hatched'], plays: ['Most watched', 'plays'] };",
+   "test": "node tests/scripts/web_history_check.js web/history_page.js"
+  },
+  {
+   "id": "a_busy_door_turns_the_hearts_into_counts",
+   "file": "web/replay_likes.js",
+   "old": "status === 503 && a && (a.error === 'likes_off' || a.error === 'counts_off')",
+   "new": "status === 503",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_counts_door_that_is_off_is_not_likes_off",
+   "file": "web/replay_likes.js",
+   "old": "(a.error === 'likes_off' || a.error === 'counts_off')",
+   "new": "(a.error === 'likes_off')",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_likes_off_answer_is_not_likes_off",
+   "file": "web/replay_likes.js",
+   "old": "(a.error === 'likes_off' || a.error === 'counts_off')",
+   "new": "(a.error === 'counts_off')",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  }
+ ]
+}

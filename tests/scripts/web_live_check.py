@@ -168,6 +168,11 @@ class Door:
                     door.hits.append(self.path)
                     door.route(self, urllib.parse.urlparse(self.path).path)
 
+            def do_POST(self):                  # (a door that takes a call with no body: the counts of the match pages, tests/scripts/web_matches_check.py; a route that does not know it answers as for a GET)
+                with door.lock:
+                    door.hits.append("POST " + self.path)
+                    door.route(self, urllib.parse.urlparse(self.path).path)
+
         class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
             daemon_threads = True
             allow_reuse_address = True
@@ -219,7 +224,7 @@ class Door:
             for k, v in FILLED.items():
                 text = text.replace(k, v)
             return self.send(h, 200, text, "text/html; charset=utf-8")
-        if path in ("/replay_page.js", "/history_page.js", "/match_stats.js", "/death_map.js", "/shapes.js", "/rejoin_key.js", "/shape_picker.js", "/map_files.js", "/countdown_button.js", "/hud_fullscreen.js", "/index.js"):
+        if path in ("/replay_page.js", "/history_page.js", "/match_stats.js", "/death_map.js", "/shapes.js", "/rejoin_key.js", "/shape_picker.js", "/map_files.js", "/countdown_button.js", "/hud_fullscreen.js", "/replay_likes.js", "/replay_plays.js", "/index.js"):
             name = path[1:] if path != "/index.js" else None
             body = open(os.path.join(WEB, name) if name else os.path.join(HERE, "web_live_stub.js"), "rb").read()
             return self.send(h, 200, body, "text/javascript")

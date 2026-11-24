@@ -156,8 +156,8 @@
         { key: 'color', label: 'Color', options: [['all', 'Any color'], ['green', 'Green'], ['red', 'Red'], ['blue', 'Blue'], ['black', 'Black']] },
         { key: 'mode', label: 'Mode', options: [['all', 'Any mode'], ['highest-score', 'Highest score'], ['187', '187']] }
     ];
-    var SORTS = [['new', 'Newest first'], ['old', 'Oldest first'], ['score', 'Highest score'], ['kills', 'Most kills'], ['hatched', 'Most hatched'], ['long', 'Longest'], ['short', 'Shortest']];
-    var SORT_KEYS = { score: ['Top score', 'score'], kills: ['Most kills', 'killed'], hatched: ['Most hatched', 'hatched'] };       // what a sort by a count shows on each card
+    var SORTS = [['new', 'Newest first'], ['old', 'Oldest first'], ['score', 'Highest score'], ['kills', 'Most kills'], ['hatched', 'Most hatched'], ['long', 'Longest'], ['short', 'Shortest'], ['plays', 'Most watched'], ['likes', 'Most liked']];
+    var SORT_KEYS = { score: ['Top score', 'score'], kills: ['Most kills', 'killed'], hatched: ['Most hatched', 'hatched'] };       // what a sort by a count shows on each card (plays and likes are not here: those two sorts keep the length and the card brightens its own small count, web/replay_likes.js)
     var Q_MAX = 40;                                      // the server's limit for a search text
 
     function defaults() { return { who: 'all', format: 'all', result: 'all', rec: 'all', color: 'all', mode: 'all', sort: 'new', q: '', page: 1 }; }

@@ -48,6 +48,7 @@
 </div>
 
 <script src="update_notice.js"></script>
+<script src="replay_likes.js"></script>
 <script src="site_nav.js"></script>
 <script src="replay_page.js"></script>
 <script src="front/map_picker.js"></script>
@@ -61,6 +62,8 @@
     var $ = function (id) { return document.getElementById(id); };
     var pics = H.pictures({ document: document, replay: R, picker: window.AntsMapPicker, fetch: window.fetch ? window.fetch.bind(window) : null });
     var id = H.idOf(window.location.search);
+    // the plays and the heart of the result (web/replay_likes.js): one look at the door tells whether this visitor likes the match
+    var likes = window.AntsLikes.create({ document: document, win: window, fetch: window.fetch ? window.fetch.bind(window) : null, numberText: H.numberText, login: function (match) { return '/hub/login?next=match&id=' + encodeURIComponent(match); } });
 
     function el(tag, className, text) {
         var node = document.createElement(tag);
@@ -116,6 +119,7 @@
         cp.addEventListener('click', function () { copyText(window.location.href, function (ok) { cp.textContent = ok ? 'Copied' : 'Copy the address'; setTimeout(function () { cp.textContent = 'Copy link'; }, 2000); }); });
         acts.appendChild(cp);
         rest.appendChild(acts); s.appendChild(rest);
+        likes.hero(s, rec, { plain: st.kind !== 'watch' });
         return s;
     }
     // The replay: the game page itself in an iframe (play?replay=<file>&embed=1), made only when "Show replay" is pressed, so that nothing of the game (the wasm and its data) and no recording is fetched before,
@@ -248,6 +252,7 @@
         current = rec;
         var ctx = { sides: H.sidesOf(rec) };
         put(SECTIONS.map(function (f) { return f(rec, ctx); }));
+        likes.look();
         window.AntsMatchStats.redraw(document);                          // (the charts are drawn for the width of their boxes)
         window.AntsDeathMap.redraw(document);                            // (and so is the map of deaths)
         document.title = document.title.replace(/^Match/, function () { return R.mapTitle(rec.map) + ', ' + H.formatText(rec.format); });      // (a function: a map name with $& or $' in it is text, not a pattern of replace)

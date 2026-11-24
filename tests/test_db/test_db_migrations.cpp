@@ -284,9 +284,9 @@ void run_migration_tests() {
         DB_CHECK(!failed.ok() && failed.code != kErrCleaning);
     } DB_END;
 
-    DB_CASE("SV1.1 The server's schema: version 1 makes the meta table with created_at; version 2 the match history tables; version 3 the play counts of the maps; version 4 the site statistics; version 5 the map submissions; version 6 the accounts of the admin page; version 8 ends them (the log stays); version 9 the schedules of the matches of computer players; version 10 the lists of their rotation; version 11 the action of a match (the history_action table)") {
+    DB_CASE("SV1.1 The server's schema: version 1 makes the meta table with created_at; version 2 the match history tables; version 3 the play counts of the maps; version 4 the site statistics; version 5 the map submissions; version 6 the accounts of the admin page; version 8 ends them (the log stays); version 9 the schedules of the matches of computer players; version 10 the lists of their rotation; version 11 the action of a match (the history_action table); version 12 the plays and the likes of the replays") {
         const auto& list = ants::server::db_migrations();
-        DB_CHECK(list.size() == 11 && list.front().version == 1 && list.back().version == 11);
+        DB_CHECK(list.size() == 12 && list.front().version == 1 && list.back().version == 12);
         DB_CHECK(ants::server::db_schema_version() == list.back().version);
         Database db;
         DB_CHECK(db.open(":memory:").ok());
@@ -299,7 +299,7 @@ void run_migration_tests() {
         const std::string created = st.column_text(0);
         DB_CHECK(created.size() == 20 && created.substr(0, 2) == "20" && created.back() == 'Z');
         DB_CHECK(db.prepare(st, "SELECT group_concat(name, ',') FROM (SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('meta', 'schema_version') ORDER BY name)").ok());
-        DB_CHECK(st.step() == Statement::Step::Row && st.column_text(0) == "admin_audit,bot_rotation,bot_schedules,history_action,history_deaths,history_markers,history_matches,history_seats,map_plays,map_submissions,review_log,site_stats,site_stats_hours,sqlite_sequence,submission_limits");
+        DB_CHECK(st.step() == Statement::Step::Row && st.column_text(0) == "admin_audit,bot_rotation,bot_schedules,history_action,history_deaths,history_markers,history_matches,history_seats,map_plays,map_submissions,replay_likes,review_log,site_stats,site_stats_hours,sqlite_sequence,submission_limits");
         DB_CHECK(migrate(db, list).ok());
         DB_CHECK(rows_in(db, "meta") == 1);
     } DB_END;
@@ -448,16 +448,16 @@ void run_migration_tests() {
         DB_CHECK(db.exec("DELETE FROM history_matches WHERE id = 'ants-TINY-20261008-143209Z'").ok() && rows_in(db, "history_deaths") == 1);   // (the row goes with its match)
     } DB_END;
 
-    DB_CASE("SV1.8 The history service's schema (history_db_migrations): numbered 1 to 5, the same history tables as the server's (the same SQL, every index and check), and no table of anything else (no statistics, submissions or accounts)") {
+    DB_CASE("SV1.8 The history service's schema (history_db_migrations): numbered 1 to 6, the same history tables as the server's (the same SQL, every index and check), and no table of anything else (no statistics, submissions or accounts)") {
         Database server, service;
         DB_CHECK(server.open(":memory:").ok() && service.open(":memory:").ok());
         int v = 0;
         DB_CHECK(migrate(server, ants::server::db_migrations(), &v).ok() && v == ants::server::db_migrations().back().version);          // (the server's list grows; the service's own file has its own numbers)
-        DB_CHECK(migrate(service, ants::server::history_db_migrations(), &v).ok() && v == 5);
+        DB_CHECK(migrate(service, ants::server::history_db_migrations(), &v).ok() && v == 6);
         const auto schema = [](Database& d) {
             std::string out;
             Statement st;
-            if (!d.prepare(st, "SELECT type, name, tbl_name, COALESCE(sql, '') FROM sqlite_master WHERE tbl_name IN ('history_matches', 'history_seats', 'history_markers', 'history_deaths', 'history_action', 'map_plays', 'meta') ORDER BY name").ok()) return std::string("(no schema)");
+            if (!d.prepare(st, "SELECT type, name, tbl_name, COALESCE(sql, '') FROM sqlite_master WHERE tbl_name IN ('history_matches', 'history_seats', 'history_markers', 'history_deaths', 'history_action', 'map_plays', 'replay_likes', 'meta') ORDER BY name").ok()) return std::string("(no schema)");
             while (st.step() == Statement::Step::Row) out += st.column_text(0) + "|" + st.column_text(1) + "|" + st.column_text(2) + "|" + st.column_text(3) + "\n";
             return out;
         };
@@ -466,7 +466,7 @@ void run_migration_tests() {
         Statement st;
         DB_CHECK(service.prepare(st, "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").ok());
         while (st.step() == Statement::Step::Row) tables += st.column_text(0) + ",";
-        DB_CHECK(tables == "history_action,history_deaths,history_markers,history_matches,history_seats,map_plays,meta,schema_version,");
-        DB_CHECK(rows_in(service, "schema_version") == 5 && rows_in(service, "meta") == 1);
+        DB_CHECK(tables == "history_action,history_deaths,history_markers,history_matches,history_seats,map_plays,meta,replay_likes,schema_version,");
+        DB_CHECK(rows_in(service, "schema_version") == 6 && rows_in(service, "meta") == 1);
     } DB_END;
 }

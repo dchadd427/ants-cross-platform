@@ -64,6 +64,8 @@ class Limits:
     admin_door_refill_seconds: float = 5.0
     admin_door_new_burst: int = 2       # a second, small share for an account that the hub has never known to hold a role (so that many plain accounts cannot use up the door's share for the staff): a burst of 2, then one every 30 seconds
     admin_door_new_refill_seconds: float = 30.0
+    like_burst: int = 60                # the likes' gate (hub/likedoor.py): for each client address a burst of 60, then one every second (nginx asks it for each of the page's calls that count or change a like)
+    like_refill_seconds: float = 1.0
     login_inflight: int = 6             # logins that wait for Discord at one time (the 7th gets the page "Login unavailable" at once, and the sockets never wait for it)
     login_states_max: int = 10000       # logins that were started and not finished (each is about 200 bytes of memory); the oldest go first
     state_seconds: float = 600.0        # how long a login may take, from /hub/login to /hub/callback
