@@ -565,7 +565,7 @@
    "id": "a_full_table_of_passes_forgets_nothing",
    "file": "src/ants_server/like_pass.cpp",
    "old": "    while (seen_.size() >= max_remembered_ && !by_age_.empty()) {",
-   "new": "    while (false) {"
+   "new": "    while (seen_.size() >= max_remembered_ + 1000000 && !by_age_.empty()) {"
   },
   {
    "id": "a_full_table_of_passes_refuses",

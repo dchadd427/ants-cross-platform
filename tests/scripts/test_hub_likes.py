@@ -408,6 +408,7 @@ class TheRealLogin(unittest.TestCase):
 class Call:
     def __init__(self, request_line, names, headers, body, raw, problems):
         self.request_line, self.names, self.headers, self.body, self.raw, self.problems = request_line, names, headers, body, raw, problems
+        self.at = time.monotonic()                                 # (when the call arrived: the pauses between the hub's tries are measured with it)
 
 
 class FakeCountsDoor:
@@ -542,6 +543,9 @@ class ForgetTest(unittest.TestCase):
         self.count = 0
 
     def finish(self):
+        if getattr(self, "finished", False):
+            return
+        self.finished = True
         self.rig.__exit__(None, None, None)
         self.fake.close()
 
@@ -753,9 +757,13 @@ class TheQueue(ForgetTest):
         self.door.mode = "status:500"
         self.assertEqual(self.forget(v).json(), {"ok": True, "likes": "later"})
         ref = self.my_ref()
-        self.assertTrue(self.wait(lambda: len(self.door.calls) >= 3), "the hub asked again, and again")
+        self.assertTrue(self.wait(lambda: len(self.door.calls) >= 5), "the hub asked again, and again")
         self.assertIn(ref, self.pending())
         self.assertGreaterEqual(self.pending()[ref][2], 1)
+        gaps = [b.at - a.at for a, b in zip(self.door.calls, self.door.calls[1:])]               # (RETRY_FIRST is 0.15 here and RETRY_LAST 0.3: the first pause is 0.15, then twice as long, then no more than 0.3)
+        self.assertGreaterEqual(gaps[0], 0.12, gaps)
+        self.assertGreaterEqual(gaps[1], 0.25, "each pause is twice the one before, up to the longest: %r" % gaps)
+        self.assertLess(max(gaps[1:]), 0.9, "and never more than the longest: %r" % gaps)
         self.door.mode = "ok"
         self.assertTrue(self.wait(lambda: not self.pending()), "the door answered: the reference is let go")
         passes = [verify(c.headers["x-ants-like-pass"], SECRET, time.time() - 30) for c in self.door.calls]
@@ -784,6 +792,15 @@ class TheQueue(ForgetTest):
             self.assertTrue(self.wait(lambda: not self.pending()))
         self.assertEqual(self.log().count(" forget_likes_given_up\n"), 1)
         self.assertEqual(likedoor.RETRY_GIVE_UP, 86400.0)
+
+    def test_a_hub_that_stops_cancels_the_try_that_is_under_way(self):
+        self.door.mode = "hang"
+        self.rig.call(self.rig.hub.likes.queue, "0123456789abcdef")
+        self.assertTrue(self.wait(lambda: len(self.door.calls) >= 1))
+        task = self.rig.call(lambda: self.rig.hub.likes.retrying)
+        self.assertFalse(task.done())
+        self.finish()
+        self.assertTrue(self.wait(task.done, 2.0) and task.cancelled(), "the try went with the hub")
 
     def test_one_try_at_a_time_and_none_while_the_door_is_silent_for_the_others(self):
         self.door.mode = "hang"
