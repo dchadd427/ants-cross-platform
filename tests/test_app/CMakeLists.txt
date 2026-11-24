@@ -674,6 +674,41 @@ target_link_libraries(test_hud_art PRIVATE ants_test_paths)
 add_test(NAME test_hud_art COMMAND test_hud_art)
 set_tests_properties(test_hud_art PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# The world art (world_art.hpp): the new pictures of the ground, its edges and the bridge, the manifest, the choice of a ground tile's picture, the real renderer's frame at 1x, 2x and 3x against the sheets, the
+# original's frame unchanged, the fall back to the original's sprites
+add_executable(test_world_art
+    test_world_art.cpp
+)
+
+target_include_directories(test_world_art PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_world_art PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_world_art PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_world_art PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_world_art PRIVATE ants_test_paths)
+
+add_test(NAME test_world_art COMMAND test_world_art)
+set_tests_properties(test_world_art PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # The PNG writer of the server's pictures (png_encode.hpp): the deflate stream, the zlib wrapper and the PNG file, read back by the repository's own reader and checked against the formats. No window
 add_executable(test_png_encode
     test_png_encode.cpp

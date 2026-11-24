@@ -32,10 +32,14 @@ void Application::load_game_menu_settings() {
 }
 
 // The HUD art: the manifest is read once; the sheets are decoded when the renderer first needs the sheet of its output's scale (renderer_art.cpp), which preload_art does now, before the first match frame.
-// A folder without the art (a build that was moved without it) leaves the original's art, with a word on stderr; the setting is not changed by that.
+// A folder without the art (a build that was moved without it) leaves the original's art, with a word on stderr; the setting is not changed by that. The world art (world_art.hpp) is read here too and follows
+// the same setting: its sheet is decoded when the first picture of it is drawn (renderer_world_art.cpp), and a folder without it leaves the original's sprites.
 void Application::load_hud_art() {
     if (!hud_art_.load(config_.hud_art_dir) && menu_settings_.hud_art_new) {
         std::cerr << "[Application] The HUD art is not available (" << hud_art_.what() << "): the original's art is drawn" << std::endl;
+    }
+    if (!world_art_.load(config_.world_art_dir) && menu_settings_.hud_art_new) {
+        std::cerr << "[Application] The world art is not available (" << world_art_.what() << "): the original's sprites are drawn" << std::endl;
     }
     apply_hud_art();
 }
@@ -43,6 +47,7 @@ void Application::load_hud_art() {
 void Application::apply_hud_art() {
     const bool show = menu_settings_.hud_art_new && hud_art_.loaded();
     hud_.set_art(show ? &hud_art_ : nullptr);
+    if (renderer_) renderer_->set_world_art(menu_settings_.hud_art_new && world_art_.loaded() ? &world_art_ : nullptr);
     check_hud_art();
 }
 

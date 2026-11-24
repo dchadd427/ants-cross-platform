@@ -24,7 +24,7 @@ RUN cd /warm && \
 # =============================================================================
 # The layers of this stage are ordered by how often their input changes, so that a release that changes no C++ does not compile the game again:
 #   1. the build files and the sources: the compile reads nothing else (CMakeLists.txt, cmake/, include/, src/; the web build has no third_party/ and no tools/ in it);
-#   2. the file VERSION, web/shell.html, Original-Ants/ and assets/hud_art/ (the HUD's new pictures): only the link reads them (the page's template and the data package). They are stubs in layer 1, which compiles and links with them, and the
+#   2. the file VERSION, web/shell.html, Original-Ants/, assets/hud_art/ (the HUD's new pictures) and assets/world_art/ (the world's): only the link reads them (the page's template and the data package). They are stubs in layer 1, which compiles and links with them, and the
 #      real ones replace them here: the version is a constant in a header that CMake generates from VERSION, so the few files that include it (the four files src/ants_app/application*.cpp, and the generated build id file) are compiled again,
 #      then the game is linked again (the map core is not: nothing of it reads these);
 #   3. everything else (the pages, the stamps, the changelog), below.
@@ -40,7 +40,7 @@ COPY include/ ./include/
 COPY src/ ./src/
 
 # The stubs of what only the link reads (CMake checks the format of VERSION, and the stub is a number that no release has, so that the guard below can tell it from the real one; emcc wants {{{ SCRIPT }}} in the template)
-RUN echo 999.999.999 > VERSION && mkdir -p web Original-Ants assets/hud_art && echo '{{{ SCRIPT }}}' > web/shell.html && echo stub > Original-Ants/stub.txt && echo stub > assets/hud_art/stub.txt
+RUN echo 999.999.999 > VERSION && mkdir -p web Original-Ants assets/hud_art assets/world_art && echo '{{{ SCRIPT }}}' > web/shell.html && echo stub > Original-Ants/stub.txt && echo stub > assets/hud_art/stub.txt && echo stub > assets/world_art/stub.txt
 
 # Configure and compile using default Makefiles
 RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-web \
@@ -59,6 +59,7 @@ COPY VERSION ./VERSION
 COPY web/shell.html ./web/shell.html
 COPY Original-Ants/ ./Original-Ants/
 COPY assets/hud_art/ ./assets/hud_art/
+COPY assets/world_art/ ./assets/world_art/
 RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-web \
     if command -v ccache > /dev/null 2>&1; then export EM_COMPILER_WRAPPER="$(command -v ccache)"; ccache -z > /dev/null; fi && \
     rm -f build_web/src/ants_app/index.html build_web/src/ants_app/index.js build_web/src/ants_app/index.wasm build_web/src/ants_app/index.data && \

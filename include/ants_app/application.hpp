@@ -105,6 +105,8 @@ struct ApplicationConfig {
     bool hud_art_new{true};
     bool hud_art_given{false};
     std::string hud_art_dir{"assets/hud_art"};
+    /// The folder of the world art (world_art.hpp): the new pictures of the ground, its edges and the bridge. The setting above (hud_art_new) chooses them as well: New draws them, Classic the original's sprites.
+    std::string world_art_dir{"assets/world_art"};
     bool headless{false};
     std::string chd_path{"Original-Ants/ants.chd"};
     std::string maps_dir{"Original-Ants/Maps"};     // the folder whose `*.lvl` files are the map list (the original searches its Maps folder)
@@ -396,6 +398,7 @@ public:
     const std::string& game_menu_describe();
     const game_menu::MenuSettings& menu_settings() const noexcept { return menu_settings_; }
     const hud_art::Art& hud_art() const noexcept { return hud_art_; }
+    const world_art::Pack& world_art() const noexcept { return world_art_; }
     const health::ChangeTracker& health_changes() const noexcept { return health_changes_; }      // the live damage and heal numbers (empty while the setting is Off)
     /// A PHONE'S KEYBOARD for the match's chat box and the options window's four quick chat fields (application_touch.cpp; the page, web/shell.html "ANTS_CHAT", opens the browser's keyboard when a
     /// finger taps a box and hands the game what is typed, through these and the exports ants_chat_probe / ants_chat_do): a box takes text now (a match is on the screen, no recording, no
@@ -737,6 +740,7 @@ private:
     double health_clock_ms_{0.0};                         // ... their clock: real milliseconds that pass while the match runs (it stops while a match or a replay is paused)
     game_menu::MenuSettings menu_settings_;               // Master volume, Mute and the hit point numbers (application_game_menu.cpp)
     hud_art::Art hud_art_;                                // the new pictures of the HUD (hud_art.hpp), read at start; the HUD draws them while the setting says New and they were found
+    world_art::Pack world_art_;                           // the new pictures of the world (world_art.hpp), read at start; the renderer draws them while the setting says New and they were found
     std::function<void()> on_game_menu_{nullptr};
     std::string game_menu_json_;                          // what ants_menu_describe hands to the page (it stays until the next call)
     bool game_menu_open_{false};                          // the page's settings panel is up: the game takes no input

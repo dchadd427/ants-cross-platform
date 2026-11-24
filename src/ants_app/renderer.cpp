@@ -363,6 +363,7 @@ void Renderer::shutdown() {
     for (auto& pair : blend_textures_) SDL_DestroyTexture(pair.second);
     blend_textures_.clear();
     drop_art_textures();
+    drop_world_art_textures();
     for (PassTexture& t : pass_levels_) destroy_texture(t);
     pass_levels_.clear();
     destroy_texture(lattice_);
@@ -588,6 +589,7 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
     std::stable_sort(object_list_sprites_.begin(), object_list_sprites_.end(),
                      [](const ObjectListSprite& a, const ObjectListSprite& b) { return a.py < b.py; });
 
+    index_ground(level);                               // (what the world art's choice of a ground tile's picture reads: renderer_world_art.cpp)
     level_set_ = true;
     map_epoch_ms_ = SDL_GetTicks();
     template_now_ms_ = 0;
@@ -888,6 +890,10 @@ void Renderer::draw_frame_parts(const ants::assets::AnimationSubItem& sub, int32
     for (size_t k = sub.frames.size(); k-- > 0;) {
         const auto& f = sub.frames[k];
         const uint32_t sp_idx = f.sprite_index;
+        if (world_art_ != nullptr && !mirrored && color == TEAM_NONE) {                 // a new picture of this sprite (world_art.hpp), where the set has one that fits; Classic has none: the original's sprite
+            const auto& original = archive_->get_sprite(sp_idx);
+            if (draw_world_art_part(sp_idx, sx + f.dx, sy + f.dy, static_cast<int>(original.width), static_cast<int>(original.height))) continue;
+        }
         SDL_Texture* tex = texture_cache_->get_sprite_texture(sp_idx, mirrored, color);
         if (!tex) continue;
         const auto& sp = mirrored ? archive_->get_mirrored_sprite(sp_idx) : archive_->get_sprite(sp_idx);

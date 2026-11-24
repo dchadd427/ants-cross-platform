@@ -1,0 +1,167 @@
+{
+ "note": "Mutants of the world art (src/ants_app/world_art.cpp, renderer_world_art.cpp, renderer_world_image.cpp, renderer_terrain.cpp, application_game_menu.cpp): the manifest's rules (a variant that is not there is the plain picture, a picture and its ring lie inside the sheet, the order, the sheet's size), the choice of a ground tile's picture (damp beside another kind, worn in a corridor, scuffed round objects, the map's border is no edge, another kind is an edge), the fit of a picture to the original sprite, the sheet by the output's scale and a zoomed pass's 1x sheet, the device's texture limit and the next smaller sheet, the art taken away, a map's picture the original's look and the setting that gives Classic the original's sprites, for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: python3 tools/mutate.py tests/data/world_art_mutants.json --keep-going --jobs 1; every mutant must be caught by the test and the text named in it.",
+ "mutants": [
+  {
+   "id": "variant_falls_back_to_the_plain_picture",
+   "file": "src/ants_app/world_art.cpp",
+   "old": "    if (it == index_.end() && variant != 0) it = index_.find(key_of(number, 0));\n",
+   "new": "",
+   "build": "test_world_art",
+   "test": "./build/tests/test_app/test_world_art",
+   "expect": "[manifest]"
+  },
+  {
+   "id": "ring_not_required_at_the_sheets_start",
+   "file": "src/ants_app/world_art.cpp",
+   "old": "if (x < 1 || y < 1 || x + static_cast<int64_t>(p.w) * s + 1",
+   "new": "if (x < 0 || y < 0 || x + static_cast<int64_t>(p.w) * s + 1",
+   "build": "test_world_art",
+   "test": "./build/tests/test_app/test_world_art",
+   "expect": "[manifest]"
+  },
+  {
+   "id": "ring_not_required_at_the_sheets_end",
+   "file": "src/ants_app/world_art.cpp",
+   "old": "x + static_cast<int64_t>(p.w) * s + 1 > sheet_w_[static_cast<size_t>(s - 1)]",
+   "new": "x + static_cast<int64_t>(p.w) * s > sheet_w_[static_cast<size_t>(s - 1)]",
+   "build": "test_world_art",
+   "test": "./build/tests/test_app/test_world_art",
+   "expect": "[manifest]"
+  },
+  {
+   "id": "pictures_not_sorted_is_fine",
+   "file": "src/ants_app/world_art.cpp",
+   "old": "            if (!pictures_.empty() && key <= last_key) sorted_ok = false;\n",
+   "new": "",
+   "build": "test_world_art",
+   "test": "./build/tests/test_app/test_world_art",
+   "expect": "[manifest]"
+  },
+  {
+   "id": "the_sheet_size_is_not_looked_at",
+   "file": "src/ants_app/world_art.cpp",
+   "old": "if (!png || be32(16) != sheet_w_[k] || be32(20) != sheet_h_[k] || head[24] != 8 || head[25] != 6) {",
+   "new": "if (!png || head[24] != 8 || head[25] != 6) {",
+   "build": "test_world_art",
+   "test": "./build/tests/test_app/test_world_art",
+   "expect": "[manifest]"
+  },
+  {
+   "id": "a_picture_that_does_not_fit_is_drawn",
+   "file": "src/ants_app/renderer_world_art.cpp",
+   "old": "if (pic == nullptr || pic->w != w || pic->h != h) return false;",
+   "new": "if (pic == nullptr) return false;",
+   "build": "test_world_art",
+   "test": "./build/tests/test_app/test_world_art",
+   "expect": "[fallback]"
+  },
+  {
+   "id": "a_zoomed_pass_takes_the_output_scale",
+   "file": "src/ants_app/renderer_world_art.cpp",
+   "old": "return in_world_target_ ? 1 : art_scale_for_output(nullptr);",
+   "new": "return art_scale_for_output(nullptr);",
+   "build": "test_world_art",
+   "test": "./build/tests/test_app/test_world_art",
+   "expect": "[scale]"
+  },
+  {
+   "id": "the_texture_limit_is_not_asked",
+   "file": "src/ants_app/renderer_world_art.cpp",
+   "old": "if (art_texture_limit_ > 0 && (image.width > art_texture_limit_ || image.height > art_texture_limit_)) {",
+   "new": "if (false) {",
+   "build": "test_world_art",
+   "test": "./build/tests/test_app/test_world_art",
+   "expect": "[scale]"
+  },
+  {
+   "id": "a_missing_sheet_does_not_give_a_smaller_one",
+   "file": "src/ants_app/renderer_world_art.cpp",
+   "old": "for (; scale >= 1 && tex == nullptr; --scale) tex = world_art_texture(scale);",
+   "new": "tex = world_art_texture(scale);\n    scale = tex != nullptr ? scale - 1 : 0;",
+   "build": "test_world_art",
+   "test": "./build/tests/test_app/test_world_art",
+   "expect": "[fallback]"
+  },
+  {
+   "id": "taking_the_art_away_keeps_its_textures",
+   "file": "src/ants_app/renderer_world_art.cpp",
+   "old": "if (world_art_ == nullptr || world_art_generation_ != world_art_->generation()) drop_world_art_textures();",
+   "new": "if (world_art_ != nullptr && world_art_generation_ != world_art_->generation()) drop_world_art_textures();",
+   "build": "test_world_art",
+   "test": "./build/tests/test_app/test_world_art",
+   "expect": "[classic]"
+  },
+  {
+   "id": "a_map_picture_has_the_art",
+   "file": "src/ants_app/renderer_world_image.cpp",
+   "old": "    world_art_ = nullptr;\n    ViewGlide saved_glide;",
+   "new": "    ViewGlide saved_glide;",
+   "build": "test_world_art",
+   "test": "./build/tests/test_app/test_world_art",
+   "expect": "[classic]"
+  },
+  {
+   "id": "every_cell_shows_the_plain_picture",
+   "file": "src/ants_app/renderer_terrain.cpp",
+   "old": "world_variant_ = at < ground_variant_.size() ? ground_variant_[at] : uint8_t{0};",
+   "new": "world_variant_ = 0;",
+   "build": "test_world_art",
+   "test": "./build/tests/test_app/test_world_art",
+   "expect": "[draw]"
+  },
+  {
+   "id": "classic_gets_the_art",
+   "file": "src/ants_app/application_game_menu.cpp",
+   "old": "renderer_->set_world_art(menu_settings_.hud_art_new && world_art_.loaded() ? &world_art_ : nullptr);",
+   "new": "renderer_->set_world_art(world_art_.loaded() ? &world_art_ : nullptr);",
+   "build": "test_game_menu",
+   "test": "./build/tests/test_app/test_game_menu",
+   "expect": "test_game_menu"
+  },
+  {
+   "id": "beside_another_kind_is_not_damp",
+   "file": "src/ants_app/world_art.cpp",
+   "old": "if (dist[at(x, y)] == 1) cls = u < k65 ? 2 : 1;",
+   "new": "if (dist[at(x, y)] == 1) cls = 0;",
+   "build": "test_world_art",
+   "test": "./build/tests/test_app/test_world_art",
+   "expect": "[variants]"
+  },
+  {
+   "id": "a_corridor_is_not_worn",
+   "file": "src/ants_app/world_art.cpp",
+   "old": "else if (widest <= 2) cls = u < k55 ? 3 : 4;",
+   "new": "else if (false) cls = u < k55 ? 3 : 4;",
+   "build": "test_world_art",
+   "test": "./build/tests/test_app/test_world_art",
+   "expect": "[variants]"
+  },
+  {
+   "id": "objects_do_not_scuff_the_ground",
+   "file": "src/ants_app/world_art.cpp",
+   "old": "else if (near_object && u < k50) cls = 1;",
+   "new": "else if (false) cls = 1;",
+   "build": "test_world_art",
+   "test": "./build/tests/test_app/test_world_art",
+   "expect": "[variants]"
+  },
+  {
+   "id": "the_map_border_is_an_edge",
+   "file": "src/ants_app/world_art.cpp",
+   "old": "                    if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;\n                    if (!same(xx, yy, map.kind[at(x, y)])) d = 1;",
+   "new": "                    if (xx < 0 || yy < 0 || xx >= W || yy >= H) { d = 1; continue; }\n                    if (!same(xx, yy, map.kind[at(x, y)])) d = 1;",
+   "build": "test_world_art",
+   "test": "./build/tests/test_app/test_world_art",
+   "expect": "[variants]"
+  },
+  {
+   "id": "another_kind_is_not_an_edge",
+   "file": "src/ants_app/world_art.cpp",
+   "old": "const auto same = [&](int32_t x, int32_t y, char k) { return x >= 0 && y >= 0 && x < W && y < H && map.plain[at(x, y)] != 0 && map.kind[at(x, y)] == k; };",
+   "new": "const auto same = [&](int32_t x, int32_t y, char k) { (void)k; return x >= 0 && y >= 0 && x < W && y < H && map.plain[at(x, y)] != 0; };",
+   "build": "test_world_art",
+   "test": "./build/tests/test_app/test_world_art",
+   "expect": "[variants]"
+  }
+ ]
+}

@@ -53,7 +53,15 @@ void Renderer::render_terrain_layer1(const ants::sim::Grid& grid) {
                 // load, so all cells of an id show the same frame at the same time (Ants.exe FUN_0102c1fc /
                 // FUN_0102b997). Ids without a template draw nothing, as in the original.
                 const int32_t id = (cell.terrain_id < tile_anim_id_.size()) ? tile_anim_id_[cell.terrain_id] : -1;
-                if (id >= 0) draw_template_screen(id, sx, sy);
+                if (id >= 0) {
+                    if (world_art_ != nullptr) {                              // (the new pictures: which of a plain tile's sixteen this cell shows)
+                        ensure_ground_variants();
+                        const size_t at = static_cast<size_t>(r) * grid.width() + static_cast<size_t>(c);
+                        world_variant_ = at < ground_variant_.size() ? ground_variant_[at] : uint8_t{0};
+                    }
+                    draw_template_screen(id, sx, sy);
+                    world_variant_ = 0;
+                }
                 continue;
             }
 

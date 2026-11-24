@@ -41,6 +41,8 @@ void Renderer::swap_level_state(LevelState& o) noexcept {
     static_decor_objects_.swap(o.static_decor_objects);
     object_index_by_cell_.swap(o.object_index_by_cell);
     object_list_sprites_.swap(o.object_list_sprites);
+    std::swap(ground_map_, o.ground_map);
+    ground_variant_.swap(o.ground_variant);
 }
 
 bool Renderer::render_world_image(const ants::assets::LevelData& level, const ants::sim::WorldState& world, const ants::sim::Grid& grid, WorldImage& out, std::string* why, int32_t max_side) {
@@ -86,6 +88,8 @@ bool Renderer::render_world_image(const ants::assets::LevelData& level, const an
     const LayoutPoint saved_origin = origin_;
     const bool saved_force_target = force_world_target_;                       // (the zoom's state: the camera's zoom is part of saved_camera; the world pass's own state, in_world_target_ and pass_, is idle between frames)
     const uint8_t saved_team = hud_team_id_;
+    const world_art::Pack* const saved_world_art = world_art_;                // (a map's picture, a thumbnail, is the original's look: the new pictures are for the game's own screen)
+    world_art_ = nullptr;
     ViewGlide saved_glide;                                                      // (the slides of the live match's ants are not this picture's: its ants have the same numbers)
     std::swap(saved_glide, view_glide_);
     const uint32_t saved_sub_tick = sub_tick_ms_;
@@ -103,6 +107,7 @@ bool Renderer::render_world_image(const ants::assets::LevelData& level, const an
         render_queue_.clear();
         overlay_queue_.clear();
         swap_level_state(live);
+        world_art_ = saved_world_art;
         layout_ = saved_layout;
         camera_ = saved_camera;
         picture_ = saved_picture;

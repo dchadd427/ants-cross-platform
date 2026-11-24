@@ -36,6 +36,7 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [Home's games](docs/HOME_GAMES.md): the Games list, Quick join, Quick host and the public Room
 - [How the game plays](docs/GAMEPLAY.md): the data files, the 20 Hz simulation, the six kinds of ant and their abilities, movement, food, power-ups, combat, the anthill, the start and end of a match, fog of war
 - [View and HUD](docs/VIEW_AND_HUD.md): the 16:9 view, mouse-wheel zoom, edge scrolling and the minimap, the HUD, messages and the chat log, the results screen, sound and music
+- [World art](docs/WORLD_ART.md): the new pictures of the ground, its edges and the bridge (later the fire, bomb, plants and hills) behind the same New / Classic setting as the HUD art, the sheets, the choice of a ground tile's picture, the fall back to the original's sprites
 - [Controls](docs/CONTROLS.md): the start menu, the setup screen, options and settings, the mouse controls, the keyboard
 - [The settings menu](docs/GAME_MENU.md): what Esc opens in a match (sound, video, controls, Leave game), the one table of rows, and the browser's panel
 - [Touch](docs/TOUCH.md): playing with a finger on a phone or a tablet

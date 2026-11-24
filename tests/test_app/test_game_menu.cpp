@@ -517,9 +517,12 @@ void test_values() {
               "a word that the row does not have is refused, and nothing changes");
         check(has(read_file(file), "ant_health=off\n") && has(read_file(file), "ant_health_style=number\n"), "both are written at once");
         check(app.game_menu_get(gm::kHudArt) == 0 && app.menu_settings().hud_art_new && app.hud().art() != nullptr && app.hud().art() == &app.hud_art(), "the HUD art starts New, and the HUD draws it");
+        check(app.world_art().loaded() && app.renderer().world_art() == &app.world_art(), "...and so does the renderer, with the new pictures of the world");
         check(app.game_menu_set(gm::kHudArt, 1) && app.game_menu_get(gm::kHudArt) == 1 && !app.menu_settings().hud_art_new && app.hud().art() == nullptr && has(read_file(file), "hud_art=classic\n"), "Classic takes the art away at once, and is written");
+        check(app.renderer().world_art() == nullptr, "...the world's new pictures too: the renderer draws the original's sprites");
         check(!app.game_menu_set(gm::kHudArt, 2) && !app.game_menu_set(gm::kHudArt, -1) && app.game_menu_get(gm::kHudArt) == 1 && app.hud().art() == nullptr, "a word that the row does not have is refused");
         check(app.game_menu_set(gm::kHudArt, 0) && app.game_menu_get(gm::kHudArt) == 0 && app.hud().art() != nullptr && has(read_file(file), "hud_art=new\n"), "New gives it back, and is written");
+        check(app.renderer().world_art() == &app.world_art(), "...with the world's new pictures");
         check(app.game_menu_set(gm::kHudArt, 1), "(Classic again, for the file)");
         check(app.game_menu_get(gm::kHealthChanges) == 1 && app.menu_settings().health_changes, "the damage and heal numbers start On");
         check(app.game_menu_set(gm::kHealthChanges, 0) && app.game_menu_get(gm::kHealthChanges) == 0 && !app.menu_settings().health_changes && has(read_file(file), "health_changes=off\n"), "...go off, and that is written");
@@ -608,6 +611,7 @@ void test_hud_art() {
     {
         Application app;
         check(start(app, folder, true, false, std::string()) && app.hud().art() == nullptr && !app.menu_settings().hud_art_new && app.game_menu_get(gm::kHudArt) == 1, "--hud-art classic: the original's art, and the menu says Classic");
+        check(app.renderer().world_art() == nullptr && app.world_art().loaded(), "...and the original's sprites in the world (the new pictures are read, and not drawn)");
     }
     {
         Application app;

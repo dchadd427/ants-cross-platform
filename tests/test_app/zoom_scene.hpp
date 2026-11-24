@@ -42,6 +42,8 @@ using namespace ants;
 using namespace ants::app;
 
 inline std::string maps_dir() { return std::string(ORIGINAL_ASSETS_DIR) + "/Maps/"; }
+/// The file of a map: an original's name (TREASURE) is in the original's folder, anything with a slash is the path of a file
+inline std::string map_path(const std::string& map) { return map.find('/') != std::string::npos ? map : maps_dir() + map + ".LVL"; }
 
 inline uint32_t lcg(uint32_t& state) {
     state = state * 1664525u + 1013904223u;
@@ -162,11 +164,12 @@ inline constexpr health::Setting kNumbersOnAll{health::When::All, health::Style:
 
 /// A real renderer over a hidden window of the canvas's size (the software renderer, the dummy video driver) with a map loaded, a pinned animation clock and a world of its own
 struct PixelRig {
-    PixelRig(const assets::AssetArchive& archive, const std::string& map, int32_t canvas_w, int32_t canvas_h, uint32_t synthetic_tiles = 0) : arc(archive), cw(canvas_w), ch(canvas_h) {
+    /// `output_scale`: how many pixels of the window one pixel of the canvas is (a Retina or 4K screen: 2, 3, ...); the picture that read() gives is the window's
+    PixelRig(const assets::AssetArchive& archive, const std::string& map, int32_t canvas_w, int32_t canvas_h, uint32_t synthetic_tiles = 0, int32_t output_scale = 1) : arc(archive), cw(canvas_w), ch(canvas_h), os(output_scale) {
         const QuietStdout quiet;
         SDL_SetHint(SDL_HINT_VIDEODRIVER, "dummy");
         SDL_Init(SDL_INIT_VIDEO);
-        win = SDL_CreateWindow("zoom-view", 0, 0, cw, ch, SDL_WINDOW_HIDDEN);
+        win = SDL_CreateWindow("zoom-view", 0, 0, cw * os, ch * os, SDL_WINDOW_HIDDEN);
         if (win == nullptr || !renderer.init(win, archive)) return;
         renderer.set_canvas_size(cw, ch);
         layout = ScreenLayout::with_size(cw, ch);
@@ -178,7 +181,7 @@ struct PixelRig {
             engine.init_test_world(synthetic_tiles, synthetic_tiles, 1, 600000);
             tiles_w = tiles_h = synthetic_tiles;
         } else {
-            if (!level.load_from_file(maps_dir() + map + ".LVL")) return;
+            if (!level.load_from_file(map_path(map))) return;
             engine.init(level, 1337);
             renderer.set_level(level);
             tiles_w = level.width();
@@ -198,7 +201,7 @@ struct PixelRig {
     /// Another map in the same renderer (the offscreen target of a zoom is reused)
     bool switch_map(const std::string& map) {
         assets::LevelData next;
-        if (!next.load_from_file(maps_dir() + map + ".LVL")) return false;
+        if (!next.load_from_file(map_path(map))) return false;
         level = next;
         engine.init(level, 1337);
         renderer.set_level(level);
@@ -226,16 +229,17 @@ struct PixelRig {
     }
     Picture read() {
         Picture p;
-        p.w = cw;
-        p.h = ch;
-        p.px.assign(static_cast<size_t>(cw) * static_cast<size_t>(ch) * 4u, 0);
-        if (SDL_RenderReadPixels(renderer.get_sdl_renderer(), nullptr, SDL_PIXELFORMAT_RGBA32, p.px.data(), cw * 4) != 0) std::fprintf(stderr, "SDL_RenderReadPixels failed: %s\n", SDL_GetError());
+        p.w = cw * os;
+        p.h = ch * os;
+        p.px.assign(static_cast<size_t>(p.w) * static_cast<size_t>(p.h) * 4u, 0);
+        if (SDL_RenderReadPixels(renderer.get_sdl_renderer(), nullptr, SDL_PIXELFORMAT_RGBA32, p.px.data(), p.w * 4) != 0) std::fprintf(stderr, "SDL_RenderReadPixels failed: %s\n", SDL_GetError());
         return p;
     }
 
     const assets::AssetArchive& arc;
     int32_t cw;
     int32_t ch;
+    int32_t os;
     SDL_Window* win{nullptr};
     assets::LevelData level;
     sim::SimulationEngine engine;

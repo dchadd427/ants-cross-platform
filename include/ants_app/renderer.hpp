@@ -36,6 +36,7 @@
 #include "ants_app/health_marks.hpp"
 #include "ants_app/screen_layout.hpp"
 #include "ants_app/view_zoom.hpp"
+#include "ants_app/world_art.hpp"
 #include "ants_assets/asset_archive.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/sim_engine.hpp"
@@ -524,7 +525,16 @@ public:
     /// (for the tests) the scale of the sheet that a piece would be drawn from now, and how many sheets are textures (0 until a piece is drawn)
     int32_t art_scale_now() const;
     size_t art_textures() const noexcept;
-    /// (for the tests) pretends that the device takes no texture with a side above `limit` pixels (0: the device's own limit), as a small phone's does
+    /// The world art (world_art.hpp): from now on the pictures of `pack` replace the sprites of the same numbers wherever the world is drawn, until it is called with null (the original's sprites, as
+    /// before). The pack must outlive the renderer or be taken away first. The sheet of the world pass's scale is a texture made when a picture is first drawn (renderer_world_art.cpp); a sheet that cannot be
+    /// read or made a texture leaves the original's sprites, with a word on stderr. (A zoomed pass draws at the world's own pixels: it uses the 1x sheet.)
+    void set_world_art(const world_art::Pack* pack);
+    const world_art::Pack* world_art() const noexcept { return world_art_; }
+    /// (for the tests) the scale of the sheet that a picture would be drawn from now, how many sheets are textures (0 until a picture is drawn), and the picture that the cell shows (0 for a cell that is not plain ground)
+    int32_t world_art_scale_now() const;
+    size_t world_art_textures() const noexcept;
+    uint8_t ground_variant_at(int32_t col, int32_t row);
+    /// (for the tests) pretends that the device takes no texture with a side above `limit` pixels, as a small phone's does (0: the device's own limit); it applies to the HUD art and the world art alike
     void set_art_texture_limit(int32_t limit) noexcept { art_texture_limit_ = limit; }
     void set_origin(int32_t x, int32_t y) override { origin_ = LayoutPoint{x, y}; }
     void set_alpha_scale(int32_t alpha) override { alpha_scale_ = static_cast<uint8_t>(std::clamp(alpha, 0, 255)); }
@@ -695,6 +705,8 @@ private:
         std::vector<StaticMapObject> static_decor_objects;
         std::vector<int32_t> object_index_by_cell;
         std::vector<ObjectListSprite> object_list_sprites;
+        world_art::GroundMap ground_map;
+        std::vector<uint8_t> ground_variant;
     };
     void swap_level_state(LevelState& other) noexcept;
 
@@ -750,6 +762,16 @@ private:
     std::array<bool, 3> art_failed_{};                     // a sheet that could not be read or made a texture: said once, and not tried again until another set comes
     std::array<SDL_Texture*, 3> art_textures_{};           // its sheets at 1x, 2x and 3x, made when first needed
     int32_t art_texture_limit_{0};                         // (for the tests) the largest side of a texture that is made; 0: the device's own
+    const world_art::Pack* world_art_{nullptr};            // the new pictures of the world (set_world_art); null: the original's sprites
+    uint64_t world_art_generation_{0};                     // the pack that world_art_textures_ were made from
+    std::array<bool, 3> world_art_failed_{};               // a sheet that could not be read or made a texture: said once, and not tried again until another pack comes
+    std::array<SDL_Texture*, 3> world_art_textures_{};     // its sheets at 1x, 2x and 3x, made when first needed
+    uint8_t world_variant_{0};                             // which picture of a plain ground tile the cell being drawn shows (render_terrain_layer1); 0 for everything else
+    void drop_world_art_textures();
+    SDL_Texture* world_art_texture(int32_t scale);
+    bool draw_world_art_part(uint32_t sprite_index, int32_t x, int32_t y, int32_t w, int32_t h);
+    void ensure_ground_variants();
+    void index_ground(const ants::assets::LevelData& level);
     void drop_art_textures();
     SDL_Texture* art_texture(const hud_art::Art& art, int32_t scale);
     int32_t art_scale_for_output(double* out = nullptr) const;
@@ -787,6 +809,8 @@ private:
     bool has_anthill_bases_{false};
     std::vector<StaticMapObject> static_decor_objects_; // Layer 2 interactive objects
     std::vector<ObjectListSprite> object_list_sprites_;  // plants / clover / flowers from the map object list
+    world_art::GroundMap ground_map_;                    // what the choice of a ground tile's picture reads from the map (set_level)
+    std::vector<uint8_t> ground_variant_;                // the picture of every cell of plain ground (world_art::ground_variants), made when the world art first needs it
     std::vector<RenderItem> render_queue_;
     std::vector<OverlayItem> overlay_queue_;
     // Selection marker ("ears") of each selected ant: its own looping clock, restarted when it is created (selection)
