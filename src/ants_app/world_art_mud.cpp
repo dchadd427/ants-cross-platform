@@ -46,10 +46,10 @@ int16_t quantize(double v, double unit) { return static_cast<int16_t>(std::lroun
 // ============================================================================
 
 double lattice_value(int64_t ix, int64_t iy, int64_t seed) {
-    uint64_t n = (static_cast<uint64_t>(ix) * 374761393ull + static_cast<uint64_t>(iy) * 668265263ull + static_cast<uint64_t>(seed) * 2246822519ull) & 0xFFFFFFFFull;
-    n = ((n ^ (n >> 13)) * 1274126177ull) & 0xFFFFFFFFull;
+    uint64_t n = (static_cast<uint64_t>(ix) * UINT64_C(374761393) + static_cast<uint64_t>(iy) * UINT64_C(668265263) + static_cast<uint64_t>(seed) * UINT64_C(2246822519)) & UINT64_C(0xFFFFFFFF);
+    n = ((n ^ (n >> 13)) * UINT64_C(1274126177)) & UINT64_C(0xFFFFFFFF);
     n ^= n >> 16;
-    return static_cast<double>(n & 0xFFFFFFull) / 16777216.0;
+    return static_cast<double>(n & UINT64_C(0xFFFFFF)) / 16777216.0;
 }
 
 double value_noise(double x, double y, int64_t seed) {
@@ -295,10 +295,10 @@ std::vector<uint8_t> apply_looks(const CellLooks& looks, const uint8_t* rgb, con
 bool is_mud_sprite(uint32_t sprite) noexcept { return (sprite >= 640 && sprite <= 657) || sprite == 901; }
 
 double cell_hash(int32_t col, int32_t row, int32_t salt) {
-    uint64_t n = (static_cast<uint64_t>(col) * 73856093ull ^ static_cast<uint64_t>(row) * 19349663ull ^ static_cast<uint64_t>(salt) * 83492791ull) & 0xFFFFFFFFull;
-    n = ((n ^ (n >> 13)) * 1274126177ull) & 0xFFFFFFFFull;
+    uint64_t n = (static_cast<uint64_t>(col) * UINT64_C(73856093) ^ static_cast<uint64_t>(row) * UINT64_C(19349663) ^ static_cast<uint64_t>(salt) * UINT64_C(83492791)) & UINT64_C(0xFFFFFFFF);
+    n = ((n ^ (n >> 13)) * UINT64_C(1274126177)) & UINT64_C(0xFFFFFFFF);
     n ^= n >> 16;
-    return static_cast<double>(n & 0xFFFFFFull) / 16777216.0;
+    return static_cast<double>(n & UINT64_C(0xFFFFFF)) / 16777216.0;
 }
 
 namespace {

@@ -89,7 +89,7 @@ const world_art::mud::CellLooks* Renderer::mud_cell_looks(int32_t col, int32_t r
     MudLooks made;
     made.looks = world_art::mud::CellLooks::compute(mud_depth_, col, row);
     made.used = mud_frame_;
-    mud_spent_us_ += static_cast<int64_t>((SDL_GetPerformanceCounter() - t0) * 1000000ull / SDL_GetPerformanceFrequency());
+    mud_spent_us_ += static_cast<int64_t>((SDL_GetPerformanceCounter() - t0) * UINT64_C(1000000) / SDL_GetPerformanceFrequency());
     ++mud_made_;
     mud_looks_bytes_ += made.looks.bytes() + sizeof(MudLooks);
     const auto inserted = mud_looks_.emplace(cell, std::move(made));
