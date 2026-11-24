@@ -1,7 +1,7 @@
 #pragma once
 
 // What a replay pass counts about a match besides the totals that the engine keeps (docs/REPLAYS.md "The match pages"): the score and the kills over time, who killed whom and when, the damage, the raids
-// on the hills, the power-ups taken, the food carried, the bombs that went off, when a seat ran out of ants, the orders of every seat by minute and by kind, and how many events of each of five kinds (a death, a bomb, a
+// on the hills (and the loot that got home), the bridges built and dug away, the fires put out, the power-ups taken, the food carried, the bombs that went off, when a seat ran out of ants, the orders of every seat by minute and by kind, and how many events of each of five kinds (a death, a bomb, a
 // theft, a fire, a hit) happened in every 5 seconds (the field `action` that the activity curve of the replay page is drawn from, docs/HEATMAPS.md "The activity curve").
 //
 // It only WATCHES: the collector is given to replay::play() as its hooks and reads what the engine already says, through the public readers (the counters, the world after every tick, the record of an ant
@@ -88,6 +88,13 @@ struct MatchStats {
     std::array<int64_t, kSeats> banked{};                  // what the hill gained: the score's rises, a thief's loot included, the cost of a hatch not taken off
     std::array<int64_t, kSeats> hatch_cost{};              // points paid for hatching
     std::array<uint32_t, kSeats> bombs_off{};              // bombs of the seat that an ant walked onto
+    // What the special ants did (docs/REPLAYS.md "The match pages", "Special ants"), counted by watching the world: the engine's own `bridges_built` is never raised, so a bridge is counted from the tiles and the Swimmer
+    // at work on it, a fire that is put out from the Fire Ant at work on it, and a raid that got home from the Thief that carried the loot. By seat of the ant that did it.
+    std::array<uint32_t, kSeats> bridges_built{};          // water squares that its Swimmers bridged through the fourth stage (a half built bridge is none, and neither is one that only came back after a dig that was cut short)
+    std::array<uint32_t, kSeats> bridges_undug{};          // finished bridges that its Swimmers dug away, down to the last stage (a bridge that falls by itself after 3 minutes is not one)
+    std::array<uint32_t, kSeats> fires_out{};              // fire walls that its Fire Ants put out, whoever lit them (one that burns out by itself after 3 minutes is not one)
+    std::array<uint32_t, kSeats> raids_home{};             // raids of its Thieves (`raids` has those begun) whose loot reached the thief's own hill; a raid on a hill with no points, and a Thief that is killed on the way, are begun and never home
+    std::array<int64_t, kSeats> loot_home{};               // the points of those raids (a hill below zero gives a negative loot: the debt comes home too)
     std::array<int32_t, kSeats> wipe_turn{-1, -1, -1, -1}; // the first turn at which the seat had no ant (an egg hatches one for free), -1 never
     std::array<uint32_t, kSeats> wipes{};                  // how many times it ran out of ants
     std::array<int32_t, kSeats> out_turn{-1, -1, -1, -1};  // the first turn at which it had no ant, no egg and no hatch running: out of the match, -1 never
@@ -109,6 +116,8 @@ public:
     MatchStats take(uint32_t turns_played);
 
 private:
+    /// What a Fire Ant or a Swimmer was doing at the last look and the pass counts: putting a fire out (the original's action 7), building a bridge (0x10) or digging one away (0x11)
+    enum class Work : uint8_t { None, PutOut, Build, Dig };
     struct Ant {
         bool alive{false};
         uint8_t player{255};
@@ -120,11 +129,21 @@ private:
         int32_t tile_y{0};
         uint32_t last_seen{0};                             // the turn at which the world last showed it
         uint32_t hit_bucket{0xFFFFFFFFu};                  // the bucket of `action` in which it was last counted as hurt (a hit is counted once for an ant in a bucket)
+        Work work{Work::None};                             // what it was doing at the last look, on which tile, and (a fire) the fire's timer then
+        int32_t work_x{0};
+        int32_t work_y{0};
+        uint32_t work_state{0};
+        int32_t raid{-1};                                  // (a Thief) the entry of `raids` of its latest raid, until its loot is picked up
+        int32_t loot{-1};                                  // (a Thief) the entry of `raids` whose loot it carries
     };
     void on_command(uint32_t turn, const sim::Command& command, sim::SimulationEngine& engine);
     void on_tick(uint32_t turns, sim::SimulationEngine& engine);
     void count(MatchStats::Action kind, uint32_t turns, uint32_t events = 1);
     void fail(const char* what);
+    void work_of(const sim::AntSnapshot& snap, sim::SimulationEngine& engine, Work& kind, int32_t& x, int32_t& y) const;
+    void settle(Ant& ant, Work now, int32_t x, int32_t y, sim::SimulationEngine& engine);
+    void note_work(Ant& ant, Work now, int32_t x, int32_t y, sim::SimulationEngine& engine) const;
+    bool first_to_settle(Work kind, int32_t x, int32_t y);
 
     MatchStats stats_;
     uint8_t roster_{0};
@@ -142,6 +161,7 @@ private:
         uint8_t owner{255};
     };
     std::vector<Bomb> bombs_;                              // the bombs on the map as last looked at
+    std::vector<std::array<int32_t, 3>> settled_;          // the work (kind, tile) that was found done in this tick: one fire put out or one bridge dug away is one, whatever the number of ants that were at it
 };
 
 struct StatsPlay {

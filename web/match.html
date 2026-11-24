@@ -166,18 +166,18 @@
         }
         // the table (wide screens)
         var t = el('table', 'tbl'); t.appendChild(el('caption', 'sr', 'The stats of every seat'));
-        var hr = el('tr'); hr.appendChild(el('th', '', 'Player')); cols.forEach(function (c) { hr.appendChild(el('th', c.first ? 'sp' : '', c.label)); });
+        var hr = el('tr'); hr.appendChild(el('th', '', 'Player')); cols.forEach(function (c) { hr.appendChild(el('th', '', c.label)); });
         var thead = el('thead'); thead.appendChild(hr); t.appendChild(thead);
         var tb = el('tbody');
         sides.forEach(function (sd) {
             sd.seats.forEach(function (seat) {
                 var tr = el('tr', (sd.winner && rec.draw !== true ? 'w' : '') + (sd.seats.length > 1 ? ' g' : '')), td = el('td'); td.appendChild(who(seat, sd, rec)); tr.appendChild(td);
-                cols.forEach(function (c) { var cell = el('td', c.first ? 'sp' : ''), n = sum([seat], c.key); cell.appendChild(el('b', n ? '' : 'zero', H.numberText(n))); cell.lastChild.style.fontWeight = '500'; cell.appendChild(meter(seat, n, max[c.key])); tr.appendChild(cell); });
+                cols.forEach(function (c) { var cell = el('td'), n = sum([seat], c.key); cell.appendChild(el('b', n ? '' : 'zero', H.numberText(n))); cell.lastChild.style.fontWeight = '500'; cell.appendChild(meter(seat, n, max[c.key])); tr.appendChild(cell); });
                 tb.appendChild(tr);
             });
             if (sd.seats.length > 1) {
                 var tot = el('tr', 'tot g' + (sd.winner && rec.draw !== true ? ' w' : '')); tot.appendChild(el('td', '', 'Side total'));
-                cols.forEach(function (c) { tot.appendChild(el('td', c.first ? 'sp' : '', H.numberText(sum(sd.seats, c.key)))); }); tb.appendChild(tot);
+                cols.forEach(function (c) { tot.appendChild(el('td', '', H.numberText(sum(sd.seats, c.key)))); }); tb.appendChild(tot);
             }
         });
         t.appendChild(tb); s.appendChild(t);
@@ -186,22 +186,19 @@
         sides.forEach(function (sd) {
             sd.seats.forEach(function (seat) {
                 var c = el('div', 'sc-card' + (sd.winner && rec.draw !== true ? ' w' : '')), top = el('div', 'top'); top.appendChild(who(seat, sd, rec)); c.appendChild(top);
-                var main = cols.filter(function (x) { return !x.first && ['bombs_defused', 'fires_lit'].indexOf(x.key) === -1; }), extra = cols.filter(function (x) { return x.first || ['bombs_defused', 'fires_lit'].indexOf(x.key) !== -1; });
-                [main, extra].forEach(function (group, gi) {
-                    var g = el('div', gi ? 'grid two' : 'grid');
-                    group.forEach(function (k) { var cell = el('div', 'cell'), n = sum([seat], k.key); cell.appendChild(el('span', '', k.label)); cell.appendChild(el('b', n ? '' : 'zero', H.numberText(n))); if (!gi) cell.appendChild(meter(seat, n, max[k.key])); g.appendChild(cell); });
-                    c.appendChild(g);
-                });
+                var g = el('div', 'grid');
+                cols.forEach(function (k) { var cell = el('div', 'cell'), n = sum([seat], k.key); cell.appendChild(el('span', '', k.label)); cell.appendChild(el('b', n ? '' : 'zero', H.numberText(n))); cell.appendChild(meter(seat, n, max[k.key])); g.appendChild(cell); });
+                c.appendChild(g);
                 cards.appendChild(c);
             });
             if (sd.seats.length > 1) {
                 var tc = el('div', 'sc-card tot'); tc.appendChild(el('div', 'top', 'Side total')); var g = el('div', 'grid');
-                cols.filter(function (x) { return !x.first && ['bombs_defused', 'fires_lit'].indexOf(x.key) === -1; }).forEach(function (k) { var cell = el('div', 'cell'); cell.appendChild(el('span', '', k.label)); cell.appendChild(el('b', '', H.numberText(sum(sd.seats, k.key)))); g.appendChild(cell); });
+                cols.forEach(function (k) { var cell = el('div', 'cell'); cell.appendChild(el('span', '', k.label)); cell.appendChild(el('b', '', H.numberText(sum(sd.seats, k.key)))); g.appendChild(cell); });
                 tc.appendChild(g); cards.appendChild(tc);
             }
         });
         s.appendChild(cards);
-        s.appendChild(el('p', 'lgd', 'Killed: enemy ants killed. Lost: your own ants lost. Hatched: new ants hatched from eggs. Bombs set, Defused and Fires lit count what each player did. A side that is an alliance adds its seats up.' + (rec.mode === '187' ? ' In this mode the score is the kills, so no score is shown.' : '')));
+        s.appendChild(el('p', 'lgd', 'Killed: enemy ants killed. Lost: your own ants lost. Hatched: new ants hatched from eggs. A side that is an alliance adds its seats up.' + (rec.mode === '187' ? ' In this mode the score is the kills, so no score is shown.' : '')));
         return s;
     }
     function aboutSection(rec, ctx) {
@@ -233,7 +230,7 @@
         if (window.AntsMatchStats.noStatsNote(rec)) return null;
         try { return deathMap.card(rec, {}); } catch (e) { return null; }
     }
-    var SECTIONS = [resultSection, replaySection, stats.summary, boardSection, stats.overtime, deathsSection, stats.activity, moreSection, aboutSection];
+    var SECTIONS = [resultSection, replaySection, stats.summary, boardSection, stats.special, stats.overtime, deathsSection, stats.activity, moreSection, aboutSection];
 
     // ---- the page ----
     function notice(bold, rest, buttons) {

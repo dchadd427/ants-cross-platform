@@ -365,8 +365,8 @@
   {
    "id": "the_cap_is_not_kept",
    "file": "src/ants_server/history_details.cpp",
-   "old": "if (text.size() <= kDetailsMaxBytes) return text;",
-   "new": "return text;",
+   "old": "        text = build(stats, record, shed, true);\n        if (text.size() <= kDetailsMaxBytes) return text;",
+   "new": "        text = build(stats, record, shed, true);\n        return text;",
    "build": "test_history_details",
    "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
   },
@@ -509,8 +509,8 @@
   {
    "id": "a_text_that_is_too_long_is_given_as_it_is",
    "file": "src/ants_server/history_details.cpp",
-   "old": "    }\n    return history_details_marker(record.heavy_orders);",
-   "new": "    }\n    return text;",
+   "old": "    if (text.size() <= kDetailsMaxBytes) return text;\n    return history_details_marker(record.heavy_orders);",
+   "new": "    return text;",
    "build": "test_history_details",
    "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
   },

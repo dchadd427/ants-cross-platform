@@ -326,7 +326,22 @@ JsonValue economy(const MatchStats& st) {
     return e;
 }
 
-// `shed` makes the text smaller, step by step: 1 no list of kills, 2 no list of raids either, 3 and 4 a series of half and a quarter the points, 5 no combat and no economy
+// What the special ants did, by seat (docs/REPLAYS.md "The match pages", "Special ants"): bridges built and dug away, fires put out, and the raids of the Thieves as [begun, home, loot that got home]
+JsonValue special(const MatchStats& st) {
+    JsonValue o = JsonValue::make_object();
+    o.set("built", ints(st.bridges_built));
+    o.set("undug", ints(st.bridges_undug));
+    o.set("out", ints(st.fires_out));
+    std::array<uint32_t, kSeats> begun{};
+    for (const MatchStats::Raid& r : st.raids) {
+        if (r.thief < kSeats) ++begun[r.thief];
+    }
+    JsonValue raids = JsonValue::make_array();
+    for (size_t s = 0; s < kSeats; ++s) raids.push_back(row({begun[s], st.raids_home[s], st.loot_home[s]}));
+    o.set("raids", std::move(raids));
+    return o;
+}
+
 JsonValue heavy_seats(uint8_t mask) {
     JsonValue seats = JsonValue::make_array();
     for (int seat = 0; seat < 4; ++seat) {
@@ -335,7 +350,9 @@ JsonValue heavy_seats(uint8_t mask) {
     return seats;
 }
 
-std::string build(const MatchStats& st, const HistoryRecord& record, int shed) {
+// `shed` makes the text smaller, step by step: 1 no list of kills, 2 no list of raids either, 3 and 4 a series of half and a quarter the points, 5 no combat and no economy. `special` (a fixed size of about
+// 150 bytes, whatever the match) stays at every step, step 5 included, and goes only in the very last try (make_history_details), when the text is too long with it and fits without it.
+std::string build(const MatchStats& st, const HistoryRecord& record, int shed, bool with_special) {
     JsonValue d = JsonValue::make_object();
     d.set("v", num(kDetailsVersion));
     d.set("turns", num(st.turns));
@@ -349,6 +366,7 @@ std::string build(const MatchStats& st, const HistoryRecord& record, int shed) {
         d.set("combat", combat(st, shed < 1, shed < 2));
         d.set("economy", economy(st));
     }
+    if (with_special) d.set("special", special(st));
     return ctl::to_json(d);
 }
 
@@ -358,9 +376,11 @@ std::string make_history_details(const replay::MatchStats& stats, const HistoryR
     if (!stats.ok) return std::string();
     std::string text;
     for (int shed = 0; shed <= 5; ++shed) {
-        text = build(stats, record, shed);
+        text = build(stats, record, shed, true);
         if (text.size() <= kDetailsMaxBytes) return text;
     }
+    text = build(stats, record, 5, false);                            // (a text that fitted before `special` was added still fits: the last try leaves it out rather than make the marker)
+    if (text.size() <= kDetailsMaxBytes) return text;
     return history_details_marker(record.heavy_orders);               // (a match so long, with numbers so large, that its minutes of orders alone do not fit: told as not counted, the cap is never passed)
 }
 
