@@ -441,6 +441,15 @@ void test_render(const assets::AssetArchive& arc, const world_art::Pack& pack) {
         check(same_pixels(walk.rig.shoot(), home), "...and the first view comes back as the same picture");
     }
 
+    // a pinned clock is a still picture: with the budget that nobody has set, the first frame is already the whole picture
+    {
+        zoomtest::PixelRig still(arc, great_sea(), kW, kH);
+        still.renderer.set_world_art(&pack);
+        still.renderer.set_dense_mud(false);
+        still.look(sea.col * 32, sea.row * 32);
+        check(same_pixels(still.shoot(), on) && same_pixels(still.shoot(), on), "with the default budget and a pinned clock the first frame is the whole picture, and so is the next");
+    }
+
     // the work of a frame: a small budget makes a cell a frame and gets to the same picture
     {
         Sea slow(arc, pack);

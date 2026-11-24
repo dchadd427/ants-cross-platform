@@ -118,6 +118,9 @@ bool Renderer::make_room_for_mud(size_t bytes) {
 
 // Whether this frame has work left for the dense mud (every frame may do one piece, the first one is free); the work is a set of looks or a baked picture
 bool Renderer::mud_work_left() const {
+    if (mud_budget_ms_ == world_art::mud::kDefaultBudget) {                        // the budget that nobody set: 8 ms, and no limit while the clock is pinned (a still picture that a test compares with the one before)
+        return anim_clock_pin_ms_ >= 0 || mud_made_ == 0 || mud_spent_us_ < static_cast<int64_t>(world_art::mud::kFrameBudgetMs) * 1000;
+    }
     return mud_budget_ms_ < 0 || mud_made_ == 0 || mud_spent_us_ < static_cast<int64_t>(mud_budget_ms_) * 1000;
 }
 

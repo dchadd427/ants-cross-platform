@@ -378,6 +378,14 @@ void test_render(const assets::AssetArchive& arc, const world_art::Pack& pack) {
         }
         check(same_pixels(last, dense), "...and goes on, a cell a frame, to the picture that the unlimited budget gives (" + std::to_string(frames) + " frames)");
     }
+    // a pinned clock is a still picture: with the budget that nobody has set, the first frame is already the whole picture
+    {
+        zoomtest::PixelRig still(arc, mud_wars(), kW, kH);
+        still.renderer.set_world_art(&pack);
+        still.renderer.set_transitions(false);
+        still.look(best_x, best_y);
+        check(same_pixels(still.shoot(), dense) && same_pixels(still.shoot(), dense), "with the default budget and a pinned clock the first frame is the whole picture, and so is the next");
+    }
     // the memory is bounded: the baked pictures and the looks together never pass the limit, what was used least recently goes first, and what does not fit is the approved picture
     {
         const auto kept = [](zoomtest::PixelRig& r) { return r.renderer.mud_baked_bytes() + r.renderer.mud_looks_bytes(); };

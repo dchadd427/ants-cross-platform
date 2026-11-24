@@ -369,6 +369,15 @@
    "build": "test_world_art_edges",
    "test": "./build/tests/test_app/test_world_art_edges",
    "expect": "[render]"
+  },
+  {
+   "id": "mud_still_picture_is_filled_over_frames",
+   "file": "src/ants_app/renderer_world_mud.cpp",
+   "old": "        return anim_clock_pin_ms_ >= 0 || mud_made_ == 0 ||",
+   "new": "        return mud_made_ == 0 ||",
+   "build": "test_world_art_mud",
+   "test": "./build/tests/test_app/test_world_art_mud",
+   "expect": "[render]"
   }
  ]
 }

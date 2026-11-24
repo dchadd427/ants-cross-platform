@@ -538,7 +538,7 @@ public:
     uint32_t world_art_sheets() const noexcept;       // which sheets are textures: bit 0 the 1x, bit 1 the 2x, bit 2 the 3x
     uint8_t ground_variant_at(int32_t col, int32_t row);
     /// Dense mud (world_art_mud.hpp): on by default while the world art is. The looks of a big mud field are made cell by cell as the cells come into view, within `ms` milliseconds of work for each frame (at
-    /// least one piece of work: 0; no limit: -1, which the tests and the picture maker use), and a cell that is not made yet shows the approved picture. Its memory is bounded: the baked pictures and the looks that
+    /// least one piece of work: 0; no limit: -1, which the tests and the picture maker use; never set: 8 ms, and no limit while the animation clock is pinned), and a cell that is not made yet shows the approved picture. Its memory is bounded: the baked pictures and the looks that
     /// are kept never take more than `limit_bytes` together (what was used least recently is let go first; a cell that cannot be had within it shows the approved picture), and the mud is baked at a scale of
     /// at most `max_scale` (the picture is then enlarged by the graphics card): the mud's own pictures, cut from the sheet, are 1.9 MB at 1x and 7.7 MB at 2x and stay as long as the world art does.
     void set_dense_mud(bool on) noexcept { dense_mud_ = on; }
@@ -651,7 +651,8 @@ public:
                             int32_t max_side = 0) override;
     static size_t get_anim_subitem_by_time(const ants::assets::AnimationSequence& seq, uint32_t now_ms);
 
-    // Template animation clock (terrain, objects). It starts at set_level(); tests can pin it to a fixed ms value.
+    // Template animation clock (terrain, objects). It starts at set_level(); tests can pin it to a fixed ms value. A pinned clock is a still picture: the world art's mud looks and transitions, which are otherwise made
+    // over several frames within a budget, are made at once, so that two frames of the same scene are the same pixels.
     void pin_animation_clock(uint32_t ms_since_map_load) noexcept {
         anim_clock_pin_ms_ = static_cast<int64_t>(ms_since_map_load);
         template_now_ms_ = ms_since_map_load;
@@ -801,7 +802,7 @@ private:
     std::array<SDL_Texture*, 3> world_art_textures_{};     // its sheets at 1x, 2x and 3x, made when first needed
     uint8_t world_variant_{0};                             // which picture of a plain ground tile the cell being drawn shows (render_terrain_layer1); 0 for everything else
     bool dense_mud_{true};                                 // the looks of big mud fields (world_art_mud.hpp), while the world art is on
-    int32_t mud_budget_ms_{8};                             // the work for the looks that a frame may take (set_dense_mud_budget_ms)
+    int32_t mud_budget_ms_{world_art::mud::kDefaultBudget};   // the work for the looks and the transitions that a frame may take (set_dense_mud_budget_ms; the default: kFrameBudgetMs, none while the clock is pinned)
     size_t mud_cache_limit_{world_art::mud::kCacheLimit};  // the bytes that the baked cell pictures and the looks may take together (set_dense_mud_cache_limit)
     int32_t mud_max_scale_{world_art::mud::kMaxScale};     // the largest scale the mud is baked at (set_dense_mud_max_scale)
     bool transitions_{true};                               // the automatic transitions (world_art_edges.hpp), while the world art is on

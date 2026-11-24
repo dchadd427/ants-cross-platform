@@ -26,6 +26,11 @@ inline constexpr double kRippleMedian = 0.001720718;   // the median length of t
 
 // ---- the memory of the dense mud (renderer_world_mud.cpp): what the baked pictures and the looks of cells may take together, and the largest scale that the mud is baked at. A big mud field in view at 2x
 // needs about 11 MB; the browser, which a phone runs, gets half of that and the 1x pictures (about 6 MB for the view), the mud's own pictures (7.7 MB at 2x, 1.9 MB at 1x) come on top.
+/// The work for the looks (and the transitions) that one frame may take, in milliseconds, and the value of the budget that nobody has set (set_dense_mud_budget_ms): that one is 8 ms, or no limit while the animation
+/// clock is pinned, as a test pins it to compare two frames of one scene
+inline constexpr int32_t kFrameBudgetMs = 8;
+inline constexpr int32_t kDefaultBudget = -2;
+
 #if defined(__EMSCRIPTEN__)
 inline constexpr size_t kCacheLimit = size_t{8} * 1024 * 1024;
 inline constexpr int32_t kMaxScale = 1;
