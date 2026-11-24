@@ -32,6 +32,7 @@ public:
         uint32_t min_ticks_left{1800};       // nothing is dug with less than this left on the clock
         uint32_t dig_ticks{400};             // an order for a tile that has not made it a bridge after this long is given up
         uint32_t job_max_swim{30};           // a bridge job is not begun when the nearest Swimmer is farther than this many tiles from its first tile
+        uint32_t chain_max_swim{70};         // ... the chains of a Raid and of a Home job (a Thief's or a Fire Ant's way over several islands) are worth a longer swim: the Swimmers of a seat that has no food left to ferry stand far away
         uint32_t blocked_ticks{200};         // a bridge job whose next tile has an ant on it this long leaves the tile alone (blacklist_ticks) and gives the Swimmer back
         uint32_t min_life{300};              // a link whose oldest tile has less life than this counts as gone (nobody starts across it)
         uint32_t dig_first_ticks{34};        // (the cost of a link, plan.island_link_cost) a tile next to the shore takes this long to dig ...

@@ -92,7 +92,7 @@ void HealTask::step(TaskContext& c) {
     const auto reaches = [&](const AntView& a) {
         if (!plan.cantgo_aware || !v.has_grid()) return true;
         if (!joined_made) {
-            joined = c.map.field_now(v.grid(), c.seat, v.walk_context());
+            joined = c.map.field_now(v.grid(), c.seat, v.walk_context(), v.walkable_mask(c.seat));
             joined_made = true;
         }
         return c.map.reaches_hill(joined, a.tile, a.type);

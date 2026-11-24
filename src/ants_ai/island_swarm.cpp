@@ -38,12 +38,18 @@ const std::vector<int32_t>& SwarmTask::field_for(TaskContext& c, size_t link) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
     if (!fields_valid_ || now >= fields_tick_ + params_.refresh_ticks || fields_.size() != tactics_.flower_links.size()) {
-        std::vector<uint8_t> mask = MapInfo::walkable_mask(v.grid(), c.seat, v.walk_context());
+        std::vector<uint8_t> mask = v.walkable_mask(c.seat);
         for (size_t i = 0; i < mask.size() && i < tactics_.shut_tiles.size(); ++i) {
             if (tactics_.shut_tiles[i] != 0) mask[i] = 0;
         }
-        fields_.clear();
-        for (const Tactics::FlowerLink& l : tactics_.flower_links) fields_.push_back(MapInfo::cost_field_onto(v.grid(), mask, c.seat, l.drop, v.walk_context()));
+        const WalkContext ctx = v.walk_context();
+        const bool same = fields_valid_ && fields_.size() == tactics_.flower_links.size() && fields_ctx_.ally == ctx.ally && fields_ctx_.dropped_mask == ctx.dropped_mask && fields_mask_ == mask;
+        if (!same) {                                                                           // (the walks are a function of the mask: the same mask keeps them, no flood)
+            fields_.clear();
+            for (const Tactics::FlowerLink& l : tactics_.flower_links) fields_.push_back(MapInfo::cost_field_onto(v.grid(), mask, c.seat, l.drop, ctx));
+            fields_mask_ = std::move(mask);
+            fields_ctx_ = ctx;
+        }
         fields_tick_ = now;
         fields_valid_ = true;
     }
@@ -60,6 +66,7 @@ sim::TileCoord SwarmTask::free_spot(TaskContext& c, size_t link, const std::vect
         for (int32_t dx = -1; dx <= 1; ++dx) {
             const sim::TileCoord n{drop.x + dx, drop.y + dy};
             if ((dx == 0 && dy == 0) || !grid.in_bounds(n) || field.empty() || field[static_cast<size_t>(index_of(grid, n))] < 0 || v.powerup_at(n) != nullptr) continue;
+            if (tactics_.plan.island_endraid && grid.get_cell(n).has_any_bridge()) continue;                  // (an ant that waits on a piece of a bridge shuts it: the Thieves of the strip go home over it, docs/BOT_IDLE.md)
             bool taken = false;
             for (const AntView& a : v.others()) taken = taken || a.tile == n;
             for (const AntView& a : v.mine()) taken = taken || (a.tile == n && a.id != self);
@@ -112,6 +119,10 @@ void SwarmTask::step(TaskContext& c) {
             if (first_made_ == 0) first_made_ = now;
             c.ledger.release(it->first, id());
             keep = false;
+        } else if (keep && plan.island_endraid && a->type == sim::AntType::Thief) {                                              // (the Thief of the endgame: the bridge planner and the raid task have it now)
+            ++thieves_;
+            c.ledger.release(it->first, id());
+            keep = false;
         } else if (keep && (a->holding || a->carried_points > 0)) {
             c.ledger.release(it->first, id());
             keep = false;
@@ -122,11 +133,14 @@ void SwarmTask::step(TaskContext& c) {
     uint32_t coming = 0;                                                                              // the ants that are on their way to a Swimmer on a drop tile
     for (const auto& s : staged_) coming += s.second.picking != 0 ? 1u : 0u;
     const uint32_t want = plan.island_swarm_swimmers;
-    if (swimmers >= want || v.ticks_left() < params_.min_ticks_left) {
+    uint32_t thieves = 0;
+    for (const AntView& a : v.mine()) thieves += a.type == sim::AntType::Thief ? 1u : 0u;
+    const bool thief_wanted = plan.island_endraid && tactics_.endraid && thieves < plan.endraid_thieves && v.ticks_left() >= params_.min_ticks_left;      // (the Thief of the endgame: one ant waits at a strip for the one that falls)
+    if ((swimmers >= want && !thief_wanted) || v.ticks_left() < params_.min_ticks_left) {
         release_all(c.ledger);
         return;
     }
-    if (swimmers + coming >= want) return;                                                            // (the ants that are on their way make the rest)
+    if (swimmers + coming >= want && !thief_wanted) return;                                           // (the ants that are on their way make the rest)
     const size_t links = tactics_.flower_links.size();
     // (the links that end at one drop tile share it: the ants are counted for the strip, so that each strip has its own before one has two)
     const auto same_drop = [&](size_t i, size_t j) { return tactics_.flower_links[i].drop == tactics_.flower_links[j].drop; };
@@ -134,7 +148,8 @@ void SwarmTask::step(TaskContext& c) {
     for (const auto& s : staged_) {
         for (size_t i = 0; i < links; ++i) at_link[i] += same_drop(i, s.second.link) ? 1u : 0u;
     }
-    const uint32_t lacking = want - swimmers - coming;
+    uint32_t lacking = swimmers + coming >= want ? 0u : want - swimmers - coming;
+    if (thief_wanted) lacking = std::max<uint32_t>(lacking, 1u);
 
     // the ants for the strips: the free ants (and the economy's) that a walk reaches a strip from, the nearest first (a plain ant before a typed one)
     if (staged_.size() < lacking) {
@@ -201,7 +216,8 @@ void SwarmTask::step(TaskContext& c) {
     for (size_t i = 0; i < links; ++i) {
         const sim::TileCoord drop = tactics_.flower_links[i].drop;
         const PowerUpView* p = v.powerup_at(drop);
-        if (p == nullptr || p->kind != sim::AntType::Swimmer || p->standing_ant != 0) continue;
+        if (p == nullptr || p->standing_ant != 0) continue;
+        if (p->kind == sim::AntType::Swimmer ? swimmers + coming >= want : !(p->kind == sim::AntType::Thief && thief_wanted)) continue;    // (a Swimmer when the bot lacks one, the Thief when it wants it)
         bool busy = false;
         const AntView* best = nullptr;
         int32_t best_d = 0;

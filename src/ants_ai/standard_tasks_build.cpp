@@ -22,7 +22,7 @@ namespace {
 bool walks_to(const BotView& v, uint8_t seat, sim::TileCoord from, sim::TileCoord to) {
     const sim::Grid& grid = v.grid();
     if (!grid.in_bounds(from) || !grid.in_bounds(to)) return false;
-    std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, seat, v.walk_context());
+    std::vector<uint8_t> mask = v.walkable_mask(seat);
     mask[tile_index(grid, from)] = 1;
     for (const assets::AnthillSpawn& ah : grid.anthills()) {
         const int32_t bx = static_cast<int32_t>(ah.x);
@@ -495,7 +495,7 @@ void BombTask::step(TaskContext& c) {
         const int gw = static_cast<int>(grid.width());
         const auto at = [&](sim::TileCoord t) { return static_cast<size_t>(t.y) * static_cast<size_t>(gw) + static_cast<size_t>(t.x); };
         const uint32_t bomber_hp = plan.own_ground_counters ? plan.counter_bomber_hp : 3u;
-        std::vector<uint8_t> open = MapInfo::walkable_mask(grid, c.seat, v.walk_context());
+        std::vector<uint8_t> open = v.walkable_mask(c.seat);
         std::vector<uint8_t> safe = open;
         const uint8_t ally = v.ally();
         for (const BombView& b : v.bombs()) {

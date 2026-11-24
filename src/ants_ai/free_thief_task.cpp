@@ -36,7 +36,7 @@ sim::TileCoord FreeThiefTask::free_tile(const TaskContext& c, const AntView& thi
     const sim::Grid& grid = v.grid();
     const HillInfo& own = c.map.hill(c.seat);
     if (!own.present || !grid.in_bounds(thief.tile)) return sim::TileCoord{-1, -1};
-    const std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, c.seat, v.walk_context());
+    const std::vector<uint8_t>& mask = v.walkable_mask(c.seat);
     std::vector<int32_t> steps(mask.size(), -1);
     std::deque<sim::TileCoord> open;
     steps[tile_index(grid, thief.tile)] = 0;
@@ -136,7 +136,7 @@ void FreeThiefTask::step(TaskContext& c) {
         // a Thief that a volley freed and that stands idle with its loot: a walk home that exists now is clicked, as the economy clicks a carrier that waits
         if (r.freed && a.state == sim::UnitState::Idle && !v.has_pending_path(a.id) && now >= r.home_after && far && r.homes_given < params_.max_homes && !near_hill(c.map, a.tile)) {
             if (!joined_made) {
-                joined = c.map.field_now(v.grid(), c.seat, v.walk_context());
+                joined = c.map.field_now(v.grid(), c.seat, v.walk_context(), v.walkable_mask(c.seat));
                 joined_made = true;
             }
             if (c.map.reaches_hill(joined, a.tile, a.type)) {

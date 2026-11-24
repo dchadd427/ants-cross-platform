@@ -131,7 +131,7 @@ void GateTask::choose_slots(TaskContext& c, const Geometry& g) {
     if (pile == nullptr) return;
     if (pile->index == slot_pile_) return;
     slot_pile_ = pile->index;
-    const std::vector<uint8_t> mask = MapInfo::walkable_mask(v.grid(), c.seat, v.walk_context());
+    const std::vector<uint8_t>& mask = v.walkable_mask(c.seat);
     const std::vector<int32_t> f = MapInfo::cost_field_onto(v.grid(), mask, c.seat, pile->anchor, v.walk_context());
     int best = 1;
     int32_t best_cost = 1 << 30;
@@ -170,7 +170,7 @@ void GateTask::refresh_now(TaskContext& c) {
     }
     const uint64_t now = v.tick();
     if (now_made_ && signature == now_signature_ && now < now_at_ + params_.field_ticks) return;
-    now_ = c.map.field_now(grid, c.seat, v.walk_context());
+    now_ = c.map.field_now(grid, c.seat, v.walk_context(), v.walkable_mask(c.seat));
     now_at_ = now;
     now_signature_ = signature;
     now_made_ = true;
@@ -620,7 +620,7 @@ void CarrierAidTask::step(TaskContext& c) {
         if (now >= blocked_until_ && a->idle() && now >= it->second.hit + 8 && now >= it->second.last_order + 40 && !v.has_pending_path(a->id)) {
             it->second.last_order = now;
             if (tactics_.plan.cantgo_aware && v.has_grid()) {                            // a carrier that no walk joins to the hill (a ring of fire walls round its gate) is not sent: it would be refused, and no try is spent on it
-                if (!joined.valid()) joined = c.map.field_now(v.grid(), c.seat, v.walk_context());
+                if (!joined.valid()) joined = c.map.field_now(v.grid(), c.seat, v.walk_context(), v.walkable_mask(c.seat));
                 if (!c.map.reaches_hill(joined, a->tile, a->type)) {
                     ++it;
                     continue;

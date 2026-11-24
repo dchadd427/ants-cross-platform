@@ -39,6 +39,7 @@ namespace {
 LevelPlan without_war(Level level) {
     LevelPlan p = plan_for(level);
     without_war_batch(p);
+    without_idle_batch(p);                                                                       // (the subject is the war batch: the blows of the idle batch's contact rule are none of its count)
     return p;
 }
 
@@ -446,7 +447,7 @@ void run_war_tests() {
             }
             spec.factory = [&](const BotSpec& b) -> std::unique_ptr<Bot> {
                 if (b.kind != "standard") return nullptr;
-                return std::make_unique<StandardBot>(war ? plan_for(b.level) : without_war(b.level));
+                return std::make_unique<StandardBot>(war ? plan_as_was(b.level) : without_war(b.level));
             };
             return play_match(spec);
         };
@@ -481,7 +482,7 @@ void run_war_tests() {
                 }
                 spec.factory = [&](const BotSpec& b) -> std::unique_ptr<Bot> {
                     if (b.kind != "standard") return nullptr;
-                    return std::make_unique<StandardBot>(b.seat % 2 == 0 ? plan_for(b.level) : without_war(b.level));
+                    return std::make_unique<StandardBot>(b.seat % 2 == 0 ? plan_as_was(b.level) : without_war(b.level));
                 };
                 const ArenaResult r = play_match(spec);
                 for (const ArenaSeatResult& s : r.seats) (s.spec.seat % 2 == 0 ? with : without) += s.banked;
