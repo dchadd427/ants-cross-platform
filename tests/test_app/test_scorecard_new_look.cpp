@@ -83,7 +83,10 @@ void open(ScorecardModal& card, const hud_art::Art* art, const Screen& s, const 
     card.set_art(art);
     card.set_screen(s.canvas_w, s.canvas_h, output_of(s));
     card.set_local_player_name("Ana");
-    if (report != nullptr) card.set_report(*report);
+    if (report != nullptr) {
+        card.set_report(*report);
+        card.set_watch_available(true);                     // (the application says so when it has the recording)
+    }
     card.show(result, local, mode);
     if (rows) card.update(0.25f);
 }
@@ -300,6 +303,20 @@ void test_counted(const assets::AssetArchive& arc, const hud_art::Art& art) {
     open(quiet, &art, kWide720, sample(), sim::GameMode::HighestScore, true, &no_play);
     const auto spyq = draw(arc, quiet, kWide720);
     check(count(*spyq, art, "sc_k_play") == 0 && count(*spyq, art, "sc_watch_up") == 0 && count(*spyq, art, "sc_k_mvp") == 1 && quiet.watch_rect().w == 0, "no Play of the game: no card and no Watch, the honors stay");
+    // no recording to open (the web build, a match of a room): no Watch button, the rest of the card stays
+    ScorecardModal blind;
+    open(blind, &art, kWide720, sample(), sim::GameMode::HighestScore, true, &rep);
+    blind.set_watch_available(false);
+    uint32_t blind_watched = 0;
+    blind.set_on_watch([&](uint32_t) { ++blind_watched; });
+    const auto spyw = draw(arc, blind, kWide720);
+    click(blind, blind.scale().rect(blind.podium().watch));
+    check(count(*spyw, art, "sc_watch_up") == 0 && blind.watch_rect().w == 0 && blind_watched == 0 && count(*spyw, art, "sc_k_play") == 1 && has_line(*spyw, "6 ants"), "no recording to open: the play is there, Watch is not, and a click where it would be does nothing");
+    ScorecardModal sighted;
+    open(sighted, &art, kWide720, sample(), sim::GameMode::HighestScore, true, &rep);
+    sighted.set_watch_available(false);
+    sighted.set_watch_available(true);
+    check(sighted.watch_rect().w > 0 && count(*draw(arc, sighted, kWide720), art, "sc_watch_up") == 1, "...and Watch is there as soon as the application says that it can open the recording");
     // an honor that nobody earned says so
     MatchReport none = counted();
     none.mvp.present = false;
@@ -824,6 +841,64 @@ void test_app() {
         check(quits == 0, "...a click under the button does nothing");
         rig.click(b.x + b.w / 2, b.y + b.h / 2);
         check(quits == 1, "...a click on the button leaves");
+    }
+    // the counted numbers reach the screen, and Watch opens the recording of the game just played (a game against a computer player on TINY: the quit that ends it)
+    {
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.start_in_map_select = true;
+        cfg.default_map_path = "Original-Ants/Maps/TINY.LVL";
+        cfg.play_at_once = true;
+        cfg.lan_port = 0;
+        ants::ai::BotSpec bot;
+        bot.seat = 1;
+        bot.level = ants::ai::Level::Medium;
+        cfg.bots.push_back(bot);
+        cfg.hud_art_given = true;
+        cfg.hud_art_new = true;
+        cfg.hud_art_dir = art_folder();
+        Application app;
+        bool up = false;
+        {
+            QuietStdout quiet;
+            up = app.init(cfg);
+        }
+        check(up && app.recorder() != nullptr, "Watch: a game against a computer player starts, and is recorded");
+        app.hud().dismiss_match_start_modal();
+        for (int i = 0; i < 400; ++i) app.update_simulation(0.05f);
+        const auto key = [&](SDL_Keycode sym, uint16_t mod) {
+            SDL_KeyboardEvent ev{};
+            ev.type = SDL_KEYDOWN;
+            ev.keysym.sym = sym;
+            ev.keysym.mod = mod;
+            app.handle_key_down(ev);
+        };
+        key(SDLK_q, KMOD_LCTRL);                                                        // the quit that ends a match with one other side left
+        key(SDLK_y, 0);
+        check(app.sim().is_match_over() && app.scorecard().is_open() && !app.last_replay().empty(), "the match ended, the results are open and its recording is kept");
+        ScorecardModal& card = app.scorecard();
+        check(app.match_report().ok && card.report().ok && card.report().turns == app.sim().current_tick() && card.report().turns > 300, "the results have the report of the match that was counted (" + std::to_string(card.report().turns) + " turns)");
+#if !defined(__EMSCRIPTEN__)
+        check(card.watch_available() && app.can_watch_play(), "a game on this computer that has its recording: Watch can be offered");
+#endif
+        MatchReport shown = counted();                                                  // (a Play of the game at turn 300: Watch opens turn 200)
+        shown.turns = card.report().turns;
+        shown.play.turn = 300;
+        card.set_report(shown);
+        app.update_results(0.3f);
+        const LayoutRect watch = card.watch_rect();
+        check(card.new_look() && watch.w > 0, "the Play of the game has its Watch button on the screen");
+        click(card, watch);
+        check(app.replay_mode() && !card.is_open(), "a click on Watch closes the results and starts the recording in the viewer");
+        check(app.replay_value(ReplayValue::JumpTarget) == 200, "...it jumps to five seconds before the moment (turn 200 for turn 300)");
+        for (int i = 0; i < 40 && app.replay_state() == ReplayState::Jumping; ++i) app.update_simulation(0.05f);
+        check(app.replay_state() != ReplayState::Jumping && app.replay_value(ReplayValue::Turn) >= 200 && app.replay_value(ReplayValue::Turn) < 220, "...and shows the match there (turn " + std::to_string(app.replay_value(ReplayValue::Turn)) + ")");
+        check(!app.can_watch_play() && app.replay_value(ReplayValue::Total) == static_cast<int>(shown.turns), "a viewer has no second Watch, and the recording is the match that was played");
+        for (int i = 0; i < 2000 && !app.sim().is_match_over(); ++i) app.update_simulation(0.05f);
+        app.update_results(0.3f);
+        check(app.sim().is_match_over() && card.is_open() && card.new_look() && !card.report().ok && !card.watch_available() && card.tab_rect(ScorecardModal::Page::Stats).w == 0,
+              "the results at the end of the recording are the original's numbers only: a viewer counts nothing, and it offers no Watch");
+        app.shutdown();
     }
     // Classic art: the original's page, centred in the canvas when the canvas is wider
     {

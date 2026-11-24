@@ -220,10 +220,6 @@ void Application::withdraw_replay() {
 // init: the file is read and checked before anything is opened, so that every way it can fail ends in a failure of the replay, never in a game that does not start
 void Application::prepare_replay() {
     replay_mode_ = true;
-    replay_failure_ = ReplayFailure::None;
-    replay_failure_text_.clear();
-    replay_file_.reset();
-    replay_live_ = false;
     std::vector<uint8_t> bytes;
     {
         std::ifstream in(config_.replay_path, std::ios::binary);
@@ -232,6 +228,15 @@ void Application::prepare_replay() {
             if (bytes.size() > replay::kMaxFileBytesWithMap) bytes.clear();
         }
     }
+    load_replay(bytes);
+}
+
+// The bytes of a recording are decoded and checked (the rules, the map, the roster): the file is shown, or replay_failure_ says why not
+void Application::load_replay(const std::vector<uint8_t>& bytes) {
+    replay_failure_ = ReplayFailure::None;
+    replay_failure_text_.clear();
+    replay_file_.reset();
+    replay_live_ = false;
     auto replay = std::make_unique<replay::Replay>();
     std::string why;
     if (bytes.empty() || !replay::decode(bytes.data(), bytes.size(), *replay, why)) {
@@ -478,6 +483,35 @@ void Application::run_replay(float dt) {
     }
     if (replay_live_ && turn_of(sim_) >= replay_limit()) tick_accumulator_ = 0.0f;       // (waiting for the next copy: the time that passes meanwhile is not owed, or the picture would rush when it comes)
     if (replay_failure_ == ReplayFailure::None && !replay_live_ && turn_of(sim_) >= file.total_turns && !replay_cut_ && !sim_.is_match_over()) replay_ends();
+}
+
+// The results' Play of the game (scorecard.hpp, set_on_watch): the desktop game keeps the file of a game on this computer in memory (last_replay_), and the viewer can jump to a turn. A match of a room has no
+// file here (the game server records it) and the web build keeps none, so there is no Watch there. Nothing is changed unless the file can be shown: it was made by this build a moment ago, so it plays here, but a
+// map that cannot be found again leaves the results as they were.
+bool Application::can_watch_play() const noexcept {
+#if defined(__EMSCRIPTEN__)
+    return false;
+#else
+    return !replay_mode_ && !network_active() && !last_replay_.empty();
+#endif
+}
+
+void Application::watch_play(uint32_t turn) {
+    if (!can_watch_play()) return;
+    load_replay(last_replay_);                                       // (start_replay lets go of last_replay_: the file is decoded before)
+    if (replay_failure_ != ReplayFailure::None || !replay_file_) {
+        replay_file_.reset();
+        replay_failure_ = ReplayFailure::None;
+        replay_failure_text_.clear();
+        return;
+    }
+    replay_mode_ = true;
+    config_.label_unnamed_teams = true;                              // (every seat of the match is shown, by its name or its color)
+    replay_paused_ = false;
+    stop_bots();                                                     // (the computer players of the match are over: a viewer only looks)
+    scorecard_.hide();
+    start_replay();
+    replay_jump_to(turn);
 }
 
 // Quit and Leave Game: back to the page's list of matches (a native game ends)

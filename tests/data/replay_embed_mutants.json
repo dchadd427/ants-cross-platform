@@ -293,8 +293,8 @@
   {
    "id": "the_viewer_reads_no_file_over_1_mib",
    "file": "src/ants_app/application_replay.cpp",
-   "old": "if (bytes.size() > replay::kMaxFileBytesWithMap) bytes.clear();\n        }\n    }\n    auto replay = std::make_unique<replay::Replay>();",
-   "new": "if (bytes.size() > replay::kMaxFileBytes) bytes.clear();\n        }\n    }\n    auto replay = std::make_unique<replay::Replay>();",
+   "old": "if (bytes.size() > replay::kMaxFileBytesWithMap) bytes.clear();\n        }\n    }\n    load_replay(bytes);",
+   "new": "if (bytes.size() > replay::kMaxFileBytes) bytes.clear();\n        }\n    }\n    load_replay(bytes);",
    "build": "test_replay_app",
    "test": "timeout 600 env ANTS_TEST_FILTER=RA7.9 ./build/tests/test_app/test_replay_app"
   },

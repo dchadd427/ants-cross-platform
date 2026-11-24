@@ -30,8 +30,10 @@ namespace ants::app {
  * In a 960 x 540 canvas the page is recomposed for the whole picture (results_layout.hpp): the layout is `ResultsLayout::of(wide_layout())`, and the Leave button, the rows and the label of the
  * waiting phase stand where it puts them. The four numbers of a row are the original's single-line labels (left aligned, a surface that clips what is wider), drawn in the original's 8 px digits.
  *
- * With the HUD art New (and a picture of at least 360 units on its shorter side) the page is the NEW one instead: the clay panel over the whole canvas, the rows in wells, laid out in units of whole device
- * pixels by scorecard_layout.hpp for any size and shape of the canvas (render_new, scorecard_new.cpp); the same rows, headings, headline and Leave button, the same keys. Classic art is the page above, untouched.
+ * With the HUD art New (and a picture of two columns or a tall column, scorecard_layout.hpp) the page is the NEW one instead, the "Podium": the clay panel over the whole canvas, Victory! or Defeat with a sentence, the winner's
+ * well, the others ranked, and Leave Game, in units of whole device pixels for any size and shape of the canvas (render_new, scorecard_new.cpp); the same rows, headline and keys. A match whose numbers were counted
+ * (match_report.hpp) adds the damage, the honors, the Play of the game with Watch and a second page "Match stats" behind two tabs; one that was not shows the original's numbers only. While the scores are added up
+ * it is "Game Over" and Leave Game. Classic art is the page above, untouched.
  *
  * The game mode 187 has its own page (results_layout.hpp, docs/GAMEPLAY.md "187"): the baked column headings are not drawn, three headings of the game's own letters stand instead, a row has three
  * numbers (the kills, which are the score; the ants lost; the ants that are left) and the headline says who won and how: "<Name> is the last colony standing!" (two allied teams that are both left:
@@ -110,6 +112,12 @@ public:
     /// second page "Match stats"; a report that is not shows the original's numbers only
     void set_report(const MatchReport& report) { report_ = report; update_new_look(); }
     const MatchReport& report() const noexcept { return report_; }
+    /// The application can open the replay at the Play of the game (a game on this computer that has its recording): without it the card has no Watch button (default: no)
+    void set_watch_available(bool available) {
+        watch_available_ = available;
+        update_button();
+    }
+    bool watch_available() const noexcept { return watch_available_; }
     /// The new page's pages: the results (the podium) and the second page of counted numbers (only with a report that is ok)
     enum class Page : uint8_t { Results, Stats };
     Page page() const noexcept { return page_; }
@@ -189,6 +197,7 @@ private:
     scorecard_layout::Waiting waiting_{};
     scorecard_layout::StatsPage stats_{};
     MatchReport report_{};
+    bool watch_available_{false};
     Page page_{Page::Results};
     bool wide_{false};                    // the page is the 16:9 one
     bool is_active_{false};

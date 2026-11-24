@@ -257,6 +257,7 @@ bool Application::init(const ApplicationConfig& config) {
         midi_player_.stop(); // In-game music stays silent
     });
 
+    scorecard_.set_on_watch([this](uint32_t turn) { watch_play(turn); });    // (the Play of the game's Watch: the recording of this match, five seconds before the moment)
     scorecard_.set_on_quit([this]() {
         leave_game();                                         // (a network match that the start menu led to: back to the menu; a local match, and every run without a menu: the program ends)
     });

@@ -364,7 +364,7 @@ void draw_play(const Ctx& c, const Podium& p) {
         base += p.play_pitch;
     }
     if (!p.narrow) c.pen.draw(when, c.X(p.play_text_x), c.Y(base), kDim, 10.0, 0);
-    c.sheet.put(std::string("sc_watch_") + state_of(c.m.watch_look()), p.watch.x, p.watch.y);
+    if (c.m.watch_available()) c.sheet.put(std::string("sc_watch_") + state_of(c.m.watch_look()), p.watch.x, p.watch.y);
 }
 
 void draw_podium(const Ctx& c) {
@@ -616,7 +616,7 @@ void ScorecardModal::update_new_buttons() {
     } else {
         leave = scale_.rect(podium_.leave);
         if (two_pages) other_tab = scale_.rect(podium_.tab_stats);
-        if (two_pages && report_.play.present && podium_.play.w > 0) watch = scale_.rect(podium_.watch);
+        if (two_pages && watch_available_ && report_.play.present && podium_.play.w > 0) watch = scale_.rect(podium_.watch);
     }
     set_rect(quit_, leave);
     set_rect(tab_results_, results_tab ? other_tab : LayoutRect{});

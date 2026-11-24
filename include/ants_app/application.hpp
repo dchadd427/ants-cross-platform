@@ -316,6 +316,10 @@ public:
     void replay_control(ReplayControl what, int value);
     /// The recording as the file says it (null when there is none)
     const replay::Replay* replay_file() const noexcept { return replay_file_.get(); }
+    /// The results' Play of the game: Watch opens the recording of the game on this computer that just ended at `turn` (the viewer's own jump: a moment's wait on a long match); only where it has one (the desktop game, not a
+    /// match of a room, not a recording that is being watched already, and not the web build, which keeps no file). Leave Game from there is what it is in a viewer: the program ends.
+    bool can_watch_play() const noexcept;
+    void watch_play(uint32_t turn);
     /// The recording of the match that is being played (null: none is made, or the match has ended)
     const replay::Recorder* recorder() const noexcept { return recorder_.get(); }
     /// The numbers of the results screen besides the original's four (match_report.hpp), counted while the match was played on the confirmed engine, whole or not at all: valid from the end of a match until the next one begins, and
@@ -947,6 +951,7 @@ private:
     // Replays (replay.hpp, docs/REPLAYS.md; application_replay.cpp): every match is recorded as it is played, and the file is made when it ends
     // Watching a replay (application_replay.cpp)
     void prepare_replay();                                             // init: the file is read, its rules and its map are checked (replay_failure_ says what is wrong)
+    void load_replay(const std::vector<uint8_t>& bytes);               // the bytes of a file are decoded and checked the same way (prepare_replay's, and the Watch of the results')
     void start_replay();                                               // the match of the file is set up on the engine and the screen, at its first turn
     void run_replay(float dt);                                         // a frame of it: the turns that the clock and the speed allow, or a step of a jump
     bool replay_turn(bool picture);                                    // one turn: the orders due, the tick; false when the recording is at its end (the end is handled)
