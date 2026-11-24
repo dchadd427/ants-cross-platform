@@ -452,8 +452,13 @@
     }
     const attackAnims = animsByName.get("attack") || nonBlinkAnims.filter((a) => /attack/i.test(a.name));
     const hitAnims = animsByName.get("hit") || nonBlinkAnims.filter((a) => /^hit$/i.test(a.name) || /\bhit\b/i.test(a.name));
-    const idleExact = animsByName.get("idle") || nonBlinkAnims.filter((a) => /idle/i.test(a.name));
-    const idleAnims = idleExact.length ? idleExact : (nonBlinkAnims.length ? [nonBlinkAnims[0]] : []);
+    const idleMatched = nonBlinkAnims.filter((a) => /^idle/i.test(a.name));
+    idleMatched.sort((a, b) => {
+      const aExact = a.name.trim().toLowerCase() === "idle" ? 0 : 1;
+      const bExact = b.name.trim().toLowerCase() === "idle" ? 0 : 1;
+      return aExact - bExact;
+    });
+    const idleAnims = idleMatched.length ? idleMatched : (nonBlinkAnims.length ? [nonBlinkAnims[0]] : []);
     const blinkInfo = { anim: blinkAnim, eyelidNodes, closedTime: 0, startTime: 0, endTime: 0.24, hasBlink: Boolean(blinkAnim || eyelidNodes.length) };
     if (blinkAnim && blinkAnim.channels.length) {
       const refCh = blinkAnim.channels.find((c) => c.path === "rotation") || blinkAnim.channels[0], times = refCh.times;

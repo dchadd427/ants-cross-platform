@@ -1156,53 +1156,28 @@ def _bomber_arm_pose(side: int, crouch: float) -> List[Tuple[float, float, float
     ]
 
 
-def _oriented_joint_armor(
-    center: np.ndarray,
-    prev_pt: np.ndarray,
-    next_pt: np.ndarray,
-    radii: Tuple[float, float, float],
-    push: float,
-    *,
-    name: str,
-    material: str,
-) -> MeshPart:
-    """Build a flared exoskeleton joint condyle/collar shell oriented along the exterior bend bisector."""
-    v1 = center - prev_pt
-    v1 /= max(1e-8, float(np.linalg.norm(v1)))
-    v2 = center - next_pt
-    v2 /= max(1e-8, float(np.linalg.norm(v2)))
-    bis = v1 + v2
-    if float(np.linalg.norm(bis)) < 1e-4:
-        bis = np.array([0.0, 0.0, 1.0], dtype=np.float64)
-    bis /= max(1e-8, float(np.linalg.norm(bis)))
-    hy = np.cross(v1, v2)
-    if float(np.linalg.norm(hy)) < 1e-4:
-        hy = np.array([1.0, 0.0, 0.0], dtype=np.float64)
-    hy /= max(1e-8, float(np.linalg.norm(hy)))
-    hx = np.cross(hy, bis)
-    hx /= max(1e-8, float(np.linalg.norm(hx)))
-    hy = np.cross(bis, hx)
-    mat = np.eye(4, dtype=np.float64)
-    mat[:3, 0], mat[:3, 1], mat[:3, 2] = hx, hy, bis
-    mat[:3, 3] = center + push * bis
-    return superellipsoid(
-        radii[0], radii[1], radii[2], e1=0.62, e2=0.66, u_segs=14, v_segs=10, name=name, material=material
-    ).transform(mat)
-
-
 def _rebuild_bomber_legs(scene: SceneBuilder, crouch: float) -> None:
-    """Rebuild Bomber's 4 legs as segmented body-colored (`chitin_team`) exoskeleton insect legs.
+    """Rebuild Bomber's 4 legs as continuous, streamlined, ball-free body-colored (`chitin_team`) insect legs.
 
-    Sculpts pinched hip/knee/ankle joints, muscular spindle femurs, flared armored knee condyles and
-    ankle collars, tapered angular tibias, and 2-segment pointed claw tarsi grounded on Y = 0.0 while
-    preserving Bomber's narrow upright stance and zero leg-vs-leg / arm-vs-leg phasing.
+    Sweeps a single smooth tapered exoskeleton curve per leg (zero protruding coxa/knee/ankle balls or
+    pinched bead segments) while preserving Bomber's narrow upright stance and ground planting at Y = 0.0.
     """
     c = float(crouch)
     leg_mat = "chitin_team"
     radii = [
-        (0.027, 0.031), (0.017, 0.019), (0.029, 0.035), (0.034, 0.042), (0.027, 0.033), (0.022, 0.026),
-        (0.0155, 0.018), (0.022, 0.027), (0.024, 0.030), (0.019, 0.024),
-        (0.0135, 0.0155), (0.0185, 0.021), (0.0125, 0.0135), (0.0175, 0.0165), (0.0145, 0.0135), (0.0068, 0.0062),
+        (0.0180, 0.0200),
+        (0.0205, 0.0235),
+        (0.0225, 0.0265),
+        (0.0180, 0.0205),
+        (0.0170, 0.0190),
+        (0.0156, 0.0174),
+        (0.0142, 0.0156),
+        (0.0124, 0.0136),
+        (0.0120, 0.0130),
+        (0.0112, 0.0120),
+        (0.0124, 0.0110),
+        (0.0110, 0.0096),
+        (0.0048, 0.0044),
     ]
     lift = np.array([0.0, 1.0, 0.0], dtype=np.float64)
     specs = (
@@ -1213,42 +1188,38 @@ def _rebuild_bomber_legs(scene: SceneBuilder, crouch: float) -> None:
     )
     for label, side, hx, hy, hz, knee, ankle, foot, foot_yaw, root_z in specs:
         s = 1.0 if side >= 0 else -1.0
-        p_root = np.array([s * 0.044, hy + 0.006, root_z], dtype=np.float64)
+        p_root = np.array([s * 0.034, hy + 0.006, root_z], dtype=np.float64)
         p_hip = np.array([s * hx, hy, hz], dtype=np.float64)
         p_knee = np.array([s * knee[0], knee[1], knee[2]], dtype=np.float64)
         p_ankle = np.array([s * ankle[0], ankle[1], ankle[2]], dtype=np.float64)
         p_foot = np.array([s * foot[0], 0.0, foot[2]], dtype=np.float64)
         fwd = np.array([math.sin(foot_yaw), 0.0, math.cos(foot_yaw)], dtype=np.float64)
 
-        femur_lo = 0.76 * p_hip + 0.24 * p_knee + np.array([s * 0.002, 0.007, 0.003])
-        femur_mid = 0.46 * p_hip + 0.54 * p_knee + np.array([s * 0.004, 0.015, 0.006])
-        femur_hi = 0.22 * p_hip + 0.78 * p_knee + np.array([s * 0.002, 0.007, 0.004])
-        pre_knee = 0.08 * p_hip + 0.92 * p_knee + np.array([s * 0.001, 0.002, 0.002])
-        post_knee = 0.90 * p_knee + 0.10 * p_ankle + np.array([s * 0.002, -0.002, 0.003])
-        tibia_mid = 0.54 * p_knee + 0.46 * p_ankle + np.array([s * 0.004, 0.001, -0.004])
-        pre_ankle = 0.16 * p_knee + 0.84 * p_ankle + np.array([s * 0.002, 0.003, -0.005])
-        tarsus_1 = 0.70 * p_ankle + 0.30 * (p_foot + 0.020 * lift) + np.array([0.0, -0.004, -0.002])
-        tarsus_joint = 0.36 * p_ankle + 0.64 * (p_foot + 0.017 * lift)
-        tarsus_heel = p_foot + 0.0165 * lift - 0.005 * fwd
-        tarsus_ball = p_foot + 0.0135 * lift + 0.018 * fwd
-        tarsus_tip = p_foot + 0.0075 * lift + 0.044 * fwd
+        femur_mid = 0.50 * p_hip + 0.50 * p_knee + np.array([s * 0.002, 0.006, 0.003])
+        pre_knee = 0.16 * p_hip + 0.84 * p_knee + np.array([s * 0.001, 0.002, 0.001])
+        post_knee = 0.86 * p_knee + 0.14 * p_ankle
+        tibia_mid = 0.48 * p_knee + 0.52 * p_ankle + np.array([s * 0.001, 0.001, -0.002])
+        pre_ankle = 0.14 * p_knee + 0.86 * p_ankle
+        tarsus_heel = p_foot + 0.0102 * lift - 0.005 * fwd
+        tarsus_mid = 0.50 * p_ankle + 0.50 * tarsus_heel
+        tarsus_ball = p_foot + 0.0086 * lift + 0.018 * fwd
+        tarsus_tip = p_foot + 0.0036 * lift + 0.044 * fwd
 
         leg_tube = curved_tube(
             [
-                p_root, p_hip, femur_lo, femur_mid, femur_hi, pre_knee,
-                p_knee, post_knee, tibia_mid, pre_ankle,
-                p_ankle, tarsus_1, tarsus_joint, tarsus_heel, tarsus_ball, tarsus_tip,
+                p_root, p_hip, femur_mid, pre_knee,
+                p_knee,
+                post_knee, tibia_mid, pre_ankle,
+                p_ankle,
+                tarsus_mid, tarsus_heel, tarsus_ball, tarsus_tip,
             ],
             radii,
-            samples_per_seg=3,
-            radial_segs=10,
+            samples_per_seg=4,
+            radial_segs=14,
             cap_rings=3,
             name=f"leg_{label}",
             material=leg_mat,
         )
-        coxa = ellipsoid(0.023, 0.023, 0.023, u_segs=12, v_segs=8, name=f"leg_coxa_{label}", material=leg_mat).translate(*p_hip)
-        kneecap = _oriented_joint_armor(p_knee, femur_hi, post_knee, (0.021, 0.019, 0.026), 0.005, name=f"leg_kneecap_{label}", material=leg_mat)
-        ankle_cap = _oriented_joint_armor(p_ankle, pre_ankle, tarsus_1, (0.017, 0.015, 0.021), 0.004, name=f"leg_anklecap_{label}", material=leg_mat)
 
         def _ground_sole(pos: np.ndarray) -> np.ndarray:
             p = pos.copy()
@@ -1258,10 +1229,7 @@ def _rebuild_bomber_legs(scene: SceneBuilder, crouch: float) -> None:
         ball = p_foot + 0.018 * fwd
         pivot = (float(ball[0]), 0.0, float(ball[2]))
         node = f"leg_{label}"
-        scene.nodes[node] = [
-            part.deform(_ground_sole).translate(-pivot[0], 0.0, -pivot[2])
-            for part in (leg_tube, coxa, kneecap, ankle_cap)
-        ]
+        scene.nodes[node] = [leg_tube.deform(_ground_sole).translate(-pivot[0], 0.0, -pivot[2])]
         scene.set_node_parent(node, "legs")
         scene.set_node_transform(node, translation=pivot)
 

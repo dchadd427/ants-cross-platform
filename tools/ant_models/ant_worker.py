@@ -82,7 +82,7 @@ def _slim_worker_torso_and_tail(scene: SceneBuilder, anchors: dict) -> None:
     """
     tc = np.asarray(anchors["thorax_center"], dtype=np.float64)
     # 1. Shape thorax shell parts cleanly around `thorax_center` (keeping neck_joint & petiole seamless).
-    slim_names = {"thorax_core", "chest_plate", "dorsal_plate", "thorax_seam"}
+    slim_names = {"thorax_core", "chest_plate", "dorsal_plate", "thorax_seam", "shoulder_socket", "shoulder_socket_right"}
     new_body = []
     for p in scene.get_node("body"):
         if p.name in slim_names:

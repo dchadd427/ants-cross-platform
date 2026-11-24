@@ -560,32 +560,106 @@ def _gaster_keel_fn(pos: np.ndarray) -> np.ndarray:
     return p
 
 
+def _thorax_sculpt_fn(pos: np.ndarray, *, y_ctr: float) -> np.ndarray:
+    """Sculpt a unified, anatomical insect thorax wrapping seamlessly around chest, flanks, and back.
+
+    Replaces the exposed vertical cylinder look with a tapered athletic mesosoma: rounded upper chest
+    and arched pronotum back flowing smoothly across sculpted lateral pleuron flanks into a slender
+    tapered lower waist with recessed shoulder & hip articulation pockets.
+    """
+    p = pos.copy()
+    x, y, z = p[:, 0], p[:, 1], p[:, 2]
+    ax = np.abs(x)
+    yr = y - y_ctr
+
+    # 1. Smooth front chest fullness (+Z) & gentle arched pronotum upper back (-Z) unified in one shell.
+    chest_w = np.exp(-((yr - 0.014) / 0.072) ** 2) * np.clip(z / 0.065, 0.0, 1.0)
+    back_w = np.exp(-((yr - 0.026) / 0.076) ** 2) * np.clip((-z) / 0.065, 0.0, 1.0)
+    p[:, 2] += 0.014 * chest_w - 0.015 * back_w
+
+    # 2. Sleek lateral mesopleuron flank shaping: slight sculpted upper-rib fullness tapering gracefully
+    #    toward a trim athletic lower waist (eliminates straight drum-like vertical side walls).
+    flank_mask = np.clip((ax - 0.025) / 0.055, 0.0, 1.0)
+    upper_rib = np.exp(-((yr - 0.022) / 0.058) ** 2) * flank_mask
+    p[:, 0] += np.sign(x) * 0.0055 * upper_rib
+
+    lower_waist = np.clip((-yr - 0.036) / 0.095, 0.0, 1.0)
+    p[:, 0] *= 1.0 - 0.22 * (lower_waist ** 1.35)
+    p[:, 2] *= 1.0 - 0.14 * (lower_waist ** 1.35)
+
+    # 3. Subtle diagonal carapace contour & neat recessed shoulder-socket hollow where arms root.
+    sh_pocket = (
+        np.exp(-(((ax - 0.070) / 0.024) ** 2 + ((yr - 0.068) / 0.026) ** 2 + ((z - 0.014) / 0.028) ** 2))
+    )
+    p[:, 0] -= np.sign(x) * 0.0065 * sh_pocket
+
+    rib_seam = np.exp(-(((yr + 0.020 - 0.18 * z) / 0.014) ** 2)) * flank_mask * np.clip(1.0 - lower_waist * 1.4, 0.0, 1.0)
+    p[:, 0] -= np.sign(x) * 0.0028 * rib_seam
+    return p
+
+
+def _paint_thorax_colors(part: MeshPart, *, y_ctr: float) -> MeshPart:
+    """Paint soft anatomical chitin shading onto the sculpted thorax (works on all team colors)."""
+    p = part.positions.astype(np.float64)
+    x, y, z = p[:, 0], p[:, 1], p[:, 2]
+    ax = np.abs(x)
+    yr = y - y_ctr
+
+    chest_hi = np.exp(-((ax / 0.058) ** 2 + ((yr - 0.018) / 0.066) ** 2)) * np.clip((z + 0.01) / 0.08, 0.0, 1.0)
+    back_hi = np.exp(-((ax / 0.060) ** 2 + ((yr - 0.030) / 0.064) ** 2)) * np.clip((-z + 0.01) / 0.08, 0.0, 1.0)
+    flank_hi = np.exp(-(((ax - 0.072) / 0.028) ** 2 + ((yr - 0.020) / 0.054) ** 2))
+    under_ao = np.clip((-yr - 0.040) / 0.092, 0.0, 1.0)
+    sh_ao = np.exp(-(((ax - 0.072) / 0.028) ** 2 + ((yr - 0.068) / 0.030) ** 2 + ((z - 0.014) / 0.032) ** 2))
+    neck_ao = np.clip((yr - 0.078) / 0.042, 0.0, 1.0)
+    flank_crease = (
+        np.exp(-(((yr + 0.020 - 0.18 * z) / 0.018) ** 2))
+        * np.clip((ax - 0.032) / 0.045, 0.0, 1.0)
+    )
+
+    lum = (
+        0.91
+        + 0.07 * chest_hi
+        + 0.06 * back_hi
+        + 0.04 * flank_hi
+        - 0.15 * under_ao
+        - 0.12 * sh_ao
+        - 0.10 * neck_ao
+        - 0.07 * flank_crease
+    )
+    lum = np.clip(lum, 0.72, 1.0).astype(np.float32)
+    part.colors = np.column_stack([lum, lum, lum]).astype(np.float32)
+    return part
+
+
 def _build_body(scene: SceneBuilder, *, y_off: float = 0.0) -> Dict[str, Tuple[float, float, float]]:
-    """Build petite slim 1998 insect thorax, pinched petiole, and compact tucked gaster."""
-    # Petite slim insect waist/chest (~28% narrower than before, matching agst901 & agst701).
+    """Build unified sculpted team-colored 1998 insect thorax, pinched petiole, and compact tucked gaster."""
+    y_ctr = 0.384 + y_off
+    # Cohesive sculpted team-colored insect thorax wrapping smoothly across chest, flanks, and upper back
+    # (no exposed flat dark vertical cylinder along the sides, tapering cleanly into the athletic waist).
     thorax_profile = [
-        (0.000, 0.248 + y_off),
-        (0.036, 0.258 + y_off),
-        (0.056, 0.286 + y_off),
-        (0.068, 0.324 + y_off),
-        (0.078, 0.368 + y_off),
-        (0.082, 0.410 + y_off),
-        (0.078, 0.446 + y_off),
-        (0.064, 0.474 + y_off),
-        (0.052, 0.496 + y_off),
-        (0.050, 0.532 + y_off),
-        (0.000, 0.544 + y_off),
+        (0.000, 0.252 + y_off),
+        (0.032, 0.262 + y_off),
+        (0.050, 0.286 + y_off),
+        (0.063, 0.318 + y_off),
+        (0.076, 0.358 + y_off),
+        (0.083, 0.402 + y_off),
+        (0.078, 0.440 + y_off),
+        (0.062, 0.468 + y_off),
+        (0.046, 0.486 + y_off),
+        (0.000, 0.494 + y_off),
     ]
     thorax_core = (
-        lathe(thorax_profile, radial_segs=24, cap_bottom=False, cap_top=False, axis="y", name="thorax_core", material="chitin_dark")
-        .scale(0.98, 1.0, 0.96)
+        lathe(thorax_profile, radial_segs=32, cap_bottom=False, cap_top=False, axis="y", name="thorax_core", material="chitin_team")
+        .scale(0.97, 1.0, 0.96)
+        .deform(lambda pts: _thorax_sculpt_fn(pts, y_ctr=y_ctr))
         .rotate_xyz(rx=0.04)
-        .translate(0.0, 0.0, -0.008)
+        .translate(0.0, 0.0, -0.006)
     )
+    thorax_core = _paint_thorax_colors(thorax_core, y_ctr=y_ctr)
     scene.add("body", thorax_core)
 
     neck_collar = (
-        torus_arc(0.052, 0.0085, u_segs=18, v_segs=8, plane="xz", name="neck_collar", material="chitin_dark")
+        torus_arc(0.048, 0.0075, u_segs=20, v_segs=8, plane="xz", name="neck_collar", material="chitin_dark")
         .rotate_xyz(rx=0.08)
         .translate(0.0, 0.484 + y_off, 0.008)
     )
@@ -594,45 +668,54 @@ def _build_body(scene: SceneBuilder, *, y_off: float = 0.0) -> Dict[str, Tuple[f
     # Smooth dark neck ball joint centered at the throat pivot so pitching the head
     # chin-up (-16 to -20 deg for 45 deg overhead camera) never reveals a jaw or occiput gap.
     neck_joint = (
-        ellipsoid(0.056, 0.062, 0.058, u_segs=18, v_segs=12, name="neck_joint", material="chitin_dark")
+        ellipsoid(0.052, 0.058, 0.054, u_segs=18, v_segs=12, name="neck_joint", material="chitin_dark")
         .translate(0.0, 0.510 + y_off, 0.016)
     )
     scene.add("body", neck_joint)
 
-    # Petite smooth ovoid team-colored chest carapace sitting cleanly proud of the slim core.
+    # Flush, low-profile sculpted sternum & dorsal pronotum contour plates seamlessly color-matched to thorax_core.
     chest_profile = [
-        (0.000, -0.082),
-        (0.038, -0.072),
-        (0.062, -0.040),
-        (0.074, -0.002),
-        (0.076, 0.032),
-        (0.064, 0.062),
-        (0.038, 0.080),
-        (0.000, 0.086),
+        (0.000, -0.064),
+        (0.030, -0.054),
+        (0.048, -0.028),
+        (0.058, 0.002),
+        (0.058, 0.028),
+        (0.046, 0.050),
+        (0.026, 0.064),
+        (0.000, 0.068),
     ]
     chest_plate = (
         lathe(chest_profile, radial_segs=22, cap_bottom=False, cap_top=False, axis="y", name="chest_plate", material="chitin_team")
-        .scale(0.95, 1.0, 0.68)
-        .rotate_xyz(rx=0.09)
-        .translate(0.0, 0.396 + y_off, 0.042)
+        .scale(0.90, 1.0, 0.44)
+        .rotate_xyz(rx=0.08)
+        .translate(0.0, 0.398 + y_off, 0.056)
     )
+    chest_plate = _paint_thorax_colors(chest_plate, y_ctr=y_ctr)
     scene.add("body", chest_plate)
 
-    # Petite smooth rounded dorsal pronotum carapace hugging the slim upper back.
     dorsal_plate = (
-        ellipsoid(0.074, 0.076, 0.050, u_segs=20, v_segs=14, name="dorsal_plate", material="chitin_team")
+        ellipsoid(0.060, 0.060, 0.032, u_segs=22, v_segs=14, name="dorsal_plate", material="chitin_team")
         .rotate_xyz(rx=-0.10)
-        .translate(0.0, 0.414 + y_off, -0.046)
+        .translate(0.0, 0.414 + y_off, -0.050)
     )
+    dorsal_plate = _paint_thorax_colors(dorsal_plate, y_ctr=y_ctr)
     scene.add("body", dorsal_plate)
 
+    # Subtle recessed dark waist articulation seam & neat flush shoulder articulation sockets.
     waist_seam = (
-        torus_arc(0.072, 0.0055, u_segs=20, v_segs=8, plane="xz", name="thorax_seam", material="chitin_dark")
-        .scale(0.98, 1.0, 1.04)
+        torus_arc(0.055, 0.0034, u_segs=24, v_segs=8, plane="xz", name="thorax_seam", material="chitin_dark")
+        .scale(0.96, 1.0, 0.98)
         .rotate_xyz(rx=0.05)
-        .translate(0.0, 0.308 + y_off, -0.006)
+        .translate(0.0, 0.312 + y_off, -0.006)
     )
     scene.add("body", waist_seam)
+
+    sh_socket = (
+        ellipsoid(0.016, 0.021, 0.021, u_segs=14, v_segs=10, name="shoulder_socket", material="chitin_dark")
+        .rotate_xyz(rz=-0.22)
+        .translate(0.068, 0.454 + y_off, 0.012)
+    )
+    scene.add_mirrored("body", sh_socket)
 
     c = max(0.0, -y_off)
     petiole_stem = swept_tube(
@@ -775,26 +858,27 @@ def _build_arm(
     ex, ey, ez = float(p1[0]), float(p1[1]), float(p1[2])
     root = np.array([side * 0.052, sy - 0.005, sz - 0.006], dtype=np.float64)
 
-    # 1. Upper arm (`arm_{label}`): thorax socket -> swollen humerus belly -> pinched elbow neck + angular cap.
-    upper_mid = 0.45 * p0 + 0.55 * p1 + np.array([side * 0.003, 0.005, -0.004])
-    upper_neck = 0.14 * p0 + 0.86 * p1
+    # 1. Upper arm (`arm_{label}`): sleek, monotonically tapered insect humerus (zero pinched elbow balls!).
+    upper_mid = 0.48 * p0 + 0.52 * p1 + np.array([side * 0.002, 0.003, -0.002])
+    upper_pre = 0.16 * p0 + 0.84 * p1
     upper_mesh = curved_tube(
-        [root, p0, upper_mid, upper_neck, p1],
+        [root, p0, upper_mid, upper_pre, p1],
         [
-            (0.024, 0.026),
-            (0.021, 0.023),
-            (0.022, 0.026),  # defined chitinous humerus swell
-            (0.0115, 0.0130),  # crisp pinched elbow neck
-            (0.0135, 0.0145),
+            (0.0195, 0.0205),
+            (0.0185, 0.0195),
+            (0.0168, 0.0178),
+            (0.0146, 0.0152),
+            (0.0138, 0.0142),
         ],
         samples_per_seg=4,
-        radial_segs=12,
+        radial_segs=14,
         cap_rings=3,
         name=f"arm_upper_{label}",
         material="chitin_dark",
     )
 
-    # Crisp angular sculpted elbow joint cap oriented along the exterior elbow bisector.
+    # Flush seamless elbow hinge fairing seated strictly inside the arm contour so bending never opens
+    # a gap and zero protruding ball appears on the elbow silhouette.
     v_up = p1 - p0
     v_up /= max(1e-8, float(np.linalg.norm(v_up)))
     v_fo = p1 - fore_pts[1]
@@ -812,12 +896,12 @@ def _build_arm(
     hinge_y = np.cross(bisect, hinge_x)
     cap_mat = np.eye(4, dtype=np.float64)
     cap_mat[:3, 0], cap_mat[:3, 1], cap_mat[:3, 2] = hinge_x, hinge_y, bisect
-    cap_mat[:3, 3] = p1 + 0.0055 * bisect
+    cap_mat[:3, 3] = p1 + 0.0016 * bisect
     elbow_cap = superellipsoid(
-        0.0145, 0.0135, 0.0195, e1=0.66, e2=0.70, u_segs=14, v_segs=10, name=f"elbow_cap_{label}", material="chitin_dark"
+        0.0112, 0.0112, 0.0128, e1=0.72, e2=0.76, u_segs=12, v_segs=8, name=f"elbow_cap_{label}", material="chitin_dark"
     ).transform(cap_mat)
     elbow_joint = ellipsoid(
-        0.0142, 0.0142, 0.0142, u_segs=12, v_segs=8, name=f"elbow_joint_{label}", material="chitin_dark"
+        0.0134, 0.0134, 0.0134, u_segs=12, v_segs=8, name=f"elbow_joint_{label}", material="chitin_dark"
     ).translate(ex, ey, ez)
 
     upper_node = f"arm_{label}"
@@ -828,7 +912,7 @@ def _build_arm(
     )
     scene.set_node_transform(upper_node, translation=(sx, sy, sz))
 
-    # 2. Forearm + wrist cuff + 2-finger pincer claws (`forearm_{label}`, pivoted RIGHT AT elbow `p1`).
+    # 2. Sleek tapered forearm + 2-finger pincer claws (`forearm_{label}`, pivoted RIGHT AT elbow `p1`).
     hand = fore_pts[-1]
     prev = fore_pts[-2]
     hdir = hand - prev
@@ -837,32 +921,32 @@ def _build_arm(
 
     if len(fore_pts) == 3:
         f_el, f_wr, f_ha = fore_pts
-        f_neck = 0.86 * f_el + 0.14 * f_wr
-        f_belly = 0.58 * f_el + 0.42 * f_wr + np.array([0.0, 0.003, 0.0])
-        f_ctrl = [f_el, f_neck, f_belly, f_wr, f_ha]
+        f_post = 0.84 * f_el + 0.16 * f_wr
+        f_mid = 0.50 * f_el + 0.50 * f_wr + np.array([0.0, 0.002, 0.0])
+        f_ctrl = [f_el, f_post, f_mid, f_wr, f_ha]
         f_rads = [
-            (0.0125, 0.0135),  # pinched elbow origin
-            (0.0120, 0.0130),
-            (0.0185, 0.0205),  # sculpted insect forearm swell
-            (0.0115, 0.0125),  # slender tapered wrist
-            (0.0158, 0.0148),  # crisp wrist cuff / palm
+            (0.0138, 0.0142),
+            (0.0136, 0.0142),
+            (0.0134, 0.0140),
+            (0.0118, 0.0124),
+            (0.0122, 0.0118),
         ]
     else:
-        f_neck = 0.86 * fore_pts[0] + 0.14 * fore_pts[1]
-        f_belly = 0.56 * fore_pts[0] + 0.44 * fore_pts[1]
+        f_post = 0.84 * fore_pts[0] + 0.16 * fore_pts[1]
+        f_mid = 0.50 * fore_pts[0] + 0.50 * fore_pts[1]
         f_wrist = 0.22 * fore_pts[0] + 0.78 * hand
-        f_ctrl = [fore_pts[0], f_neck, f_belly] + fore_pts[1:-1] + [f_wrist, hand]
+        f_ctrl = [fore_pts[0], f_post, f_mid] + fore_pts[1:-1] + [f_wrist, hand]
         f_rads = (
-            [(0.0125, 0.0135), (0.0120, 0.0130), (0.0185, 0.0205)]
-            + [(0.0155, 0.0170)] * max(0, len(fore_pts) - 2)
-            + [(0.0115, 0.0125), (0.0158, 0.0148)]
+            [(0.0138, 0.0142), (0.0136, 0.0142), (0.0134, 0.0140)]
+            + [(0.0128, 0.0134)] * max(0, len(fore_pts) - 2)
+            + [(0.0118, 0.0124), (0.0122, 0.0118)]
         )
 
     forearm_mesh = curved_tube(
         f_ctrl,
         f_rads,
         samples_per_seg=4,
-        radial_segs=12,
+        radial_segs=14,
         cap_rings=3,
         name=f"forearm_{label}",
         material="chitin_dark",

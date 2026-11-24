@@ -597,40 +597,30 @@ def _build_flowing_leg(
     foot_yaw: float,
     side: float,
 ) -> None:
-    """One segmented armored exoskeleton backwards-knee (`< \\`) insect leg pivoted at its planted foot."""
+    """One smooth, sturdy, ball-free backwards-knee (`< \\`) commando insect leg pivoted at its planted foot."""
     pts = [np.array([side * abs(p[0]), p[1], p[2]], dtype=np.float64) for p in ctrl]
-    # Segment 1: Hip -> pinched trochanter -> swollen muscular spindle femur -> pinched knee neck.
     p_hip, p_f1, p_knee, p_t1, p_ank, p_ft = pts[0], pts[1], pts[2], pts[3], pts[4], pts[5]
-    fem_pts = [p_hip, 0.62 * p_hip + 0.38 * p_f1, p_f1, 0.42 * p_f1 + 0.58 * p_knee, 0.14 * p_f1 + 0.86 * p_knee, p_knee]
-    femur = curved_tube(
-        fem_pts,
-        [(0.048, 0.052), (0.032, 0.036), (0.060, 0.066), (0.052, 0.058), (0.029, 0.033), (0.034, 0.038)],
-        samples_per_seg=3,
-        radial_segs=14,
-        cap_rings=2,
-        name=f"{node_name}_femur",
+    pre_knee = 0.16 * p_f1 + 0.84 * p_knee
+    post_knee = 0.84 * p_knee + 0.16 * p_t1
+    pre_ank = 0.16 * p_t1 + 0.84 * p_ank
+    leg_tube = curved_tube(
+        [p_hip, p_f1, pre_knee, p_knee, post_knee, p_t1, pre_ank, p_ank, p_ft],
+        [
+            (0.050, 0.054),
+            (0.053, 0.058),
+            (0.043, 0.047),
+            (0.040, 0.044),
+            (0.037, 0.040),
+            (0.034, 0.037),
+            (0.029, 0.032),
+            (0.028, 0.030),
+            (0.030, 0.032),
+        ],
+        samples_per_seg=4,
+        radial_segs=16,
+        cap_rings=3,
+        name=f"{node_name}_limb",
         material="chitin_team",
-    )
-    # Segment 2: Pinched sub-knee neck -> muscular tapered tibia -> distal ankle spur -> pinched ankle neck.
-    tib_pts = [p_knee, 0.84 * p_knee + 0.16 * p_t1, p_t1, 0.36 * p_t1 + 0.64 * p_ank, 0.14 * p_t1 + 0.86 * p_ank, p_ank, p_ft]
-    tibia = curved_tube(
-        tib_pts,
-        [(0.032, 0.036), (0.026, 0.030), (0.048, 0.054), (0.034, 0.038), (0.042, 0.046), (0.025, 0.028), (0.028, 0.030)],
-        samples_per_seg=3,
-        radial_segs=14,
-        cap_rings=2,
-        name=f"{node_name}_tibia",
-        material="chitin_team",
-    )
-    # Sculpted armored knee-cap condyle & ankle joint collar wrapping the outer exoskeleton bends.
-    bis_k = _normalize(-(p_f1 - p_knee) - (p_t1 - p_knee), fallback=(0.0, 0.0, -1.0))
-    knee_cap = (
-        superellipsoid(0.046, 0.048, 0.052, e1=0.68, e2=0.74, u_segs=14, v_segs=10, name=f"{node_name}_knee_cap", material="chitin_team")
-        .translate(p_knee + 0.010 * bis_k)
-    )
-    ankle_cap = (
-        superellipsoid(0.035, 0.032, 0.038, e1=0.70, e2=0.74, u_segs=12, v_segs=8, name=f"{node_name}_ankle_cap", material="chitin_team")
-        .translate(p_ank + np.array([0.0, 0.004, -0.004]))
     )
     yaw_s = side * foot_yaw
     foot_x = float(pts[-1][0])
@@ -638,7 +628,7 @@ def _build_flowing_leg(
     foot = _sturdy_foot(f"{node_name}_tarsus").rotate_xyz(ry=yaw_s).translate(foot_x, 0.0, foot_z)
     # Pivot cleanly on the ball of the planted foot at Y = 0.0 so knee-flex never lifts or slides the sole!
     pivot = (foot_x + 0.016 * math.sin(yaw_s), 0.0, foot_z + 0.016 * math.cos(yaw_s))
-    parts_loc = [part.translate(-pivot[0], 0.0, -pivot[2]) for part in (femur, knee_cap, tibia, ankle_cap, foot)]
+    parts_loc = [part.translate(-pivot[0], 0.0, -pivot[2]) for part in (leg_tube, foot)]
     scene.add(node_name, parts_loc, parent="legs")
     scene.set_node_transform(node_name, translation=pivot)
 

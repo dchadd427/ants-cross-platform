@@ -1442,6 +1442,44 @@ class All1998ClipsAndViewerTests(unittest.TestCase):
         finally:
             orig_sprites.DEFAULT_ANIM_JSON = old_default
 
+    @unittest.skipUnless(HAS_NUMPY, "numpy is needed")
+    def test_thief_idle_drives_left_right_eyes_and_viewer_loads_idle_lookout(self):
+        thief = self._build_all_six()["thief"]
+        idle_clip = next(c for c in thief.animations if c.name == "Idle")
+        by_target = {(ch.target_node, ch.path): ch for ch in idle_clip.channels}
+        for side in ("left", "right"):
+            ch = by_target.get((f"eye_ball_{side}", "rotation"))
+            self.assertIsNotNone(ch, f"Thief Idle clip must animate eye_ball_{side} rotation")
+            qys = [float(v[1]) for v in ch.values]
+            self.assertLess(min(qys), -0.30, f"Thief eye_ball_{side} must look hard left: {qys}")
+            self.assertGreater(max(qys), 0.30, f"Thief eye_ball_{side} must look hard right: {qys}")
+
+        node = shutil.which("node")
+        if node is None:
+            return
+        gltf_js = os.path.join(REPO, "tools", "ant_models", "viewer_gltf.js")
+        with tempfile.TemporaryDirectory(prefix="ants_thief_idle_") as tmpdir:
+            glb_path = os.path.join(tmpdir, "thief.glb")
+            with open(glb_path, "wb") as f:
+                f.write(gltf_writer.scene_to_glb_bytes(thief))
+            probe = (
+                "const fs = require('fs'), vm = require('vm');\n"
+                "globalThis.window = {};\n"
+                "globalThis.createImageBitmap = async () => ({ width: 1, height: 1, close() {} });\n"
+                "const gl = new Proxy({}, { get: (_, prop) => prop === 'getParameter' ? () => 0 : () => ({}) });\n"
+                f"vm.runInThisContext(fs.readFileSync({gltf_js!r}, 'utf8'));\n"
+                f"const buf = fs.readFileSync({glb_path!r});\n"
+                "const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);\n"
+                "globalThis.window.__antGltf.parseGlb(ab, gl).then((m) => {\n"
+                "  console.log(JSON.stringify({ idle: m.idleAnims.map((a) => a.name) }));\n"
+                "});\n"
+            )
+            run = subprocess.run([node, "-e", probe], capture_output=True, text=True, check=False)
+        self.assertEqual(run.returncode, 0, f"viewer_gltf.js parseGlb failed:\n{run.stderr}")
+        parsed = json.loads(run.stdout)
+        self.assertEqual(parsed["idle"][0], "Idle")
+        self.assertIn("IdleLookout", parsed["idle"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1203,6 +1203,17 @@ def _add_thief_idle_animation(scene: SceneBuilder) -> None:
         g_vals[-1] = g_vals[0]
         channels.append(AnimationChannel("gaster_group", "rotation", list(times), g_vals))
 
+    # Synced shifty left <-> right lookout eyes directly inside `"Idle"` (matching `"IdleLookout"`),
+    # so Thief's eyes dart left/right in every glTF viewer even when only `"Idle"` is played.
+    q_look_l = quat_from_axis_angle((0.0, 1.0, 0.0), -GAZE_ANGLE)
+    q_look_r = quat_from_axis_angle((0.0, 1.0, 0.0), +GAZE_ANGLE)
+    look_times = [0.0, 1.10, 1.26, 2.36, 2.52]
+    look_vals = [q_look_l, q_look_l, q_look_r, q_look_r, q_look_l]
+    for side in ("left", "right"):
+        ball_node = f"eye_ball_{side}"
+        if ball_node in scene.nodes:
+            channels.append(AnimationChannel(ball_node, "rotation", list(look_times), list(look_vals)))
+
     scene.add_animation("Idle", channels, replace=True)
     sync_leg_flex_to_clip(scene, "Idle")
     sync_arm_idle_to_clip(scene, "Idle")
