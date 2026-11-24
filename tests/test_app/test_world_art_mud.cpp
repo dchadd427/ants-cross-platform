@@ -46,7 +46,7 @@ void group(const char* name, const char* what) {
     std::printf("[%s] %s\n", name, what);
 }
 
-bool near(double a, double b, double tol) { return std::fabs(a - b) <= tol; }
+bool close_to(double a, double b, double tol) { return std::fabs(a - b) <= tol; }
 
 std::string pack_folder() { return std::string(ANTS_SOURCE_DIR) + "/assets/world_art"; }
 
@@ -92,28 +92,28 @@ void test_golden() {
     for (const Rec& r : recs) {
         if (r.kind == "hash" && r.v.size() == 4) {
             ++counts[0];
-            check(near(mud::lattice_value(static_cast<int64_t>(r.v[0]), static_cast<int64_t>(r.v[1]), static_cast<int64_t>(r.v[2])), r.v[3], 1e-8), "hash " + std::to_string(counts[0]));
+            check(close_to(mud::lattice_value(static_cast<int64_t>(r.v[0]), static_cast<int64_t>(r.v[1]), static_cast<int64_t>(r.v[2])), r.v[3], 1e-8), "hash " + std::to_string(counts[0]));
         } else if (r.kind == "vnoise" && r.v.size() == 4) {
             ++counts[1];
-            check(near(mud::value_noise(r.v[0], r.v[1], static_cast<int64_t>(r.v[2])), r.v[3], 1e-8), "vnoise " + std::to_string(counts[1]));
+            check(close_to(mud::value_noise(r.v[0], r.v[1], static_cast<int64_t>(r.v[2])), r.v[3], 1e-8), "vnoise " + std::to_string(counts[1]));
         } else if (r.kind == "fbm" && r.v.size() == 10) {
             ++counts[2];
-            check(near(mud::fbm(r.v[0], r.v[1], r.v[2], static_cast<int64_t>(r.v[3]), static_cast<int32_t>(r.v[4]), r.v[5], r.v[6], r.v[7], r.v[8]), r.v[9], 1e-8), "fbm " + std::to_string(counts[2]));
+            check(close_to(mud::fbm(r.v[0], r.v[1], r.v[2], static_cast<int64_t>(r.v[3]), static_cast<int32_t>(r.v[4]), r.v[5], r.v[6], r.v[7], r.v[8]), r.v[9], 1e-8), "fbm " + std::to_string(counts[2]));
         } else if (r.kind == "depth" && r.v.size() == 3) {
             ++counts[3];
-            check(near(depth.at(r.v[0], r.v[1]), r.v[2], 2e-5), "depth at (" + std::to_string(r.v[0]) + ", " + std::to_string(r.v[1]) + ")");
+            check(close_to(depth.at(r.v[0], r.v[1]), r.v[2], 2e-5), "depth at (" + std::to_string(r.v[0]) + ", " + std::to_string(r.v[1]) + ")");
         } else if (r.kind == "celldepth" && r.v.size() == 3) {
             ++counts[4];
-            check(near(depth.cell(static_cast<int32_t>(r.v[0]), static_cast<int32_t>(r.v[1])), r.v[2], 2e-5), "cell depth " + std::to_string(counts[4]));
+            check(close_to(depth.cell(static_cast<int32_t>(r.v[0]), static_cast<int32_t>(r.v[1])), r.v[2], 2e-5), "cell depth " + std::to_string(counts[4]));
         } else if (r.kind == "wetpatch" && r.v.size() == 8) {
             ++counts[5];
             const mud::Look look = mud::wet_and_patch_at(r.v[0], r.v[1], depth.at(r.v[0], r.v[1]));
             bool ok = true;
-            for (size_t k = 0; k < 3; ++k) ok = ok && near(look.mult[k], r.v[2 + k], 2e-5) && near(look.add[k], r.v[5 + k], 2e-4);
+            for (size_t k = 0; k < 3; ++k) ok = ok && close_to(look.mult[k], r.v[2 + k], 2e-5) && close_to(look.add[k], r.v[5 + k], 2e-4);
             check(ok, "wet and patch looks at (" + std::to_string(r.v[0]) + ", " + std::to_string(r.v[1]) + ")");
         } else if (r.kind == "ripple_median" && r.v.size() == 1) {
             ++counts[6];
-            check(near(mud::kRippleMedian, r.v[0], 1e-9), "the median length of the ripple field's gradient");
+            check(close_to(mud::kRippleMedian, r.v[0], 1e-9), "the median length of the ripple field's gradient");
         }
     }
     check(counts[0] == 12 && counts[1] == 12 && counts[2] == 16 && counts[3] == 40 && counts[4] == 20 && counts[5] == 40 && counts[6] == 1, "every record of the file was compared");
@@ -139,10 +139,10 @@ void test_depth_and_looks() {
     group("depth", "the depth of the mud, and which fields have looks at all");
     mud::Depth big;
     big.build(20, 20, mud_map(20, 20, {}));
-    check(big.any_deep() && near(big.cell(10, 10), mud::kDepthCap, 1e-6), "a field with no bank at all is as deep as the depth goes (the map's border is no bank): " + std::to_string(big.cell(10, 10)));
+    check(big.any_deep() && close_to(big.cell(10, 10), mud::kDepthCap, 1e-6), "a field with no bank at all is as deep as the depth goes (the map's border is no bank): " + std::to_string(big.cell(10, 10)));
     mud::Depth lake;
     lake.build(20, 20, mud_map(20, 20, {"8,8,11,11"}));
-    check(near(lake.at(8 * 32 - 0.01, 9 * 32 + 16), 0.0, 0.07) && near(lake.at(7 * 32, 9 * 32 + 16), 1.0, 0.07), "a bank has depth 0 and a point one cell from it depth 1");
+    check(close_to(lake.at(8 * 32 - 0.01, 9 * 32 + 16), 0.0, 0.07) && close_to(lake.at(7 * 32, 9 * 32 + 16), 1.0, 0.07), "a bank has depth 0 and a point one cell from it depth 1");
     check(lake.at(2 * 32 + 16, 2 * 32 + 16) > 3.0, "far from the lake the depth is more than three tiles");
     mud::Depth strip;
     strip.build(24, 12, mud_map(24, 12, {"0,0,23,4", "0,7,23,11"}));       // two cells wide
@@ -379,16 +379,16 @@ void test_render(const assets::AssetArchive& arc, const world_art::Pack& pack) {
     // the caches are bounded: once the view has moved, the cells that are not in it are let go (the limit says how many bytes may stay), and when it comes back it is the same picture
     {
         const auto cells_in = [&](double x, double y, size_t limit, size_t& kept_after_first) {
-            zoomtest::PixelRig far(arc, mud_wars(), kW, kH);
-            far.renderer.set_world_art(&pack);
-            far.renderer.set_dense_mud_budget_ms(-1);
-            far.renderer.set_dense_mud_cache_limit(limit);
-            far.look(0, y);
-            far.shoot();
-            kept_after_first = far.renderer.mud_baked_cells();
-            far.look(x, y);
-            far.shoot();
-            return far.renderer.mud_baked_cells();
+            zoomtest::PixelRig away(arc, mud_wars(), kW, kH);
+            away.renderer.set_world_art(&pack);
+            away.renderer.set_dense_mud_budget_ms(-1);
+            away.renderer.set_dense_mud_cache_limit(limit);
+            away.look(0, y);
+            away.shoot();
+            kept_after_first = away.renderer.mud_baked_cells();
+            away.look(x, y);
+            away.shoot();
+            return away.renderer.mud_baked_cells();
         };
         size_t first_alone = 0, ignore = 0;
         const size_t unbounded = cells_in(230, best_y, 1024u * 1024u * 1024u, first_alone);
