@@ -42,6 +42,8 @@ cmake-build-*/
 !web/app/**
 !assets/hud_art/
 !assets/hud_art/**
+!assets/world_art/
+!assets/world_art/**
 !tests/data/hud_art/
 !tests/data/hud_art/**
 !tools/hud_art/hands/
