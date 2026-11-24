@@ -934,8 +934,9 @@ JSON.stringify((function () {
   return { frame: true, ready: !!(w.Module && w.Module._ants_replay_get && w.Module._ants_replay_get(0) === 2), box: [box.x, box.y, box.right, box.bottom], inner: [w.innerWidth, w.innerHeight],
            gear: r(gear), gearShown: !!gear && !gear.hidden && getComputedStyle(gear).display !== 'none', gearIn: gear ? gear.parentNode.id + '>' + (gear.nextElementSibling ? gear.nextElementSibling.id : '') : '', pic: r(d.getElementById('picbtn')),
            buttons: d.querySelectorAll('.gm-btn').length, script: !!d.querySelector('script[src^="game_menu"]'),
+           head: [].filter.call(menu ? menu.querySelectorAll('.gm-head > *') : [], function (c) { return getComputedStyle(c).display !== 'none'; }).map(function (c) { var b = c.getBoundingClientRect(); return [b.x, b.right, c.scrollWidth > c.clientWidth + 1]; }),
            open: !!menu, panel: r(menu && menu.querySelector('.gm-panel')), resume: r(d.querySelector('.gm-resume')), back: r(d.querySelector('.gm-leave')), tabs: texts('[role=tab]'), tag: texts('.gm-tag'), btns: texts('.gm-btns button'),
-           rows: texts('.gm-name'), fullscreen: fs ? fs.id : null, parentPath: location.pathname, shown: !!document.getElementById('show') && document.getElementById('show').textContent };
+           rows: texts('.gm-name'), fullscreen: fs ? fs.id : null };
 })())"""
 
 
@@ -979,7 +980,8 @@ def frame_of_a_match_page(p, args, check):
     for label, width, height, touch in (("1280 x 800", 1280, 800, False), ("1920 x 1080", 1920, 1080, False), ("390 x 844, a phone", 390, 844, True)):
         tab.emulate(width, height, 1, mobile=touch)
         tab.open("about:blank", wait=False)
-        tab.open(args.web + "match?id=" + ID, settle=1.0)
+        tab.open(args.web + "match?id=" + ID, wait=False)                 # (the match page has no game of its own: nothing to wait for)
+        time.sleep(1.0)
         shown = wait_for(lambda: tab.ev("!!document.getElementById('show')"), 20, 0.3)
         check(bool(shown), "%s: the match page has Show replay" % label)
         if not shown:
@@ -992,7 +994,7 @@ def frame_of_a_match_page(p, args, check):
         check(s["gearIn"] == "rbar>picwrap", "%s: it is in the frame's bar, before the picture's button, as on the recording's own page (%s)" % (label, s["gearIn"]))
         check(inside(s["gear"], [0, 0, s["inner"][0], s["inner"][1]]) and s["gear"][3] - s["gear"][1] >= 30, "%s: it is whole inside the frame's window, 30 px high at least (%s in %s)" % (label, s["gear"], s["inner"]))
         if width > 700:
-            check(s["pic"] and s["gear"][0] >= s["pic"][2] - 1.5, "%s: it is at the right of the picture's button, as on the recording's own page" % label)
+            check(bool(s["pic"] and s["gear"]) and s["gear"][0] >= s["pic"][2] - 1.5, "%s: it is at the right of the picture's button, as on the recording's own page" % label)
         tab.save_shot(args.shots, "menu-frame-bar-%d" % width)
         # the button opens the panel
         press("#settings-btn-bar", touch)
@@ -1000,6 +1002,7 @@ def frame_of_a_match_page(p, args, check):
         check(s["open"] and s["tabs"] == "Sound,Video,Controls" and s["tag"] == "Watching a replay", "%s: the button opens the panel of a recording: Sound, Video, Controls (%s, %s)" % (label, s["tabs"], s["tag"]))
         check(s["btns"] == "Resume,Back to the matches", "%s: Resume and Back to the matches (%s)" % (label, s["btns"]))
         check(inside(s["panel"], [0, 0, s["inner"][0], s["inner"][1]]) and inside(s["resume"], s["panel"]) and inside(s["back"], s["panel"]), "%s: the panel and its buttons are whole inside the frame's window (panel %s, window %s)" % (label, s["panel"], s["inner"]))
+        check(all(a[1] <= b[0] + 0.5 for a, b in zip(s["head"], s["head"][1:])) and not any(h[2] for h in s["head"]), "%s: the pieces of the panel's header lie side by side, none over another or cut (%s)" % (label, s["head"]))
         tab.save_shot(args.shots, "menu-frame-panel-%d" % width)
         # Esc closes it and opens it again (the keys of the page go to the frame that was clicked)
         p.esc()
@@ -1027,7 +1030,7 @@ def frame_of_a_match_page(p, args, check):
         press(".gm-leave", touch)
         gone = wait_for(lambda: not fr()["frame"], 10, 0.3)
         check(bool(gone), "%s: Back to the matches takes the frame away" % label)
-        check(tab.ev("location.pathname + location.search") == path and tab.ev("document.getElementById('show').textContent") == "Show replay", "%s: the match page stays where it is and offers Show replay again" % label)
+        check(tab.ev("location.pathname + location.search") == path and tab.ev("document.getElementById('show').getAttribute('aria-expanded')") == "false" and "Show replay" in tab.ev("document.getElementById('show').textContent"), "%s: the match page stays where it is and offers Show replay again" % label)
 
 
 if __name__ == "__main__":

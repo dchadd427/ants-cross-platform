@@ -67,7 +67,7 @@ There is no separate Surrender: the forfeit is the quit that the game always had
 
 ## A recording or a live match that is watched
 
-The same panel, without what a seat needs: no Game section, a tag ("Watching a replay", "Watching live"), the note "The replay keeps playing. Pause it with the bar.", and **Back to the matches** for Leave game, which asks nothing (nothing is lost) and goes to the list. Esc, Resume and the dimmed area behave as in a match. Its Settings button is in the replay's bar.
+The same panel, without what a seat needs: no Game section, a tag ("Watching a replay", "Watching live"; a window under 401 px wide, such as a phone's frame of a match page, leaves it out: the header has no room for it beside the title and the cross), the note "The replay keeps playing. Pause it with the bar.", and **Back to the matches** for Leave game, which asks nothing (nothing is lost) and goes to the list. Esc, Resume and the dimmed area behave as in a match. Its Settings button is in the replay's bar.
 
 ## How the browser's panel is built
 
