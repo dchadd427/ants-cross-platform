@@ -1458,7 +1458,8 @@ enum class Start { Setup, Loading, Menu };
 
 /// An application on SDL's dummy video driver (a window the size of its canvas, so that window and picture coordinates are the same), its settings in a file of this run
 struct AppFixture {
-    explicit AppFixture(Aspect aspect, Start start = Start::Setup) : settings(temp_ini("ants_wide_pages")) {
+    /// `original_art`: the original's art (--hud-art classic): the results screen is then the original's page, which the cases that click or measure it are about (the new look of the results is test_scorecard_new's)
+    explicit AppFixture(Aspect aspect, Start start = Start::Setup, bool original_art = false) : settings(temp_ini("ants_wide_pages")) {
         std::error_code ignore;
         std::filesystem::remove(settings, ignore);
         ApplicationConfig cfg;
@@ -1475,6 +1476,8 @@ struct AppFixture {
         cfg.has_window_size = true;
         cfg.window_w = canvas_width_of(aspect);
         cfg.window_h = canvas_height_of(aspect);
+        cfg.hud_art_given = original_art;
+        cfg.hud_art_new = !original_art;
         QuietStdout quiet;
         ok = app.init(cfg);
         window = find_window();
@@ -1656,9 +1659,9 @@ void test_pointer(const assets::AssetArchive& arc) {
         classic.handle_mouse_down(580, 25);
         check(classic.is_quit_pressed(), "classic: the button is at (525, 12): a press at (580, 25) captures it");
     }
-    // the same through the application: the results of a match, clicked in the event loop
+    // the same through the application: the results of a match, clicked in the event loop (the original's page: with the new art the results are the new page, test_scorecard_new)
     {
-        AppFixture f(Aspect::Wide16x9);
+        AppFixture f(Aspect::Wide16x9, Start::Setup, true);
         check(f.app.start_game("Original-Ants/Maps/SMALL.LVL"), "a match starts");
         f.app.hud().update(f.app.sim().get_world_state(), 100);
         int quits = 0;
@@ -1811,11 +1814,16 @@ void test_application(const assets::AssetArchive& arc) {
             check_rect(f.app.picture(), classic, "classic: the quick help is the whole canvas");
             check(f.app.quick_help_start_button().up_rect() == ButtonRect({529, 437, 98, 27}), "classic: START! is the original's (529, 437)");
             f.app.quick_help_key(SDLK_RETURN);
-            check(f.app.start_game("Original-Ants/Maps/SMALL.LVL"), "classic: a match starts");
+        }
+    }
+    {
+        AppFixture f(Aspect::Classic4x3, Start::Setup, true);                         // (the original's art: the results are the original's page)
+        check(f.ok && f.app.start_game("Original-Ants/Maps/SMALL.LVL"), "classic: a match starts");
+        if (f.ok) {
             f.app.hud().update(f.app.sim().get_world_state(), 100);
             f.app.scorecard().show(sample_result(), 0);
             f.app.update_results(0.3f);
-            check(f.app.scorecard().is_open() && !f.app.scorecard().wide_layout(), "classic: the results are the original's page");
+            check(f.app.scorecard().is_open() && !f.app.scorecard().wide_layout() && !f.app.scorecard().new_look(), "classic: the results are the original's page");
             check_rect(f.app.picture(), classic, "classic: the results are the whole canvas");
         }
     }

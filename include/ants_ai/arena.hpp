@@ -76,11 +76,14 @@ public:
         uint32_t began{0};                     // of them, those of an ant that was not in the can't-go state a tick before (the rest repeat: the original's loop)
         uint32_t orders{0};                    // the group orders (move, special, attack) for the seat, as the engine was given them
         uint32_t attacks{0};                   // of them, the attack orders
+        uint32_t bridge_orders{0};             // of them, the special orders onto a water tile with no bridge on it (a Swimmer's dig: one order is one tile)
         uint32_t refused{0};                   // of them, those followed within kRefusedWindow ticks by the first reaction of an ant they name (the engine answers a walk within 4)
         uint32_t again{0};                     // of the refused ones, those that give the same kind of order to the same first ant onto the same tile as an order that was refused before (docs/BOT_UNSTUCK.md)
     };
     /// A command that the engine was given when its tick count was `tick`: the ants it names are remembered
     void command(const sim::Command& c, uint64_t tick);
+    /// A special order of the seat onto a water tile that holds no bridge (the arena asks the grid: the tally has none)
+    void bridge_order(uint8_t seat) noexcept { ++seats_[seat < sim::MAX_PLAYERS ? seat : 0].bridge_orders; }
     /// After the tick's commands were applied: counts `news` (the tick's news items) and the ants that entered the can't-go state (looked at only when one can have)
     void scan(const sim::SimulationEngine& sim, const std::vector<sim::NewsEvent>& news);
     const Seat& seat(uint8_t s) const noexcept { return seats_[s < sim::MAX_PLAYERS ? s : 0]; }
@@ -184,12 +187,15 @@ struct ArenaSpec {
 class IdleTally {
 public:
     static constexpr uint64_t kIdleTicks = 100;
+    static constexpr uint64_t kIdleLongTicks = 200;           // the second yardstick: an ant that has stood idle for 10 seconds (docs/BOT_IDLE.md)
     static constexpr uint64_t kPeriod = 4;
     struct Seat {
         uint64_t ant_ticks{0};                 // the living ants of the seat, in ticks
         uint64_t idle_ticks{0};                // ... of them, the idle ones
         uint64_t after_ant_ticks{0};           // the same two, from the last food taken to the end
         uint64_t after_idle_ticks{0};
+        uint64_t idle_long_ticks{0};           // the same two numbers for the ants that stood idle for 10 seconds (kIdleLongTicks)
+        uint64_t after_idle_long_ticks{0};
         uint32_t raids{0};                     // raids begun by the seat's Thieves
         uint32_t raid_points{0};               // ... and what they took (the raid_amount of the Thief when it began)
         uint32_t steals{0};                    // ... the Thieves that carried loot to the hill's entrance (a steal completed), and the points they banked
@@ -276,6 +282,28 @@ inline bool operator==(const ExpeditionResult& a, const ExpeditionResult& b) noe
            a.swimmers_taken == b.swimmers_taken && a.first_plant == b.first_plant && a.first_landing == b.first_landing && a.first_swimmer == b.first_swimmer;
 }
 
+/// What the tasks of the idle batch did (docs/BOT_IDLE.md); everything is 0 for a seat that has no standard bot or no work for the task
+struct IdleBatchResult {
+    uint32_t headon_jams{0};                   // pairs of ants face to face on a bridge for 3 seconds, with an own ant (BridgeHeadOnTask::jams), and the ants that stepped back
+    uint32_t headon_backoffs{0};
+    uint32_t contact_jobs{0};                  // single ants that struck at an enemy beside them (ContactTask::started), and their blows
+    uint32_t contact_blows{0};
+    uint32_t meets{0};                         // enemy Thieves that the idle ants met at the own hole (ThiefGuardTask::meets_started), and the blows they struck
+    uint32_t meet_strikes{0};
+    uint32_t holds{0};                         // posts taken in front of the own thief hole (IdleJobsTask::holds) and hurt ants sent home to heal
+    uint32_t heals{0};
+    uint32_t swarm_thieves{0};                 // ants that became a Thief at a strip while they waited there (SwarmTask::thieves)
+    uint32_t homed{0};                         // Thieves sent home before their first raid (RaidTask::homed)
+    uint32_t raid_tiles{0};                    // water tiles that Swimmers were told to dig for a Thief's chain, and for a Fire Ant's way home (BridgePlanner::tiles_ordered)
+    uint32_t home_tiles{0};
+};
+
+inline bool operator==(const IdleBatchResult& a, const IdleBatchResult& b) noexcept {
+    return a.headon_jams == b.headon_jams && a.headon_backoffs == b.headon_backoffs && a.contact_jobs == b.contact_jobs && a.contact_blows == b.contact_blows && a.meets == b.meets &&
+           a.meet_strikes == b.meet_strikes && a.holds == b.holds && a.heals == b.heals && a.swarm_thieves == b.swarm_thieves && a.homed == b.homed && a.raid_tiles == b.raid_tiles &&
+           a.home_tiles == b.home_tiles;
+}
+
 /// What a standard bot's Bomber flight to the island of the ring pile did (MinerFlightTask); the ticks are 0 for what never happened
 struct MinerFlightResult {
     uint32_t started{0};
@@ -320,6 +348,7 @@ struct ArenaSeatResult {
     uint32_t attack_orders{0};                 // of them, the attack orders (CantGoTally::Seat::attacks)
     uint32_t bombs_planted{0};                 // the bombs the seat's Bombers planted and the fire walls its Fire Ants lit (the engine's own match statistics)
     uint32_t fires_lit{0};
+    uint32_t bridge_orders{0};                 // the special orders onto a water tile with no bridge (CantGoTally::Seat::bridge_orders): the bridge tiles the seat's Swimmers were told to dig
     std::array<uint32_t, 4> war_ticks{};       // the ticks a standard bot spent at every war tier (StandardBot::war_ticks: not behind enough, 1 .. 3)
     uint32_t fire_hunts{0};                    // the stand batch: hunts of an enemy Fire Ant that fired the gate in (FightTask::fire_hunts)
     uint32_t mines_planted{0};                 // ... the mines the Bombers laid (MineTask::planted)
@@ -335,6 +364,8 @@ struct ArenaSeatResult {
     uint64_t idle_ticks{0};                    //     the raids its Thieves began and the points they took
     uint64_t after_ant_ticks{0};
     uint64_t after_idle_ticks{0};
+    uint64_t idle_long_ticks{0};               //     the ants that stood idle for 10 seconds, over the match and from the last food on (IdleTally::kIdleLongTicks)
+    uint64_t after_idle_long_ticks{0};
     uint32_t raids{0};
     uint32_t raid_points{0};
     uint32_t steals{0};                        // the steals completed (IdleTally::Seat::steals) and the points banked by them
@@ -346,6 +377,7 @@ struct ArenaSeatResult {
     uint32_t stuck_carriers{0};
     ExpeditionResult expedition;
     MinerFlightResult miner_flight;
+    IdleBatchResult idle_batch;
     BotController::SeatStats stats;
     /// commands released per second of game time, in thousandths
     uint32_t milli_commands_per_second(uint64_t ticks) const noexcept {

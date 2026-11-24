@@ -110,24 +110,10 @@
    "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
   },
   {
-   "id": "a_guest_has_no_button",
-   "file": "web/home/messages.js",
-   "old": "btn.hidden = !(you && live);",
-   "new": "btn.hidden = false;",
-   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
-  },
-  {
    "id": "a_typed_msg_opens_the_conversation",
    "file": "web/home/messages.js",
    "old": "else if (kind === 'open' && m && typeof m.h === 'string' && HANDLE.test(m.h)) openThread(m.h, typeof m.to === 'string' ? m.to : '');",
    "new": "",
-   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
-  },
-  {
-   "id": "the_count_stops_at_99",
-   "file": "web/home/messages.js",
-   "old": "return n > 99 ? '99+' : String(n);",
-   "new": "return n > 999 ? '99+' : String(n);",
    "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
   },
   {
@@ -149,6 +135,160 @@
    "file": "web/home/messages.js",
    "old": "m.rows.length > LIMIT.rows) return null;",
    "new": "m.rows.length > 1e9) return null;",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "the_x_of_a_conversation_closes_the_whole_sheet",
+   "file": "web/home/messages.js",
+   "old": "moreBtn, iconButton('pm-x', TEXT.close, 'x', closePanel)]);",
+   "new": "moreBtn, iconButton('pm-x', TEXT.close, 'x', function () { view = 'list'; cur = ''; menuOn = false; disarm(); paint(); focusFirst(); })]);",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "a_close_leaves_the_page_where_it_was",
+   "file": "web/home/messages.js",
+   "old": "unwatch(); unpin();",
+   "new": "unwatch();",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "back_closes_the_sheet",
+   "file": "web/home/messages.js",
+   "old": "if (!shade) return;\n                pinned = false;",
+   "new": "return;\n                pinned = false;",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "back_closes_the_report_card_first",
+   "file": "web/home/messages.js",
+   "old": "if (card) { closeCard(); pin(); } else if (menuOn)",
+   "new": "if (card) { closeCard(); closePanel(); } else if (menuOn)",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "back_closes_the_menu_before_the_sheet",
+   "file": "web/home/messages.js",
+   "old": "else if (menuOn) { menuOn = false; disarm(); paintMenu(); pin(); } else closePanel();",
+   "new": "else closePanel();",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "the_sheet_is_the_visible_part_of_the_window",
+   "file": "web/home/messages.js",
+   "old": "shade.style.top = Math.round(w.top) + 'px'; shade.style.height = Math.round(w.h) + 'px';",
+   "new": "shade.style.top = '0px'; shade.style.height = Math.round(w.high) + 'px';",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "the_field_is_brought_into_view",
+   "file": "web/home/messages.js",
+   "old": "if (field && field.scrollIntoView) field.scrollIntoView({ block: 'nearest' });",
+   "new": "",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "a_field_with_the_focus_makes_room_for_the_keyboard",
+   "file": "web/home/messages.js",
+   "old": "(!!field && doc.activeElement === field) || ",
+   "new": "",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "the_sheet_follows_a_page_that_is_panned",
+   "file": "web/home/messages.js",
+   "old": "v.addEventListener('resize', watching); v.addEventListener('scroll', watching);",
+   "new": "v.addEventListener('resize', watching);",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "the_sheet_stops_listening_when_it_closes",
+   "file": "web/home/messages.js",
+   "old": "v.removeEventListener('resize', watching); v.removeEventListener('scroll', watching);",
+   "new": "",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "a_wide_window_is_not_sized_by_the_script",
+   "file": "web/home/messages.js",
+   "old": "if (ph && w.h > 0) {",
+   "new": "if (w.h > 0) {",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "a_long_pull_closes_the_sheet",
+   "file": "web/home/messages.js",
+   "old": "var go = close && dy > LIMIT.pull;",
+   "new": "var go = false;",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "a_short_pull_does_not_close_the_sheet",
+   "file": "web/home/messages.js",
+   "old": "var go = close && dy > LIMIT.pull;",
+   "new": "var go = close;",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "a_button_of_the_head_is_not_a_grip",
+   "file": "web/home/messages.js",
+   "old": "|| inButton(e.target, zone)) return;",
+   "new": ") return;",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "a_mouse_does_not_pull_the_sheet",
+   "file": "web/home/messages.js",
+   "old": "e.pointerType === 'mouse' || ",
+   "new": "",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "a_guest_has_no_conversations",
+   "file": "web/home/messages.js",
+   "old": "convs: function () { return you && live ?",
+   "new": "convs: function () { return true ?",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "the_list_of_conversations_is_a_copy",
+   "file": "web/home/messages.js",
+   "old": "return you && live ? convs.slice() : [];",
+   "new": "return you && live ? convs : [];",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "a_hub_that_is_gone_has_no_count",
+   "file": "web/home/messages.js",
+   "old": "count: function () { return you && live ? count() : 0; }",
+   "new": "count: function () { return count(); }",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "the_bell_is_told_of_a_new_list",
+   "file": "web/home/messages.js",
+   "old": "if (shade && menuOn) paintMenu();\n            changed();\n        }",
+   "new": "if (shade && menuOn) paintMenu();\n        }",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "the_arrow_asks_the_bell_for_the_list",
+   "file": "web/home/messages.js",
+   "old": "function () { closePanel(); toList(); })",
+   "new": "function () { closePanel(); })",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "a_deleted_conversation_asks_the_bell_for_the_list",
+   "file": "web/home/messages.js",
+   "old": "closePanel(); changed(); toList();",
+   "new": "closePanel(); changed();",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "the_focus_goes_back_to_what_opened_the_conversation",
+   "file": "web/home/messages.js",
+   "old": "opener = back || null;",
+   "new": "opener = null;",
    "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
   }
  ]

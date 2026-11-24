@@ -1189,6 +1189,8 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(v.turn(), 700u);
         ASSERT_EQ(v.app.sim().state_hash().total, made.file.final_hash);
         ASSERT_TRUE(v.app.sim().is_match_over());
+        v.app.update_results(0.3f);
+        ASSERT_TRUE(v.app.scorecard().is_open() && !v.app.scorecard().report().ok && !v.app.scorecard().watch_available() && !v.app.can_watch_play());       // (the results of a file: the original's numbers, and no Watch: it is no match that was just played here)
         v.app.shutdown();
     } TEST_END();
 

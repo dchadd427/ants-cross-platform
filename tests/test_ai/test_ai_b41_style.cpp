@@ -590,6 +590,7 @@ void run_b41_style_tests() {
                 WallWorld w;
                 w.build(false, 1);
                 LevelPlan plan = defensive ? Pinned::plan(Level::Medium, Style::Defensive) : plan_for(Level::Medium);
+                without_idle_batch(plan);
                 plan.secure_side = false;
                 Rig rig(w.sim, 0, Level::Medium, std::make_unique<StandardBot>(plan), 4, 4);
                 rig.run(900);
@@ -603,6 +604,7 @@ void run_b41_style_tests() {
                 for (int i = 0; i < 4; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + i, 8});
                 const uint32_t thief = sim.spawn_unit(1, sim::AntType::Thief, TileCoord{13, 7});
                 LevelPlan plan = defensive ? Pinned::plan(Level::Medium, Style::Defensive) : plan_for(Level::Medium);
+                without_idle_batch(plan);
                 plan.secure_side = false;
                 plan.wall_trigger = WallTrigger::Never;                                                             // (the attack is the subject, not the walls)
                 Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan), 4, 4);
@@ -786,6 +788,7 @@ void run_b41_style_tests() {
                 ASSERT_EQ(plan.harass_strong_defence, 3u);
                 plan.harass_retreat_hp = 0;                                                                        // (the retreat of a hurt member is the next block's subject)
                 without_kill_batch(plan);                                                                          // (the idle hunt of the kill batch hunts the carriers with the two ants of this world: AI31.6)
+                without_idle_batch(plan);
                 if (!rule) plan.harass_strong_defence = 0;
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
                 for (int t = 0; t < 400; ++t) {
@@ -811,6 +814,7 @@ void run_b41_style_tests() {
             const uint32_t c1 = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{36, 30});
             sim.get_unit(c1).pick_up_food(1, 25);
             LevelPlan plan = Pinned::plan(Level::Hard, Style::Aggressive);
+            without_idle_batch(plan);
             plan.harass_strong_defence = 0;
             const uint64_t pause = plan.harass_pause_ticks;
             ASSERT_EQ(pause, 3000u);

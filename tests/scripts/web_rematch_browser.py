@@ -6,12 +6,12 @@ check starts the server (with the options of docker-compose.stack.yml and a star
 server, everything else to the site), and drives two people, each a browser of their own: Ann makes a room on the front page and Bob joins it through its link; Ann presses START, both pages go to the
 game page and the match runs; Bob quits (Ctrl+Q, Yes: with one other side left the rules end the match) and both games show the results.
 
-  * the game page: under the picture, the strip "The match is over" with its words, a chip for each player ("on the results screen" while nobody is back) and "Back to the lobby"; the strip lies
+  * the game page: under the picture, the strip "The match is over" with its words, a chip for each player ("on the results screen" while nobody is back) and the two choices "Back to the room" and "Back to Ants & Uncles"; the strip lies
     between the picture and the Picture row, the picture makes room for it (the picture, the strip and the Picture row are in the window together; the page's text below them scrolls
     as before), and nothing of it is markup;
-  * Back to the lobby: Ann's button takes her tab to /?room=<code>: the front page is in the same room, with the strip "Back from the match." at the top, Ann leads, Bob's color says "Still on the
+  * Back to the room: Ann's button takes her tab to /?room=<code>: the front page is in the same room, with the strip "Back from the match." at the top, Ann leads, Bob's color says "Still on the
     results screen…" and the note under START says that it waits for him; Bob's chips follow ("Ann · host · here"); Ann's START is answered by the room ("Bob is not back from the match yet.") and
-    nothing starts; Bob's way back is the game's own Leave Game on the results screen (in the picture), which takes his tab to the same room ("Back in the room" on Ann's screen, the note is gone) and Ann's START takes both
+    nothing starts; Bob's way back is the game's own results screen (Enter: "Back to the room"), which takes his tab to the same room ("Back in the room" on Ann's screen, the note is gone) and Ann's START takes both
     pages to the game again: the rematch runs;
   * a room that Ann made public is public when it comes back, and when Bob is back too (nobody is asked to make it public again);
   * in all of it the key is in no address and no console line.
@@ -37,7 +37,6 @@ from web_lobby_chat_browser import Visitor                                      
 
 ANN_DIGITS, BOB_DIGITS = "100001", "100002"               # (a guest's name is "Guest" and six digits kept by the browser: ants.guest, web/front/player_name.js; nobody types a name any more)
 ANN, BOB = "Guest " + ANN_DIGITS, "Guest " + BOB_DIGITS
-LEAVE_GAME = (1020, 112)                                     # (the results screen's own Leave Game, in the picture of a 1280 x 1025 window: picture R1)
 
 STRIP = ("(function () { var s = document.getElementById('rematch'); if (!s || s.hidden) return null; var q = function (c) { var n = s.querySelector(c); return n ? n.textContent : null; };"
          " var go = s.querySelector('.rmt-go'); return { title: q('.rmt-title'), text: q('.rmt-text'), button: go && !go.hidden ? q('.rmt-go .btn') : null, note: q('.rmt-note'),"
@@ -140,16 +139,16 @@ def main():
             strips[p.name] = wait_for(lambda: p.ev(STRIP), 20, 0.25)
             s = strips[p.name] or {}
             check(s.get("title") == "The match is over" and s.get("text") == "Everybody can go back to the room together: same host, same colors, same map. Your seat is kept for you."
-                  and s.get("button") == "Back to the lobby" and s.get("note") == "The game’s own “Leave Game” brings you back here too." and s.get("markup") == 0, "%s's game page shows the strip of picture R1 (%s)" % (p.name, s))
+                  and s.get("button") == "Back to the room" and s.get("note") == "The same two buttons are on the game’s results screen." and s.get("markup") == 0, "%s's game page shows the strip of picture R1 (%s)" % (p.name, s))
         check(bool(wait_for(lambda: [c[0] for c in (ann.ev(STRIP) or {}).get("chips", [])] == [ANN + " · on the results screen", BOB + " · on the results screen"], 10, 0.25)),
               "nobody is back yet: both chips say \"on the results screen\" (%s)" % (ann.ev(STRIP) or {}).get("chips"))
         place = ann.ev(PLACE) or {}
         check(place == {"below": True, "fits": True}, "the strip lies under the picture, and the picture and the strip are in the window together (%s)" % place)
         ann.shot(args.shots, "r1_game_page_match_over")
 
-        # ---- Ann goes back to the lobby ----
+        # ---- Ann goes back to the room ----
         ann.ev("document.querySelector('#rematch .rmt-go .btn').click(); 1")
-        check(bool(wait_for(lambda: ann.ev("location.pathname + location.search") == "/?room=" + code, 20, 0.25)), "Back to the lobby takes Ann's tab to the room's address")
+        check(bool(wait_for(lambda: ann.ev("location.pathname + location.search") == "/?room=" + code, 20, 0.25)), "Back to the room takes Ann's tab to the room's address")
         check(bool(wait_for(lambda: ann.ev("!!document.getElementById('code') && document.getElementById('code').textContent.replace(' ', '') === %r && !document.getElementById('start').disabled" % code), 30, 0.25)),
               "the front page is in the same room, and Ann may press START")
         time.sleep(1.0)
@@ -173,10 +172,10 @@ def main():
         # ---- Bob comes back; the rematch starts ----
         bob.resize(1280, 1025)
         time.sleep(0.5)
-        for kind in ("mouseMoved", "mousePressed", "mouseReleased"):                # (the game's own Leave Game, in the picture: not the strip's button; the strip's note says that it comes back here too)
-            bob.call("Input.dispatchMouseEvent", {"type": kind, "x": LEAVE_GAME[0], "y": LEAVE_GAME[1], "button": "left" if kind != "mouseMoved" else "none", "buttons": 1 if kind == "mousePressed" else 0, "clickCount": 1})
+        for kind in ("rawKeyDown", "keyUp"):                                        # (the game's own results screen, in the picture, not the strip's button: Enter takes the way that keeps the seat, "Back to the room"; the buttons' places depend on the window)
+            bob.call("Input.dispatchKeyEvent", {"type": kind, "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13, "nativeVirtualKeyCode": 13})
             time.sleep(0.1)
-        check(bool(wait_for(lambda: bob.ev("location.pathname + location.search") == "/?room=" + code and bob.ev("document.body.classList.contains('guest')"), 30, 0.25)), "Bob's Leave Game, in the game's picture, takes him to the room, as a player (not to Home)")
+        check(bool(wait_for(lambda: bob.ev("location.pathname + location.search") == "/?room=" + code and bob.ev("document.body.classList.contains('guest')"), 30, 0.25)), "Bob's Enter on the game's results screen (\"Back to the room\") takes him to the room, as a player (not to Home)")
         time.sleep(1.0)
         check(not seat_ended(bob) and not seat_ended(ann), "Bob's seat was kept for him: no \"seat ended\" notice on either screen (%s, %s)" % (bob.ev(BANNER), ann.ev(BANNER)))
         check(bool(wait_for(lambda: (ann.ev(CARDS) or [[0, ""], [1, ""]])[1][1] == "Back in the room" and ann.ev(NOTE) == "", 10, 0.25)), "Ann's screen: Bob is back in the room, nothing is waited for (%s)" % ann.ev(CARDS))

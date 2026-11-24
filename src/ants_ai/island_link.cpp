@@ -208,14 +208,21 @@ void FlowerLinkTask::step(TaskContext& c) {
     int64_t want_key = wanted;
     int32_t want_kind = -1;
     const BridgeJob* job = nullptr;
-    const bool jobs_on = tactics_.plan.island_return || tactics_.plan.island_feeder || tactics_.plan.island_power_bridge;
+    const bool jobs_on = tactics_.plan.island_return || tactics_.plan.island_feeder || tactics_.plan.island_power_bridge || (tactics_.plan.island_endraid && tactics_.endraid) || tactics_.plan.fire_hats;
     const std::function<bool(sim::TileCoord)> unusable = [&](sim::TileCoord t) {
         const auto bad = bad_.find(index_of(grid, t));
         return bad != bad_.end() && bad->second > now;
     };
-    if (wanted < 0 && jobs_on) {
-        job = planner_.look(c, tactics_, islands_->info(), swimmers, unusable);
-        if (job != nullptr) {
+    // a Thief that waits for its chain goes before a link for the Swimmers that the bot lacks (the Thief of the endgame, plan.island_endraid: the flower link keeps its digger for as long as an ant
+    // waits on the ring half, and the bot lacks Swimmers for the whole match)
+    bool thief_waits = false;
+    if (tactics_.plan.island_endraid && tactics_.endraid) {
+        for (const AntView& a : v.mine()) thief_waits = thief_waits || (a.type == sim::AntType::Thief && a.idle() && !a.holding && a.carried_points == 0 && a.hp >= 4 && c.ledger.owner(a.id) == kNoTask);
+    }
+    if (jobs_on && (wanted < 0 || thief_waits)) {
+        const BridgeJob* found = planner_.look(c, tactics_, islands_->info(), swimmers, unusable);
+        if (found != nullptr && (wanted < 0 || found->kind == BridgeJob::Kind::Raid)) {
+            job = found;
             want_tiles = &job->tiles;
             want_key = kJobKey + job->key();
             want_kind = static_cast<int32_t>(job->kind);
@@ -252,7 +259,8 @@ void FlowerLinkTask::step(TaskContext& c) {
     if (digger_ == 0) {
         if (busy) return;
         const AntView* best = nearest_digger(c, target);
-        if (best != nullptr && want_kind >= 0 && best->tile.chebyshev_dist(target) > static_cast<int32_t>(params_.job_max_swim)) return;   // (the swim would cost more than a bridge for an ant is worth)
+        const bool long_chain = want_kind == static_cast<int32_t>(BridgeJob::Kind::Raid) || want_kind == static_cast<int32_t>(BridgeJob::Kind::Home);
+        if (best != nullptr && want_kind >= 0 && best->tile.chebyshev_dist(target) > static_cast<int32_t>(long_chain ? params_.chain_max_swim : params_.job_max_swim)) return;   // (the swim would cost more than a bridge for an ant is worth)
         if (best == nullptr || !c.ledger.take(best->id, id())) return;
         digger_ = best->id;
         digger_link_ = want_key;

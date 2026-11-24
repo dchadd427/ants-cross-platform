@@ -2,13 +2,13 @@
 // and a fake clock, in the fake browser of tests/scripts/web_page_harness.js (its DOM). What it checks:
 //   1. the pure parts: a conversation, a message, the list and a thread cleaned (hostile text stays text, names and texts are cut, a handle has the hub's shape, a number is a whole number, too many rows is no frame);
 //   2. the source: ASCII, no markup, no storage, no network, no address to follow;
-//   3. who has it: no button for a guest, for a hub that is not there or before the welcome; no panel either (the way in refuses);
-//   4. the button: in the chat's head before the count of people, its label and count (99+ above 99), the count rises with a message that is not read and falls with the hub's list;
-//   5. the panel: opens from the button, the list (names, stars, 'You: ', times, counts, the empty words, the rule of 7 days), Escape, a press outside, a phone's sheet, where it stands, the focus back on the button;
-//   6. a conversation: dmopen, the bubbles (mine and theirs, a Report only on theirs), the notices, the day words, the field, sending (exact frames, nothing drawn until the hub's echo, the field kept when refused, one at a time),
-//      every word of a refusal, the page's own refusals (empty, markup, too long, offline);
+//   3. who has it: a guest, a hub that is not there or a welcome that has not come: no panel, and the ways in refuse (the part has no button: the list of conversations is the Messages tab of the bell, tests/scripts/web_home_alerts_check.js);
+//   4. the conversations and their count: what the part keeps for the bell (convs, count, the callback that says they changed), what a message that comes in or is read does to them;
+//   5. the panel: opens on a conversation, Escape, a press outside, the X, where it stands, a phone's sheet, the focus back on what opened it;
+//   6. a conversation: dmopen, the bubbles (mine and theirs, a Report only on theirs), the notices, the day words, the field, sending (exact frames, nothing drawn until the hub's echo, the field kept
+//      every word of a refusal, the page's own refusals (empty, markup, too long, offline); the arrow goes back to the bell's Messages tab;
 //   7. what is on the screen is read: dmread for a message that comes in, none for a panel that is closed or a hidden page, the read when the page is shown again;
-//   8. the menu: Block and Unblock are the hub's commands with the handle, their answers; Delete asks twice and goes back to the list;
+//   8. the menu: Block and Unblock are the hub's commands with the handle, their answers; Delete asks twice and goes back to the Messages tab;
 //   9. the report: the card, the three reasons, the exact frame, the answers, Escape, Cancel, the focus; report(h) with and without a message of theirs;
 //  10. what the hub may send: a frame that is wrong, too many rows, hostile names, unknown kinds: nothing breaks and nothing becomes markup; a new welcome clears and asks again for the open conversation; the keys (Tab stays inside).
 // tests/scripts/test_web_home_messages.py runs this with node. usage: node web_home_messages_check.js [web/lobby.html]     (exit 0: every check holds; every failure is printed)
@@ -91,6 +91,15 @@ function rig(o) {
     env.root = new El(env, 'html', '');
     const state = { phone: !!o.phone };
     const win = { AntsHomeChat: Chat, innerWidth: o.phone ? 390 : 1280, innerHeight: o.phone ? 844 : 800, matchMedia: () => ({ matches: state.phone }), listeners: {}, addEventListener(t, fn) { (win.listeners[t] = win.listeners[t] || []).push(fn); } };
+    // the history, as a browser keeps it: an entry for the page, one more for each pushState; back() takes the newest entry away and says popstate (the page's own entry is never taken)
+    const entries = [{ ants: 'home' }];
+    win.history = { get state() { return entries[entries.length - 1]; }, pushState(st) { entries.push(JSON.parse(JSON.stringify(st))); }, back() { if (entries.length > 1) { entries.pop(); (win.listeners.popstate || []).forEach((fn) => fn({})); } } };
+    if (o.vv) {                                          // the visual viewport: what the person sees (the keyboard is out of it); resize(h, top) is what a keyboard or a pan does
+        const vl = {};
+        win.visualViewport = { height: win.innerHeight, offsetTop: 0, addEventListener(t, fn) { (vl[t] = vl[t] || []).push(fn); }, removeEventListener(t, fn) { vl[t] = (vl[t] || []).filter((f) => f !== fn); }, listeners: vl, scale: 1 };
+        win.resizeVisual = (h, top) => { win.visualViewport.height = h; win.visualViewport.offsetTop = top || 0; (vl.resize || []).slice().forEach((fn) => fn({})); };
+        win.panVisual = (top) => { win.visualViewport.offsetTop = top; (vl.scroll || []).slice().forEach((fn) => fn({})); };
+    }
     const bar = new El(env, 'div'), box = new El(env, 'div', 'gchat'), head = new El(env, 'div'), here = new El(env, 'span');
     bar.className = 'hbar'; bar.getBoundingClientRect = () => ({ top: 0, bottom: 70, left: 0, right: 100, width: 100, height: 70 });
     box.getBoundingClientRect = () => ({ top: 550, bottom: 790, left: 0, right: 700, width: 700, height: 240 });
@@ -99,33 +108,32 @@ function rig(o) {
     title.className = 'gc-title'; fold.className = 'gc-fold';
     if (!o.noHead) { head.appendChild(title); head.appendChild(here); head.appendChild(fold); box.appendChild(head); }
     doc.body.appendChild(bar); doc.body.appendChild(box);
-    const sent = [], calls = [], taps = [], said = [], noted = [], errors = [], link = { open: true };
+    const sent = [], calls = [], taps = [], said = [], noted = [], errors = [], link = { open: true }, tally = { changed: 0, toList: 0 }, from = new El(env, 'button', '');
+    from.className = 'al-bell'; doc.body.appendChild(from);
     const dock = {
         root: box, tap(fn) { taps.push(fn); }, send(obj) { if (!link.open) return false; sent.push(JSON.parse(JSON.stringify(obj))); return true; }, call(text, done) { calls.push({ text, done }); }, note(t) { noted.push(t); },
         when: o.noWhen ? undefined : (at) => ({ time: '10:' + String(at % 60).padStart(2, '0'), full: 'full', day: dayOf(at), key: dayOf(at) })
     };
-    const part = Mod.mount({ doc, win, dock, say: o.noSay ? undefined : (w, t) => said.push([w, t]), now: () => NOW * 1000, error: (e) => errors.push(e) });
-    const r = { env, clock, Mod, doc, win, box, head, here, bar, part, dock, sent, calls, taps, said, noted, errors, link, state };
+    const part = Mod.mount({ doc, win, dock, say: o.noSay ? undefined : (w, t) => said.push([w, t]), now: () => NOW * 1000, error: (e) => errors.push(e), changed: () => { tally.changed++; }, toList: () => { tally.toList++; } });
+    const r = { env, clock, entries, Mod, doc, win, box, head, here, bar, part, dock, sent, calls, taps, said, noted, errors, link, state, tally, from };
     r.emit = (kind, m) => taps.forEach((fn) => fn(kind, m));
     r.live = (you) => { r.link.open = true; r.emit('live', { t: 'welcome', v: 1, you: you === undefined ? { name: 'hazel', mod: false, role: 'none', k: 'k1' } : you, login: true, presence: true, history: [] }); return r; };
     r.list = (rows) => { r.emit('msgs', { t: 'msgs', n: rows.reduce((n, c) => n + c.u, 0), rows }); return r; };
-    r.btn = () => one(head, 'pm-btn');
     r.shade = () => one(doc.body, 'pm-shade');
     r.panel = () => one(doc.body, 'pm-panel');
     r.card = () => one(doc.body, 'pm-card');
-    r.open = () => { r.btn().click(); return r.panel(); };
-    r.rows = () => byClass(r.panel(), 'pm-row');
+    r.open = (h, name) => { r.part.open(h || H1, name || 'maple', r.from); return r.panel(); };            // (the conversation, opened as the bell does: what has the focus again when it closes is `from`)
     r.names = () => texts(r.panel(), 'pm-nm');
     r.frames = (t) => sent.filter((m) => m.t === t);
     r.key = (key, extra) => { const ev = Object.assign({ key, preventDefault() { ev.stopped = true; } }, extra); doc.fire('keydown', ev); return ev; };
-    r.openThread = (h, name, rows, o2) => { r.live().list([conv(h, name)]); r.open(); r.rows()[0].click(); r.emit('thread', thread(h, name, rows || [], o2)); return r; };
+    r.openThread = (h, name, rows, o2) => { r.live().list([conv(h, name)]); r.open(h, name); r.emit('thread', thread(h, name, rows || [], o2)); return r; };
     r.bubbles = () => byClass(r.panel(), 'pm-msg');
     r.field = () => one(r.panel(), 'pm-input');
     r.type = (text) => { r.field().value = text; return r; };
     r.status = () => one(r.panel(), 'pm-status').textContent;
     r.sendBtn = () => one(r.panel(), 'pm-send');
     r.menu = () => { one(r.panel(), 'pm-more').click(); return one(r.panel(), 'pm-menu'); };
-    r.count = () => { const n = one(r.btn(), 'pm-n'); return n.hidden ? '' : n.textContent; };
+    r.count = () => { const n = r.part.count(); return n ? String(n) : ''; };
     return r;
 }
 
@@ -146,7 +154,6 @@ function rig(o) {
     check('a list of more than 50 rows, or with no rows, is no frame', P.listOf({ rows: Array.from({ length: 51 }, () => conv(H1, 'x')) }, Chat) === null && P.listOf({}, Chat) === null && P.listOf(null, Chat) === null && P.listOf({ rows: 'x' }, Chat) === null && P.listOf({ rows: Array.from({ length: 50 }, () => conv(H1, 'x')) }, Chat).length === 50);
     same('a thread: the name, the flags and the messages that are right', P.threadOf(thread(H1, 'maple', [mine(1, 'a'), { id: 'x' }, theirs(2, 'b')], { f: 1, b: 1 }), Chat), { h: H1, name: 'maple', f: true, b: true, rows: [{ id: 1, at: NOW - 30, text: 'a', me: true }, { id: 2, at: NOW - 40, text: 'b', me: false }], loaded: true });
     check('a thread of more than 100 messages, with a wrong handle or with no name is no frame', P.threadOf(thread(H1, 'x', Array.from({ length: 101 }, (_, i) => theirs(i + 1, 't'))), Chat) === null && P.threadOf(thread('bad', 'x', []), Chat) === null && P.threadOf(thread(H1, '', []), Chat) === null && P.threadOf(thread(H1, 'x', Array.from({ length: 100 }, (_, i) => theirs(i + 1, 't'))), Chat).rows.length === 100);
-    same('the count in words: 99+ above 99', [P.countText(0), P.countText(7), P.countText(99), P.countText(100), P.countText(4000)], ['0', '7', '99', '99+', '99+']);
     same('the circle holds the first code point', [P.initial('maple', Chat), P.initial(String.fromCodePoint(0x1F41C) + 'x', Chat)], ['m', String.fromCodePoint(0x1F41C)]);
     same('the limits are the hub\'s own', [P.LIMIT.convs, P.LIMIT.rows, P.LIMIT.text, P.LIMIT.name], [50, 100, 500, 32]);
 }
@@ -169,92 +176,86 @@ function rig(o) {
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
     const r = rig();
-    check('before the welcome there is a button in the head, hidden, and no panel', !!r.btn() && r.btn().hidden === true && r.part.state() === 'off');
-    check('the button stands in the chat\'s head before the count of people, and the head carries the class that gives it room', r.head.children.indexOf(r.btn()) === r.head.children.indexOf(r.here) - 1 && cls(r.head).indexOf('pm-has') !== -1);
+    check('before the welcome there is no panel, and the part says it is off and not ready', !r.panel() && r.part.state() === 'off' && r.part.ready() === false && r.part.convs().length === 0);
+    check('...and the ways in refuse', r.part.open(H1, 'maple', r.from) === false && !r.panel() && r.part.report(H1, 'maple') === false && r.frames('dmopen').length === 0);
     r.live(null);
-    check('a guest (the welcome names nobody) has no button, and the ways in refuse', r.btn().hidden === true && r.part.open(H1, 'maple') === false && r.part.openList() === false && r.part.report(H1, 'maple') === false && !r.shade());
+    check('a guest (the welcome names nobody) has no panel, and the ways in refuse', r.part.open(H1, 'maple', r.from) === false && r.part.report(H1, 'maple') === false && !r.panel() && r.part.ready() === false);
     r.live();
-    check('a person who is logged in has the button', r.btn().hidden === false && r.part.state() === 'closed');
+    check('a person who is logged in is ready and has nothing open', r.part.ready() === true && r.part.state() === 'closed');
+    r.list([conv(H1, 'maple', { u: 2 })]);
     r.emit('lost');
-    check('a hub that is gone takes the button away', r.btn().hidden === true && r.part.state() === 'off');
+    check('a hub that is gone takes the conversations away from the bell, and the bell is told', r.part.state() === 'off' && r.part.ready() === false && r.part.convs().length === 0 && r.part.count() === 0 && r.tally.changed > 0);
     r.live();
-    check('and it comes back with the next welcome', r.btn().hidden === false);
+    check('and it is ready again with the next welcome (it knows none of the conversations until the hub says them)', r.part.ready() === true && r.part.count() === 0);
     check('a hub that has not said the list yet gives no count', r.count() === '' && r.part.count() === 0);
-    check('mount is null where there is no dock, no tap or no chat script', (() => { const { Mod, doc, win } = r; return Mod.mount({ doc, win, dock: null }) === null && Mod.mount({ doc, win, dock: {} }) === null && Mod.mount({ doc, win: {}, dock: r.dock }) === null; })());
-    const bare = rig({ noHead: true });
-    bare.live();
-    check('a dock with no head has no button, and the part still works (the sheet of a person opens a conversation)', bare.btn() === null && bare.part.open(H1, 'maple') === true && !!bare.panel() && !bare.errors.length);
+    check('mount is null where there is no dock, no tap or no chat script', (() => { const { Mod, doc, win } = r; return Mod.mount({ doc, win, dock: null }) === null && Mod.mount({ doc, win, dock: {} }) === null && Mod.mount({ doc, win: Object.assign({}, win, { AntsHomeChat: null }), dock: r.dock }) === null; })());
+    check('the part makes no button and puts nothing in the chat\'s head (the list is the bell\'s)', !byClass(r.doc.body, 'pm-btn').length && r.head.children.length === 3 && cls(r.head).indexOf('pm-has') === -1);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// 4. the button and its count
+// 4. the conversations and their count (what the bell draws)
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
     const r = rig().live();
     r.list([conv(H1, 'maple', { u: 2 }), conv(H2, 'fern', { u: 1 })]);
-    check('the count is what is not read, in all conversations', r.count() === '3' && r.part.count() === 3);
-    same('...and the button says it in words', r.btn().getAttribute('aria-label'), 'Messages, 3 unread');
+    check('the count is what is not read, in all conversations', r.part.count() === 3 && r.part.convs().length === 2);
+    same('the conversations are given as the hub said them, cleaned: handle, name, the flags, what is not read', r.part.convs().map((c) => [c.h, c.name, c.u, c.f, c.b]), [[H1, 'maple', 2, false, false], [H2, 'fern', 1, false, false]]);
+    check('the bell is told at every list', r.tally.changed >= 1);
+    const before = r.tally.changed;
     r.list([conv(H1, 'maple'), conv(H2, 'fern')]);
-    check('the hub\'s list that has none unread takes the count away', r.count() === '' && r.btn().getAttribute('aria-label') === 'Messages');
+    check('the hub\'s list that has none unread takes the count away, and the bell is told', r.part.count() === 0 && r.tally.changed > before);
     r.emit('msg', { t: 'msg', h: H1, name: 'maple', id: 1, at: NOW - 5, text: 'a new one', me: 0, u: 1, f: 0 });
-    check('a message that comes in and is not read raises it', r.count() === '1');
+    check('a message that comes in and is not read raises it', r.part.count() === 1);
     r.emit('msg', { t: 'msg', h: H1, name: 'maple', id: 2, at: NOW - 4, text: 'and another', me: 0, u: 2, f: 0 });
-    check('...to what the hub counts', r.count() === '2');
+    check('...to what the hub counts', r.part.count() === 2);
     r.emit('msg', { t: 'msg', h: H3, name: 'wren', id: 3, at: NOW - 3, text: 'hi', me: 0, u: 1, f: 0 });
-    check('a message from a new person makes a conversation and counts', r.count() === '3' && r.part.count() === 3);
+    check('a message from a new person makes a conversation and counts', r.part.count() === 3 && r.part.convs()[0].h === H3);
+    same('...and the conversation with the newest message is the first', r.part.convs().map((c) => c.h), [H3, H1, H2]);
     r.emit('msg', { t: 'msg', h: H3, name: 'wren', id: 4, at: NOW - 2, text: 'my own', me: 1, u: 0, f: 0 });
-    check('a message that this person sent (the echo) does not count and clears what was not read of that conversation', r.count() === '2');
+    check('a message that this person sent (the echo) does not count and clears what was not read of that conversation', r.part.count() === 2 && r.part.convs()[0].me === true);
     r.list(Array.from({ length: 50 }, (_, i) => conv(('00000000000' + i.toString(16)).slice(-12), 'p' + i, { u: 3 })));
-    check('above 99 the button says 99+', r.count() === '99+' && r.part.count() === 150);
-    same('...and the label still has the number', r.btn().getAttribute('aria-label'), 'Messages, 150 unread');
+    check('fifty conversations at the most are kept, with their counts', r.part.convs().length === 50 && r.part.count() === 150);
+    const c0 = r.part.convs(); c0.pop();
+    check('what convs() gives is a copy: changing it changes nothing', r.part.convs().length === 50);
+    check('a guest has none: no conversations and no count whatever the hub said before', (() => { r.live(null); return r.part.convs().length === 0 && r.part.count() === 0; })());
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// 5. the panel and its list
+// 5. the panel
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
-    const r = rig().live();
-    const empty = r.open();
-    check('the button opens a dialog with the title, a close button and the empty words', !!empty && empty.getAttribute('role') === 'dialog' && texts(empty, 'pm-title')[0] === 'Private messages' && texts(empty, 'pm-et')[0] === 'No private messages yet' && /\/msg NAME/.test(texts(empty, 'pm-es')[0]) && r.btn().getAttribute('aria-expanded') === 'true' && r.part.state() === 'list');
-    same('the rule of the list is said in one line, with the 7 days and the block', texts(empty, 'pm-keep'), ['Messages are kept for 7 days. Anyone can write to you; block a person to stop their messages.']);
-    check('no request row and no gear: there is no row and no settings button', !r.rows().length && !byClass(empty, 'pm-gear').length && texts(empty, 'pm-keep')[0].indexOf('request') === -1);
+    const r = rig().live().list([conv(H1, 'maple', { u: 2 })]);
+    const panel = r.open();
+    check('a conversation opens a dialog named by it, with the arrow, the person and the X', !!panel && panel.getAttribute('role') === 'dialog' && panel.getAttribute('aria-label') === 'Private messages: maple' && !!one(panel, 'pm-back') && !!one(panel, 'pm-x') && texts(panel, 'pm-nm')[0] === 'maple' && r.part.state() === 'thread');
+    check('the panel is not a list: it has no title of the list, no row and no rule of the list', !byClass(panel, 'pm-title').length && !byClass(panel, 'pm-row').length && !byClass(panel, 'pm-keep').length);
+    check('what is not read of it is read at once, and the bell is told', r.part.count() === 0 && r.frames('dmopen').length === 1);
     r.key('Escape');
-    check('Escape closes it and the focus is back on the button', !r.shade() && r.doc.activeElement === r.btn() && r.btn().getAttribute('aria-expanded') === 'false');
-    r.list([conv(H1, 'maple', { u: 2, f: 1, text: 'ok, room is open', at: NOW - 60 }), conv(H2, 'fern', { me: 1, text: 'good game', at: NOW - 100000 }), conv(H3, 'a<b>x</b>', { text: '<script>x</script>' })]);
+    check('Escape closes it and the focus is back on what opened it (the bell)', !r.shade() && r.doc.activeElement === r.from && r.part.state() === 'closed');
     r.open();
-    same('the conversations, newest first as the hub sent them', r.names(), ['maple', 'fern', 'a<b>x</b>']);
-    same('the preview, with You: for one\'s own', texts(r.panel(), 'pm-pv'), ['ok, room is open', 'You: good game', '<script>x</script>']);
-    check('a name or a text with markup is only text: no element of its own', !r.panel().findAll((e) => e.tagName === 'script' || e.tagName === 'b').length && r.env.innerHTMLWrites.length === 0);
-    same('the time: today the clock, another day its word', texts(r.panel(), 'pm-when'), ['10:00', 'Friday', '10:00']);
-    same('the unread count is on the row that has one', texts(r.panel(), 'pm-u'), ['2']);
-    check('a person that is followed has the gold star, with its words', byClass(r.rows()[0], 'pm-star').length === 1 && byClass(r.rows()[0], 'pm-star')[0].getAttribute('aria-label') === 'You follow this person' && !byClass(r.rows()[1], 'pm-star').length);
-    check('every row is a button with a name for a screen reader that has the count and the words', r.rows().every((b) => b.tagName === 'button') && r.rows()[0].getAttribute('aria-label') === 'maple, 2 unread, ok, room is open');
-    r.emit('msg', { t: 'msg', h: H2, name: 'fern', id: 9, at: NOW - 1, text: 'one more', me: 0, u: 1, f: 0 });
-    same('a message that comes in while the list is on the screen moves its conversation to the top and draws it again', [r.names()[0], texts(r.panel(), 'pm-u')], ['fern', ['1', '2']]);
-    r.list([conv(H3, 'wren')]);
-    same('the hub\'s list again is the list', r.names(), ['wren']);
     r.shade().click();
-    check('a press on the page outside closes it', !r.shade());
+    check('a press on the page outside closes it', !r.shade() && r.doc.activeElement === r.from);
     r.open();
     one(r.panel(), 'pm-x').click();
-    check('the close button closes it', !r.shade() && r.doc.activeElement === r.btn());
+    check('the X closes it, the whole of it, and the focus is back on what opened it', !r.shade() && r.doc.activeElement === r.from && r.tally.toList === 0);
     r.open();
     r.panel().click();
-    check('a press inside does not', !!r.shade());
+    check('a press inside does not close it', !!r.shade());
     r.part.close();
     check('close() closes it', !r.shade() && r.part.state() === 'closed');
-    check('openList() opens the list, and again it only shows it', r.part.openList() === true && r.part.state() === 'list' && r.part.openList() === true && byClass(r.doc.body, 'pm-shade').length === 1);
-    r.part.close();
+    const free = rig().live().list([conv(H1, 'maple')]);
+    free.part.open(H1, 'maple');
+    one(free.panel(), 'pm-x').click();
+    check('a conversation that was opened with nothing to give the focus back to closes all the same', !free.shade() && free.part.state() === 'closed');
     const w = rig().live();
     w.open();
-    check('in a wide window the panel stands under the bar, down to the chat (the top of the chat box less 8)', w.panel().style.top === '76px' && w.panel().style.height === '466px' && cls(w.shade()).indexOf('phone') === -1, JSON.stringify([w.panel().style.top, w.panel().style.height]));
+    check('in a wide window the panel stands under the bar, down to the chat (the top of the chat box less 8)', w.panel().style.top === '76px' && w.panel().style.height === '466px' && cls(w.shade()).indexOf('phone') === -1);
     const p = rig({ phone: true }).live();
     p.open();
     check('on a phone it is a sheet: the class that the style reads, and no place of its own', cls(p.shade()).indexOf('phone') !== -1 && p.panel().style.top === '' && p.panel().style.height === '');
     p.state.phone = false;
     p.win.listeners.resize.forEach((fn) => fn({}));
     check('a window that becomes wide puts the panel in its place', cls(p.shade()).indexOf('phone') === -1 && p.panel().style.top === '76px');
-    check('nothing went wrong in any of it', !r.errors.length && !w.errors.length && !p.errors.length, [].concat(r.errors, w.errors, p.errors).map(String).join());
+    check('nothing went wrong in any of it', !r.errors.length && !w.errors.length && !p.errors.length && !free.errors.length, [].concat(r.errors, w.errors, p.errors).map(String).join());
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -262,9 +263,8 @@ function rig(o) {
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
     const r = rig().live().list([conv(H1, 'maple', { u: 2 })]);
-    r.open();
-    r.rows()[0].click();
-    same('a row opens the conversation and asks the hub for it, with the handle, exactly', r.frames('dmopen'), [{ t: 'dmopen', h: H1 }]);
+    r.open(H1, 'maple');
+    same('a conversation of the bell opens and asks the hub for it, with the handle, exactly', r.frames('dmopen'), [{ t: 'dmopen', h: H1 }]);
     check('...at once the name is there, and the words say that it is loading; the count is read', r.part.state() === 'thread' && r.names().indexOf('maple') !== -1 && /Loading/.test(one(r.panel(), 'pm-empty').textContent) && r.count() === '' && r.part.isOpen(H1) === true);
     r.emit('thread', thread(H1, 'maple', [theirs(1, 'hey hazel, want a 2v2?', NOW - 90000), theirs(2, 'no rush', NOW - 50), mine(3, 'yes! give me five minutes', NOW - 30)]));
     same('the messages, in order, mine and theirs', r.bubbles().map((b) => [cls(b)[1], one(b, 'pm-mt').textContent]), [['them', 'hey hazel, want a 2v2?'], ['them', 'no rush'], ['me', 'yes! give me five minutes']]);
@@ -321,8 +321,8 @@ function rig(o) {
     r.emit('dmx', { t: 'dmx', h: H2, why: 'who' });
     check('a refusal about another conversation is not said under this field: it is a toast of the page', r.status() === 'That did not go through, try again' && r.said.length === 1 && r.said[0][1] === 'warn');
     one(r.panel(), 'pm-back').click();
-    check('the way back shows the list, with this conversation in it', r.part.state() === 'list' && r.names().indexOf('maple') !== -1 && r.frames('dmopen').length === 1);
-    r.rows()[0].click();
+    check('the arrow closes the panel and asks the bell for its Messages tab (the hub is not asked again)', r.part.state() === 'closed' && !r.shade() && r.tally.toList === 1 && r.frames('dmopen').length === 1);
+    r.open(H1, 'maple');
     check('and a second opening asks the hub again (what is read is the hub\'s to know)', r.frames('dmopen').length === 2 && r.bubbles().length > 0);
     check('nothing went wrong in any of it', !r.errors.length, r.errors.map(String).join());
 }
@@ -401,7 +401,7 @@ function rig(o) {
     byClass(r.panel(), 'pm-mi')[1].click();
     byClass(r.panel(), 'pm-mi')[1].click();
     same('the second press sends dmdel with the handle, exactly', r.frames('dmdel'), [{ t: 'dmdel', h: H1 }]);
-    check('...the person is back at the list and the conversation is not in it', r.part.state() === 'list' && !r.rows().length && r.part.count() === 0);
+    check('...the panel is closed, the conversation is not in the list and the bell is asked for its Messages tab', r.part.state() === 'closed' && !r.shade() && r.part.convs().length === 0 && r.part.count() === 0 && r.tally.toList === 1);
     r.link.open = false;
     check('nothing went wrong in any of it', !r.errors.length, r.errors.map(String).join());
     const o = rig().openThread(H1, 'maple', [theirs(1, 'one')]);
@@ -444,8 +444,7 @@ function rig(o) {
     check('Escape closes the card first and the panel stays', esc.stopped === true && !r.card() && !!r.shade());
     r.key('Escape');
     check('...and the next Escape closes the panel', !r.shade());
-    r.open();
-    r.rows()[0].click();
+    r.open(H1, 'maple');
     r.emit('thread', thread(H1, 'maple', [theirs(1, 'first')]));
     byClass(r.bubbles()[0], 'pm-rep')[0].click();
     one(r.card(), 'pm-go').click();
@@ -510,9 +509,10 @@ function rig(o) {
     r.emit('nonsense', { t: 'nonsense' }); r.emit('who', { t: 'who' }); r.emit('alerts', { t: 'alerts', rows: [] });
     check('frames that are wrong in any part, and kinds that are not its own, change nothing and throw nothing', JSON.stringify([r.part.count(), r.part.state()]) === before && !r.errors.length && r.said.length === 0, r.errors.map(String).join());
     r.list([conv(H3, '<img src=x onerror=alert(1)>' + 'z'.repeat(60), { text: '<b>bold</b>' + 'w'.repeat(900) })]);
-    r.open();
-    check('a hostile name and text are cut and are only text', r.rows().length === 1 && Chat.points(r.names()[0]) <= 33 && r.names()[0].indexOf('<img src=x onerror=alert(1)>') === 0 && !r.panel().findAll((e) => ['img', 'b', 'script'].indexOf(e.tagName) !== -1).length && r.env.innerHTMLWrites.length === 0);
-    r.rows()[0].click();
+    const hostile = r.part.convs()[0];
+    check('a hostile name and text are cut in the list that the bell draws, and are only text', r.part.convs().length === 1 && Chat.points(hostile.name) <= 33 && hostile.name.indexOf('<img src=x onerror=alert(1)>') === 0 && Chat.points(hostile.text) === 501 && r.env.innerHTMLWrites.length === 0);      // (500 code points and the dots)
+    r.open(H3, hostile.name);
+    check('...and in the panel (the name that the bell gave)', Chat.points(r.names()[0]) <= 33 && r.names()[0].indexOf('<img src=x onerror=alert(1)>') === 0 && !r.panel().findAll((e) => ['img', 'b', 'script'].indexOf(e.tagName) !== -1).length && r.env.innerHTMLWrites.length === 0);
     r.emit('thread', thread(H3, 'x', Array.from({ length: 100 }, (_, i) => theirs(i + 1, '<i>' + i + '</i>'))));
     check('100 messages are drawn, as text', r.bubbles().length === 100 && one(r.bubbles()[0], 'pm-mt').textContent === '<i>0</i>' && !r.panel().findAll((e) => e.tagName === 'i').length);
     r.emit('msg', { t: 'msg', h: H3, name: 'x', id: 101, at: NOW, text: 'the 101st', me: 0, u: 1, f: 0 });
@@ -522,11 +522,11 @@ function rig(o) {
     same('a new welcome (a new socket) clears what was known and asks for the conversation on the screen again', [r.part.count(), r.part.state(), r.frames('dmopen').length], [0, 'thread', 2]);
     check('...with the name that was shown, until the thread comes', r.names().indexOf('x') !== -1 && /Loading/.test(one(r.panel(), 'pm-empty').textContent));
     r.live(null);
-    check('a welcome that names nobody (a log out) closes the panel and takes the button away', !r.shade() && r.btn().hidden === true && r.part.state() === 'off');
+    check('a welcome that names nobody (a log out) closes the panel and takes the conversations away', !r.shade() && r.part.ready() === false && r.part.convs().length === 0 && r.part.state() === 'off');
     r.live();
     r.emit('you', { t: 'you', you: { name: 'hazel', mod: true, role: 'mod' } });
     r.emit('you', { t: 'you', you: null });
-    check('a change of role changes nothing here, and a you that names nobody is ignored', r.btn().hidden === false);
+    check('a change of role changes nothing here, and a you that names nobody is ignored', r.part.ready() === true);
     // the keys
     const k = rig().openThread(H1, 'maple', [theirs(1, 'first')]);
     byClass(k.bubbles()[0], 'pm-rep')[0].click();
@@ -547,13 +547,8 @@ function rig(o) {
     const q = rig().live();
     const idle = q.key('Escape');
     check('with nothing open Escape and Tab are left alone', idle.stopped !== true && q.key('Tab').stopped !== true);
-    const open = rig().live().list([]);
-    open.open();
-    check('the list view moves the focus to the close button when there is no row, and to the first row when there is', open.doc.activeElement === one(open.panel(), 'pm-x'));
-    open.part.close(); open.list([conv(H1, 'maple')]); open.open();
-    check('...the first row', open.doc.activeElement === open.rows()[0]);
     const ph = rig({ phone: true }).live().list([conv(H1, 'maple')]);
-    ph.open(); ph.rows()[0].click();
+    ph.open(H1, 'maple');
     ph.emit('thread', thread(H1, 'maple', [theirs(1, 'first')]));
     byClass(ph.menu(), 'pm-mi')[0].click(); ph.calls[0].done('reply', { t: 'reply', c: 'ignore', r: 'ok' });
     check('on a phone the answer of Block is said under the field (the toast is under the sheet), not as a toast', ph.status() === 'maple is blocked: you get no more messages from them.' && ph.said.length === 0);
@@ -561,9 +556,9 @@ function rig(o) {
     check('...and so is the thanks of a report, once the card is gone', ph.status() === 'Thanks: the admins will look at it.' && ph.said.length === 0 && !ph.card());
     check('a conversation on a phone puts the focus on the way back (the keyboard stays down), on a wide window in the field', ph.doc.activeElement === one(ph.panel(), 'pm-back') && (() => { const w = rig().openThread(H1, 'maple', []); return w.doc.activeElement === w.field(); })());
     const nw = rig({ noWhen: true }).live().list([conv(H1, 'maple', { at: NOW - 120 })]);
-    nw.open();
-    check('a dock without its own words for a time gives "N min ago"', texts(nw.panel(), 'pm-when')[0] === '2 min ago' && !nw.errors.length);
-    check('nothing went wrong in any of it', ![r, k, q, open, ph, nw].some((x) => x.errors.length), [r, k, q, open, ph, nw].map((x) => x.errors.map(String).join()).join());
+    nw.open(H1, 'maple'); nw.emit('thread', thread(H1, 'maple', [theirs(1, 'a while ago', NOW - 120)]));
+    check('a dock without its own words for a time gives "N min ago" under a message', texts(nw.panel(), 'pm-tm')[0] === '' && texts(nw.panel(), 'pm-day')[0] === '2 min ago' && !nw.errors.length, JSON.stringify([texts(nw.panel(), 'pm-tm'), texts(nw.panel(), 'pm-day')]));
+    check('nothing went wrong in any of it', ![r, k, q, ph, nw].some((x) => x.errors.length), [r, k, q, ph, nw].map((x) => x.errors.map(String).join()).join());
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -592,6 +587,97 @@ function rig(o) {
     const g = rig().live(null);
     g.emit('open', { t: 'reply', c: 'msg', r: 'open', h: H2, to: 'tess' });
     check('...and a guest is never shown it', !g.panel());
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 12. a phone: the sheet is the visible part of the window (a keyboard takes the bottom of it), the field stays in view, and X, Back, a pull down, Escape and a press outside all close the whole sheet
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const r = rig({ phone: true, vv: true }).openThread(H1, 'maple', [theirs(1, 'first'), mine(2, 'second')]);
+    const sh = () => r.shade();
+    same('on a phone the sheet is exactly the visible part of the window: from its top, as high as it', [sh().style.top, sh().style.height, cls(sh()).indexOf('kb') !== -1], ['0px', '844px', false]);
+    r.win.resizeVisual(430, 0);
+    same('a keyboard (the visible part is 430 px high) makes the sheet 430 px high, with the room for the messages: the class that the style reads', [sh().style.height, sh().style.top, cls(sh()).indexOf('kb') !== -1], ['430px', '0px', true]);
+    r.win.panVisual(120);
+    same('...the page that is panned under the keyboard moves the sheet with the visible part', [sh().style.top, sh().style.height], ['120px', '430px']);
+    r.win.resizeVisual(844, 0);
+    same('...and a keyboard that goes gives the sheet its height back', [sh().style.top, sh().style.height, cls(sh()).indexOf('kb') !== -1], ['0px', '844px', false]);
+    const seenInView = [];
+    r.field().scrollIntoView = (o) => seenInView.push(o);
+    r.field().focus(); r.field().fire('focus', {});
+    check('the field with the focus makes room at once (the keyboard comes a moment later)', cls(sh()).indexOf('kb') !== -1);
+    r.clock.advance(300);
+    same('...and when the keyboard is there the field is brought into view', seenInView, [{ block: 'nearest' }]);
+    r.win.resizeVisual(430, 0);
+    r.field().blur(); r.clock.advance(400);
+    check('...a field that lost the focus with the keyboard still up keeps the sheet at the visible part', sh().style.height === '430px' && cls(sh()).indexOf('kb') !== -1);
+    r.win.resizeVisual(844, 0);
+    r.part.close();
+    check('the sheet that is closed stops listening to the viewport: nothing is left on it', (r.win.visualViewport.listeners.resize || []).length === 0 && (r.win.visualViewport.listeners.scroll || []).length === 0);
+    const w = rig({ vv: true }).openThread(H1, 'maple', []);
+    check('in a wide window the sheet is not sized by the script (the panel has its own place)', w.shade().style.top === '' && w.shade().style.height === '' && cls(w.shade()).indexOf('kb') === -1);
+    const n = rig({ phone: true }).openThread(H1, 'maple', []);
+    check('a browser with no visual viewport: the sheet is the window\'s height', n.shade().style.height === '844px' && n.shade().style.top === '0px');
+}
+{
+    const open = () => rig({ phone: true, vv: true }).openThread(H1, 'maple', [theirs(1, 'first')]);
+    const closed = (r, what) => { check(what + ': the sheet is gone (not the list, not another panel), the page is as it was', r.part.state() === 'closed' && !r.shade() && byClass(r.doc.body, 'pm-shade').length === 0 && r.entries.length === 1 && r.doc.activeElement === r.from); };
+    let r = open();
+    check('opening a conversation makes one entry of its own in the history (the page\'s own state is kept in it)', r.entries.length === 2 && r.entries[1].pm === 1 && r.entries[1].ants === 'home');
+    one(r.panel(), 'pm-x').click();
+    closed(r, 'X');
+    r = open();
+    one(r.panel(), 'pm-back').click();
+    check('the arrow closes the sheet, leaves no entry of its own in the history and asks the bell for its Messages tab', r.part.state() === 'closed' && !r.shade() && r.entries.length === 1 && r.tally.toList === 1);
+    r = open(); r.key('Escape');
+    closed(r, 'Escape');
+    r = open(); r.shade().click();
+    closed(r, 'a press outside');
+    r = open(); r.win.history.back();
+    check('the phone\'s Back button closes the sheet and leaves the page where it was', r.part.state() === 'closed' && !r.shade() && r.entries.length === 1 && r.doc.activeElement === r.from);
+    r = open();
+    r.menu();
+    r.win.history.back();
+    check('Back with the menu open closes the menu first: the sheet stays, with an entry again', r.part.state() === 'thread' && !!r.panel() && !one(r.panel(), 'pm-menu') && r.entries.length === 2);
+    r.win.history.back();
+    check('...and the next Back closes the sheet', r.part.state() === 'closed' && r.entries.length === 1);
+    r = open();
+    r.emit('thread', thread(H1, 'maple', [theirs(1, 'first')]));
+    one(r.panel(), 'pm-rep').click();
+    check('the report card is up', !!r.card());
+    r.win.history.back();
+    check('Back with the report card up closes the card first: the sheet stays, with an entry again', !r.card() && r.part.state() === 'thread' && r.entries.length === 2);
+    r.win.history.back();
+    r.win.history.back();
+    check('...and a Back that comes when nothing is open does nothing (the page is not touched)', r.part.state() === 'closed' && r.entries.length === 1);
+    r = open(); one(r.panel(), 'pm-x').click(); r.part.open(H1, 'maple');
+    check('a sheet that opens again after a close has one entry again, not two', r.entries.length === 2);
+}
+{
+    const open = () => rig({ phone: true, vv: true }).openThread(H1, 'maple', [theirs(1, 'first')]);
+    const down = (z, y, extra) => z.fire('pointerdown', Object.assign({ pointerType: 'touch', pointerId: 7, clientY: y, target: z }, extra));
+    const move = (z, y) => z.fire('pointermove', { pointerType: 'touch', pointerId: 7, clientY: y });
+    const up = (z) => z.fire('pointerup', { pointerType: 'touch', pointerId: 7 });
+    let r = open(), grab = one(r.panel(), 'pm-grab');
+    down(grab, 100); move(grab, 150);
+    check('a finger on the grip pulls the sheet down with it', r.panel().style.transform === 'translateY(50px)');
+    up(grab);
+    check('...a short pull lets it go back to its place and does not close it', r.panel().style.transform === '' && r.part.state() === 'thread');
+    r = open(); grab = one(r.panel(), 'pm-grab');
+    down(grab, 100); move(grab, 260); up(grab);
+    check('a long pull (80 px or more) closes the sheet, and the page is as it was', r.part.state() === 'closed' && !r.shade() && r.entries.length === 1 && r.doc.activeElement === r.from);
+    r = open(); const top = one(r.panel(), 'pm-top');
+    down(top, 100, { target: one(top, 'pm-who') }); move(top, 300); up(top);
+    check('the head of the sheet pulls it down too', r.part.state() === 'closed');
+    r = open(); const x = one(r.panel(), 'pm-x'), head = one(r.panel(), 'pm-top');
+    down(head, 100, { target: x }); move(head, 400); up(head);
+    check('a press that starts on a button of the head is a press, not a pull', r.part.state() === 'thread' && r.panel().style.transform === '');
+    down(head, 100, { pointerType: 'mouse' }); move(head, 400); up(head);
+    check('a mouse does not pull the sheet (it has the X)', r.part.state() === 'thread');
+    down(head, 100); move(head, 400); head.fire('pointercancel', {});
+    check('a pull that is cancelled (the browser took the touch) closes nothing and the sheet is back in its place', r.part.state() === 'thread' && r.panel().style.transform === '');
+    move(head, 500); up(head);
+    check('a move or a lift with no press before it does nothing', r.part.state() === 'thread');
 }
 
 console.log(failures ? failures + ' of ' + checks + ' checks FAILED' : 'all ' + checks + ' checks hold');

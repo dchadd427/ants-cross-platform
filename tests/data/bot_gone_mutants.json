@@ -51,8 +51,8 @@
     {
       "id": "no_raids_when_the_plan_has_none",
       "file": "src/ants_ai/standard_bot.cpp",
-      "old": "(plan.catchup && st.tier >= plan.catchup_lift_tier) || tactics_.gone;",
-      "new": "(plan.catchup && st.tier >= plan.catchup_lift_tier);",
+      "old": "(plan.catchup && st.tier >= plan.catchup_lift_tier) || tactics_.gone || tactics_.endraid;",
+      "new": "(plan.catchup && st.tier >= plan.catchup_lift_tier) || tactics_.endraid;",
       "test": "timeout 900 env ANTS_TEST_FILTER='AI56.2 ' ./build/tests/test_ai/test_ai",
       "expect": "AI56.2"
     },
@@ -123,7 +123,7 @@
     {
       "id": "after_the_food_never_restarts",
       "file": "src/ants_ai/arena.cpp",
-      "old": "        for (Seat& s : seats_) {\n            s.after_ant_ticks = 0;\n            s.after_idle_ticks = 0;\n        }",
+      "old": "        for (Seat& s : seats_) {\n            s.after_ant_ticks = 0;\n            s.after_idle_ticks = 0;\n            s.after_idle_long_ticks = 0;\n        }",
       "new": "",
       "test": "timeout 900 env ANTS_TEST_FILTER='AI56.7 ' ./build/tests/test_ai/test_ai",
       "expect": "AI56.7"

@@ -10,6 +10,11 @@
 //   Feeder   the chain leads to the hill's island and opens points of food that the hill could not walk to before (the ant's own island, or one on the way): the economy sends the ant to eat.
 //   Power    a power-up that the plan wants (Tactics::wants) lies on an island that a chain of a few tiles joins to the ant's island: the pick-up task takes it from the bridge's far side. A Fire hat is
 //            fetched only by an ant that can walk home, as everywhere (plan.fire_home_only).
+//   Raid     (plan.island_endraid, docs/BOT_IDLE.md) an own Thief that stands away from the hill and has no walk to any hill that it could raid: the chain that joins its island to the own hill's (the
+//            loot is banked there) and to the island of the richest enemy hill whose hole is open, at most `plan.endraid_tiles` water tiles in all, the other teams' hill islands left out. The chain is
+//            dug channel by channel, the tiles that are gone are dug again while the Thief waits; the raid itself is the raid task's.
+//   Home     (plan.fire_hats) a Fire Ant that took a hat where no walk leads home (a corner row of ISLANDS): the chain from its island to the hill's, at most `plan.fire_hat_tiles` tiles, and the walk
+//            home once it stands (the ant is the planner's until it is at the hill, whatever its hit points).
 //
 // A job is for one ant; it is given up when the ant is gone, moves, or is taken by a task, and a tile that could not be dug is left alone for a while (the link task's blacklist). An own ant that stands on a finished tile of a channel with little life left (the tile was dug in the match, by whom ever: a bridge piece that the map file holds stands for ever) is walked to the nearest
 // shore (the swarm and the pick-up task send ants over the new way, and two of them that meet on a one-wide bridge stand there until it falls). The planner reads the view, the map's analysis and the grid
@@ -29,13 +34,13 @@
 namespace ants::ai {
 
 struct BridgeJob {
-    enum class Kind : uint8_t { Return = 0, Feeder = 1, Power = 2 };
+    enum class Kind : uint8_t { Return = 0, Feeder = 1, Power = 2, Raid = 3, Home = 4 };
     Kind kind{Kind::Return};
     uint32_t ant{0};                         // the ant that the bridge is for
     std::vector<sim::TileCoord> tiles;       // the water tiles of the first channel of the chain that does not stand, from the ant's side outward
     int32_t missing{0};                      // the tiles of the whole chain that do not stand
     /// The identity of the job: the same ant and kind are the same job while its chain is dug channel by channel
-    int64_t key() const noexcept { return (static_cast<int64_t>(ant) << 2) | static_cast<int64_t>(kind); }
+    int64_t key() const noexcept { return (static_cast<int64_t>(ant) << 3) | static_cast<int64_t>(kind); }
 };
 
 class BridgePlanner {
@@ -62,12 +67,16 @@ public:
     void upkeep(TaskContext& context, const IslandInfo& info);
     /// The ants that a Return bridge was dug for walk home once the chain stands, and the planner keeps them from the economy until they have healed
     void walk_home(TaskContext& context);
+    /// The walks to the own hill as the map is now (a flood of the whole grid: made at most once in kWalkTicks, it changes slowly), shared by the look and the walk home
+    static constexpr uint64_t kWalkTicks = 20;
+    uint64_t walk_ttl_{0};                   // kWalkTicks while the idle batch's rules are on, 0 (the walks of this look) without them: the bot as it was looks at the map as it is
+    const MapInfo::NowField& walk_now(TaskContext& context);
     /// A tile of a job was ordered
     void note_ordered(BridgeJob::Kind kind) noexcept { ++ordered_[static_cast<size_t>(kind)]; }
 
     // ---- for the tests and the reports ----
     uint32_t tiles_ordered(BridgeJob::Kind kind) const noexcept { return ordered_[static_cast<size_t>(kind)]; }
-    uint32_t tiles_ordered() const noexcept { return ordered_[0] + ordered_[1] + ordered_[2]; }
+    uint32_t tiles_ordered() const noexcept { return ordered_[0] + ordered_[1] + ordered_[2] + ordered_[3] + ordered_[4]; }
     /// Ants that were sent home over a bridge (a move to the hill's door), and ants walked off a bridge that was about to go
     uint32_t homeward() const noexcept { return homeward_; }
     uint32_t evacuated() const noexcept { return evacuated_; }
@@ -86,15 +95,20 @@ private:
     Params params_;
     BridgeJob job_;
     std::map<uint32_t, Still> still_;        // the ants that stand free and still: where, and since when
-    std::set<uint32_t> returning_;           // the ants that a Return job was seen for: they walk home when the way stands
+    std::set<uint32_t> returning_;           // the ants that a Return or Home job was seen for: they walk home when the way stands
     std::map<uint32_t, Home> home_;          // the ants that were told to walk home
     static constexpr uint64_t kFromTheFile = ~uint64_t{0};
     bool primed_{false};                     // the first look has been made: a bridge piece that stood then is the map file's, and stands for ever
     std::map<int32_t, uint64_t> since_;      // finished tile of a channel (y * width + x) -> the tick it was first seen finished (kFromTheFile: it was there at the first look)
     std::map<uint32_t, uint64_t> evacuated_at_;   // ant -> the tick it was last told to leave a bridge
-    uint32_t ordered_[3]{0, 0, 0};
+    uint32_t ordered_[5]{0, 0, 0, 0, 0};
+    std::set<uint32_t> home_ants_;           // the Fire Ants that a Home job was made for: the planner has them until they are home
+    bool more_{false};                       // the food is gone and plan.bridge_more is on: a Return job is for any stranded ant, and the ant walks home to the hill, not to its hit points
     uint32_t homeward_{0};
     uint32_t evacuated_{0};
+    MapInfo::NowField walk_;
+    uint64_t walk_tick_{0};
+    bool walk_made_{false};
 };
 
 }  // namespace ants::ai

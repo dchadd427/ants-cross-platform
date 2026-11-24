@@ -76,6 +76,7 @@ int main(int argc, char** argv) {
         run_thief_tests();
         run_gone_tests();
         run_unstick_tests();
+        run_idle_tests();
     }
     if (ai_test::g_test_count == 0) {
         std::cout << "\n no test ran: the filter ANTS_TEST_FILTER matches no test of this suite (a misspelt or forgotten filter must not turn the suite green)\n";

@@ -75,7 +75,7 @@ struct DetourWorld {
     std::vector<uint8_t> blocking;           // 1 on a tile that the engine's search does not enter for an ant that moves: an ant of another team, an ally, a team-mate that stands still
 
     DetourWorld(const BotView& v, sim::PathGridPool& p) : view(v), grid(v.grid()), pool(p), seat(v.seat()), w(static_cast<int>(v.grid().width())), h(static_cast<int>(v.grid().height())) {
-        walk = MapInfo::walkable_mask(grid, seat, view.walk_context());
+        walk = view.walkable_mask(seat);
         const size_t n = static_cast<size_t>(std::max(w, 0)) * static_cast<size_t>(std::max(h, 0));
         bomb.assign(n, 0);
         occupied.assign(n, 0);

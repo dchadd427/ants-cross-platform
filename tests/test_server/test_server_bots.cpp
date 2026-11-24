@@ -1135,6 +1135,7 @@ void run_bot_tests() {
         }
         ASSERT_MSG(steps == 20 && finest_step_ms < 1.0, "the thread clock cannot time a pass: its finest step is " + std::to_string(finest_step_ms) + " ms (" + std::to_string(steps) + " of 20 steps seen)");
         struct Result {
+            int rooms{12};                                                                    // the rooms that the row was measured in
             double ms_per_second{0};
             double worst_pass_ms{0};
             double start_pass_ms{0};
@@ -1142,11 +1143,11 @@ void run_bot_tests() {
             std::string readings;                                                            // every reading of the row, "ms a second / worst pass / start pass", for the printout
         };
         // twelve rooms, each with one person (a client that asks for its seat) and bots in the other three seats: through the leader's fill (`fill` set) or the room's specification
-        const auto measure = [&](const char* map, const char* kind, ai::Level level, bool via_fill, Result& out) {
+        const auto measure = [&](const char* map, const char* kind, ai::Level level, bool via_fill, Result& out, int room_count = 12, int window_passes = 3000) {
             World w;
             std::vector<Client*> leaders;
             std::vector<std::string> codes;
-            for (int r = 0; r < 12; ++r) {
+            for (int r = 0; r < room_count; ++r) {
                 codes.push_back("CPU-" + std::to_string(r));
                 RoomSpec spec = spec_of(codes.back(), 4, map);
                 if (!via_fill) {
@@ -1177,13 +1178,14 @@ void run_bot_tests() {
                 if (w.status(code).state != RoomState::Running) return false;
             }
             double total = 0;
-            const int passes = 3000;                                                         // 30 s of match in all twelve rooms
+            const int passes = window_passes;                                                // 30 s of match in all twelve rooms (the island map: fewer rooms and 100 s, for the endgame of the bots is after 60 s)
             for (int i = 0; i < passes; ++i) {
                 pass(ms);
                 total += ms;
                 out.worst_pass_ms = std::max(out.worst_pass_ms, ms);
             }
-            out.ms_per_second = total / 30.0;
+            out.ms_per_second = total / (static_cast<double>(passes) / 100.0);
+            out.rooms = room_count;
             return true;
         };
         // A build with AddressSanitizer or UBSan runs the server 10 to 30 times slower than the program: its figures say nothing about the server, so such a build plays the two TINY rows (twelve
@@ -1209,13 +1211,16 @@ void run_bot_tests() {
         constexpr double kStopMsPerSecond = 300.0;
         constexpr double kStopPassMs = 750.0;
         constexpr double kRatioBound = 6.0;
+        // The island map's bots do more (the swarm, the flower link, the bridge planner, the endgame's Thief), and its idle row is a few milliseconds a second: the row has the bound of the others,
+        // 8 (a quiet Mac reads 3.7 times the idle bots, the Windows runners about half as much again)
+        constexpr double kRatioBoundIslands = 8.0;
         const auto within_stops = [](const Result& r) { return r.ms_per_second < kStopMsPerSecond && r.worst_pass_ms < kStopPassMs && r.start_pass_ms < kStopPassMs; };
-        const auto best_of = [&](const char* map, const char* kind, ai::Level level, bool via_fill, Result& out) {
+        const auto best_of = [&](const char* map, const char* kind, ai::Level level, bool via_fill, Result& out, int room_count = 12, int window_passes = 3000) {
             std::string readings;
             Result cheapest;
             for (int attempt = 1; attempt <= 3; ++attempt) {
                 Result r;
-                if (!measure(map, kind, level, via_fill, r)) return false;
+                if (!measure(map, kind, level, via_fill, r, room_count, window_passes)) return false;
                 std::ostringstream one;
                 one << std::fixed << std::setprecision(2) << r.ms_per_second << " / " << r.worst_pass_ms << " / " << r.start_pass_ms;
                 readings += (attempt > 1 ? "; " : "") + one.str();
@@ -1232,7 +1237,7 @@ void run_bot_tests() {
             out.readings = readings;
             return true;
         };
-        Result tiny_fill, tiny_idle, tiny_medium, tiny_hard, treasure_idle, treasure_hard;
+        Result tiny_fill, tiny_idle, tiny_medium, tiny_hard, treasure_idle, treasure_hard, islands_idle, islands_hard;
         ASSERT_TRUE(best_of("TINY.LVL", "standard", ai::Level::Medium, true, tiny_fill));
         ASSERT_TRUE(best_of("TINY.LVL", "standard", ai::Level::Medium, false, tiny_medium));
         if (!kSanitized) {
@@ -1240,10 +1245,12 @@ void run_bot_tests() {
             ASSERT_TRUE(best_of("TINY.LVL", "standard", ai::Level::Hard, false, tiny_hard));
             ASSERT_TRUE(best_of("TREASURE.LVL", "idle", ai::Level::Medium, false, treasure_idle));
             ASSERT_TRUE(best_of("TREASURE.LVL", "standard", ai::Level::Hard, false, treasure_hard));
+            ASSERT_TRUE(best_of("ISLANDS.LVL", "idle", ai::Level::Medium, false, islands_idle, 3, 10000));      // (the island play and the endgame batch run after the first minute: a window of 100 s in three rooms)
+            ASSERT_TRUE(best_of("ISLANDS.LVL", "standard", ai::Level::Hard, false, islands_hard, 3, 10000));
         }
         const auto row = [](const char* what, const Result& r) {
-            std::cout << "\n    " << std::left << std::setw(34) << what << std::right << std::fixed << std::setprecision(2) << std::setw(7) << r.ms_per_second << " ms per second of play for 12 rooms ("
-                      << std::setw(5) << r.ms_per_second / 12.0 << " per room), worst pass " << std::setw(6) << r.worst_pass_ms << " ms, worst pass while starting " << std::setw(6) << r.start_pass_ms << " ms";
+            std::cout << "\n    " << std::left << std::setw(34) << what << std::right << std::fixed << std::setprecision(2) << std::setw(7) << r.ms_per_second << " ms per second of play for " << r.rooms << " rooms ("
+                      << std::setw(5) << r.ms_per_second / r.rooms << " per room), worst pass " << std::setw(6) << r.worst_pass_ms << " ms, worst pass while starting " << std::setw(6) << r.start_pass_ms << " ms";
             if (r.attempts > 1) std::cout << " (measured " << r.attempts << " times, ms a second / worst pass / start pass: " << r.readings << ")";
         };
         std::cout << "\n    [12 rooms, one person and three bots in each; only the server's own thread is timed" << (kSanitized ? "; a sanitizer build: no figure here is the server's, nothing is bounded" : "") << "]";
@@ -1254,10 +1261,12 @@ void run_bot_tests() {
             row("TINY, hard bots", tiny_hard);
             row("TREASURE, idle bots", treasure_idle);
             row("TREASURE, hard bots", treasure_hard);
+            row("ISLANDS, idle bots (3 rooms)", islands_idle);
+            row("ISLANDS, hard bots (3 rooms)", islands_hard);
         }
         std::cout << "\n    ";
         if (kSanitized) return;
-        for (const Result* r : {&tiny_fill, &tiny_idle, &tiny_medium, &tiny_hard, &treasure_idle, &treasure_hard}) {
+        for (const Result* r : {&tiny_fill, &tiny_idle, &tiny_medium, &tiny_hard, &treasure_idle, &treasure_hard, &islands_idle, &islands_hard}) {
             ASSERT_MSG(within_stops(*r), "a row is over a safety stop (" + std::to_string(r->ms_per_second) + " ms a second, worst pass " + std::to_string(r->worst_pass_ms) + " ms, start pass " + std::to_string(r->start_pass_ms) + " ms); readings: " + r->readings);
         }
         // the test: what the bots cost against the idle bots on the same map, in this run
@@ -1265,13 +1274,14 @@ void run_bot_tests() {
             const char* what;
             const Result* row;
             const Result* idle;
+            double bound{kRatioBound};
         };
         for (const Against& a : {Against{"TINY, the leader's fill, medium", &tiny_fill, &tiny_idle}, Against{"TINY, medium bots", &tiny_medium, &tiny_idle}, Against{"TINY, hard bots", &tiny_hard, &tiny_idle},
-                                 Against{"TREASURE, hard bots", &treasure_hard, &treasure_idle}}) {
+                                 Against{"TREASURE, hard bots", &treasure_hard, &treasure_idle}, Against{"ISLANDS, hard bots", &islands_hard, &islands_idle, kRatioBoundIslands}}) {
             ASSERT_TRUE(a.idle->ms_per_second > 0.0);
             const double times = a.row->ms_per_second / a.idle->ms_per_second;
-            std::cout << "\n    " << a.what << ": " << std::fixed << std::setprecision(2) << times << " times the idle bots' cost on the same map (the bound is " << kRatioBound << ")";
-            ASSERT_MSG(times < kRatioBound, std::string(a.what) + " cost " + std::to_string(times) + " times what the idle bots of the same map cost in the same run (the bound is " + std::to_string(kRatioBound) + "); readings: " + a.row->readings + " against " + a.idle->readings);
+            std::cout << "\n    " << a.what << ": " << std::fixed << std::setprecision(2) << times << " times the idle bots' cost on the same map (the bound is " << a.bound << ")";
+            ASSERT_MSG(times < a.bound, std::string(a.what) + " cost " + std::to_string(times) + " times what the idle bots of the same map cost in the same run (the bound is " + std::to_string(a.bound) + "); readings: " + a.row->readings + " against " + a.idle->readings);
         }
     } TEST_END();
 

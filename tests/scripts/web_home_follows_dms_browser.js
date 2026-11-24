@@ -4,7 +4,7 @@
 //   1. the person's sheet of a name in the players list (Message, Follow, Ignore, Report, and the dim "Open a room first"): every target is 44 px or more on a touch screen, it lies inside the window;
 //   2. Follow: the Following tab (count, the person under what they do, the star in Everyone), the hub's own answer; a person who is not here under "Not here"; the word that nobody is told;
 //   3. a public room that a person she follows opens (the page of fern says it to the real hub): the toast with Join, the bell's row, and no frame of fern's holds anything of it;
-//   4. a private message: the Messages button (in the chat's head, with its count), the panel (a sheet from the bottom on a phone), the conversation, Send (a message is drawn only when the hub's echo comes), the other page's toast, count and
+//   4. a private message: the bell's Messages tab (the list of conversations; the number on the bell counts them), the panel (a sheet from the bottom on a phone), the conversation, Send (a message is drawn only when the hub's echo comes), the other page's toast, count and
 //      bell row, the read that takes them away;
 //   5. Block: the blocked person's message is not shown to hazel (no toast, no count), and the sender sees an ordinary send; Report: the card, and the hub's copy of the message (read with `python3 -m hub.admin reports`);
 //   6. nothing is wider than the window, nothing sticks out, no page error.
@@ -13,11 +13,8 @@
 // Needs `playwright` (npm), a Chromium that it can start and python3 with the hub's own folder (hub/); without them it says so and exits 0 (nothing was checked). Exit status: 0 every check passed (or none could be made), 1 a check failed.
 'use strict';
 const fs = require('fs');
-const os = require('os');
-const net = require('net');
-const http = require('http');
 const path = require('path');
-const { spawn, spawnSync } = require('child_process');
+const { spawnSync } = require('child_process');
 
 let playwright = null;
 try { playwright = require('playwright'); } catch (e) { /* not installed */ }
@@ -29,69 +26,13 @@ if (python.status !== 0) { console.log('SKIP: python3 cannot import the hub: fol
 const arg = (name) => { const i = process.argv.indexOf(name); return i === -1 ? null : process.argv[i + 1]; };
 const WEB = path.resolve(arg('--web') || path.join(ROOT, 'web'));
 const SHOTS = arg('--shots') ? path.resolve(arg('--shots')) : null;
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.ttf': 'font/ttf', '.ico': 'image/x-icon', '.json': 'application/json', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json' };
 const SIZES = [['1920', 1920, 1080, 1, false], ['1366', 1366, 768, 1, false], ['1280', 1280, 800, 1, false], ['phone', 390, 844, 2, true]];
-const ACCOUNTS = { hazel: '100_hazel', pebble: '200_pebble', fern: '300_fern', juniper: '400_juniper', birch: '500_birch' };         // (the cookie: the account's id, an underscore, its name)
-const LOBBIES = { format: 1, count: 3, lobbies: [
-    { code: 'c1v3rr', host: 'Clover', map: 'TREASURE.LVL', mode: 'highest-score', people: 2, bots: 1, free: 1, size: 4, age: 200 },
-    { code: 'p4n8dz', host: 'Pebble', map: 'ISLANDS.LVL', mode: 'highest-score', people: 3, bots: 0, free: 1, size: 4, age: 312 },
-    { code: 'f3rn22', host: 'Fern', map: 'TREASURE.LVL', mode: 'highest-score', people: 1, bots: 2, free: 1, size: 4, age: 20 }] };
+const { startStack: startStackIn, openPage, until, sleep } = require('./web_home_hub_rig.js');
+const startStack = () => startStackIn(WEB);
 
 let checks = 0;
 let failures = 0;
 function check(label, ok, detail) { checks++; if (!ok) { failures++; console.log('FAIL ' + label + (detail === undefined ? '' : ' (' + detail + ')')); } }
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const freePort = () => new Promise((resolve, reject) => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => resolve(p)); }); s.on('error', reject); });
-async function until(label, fn, ms) {
-    const end = Date.now() + (ms || 10000);
-    for (;;) {
-        let v = null;
-        try { v = await fn(); } catch (e) { v = null; }
-        if (v) return v;
-        if (Date.now() > end) throw new Error('timeout: ' + label);
-        await sleep(50);
-    }
-}
-
-async function startStack() {                        // a new hub with a new database, and the site in front of it
-    const [hubPort, sitePort] = [await freePort(), await freePort()];
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ants_follows_browser.'));
-    const origin = 'http://127.0.0.1:' + sitePort, db = path.join(dir, 'hub.db');
-    const hub = spawn('python3', ['-m', 'hub'], { cwd: ROOT, env: Object.assign({}, process.env, { ANTS_HUB_PORT: String(hubPort), ANTS_HUB_HOST: '127.0.0.1', ANTS_HUB_DB: db, ANTS_HUB_PUBLIC_URL: origin, ANTS_HUB_OWNER: '999', ANTS_HUB_TEST_LOGIN: '1' }), stdio: ['ignore', 'pipe', 'pipe'] });
-    let hubLog = '';
-    hub.stdout.on('data', (d) => { hubLog += d; });
-    hub.stderr.on('data', (d) => { hubLog += d; });
-    await until('the hub answers', () => new Promise((resolve) => http.get({ host: '127.0.0.1', port: hubPort, path: '/hub/healthz' }, (res) => { res.resume(); resolve(res.statusCode === 200); }).on('error', () => resolve(false))), 15000).catch((e) => { console.log('FAIL ' + e.message + '\n' + hubLog); process.exit(1); });
-
-    const site = http.createServer((req, res) => {          // the files of web/, as nginx gives them (/ is lobby.html), a fake /lobbies
-        const url = new URL(req.url, 'http://x');
-        if (url.pathname === '/lobbies') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(LOBBIES)); return; }
-        if (url.pathname === '/stats' || url.pathname === '/busy') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{}'); return; }
-        const file = url.pathname === '/' ? 'lobby.html' : decodeURIComponent(url.pathname).replace(/^\/+/, '');
-        const full = path.resolve(WEB, file);
-        if (full.indexOf(WEB + path.sep) !== 0 || !fs.existsSync(full) || !fs.statSync(full).isFile()) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"not here"}'); return; }
-        const type = TYPES[path.extname(full)] || 'application/octet-stream';
-        const stamp = (t) => t.replace(/@@SITE_TITLE@@/g, '').replace(/@@SITE_FOOTER@@/g, '').replace(/@@GAME_VERSION@@/g, '0.0.0').replace(/@@BUILD_ID@@/g, 'check').replace(/@@BUILD_DATE@@/g, '20000101');
-        res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store' });
-        res.end(type.startsWith('text/html') ? stamp(fs.readFileSync(full, 'utf8')) : fs.readFileSync(full));
-    });
-    site.on('upgrade', (req, socket, head) => {             // /hub/ws to the hub, with the account that the cookie names
-        if (new URL(req.url, 'http://x').pathname !== '/hub/ws') { socket.destroy(); return; }
-        const who = /(?:^|;\s*)acct=([0-9]+_[a-z0-9_.]+)/.exec(req.headers.cookie || '');
-        const headers = Object.assign({}, req.headers);
-        delete headers.cookie;
-        if (who) { const at = who[1].indexOf('_'); headers['x-hub-test-login'] = who[1].slice(0, at) + ':' + who[1].slice(at + 1); }
-        const up = net.connect(hubPort, '127.0.0.1', () => {
-            up.write('GET /hub/ws HTTP/1.1\r\n' + Object.entries(headers).map(([k, v]) => k + ': ' + v).join('\r\n') + '\r\n\r\n');
-            if (head && head.length) up.write(head);
-            up.pipe(socket); socket.pipe(up);
-        });
-        up.on('error', () => socket.destroy()); socket.on('error', () => up.destroy());
-    });
-    await new Promise((resolve) => site.listen(sitePort, '127.0.0.1', resolve));
-    return { origin, db, log: () => hubLog, stop() { hub.kill('SIGTERM'); site.close(); try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* it stays */ } } };
-}
-
 async function main() {
     const launch = { args: process.getuid && process.getuid() === 0 ? ['--no-sandbox'] : [] };
     if (process.env.CHROME) launch.executablePath = process.env.CHROME;
@@ -106,23 +47,7 @@ async function main() {
         const shoots = SHOTS && (size[0] === '1280' || size[4]);
         // ---- the pieces ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         async function open(account, sz) {                   // one page of an account, Home, the dock live; every WebSocket of the page is kept in window.__socks (so that a page can say what a page of a host says)
-            const s = sz || SIZES[2], context = await browser.newContext({ viewport: { width: s[1], height: s[2] }, deviceScaleFactor: s[3], hasTouch: !!s[4], isMobile: !!s[4] });
-            await context.addCookies([{ name: 'acct', value: ACCOUNTS[account], url: stack.origin }]);
-            await context.addInitScript((name) => {
-                try { localStorage.setItem('ants.name', name); } catch (e) { /* none */ }
-                window.__socks = [];
-                const Native = window.WebSocket;
-                window.WebSocket = function (url, protocols) { const socket = protocols === undefined ? new Native(url) : new Native(url, protocols); window.__socks.push(socket); return socket; };
-                window.WebSocket.prototype = Native.prototype;
-                ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'].forEach((k) => { window.WebSocket[k] = Native[k]; });
-            }, account);
-            const page = await context.newPage();
-            page.on('pageerror', (e) => errors.push(tag + account + ': ' + String(e && e.message || e)));
-            await page.goto(stack.origin + '/', { waitUntil: 'load' });
-            await until(tag + account + ': the dock is live', () => page.evaluate(() => { const d = document.getElementById('gchat'); return !!d && d.getAttribute('data-state') === 'live'; }), 15000);
-            await until(tag + account + ': the bell and the Messages button are there', () => page.evaluate(() => !!document.querySelector('.hbar .al-bell') && !!document.querySelector('#gchat .pm-btn')), 15000);
-            await sleep(400);
-            return { context, page, phone: !!s[4], size: s, name: account };
+            return openPage(browser, stack, account, sz || SIZES[2], (e) => errors.push(tag + account + ': ' + e), tag + account + ': ');
         }
         const view = async (a, name) => { if (a.phone) { await a.page.evaluate((n) => { const t = document.querySelector('.htab.t-' + n); if (t) t.click(); }, name); await sleep(250); } };
         const sendFrame = (page, frame) => page.evaluate((f) => { const sock = window.__socks.filter((x) => /\/hub\/ws$/.test(x.url) && x.readyState === 1)[0]; sock.send(JSON.stringify(f)); }, frame);
@@ -138,14 +63,14 @@ async function main() {
         const press = async (a, text) => { await a.page.evaluate((t) => { const b = Array.from(document.querySelectorAll('.gm-box button, .pm-panel button, .pm-card button, .pm-shade button, .al-panel button, .al-toast button, .pm-card-shade button')).filter((x) => (x.getAttribute('aria-label') || x.textContent).replace(/\s+/g, ' ').trim().indexOf(t) === 0)[0]; if (!b) throw new Error('no button ' + t); b.click(); }, text); await sleep(300); };
         const toasts = (a) => a.page.evaluate(() => Array.from(document.querySelectorAll('.al-toast')).filter((t) => !t.hidden).map((t) => t.textContent.replace(/\s+/g, ' ').trim()).join(' | '));
         const toastIs = (a, re, ms) => until(tag + a.name + ': a toast that says ' + re, async () => re.test(await toasts(a)), ms || 6000);
-        const count = (a) => a.page.evaluate(() => { const n = document.querySelector('#gchat .pm-n'); return n && !n.hidden ? Number(n.textContent) : 0; });
+        const messagesTab = async (a) => { await a.page.evaluate(() => { document.querySelector('.hbar .al-bell').click(); }); await sleep(350); await a.page.evaluate(() => { const t = document.querySelector('.al-tab[data-tab="messages"]'); if (t) t.click(); }); await sleep(250); };          // (the bell, on its Messages tab: the list of conversations)
         const bell = (a) => a.page.evaluate(() => { const m = document.querySelector('.hbar .al-bell .al-mark'); return m ? Number(m.textContent.replace('+', '')) : 0; });
         const tabOf = async (a, name) => { await view(a, 'players'); await a.page.evaluate((n) => document.querySelector('.pl-tab[data-tab="' + n + '"]').click(), name); await sleep(250); };
         async function shot(a, name) {
             const bad = await a.page.evaluate(() => {
                 const out = [], w = window.innerWidth;
                 if (document.documentElement.scrollWidth > w + 1) out.push('the page scrolls sideways');
-                document.querySelectorAll('.pm-panel, .gm-box, .al-panel, .pm-card, .al-toast, .pm-btn, .pl-tabs').forEach((e) => { const r = e.getBoundingClientRect(); if (r.width && (r.left < -1 || r.right > w + 1 || r.bottom > window.innerHeight + 1)) out.push(e.className + ' sticks out ' + Math.round(r.left) + ',' + Math.round(r.right) + ',' + Math.round(r.bottom)); });
+                document.querySelectorAll('.pm-panel, .gm-box, .al-panel, .pm-card, .al-toast, .pl-tabs').forEach((e) => { const r = e.getBoundingClientRect(); if (r.width && (r.left < -1 || r.right > w + 1 || r.bottom > window.innerHeight + 1)) out.push(e.className + ' sticks out ' + Math.round(r.left) + ',' + Math.round(r.right) + ',' + Math.round(r.bottom)); });
                 return out;
             });
             bad.forEach((b) => check(tag + name + ': ' + b, false));
@@ -231,25 +156,26 @@ async function main() {
             await until(tag + 'the message is drawn when the hub says it', async () => (await bubbles(hazel)).join() === 'me:hey pebble, want a 2v2 on Islands?', 5000);
             check(tag + 'the field is empty after the echo', (await hazel.page.inputValue('.pm-panel .pm-input')) === '');
             await closePanel(hazel);
-            await until(tag + 'pebble has the toast, the count and the bell row', async () => (await count(pebble)) === 1 && (await bell(pebble)) === 1 && /hazel sent you a private message/.test(await toasts(pebble)), 6000);
+            await until(tag + 'pebble has the toast and the number on the bell', async () => (await bell(pebble)) === 1 && /hazel sent you a private message/.test(await toasts(pebble)), 6000);
             check(tag + 'the toast of pebble has none of the words', !/Islands/.test(await toasts(pebble)));
-            check(tag + 'pebble\'s bell has one row for hazel, with Open and none of the words', await pebble.page.evaluate(() => { document.querySelector('.al-bell').click(); const rows = Array.from(document.querySelectorAll('.al-item[data-k="msg"]')); const ok = rows.length === 1 && /hazel sent you a private message/.test(rows[0].textContent) && !/Islands/.test(rows[0].textContent); document.querySelector('.al-x').click(); return ok; }));
+            await messagesTab(pebble);
+            check(tag + 'pebble\'s bell: the Messages tab has one conversation, with hazel, and the Alerts tab has no row for the message', await pebble.page.evaluate(() => { const rows = Array.from(document.querySelectorAll('.al-conv')), tabs = Array.from(document.querySelectorAll('.al-tab')).map((t) => t.getAttribute('data-tab') + ':' + t.getAttribute('data-on')).join(); const ok = rows.length === 1 && /^hazel/.test(rows[0].querySelector('.al-t').textContent) && tabs === 'alerts:false,messages:true'; document.querySelector('.al-tab[data-tab="alerts"]').click(); const none = !Array.from(document.querySelectorAll('.al-item')).some((i) => /private message/.test(i.textContent)); document.querySelector('.al-x').click(); return ok && none; }));
             await pebble.page.evaluate(() => Array.from(document.querySelectorAll('.al-toast button')).filter((b) => /Open/.test(b.textContent))[0].click()).catch(() => {});
             await sleep(500);
             const pb = await pm(pebble);
-            check(tag + 'pebble: Open on the toast opens the conversation, which is read (no count, no bell row)', !!pb && pb.view === 'thread' && (await count(pebble)) === 0 && (await bell(pebble)) === 0 && (await bubbles(pebble)).join() === 'them:hey pebble, want a 2v2 on Islands?', JSON.stringify([pb, await count(pebble), await bell(pebble), await bubbles(pebble)]));
+            check(tag + 'pebble: Open on the toast opens the conversation, which is read (nothing on the bell)', !!pb && pb.view === 'thread' && (await bell(pebble)) === 0 && (await bubbles(pebble)).join() === 'them:hey pebble, want a 2v2 on Islands?', JSON.stringify([pb, await bell(pebble), await bubbles(pebble)]));
             await typeAndSend(pebble, 'come on, answer me. I know you are there');
-            await until(tag + 'hazel has the toast and the count', async () => (await count(hazel)) === 1 && /pebble sent you a private message/.test(await toasts(hazel)), 6000);
+            await until(tag + 'hazel has the toast and the number on the bell', async () => (await bell(hazel)) === 1 && /pebble sent you a private message/.test(await toasts(hazel)), 6000);
             await view(hazel, 'chat');
             await shot(hazel, '13_dm_toast');
             await closePanel(pebble);
 
             // the list, and the conversation with a message of theirs
-            await hazel.page.evaluate(() => document.querySelector('#gchat .pm-btn').click()); await sleep(400);
-            check(tag + 'the list: pebble with the start of the newest message and a count of 1', await hazel.page.evaluate(() => { const r = document.querySelector('.pm-row'); return !!r && /pebble/.test(r.textContent) && /come on, answer me/.test(r.textContent) && r.querySelector('.pm-u').textContent === '1' && /Messages are kept for 7 days/.test(document.querySelector('.pm-keep').textContent); }));
+            await messagesTab(hazel);
+            check(tag + 'the list (the bell\'s Messages tab): pebble with the start of the newest message and a count of 1', await hazel.page.evaluate(() => { const r = document.querySelector('.al-conv'); return !!r && /pebble/.test(r.textContent) && /come on, answer me/.test(r.textContent) && r.querySelector('.al-u').textContent === '1' && /Messages are kept for 7 days/.test(document.querySelector('.al-keep').textContent); }));
             await shot(hazel, '11_dm_list');
-            await hazel.page.evaluate(() => document.querySelector('.pm-row').click()); await sleep(400);
-            check(tag + 'opening it reads it: no count on the button, no row in the bell', (await count(hazel)) === 0 && (await bell(hazel)) === 0, JSON.stringify([await count(hazel), await bell(hazel)]));
+            await hazel.page.evaluate(() => document.querySelector('.al-conv').click()); await sleep(400);
+            check(tag + 'opening it reads it: nothing on the bell, and the list is gone while the conversation is open', (await bell(hazel)) === 0 && !(await hazel.page.evaluate(() => !!document.querySelector('.al-shade'))), JSON.stringify([await bell(hazel)]));
             await shot(hazel, '10_dm_thread');
 
             // ---- 5. a report and a block --------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -267,12 +193,12 @@ async function main() {
             await press(hazel, 'Block pebble');
             await sleep(500);
             await closePanel(hazel);
-            await pebble.page.evaluate(() => document.querySelector('#gchat .pm-btn').click()); await sleep(300);
-            await pebble.page.evaluate(() => document.querySelector('.pm-row').click()); await sleep(400);
+            await messagesTab(pebble);
+            await pebble.page.evaluate(() => document.querySelector('.al-conv').click()); await sleep(400);
             await typeAndSend(pebble, 'are you there?');
             await until(tag + 'pebble sees its own message as sent', async () => (await bubbles(pebble)).slice(-1)[0] === 'me:are you there?', 5000);
             await sleep(900);
-            check(tag + 'a blocked person\'s message is not shown to hazel: no count, no toast about it, nothing new in the bell', (await count(hazel)) === 0 && !/pebble sent you a private message/.test(await toasts(hazel)) && (await bell(hazel)) === 0, JSON.stringify([await count(hazel), await toasts(hazel), await bell(hazel)]));
+            check(tag + 'a blocked person\'s message is not shown to hazel: no number on the bell, no toast about it', !/pebble sent you a private message/.test(await toasts(hazel)) && (await bell(hazel)) === 0, JSON.stringify([await toasts(hazel), await bell(hazel)]));
             check(tag + 'no word of a message is in the hub\'s log', !/answer me|2v2|are you there/.test(stack.log()));
             await closePanel(pebble);
         } catch (e) {

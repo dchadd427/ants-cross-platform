@@ -1,5 +1,5 @@
 /* The rematch (web/front/rematch.js, docs/PLAY_IN_BROWSER.md "After a match"): the game page's strip under the picture when the match of a lobby room is over ("The match is over", who is back,
-   "Back to the lobby"), and the front page's strip at the top of the page when it comes back from the match, with the words of each color and the note under START. Both pages carry the colors of
+   "Back to the room" and "Back to Ants & Uncles"), and the front page's strip at the top of the page when it comes back from the match, with the words of each color and the note under START. Both pages carry the colors of
    web/front/classic.css (the tokens); the two that only classic.css names have its value as their fallback. */
 
 /* ---- the game page: the strip between the picture and the Picture row ---- */
@@ -16,10 +16,13 @@
 .rmt-go { text-align: right; }
 .rmt-go[hidden] { display: none !important; }
 .rematch .btn.big { min-height: 54px; padding: 10px 26px; font-size: 20px; }
+.rmt-go .btn + .btn { margin-left: 12px; }
 .rmt-note { margin-top: 8px; font-size: 13px; color: var(--muted, #8fb3a6); }
 @media (max-width: 760px) {
     .rematch { grid-template-columns: minmax(0, 1fr); padding: 12px 14px; }
     .rmt-go { text-align: left; }
+    .rmt-go .btn { display: flex; width: 100%; }
+    .rmt-go .btn + .btn { margin: 10px 0 0; }
     .rmt-title { font-size: 21px; }
 }
 

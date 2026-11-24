@@ -52,30 +52,32 @@ int32_t Renderer::art_scale_now() const {
 }
 
 // The texture of a sheet: read and decoded from its file once (the pixels are not kept: the card has them), made static with the alpha blend. Null when the file cannot be read or decoded, or the device cannot make the texture (nothing is drawn then: Application::check_hud_art gives the HUD the original's art)
-SDL_Texture* Renderer::art_texture(const hud_art::Art& art, int32_t scale) {
+SDL_Texture* Renderer::art_texture(const hud_art::Art& art, int32_t scale, int32_t sheet) {
     if (art_generation_ != art.generation()) {
         drop_art_textures();
         art_generation_ = art.generation();
     }
-    SDL_Texture*& slot = art_textures_[static_cast<size_t>(scale - 1)];
+    const size_t at = static_cast<size_t>(scale - 1) + (sheet == 0 ? 0u : 3u);
+    SDL_Texture*& slot = art_textures_[at];
     if (slot) return slot;
-    if (art_failed_[static_cast<size_t>(scale - 1)]) return nullptr;
-    art_failed_[static_cast<size_t>(scale - 1)] = true;                       // (until it works: a sheet that fails is not read again at every piece of every frame)
+    if (art_failed_[at]) return nullptr;
+    art_failed_[at] = true;                                                    // (until it works: a sheet that fails is not read again at every piece of every frame)
+    const std::string& file = art.sheet_file(scale, sheet);
     DecodedImage image;
-    if (!art.sheet_pixels(scale, image)) {
-        std::cerr << "[Renderer] The HUD art's sheet " << art.sheet_file(scale) << " cannot be read" << std::endl;
+    if (!art.sheet_pixels(scale, image, sheet)) {
+        std::cerr << "[Renderer] The HUD art's sheet " << file << " cannot be read" << std::endl;
         return nullptr;
     }
     if (art_texture_limit_ > 0 && (image.width > art_texture_limit_ || image.height > art_texture_limit_)) {
-        std::cerr << "[Renderer] The HUD art's sheet " << art.sheet_file(scale) << " is larger than a texture of this device" << std::endl;
+        std::cerr << "[Renderer] The HUD art's sheet " << file << " is larger than a texture of this device" << std::endl;
         return nullptr;
     }
     SDL_Texture* tex = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, image.width, image.height);
     if (!tex) {
-        std::cerr << "[Renderer] The HUD art's sheet " << art.sheet_file(scale) << " cannot be made a texture: " << SDL_GetError() << std::endl;
+        std::cerr << "[Renderer] The HUD art's sheet " << file << " cannot be made a texture: " << SDL_GetError() << std::endl;
         return nullptr;
     }
-    art_failed_[static_cast<size_t>(scale - 1)] = false;
+    art_failed_[at] = false;
     SDL_UpdateTexture(tex, nullptr, image.rgba.data(), image.width * 4);
     SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
     slot = tex;
@@ -84,7 +86,8 @@ SDL_Texture* Renderer::art_texture(const hud_art::Art& art, int32_t scale) {
 
 bool Renderer::preload_art(const hud_art::Art& art) {
     if (!renderer_ || !art.loaded()) return false;
-    return art_texture(art, art_scale_for_output(nullptr)) != nullptr;
+    const int32_t scale = art_scale_for_output(nullptr);
+    return art_texture(art, scale) != nullptr && (!art.has_second_sheet() || art_texture(art, scale, 1) != nullptr);
 }
 
 void Renderer::draw_art(const hud_art::Art& art, int32_t sprite, int32_t x, int32_t y, int32_t w, int32_t h, int32_t sx, int32_t sy, int32_t sw, int32_t sh) {
@@ -94,7 +97,7 @@ void Renderer::draw_art(const hud_art::Art& art, int32_t sprite, int32_t x, int3
     double output = 1.0;
     int32_t scale = art_scale_for_output(&output);
     if (art_scale_override_ > 0) scale = art_scale_override_;                 // (the countdown card: the sheet of its own unit)
-    SDL_Texture* tex = art_texture(art, scale);
+    SDL_Texture* tex = art_texture(art, scale, s->sheet);
     if (!tex) return;
     // The sheet is as fine as the output or finer: a copy at the same scale is exact (nearest), a scaled one is filtered so that it does not shimmer. With a sheet of its own choice the copy is
     // exact when a sheet pixel lands on one device pixel (the width that the piece is drawn at, in device pixels, is the width it has in the sheet)

@@ -430,6 +430,8 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         // FUN_01015b17: Enter and the letters C, Q and X (either case, whatever the modifiers) leave, at any time; nothing else does anything (Esc included)
         const SDL_Keycode sym = key.keysym.sym;
         if (sym == SDLK_RETURN || sym == SDLK_KP_ENTER || sym == SDLK_c || sym == SDLK_q || sym == SDLK_x) scorecard_.leave();
+        else if (sym == SDLK_RIGHT) scorecard_.show_page(ScorecardModal::Page::Stats);          // (the new page's second page, where there is one: the arrows of its link point the way)
+        else if (sym == SDLK_LEFT) scorecard_.show_page(ScorecardModal::Page::Results);
         return;
     }
 
