@@ -21,6 +21,7 @@ from PIL import Image
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, '..', '..'))
 FILES = ('hud_art.txt', 'sheet_1x.png', 'sheet_2x.png', 'sheet_3x.png')
+SECOND = ('sheet2_1x.png', 'sheet2_2x.png', 'sheet2_3x.png')         # (a second sheet, when the first was full: compared when either folder has one)
 
 
 def read(path):
@@ -39,7 +40,8 @@ def compare(assets, built, strict=False):
     """(exit code, lines of the report) for the files of `assets` against the ones in `built`"""
     lines = []
     code = 0
-    for name in FILES:
+    names = FILES + (SECOND if any(os.path.isfile(os.path.join(folder, name)) for folder in (assets, built) for name in SECOND) else ())
+    for name in names:
         have, made = os.path.join(assets, name), os.path.join(built, name)
         if not os.path.isfile(made):
             lines.append('%-14s the generator did not write it' % name)

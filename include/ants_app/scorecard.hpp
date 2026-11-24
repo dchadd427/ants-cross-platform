@@ -159,8 +159,8 @@ public:
     // Action callbacks
     void set_on_replay(std::function<void()> cb) { on_replay_ = std::move(cb); }
     void set_on_quit(std::function<void()> cb) { on_quit_ = std::move(cb); }
-    /// Watch (the Play of the game's button) was pressed: the replay opens at this turn, five seconds before the moment
-    void set_on_watch(std::function<void(uint32_t)> cb) { on_watch_ = std::move(cb); }
+    /// Watch (the Play of the game's button) was pressed: the replay opens at this turn, five seconds before the moment, with the view on this tile (the place of the moment)
+    void set_on_watch(std::function<void(uint32_t, int32_t, int32_t)> cb) { on_watch_ = std::move(cb); }
     void set_on_play_sfx(std::function<void(uint32_t)> cb) { on_play_sfx_ = std::move(cb); }
     void play_sfx(uint32_t sound_id) { if (on_play_sfx_) on_play_sfx_(sound_id); }
 
@@ -216,7 +216,7 @@ private:
 
     std::function<void()> on_replay_;
     std::function<void()> on_quit_;
-    std::function<void(uint32_t)> on_watch_;
+    std::function<void(uint32_t, int32_t, int32_t)> on_watch_;
     std::function<void(uint32_t)> on_play_sfx_{nullptr};
 };
 

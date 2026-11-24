@@ -302,7 +302,7 @@ void draw_honors(const Ctx& c, const Podium& p) {
         std::string detail;
     };
     const Card cards[3] = {
-        {"sc_k_mvp", &rep.mvp, grouped(rep.mvp.value) + " damage"},
+        {"sc_k_mvp", &rep.mvp, std::to_string(rep.mvp.value / 10) + "% of the play"},
         {"sc_k_blood", &rep.first_blood, "at " + clock_of(rep.first_blood.turn)},
         is_187 ? Card{"sc_k_stand", &rep.last_stand, "out of ants at " + clock_of(rep.last_stand.turn)}
                : Card{"sc_k_raid", &rep.biggest_raid, grouped(rep.biggest_raid.value) + " points at " + clock_of(rep.biggest_raid.turn)},
@@ -632,7 +632,7 @@ bool ScorecardModal::new_mouse_up(int32_t x, int32_t y) {
     if (quit_.on_release(x, y)) {
         if (on_quit_) on_quit_();
     } else if (watch_.on_release(x, y)) {
-        if (on_watch_) on_watch_(report_.play.watch_turn());
+        if (on_watch_) on_watch_(report_.play.watch_turn(), report_.play.tile_x, report_.play.tile_y);
     } else if (tab_results_.on_release(x, y)) {
         show_page(Page::Results);
     } else if (tab_stats_.on_release(x, y)) {

@@ -189,9 +189,9 @@ void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine)
         }
 
         // 3. the ants: hit points that fell, a type that changed, food picked up, a raid that began; and the ants that are gone
-        const sim::WorldState& world = engine.get_world_state();
+        const std::vector<sim::AntSnapshot>& ants = engine.get_ant_snapshots();          // (the ants alone: a catch-up asks for them hundreds of times a frame, and the grid is not copied for each)
         std::array<uint32_t, kSeats> alive{};
-        for (const sim::AntSnapshot& snap : world.ants) {
+        for (const sim::AntSnapshot& snap : ants) {
             if (snap.id >= ants_.size()) ants_.resize(std::max<size_t>(ants_.size() * 2, size_t{snap.id} + 1));
             Ant& ant = ants_[snap.id];
             ant.last_seen = turns;
@@ -273,7 +273,7 @@ void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine)
         }
 
         // 4. the bombs and the fire walls on the map: which went off, which were lit and where
-        track_bombs(engine, turns, planted, defused, world);
+        track_bombs(engine, turns, planted, defused, ants);
         track_fires(engine, turns, lit_now);
 
         // 5. a seat without an ant: wiped out (an egg gives it one for free), and out for good when it has no egg and no hatch either
@@ -324,7 +324,7 @@ std::vector<MatchStatsCollector::Spot> MatchStatsCollector::scan(sim::Simulation
 // count of defused bombs rose by, went off (and, whatever a game queued in its cues, nothing of them is read here). New bombs come only with the count of bombs planted rising: the map is looked through then, and in no other tick
 // (a bomb that is known is asked about by its tile, a few asks a tick). When a bomb was defused in the tick in which another went off nothing in the counts says which was which, but the ant that a bomb throws stands on the
 // bomb's tile in the action of a bomb's victim (the world of that tick shows it) and the ant that defuses stands beside it; if that does not settle it either (and a bomb of a seat is among them) `events_ok` says so.
-void MatchStatsCollector::track_bombs(sim::SimulationEngine& engine, uint32_t turns, uint32_t planted, uint32_t defused, const sim::WorldState& world) {
+void MatchStatsCollector::track_bombs(sim::SimulationEngine& engine, uint32_t turns, uint32_t planted, uint32_t defused, const std::vector<sim::AntSnapshot>& ants) {
     std::vector<Spot> gone;
     if (planted != bombs_planted_) {
         std::vector<Spot> now = scan(engine, true);
@@ -348,7 +348,7 @@ void MatchStatsCollector::track_bombs(sim::SimulationEngine& engine, uint32_t tu
     if (taken_away > 0) {
         off.clear();
         for (const Spot& bomb : gone) {
-            const bool struck = std::any_of(world.ants.begin(), world.ants.end(), [&](const sim::AntSnapshot& ant) { return ant.tile_x == bomb.x && ant.tile_y == bomb.y && ant.action == sim::AntUnit::kActionBlast; });
+            const bool struck = std::any_of(ants.begin(), ants.end(), [&](const sim::AntSnapshot& ant) { return ant.tile_x == bomb.x && ant.tile_y == bomb.y && ant.action == sim::AntUnit::kActionBlast; });
             if (struck) off.push_back(bomb);
         }
         if (off.size() != gone.size() - taken_away) {                    // (not settled: the first ones in the order of the map are taken to be the defused)

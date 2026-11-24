@@ -317,9 +317,10 @@ public:
     /// The recording as the file says it (null when there is none)
     const replay::Replay* replay_file() const noexcept { return replay_file_.get(); }
     /// The results' Play of the game: Watch opens the recording of the game on this computer that just ended at `turn` (the viewer's own jump: a moment's wait on a long match); only where it has one (the desktop game, not a
-    /// match of a room, not a recording that is being watched already, and not the web build, which keeps no file). Leave Game from there is what it is in a viewer: the program ends.
+    /// match of a room, not a recording that is being watched from a file, and not the web build, which keeps no file). The viewer's end page is the match's own results again, with the report that was counted (the
+    /// honors, the Play of the game with Watch, Match stats). Leave Game from there is what it is in a viewer: the program ends.
     bool can_watch_play() const noexcept;
-    void watch_play(uint32_t turn);
+    void watch_play(uint32_t turn, int32_t tile_x = -1, int32_t tile_y = -1);        // (a tile that is not on the map, -1: the view is left to the Auto camera)
     /// The recording of the match that is being played (null: none is made, or the match has ended)
     const replay::Recorder* recorder() const noexcept { return recorder_.get(); }
     /// The numbers of the results screen besides the original's four (match_report.hpp), counted while the match was played on the confirmed engine, whole or not at all: valid from the end of a match until the next one begins, and
@@ -769,6 +770,11 @@ private:
     double camera_pan_px_{0.0};                           // what two fingers have panned lately (a pinch drifts a pixel or two: that is not taking the camera)
     double camera_pan_at_ms_{0.0};
     bool replay_paused_{false};
+    bool watch_focus_{false};                             // the view goes to this tile when the jump of Watch is over (focus_watched_tile)
+    int32_t watch_focus_x_{0};
+    int32_t watch_focus_y_{0};
+    bool watching_own_match_{false};                      // the viewer shows the match that was just played here (the results' Watch): its end page is the match's Podium again, from the report that was kept
+    MatchReport watched_report_{};
     bool replay_cut_{false};                              // the end of a recording that stops before its match did is reached
     bool replay_jumping_{false};
     uint32_t replay_jump_target_{0};
@@ -957,6 +963,7 @@ private:
     bool replay_turn(bool picture);                                    // one turn: the orders due, the tick; false when the recording is at its end (the end is handled)
     void replay_ends();                                                // the last turn is played: the results (the match was over) or the note (it was not)
     void replay_jump_to(uint32_t turn);
+    void focus_watched_tile();                                         // the view of the viewer is put on the tile of the moment that Watch opened (the Auto camera takes over from there with the action that comes)
     uint32_t replay_limit() const noexcept;                            // the last turn that may be played now (the file's end; while following, kLiveHoldTurns short of it)
     void replay_extend();                                              // --replay-live: the file is read again, and taken when it is the same match with more turns
     void replay_diverged(uint32_t turn);

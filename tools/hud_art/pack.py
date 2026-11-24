@@ -1,4 +1,5 @@
-"""Packs the rendered sprites into the game's files: one PNG sheet per scale (sheet_1x.png, sheet_2x.png, sheet_3x.png) and the manifest `hud_art.txt`.
+"""Packs the rendered sprites into the game's files: one PNG sheet per scale (sheet_1x.png, sheet_2x.png, sheet_3x.png) and the manifest `hud_art.txt`. When the sprites do not fit one sheet (a texture holds LIMIT device
+pixels at most, at 3x), the sheet is filled as far as it goes and the rest are on a second one (sheet2_1x.png, sheet2_2x.png, sheet2_3x.png: the manifest's `sheet2size`, `sheet2` and `sprite2` records).
 
 The manifest is plain text, one record a line, so that the game reads it without a JSON reader; its format is described once, at the top of include/ants_app/hud_art.hpp. Sprites that are the same
 picture at every scale share one place in the sheets (the manifest still names each of them).
@@ -78,41 +79,72 @@ def pack(images, rows, anims, out_dir, canvas=(960, 540), cursor_anims=(), deriv
     top = [n for n in cells if n in derived]                            # the derived sprites' own cells: the band at the top of the sheets
     rest = [n for n in cells if n not in derived]
     sizes_top, sizes_rest = [size_of(n) for n in top], [size_of(n) for n in rest]
-    best = None
-    for width in range(max(w for _, w, _ in sizes_top + sizes_rest), MAX_WIDTH + 1, 4):        # the sheet that packs smallest (width times height) of the widths that hold the widest sprite
-        spots_top, band_h = skyline(sizes_top, width) if top else ({}, 0)
-        spots_rest, rest_h = skyline(sizes_rest, width)
-        height = band_h + rest_h
-        if height * max(scales) > LIMIT:
-            continue
-        if best is None or width * height < best[0]:
-            best = (width * height, width, height, dict(spots_top, **{n: (x, y + band_h) for n, (x, y) in spots_rest.items()}), band_h)
-    _, sheet_w, sheet_h, spots, band_h = best
-    assert sheet_w * max(scales) <= LIMIT and sheet_h * max(scales) <= LIMIT, 'the sheet is %d x %d canvas pixels: at %dx it does not fit a texture of %d' % (sheet_w, sheet_h, max(scales), LIMIT)
-    place = {n: (spots[n][0] + PAD, spots[n][1] + PAD) for n in cells}
+
+    def fit(sizes_a, sizes_b):
+        """the sheet that packs smallest (width times height) of the widths that hold the widest sprite and are at most MAX_WIDTH, the sprites of the band first: (width, height, {name: (x, y)}, band height), or None when none
+        of them fits a texture"""
+        best = None
+        widest = max([w for _, w, _ in sizes_a + sizes_b] or [1])
+        for width in range(widest, MAX_WIDTH + 1, 4):
+            spots_a, band_h = skyline(sizes_a, width) if sizes_a else ({}, 0)
+            spots_b, rest_h = skyline(sizes_b, width) if sizes_b else ({}, 0)
+            height = band_h + rest_h
+            if height * max(scales) > LIMIT:
+                continue
+            if best is None or width * height < best[0]:
+                best = (width * height, width, height, dict(spots_a, **{n: (x, y + band_h) for n, (x, y) in spots_b.items()}), band_h)
+        return None if best is None else best[1:]
+
+    first = fit(sizes_top, sizes_rest)
+    second = None
+    if first is None:                                                   # full: as many of the sprites as fit the first sheet (the band of derived ones always), the rest on a second
+        assert fit(sizes_top, []) is not None, 'the derived sprites alone do not fit a sheet'
+        lo, hi = 0, len(sizes_rest)                                     # the most sprites of `rest` that the first sheet takes: fit() is monotonic in the sprites it is given
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            if fit(sizes_top, sizes_rest[:mid]) is not None:
+                lo = mid
+            else:
+                hi = mid - 1
+        first = fit(sizes_top, sizes_rest[:lo])
+        second = fit([], sizes_rest[lo:])
+        assert second is not None, 'the sprites that the first sheet could not take do not fit a second one'
+    sheets = [first] + ([second] if second is not None else [])
+    band_h = first[3]
+    place = {}                                                          # name: (sheet, x, y), the sprite's own pixel (the padding is round it)
+    for index, (_, _, spots, _) in enumerate(sheets):
+        for n, (x, y) in spots.items():
+            place[n] = (index, x + PAD, y + PAD)
+    assert set(place) == set(cells)
     os.makedirs(out_dir, exist_ok=True)
     files = {}
-    for k in scales:
-        sheet = np.zeros((sheet_h * k, sheet_w * k, 4), np.uint8)
-        for n in cells:
-            if k == 2 and n in derived:
-                continue                                        # (the game makes these when it loads the sheet)
-            a = np.asarray(images[k][n].convert('RGBA'))
-            px, py = place[n]
-            ext = np.pad(a, ((PAD * k, PAD * k), (PAD * k, PAD * k), (0, 0)), mode='edge')
-            sheet[(py - PAD) * k:(py - PAD) * k + ext.shape[0], (px - PAD) * k:(px - PAD) * k + ext.shape[1]] = ext
-        name = 'sheet_%dx.png' % k
-        write_png(os.path.join(out_dir, name), sheet)
-        files[k] = name
-    lines = ['ants-hud-art 1', 'canvas %d %d' % canvas, 'sheetsize %d %d' % (sheet_w, sheet_h)]
+    for index, (sheet_w, sheet_h, _, _) in enumerate(sheets):
+        for k in scales:
+            sheet = np.zeros((sheet_h * k, sheet_w * k, 4), np.uint8)
+            for n in cells:
+                if place[n][0] != index:
+                    continue
+                if k == 2 and n in derived:
+                    continue                                    # (the game makes these when it loads the sheet)
+                a = np.asarray(images[k][n].convert('RGBA'))
+                _, px, py = place[n]
+                ext = np.pad(a, ((PAD * k, PAD * k), (PAD * k, PAD * k), (0, 0)), mode='edge')
+                sheet[(py - PAD) * k:(py - PAD) * k + ext.shape[0], (px - PAD) * k:(px - PAD) * k + ext.shape[1]] = ext
+            name = ('sheet_%dx.png' if index == 0 else 'sheet2_%dx.png') % k
+            write_png(os.path.join(out_dir, name), sheet)
+            files[(index, k)] = name
+    lines = ['ants-hud-art 1', 'canvas %d %d' % canvas, 'sheetsize %d %d' % (sheets[0][0], sheets[0][1])]
     if derived:
         lines.append('derive2x %d' % band_h)
-    lines += ['sheet %d %s' % (k, files[k]) for k in scales]
+    lines += ['sheet %d %s' % (k, files[(0, k)]) for k in scales]
+    if second is not None:
+        lines.append('sheet2size %d %d' % (second[0], second[1]))
+        lines += ['sheet2 %d %s' % (k, files[(1, k)]) for k in scales]
     for r in rows:
         w, h = r['size']
-        sx, sy = place[cell_of[r['name']]]
+        which, sx, sy = place[cell_of[r['name']]]
         x0, y0 = r['rect_960x540'][:2]
-        line = 'sprite %s %d %d %d %d %d %d %s %s' % (r['name'], w, h, sx, sy, x0, y0, r['anchor'][0], r['anchor'][1])
+        line = '%s %s %d %d %d %d %d %d %s %s' % ('sprite' if which == 0 else 'sprite2', r['name'], w, h, sx, sy, x0, y0, r['anchor'][0], r['anchor'][1])
         sl = r.get('slice')
         if sl:
             line += ' %s %d %d %d %d' % (sl['axis'], sl['start'], sl['tile'][0], sl['tile'][1], sl['end'])

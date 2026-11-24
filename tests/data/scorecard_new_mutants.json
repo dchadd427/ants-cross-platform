@@ -220,7 +220,7 @@
     {
       "id": "the_report_does_not_reach_the_screen",
       "file": "src/ants_app/application_sim.cpp",
-      "old": "    scorecard_.set_report(live_stats_.report());",
+      "old": "    scorecard_.set_report(watching_own_match_ ? watched_report_ : live_stats_.report());",
       "new": "    (void)live_stats_;",
       "build": "test_scorecard_new",
       "test": "./build/tests/test_app/test_scorecard_new",
@@ -231,15 +231,15 @@
       "file": "src/ants_app/application_sim.cpp",
       "old": "scorecard_.set_watch_available(can_watch_play());",
       "new": "scorecard_.set_watch_available(true);",
-      "build": "test_scorecard_new",
-      "test": "./build/tests/test_app/test_scorecard_new",
-      "expect": "[app]"
+      "build": "test_scorecard_new test_replay_app",
+      "test": "./build/tests/test_app/test_scorecard_new && ./build/tests/test_app/test_replay_app",
+      "expect": "RA7.1"
     },
     {
       "id": "watch_does_not_jump",
       "file": "src/ants_app/application_replay.cpp",
-      "old": "    replay_jump_to(turn);\n}",
-      "new": "    (void)turn;\n}",
+      "old": "    replay_jump_to(turn);\n    if (!replay_jumping_) focus_watched_tile();\n}",
+      "new": "    (void)turn;\n    if (!replay_jumping_) focus_watched_tile();\n}",
       "build": "test_scorecard_new",
       "test": "./build/tests/test_app/test_scorecard_new",
       "expect": "[app]"
@@ -249,6 +249,42 @@
       "file": "include/ants_app/match_report.hpp",
       "old": "kWatchLeadTurns = 5 * kTurnsPerSecond;",
       "new": "kWatchLeadTurns = 0 * kTurnsPerSecond;",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[counted]"
+    },
+    {
+      "id": "the_viewer_s_end_page_loses_the_report",
+      "file": "src/ants_app/application_sim.cpp",
+      "old": "watching_own_match_ ? watched_report_ : live_stats_.report()",
+      "new": "live_stats_.report()",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[app]"
+    },
+    {
+      "id": "watch_leaves_the_view_where_it_was",
+      "file": "src/ants_app/application_replay.cpp",
+      "old": "    if (!watch_focus_) return;\n    watch_focus_ = false;",
+      "new": "    if (!watch_focus_ || true) return;\n    watch_focus_ = false;",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[app]"
+    },
+    {
+      "id": "watch_does_not_pass_the_tile",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "on_watch_(report_.play.watch_turn(), report_.play.tile_x, report_.play.tile_y);",
+      "new": "on_watch_(report_.play.watch_turn(), 0, 0);",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[counted]"
+    },
+    {
+      "id": "the_mvp_card_says_the_share_wrong",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "std::to_string(rep.mvp.value / 10) + \"% of the play\"",
+      "new": "std::to_string(rep.mvp.value) + \"% of the play\"",
       "build": "test_scorecard_new",
       "test": "./build/tests/test_app/test_scorecard_new",
       "expect": "[counted]"

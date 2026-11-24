@@ -804,6 +804,62 @@ void SimulationEngine::form_alliance(uint8_t p1, uint8_t p2) {
     }
 }
 
+// The ants as the world state shows them (get_world_state, get_ant_snapshots)
+void SimulationEngineImpl::snapshot_ants(std::vector<AntSnapshot>& out) const {
+    out.clear();
+    for (const auto& a : ants_) {
+        if (!a) continue;
+        // A removed ant is gone (RemoveAnt); an ant without hit points still flies, drowns or dies on its clip
+        if (a->removed) continue;
+        AntSnapshot s{};
+        s.id = a->id;
+        s.player_id = a->player_id;
+        s.type = type_of(*a);                      // what the ant IS (the getter): the sprite, the voice, the panel, the pedestal, the selection's type
+        s.raw_type = a->type;                              // the ant's own type field (+0x54): the pick box of a combat ant is read from it (0x1026a3d)
+        s.px = a->pixel_x;
+        s.py = a->pixel_y;
+        s.tile_x = a->pos.x;
+        s.tile_y = a->pos.y;
+        s.facing = static_cast<uint8_t>(a->facing);
+        s.hp = a->hp;
+        s.max_hp = a->max_hp;
+        s.anim_state = static_cast<uint16_t>(a->state);
+        s.anim_frame = a->anim_subitem;
+        s.is_holding = a->is_holding();
+        s.carried_points = a->carried_signed();
+        s.is_stunned = a->is_stunned();
+        s.is_swimming = (a->state == UnitState::Swimming || a->in_water);
+        s.is_drowning = (a->state == UnitState::Drowning);
+        s.is_on_mud = a->is_on_mud;
+        s.state = a->state;
+        s.action = orig_action_of(*a);             // +0xe4: what the getter's flag-1 branch asks (the cursor, the right click)
+        s.frozen = a->frozen;
+        if (a->burn_end_ms != 0) {                       // the dud burn overlay (?bu) that covers the frozen ant
+            const uint32_t total = movement::action_clip(movement::ActionClip::Burn, static_cast<uint8_t>(type_of(*a)), 0, false).total_duration_ms();
+            const uint32_t remaining = (a->burn_end_ms > anim_clock_ms_) ? a->burn_end_ms - anim_clock_ms_ : 0u;
+            s.burn_elapsed_ms = static_cast<int32_t>(total - std::min(total, remaining));
+        }
+        s.target_team_id = a->target_team_id;
+        if (a->loco_action != AntUnit::kActionNone && a->loco.clip.valid()) {
+            s.loco_clip = a->loco.clip.chd_index;
+            s.loco_frame = (a->loco.cursor > 0) ? static_cast<uint16_t>(a->loco.cursor - 1) : 0;
+            s.loco_mirrored = a->loco.clip.mirrored;
+            s.loco_left_ms = (a->loco.next_ms > anim_clock_ms_)
+                ? static_cast<uint16_t>(std::min<uint32_t>(a->loco.next_ms - anim_clock_ms_, 0xFFFFu)) : uint16_t{0};
+        } else if (current_tick_ == 0) {
+            // Before the first tick: the clip that tick starts (the original starts it when it creates the ant, 0x100ef18), its first frame, held, so that the picture behind the
+            // "Get ready" dialog has its ants. Nothing of the state is touched.
+            const movement::MotionClip first = pending_idle_clip(*a);
+            if (first.valid()) {
+                s.loco_clip = first.chd_index;
+                s.loco_mirrored = first.mirrored;
+                s.loco_left_ms = 0xFFFFu;
+            }
+        }
+        out.push_back(s);
+    }
+}
+
 const WorldState& SimulationEngine::get_world_state() const {
     if (impl_->world_state_dirty_) {
         impl_->world_state_cache_.match_time_remaining_ms = impl_->match_time_remaining_ms_;
@@ -811,58 +867,7 @@ const WorldState& SimulationEngine::get_world_state() const {
         impl_->world_state_cache_.height = impl_->grid_.height();
         impl_->world_state_cache_.cells = impl_->grid_.cells();
 
-        impl_->world_state_cache_.ants.clear();
-        for (const auto& a : impl_->ants_) {
-            if (!a) continue;
-            // A removed ant is gone (RemoveAnt); an ant without hit points still flies, drowns or dies on its clip
-            if (a->removed) continue;
-            AntSnapshot s{};
-            s.id = a->id;
-            s.player_id = a->player_id;
-            s.type = impl_->type_of(*a);                      // what the ant IS (the getter): the sprite, the voice, the panel, the pedestal, the selection's type
-            s.raw_type = a->type;                              // the ant's own type field (+0x54): the pick box of a combat ant is read from it (0x1026a3d)
-            s.px = a->pixel_x;
-            s.py = a->pixel_y;
-            s.tile_x = a->pos.x;
-            s.tile_y = a->pos.y;
-            s.facing = static_cast<uint8_t>(a->facing);
-            s.hp = a->hp;
-            s.max_hp = a->max_hp;
-            s.anim_state = static_cast<uint16_t>(a->state);
-            s.anim_frame = a->anim_subitem;
-            s.is_holding = a->is_holding();
-            s.carried_points = a->carried_signed();
-            s.is_stunned = a->is_stunned();
-            s.is_swimming = (a->state == UnitState::Swimming || a->in_water);
-            s.is_drowning = (a->state == UnitState::Drowning);
-            s.is_on_mud = a->is_on_mud;
-            s.state = a->state;
-            s.action = impl_->orig_action_of(*a);             // +0xe4: what the getter's flag-1 branch asks (the cursor, the right click)
-            s.frozen = a->frozen;
-            if (a->burn_end_ms != 0) {                       // the dud burn overlay (?bu) that covers the frozen ant
-                const uint32_t total = movement::action_clip(movement::ActionClip::Burn, static_cast<uint8_t>(impl_->type_of(*a)), 0, false).total_duration_ms();
-                const uint32_t remaining = (a->burn_end_ms > impl_->anim_clock_ms_) ? a->burn_end_ms - impl_->anim_clock_ms_ : 0u;
-                s.burn_elapsed_ms = static_cast<int32_t>(total - std::min(total, remaining));
-            }
-            s.target_team_id = a->target_team_id;
-            if (a->loco_action != AntUnit::kActionNone && a->loco.clip.valid()) {
-                s.loco_clip = a->loco.clip.chd_index;
-                s.loco_frame = (a->loco.cursor > 0) ? static_cast<uint16_t>(a->loco.cursor - 1) : 0;
-                s.loco_mirrored = a->loco.clip.mirrored;
-                s.loco_left_ms = (a->loco.next_ms > impl_->anim_clock_ms_)
-                    ? static_cast<uint16_t>(std::min<uint32_t>(a->loco.next_ms - impl_->anim_clock_ms_, 0xFFFFu)) : uint16_t{0};
-            } else if (impl_->current_tick_ == 0) {
-                // Before the first tick: the clip that tick starts (the original starts it when it creates the ant, 0x100ef18), its first frame, held, so that the picture behind the
-                // "Get ready" dialog has its ants. Nothing of the state is touched.
-                const movement::MotionClip first = impl_->pending_idle_clip(*a);
-                if (first.valid()) {
-                    s.loco_clip = first.chd_index;
-                    s.loco_mirrored = first.mirrored;
-                    s.loco_left_ms = 0xFFFFu;
-                }
-            }
-            impl_->world_state_cache_.ants.push_back(s);
-        }
+        impl_->snapshot_ants(impl_->world_state_cache_.ants);
 
         impl_->world_state_cache_.effects = impl_->active_effects_;
         for (const auto& bc : impl_->battle_clouds_) {          // the dust balls of foreign pile-ups (looping "battle" clip)
@@ -910,6 +915,14 @@ const WorldState& SimulationEngine::get_world_state() const {
         impl_->world_state_dirty_ = false;
     }
     return impl_->world_state_cache_;
+}
+
+// The ants alone: when the cached world state is up to date they are its ants; when it is not, they are made into a cache of their own and the grid is not copied (get_world_state would copy every cell: 2.6 MB a call on a
+// 256 x 256 map), so a reader that follows the ants for every tick of a catch-up pays for the ants only. The world state's own cache is left as it was, stale.
+const std::vector<AntSnapshot>& SimulationEngine::get_ant_snapshots() const {
+    if (!impl_->world_state_dirty_) return impl_->world_state_cache_.ants;
+    impl_->snapshot_ants(impl_->ant_snapshots_.ants);
+    return impl_->ant_snapshots_.ants;
 }
 
 uint32_t SimulationEngine::get_match_time_remaining_ms() const {

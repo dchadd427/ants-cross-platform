@@ -87,6 +87,29 @@ class TheComparison(unittest.TestCase):
         os.remove(os.path.join(self.have, "sheet_1x.png"))
         self.assertEqual(self.check.compare(self.have, self.made)[0], 1)
 
+    def test_a_second_sheet_is_compared_too(self):
+        self.fill(self.have)
+        self.fill(self.made)
+        for name in self.check.SECOND:
+            png(os.path.join(self.have, name))
+            png(os.path.join(self.made, name))
+        code, lines = self.check.compare(self.have, self.made)
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(len([line for line in lines if line.startswith("sheet2_")]), 3, lines)
+        png(os.path.join(self.made, "sheet2_2x.png"), pixel=1)
+        self.assertEqual(self.check.compare(self.have, self.made)[0], 1)
+        os.remove(os.path.join(self.made, "sheet2_3x.png"))
+        self.assertEqual(self.check.compare(self.have, self.made)[0], 1)
+
+    def test_a_second_sheet_that_the_repository_lacks_fails(self):
+        self.fill(self.have)
+        self.fill(self.made)
+        for name in self.check.SECOND:
+            png(os.path.join(self.made, name))
+        code, lines = self.check.compare(self.have, self.made)
+        self.assertEqual(code, 1)
+        self.assertIn("no such file", [line for line in lines if line.startswith("sheet2_1x")][0])
+
     def test_the_repository_holds_the_four_files(self):
         folder = os.path.join(REPO, "assets", "hud_art")
         for name in self.check.FILES:

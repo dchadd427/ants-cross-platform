@@ -70,7 +70,7 @@ MatchReport counted(bool with_play = true) {
     r.fires_lit = {1, 0, 0, 0};
     r.raids = {3, 0, 1, 0};
     r.loot = {50, 0, 20, 0};
-    r.mvp = MatchReport::Honor{true, 0, 1240, 0};
+    r.mvp = MatchReport::Honor{true, 0, 620, 0};
     r.first_blood = MatchReport::Honor{true, 2, 0, 840};
     r.biggest_raid = MatchReport::Honor{true, 0, 50, 11000};
     r.last_stand = MatchReport::Honor{true, 3, 0, 2600};
@@ -290,7 +290,7 @@ void test_counted(const assets::AssetArchive& arc, const hud_art::Art& art) {
     check(spy->face("Lost " + card.rows()[1].numbers[1] + "   Killed " + card.rows()[1].numbers[2] + "   Hatched " + card.rows()[1].numbers[3] + "   Damage 420") != nullptr, "a ranked row's small numbers end with its damage");
     check(count(*spy, art, "sc_tab_m_up") == 2 && count(*spy, art, "sc_tw_results_lit_up") == 1 && count(*spy, art, "sc_tw_stats_up") == 1, "two tabs, the results page lit");
     check(count(*spy, art, "sc_k_mvp") == 1 && count(*spy, art, "sc_k_blood") == 1 && count(*spy, art, "sc_k_raid") == 1 && count(*spy, art, "sc_k_stand") == 0 && count(*spy, art, "sc_k_play") == 1, "the labels of the three honors and of the Play of the game");
-    check(has_line(*spy, "1,240 damage") && has_line(*spy, "at 0:42") && has_line(*spy, "50 points at 9:10"), "the honors' numbers: the MVP's damage, First blood's time, the raid's loot and time");
+    check(has_line(*spy, "62% of the play") && has_line(*spy, "at 0:42") && has_line(*spy, "50 points at 9:10"), "the honors' numbers: the MVP's share of the play, First blood's time, the raid's loot and time");
     check(has_line(*spy, card.seat_name(0)) && has_line(*spy, card.seat_name(2)), "...and who earned them");
     check(has_line(*spy, card.seat_name(1) + "'s bomb takes out") && has_line(*spy, "6 ants") && has_line(*spy, "at 7:41"), "the Play of the game says what happened and when (\"... bomb takes out\", \"6 ants\", \"at 7:41\")");
     check(count(*spy, art, "sc_watch_up") == 1, "Watch is there");
@@ -308,7 +308,7 @@ void test_counted(const assets::AssetArchive& arc, const hud_art::Art& art) {
     open(blind, &art, kWide720, sample(), sim::GameMode::HighestScore, true, &rep);
     blind.set_watch_available(false);
     uint32_t blind_watched = 0;
-    blind.set_on_watch([&](uint32_t) { ++blind_watched; });
+    blind.set_on_watch([&](uint32_t, int32_t, int32_t) { ++blind_watched; });
     const auto spyw = draw(arc, blind, kWide720);
     click(blind, blind.scale().rect(blind.podium().watch));
     check(count(*spyw, art, "sc_watch_up") == 0 && blind.watch_rect().w == 0 && blind_watched == 0 && count(*spyw, art, "sc_k_play") == 1 && has_line(*spyw, "6 ants"), "no recording to open: the play is there, Watch is not, and a click where it would be does nothing");
@@ -326,7 +326,7 @@ void test_counted(const assets::AssetArchive& arc, const hud_art::Art& art) {
 
     // the second page: the tab shows it, every number of every seat, the best of a column in gold
     int jumps = 0;
-    card.set_on_watch([&](uint32_t) { ++jumps; });
+    card.set_on_watch([&](uint32_t, int32_t, int32_t) { ++jumps; });
     click(card, card.tab_rect(ScorecardModal::Page::Stats));
     check(card.page() == ScorecardModal::Page::Stats && jumps == 0, "a click on the Match stats tab shows the second page");
     const auto page = draw(arc, card, kWide720);
@@ -345,9 +345,10 @@ void test_counted(const assets::AssetArchive& arc, const hud_art::Art& art) {
     check(card.page() == ScorecardModal::Page::Results && count(*draw(arc, card, kWide720), art, "sc_victory_26") == 1, "a click on the Results tab shows the podium again");
     // the Watch button
     uint32_t watched = 0;
-    card.set_on_watch([&](uint32_t turn) { watched = turn; ++jumps; });
+    int32_t watched_x = -1, watched_y = -1;
+    card.set_on_watch([&](uint32_t turn, int32_t x, int32_t y) { watched = turn; watched_x = x; watched_y = y; ++jumps; });
     click(card, card.watch_rect());
-    check(jumps == 1 && watched == rep.play.watch_turn() && watched == 9120, "Watch opens the replay five seconds before the moment (turn 9120 for turn 9220)");
+    check(jumps == 1 && watched == rep.play.watch_turn() && watched == 9120 && watched_x == rep.play.tile_x && watched_y == rep.play.tile_y && watched_x == 10 && watched_y == 20, "Watch opens the replay five seconds before the moment (turn 9120 for turn 9220), with the view on its tile");
 
     // the second page again with the clicks that must do nothing there
     card.show_page(ScorecardModal::Page::Stats);
@@ -894,9 +895,13 @@ void test_app() {
 #if !defined(__EMSCRIPTEN__)
         check(card.watch_available() && app.can_watch_play(), "a game on this computer that has its recording: Watch can be offered");
 #endif
+        const MatchReport live = app.match_report();                                     // (what was counted: the viewer's end page has it again)
         MatchReport shown = counted();                                                  // (a Play of the game at turn 300: Watch opens turn 200)
         shown.turns = card.report().turns;
         shown.play.turn = 300;
+        const sim::WorldState& map = app.sim().get_world_state();
+        shown.play.tile_x = static_cast<int32_t>(map.width / 2);                        // (a moment in the middle of the map)
+        shown.play.tile_y = static_cast<int32_t>(map.height / 2);
         card.set_report(shown);
         app.update_results(0.3f);
         const LayoutRect watch = card.watch_rect();
@@ -906,11 +911,23 @@ void test_app() {
         check(app.replay_value(ReplayValue::JumpTarget) == 200, "...it jumps to five seconds before the moment (turn 200 for turn 300)");
         for (int i = 0; i < 40 && app.replay_state() == ReplayState::Jumping; ++i) app.update_simulation(0.05f);
         check(app.replay_state() != ReplayState::Jumping && app.replay_value(ReplayValue::Turn) >= 200 && app.replay_value(ReplayValue::Turn) < 220, "...and shows the match there (turn " + std::to_string(app.replay_value(ReplayValue::Turn)) + ")");
-        check(!app.can_watch_play() && app.replay_value(ReplayValue::Total) == static_cast<int>(shown.turns), "a viewer has no second Watch, and the recording is the match that was played");
+        const ViewportCamera& view = app.renderer().camera();
+        const double mid_x = static_cast<double>(view.x) + zoom::visible_exact(view.viewport_w, view.zoom) / 2.0;
+        const double mid_y = static_cast<double>(view.y) + zoom::visible_exact(view.viewport_h, view.zoom) / 2.0;
+        check(std::fabs(mid_x - (shown.play.tile_x * 32.0 + 16.0)) < 40.0 && std::fabs(mid_y - (shown.play.tile_y * 32.0 + 16.0)) < 40.0, "...with the view on the place of the moment (" + std::to_string(mid_x) + ", " + std::to_string(mid_y) + " for the tile " + std::to_string(shown.play.tile_x) + ", " + std::to_string(shown.play.tile_y) + ")");
+        check(app.can_watch_play() && app.replay_value(ReplayValue::Total) == static_cast<int>(shown.turns), "the viewer of the match just played can watch again, and the recording is the match that was played");
         for (int i = 0; i < 2000 && !app.sim().is_match_over(); ++i) app.update_simulation(0.05f);
         app.update_results(0.3f);
-        check(app.sim().is_match_over() && card.is_open() && card.new_look() && !card.report().ok && !card.watch_available() && card.tab_rect(ScorecardModal::Page::Stats).w == 0,
-              "the results at the end of the recording are the original's numbers only: a viewer counts nothing, and it offers no Watch");
+        const MatchReport& end = card.report();
+        check(app.sim().is_match_over() && card.is_open() && card.new_look() && end.ok && end.turns == live.turns && end.mvp.present == live.mvp.present && end.mvp.seat == live.mvp.seat && end.first_blood.present == live.first_blood.present &&
+                  end.play.present == live.play.present && end.damage_done == live.damage_done && card.watch_available() && card.tab_rect(ScorecardModal::Page::Stats).w > 0,
+              "the viewer's end page is the match's own Podium again, from the report that was kept: the honors, the Play of the game, Match stats");
+        click(card, card.tab_rect(ScorecardModal::Page::Stats));
+        check(card.page() == ScorecardModal::Page::Stats, "...its second page opens");
+        app.watch_play(200);                                                            // (what its Watch does, with the play that this match has)
+        check(app.replay_mode() && !card.is_open() && app.replay_value(ReplayValue::JumpTarget) == 200, "...and Watch jumps to the moment again (turn 200)");
+        for (int i = 0; i < 40 && app.replay_state() == ReplayState::Jumping; ++i) app.update_simulation(0.05f);
+        check(app.replay_state() != ReplayState::Jumping && app.replay_value(ReplayValue::Turn) >= 200 && app.replay_value(ReplayValue::Turn) < 220, "...and shows the match there (turn " + std::to_string(app.replay_value(ReplayValue::Turn)) + ")");
         app.shutdown();
     }
     // Classic art: the original's page, centred in the canvas when the canvas is wider

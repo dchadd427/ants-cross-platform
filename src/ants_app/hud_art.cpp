@@ -64,9 +64,10 @@ const Animation* Art::find_animation(const std::string& name) const noexcept {
     return it == animation_index_.end() ? nullptr : &animations_[it->second];
 }
 
-const std::string& Art::sheet_file(int32_t scale) const {
+const std::string& Art::sheet_file(int32_t scale, int32_t sheet) const {
     static const std::string none;
-    return scale >= 1 && scale <= 3 ? sheets_[static_cast<size_t>(scale - 1)] : none;
+    if (scale < 1 || scale > 3 || sheet < 0 || sheet > 1) return none;
+    return sheet == 0 ? sheets_[static_cast<size_t>(scale - 1)] : sheets2_[static_cast<size_t>(scale - 1)];
 }
 
 bool Art::parse(const std::string& manifest) {
@@ -100,16 +101,23 @@ bool Art::parse(const std::string& manifest) {
             if (w.size() != 3 || !to_int(w[1], canvas_w) || !to_int(w[2], canvas_h) || canvas_w != kReferenceWidth || canvas_h != kReferenceHeight) return fail(where + "the canvas is not 960 x 540");
         } else if (w[0] == "sheetsize") {
             if (w.size() != 3 || !to_int(w[1], sheet_w_) || !to_int(w[2], sheet_h_) || sheet_w_ <= 0 || sheet_h_ <= 0) return fail(where + "a bad sheet size");
+        } else if (w[0] == "sheet2size") {
+            if (w.size() != 3 || !to_int(w[1], sheet2_w_) || !to_int(w[2], sheet2_h_) || sheet2_w_ <= 0 || sheet2_h_ <= 0) return fail(where + "a bad second sheet size");
         } else if (w[0] == "derive2x") {
             if (w.size() != 2 || !to_int(w[1], derived_rows_) || derived_rows_ <= 0) return fail(where + "a bad derive2x record");
         } else if (w[0] == "sheet") {
             int32_t scale = 0;
             if (w.size() != 3 || !to_int(w[1], scale) || scale < 1 || scale > 3 || w[2].find('/') != std::string::npos || w[2].find('\\') != std::string::npos || w[2].find("..") != std::string::npos) return fail(where + "a bad sheet record");
             sheets_[static_cast<size_t>(scale - 1)] = w[2];
-        } else if (w[0] == "sprite") {
+        } else if (w[0] == "sheet2") {
+            int32_t scale = 0;
+            if (w.size() != 3 || !to_int(w[1], scale) || scale < 1 || scale > 3 || w[2].find('/') != std::string::npos || w[2].find('\\') != std::string::npos || w[2].find("..") != std::string::npos) return fail(where + "a bad second sheet record");
+            sheets2_[static_cast<size_t>(scale - 1)] = w[2];
+        } else if (w[0] == "sprite" || w[0] == "sprite2") {
             if (w.size() != 10 && w.size() != 15) return fail(where + "a sprite record has 9 or 14 fields");
             Sprite s;
             s.name = w[1];
+            s.sheet = w[0] == "sprite2" ? 1 : 0;
             if (!to_int(w[2], s.w) || !to_int(w[3], s.h) || !to_int(w[4], s.sheet_x) || !to_int(w[5], s.sheet_y) || !to_int(w[6], s.x) || !to_int(w[7], s.y)) return fail(where + "a number is not one");
             if (s.w <= 0 || s.h <= 0 || s.sheet_x < 0 || s.sheet_y < 0) return fail(where + "a sprite without a size or place");
             if (w[8] == "left") s.anchor_x = AnchorX::Left;
@@ -158,8 +166,11 @@ bool Art::parse(const std::string& manifest) {
         if (sheets_[static_cast<size_t>(scale - 1)].empty()) return fail("no sheet for the scale " + std::to_string(scale));
     }
     if (derived_rows_ > sheet_h_) return fail("derive2x names more rows than the sheet has");
+    const bool second = sheet2_w_ > 0 || sheet2_h_ > 0 || !sheets2_[0].empty() || !sheets2_[1].empty() || !sheets2_[2].empty();
+    if (second && (sheet2_w_ <= 0 || sheet2_h_ <= 0 || sheets2_[0].empty() || sheets2_[1].empty() || sheets2_[2].empty())) return fail("a second sheet needs its size and its three files");
     for (const Sprite& s : sprites_) {
-        if (s.sheet_x + s.w > sheet_w_ || s.sheet_y + s.h > sheet_h_) return fail("the sprite " + s.name + " is outside its sheet");
+        if (s.sheet == 1 && !second) return fail("the sprite " + s.name + " is on a second sheet that the manifest does not have");
+        if (s.sheet_x + s.w > sheet_width(s.sheet) || s.sheet_y + s.h > sheet_height(s.sheet)) return fail("the sprite " + s.name + " is outside its sheet");
     }
     for (const Animation& a : animations_) {
         if (a.frames.empty()) return fail("the animation " + a.name + " has no frame");
@@ -194,29 +205,33 @@ bool Art::load(const std::string& folder) {
     folder_ = dir;
     // The sheets are decoded later (when a texture needs one), but they must be there and be the size that the manifest's places assume: the header of each file is read now, so that a folder that lacks
     // a sheet, or has another one, is the original's art from the start and not a frame that stays empty
-    for (const int32_t scale : kScales) {
-        const std::string& file = sheets_[static_cast<size_t>(scale - 1)];
-        std::ifstream sheet(dir + file, std::ios::binary);
-        uint8_t head[33] = {};
-        sheet.read(reinterpret_cast<char*>(head), sizeof(head));
-        const bool png = sheet.gcount() == static_cast<std::streamsize>(sizeof(head)) && std::memcmp(head, "\x89PNG\r\n\x1a\n", 8) == 0 && std::memcmp(head + 12, "IHDR", 4) == 0;
-        const auto be32 = [&head](size_t at) { return (static_cast<int64_t>(head[at]) << 24) | (static_cast<int64_t>(head[at + 1]) << 16) | (static_cast<int64_t>(head[at + 2]) << 8) | head[at + 3]; };
-        if (!png || be32(16) != static_cast<int64_t>(sheet_w_) * scale || be32(20) != static_cast<int64_t>(sheet_h_) * scale || head[24] != 8 || head[25] != 6) {
-            const std::string why = "the sheet " + dir + file + " is missing, or is not a " + std::to_string(sheet_w_ * scale) + " x " + std::to_string(sheet_h_ * scale) + " picture of 8-bit RGBA";
-            *this = Art{};
-            what_ = why;
-            return false;
+    for (int32_t which = 0; which <= (has_second_sheet() ? 1 : 0); ++which) {
+        for (const int32_t scale : kScales) {
+            const std::string& file = sheet_file(scale, which);
+            const int32_t wide = sheet_width(which);
+            const int32_t high = sheet_height(which);
+            std::ifstream sheet(dir + file, std::ios::binary);
+            uint8_t head[33] = {};
+            sheet.read(reinterpret_cast<char*>(head), sizeof(head));
+            const bool png = sheet.gcount() == static_cast<std::streamsize>(sizeof(head)) && std::memcmp(head, "\x89PNG\r\n\x1a\n", 8) == 0 && std::memcmp(head + 12, "IHDR", 4) == 0;
+            const auto be32 = [&head](size_t at) { return (static_cast<int64_t>(head[at]) << 24) | (static_cast<int64_t>(head[at + 1]) << 16) | (static_cast<int64_t>(head[at + 2]) << 8) | head[at + 3]; };
+            if (!png || be32(16) != static_cast<int64_t>(wide) * scale || be32(20) != static_cast<int64_t>(high) * scale || head[24] != 8 || head[25] != 6) {
+                const std::string why = "the sheet " + dir + file + " is missing, or is not a " + std::to_string(wide * scale) + " x " + std::to_string(high * scale) + " picture of 8-bit RGBA";
+                *this = Art{};
+                what_ = why;
+                return false;
+            }
         }
     }
     return true;
 }
 
-bool Art::sheet_pixels(int32_t scale, DecodedImage& out) const {
+bool Art::sheet_pixels(int32_t scale, DecodedImage& out, int32_t sheet) const {
     out = DecodedImage{};
-    const std::string& file = sheet_file(scale);
+    const std::string& file = sheet_file(scale, sheet);
     if (!loaded_ || file.empty()) return false;
     DecodedImage derived;
-    if (scale == 2 && derived_rows_ > 0) {
+    if (sheet == 0 && scale == 2 && derived_rows_ > 0) {
         // the first rows are made from the 3x sheet, of which only those rows are decoded; they are made first, so that the 3x rows are gone again before the 2x sheet is decoded
         std::string bytes3;
         DecodedImage three;
@@ -228,7 +243,7 @@ bool Art::sheet_pixels(int32_t scale, DecodedImage& out) const {
     std::string bytes;
     if (!read_file(folder_ + file, bytes)) return false;
     if (!decode_png_rgba(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), out)) return false;
-    if (out.width != sheet_w_ * scale || out.height != sheet_h_ * scale) {
+    if (out.width != sheet_width(sheet) * scale || out.height != sheet_height(sheet) * scale) {
         out = DecodedImage{};
         return false;
     }

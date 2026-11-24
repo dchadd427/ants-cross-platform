@@ -65,19 +65,19 @@
    "test": "timeout 600 ./build/tests/test_app/test_match_report"
   },
   {
-   "id": "mvp_counts_food_below_zero",
+   "id": "mvp_counts_banked_points_below_zero",
    "file": "src/ants_app/match_report.cpp",
-   "old": "things[3][s] = std::max<int64_t>(0, st.food_points[s]);",
-   "new": "things[3][s] = st.food_points[s];",
+   "old": "things[3][s] = std::max<int64_t>(0, st.banked[s]);",
+   "new": "things[3][s] = st.banked[s];",
    "expect": "MR1.2",
    "build": "test_match_report",
    "test": "timeout 600 ./build/tests/test_app/test_match_report"
   },
   {
-   "id": "mvp_value_is_the_share",
+   "id": "mvp_value_is_the_damage",
    "file": "src/ants_app/match_report.cpp",
-   "old": "static_cast<int64_t>(st.damage_dealt[s]), 0};",
-   "new": "static_cast<int64_t>(share), 0};",
+   "old": "static_cast<int64_t>(share), 0};",
+   "new": "static_cast<int64_t>(st.damage_dealt[s]), 0};",
    "expect": "MR1.3",
    "build": "test_match_report",
    "test": "timeout 600 ./build/tests/test_app/test_match_report"
@@ -328,8 +328,8 @@
   {
    "id": "of_two_equal_seats_the_higher",
    "file": "src/ants_app/match_report.cpp",
-   "old": "        if (sum > most) {",
-   "new": "        if (sum >= most) {",
+   "old": "seats.push_back(s);",
+   "new": "seats.insert(seats.begin(), s);",
    "expect": "MR1.",
    "build": "test_match_report",
    "test": "timeout 600 ./build/tests/test_app/test_match_report"
@@ -337,8 +337,8 @@
   {
    "id": "of_two_equal_kinds_the_later",
    "file": "src/ants_app/match_report.cpp",
-   "old": "if (weighted(seat, k) > weighted(seat, kind)) kind = k;",
-   "new": "if (weighted(seat, k) >= weighted(seat, kind)) kind = k;",
+   "old": "if (weighted(seat, k) > 0) kinds.push_back(k);",
+   "new": "if (weighted(seat, k) > 0) kinds.insert(kinds.begin(), k);",
    "expect": "MR1.7",
    "build": "test_match_report",
    "test": "timeout 600 ./build/tests/test_app/test_match_report"
@@ -499,8 +499,8 @@
   {
    "id": "a_fight_counts_kills_out_of_the_window",
    "file": "src/ants_app/match_report.cpp",
-   "old": "            if (kill.drowned || !in_window(kill.turn, lo, hi)) continue;",
-   "new": "            if (kill.drowned) continue;",
+   "old": "if (is_kill_of_a_seat(kill) && kill.killer == seat && in_window(kill.turn, lo, hi)) made.push_back(&kill);",
+   "new": "if (is_kill_of_a_seat(kill) && kill.killer == seat) made.push_back(&kill);",
    "expect": "MR1.8",
    "build": "test_match_report",
    "test": "timeout 600 ./build/tests/test_app/test_match_report"
@@ -508,7 +508,7 @@
   {
    "id": "the_fight_s_place_is_its_first_kill",
    "file": "src/ants_app/match_report.cpp",
-   "old": "(from.size() - 1) / 2",
+   "old": "(made.size() - 1) / 2",
    "new": "0",
    "expect": "MR1.",
    "build": "test_match_report",
@@ -517,8 +517,8 @@
   {
    "id": "the_fight_s_place_is_its_last_kill",
    "file": "src/ants_app/match_report.cpp",
-   "old": "(from.size() - 1) / 2",
-   "new": "(from.size() - 1)",
+   "old": "(made.size() - 1) / 2",
+   "new": "(made.size() - 1)",
    "expect": "MR1.",
    "build": "test_match_report",
    "test": "timeout 600 ./build/tests/test_app/test_match_report"
@@ -526,8 +526,8 @@
   {
    "id": "a_fight_with_no_kill_of_its_own_has_no_place",
    "file": "src/ants_app/match_report.cpp",
-   "old": "const std::vector<const MatchStats::Kill*>& from = made.empty() ? every : made;",
-   "new": "const std::vector<const MatchStats::Kill*>& from = made;",
+   "old": "if (made.empty()) return false;",
+   "new": "if (made.empty()) return true;",
    "expect": "MR1.7",
    "build": "test_match_report",
    "test": "timeout 600 ./build/tests/test_app/test_match_report"
@@ -601,6 +601,42 @@
    "old": "    reset();\n    collector_ = std::make_unique",
    "new": "    abandon();\n    collector_ = std::make_unique",
    "expect": "MR3.1",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_finish_without_a_start_gives_the_last_report",
+   "file": "src/ants_app/live_match_stats.cpp",
+   "old": "if (state_ != State::Counting) return none_;",
+   "new": "if (state_ != State::Counting) return report_;",
+   "expect": "MR3.1",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_play_that_counts_nothing_is_still_a_play",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "play.present = play.count > 0;\n        return play.present;",
+   "new": "play.present = true;\n        return true;",
+   "expect": "MR1.9",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "mvp_counts_carried_food_not_banked_points",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "things[3][s] = std::max<int64_t>(0, st.banked[s]);",
+   "new": "things[3][s] = std::max<int64_t>(0, st.food_points[s]);",
+   "expect": "MR1.1",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_ants_alone_are_the_old_ones_when_the_world_is_stale",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "    if (!impl_->world_state_dirty_) return impl_->world_state_cache_.ants;\n    impl_->snapshot_ants(impl_->ant_snapshots_.ants);",
+   "new": "    if (true) return impl_->world_state_cache_.ants;\n    impl_->snapshot_ants(impl_->ant_snapshots_.ants);",
+   "expect": "MR3.4",
    "build": "test_match_report",
    "test": "timeout 600 ./build/tests/test_app/test_match_report"
   },

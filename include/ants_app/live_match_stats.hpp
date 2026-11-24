@@ -40,7 +40,7 @@ public:
     void abandon();
     /// Nothing is counted and no report is kept (a viewer of a recording counts nothing, and has none of an earlier match to show)
     void reset();
-    /// The match is over: its report (`local_seat` is the seat of this machine's player, whose results screen it is). Not ok when the pass missed anything. Does nothing, and gives the report that stands, when no match is being counted.
+    /// The match is over: its report (`local_seat` is the seat of this machine's player, whose results screen it is). Not ok when the pass missed anything. When no match is being counted (no start() since the last finish or abandon) it does nothing and gives a report that is not ok, never the report of an earlier match (report() still holds that one).
     const MatchReport& finish(sim::SimulationEngine& engine, uint8_t local_seat);
 
     /// True from start() until finish() or abandon()
@@ -62,6 +62,7 @@ private:
     uint32_t turns_{0};                  // the ticks seen
     uint64_t last_tick_{0};              // the engine's own tick count after the last tick that was seen
     MatchReport report_;
+    const MatchReport none_{};           // what finish() gives when nothing was counted
     replay::MatchStats stats_;
 };
 

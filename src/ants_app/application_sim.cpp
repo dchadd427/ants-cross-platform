@@ -208,7 +208,7 @@ void Application::check_match_over() {
     finish_recording();                                          // (the replay is the match as it ended: every command and every tick are in it)
     live_stats_.finish(sim_, local_player_id_);                  // (the numbers of the results: counted for every tick of the match, or not at all; before the screen opens)
     const auto& world = sim_.get_world_state();
-    scorecard_.set_report(live_stats_.report());                 // (the counted numbers: the new page's honors, Play of the game and second page; a report that is not ok shows the original's numbers only)
+    scorecard_.set_report(watching_own_match_ ? watched_report_ : live_stats_.report());     // (the counted numbers: the new page's honors, Play of the game and second page; a report that is not ok shows the original's numbers only; the viewer of the match just played has the report that was kept)
     scorecard_.set_watch_available(can_watch_play());            // (the Play of the game's Watch: only where the recording of this match can be opened)
     scorecard_.show(world.match_result, local_player_id_, world.game_mode);       // "Waiting for scores..."; the cue plays when the rows appear (update_scorecard)
     update_picture();                                            // the results are the whole canvas (their wide page, or the original's own page)

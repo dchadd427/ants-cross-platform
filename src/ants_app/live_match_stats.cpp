@@ -50,7 +50,7 @@ void LiveMatchStats::reset() {
 }
 
 const MatchReport& LiveMatchStats::finish(sim::SimulationEngine& engine, uint8_t local_seat) {
-    if (state_ != State::Counting) return report_;
+    if (state_ != State::Counting) return none_;                // (nothing was counted: not the report of an earlier match, which report() holds until the next match starts)
     if (engine.current_tick() != last_tick_) fail("a tick ran that was not seen");
     stats_ = collector_->take(turns_);
     collector_.reset();

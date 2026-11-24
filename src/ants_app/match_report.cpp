@@ -10,17 +10,18 @@
 // THE DEFINITIONS (the owner's; docs/REPLAYS.md "The match pages" has them too)
 //   Winning side   the seats of the first row of result.rows(local_seat): one seat, or two for an alliance. The honors and the play are about every seat of the match, except the MVP (a seat of the winning side) and the Last stand (a
 //                  seat that is not on it).
-//   MVP            the seat of the winning side with the highest mvp_share (ties: the lower seat); no MVP when that share is 0. `value` is the damage that it did.
+//   MVP            the seat of the winning side with the highest mvp_share (ties: the lower seat); no MVP when that share is 0. `value` is that share (thousandths). The fourth thing is the points that the seat's hill gained (MatchStats::banked, a thief's loot included).
 //   First blood    the first kill, by turn and then by the order they were counted, whose killer is a real team that is not its victim's own. A death by drowning has no killer and is nobody's. None when there is none.
 //   Biggest raid   the raid that took the most points (more than 0; ties: the earlier). Not in 187, which has the Last stand instead: of the seats that are not on the winning side and ran out of ants for good during the match
 //                  (no ant, no egg, no hatch: stats.out_turn), the one that did LAST; none when none did. (A seat that was wiped out and came back from an egg did not run out.)
 //   Play of the game  the busiest 10 seconds: two neighboring buckets of 100 turns (b and b + 1, for every b; a bucket that the match did not reach is empty) with the most activity, the activity being the sum of count times weight
 //                  (death 14, bomb 10, theft 6, fire 5, hit 2: the activity curve's). The earlier window wins a tie; under 28 (two deaths) there is no play. The events of the window belong to seats: a death to the team of the last damage
 //                  (none when it drowned, or the team was its own), a bomb to its planter, a theft to its thief, a fire to the seat that lit it, a hit to the team of the damage (never to the seat that was hurt). The seat with the most weighted
-//                  activity in the window gets the play (ties: the lower seat); its biggest KIND of event, by weighted activity (ties: the order death, bomb, theft, fire, hit), says the kind and the count:
+//                  activity in the window gets the play (ties: the lower seat); its biggest KIND of event, by weighted activity (ties: the order death, bomb, theft, fire, hit), says the kind and the count (a kind that counts
+//                  nothing, a bomb that took out nobody or a fight without a kill of its own, is no play: the seat's next kind, then the next seat, else no play at all, so the sentence never says "0"):
 //                    bomb -> Bomb   the ants of other seats that died within 20 turns after, and within 4 tiles of, one of its bombs that went off in the window; the busiest of those bombs is the moment (the earlier of two equal ones)
 //                    theft -> Raid  the points that its raids of the window took; the raid with the most points is the moment
-//                    death, hit -> Fight   the kills that it made in the window; the middle kill (of those, else of every death of the window) is the moment: a window of blows alone has no place to show and is no play
+//                    death, hit -> Fight   the kills that it made in the window; the middle one is the moment: a window of blows alone, or of the kills of others, has no place to show and is no play for the seat
 //                    fire -> Fire   the ants of other seats that died in the window within 3 tiles of a wall that it lit, from the turn it lit it to 180 seconds after; the fire of the window with the most of them is the moment
 //                  A distance is the larger of the two tile differences.
 //                  HONEST LIMIT: the pass does not know what caused a hit or a death, so these counts are "near in time and place", not "caused by"; a bomb does not claim the ant that a fire in the same place killed.
@@ -96,119 +97,131 @@ MatchReport::Play make_play(const MatchStats& st) {
         for (size_t seat = 0; seat < kSeats; ++seat) events[seat][kHit] += st.hit_credit[b][seat];
     }
     const auto weighted = [&](size_t seat, size_t kind) { return events[seat][kind] * kWeight[kind]; };
-    uint32_t most = 0;
-    size_t seat = 0;
+
+    // 3. what it was, how many, and when and where: one candidate for a seat and a kind of play, which is only a play when it counts something (a bomb that took out nobody is no play to say "takes out 0 ants" of)
+    const auto candidate = [&](size_t seat, MatchReport::PlayKind kind, MatchReport::Play& play) -> bool {
+        play = MatchReport::Play{};
+        play.seat = static_cast<uint8_t>(seat);
+        play.kind = kind;
+        if (kind == MatchReport::PlayKind::Bomb) {
+            std::vector<const MatchStats::BombOff*> bombs;
+            for (const MatchStats::BombOff& bomb : st.bomb_events) {
+                if (bomb.owner == seat && in_window(bomb.turn, lo, hi)) bombs.push_back(&bomb);
+            }
+            if (bombs.empty()) return false;
+            const auto victim_of = [&](const MatchStats::Kill& kill, const MatchStats::BombOff& bomb) {
+                return !kill.drowned && kill.victim != seat && kill.turn >= bomb.turn && kill.turn - bomb.turn <= kBombReachTurns && distance(kill.tile_x, kill.tile_y, bomb.tile_x, bomb.tile_y) <= kBombReachTiles;
+            };
+            uint32_t busiest = 0;
+            const MatchStats::BombOff* moment = bombs.front();
+            for (const MatchStats::BombOff* bomb : bombs) {
+                uint32_t taken = 0;
+                for (const MatchStats::Kill& kill : st.kills) taken += victim_of(kill, *bomb) ? 1u : 0u;
+                if (taken > busiest) {
+                    busiest = taken;
+                    moment = bomb;
+                }
+            }
+            for (const MatchStats::Kill& kill : st.kills) {                 // (an ant near two bombs is counted once)
+                play.count += std::any_of(bombs.begin(), bombs.end(), [&](const MatchStats::BombOff* bomb) { return victim_of(kill, *bomb); }) ? 1u : 0u;
+            }
+            play.turn = moment->turn;
+            play.tile_x = moment->tile_x;
+            play.tile_y = moment->tile_y;
+        } else if (kind == MatchReport::PlayKind::Raid) {
+            const MatchStats::Raid* moment = nullptr;
+            for (const MatchStats::Raid& raid : st.raids) {
+                if (raid.thief != seat || !in_window(raid.turn, lo, hi)) continue;
+                play.count += static_cast<uint32_t>(std::max<int32_t>(0, raid.points));
+                if (moment == nullptr || raid.points > moment->points) moment = &raid;
+            }
+            if (moment == nullptr) return false;
+            play.turn = moment->turn;
+            play.tile_x = moment->tile_x;
+            play.tile_y = moment->tile_y;
+        } else if (kind == MatchReport::PlayKind::Fire) {
+            std::vector<const MatchStats::FireLit*> fires;                  // the seat's fires, whenever they were lit (one still burns); the moment is one of the window's
+            for (const MatchStats::FireLit& fire : st.fire_events) {
+                if (fire.seat == seat && fire.has_tile) fires.push_back(&fire);
+            }
+            const auto victim_of = [&](const MatchStats::Kill& kill, const MatchStats::FireLit& fire) {
+                return !kill.drowned && kill.victim != seat && in_window(kill.turn, lo, hi) && kill.turn >= fire.turn && kill.turn - fire.turn <= kFireLifeTurns &&
+                       distance(kill.tile_x, kill.tile_y, fire.tile_x, fire.tile_y) <= kFireReachTiles;
+            };
+            const MatchStats::FireLit* moment = nullptr;
+            uint32_t busiest = 0;
+            for (const MatchStats::FireLit* fire : fires) {
+                if (!in_window(fire->turn, lo, hi)) continue;
+                uint32_t taken = 0;
+                for (const MatchStats::Kill& kill : st.kills) taken += victim_of(kill, *fire) ? 1u : 0u;
+                if (moment == nullptr || taken > busiest) {
+                    busiest = taken;
+                    moment = fire;
+                }
+            }
+            if (moment == nullptr) return false;                            // (the fires of the window left no wall: no place to show)
+            for (const MatchStats::Kill& kill : st.kills) {
+                play.count += std::any_of(fires.begin(), fires.end(), [&](const MatchStats::FireLit* fire) { return victim_of(kill, *fire); }) ? 1u : 0u;
+            }
+            play.turn = moment->turn;
+            play.tile_x = moment->tile_x;
+            play.tile_y = moment->tile_y;
+        } else {                                                            // deaths and hits: a fight, the kills that the seat made in the window
+            std::vector<const MatchStats::Kill*> made;
+            for (const MatchStats::Kill& kill : st.kills) {
+                if (is_kill_of_a_seat(kill) && kill.killer == seat && in_window(kill.turn, lo, hi)) made.push_back(&kill);
+            }
+            if (made.empty()) return false;                                 // (only blows, or the kills of others: nothing of its own to show)
+            play.count = static_cast<uint32_t>(made.size());
+            const MatchStats::Kill& middle = *made[(made.size() - 1) / 2];
+            play.turn = middle.turn;
+            play.tile_x = middle.tile_x;
+            play.tile_y = middle.tile_y;
+        }
+        play.present = play.count > 0;
+        return play.present;
+    };
+
+    // 4. the seats that did something, the one with the most weighted activity first (the lower seat on a tie); for each, its kinds of event, the biggest first (the earlier kind on a tie); the first that counts something is the play
+    std::vector<size_t> seats;
     for (size_t s = 0; s < kSeats; ++s) {
         uint32_t sum = 0;
         for (size_t k = 0; k < kKinds; ++k) sum += weighted(s, k);
-        if (sum > most) {                                                   // (strictly: the lower seat keeps a tie)
-            most = sum;
-            seat = s;
+        if (sum > 0) seats.push_back(s);                                    // (a window that nobody did: deaths by drowning, hits of no team, has none)
+    }
+    const auto total_of = [&](size_t s) {
+        uint32_t sum = 0;
+        for (size_t k = 0; k < kKinds; ++k) sum += weighted(s, k);
+        return sum;
+    };
+    std::stable_sort(seats.begin(), seats.end(), [&](size_t a, size_t b) { return total_of(a) > total_of(b); });
+    for (const size_t seat : seats) {
+        std::vector<size_t> kinds;
+        for (size_t k = 0; k < kKinds; ++k) {
+            if (weighted(seat, k) > 0) kinds.push_back(k);
+        }
+        std::stable_sort(kinds.begin(), kinds.end(), [&](size_t a, size_t b) { return weighted(seat, a) > weighted(seat, b); });
+        std::vector<MatchReport::PlayKind> tried;
+        for (const size_t k : kinds) {
+            const MatchReport::PlayKind kind = k == kBomb ? MatchReport::PlayKind::Bomb : k == kTheft ? MatchReport::PlayKind::Raid : k == kFire ? MatchReport::PlayKind::Fire : MatchReport::PlayKind::Fight;
+            if (std::find(tried.begin(), tried.end(), kind) != tried.end()) continue;      // (a death and a hit are both a fight)
+            tried.push_back(kind);
+            MatchReport::Play play;
+            if (candidate(seat, kind, play)) return play;
         }
     }
-    if (most == 0) return none;                                             // (a window that nobody did: deaths by drowning, hits of no team)
-    size_t kind = 0;
-    for (size_t k = 1; k < kKinds; ++k) {
-        if (weighted(seat, k) > weighted(seat, kind)) kind = k;             // (strictly: the earlier kind keeps a tie)
-    }
-
-    // 3. what it was, how many, and when and where
-    MatchReport::Play play;
-    play.seat = static_cast<uint8_t>(seat);
-    if (kind == kBomb) {
-        play.kind = MatchReport::PlayKind::Bomb;
-        std::vector<const MatchStats::BombOff*> bombs;
-        for (const MatchStats::BombOff& bomb : st.bomb_events) {
-            if (bomb.owner == seat && in_window(bomb.turn, lo, hi)) bombs.push_back(&bomb);
-        }
-        const auto victim_of = [&](const MatchStats::Kill& kill, const MatchStats::BombOff& bomb) {
-            return !kill.drowned && kill.victim != seat && kill.turn >= bomb.turn && kill.turn - bomb.turn <= kBombReachTurns && distance(kill.tile_x, kill.tile_y, bomb.tile_x, bomb.tile_y) <= kBombReachTiles;
-        };
-        uint32_t busiest = 0;
-        const MatchStats::BombOff* moment = bombs.front();
-        for (const MatchStats::BombOff* bomb : bombs) {
-            uint32_t taken = 0;
-            for (const MatchStats::Kill& kill : st.kills) taken += victim_of(kill, *bomb) ? 1u : 0u;
-            if (taken > busiest) {
-                busiest = taken;
-                moment = bomb;
-            }
-        }
-        for (const MatchStats::Kill& kill : st.kills) {                     // (an ant near two bombs is counted once)
-            play.count += std::any_of(bombs.begin(), bombs.end(), [&](const MatchStats::BombOff* bomb) { return victim_of(kill, *bomb); }) ? 1u : 0u;
-        }
-        play.turn = moment->turn;
-        play.tile_x = moment->tile_x;
-        play.tile_y = moment->tile_y;
-    } else if (kind == kTheft) {
-        play.kind = MatchReport::PlayKind::Raid;
-        const MatchStats::Raid* moment = nullptr;
-        for (const MatchStats::Raid& raid : st.raids) {
-            if (raid.thief != seat || !in_window(raid.turn, lo, hi)) continue;
-            play.count += static_cast<uint32_t>(std::max<int32_t>(0, raid.points));
-            if (moment == nullptr || raid.points > moment->points) moment = &raid;
-        }
-        play.turn = moment->turn;
-        play.tile_x = moment->tile_x;
-        play.tile_y = moment->tile_y;
-    } else if (kind == kFire) {
-        play.kind = MatchReport::PlayKind::Fire;
-        std::vector<const MatchStats::FireLit*> fires;                      // the seat's fires, whenever they were lit (one still burns); the moment is one of the window's
-        for (const MatchStats::FireLit& fire : st.fire_events) {
-            if (fire.seat == seat && fire.has_tile) fires.push_back(&fire);
-        }
-        const auto victim_of = [&](const MatchStats::Kill& kill, const MatchStats::FireLit& fire) {
-            return !kill.drowned && kill.victim != seat && in_window(kill.turn, lo, hi) && kill.turn >= fire.turn && kill.turn - fire.turn <= kFireLifeTurns &&
-                   distance(kill.tile_x, kill.tile_y, fire.tile_x, fire.tile_y) <= kFireReachTiles;
-        };
-        const MatchStats::FireLit* moment = nullptr;
-        uint32_t busiest = 0;
-        for (const MatchStats::FireLit* fire : fires) {
-            if (!in_window(fire->turn, lo, hi)) continue;
-            uint32_t taken = 0;
-            for (const MatchStats::Kill& kill : st.kills) taken += victim_of(kill, *fire) ? 1u : 0u;
-            if (moment == nullptr || taken > busiest) {
-                busiest = taken;
-                moment = fire;
-            }
-        }
-        if (moment == nullptr) return none;                                 // (the fires of the window left no wall: no place to show)
-        for (const MatchStats::Kill& kill : st.kills) {
-            play.count += std::any_of(fires.begin(), fires.end(), [&](const MatchStats::FireLit* fire) { return victim_of(kill, *fire); }) ? 1u : 0u;
-        }
-        play.turn = moment->turn;
-        play.tile_x = moment->tile_x;
-        play.tile_y = moment->tile_y;
-    } else {                                                                // deaths and hits: a fight
-        play.kind = MatchReport::PlayKind::Fight;
-        std::vector<const MatchStats::Kill*> made;
-        std::vector<const MatchStats::Kill*> every;
-        for (const MatchStats::Kill& kill : st.kills) {
-            if (kill.drowned || !in_window(kill.turn, lo, hi)) continue;
-            every.push_back(&kill);
-            if (is_kill_of_a_seat(kill) && kill.killer == seat) made.push_back(&kill);
-        }
-        play.count = static_cast<uint32_t>(made.size());
-        const std::vector<const MatchStats::Kill*>& from = made.empty() ? every : made;
-        if (from.empty()) return none;                                      // (only blows: nothing to show)
-        const MatchStats::Kill& middle = *from[(from.size() - 1) / 2];
-        play.turn = middle.turn;
-        play.tile_x = middle.tile_x;
-        play.tile_y = middle.tile_y;
-    }
-    play.present = true;
-    return play;
+    return none;
 }
 
 }  // namespace
 
 uint32_t mvp_share(const replay::MatchStats& st, uint8_t seat) {
     if (!plays(st.roster, seat)) return 0;
-    // the four things, for every seat: damage done, kills (a drowned ant is nobody's), loot that raids took, food points carried (never below 0)
+    // the four things, for every seat: damage done, kills (a drowned ant is nobody's), loot that raids took, points banked (the hill's gain, a thief's loot included; never below 0)
     std::array<std::array<int64_t, kSeats>, 4> things{};
     for (size_t s = 0; s < kSeats; ++s) {
         things[0][s] = st.damage_dealt[s];
-        things[3][s] = std::max<int64_t>(0, st.food_points[s]);
+        things[3][s] = std::max<int64_t>(0, st.banked[s]);
     }
     for (const MatchStats::Kill& kill : st.kills) {
         if (is_kill_of_a_seat(kill)) ++things[1][kill.killer];
@@ -265,7 +278,7 @@ MatchReport make_match_report(const replay::MatchStats& st, const sim::MatchResu
         const uint32_t share = mvp_share(st, static_cast<uint8_t>(s));
         if (share > best) {                                                 // (strictly: the lower seat keeps a tie)
             best = share;
-            report.mvp = MatchReport::Honor{true, static_cast<uint8_t>(s), static_cast<int64_t>(st.damage_dealt[s]), 0};
+            report.mvp = MatchReport::Honor{true, static_cast<uint8_t>(s), static_cast<int64_t>(share), 0};
         }
     }
 

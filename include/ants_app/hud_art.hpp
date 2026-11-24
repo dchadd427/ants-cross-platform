@@ -11,6 +11,8 @@
 //     sheetsize <w> <h>                                 the 1x sheet's size (the others are that times the scale)
 //     derive2x <rows>                                   optional: the first <rows> rows of the 2x sheet are not in its file: sheet_pixels makes them from the same rows of the 3x sheet (derive_two_thirds)
 //     sheet <scale> <png file>
+//     sheet2size <w> <h>                                optional: a SECOND sheet, when the first is full (a texture holds 4096 pixels at most: 1365 canvas pixels at 3x), and then
+//     sheet2 <scale> <png file>                         its three files, as `sheet`; the sprites on it are written `sprite2` (the same fields) and the sheet's own size is `sheet2size`
 //     sprite <name> <w> <h> <sheet x> <sheet y> <x> <y> <anchor x> <anchor y> [<axis> <start> <tile from> <tile to> <end>]
 //     anim <name> [cursor]                              the original's animation that this set replaces
 //     frame <ms> <sprite> <x> <y> [<sprite> <x> <y> ...]  one frame of it: the original's time, and the pieces that make the frame
@@ -55,6 +57,7 @@ struct Sprite {
     int32_t h{0};
     int32_t sheet_x{0};         // where it is in the 1x sheet (the other sheets: times the scale)
     int32_t sheet_y{0};
+    int32_t sheet{0};           // which sheet: 0, or 1 for the second one (`sprite2`)
     int32_t x{0};               // its place in the 960 x 540 layout
     int32_t y{0};
     AnchorX anchor_x{AnchorX::Left};
@@ -114,16 +117,19 @@ public:
     const Sprite* sprite_at(int32_t index) const noexcept { return index >= 0 && static_cast<size_t>(index) < sprites_.size() ? &sprites_[static_cast<size_t>(index)] : nullptr; }
     int32_t find_sprite(const std::string& name) const noexcept;
     const Animation* find_animation(const std::string& name) const noexcept;
-    const std::string& sheet_file(int32_t scale) const;
+    /// The file of a sheet at a scale (`sheet`: 0, or 1 for the second sheet)
+    const std::string& sheet_file(int32_t scale, int32_t sheet = 0) const;
+    /// The set has a second sheet (the first was full)
+    bool has_second_sheet() const noexcept { return sheet2_w_ > 0; }
 
     /// The pixels of the sheet of a scale, read and decoded from its file (the first `derive2x` rows of the 2x sheet: made from the 3x sheet, of which only those rows are decoded). False (what() says why)
     /// when a file is missing or damaged, or is not the size that the manifest's sprites need
-    bool sheet_pixels(int32_t scale, DecodedImage& out) const;
+    bool sheet_pixels(int32_t scale, DecodedImage& out, int32_t sheet = 0) const;
     /// How many rows (canvas pixels, from the top) of the 2x sheet the game makes from the 3x sheet: the lettering of the windows, whose 2x pictures would only repeat the 3x ones (0: none)
     int32_t derived_rows() const noexcept { return derived_rows_; }
     /// The size of a sheet in canvas pixels (the manifest's sprites end inside it)
-    int32_t sheet_width() const noexcept { return sheet_w_; }
-    int32_t sheet_height() const noexcept { return sheet_h_; }
+    int32_t sheet_width(int32_t sheet = 0) const noexcept { return sheet == 0 ? sheet_w_ : sheet2_w_; }
+    int32_t sheet_height(int32_t sheet = 0) const noexcept { return sheet == 0 ? sheet_h_ : sheet2_h_; }
 
     /// A number that changes with every manifest that was read (a renderer that keeps textures of a set knows it by this, not by the address)
     uint64_t generation() const noexcept { return generation_; }
@@ -156,6 +162,9 @@ private:
     std::unordered_map<std::string, int32_t> sprite_index_;
     std::unordered_map<std::string, size_t> animation_index_;
     std::array<std::string, 3> sheets_;
+    int32_t sheet2_w_{0};                                  // the second sheet (0: there is none)
+    int32_t sheet2_h_{0};
+    std::array<std::string, 3> sheets2_;
 };
 
 /// Where a sprite stands in a picture of `layout`'s size: its place at 960 x 540 moved by the anchors

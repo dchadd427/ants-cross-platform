@@ -468,6 +468,7 @@ void Application::run_replay(float dt) {
         if (turn_of(sim_) >= replay_jump_target_) {
             replay_jumping_ = false;
             auto_camera_.reset();                                          // (nobody saw the turns of the jump: the camera starts from what the picture shows now)
+            focus_watched_tile();                                          // (Watch: ... on the place of the moment)
             catch_up_backlog_ = true;                                      // (what the turns of the jump made is not told: the sounds are dropped, the news stay in the chat log)
             post_tick();
             tick_accumulator_ = 0.0f;
@@ -492,12 +493,24 @@ bool Application::can_watch_play() const noexcept {
 #if defined(__EMSCRIPTEN__)
     return false;
 #else
-    return !replay_mode_ && !network_active() && !last_replay_.empty();
+    if (network_active()) return false;
+    if (watching_own_match_) return replay_file_ != nullptr && replay_failure_ == ReplayFailure::None;      // (the viewer of the match just played: from its end page, Watch jumps again)
+    return !replay_mode_ && !last_replay_.empty();
 #endif
 }
 
-void Application::watch_play(uint32_t turn) {
+void Application::watch_play(uint32_t turn, int32_t tile_x, int32_t tile_y) {
     if (!can_watch_play()) return;
+    watch_focus_ = tile_x >= 0 && tile_y >= 0;
+    watch_focus_x_ = tile_x;
+    watch_focus_y_ = tile_y;
+    if (watching_own_match_) {                                       // (from the viewer's own end page: the file is loaded, and a jump to an earlier turn starts the match again)
+        scorecard_.hide();
+        replay_jump_to(turn);
+        if (!replay_jumping_) focus_watched_tile();
+        return;
+    }
+    const MatchReport report = live_stats_.report();                 // (start_replay lets go of the count: the report is kept for the viewer's end page)
     load_replay(last_replay_);                                       // (start_replay lets go of last_replay_: the file is decoded before)
     if (replay_failure_ != ReplayFailure::None || !replay_file_) {
         replay_file_.reset();
@@ -506,12 +519,23 @@ void Application::watch_play(uint32_t turn) {
         return;
     }
     replay_mode_ = true;
+    watching_own_match_ = true;
+    watched_report_ = report;
     config_.label_unnamed_teams = true;                              // (every seat of the match is shown, by its name or its color)
     replay_paused_ = false;
     stop_bots();                                                     // (the computer players of the match are over: a viewer only looks)
     scorecard_.hide();
     start_replay();
     replay_jump_to(turn);
+    if (!replay_jumping_) focus_watched_tile();
+}
+
+// The view is put on the tile of the Play of the game when the turns before it have been played (the Auto camera, reset by the jump, has no action to look at until the moment comes, and then takes the view where it is)
+void Application::focus_watched_tile() {
+    if (!watch_focus_) return;
+    watch_focus_ = false;
+    if (!renderer_) return;
+    renderer_->camera().center_on(watch_focus_x_ * 32 + 16, watch_focus_y_ * 32 + 16, current_level_.width(), current_level_.height());
 }
 
 // Quit and Leave Game: back to the page's list of matches (a native game ends)

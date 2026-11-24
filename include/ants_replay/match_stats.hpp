@@ -10,11 +10,11 @@
 // (ants_server/history_details.hpp), in the same pass that counts the totals.
 //
 // What this cannot tell (it needs an event sink in the engine, a later change): what caused each hit (a blow, a bomb, a fire wall) and the type of the ant that struck. The tile of every lost ant is read from the
-// same world snapshot (the tile of its last look: nothing is added to the engine for it).
+// same snapshot of the ants (the tile of its last look). The ants are read with SimulationEngine::get_ant_snapshots: the ants alone, so a catch-up that counts hundreds of turns a frame does not copy the map for each of them.
 //
 // The same pass is also run LIVE, while a match is played (ants_app/live_match_stats.hpp): the application hands every tick that its confirmed engine executes to on_tick(), and the numbers that the results screen
 // shows (ants_app/match_report.hpp) are made from what it counted. Counted live or from the recording, the numbers are the same (tests/test_app/test_match_report.cpp checks it): so the pass reads the world and the
-// counters only, never the engine's queues of cues and news (a game's own code drains them: a pass that took them would take the sounds of the match), and a tick that it was not told of makes it fail.
+// counters only, never the engine's queues of cues and news (a game's own code drains them: a pass that took them would take the sounds of the match), and a tick that it was not told of makes it fail. (A pass over a recording, StatsPlayback, has replay::Playback clear both queues after every tick, so nothing piles up there.)
 
 #include <array>
 #include <cstddef>
@@ -165,7 +165,7 @@ private:
     };
     void count(MatchStats::Action kind, uint32_t turns, uint32_t events = 1);
     void credit_hit(uint32_t bucket, uint8_t seat);
-    void track_bombs(sim::SimulationEngine& engine, uint32_t turns, uint32_t planted, uint32_t defused, const sim::WorldState& world);
+    void track_bombs(sim::SimulationEngine& engine, uint32_t turns, uint32_t planted, uint32_t defused, const std::vector<sim::AntSnapshot>& ants);
     void track_fires(sim::SimulationEngine& engine, uint32_t turns, const std::array<uint32_t, MatchStats::kSeats>& lit_now);
 
     MatchStats stats_;

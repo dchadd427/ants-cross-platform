@@ -422,6 +422,58 @@ void test_derive() {
 
 }  // namespace
 
+// A second sheet (the first was full): the sprites of `sprite2` are read from its files and drawn from its textures, checked with pixels. The shipped manifest with a second sheet of 16 x 16 canvas pixels (three
+// files of one color) and a sprite2 on it, drawn by the real renderer: the pixel that comes out is the second sheet's, never the first sheet's at the same place
+void test_second_sheet(const assets::AssetArchive& arc) {
+    group("second_sheet", "a sprite on a second sheet is read from its own files and drawn from its own texture");
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() / ("ants_hud_art_second_" + std::to_string(static_cast<long long>(SDL_GetTicks())));
+    std::error_code ignored;
+    fs::remove_all(dir, ignored);
+    fs::create_directories(dir, ignored);
+    std::ifstream in(art_folder() + "/hud_art.txt", std::ios::binary);
+    std::string manifest((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    manifest.insert(manifest.find("sprite "), "sheet2size 16 16\nsheet2 1 sheet2_1x.png\nsheet2 2 sheet2_2x.png\nsheet2 3 sheet2_3x.png\nsprite2 second_dot 8 8 4 4 0 0 left top\n");
+    {
+        std::ofstream out(dir / "hud_art.txt", std::ios::binary | std::ios::trunc);
+        out.write(manifest.data(), static_cast<std::streamsize>(manifest.size()));
+    }
+    for (const char* name : {"sheet_1x.png", "sheet_2x.png", "sheet_3x.png"}) fs::copy_file(art_folder() + "/" + name, dir / name, fs::copy_options::overwrite_existing, ignored);
+    const std::array<uint8_t, 4> color = {10, 200, 60, 255};
+    for (int k = 1; k <= 3; ++k) {
+        std::vector<uint8_t> px;
+        for (int i = 0; i < 16 * k * 16 * k; ++i) px.insert(px.end(), color.begin(), color.end());
+        const std::vector<uint8_t> bytes = png_of(16 * k, 16 * k, filtered(px, 16 * k, 16 * k, {0}));
+        std::ofstream out(dir / ("sheet2_" + std::to_string(k) + "x.png"), std::ios::binary | std::ios::trunc);
+        out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    }
+    hud_art::Art art;
+    check(art.load(dir.string()) && art.has_second_sheet() && art.sheet_width(1) == 16, "a set with a second sheet is read, and its three files are checked against its size");
+    DecodedImage image;
+    check(art.sheet_pixels(1, image, 1) && image.width == 16 && image.rgba[0] == color[0] && image.rgba[1] == color[1] && image.rgba[2] == color[2], "...its own file is what a second sheet's pixels are");
+    check(art.sheet_pixels(3, image, 1) && image.width == 48 && image.height == 48 && !art.sheet_pixels(3, image, 2), "...at every scale, and there is no third sheet");
+    const QuietStdout quiet;
+    SDL_Window* win = SDL_CreateWindow("hud-art-second", 0, 0, 960, 540, SDL_WINDOW_HIDDEN);
+    Renderer renderer;
+    if (win == nullptr || !renderer.init(win, arc)) {
+        check(false, "the renderer is up");
+        return;
+    }
+    renderer.set_canvas_size(960, 540);
+    check(renderer.preload_art(art), "the renderer makes the textures of both sheets");
+    renderer.begin_frame();
+    renderer.draw_art(art, art.find_sprite("second_dot"), 100, 100, 8, 8, 0, 0, 8, 8);
+    renderer.draw_art(art, art.card, 300, 100, 182, 116, 0, 0, 182, 116);
+    std::vector<uint8_t> px(960u * 540u * 4u, 0);
+    SDL_RenderReadPixels(renderer.get_sdl_renderer(), nullptr, SDL_PIXELFORMAT_RGBA32, px.data(), 960 * 4);
+    const auto at = [&](int x, int y) { return &px[(static_cast<size_t>(y) * 960u + static_cast<size_t>(x)) * 4u]; };
+    check(at(103, 103)[0] == color[0] && at(103, 103)[1] == color[1] && at(103, 103)[2] == color[2], "a sprite2 is drawn from the second sheet's pixels (" + std::to_string(at(103, 103)[0]) + ", " + std::to_string(at(103, 103)[1]) + ", " + std::to_string(at(103, 103)[2]) + ")");
+    check(!(at(350, 150)[0] == color[0] && at(350, 150)[1] == color[1] && at(350, 150)[2] == color[2]) && (at(350, 150)[0] != 0 || at(350, 150)[1] != 0 || at(350, 150)[2] != 0), "...a sprite of the first sheet still comes from the first");
+    renderer.shutdown();
+    SDL_DestroyWindow(win);
+    fs::remove_all(dir, ignored);
+}
+
 void test_manifest();
 void test_frame();
 void test_look(const assets::AssetArchive& arc, const hud_art::Art& art);
@@ -457,6 +509,7 @@ int main(int argc, char* argv[]) {
         std::fprintf(stderr, "cannot open ants.chd or the HUD art\n");
         return 2;
     }
+    test_second_sheet(arc);
     test_panel(art);
     test_window_pieces(arc, art);
     test_window_model(arc);
