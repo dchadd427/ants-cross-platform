@@ -284,6 +284,23 @@ const char* const kActionSql =
     " action TEXT NOT NULL CHECK (length(action) <= 1500)"
     ") WITHOUT ROWID;";
 
+// Version 12. The plays and the likes of the replays (docs/REPLAY_COUNTS.md). `plays` and `likes` are two numbers on the match's own row, so that the list shows them with the match and sorts by them with an index like
+// its other sorts: how many times the replay was played (a count and nothing else: nothing says who played) and how many people like it. `replay_likes` holds one row for each person who likes a match: the id and the hub's opaque
+// reference of the account (16 lower-case hex digits, never an account id), so that a person likes a match once, finds the hearts that are theirs and takes them all back when they forget themselves; no answer of the server
+// lists the people of a match. `likes` is kept equal to the number of rows of the match in the transaction that changes either. The table does not refer to history_matches: a record that is replaced (HistoryStore::put) keeps its
+// numbers and its likes, and HistoryStore::remove deletes them with the match.
+const char* const kReplayCountsSql =
+    "ALTER TABLE history_matches ADD COLUMN plays INTEGER NOT NULL DEFAULT 0 CHECK (plays BETWEEN 0 AND 1000000);"
+    "ALTER TABLE history_matches ADD COLUMN likes INTEGER NOT NULL DEFAULT 0 CHECK (likes BETWEEN 0 AND 1000000);"
+    "CREATE INDEX history_matches_plays ON history_matches (plays DESC, ended DESC, id DESC);"
+    "CREATE INDEX history_matches_likes ON history_matches (likes DESC, ended DESC, id DESC);"
+    "CREATE TABLE replay_likes ("
+    " id TEXT NOT NULL,"
+    " ref TEXT NOT NULL CHECK (length(ref) = 16),"
+    " PRIMARY KEY (id, ref)"
+    ") WITHOUT ROWID;"
+    "CREATE INDEX replay_likes_ref ON replay_likes (ref, id);";
+
 }  // namespace
 
 const std::vector<db::Migration>& db_migrations() {
@@ -299,6 +316,7 @@ const std::vector<db::Migration>& db_migrations() {
         {9, "bot_schedules", kBotSchedulesSql},
         {10, "bot_rotation", kBotRotationSql},
         {11, "history_action", kActionSql},
+        {12, "replay_counts", kReplayCountsSql},
     };
     return list;
 }
@@ -311,6 +329,7 @@ const std::vector<db::Migration>& history_db_migrations() {
         {3, "map_plays", kMapPlaysSql},
         {4, "history_deaths", kDeathsSql},
         {5, "history_action", kActionSql},
+        {6, "replay_counts", kReplayCountsSql},
     };
     return list;
 }

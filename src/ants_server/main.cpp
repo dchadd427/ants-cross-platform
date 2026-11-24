@@ -112,6 +112,10 @@
 //                      how many maps may wait for the owner (default 200) and how many one address may send in a UTC day (default 3)
 //   --submit-ignore-client-header
 //                      count an address by the connection's own address instead of the X-Client-Address that the site's nginx sets (for a door that no proxy stands in front of)
+//   --counts-port N    the door of the PLAYS and the LIKES of replays (docs/REPLAY_COUNTS.md): POST /counts/play/<id>, GET /counts/mine, POST /counts/like/<id>, /counts/unlike/<id> and /counts/forget. 0 = off, the default (the stack
+//                      files turn it on at 4032). This machine only; the site's nginx passes the first four, and the chat hub calls the last one. Plays need no secret; likes need the same ANTS_ADMIN_GATE_SECRET as the hub
+//   --counts-any-interface
+//                      the counts door listens on every interface (for a container only)
 //   --test-map-port N  the door of the TEST MAPS of the Map Maker's "With other players" (docs/MAP_SUBMISSIONS.md, "Test maps"): one route, POST /test-maps. 0 = off, the default (the stack files turn it on at 4031).
 //                      This machine only; the site's nginx passes the path to it and sets the real client address. It needs a folder for the maps, no database, no account and not the submissions door
 //   --test-map-any-interface
@@ -174,6 +178,7 @@
 #include "ants_server/bot_matches.hpp"
 #include "ants_server/bot_rotation.hpp"
 #include "ants_server/private_files.hpp"
+#include "ants_server/replay_counts_api.hpp"
 #include "ants_server/control.hpp"
 #include "ants_db/database.hpp"
 #include "ants_db/migrations.hpp"
@@ -246,6 +251,8 @@ struct Options {
     size_t submit_max_waiting{200};
     size_t submit_per_address{3};
     bool submit_ignore_client_header{false};
+    uint16_t counts_port{0};                   // --counts-port: the door of the plays and likes of replays (0: none)
+    bool counts_any_interface{false};
     uint16_t test_map_port{0};                 // --test-map-port: the door of the test maps (0: none)
     bool test_map_any_interface{false};
     std::string test_maps_dir;                 // --test-maps-dir (empty: the folder "test-maps" in the results folder)
@@ -270,6 +277,7 @@ void usage(FILE* to) {
                  "                    [--replays-dir DIR | --no-replays] [--replay-demo] [--replays-days 1-3650] [--replays-max-mb 1-4096]\n"
                  "                    [--replay-port N] [--replay-any-interface] [--bot-match-every-min 0|5-1440] [--db FILE | --no-db] [--no-history]\n"
                  "                    [--submit-port N] [--submit-any-interface] [--submissions-dir DIR] [--submit-max-waiting N] [--submit-per-address N] [--submit-ignore-client-header]\n"
+                 "                    [--counts-port N] [--counts-any-interface]\n"
                  "                    [--test-map-port N] [--test-map-any-interface] [--test-maps-dir DIR] [--test-map-ignore-client-header]\n"
                  "                    [--map-picture-program PATH --map-picture-archive FILE [--map-pictures-dir DIR]] [--turn-host HOST[:PORT]]\n"
                  "                    [--no-address-limits | --address-connections-per-second N --address-rooms-per-minute N --address-rooms-open N --address-wrong-codes-per-minute N\n"
@@ -344,6 +352,13 @@ int main(int argc, char** argv) {
                 std::fprintf(stderr, "--submit-port takes a port number (0 - 65535)\n");
                 return 2;
             }
+        } else if (a == "--counts-port") {
+            if (!parse_port(value("--counts-port"), o.counts_port)) {
+                std::fprintf(stderr, "--counts-port takes a port number (0 - 65535)\n");
+                return 2;
+            }
+        } else if (a == "--counts-any-interface") {
+            o.counts_any_interface = true;
         } else if (a == "--test-map-port") {
             if (!parse_port(value("--test-map-port"), o.test_map_port)) {
                 std::fprintf(stderr, "--test-map-port takes a port number (0 - 65535)\n");
@@ -593,6 +608,7 @@ int main(int argc, char** argv) {
     std::unique_ptr<ants::ctl::HttpServer> replay_http;           // the public, read-only door of the replays (--replay-port)
     std::unique_ptr<ants::ctl::HttpServer> submit_http;           // the door of the map submissions (--submit-port)
     std::unique_ptr<ants::ctl::HttpServer> test_map_http;         // the door of the test maps (--test-map-port)
+    std::unique_ptr<ants::ctl::HttpServer> counts_http;           // the door of the plays and likes of replays (--counts-port)
     if (o.port != 0) {
         tcp = ants::net::TcpListener::listen(o.port, !o.is_public);
         if (!tcp) {
@@ -639,6 +655,13 @@ int main(int argc, char** argv) {
         door.body_limit = [](const ants::ctl::HttpRequest& head) { return ants::server::TestMapApi::body_limit(head); };
         test_map_http = ants::ctl::HttpServer::listen_door(o.test_map_port, door, !o.test_map_any_interface);
         if (!test_map_http) log("test rooms are off: cannot listen on test-map port " + std::to_string(o.test_map_port));
+    }
+    if (o.counts_port != 0) {                                      // (a door that cannot listen does not stop the game: the stack turns it on by default, so a taken port only switches the counts off, with a line in the log)
+        ants::ctl::DoorOptions door;
+        door.max_body_bytes = 16;                                  // (no route takes a body: a Content-Length above 0 is answered 413 on the head, and the body is never read)
+        door.body_limit = [](const ants::ctl::HttpRequest& head) { return ants::server::ReplayCountsApi::body_limit(head); };
+        counts_http = ants::ctl::HttpServer::listen_door(o.counts_port, door, !o.counts_any_interface);
+        if (!counts_http) log("plays and likes of replays are off: cannot listen on counts port " + std::to_string(o.counts_port));
     }
     if (!tcp && !ws) {
         std::fprintf(stderr, "no game port: give --port or --ws-port\n");
@@ -872,6 +895,20 @@ int main(int argc, char** argv) {
             log(std::string("match history kept for good in the database") + (rooms.replay_store() != nullptr ? "; the matches of the replay store are counted while no match runs" : "; the server keeps no replays, so nothing is added"));
         }
     }
+    // The plays and likes of replays (replay_counts_api.hpp, docs/REPLAY_COUNTS.md): they are numbers of the match history, so the door needs it; likes need the key that the hub's gate signs with.
+    std::unique_ptr<ants::server::ReplayCountsApi> counts_api;
+    if (counts_http) {
+        if (rooms.history_store() == nullptr) {
+            log("plays and likes of replays are off: the server keeps no match history");
+            counts_http.reset();
+        } else {
+            ants::server::ReplayCountsConfig cc;
+            if (const char* gate_key = std::getenv("ANTS_ADMIN_GATE_SECRET")) cc.gate_secret = gate_key;
+            counts_api = std::make_unique<ants::server::ReplayCountsApi>(*rooms.history_store(), rooms.replay_store(), cc);
+            log(std::string("plays and likes of replays on port ") + std::to_string(counts_http->port()) + (o.counts_any_interface ? " (all interfaces: the host must restrict it)" : " (this machine only)") +
+                ": POST /counts/play/<id> counts, " + (counts_api->likes_on() ? "likes are ON (the hub's pass)" : "likes are OFF (ANTS_ADMIN_GATE_SECRET is not a good key)"));
+        }
+    }
     // The map submissions (submissions.hpp, docs/MAP_SUBMISSIONS.md): the store needs the database and a folder; the admin page needs one setting of the environment. What is missing switches a part off with a line in
     // the log; a door that was asked for and cannot work stops the server (the operator asked for it).
     std::unique_ptr<ants::server::SubmissionStore> submissions;
@@ -1089,6 +1126,10 @@ int main(int argc, char** argv) {
             }
             for (const std::string& line : submissions->take_notices()) log(line);
             for (const std::string& line : submit_api->take_notices()) log(line);           // (a pass that was refused: its kind, never the pass, a name or an address)
+        }
+        if (counts_http && counts_api) {
+            counts_http->update(now, [&](const ants::ctl::HttpRequest& request) { return counts_api->handle(request, now); });
+            for (const std::string& line : counts_api->take_notices()) log(line);            // (a pass that was refused: its kind, never the pass or a reference)
         }
         if (test_map_http && test_api) {
             test_map_http->update(now, [&](const ants::ctl::HttpRequest& request) { return test_api->handle(request, static_cast<int64_t>(std::time(nullptr)), now); });

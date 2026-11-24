@@ -3704,6 +3704,15 @@
             liveClasses();
             document.querySelector('.sb nav a[href="/matches"]').setAttribute('aria-current', 'page');   // (the Menu says where the player is: the list of matches)
             window.antsReplayPlaceBar(); if (OWN) OWN.chrome();
+            // PLAYS_BEGIN (tests/scripts/web_plays_check.js runs this block on a page of fakes)
+            // A recording of the server's own store is one play after 10 s of playing (web/replay_plays.js, docs/REPLAYS.md "Watching a replay"): never a match that is being played, never a file of your own; the script is fetched for these only
+            if (!ANTS_LIVE_MODE && !ANTS_OWN_MODE && window.AntsHistory.idOfFile(FILE)) {
+                var plays = document.createElement('script');
+                plays.src = 'replay_plays.js?v=' + ANTS_BUILD_VER;
+                plays.onload = function () { window.AntsPlays.start(window, window.AntsHistory.idOfFile(FILE), function () { return get(VALUE.state) === STATE.playing; }); };
+                document.head.appendChild(plays);      // (a script that cannot be had counts nothing: no other part of the page waits for it)
+            }
+            // PLAYS_END
             setInterval(tick, 100);
             tick();
         })();

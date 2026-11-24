@@ -87,7 +87,7 @@ db::Error scalar(db::Database& d, const char* sql, const std::vector<Arg>& args,
 }
 
 // ---- the columns of a match ---------------------------------------------------------------------------------------------------------
-const char* const kMatchColumns = "m.id, m.ended, m.map, m.game, m.turns, m.finished, m.quitter, m.mode, m.format, m.result, m.computers_only, m.rows_json, m.details";
+const char* const kMatchColumns = "m.id, m.ended, m.map, m.game, m.turns, m.finished, m.quitter, m.mode, m.format, m.result, m.computers_only, m.rows_json, m.details, m.plays, m.likes";
 const char* const kSeatColumns = "seat, name, bot, score, killed, lost, hatched, bombs_planted, bombs_defused, fires_lit, left_early, winner";
 
 uint32_t to_u32(int64_t v) { return v < 0 ? 0u : v > 0xFFFFFFFFll ? 0xFFFFFFFFu : static_cast<uint32_t>(v); }
@@ -110,6 +110,8 @@ bool read_match(db::Statement& st, HistoryRecord& r) {
     r.computers_only = st.column_int64(10) != 0;
     if (!history_rows_from_json(st.column_text(11), r.rows)) r.rows.clear();
     if (!st.column_is_null(12)) r.details = st.column_text(12);
+    r.plays = to_u32(st.column_int64(13));
+    r.likes = to_u32(st.column_int64(14));
     return true;
 }
 
@@ -354,8 +356,10 @@ bool HistoryStore::put(const HistoryRecord& record, std::string& why) {
         return false;
     };
     // A match is one play of its map the first time it is kept: a record of an id that the history or the owner's marker already knows was counted then (or was taken out on purpose)
-    int64_t known = 0;
+    int64_t known = 0, plays = 0, likes = 0;
     db::Error e = scalar(db_, "SELECT (SELECT count(*) FROM history_matches WHERE id = ?1) + (SELECT count(*) FROM history_markers WHERE id = ?1)", {text_arg(record.id)}, known);
+    if (e.ok()) e = scalar(db_, "SELECT COALESCE((SELECT plays FROM history_matches WHERE id = ?1), 0)", {text_arg(record.id)}, plays);              // (a record that is replaced keeps its plays and its likes: they are not the record's, and the likes' rows stay)
+    if (e.ok()) e = scalar(db_, "SELECT COALESCE((SELECT likes FROM history_matches WHERE id = ?1), 0)", {text_arg(record.id)}, likes);
     if (e.ok()) e = run(db_, "DELETE FROM history_seats WHERE match_id = ?1", {text_arg(record.id)});
     if (e.ok()) e = run(db_, "DELETE FROM history_deaths WHERE id = ?1", {text_arg(record.id)});
     if (e.ok()) e = run(db_, "DELETE FROM history_action WHERE id = ?1", {text_arg(record.id)});
@@ -363,12 +367,12 @@ bool HistoryStore::put(const HistoryRecord& record, std::string& why) {
     if (e.ok()) e = run(db_, "DELETE FROM history_markers WHERE id = ?1", {text_arg(record.id)});
     if (!e.ok()) return refused("a record could not be replaced", e);
     e = run(db_,
-            "INSERT INTO history_matches (id, ended, map, game, turns, finished, quitter, mode, format, result, computers_only, best_score, best_kills, best_hatched, search, rows_json, details, counted_at)"
-            " VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+            "INSERT INTO history_matches (id, ended, map, game, turns, finished, quitter, mode, format, result, computers_only, best_score, best_kills, best_hatched, search, rows_json, details, counted_at, plays, likes)"
+            " VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
             {text_arg(record.id), int_arg(record.ended_s), text_arg(record.map), text_arg(record.game), int_arg(record.turns), int_arg(record.finished ? 1 : 0),
              record.quitter >= 0 ? int_arg(record.quitter) : null_arg(), text_arg(record.mode), text_arg(record.format), text_arg(record.result()), int_arg(record.computers_only ? 1 : 0),
              int_arg(best_score), int_arg(best_kills), int_arg(best_hatched), text_arg(search_text(record)), text_arg(history_rows_to_json(record.rows)),
-             record.details.empty() ? null_arg() : text_arg(record.details), int_arg(now_s())});
+             record.details.empty() ? null_arg() : text_arg(record.details), int_arg(now_s()), int_arg(plays), int_arg(likes)});
     if (!e.ok()) return refused("a record could not be kept", e);
     for (const HistorySeat& s : record.seats) {
         e = run(db_,
@@ -421,6 +425,7 @@ HistoryStore::Removal HistoryStore::remove(const std::string& id, bool keep_mark
     if (e.ok()) e = run(db_, "DELETE FROM history_seats WHERE match_id = ?1", {text_arg(id)});
     if (e.ok()) e = run(db_, "DELETE FROM history_deaths WHERE id = ?1", {text_arg(id)});
     if (e.ok()) e = run(db_, "DELETE FROM history_action WHERE id = ?1", {text_arg(id)});
+    if (e.ok()) e = run(db_, "DELETE FROM replay_likes WHERE id = ?1", {text_arg(id)});               // (the likes go with the match, and its two numbers with its row; put() keeps them when it replaces a record)
     if (e.ok()) e = run(db_, "DELETE FROM history_matches WHERE id = ?1", {text_arg(id)});
     if (e.ok() && keep_marker) e = run(db_, "INSERT OR REPLACE INTO history_markers (id, deleted_at) VALUES (?1, ?2)", {text_arg(id), int_arg(now_s())});
     if (e.ok()) e = tx.commit();
@@ -433,6 +438,137 @@ HistoryStore::Removal HistoryStore::remove(const std::string& id, bool keep_mark
     e = refresh_counts();
     if (!e.ok()) fail("the records could not be counted", e);
     return Removal::Done;
+}
+
+// ---- plays and likes (docs/REPLAY_COUNTS.md) ----------------------------------------------------------------------------------------------
+// Each is one transaction. The checks that need the replay store (a recording that can be played) are the caller's: the store knows matches, not recordings.
+
+HistoryStore::Counted HistoryStore::add_play(const std::string& id) {
+    if (!up_) return Counted::Failed;
+    if (!valid_history_id(id)) return Counted::Unknown;
+    db::Transaction tx(db_);
+    if (!tx.error().ok()) {
+        fail("a play could not be started", tx.error());
+        return Counted::Failed;
+    }
+    int64_t present = 0;
+    db::Error e = scalar(db_, "SELECT count(*) FROM history_matches WHERE id = ?1", {text_arg(id)}, present);
+    if (e.ok() && present == 0) return Counted::Unknown;                                    // (the transaction rolls back: nothing was written)
+    if (e.ok()) e = run(db_, "UPDATE history_matches SET plays = min(plays + 1, ?2) WHERE id = ?1", {text_arg(id), int_arg(kMaxCount)});
+    if (e.ok()) e = tx.commit();
+    if (!e.ok()) {
+        fail("a play could not be counted", e);
+        return Counted::Failed;
+    }
+    return Counted::Done;
+}
+
+HistoryStore::Counted HistoryStore::like(const std::string& id, const std::string& ref, uint32_t& likes) {
+    likes = 0;
+    if (!up_) return Counted::Failed;
+    if (!valid_history_id(id)) return Counted::Unknown;
+    db::Transaction tx(db_);
+    if (!tx.error().ok()) {
+        fail("a like could not be started", tx.error());
+        return Counted::Failed;
+    }
+    int64_t present = 0, liked = 0, mine = 0, now = 0;
+    db::Error e = scalar(db_, "SELECT count(*) FROM history_matches WHERE id = ?1", {text_arg(id)}, present);
+    if (e.ok() && present == 0) return Counted::Unknown;
+    if (e.ok()) e = scalar(db_, "SELECT count(*) FROM replay_likes WHERE id = ?1 AND ref = ?2", {text_arg(id), text_arg(ref)}, liked);
+    if (e.ok() && liked == 0) {                                                             // (a like that is there already changes nothing)
+        e = scalar(db_, "SELECT count(*) FROM replay_likes WHERE ref = ?1", {text_arg(ref)}, mine);
+        if (e.ok() && static_cast<size_t>(mine) >= kMaxLikesOfAPerson) return Counted::Limit;
+        if (e.ok()) e = scalar(db_, "SELECT likes FROM history_matches WHERE id = ?1", {text_arg(id)}, now);
+        if (e.ok() && now >= kMaxCount) return Counted::Limit;                              // (a replay that shows a million likes takes no more)
+        if (e.ok()) e = run(db_, "INSERT INTO replay_likes (id, ref) VALUES (?1, ?2)", {text_arg(id), text_arg(ref)});
+        if (e.ok()) e = run(db_, "UPDATE history_matches SET likes = likes + 1 WHERE id = ?1", {text_arg(id)});
+    }
+    if (e.ok()) e = scalar(db_, "SELECT likes FROM history_matches WHERE id = ?1", {text_arg(id)}, now);
+    if (e.ok()) e = tx.commit();
+    if (!e.ok()) {
+        fail("a like could not be kept", e);
+        return Counted::Failed;
+    }
+    likes = to_u32(now);
+    return Counted::Done;
+}
+
+HistoryStore::Counted HistoryStore::unlike(const std::string& id, const std::string& ref, uint32_t& likes) {
+    likes = 0;
+    if (!up_) return Counted::Failed;
+    if (!valid_history_id(id)) return Counted::Unknown;
+    db::Transaction tx(db_);
+    if (!tx.error().ok()) {
+        fail("a like could not be taken back", tx.error());
+        return Counted::Failed;
+    }
+    int64_t present = 0, liked = 0, now = 0;
+    db::Error e = scalar(db_, "SELECT count(*) FROM history_matches WHERE id = ?1", {text_arg(id)}, present);
+    if (e.ok() && present == 0) return Counted::Unknown;
+    if (e.ok()) e = scalar(db_, "SELECT count(*) FROM replay_likes WHERE id = ?1 AND ref = ?2", {text_arg(id), text_arg(ref)}, liked);
+    if (e.ok() && liked > 0) {
+        e = run(db_, "DELETE FROM replay_likes WHERE id = ?1 AND ref = ?2", {text_arg(id), text_arg(ref)});
+        if (e.ok()) e = run(db_, "UPDATE history_matches SET likes = max(likes - 1, 0) WHERE id = ?1", {text_arg(id)});
+    }
+    if (e.ok()) e = scalar(db_, "SELECT likes FROM history_matches WHERE id = ?1", {text_arg(id)}, now);
+    if (e.ok()) e = tx.commit();
+    if (!e.ok()) {
+        fail("a like could not be taken back", e);
+        return Counted::Failed;
+    }
+    likes = to_u32(now);
+    return Counted::Done;
+}
+
+bool HistoryStore::liked_among(const std::string& ref, const std::vector<std::string>& ids, std::vector<std::string>& out) const {
+    out.clear();
+    if (!up_) return false;
+    if (ids.empty()) return true;
+    std::string marks;
+    for (size_t k = 0; k < ids.size(); ++k) marks += k == 0 ? "?2" : ", ?" + std::to_string(k + 2);
+    db::Statement st;
+    db::Error e = db_.prepare(st, ("SELECT id FROM replay_likes WHERE ref = ?1 AND id IN (" + marks + ")").c_str());       // (the question marks are all the text that depends on the number of ids, at most a page)
+    if (e.ok()) e = st.bind_text(1, ref);
+    for (size_t k = 0; e.ok() && k < ids.size(); ++k) e = st.bind_text(static_cast<int>(k) + 2, ids[k]);
+    std::unordered_set<std::string> mine;
+    while (e.ok()) {
+        const db::Statement::Step step = st.step();
+        if (step == db::Statement::Step::Failed) e = st.error();
+        if (step != db::Statement::Step::Row) break;
+        mine.insert(st.column_text(0));
+    }
+    if (!e.ok()) {
+        fail("the likes of a person could not be read", e);
+        return false;
+    }
+    for (const std::string& id : ids) {
+        if (mine.count(id) != 0) out.push_back(id);
+    }
+    return true;
+}
+
+bool HistoryStore::forget_likes(const std::string& ref, size_t& removed) {
+    removed = 0;
+    if (!up_) return false;
+    db::Transaction tx(db_);
+    if (!tx.error().ok()) {
+        fail("the likes of a person could not be taken back", tx.error());
+        return false;
+    }
+    int64_t n = 0;
+    db::Error e = scalar(db_, "SELECT count(*) FROM replay_likes WHERE ref = ?1", {text_arg(ref)}, n);
+    if (e.ok() && n > 0) {
+        e = run(db_, "UPDATE history_matches SET likes = max(likes - 1, 0) WHERE id IN (SELECT id FROM replay_likes WHERE ref = ?1)", {text_arg(ref)});
+        if (e.ok()) e = run(db_, "DELETE FROM replay_likes WHERE ref = ?1", {text_arg(ref)});
+    }
+    if (e.ok()) e = tx.commit();
+    if (!e.ok()) {
+        fail("the likes of a person could not be taken back", e);
+        return false;
+    }
+    removed = static_cast<size_t>(n);
+    return true;
 }
 
 size_t HistoryStore::prune_markers(const std::function<bool(const std::string& id)>& still_needed) {
@@ -806,6 +942,8 @@ HistoryPage HistoryStore::query(const HistoryQuery& q, const std::function<Recor
         case HistoryQuery::Sort::Hatched: order = " ORDER BY m.best_hatched DESC, m.ended DESC, m.id DESC"; break;
         case HistoryQuery::Sort::Long: order = " ORDER BY m.turns DESC, m.ended DESC, m.id DESC"; break;
         case HistoryQuery::Sort::Short: order = " ORDER BY m.turns ASC, m.ended DESC, m.id DESC"; break;
+        case HistoryQuery::Sort::Plays: order = " ORDER BY m.plays DESC, m.ended DESC, m.id DESC"; break;
+        case HistoryQuery::Sort::Likes: order = " ORDER BY m.likes DESC, m.ended DESC, m.id DESC"; break;
     }
     const size_t limit = std::min(std::max<size_t>(q.limit, 1), HistoryQuery::kMaxLimit);
 

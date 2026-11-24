@@ -73,6 +73,7 @@
 <script src="front/map_picker.js"></script>
 <script src="history_page.js"></script>
 <script src="update_notice.js"></script>
+<script src="replay_likes.js"></script>
 <script>
 (function () {
     'use strict';
@@ -82,6 +83,8 @@
     var ASK_WAIT = 350;                       // ms of quiet after the last choice (a select, a button, a page) before the list is asked for: six presses of an arrow key on a select are one request
     var state = H.stateOf(window.location.search);
     var pics = H.pictures({ document: document, replay: R, picker: window.AntsMapPicker, fetch: window.fetch ? window.fetch.bind(window) : null });
+    // the plays and the hearts of the cards (web/replay_likes.js): one look at the door for the cards of a page tells which of them this visitor likes
+    var likes = window.AntsLikes.create({ document: document, win: window, fetch: window.fetch ? window.fetch.bind(window) : null, numberText: H.numberText, login: function () { return '/hub/login?next=matches'; } });
 
     function el(tag, className, text) {
         var node = document.createElement(tag);
@@ -163,6 +166,7 @@
         len.appendChild(el('span', 'lab', key ? key.label : 'Length')); len.appendChild(el('b', '', key ? H.numberText(key.value) : R.lengthText(rec.seconds))); col.appendChild(len);
         var act = el('div', 'act'); act.appendChild(recNode(rec)); var go = el('a', 'btn sm go', s.kind === 'watch' ? 'Stats & replay' : 'Stats'); go.href = href; act.appendChild(go); col.appendChild(act);
         li.appendChild(col);
+        likes.card(li, rec, { plain: s.kind !== 'watch', key: state.sort === 'plays' || state.sort === 'likes' ? state.sort : '' });
         return li;
     }
     function pagerNode(count) {
@@ -207,12 +211,12 @@
         }).catch(function () { clearTimeout(cut); if (mine === round) fail(0, null); });
     }
     function fail(status, body) {
-        pics.forget('list');
+        pics.forget('list'); likes.begin();
         var p = H.problemOf(status, body);
         show(notice(p.text, '', p.retry ? [{ label: 'Try again', click: function () { ask(state, false); } }] : []), '');
     }
     function render(data, plan, scroll) {
-        pics.forget('list');                    // (the squares of the list that goes: before the new cards are made, which are kept so that the list of the maps, when it comes, can correct their pictures)
+        pics.forget('list'); likes.begin();     // (the squares of the list that goes: before the new cards are made, which are kept so that the list of the maps, when it comes, can correct their pictures)
         var list = data.history.filter(function (r) { return r && typeof r === 'object' && typeof r.id === 'string' && H.ID_RE.test(r.id) && typeof r.map === 'string'; }).slice(plan.skip, plan.skip + plan.take);
         var count = typeof data.count === 'number' ? data.count : list.length, total = typeof data.total === 'number' ? data.total : count;
         if (!list.length) {
@@ -226,6 +230,7 @@
         var ul = el('ul', 'list');
         list.forEach(function (rec) { ul.appendChild(card(rec)); });
         show(ul, H.rangeText(count, total, (state.page - 1) * H.PAGE, list.length, state.sort), true);
+        likes.look();
         pagerNode(count);
         if (scroll) $('list-panel').scrollIntoView({ block: 'start' });
     }

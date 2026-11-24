@@ -35,8 +35,8 @@
   {
    "id": "state_runs_out_after_a_day",
    "file": "hub/login.py",
-   "old": "self.states[digest(state)] = (wall + self.limits.state_seconds, back)",
-   "new": "self.states[digest(state)] = (wall + 86400, back)",
+   "old": "(wall + self.limits.state_seconds, back, ident)",
+   "new": "(wall + 86400, back, ident)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback"
   },
   {
@@ -126,7 +126,7 @@
   {
    "id": "way_back_always_the_room",
    "file": "hub/login.py",
-   "old": "(\"Location\", NEXT[back])",
+   "old": "(\"Location\", back)",
    "new": "(\"Location\", NEXT[\"room\"])",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart tests.scripts.test_hub_login.TheCallback"
   },
@@ -917,8 +917,8 @@
   {
    "id": "redirect_keeps_the_referrer",
    "file": "hub/login.py",
-   "old": "(\"Location\", NEXT[back]), (\"Referrer-Policy\", \"no-referrer\"), ",
-   "new": "(\"Location\", NEXT[back]), ",
+   "old": "(\"Location\", back), (\"Referrer-Policy\", \"no-referrer\"), ",
+   "new": "(\"Location\", back), ",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback"
   },
   {

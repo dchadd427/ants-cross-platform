@@ -16,12 +16,13 @@ struct Column {
     const char* name;
     char kind;                                         // 'i' integer, 't' text
     bool nullable;
+    bool newer{false};                                 // a column of a later migration: a game database that does not have it yet (it is at an older schema) is copied with a 0 in its place
 };
 
 struct Table {
     const char* name;
     std::vector<Column> columns;
-    bool optional;                                     // a game database of an older schema may not have it (the map of deaths came with version 7, the action of a match with version 11)
+    bool optional;                                     // a game database of an older schema may not have it (the map of deaths came with version 7, the action of a match with version 11, the likes with version 12)
     bool (*accepts)(db::Statement& row) = nullptr;     // null: every row is copied; else a row that it refuses is left out (the same check that put() makes of a text before it keeps it)
 };
 
@@ -39,7 +40,7 @@ const std::vector<Table>& tables() {
         {"history_matches",
          {{"id", 't', false}, {"ended", 'i', false}, {"map", 't', false}, {"game", 't', false}, {"turns", 'i', false}, {"finished", 'i', false}, {"quitter", 'i', true}, {"mode", 't', false},
           {"format", 't', false}, {"result", 't', false}, {"computers_only", 'i', false}, {"best_score", 'i', false}, {"best_kills", 'i', false}, {"best_hatched", 'i', false}, {"search", 't', false},
-          {"rows_json", 't', false}, {"details", 't', true}, {"counted_at", 'i', false}},
+          {"rows_json", 't', false}, {"details", 't', true}, {"counted_at", 'i', false}, {"plays", 'i', false, true}, {"likes", 'i', false, true}},
          false},
         {"history_seats",
          {{"match_id", 't', false}, {"seat", 'i', false}, {"name", 't', false}, {"bot", 't', false}, {"score", 'i', false}, {"killed", 'i', false}, {"lost", 'i', false}, {"hatched", 'i', false},
@@ -49,6 +50,7 @@ const std::vector<Table>& tables() {
         {"history_deaths", {{"id", 't', false}, {"map", 't', false}, {"hash", 't', false}, {"ended", 'i', false}, {"w", 'i', false}, {"h", 'i', false}, {"n", 'i', false}, {"deaths", 't', false}}, true},
         {"history_action", {{"id", 't', false}, {"action", 't', false}}, true, action_row_ok},
         {"map_plays", {{"map", 't', false}, {"hash", 't', false}, {"plays", 'i', false}, {"last_played", 'i', false}}, false},
+        {"replay_likes", {{"id", 't', false}, {"ref", 't', false}}, true},
     };
     return list;
 }
@@ -75,11 +77,22 @@ int64_t count_rows(db::Database& d, const std::string& table, db::Error& e) {
     return st.column_int64(0);
 }
 
-std::string joined(const Table& t, bool marks) {
+bool has_column(db::Database& d, const char* table, const char* column) {
+    db::Statement st;
+    db::Error e = d.prepare(st, "SELECT count(*) FROM pragma_table_info(?1) WHERE name = ?2");
+    if (e.ok()) e = st.bind_text(1, table);
+    if (e.ok()) e = st.bind_text(2, column);
+    return e.ok() && st.step() == db::Statement::Step::Row && st.column_int64(0) > 0;
+}
+
+// The list of columns: the names (the source's: `from` says which database the names are read from, and a column that it does not have yet is read as 0) or the numbered marks of an INSERT
+std::string joined(const Table& t, bool marks, db::Database* from = nullptr) {
     std::string out;
     for (size_t k = 0; k < t.columns.size(); ++k) {
         if (k > 0) out += ", ";
-        out += marks ? "?" + std::to_string(k + 1) : std::string(t.columns[k].name);
+        if (marks) out += "?" + std::to_string(k + 1);
+        else if (from != nullptr && t.columns[k].newer && !has_column(*from, t.name, t.columns[k].name)) out += "0";
+        else out += t.columns[k].name;
     }
     return out;
 }
@@ -89,7 +102,7 @@ db::Error copy_table(db::Database& from, db::Database& to, const Table& t, size_
     rows = 0;
     refused = 0;
     db::Statement select;
-    db::Error e = from.prepare(select, "SELECT " + joined(t, false) + " FROM " + t.name);
+    db::Error e = from.prepare(select, "SELECT " + joined(t, false, &from) + " FROM " + t.name);
     if (!e.ok()) return e;
     db::Statement insert;
     e = to.prepare(insert, std::string("INSERT INTO ") + t.name + " (" + joined(t, false) + ") VALUES (" + joined(t, true) + ")");
@@ -224,10 +237,11 @@ bool import_game_history(db::Database& target, const std::string& source_path, I
                 counted.action = rows;
                 counted.action_refused = refused;
             }
+            else if (name == "replay_likes") counted.replay_likes = rows;
             else counted.map_plays = rows;
         }
         const std::string summary = std::to_string(counted.matches) + " match(es), " + std::to_string(counted.seats) + " seat(s), " + std::to_string(counted.markers) + " marker(s), " + std::to_string(counted.deaths) +
-                                    " map(s) of deaths, " + std::to_string(counted.action) + " action(s)" + (counted.action_refused > 0 ? " (" + std::to_string(counted.action_refused) + " refused: not a field of this version)" : std::string()) + ", " + std::to_string(counted.map_plays) + " play count(s)";
+                                    " map(s) of deaths, " + std::to_string(counted.action) + " action(s)" + (counted.action_refused > 0 ? " (" + std::to_string(counted.action_refused) + " refused: not a field of this version)" : std::string()) + ", " + std::to_string(counted.map_plays) + " play count(s), " + std::to_string(counted.replay_likes) + " like(s)";
         db::Statement mark;
         e = target.prepare(mark, "INSERT INTO meta (key, value) VALUES ('history_import', strftime('%Y-%m-%dT%H:%M:%SZ', 'now') || ' ' || ?1)");
         if (e.ok()) e = mark.bind_text(1, summary);

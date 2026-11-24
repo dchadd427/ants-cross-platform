@@ -6,7 +6,7 @@ A faithful, deterministic C++17 engine remake and port of the 1998 real-time str
 
 The engine loads the original game's data files (`ants.chd` and `Maps/*.LVL`) directly, without pre-conversion. The game's mechanics are re-derived from the disassembly of the original program, system by system ([the original program](docs/ORIGINAL_PROGRAM.md)); the network play, the computer players, the 16:9 picture, the zoom, the touch controls and the browser build are this project's own. It runs a deterministic 20 Hz simulation, with 32-channel spatial audio, MP3 music (the original's four pieces), TrueType text and an SDL2 2D renderer (hardware-accelerated, with a software fallback).
 
-**Current version: v0.21.1** (shown on screen next to the FPS meter; in the room and the match of a network game the same corner also shows **ping** and **delay**, see [Network play](docs/MULTIPLAYER.md)). The releases since v0.14.1 are in the short **[What’s new](CHANGELOG.md)** (also published at **[beta.playants.org/changelog](https://beta.playants.org/changelog)**); the releases before v0.14.1 are only in git history. How work flows from a commit to a release: [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
+**Current version: v0.21.1** (shown on screen next to the FPS meter; in the room and the match of a network game the same corner also shows **ping** and **delay**, see [Network play](docs/MULTIPLAYER.md)). The releases since v0.15.0 are in the short **[What’s new](CHANGELOG.md)** (also published at **[beta.playants.org/changelog](https://beta.playants.org/changelog)**); the releases before v0.15.0 are only in git history. How work flows from a commit to a release: [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
 
 ## Play
 
@@ -40,6 +40,7 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [Network play and bots](docs/MULTIPLAYER.md): LAN and server games, lag and drop-outs, computer players
 - [Replays](docs/REPLAYS.md): recording a match in the desktop game, the file, and the tool that lists every order of a recorded match
 - [Heatmaps](docs/HEATMAPS.md): where ants died and where the action was in a match: the map of deaths and the activity curve of the replay page
+- [Plays and likes of replays](docs/REPLAY_COUNTS.md): how often a replay was played and how many people like it, the door that counts it, the hub's pass that names a person, and what is kept (numbers only)
 - [Command-line options](docs/COMMAND_LINE.md): every option of the game and its environment variables
 
 **Building, running and testing**

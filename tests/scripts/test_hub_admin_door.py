@@ -1159,7 +1159,7 @@ class TheLoginReturnsToTheAdminPage(unittest.TestCase):
     def test_next_admin_is_one_of_the_fixed_words_and_nothing_else_is(self):
         from hub import login
         self.assertEqual(login.NEXT["admin"], "/admin")
-        self.assertEqual(sorted(login.NEXT), ["admin", "home", "mapmaker", "room"])
+        self.assertEqual(sorted(login.NEXT), ["admin", "home", "mapmaker", "match", "matches", "room"])
         self.assertTrue(all(v.startswith("/") and not v.startswith("//") for v in login.NEXT.values()))
 
 

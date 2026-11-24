@@ -36,7 +36,10 @@ Work that is not released yet is written in the same template under a heading th
 - **Random map.** The map list of a room has a **Random map** row under the sorts: **Pick one** puts a random map from the maps shown into the room at once, **Pick another** picks again. The Maps page has a **Random map** button that opens the page of a random map of the whole library.
 - **A page for every map.** The six maps of the 1998 game and the players' maps each have a page at /map/NAME (picture, size, game length, food and power-ups, the map's own line, the maker when its line names one, and how often it was played here) with **Play it**, which opens a room on that map, and **Open in Map maker**; /map-library lists them with a search and filters. The Map Maker opens a library map from /mapmaker?mapfile=NAME.lvl.
 
+- **Plays and likes of replays.** A replay counts as played after 10 seconds of playing (pauses do not count), once a day in a browser. The list of matches and a match's page show how often it was played and how many people like it; a logged-in person taps the heart to like and taps again to take it back, and nobody sees who liked. New sorts, **Most watched** and **Most liked**; the Sort box is wider so no name is cut. Not logged in, a tap on a heart says "Log in to like a replay."
+
 **For operators:**
+- Plays and likes of replays: a new door of the game server (`--counts-port`, 4032 in the stack files; [`docs/REPLAY_COUNTS.md`](docs/REPLAY_COUNTS.md)) and a like gate of the hub that signs a short pass for the person's login (the admin page's key, `ANTS_ADMIN_GATE_SECRET`; without a good one likes are off and plays still count). The database goes to schema 12 (one way: keep a copy of `ants.db` before the first start); only numbers are kept for plays, and for a like the hub's opaque reference of the account. **Forget me** takes the person's likes back first (`ANTS_HUB_COUNTS_URL`, `http://ants-server:4032` in the stack) and deletes nothing if the door does not answer.
 - The hub keeps an account's last 30 alerts of 7 days and its `/ignore` list (new `alerts` and `ignores` tables, made by the first one; Forget me deletes them), and limits invitations and mentions ([the hub's document](docs/HUB_PEOPLE.md)).
 - The map pages are made when the image is built (`tools/map_pages.py`, [`docs/MAP_PAGES.md`](docs/MAP_PAGES.md)) and listed in `sitemap-library.xml`; the maps that players send and you approve have no page yet.
 
@@ -563,20 +566,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f6969023...5aee057e)
 
-## v0.14.1 - 2026-11-09 - Discord names in games, the Players list, replay files, and a Hard bot that answers a blow
+## Older versions (v0.14.1 and before)
 
-**For players:**
-- **Your Discord name in rooms and games.** On the website nobody types a name any more: if you are logged in with Discord (Log in, in the chat), rooms and games show that name; everybody else plays as "Guest" and six digits, kept by this browser. A name with letters the game cannot show uses the Discord username instead.
-- **Display names in the chat.** The chat shows your Discord display name, and the More menu has a switch to show your username instead. A login from before this version shows the username until you log out and in again. Moderators see the username next to a display name.
-- **Who is here.** Home has a Players list: the people on the front page now, grouped as waiting in a room, playing and looking around (guests are counted, not named). The host of a public room that waits has a Join button in the list. On a phone the list opens from the Players button.
-- **The Games list** shows the picture of a map that a player made, and on a wide window the docked list sits in the middle. On a narrow phone the label of the Room's Public | Private switch stays inside its button.
-- **Watch a replay file you downloaded.** Matches has "Open a replay file" (or drop the file on the page): it plays in this tab and is not uploaded.
-- **The Hard computer player answers a blow.** When one of its ants is struck, that ant and the ants near it that can strike answer together, as many as the attacker has there and one more (five at most), and keep fighting while their side is at least three fifths as strong. Medium, Easy and the game type 187 play as before. The desktop game's Hard player does the same.
-
-**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.14.0 page or game still joins. The rest of this release is internal: large source files split into smaller ones, tools and tests for the computer players, and computer-player work that is built but switched off.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/26714f6f...4fd8a6ad)
-
-## Older versions (v0.14.0 and before)
-
-Every release before v0.14.1, and the long notes of v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.15.0, and the long notes of v0.14.1, v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

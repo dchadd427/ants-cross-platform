@@ -50,6 +50,7 @@ COSTS = {
     "test_hub_roles.TheLiveRoles": 30, "test_hub_roles.TheLookup": 6, "test_hub_roles.TheSecrets": 5,
     "test_web_home_cmds.TheChecksAreNotVacuous": 6, "test_hub_powers.TheLiveHub": 45, "test_hub_powers.TheRealProcess": 31, "test_hub_powers.TheFreshCheck": 6, "test_hub_powers.TheIdIsLikeAPassword": 5,
     "test_web_mapmaker_ai.TheChecksAreNotVacuous": 40,
+    "test_web_plays.TheChecksAreNotVacuous": 6, "test_web_likes.TheChecksAreNotVacuous": 7,
 }
 
 # The mutation classes that run as several units (the groups of this table, `NAME[K/N]`, K from 1): each unit gets the environment variable SHARD_ENV, "K/N", and the class (through

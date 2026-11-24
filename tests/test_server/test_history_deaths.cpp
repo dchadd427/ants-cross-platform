@@ -1214,7 +1214,7 @@ int main() {
         const std::vector<db::Migration> every = db_migrations();
         const std::vector<db::Migration>& service = history_db_migrations();
         ASSERT_TRUE(every.size() >= 11 && every[10].version == 11 && std::string(every[10].name) == "history_action");
-        ASSERT_TRUE(service.size() == 5 && service[4].version == 5 && std::string(service[4].name) == "history_action");
+        ASSERT_TRUE(service.size() >= 5 && service[4].version == 5 && std::string(service[4].name) == "history_action");
         const auto one = [](db::Database& d, const std::string& sql) {
             db::Statement st;
             return d.prepare(st, sql).ok() && st.step() == db::Statement::Step::Row ? st.column_int64(0) : int64_t{-1};
@@ -1223,7 +1223,7 @@ int main() {
         // the game server's file (10 -> 11) and the history service's own (4 -> 5): a match with its seats, its map of deaths and its play count is kept before the upgrade and is all there after it
         for (const bool server_file : {true, false}) {
             const std::vector<db::Migration>& all = server_file ? every : service;
-            const std::vector<db::Migration> before(all.begin(), all.end() - 1);
+            const std::vector<db::Migration> before(all.begin(), all.begin() + (server_file ? 10 : 4));        // (the migration that makes history_action is the eleventh of the server's list and the fifth of the service's: the ones after it, if any, come with the upgrade)
             TempDir dir;
             const std::string path = (dir.path / "history.db").string();
             {
