@@ -336,6 +336,7 @@ class DiscordLogin(session.Sessions):
             return self.fail(503, "busy")
         self.hub.end_logins(account=who.account_id)
         self.hub.chat.commands.forget(who.account_id)               # (the list of the people that it ignores, and its place on the lists of the others)
+        self.hub.chat.people.forget(who.account_id)                 # (its invitations, and the alerts of the others that are from it)
         self.sync_pictures()
         self.hub.chat.drop_lines(lines)
         self.log.event("forget", tag=self.log.tag(address), lines=len(lines))

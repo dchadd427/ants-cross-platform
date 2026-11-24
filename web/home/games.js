@@ -697,8 +697,9 @@
             busy(false);
             var f = codeOpen ? codeInput : codeLink; if (isOpen && f.focus) f.focus();
         }
+        function refusalWords(res, fromList) { return res.kind === 'full' ? TEXT.full : res.kind === 'running' ? TEXT.started : res.kind === 'silent' ? TEXT.silent : res.kind === 'version' ? res.text : fromList ? TEXT.gone : res.text; }
         function refused(res, fromList) {
-            var words = res.kind === 'full' ? TEXT.full : res.kind === 'running' ? TEXT.started : res.kind === 'silent' ? TEXT.silent : res.kind === 'version' ? res.text : fromList ? TEXT.gone : res.text;
+            var words = refusalWords(res, fromList);
             if (fromList) { popNote.textContent = words; popNote.hidden = false; } else codeHint.textContent = words;
             poll();
         }
@@ -718,6 +719,22 @@
                 page.join(row.code, page.name(), guard(function (res) { if (mine !== joinSeq) return; busy(false); if (res && res.ok) joined(possessive(row.host) + ' room'); else if (res) refused(res, true); }));
             }
             if (needsAsk(c)) askLeave(c, row, go); else go();
+        }
+        // An invitation's Join (the bell's list, a toast, the chat's line: web/home/alerts.js): o { code, host (the inviter's name), opener (what has the focus again if the question is not answered) }. What a Join of the list does: the question first when the page holds a room (a room
+        // that it holds already is just shown), then the page's probe; a room that is not there any more, or is full, is a toast. The code is checked before anything is asked. Says whether it started.
+        function joinInvite(o) {
+            if (!o || typeof o.code !== 'string' || !/^[a-z0-9_-]{1,32}$/.test(o.code) || joining || finding) return false;
+            if (over()) { itsWay(); return false; }
+            var c = client(), host = typeof o.host === 'string' && o.host ? o.host : 'the host';
+            if (c && c.code === o.code) { ctl.show('room', 'push'); return true; }
+            if (matchRunning(c)) { closeAll(); runningNotice(); return false; }
+            function go() {
+                var mine = ++joinSeq;
+                busy(true, 'Joining ' + possessive(host) + ' room\u2026');
+                page.join(o.code, page.name(), guard(function (res) { if (mine !== joinSeq) return; busy(false); if (res && res.ok) joined(possessive(host) + ' room'); else if (res) notice('invite', refusalWords(res, true), 'warn', []); }));
+            }
+            if (needsAsk(c)) askLeave(c, null, go, { opener: o.opener }); else go();
+            return true;
         }
         function joinTyped() {                             // the page checks the code first (a line for one that leads nowhere), then the question, then the name card, then the look at the room
             if (joining || finding) return;
@@ -947,7 +964,7 @@
         poll();
         pollLive();
         return {
-            sync: guard(sync), shown: guard(shown), leaving: leaving, said: guard(function (words) { notice('left', words, '', []); }), told: guard(function (kind, text, tone, actions) { notice(kind, text, tone, actions || []); return true; }), opening: opening, stalled: stalled, inert: inert, poll: poll,
+            sync: guard(sync), shown: guard(shown), leaving: leaving, joinInvite: guard(joinInvite), said: guard(function (words) { notice('left', words, '', []); }), told: guard(function (kind, text, tone, actions) { notice(kind, text, tone, actions || []); return true; }), opening: opening, stalled: stalled, inert: inert, poll: poll,
             state: function () { return { rows: rows, loaded: loaded, off: off, failures: failures, open: isOpen, pending: !!pending, joining: joining, notice: noticeKind, live: live, liveOff: liveOff, liveLoaded: liveLoaded, showLive: showLive }; }
         };
     }

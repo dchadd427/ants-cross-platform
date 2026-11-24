@@ -688,6 +688,36 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     check('Quick join and a press on every part of every locked card: not one connection to the game server was made', env.sockets.length === 0);
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 9. An invitation's Join (docs/HUB_PEOPLE.md: the bell's list, a toast and the chat's line press it through Home): the Games list's own Join for a code that the hub sent
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const invite = (env, code, back) => env.homeApi.joinInvite({ code, from: 'Clover' }, back || null);
+    const env = await withRooms(ROWS);
+    check('a code that is none starts nothing: no connection, no card', ['', 'ABC 234', 'not a code', 'a'.repeat(33), null, undefined, 5].every((c) => invite(env, c) === false) && env.sockets.length === 0 && !card(env));
+    check('an invitation with no room held: the page asks that room with a second client (a Hello that only joins, with the page\'s name), and starts nothing else', invite(env, 'k7m2xq') === true && env.sockets.length === 1 && askedFor(env.last()) === 'k7m2xq' && hex(env.last().open().sent[0]) === hex(helloBytes(GUEST, 'k7m2xq', { join: true })));
+    check('a second press while it waits starts no second client', invite(env, 'k7m2xq') === false && env.sockets.length === 1);
+    const probe = env.last();
+    welcomeOf(probe, 1, ['Clover', 'Maya'], PRIVATE);
+    check('the room welcomes the page: it holds it, the Room shows, and a toast says "Joined Clover’s room."', env.holdsRoom() === true && env.screen() === 'room' && toastTextOf(env) === 'Joined Clover’s room.' && toastOf(env).hidden === false);
+    check('the invitation to the room that the page holds shows the Room and asks and starts nothing', (env.homeApi.show('home', 'push'), invite(env, 'k7m2xq') === true) && env.screen() === 'room' && env.sockets.length === 1 && !card(env));
+    check('an invitation to another room while the page holds one asks first, and the question has Cancel for the safe answer', invite(env, 'p4n8dz') === true && !!card(env) && /^Leave /.test(title(env)) && env.sockets.length === 1 && textOf(act(env, 'gyes')) === 'Leave and join');
+    tap(act(env, 'gstay'));
+    check('Cancel: nothing is asked of the server and the room is kept', env.sockets.length === 1 && env.holdsRoom() === true && !card(env));
+    invite(env, 'p4n8dz'); tap(act(env, 'gyes')); await flush();
+    check('Leave and join: the other room is asked for (the old room goes only when the new one welcomes the page)', env.sockets.length === 2 && askedFor(env.last()) === 'p4n8dz');
+    env.last().open().receive(reject(6));
+    check('a room that is not there any more is a gold toast with the words of the list ("That game is not open any more."), and the old room is still the page\'s', toastTextOf(env) === R.Games.TEXT.gone && /warn/.test(toastOf(env).className) && env.holdsRoom() === true);
+    invite(env, 'p4n8dz'); tap(act(env, 'gyes')); await flush();
+    env.last().open().receive(reject(1));
+    check('a room that is full is said as the list says it', toastTextOf(env) === R.Games.TEXT.full && /warn/.test(toastOf(env).className));
+}
+{   // a match that runs, and a page that is on its way to a game
+    const env = await withRooms(ROWS);
+    myRoom(env, ['Maya', 'Pebble'], STARTING);
+    check('while the page\'s own match is starting the invitation does nothing but say so (a card), and asks nobody', env.homeApi.joinInvite({ code: 'k7m2xq', from: 'Clover' }, null) === false && env.sockets.length === 1);
+}
+
 done('Quick join and Leave room');
 function OTHERS_OF(names) { return names; }
 })().catch(broke);

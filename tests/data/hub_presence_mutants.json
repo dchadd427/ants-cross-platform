@@ -91,8 +91,8 @@
   {
    "id": "the_older_word_wins",
    "file": "hub/presence.py",
-   "old": "key = (WEIGHT[where.at], where.seq) if where else (0, 0)",
-   "new": "key = (WEIGHT[where.at], -where.seq) if where else (0, 0)",
+   "old": "key = (WEIGHT[where.at], where.seq) if where else (0, 0)\n            if who.account_id not in best",
+   "new": "key = (WEIGHT[where.at], -where.seq) if where else (0, 0)\n            if who.account_id not in best",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
   {
@@ -210,8 +210,8 @@
   {
    "id": "any_number_of_seats",
    "file": "hub/presence.py",
-   "old": "whole(n, 0, SEATS)",
-   "new": "whole(n, 0, 99)",
+   "old": "(n is not None and not whole(n, 0, SEATS))",
+   "new": "(n is not None and not whole(n, 0, 99))",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
   {
@@ -224,8 +224,8 @@
   {
    "id": "a_map_is_not_checked",
    "file": "hub/presence.py",
-   "old": "(file is not None and map_file(file) is None)",
-   "new": "False",
+   "old": "(file is not None and map_file(file) is None) or (code is not None",
+   "new": "False or (code is not None",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
   {
@@ -280,8 +280,8 @@
   {
    "id": "a_wrong_here_is_no_mistake",
    "file": "hub/presence.py",
-   "old": "        if where is None:\n            return self.chat.mistake(peer, REFUSED)",
-   "new": "        if where is None:\n            return",
+   "old": "        if where is None or room is False or (room is not None and where.at != \"wait\"):\n            return self.chat.mistake(peer, REFUSED)",
+   "new": "        if where is None or room is False or (room is not None and where.at != \"wait\"):\n            return",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
   {
@@ -581,8 +581,8 @@
   {
    "id": "a_failing_list_stops_the_clock",
    "file": "hub/server.py",
-   "old": "        try:                                             # (the count of people and the list of the front page, on their own: a bug in them never stops the retention below, and a failing purge never stops them)\n            count = self.chat.presence.people()\n            if count != self.online_shown and now - self.online_at >= self.limits.online_seconds:\n                self.online_shown, self.online_at = count, now\n                self.chat.online()\n            self.chat.presence.flush(now)\n        except Exception as e:\n            self.presence_trouble(now, e)\n",
-   "new": "        count = self.chat.presence.people()\n        if count != self.online_shown and now - self.online_at >= self.limits.online_seconds:\n            self.online_shown, self.online_at = count, now\n            self.chat.online()\n        self.chat.presence.flush(now)\n",
+   "old": "        try:                                             # (the count of people and the list of the front page, on their own: a bug in them never stops the retention below, and a failing purge never stops them)\n            count = self.chat.presence.people()\n            if count != self.online_shown and now - self.online_at >= self.limits.online_seconds:\n                self.online_shown, self.online_at = count, now\n                self.chat.online()\n            self.chat.presence.flush(now)\n            self.chat.people.sweep(now)                                # (an invitation whose room is gone ends)\n        except Exception as e:\n            self.presence_trouble(now, e)\n",
+   "new": "        count = self.chat.presence.people()\n        if count != self.online_shown and now - self.online_at >= self.limits.online_seconds:\n            self.online_shown, self.online_at = count, now\n            self.chat.online()\n        self.chat.presence.flush(now)\n        self.chat.people.sweep(now)\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
   {

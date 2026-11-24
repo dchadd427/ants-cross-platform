@@ -123,3 +123,13 @@ div.gm-ri { background: #0b1117; }
 @media (max-width: 359px) { .gm-times .btn { font-size: 18px; } .gm-btns { gap: 8px; } }
 @media (forced-colors: active) { .gm-act, .gm-box, .gm-toast, .gm-ri { border-color: CanvasText; } .gm-act, button.gm-ri { border-color: ButtonText; } }
 @media (prefers-reduced-motion: reduce) { .gm-wait::after { animation: none; } }
+
+/* ---- the invitation: the first row of a person's sheet, for anybody who is in a room (a row that cannot be pressed says why under its title) ---- */
+@media (pointer: coarse) { .gc-who[data-act] { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; } }       /* (a long press on the name opens the sheet: the phone's own callout is held back there only) */
+.gc-who[data-act] { cursor: context-menu; }
+.gm-act > .gm-ico:first-child { color: #9fe0b8; }
+.gm-act.gm-off { background: transparent; border-style: dashed; cursor: default; }
+.gm-act.gm-off:hover { background: transparent; border-color: #1c3a30; }
+.gm-act.gm-off b { color: #a8cfc0; }
+.gm-act.gm-off small { color: var(--gold); }
+.gm-act.gm-off > .gm-ico:first-child { color: #7f9c92; }

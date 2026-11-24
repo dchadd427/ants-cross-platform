@@ -44,7 +44,7 @@ PLAYER = session.Identity(PLAYER_ID, "maple.leaf", False)
 OTHER = session.Identity(OTHER_ID, "pine.cone", False)
 OWNER = session.Identity(OWNER_ID, "the.boss", False)
 UNKNOWN = {"t": "reply", "c": "unknown", "r": "unknown"}
-EVERYONE = ["/help", "/ignore", "/unignore"]
+EVERYONE = ["/help", "/invite", "/ignore", "/unignore"]
 MODERATORS = ["/mute", "/unmute", "/del", "/kick", "/mutes"]
 ADMINISTRATORS = ["/ban", "/unban", "/bans", "/nopic", "/pic", "/noimages", "/images", "/bots"]
 LIMITS = limitmod.Limits()
@@ -84,7 +84,7 @@ class TheTable(unittest.TestCase):
                 self.assertTrue(all(isinstance(v, str) for v in row.values()))
                 self.assertTrue(row["w"].startswith("/") and row["d"] and len(row["d"]) <= 40, row)
         groups = {r["w"]: r["g"] for r in cmds.lines_for("admin")}
-        self.assertEqual([groups[w] for w in EVERYONE], ["Everyone"] * 3)
+        self.assertEqual([groups[w] for w in EVERYONE], ["Everyone"] * 4)
         self.assertEqual([groups[w] for w in MODERATORS], ["Moderators"] * 5)
         self.assertEqual([groups[w] for w in ADMINISTRATORS], ["Administrators"] * len(ADMINISTRATORS))
 
