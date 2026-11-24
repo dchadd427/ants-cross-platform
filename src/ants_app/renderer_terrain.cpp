@@ -191,7 +191,20 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid, con
 
             // Fire walls, bombs, food, power-ups are hidden while their anchor tile is unexplored
             if (cell.has_fire()) {
-                if (explored(c, r)) draw_template_world(anim_id_fire_, wx, wy);
+                if (explored(c, r)) {
+                    if (world_art_ != nullptr && world_art_->find(50316, 0) != nullptr) {          // the new art's fire is light: it lies in the y-sorted queue at the bottom of its cell, so that an ant in the cell or north of it is seen through it and one south of it covers it
+                        if (fire_in_queue_) {
+                            RenderItem item{};
+                            item.sort_y = wy + TILE_SIZE;
+                            item.draw_func = [this, wx, wy](SDL_Renderer*, TextureCache&) { this->draw_fire_wall(wx, wy); };
+                            render_queue_.push_back(std::move(item));
+                        } else {
+                            draw_fire_wall(wx, wy);
+                        }
+                    } else {
+                        draw_template_world(anim_id_fire_, wx, wy);
+                    }
+                }
                 continue;
             }
             if (cell.has_bomb()) {
@@ -389,13 +402,15 @@ void Renderer::collect_visual_effects(const ants::sim::WorldState& world) {
         RenderItem item{};
         item.sort_y = (eff.y_key != 0) ? eff.y_key : eff.py;
         const int32_t px = eff.px, py = eff.py;
-        item.draw_func = [this, anim, sub_idx, px, py](SDL_Renderer*, TextureCache&) {
+        const bool blast = world_art_ != nullptr && anim_id_bombex_ >= 0 && anim == &archive_->get_animation(static_cast<uint32_t>(anim_id_bombex_));     // (the bomb's explosion: drawn as light with the new art)
+        item.draw_func = [this, anim, sub_idx, px, py, blast](SDL_Renderer*, TextureCache&) {
             const LayoutRect view = world_view();
             const int32_t sx = view.x + (px - static_cast<int32_t>(camera_.x));
             const int32_t sy = view.y + (py - static_cast<int32_t>(camera_.y));
             if (sx < view.x - 320 || sx > view.x + view.w + 320 ||
                 sy < view.y - 320 || sy > view.y + view.h + 320) return;
-            this->draw_frame_parts(anim->subitems[sub_idx], sx, sy);
+            if (blast) this->draw_blast_light(anim->subitems[sub_idx], sx, sy);
+            else this->draw_frame_parts(anim->subitems[sub_idx], sx, sy);
         };
         render_queue_.push_back(std::move(item));
     }

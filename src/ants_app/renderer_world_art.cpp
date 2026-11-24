@@ -25,6 +25,7 @@ void Renderer::drop_world_art_textures() {
     }
     world_art_failed_.fill(false);
     world_art_generation_ = 0;
+    drop_effect_textures();
 }
 
 void Renderer::set_world_art(const world_art::Pack* pack) {

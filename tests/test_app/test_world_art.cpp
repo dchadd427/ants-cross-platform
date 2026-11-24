@@ -117,7 +117,12 @@ void test_manifest(const assets::AssetArchive& arc) {
     group("manifest", "the shipped manifest and its sheets, and every way to break a manifest");
     world_art::Pack pack;
     check(pack.load(pack_folder()) && pack.loaded(), "the shipped pack is read: " + pack.what());
-    check(pack.pictures().size() == 987, "the pack holds the 987 pictures of the batches so far (the plain ones and their variants, and the bigger bubbles): " + std::to_string(pack.pictures().size()));
+    check(pack.pictures().size() == 1020, "the pack holds the 1,020 pictures of the batches so far (the plain ones and their variants, the bigger bubbles, the bombs, the explosion and the fire wall): " + std::to_string(pack.pictures().size()));
+    size_t effects = 0;
+    for (uint32_t sprite = 298; sprite <= 315; ++sprite) effects += pack.find(sprite, 0) != nullptr && pack.find(sprite, 0)->number == sprite ? 1u : 0u;
+    for (uint32_t sprite = 306; sprite <= 315; ++sprite) effects += pack.find(30000 + sprite, 0) != nullptr && pack.find(30000 + sprite, 0)->number == 30000 + sprite ? 1u : 0u;
+    for (uint32_t sprite = 316; sprite <= 320; ++sprite) effects += pack.find(50000 + sprite, 0) != nullptr && pack.find(50000 + sprite, 0)->number == 50000 + sprite ? 1u : 0u;
+    check(effects == 33 && pack.find(316, 0) == nullptr, "the bombs (298 .. 305), the explosion (306 .. 315) and its light (30306 .. 30315) and the fire wall (50316 .. 50320) are there, and the fire's sprites are not offered as the original's own (316 .. 320 stay the original's: the Fire ant's frames use them)");
     size_t bigger = 0;
     for (uint32_t sprite = 641; sprite <= 650; ++sprite) {
         for (uint8_t v = 0; v < world_art::kVariants; ++v) bigger += (pack.find(10000 + sprite, v) != nullptr && pack.find(10000 + sprite, v)->variant == v ? 1u : 0u) + (pack.find(20000 + sprite, v) != nullptr && pack.find(20000 + sprite, v)->variant == v ? 1u : 0u);
@@ -497,12 +502,12 @@ void test_scale(const assets::AssetArchive& arc, const world_art::Pack& pack) {
         zoomtest::PixelRig rig(arc, "TREASURE", kW, kH, 0, 3);
         const zoomtest::Picture classic = [&]() { look_at_treasure(rig); return rig.shoot(); }();
         use_art(rig.renderer, pack);
-        rig.renderer.set_art_texture_limit(2200);                                // the 3x sheet (3072 x 3136) is too big, the 2x one (2048 x 2112) is not
+        rig.renderer.set_art_texture_limit(2600);                                // the 3x sheet (3072 x 3743) is too big, the 2x one (2048 x 2518) is not
         const zoomtest::Picture two = rig.shoot();
         check(rig.renderer.world_art_sheets() == 2u && !same_pixels(two, classic), "a device that takes no texture of 3072 gets the 2x sheet at the 3x output");
         rig.renderer.set_world_art(nullptr);
         use_art(rig.renderer, pack);
-        rig.renderer.set_art_texture_limit(1000);                                // not even the 1x sheet (1024 x 1122)
+        rig.renderer.set_art_texture_limit(1000);                                // not even the 1x sheet (1024 x 1327)
         const zoomtest::Picture none = rig.shoot();
         check(rig.renderer.world_art_textures() == 0 && same_pixels(none, classic), "a device that takes no sheet at all draws the original's frame");
         rig.renderer.set_art_texture_limit(0);
@@ -874,6 +879,104 @@ void make_edge_pictures(const assets::AssetArchive& arc, const world_art::Pack& 
     std::printf("pictures written to %s\n", dir.c_str());
 }
 
+/// An ant standing still at a place of the world (the idle clip of its kind, facing the same way as the ants of zoomtest::populate)
+sim::AntSnapshot standing_ant(const assets::AssetArchive& arc, uint32_t id, uint8_t player, int type, int32_t px, int32_t py) {
+    sim::AntSnapshot a;
+    a.id = id;
+    a.player_id = player;
+    a.type = static_cast<sim::AntType>(type);
+    a.px = px;
+    a.py = py;
+    a.tile_x = px / 32;
+    a.tile_y = py / 32;
+    a.hp = 10;
+    a.max_hp = 10;
+    a.state = sim::UnitState::Idle;
+    const int32_t clip = zoomtest::idle_clip(arc, type, 3);
+    a.loco_clip = clip < 0 ? uint16_t{0x7FFE} : static_cast<uint16_t>(clip);
+    a.loco_frame = 0;
+    a.loco_mirrored = false;
+    a.loco_left_ms = 100;
+    return a;
+}
+
+/// The pictures of the fire wall, the bombs and the explosion (ANTS_WORLD_ART_SHOTS=FOLDER ANTS_WORLD_ART_SET=effects): on gravel, on mud and beside water, at 1x, 2x and 3x, the original's beside the new one
+void make_effect_pictures(const assets::AssetArchive& arc, const world_art::Pack& pack, const std::string& dir) {
+    namespace fs = std::filesystem;
+    std::error_code ignored;
+    fs::create_directories(dir, ignored);
+    struct Scene {
+        std::string name, map;
+        int32_t col, row;
+    };
+    const std::vector<Scene> scenes = {{"gravel", "ISLANDS", 23, 26}, {"mud", std::string(ANTS_SOURCE_DIR) + "/Community-Maps/Mud Wars.lvl", 8, 14}, {"water", "ISLANDS", 7, 21}};
+    for (const Scene& sc : scenes) {
+        for (const int32_t os : {1, 2, 3}) {
+            zoomtest::PixelRig rig(arc, sc.map, kW, kH, 0, os);
+            if (!rig.ok) {
+                std::fprintf(stderr, "picture: cannot start %s\n", sc.name.c_str());
+                continue;
+            }
+            rig.renderer.set_dense_mud_budget_ms(-1);
+            const int32_t x = sc.col * 32, y = sc.row * 32;
+            rig.look(x - 48, y - 40);
+            const LayoutRect view = rig.layout.view();
+            const int32_t w = 160, h = 112;
+            const auto cut = [&](const zoomtest::Picture& pic, const std::string& what, const char* tag) {
+                const std::string path = dir + "/" + sc.name + "_" + what + "_" + std::to_string(os) + "x_" + tag + ".png";
+                if (!write_crop(path, pic, view.x * os, view.y * os, w * os, h * os)) std::fprintf(stderr, "picture: cannot write %s\n", path.c_str());
+            };
+            const auto both = [&](const std::string& what, const std::function<void()>& set_up) {
+                rig.renderer.set_world_art(nullptr);
+                set_up();
+                cut(rig.shoot(), what, "classic");
+                rig.renderer.set_world_art(&pack);
+                rig.renderer.set_dense_mud(false);
+                cut(rig.shoot(), what, "new");
+            };
+            // fire walls, an ant standing in the first of them and one beside the last
+            rig.engine.grid_mut().place_firewall(static_cast<uint32_t>(sc.col), static_cast<uint32_t>(sc.row), 0);
+            rig.engine.grid_mut().place_firewall(static_cast<uint32_t>(sc.col + 2), static_cast<uint32_t>(sc.row), 0);
+            both("fire", [&]() {
+                rig.world = rig.engine.get_world_state();
+                rig.world.ants.clear();
+                rig.world.ants.push_back(standing_ant(arc, 9001, 0, 2, x + 16, y + 22));
+                rig.world.ants.push_back(standing_ant(arc, 9002, 1, 0, x + 80, y + 54));
+            });
+            rig.engine.grid_mut().clear_firewall(static_cast<uint32_t>(sc.col), static_cast<uint32_t>(sc.row));
+            rig.engine.grid_mut().clear_firewall(static_cast<uint32_t>(sc.col + 2), static_cast<uint32_t>(sc.row));
+            // the four teams' bombs
+            for (uint32_t t = 0; t < 4; ++t) rig.engine.grid_mut().place_bomb(static_cast<uint32_t>(sc.col) + t, static_cast<uint32_t>(sc.row), static_cast<uint8_t>(t));
+            both("bombs", [&]() {
+                rig.world = rig.engine.get_world_state();
+                rig.world.ants.clear();
+            });
+            for (uint32_t t = 0; t < 4; ++t) rig.engine.grid_mut().clear_bomb(static_cast<uint32_t>(sc.col) + t, static_cast<uint32_t>(sc.row));
+            if (sc.name == "water") continue;
+            // the explosion at three moments of its 680 ms, an ant beside it
+            for (const uint32_t ms : {90u, 250u, 410u}) {
+                both("explosion_" + std::to_string(ms), [&]() {
+                    rig.world = rig.engine.get_world_state();
+                    rig.world.ants.clear();
+                    rig.world.ants.push_back(standing_ant(arc, 9003, 0, 2, x + 40, y + 40));
+                    rig.world.effects.clear();
+                    sim::VisualEffect e;
+                    e.anim_name = "bombex";
+                    e.px = x;
+                    e.py = y;
+                    e.elapsed_ms = ms;
+                    e.duration_ms = 680;
+                    e.frame = static_cast<uint16_t>(ms / 50u);
+                    e.total_frames = 14;
+                    e.y_key = y;
+                    rig.world.effects.push_back(e);
+                });
+            }
+        }
+    }
+    std::printf("pictures written to %s\n", dir.c_str());
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -890,6 +993,7 @@ int main(int argc, char* argv[]) {
         const char* set = std::getenv("ANTS_WORLD_ART_SET");
         if (set != nullptr && std::string(set) == "mud") make_mud_pictures(arc, pack, shots);
         else if (set != nullptr && std::string(set) == "edges") make_edge_pictures(arc, pack, shots);
+        else if (set != nullptr && std::string(set) == "effects") make_effect_pictures(arc, pack, shots);
         else make_pictures(arc, pack, shots);
         return 0;
     }

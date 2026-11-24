@@ -378,6 +378,60 @@
    "build": "test_world_art_mud",
    "test": "./build/tests/test_app/test_world_art_mud",
    "expect": "[render]"
+  },
+  {
+   "id": "fire_sorts_at_the_top_of_its_cell",
+   "file": "src/ants_app/renderer_terrain.cpp",
+   "old": "item.sort_y = wy + TILE_SIZE;",
+   "new": "item.sort_y = wy;",
+   "build": "test_world_art_effects",
+   "test": "./build/tests/test_app/test_world_art_effects",
+   "expect": "[fire]"
+  },
+  {
+   "id": "fire_is_drawn_after_every_ant",
+   "file": "src/ants_app/renderer_terrain.cpp",
+   "old": "item.sort_y = wy + TILE_SIZE;",
+   "new": "item.sort_y = wy + 100000;",
+   "build": "test_world_art_effects",
+   "test": "./build/tests/test_app/test_world_art_effects",
+   "expect": "[fire]"
+  },
+  {
+   "id": "fire_ignores_fog_of_war",
+   "file": "src/ants_app/renderer_terrain.cpp",
+   "old": "                if (explored(c, r)) {\n                    if (world_art_ != nullptr && world_art_->find(50316, 0) != nullptr) {",
+   "new": "                if (true) {\n                    if (world_art_ != nullptr && world_art_->find(50316, 0) != nullptr) {",
+   "build": "test_world_art_effects",
+   "test": "./build/tests/test_app/test_world_art_effects",
+   "expect": "[fire]"
+  },
+  {
+   "id": "fire_has_no_glow",
+   "file": "src/ants_app/renderer_world_effects.cpp",
+   "old": "    if (SDL_Texture* glow = fire_glow_texture(scale)) {",
+   "new": "    if (SDL_Texture* glow = static_cast<SDL_Texture*>(nullptr)) {",
+   "build": "test_world_art_effects",
+   "test": "./build/tests/test_app/test_world_art_effects",
+   "expect": "[fire]"
+  },
+  {
+   "id": "explosion_has_no_glow",
+   "file": "src/ants_app/renderer_world_effects.cpp",
+   "old": "        if (glow == nullptr) continue;",
+   "new": "        if (glow == nullptr || glow != nullptr) continue;",
+   "build": "test_world_art_effects",
+   "test": "./build/tests/test_app/test_world_art_effects",
+   "expect": "[explosion]"
+  },
+  {
+   "id": "explosion_is_not_light",
+   "file": "src/ants_app/renderer_terrain.cpp",
+   "old": "const bool blast = world_art_ != nullptr && anim_id_bombex_ >= 0 &&",
+   "new": "const bool blast = world_art_ == nullptr && anim_id_bombex_ >= 0 &&",
+   "build": "test_world_art_effects",
+   "test": "./build/tests/test_app/test_world_art_effects",
+   "expect": "[explosion]"
   }
  ]
 }

@@ -806,6 +806,20 @@ private:
     size_t mud_cache_limit_{world_art::mud::kCacheLimit};  // the bytes that the baked cell pictures and the looks may take together (set_dense_mud_cache_limit)
     int32_t mud_max_scale_{world_art::mud::kMaxScale};     // the largest scale the mud is baked at (set_dense_mud_max_scale)
     bool transitions_{true};                               // the automatic transitions (world_art_edges.hpp), while the world art is on
+    int32_t anim_id_bombex_{-1};                           // the bomb's explosion (the animation bombex): drawn as light while the world art is on (renderer_world_effects.cpp)
+    bool fire_in_queue_{false};                            // a fire wall that the layer-2 pass meets goes into the y-sorted queue (render_world) and is not drawn at once
+    std::array<SDL_Texture*, 3> fire_glow_{};              // the warm glow under a fire wall at 1x, 2x and 3x, made when first needed
+    struct BlastGlow {
+        SDL_Texture* texture{nullptr};                     // the explosion's glow for one frame: the light blurred, made from the 1x picture (null: the frame has no light, or it cannot be made)
+        int32_t margin{0};
+        int32_t w{0};
+        int32_t h{0};
+        bool built{false};
+    };
+    std::array<BlastGlow, 10> blast_glow_{};
+    const BlastGlow* blast_glow(uint32_t sprite);
+    std::array<std::vector<uint8_t>, 10> blast_alpha_;     // the alpha of the ten light pictures at 1x
+    uint8_t blast_alpha_state_{0};                         // 0: not read, 1: read, 2: could not be read
     size_t edge_cache_limit_{world_art::edges::kCacheLimit};
     int32_t edge_max_scale_{world_art::edges::kMaxScale};
     world_art::edges::EdgeMap edge_map_;                   // the kinds of the cells, made when the first cell is drawn (ensure_edge_map)
@@ -856,6 +870,11 @@ private:
     bool ensure_edge_pictures(int32_t scale);
     bool make_room_for_edges(size_t bytes);
     void draw_transition(int32_t col, int32_t row, int32_t sx, int32_t sy);
+    void draw_fire_wall(int32_t wx, int32_t wy);
+    void draw_blast_light(const ants::assets::AnimationSubItem& sub, int32_t sx, int32_t sy);
+    SDL_Texture* fire_glow_texture(int32_t scale);
+    bool ensure_blast_alpha();
+    void drop_effect_textures();
     void mud_work_done(uint64_t since);
     void drop_mud_caches();
     void drop_edge_caches();

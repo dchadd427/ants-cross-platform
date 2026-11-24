@@ -472,6 +472,7 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
         anim_id_digit_[d] = archive_->find_animation_id("dig" + std::to_string(d));
     }
     anim_id_fire_ = archive_->find_animation_id("wallup04");
+    anim_id_bombex_ = archive_->find_animation_id("bombex");
     anim_id_lunchbox_ = archive_->find_animation_id("lunchbox");
     anim_id_bomb_[0] = archive_->find_animation_id("greenbomb");
     anim_id_bomb_[1] = archive_->find_animation_id("redbomb");
@@ -836,8 +837,10 @@ void Renderer::render_world(const ants::sim::WorldState& world,
     // 2. Layer 1 Terrain
     render_terrain_layer1(grid);
 
-    // 3. Layer 2 Structures / Interactive Objects
+    // 3. Layer 2 Structures / Interactive Objects (a fire wall of the new art goes into the y-sorted queue below)
+    fire_in_queue_ = true;
     render_terrain_layer2_structures(grid, &world);
+    fire_in_queue_ = false;
 
     // 4. One y-sorted sprite list (original FUN_010088e7, sort key = sprite y, ties keep insertion order):
     //    object-list plants (key row*32+16), ants, effects (key row*32), food droppers, the hill selection brackets

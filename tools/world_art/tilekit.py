@@ -31,13 +31,13 @@ def blur(a, sigma):
     return np.real(np.fft.ifft2(np.fft.fft2(b) * g))[pad:-pad, pad:-pad]
 
 
-def blur_edge(a, sigma):
-    """Gaussian blur of a master array with its border continued outward"""
-    pad = int(4 * sigma * MS) + 2
+def blur_edge(a, sigma, ms=MS):
+    """Gaussian blur of a master array with its border continued outward (`ms`: the master's samples for each world pixel, the bomb's is 6)"""
+    pad = int(4 * sigma * ms) + 2
     b = np.pad(a, pad, mode='edge')
     ky = np.fft.fftfreq(b.shape[0])[:, None]
     kx = np.fft.fftfreq(b.shape[1])[None, :]
-    g = np.exp(-2 * (np.pi * sigma * MS) ** 2 * (kx ** 2 + ky ** 2))
+    g = np.exp(-2 * (np.pi * sigma * ms) ** 2 * (kx ** 2 + ky ** 2))
     return np.real(np.fft.ifft2(np.fft.fft2(b) * g))[pad:-pad, pad:-pad]
 
 

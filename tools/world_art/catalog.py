@@ -17,6 +17,11 @@ BRIDGE = range(112, 117)                      # the five sprites of the bridge
 VARIANT_COUNT = 16                            # a plain tile has sixteen pictures (the position variants 0 to 15)
 BUBBLE_SPRITES = range(641, 651)              # the original's bubble frames that have bigger copies: two sets of five (big_bubbles.py)
 BIG_BUBBLE_CLASS = {'M': 10000, 'L': 20000}   # the number of a bigger bubble's picture is this plus the original's sprite number (10641 to 10650 medium, 20641 to 20650 large)
+BOMBS = range(298, 306)                       # the four teams' bombs, two frames each (bomb.py)
+EXPLOSION = range(306, 316)                   # the bomb's explosion, ten frames (explosion.py)
+FIRE_WALL = range(316, 321)                   # the fire wall, five frames (fire.py)
+EXPLOSION_LIGHT = 30000                       # the number of an explosion frame's light (the fire alone) is this plus the original's sprite number (30306 to 30315)
+FIRE_WALL_BASE = 50000                        # the number of a fire wall's picture is this plus the original's sprite number (50316 to 50320): 316 to 319 are also the Fire ant's own frames, which keep the original's pictures
 
 _table = None
 
@@ -67,7 +72,7 @@ def sprite(number):
 
 
 def original_number(number):
-    """the original's sprite that a picture's number stands for: itself, or for a bigger bubble (10000 or 20000 plus the sprite) the bubble's sprite"""
+    """the original's sprite that a picture's number stands for: itself, or for a bigger bubble, an explosion's light or the fire wall (10000, 20000, 30000 or 50000 plus the sprite) its sprite"""
     return number % 10000
 
 
@@ -80,3 +85,8 @@ def sprite_size(number):
     """(width, height) of the original's sprite that a picture's number stands for, read from its file's header"""
     with Image.open(sprite_path(original_number(number))) as im:
         return im.size
+
+
+def effect_numbers():
+    """the numbers of the bombs, the explosion with its light and the fire wall, sorted"""
+    return sorted(set(BOMBS) | set(EXPLOSION) | {EXPLOSION_LIGHT + n for n in EXPLOSION} | {FIRE_WALL_BASE + n for n in FIRE_WALL})

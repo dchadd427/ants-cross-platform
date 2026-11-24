@@ -777,6 +777,40 @@ target_link_libraries(test_world_art_edges PRIVATE ants_test_paths)
 add_test(NAME test_world_art_edges COMMAND test_world_art_edges)
 set_tests_properties(test_world_art_edges PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# The fire wall, the bombs and the explosion of the world art (renderer_world_effects.cpp): light over a glow, the order of the draw, Fog of War, the original's places and times
+add_executable(test_world_art_effects
+    test_world_art_effects.cpp
+)
+
+target_include_directories(test_world_art_effects PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_world_art_effects PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_world_art_effects PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_world_art_effects PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_world_art_effects PRIVATE ants_test_paths)
+
+add_test(NAME test_world_art_effects COMMAND test_world_art_effects)
+set_tests_properties(test_world_art_effects PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # The PNG writer of the server's pictures (png_encode.hpp): the deflate stream, the zlib wrapper and the PNG file, read back by the repository's own reader and checked against the formats. No window
 add_executable(test_png_encode
     test_png_encode.cpp

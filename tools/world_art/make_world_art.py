@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Makes the world art of the game: the ground tiles, the edge tiles and the bridge, drawn at 1x, 2x and 3x and packed into the sheets that the game reads (README.md).
+"""Makes the world art of the game: the ground tiles, the edge tiles, the bridge, the bigger bubbles of the mud, the bombs, the explosion and the fire wall, drawn at 1x, 2x and 3x and packed into the sheets that the game reads (README.md).
 
 usage: make_world_art.py [--out DIR] [--work DIR]
 

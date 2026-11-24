@@ -5,9 +5,12 @@ Nothing is drawn here (drawing takes about 40 seconds): the committed manifest a
   - TheManifest: the header, the three sheet rows (real PNG files of 8-bit RGBA with the sizes they state, as wide as 1024, 2048 and 3072 pixels and at most 4096 high), the sprite records
     (ten whole numbers each, sorted by number and variant, none twice, UTF-8 with LF and nothing else);
   - ThePictures: every picture is the size of the original's sprite (asset_catalog/sprites) times the scale, lies inside its sheet with its one-pixel ring, no two pictures (rings included) overlap,
-    and the ring repeats the picture's own edge pixels (a corner pixel repeats the corner);
-  - TheSet: the numbers are exactly every sprite of the ground tiles 431 to 669 of docs/chd_table4_animations.json, the bridge sprites 112 to 116 and the bigger bubbles of the mud (10000 or 20000
-    plus the bubble sprites 641 to 650, each the size of its sprite: 32 x 32), and variants 1 to 15 exist exactly for the plain tiles 640 to 657, 726 to 731 and 901 and the bigger bubbles;
+    and the ring repeats the picture's own edge pixels (a corner pixel repeats the corner, a partly transparent edge pixel its color and its opacity);
+  - TheSet: the numbers are exactly every sprite of the ground tiles 431 to 669 of docs/chd_table4_animations.json, the bridge sprites 112 to 116, the bigger bubbles of the mud (10000 or 20000
+    plus the bubble sprites 641 to 650, each the size of its sprite: 32 x 32), the four teams' bombs 298 to 305, the explosion 306 to 315 with its light (30000 plus them) and the fire wall (50000
+    plus the sprites 316 to 320), and variants 1 to 15 exist exactly for the plain tiles 640 to 657, 726 to 731 and 901 and the bigger bubbles;
+  - TheEffects: the bombs are solid; the explosion, its light and the fire wall are see-through by heat (no opaque pixel, more than one level of opacity, not empty but for the light of the four
+    smoke-only frames), and a frame's light is never more opaque than the whole frame;
   - TheChecksAreNotVacuous: each rule above refuses a copy of the real data that is broken in that one way.
 Needs numpy and Pillow (the tests are skipped only on a machine that has none; CI has both).
 """
@@ -36,6 +39,13 @@ VARIANT_TILES = set(range(640, 658)) | set(range(726, 732)) | {901}
 GROUND_TILES = (431, 669)
 BRIDGE = set(range(112, 117))
 BIG_BUBBLES = {base + sprite for base in (10000, 20000) for sprite in range(641, 651)}      # a bigger bubble's number: 10000 (medium) or 20000 (large) plus the original's bubble sprite
+BOMBS = set(range(298, 306))                                    # the four teams' bombs, two frames each
+EXPLOSION = set(range(306, 316))                                # the bomb's explosion, ten frames
+EXPLOSION_LIGHT = {30000 + n for n in EXPLOSION}                # each frame's fire alone, for a pass that adds it to the ground as light
+FIRE_WALL = {50000 + n for n in range(316, 321)}                # the fire wall's five frames (316 to 319 are also the Fire ant's own, which keep the original's pictures, hence 50000 plus)
+EFFECTS = BOMBS | EXPLOSION | EXPLOSION_LIGHT | FIRE_WALL
+SEE_THROUGH = EXPLOSION | EXPLOSION_LIGHT | FIRE_WALL           # drawn as light: opacity by heat
+NO_FIRE = {30312, 30313, 30314, 30315}                          # the last four frames of the blast are smoke only: their light is empty
 NUMBER = re.compile(r"0|[1-9][0-9]*")
 
 
@@ -133,12 +143,54 @@ def ring_problems(arrays, sprites):
     return out
 
 
+def crops(arrays, sprites, numbers):
+    """(number, scale, RGBA picture without its ring) of every picture of these numbers in the sheets given"""
+    for number, variant, w, h, places in sprites:
+        if number in numbers:
+            for scale, a in arrays.items():
+                x, y = places[scale]
+                yield number, scale, a[y:y + h * scale, x:x + w * scale]
+
+
+def alpha_problems(arrays, sprites):
+    """the bombs are solid (more than half of their visible pixels opaque); the explosion, its light and the fire wall are see-through by heat: not one opaque pixel, more than one level of opacity,
+    and not empty (the light of the four smoke-only frames is the one that is)"""
+    out = []
+    for number, scale, pic in crops(arrays, sprites, BOMBS | SEE_THROUGH):
+        alpha = pic[..., 3]
+        visible = alpha > 0
+        if number in BOMBS:
+            if (alpha == 255).sum() * 2 <= visible.sum():
+                out.append("the bomb %d at %dx is not solid" % (number, scale))
+        elif not visible.any():
+            if number not in NO_FIRE:
+                out.append("sprite %d at %dx is empty" % (number, scale))
+        elif alpha.max() == 255:
+            out.append("sprite %d at %dx has an opaque pixel: it is drawn as see-through by heat" % (number, scale))
+        elif len(np.unique(alpha[visible])) < 2:
+            out.append("sprite %d at %dx has one level of opacity" % (number, scale))
+    return out
+
+
+def light_problems(arrays, sprites):
+    """a frame's light (the fire alone) is never more opaque than the whole frame, pixel for pixel"""
+    out = []
+    whole = {(n, s): pic for n, s, pic in crops(arrays, sprites, EXPLOSION)}
+    for number, scale, pic in crops(arrays, sprites, EXPLOSION_LIGHT):
+        other = whole.get((number - 30000, scale))
+        if other is None or other.shape != pic.shape:
+            out.append("the light %d at %dx has no whole picture of its size" % (number, scale))
+        elif (pic[..., 3] > other[..., 3]).any():
+            out.append("the light %d at %dx is more opaque than its frame" % (number, scale))
+    return out
+
+
 def expected_numbers():
     with open(TABLE, encoding="utf-8") as f:
         table = json.load(f)
     assert table[GROUND_TILES[0]]["entry_index"] == GROUND_TILES[0] and table[GROUND_TILES[1]]["entry_index"] == GROUND_TILES[1]
     ground = {f["sprite_index"] for entry in table[GROUND_TILES[0]:GROUND_TILES[1] + 1] for item in entry["subitems"] for f in item["frames"]}
-    return ground | BRIDGE | BIG_BUBBLES
+    return ground | BRIDGE | BIG_BUBBLES | EFFECTS
 
 
 def set_problems(sprites, numbers):
@@ -150,7 +202,7 @@ def set_problems(sprites, numbers):
     for number in sorted(numbers - set(found)):
         out.append("sprite %d is missing" % number)
     for number in sorted(set(found) - numbers):
-        out.append("sprite %d is not a ground tile or a bridge sprite" % number)
+        out.append("sprite %d is not a sprite of the pack" % number)
     for number, variants in sorted(found.items()):
         want = set(range(VARIANTS)) if number in VARIANT_TILES | BIG_BUBBLES else {0}
         if variants != want:
@@ -220,6 +272,22 @@ class TheSet(Committed):
         self.assertEqual({(s[2], s[3]) for s in records}, {(32, 32)})
 
 
+class TheEffects(Committed):
+    def test_the_bombs_are_solid_and_the_explosion_its_light_and_the_fire_wall_are_see_through(self):
+        self.assertEqual(alpha_problems(self.arrays, self.sprites), [])
+
+    def test_the_light_is_never_more_opaque_than_the_frame_it_belongs_to(self):
+        self.assertEqual(light_problems(self.arrays, self.sprites), [])
+
+    def test_the_effects_are_each_one_picture_of_the_originals_size(self):
+        records = [s for s in self.sprites if s[0] in EFFECTS]
+        self.assertEqual([(s[0], s[1]) for s in records], [(n, 0) for n in sorted(EFFECTS)])
+        self.assertEqual(len(records), 33)
+        self.assertEqual({(s[2], s[3]) for s in records if s[0] in BOMBS}, {(12, 24)})
+        for s in records:
+            self.assertEqual((s[2], s[3]), original_size(s[0]))
+
+
 class TheChecksAreNotVacuous(Committed):
     def broken(self, sprites, index, **change):
         """a copy of the sprite records with record `index` changed: number, variant, w, h or the places"""
@@ -287,6 +355,68 @@ class TheChecksAreNotVacuous(Committed):
             a[1][y + dy, x + dx] = a[1][y + dy, x + dx] ^ 1
             self.assertEqual(len(ring_problems(a, [self.sprites[10]])), 1, (dy, dx))
 
+    def only(self, scale, number):
+        """the sheet of a scale, copied, and the record of a number: for a copy of the data that is broken in one picture"""
+        record = next(s for s in self.sprites if s[0] == number)
+        return {scale: self.arrays[scale].copy()}, record
+
+    def picture_of(self, arrays, scale, record):
+        x, y = record[4][scale]
+        return arrays[scale][y:y + record[3] * scale, x:x + record[2] * scale]
+
+    def test_an_opaque_or_flat_or_empty_copy_of_a_see_through_picture_or_a_see_through_bomb_is_found(self):
+        for number, scale in ((50316, 1), (50320, 3), (306, 2), (309, 3), (30306, 1), (30311, 3)):
+            a, record = self.only(scale, number)
+            pic = self.picture_of(a, scale, record)
+            self.assertEqual(alpha_problems(a, [record]), [], number)
+            kept = pic.copy()
+            pic[..., 3] = np.where(kept[..., 3] > 0, 255, 0)                                   # every visible pixel opaque
+            self.assertEqual(len(alpha_problems(a, [record])), 1, "opaque %d" % number)
+            pic[..., 3] = np.where(kept[..., 3] >= 128, 255, 0)                                # a cut-out: the original's kind of alpha
+            self.assertEqual(len(alpha_problems(a, [record])), 1, "cut out %d" % number)
+            pic[..., 3] = np.where(kept[..., 3] > 0, 128, 0)                                   # one level of opacity
+            self.assertEqual(len(alpha_problems(a, [record])), 1, "flat %d" % number)
+            pic[...] = 0                                                                       # nothing at all
+            self.assertEqual(len(alpha_problems(a, [record])), 1, "empty %d" % number)
+        a, record = self.only(1, 298)
+        pic = self.picture_of(a, 1, record)
+        pic[..., 3] = pic[..., 3] // 2                                                         # a bomb you can see through
+        self.assertEqual(len(alpha_problems(a, [record])), 1)
+
+    def test_the_light_of_a_smoke_only_frame_may_be_empty_and_no_other_picture_may(self):
+        for number in sorted(NO_FIRE):
+            a, record = self.only(1, number)
+            self.assertEqual(alpha_problems(a, [record]), [], number)
+        a, record = self.only(1, 30310)
+        self.picture_of(a, 1, record)[...] = 0
+        self.assertEqual(len(alpha_problems(a, [record])), 1)
+
+    def test_a_light_that_is_more_opaque_than_its_frame_or_has_no_frame_is_found(self):
+        wholes = [s for s in self.sprites if s[0] in (306, 30306)]
+        arrays = {3: self.arrays[3].copy()}
+        self.assertEqual(light_problems(arrays, wholes), [])
+        light = next(s for s in wholes if s[0] == 30306)
+        pic = self.picture_of(arrays, 3, light)
+        y, x = np.argwhere(pic[..., 3] > 0)[0]
+        whole = self.picture_of(arrays, 3, next(s for s in wholes if s[0] == 306))
+        pic[y, x, 3] = min(255, int(whole[y, x, 3]) + 1)
+        self.assertEqual(len(light_problems(arrays, wholes)), 1)
+        self.assertEqual(len(light_problems(arrays, [light])), 1)                              # its frame is not there
+
+    def test_the_ring_of_a_partly_transparent_edge_repeats_its_color_and_its_opacity(self):
+        record = next(s for s in self.sprites if s[0] == 50316)
+        x, y = record[4][3]
+        arrays = {3: self.arrays[3].copy()}
+        edge = arrays[3][y:y + record[3] * 3, x:x + record[2] * 3][0]                          # the picture's top row
+        column = int(np.argmax((edge[:, 3] > 0) & (edge[:, 3] < 255)))
+        self.assertTrue(0 < edge[column, 3] < 255)                                             # a partly transparent edge pixel
+        self.assertEqual(ring_problems(arrays, [record]), [])
+        arrays[3][y - RING, x + column, 3] ^= 1                                                # the ring above it, one level of opacity apart
+        self.assertEqual(len(ring_problems(arrays, [record])), 1)
+        arrays[3][y - RING, x + column, 3] ^= 1
+        arrays[3][y - RING, x + column, 0] ^= 1                                                # or one level of its red
+        self.assertEqual(len(ring_problems(arrays, [record])), 1)
+
     def test_a_number_that_is_missing_or_not_a_ground_sprite_or_with_other_variants_is_found(self):
         numbers = expected_numbers()
         self.assertEqual(len(set_problems([s for s in self.sprites if s[0] != 112], numbers)), 1)
@@ -308,6 +438,18 @@ class TheChecksAreNotVacuous(Committed):
         first = next(i for i, s in enumerate(self.sprites) if s[0] == 10641)
         self.assertEqual(len(size_problems(self.broken(self.sprites, first, w=16))), 1)
         self.assertEqual(len(size_problems(self.broken(self.sprites, first, h=64))), 1)
+
+    def test_an_effect_that_is_missing_extra_with_variants_or_the_wrong_size_is_found(self):
+        numbers = expected_numbers()
+        for number in (298, 305, 306, 315, 30306, 30315, 50316, 50320):
+            self.assertEqual(len(set_problems([s for s in self.sprites if s[0] != number], numbers)), 1, number)
+        self.assertEqual(len(set_problems(self.sprites + [(316, 0, 29, 33, {})], numbers)), 1)        # the original's own fire sprite is not a number of the pack
+        self.assertEqual(len(set_problems(self.sprites + [(40306, 0, 29, 29, {})], numbers)), 1)
+        self.assertEqual(len(set_problems(self.sprites + [(50316, 1, 29, 33, {})], numbers)), 1)
+        for number in (298, 30306, 50320):
+            first = next(i for i, s in enumerate(self.sprites) if s[0] == number)
+            self.assertEqual(len(size_problems(self.broken(self.sprites, first, w=self.sprites[first][2] + 1))), 1)
+            self.assertEqual(len(size_problems(self.broken(self.sprites, first, h=self.sprites[first][3] - 1))), 1)
 
 
 if __name__ == "__main__":

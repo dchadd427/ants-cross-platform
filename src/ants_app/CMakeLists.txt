@@ -43,6 +43,7 @@ add_library(ants_app STATIC
     world_art_mud.cpp
     world_art_edges.cpp
     renderer_world_edges.cpp
+    renderer_world_effects.cpp
     renderer_world_mud.cpp
     window_art.cpp
     app_icon.cpp
