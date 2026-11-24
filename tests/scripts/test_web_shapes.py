@@ -79,7 +79,7 @@ class TheTwoTablesAgree(unittest.TestCase):
         self.assertEqual(sorted(re.findall(r"^\s+(\w+)", enum, re.M)), sorted(r[0] for r in rows), "every value of Aspect has a row")
 
     def test_the_slot_of_a_page_is_960_css_pixels_for_the_classic_picture_1280_and_for_a_wider_canvas_its_own_width(self):
-        """The rule (docs/PLAY_IN_BROWSER.md, "A 16:9 picture that fills the page"): the widest slot is the page's column of 1280 CSS pixels, or the canvas's own width when that is more (a monitor then shows 32:9 at 1x), and 960 for the classic picture."""
+        """The rule (docs/PLAY_PICTURE.md, "A 16:9 picture that fills the page"): the widest slot is the page's column of 1280 CSS pixels, or the canvas's own width when that is more (a monitor then shows 32:9 at 1x), and 960 for the classic picture."""
         rows = page_rows()
         for name, _, w, h, slot in rows:
             self.assertEqual(slot, 960 if (w, h) == (640, 480) else max(1280, w), name + ": its widest slot")

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The web page's picture in a REAL browser (widescreen milestone M5; opt-in; see tests/scripts/test_web_aspect.sh and docs/PLAY_IN_BROWSER.md).
+"""The web page's picture in a REAL browser (widescreen milestone M5; opt-in; see tests/scripts/test_web_aspect.sh and docs/PLAY_PICTURE.md).
 
 Needs a running web page (the web image of this tree: `docker build -t ants-beta .` and run it, or `docker-compose.stack.yml`; --web is the site's address: the game page is opened at its own
 path /play, "/" being the front page), a Chromium-based browser and Python 3; nothing

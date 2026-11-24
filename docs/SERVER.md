@@ -341,7 +341,7 @@ The server keeps one SQLite database file for its records (the restart records m
 - **Not in the database yet**: the rooms' restart records (`restart_record.hpp`, "Restart records" in [`NETWORK_PORT.md`](NETWORK_PORT.md)) stay files in the folder `restart`. A record is appended one turn at a time with one `write()` before the turn is sent to anybody, which is what lets a restart lose no turn; moving it needs a design of its own for that guarantee (a transaction for each turn of each room at 20 a second, or a log that is still a file), so it is a step of its own.
 - **Backup**: copy the file while the server is **stopped** (a clean stop leaves one self-contained `ants.db`; copy `-wal` and `-shm` with it if they are there), or let the program make a consistent copy while it runs (`Database::backup_to`, SQLite's online backup; nothing calls it yet).
 
-Tests: the suite `test_db` ([`TESTING.md`](TESTING.md), 2.31) and the options part of `tests/scripts/test_ants_server.sh`.
+Tests: the suite `test_db` ([`TESTING_SUITES.md`](TESTING_SUITES.md), 2.31) and the options part of `tests/scripts/test_ants_server.sh`.
 
 ## The relay for the players' channels
 

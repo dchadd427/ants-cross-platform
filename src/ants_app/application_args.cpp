@@ -319,7 +319,7 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             } else if (cfg.startup_error.empty()) {
                 cfg.startup_error = "--bot " + std::string(argv[i]) + ": " + why;
             }
-        } else if (std::strcmp(argv[i], "--teams") == 0) {                     // the teams of a game on this computer: ffa | A+B (docs/BOTS.md, "Alliances")
+        } else if (std::strcmp(argv[i], "--teams") == 0) {                     // the teams of a game on this computer: ffa | A+B (docs/BOT_PLAY.md, "Alliances")
             std::string why;
             if (i + 1 >= argc) {
                 if (cfg.startup_error.empty()) cfg.startup_error = "--teams needs ffa or two seats like 0+1";

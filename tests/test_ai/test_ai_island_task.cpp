@@ -1,4 +1,4 @@
-// AI15: the island task of the standard bot (island_tasks.hpp, docs/BOTS.md "Islands"): a Swimmer digs the bridges, the economy walks over them, one ant to a bridge, and the ants are kept off a
+// AI15: the island task of the standard bot (island_tasks.hpp, docs/BOT_ISLANDS.md "Islands"): a Swimmer digs the bridges, the economy walks over them, one ant to a bridge, and the ants are kept off a
 // bridge that is about to go. The quick cases are here (a few thousand ticks of one seat); the whole matches of the four seats are suite 2.28 (test_ai_islands, AI16).
 #include <functional>
 

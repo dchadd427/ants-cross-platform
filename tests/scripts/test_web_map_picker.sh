@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# OPT-IN, not part of ./run_tests.sh: the map picker of the front page in a REAL browser (docs/PLAY_IN_BROWSER.md, "Choosing a map"): the list of all the maps with the Detail and Thumbnails views, the
+# OPT-IN, not part of ./run_tests.sh: the map picker of the front page in a REAL browser (docs/PLAY_MATCH_SETUP.md, "Choosing a map"): the list of all the maps with the Detail and Thumbnails views, the
 # search, the keyboard, a map of the players chosen as the room's map (and its file warmed in the browser's cache), the phone's sheet, the list that is down (the old selector goes on), and a match on a
 # map of the players started from the lobby. --shots DIR saves the pictures that the check looks at.
 #

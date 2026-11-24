@@ -69,4 +69,4 @@ The game server keeps these until they move: the operator's `DELETE /history/<id
 
 ## Tests
 
-The cases are in [`TESTING.md`](TESTING.md), 2.19.20; the mutants of the service's rules are in `tests/data/history_service_mutants.json`.
+The cases are in [`TESTING_SUITES.md`](TESTING_SUITES.md), 2.19.20; the mutants of the service's rules are in `tests/data/history_service_mutants.json`.

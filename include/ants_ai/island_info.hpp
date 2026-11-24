@@ -1,6 +1,6 @@
 #pragma once
 
-// IslandInfo: the water analysis of one team's map (docs/BOTS.md, "Islands"). Where MapInfo says which tiles the team's ants can walk to and how far food is on foot, this says what lies
+// IslandInfo: the water analysis of one team's map (docs/BOT_ISLANDS.md, "Islands"). Where MapInfo says which tiles the team's ants can walk to and how far food is on foot, this says what lies
 // BEYOND water: which walker components exist (islands), what each holds (piles, power-ups, flowers), and the ways over the channels between them that the original's rules allow:
 //
 //   a bridge   a chain of water tiles that a Swimmer ant digs (special order onto a water tile, three passes each; a finished bridge tile is mud for everybody and collapses 3,600 ticks

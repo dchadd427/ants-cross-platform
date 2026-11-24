@@ -37,7 +37,7 @@ inline void tick_all(sim::SimulationEngine& sim, uint64_t n) {
     }
 }
 
-// The plan of a level without the war batch (docs/BOTS.md, "The war batch") and without the food-gone batch (docs/BOT_GONE.md): the tests of the older rules play it, so that the assault, the mines, the
+// The plan of a level without the war batch (docs/BOT_TACTICS.md, "The war batch") and without the food-gone batch (docs/BOT_GONE.md): the tests of the older rules play it, so that the assault, the mines, the
 // extra Fire Ants and the steals of a world with no food on it take no part
 inline LevelPlan peace_plan(Level level) {
     LevelPlan p = plan_for(level);

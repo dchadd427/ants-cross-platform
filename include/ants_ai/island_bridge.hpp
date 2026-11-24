@@ -1,6 +1,6 @@
 #pragma once
 
-// The bridges for ants that stand away from the hill (docs/BOTS.md, "Islands", "Bridges for ants"; plan.island_return, island_feeder, island_power_bridge, Hard, ISLANDS): the flower link task
+// The bridges for ants that stand away from the hill (docs/BOT_ISLANDS.md, "Islands", "Bridges for ants"; plan.island_return, island_feeder, island_power_bridge, Hard, ISLANDS): the flower link task
 // (island_link.hpp) lends its Swimmer to a second kind of dig. An own ant that is no Swimmer, that no task holds and that has stood still for `island_bridge_idle` ticks on an island other than the
 // walk from the hill reaches is "stranded" (the economy counts such an ant as unplaced and leaves it where it is). A bridge is dug for it when the chain of channels from its island to what it
 // needs is at most `island_bridge_tiles` water tiles that do not stand, in the original's own way: one special order onto one water tile at a time (a Swimmer builds a tile in three passes, which

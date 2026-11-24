@@ -1,6 +1,6 @@
 // The fights, the fire and the standing of the standard bot (contest batch, AI20.2 - AI20.9): the reports that the hard bots don't really fight unless they're defending, that the losing player should be a
 // little more aggressive, that they need to be aware of the health of other players (KDR) and that an ant at 4 HP was just not killed, the three bug reports on the fire play, and what followed
-// from them (docs/BOTS.md, "Fights of its own", "Fire play", "Behind the leader and the endgame"). Hand-made worlds (b41_helpers.hpp), quick enough for suite 2.20.
+// from them (docs/BOT_TACTICS.md, "Fights of its own", "Fire play", "Behind the leader and the endgame"). Hand-made worlds (b41_helpers.hpp), quick enough for suite 2.20.
 //
 //   AI20.2  a skirmish of the bot's own (flag, off in every shipped plan): the stronger force attacks a carrier or a worker at a pile without a blow first
 //   AI20.3  health-aware fighting: the target that dies soonest, an attacker one blow from the kill stays, an own ant that would die first is relieved, a fight is kept up only while a kill is in

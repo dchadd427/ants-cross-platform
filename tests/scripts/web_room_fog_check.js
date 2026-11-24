@@ -1,4 +1,4 @@
-// Runs the Room's FOG OF WAR switch (web/front/room_fog.js with web/lobby.html's own script and web/home/games.js, docs/PLAY_IN_BROWSER.md "Fog of War", network protocol 28) in the fake browser of
+// Runs the Room's FOG OF WAR switch (web/front/room_fog.js with web/lobby.html's own script and web/home/games.js, docs/PLAY_MATCH_SETUP.md "Fog of War", network protocol 28) in the fake browser of
 // tests/scripts/web_page_harness.js against a scripted game server:
 //   1. the leader's switch: its row in the Rules sheet, its state the Room message's and never the press's, the plan that a press sends (every byte, fog last), a press that is a double press, a guest who has none;
 //   2. everybody else: the guest reads the switch (it takes no press) and the Rules button says Fog while fog is on, the line of the room's chat when the leader switches it;

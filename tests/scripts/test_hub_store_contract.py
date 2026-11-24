@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The contract of the hub's data (hub/store/base.py; docs/HUB.md, "Data"): the same checks run against every backend.
+"""The contract of the hub's data (hub/store/base.py; docs/HUB_LOGIN.md, "Data"): the same checks run against every backend.
 
 A backend is a subclass of `Contract` that says how to make a store (`make_store(clock)`) and how to make writes fail (`refusing_writes(store)`).
 SQLite is the default and always runs. A backend that needs a server (the hook at the bottom) is SKIPPED, visibly, when no server is configured: it never passes without one.

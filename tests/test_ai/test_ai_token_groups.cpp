@@ -1,4 +1,4 @@
-// AI32: the token groups of IslandInfo (docs/BOTS.md, "Islands"): power-ups that touch each other (8-connected) form a group whose members are listed in the order of a walk from the first entrance, and the
+// AI32: the token groups of IslandInfo (docs/BOT_ISLANDS.md, "Islands"): power-ups that touch each other (8-connected) form a group whose members are listed in the order of a walk from the first entrance, and the
 // expedition walks a row of them from every one of its entrances (ExpeditionTask::walk_of).
 // AI32.1 pins the order of the members against a plain re-statement of the walk (a search of the members already listed, which is what the analysis did before it kept a flag for each power-up) on clusters,
 // lines, diagonal chains, blobs and scattered cells; AI32.2 pins the cost: one cluster of three thousand power-ups is analysed in a time that the cube of its size could not keep. AI32.3 pins the order of

@@ -1,4 +1,4 @@
-// AI17: the expedition of the standard bot (island_expedition.hpp, docs/BOTS.md "Islands"): a crew of plain workers is flown over the water by bombs to the Swimmers in the corners of ISLANDS,
+// AI17: the expedition of the standard bot (island_expedition.hpp, docs/BOT_ISLANDS.md "Islands"): a crew of plain workers is flown over the water by bombs to the Swimmers in the corners of ISLANDS,
 // and one worker takes one token of the row and walks out. One seat plays in each match here (a few thousand ticks); the whole matches of four seats are AI16 (suite 2.28).
 #include <algorithm>
 #include <functional>
@@ -381,7 +381,7 @@ Natural four_bots(Level level, uint32_t seed, uint32_t latency, uint8_t seat, in
 }  // namespace
 
 void run_island_expedition_tests() {
-    // The bounds are those of the runs of the four seats (Medium, seed 1) with a margin; docs/BOTS.md, "Islands".
+    // The bounds are those of the runs of the four seats (Medium, seed 1) with a margin; docs/BOT_ISLANDS.md, "Islands".
     TEST_CASE("AI17.1 The Opening Hop (A Medium Bot, ISLANDS, Every Seat): The Expedition Is Planned At The First Look Over Two Flights (Seat 3 Too: Its Short Way Goes Over A Satellite With No Bomber To Take, And The Bomber Of The Hill Flies On With The Crew), A Bomber Plants At The Shore Within 400 Ticks, The Flights In Use Are Flights Of The Analysis With A Landing The Engine Accepts, And The First Ant Is On The Next Island Within 900 Ticks")
     {
         for (uint8_t seat = 0; seat < 4; ++seat) {

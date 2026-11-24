@@ -215,7 +215,7 @@ public:
         uint32_t race_army_weight{0};        // a pile with enemy fighters near it (Combat Ant 8, an ant drawn attacking 4) of at least this weight is held by an army (0: the check is off)
         uint32_t race_army_percent{150};     // ... unless the own strength near it is at least this percentage of the enemy's
         /// ... and only when the seat has at least this many ants at its first look: a team of three or four ants cannot spare one for a trip across the map (TINY, 3 ants: the contest
-        /// of the middle cost 4 percent of the score against workers and lost the duels, docs/BOTS.md, "Aggression"); 0: no minimum
+        /// of the middle cost 4 percent of the score against workers and lost the duels, docs/BOT_TACTICS.md, "Aggression"); 0: no minimum
         uint32_t contest_opening_min_ants{0};
         /// The denial order (the standard bot at Medium and Hard; docs/BOT_FOOD.md, "Medium and Hard: the denial order"): FOOD IS FINITE, and a pile that other teams reach about
         /// as soon as this seat is eaten by whoever gets there, while a pile that no enemy reaches as soon waits for the seat. So the piles are ranked by points per trip as before,

@@ -1,4 +1,4 @@
-// The players' maps in the browser (docs/PLAY_IN_BROWSER.md "Players' maps"): the game's virtual file system holds the six originals only, so a map of the community is fetched from the site (/maps/files/<name>),
+// The players' maps in the browser (docs/PLAY_MATCH_SETUP.md "Players' maps"): the game's virtual file system holds the six originals only, so a map of the community is fetched from the site (/maps/files/<name>),
 // checked against the hash that the room's Start (or the recording's head) names, and written where the game looks for maps (the game's --maps-dir, Original-Ants/Maps) before the match loads.
 //   * ES5 and no module system, as the site's other scripts: a page gets the global AntsMapFiles, node gets module.exports (tests/scripts/web_map_files_check.js runs it with fakes).
 //   * The game (src/ants_app/map_fetch.cpp) asks through request / status / message and polls: the network lock-step never waits on a promise inside the wasm.

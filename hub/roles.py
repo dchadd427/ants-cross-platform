@@ -1,4 +1,4 @@
-"""Who is a moderator or an administrator (docs/HUB.md, "Roles"): the answer comes from Discord and from nothing a client says. The site's own Discord server has two roles; the hub asks, with
+"""Who is a moderator or an administrator (docs/HUB_ROLES.md, "Roles"): the answer comes from Discord and from nothing a client says. The site's own Discord server has two roles; the hub asks, with
 the bot's token, `GET /guilds/<server>/members/<account>` (hub/discord.py `member`) and reads the `roles` of the answer: the administrator's role makes `admin` (also for a person who holds both),
 the moderator's role makes `mod`, and a person who is not in the server, or holds neither, is `none`. The account in `ANTS_HUB_OWNER` is always `admin`, without a call. A third role, the images' (`ANTS_HUB_ROLE_IMAGES`, docs/HUB_IMAGES.md), is read from the same answer: `images_of` says whether
 Discord lets the person post images (that role, the moderator's or the administrator's), with the same belief, the same grace and the same failing closed as the other two (the images' own flag

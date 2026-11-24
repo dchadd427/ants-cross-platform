@@ -1,5 +1,5 @@
 // The admin page (docs/MAP_SUBMISSIONS.md, "The admin page"), reached only by typing /admin: the bar at the top links out of it and nothing links in. The page asks for no login of its own: the site's web server asks the chat hub
-// (the Discord login) before it passes any /admin/api call on, the game server decides again on every call, and the hub decides again on every call of /hub/admin/api (docs/HUB.md, "The admin page's door"). The page asks who is
+// (the Discord login) before it passes any /admin/api call on, the game server decides again on every call, and the hub decides again on every call of /hub/admin/api (docs/HUB_ROLES.md, "The admin page's door"). The page asks who is
 // here (GET /admin/api/me) and shows only what it is told:
 //   * an Admin or an Owner: the title with the person's chip (name, role, Front page, Log out) and five sections: Maps (the maps that players sent), Chat (mute, ban, hide a picture), Bot matches (start matches of
 //     computer players and their schedules: web/admin_bots.js, loaded before this file), Log (what moderators, admins and the map and bot match decisions did) and Status (how the site is doing);

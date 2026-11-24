@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the cheapest flower link and the bridges for ants that stand away from the hill (include/ants_ai/island_link.hpp, island_bridge.hpp; src/ants_ai/island_link.cpp, island_bridge.cpp; docs/BOTS.md 'Bridges for ants') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_island_bridges_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect; the baseline runs all the cases of the batch (AI54).",
+ "note": "Mutants of the cheapest flower link and the bridges for ants that stand away from the hill (include/ants_ai/island_link.hpp, island_bridge.hpp; src/ants_ai/island_link.cpp, island_bridge.cpp; docs/BOT_ISLANDS.md 'Bridges for ants') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_island_bridges_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect; the baseline runs all the cases of the batch (AI54).",
  "defaults": {
   "build": "test_ai"
  },

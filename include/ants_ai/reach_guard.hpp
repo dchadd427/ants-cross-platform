@@ -1,6 +1,6 @@
 #pragma once
 
-// The reach guard (docs/BOTS.md, "The can't-go loop", orders over water): the last look of a standard bot at the orders of a look. An ant is not ordered to a place that its own walk
+// The reach guard (docs/BOT_PLAY.md, "The can't-go loop", orders over water): the last look of a standard bot at the orders of a look. An ant is not ordered to a place that its own walk
 // cannot reach on the map as it is now (a pile, a power-up, an enemy ant or a tile for a bomb or a fire wall on another island): the engine answers such a click with "Can't go there."
 // and the ant says it aloud. The orders that stay are the orders that can be carried out; for those that go, the tasks are told like for a click that the controller refuses
 // (Bot::Fate::Filtered), so none of them proposes the same click again at every look.

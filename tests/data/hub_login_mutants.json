@@ -1644,21 +1644,21 @@
   },
   {
    "id": "docs_forget_the_trusted_proxies",
-   "file": "docs/HUB.md",
+   "file": "docs/HUB_LOGIN.md",
    "old": "(0) **Before the login goes live:** name the reverse proxy in front of the site in `docker/trusted-proxies.conf`",
    "new": "(0) name the reverse proxy in front of the site in `docker/trusted-proxies.conf`",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDocumentsSayWhatAnOperatorNeedsToKnow"
   },
   {
    "id": "docs_forget_the_fresh_account",
-   "file": "docs/HUB.md",
+   "file": "docs/HUB_LOGIN.md",
    "old": "**Try it with a fresh Discord account** that never authorized the application",
    "new": "Try it",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDocumentsSayWhatAnOperatorNeedsToKnow"
   },
   {
    "id": "docs_forget_the_rollback",
-   "file": "docs/HUB.md",
+   "file": "docs/HUB_LOGIN.md",
    "old": "**The schema is 4** (`PRAGMA user_version`; the `sessions` table came with version 3). A hub of an earlier version does not start on such a database",
    "new": "The schema is 4. A hub of an earlier version reads such a database",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDocumentsSayWhatAnOperatorNeedsToKnow"

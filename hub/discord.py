@@ -1,4 +1,4 @@
-"""Discord, the two calls that the login needs (docs/HUB.md, "Login"): the code that Discord handed the browser is exchanged for an access token (`POST /oauth2/token`), and the token is
+"""Discord, the two calls that the login needs (docs/HUB_LOGIN.md, "Login"): the code that Discord handed the browser is exchanged for an access token (`POST /oauth2/token`), and the token is
 used once, to ask who it belongs to (`GET /users/@me`). The id, the username and the display name (`global_name`, which the one scope `identify` includes, and which is null for a person who set none)
 are all that is kept; the token is a local variable of one function and is gone when it returns (no refresh token is asked for or looked at, no email). The picture's short code (`avatar`) is
 read, checked for its shape and used for the fetch of the picture (`picture()`, hub/pictures.py): it is never kept (hub/pictures.py keeps only a keyed mark of it, in memory, to tell a changed picture). The bot's token also asks for a person's public profile (`user()`), for a picture of someone who is not in the server.

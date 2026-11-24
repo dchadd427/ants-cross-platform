@@ -1,10 +1,10 @@
 #pragma once
 
-// The brawl of game type 187 (docs/BOTS.md, "187: the brawl"; docs/GAMEPLAY.md, "187"). In 187 there is no food and no power-up, the kills are the score and the last side with ants
+// The brawl of game type 187 (docs/BOT_PLAY.md, "187: the brawl"; docs/GAMEPLAY.md, "187"). In 187 there is no food and no power-up, the kills are the score and the last side with ants
 // wins, so a standard bot that sees the game mode plays this task INSTEAD of the food game's tasks: it keeps its profile (look interval, reaction time, command budget), its answer to an
 // invitation to team up and its fairness, and spends every ant on the fight.
 //
-// What the engine allows (measured; docs/BOTS.md, "187: the brawl"): one blow lands per hit clip, about every 40 ticks, however many ants strike a victim; a worker's blow takes 1 hit point and
+// What the engine allows (measured; docs/BOT_PLAY.md, "187: the brawl"): one blow lands per hit clip, about every 40 ticks, however many ants strike a victim; a worker's blow takes 1 hit point and
 // throws the victim one tile away from the attacker, a Combat Ant's punch takes 2 and throws it four; under the earlier rule an ant left with ONE hit point walks home and is caught only by luck (in 187 now the hill is closed and it stays where it is); an ant thrown into
 // water drowns whatever its hit points. An order that names a tile is carried out against whoever stands there when it arrives, so a victim that was struck (and thrown to another tile) or has
 // moved on is hit again only by an order that names its new tile. The task therefore

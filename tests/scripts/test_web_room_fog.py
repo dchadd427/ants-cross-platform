@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The Room's "Fog of War" switch (web/front/room_fog.js, web/lobby.html, docs/PLAY_IN_BROWSER.md "Fog of War"; network protocol 28; run by ./run_tests.sh --fast and by CI).
+"""The Room's "Fog of War" switch (web/front/room_fog.js, web/lobby.html, docs/PLAY_MATCH_SETUP.md "Fog of War"; network protocol 28; run by ./run_tests.sh --fast and by CI).
 
 The leader of a lobby room switches Fog of War on and off in the Rules sheet; the plan that the page sends carries it (the last byte), a guest reads the switch and the Rules button says Fog, a room with computer players is asked first
 (the Games list's own notice, with a button), and the colors' menus have their bot choices off while fog is on. What this file checks:

@@ -32,7 +32,7 @@ bool parse_level(std::string_view text, Level& out) noexcept;
 
 // ---- styles -------------------------------------------------------------------------------------------------------------------------------------------
 
-/// The STYLE of a standard bot (docs/BOTS.md, "Styles"): which tactics it prefers and how early it plays them, so that bots of one level do not all play alike. A bot draws its style at
+/// The STYLE of a standard bot (docs/BOT_PLAY.md, "Styles"): which tactics it prefers and how early it plays them, so that bots of one level do not all play alike. A bot draws its style at
 /// the start of a match from its own seat's generator (the same match seed and seat give the same style; a replay needs no bot anyway), or the spec pins it (`--bot 2:standard:hard:raider`).
 /// The style never changes what a level may do (the profile: look interval, reaction time, command budget; and the tactics that the level unlocks): it picks among them and says how early
 /// and how hard. What each one does is in tactics.cpp, plan_for(level, style, rng):
@@ -137,7 +137,7 @@ struct Intent {
     /// paid from the bucket and held back by it, dropped after Profile::intent_ttl like any other, and the walk round a bomb leaves it alone.
     bool volley{false};
     uint32_t later{0};
-    /// A TIMED CHAIN (Orders::chain, docs/BOTS.md "Timed clicks"): the intents of one chain have the same `chain` number (not 0) and `step` 0, 1, 2, ... The controller releases step 0 like any intent (the
+    /// A TIMED CHAIN (Orders::chain, docs/BOT_ISLANDS.md "Timed clicks"): the intents of one chain have the same `chain` number (not 0) and `step` 0, 1, 2, ... The controller releases step 0 like any intent (the
     /// reaction time, the budget); every later step is released at the first tick at which the sink would APPLY it between `gap_lo` and `gap_hi` ticks after the step before was applied, and never
     /// otherwise: a step that would be applied later is dropped with the rest of its chain (Fate::Expired). A chain the first step of which never leaves leaves no step.
     uint32_t chain{0};

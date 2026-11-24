@@ -1,6 +1,6 @@
 #pragma once
 
-// The teams that a match starts with (docs/BOTS.md, "Alliances"; docs/NETWORK_PORT.md, "Protocol 13"): free for all (the default) or ONE pair of seats as a team, the two other seats too when both play.
+// The teams that a match starts with (docs/BOT_PLAY.md, "Alliances"; docs/NETWORK_PORT.md, "Protocol 13"): free for all (the default) or ONE pair of seats as a team, the two other seats too when both play.
 // One rule for every way a match starts: a game on this computer (`--teams`, the start menu's Teams row, the web page's `&teams=`), a room on the local network and a server's room (the leader's choice,
 // which travels in the start data). Every engine that starts a match calls apply_start_teams with the same value right after init() and before its first tick, with the original's own commands
 // (an invitation and its acceptance, applied straight to the engine), so the machines, the referee and an engine that is restored or caught up from nothing agree on every state hash.

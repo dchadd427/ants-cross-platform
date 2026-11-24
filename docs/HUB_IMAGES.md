@@ -8,7 +8,7 @@ Part of [the chat hub](HUB.md). A person who is allowed to can post an image (a 
 
 | State | Meaning |
 |---|---|
-| `on` | the account may: the operator's account (`ANTS_HUB_OWNER`, no call to Discord, never blocked by the flag), or Discord says that it holds the images' role (`ANTS_HUB_ROLE_IMAGES`), the moderator's or the administrator's, on an answer within the belief of [Roles](HUB.md#roles) |
+| `on` | the account may: the operator's account (`ANTS_HUB_OWNER`, no call to Discord, never blocked by the flag), or Discord says that it holds the images' role (`ANTS_HUB_ROLE_IMAGES`), the moderator's or the administrator's, on an answer within the belief of [Roles](HUB_ROLES.md#roles) |
 | `off` | an administrator took it away: a row of the account's reference in the table `noimages`, which beats every role but the operator's account |
 | `role` | Discord's answer is known and says no |
 | `wait` | it cannot be said now: Discord has not answered, or its answer is old, or refused, or the flags could not be read. It fails closed: not allowed, and the person is told that it is not known (the text of the chat is not touched) |
@@ -113,7 +113,7 @@ From a terminal: `python -m hub.admin noimages ACCOUNT` and `images ACCOUNT` (th
 
 | Variable | Meaning |
 |---|---|
-| `ANTS_HUB_ROLE_IMAGES` | the id (digits) of the Discord role whose holders may post images; a different role from the other two; optional (without it only the staff and the operator's account post); needs the token and the server of [Roles](HUB.md#roles); never printed |
+| `ANTS_HUB_ROLE_IMAGES` | the id (digits) of the Discord role whose holders may post images; a different role from the other two; optional (without it only the staff and the operator's account post); needs the token and the server of [Roles](HUB_ROLES.md#roles); never printed |
 | `ANTS_HUB_IMAGE_CONVERTER_URL` | `http://host:port` of the converter and nothing else; in the stack file a variable that is not set at all is `http://ants-img:4050`, and one that is set and **empty** switches images off for everybody (no posting; the files that are there are still deleted with their lines) |
 | `ANTS_HUB_IMAGE_DIR` | the folder of the files, `/images` in the stack (the hub's image has no default folder to write in: it must be a volume) |
 

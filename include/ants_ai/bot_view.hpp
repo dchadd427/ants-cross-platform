@@ -88,7 +88,7 @@ struct PowerUpView {
     sim::TileCoord tile{};
     sim::AntType kind{sim::AntType::Bomber};
     /// The team of the ant that STANDS on the power-up (255: nobody does), and its id (0: nobody). An ant that stands on a power-up cannot be attacked (no order reaches it, no
-    /// reflex, no bomb, no fire) and nobody else can take the power-up (docs/BOTS.md, "Power-ups"); an ant that is only walking over the tile on its way to take it does not stand.
+    /// reflex, no bomb, no fire) and nobody else can take the power-up (docs/BOT_TACTICS.md, "Power-ups"); an ant that is only walking over the tile on its way to take it does not stand.
     uint8_t standing_team{255};
     uint32_t standing_ant{0};
 };

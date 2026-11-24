@@ -1,4 +1,4 @@
-// AI18: the ferry of the standard bot (island_ferry.hpp, docs/BOTS.md "Islands"): a Swimmer that digs no bridge carries food across the water, to the pile that pays best per tick of its own trip.
+// AI18: the ferry of the standard bot (island_ferry.hpp, docs/BOT_ISLANDS.md "Islands"): a Swimmer that digs no bridge carries food across the water, to the pile that pays best per tick of its own trip.
 // The Swimmer is given here (the way to one is AI17); one seat plays in each match.
 #include <map>
 #include <vector>

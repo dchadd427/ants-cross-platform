@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The players' maps in the browser (run by ./run_tests.sh --fast and by the CI): the game's file system holds the six originals only, so the page fetches the map that a room (or a recording) plays
-from /maps/files/<name>, checks its hash and writes it where the game looks, before the match loads (docs/PLAY_IN_BROWSER.md "Players' maps").
+from /maps/files/<name>, checks its hash and writes it where the game looks, before the match loads (docs/PLAY_MATCH_SETUP.md "Players' maps").
 
   - the page's own code is RUN (node, when it is installed): the hash, the address, every way a download can end, that a failure is not kept, the head of a recording (tests/scripts/web_map_files_check.js),
     and the check is shown able to fail: broken copies of the script (the hash not compared, the wrong multiplier, a failure kept, the cache skipped for nothing) are refused by it;

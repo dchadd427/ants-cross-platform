@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the dropped power-ups (src/ants_ai/standard_bot.cpp 'the dropped power-ups', src/ants_ai/tactics.cpp, src/ants_ai/arena.cpp DropTally, docs/BOTS.md 'Dropped power-ups') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_drops_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect; the baseline runs all the cases of the batch (AI47).",
+ "note": "Mutants of the dropped power-ups (src/ants_ai/standard_bot.cpp 'the dropped power-ups', src/ants_ai/tactics.cpp, src/ants_ai/arena.cpp DropTally, docs/BOT_TACTICS.md 'Dropped power-ups') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_drops_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect; the baseline runs all the cases of the batch (AI47).",
  "defaults": {
   "build": "test_ai"
  },

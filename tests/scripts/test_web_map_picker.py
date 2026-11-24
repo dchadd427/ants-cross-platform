@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The map picker of the front page (run by ./run_tests.sh --fast and by the CI): a list of the maps that the game server offers (GET /maps), a Detail list or a Thumbnails grid, a search over name and
 description, four sorts (the originals first and then the most played is the default), the Original badge, the play counts, a bottom sheet on a phone, keyboard use (arrows, Enter, Esc, Tab kept inside),
-and the choice of a map of the players, which sets the room's map as the selector does and warms the browser's cache for the game page (docs/PLAY_IN_BROWSER.md "Choosing a map").
+and the choice of a map of the players, which sets the room's map as the selector does and warms the browser's cache for the game page (docs/PLAY_MATCH_SETUP.md "Choosing a map").
 
   - the picker's own code is RUN (node, when it is installed): the parsing of the list, the sorts, the search, the whole picker with a small fake of the DOM (tests/scripts/web_map_picker_check.js), and
     the check is shown able to fail: broken copies of the script are refused by it;

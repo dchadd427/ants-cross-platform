@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The likes' gate, Forget me's call to the counts door and the login's way back to a match (hub/likedoor.py, hub/login.py, hub/config.py `ANTS_HUB_COUNTS_URL`; docs/HUB.md, docs/REPLAY_COUNTS.md). Real sockets and the
+"""The likes' gate, Forget me's call to the counts door and the login's way back to a match (hub/likedoor.py, hub/login.py, hub/config.py `ANTS_HUB_COUNTS_URL`; docs/HUB_LOGIN.md, docs/REPLAY_COUNTS.md). Real sockets and the
 real hub (tests/scripts/hub_rig.py), a fake Discord for the logins (tests/scripts/fake_discord.py) and a stand-in for the game server's counts door that checks every call the way the game server does. The pass and
 its keys are written here from the contract's words (HMAC-SHA-256 from the standard library), never taken from the hub's code, and the known answers are numbers that the game server's code must reproduce.
 
@@ -50,7 +50,7 @@ from hub import config as configmod, likedoor  # noqa: E402
 from hub.store import StoreError  # noqa: E402
 
 SECRET = "testing-gate-key-0b8e2d71a4c6f395-z"           # a made-up key
-SAMPLE_SECRET = "canary-gate-key-5d8f0c1e7a9b4263-q"     # the made-up key of the known answers of docs/HUB.md: published, so never a key
+SAMPLE_SECRET = "canary-gate-key-5d8f0c1e7a9b4263-q"     # the made-up key of the known answers of docs/HUB_ROLES.md: published, so never a key
 OWNER = "9300000000000001"
 PLAIN = "9300000000000002"
 YOUNG = "9300000000000003"
@@ -66,7 +66,7 @@ CALLBACK = hc.SITE + "/hub/callback"
 OLD = fd.snowflake(900)                                  # the id of the Discord account that the fake logs in
 CLEARED_SESSION = "__Host-ants_hub=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Strict"
 
-# The known answers: computed from the contract's words for the made-up secret of docs/HUB.md (the label is the MESSAGE and the secret the KEY; the keys are the raw 32 bytes of the digests).
+# The known answers: computed from the contract's words for the made-up secret of docs/HUB_ROLES.md (the label is the MESSAGE and the secret the KEY; the keys are the raw 32 bytes of the digests).
 KAT_PASS_KEY = "8c13d59045b7f259e8ea9cfa18a50178873af160e6ffa04821d9cf4601d55ae9"
 KAT_CSRF_KEY = "4f749ae0b8f8bb03e531bf146ab21d7efd40d07bd58f54de599cbbfc115cdf11"
 KAT_REF = "0123456789abcdef"

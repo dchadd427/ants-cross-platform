@@ -1,4 +1,4 @@
-"""The likes' door (docs/REPLAY_COUNTS.md; the pass is the admin page's, docs/HUB.md "The admin page's door"): who may like a replay, decided by the hub's login and nowhere else, and the hub's one call to
+"""The likes' door (docs/REPLAY_COUNTS.md; the pass is the admin page's, docs/HUB_ROLES.md "The admin page's door"): who may like a replay, decided by the hub's login and nowhere else, and the hub's one call to
 the game server's counts door.
 
   GET  /hub/likes/gate         asked only by the site's nginx (auth_request) before it passes a /counts/mine, /counts/like or /counts/unlike request on, with the visitor's own headers: 204 and a signed pass in

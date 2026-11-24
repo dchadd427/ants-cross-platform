@@ -1,4 +1,4 @@
-"""The Discord login of the chat hub (docs/HUB.md, "Login"): who a visitor is, from one cookie and the one scope `identify`.
+"""The Discord login of the chat hub (docs/HUB_LOGIN.md, "Login"): who a visitor is, from one cookie and the one scope `identify`.
 
 The pages (nginx passes these five, /hub/pic/<name>.png and /hub/ws to the hub, docker/nginx.conf):
   GET  /hub/login?next=home|room|admin|mapmaker|matches|match[&id=<match id>]   a random state (128 bits, one use, 10 minutes) is kept here and in a short cookie, and the visitor is sent to Discord

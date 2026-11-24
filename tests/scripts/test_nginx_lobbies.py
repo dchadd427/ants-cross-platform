@@ -167,7 +167,7 @@ class TheDocumentsSayWhatIsBuilt(unittest.TestCase):
         server = read("docs", "SERVER.md") + read("docs", "SERVER_REPLAYS.md")
         for needle in ("`/lobbies`", "ants_lobbies", "lobbies_off"):
             self.assertIn(needle, server, needle)
-        testing = read("docs", "TESTING.md")
+        testing = read("docs", "TESTING_PYTHON.md")
         for needle in ("test_nginx_lobbies.py", "nginx_lobbies_mutants.json"):
             self.assertIn(needle, testing, needle)
 

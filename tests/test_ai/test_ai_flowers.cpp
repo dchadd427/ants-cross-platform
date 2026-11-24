@@ -1,4 +1,4 @@
-// AI23: the flowers (docs/BOTS.md, "The flowers"): what the analysis and the view show of the flower droppers, whose side a drop is on, what the arena counts of them, and what a Hard bot
+// AI23: the flowers (docs/BOT_TACTICS.md, "The flowers"): what the analysis and the view show of the flower droppers, whose side a drop is on, what the arena counts of them, and what a Hard bot
 // does with a drop that lands. The maps are the shipped ones: a flower cannot be made in a hand-made world. Medium and Easy play none of it.
 //
 //   AI23.1 - 2b             the analysis and the view: the flowers of every map, the droplet's kind and age, every kind that lands
@@ -31,7 +31,7 @@ using namespace ants;
 using namespace ants::ai;
 using namespace b41;
 
-// Medium plays none of the flower rules (they lost 20 points on SMALL there: docs/BOTS.md, "The flowers"); the tests that ask what the rules do play a Medium bot with them switched on
+// Medium plays none of the flower rules (they lost 20 points on SMALL there: docs/BOT_TACTICS.md, "The flowers"); the tests that ask what the rules do play a Medium bot with them switched on
 LevelPlan medium_with_rules() {
     LevelPlan p = plan_for(Level::Medium);
     p.flower_sides = p.flower_fire = p.flower_recover = p.flower_recall = true;
