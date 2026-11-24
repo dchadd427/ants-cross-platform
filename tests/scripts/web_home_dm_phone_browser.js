@@ -1,9 +1,10 @@
 // OPT-IN, not part of ./run_tests.sh: the private messages on a phone (docs/HOME_CHAT.md "Private messages and follows") in a REAL browser (Chromium through Playwright) against the real hub, behind the stand-in for the site's nginx
 // of tests/scripts/web_home_hub_rig.js. Two accounts (hazel on a phone, 390 x 844 at pixel ratio 2, pebble in a wide window) and, for hazel:
-//   1. the conversation is a sheet with a head that holds the person's name, a way back and an X (every target is 44 px or more, all on the screen), and the field that sits at the bottom of it;
+//   0. the Messages tab of the bell (the list of conversations: the bell's number counts them) and a conversation opened from it;
+//   1. the conversation is a sheet with a head that holds the person's name, a way back (to the Messages tab) and an X (every target is 44 px or more, all on the screen), and the field that sits at the bottom of it;
 //   2. with a keyboard-sized window (390 x 430) the head is still on the screen, the field is on the screen and a field that has the focus is not under the bottom, and the messages have room above it;
 //   3. a visual viewport that shrinks alone (the keyboard of Android Chrome and of iOS does that, and the window keeps its height): the sheet follows it, and the field is just above the keyboard;
-//   4. the ways out: X closes the whole sheet and leaves the page as it was (no bell list), the arrow goes back to the list, Escape, the phone's Back button, a pull down on the head, a press outside;
+//   4. the ways out: X closes the whole sheet and leaves the page as it was (no bell list), the arrow goes back to the bell's Messages tab, Escape, the phone's Back button, a pull down on the head, a press outside;
 //   5. nothing is wider than the window, no page error.
 //   --shots DIR takes the pictures (name: TAG_subject_size.png; --tag before|after says which files these are: run it once on the files of the release before, with `--web DIR`, once on these).
 //   node tests/scripts/web_home_dm_phone_browser.js [--web DIR] [--shots DIR] [--tag after]      (CHROME=/path/to/chromium names a browser; as root it runs with --no-sandbox)
@@ -42,23 +43,30 @@ async function main() {
         const page = hazel.page;
         const typeAndSend = async (a, text) => { await a.page.fill('.pm-panel .pm-input', text); await a.page.click('.pm-panel .pm-send'); await sleep(300); };
         const rect = (sel) => page.evaluate((q) => { const e = document.querySelector(q); if (!e) return null; const r = e.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right), h: Math.round(r.height), w: Math.round(r.width) }; }, sel);
-        const state = () => page.evaluate(() => ({ sheet: !!document.querySelector('.pm-shade'), bell: !!document.querySelector('.al-shade'), view: (document.querySelector('.pm-panel') || { getAttribute: () => null }).getAttribute('data-view'), url: location.pathname + location.hash, active: document.activeElement && (document.activeElement.className || document.activeElement.tagName) }));
+        const state = () => page.evaluate(() => ({ sheet: !!document.querySelector('.pm-shade'), bell: !!document.querySelector('.al-shade'), tab: (document.querySelector('.al-panel') || { getAttribute: () => null }).getAttribute('data-tab'), url: location.pathname + location.hash, active: document.activeElement && (document.activeElement.className || document.activeElement.tagName) }));
         const shot = async (name) => { if (SHOTS) { await sleep(250); await page.screenshot({ path: path.join(SHOTS, TAG + '_' + name + '.png') }); } };
-        const messages = () => page.evaluate(() => document.querySelector('#gchat .pm-btn').click());
+        const messages = async () => { await page.evaluate(() => { document.querySelector('.hbar .al-bell').click(); }); await sleep(300); await page.evaluate(() => { const t = document.querySelector('.al-tab[data-tab="messages"]'); if (t) t.click(); }); };       // (the bell, then its Messages tab)
+        const firstConversation = () => page.evaluate(() => document.querySelector('.al-conv').click());
         const tab = (name) => page.evaluate((n) => { const t = document.querySelector('.htab.t-' + n); if (t) t.click(); }, name);
 
         // pebble writes to hazel: a conversation with some messages in it (pebble's page opens it with /msg)
         await pebble.page.evaluate(() => { const s = window.__socks.filter((x) => /\/hub\/ws$/.test(x.url) && x.readyState === 1)[0]; s.send(JSON.stringify({ t: 'say', text: '/msg hazel' })); });
         await until('pebble has the conversation open', () => pebble.page.evaluate(() => !!document.querySelector('.pm-panel .pm-input')), 8000);
         for (const text of ['hey hazel, are you around?', 'I found a map that we have not played: Islands, four players.', 'Bring the scouts. They are faster there than you think.', 'Also: do not build the second nest before you have a bomber. Last time that cost you the game.', 'See you in the room?']) await typeAndSend(pebble, text);
-        await until('hazel has the count', () => page.evaluate(() => { const n = document.querySelector('#gchat .pm-n'); return !!n && !n.hidden && Number(n.textContent) >= 1; }), 8000);
+        await until('hazel has the count on the bell', () => page.evaluate(() => { const n = document.querySelector('.hbar .al-bell .al-mark'); return !!n && Number(n.textContent.replace('+', '')) >= 1; }), 8000);
         await tab('chat'); await sleep(300);
         await page.evaluate(() => document.querySelectorAll('.al-toast').forEach((t) => { t.hidden = true; }));
 
         // ---- the list, then the conversation, in the window as it is --------------------------------------------------------------------------------------------------------------------------------
         await messages(); await sleep(400);
+        const tabs = await page.evaluate(() => Array.from(document.querySelectorAll('.al-tab')).map((t) => t.textContent.replace(/\s+/g, ' ').trim() + ':' + t.getAttribute('data-on')));
+        check('the bell has the two tabs, Messages chosen, with the count of what is not read', tabs.length === 2 && /^Alerts/.test(tabs[0]) && /^Messages5:true$/.test(tabs[1]), JSON.stringify(tabs));
+        const conv = await page.evaluate(() => { const c = document.querySelector('.al-conv'); return c ? c.textContent.replace(/\s+/g, ' ').trim() : ''; });
+        check('the conversation is in the list: the person, the start of the newest message, and the count', /pebble/.test(conv) && /See you in the room\?/.test(conv) && /5$/.test(conv), conv);
+        const none = await page.evaluate(() => Array.from(document.querySelectorAll('.al-item')).filter((i) => /private message/.test(i.textContent)).length);
+        check('the list holds the conversation and no row for the same message in the Alerts tab', none === 0);
         await shot('list_844');
-        await page.evaluate(() => document.querySelector('.pm-row').click()); await sleep(500);
+        await firstConversation(); await sleep(500);
         let top = await rect('.pm-top'), x = await rect('.pm-top .pm-x'), back = await rect('.pm-top .pm-back'), field = await rect('.pm-input'), shade = await rect('.pm-shade');
         check('the sheet is exactly the window and its head is on the screen with the arrow and the X (44 px or more)', !!top && top.top >= 0 && !!x && x.h >= 43.5 && x.w >= 43.5 && !!back && back.h >= 43.5 && x.right <= 390 && !!shade && shade.h === 844, JSON.stringify([top, x, back, shade]));
         check('the field is on the screen, at the bottom of the sheet', !!field && field.bottom <= 844 && field.bottom > 700, JSON.stringify(field));
@@ -91,7 +99,7 @@ async function main() {
             };
         });
         await messages(); await sleep(400);
-        await page.evaluate(() => document.querySelector('.pm-row').click()); await sleep(400);
+        await firstConversation(); await sleep(400);
         await page.focus('.pm-input');
         await page.evaluate(() => window.__keyboard(true)); await sleep(700);
         top = await rect('.pm-top'); field = await rect('.pm-input'); shade = await rect('.pm-shade'); log = await rect('.pm-log');
@@ -107,24 +115,25 @@ async function main() {
         // ---- the ways out -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         const closedAtThePage = async (what) => { await sleep(350); const s = await state(); check(what + ': the whole sheet is gone, no bell list opened, the page is where it was', !s.sheet && !s.bell && s.url === '/', JSON.stringify(s)); };
         await page.evaluate(() => document.querySelector('.pm-x').click()); await closedAtThePage('X');
-        await messages(); await sleep(300); await page.evaluate(() => document.querySelector('.pm-row').click()); await sleep(300);
-        await page.evaluate(() => document.querySelector('.pm-back').click()); await sleep(300);
+        await messages(); await sleep(300); await firstConversation(); await sleep(300);
+        await page.evaluate(() => document.querySelector('.pm-back').click()); await sleep(400);
         let s = await state();
-        check('the arrow goes back to the list of conversations (the sheet stays)', s.sheet && s.view === 'list' && !s.bell, JSON.stringify(s));
-        await page.evaluate(() => document.querySelector('.pm-x').click()); await closedAtThePage('X on the list');
-        await messages(); await sleep(300); await page.evaluate(() => document.querySelector('.pm-row').click()); await sleep(300);
+        check('the arrow goes back to the bell on its Messages tab (the conversation is gone)', !s.sheet && s.bell && s.tab === 'messages', JSON.stringify(s));
+        await page.evaluate(() => document.querySelector('.al-x').click()); await closedAtThePage('X on the bell');
+        await messages(); await sleep(300); await firstConversation(); await sleep(300);
         await page.keyboard.press('Escape'); await closedAtThePage('Escape');
-        await messages(); await sleep(300); await page.evaluate(() => document.querySelector('.pm-row').click()); await sleep(300);
+        await messages(); await sleep(300); await firstConversation(); await sleep(300);
         await page.goBack(); await closedAtThePage('the phone\'s Back button');
         check('...and the page has not left the front page (it is still the same document)', (await page.evaluate(() => !!document.querySelector('#gchat') && location.pathname === '/')));
-        await messages(); await sleep(300); await page.evaluate(() => document.querySelector('.pm-row').click()); await sleep(300);
+        await messages(); await sleep(300); await firstConversation(); await sleep(300);
         await page.evaluate(() => {
             const g = document.querySelector('.pm-grab'), fire = (t, y) => g.dispatchEvent(new PointerEvent(t, { bubbles: true, pointerType: 'touch', pointerId: 5, clientY: y, button: 0 }));
             fire('pointerdown', 40); fire('pointermove', 90); fire('pointermove', 200); fire('pointerup', 200);
         });
         await closedAtThePage('a pull down on the head');
-        await messages(); await sleep(300); await page.evaluate(() => document.querySelector('.pm-shade').dispatchEvent(new MouseEvent('click', { bubbles: true }))); await closedAtThePage('a press outside');
-        await messages(); await sleep(300); await page.evaluate(() => document.querySelector('.pm-row').click()); await sleep(300);
+        await messages(); await sleep(300); await firstConversation(); await sleep(300);
+        await page.evaluate(() => document.querySelector('.pm-shade').dispatchEvent(new MouseEvent('click', { bubbles: true }))); await closedAtThePage('a press outside');
+        await messages(); await sleep(300); await firstConversation(); await sleep(300);
         await page.evaluate(() => document.querySelector('.pm-x').click()); await sleep(500);
         check('a sheet that was closed by X leaves no entry of its own in the history', await page.evaluate(() => !(history.state && history.state.pm)));
 
