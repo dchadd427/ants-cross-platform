@@ -22,8 +22,10 @@ for tests/scripts/test_web_camera.sh) makes the parts that watch a replay run. N
     a phone on its side (844 x 390): the panel is the screen's height less the gutter and every button is on the screen; in fullscreen on a touch screen no Settings button is on the screen (there is no Esc either: fullscreen is left first), and it is back when it is left;
   * scrolling: in every section whose list is taller than the pane, at 1280 x 720, 1024 x 600 and 800 x 500 with a wheel, in fullscreen with a wheel (the stage cancels the wheel over its bars: not over the panel),
     and at 390 x 844 and 844 x 390 with a finger and a wheel, the pane can be moved to its end and the last row is then whole inside it (the Video section is taller than the pane on every computer);
-  * a recording (play.html?replay=...): the button is in the bar, Esc opens the panel with no Game section, the replay goes on meanwhile, "Back to the matches" asks nothing and leaves for the list; in the
-    frame of a match page (embed=1) there is no panel, no button and no script.
+  * a recording (play.html?replay=...): the button is in the bar, Esc opens the panel with no Game section, the replay goes on meanwhile, "Back to the matches" asks nothing and leaves for the list;
+  * the frame of a match page (the match page itself, with the door's answers made by the check, and "Show replay" pressed) at 1280 x 800, 1920 x 1080 and 390 x 844: the same Settings button in the bar of
+    the frame as on the recording's own page (before the picture's button), a click or Esc opens the same panel (Sound, Video, Controls, "Watching a replay", Resume and Back to the matches), the panel is
+    whole inside the frame's window, Fullscreen makes the frame's stage fullscreen, and Back to the matches hides the replay (the match page stays where it is).
 
 Exit status 0: every check passed; 1: a check failed, or the browser or the page broke down during the check; 3: the check could not be made because the environment is not there; 2: a bad command line.
 """
@@ -263,6 +265,7 @@ def main():
             if args.profile in ("all", "replay"):
                 if args.replay and os.path.isfile(args.replay):
                     recording(page, args, check)
+                    frame_of_a_match_page(page, args, check)
                 else:
                     print("  note: no recording (--replay or ANTS_CAMERA_REPLAY): the parts that watch a replay are left out")
         finally:
@@ -917,18 +920,114 @@ def recording(p, args, check):
     gone = wait_for(lambda: tab.ev("location.pathname") != "/play", 15, 0.3)
     check(bool(gone) and not tab.ev("document.querySelector('.gm-ask')"), "Back to the matches asks nothing and leaves for the list (%s)" % tab.ev("location.pathname"))
 
-    print("[web game menu] the frame of a match page (embed=1)")
-    tab.emulate(1000, 700, 1)
-    tab.open("about:blank", wait=False)
-    url = r.url + "&embed=1"
-    tab.open(url, settle=1.5)
-    time.sleep(3.0)
-    s = tab.ev("JSON.stringify({ buttons: document.querySelectorAll('.gm-btn').length, ask: typeof window.antsGameMenuAsk, script: !!document.querySelector('script[src^=\"game_menu\"]'), fetched: performance.getEntriesByType('resource').filter(function (e) { return e.name.indexOf('game_menu') >= 0; }).length })")
-    s = json.loads(s)
-    check(s == {"buttons": 0, "ask": "undefined", "script": False, "fetched": 0}, "in a frame there is no button, no function for Esc, no script and no fetch (%s)" % s)
-    p.esc()
-    time.sleep(0.4)
-    check(not p.state()["open"], "Esc opens nothing there")
+
+ID = "ants-TREASURE-20261011-120000Z"                                   # (the check's recording is named for this match: web_camera_check.NAME)
+
+FRAME_STATE = r"""
+JSON.stringify((function () {
+  var f = document.querySelector('iframe');
+  if (!f) return { frame: false };
+  var w = f.contentWindow, d = w.document, box = f.getBoundingClientRect();
+  var r = function (e) { if (!e) return null; var b = e.getBoundingClientRect(); return [b.x, b.y, b.right, b.bottom]; };
+  var menu = d.getElementById('game-menu'), gear = d.getElementById('settings-btn-bar'), fs = d.fullscreenElement || d.webkitFullscreenElement;
+  var texts = function (sel) { return [].map.call(d.querySelectorAll(sel), function (t) { return t.textContent; }).join(); };
+  return { frame: true, ready: !!(w.Module && w.Module._ants_replay_get && w.Module._ants_replay_get(0) === 2), box: [box.x, box.y, box.right, box.bottom], inner: [w.innerWidth, w.innerHeight],
+           gear: r(gear), gearShown: !!gear && !gear.hidden && getComputedStyle(gear).display !== 'none', gearIn: gear ? gear.parentNode.id + '>' + (gear.nextElementSibling ? gear.nextElementSibling.id : '') : '', pic: r(d.getElementById('picbtn')),
+           buttons: d.querySelectorAll('.gm-btn').length, script: !!d.querySelector('script[src^="game_menu"]'),
+           open: !!menu, panel: r(menu && menu.querySelector('.gm-panel')), resume: r(d.querySelector('.gm-resume')), back: r(d.querySelector('.gm-leave')), tabs: texts('[role=tab]'), tag: texts('.gm-tag'), btns: texts('.gm-btns button'),
+           rows: texts('.gm-name'), fullscreen: fs ? fs.id : null, parentPath: location.pathname, shown: !!document.getElementById('show') && document.getElementById('show').textContent };
+})())"""
+
+
+def frame_of_a_match_page(p, args, check):
+    """The match page's own frame: the page is the real one, the door's answers (the match's record) are made here, the recording is the check's"""
+    from web_camera_check import Replay
+    from web_matches_check import record, seat
+    print("[web game menu] the frame of a match page (play?replay=...&embed=1 inside web/match.html)")
+    with open(args.replay, "rb") as f:
+        data = f.read()
+    tab = p.tab
+    seats = [seat(0, "Green", "Ana", ""), seat(1, "Red", "Bea", ""), seat(2, "Blue", "Pip", "Hard", winner=True), seat(3, "Black", "Rex", "Hard")]
+    rows = [{"seats": [2], "score": 0, "killed": 0, "lost": 0, "hatched": 0, "winner": True}, {"seats": [0, 1, 3], "score": 0, "killed": 0, "lost": 0, "hatched": 0, "winner": False}]
+    door = record(ID, 1792060672, "TREASURE.LVL", "2v2", seats, rows, file=ID + ".antsrep")
+    r = Replay(tab, args.web, data, False)                                  # (its script answers the page's fetch of the recording, in the frame as well: it runs in every document of the tab)
+    answers = """(function () {
+      var real = window.fetch, rec = %s;
+      window.fetch = function (input, init) {
+        var url = typeof input === 'string' ? input : input.url;
+        if (url.indexOf('/history/%s') !== -1 && url.indexOf('deaths') === -1) return Promise.resolve(new Response(JSON.stringify(rec), { status: 200, headers: { 'content-type': 'application/json' } }));
+        if (url.indexOf('/history/') !== -1 || url.indexOf('/maps/') !== -1 || url.indexOf('/live') !== -1) return Promise.resolve(new Response('{}', { status: 404, headers: { 'content-type': 'application/json' } }));
+        return real.apply(this, arguments);
+      };
+    })();""" % (json.dumps(door), ID)
+    tab.call("Page.addScriptToEvaluateOnNewDocument", {"source": answers})
+    tab.call("Page.addScriptToEvaluateOnNewDocument", {"source": r.hook})
+    fr = lambda: dict({"frame": False, "ready": False, "gearShown": False, "fullscreen": None, "open": False}, **json.loads(tab.ev(FRAME_STATE)))      # (no frame: nothing of it is shown)
+
+    def at(selector):
+        """the middle of an element of the frame, in the page's own window (the frame is brought into view first)"""
+        return json.loads(tab.ev("JSON.stringify((function () { var f = document.querySelector('iframe'); f.scrollIntoView({ block: 'start' }); var o = f.getBoundingClientRect(), b = f.contentDocument.querySelector(%s).getBoundingClientRect(); return [o.x + b.x + b.width / 2, o.y + b.y + b.height / 2]; })())" % json.dumps(selector)))
+
+    def press(selector, touch):
+        x, y = at(selector)
+        (tab.tap if touch else tab.click)(x, y)
+        time.sleep(0.6)
+
+    def inside(box, outer, slack=1.5):
+        return bool(box) and box[0] >= outer[0] - slack and box[1] >= outer[1] - slack and box[2] <= outer[2] + slack and box[3] <= outer[3] + slack
+
+    for label, width, height, touch in (("1280 x 800", 1280, 800, False), ("1920 x 1080", 1920, 1080, False), ("390 x 844, a phone", 390, 844, True)):
+        tab.emulate(width, height, 1, mobile=touch)
+        tab.open("about:blank", wait=False)
+        tab.open(args.web + "match?id=" + ID, settle=1.0)
+        shown = wait_for(lambda: tab.ev("!!document.getElementById('show')"), 20, 0.3)
+        check(bool(shown), "%s: the match page has Show replay" % label)
+        if not shown:
+            continue
+        tab.ev("document.getElementById('show').click(); 1")
+        check(bool(wait_for(lambda: fr()["frame"] and fr()["ready"], 90, 0.5)), "%s: the frame's game is up and the replay plays" % label)
+        wait_for(lambda: fr()["gearShown"], 15, 0.3)
+        s = fr()
+        check(s["buttons"] == 1 and s["gearShown"] and s["script"], "%s: the frame has the Settings button, made by the menu's script (%s buttons)" % (label, s["buttons"]))
+        check(s["gearIn"] == "rbar>picwrap", "%s: it is in the frame's bar, before the picture's button, as on the recording's own page (%s)" % (label, s["gearIn"]))
+        check(inside(s["gear"], [0, 0, s["inner"][0], s["inner"][1]]) and s["gear"][3] - s["gear"][1] >= 30, "%s: it is whole inside the frame's window, 30 px high at least (%s in %s)" % (label, s["gear"], s["inner"]))
+        if width > 700:
+            check(s["pic"] and s["gear"][0] >= s["pic"][2] - 1.5, "%s: it is at the right of the picture's button, as on the recording's own page" % label)
+        tab.save_shot(args.shots, "menu-frame-bar-%d" % width)
+        # the button opens the panel
+        press("#settings-btn-bar", touch)
+        s = fr()
+        check(s["open"] and s["tabs"] == "Sound,Video,Controls" and s["tag"] == "Watching a replay", "%s: the button opens the panel of a recording: Sound, Video, Controls (%s, %s)" % (label, s["tabs"], s["tag"]))
+        check(s["btns"] == "Resume,Back to the matches", "%s: Resume and Back to the matches (%s)" % (label, s["btns"]))
+        check(inside(s["panel"], [0, 0, s["inner"][0], s["inner"][1]]) and inside(s["resume"], s["panel"]) and inside(s["back"], s["panel"]), "%s: the panel and its buttons are whole inside the frame's window (panel %s, window %s)" % (label, s["panel"], s["inner"]))
+        tab.save_shot(args.shots, "menu-frame-panel-%d" % width)
+        # Esc closes it and opens it again (the keys of the page go to the frame that was clicked)
+        p.esc()
+        check(not fr()["open"], "%s: Esc closes it" % label)
+        if not touch:
+            p.esc()
+            check(fr()["open"], "%s: Esc opens it in the frame" % label)
+        else:
+            press("#settings-btn-bar", touch)
+        # Fullscreen is the panel's row
+        tab.ev("document.querySelector('iframe').contentDocument.getElementById('gm-tab-video').click(); 1")
+        time.sleep(0.4)
+        names = tab.ev("[].map.call(document.querySelector('iframe').contentDocument.querySelectorAll('.gm-name'), function (t) { return t.textContent; }).join()")
+        check("Fullscreen" in names and "Picture shape" in names, "%s: the Video section has Fullscreen and the picture's shape (%s)" % (label, names))
+        press(".gm-k-fullscreen .gm-act", touch)
+        got = wait_for(lambda: fr()["fullscreen"], 8, 0.3)
+        check(got == "game-stage", "%s: Fullscreen makes the frame's stage fullscreen (%s)" % (label, got))
+        tab.ev("document.querySelector('iframe').contentDocument.exitFullscreen && document.querySelector('iframe').contentDocument.exitFullscreen(); 1")
+        wait_for(lambda: not fr()["fullscreen"], 8, 0.3)
+        time.sleep(0.5)
+        if not fr()["open"]:
+            press("#settings-btn-bar", touch)
+        # Back to the matches hides the replay, as the frame's own Quit does
+        path = tab.ev("location.pathname + location.search")
+        press(".gm-leave", touch)
+        gone = wait_for(lambda: not fr()["frame"], 10, 0.3)
+        check(bool(gone), "%s: Back to the matches takes the frame away" % label)
+        check(tab.ev("location.pathname + location.search") == path and tab.ev("document.getElementById('show').textContent") == "Show replay", "%s: the match page stays where it is and offers Show replay again" % label)
 
 
 if __name__ == "__main__":
