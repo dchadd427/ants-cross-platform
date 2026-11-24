@@ -4,9 +4,12 @@
 //
 // The page is drawn in UNITS, and a unit is a whole number `k` of device pixels: the largest k that leaves at least 360 units on the picture's shorter side (1 at 640 x 480, 2 at 1280 x 720, 3 at 1920 x 1080 and
 // on a phone, 4 at 2560 x 1440), as the countdown card does (countdown_card.hpp). The clay panel fills the whole picture (nine pieces serve every size), and the content is one column of at most 760
-// units, centered. A picture 520 units wide or more gets a table (the number columns right aligned under their headings); a narrower one (a phone held upright) gets a card for each player, with the
-// numbers under the name and a big Leave Game button at the bottom. When the height is short (four teams, the 187 page's headline), "Your Score" becomes a small heading in the row of the column
-// headings and the rows get lower. Everything here is whole units and no renderer: a test runs it at any size.
+// units, centered. A picture 520 units wide or more gets a table (the number columns right aligned under their headings); a narrower one gets a card for each player, with the numbers under the name and
+// a big Leave Game button at the bottom (when the height holds the cards: four teams in a picture 360 units high get a compact table instead). Which pictures are that narrow: no 16:9 or wider canvas (they
+// are at least 640 units wide, with 360 on the shorter side), and a phone held upright has no canvas of its own yet (the shape table has landscape shapes only: it gets the 16:9 picture, a table); today
+// it is the 4:3 canvas when one of its pixels is 1.5 or 3 device pixels (640 x 480 in a window of 960 x 720, or on a pixel ratio of 3): 480 x 360 units. The layout is made for any shape all the same,
+// the canvases of a taller shape included. When the height is short (four teams, the 187 page's headline), "Your Score" becomes a small heading in the row of the column headings and the rows get
+// lower. Everything here is whole units and no renderer: a test runs it at any size.
 
 #include <array>
 #include <cmath>

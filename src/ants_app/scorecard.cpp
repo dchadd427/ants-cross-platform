@@ -61,6 +61,12 @@ void ScorecardModal::set_art(const hud_art::Art* art) {
     update_new_look();
 }
 
+void ScorecardModal::set_text_source(const IRenderer* renderer) {
+    if (renderer == text_source_) return;
+    text_source_ = renderer;
+    update_new_look();
+}
+
 void ScorecardModal::set_screen(int32_t canvas_w, int32_t canvas_h, double output_scale) {
     if (canvas_w == canvas_w_ && canvas_h == canvas_h_ && output_scale == output_) return;
     canvas_w_ = canvas_w;
@@ -82,7 +88,12 @@ void ScorecardModal::update_new_look() {
         in.h = scale_.h;
         in.rows = !rows_.empty() ? rows_.size() : std::max<size_t>(1, result_.rows(local_player_id_).size());      // (before the rows are built: the rows that will be)
         in.columns = mode_ == sim::GameMode::Kills187 ? 3 : 4;
-        in.headline_lines = headline_.empty() ? 0 : std::max(1, headline_lines_);
+        headline_text_.clear();
+        if (!headline_.empty()) {                       // (the box that the headline's lines stand in does not depend on how many they are: lay out for one, wrap, lay out for what came)
+            in.headline_lines = 1;
+            headline_text_ = wrap_headline(scorecard_layout::compute(in).headline_w);
+            in.headline_lines = std::max<int32_t>(1, static_cast<int32_t>(headline_text_.size()));
+        }
         layout_ = scorecard_layout::compute(in);
     }
     update_button();
@@ -102,7 +113,6 @@ void ScorecardModal::show(const sim::MatchResult& result, uint8_t local_player_i
     rows_.clear();
     result_ = result;
     result_.present_mask = static_cast<uint8_t>(result.present_mask & shown_mask_);
-    headline_lines_ = 0;
     update_new_look();
 }
 

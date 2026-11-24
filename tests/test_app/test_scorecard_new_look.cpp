@@ -29,6 +29,10 @@ const Screen kWide720{"720p", 960, 540, 1280, 720};
 const Screen kPhoneUp{"phone held upright", 390, 844, 1170, 2532};
 const Screen kPhoneSide{"phone held sideways", 1200, 540, 2532, 1170};
 const Screen kUltra{"ultrawide", 1260, 540, 3440, 1440};
+const Screen kSmall43{"640 x 480 at 150%", 640, 480, 960, 720};           // (the picture that makes the cards today)
+
+/// What the page measures its text with (the renderer that the application gives it): a recording renderer with the game's faces
+ArtSpy* g_meter = nullptr;
 
 double output_of(const Screen& s) { return CanvasLayout{s.canvas_w, s.canvas_h}.fit(s.window_w, s.window_h).scale; }
 
@@ -52,6 +56,7 @@ sim::MatchResult sample(bool allied = true) {
 }
 
 void open(ScorecardModal& card, const hud_art::Art* art, const Screen& s, const sim::MatchResult& result, sim::GameMode mode = sim::GameMode::HighestScore, bool rows = true) {
+    card.set_text_source(g_meter);
     card.set_art(art);
     card.set_screen(s.canvas_w, s.canvas_h, output_of(s));
     card.set_local_player_name("Ana");
@@ -69,6 +74,44 @@ std::unique_ptr<ArtSpy> draw(const assets::AssetArchive& arc, ScorecardModal& ca
 }
 
 size_t count(const ArtSpy& spy, const hud_art::Art& art, const char* name) { return spy.of_sprite(art, name).size(); }
+
+/// Is the text well formed UTF-8 (every lead byte has its continuation bytes, no stray continuation byte)
+bool is_utf8(const std::string& text) {
+    for (size_t i = 0; i < text.size();) {
+        const unsigned char c = static_cast<unsigned char>(text[i]);
+        const size_t n = c < 0x80 ? 1 : (c >> 5) == 0x6 ? 2 : (c >> 4) == 0xE ? 3 : (c >> 3) == 0x1E ? 4 : 0;
+        if (n == 0 || i + n > text.size()) return false;
+        for (size_t k = 1; k < n; ++k) {
+            if ((static_cast<unsigned char>(text[i + k]) & 0xC0) != 0x80) return false;
+        }
+        i += n;
+    }
+    return true;
+}
+
+/// The parts of a layout that a frame must not move
+struct Frozen {
+    scorecard_layout::Layout layout;
+    scorecard_layout::Scale scale;
+    LayoutRect leave;
+    bool operator==(const Frozen& o) const {
+        return layout.leave == o.layout.leave && layout.winner_well == o.layout.winner_well && layout.others_well == o.layout.others_well && layout.row[0].top == o.layout.row[0].top &&
+               layout.row[1].top == o.layout.row[1].top && layout.headline_base == o.layout.headline_base && layout.score == o.layout.score && layout.narrow == o.layout.narrow && scale.k == o.scale.k &&
+               scale.w == o.scale.w && scale.h == o.scale.h && leave == o.leave;
+    }
+};
+Frozen frozen_of(const ScorecardModal& card) { return Frozen{card.new_layout(), card.scale(), card.scale().rect(card.new_layout().leave)}; }
+
+/// The layout that a page of these rows and this headline must have: made for as many lines of headline as were drawn
+scorecard_layout::Layout expected_layout(const ScorecardModal& card, size_t rows, int32_t lines) {
+    scorecard_layout::Input in;
+    in.w = card.scale().w;
+    in.h = card.scale().h;
+    in.rows = rows;
+    in.columns = 3;
+    in.headline_lines = lines;
+    return scorecard_layout::compute(in);
+}
 
 bool has_line(const ArtSpy& spy, const std::string& text) { return spy.face(text) != nullptr; }
 
@@ -182,7 +225,9 @@ void test_187(const assets::AssetArchive& arc, const hud_art::Art& art) {
     group("187", "three headings, three numbers a row, and the headline");
     ScorecardModal card;
     open(card, &art, kWide720, sample(), sim::GameMode::Kills187);
+    const Frozen before = frozen_of(card);
     const auto spy = draw(arc, card, kWide720);
+    check(frozen_of(card) == before, "drawing the frame moves nothing: the layout was made when the rows were built");
     check(!card.headline().empty() && card.new_layout().headings && count(*spy, art, "sc_h_kills") == 1 && count(*spy, art, "sc_h_antslost") == 1 && count(*spy, art, "sc_h_antsleft") == 1, "the three headings of the 187 page");
     check(count(*spy, art, "sc_h_score") == 0 && count(*spy, art, "sc_h_new") == 0, "...and none of the four of the other page");
     for (const ScorecardModal::Row& row : card.rows()) check(has_line(*spy, row.numbers[0]) && has_line(*spy, row.numbers[1]) && has_line(*spy, row.numbers[2]), "a row of 187 shows its three numbers: " + row.name);
@@ -190,16 +235,40 @@ void test_187(const assets::AssetArchive& arc, const hud_art::Art& art) {
     for (const ArtSpy::Line& line : spy->lines) headline = headline || card.headline().find(line.text) == 0;
     check(headline, "the headline \"" + card.headline() + "\" is in the windows' face");
     check(card.new_layout().headline_base > 0 && card.new_layout().row[0].top > card.new_layout().headline_base, "the headline is above the rows");
-    // two lines for a long headline
+    // two lines for a long headline: the room for them is made when the rows are built, and the first frame does not move it
     ScorecardModal narrow;
     narrow.set_player_names({"Bartholomew the Third of Antwerp", "Cornelius the Mighty Builder of Hills", "Dot", "Eve"});
     sim::MatchResult both = sample();
     both.standing = 0;
     both.ants_left = {5, 4, 0, 0};
     open(narrow, &art, kPhoneUp, both, sim::GameMode::Kills187);
+    const Frozen narrow_before = frozen_of(narrow);
     const auto spyn = draw(arc, narrow, kPhoneUp);
     check(narrow.new_layout().narrow && spyn->lines.size() >= 2 && narrow.new_layout().headline_base > 0, "a long headline on a phone is two lines");
+    check(frozen_of(narrow) == narrow_before, "...and the frame that draws them moves nothing");
+    const scorecard_layout::Layout made_for = expected_layout(narrow, narrow.rows().size(), static_cast<int32_t>(spyn->lines.size()));
+    check(narrow.new_layout().row[0].top == made_for.row[0].top && narrow.new_layout().winner_well == made_for.winner_well && narrow.new_layout().leave == made_for.leave, "...the page was laid out for as many lines as were drawn (" + std::to_string(spyn->lines.size()) + ")");
     check(count(*spyn, art, "sc_btn_m_up") >= 1, "...and the page is the cards' page");
+    // a headline of three lines and more is cut to two: whole characters only, whatever the names are made of (a name a letter longer moves the cut by a byte: eight of them cover every place a cut can fall)
+    int whole_runs = 0;
+    int cut_runs = 0;
+    for (int extra = 0; extra < 8; ++extra) {
+        ScorecardModal utf;
+        const std::string pad(static_cast<size_t>(extra), 'x');
+        utf.set_player_names({"\xC3\x9C" "n\xC3\xAF" "c\xC3\xB6" "d\xC3\xA9 W\xC3\xA4" "rri\xC3\xB6" "r Qu\xC3\xA9\xC3\xA9" "n of the \xC3\x81" "ntz", pad + "\xC3\x89" "l\xC3\xA9" "onore \xC3\x89" "tienne \xC3\x86" "gir \xC3\x98" "rsted \xC3\x85" "sa \xC3\x9C" "nal \xC3\x87" "elik \xC3\x8F" "\xC3\xB1" "igo \xC3\x96" "zt\xC3\xBC" "rk Zo\xC3\xAB Bront\xC3\xAB", "Dot", "Eve"});
+        sim::MatchResult many = sample();
+        many.standing = 0;
+        many.ants_left = {5, 4, 0, 0};
+        open(utf, &art, kPhoneUp, many, sim::GameMode::Kills187);
+        const auto spyu = draw(arc, utf, kPhoneUp);
+        bool all_whole = !spyu->lines.empty();
+        for (const ArtSpy::Line& line : spyu->lines) all_whole = all_whole && is_utf8(line.text);
+        const bool dotted = spyu->lines.size() == 2 && spyu->lines[1].text.size() > 3 && spyu->lines[1].text.compare(spyu->lines[1].text.size() - 3, 3, "...") == 0;
+        whole_runs += all_whole && dotted ? 1 : 0;
+        cut_runs += dotted ? 1 : 0;
+    }
+    check(cut_runs == 8, "a headline of long names with accents is cut to two lines, the end of the second with three dots (" + std::to_string(cut_runs) + " of 8)");
+    check(whole_runs == 8, "...at a whole character each time: every line that is drawn is well formed UTF-8 (" + std::to_string(whole_runs) + " of 8)");
 }
 
 void test_reflow(const assets::AssetArchive& arc, const hud_art::Art& art) {
@@ -219,6 +288,23 @@ void test_reflow(const assets::AssetArchive& arc, const hud_art::Art& art) {
     const sl::Layout& l = card.new_layout();
     const LayoutRect big = canvas_rect_of(card, l.leave);
     check(big.w > card.scale().canvas_w * 8 / 10, "the big button is most of the picture wide");
+
+    // the picture that makes the cards today: the 4:3 canvas in a window of 960 x 720 (480 x 360 units)
+    ScorecardModal small;
+    open(small, &art, kSmall43, sample());
+    const auto spys = draw(arc, small, kSmall43);
+    check(small.new_look() && small.scale().k == 2 && small.scale().w == 480 && small.scale().h == 360 && small.new_layout().narrow, "640 x 480 at 150%: 480 x 360 units, the cards");
+    check(count(*spys, art, "sc_btn_m_up") >= 1 && count(*spys, art, "sc_h_score") == 0 && has_line(*spys, "Killed"), "...with the big button, the labels under the numbers and no column headings");
+    for (const ScorecardModal::Row& row : small.rows()) {
+        const ArtSpy::Face* name = spys->face(row.name);
+        const ArtSpy::Face* number = spys->face(row.numbers[0]);
+        check(name != nullptr && number != nullptr && number->baseline > name->baseline, "640 x 480 at 150%: the numbers are under the name: " + row.name);
+    }
+    ScorecardModal small4;
+    open(small4, &art, kSmall43, sample(false));
+    const auto spys4 = draw(arc, small4, kSmall43);
+    check(small4.rows().size() == 4 && !small4.new_layout().narrow && count(*spys4, art, "sc_h_score") == 1 && count(*spys4, art, "sc_leave_up") == 1, "640 x 480 at 150%, four teams: a compact table, with the corner's button");
+    for (const ScorecardModal::Row& row : small4.rows()) check(spys4->face(row.numbers[3]) != nullptr && spys4->face(row.name) != nullptr, "...every row is there: " + row.name);
 
     ScorecardModal side;
     open(side, &art, kPhoneSide, sample());
@@ -441,7 +527,7 @@ void test_pixels(const assets::AssetArchive& arc, const hud_art::Art& art) {
         check(px[mid + 1] > px[mid + 0] && px[mid + 1] < 140, "...the button's face is green steel where the pointer would be");
     }
     // the new page differs between a 4:3 canvas and a 21:9 one only by what they have room for: both are covered
-    for (const Screen& s : {kUltra, kPhoneSide, kPhoneUp}) {
+    for (const Screen& s : {kUltra, kPhoneSide, kPhoneUp, kSmall43}) {
         Rig rig(arc, art, s.canvas_w, s.canvas_h, s.window_w, s.window_h);
         ScorecardModal card;
         open(card, &art, s, sample());
@@ -462,7 +548,7 @@ SDL_Window* find_window() {
 
 /// A headless application on SDL's dummy driver, its window the size of its canvas
 struct AppRig {
-    AppRig(Aspect aspect, bool new_art) {
+    AppRig(Aspect aspect, bool new_art, double window_scale = 1.0) : scale(window_scale) {
         static int counter = 0;
         settings = std::filesystem::temp_directory_path() / ("ants_scorecard_new_" + std::to_string(static_cast<unsigned long long>(SDL_GetPerformanceCounter())) + "_" + std::to_string(counter++) + ".ini");
         std::error_code ignore;
@@ -478,8 +564,8 @@ struct AppRig {
         cfg.screenshot_path = settings.string() + ".png";
         cfg.screenshot_frames = 1000000000;
         cfg.has_window_size = true;
-        cfg.window_w = canvas_width_of(aspect);
-        cfg.window_h = canvas_height_of(aspect);
+        cfg.window_w = static_cast<int32_t>(std::lround(canvas_width_of(aspect) * window_scale));
+        cfg.window_h = static_cast<int32_t>(std::lround(canvas_height_of(aspect) * window_scale));
         cfg.hud_art_given = true;
         cfg.hud_art_new = new_art;
         cfg.hud_art_dir = art_folder();
@@ -494,7 +580,10 @@ struct AppRig {
     }
     AppRig(const AppRig&) = delete;
     AppRig& operator=(const AppRig&) = delete;
-    void event(Uint32 type, int32_t x, int32_t y) {
+    /// A pointer event at the canvas pixel (x, y): SDL converts the window's pixels of an event to the canvas's (the logical size), so the event is given in the window's, at the middle of that pixel
+    void event(Uint32 type, int32_t cx, int32_t cy) {
+        const int32_t x = static_cast<int32_t>(std::floor((cx + 0.5) * scale));
+        const int32_t y = static_cast<int32_t>(std::floor((cy + 0.5) * scale));
         SDL_Event e{};
         e.type = type;
         if (type == SDL_MOUSEMOTION) {
@@ -525,6 +614,7 @@ struct AppRig {
         app.update_results(0.3f);
         deliver();
     }
+    double scale;                                     // device pixels to a canvas pixel
     std::filesystem::path settings;
     Application app;
     SDL_Window* window{nullptr};
@@ -548,6 +638,23 @@ void test_app() {
         check(quits == 0, at + "a click beside the button does nothing");
         rig.click(b.x + b.w / 2, b.y + b.h / 2);
         check(quits == 1, at + "a click on the button leaves");
+    }
+    // the 4:3 picture in a window of 960 x 720: 480 x 360 units, the cards, and the click on the big button
+    {
+        AppRig rig(Aspect::Classic4x3, true, 1.5);
+        check(rig.ok && rig.app.start_game("Original-Ants/Maps/SMALL.LVL"), "4:3 at 150%: a match starts");
+        int quits = 0;
+        rig.app.scorecard().set_on_quit([&]() { ++quits; });
+        rig.results();
+        const ScorecardModal& card = rig.app.scorecard();
+        check(card.is_open() && card.new_look() && card.new_layout().narrow && card.scale().w == 480 && card.scale().h == 360 && rig.app.picture() == CanvasLayout::of(Aspect::Classic4x3).rect(),
+              "4:3 at 150%: the results are the cards' page, 480 x 360 units, and the picture is the whole canvas " + str(rig.app.picture()));
+        const LayoutRect b = card.scale().rect(card.new_layout().leave);
+        check(b.w > 400 && b.bottom() <= 480, "...the big button is most of the picture wide and inside it " + str(b));
+        rig.click(b.x + b.w / 2, b.y - 12);
+        check(quits == 0, "...a click above the button does nothing");
+        rig.click(b.x + b.w / 2, b.y + b.h / 2);
+        check(quits == 1, "...a click on the big button leaves");
     }
     // Classic art: the original's page, centred in the canvas when the canvas is wider
     {
@@ -574,6 +681,10 @@ void test_app() {
 }  // namespace
 
 void test_scorecard_look(const assets::AssetArchive& arc, const hud_art::Art& art) {
+    ArtSpy meter(arc);                                // (what the page measures its text with, as the application's renderer is: the game's faces)
+    meter.face_ready = true;
+    meter.dialog_face = true;
+    g_meter = &meter;
     test_switch(arc, art);
     test_rows(arc, art);
     test_187(arc, art);
@@ -581,4 +692,5 @@ void test_scorecard_look(const assets::AssetArchive& arc, const hud_art::Art& ar
     test_leave(arc, art);
     test_pixels(arc, art);
     test_app();
+    g_meter = nullptr;
 }

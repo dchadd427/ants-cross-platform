@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the new results screen: which page shows (the original's or the new one: the art, the canvas, the size of the window), the whole canvas as its picture, every row and its gold score, the table and the cards by the width, the unit and the sheet by the output's scale, the panel to the canvas's last pixel, Leave Game's rectangle and pictures, the pieces that the art must have, and the original's page that stays what it was (src/ants_app/scorecard.cpp, scorecard_new.cpp, scorecard_layout.cpp, window_art.cpp, application_view.cpp; include/ants_app/scorecard_layout.hpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: python3 tools/mutate.py tests/data/scorecard_new_mutants.json --keep-going --jobs 1; every mutant must be caught by the test and the text named in it.",
+  "note": "Mutants of the new results screen: which page shows (the original's or the new one: the art, the canvas, the size of the window), the whole canvas as its picture, every row and its gold score, the table and the cards by the width, the unit and the sheet by the output's scale, the panel to the canvas's last pixel, Leave Game's rectangle and pictures, the pieces that the art must have, the 187 headline (made when the rows are built, cut at whole characters), and the original's page that stays what it was (src/ants_app/scorecard.cpp, scorecard_new.cpp, scorecard_layout.cpp, window_art.cpp, application_view.cpp; include/ants_app/scorecard_layout.hpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: python3 tools/mutate.py tests/data/scorecard_new_mutants.json --keep-going --jobs 1; every mutant must be caught by the test and the text named in it.",
   "mutants": [
     {
       "id": "window_too_small_takes_the_new_page",
@@ -161,6 +161,24 @@
       "new": "pressed = up;",
       "build": "test_wide_pages",
       "test": "./build/tests/test_app/test_wide_pages"
+    },
+    {
+      "id": "the_headline_is_cut_inside_a_character",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "UnitMeter::cut_last_character(rest);",
+      "new": "rest.pop_back();",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[187]"
+    },
+    {
+      "id": "the_headline_is_laid_out_for_one_line",
+      "file": "src/ants_app/scorecard.cpp",
+      "old": "in.headline_lines = std::max<int32_t>(1, static_cast<int32_t>(headline_text_.size()));",
+      "new": "in.headline_lines = 1;",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[187]"
     }
   ]
 }

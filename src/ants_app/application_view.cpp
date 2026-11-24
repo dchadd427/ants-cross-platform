@@ -282,6 +282,7 @@ bool Application::wide_pages() const {
 void Application::update_picture() {
     map_select_.set_wide_layout(wide_setup());                                              // (the screen is drawn and answers the pointer as its wide version when the canvas is 960 x 540)
     const bool wide = wide_pages();
+    scorecard_.set_text_source(renderer_.get());                                            // (the new results page measures its text with the renderer's faces)
     scorecard_.set_art(hud_.art());                                                         // (the results screen has the HUD's art: the new page, or the original's when the art is Classic or cannot be used)
     scorecard_.set_screen(canvas().width, canvas().height, renderer_ ? renderer_->output_scale() : 1.0);       // (the new results page is laid out for the canvas and its output)
     scorecard_.set_wide_layout(wide);                                                       // (so are the results, the start menu and the quick help's button: they stand where the wide pages put them)

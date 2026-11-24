@@ -100,6 +100,9 @@ public:
     void set_art(const hud_art::Art* art);
     /// The canvas that the page is drawn on, in canvas pixels, and how many device pixels one of them is (IRenderer::output_scale): the new page's layout follows both
     void set_screen(int32_t canvas_w, int32_t canvas_h, double output_scale);
+    /// The renderer that the new page measures its text with (the 187 headline is wrapped into one or two lines, and the layout makes room for them when the rows are built, not when they are drawn). Null:
+    /// the headline is one line
+    void set_text_source(const IRenderer* renderer);
     /// The new page is the one that shows: its picture is the whole canvas (Application::picture_for_state)
     bool new_look() const noexcept { return new_look_; }
     const scorecard_layout::Scale& scale() const noexcept { return scale_; }
@@ -134,6 +137,7 @@ private:
     void update_new_look();                  // the new page's scale, layout and Leave button from the art, the canvas and the rows
     void update_button();                    // the Leave button's rectangles: the new page's or the page's own
     void render_new(IRenderer& renderer, const assets::AssetArchive& assets);
+    std::vector<std::string> wrap_headline(int32_t max_w_units) const;      // the 187 headline in one or two lines of the new page (scorecard_new.cpp)
     std::string headline_187() const;
     std::string name_of(uint8_t team) const;
     void draw_portrait(IRenderer& renderer, const assets::AssetArchive& assets, uint8_t team, int32_t x, int32_t y) const;
@@ -150,7 +154,8 @@ private:
     bool new_look_{false};                // the new page shows (art_ has the pieces, the canvas is big enough)
     scorecard_layout::Scale scale_{};
     scorecard_layout::Layout layout_{};
-    int32_t headline_lines_{0};           // the 187 headline's lines as the renderer wrapped them in the last frame (the layout makes room for them)
+    const IRenderer* text_source_{nullptr};          // what the new page's text is measured with (set_text_source)
+    std::vector<std::string> headline_text_{};       // the 187 headline's lines on the new page, as they were wrapped when the layout was made: the frame draws these
     bool wide_{false};                    // the page is the 16:9 one
     bool is_active_{false};
     Phase phase_{Phase::Waiting};

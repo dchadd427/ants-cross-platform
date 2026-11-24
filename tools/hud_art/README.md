@@ -6,6 +6,12 @@ Draws the new pictures of the match screen's HUD (the frame, the buttons, the pe
 python3 tools/hud_art/make_hud_art.py            # writes assets/hud_art/sheet_1x.png, sheet_2x.png, sheet_3x.png and hud_art.txt (about a minute)
 ```
 
+```
+python3 tools/hud_art/check_sheets.py            # builds the sheets again in a folder of its own and compares them with assets/hud_art/ (about a minute)
+```
+
+`check_sheets.py` says whether the generator makes the sheets that the repository holds, byte for byte (the manifest and the three sheets; the pixels alone when only the compression differs, because a machine without libdeflate writes larger files: `--strict` makes that a failure too). It needs the browser, so CI does not run it: run it after a change to the generator and before the sheets are committed. Its comparison is tested without a browser (`tests/scripts/test_hud_art_check_sheets.py`).
+
 Needs Python 3 with Pillow and numpy, and Google Chrome or Chromium (headless: it renders the SVG pieces of the HUD; the cursors need no browser; `--chrome PROGRAM` or `ANTS_CHROME` names it when it is not in the usual place). Blender is not needed: the two hands of the cursors are committed (below). `--work DIR` (or `ANTS_HUD_ART_WORK`) is the folder of the scratch files, `--out DIR` the folder of the result. Nothing in the generator names a place on a machine: the repository's root is found from the scripts' own place. The drawing is deterministic: the same inputs give the same files.
 
 ## What is here
@@ -18,6 +24,7 @@ Needs Python 3 with Pillow and numpy, and Google Chrome or Chromium (headless: i
 | `pieces.py`, `system.py`, `texture.py`, `ants.py`, `lettering.py` | the drawn pieces as SVG: the bars, strips, panel, windows, buttons and card, the one bevel system, the plate's texture tile, the ornament ants, the labels |
 | `dialog_kit.py`, `dialog_windows.py`, `dialog_pieces.py`, `dialogs.py` | the windows (below): the look (the panel, wells, buttons, switches, tracks, thumbs, edit fields and lettering as SVG), the geometry of each window, the sprites and the cutting of a window into pieces, and `dialogs.export()`, which renders them and gives the manifest rows and animations |
 | `results_art.py` | the results screen's pieces (below, "The results screen"): its lettering, the nine-slice well and the Leave Game buttons |
+| `check_sheets.py` | builds the sheets again and compares them with the repository's, byte for byte (above) |
 | `fullscreen_button.py` | the Fullscreen button of the HUD's top right corner (six sprites) |
 | `relief.py`, `carve.py` | the carved pieces, built as height fields and lit from the top left: the pedestals and their eight pictures, the gold band and the rim flash, the socket, the eggs, the lunch box |
 | `cursors.py`, `crisp.py` | the cursors: one sprite for every sprite of the original's sixteen cursor animations, at 1x, 2x and 3x, drawn flat and hard-edged on each scale's own pixel grid (`crisp.py` is the canvas); the sizes, the offsets from the click point and the frame times are read from the catalog below, so a cursor's click point and timing are the original's; the animations are marked `cursor` in the manifest |

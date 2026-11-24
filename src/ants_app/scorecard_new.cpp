@@ -118,23 +118,27 @@ private:
     const Scale& s_;
 };
 
-/// The wrapped lines of the 187 headline in the windows' face (the page's own text as a last resort): at most two, the end of the second cut with three dots
-std::vector<std::string> headline_lines(IRenderer& renderer, const UnitPen& pen, const Scale& scale, const std::string& text, int32_t max_w_units) {
-    const int32_t max_w = static_cast<int32_t>(std::lround(static_cast<double>(max_w_units) * scale.f));
-    const bool face = renderer.dialog_text_ready();
-    const auto width = [&](const std::string& s) { return face ? renderer.dialog_text_width(s, scale.em_tenths(kHeadlineEm)) : pen.width(s, kHeadlineEm); };
-    std::vector<std::string> lines = wrap_label_with(width, text, max_w);
+}  // namespace
+
+// The wrapped lines of the 187 headline in the windows' face (the game's own text where the renderer has no such face): at most two, the end of the second cut with three dots, whole characters only.
+// The layout is made with these lines (update_new_look) and the frame draws them: nothing is measured while drawing.
+std::vector<std::string> ScorecardModal::wrap_headline(int32_t max_w_units) const {
+    if (text_source_ == nullptr) return {headline_};
+    const IRenderer& r = *text_source_;
+    const UnitMeter meter(r, scale_.f);
+    const int32_t max_w = static_cast<int32_t>(std::lround(static_cast<double>(max_w_units) * scale_.f));
+    const bool face = r.dialog_text_ready();
+    const auto width = [&](const std::string& s) { return face ? r.dialog_text_width(s, scale_.em_tenths(kHeadlineEm)) : meter.width(s, kHeadlineEm); };
+    std::vector<std::string> lines = wrap_label_with(width, headline_, max_w);
     if (lines.size() > 2) {
         std::string rest = lines[1];
         for (size_t i = 2; i < lines.size(); ++i) rest += " " + lines[i];
         lines.resize(2);
-        while (!rest.empty() && width(rest + "...") > max_w) rest.pop_back();
+        while (!rest.empty() && width(rest + "...") > max_w) UnitMeter::cut_last_character(rest);
         lines[1] = rest + "...";
     }
     return lines;
 }
-
-}  // namespace
 
 // One AntSlot as the new page draws it: the animation agst301 in the color of the team, running since the screen was created, its first frame's box (the whole picture of the ant) put at (ux, uy) units
 // and drawn `a` times its own size (1: a pixel of the ant is a unit; less where a row is lower than the ant)
@@ -175,22 +179,8 @@ static int32_t ant_height(const assets::AssetArchive& assets) {
 }
 
 void ScorecardModal::render_new(IRenderer& renderer, const assets::AssetArchive& assets) {
-    // the output may have changed since the application last said (a window dragged to another screen): the page follows
-    const double output = renderer.output_scale();
-    if (std::fabs(output - output_) > 1e-9) set_screen(canvas_w_, canvas_h_, output);
     const bool rows_shown = phase_ == Phase::Rows;
     UnitPen pen(renderer, scale_.f);
-    if (new_look_ && mode_ == sim::GameMode::Kills187 && rows_shown && !headline_.empty()) {
-        const int32_t lines = static_cast<int32_t>(headline_lines(renderer, pen, scale_, headline_, layout_.headline_w).size());
-        if (lines != headline_lines_) {
-            headline_lines_ = lines;
-            update_new_look();
-        }
-    }
-    if (!new_look_) {                                             // (the output became too small for the page: the original's)
-        render(renderer, assets);
-        return;
-    }
     const bool is_187 = mode_ == sim::GameMode::Kills187;
     const scorecard_layout::Layout& l = layout_;
     const hud_art::Art& art = *art_;
@@ -227,7 +217,7 @@ void ScorecardModal::render_new(IRenderer& renderer, const assets::AssetArchive&
             page.well(l.others_well);
         }
         if (is_187 && rows_shown && !headline_.empty()) {
-            const std::vector<std::string> lines = headline_lines(renderer, pen, scale_, headline_, l.headline_w);
+            const std::vector<std::string>& lines = headline_text_;
             for (size_t i = 0; i < lines.size(); ++i) {
                 const int32_t baseline = scale_.y(l.headline_base + static_cast<int32_t>(i) * l.headline_pitch);
                 if (renderer.dialog_text_ready()) {

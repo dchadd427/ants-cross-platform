@@ -32,6 +32,7 @@ const Screen kScreens[] = {
     {"3440 x 1440 (21:9)", 1260, 540, 3440, 1440, 4, 840, 360},
     {"phone held upright (1170 x 2532)", 390, 844, 1170, 2532, 3, 390, 844},
     {"phone held sideways (2532 x 1170)", 1200, 540, 2532, 1170, 3, 844, 379},
+    {"640 x 480 at 150% (a window of 960 x 720)", 640, 480, 960, 720, 2, 480, 360},       // (the picture that makes the cards today: a 4:3 canvas under 520 units)
 };
 
 double output_of(const Screen& s) { return CanvasLayout{s.canvas_w, s.canvas_h}.fit(s.window_w, s.window_h).scale; }
@@ -205,6 +206,13 @@ void test_layout(const hud_art::Art& art) {
     const sl::Layout t3 = sl::compute(input_of(sl::scale_for(960, 540, 2.0), 3, 3, 0));
     check(t3.row[0].number_x[2] == t4.row[0].number_x[3] && t3.row[0].number_x[1] == t4.row[0].number_x[2] && t3.column_right[2] == t4.column_right[3], "the 187 page's three columns are the last three of the table's four");
     // the width decides between the table and the cards, at the width and not by a hair
+    // the 4:3 picture in a window of 960 x 720 is 480 x 360 units: three rows are cards (the lowest card that fits), four teams do not fit them and are a compact table
+    const sl::Scale small = sl::scale_for(640, 480, 1.5);
+    const sl::Layout cards3 = sl::compute(input_of(small, 3, 4, 0));
+    const sl::Layout table4 = sl::compute(input_of(small, 4, 4, 0));
+    check(small.w == 480 && small.h == 360 && cards3.narrow && cards3.leave_big && cards3.row[0].height == 48, "640 x 480 at 1.5: 480 x 360 units, three rows are cards of 48 units and the big button");
+    check(!table4.narrow && table4.headings && !table4.leave_big && table4.row[0].name_w > 0 && table4.row[0].number_x[3] <= table4.winner_well.right() - 4, "...four teams are a compact table, with room for the names");
+    check(sl::compute(input_of(small, 2, 3, 1)).narrow, "...and the 187 page with one line of headline and two rows is cards too");
     const sl::Layout at519 = sl::compute(input_of(sl::scale_for(519, 900, 1.0), 3, 4, 0));
     const sl::Layout at520 = sl::compute(input_of(sl::scale_for(520, 900, 1.0), 3, 4, 0));
     check(at519.narrow && !at520.narrow, "519 units wide stack the numbers under the names, 520 are a table");
@@ -218,16 +226,20 @@ void test_sweep(const hud_art::Art& art) {
         for (int32_t h = 360; h <= 1000; h += (h < 560 ? 10 : 40)) {
             if (w < 480 && h < 600) continue;                  // (no picture is that narrow and that short: a canvas is 4:3 or wider, a phone upright is 1.7 times as high as wide)
             for (size_t rows = 1; rows <= 4; ++rows) {
-                const sl::Layout l = sl::compute(input_of(sl::Scale{1, 1.0, 1, w, h, w, h}, rows, 4, 0));
-                const int fails_before = g_failures;
-                check_layout(art, input_of(sl::Scale{1, 1.0, 1, w, h, w, h}, rows, 4, 0), std::to_string(w) + " x " + std::to_string(h) + ", " + std::to_string(rows) + " rows");
-                ++cases;
-                bad += g_failures > fails_before ? 1 : 0;
-                (void)l;
+                for (const int32_t columns : {4, 3}) {
+                    for (const int32_t lines : {0, 1, 2}) {
+                        if (columns == 4 && lines > 0) continue;                       // (only the 187 page has a headline)
+                        const int fails_before = g_failures;
+                        check_layout(art, input_of(sl::Scale{1, 1.0, 1, w, h, w, h}, rows, columns, lines),
+                                     std::to_string(w) + " x " + std::to_string(h) + ", " + std::to_string(rows) + " rows, " + std::to_string(columns) + " numbers, " + std::to_string(lines) + " headline lines");
+                        ++cases;
+                        bad += g_failures > fails_before ? 1 : 0;
+                    }
+                }
             }
         }
     }
-    check(cases > 1000 && bad == 0, "every layout of " + std::to_string(cases) + " holds (" + std::to_string(bad) + " do not)");
+    check(cases > 3000 && bad == 0, "every layout of " + std::to_string(cases) + " holds (" + std::to_string(bad) + " do not)");
 }
 
 void test_pieces(const hud_art::Art& art) {
