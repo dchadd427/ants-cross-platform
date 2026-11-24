@@ -328,6 +328,9 @@ int main() {
         ASSERT_TRUE(gate.check("", kT0, who) == PassVerdict::NoPass);
         ASSERT_TRUE(gate.check("v2.abc.def", kT0, who) == PassVerdict::Malformed && gate.check("garbage", kT0, who) == PassVerdict::Malformed && gate.check(std::string(600, 'a'), kT0, who) == PassVerdict::Malformed);
         const std::string good = m.make(kT0);
+        const uint64_t compared = ctl::constant_time_equal_calls();
+        PersonIdentity again;
+        ASSERT_TRUE(LikeGate(kSecret).check(good, kT0, again) == PassVerdict::Ok && ctl::constant_time_equal_calls() > compared);                  // (the mac is compared in constant time: a comparison written as == would give the same answers)
         std::string flipped = good;
         flipped.back() = flipped.back() == '0' ? '1' : '0';
         ASSERT_TRUE(gate.check(flipped, kT0, who) == PassVerdict::BadPass);                                                     // (one character of the mac)
@@ -335,6 +338,9 @@ int main() {
         other.secret = "another-like-key-99b04c61f7e2d583-v";
         ASSERT_TRUE(gate.check(other.make(kT0), kT0, who) == PassVerdict::BadPass);                                             // (the hub of another key)
         ASSERT_TRUE(gate.check(m.make(kT0, kRefAnn, -1), kT0, who) == PassVerdict::Expired);                                    // (it ended a second ago)
+        ASSERT_TRUE(gate.check(m.make(kT0, kRefAnn, 0), kT0, who) == PassVerdict::Expired);                                     // (it ends this second: no longer good)
+        ASSERT_TRUE(gate.check(m.make(kT0, kRefAnn, 1), kT0, who) == PassVerdict::Ok);
+        ASSERT_TRUE(gate.check(m.make(kT0, kRefAnn, 90), kT0, who) == PassVerdict::Ok && gate.check(m.make(kT0, kRefAnn, 91), kT0, who) == PassVerdict::BadFields);        // (a minute and its slack of half a minute)
         ASSERT_TRUE(gate.check(m.make(kT0, kRefAnn, 200), kT0, who) == PassVerdict::BadFields);                                 // (a pass that lasts longer than the hub makes one)
         const std::string key = like_key(kSecret);
         ASSERT_TRUE(gate.check(sign_with(key, "{\"exp\":" + std::to_string(kT0 + 60) + ",\"nonce\":\"00112233445566aa\",\"ref\":\"0123456789abcdef\",\"role\":\"admin\"}"), kT0, who) == PassVerdict::BadFields);      // (a fourth member)
@@ -358,6 +364,23 @@ int main() {
         for (int k = 0; k < 3; ++k) ASSERT_TRUE(small.check(m.make(kT0), kT0, who) == PassVerdict::Ok);
         ASSERT_TRUE(small.check(m.make(kT0), kT0, who) == PassVerdict::Full && small.remembered() == 3);
         ASSERT_TRUE(small.check(m.make(kT0 + 200), kT0 + 200, who) == PassVerdict::Ok && small.remembered() == 1);
+    } TEST_END();
+
+    TEST_CASE("RC2.2 The door's table of used passes is bounded: when 50,000 passes of one minute are remembered no pass is accepted until some have ended, and the answer says busy, not that the person is nobody") {
+        if (match_file(0).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        World w;
+        ASSERT_TRUE(w.open());
+        int served = 0;
+        for (size_t k = 0; k < kPassNoncesMax; ++k) served += w.call("GET", "/counts/mine", "", {{"x-ants-like-pass", w.maker.make(kT0)}}).status == 200 ? 1 : 0;
+        ASSERT_EQ(served, static_cast<int>(kPassNoncesMax));
+        const HttpResponse full = w.call("GET", "/counts/mine", "", {{"x-ants-like-pass", w.maker.make(kT0)}});
+        ASSERT_TRUE(full.status == 503 && error_of(full) == "busy");
+        w.now_s += 100;                                                                                                          // (the passes of the minute have ended: the table is empty again)
+        ASSERT_EQ(w.call("GET", "/counts/mine", "", {{"x-ants-like-pass", w.maker.make(w.now_s)}}).status, 200);
+        ASSERT_TRUE(!w.api->take_notices().empty());                                                                             // (said once in the log)
     } TEST_END();
 
     TEST_CASE("RC3.1 POST /counts/play/<id>: one play of a recording that can be watched, 204; an id that is unknown, malformed or whose recording is gone is 404 and changes nothing; the other shapes of a request are refused") {
@@ -441,6 +464,7 @@ int main() {
         const ctl::JsonValue b = json_of(w.as(kRefBo, "GET", "/counts/mine", "ids=" + ids, false));
         ASSERT_TRUE(b.get("liked").size() == 1 && b.get("liked").at(0).str() == w.ids[1] && b.get("csrf").str() == kPythonCsrfBo);
         ASSERT_TRUE(json_of(w.as(kRefAnn, "GET", "/counts/mine", "", false)).get("liked").size() == 0);
+        ASSERT_EQ(json_of(w.as(kRefAnn, "GET", "/counts/mine", "ids=" + w.ids[0] + "," + w.ids[0], false)).get("liked").size(), size_t{1});          // (an id twice is asked once)
         ASSERT_TRUE(json_of(w.as(kRefAnn, "GET", "/counts/mine", "ids=" + w.ids[1], false)).get("liked").size() == 0);
         ASSERT_TRUE(!contains(ann.body, kRefAnn) && !contains(ann.body, kRefBo));                                                // (no reference in an answer)
         // the shape of the query
@@ -487,8 +511,10 @@ int main() {
         ASSERT_TRUE(r.status == 200 && json_of(r).get("likes").as_int_or(-1) == 1);
         r = w.as(kRefBo, "POST", "/counts/like/" + a);
         ASSERT_TRUE(r.status == 200 && json_of(r).get("likes").as_int_or(-1) == 2);
+        const uint64_t compared = ctl::constant_time_equal_calls();
         r = w.as(kRefAnn, "POST", "/counts/unlike/" + a);
         ASSERT_TRUE(r.status == 200 && !json_of(r).get("liked").as_bool_or(true) && json_of(r).get("likes").as_int_or(-1) == 1);
+        ASSERT_TRUE(ctl::constant_time_equal_calls() >= compared + 2);                                                           // (the mac of the pass and the token of the change)
         ASSERT_EQ(w.number("SELECT likes FROM history_matches WHERE id = '" + a + "'"), int64_t{1});
         // no token, a wrong one, the token of another person
         ASSERT_EQ(w.as(kRefAnn, "POST", "/counts/like/" + a, "", false).status, 403);
