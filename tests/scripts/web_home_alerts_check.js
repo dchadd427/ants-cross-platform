@@ -365,12 +365,12 @@ const buttonsOf = (root, label) => root.findAll((e) => e.tagName === 'button' &&
     function mountOf(o) {
         o = o || {};
         const bar = new H.El(env, 'div', ''), menu = new H.El(env, 'button', ''); menu.className = 'btn hmenu'; bar.appendChild(menu);
-        const calls = [], sent = [], blocks = [], state = { signedIn: o.signedIn !== false, chat: !!o.chat, taps: [], dockUp: !o.late };
+        const calls = [], sent = [], blocks = [], state = { signedIn: o.signedIn !== false, chat: !!o.chat, taps: [], dockUp: !o.late, convs: [], msgReady: !!o.messages, backs: [] };
         const dock = { tap(fn) { state.taps.push(fn); }, send: o.noSend ? undefined : (obj) => { sent.push(obj); return true; }, onScreen: () => state.chat, note() {}, you: () => (state.signedIn ? { name: 'Maya' } : null),
             block: o.noBlock ? undefined : (draw, cls) => { const b = { draw, cls, redraws: 0 }; blocks.push(b); return { redraw() { b.redraws++; } }; } };
         const opened = [];
         const win = Object.assign({}, env.win, { AntsHomeChat: Chat, innerHeight: 800, navigator: { userAgent: 'x' }, open: (...a) => { opened.push(a); return null; } });
-        const m = A.mount({ doc: env.doc, win, core, ctl: { screen: () => o.screen || 'home', show: (n, how) => calls.push(['show', n, how]), join: (row, back) => { calls.push(['join', row.code, row.from]); return true; }, chat: () => calls.push(['chat']), messages: (h, name) => calls.push(['messages', h, name]), seeing: (h) => state.seeing === h },
+        const m = A.mount({ doc: env.doc, win, core, ctl: { screen: () => o.screen || 'home', show: (n, how) => calls.push(['show', n, how]), join: (row, back) => { calls.push(['join', row.code, row.from]); return true; }, chat: () => calls.push(['chat']), messages: (h, name, back) => { calls.push(['messages', h, name]); state.backs.push(back); }, seeing: (h) => state.seeing === h, convs: o.messages ? () => state.convs : undefined, messagesReady: o.messages ? () => state.msgReady : undefined },
             bar, menuBtn: menu, signedIn: () => state.signedIn, dock: () => (state.dockUp ? dock : null), now: () => NOW });
         const bell = bar.children.filter((e) => /(^|\s)al-bell(\s|$)/.test(e.className))[0];
         const tap = (kind, m1) => state.taps.forEach((f) => f(kind, m1));
@@ -466,11 +466,9 @@ const buttonsOf = (root, label) => root.findAll((e) => e.tagName === 'button' &&
     b.tap('alerts', { rows: [MSGROW(6), ROOMROW(5), ROOMROW(4, { o: undefined, code: undefined, u: 0 })] });
     b.bell.click();
     const kinds2 = items().map((i) => i.textContent);
-    same('the list holds a room, a private message and a room that has closed, each in its own words', [items().map((i) => i.getAttribute('data-k')), /Pebble sent you a private message/.test(kinds2[0]) && /Open/.test(kinds2[0]), /Fern opened a room/.test(kinds2[1]) && /Treasure/.test(kinds2[1]) && /1 of 4 in/.test(kinds2[1]) && /Join/.test(kinds2[1]), /Fern opened a room/.test(kinds2[2]) && /The room has closed\./.test(kinds2[2]) && !/Join/.test(kinds2[2])], [['msg', 'room', 'room'], true, true, true]);
-    check('a message row says who and when, and has no words of a message (the hub keeps none in it)', !/hello|secret/.test(kinds2[0]) && /Pebble/.test(kinds2[0]) && /ago|just now/.test(kinds2[0]));
+    same('the list holds the room and the room that has closed, each in its own words: the private message is not a row of it (it is a conversation, in the Messages tab)', [items().map((i) => i.getAttribute('data-k')), /Fern opened a room/.test(kinds2[0]) && /Treasure/.test(kinds2[0]) && /1 of 4 in/.test(kinds2[0]) && /Join/.test(kinds2[0]), /The room has closed\./.test(kinds2[1])], [['room', 'room'], true, true]);
+    check('the bell counts the room and not the message row of the hub (the Messages tab has its own count)', b.marks().join() === '1' && !items().some((i) => /private message/.test(i.textContent)));
     items()[0].findAll((e) => e.tagName === 'button')[0].click();
-    same('Open on a message row opens the conversation by the handle that the hub gave, and the list goes', [b.calls.pop(), shadeOf(env)], [['messages', 'a1b2c3d4e5f6', 'Pebble'], null]);
-    b.bell.click(); items()[1].findAll((e) => e.tagName === 'button')[0].click();
     same('Join on a room row is the invitation\'s Join', b.calls.pop().join(), 'join,abc234,Fern');
     b = mountOf();
     b.tap('alert', { row: ROOMROW(7) });
@@ -480,12 +478,12 @@ const buttonsOf = (root, label) => root.findAll((e) => e.tagName === 'button' &&
     same('...Join joins the room and the toast goes', [b.calls.pop().join(), toast()], ['join,abc234,Fern', null]);
     b.tap('alert', { row: MSGROW(8) });
     const mt = toast();
-    check('a private message: a toast that says who and nothing of the words, with Open', !!mt && /Pebble sent you a private message\./.test(mt.textContent) && /Open/.test(mt.textContent) && b.marks().join() === '2');
+    check('a private message: a toast that says who and nothing of the words, with Open', !!mt && /Pebble sent you a private message\./.test(mt.textContent) && /Open/.test(mt.textContent) && b.marks().join() === '1');
     mt.findAll((e) => e.tagName === 'button')[0].click();
     same('...Open opens the conversation', b.calls.pop().join(), 'messages,a1b2c3d4e5f6,Pebble');
     b.state.seeing = 'a1b2c3d4e5f6';
     b.tap('alert', { row: MSGROW(9) });
-    check('a message from the person whose conversation is on the screen: no toast (the Messages part reads it), the bell has it', toast() === null && b.marks().join() === '3');
+    check('a message from the person whose conversation is on the screen: no toast (the Messages part reads it), and no number on the bell for the message row', toast() === null && b.marks().join() === '1');
     b.state.seeing = null;
     b = mountOf({ chat: true });
     b.tap('alert', { row: ROOMROW(7) });
@@ -563,6 +561,61 @@ const buttonsOf = (root, label) => root.findAll((e) => e.tagName === 'button' &&
     same('the unread are counted, and nine is the most that the bell says', [A.countOf([{ u: true }, { u: false }, { u: true }]), A.countText(9), A.countText(10)], [2, '9', '9+']);
     same('a visitor\'s list: the last seven days, the newest thirty, newest first', A.trim([{ id: 1, at: NOW - 8 * 86400 }, { id: 2, at: NOW }, { id: 3, at: NOW }], NOW).map((r) => r.id), [3, 2]);
     check('the list is never a place for the browser to be asked for anything, and nothing is written as markup', env.innerHTMLWrites.length === 0);
+    // the Messages tab of the bell (docs/HOME_CHAT.md): the conversations, the count of both on the bell, and a conversation opened from here
+    {
+        const CONV = (h, name, o) => Object.assign({ h, name, at: NOW - 120, text: 'hello there', me: false, u: 0, f: false, b: false }, o || {});
+        const tabs = () => (shadeOf(env) ? shadeOf(env).findAll((e) => /(^|\s)al-tab(\s|$)/.test(e.className)) : []);
+        const convRows = () => (shadeOf(env) ? shadeOf(env).findAll((e) => /(^|\s)al-conv(\s|$)/.test(e.className)) : []);
+        const gear = () => (shadeOf(env) ? shadeOf(env).findAll((e) => /(^|\s)al-gear(\s|$)/.test(e.className)) : []);
+        const withTabs = (convs, o) => { const m = mountOf(Object.assign({ messages: true }, o || {})); m.state.convs = convs; return m; };
+        let t = mountOf();
+        t.bell.click();
+        check('no Messages part (a guest, or the part is not there yet): the bell has no tabs and no word of messages', tabs().length === 0 && !/Messages/.test(shadeOf(env).textContent));
+        t.bell.click();
+        t = mountOf({ messages: true, signedIn: false });
+        t.bell.click();
+        check('a guest never has the Messages tab, whatever the part says', tabs().length === 0);
+        t.bell.click();
+        t = withTabs([CONV('a1b2c3d4e5f6', 'Pebble', { u: 2 }), CONV('b1b2c3d4e5f6', 'Maple', { me: true, text: 'see you', f: true, at: NOW - 7200 }), CONV('c1b2c3d4e5f6', 'Tess', { u: 120, text: '<b>x</b>' })]);
+        t.tap('alerts', { rows: [MENTION(3), MSGROW(4)] });
+        same('the bell counts what is not read in the alerts and in the conversations, and the message row of the hub is none of them', [t.marks(), t.bell.getAttribute('aria-label')], [['9+'], 'Alerts, 123 unread']);
+        t.bell.click();
+        same('a person who is logged in has the two tabs, Alerts first and chosen, each with its count', [tabs().map((e) => e.getAttribute('data-tab')), tabs().map((e) => e.getAttribute('data-on')), tabs().map((e) => e.textContent)], [['alerts', 'messages'], ['true', 'false'], ['Alerts1', 'Messages99+']]);
+        same('the Alerts tab has the alerts and none of the conversations', [items().map((i) => i.getAttribute('data-k')), convRows().length, gear().length], [['mention'], 0, 1]);
+        tabs()[1].click();
+        same('the Messages tab: the conversations in the hub\'s order, the title, no gear (the settings are the alerts\')', [convRows().map((r) => r.getAttribute('data-h')), panelOf(env).getAttribute('data-tab'), panelOf(env).getAttribute('aria-label'), gear().length, tabs().map((e) => e.getAttribute('data-on'))], [['a1b2c3d4e5f6', 'b1b2c3d4e5f6', 'c1b2c3d4e5f6'], 'messages', 'Messages', 0, ['false', 'true']]);
+        const words2 = convRows().map((r) => r.textContent);
+        check('a conversation says the person, the start of the newest message ("You: " when it is yours), how long ago and the count of what is not read (99+ above 99)', /Pebble/.test(words2[0]) && /hello there/.test(words2[0]) && /2 min ago/.test(words2[0]) && /2$/.test(words2[0]) && /You: see you/.test(words2[1]) && /2 hours? ago|2 h/.test(words2[1]) && /99\+$/.test(words2[2]));
+        check('a person that is followed has the gold star, with its words; the unread have the mark', convRows()[1].findAll((e) => /al-star/.test(e.className)).length === 1 && convRows()[0].findAll((e) => /al-star/.test(e.className)).length === 0 && /unread/.test(convRows()[0].className) && !/unread/.test(convRows()[1].className));
+        same('the circle of a conversation holds the first letter of the name and nothing more (no dots of a cut)', convRows().map((r) => r.findAll((e) => /(^|\s)al-ic(\s|$)/.test(e.className))[0].textContent), ['P', 'M', 'T']);
+        check('hostile text is text: no markup is written', words2[2].indexOf('<b>x</b>') !== -1 && env.innerHTMLWrites.length === 0);
+        check('the line under the list says how long messages are kept', /kept for 7 days/.test(panelOf(env).textContent));
+        convRows()[0].click();
+        same('a conversation opens by the handle that the hub gave, the list goes, and the part is told what has the focus again (the bell)', [t.calls.pop(), shadeOf(env), t.state.backs.pop() === t.bell], [['messages', 'a1b2c3d4e5f6', 'Pebble'], null, true]);
+        t.bell.click();
+        same('the list is on the Alerts tab again when it is opened from the bell', [panelOf(env).getAttribute('data-tab'), t.m.count()], ['alerts', 122]);      // (the alerts were read when the list closed: what is left is the conversations')
+        t.m.close(); t.m.open(null, 'messages');
+        same('open(null, "messages") opens on the Messages tab (the arrow of a conversation comes back to it)', [panelOf(env).getAttribute('data-tab'), convRows().length], ['messages', 3]);
+        t.state.convs = [CONV('d1b2c3d4e5f6', 'Fern', { u: 1 })]; t.m.messagesChanged();
+        same('a change of the conversations while the Messages tab is on the screen draws it again, and the bell\'s number follows', [convRows().map((r) => r.getAttribute('data-h')), t.marks()], [['d1b2c3d4e5f6'], ['1']]);
+        t.m.close();
+        same('closing the list marks the alerts read and sends nothing of the conversations: the bell has what is not read of them', [t.sent.filter((f) => f.t === 'seen').map((f) => f.upto), t.marks()], [[3], ['1']]);
+        t.state.convs = []; t.m.messagesChanged(); t.m.open(null, 'messages');
+        same('no conversations: the words that say how to start one', [convRows().length, /No private messages yet/.test(panelOf(env).textContent), /Message, or type \/msg NAME/.test(panelOf(env).textContent)], [0, true, true]);
+        env.doc.listeners.keydown.forEach((f) => f({ key: 'Escape', preventDefault() {} }));
+        check('Escape closes the list from the Messages tab', shadeOf(env) === null);
+        t.state.msgReady = false; t.m.open(null, 'messages');
+        same('a part that is not ready: the tab is not there, and a request for it opens the alerts', [tabs().length, panelOf(env).getAttribute('data-tab')], [0, 'alerts']);
+        t.m.close();
+        t = withTabs([CONV('a1b2c3d4e5f6', 'Pebble', { u: 1 })]);
+        t.m.open(null, 'messages');
+        gear();
+        t.m.open(null, 'messages');
+        check('a request for the Messages tab while the list is open on it changes nothing', convRows().length === 1 && tabs().length === 2);
+        tabs()[0].click();
+        check('the tabs change the list in place and keep the focus on the tab that was pressed', tabs()[0].getAttribute('data-on') === 'true' && env.doc.activeElement === tabs()[0]);
+        t.m.close();
+    }
     // the match of the account that is over: an entry of the list that is read, told by the page that came back from it
     const ID = 'ants-TREASURE-20261016-071320Z';
     const OVER = (id, o) => Object.assign({ id, at: NOW - 120, k: 'over', map: 'TREASURE.LVL', place: 2, match: ID }, o || {});

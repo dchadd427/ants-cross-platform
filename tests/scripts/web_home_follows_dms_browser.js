@@ -4,7 +4,7 @@
 //   1. the person's sheet of a name in the players list (Message, Follow, Ignore, Report, and the dim "Open a room first"): every target is 44 px or more on a touch screen, it lies inside the window;
 //   2. Follow: the Following tab (count, the person under what they do, the star in Everyone), the hub's own answer; a person who is not here under "Not here"; the word that nobody is told;
 //   3. a public room that a person she follows opens (the page of fern says it to the real hub): the toast with Join, the bell's row, and no frame of fern's holds anything of it;
-//   4. a private message: the Messages button (in the chat's head, with its count), the panel (a sheet from the bottom on a phone), the conversation, Send (a message is drawn only when the hub's echo comes), the other page's toast, count and
+//   4. a private message: the bell's Messages tab (the list of conversations; the number on the bell counts them), the panel (a sheet from the bottom on a phone), the conversation, Send (a message is drawn only when the hub's echo comes), the other page's toast, count and
 //      bell row, the read that takes them away;
 //   5. Block: the blocked person's message is not shown to hazel (no toast, no count), and the sender sees an ordinary send; Report: the card, and the hub's copy of the message (read with `python3 -m hub.admin reports`);
 //   6. nothing is wider than the window, nothing sticks out, no page error.
@@ -63,14 +63,14 @@ async function main() {
         const press = async (a, text) => { await a.page.evaluate((t) => { const b = Array.from(document.querySelectorAll('.gm-box button, .pm-panel button, .pm-card button, .pm-shade button, .al-panel button, .al-toast button, .pm-card-shade button')).filter((x) => (x.getAttribute('aria-label') || x.textContent).replace(/\s+/g, ' ').trim().indexOf(t) === 0)[0]; if (!b) throw new Error('no button ' + t); b.click(); }, text); await sleep(300); };
         const toasts = (a) => a.page.evaluate(() => Array.from(document.querySelectorAll('.al-toast')).filter((t) => !t.hidden).map((t) => t.textContent.replace(/\s+/g, ' ').trim()).join(' | '));
         const toastIs = (a, re, ms) => until(tag + a.name + ': a toast that says ' + re, async () => re.test(await toasts(a)), ms || 6000);
-        const count = (a) => a.page.evaluate(() => { const n = document.querySelector('#gchat .pm-n'); return n && !n.hidden ? Number(n.textContent) : 0; });
+        const messagesTab = async (a) => { await a.page.evaluate(() => { document.querySelector('.hbar .al-bell').click(); }); await sleep(350); await a.page.evaluate(() => { const t = document.querySelector('.al-tab[data-tab="messages"]'); if (t) t.click(); }); await sleep(250); };          // (the bell, on its Messages tab: the list of conversations)
         const bell = (a) => a.page.evaluate(() => { const m = document.querySelector('.hbar .al-bell .al-mark'); return m ? Number(m.textContent.replace('+', '')) : 0; });
         const tabOf = async (a, name) => { await view(a, 'players'); await a.page.evaluate((n) => document.querySelector('.pl-tab[data-tab="' + n + '"]').click(), name); await sleep(250); };
         async function shot(a, name) {
             const bad = await a.page.evaluate(() => {
                 const out = [], w = window.innerWidth;
                 if (document.documentElement.scrollWidth > w + 1) out.push('the page scrolls sideways');
-                document.querySelectorAll('.pm-panel, .gm-box, .al-panel, .pm-card, .al-toast, .pm-btn, .pl-tabs').forEach((e) => { const r = e.getBoundingClientRect(); if (r.width && (r.left < -1 || r.right > w + 1 || r.bottom > window.innerHeight + 1)) out.push(e.className + ' sticks out ' + Math.round(r.left) + ',' + Math.round(r.right) + ',' + Math.round(r.bottom)); });
+                document.querySelectorAll('.pm-panel, .gm-box, .al-panel, .pm-card, .al-toast, .pl-tabs').forEach((e) => { const r = e.getBoundingClientRect(); if (r.width && (r.left < -1 || r.right > w + 1 || r.bottom > window.innerHeight + 1)) out.push(e.className + ' sticks out ' + Math.round(r.left) + ',' + Math.round(r.right) + ',' + Math.round(r.bottom)); });
                 return out;
             });
             bad.forEach((b) => check(tag + name + ': ' + b, false));
@@ -156,25 +156,26 @@ async function main() {
             await until(tag + 'the message is drawn when the hub says it', async () => (await bubbles(hazel)).join() === 'me:hey pebble, want a 2v2 on Islands?', 5000);
             check(tag + 'the field is empty after the echo', (await hazel.page.inputValue('.pm-panel .pm-input')) === '');
             await closePanel(hazel);
-            await until(tag + 'pebble has the toast, the count and the bell row', async () => (await count(pebble)) === 1 && (await bell(pebble)) === 1 && /hazel sent you a private message/.test(await toasts(pebble)), 6000);
+            await until(tag + 'pebble has the toast and the number on the bell', async () => (await bell(pebble)) === 1 && /hazel sent you a private message/.test(await toasts(pebble)), 6000);
             check(tag + 'the toast of pebble has none of the words', !/Islands/.test(await toasts(pebble)));
-            check(tag + 'pebble\'s bell has one row for hazel, with Open and none of the words', await pebble.page.evaluate(() => { document.querySelector('.al-bell').click(); const rows = Array.from(document.querySelectorAll('.al-item[data-k="msg"]')); const ok = rows.length === 1 && /hazel sent you a private message/.test(rows[0].textContent) && !/Islands/.test(rows[0].textContent); document.querySelector('.al-x').click(); return ok; }));
+            await messagesTab(pebble);
+            check(tag + 'pebble\'s bell: the Messages tab has one conversation, with hazel, and the Alerts tab has no row for the message', await pebble.page.evaluate(() => { const rows = Array.from(document.querySelectorAll('.al-conv')), tabs = Array.from(document.querySelectorAll('.al-tab')).map((t) => t.getAttribute('data-tab') + ':' + t.getAttribute('data-on')).join(); const ok = rows.length === 1 && /^hazel/.test(rows[0].querySelector('.al-t').textContent) && tabs === 'alerts:false,messages:true'; document.querySelector('.al-tab[data-tab="alerts"]').click(); const none = !Array.from(document.querySelectorAll('.al-item')).some((i) => /private message/.test(i.textContent)); document.querySelector('.al-x').click(); return ok && none; }));
             await pebble.page.evaluate(() => Array.from(document.querySelectorAll('.al-toast button')).filter((b) => /Open/.test(b.textContent))[0].click()).catch(() => {});
             await sleep(500);
             const pb = await pm(pebble);
-            check(tag + 'pebble: Open on the toast opens the conversation, which is read (no count, no bell row)', !!pb && pb.view === 'thread' && (await count(pebble)) === 0 && (await bell(pebble)) === 0 && (await bubbles(pebble)).join() === 'them:hey pebble, want a 2v2 on Islands?', JSON.stringify([pb, await count(pebble), await bell(pebble), await bubbles(pebble)]));
+            check(tag + 'pebble: Open on the toast opens the conversation, which is read (nothing on the bell)', !!pb && pb.view === 'thread' && (await bell(pebble)) === 0 && (await bubbles(pebble)).join() === 'them:hey pebble, want a 2v2 on Islands?', JSON.stringify([pb, await bell(pebble), await bubbles(pebble)]));
             await typeAndSend(pebble, 'come on, answer me. I know you are there');
-            await until(tag + 'hazel has the toast and the count', async () => (await count(hazel)) === 1 && /pebble sent you a private message/.test(await toasts(hazel)), 6000);
+            await until(tag + 'hazel has the toast and the number on the bell', async () => (await bell(hazel)) === 1 && /pebble sent you a private message/.test(await toasts(hazel)), 6000);
             await view(hazel, 'chat');
             await shot(hazel, '13_dm_toast');
             await closePanel(pebble);
 
             // the list, and the conversation with a message of theirs
-            await hazel.page.evaluate(() => document.querySelector('#gchat .pm-btn').click()); await sleep(400);
-            check(tag + 'the list: pebble with the start of the newest message and a count of 1', await hazel.page.evaluate(() => { const r = document.querySelector('.pm-row'); return !!r && /pebble/.test(r.textContent) && /come on, answer me/.test(r.textContent) && r.querySelector('.pm-u').textContent === '1' && /Messages are kept for 7 days/.test(document.querySelector('.pm-keep').textContent); }));
+            await messagesTab(hazel);
+            check(tag + 'the list (the bell\'s Messages tab): pebble with the start of the newest message and a count of 1', await hazel.page.evaluate(() => { const r = document.querySelector('.al-conv'); return !!r && /pebble/.test(r.textContent) && /come on, answer me/.test(r.textContent) && r.querySelector('.al-u').textContent === '1' && /Messages are kept for 7 days/.test(document.querySelector('.al-keep').textContent); }));
             await shot(hazel, '11_dm_list');
-            await hazel.page.evaluate(() => document.querySelector('.pm-row').click()); await sleep(400);
-            check(tag + 'opening it reads it: no count on the button, no row in the bell', (await count(hazel)) === 0 && (await bell(hazel)) === 0, JSON.stringify([await count(hazel), await bell(hazel)]));
+            await hazel.page.evaluate(() => document.querySelector('.al-conv').click()); await sleep(400);
+            check(tag + 'opening it reads it: nothing on the bell, and the list is gone while the conversation is open', (await bell(hazel)) === 0 && !(await hazel.page.evaluate(() => !!document.querySelector('.al-shade'))), JSON.stringify([await bell(hazel)]));
             await shot(hazel, '10_dm_thread');
 
             // ---- 5. a report and a block --------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -192,12 +193,12 @@ async function main() {
             await press(hazel, 'Block pebble');
             await sleep(500);
             await closePanel(hazel);
-            await pebble.page.evaluate(() => document.querySelector('#gchat .pm-btn').click()); await sleep(300);
-            await pebble.page.evaluate(() => document.querySelector('.pm-row').click()); await sleep(400);
+            await messagesTab(pebble);
+            await pebble.page.evaluate(() => document.querySelector('.al-conv').click()); await sleep(400);
             await typeAndSend(pebble, 'are you there?');
             await until(tag + 'pebble sees its own message as sent', async () => (await bubbles(pebble)).slice(-1)[0] === 'me:are you there?', 5000);
             await sleep(900);
-            check(tag + 'a blocked person\'s message is not shown to hazel: no count, no toast about it, nothing new in the bell', (await count(hazel)) === 0 && !/pebble sent you a private message/.test(await toasts(hazel)) && (await bell(hazel)) === 0, JSON.stringify([await count(hazel), await toasts(hazel), await bell(hazel)]));
+            check(tag + 'a blocked person\'s message is not shown to hazel: no number on the bell, no toast about it', !/pebble sent you a private message/.test(await toasts(hazel)) && (await bell(hazel)) === 0, JSON.stringify([await toasts(hazel), await bell(hazel)]));
             check(tag + 'no word of a message is in the hub\'s log', !/answer me|2v2|are you there/.test(stack.log()));
             await closePanel(pebble);
         } catch (e) {
