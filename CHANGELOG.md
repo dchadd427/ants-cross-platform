@@ -29,14 +29,20 @@ Work that is not released yet is written in the same template under a heading th
 ## Next
 
 **For players:**
-- **Special ants on a match's page.** A new section under the Scoreboard shows what each type of ant did: a card for each type that somebody had (Swimmer: bridges built and taken down; Fire Ant: fires lit and put out; Bomber: bombs set, defused and gone off; Thief: raids that brought loot home, "5 of 8", and the loot), and a card for food and fighting. A type that nobody used is left out with one line. Bombs set, Defused and Fires lit moved there from the Scoreboard. A match played before this release shows what was counted then (no bridges, fires put out or loot).
 - **Computer players stand idle less.** On ISLANDS Hard bots take the Thief and Fire hats and dig to a rival's hill to steal; at every level ants that meet on a bridge sort it out. Bots only.
 - **A new results screen.** With the New HUD the end of a match is a page that fits any window or phone: Victory! or Defeat, the winner and the others ranked, the damage, three honors and a Play of the game, with Watch on the desktop. "All stats" opens every player's numbers and "Back to results" returns (the arrow keys work too).
 - **You choose after a room's match.** The results of a match that began in a lobby room have two buttons, "Back to the room" and "Back to Ants & Uncles", and wait until you press one.
 
+## v0.21.4 - 2026-11-24 - Special ants on the match page, What's new fits a phone
+
+**For players:**
+- **Special ants on a match's page.** A new section under the Scoreboard shows what each type of ant did: a card for each type that somebody had (Swimmer: bridges built and taken down; Fire Ant: fires lit and put out; Bomber: bombs set, defused and gone off; Thief: raids that brought loot home, "5 of 8", and the loot), and a card for food and fighting. A type that nobody used is left out with one line. Bombs set, Defused and Fires lit moved there from the Scoreboard. A match played before this release shows what was counted then (no bridges, fires put out or loot).
+
 **Fixes:**
 - On a phone, the "What's new" window fits the screen, so its Close button is no longer below the bottom of the page.
 - Private messages on a phone: the conversation is a sheet that follows what you can see, so with the keyboard open the field sits just above it, the head with the name and the X stays on the screen and the messages fill the room over the field. The X, the arrow, Escape, a pull down on the head and the phone's Back button each close the sheet and leave you on the page where you were, not on the bell's list.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/3430f45a...e6b312bf)
 
 ## v0.21.3 - 2026-11-24 - Follows, private messages, replay likes and the activity curve
 
