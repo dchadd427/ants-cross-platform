@@ -140,7 +140,7 @@ bool RaidTask::launch(TaskContext& c, const AntView& thief) {
     const std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, c.seat, v.walk_context());
     const std::vector<int32_t> field = MapInfo::cost_field(grid, mask, thief.tile);
     if (field.empty()) return false;
-    const bool island_mode = plan.island_endraid && tactics_.far_work;                    // (the island play: the hills are joined by bridges that go, and the loot is banked at the own hill)
+    const bool island_mode = plan.island_endraid && tactics_.island_play;                    // (the island play: the hills are joined by bridges that go, and the loot is banked at the own hill)
     for (const uint8_t t : teams) {
         const HillInfo& hill = c.map.hill(t);
         int32_t best = -1;
@@ -437,7 +437,7 @@ void RaidTask::step(TaskContext& c) {
             if (held && waiting_.count(a.id) == 0) c.ledger.release(a.id, id());        // walking, carrying, hurt: the economy's again (a thief on its way to its waiting place stays ours)
             continue;
         }
-        if (tactics_.plan.island_endraid && tactics_.far_work && tactics_.endraid) {    // the island play: a Thief far from the own hill walks home first when a walk leads there, and raids from its island (the loop is a short walk then)
+        if (tactics_.plan.island_endraid && tactics_.island_play && tactics_.endraid) {    // the island play: a Thief far from the own hill walks home first when a walk leads there, and raids from its island (the loop is a short walk then)
             const HillInfo& own = c.map.hill(c.seat);
             if (own.present && a.tile.chebyshev_dist(own.entrance) > 12) {
                 if (!stage_joined_made_) {

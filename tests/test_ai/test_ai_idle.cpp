@@ -9,6 +9,7 @@
 //   AI58.6  whole matches on ISLANDS: with the endgame Thief on the bots take the Thieves that fall at the strips, dig the chains and steal; with it off nobody steals; the matches replay
 //   AI58.7  whole matches on ISLANDS: with the Fire hats the bots take more of the Fire hats of the corner rows (the ring, 3 to 6 water tiles from a hill) and Swimmers dig the chain home for the Fire Ant; with the rule off none is dug
 //   AI58.8  a whole ant that stands idle on a satellite gets the bridge home when the bridge rule is on (and the endgame wants a Thief); with it off it stays
+//   AI58.9  HELLRAISER (a gate map): the island rules (the endgame Thief, the Fire hats, the bridge rule) change nothing there: the same match with them on and off
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -354,6 +355,41 @@ void run_idle_tests() {
             ASSERT_EQ(a->tile_x >= 17, on);                                                      // both walked home over the bridge (the hill's island starts at x 18)
             ASSERT_EQ(b->tile_x >= 17, on);
             ASSERT_EQ(lab.bot()->flower_link().bridges().tiles_ordered(BridgeJob::Kind::Return) > 0u, on);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI58.9 The Island Play Does Nothing Off The Island Maps: Four Hard Bots On HELLRAISER (A Gate Map: Food Beyond Walls) Play The Same Match With The Endgame Thief, The Fire Hats And The Bridge Rule On As With Them Off (Every Seat: The Same Score, Orders And Raids)") {
+        assets::LevelData level;
+        ASSERT_TRUE(level.load_from_file(std::string(ANTS_SOURCE_DIR) + "/Community-Maps/HELLRAISER.lvl"));
+        const auto play = [&](bool island_rules, uint32_t seed) {
+            ArenaSpec spec;
+            spec.level = &level;
+            spec.seed = seed;
+            spec.max_ticks = 12000;
+            for (uint8_t seat = 0; seat < 4; ++seat) {
+                BotSpec b;
+                b.seat = seat;
+                b.level = Level::Hard;
+                spec.bots.push_back(b);
+            }
+            spec.factory = [island_rules](const BotSpec& b) {
+                return std::unique_ptr<Bot>(std::make_unique<StandardBot>(b.level, Style::Random, [island_rules](LevelPlan& plan) {
+                    plan.island_endraid = plan.fire_hats = plan.bridge_more = island_rules;
+                    plan.contact_strike = plan.idle_jobs = plan.thief_answer = plan.bridge_headon = false;       // (the rules that are not the island play are the same in both)
+                }));
+            };
+            return play_match(spec);
+        };
+        for (const uint32_t seed : {1u, 2u}) {
+            const ArenaResult on = play(true, seed);
+            const ArenaResult off = play(false, seed);
+            ASSERT_TRUE(on.error.empty() && off.error.empty());
+            ASSERT_EQ(on.seats.size(), off.seats.size());
+            for (size_t i = 0; i < on.seats.size(); ++i) {
+                ASSERT_EQ(on.seats[i].score, off.seats[i].score);
+                ASSERT_EQ(on.seats[i].orders, off.seats[i].orders);
+                ASSERT_EQ(on.seats[i].raided, off.seats[i].raided);
+            }
         }
     } TEST_END();
 }

@@ -125,6 +125,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
         if (info == nullptr || info->approach[seat_].reachable()) any_reachable_pile = true;
     }
     tactics_.far_work = (plan.islands && island_.active()) || tactics_.gate_map || tactics_.field_map;                            // (food beyond water, a gate or a field is work for the Swimmers and the goals: the ants do not go hunting, and the last ants do not go for a kill)
+    tactics_.island_play = plan.islands && island_.active();                                   // (far_work without the gate and field maps: the island rules of docs/BOT_IDLE.md are for the island maps only)
     tactics_.no_work = !any_reachable_pile && !tactics_.far_work;
     // The food-gone batch (LevelPlan::gone, docs/BOT_TACTICS.md "When the food is gone"): no food to walk to, no island, gate or field work for the ants, for plan.gone_wait ticks and with time left on the clock
     {
