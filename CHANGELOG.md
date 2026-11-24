@@ -33,6 +33,9 @@ Work that is not released yet is written in the same template under a heading th
 - **A new results screen.** With the New HUD the end of a match is a page that fits any window or phone: Victory! or Defeat, the winner and the others ranked, the damage, three honors (MVP, First blood, Biggest raid) and a Play of the game, with Watch on the desktop. "All stats" opens every player's numbers and "Back to results" returns (the arrow keys work too).
 - **You choose after a room's match.** The results of a match that began in a lobby room have two buttons, "Back to the room" and "Back to Ants & Uncles", and wait until you press one.
 
+**Fixes:**
+- On a phone, the "What's new" window fits the screen, so its Close button is no longer below the bottom of the page.
+
 ## v0.21.3 - 2026-11-24 - Follows, private messages, replay likes and the activity curve
 
 **For players:**
