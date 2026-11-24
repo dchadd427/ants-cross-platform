@@ -126,6 +126,9 @@
     .gm-ask-btns { display: grid; grid-template-columns: minmax(0, 1fr); }
 }
 
+/* a window too narrow for the header's three pieces (a phone's frame of a match page is 320 px wide, a phone upright 390): the tag would lie over the title, so it is left out there (the note at the foot says that the replay goes on) */
+@media (max-width: 400px) { .gm-tag { display: none; } }
+
 /* a phone on its side: the screen's height less the gutter, the sections at the left, the note beside the title */
 @media (min-width: 701px) and (max-height: 520px) {
     .gm-scrim { padding: 8px; }

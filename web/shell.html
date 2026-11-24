@@ -1826,7 +1826,7 @@
                 // first press, see the audio block below)
                 isReadyToPlay = true;
                 antsSyncAspect();                                            // (a picture that was chosen while the game was starting)
-                if (!ANTS_EMBED) antsLoadGameMenu();                         // (the settings menu's panel: Esc opens it)
+                antsLoadGameMenu();                                          // (the settings menu's panel: Esc opens it; the frame of a match page has it too)
                 clearTimeout(window.antsStartWatchdog);
                 progressContainer.style.display = 'none';
                 hideLoadingScreen();
@@ -3001,7 +3001,7 @@
                 menu: function (what) { try { return Module._ants_menu_get ? Module._ants_menu_get(what) : -1; } catch (err) { return -1; } },
                 isFullscreen: isFullscreen, relayout: function () { relayout(false); }, store: function () { return window.localStorage; } });
         }
-        // THE SETTINGS MENU (game_menu.js and game_menu.css, docs/GAME_MENU.md): fetched once the game runs, never in the frame of a match page; until it is here, or when it cannot be had (tried twice, then said in the toast), Esc is what it was
+        // THE SETTINGS MENU (game_menu.js and game_menu.css, docs/GAME_MENU.md): fetched once the game runs (in the frame of a match page too); until it is here, or when it cannot be had (tried twice, then said in the toast), Esc is what it was
         function antsLoadGameMenu(again) {
             var script = document.createElement('script'), toast = document.getElementById('toast');
             script.src = 'game_menu.js?v=' + ANTS_BUILD_VER;
