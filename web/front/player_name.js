@@ -1,5 +1,5 @@
 // The name that a person plays under on the front page and on the game page (web/lobby.html, web/shell.html): nobody types a name on the web (tests/scripts/web_player_name_check.js).
-//   * A person who is logged in with Discord (docs/HUB.md "Login") plays under the login's name made to fit the game's rules. The page asks the site's own `GET /hub/me` (same origin; the cookie is HttpOnly)
+//   * A person who is logged in with Discord (docs/HUB_LOGIN.md "Login") plays under the login's name made to fit the game's rules. The page asks the site's own `GET /hub/me` (same origin; the cookie is HttpOnly)
 //     when it opens, and again at every seat (a login, a guest of a site that has a login, a failed answer), so that a log in or a log out in the chat is known at the next room. `you.name` is tried first, then `you.next` (the display name, when the hub shows the server nickname and says it), then `you.other`; the username always fits.
 //   * Everybody else (not logged in, no hub or no login, an answer that is late or wrong) plays under a guest name: "Guest" and six digits, made once and kept in this browser (localStorage, GUEST_KEY; a
 //     browser that refuses its storage keeps it for the page). A login and a log out never change it. It is a random number and nothing else.

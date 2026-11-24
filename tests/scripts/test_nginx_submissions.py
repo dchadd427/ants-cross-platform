@@ -7,7 +7,7 @@ The game server's SUBMISSION door (ants_server --submit-port 4030, docs/MAP_SUBM
     list of the newest version) and the fallback that asks the game server for the file and the picture of an APPROVED map; everything else under /admin/ is a 404 (there is no helper, no callback);
   - what is passed on: nothing the visitor sent but the few headers that each block names (the token of a maker, the CSRF token of the admin, the type of the body), the real client address in
     X-Client-Address (a header of that name from a visitor never gets through), and no cookie in either direction;
-  - the admin's door (docs/HUB.md "The admin page's door"): the chat hub's gate is asked once for each request of /admin/api/ (a stand-in hub plays it below), only its signed pass goes to the game server, a visitor
+  - the admin's door (docs/HUB_ROLES.md "The admin page's door"): the chat hub's gate is asked once for each request of /admin/api/ (a stand-in hub plays it below), only its signed pass goes to the game server, a visitor
     whom it does not let in is answered here in JSON, a gate in trouble is a 503, a request of another site is turned away first, and the allowance is for each address;
   - the limits that nginx holds before the game server is asked: the size of a map (under a million bytes for a Classic one, 4 MiB for an Extended one), the methods, an allowance for each address;
   - a game server that is not there is a JSON 503, never a page of the site; the admin page is never kept by a cache, has a strict content security policy and cannot be framed.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The chat store prunes old messages to stay inside its size limit (hub/store/sqlite.py `make_room`, hub/server.py, hub/limits.py, hub/chat.py, hub/admin.py; docs/HUB.md "Data", "Limits", "Moderation").
+"""The chat store prunes old messages to stay inside its size limit (hub/store/sqlite.py `make_room`, hub/server.py, hub/limits.py, hub/chat.py, hub/admin.py; docs/HUB_LOGIN.md "Data", docs/HUB.md "Limits", docs/HUB_COMMANDS.md "Moderation").
 
 When hub.db and its log file come near `db_max_bytes`, the hub's clock deletes the oldest lines (the moderators' lines and the lines that a moderator deleted last, the newest 1,000 never) until the pages that hold something are down to
 80% of the limit. The freed pages are reused, so the file stops growing; mutes, bans, the counter of deletions and the logins are never touched. An account has a budget of lines for an hour and for
@@ -1167,7 +1167,7 @@ class TheHubOnRealSockets(unittest.TestCase):
 class TheDocumentsSayWhatTheCodeDoes(unittest.TestCase):
     def setUp(self):
         self.doc = ""
-        for name in ("HUB.md", "HUB_COMMANDS.md"):                                                  # (the moderation section, with the command line's words, is in the second: a pure move of the first)
+        for name in ("HUB.md", "HUB_COMMANDS.md", "HUB_ROLES.md", "HUB_LOGIN.md"):                  # (the moderation section, with the command line's words, is in the second, the roles and the login in the last two: pure moves of the first)
             with open(os.path.join(REPO, "docs", name), encoding="utf-8") as f:
                 self.doc += f.read()
 
