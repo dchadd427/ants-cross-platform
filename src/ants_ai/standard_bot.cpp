@@ -63,7 +63,7 @@ void StandardBot::start(const BotContext& context) {
     ledger_.set_rank(kFlowerLink, kRankPowerUps);                 // (the Swimmer that digs the tiles to a flower strip: taken from the ferry, which has the lower rank)
     ledger_.set_rank(kThiefGuard, kRankFight);                    // (the fighters that meet an enemy Thief: taken from the economy, the guard and the ferry, never from a pick-up, a raid, a wall or a fight)
     ledger_.set_rank(kPlugs, kRankPowerUps);                      // (the ant that takes a power-up that plugs the way of the seat: the stranded ants first, else an ant the economy can spare)
-    ledger_.set_rank(kIdleJobs, kRankGuard);                      // (the ants that walk home to heal or hold a post at the own thief hole: any task of a higher rank may take them)
+    ledger_.set_rank(kIdleJobs, kRankGuard);                      // (the ants that walk home to heal or hold a post at the own thief hole: a task of a higher rank takes them; the economy, of a lower one, does not, so the task ends its holds itself when the food is no longer gone)
     ledger_.set_rank(kContact, kRankFight);                       // (the ant that strikes the enemy beside it: taken from the economy, the guard and the ferry, like a fight's)
     ledger_.set_rank(kHeadOn, kRankFight);                        // (the ant that gives way on a bridge: taken from every task below a fight, never from a fight, a heal or a goal)
     ledger_.set_rank(kFerry, kRankGuard);                         // (the Swimmers that carry food: the island task takes one when a bridge is wanted)

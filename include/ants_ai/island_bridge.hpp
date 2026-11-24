@@ -67,6 +67,9 @@ public:
     void upkeep(TaskContext& context, const IslandInfo& info);
     /// The ants that a Return bridge was dug for walk home once the chain stands, and the planner keeps them from the economy until they have healed
     void walk_home(TaskContext& context);
+    /// The walks to the own hill as the map is now (a flood of the whole grid: made at most once in kWalkTicks, it changes slowly), shared by the look and the walk home
+    static constexpr uint64_t kWalkTicks = 20;
+    const MapInfo::NowField& walk_now(TaskContext& context);
     /// A tile of a job was ordered
     void note_ordered(BridgeJob::Kind kind) noexcept { ++ordered_[static_cast<size_t>(kind)]; }
 
@@ -102,6 +105,9 @@ private:
     bool more_{false};                       // the food is gone and plan.bridge_more is on: a Return job is for any stranded ant, and the ant walks home to the hill, not to its hit points
     uint32_t homeward_{0};
     uint32_t evacuated_{0};
+    MapInfo::NowField walk_;
+    uint64_t walk_tick_{0};
+    bool walk_made_{false};
 };
 
 }  // namespace ants::ai

@@ -31,6 +31,8 @@ public:
         uint32_t cooldown_ticks{400};        // an ant that gave way is not asked to again within this long (the jam is not its own, or the way is shut)
         int32_t retreat_tiles{8};            // the land tile that it backs off to is at most this many tiles away
         uint32_t max_hold_ants{2};           // at most this many ants are held back at a time
+        uint32_t plug_ticks{100};            // an own ant that has stood idle this long on the land tile at the foot of a bridge, with an ant that cannot go within `jam_tiles`, is a plug
+        int32_t jam_tiles{8};                // ... and the ant that cannot go (in the can't-go clip for a while, or standing on a bridge tile beside the plug) is within this many tiles of it (a bridge of a few tiles: its other end)
     };
     BridgeHeadOnTask(TaskId id, Tactics& tactics) : BridgeHeadOnTask(id, tactics, Params{}) {}
     BridgeHeadOnTask(TaskId id, Tactics& tactics, const Params& params) : Task(id), tactics_(tactics), params_(params) {}
@@ -46,6 +48,8 @@ public:
     uint32_t backoffs() const noexcept { return backoffs_; }
     /// The ants that are held back now
     size_t held() const noexcept { return held_.size(); }
+    /// The own ants that stood on the foot of a bridge with an ant behind them that could not go, and were sent off it
+    uint32_t plugs() const noexcept { return plugs_; }
 
 private:
     struct Still {
@@ -57,15 +61,27 @@ private:
         uint64_t until{0};
         uint64_t ordered{0};
     };
+    struct Jam {
+        sim::TileCoord tile{-1, -1};
+        uint64_t since{0};
+        uint64_t last{0};
+        uint32_t looks{0};
+    };
     void release_all(TaskContext& context);
+    void clear_feet(TaskContext& context);
+    /// The nearest free land tile within retreat_tiles of the ant that the flood reaches over `mask`, other than the tile of `other` (and, with `off_the_feet`, no tile at the foot of a bridge)
+    sim::TileCoord shore_for(TaskContext& context, const AntView& ant, const std::vector<uint8_t>& mask, sim::TileCoord other, bool off_the_feet, int32_t& cost) const;
 
     Tactics& tactics_;
     Params params_;
     std::map<uint32_t, Still> still_;        // the ants (every team's, by id) on a finished bridge tile: the tile and since when
     std::map<uint32_t, Held> held_;          // the ants that gave way
     std::map<uint32_t, uint64_t> cooldown_;  // ant -> the tick until which it is not asked to give way again
+    std::map<uint32_t, Jam> jam_;            // the ants (every team's) that showed the can't-go clip lately: where, since when, and at how many looks
+    std::map<uint32_t, Still> idle_;         // the own ants that stand idle: the tile and since when
     uint32_t jams_{0};
     uint32_t backoffs_{0};
+    uint32_t plugs_{0};
 };
 
 }  // namespace ants::ai

@@ -161,7 +161,9 @@ const BridgeJob* BridgePlanner::look(TaskContext& c, const Tactics& tactics, con
     // the ants that stand free and still: since when
     std::map<uint32_t, Still> next;
     for (const AntView& a : v.mine()) {
-        if (a.type == sim::AntType::Swimmer || !a.idle() || a.holding || a.carried_points > 0 || c.ledger.owner(a.id) != kNoTask) continue;
+        // (a Thief with loot that no walk takes home stands idle or in its can't-go clip: it waits for a chain home like the others, plan.island_endraid)
+        const bool loaded_thief = raid_on && a.type == sim::AntType::Thief && (a.holding || a.carried_points > 0);
+        if (a.type == sim::AntType::Swimmer || !(a.idle() || (loaded_thief && a.state == sim::UnitState::CantGo)) || ((a.holding || a.carried_points > 0) && !loaded_thief) || c.ledger.owner(a.id) != kNoTask) continue;
         const auto was = still_.find(a.id);
         next[a.id] = was != still_.end() && was->second.tile == a.tile ? was->second : Still{a.tile, now};
     }
@@ -185,7 +187,7 @@ const BridgeJob* BridgePlanner::look(TaskContext& c, const Tactics& tactics, con
     }
     if (waiting.empty()) return nullptr;
     if (more) {                                                                                   // an idle ant that a walk joins to the hill now comes home too (plan.bridge_more): the bridge that was dug for another ant of its island is its way as well
-        const MapInfo::NowField walk = c.map.field_now(grid, c.seat, v.walk_context());
+        const MapInfo::NowField& walk = walk_now(c);
         for (const AntView* a : waiting) {
             if (!(raid_on && a->type == sim::AntType::Thief) && a->tile.chebyshev_dist(c.map.hill(c.seat).entrance) > 3 && c.map.reaches_hill(walk, a->tile, a->type)) returning_.insert(a->id);
         }
@@ -253,7 +255,7 @@ const BridgeJob* BridgePlanner::look(TaskContext& c, const Tactics& tactics, con
         if (e.a != e.b && !foreign_set[static_cast<size_t>(e.a)] && !foreign_set[static_cast<size_t>(e.b)]) edges.push_back(e);
     }
     if (edges.empty() && all_edges.empty()) return nullptr;
-    const MapInfo::NowField now_field = c.map.field_now(grid, c.seat, v.walk_context());
+    const MapInfo::NowField& now_field = walk_now(c);
     const int32_t hill_set = sets.find(hill_comp);
 
     // the food on the islands, by the pile table's number (what each island holds is in the analysis of the start; what is left of it is on the view)
@@ -393,8 +395,33 @@ const BridgeJob* BridgePlanner::look(TaskContext& c, const Tactics& tactics, con
     for (const AntView* a : waiting) {
         const int32_t from = sets.find(c.map.ant_component(c.seat, a->tile));
         if (raid_on && a->type == sim::AntType::Thief) {                                         // (a Thief waits for its raid chain; the older kinds are for the other ants)
-            if (a->hp >= 4 && !a->holding && a->carried_points == 0) consider_raid(*a, from);
-            continue;
+            if (a->holding || a->carried_points > 0) {                                           // ... one that has the loot waits for the way home (the engine walks it, when a walk leads there)
+                if (from != hill_set && !c.map.reaches_hill(now_field, a->tile, a->type) && hill_set >= 0) {
+                    std::vector<Edge> pool;                                                       // (the islands of enemy hills are left out, but the one that it stands on and the own)
+                    for (const Edge& e : all_edges) {
+                        bool shut = false;
+                        for (uint8_t u = 0; u < sim::MAX_PLAYERS; ++u) {
+                            if (team_island[u] < 0) continue;
+                            const int32_t island = sets.find(team_island[u]);
+                            if (island == hill_set || island == from) continue;
+                            shut = shut || e.a == island || e.b == island;
+                        }
+                        if (!shut) pool.push_back(e);
+                    }
+                    const std::vector<size_t> path = chain(pool, comps.size(), from, hill_set, static_cast<int32_t>(plan.endraid_tiles));
+                    if (!path.empty()) {
+                        BridgeJob job;
+                        job.ant = a->id;
+                        job.kind = BridgeJob::Kind::Return;
+                        consider(job, path, from, pool);
+                    }
+                }
+                continue;
+            }
+            if (a->hp >= 4) {
+                consider_raid(*a, from);
+                continue;
+            }
         }
         if (foreign_set[static_cast<size_t>(from)]) continue;                                    // (it stands on an island that is joined to another team's hill: no bridge for it)
         const bool home = c.map.reaches_hill(now_field, a->tile, a->type);
@@ -473,13 +500,21 @@ const BridgeJob* BridgePlanner::look(TaskContext& c, const Tactics& tactics, con
     return &job_;
 }
 
+const MapInfo::NowField& BridgePlanner::walk_now(TaskContext& c) {
+    const uint64_t now = c.view.tick();
+    if (!walk_made_ || now >= walk_tick_ + kWalkTicks) {
+        walk_ = c.map.field_now(c.view.grid(), c.seat, c.view.walk_context());
+        walk_tick_ = now;
+        walk_made_ = true;
+    }
+    return walk_;
+}
+
 void BridgePlanner::walk_home(TaskContext& c) {
     if (returning_.empty()) return;
     const BotView& v = c.view;
     const uint64_t now = v.tick();
     const HillInfo& hill = c.map.hill(c.seat);
-    MapInfo::NowField field;
-    bool made = false;
     std::vector<uint32_t> go;
     std::vector<uint32_t> go_whole;
     for (auto it = returning_.begin(); it != returning_.end();) {
@@ -502,10 +537,7 @@ void BridgePlanner::walk_home(TaskContext& c) {
         Home& h = home_[id];
         ++it;
         if (!a->takes_orders() || a->holding || a->carried_points > 0 || a->tile.chebyshev_dist(hill.entrance) <= 1) continue;
-        if (!made) {
-            field = c.map.field_now(v.grid(), c.seat, v.walk_context());
-            made = true;
-        }
+        const MapInfo::NowField& field = walk_now(c);
         if (!c.map.reaches_hill(field, a->tile, a->type)) continue;                                // (the way does not stand yet)
         // a way that stands now is no way home if a tile of a bridge of the planner's goes before the ant has walked it: the ant would be on the bridge when it falls. The tile with the least life left
         // counts, wherever it is (the planner does not know which tiles the walk takes), and the walk gets the margin of the evacuation's gap

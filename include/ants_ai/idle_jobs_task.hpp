@@ -5,7 +5,7 @@
 // food gone, the bots were 93 to 97 percent idle while a Thief took 13 steals at their hills. An ant that stands idle for `idle_after` ticks, holds no food and no task holds, gets one of two jobs:
 //   Heal   it has at most `idle_heal_hp` hit points and a walk leads to the own hill as the map is now: it is clicked onto the entrance (the hill's door restores every hit point), so that the ants that
 //          the fights and the raids take are whole. Every level; the engine sends an ant home by itself only at one hit point
-//   Hold   the food is gone, or an enemy Thief has been seen this match: up to `idle_posts` of the idle ants that a walk leads to the own thief hole stand on the tiles in front of it that no
+//   Hold   the food is gone, or an enemy Thief was seen in the last `wall_latch_ticks` and no pile can be reached (with food to carry the ants are the economy's: it cannot take a holder back): up to `idle_posts` of the idle ants that a walk leads to the own thief hole stand on the tiles in front of it that no
 //          wall, bomb or ant holds, and shut it (a raid order whose three tiles are held by standing ants ends in "Can't go there.", whoever gave it, and the raid task of a bot leaves such a
 //          hole alone; the Thief of a person is told so at once). The own ants never use those tiles (the entrance is on the other side of the mound), and the points that a hill holds when the food is
 //          gone can only be lost to a Thief. The holders are the tasks' to take again at any look (rank 2); a hurt one goes home first; Swimmers stay out of it while the bot has `endraid_keep_swimmers`

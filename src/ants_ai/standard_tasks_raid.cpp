@@ -117,6 +117,16 @@ RaidTask::Hole RaidTask::hole_state(TaskContext& c, uint8_t t, uint32_t thief_id
 
 bool RaidTask::hole_shut(TaskContext& c, uint8_t t, uint32_t thief_id) const { return hole_state(c, t, thief_id) != Hole::Open; }
 
+const MapInfo::NowField& RaidTask::joined_now(TaskContext& c) {
+    const uint64_t now = c.view.tick();
+    if (!stage_joined_made_ || now >= stage_joined_tick_ + kJoinedTicks) {
+        stage_joined_ = c.map.field_now(c.view.grid(), c.seat, c.view.walk_context());
+        stage_joined_tick_ = now;
+        stage_joined_made_ = true;
+    }
+    return stage_joined_;
+}
+
 bool RaidTask::launch(TaskContext& c, const AntView& thief) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
@@ -161,11 +171,20 @@ bool RaidTask::launch(TaskContext& c, const AntView& thief) {
         if (!island_mode && static_cast<uint64_t>(v.ticks_left()) < round + 2u * c.profile.reaction_delay + 60u) continue;
         if (island_mode) {                                                               // the way home from the raid side exists as the map is now, and every bridge on the way there and back outlives the round trip
             const HillInfo& own = c.map.hill(c.seat);
-            const MapInfo::NowField joined = c.map.field_now(grid, c.seat, v.walk_context());
-            if (!own.present || go > plan.endraid_walk || !c.map.reaches_hill(joined, best_tile, thief.type)) continue;       // (a long walk is a way round, not the raid chain: the bridges last 3,600 ticks)
-            const std::vector<int32_t> back_field = MapInfo::cost_field(grid, mask, best_tile);
-            int32_t home_cost = -1;                                                       // (the way back to the own hill from the raid side, as the map is now: the start analysis knows none over water)
+            if (!own.present || go > plan.endraid_walk) continue;                          // (a long walk is a way round, not the raid chain: the bridges last 3,600 ticks)
             int32_t life = route_life(grid, field, best_tile, tactics_.bridge_life);
+            const int64_t keep_life = static_cast<int64_t>(plan.endraid_min_life);                  // (the bridges on the way outlive the round trip by this much)
+            if (life < Tactics::kForever && static_cast<int64_t>(life) < static_cast<int64_t>(go) + keep_life) continue;       // (the way there alone is too short-lived: no flood to look for the way back)
+            if (!c.map.reaches_hill(joined_now(c), best_tile, thief.type)) continue;
+            if (back_tick_ != now) {
+                back_fields_.clear();
+                back_tick_ = now;
+            }
+            const size_t back_key = tile_index(grid, best_tile);
+            auto back_it = back_fields_.find(back_key);
+            if (back_it == back_fields_.end()) back_it = back_fields_.emplace(back_key, MapInfo::cost_field(grid, mask, best_tile)).first;
+            const std::vector<int32_t>& back_field = back_it->second;
+            int32_t home_cost = -1;                                                       // (the way back to the own hill from the raid side, as the map is now: the start analysis knows none over water)
             for (const sim::TileCoord& s : own.starts) {
                 life = std::min(life, route_life(grid, back_field, s, tactics_.bridge_life));
                 const int32_t k = back_field[tile_index(grid, s)];
@@ -173,7 +192,7 @@ bool RaidTask::launch(TaskContext& c, const AntView& thief) {
             }
             const uint64_t island_round = go + 80u + (home_cost < 0 ? go : static_cast<uint64_t>(MapInfo::walking_ticks(home_cost)) + 30u) + 30u;
             if (static_cast<uint64_t>(v.ticks_left()) < island_round + 2u * c.profile.reaction_delay + 60u) continue;
-            if (life < Tactics::kForever && static_cast<int64_t>(life) < static_cast<int64_t>(island_round) + static_cast<int64_t>(plan.endraid_min_life)) continue;
+            if (life < Tactics::kForever && static_cast<int64_t>(life) < static_cast<int64_t>(island_round) + keep_life) continue;
         }
         if (plan.avoids_guarded_hills && tier < 2) {
             bool guarded = false;
@@ -389,7 +408,7 @@ void RaidTask::step(TaskContext& c) {
         else ++it;
     }
     for (auto it = black_.begin(); it != black_.end();) it = it->second <= now ? black_.erase(it) : std::next(it);
-    stage_joined_made_ = false;
+    for (auto it = nolaunch_.begin(); it != nolaunch_.end();) it = it->second <= now ? nolaunch_.erase(it) : std::next(it);
     for (auto it = homing_.begin(); it != homing_.end();) it = it->second + 2400u <= now ? homing_.erase(it) : std::next(it);
     // the thieves of the bot: one is claimed only for a raid that is under way or about to be ordered; between raids (and while no hill is worth a trip) it harvests like a worker. A
     // task of a higher rank may take one for a fight: then it is not ours
@@ -440,11 +459,7 @@ void RaidTask::step(TaskContext& c) {
         if (tactics_.plan.island_endraid && tactics_.island_play && tactics_.endraid) {    // the island play: a Thief far from the own hill walks home first when a walk leads there, and raids from its island (the loop is a short walk then)
             const HillInfo& own = c.map.hill(c.seat);
             if (own.present && a.tile.chebyshev_dist(own.entrance) > 12) {
-                if (!stage_joined_made_) {
-                    stage_joined_ = c.map.field_now(v.grid(), c.seat, v.walk_context());
-                    stage_joined_made_ = true;
-                }
-                if (c.map.reaches_hill(stage_joined_, a.tile, a.type)) {
+                if (c.map.reaches_hill(joined_now(c), a.tile, a.type)) {
                     uint64_t& next = homing_[a.id];
                     if (now >= next) {
                         c.orders.move({a.id}, own.tile42, Priority::Normal);
@@ -457,10 +472,15 @@ void RaidTask::step(TaskContext& c) {
             }
         }
         if (!held && !c.ledger.take(a.id, id())) continue;                              // a task of a higher rank has it
-        if (launch(c, a)) {
+        const bool island_play = tactics_.plan.island_endraid && tactics_.island_play;
+        const auto later = nolaunch_.find(a.id);
+        const bool looked = island_play && later != nolaunch_.end() && later->second > now;     // (an island Thief that found nothing to raid: the search floods the map, it waits for the next one)
+        if (!looked && launch(c, a)) {
+            nolaunch_.erase(a.id);
             waiting_.erase(a.id);
             continue;
         }
+        if (island_play && !looked) nolaunch_[a.id] = now + kRelaunchTicks;
         if (!ambush(c, a)) c.ledger.release(a.id, id());                                // nothing to raid, and nothing to wait for: back to the economy
     }
 }

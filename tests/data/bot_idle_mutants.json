@@ -22,8 +22,8 @@
     {
       "id": "headon_no_hold_on_land",
       "file": "src/ants_ai/bridge_headon.cpp",
-      "old": "h.until = now + params_.hold_ticks;",
-      "new": "h.until = now;",
+      "old": "h.shore = p.shore;\n        h.until = now + params_.hold_ticks;",
+      "new": "h.shore = p.shore;\n        h.until = now;",
       "build": "test_ai",
       "test": "timeout 900 env ANTS_TEST_FILTER='AI58.1 ' ./build/tests/test_ai/test_ai",
       "expect": "AI58.1"
@@ -85,8 +85,8 @@
     {
       "id": "hold_before_the_food_is_gone",
       "file": "src/ants_ai/idle_jobs_task.cpp",
-      "old": "const bool want_hold = tactics_.gone || tactics_.memory.thief_last_seen() != 0;",
-      "new": "const bool want_hold = true;",
+      "old": "const bool want_hold = tactics_.gone || (seen != 0 && now <= seen + plan.wall_latch_ticks && tactics_.no_work);",
+      "new": "const bool want_hold = true || tactics_.gone || (seen != 0 && now <= seen + plan.wall_latch_ticks && tactics_.no_work);",
       "build": "test_ai",
       "test": "timeout 900 env ANTS_TEST_FILTER='AI58.4 ' ./build/tests/test_ai/test_ai",
       "expect": "AI58.4"
@@ -180,6 +180,69 @@
       "build": "test_ai",
       "test": "timeout 900 env ANTS_TEST_FILTER='AI58.9 ' ./build/tests/test_ai/test_ai",
       "expect": "AI58.9"
+    },
+    {
+      "id": "raid_ignores_the_life_of_the_bridges",
+      "file": "src/ants_ai/standard_tasks_raid.cpp",
+      "old": "const int64_t keep_life = static_cast<int64_t>(plan.endraid_min_life);",
+      "new": "const int64_t keep_life = 0 * static_cast<int64_t>(plan.endraid_min_life);",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.6 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.6"
+    },
+    {
+      "id": "route_life_sees_no_bridge",
+      "file": "src/ants_ai/standard_tasks_raid.cpp",
+      "old": "if (idx < life.size() && life[idx] >= 0) least = std::min(least, life[idx]);",
+      "new": "if (false && idx < life.size() && life[idx] >= 0) least = std::min(least, life[idx]);",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.6 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.6"
+    },
+    {
+      "id": "hurt_ant_walks_to_the_waiting_tile",
+      "file": "src/ants_ai/island_bridge.cpp",
+      "old": "(a->hp <= params_.return_hp ? go : go_whole).push_back(id);",
+      "new": "(a->hp <= params_.return_hp ? go_whole : go).push_back(id);",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.13 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.13"
+    },
+    {
+      "id": "plug_rule_off",
+      "file": "src/ants_ai/bridge_headon.cpp",
+      "old": "    clear_feet(c);",
+      "new": "    if (false) clear_feet(c);",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.10 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.10"
+    },
+    {
+      "id": "swarm_waits_on_a_bridge_piece",
+      "file": "src/ants_ai/island_swarm.cpp",
+      "old": "if (tactics_.plan.island_endraid && grid.get_cell(n).has_any_bridge()) continue;",
+      "new": "if (false && tactics_.plan.island_endraid && grid.get_cell(n).has_any_bridge()) continue;",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.11 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.11"
+    },
+    {
+      "id": "loaded_thief_gets_no_chain",
+      "file": "src/ants_ai/island_bridge.cpp",
+      "old": "if (from != hill_set && !c.map.reaches_hill(now_field, a->tile, a->type) && hill_set >= 0) {",
+      "new": "if (false && from != hill_set && !c.map.reaches_hill(now_field, a->tile, a->type) && hill_set >= 0) {",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.12 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.12"
+    },
+    {
+      "id": "hold_after_the_latch",
+      "file": "src/ants_ai/idle_jobs_task.cpp",
+      "old": "(seen != 0 && now <= seen + plan.wall_latch_ticks && tactics_.no_work)",
+      "new": "(seen != 0 && tactics_.no_work)",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.14 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.14"
     }
   ]
 }

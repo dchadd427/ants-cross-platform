@@ -60,6 +60,7 @@ sim::TileCoord SwarmTask::free_spot(TaskContext& c, size_t link, const std::vect
         for (int32_t dx = -1; dx <= 1; ++dx) {
             const sim::TileCoord n{drop.x + dx, drop.y + dy};
             if ((dx == 0 && dy == 0) || !grid.in_bounds(n) || field.empty() || field[static_cast<size_t>(index_of(grid, n))] < 0 || v.powerup_at(n) != nullptr) continue;
+            if (tactics_.plan.island_endraid && grid.get_cell(n).has_any_bridge()) continue;                  // (an ant that waits on a piece of a bridge shuts it: the Thieves of the strip go home over it, docs/BOT_IDLE.md)
             bool taken = false;
             for (const AntView& a : v.others()) taken = taken || a.tile == n;
             for (const AntView& a : v.mine()) taken = taken || (a.tile == n && a.id != self);

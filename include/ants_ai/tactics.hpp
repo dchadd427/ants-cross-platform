@@ -302,7 +302,7 @@ struct LevelPlan {
     uint32_t endraid_walk{500};          // ... a hill that the own hill's ants walk to in at most this many ticks needs no chain, and no raid is begun over a longer walk (the bridges last 3,600 ticks)
     uint32_t endraid_min_life{500};      // ... a raid is begun only when every bridge tile on the way there and back will last this many ticks more than the round trip needs
     uint32_t endraid_keep_swimmers{3};   // ... Swimmers that stay Swimmers (one of the others may take the Thief)
-    bool thief_answer{true};             // an enemy Thief that comes for the own hole is met by the free ants that stand idle near it: blockers on the tiles in front of the hole, strikers at the posts (ThiefGuardTask in its
+    bool thief_answer{false};             // an enemy Thief that comes for the own hole is met by the free ants that stand idle near it: blockers on the tiles in front of the hole, strikers at the posts (ThiefGuardTask in its   // OFF by default: no gain in the arena (ISLANDS -7 +/- 11, TREASURE -23 +/- 69 over 36 seeds, docs/BOT_IDLE.md); `bot_arena --tune tanswer=1` plays it. Retired or removed within two releases unless a bench Thief that raids like a person shows a gain
                                          // answer mode, docs/BOT_TACTICS.md, "Thieves"), and with the food gone the hole is held by blockers for the rest of the match (`tanswer=0`: the bot as it was)
     bool fire_hats{true};                // a Fire hat is taken when a walk home can be made for the ant (the chain is dug: BridgeJob::Kind::Home), and a Fire Ant left where no walk leads home gets the chain (`firehats=0`: the bot as it was)
     uint32_t fire_hat_tiles{6};          // ... the most water tiles of that chain

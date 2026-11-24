@@ -100,22 +100,22 @@ void PowerUpTask::on_command(const sim::Command& command, Bot::Fate fate, uint64
 const std::vector<int32_t>& PowerUpTask::field_for(TaskContext& c, sim::TileCoord tile) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
-    if (mask_tick_ != now) {
-        mask_ = MapInfo::walkable_mask(v.grid(), c.seat, v.walk_context());
-        for (size_t i = 0; i < mask_.size() && i < tactics_.shut_tiles.size(); ++i) {
-            if (tactics_.shut_tiles[i] != 0) mask_[i] = 0;                                         // (the bridges that will not last the trip: the island task)
-        }
-        if (tactics_.gate_map) {
-            for (const BombView& b : v.bombs()) {
-                if (b.owner != c.seat && !(v.ally() < sim::MAX_PLAYERS && b.owner == v.ally()) && v.grid().in_bounds(b.tile)) {
-                    mask_[tile_index(v.grid(), b.tile)] = 0;                                        // (map bombs are not walked into on a pick-up trip while gate goals run)
-                }
-            }
-        }
-        mask_tick_ = now;
-    }
     Cached& e = fields_[key_of(tile)];
     if (e.field.empty() || now >= e.tick + params_.field_ttl_ticks) {
+        if (mask_tick_ != now) {                                                                   // (the mask is made when a field is made: a look that finds every field fresh floods nothing)
+            mask_ = MapInfo::walkable_mask(v.grid(), c.seat, v.walk_context());
+            for (size_t i = 0; i < mask_.size() && i < tactics_.shut_tiles.size(); ++i) {
+                if (tactics_.shut_tiles[i] != 0) mask_[i] = 0;                                     // (the bridges that will not last the trip: the island task)
+            }
+            if (tactics_.gate_map) {
+                for (const BombView& b : v.bombs()) {
+                    if (b.owner != c.seat && !(v.ally() < sim::MAX_PLAYERS && b.owner == v.ally()) && v.grid().in_bounds(b.tile)) {
+                        mask_[tile_index(v.grid(), b.tile)] = 0;                                    // (map bombs are not walked into on a pick-up trip while gate goals run)
+                    }
+                }
+            }
+            mask_tick_ = now;
+        }
         e.field = MapInfo::cost_field_onto(v.grid(), mask_, c.seat, tile, v.walk_context());
         e.tick = now;
         ++searches_;

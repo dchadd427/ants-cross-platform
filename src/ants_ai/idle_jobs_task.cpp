@@ -66,7 +66,9 @@ void IdleJobsTask::step(TaskContext& c) {
         return joined_;
     };
     // the walls of a Fire Ant that can walk home are the better answer (they last 3,600 ticks and cost no ant), and the keeper lights none on a tile that an ant holds: with one, nobody holds
-    const bool want_hold = tactics_.gone || tactics_.memory.thief_last_seen() != 0;
+    // (the food is gone, or an enemy Thief was seen within the latch of the walls and no pile can be reached: while there is food to carry the ants are the economy's, which cannot take a holder back)
+    const uint64_t seen = tactics_.memory.thief_last_seen();
+    const bool want_hold = tactics_.gone || (seen != 0 && now <= seen + plan.wall_latch_ticks && tactics_.no_work);
     bool keeper = false;
     for (const AntView& a : v.mine()) {
         if (!want_hold) break;                                                                      // (nobody holds: the keeper is of no matter, and the flood is not made)

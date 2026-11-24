@@ -552,8 +552,17 @@ private:
     std::map<uint32_t, uint64_t> aside_;           // the ants that were sent aside to let a thief out of a hole (the tick): not sent to a raid again for a while
     uint32_t unjams_{0};
     std::map<uint32_t, uint64_t> homing_;          // the Thieves of the island play that were sent home (the tick of the next click): they raid from the own island
-    MapInfo::NowField stage_joined_;               // the walk from the own hill as the map is now, made at most once a look
+    /// The walk from the own hill as the map is now (a flood of the whole grid: made at most once in kJoinedTicks, it changes slowly), and the walk back from a raid tile (once a look, by the tile)
+    static constexpr uint64_t kJoinedTicks = 40;
+    /// An island Thief that found no raid to order is looked at again after this many ticks (the search for one floods the map)
+    static constexpr uint64_t kRelaunchTicks = 60;
+    const MapInfo::NowField& joined_now(TaskContext& context);
+    MapInfo::NowField stage_joined_;
+    uint64_t stage_joined_tick_{0};
     bool stage_joined_made_{false};
+    std::map<size_t, std::vector<int32_t>> back_fields_;   // the cost field from a raid tile, made in this look (the Thieves of one look that go for one hill share it)
+    uint64_t back_tick_{0};
+    std::map<uint32_t, uint64_t> nolaunch_;        // the Thieves of the island play that found no raid: not looked at again before this tick
     uint32_t homed_{0};
     uint32_t rechecks_{0};
     uint32_t retargets_{0};
