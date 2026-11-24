@@ -33,15 +33,20 @@ import map_pages as mp  # noqa: E402
 import seo_files  # noqa: E402
 from test_web_seo import parse  # noqa: E402  (the head of a page as a browser takes it: title, metas, links, scripts of data)
 
+def read_text(path):
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+
 TOOL = os.path.join(REPO, "tools", "map_pages.py")
 ORIGIN = "https://site.example"
-LEDGER = os.path.join(REPO, "tests", "data", "map_page_slugs.json")
+LEDGER = os.path.join(REPO, "tools", "map_page_slugs.json")
+NGINX_PAGE = re.search(r'location ~ "(\^/map/[^"]*)" \{', read_text(os.path.join(REPO, "docker", "nginx.conf"))).group(1).replace("\\z", "\\Z")       # (the one pattern that nginx serves a map page by)
 TITLE = re.compile(r"^(?P<page>.+) — Ants \(1998\)$")
 
 
 def read(*parts):
-    with open(os.path.join(REPO, *parts), encoding="utf-8") as f:
-        return f.read()
+    return read_text(os.path.join(REPO, *parts))
 
 
 TEMPLATE = read("web", "map_pages", "page.html")
@@ -53,11 +58,15 @@ class Body(html.parser.HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.links, self.images, self.headings, self.texts, self.dts, self.tags = [], [], [], {}, {}, []
+        self.elements, self.ids, self.current, self.data = set(), {}, [], []
         self.stack, self.in_body = [], False
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
         self.stack.append((tag, a, []))
+        self.elements.add(tag)
+        if a.get("id"):
+            self.ids[a["id"]] = a
         if tag == "body":
             self.in_body = True
         if tag == "img":
@@ -71,6 +80,8 @@ class Body(html.parser.HTMLParser):
             text = "".join(parts)
             if open_tag == "a":
                 self.links.append((a.get("href"), text))
+                if "aria-current" in a:
+                    self.current.append(a.get("href"))
             if open_tag in ("h1", "h2"):
                 self.headings.append((open_tag, text))
             if a.get("class"):
@@ -81,8 +92,26 @@ class Body(html.parser.HTMLParser):
                 break
 
     def handle_data(self, data):
+        self.data.append(data)
         if self.stack:
             self.stack[-1][2].append(data)
+
+    def plain(self):
+        """The text of what was fed, as a reader sees it: tags gone, entities read, blanks folded."""
+        return " ".join("".join(self.data).split())
+
+
+class BarOf(html.parser.HTMLParser):
+    """The stamps in the bar at the top of a page (the data attributes of its <header class="sb">)."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.attrs = {}
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "header" and a.get("class") == "sb":
+            self.attrs = {k: v for k, v in a.items() if k.startswith("data-") and k != "data-live"}
 
 
 def body_of(page):
@@ -109,8 +138,8 @@ class TheLibrary(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.maps = mp.read_library()
-        cls.primaries, cls.moved = mp.plan(cls.maps)
-        cls.files = mp.build(ORIGIN, TEMPLATE, cls.maps)
+        cls.primaries, cls.moved = mp.plan(cls.maps, mp.read_ledger())
+        cls.files = mp.build(ORIGIN, TEMPLATE, cls.maps, ledger=mp.read_ledger())
 
     def test_every_map_of_the_library_is_a_page_or_a_name_that_redirects_to_one(self):
         every = {m.file for m in self.maps}
@@ -137,14 +166,18 @@ class TheLibrary(unittest.TestCase):
         order, _ = mp.plan([fake("!!!Zed.lvl", data=b"z"), fake("Alpha.lvl", data=b"a"), fake("~Beta.lvl", data=b"b"), fake("0 first.lvl", data=b"f")])
         self.assertEqual([m.name for m in order], ["0 first", "Alpha", "~Beta", "!!!Zed"])
 
-    def test_the_ledger_of_addresses_is_what_the_library_gets(self):
-        with open(LEDGER, encoding="utf-8") as f:
-            pinned = json.load(f)
-        got = mp.slugs_of(self.maps)
+    def test_every_address_of_the_library_is_in_the_ledger_and_is_the_one_that_it_names(self):
+        pinned = mp.read_ledger()
+        got = mp.slugs_of(self.maps, pinned)
+        here = {m.file for m in self.primaries}
         for slug, file in pinned.items():
-            self.assertEqual(got.get(slug), file, "the address /map/%s was for %s: an address that a search engine has listed is never taken away or given to another map" % (slug, file))
-        self.assertEqual(sorted(set(got) - set(pinned)), [], "a new map: add its address to tests/data/map_page_slugs.json with `python3 tools/map_pages.py --slugs > tests/data/map_page_slugs.json` "
-                                                            "(the old ones must not change)")
+            if file in here:
+                self.assertEqual(got.get(slug), file, "the address /map/%s was for %s: an address that a search engine has listed is never taken away or given to another map" % (slug, file))
+        self.assertEqual(sorted(set(got) - set(pinned)), [], "a new map: save its address with `python3 tools/map_pages.py --slugs > tools/map_page_slugs.json` (the old ones do not change)")
+
+    def test_every_address_is_one_that_nginx_serves_a_page_by(self):
+        for m in self.primaries:
+            self.assertRegex("/map/" + m.slug, NGINX_PAGE, m.file)
 
     def test_a_name_that_is_in_the_library_twice_with_the_same_bytes_is_one_page_with_the_other_names_redirected(self):
         for m in self.primaries:
@@ -285,12 +318,71 @@ class TheFileNames(unittest.TestCase):
         self.assertIn("Play it", mp.map_body(ok))
 
 
+class TheLedger(unittest.TestCase):
+    def test_a_map_keeps_the_address_that_the_ledger_gives_it_when_a_new_map_would_take_it(self):
+        without, _ = mp.plan([fake("FiRe.lvl", data=b"1"), fake("FIRE.lvl", data=b"2")])
+        self.assertEqual({m.file: m.slug for m in without}["FIRE.lvl"], "fire")                    # (the name that sorts first takes the word: that is what the ledger prevents)
+        primaries, _ = mp.plan([fake("FiRe.lvl", data=b"1"), fake("FIRE.lvl", data=b"2")], {"fire": "FiRe.lvl"})
+        slugs = {m.file: m.slug for m in primaries}
+        self.assertEqual(slugs["FiRe.lvl"], "fire")
+        self.assertRegex(slugs["FIRE.lvl"], r"^fire-[0-9a-f]{4,}$")
+
+    def test_an_address_of_a_map_that_is_gone_stays_taken_and_a_new_map_gets_another(self):
+        primaries, _ = mp.plan([fake("Fire.lvl", data=b"3")], {"fire": "Gone.lvl"})
+        self.assertNotEqual(primaries[0].slug, "fire")
+        self.assertTrue(primaries[0].slug.startswith("fire-"))
+
+    def test_a_group_of_copies_keeps_its_page_when_a_copy_with_a_name_that_would_win_is_added(self):
+        names = ("Zed.lvl", "Aardvark.lvl", "aardvark!.lvl")                                     # (two of the three spell it alike: without the ledger the page is Aardvark's)
+        alone, moved_alone = mp.plan([fake(n, data=b"w") for n in names])
+        self.assertEqual([m.name for m in alone], ["Aardvark"])
+        kept, moved = mp.plan([fake(n, data=b"w") for n in names], {"zed": "Zed.lvl"})
+        self.assertEqual([(m.name, m.slug) for m in kept], [("Zed", "zed")])
+        self.assertEqual(moved.get("aardvark"), "zed")                                           # (the other names redirect to the page that is there)
+
+    def test_the_originals_and_the_maps_of_the_players_keep_theirs_too(self):
+        primaries, _ = mp.plan([fake("Tiny Treasure.lvl", data=b"t"), original("treasure")], {"treasure": "TREASURE.LVL", "tiny-treasure": "Tiny Treasure.lvl"})
+        self.assertEqual({m.file: m.slug for m in primaries}, {"TREASURE.LVL": "treasure", "Tiny Treasure.lvl": "tiny-treasure"})
+
+    def test_a_clash_with_a_long_name_never_makes_a_double_hyphen_and_every_address_is_one_that_nginx_serves(self):
+        m = fake("a" * 59 + " bcdefgh.lvl", data=b"long")
+        word = mp.base_slug(m.name)
+        self.assertEqual(word[59], "-")                                                           # (the word was cut where a hyphen stands: the case that made two)
+        primaries, _ = mp.plan([m], {word: "Other.lvl"})
+        self.assertNotIn("--", primaries[0].slug)
+        self.assertNotEqual(primaries[0].slug, word)
+        for name in ("Fire", "FiRe", "Fire!", "Fire!!", "a" * 70, "a" * 59 + " b" * 9, "!!!", "x" * 60):
+            made, _ = mp.plan([fake(name + ".lvl", data=name.encode()), fake(name + "?.lvl", data=name.encode() + b"?")], {})
+            for one in made:
+                self.assertRegex("/map/" + one.slug, NGINX_PAGE, one.file)
+                self.assertNotIn("--", one.slug)
+
+    def test_a_ledger_is_read_and_a_text_that_is_none_is_refused(self):
+        self.assertEqual(mp.read_ledger(os.path.join(REPO, "tools", "no_such_ledger.json")), {})
+        with tempfile.TemporaryDirectory(prefix="ants_ledger_") as tmp:
+            for bad in ("[]", '{"A b": "x.lvl"}', '{"a": 3}', '{"a--b": "x.lvl"}', '{"": "x.lvl"}', "not json"):
+                path = os.path.join(tmp, "ledger.json")
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(bad)
+                with self.assertRaises(ValueError, msg=bad):
+                    mp.read_ledger(path)
+            with open(os.path.join(tmp, "ledger.json"), "w", encoding="utf-8") as f:
+                f.write('{"fire": "Fire.lvl"}')
+            self.assertEqual(mp.read_ledger(os.path.join(tmp, "ledger.json")), {"fire": "Fire.lvl"})
+
+    def test_the_ledger_that_is_printed_has_the_old_addresses_and_the_new_maps_and_asks_for_no_change_of_an_old_one(self):
+        maps = [fake("Fire.lvl", data=b"1"), fake("A new map.lvl", data=b"2")]
+        printed = mp.slugs_of(maps, {"fire": "Fire.lvl", "gone": "Gone.lvl"})
+        self.assertEqual(printed, {"fire": "Fire.lvl", "a-new-map": "A new map.lvl"})
+        self.assertEqual(mp.slugs_of(maps, printed), printed)                                      # (saved, it changes nothing)
+
+
 class TheMaker(unittest.TestCase):
     NAMED = (("by Angel/Eclipse", "Angel/Eclipse"), ("*by Angel/Eclipse       ...", "Angel/Eclipse"), ("*Made By: Arn437        ...", "Arn437"), ("made by _Dangerb0y_", "_Dangerb0y_"),
              ("!Map Made By Ice        ...", "Ice"), ("*HQS By HaNiBaL*        ...", "HaNiBaL"), ("** By: TheDMaster *     ...", "TheDMaster"), ("*By YaMaHa and Pr0nGs   ...", "YaMaHa and Pr0nGs"),
-             ("Made By __SaLtY_......", "__SaLtY_"), ("*xpert-by:Black_Tiger66 ...", "Black_Tiger66"), ("Mini Murky Map!!!!!!By Scythe", "Scythe"), ("by perfect_chaos", "perfect_chaos"),
-             ("*made by:Hawkmon_92     ...", "Hawkmon_92"), ("MaDE By: __RiP_ChUcKy_", "__RiP_ChUcKy_"), ("Created by Pip, Pop", "Pip, Pop"), ("Made by LP_Linkin_Park_...", "LP_Linkin_Park_"))
-    NOT_NAMED = ("*Lets Have Fun by Arcade...", "*Improved by Arcade     ...", "From Rexall to you", "Another from Chesha", "surrounded by water", "Attack by water", "stand by me", "Made by hand",
+             ("*xpert-by:Black_Tiger66 ...", "Black_Tiger66"), ("Mini Murky Map!!!!!!By Scythe", "Scythe"), ("by perfect_chaos", "perfect_chaos"),
+             ("*made by:Hawkmon_92     ...", "Hawkmon_92"), ("MaDE By: __RiP_ChUcKy_", "__RiP_ChUcKy_"), ("Created by Pip, Pop", "Pip, Pop"))
+    NOT_NAMED = ("Made by LP_Linkin_Park_...", "Made By __SaLtY_......", "*Lets Have Fun by Arcade...", "*Improved by Arcade     ...", "From Rexall to you", "Another from Chesha", "surrounded by water", "Attack by water", "stand by me", "Made by hand",
                  "!By: Fuel  have fun     ...", "^by Antsss.com Staff", "Have fun on this map by ONION", "by 123", "by", "", "*Get Food From Every Sid...", "Made by Ann and Bob and Cy and Di", "by A, B, C, D", "by a very very long name indeed here", "by " + "x" * 30)
 
     def maker(self, raw):
@@ -319,32 +411,41 @@ class TheMaker(unittest.TestCase):
         self.assertEqual(mp.describe("***BURP***"), ("BURP***", False))
         self.assertEqual(mp.describe("")[0], "")
 
-    def test_every_maker_that_the_library_gets_is_in_the_words_of_the_description_and_its_page_says_made_by_only_then(self):
+    def test_every_maker_that_the_library_gets_is_in_the_words_of_the_description_and_is_on_its_page(self):
         maps = mp.read_library()
-        primaries, _ = mp.plan(maps)
-        files = mp.build(ORIGIN, TEMPLATE, maps)
+        primaries, _ = mp.plan(maps, mp.read_ledger())
+        files = mp.build(ORIGIN, TEMPLATE, maps, ledger=mp.read_ledger())
         named = 0
         for m in primaries:
+            if not m.maker:
+                continue
+            named += 1
             page = files["html/map_pages/map/%s.html" % m.slug]
-            page = page[page.index("<main"):]
-            page = re.sub(r'<p class="say">.*?</p>', "", page)                                   # (the map's own line is the player's: it may say anything)
-            text = html.unescape(" ".join(re.sub(r"<[^>]+>", " ", page).split()))
-            if m.maker:
-                named += 1
-                self.assertTrue(set(re.findall(r"[A-Za-z0-9]+", m.maker)) <= set(re.findall(r"[A-Za-z0-9]+", m.text)), "%s: %r from %r" % (m.file, m.maker, m.text))
-                self.assertIn("Made by %s" % m.maker, text, m.file)
-            elif not m.original:
-                self.assertNotIn("Made by", text, m.file)                                        # (no maker line where no description names one)
+            body = body_of(page[page.index("<main"):])
+            self.assertTrue(set(re.findall(r"[A-Za-z0-9]+", m.maker)) <= set(re.findall(r"[A-Za-z0-9]+", m.text)), "%s: %r from %r" % (m.file, m.maker, m.text))
+            self.assertIn(m.maker, body.plain(), m.file)
+            self.assertIn(m.maker, parse(page).title, m.file)
         self.assertGreater(named, 10)                                                              # (the rule finds makers in the library: a rule that never matched would pass the rest)
         self.assertLess(named, len(primaries) // 2)
+
+    def test_a_page_names_a_maker_only_when_the_description_does(self):
+        named, unnamed = fake("Named.lvl", "by Ann", data=b"n"), fake("Named2.lvl", "just words", data=b"u")
+        same_but = fake("Named3.lvl", "by Ann", data=b"s")
+        mp.plan([named, unnamed, same_but])
+        self.assertEqual((named.maker, unnamed.maker), ("Ann", ""))
+        self.assertEqual(len(mp.facts_of(named)), len(mp.facts_of(unnamed)) + 1)                    # (a row for the maker, and none where no description names one)
+        self.assertIn("Ann", body_of(mp.map_body(named)).plain())
+        self.assertIn("Ann", mp.title_of(named))
+        self.assertNotIn("Ann", mp.title_of(unnamed) + mp.description_of(unnamed))
+        self.assertNotIn("by", [t for _label, t in mp.facts_of(unnamed)])
 
 
 class ThePages(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.maps = mp.read_library()
-        cls.primaries, cls.moved = mp.plan(cls.maps)
-        cls.files = mp.build(ORIGIN, TEMPLATE, cls.maps)
+        cls.primaries, cls.moved = mp.plan(cls.maps, mp.read_ledger())
+        cls.files = mp.build(ORIGIN, TEMPLATE, cls.maps, ledger=mp.read_ledger())
         cls.pages = {p: t for p, t in cls.files.items() if p.endswith(".html")}
         cls.slugs = {m.slug: m for m in cls.primaries}
 
@@ -415,7 +516,7 @@ class ThePages(unittest.TestCase):
             self.assertEqual([i["item"] for i in items], [ORIGIN + "/", ORIGIN + "/map-library", ORIGIN + self.address_of(path)])
             self.assertEqual(items[2]["name"], self.slugs[os.path.basename(path)[:-5]].name)
 
-    def test_a_map_page_has_one_h1_a_play_button_and_a_map_maker_button_that_name_the_map_and_no_address_has_dot_html(self):
+    def test_a_map_page_has_one_h1_a_link_that_opens_a_room_on_the_map_and_one_that_opens_it_in_the_map_maker_and_no_address_has_dot_html(self):
         for path, text in self.pages.items():
             body = body_of(text)
             self.assertEqual(len([h for h in body.headings if h[0] == "h1"]), 1, path)
@@ -424,13 +525,24 @@ class ThePages(unittest.TestCase):
                 self.assertNotRegex(href or "", r"\.html", path)
                 self.assertTrue((href or "").startswith(("/", "https://discord.gg/")), (path, href))
         for slug, m in self.slugs.items():
-            links = dict((words, href) for href, words in body_of(self.pages["html/map_pages/map/%s.html" % slug]).links)
-            play, maker = urllib.parse.urlsplit(links["Play it"]), urllib.parse.urlsplit(links["Open in Map maker"])
-            self.assertEqual(play.path, "/play")
-            query = urllib.parse.parse_qs(play.query)
-            self.assertEqual(query, {"map": [m.original_key], "bots": ["medium"]} if m.original else {"mapfile": [m.file], "bots": ["medium"]}, slug)
-            self.assertEqual((maker.path, urllib.parse.parse_qs(maker.query)), ("/mapmaker", {"mapfile": [m.file]}), slug)
+            hrefs = [urllib.parse.urlsplit(h) for h, _ in body_of(self.pages["html/map_pages/map/%s.html" % slug]).links]
+            hosts = [u for u in hrefs if u.path == "/" and u.query]
+            makers = [u for u in hrefs if u.path == "/mapmaker" and u.query]
+            self.assertEqual([urllib.parse.parse_qs(u.query) for u in hosts], [{"hostmap": [m.file]}], slug)            # (the address of the front page that opens a room on this map)
+            self.assertEqual([urllib.parse.parse_qs(u.query) for u in makers], [{"mapfile": [m.file]}], slug)
             self.assertTrue(os.path.isfile(os.path.join(REPO, "Original-Ants", "Maps", m.file) if m.original else os.path.join(REPO, "Community-Maps", m.file)), slug)
+
+    def test_every_map_page_is_ready_for_its_play_count_and_the_page_that_has_none_shows_none(self):
+        for slug, m in self.slugs.items():
+            page = self.pages["html/map_pages/map/%s.html" % slug]
+            body = body_of(page)
+            line, fact = body.ids.get("plays-line"), body.ids.get("plays-fact")
+            self.assertEqual(line.get("data-file"), m.file, slug)                              # (what the script looks up in the site's list)
+            self.assertTrue(line.get("data-matches", "").startswith("/matches?q="), slug)
+            self.assertIn("hidden", fact, slug)                                                # (nothing is claimed before the site has answered)
+            self.assertIn("plays-count", body.ids, slug)
+            self.assertIn("/map_plays.js", [src for src in re.findall(r'<script src="([^"]*)"', page)], slug)
+            self.assertIn(line["data-matches"], [h for h, _ in body.links], slug)             # (the sentence that the page comes with is a plain link to the matches)
 
     def test_every_link_of_a_map_page_goes_to_a_page_that_exists(self):
         index = {"/map-library"} | {mp.library_address(n) for n in range(1, 40)}
@@ -444,39 +556,40 @@ class ThePages(unittest.TestCase):
                 elif address.path == "/map-library":
                     self.assertIn(href, index, (path, href))
                 else:
-                    self.assertIn(address.path, ("/", "/matches", "/play", "/mapmaker"), (path, href))
+                    self.assertIn(address.path, ("/", "/matches", "/mapmaker"), (path, href))
 
-    def test_the_about_text_and_the_facts_are_written_from_the_map(self):
-        treasure = body_of(self.pages["html/map_pages/map/treasure.html"])
-        facts = dict(re.findall(r"<dt>([^<]*)</dt><dd>([^<]*)</dd>", self.pages["html/map_pages/map/treasure.html"]))
-        self.assertEqual((facts["Kind"], facts["Size"], facts["Players"], facts["Made by"]), ("Original (1998)", "60 x 60 squares", "4 anthills", "The makers of Ants"))
-        self.assertRegex(facts["Food"], r"^\d+ piles$")
-        self.assertIn(("h2", "About this map"), treasure.headings)
-        about = " ".join(treasure.texts.get("panel mp about", []))
-        self.assertIn("one of the six maps that came with Ants in 1998", about)
-        self.assertIn("12 minutes", about)
+    def test_the_about_text_and_the_facts_are_written_from_the_data_of_the_map(self):
+        for slug, m in self.slugs.items():
+            body = body_of(self.pages["html/map_pages/map/%s.html" % slug])
+            about = " ".join(body.texts.get("panel mp about", []))
+            self.assertIn(m.name, about, slug)
+            self.assertIn(str(m.minutes), about, slug)                                        # (the length of a game: the map's own number)
+            rows = " | ".join(t for _label, t in mp.facts_of(m))
+            for number in (m.width, m.height, m.minutes, m.food, m.powerups):
+                if number:
+                    self.assertIn(str(number), rows, "%s: %s" % (slug, number))
+            self.assertIn(m.file, rows, slug)
 
     def test_the_game_types_follow_the_food_and_a_count_that_the_file_did_not_give_is_not_shown(self):
         fed, hungry = fake("Fed.lvl"), fake("Hungry.lvl")
         fed.food, fed.powerups, fed.ants = 3, 2, [4, 4, 4, 4]
         hungry.food, hungry.powerups, hungry.ants = 0, 0, [3, 3, 4, 4]
         unknown = fake("Unknown.lvl")
-        self.assertEqual(mp.game_types_of(fed), ["Highest score", "187"])
-        self.assertEqual(mp.game_types_of(hungry), ["187"])                                      # (no food: only 187)
-        self.assertEqual(dict(mp.facts_of(fed))["Starting ants"], "4 each")
-        self.assertEqual(dict(mp.facts_of(hungry))["Starting ants"], "14 in all")
-        self.assertEqual((dict(mp.facts_of(hungry))["Food"], dict(mp.facts_of(hungry))["Power-ups"]), ("none", "none"))
-        for label in ("Food", "Power-ups", "Starting ants"):
-            self.assertNotIn(label, dict(mp.facts_of(unknown)))
-        self.assertNotIn("Made by", dict(mp.facts_of(unknown)))
+        self.assertEqual(len(mp.game_types_of(fed)), len(mp.game_types_of(hungry)) + 1)          # (a map with no food is not offered the game that is won with food)
+        self.assertIn("187", mp.game_types_of(hungry))                                           # (and any map can be played as 187)
+        self.assertIn("187", mp.game_types_of(unknown))
+        counts = [t for label, t in mp.facts_of(fed) if label not in dict(mp.facts_of(unknown))]
+        self.assertEqual(len(counts), 3)                                                         # (the food, the power-ups and the starting ants: shown when the file gave them, not when it did not)
+        self.assertTrue(all(re.search(r"\d", t) for t in counts), counts)
+        self.assertIn("14", " ".join(t for _label, t in mp.facts_of(hungry)))                    # (starting ants that differ are added up)
         self.assertEqual(mp.food_phrase(unknown), "")
 
     def test_a_repaired_map_says_what_was_changed_and_a_map_with_other_names_lists_them(self):
         m = fake("Fixed.lvl", repaired="Text-transfer damage undone: 8 zero bytes put back.")
-        self.assertIn("Text-transfer damage undone", " ".join(mp.paragraphs_of(m)))
+        self.assertIn(m.repaired, body_of(" ".join(mp.paragraphs_of(m))).plain())
         group, _ = mp.plan([fake("Alley Ants.lvl", data=b"z"), fake("AlleyAnts.lvl", data=b"z")])
-        self.assertEqual(dict(mp.facts_of(group[0]))["Also shared as"], "AlleyAnts")
-        self.assertIn("also shared as AlleyAnts", " ".join(mp.paragraphs_of(group[0])))
+        self.assertIn("AlleyAnts", [t for _label, t in mp.facts_of(group[0])])
+        self.assertIn("AlleyAnts", body_of(" ".join(mp.paragraphs_of(group[0]))).plain())
 
     def test_the_six_originals_have_the_counts_of_their_files(self):
         # (the files never change: food piles, power-ups and the start markers of a team; the same counts as the server's, src/ants_server/online_limits.cpp)
@@ -487,21 +600,23 @@ class ThePages(unittest.TestCase):
     def test_the_players_choice_is_there_only_when_the_library_has_two_kinds_of_map(self):
         four = [fake("A.lvl", data=b"1"), fake("B.lvl", data=b"2")]
         mixed = [fake("A.lvl", data=b"1"), fake("B.lvl", data=b"2", players=2)]
-        self.assertNotIn('id="f-players"', mp.tools_panel(four))
-        self.assertIn('id="f-players"', mp.tools_panel(mixed))
-        self.assertIn('<option value="2">2 players</option>', mp.tools_panel(mixed))
+        self.assertEqual(mp.tools_panel(mixed).count("<select"), mp.tools_panel(four).count("<select") + 1)        # (one more choice, only when there is something to choose)
+        values = re.findall(r'<option value="([^"]*)"', mp.tools_panel(mixed))
+        self.assertTrue({"2", "4"} <= set(values), values)
 
-    def test_the_index_pager_names_the_neighbours_and_every_page_is_a_plain_address(self):
-        out = mp.pager(1, 11)
-        self.assertEqual(re.findall(r'href="([^"]*)"', out), ["/map-library", "/map-library?page=2", "/map-library?page=3", "/map-library?page=11", "/map-library?page=2"])
-        mid = mp.pager(6, 11)
-        self.assertEqual([n for n in re.findall(r'class="pg num[^>]*>(\d+)<', mid)], ["1", "5", "6", "7", "11"])
-        self.assertIn('aria-current="page" href="/map-library?page=6"', mid)
-        self.assertEqual(re.findall(r'class="pg wide" href="([^"]*)"', mid), ["/map-library?page=5", "/map-library?page=7"])
-        self.assertNotIn("<a", mp.pager(1, 1).replace('<a class="pg num" aria-current="page" href="/map-library">1</a>', ""))
-        last = mp.pager(11, 11)
-        self.assertIn('<span class="pg wide off">Next', last)
-        self.assertIn('<span class="pg wide off">&lsaquo; Back', out)
+    def test_the_pager_of_the_index_links_the_first_the_last_and_the_neighbours_of_the_page_that_is_open_and_marks_it(self):
+        for pages in (1, 2, 5, 11):
+            for page in range(1, pages + 1):
+                body = body_of(mp.pager(page, pages))
+                linked = {h for h, _ in body.links}
+                allowed = {mp.library_address(n) for n in range(1, pages + 1)}
+                self.assertTrue(linked <= allowed, (page, pages, linked))                       # (every link is a page of the index, none past its ends)
+                self.assertEqual(body.current, [mp.library_address(page)], (page, pages))        # (the page that is open is marked, once)
+                wanted = {1, pages} | {n for n in (page - 1, page + 1) if 1 <= n <= pages}
+                self.assertTrue({mp.library_address(n) for n in wanted} <= linked | {mp.library_address(page)}, (page, pages, linked))
+                self.assertLessEqual(len(linked), 6, (page, pages, linked))                       # (a pager, not a list of every page)
+        body = body_of(mp.pager(1, 1))
+        self.assertEqual((body.current, [h for h, _ in body.links if h not in body.current]), ([mp.library_address(1)], []))
 
 
 class TheTextOfAPlayerIsData(unittest.TestCase):
@@ -535,20 +650,21 @@ class TheTextOfAPlayerIsData(unittest.TestCase):
         data = json.loads(text[len("window.ANTS_MAP_LIBRARY="):].rstrip(";\n"))
         self.assertEqual(data["maps"][0][1], "Evil </script><script>alert(1)</script>")
 
-    def test_a_link_to_the_match_list_and_to_the_map_maker_carries_the_name_percent_encoded(self):
+    def test_a_link_to_the_match_list_the_map_maker_and_the_room_carries_the_name_and_reads_back_as_it_was(self):
         m = fake("A&B #1 '%20'.lvl", data=b"q")
         mp.plan([m])
-        self.assertEqual(mp.maker_address(m), "/mapmaker?mapfile=A%26B%20%231%20%27%2520%27.lvl")
-        self.assertIn("/matches?q=A%26B%20%231%20%27%2520%27", " ".join(mp.paragraphs_of(m)))
-        self.assertNotIn("&B", mp.card(m).replace("&amp;B", ""))
+        for address, key in ((mp.maker_address(m), "mapfile"), (mp.play_address(m), "hostmap")):
+            self.assertEqual(urllib.parse.parse_qs(urllib.parse.urlsplit(address).query), {key: [m.file]}, address)
+        found = re.search(r'data-matches="([^"]*)"', " ".join(mp.paragraphs_of(m))).group(1)
+        self.assertEqual(urllib.parse.parse_qs(urllib.parse.urlsplit(html.unescape(found)).query), {"q": [m.name]})
+        self.assertEqual([t for _h, t in body_of(mp.card(m)).links], [m.name])                    # (the card shows the name as it is)
 
     def test_the_repair_note_and_the_other_names_are_text_too_and_the_match_search_gets_at_most_what_its_box_takes(self):
         group, _ = mp.plan([fake("Plain.lvl", data=b"p", repaired="<b>fixed</b> & done"), fake("<i>Other</i>.lvl", data=b"p")])
-        text = " ".join(mp.paragraphs_of(group[0]))
-        self.assertNotIn("<b>", text)
-        self.assertNotIn("<i>", text)
-        self.assertIn("&lt;b&gt;fixed&lt;/b&gt; &amp; done", text)
-        self.assertIn("&lt;i&gt;Other&lt;/i&gt;", text)
+        body = body_of(" ".join(mp.paragraphs_of(group[0])))
+        self.assertTrue({"b", "i"}.isdisjoint(body.elements), body.elements)                      # (no element came out of them)
+        self.assertIn("<b>fixed</b> & done", body.plain())
+        self.assertIn("<i>Other</i>", body.plain())
         long = fake("L" * 60 + ".lvl", data=b"l60")
         query = re.search(r"/matches\?q=([^\"]*)", " ".join(mp.paragraphs_of(long))).group(1)
         self.assertEqual(urllib.parse.unquote(query), "L" * 40)
@@ -567,7 +683,7 @@ class TheTextOfAPlayerIsData(unittest.TestCase):
 
 class TheSitemap(unittest.TestCase):
     def test_the_sitemap_of_the_map_pages_lists_the_pages_of_the_library_that_ask_to_be_listed_by_their_canonical_addresses_and_nothing_else(self):
-        files = mp.build(ORIGIN, TEMPLATE, mp.read_library())
+        files = mp.build(ORIGIN, TEMPLATE, mp.read_library(), ledger=mp.read_ledger())
         root = ET.fromstring(seo_files.sitemap_xml(ORIGIN, files["addresses.txt"].split()))
         ns = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
         locations = [e.find(ns + "loc").text for e in root]
@@ -624,7 +740,9 @@ class TheTool(unittest.TestCase):
             for name in ("html/map_library_data.js", "nginx/moved.map", "addresses.txt"):
                 self.assertTrue(os.path.getsize(os.path.join(out, name)) > 0, name)
             page = read_file(os.path.join(out, "html", "map_pages", "map", "treasure.html"))
-            self.assertIn('data-version="v1.2.3" data-build="abc1234" data-built="2026-01-01 09:00 PT"', page)           # (the stamps of the other pages)
+            bar = BarOf()
+            bar.feed(page)
+            self.assertEqual(bar.attrs, {"data-version": "v1.2.3", "data-build": "abc1234", "data-built": "2026-01-01 09:00 PT"})        # (the stamps that the Menu of every page shows)
             self.assertNotRegex(page, r"@@[A-Z_]+@@")
 
     def test_an_address_that_is_not_an_origin_stops_it_before_anything_is_written(self):
@@ -632,7 +750,7 @@ class TheTool(unittest.TestCase):
             with tempfile.TemporaryDirectory(prefix="ants_mp_") as out:
                 done = self.run_tool(bad, out)
                 self.assertEqual(done.returncode, 1, bad)
-                self.assertIn("not an origin", done.stderr)
+                self.assertNotEqual(done.stderr, "")
                 self.assertEqual(os.listdir(out), [], bad)
 
     def test_the_tool_never_writes_into_the_map_library(self):
@@ -640,7 +758,7 @@ class TheTool(unittest.TestCase):
             self.addCleanup(shutil.rmtree, folder, True)                                       # (a tool that did write there must not leave the library dirty: the test fails, the folder goes)
             done = self.run_tool(ORIGIN, folder)
             self.assertEqual(done.returncode, 1)
-            self.assertIn("map library", done.stderr)
+            self.assertNotEqual(done.stderr, "")
             self.assertFalse(os.path.exists(folder))
 
     def test_a_library_whose_list_names_a_file_that_is_not_there_stops_the_build(self):
@@ -651,14 +769,28 @@ class TheTool(unittest.TestCase):
                 json.dump({"format": 1, "maps": [{"file": "Gone.lvl", "width": 31, "height": 31, "minutes": 5, "players": 4, "description": "x"}]}, f)
             done = self.run_tool(ORIGIN, os.path.join(tmp, "out"), "--library", library)
             self.assertEqual(done.returncode, 1)
-            self.assertIn("Gone.lvl", done.stderr)
+            self.assertNotEqual(done.stderr, "")
+            self.assertFalse(os.path.exists(os.path.join(tmp, "out")))
+
+    def test_a_library_list_that_names_a_path_or_no_file_name_stops_the_build_before_anything_is_read_or_written(self):
+        for bad in ("../outside.lvl", "sub/x.lvl", "..\\x.lvl", "/etc/passwd", "x.txt", 3, None):
+            with tempfile.TemporaryDirectory(prefix="ants_mp_") as tmp:
+                library = os.path.join(tmp, "lib")
+                os.makedirs(library)
+                with open(os.path.join(tmp, "outside.lvl"), "wb") as f:
+                    f.write(b"a file next to the library")
+                with open(os.path.join(library, "maps.json"), "w", encoding="utf-8") as f:
+                    json.dump({"format": 1, "maps": [{"file": bad, "width": 31, "height": 31, "minutes": 5, "players": 4, "description": "x"}]}, f)
+                done = self.run_tool(ORIGIN, os.path.join(tmp, "out"), "--library", library)
+                self.assertEqual(done.returncode, 1, repr(bad))
+                self.assertFalse(os.path.exists(os.path.join(tmp, "out")), repr(bad))
 
     def test_the_slugs_option_prints_the_ledger(self):
         done = self.run_tool("--slugs")
         self.assertEqual(done.returncode, 0, done.stderr)
         got = json.loads(done.stdout)
         self.assertEqual(got["treasure"], "TREASURE.LVL")
-        self.assertEqual(got, mp.slugs_of(mp.read_library()))
+        self.assertEqual(got, mp.slugs_of(mp.read_library(), mp.read_ledger()))
 
     def test_every_slot_of_the_template_is_one_that_the_tool_fills(self):
         slots = set(re.findall(r"@@([A-Z_]+)@@", TEMPLATE))

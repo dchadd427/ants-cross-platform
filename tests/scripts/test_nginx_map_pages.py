@@ -175,6 +175,9 @@ class TheRoutesRun(unittest.TestCase):
                 self.assertEqual(self.ask(new)[0], 200)
             else:
                 self.assertEqual(status, 200, old)                                              # (the page's own word is never redirected, to itself or anywhere)
+        status, headers, _ = self.ask("/map/AlleyAnts")
+        self.assertEqual((status, headers["location"]), (301, "/map/alley-ants"))               # (nginx compares the names of a map's list without regard to case: docs/MAP_PAGES.md says so)
+        self.assertEqual(self.ask("/map/Treasure")[0], 404)                                       # (a name that is no other name of a map is a 404, whatever its case)
         with open(os.path.join(self.moved, "moved.map"), encoding="utf-8") as f:
             moved = f.read().split("\n")
         self.assertIn("/map/alleyants /map/alley-ants;", moved)

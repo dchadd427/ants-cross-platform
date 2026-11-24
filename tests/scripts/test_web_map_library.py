@@ -4,6 +4,7 @@ tests/data/map_library_mutants.json breaks one rule at a time, for tools/mutate.
 
   - TheIndexScript      the real script runs on a fake of the DOM (tests/scripts/web_map_library_check.js, node): the page stays until a control is used, the search and the filters, the order (Most played
                         asks /maps once), 48 to a page with a pager, the page back when everything is cleared, and every text of a map put in as text
+  - ThePlayCount        the play count of a map's page (web/map_plays.js) runs on a fake of the DOM (tests/scripts/web_map_plays_check.js): the number of the map's file from the site's list, as text, and nothing at all without an answer of the right shape
   - TheMapMaker         "Open in Map maker": the page's own function that opens the library map named in the address runs on fakes (tests/scripts/web_mapmaker_address_check.js)
   - TheFiles            the byte budgets of the files and of the pages the tool makes (tools/size_limits.py); plain ES5; the script never puts a text of a map in as markup; the image and build_web.sh carry the
                         files and make the pages before the sitemap that lists them (read as text: no run builds the image)
@@ -46,6 +47,16 @@ class TheIndexScript(unittest.TestCase):
 
 
 @unittest.skipUnless(NODE, "node is needed")
+class ThePlayCount(unittest.TestCase):
+    def test_the_script_passes_its_checks_on_a_fake_dom(self):
+        done = run_node("web_map_plays_check.js")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("0 failed", done.stdout)
+        for part in ("A the number of the map", "B no answer", "C no parts, no fetch"):
+            self.assertIn("RUNNING: %s ... done" % part, done.stdout)
+
+
+@unittest.skipUnless(NODE, "node is needed")
 class TheMapMaker(unittest.TestCase):
     def test_the_map_maker_opens_the_library_map_that_its_address_names(self):
         done = run_node("web_mapmaker_address_check.js")
@@ -57,7 +68,7 @@ class TheMapMaker(unittest.TestCase):
 
 class TheFiles(unittest.TestCase):
     def test_the_style_and_the_script_are_within_their_budgets(self):
-        for name, raw, packed in (("map_pages.css", limits.MAP_PAGES_BUDGET, limits.MAP_PAGES_GZIP_BUDGET), ("map_library.js", limits.MAP_LIBRARY_BUDGET, limits.MAP_LIBRARY_GZIP_BUDGET)):
+        for name, raw, packed in (("map_pages.css", limits.MAP_PAGES_BUDGET, limits.MAP_PAGES_GZIP_BUDGET), ("map_library.js", limits.MAP_LIBRARY_BUDGET, limits.MAP_LIBRARY_GZIP_BUDGET), ("map_plays.js", limits.MAP_PLAYS_BUDGET, limits.MAP_PLAYS_GZIP_BUDGET)):
             data = read("web", name).encode("utf-8")
             self.assertLess(len(data), raw, "%s is %d bytes" % (name, len(data)))
             self.assertLess(len(gzip.compress(data, 9)), packed, "%s is %d bytes gzipped" % (name, len(gzip.compress(data, 9))))
@@ -72,6 +83,12 @@ class TheFiles(unittest.TestCase):
         self.assertLess(biggest, limits.MAP_PAGE_BUDGET, "the biggest map page is %d bytes" % biggest)
         index = max(len(t.encode("utf-8")) for p, t in files.items() if "/library/" in p)
         self.assertLess(index, limits.MAP_INDEX_PAGE_BUDGET, "the biggest page of the index is %d bytes" % index)
+
+    def test_the_play_count_script_is_plain_es5_sets_no_markup_and_asks_the_site_for_one_thing(self):
+        code = re.sub(r"/\*.*?\*/", "", read("web", "map_plays.js"), flags=re.S)
+        for bad in ("=>", "let ", "const ", "`", "class ", "innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function", "XMLHttpRequest", "localStorage", "cookie"):
+            self.assertNotIn(bad, code, bad)
+        self.assertEqual(re.findall(r"fetch\(([^,)]*)", code), ["'/maps'"])
 
     def test_the_script_is_plain_es5_and_never_puts_what_came_with_the_list_in_as_markup(self):
         # (an older browser must run it: nothing a run of the real script shows. And the one place that sets markup puts back the page's own text, saved when the script began; no run of a text of a map reaches it)
@@ -96,13 +113,13 @@ class TheFiles(unittest.TestCase):
         self.assertLess(steps.index(builder[0]), steps.index(sitemap[0]))
         self.assertIn("--pages /src/map_site/addresses.txt", sitemap[0].text)
         copies = [w for s in steps if s.op == "COPY" for w in s.words[:-1]]
-        for needed in ("web/map_pages.css", "web/map_library.js", "tools/map_pages.py", "tools/library_guard.py", "tools/seo_files.py", "Community-Maps/maps.json", "/src/sitemap-library.xml"):
+        for needed in ("web/map_pages.css", "web/map_library.js", "web/map_plays.js", "tools/map_pages.py", "tools/map_page_slugs.json", "tools/library_guard.py", "tools/seo_files.py", "Community-Maps/maps.json", "/src/sitemap-library.xml"):
             self.assertIn(needed, copies, needed)
         self.assertEqual(len([s for s in steps if s.op == "COPY" and s.words[-1] == "/etc/nginx/ants-map-pages/"]), 1)
         build = read("build_web.sh")
         self.assertLess(build.index("tools/map_pages.py"), build.index("tools/seo_files.py"))
         self.assertIn("--pages", build)
-        for name in ("map_pages.css", "map_library.js"):
+        for name in ("map_pages.css", "map_library.js", "map_plays.js"):
             self.assertIn(name, build)
 
     @unittest.skipUnless(hasattr(sys, "stdlib_module_names"), "needs Python 3.10")

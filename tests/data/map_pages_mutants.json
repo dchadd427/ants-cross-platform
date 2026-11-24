@@ -1,6 +1,76 @@
 {
- "note": "Mutants of the map pages (tools/map_pages.py, and the lines of tools/seo_files.py that list them and open their pictures) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule of docs/MAP_PAGES.md on purpose and a test of tests/scripts/test_map_pages.py must notice - an address is lower case letters and digits with single hyphens and never given to two maps; one page for the copies of a file; the maker only when the description clearly names one; what a player wrote is text in every place a page puts it; the counts come from the file and a count that the file does not give is not shown; the index holds every map once; the sitemap lists the pages that ask to be listed; the tool never writes into the map library and takes an origin only. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/map_pages_mutants.json --keep-going --jobs 1.",
+ "note": "Mutants of the product rules of the map pages (tools/map_pages.py, and the lines of tools/seo_files.py that list them) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): what a player wrote is text wherever a page puts it; an address that was listed never moves and every address is one that nginx serves; the maker only when a description clearly names one; the sitemap of the map pages; a file name that the Map Maker and the game page can fetch, and a library that is never written; the address of Play it and the play count that waits for the site. A test of tests/scripts/test_map_pages.py must notice each (the play count's script has its own list in tests/data/map_library_mutants.json). Run from the checkout, no build needed: python3 tools/mutate.py tests/data/map_pages_mutants.json --keep-going --jobs 1.",
  "mutants": [
+  {
+   "id": "a_name_is_put_into_a_page_as_it_is",
+   "file": "tools/map_pages.py",
+   "old": "    return html.escape(text, quote=True)",
+   "new": "    return text",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
+  },
+  {
+   "id": "a_name_is_not_escaped_in_an_attribute",
+   "file": "tools/map_pages.py",
+   "old": "    return html.escape(text, quote=True)",
+   "new": "    return html.escape(text, quote=False)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
+  },
+  {
+   "id": "the_structured_data_can_end_its_script",
+   "file": "tools/map_pages.py",
+   "old": ".replace(\"<\", \"\\\\u003c\")",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
+  },
+  {
+   "id": "the_list_of_the_index_can_hold_a_line_separator",
+   "file": "tools/map_pages.py",
+   "old": ".replace(\"\\u2028\", \"\\\\u2028\")",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
+  },
+  {
+   "id": "a_name_that_looks_like_a_slot_is_filled_in",
+   "file": "tools/map_pages.py",
+   "old": "    return SLOT.sub(lambda found: slots[found.group(1)], template)",
+   "new": "    for _ in range(3):\n        template = SLOT.sub(lambda found: slots.get(found.group(1), found.group(0)), template)\n    return template",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
+  },
+  {
+   "id": "the_repair_note_is_not_escaped",
+   "file": "tools/map_pages.py",
+   "old": "% esc(m.repaired))",
+   "new": "% m.repaired)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
+  },
+  {
+   "id": "the_other_names_are_not_escaped",
+   "file": "tools/map_pages.py",
+   "old": "\", \".join(esc(o.name) for o in m.aliases)",
+   "new": "\", \".join(o.name for o in m.aliases)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
+  },
+  {
+   "id": "the_map_maker_address_is_not_percent_encoded",
+   "file": "tools/map_pages.py",
+   "old": "    return \"/mapmaker?mapfile=\" + percent(m.file)",
+   "new": "    return \"/mapmaker?mapfile=\" + m.file",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
+  },
+  {
+   "id": "the_room_address_is_not_percent_encoded",
+   "file": "tools/map_pages.py",
+   "old": "    return \"/?hostmap=\" + percent(m.file)",
+   "new": "    return \"/?hostmap=\" + m.file",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
+  },
+  {
+   "id": "an_address_that_is_not_an_origin_is_put_into_the_pages",
+   "file": "tools/map_pages.py",
+   "old": "    seo_files.check_origin(origin)\n    primaries, moved = plan(maps, ledger)",
+   "new": "    primaries, moved = plan(maps, ledger)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
+  },
   {
    "id": "an_address_keeps_its_capital_letters",
    "file": "tools/map_pages.py",
@@ -39,8 +109,36 @@
   {
    "id": "the_tag_of_a_second_map_depends_on_the_others",
    "file": "tools/map_pages.py",
-   "old": "            tag = hashlib.sha1(m.file.encode(\"latin-1\", \"replace\")).hexdigest()\n            length = 4",
-   "new": "            tag = \"%040x\" % len(taken)\n            length = 4",
+   "old": "            tag = hashlib.sha1(m.file.encode(\"latin-1\", \"replace\")).hexdigest()\n            base, length",
+   "new": "            tag = \"%040x\" % len(taken)\n            base, length",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
+  },
+  {
+   "id": "a_cut_word_leaves_a_hyphen_before_the_tag",
+   "file": "tools/map_pages.py",
+   "old": "base, length = slug[:SLUG_MAX].rstrip(\"-\"), 4",
+   "new": "base, length = slug[:SLUG_MAX], 4",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
+  },
+  {
+   "id": "the_ledger_is_not_read",
+   "file": "tools/map_pages.py",
+   "old": "    pinned = {file: slug for slug, file in ledger.items()}",
+   "new": "    pinned = {}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
+  },
+  {
+   "id": "an_address_of_a_map_that_is_gone_is_free_again",
+   "file": "tools/map_pages.py",
+   "old": "    taken = {slug: None for slug in ledger}",
+   "new": "    taken = {}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
+  },
+  {
+   "id": "a_group_of_copies_does_not_keep_the_page_of_the_ledger",
+   "file": "tools/map_pages.py",
+   "old": "m.file not in pinned, -spellings.count",
+   "new": "-spellings.count",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
@@ -58,38 +156,17 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
-   "id": "the_spelling_that_most_names_share_does_not_count",
-   "file": "tools/map_pages.py",
-   "old": "-spellings.count(re.sub(r\"[^a-z0-9]\", \"\", m.name.lower())), ",
-   "new": "0, ",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "a_name_that_starts_with_a_sign_is_as_good_as_one_that_starts_with_a_letter",
-   "file": "tools/map_pages.py",
-   "old": "not m.name[:1].isalnum(), m.name.lower(), m.name))\n        first",
-   "new": "m.name.lower(), m.name))\n        first",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "a_name_that_is_the_page_of_another_map_is_redirected_away",
+   "id": "a_name_that_is_a_page_of_another_map_is_redirected_away",
    "file": "tools/map_pages.py",
    "old": "if slug not in taken and slug not in moved:",
    "new": "if slug not in moved:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
-   "id": "a_map_is_its_own_related_map",
+   "id": "a_ledger_may_hold_any_text",
    "file": "tools/map_pages.py",
-   "old": "    others = [o for o in maps if o is not m]",
-   "new": "    others = list(maps)",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "the_related_maps_are_fewer_than_four",
-   "file": "tools/map_pages.py",
-   "old": "    return (shared + same)[:count]",
-   "new": "    return (shared + same)[:count - 1]",
+   "old": "re.fullmatch(r\"[a-z0-9]+(?:-[a-z0-9]+)*\", k) for k, v in ledger.items()",
+   "new": "True for k, v in ledger.items()",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
@@ -97,6 +174,13 @@
    "file": "tools/map_pages.py",
    "old": "    if cut:\n        return \"\"",
    "new": "    if False:\n        return \"\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
+  },
+  {
+   "id": "a_text_that_ends_in_three_dots_is_not_known_as_cut",
+   "file": "tools/map_pages.py",
+   "old": "    cut = re.search(r\"\\S\\.\\.\\.$\", raw) is not None",
+   "new": "    cut = len(raw) >= 27 and re.search(r\"\\S\\.\\.\\.$\", raw) is not None",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
@@ -135,90 +219,6 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
-   "id": "the_old_editors_sign_stays_in_the_words",
-   "file": "tools/map_pages.py",
-   "old": "    text = re.sub(r\"^[!*^\\s]+\", \"\", text).strip()",
-   "new": "    text = text.strip()",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "the_padding_stays_in_the_words",
-   "file": "tools/map_pages.py",
-   "old": "    text = re.sub(r\"\\s+\\.\\.\\.$\", \"\", raw)",
-   "new": "    text = raw",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "a_cut_text_is_never_known_as_cut",
-   "file": "tools/map_pages.py",
-   "old": "    cut = len(raw) >= 27 and re.search(r\"\\S\\.\\.\\.$\", raw) is not None",
-   "new": "    cut = False",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "a_long_name_makes_a_long_title",
-   "file": "tools/map_pages.py",
-   "old": "    name = m.name if len(m.name) <= room else m.name[:max(room - 1, 1)].rstrip() + \"\\u2026\"",
-   "new": "    name = m.name",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "a_long_description_is_not_cut",
-   "file": "tools/map_pages.py",
-   "old": "    return cut_to(text, DESCRIPTION_MAX)",
-   "new": "    return text",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "a_name_is_put_into_a_page_as_it_is",
-   "file": "tools/map_pages.py",
-   "old": "    return html.escape(text, quote=True)",
-   "new": "    return text",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "a_name_is_not_escaped_in_an_attribute",
-   "file": "tools/map_pages.py",
-   "old": "    return html.escape(text, quote=True)",
-   "new": "    return html.escape(text, quote=False)",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "the_structured_data_can_end_its_script",
-   "file": "tools/map_pages.py",
-   "old": ".replace(\"<\", \"\\\\u003c\")",
-   "new": "",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "a_name_that_looks_like_a_slot_is_filled_in",
-   "file": "tools/map_pages.py",
-   "old": "    return SLOT.sub(lambda found: slots[found.group(1)], template)",
-   "new": "    for _ in range(3):\n        template = SLOT.sub(lambda found: slots.get(found.group(1), found.group(0)), template)\n    return template",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "a_page_names_another_address_as_its_own",
-   "file": "tools/map_pages.py",
-   "old": "CANONICAL=esc(\"%s/map/%s\" % (origin, m.slug))",
-   "new": "CANONICAL=esc(origin + \"/\")",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "the_share_card_picture_has_no_address_of_the_site",
-   "file": "tools/map_pages.py",
-   "old": "IMAGE=esc(origin + picture_of(m)),",
-   "new": "IMAGE=esc(picture_of(m)),",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "the_breadcrumb_ends_at_another_page",
-   "file": "tools/map_pages.py",
-   "old": "(m.name, \"%s/map/%s\" % (origin, m.slug))]",
-   "new": "(m.name, \"%s/map-library\" % origin)]",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
    "id": "a_maker_row_is_shown_for_a_map_that_names_none",
    "file": "tools/map_pages.py",
    "old": "    elif m.maker:\n        rows.append((\"Made by\", m.maker))",
@@ -233,80 +233,38 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
-   "id": "a_map_with_no_food_is_offered_as_highest_score",
-   "file": "tools/map_pages.py",
-   "old": "    return ([\"Highest score\"] if m.food is None or m.food else []) + [\"187\"]",
-   "new": "    return [\"Highest score\", \"187\"]",
+   "id": "the_sitemap_of_the_map_pages_is_not_made",
+   "file": "tools/seo_files.py",
+   "old": "            files[MAP_SITEMAP] = sitemap_xml(argv[1], more)",
+   "new": "            pass",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
-   "id": "a_count_that_the_file_did_not_give_is_shown",
-   "file": "tools/map_pages.py",
-   "old": "    if m.food is not None:\n        rows +=",
-   "new": "    if True:\n        rows +=",
+   "id": "the_site_s_own_sitemap_holds_the_map_pages",
+   "file": "tools/seo_files.py",
+   "old": "files = {\"robots.txt\": robots_txt(argv[1]), \"sitemap.xml\": sitemap_xml(argv[1])}",
+   "new": "files = {\"robots.txt\": robots_txt(argv[1]), \"sitemap.xml\": sitemap_xml(argv[1], more)}",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
-   "id": "starting_ants_are_always_each",
-   "file": "tools/map_pages.py",
-   "old": "len(set(m.ants)) == 1 else",
-   "new": "True else",
+   "id": "a_page_is_listed_twice",
+   "file": "tools/seo_files.py",
+   "old": "for path in dict.fromkeys(paths))",
+   "new": "for path in paths)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
-   "id": "the_last_power_up_tile_is_not_counted",
-   "file": "tools/map_pages.py",
-   "old": "POWER_UP_TILES = range(62, 67)",
-   "new": "POWER_UP_TILES = range(62, 66)",
+   "id": "an_address_with_two_slashes_is_a_page",
+   "file": "tools/seo_files.py",
+   "old": "ADDRESS = re.compile(r\"/(?:[A-Za-z0-9_~-][A-Za-z0-9._~-]*(?:/[A-Za-z0-9_~-][A-Za-z0-9._~-]*)*)?\")",
+   "new": "ADDRESS = re.compile(r\"/[A-Za-z0-9._~/-]*\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
-   "id": "a_start_marker_is_read_as_another_color",
-   "file": "tools/map_pages.py",
-   "old": "START_MARKERS = (152, 153, 154, 155)",
-   "new": "START_MARKERS = (152, 153, 154, 154)",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "food_is_read_from_the_wrong_place",
-   "file": "tools/map_pages.py",
-   "old": "food = struct.unpack_from(\"<H\", data, off + 2 + 6 * records)[0]",
-   "new": "food = struct.unpack_from(\"<H\", data, off + 2 + 6 * records - 2)[0]",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "the_pager_names_no_neighbour",
-   "file": "tools/map_pages.py",
-   "old": "shown = sorted({1, pages, page - 1, page, page + 1} |",
-   "new": "shown = sorted({1, pages, page} |",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "the_pager_has_no_back_link",
-   "file": "tools/map_pages.py",
-   "old": "out = ['<a class=\"pg wide\" href=\"%s\">&lsaquo; Back</a>' % library_address(page - 1) if page > 1 else",
-   "new": "out = [",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "a_page_of_the_index_holds_fifty",
-   "file": "tools/map_pages.py",
-   "old": "PAGE_SIZE = 48",
-   "new": "PAGE_SIZE = 50",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "a_map_is_left_off_its_page_of_the_index",
-   "file": "tools/map_pages.py",
-   "old": "    shown = maps[(page - 1) * PAGE_SIZE:page * PAGE_SIZE]",
-   "new": "    shown = maps[(page - 1) * PAGE_SIZE:page * PAGE_SIZE - 1]",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "the_players_choice_is_there_with_one_kind_of_map",
-   "file": "tools/map_pages.py",
-   "old": "    if len(counts) > 1:",
-   "new": "    if True:",
+   "id": "a_bad_address_is_written_into_the_sitemap",
+   "file": "tools/seo_files.py",
+   "old": "        if not ADDRESS.fullmatch(path):\n            raise ValueError(\"not a page address: %r\" % path)\n",
+   "new": "",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
@@ -314,20 +272,6 @@
    "file": "tools/map_pages.py",
    "old": "\"\".join(address + \"\\n\" for address in [\"/map-library\"] + [\"/map/\" + m.slug for m in primaries])",
    "new": "\"\".join(address + \"\\n\" for address in [\"/map/\" + m.slug for m in primaries])",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "the_tool_writes_into_the_map_library",
-   "file": "tools/map_pages.py",
-   "old": "    library_guard.require_writable(out_dir, inputs)\n    for name in sorted(files):\n        path = os.path.join(out_dir, name)\n        library_guard.require_writable(path, inputs)\n",
-   "new": "    for name in sorted(files):\n        path = os.path.join(out_dir, name)\n",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "an_address_that_is_not_an_origin_is_put_into_the_pages",
-   "file": "tools/map_pages.py",
-   "old": "    seo_files.check_origin(origin)\n    primaries, moved = plan(maps)",
-   "new": "    primaries, moved = plan(maps)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
@@ -366,66 +310,45 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
-   "id": "the_map_maker_address_is_not_percent_encoded",
+   "id": "a_library_list_may_name_a_path",
    "file": "tools/map_pages.py",
-   "old": "    return \"/mapmaker?mapfile=\" + percent(m.file)",
-   "new": "    return \"/mapmaker?mapfile=\" + m.file",
+   "old": "        if not isinstance(entry.get(\"file\"), str) or not valid_map_file(entry[\"file\"]):",
+   "new": "        if False:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
-   "id": "the_match_search_gets_the_whole_name",
+   "id": "the_tool_writes_into_the_map_library",
    "file": "tools/map_pages.py",
-   "old": "percent(m.name[:QUERY_MAX])",
-   "new": "percent(m.name)",
+   "old": "    library_guard.require_writable(out_dir, inputs)\n    for name in sorted(files):\n        path = os.path.join(out_dir, name)\n        library_guard.require_writable(path, inputs)\n",
+   "new": "    for name in sorted(files):\n        path = os.path.join(out_dir, name)\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
-   "id": "the_repair_note_is_not_escaped",
+   "id": "play_it_goes_to_the_wrong_address",
    "file": "tools/map_pages.py",
-   "old": "% esc(m.repaired))",
-   "new": "% m.repaired)",
+   "old": "    return \"/?hostmap=\" + percent(m.file)",
+   "new": "    return \"/?map=\" + percent(m.file)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
-   "id": "the_other_names_are_not_escaped",
+   "id": "a_page_does_not_say_which_file_to_count",
    "file": "tools/map_pages.py",
-   "old": "\", \".join(esc(o.name) for o in m.aliases)",
-   "new": "\", \".join(o.name for o in m.aliases)",
+   "old": "<p id=\"plays-line\" data-file=\"%s\" data-matches=\"%s\">%s</p>' % (esc(m.file), esc(found), third)",
+   "new": "<p id=\"plays-line\" data-matches=\"%s\">%s</p>' % (esc(found), third)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
-   "id": "the_sitemap_of_the_map_pages_is_not_made",
-   "file": "tools/seo_files.py",
-   "old": "            files[MAP_SITEMAP] = sitemap_xml(argv[1], more)",
-   "new": "            pass",
+   "id": "the_play_count_is_shown_before_the_site_answers",
+   "file": "tools/map_pages.py",
+   "old": "<div id=\"plays-fact\" hidden>",
+   "new": "<div id=\"plays-fact\">",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
-   "id": "the_site_s_own_sitemap_holds_the_map_pages",
-   "file": "tools/seo_files.py",
-   "old": "files = {\"robots.txt\": robots_txt(argv[1]), \"sitemap.xml\": sitemap_xml(argv[1])}",
-   "new": "files = {\"robots.txt\": robots_txt(argv[1]), \"sitemap.xml\": sitemap_xml(argv[1], more)}",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "a_page_is_listed_twice",
-   "file": "tools/seo_files.py",
-   "old": "for path in dict.fromkeys(paths))",
-   "new": "for path in paths)",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "an_address_with_two_slashes_is_a_page",
-   "file": "tools/seo_files.py",
-   "old": "ADDRESS = re.compile(r\"/(?:[A-Za-z0-9_~-][A-Za-z0-9._~-]*(?:/[A-Za-z0-9_~-][A-Za-z0-9._~-]*)*)?\")",
-   "new": "ADDRESS = re.compile(r\"/[A-Za-z0-9._~/-]*\")",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "a_bad_address_is_written_into_the_sitemap",
-   "file": "tools/seo_files.py",
-   "old": "        if not ADDRESS.fullmatch(path):\n            raise ValueError(\"not a page address: %r\" % path)\n",
-   "new": "",
+   "id": "a_map_page_does_not_load_the_play_count",
+   "file": "tools/map_pages.py",
+   "old": "SCRIPTS='<script src=\"/map_plays.js\"></script>\\n'",
+   "new": "SCRIPTS=\"\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   }
  ]

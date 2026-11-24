@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the map index's script (web/map_library.js) and of the Map Maker's opening of the library map that its address names (addressMap of web/front/mapmaker_app.js) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule of docs/MAP_PAGES.md on purpose and a test of tests/scripts/test_web_map_library.py must notice - the page stays until a control is used; the search reads every word of the name and the line, in any case; the sizes and lengths are the ones that the page says; Most played asks the site once; 48 to a page; everything that came with the list is text; the Map Maker asks before it replaces unsaved drawing, opens the map once and says when the site has none. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/map_library_mutants.json --keep-going --jobs 1.",
+ "note": "Mutants of the map index's script (web/map_library.js), of the play count of a map's page (web/map_plays.js) and of the Map Maker's opening of the library map that its address names (addressMap of web/front/mapmaker_app.js) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule of docs/MAP_PAGES.md on purpose and a test of tests/scripts/test_web_map_library.py must notice - the page stays until a control is used; the search reads every word of the name and the line, in any case; the sizes and lengths are the ones that the page says; Most played asks the site once; 48 to a page; everything that came with the list is text; the Map Maker asks before it replaces unsaved drawing, opens the map once and says when the site has none. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/map_library_mutants.json --keep-going --jobs 1.",
  "mutants": [
   {
    "id": "a_map_of_exactly_the_top_of_a_size_is_left_out",
@@ -174,6 +174,55 @@
    "file": "web/map_library.js",
    "old": "if (!found.length) list.appendChild(make('li', 'empty', 'No map has that in its name or its words.'));",
    "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_play_count_is_taken_without_a_look_at_it",
+   "file": "web/map_plays.js",
+   "old": "if (whole(m.plays)) show(m.plays); return;",
+   "new": "show(m.plays); return;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_play_count_of_another_letter_case_is_another_map",
+   "file": "web/map_plays.js",
+   "old": "m.file.toLowerCase() === file",
+   "new": "m.file === file",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "an_answer_of_no_is_read_all_the_same",
+   "file": "web/map_plays.js",
+   "old": "r.ok ? r.json() : null",
+   "new": "r.json()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "a_failure_of_the_request_is_left_unhandled",
+   "file": "web/map_plays.js",
+   "old": "}).catch(function () { /* no answer: the page stays as it came */ });",
+   "new": "});",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "any_address_is_made_a_link_to_the_matches",
+   "file": "web/map_plays.js",
+   "old": "if (matches.indexOf('/matches') === 0) {",
+   "new": "if (true) {",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_play_count_is_put_in_as_markup",
+   "file": "web/map_plays.js",
+   "old": "cell.textContent = n ? n + (n === 1 ? ' match' : ' matches') : 'Not yet';",
+   "new": "cell.innerHTML = n ? n + (n === 1 ? ' match' : ' matches') : 'Not yet';",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_fact_is_shown_for_a_page_that_got_no_number",
+   "file": "web/map_plays.js",
+   "old": "if (!answer || !Array.isArray(answer.maps)) return;",
+   "new": "fact.hidden = false; if (!answer || !Array.isArray(answer.maps)) return;",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
   },
   {

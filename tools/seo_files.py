@@ -24,8 +24,8 @@ DOORS = (
      ("/ws", "/busy", "/live", "/replays", "/history", "/lobbies", "/maps", "/stats", "/submissions", "/test-maps")),
 )
 FOLDERS = (("The chat hub: the login, the connection, the pictures and images", ("/hub/",)),)
-QUERIES = ("Addresses that hold a room (room=, join=, code=), a live match (live=) or a recording (replay=): a link that someone pasted into the chat is not for a search engine",
-           ("/*room=", "/*join=", "/*code=", "/*live=", "/*replay="))
+QUERIES = ("Addresses that hold a room (room=, join=, code=, hostmap=: the Play it button of a map), a live match (live=) or a recording (replay=), or open a library map in the Map Maker (mapfile=): a link that someone pasted into the chat is not for a search engine",
+           ("/*room=", "/*join=", "/*code=", "/*hostmap=", "/*mapfile=", "/*live=", "/*replay="))
 
 # What a crawler may read below a path that is closed: the pictures of the maps (the map pages show them and a share card names one; a crawler that may not fetch the picture shows the page without it).
 # The longest rule wins (RFC 9309), so this opens /maps/previews/ and nothing else under /maps/ (the files of the maps stay closed).

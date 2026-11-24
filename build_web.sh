@@ -50,7 +50,7 @@ SITE_ORIGIN="$(head -n 1 "${SCRIPT_DIR}/web/SITE_ORIGIN" | tr -d '[:space:]')"
 MAP_SITE="${BUILD_DIR}/map_site"
 python3 "${SCRIPT_DIR}/tools/map_pages.py" "${SITE_ORIGIN}" "${MAP_SITE}" --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --build-date "${BUILD_DATE}"
 cp -R "${MAP_SITE}/html/." "${DIST_DIR}/"
-cp -f "${SCRIPT_DIR}/web/map_pages.css" "${SCRIPT_DIR}/web/map_library.js" "${DIST_DIR}/"
+cp -f "${SCRIPT_DIR}/web/map_pages.css" "${SCRIPT_DIR}/web/map_library.js" "${SCRIPT_DIR}/web/map_plays.js" "${DIST_DIR}/"
 python3 "${SCRIPT_DIR}/tools/seo_files.py" "${SITE_ORIGIN}" "${DIST_DIR}" --pages "${MAP_SITE}/addresses.txt"
 sed -e "s/@@GAME_VERSION@@/${GAME_VERSION}/g" -e "s/@@BUILD_ID@@/${BUILD_ID}/g" -e "s/@@BUILD_DATE@@/${BUILD_DATE}/g" -e "s/@@SITE_TITLE@@//g" -e "s/@@SITE_FOOTER@@//g" -e "s|@@SITE_ORIGIN@@|${SITE_ORIGIN}|g" "${BUILD_DIR}/src/ants_app/index.html" > "${DIST_DIR}/index.html"
 cp -f "${DIST_DIR}/index.html" "${DIST_DIR}/play.html"            # the game page at its own path (the games on this computer), as the image has it

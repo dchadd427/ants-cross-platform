@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """The public pages of the map library: one page for each map at /map/NAME and the index at /map-library (docs/MAP_PAGES.md).
 
-usage: map_pages.py ORIGIN OUT_DIR [--library DIR] [--originals DIR] [--template FILE] [--version V] [--build-id ID] [--build-date TEXT]
-       map_pages.py --slugs [--library DIR] [--originals DIR]      the addresses of the library as JSON, {"slug": "file name"}: the ledger that tests/data/map_page_slugs.json holds
+usage: map_pages.py ORIGIN OUT_DIR [--library DIR] [--originals DIR] [--template FILE] [--ledger FILE] [--version V] [--build-id ID] [--build-date TEXT]
+       map_pages.py --slugs [--library DIR] [--originals DIR] [--ledger FILE]      the addresses of the library as JSON, {"slug": "file name"}: what tools/map_page_slugs.json holds
 
 ORIGIN is the address that the pages name themselves by (the one line of web/SITE_ORIGIN; the canonical links, the share cards and the structured data carry it). The library is read, never written
 (tools/library_guard.py): the six maps of Original-Ants/Maps and the players' maps of Community-Maps (maps.json and the files). OUT_DIR gets
@@ -12,7 +12,8 @@ ORIGIN is the address that the pages name themselves by (the one line of web/SIT
   nginx/moved.map                     the other names of a map that was shared under several: `/map/OTHER /map/SLUG;` for a `map` block of nginx (a 301)
   addresses.txt                       the addresses of the pages that a search engine should list, one a line (tools/seo_files.py puts them into sitemap.xml)
 
-Everything that a player wrote (a file name, a description) is data: it is escaped for the place it goes into (html.escape, json with the characters of markup written as escapes) and never read as
+The ledger (tools/map_page_slugs.json, {"slug": "file name"}) is what keeps an address from ever moving: a map in it has its address, whatever has been added to the library since, an address of a map that is gone stays taken, and a new map gets
+an address that is free; `--slugs` prints the ledger with the new maps in it, to be saved. Everything that a player wrote (a file name, a description) is data: it is escaped for the place it goes into (html.escape, json with the characters of markup written as escapes) and never read as
 markup or as an instruction. The pages are filled in one pass, so that a text that looks like a slot of the template is not filled in.
 """
 import argparse
@@ -34,6 +35,7 @@ REPO = os.path.abspath(os.path.join(HERE, os.pardir))
 ORIGINALS_DIR = os.path.join(REPO, "Original-Ants", "Maps")
 LIBRARY_DIR = os.path.join(REPO, "Community-Maps")
 TEMPLATE = os.path.join(REPO, "web", "map_pages", "page.html")
+LEDGER = os.path.join(HERE, "map_page_slugs.json")
 ORIGINAL_KEYS = ("tiny", "small", "medium", "gauntlet", "treasure", "islands")      # the order of the six on the page and in GET /maps (docs/SERVER.md "The list of maps")
 PAGE_SIZE = 48
 SLUG_MAX = 60
@@ -49,7 +51,7 @@ LENGTH_CLASSES = (("short", "Up to 10 minutes", 10), ("middle", "11 to 15 minute
 STOP_WORDS = frozenset("the and map maps ant ants for new old of a an in on to by".split())
 SLOT = re.compile(r"@@([A-Z_]+)@@")
 KIND_NOTE = "The map\u2019s own line, as the game\u2019s setup screen shows it"
-PLAY_NOTE = "Play it starts a game on this map in your browser, you against three computer players. For a game with friends, make a room on the front page."
+PLAY_NOTE = "Play it opens a room on this map; share its link or add bots."
 
 
 def esc(text):
@@ -133,6 +135,8 @@ def read_library(originals_dir=ORIGINALS_DIR, library_dir=LIBRARY_DIR):
     with open(os.path.join(library_dir, "maps.json"), encoding="utf-8") as f:
         entries = json.load(f)["maps"]
     for entry in sorted(entries, key=lambda e: e["file"]):
+        if not isinstance(entry.get("file"), str) or not valid_map_file(entry["file"]):
+            raise ValueError("maps.json lists a name that is no map file: %r" % (entry.get("file"),))             # (the name is joined to the folder below: a path in it would read another file)
         path = os.path.join(library_dir, entry["file"])
         if not os.path.isfile(path):
             raise ValueError("maps.json lists %s, which is not in the folder" % entry["file"])
@@ -144,9 +148,10 @@ def read_library(originals_dir=ORIGINALS_DIR, library_dir=LIBRARY_DIR):
 # ---- what a player wrote ----
 
 def describe(raw):
-    """(the description as a person reads it, whether it was cut). The header holds 27 characters at most: a longer text is cut at 24 and ends in "..." with no space before them, a shorter one is
-    padded with spaces and then "...". The sign that the old editors put first (! * ^) and the padding are not part of the words."""
-    cut = len(raw) >= 27 and re.search(r"\S\.\.\.$", raw) is not None
+    """(the description as a person reads it, whether it may have been cut). The header holds 27 characters at most: a longer text is cut at 24 and ends in "..." with no space before them, a shorter one is
+    padded with spaces and then "...". So a text that ends in "..." right after a letter or a sign may be one that was cut (or one that its player ended so), and a name at its end may be cut: the maker rule takes
+    nothing from it. The sign that the old editors put first (! * ^) and the padding are not part of the words."""
+    cut = re.search(r"\S\.\.\.$", raw) is not None
     text = re.sub(r"\s+\.\.\.$", "", raw)
     text = re.sub(r"^[!*^\s]+", "", text).strip()
     return text, cut
@@ -193,30 +198,51 @@ def sort_key(name):
     return (re.sub(r"^[^a-z0-9]+", "", low), low, name)
 
 
-def plan(maps):
-    """Folds the copies of one file together and gives every map its address. A file that is the same bytes under several names is one map (the page of an original, else of the name that most
-    of the names spell alike when only letters and digits are looked at, then one that starts with a letter or a digit, then the name that sorts first); the other names are `aliases` and redirect to it. Two different maps with one address word: the first of
-    them (an original, then by name) keeps it, the others get a hash of their file name after it. Returns the maps that have a page (the primaries) and {other name's slug: slug}."""
+def read_ledger(path=LEDGER):
+    """{address: file name} of the ledger; none when the file is not there (a tree that has never fixed an address)."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            ledger = json.load(f)
+    except FileNotFoundError:
+        return {}
+    if not isinstance(ledger, dict) or not all(isinstance(k, str) and isinstance(v, str) and re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", k) for k, v in ledger.items()):
+        raise ValueError("%s is not a ledger of addresses ({\"slug\": \"file name\"})" % path)
+    return ledger
+
+
+def plan(maps, ledger=None):
+    """Folds the copies of one file together and gives every map its address. A file that is the same bytes under several names is one map (the page of an original, else of the name that the ledger has, else of the name
+    that most of the names spell alike when only letters and digits are looked at, then one that starts with a letter or a digit, then the name that sorts first); the other names are `aliases` and redirect to it. A map that the
+    `ledger` ({address: file name}) has keeps the address it has there, an address of the ledger that no map has any more stays taken, and a new map gets the word of its name when that is free, else the word and a hash of
+    its file name after it (which never depends on the other maps). Returns the maps that have a page (the primaries) and {other name's slug: slug}."""
+    ledger = ledger or {}
+    pinned = {file: slug for slug, file in ledger.items()}
     groups = {}
     for m in maps:
         groups.setdefault(m.digest, []).append(m)
     primaries = []
     for group in groups.values():
         spellings = [re.sub(r"[^a-z0-9]", "", m.name.lower()) for m in group]
-        group.sort(key=lambda m: (not m.original, -spellings.count(re.sub(r"[^a-z0-9]", "", m.name.lower())), not m.name[:1].isalnum(), m.name.lower(), m.name))
+        group.sort(key=lambda m: (not m.original, m.file not in pinned, -spellings.count(re.sub(r"[^a-z0-9]", "", m.name.lower())), not m.name[:1].isalnum(), m.name.lower(), m.name))
         first = group[0]
         first.aliases = [m for m in group[1:] if m.name.lower() != first.name.lower()]
         primaries.append(first)
     primaries.sort(key=lambda m: (not m.original, ORIGINAL_KEYS.index(m.original_key) if m.original else 0, sort_key(m.name)))
-    taken = {}
+    taken = {slug: None for slug in ledger}
     for m in primaries:
+        if m.file in pinned:
+            m.slug = pinned[m.file]
+            taken[m.slug] = m
+    for m in primaries:
+        if m.file in pinned:
+            continue
         slug = base_slug(m.name)
         if slug in taken:
             tag = hashlib.sha1(m.file.encode("latin-1", "replace")).hexdigest()
-            length = 4
-            while "%s-%s" % (slug[:SLUG_MAX], tag[:length]) in taken:
+            base, length = slug[:SLUG_MAX].rstrip("-"), 4
+            while "%s-%s" % (base, tag[:length]) in taken:
                 length += 2
-            slug = "%s-%s" % (slug[:SLUG_MAX], tag[:length])
+            slug = "%s-%s" % (base, tag[:length])
         taken[slug] = m
         m.slug = slug
     moved = {}
@@ -307,14 +333,14 @@ def paragraphs_of(m):
     second += food_phrase(m) + (" " if food_phrase(m) else "") + "Up to four people or bots can play it."
     found = "/matches?q=" + percent(m.name[:QUERY_MAX])
     third = "Find the matches that were played on it in the <a href=\"%s\">match history</a>." % esc(found)
-    paragraphs = [first, second.strip(), third]
+    paragraphs = ["<p>%s</p>" % first, "<p>%s</p>" % second.strip(), '<p id="plays-line" data-file="%s" data-matches="%s">%s</p>' % (esc(m.file), esc(found), third)]
     if not m.text:
-        paragraphs[0] += " Its file has no description."
+        paragraphs[0] = paragraphs[0][:-4] + " Its file has no description.</p>"
     if m.repaired:
-        paragraphs.append("Its file was damaged on its way from player to player and was repaired for this library: %s" % esc(m.repaired))
+        paragraphs.append("<p>Its file was damaged on its way from player to player and was repaired for this library: %s</p>" % esc(m.repaired))
     if m.aliases:
-        paragraphs.append("The same map was also shared as %s." % ", ".join(esc(o.name) for o in m.aliases))
-    return ["<p>%s</p>" % p for p in paragraphs]
+        paragraphs.append("<p>The same map was also shared as %s.</p>" % ", ".join(esc(o.name) for o in m.aliases))
+    return paragraphs
 
 
 def facts_of(m):
@@ -354,9 +380,8 @@ def card(m, plays=None):
 
 
 def play_address(m):
-    if m.original:
-        return "/play?map=%s&bots=medium" % m.original_key
-    return "/play?mapfile=%s&bots=medium" % percent(m.file)
+    """The front page's address for a room on this map (docs/HOME_SCREEN.md): the page makes the room of its own and plans the map."""
+    return "/?hostmap=" + percent(m.file)
 
 
 def maker_address(m):
@@ -371,7 +396,9 @@ def map_body(m):
     buttons = ""
     if valid_map_file(m.file) or m.original:
         buttons = '<div class="acts"><a class="btn big" href="%s">Play it</a><a class="btn" href="%s">Open in Map maker</a></div><p class="meta why">%s</p>' % (esc(play_address(m)), esc(maker_address(m)), PLAY_NOTE)
-    facts = "".join("<div><dt>%s</dt><dd>%s</dd></div>" % (esc(label), esc(text)) for label, text in facts_of(m))
+    rows = facts_of(m)
+    after = "Starting ants" if any(label == "Starting ants" for label, _ in rows) else "Game length"
+    facts = "".join("<div><dt>%s</dt><dd>%s</dd></div>" % (esc(label), esc(text)) + ('<div id="plays-fact" hidden><dt>Played here</dt><dd id="plays-count"></dd></div>' if label == after else "") for label, text in rows)
     modes = "".join('<span class="fchip">%s</span>' % esc(t) for t in game_types_of(m))
     related = "".join(card(o) for o in m.related)
     return (
@@ -412,7 +439,7 @@ def page_slots(stamps, **own):
 
 def map_page(template, origin, m, stamps):
     return fill(template, page_slots(stamps, TITLE=esc(title_of(m)), DESCRIPTION=esc(description_of(m)), CANONICAL=esc("%s/map/%s" % (origin, m.slug)), IMAGE=esc(origin + picture_of(m)),
-                                     IMAGE_ALT=esc("The map %s of Ants, seen from above." % m.name), HEAD_EXTRA=breadcrumbs(origin, m), BODY=map_body(m)))
+                                     IMAGE_ALT=esc("The map %s of Ants, seen from above." % m.name), HEAD_EXTRA=breadcrumbs(origin, m), BODY=map_body(m), SCRIPTS='<script src="/map_plays.js"></script>\n'))
 
 
 def pages_count(maps):
@@ -495,10 +522,10 @@ def library_data(maps):
     return "window.ANTS_MAP_LIBRARY=%s;\n" % json_for_script(data)
 
 
-def build(origin, template, maps, stamps=STAMPS):
+def build(origin, template, maps, stamps=STAMPS, ledger=None):
     """{path below OUT_DIR: text} of everything the pages are made of, for the maps that `plan` found (the origin is checked first: it goes into every page)."""
     seo_files.check_origin(origin)
-    primaries, moved = plan(maps)
+    primaries, moved = plan(maps, ledger)
     files = {}
     for m in primaries:
         files["html/map_pages/map/%s.html" % m.slug] = map_page(template, origin, m, stamps)
@@ -510,8 +537,8 @@ def build(origin, template, maps, stamps=STAMPS):
     return files
 
 
-def slugs_of(maps):
-    return {m.slug: m.file for m in plan(maps)[0]}
+def slugs_of(maps, ledger=None):
+    return {m.slug: m.file for m in plan(maps, ledger)[0]}
 
 
 def write(out_dir, files, inputs=()):
@@ -531,21 +558,23 @@ def main(argv):
     parser.add_argument("--library", default=LIBRARY_DIR)
     parser.add_argument("--originals", default=ORIGINALS_DIR)
     parser.add_argument("--template", default=TEMPLATE)
+    parser.add_argument("--ledger", default=LEDGER)
     parser.add_argument("--slugs", action="store_true")
     for flag, default in (("--version", STAMPS[0]), ("--build-id", STAMPS[1]), ("--build-date", STAMPS[2])):
         parser.add_argument(flag, default=default)
     args = parser.parse_args(argv[1:])
     try:
         maps = read_library(args.originals, args.library)
+        ledger = read_ledger(args.ledger)
         if args.slugs:
-            sys.stdout.write(json.dumps(slugs_of(maps), indent=1, sort_keys=True, ensure_ascii=True) + "\n")
+            sys.stdout.write(json.dumps(slugs_of(maps, ledger), indent=1, sort_keys=True, ensure_ascii=True) + "\n")
             return 0
         if not args.origin or not args.out_dir:
             parser.print_usage(sys.stderr)
             return 2
         with open(args.template, encoding="utf-8") as f:
             template = f.read()
-        write(args.out_dir, build(args.origin, template, maps, (args.version, args.build_id, args.build_date)))
+        write(args.out_dir, build(args.origin, template, maps, (args.version, args.build_id, args.build_date), ledger))
     except (ValueError, OSError, KeyError) as e:
         sys.stderr.write("map_pages.py: %s\n" % e)
         return 1

@@ -15,7 +15,7 @@ def make(out, library=None, originals=None, origin="https://site.example"):
     """Runs the tool into `out` with stamps that fill every slot; the real library unless `library` and `originals` say another."""
     command = [sys.executable, TOOL, origin, out, "--version", "v0.0.0", "--build-id", "test", "--build-date", "today"]
     if library:
-        command += ["--library", library]
+        command += ["--library", library, "--ledger", os.path.join(out, "no_such_ledger.json")]       # (a library that a test made up has no addresses fixed: the ledger of the real one is not its)
     if originals:
         command += ["--originals", originals]
     done = subprocess.run(command, capture_output=True, text=True, timeout=120)
@@ -32,7 +32,7 @@ def put_pages(docroot, nginx_dir, library=None, originals=None):
         os.makedirs(nginx_dir, exist_ok=True)
         for name in os.listdir(os.path.join(out, "nginx")):
             shutil.copyfile(os.path.join(out, "nginx", name), os.path.join(nginx_dir, name))
-        for name in ("map_pages.css", "map_library.js"):
+        for name in ("map_pages.css", "map_library.js", "map_plays.js"):
             shutil.copyfile(os.path.join(REPO, "web", name), os.path.join(docroot, name))
         done = subprocess.run([sys.executable, os.path.join(REPO, "tools", "seo_files.py"), "https://site.example", docroot, "--pages", os.path.join(out, "addresses.txt")], capture_output=True, text=True, timeout=60)
         if done.returncode != 0:

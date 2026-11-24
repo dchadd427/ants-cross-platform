@@ -61,6 +61,7 @@ TOUCH_KEYS_BUDGET, TOUCH_KEYS_GZIP_BUDGET = 35_700, 11_200   # the hotkey button
 # the map pages (docs/MAP_PAGES.md): the style and the script of the index, and what tools/map_pages.py makes (the list that the index reads, one page of a map, one page of the index)
 MAP_PAGES_BUDGET, MAP_PAGES_GZIP_BUDGET = 3_600, 1_400         # web/map_pages.css
 MAP_LIBRARY_BUDGET, MAP_LIBRARY_GZIP_BUDGET = 9_000, 3_300     # web/map_library.js
+MAP_PLAYS_BUDGET, MAP_PLAYS_GZIP_BUDGET = 2_800, 1_300        # web/map_plays.js
 MAP_DATA_BUDGET, MAP_DATA_GZIP_BUDGET = 66_000, 18_500         # map_library_data.js: raise with the library, one number
 MAP_PAGE_BUDGET, MAP_INDEX_PAGE_BUDGET = 10_500, 25_500        # one map's page, one page of the index (each is also what a search engine reads)
 # the front page (web/home/, web/front/player_name.js)

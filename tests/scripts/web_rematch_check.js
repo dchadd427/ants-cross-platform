@@ -653,6 +653,49 @@ async function main() {
         byClass(tBar, 'testbar-back').fire('click');
         same('Back to editor notifies the opener and closes the tab', [backCalls, closedCalls], [['k7m2xq9abc12'], 1]);
 
+        // a room on a map of the library (/?hostmap=<file name>: the Play it button of a map's page, docs/MAP_PAGES.md)
+        {
+            const hostStrip = (search, held) => {
+                const replaced = [], b = node('body'), sc = node('div');
+                b.appendChild(sc);
+                const st = R.frontStrip({ doc, win: { location: { search, pathname: '//lobby.html' }, history: { replaceState: (a, t, url) => replaced.push(url) } }, before: sc, fetch: () => { throw new Error('a room on a library map asks the server for nothing here'); }, later: (fn) => fn() });
+                let ready = 0;
+                const began = st.begin(() => { ready++; }, held);
+                return { st, began, ready: () => ready, replaced };
+            };
+            const room = (mapFile, extra) => Object.assign({ guest: false, starting: false, you: 0, mapFile }, extra || {});
+            const h = hostStrip('?hostmap=Treasure%202.lvl', false);
+            same('begin takes /?hostmap=<file>: it makes the room of the page (onReady once) and the address loses its query', [h.began, h.ready(), h.replaced], [true, 1, ['/lobby.html']]);
+            const sent = [], warm = [];
+            h.st.sync(room('TREASURE.LVL'), (ch) => { sent.push(ch); return true; }, (f) => warm.push(f));
+            same('sync sends the map once, by its file name, and warms it', [sent, warm], [[{ file: 'Treasure 2.lvl' }], ['Treasure 2.lvl']]);
+            h.st.sync(room('TREASURE.LVL'), (ch) => { sent.push(ch); return true; });
+            h.st.remade();
+            h.st.sync(room('TREASURE.LVL'), (ch) => { sent.push(ch); return true; });
+            same('it is sent once: a later look, and a room that the page makes again, are ordinary', sent.length, 1);
+            const kept = hostStrip('?hostmap=Treasure%202.lvl', false), tries = [];
+            kept.st.sync(room('TREASURE.LVL'), (ch) => { tries.push(ch); return false; });
+            kept.st.sync(room('TREASURE.LVL'), (ch) => { tries.push(ch); return true; });
+            same('a plan that the room does not take yet is sent again at the next look', tries.length, 2);
+            const already = hostStrip('?hostmap=treasure.LVL', false), none = [];
+            already.st.sync(room('TREASURE.LVL'), (ch) => { none.push(ch); return true; });
+            same('a room that has the map already (any letter case) is sent nothing', none, []);
+            const guestRoom = hostStrip('?hostmap=Treasure%202.lvl', false), g = [];
+            guestRoom.st.sync(room('TREASURE.LVL', { guest: true }), (ch) => { g.push(ch); return true; });
+            guestRoom.st.sync(room('TREASURE.LVL', { starting: true }), (ch) => { g.push(ch); return true; });
+            guestRoom.st.sync(null, (ch) => { g.push(ch); return true; });
+            same('only the leader of a room that has not started plans: a guest, a started room and no room are sent nothing', g, []);
+            const held = hostStrip('?hostmap=Treasure%202.lvl', true), heldSent = [];
+            held.st.sync(room('TREASURE.LVL'), (ch) => { heldSent.push(ch); return true; });
+            same('a page that holds a room already makes none and changes none (the front page\'s own answer), and the address loses its query', [held.began, held.ready(), heldSent, held.replaced], [false, 0, [], ['/lobby.html']]);
+            for (const bad of ['', '../x.lvl', 'a/b.lvl', 'x.txt', 'a:b.lvl', '.hidden.lvl', 'x'.repeat(61) + '.lvl', 'ab.lv']) {
+                const b = hostStrip('?hostmap=' + encodeURIComponent(bad), false);
+                same('no room for a name that is no map file (' + JSON.stringify(bad.slice(0, 12)) + ')', [b.began, b.ready(), b.replaced.length], [false, 0, 1]);
+            }
+            const plain = hostStrip('?x=1', false);
+            same('an address with no hostmap is left alone', [plain.began, plain.ready(), plain.replaced], [false, 0, []]);
+        }
+
         // draft map where Green (Seat 0) is not usable moves the host to the first usable color, and error strip survives sync()
         const tBody2 = node('body'), tScreen2 = node('div');
         tBody2.appendChild(tScreen2);

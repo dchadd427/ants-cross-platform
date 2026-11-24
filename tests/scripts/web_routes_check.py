@@ -263,7 +263,7 @@ def main():
                       ("/map_pages/map/treasure.html?x=1", "/map/treasure?x=1"), ("/map_pages/library/1.html", "/map-library"), ("/map_pages/library/2.html", "/map-library")):
         status, headers, names, body = get(old)
         check(status == 301 and headers.get("location") == want and "content-security-policy" not in headers, "%s answers 301 to %s (%s %s)" % (old, want, status, headers.get("location")))
-    for path, kind in (("/map_pages.css", "text/css"), ("/map_library.js", "javascript"), ("/map_library_data.js", "javascript")):
+    for path, kind in (("/map_pages.css", "text/css"), ("/map_library.js", "javascript"), ("/map_plays.js", "javascript"), ("/map_library_data.js", "javascript")):
         status, headers, names, body = get(path)
         check(status == 200 and kind in headers.get("content-type", "") and not GAME.search(body) and headers.get("cache-control") == "no-cache, must-revalidate" and names.count("cache-control") == 1, "%s is the file, revalidated (%s, %s)" % (path, status, headers.get("content-type")))
     check("window.ANTS_MAP_LIBRARY=" in get("/map_library_data.js")[3] and 'src="/map_library_data.js"' in get("/map-library")[3], "the index loads the list that the build made")
