@@ -80,7 +80,7 @@ struct MatchStats {
     std::array<uint32_t, kSeats> damage_taken{};
     std::array<std::array<uint32_t, kSeats>, kSeats> damage_from{};   // [the team of the damage][the seat that lost the points]; a seat can hurt itself (its own fire wall)
     /// action[kind][bucket]: events of that kind in the 5 seconds (kSampleTurns turns) of the bucket, bucket b being the turns 100 b to 100 b + 99 (the same second as the kill's: turn / 20). A death is an entry of
-    /// `kills`, a theft one of `raids`, a bomb one of `bombs_off` and a fire one of the seats' `fires_lit`; a hit is an ant that lost hit points in a tick (several in a tick count each).
+    /// `kills`, a theft one of `raids`, a bomb one of `bombs_off` and a fire one of the seats' `fires_lit`; a hit is an ant that lost hit points, counted once for each ant in each bucket (so a long fight is as big as the ants in it, not as long as it lasts).
     std::array<std::vector<uint32_t>, kActionKinds> action;
     std::array<std::array<uint32_t, 5>, kSeats> powerups{};            // [seat][bomber, fire, thief, combat, swimmer]: power-ups taken that changed the ant's type
     std::array<uint32_t, kSeats> food_trips{};             // times an ant picked food up
@@ -119,6 +119,7 @@ private:
         int32_t tile_x{0};
         int32_t tile_y{0};
         uint32_t last_seen{0};                             // the turn at which the world last showed it
+        uint32_t hit_bucket{0xFFFFFFFFu};                  // the bucket of `action` in which it was last counted as hurt (a hit is counted once for an ant in a bucket)
     };
     void on_command(uint32_t turn, const sim::Command& command, sim::SimulationEngine& engine);
     void on_tick(uint32_t turns, sim::SimulationEngine& engine);

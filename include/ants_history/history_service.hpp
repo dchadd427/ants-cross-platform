@@ -60,6 +60,7 @@ struct ImportReport {
     size_t markers{0};
     size_t deaths{0};
     size_t action{0};
+    size_t action_refused{0};                         // rows of history_action that were not copied: their text is not a field of this version (the page and the route take only a text that put() would have kept)
     size_t map_plays{0};
     std::string note;                                 // one line for the log
 };

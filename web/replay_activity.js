@@ -155,7 +155,7 @@
         var t = Math.max(0, Math.min(series.total, seconds)), i = Math.min(series.buckets - 1, Math.floor(t / series.seconds)), parts = [];
         Object.keys(NAMES).forEach(function (kind) {
             var n = series.counts[kind][i];
-            if (n > 0) parts.push(n + ' ' + NAMES[kind][n === 1 ? 0 : 1]);
+            if (n > 0) parts.push((n >= MAX_COUNT ? MAX_COUNT + '+' : n) + ' ' + NAMES[kind][n === 1 ? 0 : 1]);      // (a full bucket holds 63 and more: it says so)
         });
         if (!parts.length) parts.push(series.deathsOnly ? 'no deaths' : series.counts.hit[i] >= FIGHT ? 'fighting' : 'quiet');
         return { time: clock(t), what: parts.join(', ') };
@@ -206,6 +206,7 @@
         function release() { pressed = false; paint(); }
         env.tl.addEventListener('pointerup', release);
         env.tl.addEventListener('pointercancel', release);
+        env.tl.addEventListener('lostpointercapture', release);                                   // (the pointer was let go without a pointerup, for example the bar was moved in the page)
         paint();
         return {
             played: function (percent) { var p = Math.max(0, Math.min(100, typeof percent === 'number' && isFinite(percent) ? percent : 0)) * WIDTH / 100; rp.setAttribute('width', String(p)); ru.setAttribute('x', String(p)); ru.setAttribute('width', String(WIDTH - p)); }
@@ -225,5 +226,5 @@
         return handle;
     }
 
-    return { mount: mount, attach: attach, seriesOf: seriesOf, actionOf: actionOf, deathsOf: deathsOf, shape: shape, curveOf: curveOf, tipOf: tipOf, smooth: smooth, clock: clock, WEIGHTS: WEIGHTS, KINDS: KINDS, LETTERS: LETTERS };
+    return { mount: mount, attach: attach, LIMITS: { MAX_BUCKETS: MAX_BUCKETS, BASE: BASE, MAX_COUNT: MAX_COUNT, MAX_SECONDS: MAX_SECONDS }, seriesOf: seriesOf, actionOf: actionOf, deathsOf: deathsOf, shape: shape, curveOf: curveOf, tipOf: tipOf, smooth: smooth, clock: clock, WEIGHTS: WEIGHTS, KINDS: KINDS, LETTERS: LETTERS };
 });

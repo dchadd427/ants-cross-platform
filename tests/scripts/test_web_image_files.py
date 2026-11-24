@@ -68,7 +68,7 @@ class ThePagesAndTheImage(unittest.TestCase):
 
     def test_the_pages_load_something(self):
         refs = loaded_files()
-        for name in ("history_page.js", "match_stats.js", "match_stats.css", "death_map.js", "death_map.css", "matches.css", "replay_page.js", "lvl_core.js", "lvl_core_api.js", "front/mapmaker_app.js"):
+        for name in ("history_page.js", "match_stats.js", "match_stats.css", "death_map.js", "death_map.css", "replay_activity.js", "replay_activity.css", "matches.css", "replay_page.js", "lvl_core.js", "lvl_core_api.js", "front/mapmaker_app.js"):
             self.assertIn(name, refs, name + " is loaded by no page: did the scan stop reading the pages?")
 
     def test_every_file_a_page_loads_is_a_file_of_web_and_is_copied_into_the_image(self):

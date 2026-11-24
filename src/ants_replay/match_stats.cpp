@@ -192,7 +192,10 @@ void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine)
             }
             if (snap.player_id < kSeats) {
                 if (snap.hp < ant.hp) {                                 // it lost hit points; the damage is the team's of the last damage it took
-                    count(MatchStats::Action::Hit, turns);
+                    if (ant.hit_bucket != turns / MatchStats::kSampleTurns) {          // (once for an ant in a bucket: a fight that goes on does not make a bigger one)
+                        ant.hit_bucket = turns / MatchStats::kSampleTurns;
+                        count(MatchStats::Action::Hit, turns);
+                    }
                     uint8_t source = MatchStats::kNoKiller;
                     try {
                         const uint8_t killer = engine.get_unit(snap.id).killer_team;

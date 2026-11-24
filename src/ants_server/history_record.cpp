@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "ants_ai/bot_names.hpp"
+#include "ants_server/history_action.hpp"
 #include "ants_server/replay_store.hpp"
 #include "ants_sim/game_mode.hpp"
 #include "ants_sim/start_teams.hpp"
@@ -258,7 +259,8 @@ JsonValue history_record_to_json(const HistoryRecord& r, bool full) {
         limits.max_depth = 3;
         if (ctl::parse_json(r.deaths, deaths, nullptr, limits)) o.set("deaths", std::move(deaths));
     }
-    if (full && !r.action.empty()) {                         // (the action of the match, for the curve of the replay page: its own key, its own cap; a damaged text is left out, never passed on as it is)
+    ActionView view;
+    if (full && !r.action.empty() && r.action.size() <= kActionMaxBytes && parse_history_action(r.action, view)) {       // (the action of the match, for the curve of the replay page: its own key, its own cap; a text that is not a field of this version is left out, never passed on as it is)
         JsonValue action;
         ctl::JsonLimits limits;
         limits.max_bytes = 8u * 1024u;

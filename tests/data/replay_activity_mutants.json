@@ -1,18 +1,21 @@
 {
- "note": "Mutants of the activity curve's data for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the buckets that the collector fills (src/ants_replay/match_stats.cpp), the field `action` and its cap, its letters and its reader (src/ants_server/history_action.cpp, include/ants_server/history_action.hpp), the table, the store, the record's JSON and the history service's copy (src/ants_server/history_store.cpp, history_record.cpp, db_schema.cpp, src/ants_history/history_import.cpp) against DD7.x of test_history_deaths and HV1.2 of test_history_service. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/replay_activity_mutants.json --keep-going --jobs 1. The page's mutants (weights, buckets, the deaths alone, the computer and the touch screen) are in tests/scripts/test_web_activity.py and run with every test run. Each C++ mutant needs a rebuild of ants_server_core and the test (about a minute); each names the one case that has to catch it (ANTS_TEST_FILTER).",
+ "note": "Mutants of the product rules of the activity curve for tools/mutate.py (docs/TESTING.md, 'Mutation checks'; docs/HEATMAPS.md 'The activity curve'): the 5 second bucket, the cap (a count of 63, 240 buckets, 1,500 bytes, a hit counted once for an ant in a bucket), that what is served is a field and nothing else, that the replay pass leaves the simulation as it is, the weights' order of importance, the curve of the deaths alone, and the curve shown on a computer only while the pointer is over the timeline. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/replay_activity_mutants.json --keep-going --jobs 1. The C++ mutants (DD7.x of test_history_deaths, HV1.2b of test_history_service) need a rebuild of ants_server_core and the test each (about a minute); the page's (tests/scripts/web_activity_check.js) need none.",
  "defaults": {
   "build": "test_history_deaths",
   "test": "./build/tests/test_server/test_history_deaths"
  },
  "baseline": [
   {
-   "build": "test_history_deaths test_history_details test_history_service",
-   "test": "./build/tests/test_server/test_history_deaths && ./build/tests/test_server/test_history_details && ./build/tests/test_server/test_history_service"
+   "build": "test_history_deaths test_history_service",
+   "test": "./build/tests/test_server/test_history_deaths && ./build/tests/test_server/test_history_service"
+  },
+  {
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
   }
  ],
  "mutants": [
   {
-   "id": "collector_bucket_is_a_second",
+   "id": "bucket_is_a_second",
    "file": "src/ants_replay/match_stats.cpp",
    "old": "const size_t bucket = turns / MatchStats::kSampleTurns;",
    "new": "const size_t bucket = turns / 20;",
@@ -20,88 +23,7 @@
    "expect": "DD7.1"
   },
   {
-   "id": "collector_no_deaths",
-   "file": "src/ants_replay/match_stats.cpp",
-   "old": "                count(MatchStats::Action::Death, turns);\n",
-   "new": "",
-   "test": "ANTS_TEST_FILTER=DD7.1 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.1"
-  },
-  {
-   "id": "collector_no_thefts",
-   "file": "src/ants_replay/match_stats.cpp",
-   "old": "                    count(MatchStats::Action::Theft, turns);\n",
-   "new": "",
-   "test": "ANTS_TEST_FILTER=DD7.1 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.1"
-  },
-  {
-   "id": "collector_no_bombs",
-   "file": "src/ants_replay/match_stats.cpp",
-   "old": "                    count(MatchStats::Action::Bomb, turns);\n",
-   "new": "",
-   "test": "ANTS_TEST_FILTER=HD1.6 ./build/tests/test_server/test_history_details",
-   "expect": "HD1.6",
-   "build": "test_history_details"
-  },
-  {
-   "id": "collector_no_hits",
-   "file": "src/ants_replay/match_stats.cpp",
-   "old": "                    count(MatchStats::Action::Hit, turns);\n",
-   "new": "",
-   "test": "ANTS_TEST_FILTER=DD7.1 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.1"
-  },
-  {
-   "id": "collector_no_fires",
-   "file": "src/ants_replay/match_stats.cpp",
-   "old": "if (st.fires_lit > prev_fires_[s]) count(MatchStats::Action::Fire, turns, st.fires_lit - prev_fires_[s]);",
-   "new": "",
-   "test": "ANTS_TEST_FILTER=DD7.1 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.1"
-  },
-  {
-   "id": "collector_a_death_is_a_hit",
-   "file": "src/ants_replay/match_stats.cpp",
-   "old": "                count(MatchStats::Action::Death, turns);",
-   "new": "                count(MatchStats::Action::Hit, turns);",
-   "test": "ANTS_TEST_FILTER=DD7.1 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.1"
-  },
-  {
-   "id": "collector_fires_seen_again",
-   "file": "src/ants_replay/match_stats.cpp",
-   "old": "            prev_fires_[s] = st.fires_lit;\n",
-   "new": "",
-   "test": "ANTS_TEST_FILTER=DD7.1 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.1"
-  },
-  {
-   "id": "field_a_count_over_63_is_64",
-   "file": "src/ants_server/history_action.cpp",
-   "old": "kAlphabet[std::min<uint64_t>(sum, kActionMaxCount)]",
-   "new": "kAlphabet[std::min<uint64_t>(sum, kActionMaxCount + 1)]",
-   "test": "ANTS_TEST_FILTER=DD7.2 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.2"
-  },
-  {
-   "id": "field_max_count_is_62",
-   "file": "include/ants_server/history_action.hpp",
-   "old": "inline constexpr uint32_t kActionMaxCount = 63;",
-   "new": "inline constexpr uint32_t kActionMaxCount = 62;",
-   "test": "ANTS_TEST_FILTER=DD7.2 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.2"
-  },
-  {
-   "id": "field_the_last_tick_has_no_bucket",
-   "file": "src/ants_server/history_action.cpp",
-   "old": "sums[static_cast<size_t>(std::min<uint64_t>(b, base - 1) / factor)]",
-   "new": "sums[static_cast<size_t>((b < base ? b : 0) / factor)]",
-   "test": "ANTS_TEST_FILTER=DD7.2 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.2"
-  },
-  {
-   "id": "field_twenty_minutes_double",
+   "id": "bucket_stays_five_to_twenty_minutes_only",
    "file": "src/ants_server/history_action.cpp",
    "old": "while ((base + factor - 1) / factor > kActionMaxBuckets) factor *= 2;",
    "new": "while ((base + factor - 1) / factor >= kActionMaxBuckets) factor *= 2;",
@@ -109,15 +31,7 @@
    "expect": "DD7.2"
   },
   {
-   "id": "field_buckets_triple",
-   "file": "src/ants_server/history_action.cpp",
-   "old": "kActionMaxBuckets) factor *= 2;",
-   "new": "kActionMaxBuckets) factor *= 3;",
-   "test": "ANTS_TEST_FILTER=DD7.3 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.3"
-  },
-  {
-   "id": "field_bucket_is_five_whatever",
+   "id": "bucket_length_is_five_whatever",
    "file": "src/ants_server/history_action.cpp",
    "old": "static_cast<int64_t>(kActionBaseSeconds) * factor));",
    "new": "static_cast<int64_t>(kActionBaseSeconds)));",
@@ -125,7 +39,15 @@
    "expect": "DD7.3"
   },
   {
-   "id": "field_more_buckets",
+   "id": "cap_a_count_over_63_is_64",
+   "file": "src/ants_server/history_action.cpp",
+   "old": "kAlphabet[std::min<uint64_t>(sum, kActionMaxCount)]",
+   "new": "kAlphabet[std::min<uint64_t>(sum, kActionMaxCount + 1)]",
+   "test": "ANTS_TEST_FILTER=DD7.2 ./build/tests/test_server/test_history_deaths",
+   "expect": "DD7.2"
+  },
+  {
+   "id": "cap_one_more_bucket",
    "file": "include/ants_server/history_action.hpp",
    "old": "inline constexpr size_t kActionMaxBuckets = 240;",
    "new": "inline constexpr size_t kActionMaxBuckets = 241;",
@@ -133,7 +55,7 @@
    "expect": "DD7.3"
   },
   {
-   "id": "field_bytes_cap_lower",
+   "id": "cap_of_the_text_is_lower",
    "file": "include/ants_server/history_action.hpp",
    "old": "inline constexpr size_t kActionMaxBytes = 1500;",
    "new": "inline constexpr size_t kActionMaxBytes = 1000;",
@@ -141,71 +63,7 @@
    "expect": "DD7.5"
   },
   {
-   "id": "field_buckets_are_summed_not_all",
-   "file": "src/ants_server/history_action.cpp",
-   "old": "for (size_t b = 0; b < series.size(); ++b)",
-   "new": "for (size_t b = 0; b + 1 < series.size(); ++b)",
-   "test": "ANTS_TEST_FILTER=DD7.3 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.3"
-  },
-  {
-   "id": "field_nothing_is_a_field",
-   "file": "src/ants_server/history_action.cpp",
-   "old": "    if (events == 0) return std::string();\n",
-   "new": "    if (events == 0 && false) return std::string();\n",
-   "test": "ANTS_TEST_FILTER=DD7.4 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.4"
-  },
-  {
-   "id": "field_a_failed_pass_is_a_field",
-   "file": "src/ants_server/history_action.cpp",
-   "old": "    if (!st.ok) return std::string();\n    uint64_t events",
-   "new": "    uint64_t events",
-   "test": "ANTS_TEST_FILTER=DD7.4 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.4"
-  },
-  {
-   "id": "reader_another_version",
-   "file": "src/ants_server/history_action.cpp",
-   "old": "|| v.get(\"v\").as_int_or(0) != kActionVersion) return false;",
-   "new": ") return false;",
-   "test": "ANTS_TEST_FILTER=DD7.4 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.4"
-  },
-  {
-   "id": "reader_a_bucket_of_7",
-   "file": "src/ants_server/history_action.cpp",
-   "old": " || s % kActionBaseSeconds != 0",
-   "new": "",
-   "test": "ANTS_TEST_FILTER=DD7.4 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.4"
-  },
-  {
-   "id": "reader_too_many_buckets",
-   "file": "src/ants_server/history_action.cpp",
-   "old": "n > static_cast<int64_t>(kActionMaxBuckets)) return false;",
-   "new": "n > 100000) return false;",
-   "test": "ANTS_TEST_FILTER=DD7.4 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.4"
-  },
-  {
-   "id": "reader_any_length",
-   "file": "src/ants_server/history_action.cpp",
-   "old": "|| letters.str().size() != static_cast<size_t>(n)) return false;",
-   "new": ") return false;",
-   "test": "ANTS_TEST_FILTER=DD7.4 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.4"
-  },
-  {
-   "id": "reader_any_letter",
-   "file": "src/ants_server/history_action.cpp",
-   "old": "            if (value < 0) return false;\n",
-   "new": "",
-   "test": "ANTS_TEST_FILTER=DD7.4 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.4"
-  },
-  {
-   "id": "store_a_text_over_its_cap_is_kept",
+   "id": "cap_a_text_over_it_is_kept",
    "file": "src/ants_server/history_store.cpp",
    "old": "record.action.size() <= kActionMaxBytes && ",
    "new": "",
@@ -213,47 +71,7 @@
    "expect": "DD7.7"
   },
   {
-   "id": "store_a_text_that_is_not_a_field_is_kept",
-   "file": "src/ants_server/history_store.cpp",
-   "old": " && parse_history_action(record.action, action)) {",
-   "new": ") {",
-   "test": "ANTS_TEST_FILTER=DD7.7 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.7"
-  },
-  {
-   "id": "feeder_keeps_no_action",
-   "file": "src/ants_server/history_store.cpp",
-   "old": "record.action = action_maker_ ? action_maker_(played.stats) : std::string();",
-   "new": "record.action = std::string();",
-   "test": "ANTS_TEST_FILTER=DD7.6 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.6"
-  },
-  {
-   "id": "store_find_reads_no_action",
-   "file": "src/ants_server/history_store.cpp",
-   "old": "else if (step == db::Statement::Step::Row) out.action = action.column_text(0);",
-   "new": "else if (step == db::Statement::Step::Row) out.action.clear();",
-   "test": "ANTS_TEST_FILTER=DD7.6 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.6"
-  },
-  {
-   "id": "record_json_has_no_action",
-   "file": "src/ants_server/history_record.cpp",
-   "old": "if (full && !r.action.empty()) {",
-   "new": "if (false && !r.action.empty()) {",
-   "test": "ANTS_TEST_FILTER=DD7.6 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.6"
-  },
-  {
-   "id": "record_json_list_has_action",
-   "file": "src/ants_server/history_record.cpp",
-   "old": "if (full && !r.action.empty()) {",
-   "new": "if (!r.action.empty()) {",
-   "test": "ANTS_TEST_FILTER=DD7.6 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.6"
-  },
-  {
-   "id": "schema_cap_is_lower",
+   "id": "cap_of_the_column_is_lower",
    "file": "src/ants_server/db_schema.cpp",
    "old": "\" action TEXT NOT NULL CHECK (length(action) <= 1500)\"",
    "new": "\" action TEXT NOT NULL CHECK (length(action) <= 1000)\"",
@@ -261,46 +79,149 @@
    "expect": "DD7.8"
   },
   {
-   "id": "schema_row_stays_with_its_match",
-   "file": "src/ants_server/db_schema.cpp",
-   "old": "\" id TEXT PRIMARY KEY NOT NULL REFERENCES history_matches (id) ON DELETE CASCADE,\"\n    \" action TEXT",
-   "new": "\" id TEXT PRIMARY KEY NOT NULL REFERENCES history_matches (id),\"\n    \" action TEXT",
-   "test": "ANTS_TEST_FILTER=DD7.8 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.8"
+   "id": "cap_a_hit_is_counted_at_every_tick",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "if (ant.hit_bucket != turns / MatchStats::kSampleTurns) {",
+   "new": "if (true) {",
+   "test": "ANTS_TEST_FILTER=DD7.1 ./build/tests/test_server/test_history_deaths",
+   "expect": "DD7.1"
   },
   {
-   "id": "schema_service_has_no_action",
-   "file": "src/ants_server/db_schema.cpp",
-   "old": "        {5, \"history_action\", kActionSql},\n",
-   "new": "",
-   "test": "ANTS_TEST_FILTER=DD7.8 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.8"
+   "id": "served_a_text_that_is_not_a_field_is_kept",
+   "file": "src/ants_server/history_store.cpp",
+   "old": " && parse_history_action(record.action, action)) {",
+   "new": ") {",
+   "test": "ANTS_TEST_FILTER=DD7.7 ./build/tests/test_server/test_history_deaths",
+   "expect": "DD7.7"
   },
   {
-   "id": "schema_server_has_no_action",
-   "file": "src/ants_server/db_schema.cpp",
-   "old": "        {11, \"history_action\", kActionSql},\n",
-   "new": "",
-   "test": "ANTS_TEST_FILTER=DD7.8 ./build/tests/test_server/test_history_deaths",
-   "expect": "DD7.8"
+   "id": "served_the_record_passes_a_text_that_is_not_a_field",
+   "file": "src/ants_server/history_record.cpp",
+   "old": " && parse_history_action(r.action, view)) {",
+   "new": ") {",
+   "test": "ANTS_TEST_FILTER=DD7.7 ./build/tests/test_server/test_history_deaths",
+   "expect": "DD7.7"
   },
   {
-   "id": "import_leaves_the_actions",
+   "id": "served_an_imported_row_that_is_not_a_field_is_copied",
    "file": "src/ants_history/history_import.cpp",
-   "old": "        {\"history_action\", {{\"id\", 't', false}, {\"action\", 't', false}}, true},\n",
-   "new": "",
+   "old": "return text.size() <= server::kActionMaxBytes && server::parse_history_action(text, view);",
+   "new": "return text.size() <= server::kActionMaxBytes || server::parse_history_action(text, view);",
    "build": "test_history_service",
-   "test": "ANTS_TEST_FILTER=HV1.2 ./build/tests/test_server/test_history_service",
-   "expect": "HV1.2"
+   "test": "ANTS_TEST_FILTER=HV1.2b ./build/tests/test_server/test_history_service",
+   "expect": "HV1.2b"
   },
   {
-   "id": "import_counts_no_action",
-   "file": "src/ants_history/history_import.cpp",
-   "old": "else if (name == \"history_action\") counted.action = rows;",
-   "new": "else if (name == \"history_action\") counted.action = 0;",
-   "build": "test_history_service",
-   "test": "ANTS_TEST_FILTER=HV1.2 ./build/tests/test_server/test_history_service",
-   "expect": "HV1.2"
+   "id": "simulation_a_hit_ticks_the_engine",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "                        count(MatchStats::Action::Hit, turns);\n",
+   "new": "                        count(MatchStats::Action::Hit, turns);\n                        engine.tick();\n",
+   "test": "ANTS_TEST_FILTER=DD7.1 ./build/tests/test_server/test_history_deaths",
+   "expect": "DD7.1"
+  },
+  {
+   "id": "weights_a_death_weighs_less_than_a_bomb",
+   "file": "web/replay_activity.js",
+   "old": "death: 14,",
+   "new": "death: 9,",
+   "build": [],
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+  },
+  {
+   "id": "weights_a_theft_weighs_more_than_a_bomb",
+   "file": "web/replay_activity.js",
+   "old": "theft: 6,",
+   "new": "theft: 11,",
+   "build": [],
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+  },
+  {
+   "id": "weights_a_hit_weighs_more_than_a_fire",
+   "file": "web/replay_activity.js",
+   "old": "hit: 2 }",
+   "new": "hit: 7 }",
+   "build": [],
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+  },
+  {
+   "id": "deaths_alone_are_not_drawn",
+   "file": "web/replay_activity.js",
+   "old": "if (!s) s = deathsOf(rec.deaths, total || 5);",
+   "new": "",
+   "build": [],
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+  },
+  {
+   "id": "deaths_alone_win_over_the_action",
+   "file": "web/replay_activity.js",
+   "old": "var s = actionOf(rec.action);\n        if (!s) s = deathsOf(rec.deaths, total || 5);",
+   "new": "var s = deathsOf(rec.deaths, total || 5);\n        if (!s) s = actionOf(rec.action);",
+   "build": [],
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+  },
+  {
+   "id": "deaths_alone_in_squares_are_drawn",
+   "file": "web/replay_activity.js",
+   "old": "d.v !== 1 || d.k !== 'x' || typeof d.d",
+   "new": "d.v !== 1 || typeof d.d",
+   "build": [],
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+  },
+  {
+   "id": "deaths_alone_bucket_of_five_seconds_doubles_too_late",
+   "file": "web/replay_activity.js",
+   "old": "while (Math.ceil(base / f) > MAX_BUCKETS) f *= 2;",
+   "new": "while (Math.ceil(base / f) > MAX_BUCKETS + 1) f *= 2;",
+   "build": [],
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+  },
+  {
+   "id": "hover_a_computer_shows_it_at_rest",
+   "file": "web/replay_activity.js",
+   "old": "else if (touching()) heat.classList.add('faint');",
+   "new": "else heat.classList.add('faint');",
+   "build": [],
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+  },
+  {
+   "id": "hover_a_touch_screen_shows_nothing_at_rest",
+   "file": "web/replay_activity.js",
+   "old": "else if (touching()) heat.classList.add('faint');",
+   "new": "else if (false) heat.classList.add('faint');",
+   "build": [],
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+  },
+  {
+   "id": "hover_the_pointer_shows_nothing",
+   "file": "web/replay_activity.js",
+   "old": "var live = pressed || inside;",
+   "new": "var live = pressed;",
+   "build": [],
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+  },
+  {
+   "id": "limits_any_number_of_buckets_is_read",
+   "file": "web/replay_activity.js",
+   "old": "!whole(a.n, 1, MAX_BUCKETS)",
+   "new": "!whole(a.n, 1, 1e9)",
+   "build": [],
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+  },
+  {
+   "id": "limits_a_letter_that_is_not_one_of_the_64_is_a_count",
+   "file": "web/replay_activity.js",
+   "old": "                if (v < 0) return null;\n                list.push(v);",
+   "new": "                list.push(v);",
+   "build": [],
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
+  },
+  {
+   "id": "limits_a_bucket_of_deaths_is_not_capped",
+   "file": "web/replay_activity.js",
+   "old": "death[bucket] = Math.min(MAX_COUNT, death[bucket] + 1);",
+   "new": "death[bucket] = death[bucket] + 1;",
+   "build": [],
+   "test": "node tests/scripts/web_activity_check.js web/replay_activity.js web/history_page.js"
   }
  ]
 }

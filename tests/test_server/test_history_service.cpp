@@ -494,6 +494,55 @@ int main() {
         ASSERT_EQ(service.import_report().action, table_rows(copy, "history_action"));
     } TEST_END();
 
+    TEST_CASE("HV1.2b A row of history_action in the game server's database that is not a field of this version is not copied (the same guarantee as the store's put()): the others are, the report counts both, and the record of a match that has none gives no action") {
+        if (match_file(0).empty() || match_file(4).empty() || match_file(5).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        GameSide game;
+        ASSERT_TRUE(game.open());
+        const std::vector<std::string> ids = game.keep_and_count({0, 4, 5});
+        const size_t actions = table_rows(game.server.database, "history_action");
+        ASSERT_TRUE(actions >= 2);
+        // two rows go bad (the column's own check holds only the length): a text that is no JSON, and one of another version
+        std::string first, last;
+        {
+            db::Statement st;
+            ASSERT_TRUE(game.server.database.prepare(st, "SELECT min(id), max(id) FROM history_action").ok() && st.step() == db::Statement::Step::Row);
+            first = st.column_text(0);
+            last = st.column_text(1);
+        }
+        ASSERT_TRUE(first != last);
+        ASSERT_TRUE(game.server.database.exec("UPDATE history_action SET action = 'not a field' WHERE id = '" + first + "'").ok());
+        ASSERT_TRUE(game.server.database.exec("UPDATE history_action SET action = '{\"v\":2}' WHERE id = '" + last + "'").ok());
+        for (const std::string& f : recording_files(game.recordings())) fs::remove(game.recordings() / f);
+        fs::last_write_time(game.recordings(), fs::file_time_type(std::chrono::hours(100000)));
+        game.server.mgr.replay_store()->rescan();
+        TempDir work;
+        fs::create_directories(work.path / "none");
+        auto log = std::make_shared<Collector>();
+        ServiceConfig cfg = base_config(work.path, work.path / "none", log);
+        cfg.game_db_path = game.database().string();
+        cfg.submissions_dir = (work.path / "submissions").string();
+        HistoryService service(cfg);
+        std::string why;
+        ASSERT_TRUE(service.start(why));
+        ASSERT_TRUE(service.import_report().imported && service.import_report().matches == ids.size());
+        ASSERT_EQ(service.import_report().action, actions - 2);
+        ASSERT_EQ(service.import_report().action_refused, size_t{2});
+        ASSERT_TRUE(json_of(ask(service, "GET", "/history/" + first)).get("id").is_string() && !json_of(ask(service, "GET", "/history/" + first)).has("action"));
+        ASSERT_TRUE(json_of(ask(service, "GET", "/history/" + last)).get("id").is_string() && !json_of(ask(service, "GET", "/history/" + last)).has("action"));
+        size_t served = 0;
+        for (const std::string& id : ids) {
+            if (id != first && id != last && json_of(ask(service, "GET", "/history/" + id)).get("action").is_object()) ++served;
+        }
+        ASSERT_EQ(served, actions - 2);
+        service.stop();
+        db::Database copy;
+        ASSERT_TRUE(copy.open((work.path / "history.db").string()).ok());
+        ASSERT_EQ(table_rows(copy, "history_action"), actions - 2);
+    } TEST_END();
+
     TEST_CASE("HV1.3 The limits are the door's: a clock that runs on makes the same time box and the same budget answer, with the same words, and the plain list is not held back") {
         if (match_file(1).empty()) {
             std::cout << "SKIPPED (no map)\n";

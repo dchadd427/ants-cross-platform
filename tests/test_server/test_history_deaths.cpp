@@ -978,6 +978,7 @@ int main() {
             std::array<uint32_t, 4> fires_before{};
             std::vector<int32_t> hp;
             std::vector<bool> there;
+            std::vector<uint32_t> hurt_in;                                                       // (the bucket in which an ant was last counted as hurt)
             replay::Hooks hooks;
             hooks.after_tick = [&](uint32_t turns, sim::SimulationEngine& engine) {
                 const size_t bucket = turns / MatchStats::kSampleTurns;
@@ -993,8 +994,10 @@ int main() {
                     if (snap.id >= hp.size()) {
                         hp.resize(std::max<size_t>(hp.size() * 2, size_t{snap.id} + 1), 0);
                         there.resize(hp.size(), false);
+                        hurt_in.resize(hp.size(), 0xFFFFFFFFu);
                     }
-                    if (there[snap.id] && snap.player_id < 4 && snap.hp < hp[snap.id]) {
+                    if (there[snap.id] && snap.player_id < 4 && snap.hp < hp[snap.id] && hurt_in[snap.id] != bucket) {      // (an ant that is hurt is one hit in the bucket, however often it is hurt in it)
+                        hurt_in[snap.id] = static_cast<uint32_t>(bucket);
                         if (hits_seen.size() <= bucket) hits_seen.resize(bucket + 1);
                         ++hits_seen[bucket];
                     }
@@ -1023,7 +1026,7 @@ int main() {
             ASSERT_EQ(sum_of(st.action[kBomb]), bombs);
             ASSERT_EQ(sum_of(st.action[kFire]), fires);
             ASSERT_TRUE(st.action[kFire] == fires_seen);                                                       // (a fire in the bucket of the tick that lit it)
-            ASSERT_TRUE(st.action[kHit] == hits_seen);                                                         // (a hit in the bucket of the tick that took the points)
+            ASSERT_TRUE(st.action[kHit] == hits_seen);                                                         // (a hit in the bucket of the tick that took the points, once for an ant in a bucket)
             for (size_t kind = 0; kind < MatchStats::kActionKinds; ++kind) ASSERT_TRUE(st.action[kind].size() <= st.turns / 100 + 1);
             any = any || !st.kills.empty();
             hits = hits || sum_of(st.action[kHit]) > 0;
@@ -1190,6 +1193,13 @@ int main() {
         const std::string two(2, 'A');
         bad.action = action_text(1, 5, 2, two, two, two, two, "A!");
         ASSERT_TRUE(store.history.put(bad, why) && store.history.find(bad.id, got) && got.action.empty());
+        HistoryRecord shown = synthetic(id_at(kT0 + 50), "TINY.LVL", 5, kT0 + 50, std::string());           // (the record's JSON gives the action only when it is a field of this version, as put() keeps it)
+        shown.action = field;
+        ASSERT_TRUE(history_record_to_json(shown, true).get("action").get("n").as_int_or(0) == static_cast<int64_t>(action_view(field).buckets));
+        for (const std::string& text : {std::string("not a field"), std::string("{\"v\":1}"), action_text(2, 5, 2, two, two, two, two, two), field + std::string(kActionMaxBytes, ' ')}) {
+            shown.action = text;
+            ASSERT_FALSE(history_record_to_json(shown, true).has("action"));
+        }
         a.action.clear();                                                                                      // (kept again without it: the old row goes)
         ASSERT_TRUE(store.history.put(a, why) && store.history.find(a.id, got) && got.action.empty());
         a.action = field;
@@ -1199,35 +1209,51 @@ int main() {
         ASSERT_TRUE(store.history.put(a, why) && store.history.find(a.id, got) && got.action == field);        // (kept again: the marker goes, the row is back)
     } TEST_END();
 
-    TEST_CASE("DD7.8 The action is schema version 11 (history service: 5) and a database of version 10 gets the table without losing a record; the cap of the column is the cap of the field and the row goes with its match") {
+    TEST_CASE("DD7.8 The action is schema version 11 (history service: 5) and a database of the version before it, with a match in it, gets the table without losing a row; the cap of the column is the cap of the field and the row goes with its match") {
         ASSERT_TRUE(db_schema_version() >= 11);
-        TempDir dir;
-        db::Database d;
         const std::vector<db::Migration> every = db_migrations();
-        ASSERT_TRUE(every.size() >= 11 && every[10].version == 11 && std::string(every[10].name) == "history_action");
-        const std::vector<db::Migration> ten(every.begin(), every.begin() + 10);
-        ASSERT_TRUE(db::open_and_migrate(d, (dir.path / "ten.db").string(), ten, db::OpenOptions()).ok());
-        {
-            db::Statement st;
-            ASSERT_TRUE(d.prepare(st, "SELECT count(*) FROM sqlite_master WHERE name = 'history_action'").ok() && st.step() == db::Statement::Step::Row && st.column_int64(0) == 0);
-        }
-        d.close();
-        db::Database up;
-        ASSERT_TRUE(db::open_and_migrate(up, (dir.path / "ten.db").string(), db_migrations(), db::OpenOptions()).ok());
-        ASSERT_TRUE(up.exec("INSERT INTO history_matches (id, ended, map, game, turns, finished, quitter, mode, format, result, computers_only, best_score, best_kills, best_hatched, search, rows_json, counted_at)"
-                            " VALUES ('ants-TINY-20261008-143209Z', 1, 'TINY.LVL', 'v1', 10, 1, NULL, 'highest-score', '1v1', 'decided', 0, 1, 1, 1, 'tiny', '[]', 1)").ok());
-        const auto insert = [&](const std::string& text) {
-            db::Statement st;
-            if (!up.prepare(st, "INSERT INTO history_action (id, action) VALUES ('ants-TINY-20261008-143209Z', ?1)").ok() || !st.bind_text(1, text).ok()) return false;
-            return st.step() == db::Statement::Step::Done;
-        };
-        ASSERT_FALSE(insert(std::string(kActionMaxBytes + 1, 'A')));
-        ASSERT_TRUE(insert(std::string(kActionMaxBytes, 'A')));
-        ASSERT_TRUE(up.exec("DELETE FROM history_matches WHERE id = 'ants-TINY-20261008-143209Z'").ok());
-        db::Statement count;
-        ASSERT_TRUE(up.prepare(count, "SELECT count(*) FROM history_action").ok() && count.step() == db::Statement::Step::Row && count.column_int64(0) == 0);          // (the row went with its match)
         const std::vector<db::Migration>& service = history_db_migrations();
+        ASSERT_TRUE(every.size() >= 11 && every[10].version == 11 && std::string(every[10].name) == "history_action");
         ASSERT_TRUE(service.size() == 5 && service[4].version == 5 && std::string(service[4].name) == "history_action");
+        const auto one = [](db::Database& d, const std::string& sql) {
+            db::Statement st;
+            return d.prepare(st, sql).ok() && st.step() == db::Statement::Step::Row ? st.column_int64(0) : int64_t{-1};
+        };
+        const std::string id = "ants-TINY-20261008-143209Z";
+        // the game server's file (10 -> 11) and the history service's own (4 -> 5): a match with its seats, its map of deaths and its play count is kept before the upgrade and is all there after it
+        for (const bool server_file : {true, false}) {
+            const std::vector<db::Migration>& all = server_file ? every : service;
+            const std::vector<db::Migration> before(all.begin(), all.end() - 1);
+            TempDir dir;
+            const std::string path = (dir.path / "history.db").string();
+            {
+                db::Database d;
+                ASSERT_TRUE(db::open_and_migrate(d, path, before, db::OpenOptions()).ok());
+                ASSERT_EQ(one(d, "SELECT count(*) FROM sqlite_master WHERE name = 'history_action'"), int64_t{0});
+                ASSERT_TRUE(d.exec("INSERT INTO history_matches (id, ended, map, game, turns, finished, quitter, mode, format, result, computers_only, best_score, best_kills, best_hatched, search, rows_json, counted_at)"
+                                   " VALUES ('" + id + "', 1, 'TINY.LVL', 'v1', 2400, 1, NULL, 'highest-score', '1v1', 'decided', 0, 5, 5, 0, 'tiny ann', '[]', 1)").ok());
+                ASSERT_TRUE(d.exec("INSERT INTO history_seats VALUES ('" + id + "', 0, 'Ann', '', 5, 5, 0, 0, 0, 0, 0, 0, 1)").ok());
+                ASSERT_TRUE(d.exec("INSERT INTO history_seats VALUES ('" + id + "', 1, 'Bo', 'Hard', 0, 0, 5, 0, 0, 0, 0, 0, 0)").ok());
+                ASSERT_TRUE(d.exec("INSERT INTO history_deaths (id, map, hash, ended, w, h, n, deaths) VALUES ('" + id + "', 'TINY.LVL', '0123456789abcdef', 1, 60, 60, 1, 'kept as it was')").ok());
+                ASSERT_TRUE(d.exec("INSERT INTO map_plays (map, hash, plays, last_played) VALUES ('TINY.LVL', '0123456789abcdef', 3, 1)").ok());
+            }
+            db::Database up;
+            ASSERT_TRUE(db::open_and_migrate(up, path, all, db::OpenOptions()).ok());
+            ASSERT_EQ(one(up, "SELECT count(*) FROM history_matches WHERE id = '" + id + "' AND turns = 2400 AND best_score = 5 AND search = 'tiny ann'"), int64_t{1});
+            ASSERT_EQ(one(up, "SELECT count(*) FROM history_seats WHERE match_id = '" + id + "' AND ((seat = 0 AND name = 'Ann' AND winner = 1) OR (seat = 1 AND name = 'Bo' AND bot = 'Hard' AND lost = 5))"), int64_t{2});
+            ASSERT_EQ(one(up, "SELECT count(*) FROM history_deaths WHERE id = '" + id + "' AND deaths = 'kept as it was'"), int64_t{1});
+            ASSERT_EQ(one(up, "SELECT plays FROM map_plays WHERE map = 'TINY.LVL'"), int64_t{3});
+            ASSERT_EQ(one(up, "SELECT count(*) FROM history_action"), int64_t{0});
+            const auto insert = [&](const std::string& text) {
+                db::Statement st;
+                if (!up.prepare(st, "INSERT INTO history_action (id, action) VALUES ('" + id + "', ?1)").ok() || !st.bind_text(1, text).ok()) return false;
+                return st.step() == db::Statement::Step::Done;
+            };
+            ASSERT_FALSE(insert(std::string(kActionMaxBytes + 1, 'A')));                      // (the cap of the column is the cap of the field)
+            ASSERT_TRUE(insert(std::string(kActionMaxBytes, 'A')));
+            ASSERT_TRUE(up.exec("DELETE FROM history_matches WHERE id = '" + id + "'").ok());
+            ASSERT_EQ(one(up, "SELECT count(*) FROM history_action"), int64_t{0});             // (the row went with its match)
+        }
     } TEST_END();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Failed:           " << g_test_failures << "\n=======================================================\n";

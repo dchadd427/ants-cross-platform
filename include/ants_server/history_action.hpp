@@ -11,7 +11,7 @@
 //   n        how many buckets (1 to kActionMaxBuckets): bucket i is the seconds s i to s i + s of the match; the last tick of a match that ends on the edge of a bucket is counted in the last bucket
 //   death, bomb, theft, fire, hit
 //            one text of n letters for each kind: the count of that kind in the bucket as one base64url letter (A-Z a-z 0-9 - _: A is 0, _ is 63), never more than kActionMaxCount (a bucket with more says 63).
-//            A death is an ant that was lost, a bomb one that went off, a theft a Thief that began to raid a hill, a fire one that a Fire Ant lit, a hit an ant that lost hit points in a tick.
+//            A death is an ant that was lost, a bomb one that went off, a theft a Thief that began to raid a hill, a fire one that a Fire Ant lit, a hit an ant that lost hit points (once for an ant in a bucket of 5 seconds: the size of a fight, not its length).
 // A match in which none of the five happened, and one that the pass could not count, has no field at all (the column is empty; the page then draws what the deaths alone say, or nothing). The text is at most
 // kActionMaxBytes, always: five texts of at most kActionMaxBuckets letters and a short head.
 

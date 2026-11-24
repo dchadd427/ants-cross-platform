@@ -77,7 +77,9 @@ function deaths(seconds, w, h) { return { v: 1, w: w || 60, h: h || 60, n: secon
     check('240 buckets is a field and a bucket of 5 x 2^20 seconds too', A.actionOf(field(240, 5, {})) !== null && A.actionOf(field(2, 5 * 1048576, {})) !== null);
 }
 {
-    same('the weights are the Auto camera\'s: a death 14, a bomb 10, a theft 6, a fire 5, a hit 2', A.KINDS.map((k) => A.WEIGHTS[k]), [14, 10, 6, 5, 2]);
+    same('the weights are the Auto camera\'s: a death 14, a bomb 10, a theft 6, a fire 5, a hit 2 (test_history_deaths DD7.2 holds the camera to the same five numbers)', A.KINDS.map((k) => A.WEIGHTS[k]), [14, 10, 6, 5, 2]);
+    check('... in the order of importance: a death outweighs a bomb, a bomb a theft, a theft a fire, a fire a hit', A.KINDS.every((k, i) => i === 0 || A.WEIGHTS[A.KINDS[i - 1]] > A.WEIGHTS[k]));
+    same('the page\'s limits are the server\'s (include/ants_server/history_action.hpp: buckets, the 5 seconds, the count a letter holds, the longest bucket; test_history_deaths DD7.3 - DD7.5)', A.LIMITS, { MAX_BUCKETS: 240, BASE: 5, MAX_COUNT: 63, MAX_SECONDS: 5242880 });
     const s = A.seriesOf(record({ seconds: 50, action: field(10, 5, { death: 'AAB', bomb: 'AAC', theft: 'AAD', fire: 'AAE', hit: 'AAF' }) }));
     same('a bucket weighs what the Auto camera weighs: 1 death, 2 bombs, 3 thefts, 4 fires and 5 hits are 14 + 20 + 18 + 20 + 10', s && s.weight.slice(0, 4), [0, 0, 82, 0]);
     same('... and the series says its buckets, their length and the match\'s seconds', s && [s.seconds, s.buckets, s.total, s.deathsOnly], [5, 10, 50, false]);
@@ -126,7 +128,8 @@ function deaths(seconds, w, h) { return { v: 1, w: w || 60, h: h || 60, n: secon
     const s = A.seriesOf(record({ action: SERVER, seconds: 120, turns: 2400 }));
     same('the label: the time and what the bucket holds (counts, in the order death, bomb, theft, fire; a plural for more than one)', [A.tipOf(s, 2), A.tipOf(s, 14), A.tipOf(s, 5), A.tipOf(s, 17)], [
         { time: '0:02', what: '1 death' }, { time: '0:14', what: '3 deaths' }, { time: '0:05', what: '2 bombs' }, { time: '0:17', what: '26 thefts' }]);
-    same('... one of each is singular and the fires come last, 63 is 63', [A.tipOf(A.seriesOf(record({ action: field(10, 5, { death: 'B', bomb: 'B', theft: 'B', fire: 'B', hit: 'B' }) })), 1), A.tipOf(s, 21)], [{ time: '0:01', what: '1 death, 1 bomb, 1 theft, 1 fire' }, { time: '0:21', what: '27 fires' }]);
+    same('... a full bucket (63 and more) says so: 63+, and 62 is 62', [A.tipOf(s, 27).what, A.tipOf(A.seriesOf(record({ action: field(10, 5, { death: '-' }) })), 1).what], ['63+ deaths', '62 deaths']);
+    same('... one of each is singular and the fires come last', [A.tipOf(A.seriesOf(record({ action: field(10, 5, { death: 'B', bomb: 'B', theft: 'B', fire: 'B', hit: 'B' }) })), 1), A.tipOf(s, 21)], [{ time: '0:01', what: '1 death, 1 bomb, 1 theft, 1 fire' }, { time: '0:21', what: '27 fires' }]);
     same('... a bucket with nothing says quiet, and with fights alone (3 hits or more) says fighting, two hits are quiet', [A.tipOf(s, 100).what, A.tipOf(A.seriesOf(record({ action: field(10, 5, { death: 'AAAAAAAAB', hit: 'DAAAAAAAAA' }) })), 1).what, A.tipOf(A.seriesOf(record({ action: field(10, 5, { death: 'AAAAAAAAB', hit: 'CAAAAAAAAA' }) })), 1).what], ['quiet', 'fighting', 'quiet']);
     same('... the very end is in the last bucket (a match of 50 seconds with a death in its last 5)', A.tipOf(A.seriesOf(record({ seconds: 50, action: field(10, 5, { death: 'AAAAAAAAAB' }) })), 50), { time: '0:50', what: '1 death' });
     same('... a time before the start and one after the end are the first and the last moment', [A.tipOf(s, -50).time, A.tipOf(s, 9999).time, A.tipOf(s, 9999).what], ['0:00', '2:00', 'quiet']);
@@ -179,6 +182,8 @@ const series = A.seriesOf(record());
     check('... while the pointer is still on the timeline it stays on', has(heat, 'on'));
     p.tl.fire('pointerleave', {}); p.tl.fire('pointerdown', { clientX: 11 + 100 }); p.tl.fire('pointercancel', {});
     check('a press that is cancelled ends the same way', !has(heat, 'on'));
+    p.tl.fire('pointerdown', { clientX: 11 + 100 }); p.tl.fire('lostpointercapture', {});
+    check('... and so does a pointer that is let go with no pointerup (the bar moved in the page): the curve is not left on', !has(heat, 'on') && !has(p.bar, 'acthov'));
     h.played(25);
     const clips = heat.byTag('rect');
     same('the part played: the colored part is the first quarter, the rest is the other three', [clips[0].attrs.width, clips[1].attrs.x, clips[1].attrs.width], ['250', '250', '750']);

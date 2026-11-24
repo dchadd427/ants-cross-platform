@@ -485,6 +485,9 @@ int main() {
             ASSERT_EQ(st.kills.size(), size_t{2});
             for (const MatchStats::Kill& k : st.kills) ASSERT_TRUE(k.victim == 0 && k.killer == MatchStats::kNoKiller);   // (no seat killed it: its own fire did)
             ASSERT_EQ(sum_of(st.damage_dealt), int64_t{0});                                    // (hurting yourself deals nothing)
+            uint64_t hurt = 0;
+            for (const uint32_t n : st.action[static_cast<size_t>(MatchStats::Action::Hit)]) hurt += n;
+            ASSERT_TRUE(hurt >= 2 && hurt <= 2 * (b.turns / MatchStats::kSampleTurns + 1));    // (two ants burned for hundreds of ticks: one hit for each in each bucket of 5 seconds, not one for every tick)
             ASSERT_TRUE(st.damage_taken[0] >= 18 && st.damage_from[0][0] == st.damage_taken[0]);
             ASSERT_TRUE(st.damage_taken[1] == 0 && st.damage_from[1][0] == 0);
             ASSERT_TRUE(st.wipes[0] == 2 && st.wipes[1] == 0);
