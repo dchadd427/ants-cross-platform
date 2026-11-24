@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "ants_ai/bot_names.hpp"
+#include "ants_server/history_action.hpp"
 #include "ants_server/replay_store.hpp"
 #include "ants_sim/game_mode.hpp"
 #include "ants_sim/start_teams.hpp"
@@ -236,6 +237,8 @@ JsonValue history_record_to_json(const HistoryRecord& r, bool full) {
     o.set("draw", JsonValue::make_bool(r.draw));
     o.set("result", JsonValue::make_string(r.result()));
     o.set("computers_only", JsonValue::make_bool(r.computers_only));
+    o.set("plays", JsonValue::make_int(r.plays));
+    o.set("likes", JsonValue::make_int(r.likes));
     JsonValue seats = JsonValue::make_array();
     for (const HistorySeat& s : r.seats) seats.push_back(seat_json(s, full));
     o.set("seats", std::move(seats));
@@ -257,6 +260,15 @@ JsonValue history_record_to_json(const HistoryRecord& r, bool full) {
         limits.max_elements = 16;
         limits.max_depth = 3;
         if (ctl::parse_json(r.deaths, deaths, nullptr, limits)) o.set("deaths", std::move(deaths));
+    }
+    ActionView view;
+    if (full && !r.action.empty() && r.action.size() <= kActionMaxBytes && parse_history_action(r.action, view)) {       // (the action of the match, for the curve of the replay page: its own key, its own cap; a text that is not a field of this version is left out, never passed on as it is)
+        JsonValue action;
+        ctl::JsonLimits limits;
+        limits.max_bytes = 8u * 1024u;
+        limits.max_elements = 16;
+        limits.max_depth = 2;
+        if (ctl::parse_json(r.action, action, nullptr, limits)) o.set("action", std::move(action));
     }
     return o;
 }

@@ -277,7 +277,7 @@ COPY Community-Maps/*.lvl Community-Maps/*.LVL /srv/community-maps/files/
 COPY Original-Ants/Maps/*.LVL /srv/community-maps/files/
 
 # The match history and the replays (docs/REPLAYS.md "The match pages", "Watching a replay"): the list of every match (matches.html) and one match (match.html), linked from
-# the header of the front page and the footers (with the site label, the version and the build put in), their stylesheet (matches.css), the stats sections of the match page (match_stats.js and match_stats.css), the map of deaths (death_map.js and death_map.css, also on the game page in replay mode) and the helpers
+# the header of the front page and the footers (with the site label, the version and the build put in), their stylesheet (matches.css), the stats sections of the match page (match_stats.js and match_stats.css), the map of deaths (death_map.js and death_map.css, also on the game page in replay mode), the activity curve of the game page's timeline (replay_activity.js and replay_activity.css), the play counter of the game page's replay mode (replay_plays.js, fetched by it for a kept recording only), the plays and hearts of the two pages (replay_likes.js) and the helpers
 # that they share with the game page (replay_page.js, history_page.js, and replay_stats.css for the stats and the frame mode of the game page). The game page plays a recording as play?replay=<file> (and in the frame of match.html as play?replay=<file>&embed=1).
 COPY --from=builder /src/matches.html /usr/share/nginx/html/matches.html
 COPY --from=builder /src/match.html /usr/share/nginx/html/match.html
@@ -296,18 +296,22 @@ COPY web/history_page.js /usr/share/nginx/html/history_page.js
 COPY web/match_stats.js /usr/share/nginx/html/match_stats.js
 COPY web/death_map.css /usr/share/nginx/html/death_map.css
 COPY web/death_map.js /usr/share/nginx/html/death_map.js
+COPY web/replay_activity.css /usr/share/nginx/html/replay_activity.css
+COPY web/replay_activity.js /usr/share/nginx/html/replay_activity.js
+COPY web/replay_plays.js /usr/share/nginx/html/replay_plays.js
+COPY web/replay_likes.js /usr/share/nginx/html/replay_likes.js
 COPY web/replay_stats.css /usr/share/nginx/html/replay_stats.css
 
 # The keys of the seats that this browser holds, read in one place for the front page's Rejoin strip and the game page's name step (rejoin_key.js)
 COPY web/rejoin_key.js /usr/share/nginx/html/rejoin_key.js
 # What the game page tells the chat hub about its visitor in a match, for the players list of Home (hub_here.js)
 COPY web/hub_here.js /usr/share/nginx/html/hub_here.js
-# The shapes of the picture, one table for the game page, the front page and the settings menu (docs/PLAY_IN_BROWSER.md "Four shapes"; shapes.js)
+# The shapes of the picture, one table for the game page, the front page and the settings menu (docs/PLAY_PICTURE.md "Four shapes"; shapes.js)
 COPY web/shapes.js /usr/share/nginx/html/shapes.js
 # ... and the control that the game page and the settings menu choose a shape with (a button and a list made by the page: a native list does not open under the fullscreen mouse lock; shape_picker.js)
 COPY web/shape_picker.js /usr/share/nginx/html/shape_picker.js
 
-# The players' maps (docs/PLAY_IN_BROWSER.md "Players' maps in the browser"): the game page fetches the map of a room or a recording from /maps/files/ (map_files.js)
+# The players' maps (docs/PLAY_MATCH_SETUP.md "Players' maps in the browser"): the game page fetches the map of a room or a recording from /maps/files/ (map_files.js)
 COPY web/map_files.js /usr/share/nginx/html/map_files.js
 
 # The countdown's Fullscreen button (docs/MATCH_COUNTDOWN.md): the game page lays it over the card that opens a match of two or more people (countdown_button.js)

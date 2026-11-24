@@ -51,7 +51,11 @@
 #                                                   to POST /test-maps, which docker/nginx.conf passes here; it works with the submissions door OFF (it has no database, no accounts and no other route). Leave it at
 #                                                   4031, the one that nginx passes to, or set 0, which switches test rooms off (the site then says so). Not published on the host. The maps live in the folder test-maps of the
 #                                                   volume ants-server-results (at most 64 MiB, 6 hours each) and are wiped at every start.
-#   ANTS_ADMIN_GATE_SECRET=<32+ characters>         the ONE key of the admin page (docs/MAP_SUBMISSIONS.md, "The admin page"; docs/HUB.md, "The admin page's door"): this stack hands it to the chat hub, which signs the
+#   ANTS_COUNTS_PORT=4032                           the port, inside the container, of the COUNTS door (docs/REPLAY_COUNTS.md): ON by default. The plays of the replays (the game page's POST /counts/play/<id>) and the likes (the matches'
+#                                                   pages' hearts) are counted there; docker/nginx.conf passes them here, and the chat hub calls it once more, for Forget me. It needs the database (the match history). Plays need no
+#                                                   key; likes need ANTS_ADMIN_GATE_SECRET below (the same key as the admin page's: without a good one likes are off and say so). Leave it at 4032, the one that nginx and the
+#                                                   hub's ANTS_HUB_COUNTS_URL use, or set 0, which switches plays and likes off and needs ANTS_HUB_COUNTS_URL empty as well (Forget me then asks nobody; with the URL still set it asks, finds nobody and tries again for a day). Not published on the host.
+#   ANTS_ADMIN_GATE_SECRET=<32+ characters>         the ONE key of the admin page (docs/MAP_SUBMISSIONS.md, "The admin page"; docs/HUB_ROLES.md, "The admin page's door"): this stack hands it to the chat hub, which signs the
 #                                                   pass with it, and to the game server, which checks the pass (32 to 256 printable characters, no blank: openssl rand -hex 32). The page also needs
 #                                                   ANTS_SUBMIT_PORT=4030 above. Without a good key the hub's door is shut (nginx says door_off); without the key at the game server every /admin/api path
 #                                                   answers 403 closed. There are no accounts: the hub's login decides who may use the page. A stack that still sets the hub's old name for it
@@ -59,12 +63,12 @@
 #
 #   ANTS_HUB_PUBLIC_URL=https://beta.playants.org   the chat hub (service ants-hub, docs/HUB.md): the address of this site, the one Origin that a chat socket may come from, and the base of the Discord login's way back
 #                                                   (<this address>/hub/callback; optional; this is the default). Empty or wrong: the hub refuses every socket and the page says "Chat is offline"
-#   ANTS_HUB_DISCORD_CLIENT_ID, ANTS_HUB_DISCORD_CLIENT_SECRET    the Discord application of the chat's login (docs/HUB.md, "Login": the site's operator makes the application, adds the redirect
+#   ANTS_HUB_DISCORD_CLIENT_ID, ANTS_HUB_DISCORD_CLIENT_SECRET    the Discord application of the chat's login (docs/HUB_LOGIN.md, "Login": the site's operator makes the application, adds the redirect
 #                                                   <this address>/hub/callback, and puts the id and the secret here). BOTH come from this stack's environment and never from a file of
 #                                                   the repository; without them the chat is read-only for everybody and says so. The secret is read by the hub and printed nowhere
 #   ANTS_HUB_MIN_ACCOUNT_DAYS=7                     a Discord account younger than this many days cannot write in the chat (0 lets every account write; optional; this is the default)
 #   ANTS_HUB_DISCORD_BOT_TOKEN, ANTS_HUB_DISCORD_GUILD, ANTS_HUB_ROLE_ADMIN, ANTS_HUB_ROLE_MOD    who may moderate the chat: the hub asks the site's Discord server, with the bot's token, which
-#                                                   roles a logged-in person holds (docs/HUB.md, "Roles"): the server's id and the two roles' ids. ALL come from this stack's environment and never
+#                                                   roles a logged-in person holds (docs/HUB_ROLES.md, "Roles"): the server's id and the two roles' ids. ALL come from this stack's environment and never
 #                                                   from a file of the repository; the token is read by the hub and printed nowhere. Without them nobody moderates in the chat (optional)
 #   ANTS_HUB_ROLE_IMAGES=<role id>                  the Discord role whose holders may post images in the chat, besides the moderators, the administrators and the operator's account (docs/HUB_IMAGES.md); it needs the token and the server
 #                                                   above, and must be a different role from the other two. Its id comes from this stack's environment and never from a file of the repository. Without it only the staff post images (optional)
@@ -137,7 +141,7 @@ services:
     # matches of the demo rooms too (the front page's games). --replay-port opens the PUBLIC, read-only door of the list and the files (GET /replays, GET /replays/<file>; the site's nginx passes both to it
     # over the network below): ON here, with the port that docker/nginx.conf uses; ANTS_REPLAY_PORT=0 switches it off. The program's own default is off.
     # The files and the list hold the names that the players typed (a player with no name shows as a color), so those names are public here; no address, room code or chat is in them.
-    command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-48}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}", "--log-mb", "4", "--bot-match-every-min", "${ANTS_BOT_MATCH_EVERY_MIN:-60}", "--submit-port", "${ANTS_SUBMIT_PORT:-0}", "--test-map-port", "${ANTS_TEST_MAP_PORT:-4031}", "--replay-demo", "--replays-days", "${ANTS_REPLAY_DAYS:-90}", "--replays-max-mb", "${ANTS_REPLAY_MAX_MB:-1024}", "--replay-port", "${ANTS_REPLAY_PORT:-4020}"]
+    command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-48}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}", "--log-mb", "4", "--bot-match-every-min", "${ANTS_BOT_MATCH_EVERY_MIN:-60}", "--submit-port", "${ANTS_SUBMIT_PORT:-0}", "--test-map-port", "${ANTS_TEST_MAP_PORT:-4031}", "--counts-port", "${ANTS_COUNTS_PORT:-4032}", "--replay-demo", "--replays-days", "${ANTS_REPLAY_DAYS:-90}", "--replays-max-mb", "${ANTS_REPLAY_MAX_MB:-1024}", "--replay-port", "${ANTS_REPLAY_PORT:-4020}"]
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}
       # the admin page (docs/MAP_SUBMISSIONS.md): the key of the pass that the hub's gate signs; the hub gets the same variable; without a good key every /admin/api path answers 403 closed
@@ -194,6 +198,9 @@ services:
       ANTS_HUB_AI_KEYS: ${ANTS_HUB_AI_KEYS:-off}
       # where the game server's admin door is, for `/bots` (empty: off); the call stays on this network and publishes no port
       ANTS_HUB_GAME_ADMIN_URL: ${ANTS_HUB_GAME_ADMIN_URL:-}
+      # where the game server's counts door is (docs/REPLAY_COUNTS.md): Forget me takes the person's likes of replays back there first; the call stays on this network. A variable that is not set takes the default; one that is set and
+      # EMPTY (no colon in the line: `-`, not `:-`) switches the call off
+      ANTS_HUB_COUNTS_URL: ${ANTS_HUB_COUNTS_URL-http://ants-server:4032}
       # where the image converter is (docs/HUB_IMAGES.md); the call stays on the private network below. A variable that is not set takes the default; one that is set and EMPTY (no colon in the line: `-`, not
       # `:-`) switches images off for everybody
       ANTS_HUB_IMAGE_CONVERTER_URL: ${ANTS_HUB_IMAGE_CONVERTER_URL-http://ants-img:4050}

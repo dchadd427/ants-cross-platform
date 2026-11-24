@@ -92,15 +92,15 @@
   {
    "id": "feeder_map_skip_not_marked",
    "file": "src/ants_server/history_store.cpp",
-   "old": "skip(id, why, true);",
-   "new": "skip(id, why);",
+   "old": "skip(job.id, why, kind == Refusal::NoMap);",
+   "new": "skip(job.id, why);",
    "test": "ANTS_TEST_FILTER=HS5.9 ./build/tests/test_server/test_history_store",
    "expect": "HS5.9"
   },
   {
    "id": "feeder_retry_keeps_skipped",
    "file": "src/ants_server/history_store.cpp",
-   "old": "for (const std::string& id : map_skipped_) skipped_.erase(id);",
+   "old": "        skipped_.erase(id);\n",
    "new": "",
    "test": "ANTS_TEST_FILTER=HS5.9 ./build/tests/test_server/test_history_store",
    "expect": "HS5.9"

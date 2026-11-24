@@ -109,7 +109,9 @@ bool parse_history_query(const std::string& raw, HistoryQuery& q, std::string& e
             else if (value == "hatched") q.sort = HistoryQuery::Sort::Hatched;
             else if (value == "long") q.sort = HistoryQuery::Sort::Long;
             else if (value == "short") q.sort = HistoryQuery::Sort::Short;
-            else return bad("new, old, score, kills, hatched, long or short");
+            else if (value == "plays") q.sort = HistoryQuery::Sort::Plays;
+            else if (value == "likes") q.sort = HistoryQuery::Sort::Likes;
+            else return bad("new, old, score, kills, hatched, long, short, plays or likes");
         } else if (key == "format") {
             if (value == "all") q.format = HistoryQuery::Format::All;
             else if (value == "1v1") q.format = HistoryQuery::Format::OneVsOne;

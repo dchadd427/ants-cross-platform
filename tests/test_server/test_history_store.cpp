@@ -8,6 +8,7 @@
 #include <iostream>
 
 #include "../common/test_assert.hpp"
+#include "big_map_fixtures.hpp"
 #include "history_fixtures.hpp"
 
 static int g_test_count = 0;
@@ -1120,7 +1121,7 @@ int main() {
         const std::string id0 = s.keep(match_file(0));
         const std::string id1 = s.keep(match_file(1));
         ASSERT_EQ(parse_text(s.control("GET", "/history").body).get("count").as_int_or(-1), int64_t{0});
-        s.run_updates(30);
+        ASSERT_TRUE(s.run_until_counted(2));
         ASSERT_TRUE(s.mgr.history_store() != nullptr && s.mgr.history_store()->count() == 2);
         const ctl::HttpResponse owner = s.control("GET", "/history");
         const ctl::HttpResponse door = s.door("GET", "/history");
@@ -1216,7 +1217,7 @@ int main() {
         ASSERT_TRUE(s.open());
         const std::string a = s.keep(match_file(1));
         const std::string b = s.keep(match_file(2));
-        s.run_updates(30);
+        ASSERT_TRUE(s.run_until_counted(2));
         HistoryStore& history = *s.mgr.history_store();
         ASSERT_EQ(history.count(), size_t{2});
         ASSERT_EQ(s.door("DELETE", "/history/" + a).status, 404);                                 // (the public door cannot delete)
@@ -1354,7 +1355,7 @@ int main() {
             Server s(maps_off.path.string(), players.path.string());
             ASSERT_TRUE(s.open());
             const std::string id = s.keep(match_file(1));
-            s.run_updates(30);
+            ASSERT_TRUE(s.run_until_counted(1));
             ASSERT_TRUE(s.mgr.history_store() != nullptr && s.mgr.history_store()->count() == 1 && s.mgr.history_store()->knows(id));
             const ctl::JsonValue got = parse_text(s.control("GET", "/history/" + id).body);
             ASSERT_TRUE(got.get("id").str() == id && got.get("details").get("v").as_int_or(0) == 1);          // (with its stats: the same play)
@@ -1453,6 +1454,315 @@ int main() {
                 ASSERT_LT(run, size_t{15});
             }
         }
+    } TEST_END();
+
+    // ---- the feeder in steps (the game server's way: docs/SERVER_REPLAYS.md "The match history") -------------------------------------------
+
+    TEST_CASE("HS5.10 A sliced feeder counts a match that has just ended whatever runs (it never asks whether the server is idle), the newest first and once, in many steps that each work the budget at most") {
+        if (match_file(1).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        Rig rig;
+        ASSERT_TRUE(rig.open());
+        rig.work_us = 50;                                                              // (every look at the clock is 50 us later: a step of 2,000 us plays about 40 turns)
+        rig.feeder.set_slice(HistoryFeeder::kSliceUs);
+        const std::string older = rig.keep(match_file(1));                             // (1,000 turns)
+        const std::string newer = rig.keep(match_file(2));                             // (800 turns)
+        int asked = 0;
+        int steps = 0;
+        uint64_t widest = 0;
+        bool newer_first = false;
+        while (rig.history.count() < 2 && steps < 400) {
+            rig.ms += 20;
+            const uint64_t before = rig.work_clock;
+            rig.feeder.step([&] {
+                ++asked;
+                return false;                                                          // (a person's match runs, all the time)
+            }, rig.ms);
+            widest = std::max(widest, rig.work_clock - before);
+            ++steps;
+            if (rig.history.count() == 1 && !newer_first) newer_first = rig.history.knows(newer) && !rig.history.knows(older);
+        }
+        ASSERT_TRUE(rig.history.count() == 2 && rig.history.knows(older) && rig.history.knows(newer) && rig.feeder.counted() == 2 && rig.feeder.pending() == 0);
+        ASSERT_TRUE(newer_first);
+        ASSERT_EQ(asked, 0);
+        ASSERT_LE(widest, uint64_t{HistoryFeeder::kSliceUs} + 6 * rig.work_us);        // (a step takes the budget and a look at the clock more, at the most)
+        ASSERT_GE(steps, 40);                                                          // (1,800 turns at 40 a step, and the steps that open and keep each recording)
+        for (const std::string& id : {older, newer}) {
+            HistoryRecord rec;
+            ASSERT_TRUE(rig.history.find(id, rec) && !rec.details.empty() && rec.seats.size() == 2);
+        }
+    } TEST_END();
+
+    TEST_CASE("HS5.11 A sliced feeder leaves an older recording to a quiet server: the one that is part-way when a person's match begins goes back in its line, a fresh one takes its turn, and the old one is counted when the server is quiet again") {
+        if (match_file(1).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        Rig rig;
+        ASSERT_TRUE(rig.open());
+        rig.work_us = 50;
+        rig.feeder.set_slice(HistoryFeeder::kSliceUs);
+        int asked = 0;
+        const auto step = [&](bool idle) {
+            rig.ms += 20;
+            return rig.feeder.step([&, idle] {
+                ++asked;
+                return idle;
+            }, rig.ms);
+        };
+        int whole_steps = 0;                                                           // (what an old recording takes when nothing stops it)
+        {
+            Rig alone;
+            ASSERT_TRUE(alone.open());
+            alone.work_us = 50;
+            alone.feeder.set_slice(HistoryFeeder::kSliceUs);
+            alone.keep(match_file(1));
+            alone.now += 2 * 3600;
+            while (alone.history.count() == 0 && whole_steps < 400) {
+                alone.ms += 20;
+                alone.feeder.step([] { return true; }, alone.ms);
+                ++whole_steps;
+            }
+            ASSERT_TRUE(alone.history.count() == 1 && whole_steps > 20);
+        }
+        const std::string old_id = rig.keep(match_file(1));
+        rig.now += 2 * 3600;                                                           // (two hours on: it is no fresh recording any more)
+        for (int i = 0; i < 60; ++i) step(false);
+        ASSERT_TRUE(rig.history.count() == 0 && rig.feeder.pending() == 0 && asked > 0);
+        for (int i = 0; i < 6; ++i) step(true);                                        // (quiet: it is opened and some of its turns are played)
+        ASSERT_TRUE(rig.history.count() == 0 && rig.feeder.pending() == 1);
+        const std::string fresh_id = rig.keep(match_file(2));                          // (a match that a person has just played ends while another person's match runs)
+        for (int i = 0; i < 400 && rig.history.count() == 0; ++i) step(false);
+        ASSERT_TRUE(rig.history.knows(fresh_id) && !rig.history.knows(old_id) && rig.feeder.pending() == 1);     // (the old one waits where it was)
+        for (int i = 0; i < 100; ++i) step(false);
+        ASSERT_TRUE(rig.history.count() == 1 && !rig.history.knows(old_id));          // (it waits as long as the server is not quiet)
+        int resumed_steps = 0;
+        for (; resumed_steps < 400 && rig.history.count() < 2; ++resumed_steps) step(true);
+        ASSERT_TRUE(rig.history.count() == 2 && rig.history.knows(old_id) && rig.feeder.counted() == 2 && rig.feeder.pending() == 0);
+        ASSERT_LE(6 + resumed_steps, whole_steps + 1);                                 // (it went on from the turn it had reached: the six steps that it had made were not made again)
+    } TEST_END();
+
+    TEST_CASE("HS5.12 A database that stops answering while a fresh recording is counted makes it wait: nothing is left out, and it is counted when the database answers again, with no quiet server asked for") {
+        if (match_file(1).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        Rig rig;
+        ASSERT_TRUE(rig.open());
+        rig.work_us = 50;
+        rig.feeder.set_slice(HistoryFeeder::kSliceUs);
+        const auto step = [&]() {
+            rig.ms += 20;
+            return rig.feeder.step([] { return false; }, rig.ms);
+        };
+        const std::string id = rig.keep(match_file(1));
+        for (int i = 0; i < 10; ++i) step();                                           // (part-way)
+        ASSERT_TRUE(rig.history.count() == 0 && rig.feeder.pending() == 1);
+        db::Database away;
+        ASSERT_TRUE(away.open((rig.temp.path / "ants.db").string()).ok());
+        ASSERT_TRUE(away.exec("ALTER TABLE history_matches RENAME TO history_matches_away").ok());
+        for (int i = 0; i < 100; ++i) step();                                          // (played to its end: the record is refused, the database is down)
+        ASSERT_TRUE(!rig.history.available() && rig.feeder.counted() == 0 && rig.feeder.left_out() == 0 && rig.feeder.pending() == 1);
+        ASSERT_TRUE(away.exec("ALTER TABLE history_matches_away RENAME TO history_matches").ok());
+        for (int minute = 0; minute < 3; ++minute) {                                   // (the store looks again every minute of the server's clock)
+            rig.ms += HistoryStore::kRetryMs;
+            step();
+        }
+        for (int i = 0; i < 300 && rig.history.count() == 0; ++i) step();
+        ASSERT_TRUE(rig.history.available() && rig.history.count() == 1 && rig.history.knows(id) && rig.feeder.counted() == 1 && rig.feeder.left_out() == 0);
+    } TEST_END();
+
+    TEST_CASE("HS5.13 On a real clock a recording of 7,000 turns and four players is counted in many steps, and all but a few of them are short (the steps that open the file and keep the record are the few): a match that is played on the same thread loses a few milliseconds at a time, never the half second that a whole recording takes") {
+        if (match_file(0).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        MatchSpec spec;                                                                // (the same match as match file 4, with people's names: a match of computer players alone is no fresh one)
+        spec.map = "TREASURE";
+        spec.seed = 23;
+        spec.turns = 7000;
+        spec.names = {"Ann", "Bob", "Cy", "Di"};
+        const std::vector<uint8_t> people = record_match(spec);
+        ASSERT_TRUE(!people.empty());
+        Rig rig;
+        ASSERT_TRUE(rig.open());
+        const std::string id = rig.keep(people);
+        HistoryFeeder real(rig.history, rig.replays, maps_dir());                      // (the clock of the process)
+        real.set_slice(HistoryFeeder::kSliceUs);
+        std::vector<double> took;
+        uint32_t t = rig.ms;
+        const auto began = std::chrono::steady_clock::now();
+        while (rig.history.count() == 0 && took.size() < 20000) {
+            t += 120;                                                                  // (past the gap that any step of up to 25 ms is followed by: every call works)
+            const auto before = std::chrono::steady_clock::now();
+            real.step([] { return false; }, t);
+            took.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - before).count());
+        }
+        const double all_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - began).count();
+        ASSERT_TRUE(rig.history.count() == 1 && rig.history.knows(id));
+        std::vector<double> sorted = took;
+        std::sort(sorted.begin(), sorted.end());
+        const double p95 = sorted[sorted.size() * 95 / 100];
+        std::cout << "\n    " << took.size() << " steps, " << std::fixed << std::setprecision(1) << all_ms << " ms in all, the median step " << std::setprecision(2) << sorted[sorted.size() / 2] << " ms, the 95th percentile " << p95 << " ms, the longest "
+                  << std::setprecision(1) << sorted.back() << " ms";
+        ASSERT_GE(took.size(), size_t{40});
+        ASSERT_LT(p95, 20.0);                                                          // (a tick is 50 ms; a step is 2 ms and the bound is ten times that, for a machine that is busy)
+    } TEST_END();
+
+    TEST_CASE("HS5.14 A sliced feeder does not count a fresh recording that the history knows, or that its owner took out (the marker): it is looked up by its id, not played") {
+        if (match_file(1).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        Rig rig;
+        ASSERT_TRUE(rig.open());
+        rig.work_us = 50;
+        rig.feeder.set_slice(HistoryFeeder::kSliceUs);
+        const std::string counted = rig.keep(match_file(1));
+        const std::string taken_out = rig.keep(match_file(2));
+        const std::string wanted = rig.keep(match_file(3));
+        std::string why;
+        for (const std::string& id : {counted, taken_out}) {
+            const Played pl = play_file(match_file(id == counted ? 1 : 2));
+            ASSERT_TRUE(pl.ok);
+            ASSERT_TRUE(rig.history.put(make_history_record(id, rig.now, pl.rep, pl.outcome), why));
+        }
+        ASSERT_TRUE(rig.history.remove(taken_out, true, why) == HistoryStore::Removal::Done);          // (the owner took it out: its recording is still kept)
+        for (int i = 0; i < 300 && rig.history.count() < 2; ++i) {
+            rig.ms += 20;
+            rig.feeder.step([] { return false; }, rig.ms);
+        }
+        for (int i = 0; i < 20; ++i) {
+            rig.ms += 20;
+            rig.feeder.step([] { return false; }, rig.ms);
+        }
+        ASSERT_TRUE(rig.history.knows(wanted) && rig.feeder.counted() == 1 && rig.history.count() == 2 && rig.history.marker_count() == 1);
+        ASSERT_TRUE(rig.feeder.left_out() == 0 && rig.feeder.pending() == 0);
+    } TEST_END();
+
+    TEST_CASE("HS5.15 A turn that takes the state hash (every 100th) starts a step of its own, and so does the end of the play: a step never plays the turns before such a turn and then the turn itself, however much of its budget is left") {
+        if (match_file(1).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        Rig rig;
+        ASSERT_TRUE(rig.open());
+        rig.work_us = 5;                                                               // (a step of 2,000 us could play 400 turns)
+        rig.feeder.set_slice(HistoryFeeder::kSliceUs);
+        const std::string id = rig.keep(match_file(1));                                // (1,000 turns, a hash every 100)
+        uint64_t widest = 0;
+        int steps = 0;
+        while (rig.history.count() == 0 && steps < 200) {
+            rig.ms += 20;
+            const uint64_t before = rig.work_clock;
+            rig.feeder.step([] { return false; }, rig.ms);
+            widest = std::max(widest, rig.work_clock - before);
+            ++steps;
+        }
+        ASSERT_TRUE(rig.history.knows(id) && rig.feeder.counted() == 1);
+        ASSERT_LE(widest, uint64_t{110} * rig.work_us);                                // (the turn that hashes and the 99 after it, with the looks at the clock round them: not 400 turns)
+        ASSERT_GE(steps, 12);                                                          // (ten hashes and the end of the play make the steps that were not cut by the budget)
+    } TEST_END();
+
+    TEST_CASE("HS5.16 A sliced feeder counts a match of computer players alone, a file of the bot arena and a match that ended more than an hour ago only while the server is quiet: only a match with a person in it that has just ended is worked at any time") {
+        if (match_file(4).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        Rig rig;
+        ASSERT_TRUE(rig.open());
+        rig.work_us = 50;
+        rig.feeder.set_slice(HistoryFeeder::kSliceUs);
+        const std::string bots = rig.keep(match_file(4));                              // (four computer players)
+        const std::string people = rig.keep(match_file(1));
+        const ReplayEntry* bot_entry = rig.replays.find(history_recording_file(bots));
+        const ReplayEntry* people_entry = rig.replays.find(history_recording_file(people));
+        ASSERT_TRUE(bot_entry != nullptr && bot_entry->bots_only && people_entry != nullptr && !people_entry->bots_only);
+        int asked = 0;
+        const auto step = [&](bool idle) {
+            rig.ms += 20;
+            return rig.feeder.step([&, idle] {
+                ++asked;
+                return idle;
+            }, rig.ms);
+        };
+        for (int i = 0; i < 400 && rig.history.count() == 0; ++i) step(false);
+        ASSERT_TRUE(rig.history.knows(people) && !rig.history.knows(bots));
+        for (int i = 0; i < 100; ++i) step(false);
+        ASSERT_TRUE(rig.history.count() == 1 && asked > 0);                            // (the match of the computers waits as long as a person's match runs)
+        for (int i = 0; i < 600 && rig.history.count() < 2; ++i) step(true);
+        ASSERT_TRUE(rig.history.knows(bots) && rig.feeder.counted() == 2);
+    } TEST_END();
+
+    TEST_CASE("HS5.17 A recording on a 256 x 256 map with four players is counted in steps of a few milliseconds on a real clock: the turns that take the state hash and the step that opens the file are the long ones, and no step takes a tick") {
+        const std::string big = grown_tiny(256, 256);
+        if (big.empty() || match_file(0).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        TempDir players;
+        { std::ofstream out((players.path / "BIG256.LVL").string(), std::ios::binary); out << big; }
+        MatchSpec spec;
+        spec.map = "BIG256";
+        spec.dir = players.path.string();
+        spec.file = "BIG256.LVL";
+        spec.seed = 9;
+        spec.turns = 1200;                                                             // (twelve hashes)
+        spec.names = {"Ann", "Bob", "Cy", "Di"};
+        const std::vector<uint8_t> bytes = record_match(spec);
+        ASSERT_TRUE(!bytes.empty());
+        Rig rig(maps_dir(), players.path.string());
+        ASSERT_TRUE(rig.open());
+        const std::string id = rig.keep(bytes);
+        ASSERT_TRUE(!id.empty());
+        HistoryFeeder real(rig.history, rig.replays, maps_dir(), std::function<uint64_t()>(), players.path.string());
+        real.set_slice(HistoryFeeder::kSliceUs);
+        std::vector<double> took;
+        uint32_t t = rig.ms;
+        const auto began = std::chrono::steady_clock::now();
+        while (rig.history.count() == 0 && took.size() < 20000) {
+            t += 120;
+            const auto before = std::chrono::steady_clock::now();
+            real.step([] { return false; }, t);
+            took.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - before).count());
+        }
+        const double all_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - began).count();
+        ASSERT_TRUE(rig.history.count() == 1 && rig.history.knows(id) && real.counted() == 1);
+        std::vector<double> sorted = took;
+        std::sort(sorted.begin(), sorted.end());
+        const double p95 = sorted[sorted.size() * 95 / 100];
+        std::cout << "\n    " << took.size() << " steps, " << std::fixed << std::setprecision(1) << all_ms << " ms in all, the median step " << std::setprecision(2) << sorted[sorted.size() / 2] << " ms, the 95th percentile " << p95
+                  << " ms, the longest " << std::setprecision(1) << sorted.back() << " ms";
+        ASSERT_GE(took.size(), size_t{40});
+        ASSERT_LT(p95, 15.0);                                                          // (a turn of this map takes up to 5 ms and a hash turn is a step of its own: a tick is 50 ms; the bound is for a machine that is busy)
+    } TEST_END();
+
+    TEST_CASE("HS5.18 A recording on a map with more cells than a room plays (300 x 300) is left out for good: it is no map that is not there, so nothing waits for the maps to change, and the line in the log says that the map is bigger") {
+        const std::string big = grown_tiny(300, 300);
+        if (big.empty() || match_file(0).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        TempDir players;
+        { std::ofstream out((players.path / "BIG300.LVL").string(), std::ios::binary); out << big; }
+        MatchSpec spec;
+        spec.map = "BIG300";
+        spec.dir = players.path.string();
+        spec.file = "BIG300.LVL";
+        spec.seed = 9;
+        spec.turns = 300;
+        spec.names = {"Ann", "Bob", "Cy", "Di"};
+        const std::vector<uint8_t> bytes = record_match(spec);
+        ASSERT_TRUE(!bytes.empty());
+        Rig rig(maps_dir(), players.path.string());
+        ASSERT_TRUE(rig.open());
+        ASSERT_TRUE(!rig.keep(bytes).empty());
+        rig.drain(8);
+        ASSERT_TRUE(rig.history.count() == 0 && rig.feeder.left_out() == 1 && rig.feeder.left_out_for_map() == 0);
+        ASSERT_EQ(rig.feeder.retry_skipped_maps(), size_t{0});                         // (a map that a room does not play does not wait for the list of maps to change)
+        ASSERT_TRUE(lines_with(rig.history.take_notes(), "is bigger than a room plays online") == 1);
     } TEST_END();
 
     TEST_CASE("HS7.1 A store that only reads a file that another connection writes (the history service's HTTP side): a read scope sees what was committed before it, keeps one state to its end, and the next one sees the rest; the counts and the sums are made again") {

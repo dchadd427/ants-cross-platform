@@ -1,4 +1,4 @@
-// The stand batch (docs/BOTS.md, "The stand batch"): a report of a match on TREASURE, 2026-10-10: a combat ant was blocking where the regular ant could walk, and it did not know that it can move
+// The stand batch (docs/BOT_TACTICS.md, "The stand batch"): a report of a match on TREASURE, 2026-10-10: a combat ant was blocking where the regular ant could walk, and it did not know that it can move
 // it; the fire ants need to fight each other: a fire ant is firing in a team, and that team has a fire ant that could just go and try to kill the other fire ant, or at least try to knock it off the fire
 // and then get it with its other ants (stand your ground); a bot that is down by a few hundred points is very unlikely to win by just continuing to eat, so it could select all its ants and
 // take them to the enemy base; that is why it is really important to put bombs around the own base: the enemy would have to go one or two ants at a time and path around the bombs.
@@ -66,7 +66,7 @@ void run_stand_tests() {
         const LevelPlan hard = plan_for(Level::Hard);
         for (const LevelPlan* p : {&easy, &medium, &hard}) {
             ASSERT_TRUE(p->fire_duel);
-            ASSERT_FALSE(p->fire_draft);                                                                     // (the rule is there, the plans leave it off: docs/BOTS.md, "The stand batch")
+            ASSERT_FALSE(p->fire_draft);                                                                     // (the rule is there, the plans leave it off: docs/BOT_TACTICS.md, "The stand batch")
             ASSERT_EQ(p->ramp_unjam_ticks, 40u);
         }
         ASSERT_TRUE(hard.ramp_unjam);                                                                        // (the gate is Hard's: GateTask never runs at the other levels)

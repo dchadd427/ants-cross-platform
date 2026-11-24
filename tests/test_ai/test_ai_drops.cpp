@@ -1,4 +1,4 @@
-// AI47: the power-ups that dead typed ants leave (docs/BOTS.md, "Dropped power-ups"): Medium and Hard send a worker to take back a power-up of a kind that the team had and has none of now, Hard also
+// AI47: the power-ups that dead typed ants leave (docs/BOT_TACTICS.md, "Dropped power-ups"): Medium and Hard send a worker to take back a power-up of a kind that the team had and has none of now, Hard also
 // takes a Fire, Bomber or Thief power-up that lies on another team's side when it has none of the kind (the trip's contest check still decides who is first), Easy plays as it did. Hand-made worlds
 // (b41_helpers.hpp: four hills on a field of 60 x 60, eight workers of seat 0 near its hill at (4, 4)); the power-up of a dead ant is the engine's own (kill_unit leaves it as a death does).
 //

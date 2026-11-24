@@ -395,7 +395,7 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
 {   // empty: just the visitor
     const r = rig();
     r.live(); r.who(FULL([row(1, 'maple')], { n: 1 }));
-    same('just the visitor: only the visitor\'s own row; no note, no button, no groups', [texts(r.panel(), 'pl-note').length, byClass(r.panel(), 'pl-host').length, r.panel().findAll((e) => e.tagName === 'button').length, r.names(), r.groups().length], [0, 0, 0, ['maple'], 0]);
+    same('just the visitor: only the visitor\'s own row; no note, no button, no groups', [texts(r.panel(), 'pl-note').length, byClass(r.panel(), 'pl-host').length, r.panel().findAll((e) => e.tagName === 'button' && e.className !== 'pl-tab').length, r.names(), r.groups().length], [0, 0, 0, ['maple'], 0]);       // (the two tabs of a person who is logged in are buttons: none else)
     same('... and nothing in the list under the row says anything', texts(one(r.panel(), 'pl-list'), 'pl-note').length + byClass(one(r.panel(), 'pl-list'), 'pl-card').length, 0);
     const guest = rig();
     guest.live(W({ you: null })); guest.who(FULL([], { n: 1, g: 1 }));
@@ -822,7 +822,7 @@ function bringPlayers(env) {
     r.live(W({ me: 1 })).who(FULL([row(1, 'maple'), row(2, 'pat', 'wait', { priv: true }), row(3, 'quinn', 'play', { priv: true }), row(4, 'rex', 'play', { solo: true, map: 'TREASURE.LVL' }), row(5, 'sky', 'play', { pub: true, map: 'ISLANDS.LVL', n: 3 }), row(6, 'tom', 'play')]));
     same('the list: Waiting and Playing rows say what each is', ['pat', 'quinn', 'rex', 'sky', 'tom'].map((n) => r.metaOf(n)), ['Private room', 'Private game', 'Treasure · vs computer', 'Islands · 3 players', 'In a game']);
     const lockOf = (n) => { const c = byClass(r.panel(), 'pl-card').find((x) => one(x, 'pl-nm').textContent === n); return c ? byClass(c, 'pl-lock').length : -1; };
-    same('a lock only on the private rows, and no Join or button anywhere on them', [lockOf('pat'), lockOf('quinn'), lockOf('rex'), lockOf('sky'), r.joins().length, r.panel().findAll((e) => e.tagName === 'button').length], [1, 1, 0, 0, 0, 0]);
+    same('a lock only on the private rows, and no Join or button anywhere on them', [lockOf('pat'), lockOf('quinn'), lockOf('rex'), lockOf('sky'), r.joins().length, r.panel().findAll((e) => e.tagName === 'button' && e.className !== 'pl-tab').length], [1, 1, 0, 0, 0, 0]);
     same('the hub is told a private room is private, and its code, seats and map apart, for invitations', (() => {
         const q = rig({ client: CLIENT(ROOM({ isPublic: false }), 'k7m2xq'), count: { people: 2, size: 4 } });
         q.live(W({})); q.tick(0);
@@ -877,7 +877,7 @@ check('the hash of the note is the game page\'s own', ['c1v3rr', 'a', 'k7m2xq', 
     r.live(W({ me: 1, you: { name: 'maple', mod: true, role: 'admin' } }));
     r.who(FULL([row(1, 'maple', 'look', { mod: true, role: 'admin' }), row(2, 'zed', 'look', { mod: true, role: 'mod' }), row(4, 'clover', 'wait', { pub: true, map: 'TREASURE.LVL', n: 2, of: 4, code: 'c1v3rr' }), row(5, 'sage'), row(6, 'sage', 'away')], { n: 6 }));
     same('a row of the list carries the hub\'s number of the row as data-i; the visitor\'s own place does not (it has no number to act on)', [byClass(r.panel(), 'pl-card').map((c) => c.getAttribute('data-i')).filter((x) => x !== null).sort().join(), byClass(r.panel(), 'pl-card').filter((c) => c.getAttribute('data-i') === null).length], ['2,4,5,6', 1]);
-    same('person(i): the number, the name, the role, what the person does and where, in words', [r.list.person(4), r.list.person(2), r.list.person(5)], [{ i: 4, name: 'clover', role: 'none', at: 'wait', where: 'Waiting \u00b7 Treasure \u00b7 2 of 4' }, { i: 2, name: 'zed', role: 'mod', at: 'look', where: 'Looking' }, { i: 5, name: 'sage', role: 'none', at: 'look', where: 'Looking' }]);
+    same('person(i): the number, the name, the role, what the person does and where, in words', [r.list.person(4), r.list.person(2), r.list.person(5)], [{ i: 4, name: 'clover', role: 'none', at: 'wait', where: 'Waiting \u00b7 Treasure \u00b7 2 of 4', word: 'row:4', following: false }, { i: 2, name: 'zed', role: 'mod', at: 'look', where: 'Looking', word: 'row:2', following: false }, { i: 5, name: 'sage', role: 'none', at: 'look', where: 'Looking', word: 'row:5', following: false }]);
     same('...a person who is Away has a row (and a number) and no sheet: the hub takes `row:` only for a person with an open socket, so every command would be refused', [byClass(r.panel(), 'pl-card').some((c) => c.getAttribute('data-i') === '6'), r.list.person(5).name, r.list.person(6)], [true, 'sage', null]);
     same('...the visitor\'s own row (number 1 here), a number that is not a row, and anything that is not a number are nobody', [r.list.person(1), r.list.person(99), r.list.person('4'), r.list.person(-1), r.list.person(1.5), r.list.person(null)], [null, null, null, null, null, null]);
     check('drawn(fn) is told when the list was made again (a change in it), with the list already drawn', drawn.length >= 1 && drawn[drawn.length - 1] === 5 && r.list.list.parent !== null);
@@ -946,6 +946,59 @@ check('the hash of the note is the game page\'s own', ['c1v3rr', 'a', 'k7m2xq', 
     check('... but not when an invitation is about to ask: the hub is told now, the room as it is', f.hereFrames().length === before + 1 && f.hereFrames()[before].inv.n === 3);
     f.list.directory().flush();
     check('and once, not twice', f.hereFrames().length === before + 1);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// The people that the visitor follows: the hub's `follows` frame, the two tabs, the star, the Following tab (docs/HUB_PEOPLE.md, "Follows")
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const r0 = rig(), P0 = r0.Players, Chat0 = r0.win.AntsHomeChat, HH = (n) => ('a1b2c3d4e5f' + n).slice(0, 12);
+    same('the follows of a frame: handle, name, the number of the row while the person is here, the key of their lines; text is cleaned like a name', P0.followsOf({ rows: [{ h: HH(1), name: 'Fern', i: 4, k: 'k1' }, { h: HH(2), name: 'Bo‏b', i: -1 }, { h: HH(3), name: 'birch', i: 'x', k: 7 }] }, Chat0),
+        [{ h: HH(1), name: 'Fern', i: 4, k: 'k1' }, { h: HH(2), name: 'Bob', i: -1, k: '' }, { h: HH(3), name: 'birch', i: -1, k: '' }]);
+    same('...a row that is wrong is left out, and a frame that is not one is none', [P0.followsOf({ rows: [{ h: 'nope', name: 'x' }, { h: HH(1) }, null, 5, { h: HH(1), name: '' }] }, Chat0), P0.followsOf({ rows: 'x' }, Chat0), P0.followsOf(null, Chat0), P0.followsOf({ rows: new Array(101).fill({ h: HH(1), name: 'x' }) }, Chat0)], [[], null, null, null]);
+    const model = { rows: { 4: { id: 4, name: 'Fern', at: 'wait' }, 5: { id: 5, name: 'Pebble', at: 'play' }, 6: { id: 6, name: 'Wren', at: 'wait' }, 7: { id: 7, name: 'Moss', at: 'away' }, 9: { id: 9, name: 'Ash', at: 'look' }, 1: { id: 1, name: 'maple', at: 'look' } } };
+    const f = (h, name, i) => ({ h: HH(h), name, i, k: '' });
+    const list = P0.followedList(model, [f(1, 'Fern', 4), f(2, 'Pebble', 5), f(3, 'Wren', 6), f(4, 'Moss', 7), f(5, 'birch', -1), f(6, 'Ash', 9), f(7, 'ghost', 55), f(8, 'maple', 1)], 1);
+    same('the Following tab\'s groups: by what they do now; a person who is away, who is not in the list at all or who is the visitor\'s own row is not here; each group by name', ['wait', 'play', 'look', 'gone'].map((g) => list[g].map((x) => x.follow.name)), [['Fern', 'Wren'], ['Pebble'], ['Ash'], ['birch', 'ghost', 'maple', 'Moss'].sort((a, b) => (a < b ? -1 : 1))]);
+}
+{
+    const FR = (i, name, extra) => Object.assign({ h: ('c0ffee00000' + i).slice(0, 12), name, i: -1, k: '' }, extra);
+    const r = rig();
+    r.live(W({ me: 1 }));
+    r.who(FULL([row(1, 'maple'), row(2, 'Fern', 'wait', { pub: true, map: 'TREASURE.LVL', n: 1, of: 4, code: 'c1v3rr' }), row(3, 'Wren', 'wait', { priv: true }), row(4, 'Pebble', 'play', { priv: true }), row(5, 'tess')], { n: 5 }));
+    r.emit('follows', { rows: [FR(2, 'Fern', { i: 2 }), FR(3, 'Wren', { i: 3 }), FR(4, 'Pebble', { i: 4 }), FR(6, 'birch')] });
+    const tabs = byClass(r.panel(), 'pl-tab');
+    same('a person who is logged in has two tabs, Everyone (all of the list) and Following (the people they follow), Everyone first and selected', [tabs.map((t) => t.textContent.replace(/\s+/g, ' ').trim()), tabs.map((t) => t.getAttribute('aria-selected')), one(r.panel(), 'pl-tabs').getAttribute('role')], [['Everyone 5', 'Following 4'], ['true', 'false'], 'tablist']);
+    same('Everyone: a star after the name of each person that is followed, with the words for a screen reader, and none after the others', [byClass(r.panel(), 'pl-card').map((c) => [one(c, 'pl-nm').textContent, byClass(c, 'pl-star').length]).filter((x) => x[1]).map((x) => x[0]).sort(), texts(r.panel(), 'pl-sr').filter((t) => /following/.test(t)).length], [['Fern', 'Pebble', 'Wren'], 3]);
+    tabs[1].click();
+    same('the Following tab: the groups by what the people do now, then the person who is not here; the visitor\'s own row is not on it and there are no guests', [r.groups().map((g) => [g.g, g.n, g.names]), byClass(r.panel(), 'pl-you').length === 0 || one(r.panel(), 'pl-you').children.length === 0 ? 'no own row' : 'own row', byClass(r.panel(), 'pl-guests').length], [[['wait', '2', ['Fern', 'Wren']], ['play', '1', ['Pebble']], ['away', '1', ['birch']]], 'no own row', 0]);
+    check('...the two tabs are still there, Following is the selected one', byClass(r.panel(), 'pl-tab').map((t) => t.getAttribute('aria-selected')).join() === 'false,true');
+    check('...it says that only the visitor sees the list and that nobody is told', texts(r.panel(), 'pl-keep').join() === 'Only you see this list. Nobody is told that you follow them.');
+    check('...a person who is not here has a card with a number from 900,000,000, the hub\'s handle and no row of the list', (() => { const c = r.panel().findAll((e) => e.getAttribute && e.getAttribute('data-h') !== null)[0]; return !!c && Number(c.getAttribute('data-i')) >= r.Players.FAR && c.getAttribute('data-h') === FR(6, 'birch').h; })());
+    same('...person(n) of that card says so for the sheet: the handle is the word, the person is followed and is not here', [r.list.person(r.Players.FAR + 3).word, r.list.person(r.Players.FAR + 3).following, r.list.person(r.Players.FAR + 3).far, r.list.person(r.Players.FAR + 3).where, r.list.person(r.Players.FAR + 4)], [FR(6, 'birch').h ? 'h:' + FR(6, 'birch').h : '', true, true, 'Not here', null]);
+    same('a person of the list: person(i) is the row, and says whether they are followed', [r.list.person(2).word, r.list.person(2).following, r.list.person(5).following], ['row:2', true, false]);
+    same('directory().following: by the number of the row, or by the key of the lines of the person', [r.list.directory().following({ row: 2 }), r.list.directory().following({ row: 5 }), (r.emit('follows', { rows: [FR(2, 'Fern', { i: 2, k: 'k-fern' })] }), r.list.directory().following({ k: 'k-fern' })), r.list.directory().following({ k: 'k-other' }), r.list.directory().following({ k: '' })], [true, false, true, false, false]);
+    tabs.forEach((t) => t.getAttribute('data-tab') === 'all' && t.click());
+    check('Everyone again: the whole list, with the visitor\'s own row', r.names().indexOf('maple') !== -1 && r.names().indexOf('tess') !== -1 && byClass(r.panel(), 'pl-group').length >= 1);
+    r.emit('follows', { rows: [] });
+    r.panel().findAll((e) => e.getAttribute && e.getAttribute('data-tab') === 'following')[0].click();
+    same('nobody followed: the tab says so and how to follow, and the line about who sees the list is there', [texts(r.panel(), 'pl-nt'), texts(r.panel(), 'small').length, byClass(r.panel(), 'pl-card').length, texts(r.panel(), 'pl-keep').length], [['You follow nobody yet'], 1, 0, 1]);
+    const bad = rig();
+    bad.emit('follows', { rows: [FR(1, 'x', { k: 'kx' })] });
+    check('a follows frame before the welcome is nothing (not kept for the welcome that comes)', bad.list.directory().following({ k: 'kx' }) === false);
+    bad.live(W({})); bad.who(FULL([row(1, 'maple')], { n: 1 }));
+    bad.emit('follows', { rows: 'x' }); bad.emit('follows', null); bad.emit('follows', { rows: new Array(101).fill(FR(1, 'x')) });
+    check('a follows frame that comes before the welcome, or that is wrong, changes nothing', bad.list.model().n === 1 && bad.list.directory().following({ row: 1 }) === false && byClass(bad.panel(), 'pl-tab').map((t) => t.textContent.replace(/\s+/g, ' ').trim()).join() === 'Everyone 1,Following 0');
+    const hostile = rig(); hostile.live(W({})); hostile.who(FULL([row(1, 'maple')], { n: 1 }));
+    hostile.emit('follows', { rows: [FR(1, '<img src=x onerror=alert(1)>', {}), FR(2, 'a'.repeat(300))] });
+    hostile.panel().findAll((e) => e.getAttribute && e.getAttribute('data-tab') === 'following')[0].click();
+    check('names of the people that are followed are text: no markup is written, and a long one is cut', hostile.env.innerHTMLWrites.length === 0 && texts(hostile.panel(), 'pl-nm').every((t) => t.length <= 33) && texts(hostile.panel(), 'pl-nm').indexOf('<img src=x onerror=alert(1)>') !== -1);
+    const guest = rig(); guest.live(W({ you: null })); guest.who(FULL([], { n: 1, g: 1 }));
+    check('a guest has no tabs and nothing of this', byClass(guest.panel(), 'pl-tab').length === 0 && byClass(guest.panel(), 'pl-keep').length === 0);
+    const again = rig(); again.live(W({})); again.who(FULL([row(1, 'maple'), row(2, 'Fern')], { n: 2 })); again.emit('follows', { rows: [FR(2, 'Fern', { i: 2, k: 'ky' })] }); again.live(W({}));
+    check('a welcome forgets the follows even where no loss came first (the hub sends them again)', again.list.directory().following({ k: 'ky' }) === false && again.list.directory().following({ row: 2 }) === false);
+    const gone = rig(); gone.live(W({})); gone.who(FULL([row(1, 'maple'), row(2, 'Fern')], { n: 2 })); gone.emit('follows', { rows: [FR(2, 'Fern', { i: 2 })] }); gone.lost(); gone.live(W({})); gone.who(FULL([row(1, 'maple'), row(2, 'Fern')], { n: 2 }));
+    check('a new socket forgets the follows (the hub sends them again)', byClass(gone.panel(), 'pl-card').every((c) => byClass(c, 'pl-star').length === 0) && byClass(gone.panel(), 'pl-tab').map((t) => t.textContent.replace(/\s+/g, ' ').trim()).join() === 'Everyone 2,Following 0');
 }
 
 console.log('players list: ' + checks + ' checks, ' + failures + ' failed');

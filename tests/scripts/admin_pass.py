@@ -1,4 +1,4 @@
-"""Passes of the admin page's door, for tests that stand in for the chat hub's gate (docs/HUB.md, "The admin page's door"; docs/MAP_SUBMISSIONS.md, "The admin page").
+"""Passes of the admin page's door, for tests that stand in for the chat hub's gate (docs/HUB_ROLES.md, "The admin page's door"; docs/MAP_SUBMISSIONS.md, "The admin page").
 
 The hub's gate answers 204 with `X-Ants-Admin-Pass: v1.<base64url payload>.<hex mac>`; the game server checks it. This file makes the same text from the shared key, with the standard
 library only, so that a test can play the gate: a stand-in hub for the site's nginx, or a request made by hand to the game server's door. The keys are made as the hub makes them: the secret

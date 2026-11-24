@@ -123,6 +123,10 @@
         usage: ['Type /ignore NAME, for example /ignore pebble.', 'Type /unignore NAME, for example /unignore pebble.'], nobody: 'Nobody in the chat has that name.', ambiguous: 'Several people show that name, so it cannot be told which one you mean.',
         self: 'You cannot ignore yourself.', staff: 'A moderator or an administrator cannot be ignored.', full: 'Your list is full (50 people). Type /unignore NAME to make room.', not: 'That person is not on your list.'
     };
+    var FOLLOW_ERR = {       // the words of the answers to /follow, /unfollow and /msg (the third of a list is /msg's)
+        usage: ['Type /follow NAME, for example /follow pebble.', 'Type /unfollow NAME, for example /unfollow pebble.', 'Type /msg NAME, for example /msg pebble.'], nobody: 'Nobody in the chat has that name.', ambiguous: 'Several people show that name, so it cannot be told which one you mean.',
+        self: ['You cannot follow yourself.', '', 'You cannot message yourself.'], full: 'You follow 100 people. Type /unfollow NAME to make room.', not: 'You do not follow anybody by that name.'
+    };
     var INVITE_ERR = {
         usage: 'Type /invite NAME, for example /invite pebble.', nobody: 'Nobody here by that name. Type /invite and a space to see who is.', ambiguous: 'Several people show that name, so it cannot be told which one you mean.',
         self: 'You cannot invite yourself.', noroom: 'You are not in a room. Use Quick host to open one, then invite.', total: 'Too many invitations. Wait a minute, then try again.'
@@ -168,6 +172,14 @@
         if (r === 'busy') return bad((to || 'That person') + ' is playing a match.');
         return Object.prototype.hasOwnProperty.call(INVITE_ERR, r) ? bad(INVITE_ERR[r]) : bad(TEXT.generic);
     }
+    function followReply(c, r, m, say, bad) {   // the hub's answer to /follow, /unfollow and /msg (`open` opens the Messages part, which the dock tells: it says nothing here)
+        var i = c === 'follow' ? 0 : c === 'unfollow' ? 1 : 2, to = typeof m.to === 'string' ? clean(m.to, LIMIT.name) : '', w;
+        if (r === 'open') return null;
+        if (r === 'ok') return say(c === 'follow' ? 'Done. You follow ' + (to || 'that person') + '. You get an alert when they open a public room, and nobody is told.' : 'Done. You do not follow that person any more.');
+        w = r === 'usage' ? FOLLOW_ERR.usage[i] : FOLLOW_ERR[r];
+        if (Array.isArray(w)) w = w[i];
+        return typeof w === 'string' && w ? bad(w) : bad(TEXT.generic);
+    }
     function replyOf(m, typed, now, clock) {   // a `reply` frame as { cls, lines, batches }, { help: true }, or null
         var c = typeof m.c === 'string' ? m.c : '', r = typeof m.r === 'string' ? m.r : '', say = function (t, cls) { return { cls: cls || '', lines: [t], batches: [] }; }, bad = function (t) { return say(t, 'gc-err'); }, n, at, list;
         clock = clock || function (d) { return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); };
@@ -176,11 +188,12 @@
         if (c === 'help' && r === 'list') return { help: true };
         if (r === 'rate') { n = Math.min(LIMIT.wait, Math.max(1, int(m.wait))); return bad('Too fast: wait ' + n + (n === 1 ? ' second' : ' seconds') + ' before the next ' + (/^[a-z]{1,16}$/.test(c) && c !== 'unknown' ? '/' + c : 'command') + '.'); }
         if (c === 'ignore' || c === 'unignore') {
-            if (r === 'ok') { n = int(m.n); return say(c === 'ignore' ? 'Done. You will not see that person\u2019s lines any more. You ignore ' + (n ? peopleOf(n) : 'nobody') + ' now.' : 'Done. You see that person\u2019s lines again. You ignore ' + (n ? peopleOf(n) : 'nobody') + ' now.'); }
+            if (r === 'ok') { n = int(m.n); return say(c === 'ignore' ? 'Done. You will not see that person\u2019s lines or private messages any more. You ignore ' + (n ? peopleOf(n) : 'nobody') + ' now.' : 'Done. You see that person\u2019s lines again. You ignore ' + (n ? peopleOf(n) : 'nobody') + ' now.'); }
             if (r === 'usage') return bad(IGNORE_ERR.usage[c === 'ignore' ? 0 : 1]);
             return Object.prototype.hasOwnProperty.call(IGNORE_ERR, r) && r !== 'usage' ? bad(IGNORE_ERR[r]) : bad(TEXT.generic);
         }
         if (c === 'invite') return inviteReply(m, typed, say, bad);
+        if (c === 'follow' || c === 'unfollow' || c === 'msg') return followReply(c, r, m, say, bad);
         if (c !== 'bots') return bad(TEXT.generic);
         if (r === 'started') return { cls: '', lines: startedOf(m, now, clock), batches: [] };
         if (r === 'stopped') {

@@ -1,4 +1,4 @@
-// AI22: the can't-go counter of the arena (docs/BOTS.md, "The can't-go loop"): what CantGoTally counts of the "Can't go there." and "Can't do that..." reactions and of the orders that
+// AI22: the can't-go counter of the arena (docs/BOT_PLAY.md, "The can't-go loop"): what CantGoTally counts of the "Can't go there." and "Can't do that..." reactions and of the orders that
 // were followed by one, in hand-made worlds with the real engine, and that play_match reports it. The counter changes nothing in a match (AI22.8); bot_arena --selftest checks that it
 // reaches the report.
 //

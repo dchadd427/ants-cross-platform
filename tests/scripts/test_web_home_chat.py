@@ -79,7 +79,7 @@ class ThePageAndTheOtherPages(unittest.TestCase):
                     naming_the_socket.add(rel)
         self.assertEqual(sorted(naming_the_dock), ["web/home/chat.css", "web/home/chat.js", "web/home/home.js"], "the front page's own script asks for the dock; no other page does")
         self.assertEqual(sorted(naming_the_socket), ["web/home/chat.js", "web/hub_here.js"], "only the dock's script knows the address of the hub's socket: a page that opens a socket to it is a page that has a chat")
-        self.assertEqual(sorted(naming_the_door), ["web/admin_page.js", "web/front/mapmaker_ai.js", "web/front/player_name.js", "web/home/chat.js", "web/home/pics.js", "web/home/post.js", "web/hub_here.js"], "the other scripts that name the hub: the map maker's Connect an AI (the key pages and the socket of an armed tab, /hub/ai/: tests/scripts/test_web_mapmaker_ai.py), the one that asks for the name to play under (its one page, GET /hub/me: tests/scripts/test_web_player_name.py), the admin page, whose one link is the hub's Discord login (tests/scripts/test_web_admin.py), and the two parts of the chat's images, which name the site's addresses of the images and of the upload (/hub/img/: tests/scripts/test_web_home_images.py)")
+        self.assertEqual(sorted(naming_the_door), ["web/admin_page.js", "web/front/mapmaker_ai.js", "web/front/player_name.js", "web/home/chat.js", "web/home/pics.js", "web/home/post.js", "web/hub_here.js", "web/match.html", "web/matches.html"], "the other scripts that name the hub: the map maker's Connect an AI (the key pages and the socket of an armed tab, /hub/ai/: tests/scripts/test_web_mapmaker_ai.py), the one that asks for the name to play under (its one page, GET /hub/me: tests/scripts/test_web_player_name.py), the admin page, whose one link is the hub's Discord login (tests/scripts/test_web_admin.py), the two parts of the chat's images, which name the site's addresses of the images and of the upload (/hub/img/: tests/scripts/test_web_home_images.py), and the two pages of the matches, whose one link is the hub's Discord login for a visitor who taps a heart (tests/scripts/test_web_likes.py)")
 
     def test_the_game_server_and_the_game_never_open_the_hub(self):
         for rel in (("web", "shell.html"), ("web", "front", "lobby_net.js"), ("web", "front", "lobby_chat.js")):
@@ -103,7 +103,7 @@ class TheLoaderInHome(unittest.TestCase):
 
     def test_the_dock_is_mounted_when_both_files_are_there_and_whatever_goes_wrong_stays_in_it(self):
         self.assertIn("var parts = 2;", self.js)
-        self.assertIn("function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; }, load: lazy }); inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); } } catch (e) { dock = null; } }", self.js)
+        self.assertIn("function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; }, load: lazy }); inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); wantMessages(); } } catch (e) { dock = null; } }", self.js)
         self.assertIn("[bar, racts, tabs, dock && dock.root, players && players.root].forEach(function (n) { if (n) {", self.js, "a dialog over the page, or a hand-off, takes the dock's keys and presses too: the focus does not go behind the modal")
         self.assertIn("css.onload = mountDock;", self.js)
         self.assertIn("js.src = CHAT.script; js.async = true; js.onload = mountDock;", self.js, "async: the script never holds the page")
@@ -369,7 +369,7 @@ def contrast(a, b):
 
 
 class TheRoles(unittest.TestCase):
-    """the page's side of the roles (docs/HUB.md "Roles" and "Moderation"): what it reads, what it draws, the words, and what it never does with a person's text; the behavior is run in
+    """the page's side of the roles (docs/HUB_ROLES.md "Roles" and docs/HUB_COMMANDS.md "Moderation"): what it reads, what it draws, the words, and what it never does with a person's text; the behavior is run in
     tests/scripts/web_home_chat_check.js (the fake clock) and web_home_chat_hub_check.js (a real socket)"""
     @classmethod
     def setUpClass(cls):

@@ -362,7 +362,7 @@ bool Application::is_bot_seat(uint8_t seat) const {
     return bot_spec_of(seat) != nullptr;
 }
 
-// Why a bot declined the local player's invitation: the original's "... rejected teaming up" says that it did, never why, so ONE chat-log line follows it (docs/BOTS.md, "Alliances"), from the rule
+// Why a bot declined the local player's invitation: the original's "... rejected teaming up" says that it did, never why, so ONE chat-log line follows it (docs/BOT_PLAY.md, "Alliances"), from the rule
 // the bot answers by (ai::team_up_answer) asked of the world as it is now. Nothing for any other event, a person's answer, or a rule that would accept now.
 std::string Application::declined_team_up_note(const sim::NewsEvent& event) const {
     if (event.string_id != sim::strings::kTeamRejected || !is_bot_seat(event.subject)) return std::string();      // (the HUD hands over only the local player's events)

@@ -62,8 +62,8 @@ CONVERT_LAZY = ("mapmaker_convert.js", "mapmaker_crop.js")        # the map make
 AI_LAZY = ("mapmaker_ai.js", "mapmaker_ai_tools.js", "mapmaker_ai.css")        # the map maker's Connect an AI (docs/MAP_AI.md): the sheet and the strip, the tools and the style are loaded together the first time the button is pressed (web/front/mapmaker_app.js, withAi)
 PLAY_LAZY = ("mapmaker_play.js", "mapmaker_play.css")        # the map maker's Play this map (docs/MAP_EDITOR.md): its script and its style are loaded together the first time the button is pressed (web/front/mapmaker_app.js, playMap)
 GAME_MENU_FILES = ("game_menu.js", "game_menu.css")        # the game page's settings menu (docs/GAME_MENU.md): beside web/shell.html, not in web/front; its script and its style are fetched together once the game runs (web/shell.html, antsLoadGameMenu)
-SHAPES_FILE = "shapes.js"        # the one table of the picture's shapes (docs/PLAY_IN_BROWSER.md): beside web/shell.html, not in web/front; both the game page and the front page load it before their own code
-PICKER_FILE = "shape_picker.js"        # the picture's dropdown, a button and a list that the page makes (docs/PLAY_IN_BROWSER.md, "Which shape"): beside web/shell.html, not in web/front; the game page only (the front page's dropdown is a native one: it is never fullscreen)
+SHAPES_FILE = "shapes.js"        # the one table of the picture's shapes (docs/PLAY_PICTURE.md): beside web/shell.html, not in web/front; both the game page and the front page load it before their own code
+PICKER_FILE = "shape_picker.js"        # the picture's dropdown, a button and a list that the page makes (docs/PLAY_PICTURE.md, "Which shape"): beside web/shell.html, not in web/front; the game page only (the front page's dropdown is a native one: it is never fullscreen)
 GAME_SCRIPTS = ("test_game.js",)        # the game page's side of Play this map (web/shell.html loads it with the other scripts of this folder): not the lobby's, not the editor's
 SUBMIT_LAZY = ("mapmaker_submit.js",)        # the map maker's script that is loaded only when a player sends a map or looks at My submissions (web/front/mapmaker_app.js, withSubmit): not in the page's own list of scripts, so apart from the budget below
 
@@ -701,7 +701,7 @@ class TheRosterAnts(unittest.TestCase):
                     self.assertEqual(colors[one] & colors[other], set(), "%s and %s share no color of their body" % (one, other))
 
     def test_the_black_row_is_the_catalogs_pictures_of_the_sprites_as_they_are(self):
-        # the catalog's pictures are converted from the archive's paletted bitmaps (docs/PLAY_IN_BROWSER.md, "Interactive Asset Catalog"): they show that the reader above, and the tool's, read the right indices and the right palette
+        # the catalog's pictures are converted from the archive's paletted bitmaps (docs/PLAY_PICTURE.md, "Interactive Asset Catalog"): they show that the reader above, and the tool's, read the right indices and the right palette
         _width, _height, rows = read_png_pixels(os.path.join(FRONT, "ants.png"), alpha=True)
         black = list(self.SHIFT).index("black")
         for column, number in enumerate(self.order):

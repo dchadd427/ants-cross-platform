@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""docker/nginx.conf routes the pages of the chat hub's Discord login (run by ./run_tests.sh --fast and by the CI; docs/HUB.md "Login", "The site's nginx").
+"""docker/nginx.conf routes the pages of the chat hub's Discord login (run by ./run_tests.sh --fast and by the CI; docs/HUB_LOGIN.md "Login", docs/HUB.md "The site's nginx").
 
 /hub/login, /hub/callback, /hub/me, /hub/logout and /hub/forget go to the hub, and the login's cookie (`__Host-ants_hub`, Path=/, so the browser sends it with EVERY request to the site) goes to those
 and to nothing else. The text of the file is checked everywhere:
@@ -150,7 +150,7 @@ class TheText(unittest.TestCase):
     def test_the_hubs_cookies_reach_no_other_place_and_no_other_cookie_reaches_the_hub(self):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", CONF, re.M)
         allowed = {"= /hub/ws": "$hub_cookie_session", "= /hub/login": None, "= /hub/callback": "$hub_cookie_state", "= /hub/me": "$hub_cookie_session", "= /hub/logout": "$hub_cookie_session",
-                   "= /hub/forget": "$hub_cookie_session", "= /hub/admin/gate": "$hub_cookie_session", "^~ /admin/api/": None, "^~ /hub/admin/api/": "$hub_cookie_session",
+                   "= /hub/forget": "$hub_cookie_session", "= /hub/admin/gate": "$hub_cookie_session", "= /hub/likes/gate": "$hub_cookie_session", "^~ /admin/api/": None, "^~ /hub/admin/api/": "$hub_cookie_session",
                    "= /hub/img/up": "$hub_cookie_session",      # (the images' upload: the login's cookie and nothing else of the visitor's, tests/scripts/test_nginx_hub_img.py)
                    "= /hub/ai/keys": "$hub_cookie_session", "= /hub/ai/keys/revoke": "$hub_cookie_session", "= /hub/ai/ws": "$hub_cookie_session"}      # (the AI keys' pages and the socket of an armed tab: the login's cookie; the doors of an AI pass none, tests/scripts/test_nginx_hub_ai.py)
         checked = 0
@@ -188,7 +188,10 @@ class TheText(unittest.TestCase):
         self.assertLess(limits.Limits().discord_seconds, limits.Limits().discord_total_seconds)
         for name, block in PAGES.items():
             self.assertIn("proxy_connect_timeout 3s;", block, name)
-            if name != "callback":
+            if name == "forget":                                                               # (Forget me first takes the person's likes of replays back at the game server, where the hub gives the call door_seconds: nginx waits longer, so the hub always answers first)
+                self.assertIn("proxy_read_timeout 12s;", block, name)
+                self.assertGreater(12, limits.Limits().door_seconds)
+            elif name != "callback":
                 self.assertIn("proxy_read_timeout 5s;", block, name)
 
 

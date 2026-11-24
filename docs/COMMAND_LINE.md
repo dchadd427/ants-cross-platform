@@ -59,7 +59,7 @@ Every option of the game program `ants`, and the environment variables that it a
 - With `--join`, `--join-url` or `--host` it is this machine's choice for a room's START that it leads (network protocol 13: every machine and the server make the same team before the first tick; a guest's is ignored). Teams that the seats which play cannot make are told to everybody in the room ("No teams: ..."), and the match starts without.
 - A room that has teams of its own (its create block named them: `--room-teams`, below) makes those, for every start (the room that fills up included), and ignores `--teams`.
 - The start menu's Teams rows (Single player, and the Host panel for three or four players) and the Team 1 and Team 2 switches of the web page's card choose the same thing.
-- More: [`BOTS.md`](BOTS.md#alliances).
+- More: [`BOT_PLAY.md`](BOT_PLAY.md#alliances).
 
 ## Network
 

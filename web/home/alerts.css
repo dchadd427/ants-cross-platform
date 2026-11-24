@@ -29,6 +29,7 @@
 .al-ic { flex: none; display: grid; place-items: center; box-sizing: border-box; width: 40px; height: 40px; color: #9fe0b8; border: 2px solid #1c4a3b; border-radius: 50%; }
 .al-ic .al-ico { width: 22px; height: 22px; }
 .al-item[data-k="invite"] .al-ic { color: var(--gold); border-color: #8a6f14; }
+.al-item[data-k="msg"] .al-ic { color: #aab6ff; border-color: #3c4aa8; }
 .al-tx { flex: 1 1 auto; min-width: 0; }
 .al-t, .al-s { display: block; overflow-wrap: anywhere; }
 .al-t { font-size: 16px; line-height: 1.25; }

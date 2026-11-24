@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""docker/nginx.conf's door for the admin page's calls to the chat hub itself (/hub/admin/api/*: the lists, the status and the changes of the Chat, Log and Status sections; docs/HUB.md "The admin page's door").
+"""docker/nginx.conf's door for the admin page's calls to the chat hub itself (/hub/admin/api/*: the lists, the status and the changes of the Chat, Log and Status sections; docs/HUB_ROLES.md "The admin page's door").
 Run by ./run_tests.sh --fast and by the CI; the blocks are RUN where the program nginx is installed.
 
   - the text: one prefix location, and a map that lets a call through only when its method and its name are ones that the hub has (the lists are read from hub/admindoor.py, so a call that the hub gains
@@ -304,7 +304,7 @@ class TheHubIsNotThere(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("nginx"), "nginx is not installed: a real hub whose door is shut was NOT run (tests/scripts/test_nginx_hub_admin_api.py)")
 class TheDoorThatIsShut(unittest.TestCase):
-    """The real hub with no key (its door is shut: docs/HUB.md "The admin page's door") behind the real blocks of /admin/api/ (its gate) and /hub/admin/api/ (the page's calls to the hub): every answer says that
+    """The real hub with no key (its door is shut: docs/HUB_ROLES.md "The admin page's door") behind the real blocks of /admin/api/ (its gate) and /hub/admin/api/ (the page's calls to the hub): every answer says that
     the door is off, for a visitor with a login and for one with none, and none of them says "not an admin"; the game server is not asked."""
 
     def test_a_hub_with_no_key_is_door_off_for_everybody_and_never_not_allowed(self):

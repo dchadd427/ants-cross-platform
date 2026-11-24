@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the admin page's door in docker/nginx.conf (the internal gate, the auth_request of /admin/api/, its answers and its allowance; docs/HUB.md 'The admin page's door') for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose, and tests/scripts/test_nginx_submissions.py must notice, running the real blocks in front of a stand-in gate and a stand-in game server. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/nginx_admin_door_mutants.json --keep-going --jobs 1. Not listed on purpose: the gate's query and its body. nginx's auth_request makes its subrequest with no query and with an empty body whatever the block says, so the gate's explicit address and `proxy_pass_request_body off;` are second locks, and a mutant of either is equivalent (nothing a test can see changes). The mutants need an nginx program on the machine (without one they cannot be caught and show as survived).",
+ "note": "Mutants of the admin page's door in docker/nginx.conf (the internal gate, the auth_request of /admin/api/, its answers and its allowance; docs/HUB_ROLES.md 'The admin page's door') for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose, and tests/scripts/test_nginx_submissions.py must notice, running the real blocks in front of a stand-in gate and a stand-in game server. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/nginx_admin_door_mutants.json --keep-going --jobs 1. Not listed on purpose: the gate's query and its body. nginx's auth_request makes its subrequest with no query and with an empty body whatever the block says, so the gate's explicit address and `proxy_pass_request_body off;` are second locks, and a mutant of either is equivalent (nothing a test can see changes). The mutants need an nginx program on the machine (without one they cannot be caught and show as survived).",
  "defaults": {
   "test": "python3 -I tests/scripts/test_nginx_submissions.py",
   "build": []
@@ -14,8 +14,8 @@
   {
    "id": "gate_believes_the_visitors_address",
    "file": "docker/nginx.conf",
-   "old": "Cookie $hub_cookie_session;\n        proxy_set_header X-Client-Address $remote_addr;",
-   "new": "Cookie $hub_cookie_session;\n        proxy_set_header X-Client-Address $http_x_client_address;"
+   "old": "proxy_pass http://$ants_hub/hub/admin/gate;               # (an explicit address: the visitor's query is not passed on)\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Cookie $hub_cookie_session;\n        proxy_set_header X-Client-Address $remote_addr;",
+   "new": "proxy_pass http://$ants_hub/hub/admin/gate;               # (an explicit address: the visitor's query is not passed on)\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Cookie $hub_cookie_session;\n        proxy_set_header X-Client-Address $http_x_client_address;"
   },
   {
    "id": "gate_is_asked_with_the_visitors_headers",

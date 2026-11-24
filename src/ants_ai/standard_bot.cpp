@@ -89,7 +89,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     refusals_.look(view);                                        // (the orders that left are judged: an ant that stands where it stood did not obey)
     TaskContext context{view, orders, ledger_, profile_, *map, seat_};
 
-    // 0. the game type 187 has no food: the whole fight is the brawl's (docs/BOTS.md, "187: the brawl")
+    // 0. the game type 187 has no food: the whole fight is the brawl's (docs/BOT_PLAY.md, "187: the brawl")
     if (tactics_.plan.brawl187 && view.game_mode() == sim::GameMode::Kills187) {
         brawl_.step(context);
         return;
@@ -123,7 +123,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     }
     tactics_.far_work = (plan.islands && island_.active()) || tactics_.gate_map || tactics_.field_map;                            // (food beyond water, a gate or a field is work for the Swimmers and the goals: the ants do not go hunting, and the last ants do not go for a kill)
     tactics_.no_work = !any_reachable_pile && !tactics_.far_work;
-    // The food-gone batch (LevelPlan::gone, docs/BOTS.md "When the food is gone"): no food to walk to, no island, gate or field work for the ants, for plan.gone_wait ticks and with time left on the clock
+    // The food-gone batch (LevelPlan::gone, docs/BOT_TACTICS.md "When the food is gone"): no food to walk to, no island, gate or field work for the ants, for plan.gone_wait ticks and with time left on the clock
     {
         // nothing to do: every pile is eaten, or what is left is out of the hill's reach (a lunchbox that no walk joins to the hill is no pile) and the island, gate or field work has banked nothing for plan.gone_stall ticks
         bool walkable_food = false;
@@ -144,7 +144,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
             if (((plan.secure_kinds >> static_cast<unsigned>(p.kind)) & 1u) != 0 && power_up_side(*map, p.tile, present) == seat_) tactics_.wants[static_cast<size_t>(p.kind)] = 1;
         }
     }
-    if (plan.flower_sides || plan.flower_fire) {  // the drops of the flowers (docs/BOTS.md, "The flowers"): a landed drop has a side like a power-up of the start, and a bot without a Fire Ant wants the Fire that lands
+    if (plan.flower_sides || plan.flower_fire) {  // the drops of the flowers (docs/BOT_TACTICS.md, "The flowers"): a landed drop has a side like a power-up of the start, and a bot without a Fire Ant wants the Fire that lands
         for (const PowerUpView& p : view.powerups()) {
             const FlowerInfo* flower = map->flower_at(p.tile);
             if (flower == nullptr) continue;
@@ -269,7 +269,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
 // The gate play is on where the start analysis (GateInfo) finds every pile walled off from the seat's hill, also with the power-ups taken, and the island play (water, bridges, flights over channels)
 // does not own the map. Medium and Hard play it; Easy never does. The decision is made once: a map that is open at the start stays open for the bot when its free piles are eaten, so an open map is
 // played exactly as it was. A bot that is created in the middle of a match (a server that restores a match after a restart, room.cpp) takes this decision at its first look on the grid of that moment,
-// not of the start: fire walls and bombs that exist then are the map it sees (low impact; not redesigned, docs/BOTS.md "Walled maps"). With the decision goes Tactics::gate_beside: an own worker that
+// not of the start: fire walls and bombs that exist then are the map it sees (low impact; not redesigned, docs/BOT_PLAY.md "Walled maps"). With the decision goes Tactics::gate_beside: an own worker that
 // stands in a component next to a pile at that look (Ghetto: the start workers stand at the central pile). The plain economy has food to harvest there, so the opening is not held back.
 void StandardBot::decide_gate_map(TaskContext& context) {
     if (!context.view.has_grid()) return;                                                   // (no grid, no analysis: asked again at the next look)

@@ -11,7 +11,7 @@ CLIENT_SECRET = re.compile(r"[\x21-\x7e]{8,256}\Z")      # printable characters,
 BOT_TOKEN = re.compile(r"[A-Za-z0-9._-]{30,200}\Z")        # a bot's token is one plain word; one that is not is not Discord's, and is never put in a header
 SNOWFLAKE = re.compile(r"[1-9][0-9]{4,19}\Z")             # the id of a server or of a role
 GATE_SECRET = re.compile(r"[\x21-\x7e]{32,256}\Z")         # the key of the admin page's door (ANTS_ADMIN_GATE_SECRET): 32 to 256 printable characters, no blank
-GATE_SETTING = "ANTS_ADMIN_GATE_SECRET"                    # the one setting of the key: the game server reads the same name (docs/HUB.md, "The admin page's door")
+GATE_SETTING = "ANTS_ADMIN_GATE_SECRET"                    # the one setting of the key: the game server reads the same name (docs/HUB_ROLES.md, "The admin page's door")
 GATE_SETTING_OLD = "ANTS_HUB_ADMIN_GATE_SECRET"            # its name before the two services shared one: still read, when the new name is not set, until the release after this one
 GATE_DISTINCT = 8                                        # a key of fewer different characters than this (one repeated character) is not a key
 SAMPLE_GATE_KEY = "canary-gate-key-5d8f0c1e7a9b4263-q"      # the made-up key of the known answer in docs/HUB.md: published, so never a key (the game server refuses it too)
@@ -49,6 +49,7 @@ class Config:
     admin_gate_given: bool = False                                          # whether the setting was there at all (a value that is there and is no good is said at the start; one that is absent is said as well, differently)
     discord_test_url: str = ""                                              # TESTS ONLY: where the fake Discord of the tests listens (a loopback address, refused for any other)
     game_admin_url: str = ""                                                # where the game server's admin door is, `http://host:port` (hub/gamedoor.py: `/bots`); "" is none, and `/bots` answers `off`
+    counts_url: str = ""                                                    # where the game server's counts door is, `http://host:port` (hub/likedoor.py: Forget me removes the person's likes of replays there first); "" is none, and the call is skipped
     image_converter_url: str = ""                                           # where the image converter is, `http://host:port` (hub/imgdoor.py); "" is none, and images are off for everybody
     image_dir: str = "/images"                                              # the folder of the images' files (the volume that the site's web server reads, read only)
     ai_keys: bool = False                                                   # ANTS_HUB_AI_KEYS=on: the keys that let a person's own AI work in the person's open Map Maker tab (docs/MAP_AI.md); off, every door of it answers 503 `ai_off`
@@ -129,6 +130,14 @@ def parse_game_admin_url(url):
     return "http://%s:%d" % (found.group(1), int(found.group(2)))
 
 
+def parse_counts_url(url):
+    """'http://ants-server:4032' (the same shape as the game server's admin address) for the game server's counts door, else a ConfigError that never says the value."""
+    found = GAME_ADMIN_URL.match(url.strip())
+    if not found or not 1 <= int(found.group(2)) <= 65535:
+        raise ConfigError("ANTS_HUB_COUNTS_URL must be like http://ants-server:4032 (http, a host name or address of letters, digits, dots and dashes, and a port from 1 to 65535, nothing else)")
+    return "http://%s:%d" % (found.group(1), int(found.group(2)))
+
+
 def parse_converter_url(url):
     """'http://ants-img:4050' (the same shape as the game server's address) for the image converter, else a ConfigError that never says the value."""
     found = GAME_ADMIN_URL.match(url.strip())
@@ -188,6 +197,8 @@ def load(env):
         raise ConfigError("ANTS_HUB_TEST_LOGIN=1 and the Discord login cannot both be on")
     if env.get("ANTS_HUB_GAME_ADMIN_URL", "").strip():
         cfg.game_admin_url = parse_game_admin_url(env["ANTS_HUB_GAME_ADMIN_URL"])
+    if env.get("ANTS_HUB_COUNTS_URL", "").strip():
+        cfg.counts_url = parse_counts_url(env["ANTS_HUB_COUNTS_URL"])
     if env.get("ANTS_HUB_IMAGE_CONVERTER_URL", "").strip():
         cfg.image_converter_url = parse_converter_url(env["ANTS_HUB_IMAGE_CONVERTER_URL"])
     cfg.image_dir = env.get("ANTS_HUB_IMAGE_DIR", "").strip() or cfg.image_dir

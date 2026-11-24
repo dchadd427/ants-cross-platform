@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The admin page's door (hub/admindoor.py, hub/admin.py `resolve`, docs/HUB.md "The admin page's door"): who may use it, the pass that the site's nginx hands on, and the hub's side of what the page does.
+"""The admin page's door (hub/admindoor.py, hub/admin.py `resolve`, docs/HUB_ROLES.md "The admin page's door"): who may use it, the pass that the site's nginx hands on, and the hub's side of what the page does.
 
   TheRule          the one rule: nobody / no role / moderator / administrator / the operator's account, each with a fresh answer, an old one and a Discord that is down; no key, a short key, a key with a blank
                    (a shut door is a 503 `door_off` at the gate and on the page's calls, for everybody, and never the 403 that says "not an administrator")
@@ -1159,7 +1159,7 @@ class TheLoginReturnsToTheAdminPage(unittest.TestCase):
     def test_next_admin_is_one_of_the_fixed_words_and_nothing_else_is(self):
         from hub import login
         self.assertEqual(login.NEXT["admin"], "/admin")
-        self.assertEqual(sorted(login.NEXT), ["admin", "home", "mapmaker", "room"])
+        self.assertEqual(sorted(login.NEXT), ["admin", "home", "mapmaker", "match", "matches", "room"])
         self.assertTrue(all(v.startswith("/") and not v.startswith("//") for v in login.NEXT.values()))
 
 

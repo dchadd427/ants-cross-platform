@@ -8,7 +8,8 @@ web_hidden_check.py (standard library only); the browser has its own profile and
 Parts (--only): list (every match, the cards, the filters and the search with their requests and the way back, the pager, the words of a busy server and of no match, a phone), match (the stats of a
 match, mode 187, a recording of an older version, one that is gone, a match that is not counted yet, a server that fails), frame (the replay: nothing of the game is asked for before "Show replay", then
 one frame of the game page with ?embed=1 and nothing but the picture and the bar, taken away by "Hide replay" and by the game's own Quit), stats (the Stats of the replay page: a button, the panel, a
-phone's row, and no stats for a live match, a frame or a match with no record).
+phone's row, and no stats for a live match, a frame or a match with no record), likes (the plays and the hearts of the cards and of the match page against a fake door of the counts: the look at who is
+logged in, a like and an unlike with the token, the card with the way in, a plain count for a recording that is gone, the sorts Most watched and Most liked, and a Sort box that does not cut its words).
 
 Exit status 0: every check passed; 1: a check failed; 3: the check could not be made (no browser); 2 is the status of a bad command line.
 """
@@ -50,7 +51,7 @@ def seat(n, color, name, bot, **kw):
 
 def record(ident, ended, map_, fmt, seats, rows, **kw):
     r = {"v": 1, "id": ident, "ended": ended, "map": map_, "game": "v0.12.43", "turns": 14405, "seconds": 720, "finished": True, "quitter": None, "mode": "highest-score", "format": fmt, "draw": False, "result": "decided",
-         "computers_only": not any(s["bot"] == "" for s in seats), "seats": seats, "rows": rows, "recording": "watch", "file": ident + ".antsrep", "keep_days": 30}
+         "computers_only": not any(s["bot"] == "" for s in seats), "seats": seats, "rows": rows, "recording": "watch", "file": ident + ".antsrep", "keep_days": 30, "plays": 0, "likes": 0}
     r.update(kw)
     return r
 
@@ -75,7 +76,7 @@ def put(value, letters):
 
 
 def pack_ant(x, y, second, team, killer, kind=0, drowned=False):
-    """One ant of nine letters, as ants_server/history_deaths.hpp writes it (docs/REPLAYS.md "The map of deaths")"""
+    """One ant of nine letters, as ants_server/history_deaths.hpp writes it (docs/HEATMAPS.md "The map of deaths")"""
     return put(x, 2) + put(y, 2) + put(second, 3) + put((team & 3) | (kind << 2) | (32 if drowned else 0) | ((7 if killer < 0 else killer) << 6), 2)
 
 
@@ -134,13 +135,14 @@ def make_records():
                      {"seats": [0, 3], "score": 210, "killed": 9, "lost": 10, "hatched": 1, "winner": False}])
     people["details"] = details_of_people()
     people["deaths"] = deaths_field(60, 60, fight_ants(34))
+    people["plays"], people["likes"] = 12, 7
     community = record(ID_COMMUNITY, NOW - 900, "Pond.lvl", "1v1", [seat(0, "Green", "Ann", "", score=900, killed=2, lost=1, winner=True), seat(2, "Blue", "Cy", "Easy", score=300, killed=1, lost=2)],
-                       [{"seats": [0], "score": 900, "killed": 2, "lost": 1, "hatched": 0, "winner": True}, {"seats": [2], "score": 300, "killed": 1, "lost": 2, "hatched": 0, "winner": False}])
+                       [{"seats": [0], "score": 900, "killed": 2, "lost": 1, "hatched": 0, "winner": True}, {"seats": [2], "score": 300, "killed": 1, "lost": 2, "hatched": 0, "winner": False}], plays=1, likes=1)
     old = record(ID_OLD, NOW - 5 * 86400, "TREASURE.LVL", "1v1", [seat(0, "Green", "Ann", "", score=2945, killed=6, lost=1, winner=True), seat(3, "Black", "", "Hard", score=720, killed=1, lost=6, hatched=1)],
-                 [{"seats": [0], "score": 2945, "killed": 6, "lost": 1, "hatched": 0, "winner": True}, {"seats": [3], "score": 720, "killed": 1, "lost": 6, "hatched": 1, "winner": False}], game="v0.12.0", recording="old")
+                 [{"seats": [0], "score": 2945, "killed": 6, "lost": 1, "hatched": 0, "winner": True}, {"seats": [3], "score": 720, "killed": 1, "lost": 6, "hatched": 1, "winner": False}], game="v0.12.0", recording="old", plays=1234, likes=312)
     removed = record(ID_REMOVED, NOW - 29 * 86400, "TINY.LVL", "1v1", [seat(0, "Green", "", "Medium", score=2020), seat(1, "Red", "", "Hard", score=2020)],
                      [{"seats": [0], "score": 2020, "killed": 0, "lost": 0, "hatched": 0, "winner": False}, {"seats": [1], "score": 2020, "killed": 0, "lost": 0, "hatched": 0, "winner": False}],
-                     draw=True, result="draw", recording="removed")
+                     draw=True, result="draw", recording="removed", plays=356, likes=41)
     removed.pop("file")
     m187 = record(ID_187, NOW - 3 * 86400, "ISLANDS.LVL", "ffa3", [seat(0, "Green", "Ann", "", score=12, killed=12, lost=3, winner=True), seat(1, "Red", "Bea", "", score=5, killed=5, lost=4), seat(2, "Blue", "Cy", "", score=0, lost=7)],
                   [{"seats": [0], "score": 12, "killed": 12, "lost": 3, "hatched": 0, "winner": True}, {"seats": [1], "score": 5, "killed": 5, "lost": 4, "hatched": 0, "winner": False}, {"seats": [2], "score": 0, "killed": 0, "lost": 7, "hatched": 0, "winner": False}],
@@ -178,6 +180,7 @@ BY_ID = {r["id"]: r for r in RECORDS}
 BY_ID[ID_DOLLAR] = record(ID_DOLLAR, NOW - 3 * 86400, "Ant$&s$'x.lvl", "1v1", [seat(0, "Green", "Ann", "", score=900, killed=2, winner=True), seat(2, "Blue", "Cy", "Easy", score=300)],      # (a map name made of replace patterns; it is not in the list)
                           [{"seats": [0], "score": 900, "killed": 2, "lost": 0, "hatched": 0, "winner": True}, {"seats": [2], "score": 300, "killed": 0, "lost": 2, "hatched": 0, "winner": False}])
 SORTS = {"new": lambda r: (-r["ended"], r["id"]), "old": lambda r: (r["ended"], r["id"]), "long": lambda r: (-r["turns"], -r["ended"]), "short": lambda r: (r["turns"], -r["ended"]),
+         "plays": lambda r: (-r["plays"], -r["ended"]), "likes": lambda r: (-r["likes"], -r["ended"]),
          "kills": lambda r: (-max(s["killed"] for s in r["seats"]), -r["ended"]), "score": lambda r: (-max(s["score"] for s in r["seats"]), -r["ended"]), "hatched": lambda r: (-max(s["hatched"] for s in r["seats"]), -r["ended"])}
 WORDS = {"who": ("all", "people", "computers"), "format": ("all", "1v1", "team", "ffa"), "result": ("all", "decided", "draw", "cut"), "rec": ("all", "watch", "old", "removed"),
          "color": ("all", "green", "red", "blue", "black"), "mode": ("all", "highest-score", "187"), "sort": tuple(SORTS)}
@@ -238,6 +241,12 @@ class MatchesDoor(live.Door):
         self.deaths = "ok"                               # ok | none (no map of deaths for any map: 404)
         self.approved_pond = False                       # Pond is a library map (a .webp picture) or an approved one (only a .png: the library's address is a 404)
         self.seat_keys = "both"                          # both (this server) | old (an earlier server: only "colour") | new (only "color"): the keys of each seat
+        self.signed = True                               # the counts door: is the visitor logged in (GET /counts/mine says so)
+        self.likes_off = False                           # ... or are likes off (503 for the look and for a call)
+        self.liked = set()                               # ... which matches this visitor likes
+        self.csrf = "0123456789abcdef0123456789abcdef"   # ... the token that the look gives and a like must bring in X-Ants-Csrf
+        self.refuse = 0                                  # ... a status that the next like or unlike is answered with (0: as the door would)
+        self.calls = []                                  # ... the calls it took: [method, path, the token that came with it, the query]
 
     @staticmethod
     def send(h, code, body, ctype="text/plain"):
@@ -264,8 +273,43 @@ class MatchesDoor(live.Door):
                 st.pop(drop, None)
         return data
 
+    def counts(self, h, path, query):
+        """The door of the counts (docs/REPLAY_COUNTS.md): who is logged in and which of the asked matches they like, a like and an unlike with the token of the look."""
+        token = h.headers.get("X-Ants-Csrf")
+        self.calls.append([h.command, path, token, query])
+        if path == "/counts/mine" and h.command == "GET":
+            if self.likes_off:
+                return self.js(h, 503, {"error": "likes_off"})
+            if not self.signed:
+                return self.js(h, 200, {"signed_in": False, "liked": []})
+            ids = [i for i in urllib.parse.parse_qs(query).get("ids", [""])[0].split(",") if i]
+            return self.js(h, 200, {"signed_in": True, "liked": [i for i in ids if i in self.liked], "csrf": self.csrf})
+        m = re.match(r"^/counts/(like|unlike)/([A-Za-z0-9_-]+)$", path)
+        if m and h.command == "POST":
+            if self.likes_off:
+                return self.js(h, 503, {"error": "likes_off"})
+            if not self.signed:
+                return self.js(h, 401, {"error": "not_signed_in"})
+            if token != self.csrf:
+                return self.js(h, 403, {"error": "csrf"})
+            if self.refuse:
+                return self.js(h, self.refuse, {"error": "x"})
+            rec = BY_ID.get(m.group(2))
+            if rec is None:
+                return self.js(h, 404, {"error": "not found"})
+            if m.group(1) == "like" and m.group(2) not in self.liked:
+                self.liked.add(m.group(2))
+                rec["likes"] += 1
+            if m.group(1) == "unlike" and m.group(2) in self.liked:
+                self.liked.discard(m.group(2))
+                rec["likes"] -= 1
+            return self.js(h, 200, {"liked": m.group(2) in self.liked, "likes": rec["likes"]})
+        return self.js(h, 404, {"error": "not found"})
+
     def route(self, h, path):
         query = urllib.parse.urlparse(h.path).query
+        if path.startswith("/counts/"):
+            return self.counts(h, path, query)
         if path in ("/matches", "/match"):
             text = open(os.path.join(live.WEB, path[1:] + ".html"), encoding="utf-8").read()
             for k, v in live.FILLED.items():
@@ -307,10 +351,10 @@ class MatchesDoor(live.Door):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--browser", default=os.environ.get("CHROME", ""), help="a Chromium-based browser (default: look for one)")
-    ap.add_argument("--only", default="", help="one part: list, match, deaths, frame or stats (default: all)")
+    ap.add_argument("--only", default="", help="one part: list, match, deaths, frame, stats or likes (default: all)")
     ap.add_argument("--shots", default="", help="a folder to save screenshots in")
     args = ap.parse_args()
-    parts = ("list", "match", "deaths", "frame", "stats")
+    parts = ("list", "match", "deaths", "frame", "stats", "likes")
     if args.only and args.only not in parts:
         print("--only is one of: " + ", ".join(parts))
         return 2
@@ -616,6 +660,171 @@ def main():
             shot(tab, "match-phone")
             tab.close()
 
+        if args.only in ("", "likes"):
+            print("[web matches] part likes: the plays and the hearts, the way in, the sorts, the Sort box")
+
+            def reset(**kw):
+                state = dict(signed=True, likes_off=False, liked={ID_PEOPLE}, refuse=0, csrf="0123456789abcdef0123456789abcdef")
+                state.update(kw)
+                door.set(**state)
+                for ident, plays, likes in ((ID_PEOPLE, 12, 7), (ID_COMMUNITY, 1, 1), (ID_OLD, 1234, 312), (ID_REMOVED, 356, 41)):
+                    BY_ID[ident]["plays"], BY_ID[ident]["likes"] = plays, likes
+                with door.lock:
+                    door.calls[:] = []
+                    door.hits[:] = []
+
+            def calls(method):
+                with door.lock:
+                    return [c for c in door.calls if c[0] == method]
+
+            mark = "document.querySelector('#body .m .act .lk')"
+            wait_hearts = lambda t: until(t, "document.querySelectorAll('#body .m').length === 25 && document.fonts.status === 'loaded'") is True
+            reset()
+            tab = new_tab(1000, 900)
+            open_page(tab, "/matches")
+            check(wait_hearts(tab) and until(tab, mark + ".classList.contains('on')") is True, "the list: 25 cards, and the heart of the match this visitor likes is lit (after one look at the door)")
+            mine = calls("GET")
+            ids = urllib.parse.parse_qs(mine[0][3]).get("ids", [""])[0].split(",") if mine else []
+            check(len(mine) == 1 and mine[0][1] == "/counts/mine" and len(ids) == 25 and ids[0] == ID_PEOPLE, "... one look for the 25 cards, nothing else asked of the door (%s)" % [c[:2] for c in door.calls][:3])
+            first = tab.ev("(function () { var g = document.querySelector('#body .m .act .pl'); return [g.querySelector('.pv').textContent, g.querySelector('.lk').textContent, g.querySelector('.lk').className, g.querySelector('.lk').tagName, g === document.querySelector('#body .m .act').firstChild, g.getBoundingClientRect().right <= document.querySelector('#body .m .act .rec').getBoundingClientRect().left]; })()")
+            check(first == ["12", "7", "lk on", "BUTTON", True, True], "the first card: 12 plays and a lit heart with 7, left of \"Replay\" (%s)" % first)
+            zero = tab.ev("(function () { var g = document.querySelectorAll('#body .m')[1].querySelector('.act .pl'); return [g.querySelector('.pv').className, g.querySelector('.lk').className, g.querySelector('.pv').textContent + g.querySelector('.lk').textContent, getComputedStyle(g.querySelector('.pv')).opacity]; })()")
+            check(zero == ["pv zero", "lk zero", "00", "0.55"], "a match with no plays and no likes shows a dim 0 and a dim heart with 0 (%s)" % zero)
+            shown = tab.ev("[document.querySelector('#body .m .act .pl').getBoundingClientRect().width > 0, document.querySelector('#body .m .info .pl').getBoundingClientRect().width > 0]")
+            check(shown == [True, False], "a computer shows the group in the actions, not the one of a phone (%s)" % shown)
+            check(tab.ev("document.documentElement.scrollWidth <= window.innerWidth") is True, "... inside the window")
+            shot(tab, "likes-list")
+            # the Sort box, at the widths where the six boxes are in one row, and in the three-box layout under it
+            for width in (1000, 981, 1440, 980, 721):
+                t = new_tab(width, 900)
+                open_page(t, "/matches")
+                until(t, "document.querySelectorAll('#body .m').length === 25 && document.fonts.status === 'loaded'")
+                cut = t.ev("(function () { var sel = document.getElementById('s-sort'), c = document.createElement('canvas').getContext('2d'), cs = getComputedStyle(sel); c.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily; var avail = sel.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight); return [].filter.call(sel.options, function (o) { return c.measureText(o.textContent).width > avail + 0.5; }).map(function (o) { return o.textContent; }); })()")
+                check(cut == [], "the Sort box at %d px wide has room for every word of its list, \"Most watched\" and \"Most hatched\" too (cut: %s)" % (width, cut))
+                wide = t.ev("document.getElementById('s-sort').getBoundingClientRect().width")
+                if width >= 981:
+                    others = t.ev("[].map.call(document.querySelectorAll('.tools .sel select:not(#s-sort)'), function (s) { var c = document.createElement('canvas').getContext('2d'), cs = getComputedStyle(s); c.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily; return c.measureText(s.options[s.selectedIndex].textContent).width > s.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) + 0.5; })")
+                    check(others == [False] * 5 and t.ev("document.getElementById('r2') && getComputedStyle(document.getElementById('r2')).display") == "grid", "... and none of the other five boxes cuts the word that it shows (%s)" % others)
+                t.close()
+            check(tab.ev("[].map.call(document.getElementById('s-sort').options, function (o) { return o.value + ':' + o.textContent; }).slice(-2)") == ["plays:Most watched", "likes:Most liked"], "the Sort box ends with Most watched and Most liked")
+            # the sorts
+            for word, line, order in (("plays", "most watched", [ID_OLD, ID_REMOVED, ID_PEOPLE, ID_COMMUNITY]), ("likes", "most liked", [ID_OLD, ID_REMOVED, ID_PEOPLE, ID_COMMUNITY])):
+                reset()
+                open_page(tab, "/matches?sort=" + word)
+                check(wait_hearts(tab) and hits("/history") == ["/history?sort=%s&limit=25&offset=0" % word], "?sort=%s asks the server for sort=%s: %s" % (word, word, hits("/history")))
+                got = tab.ev("[].map.call(document.querySelectorAll('#body .m h3 a'), function (a) { return new URL(a.href).searchParams.get('id'); }).slice(0, 4)")
+                check(got == order and tab.ev("document.getElementById('count').textContent") == "Showing 1 to 25 of %d matches, %s" % (len(RECORDS), line) and tab.ev("document.getElementById('s-sort').value") == word, "... in the server's order, the line says \"%s\" and the select agrees (%s)" % (line, tab.ev("document.getElementById('count').textContent")))
+                keyed = tab.ev("[document.querySelectorAll('#body .m .act .pv.key').length, document.querySelectorAll('#body .m .act .lk.key').length, document.querySelector('#body .m .len .lab').textContent, document.querySelector('#body .m .len b').textContent, document.querySelectorAll('#body .m .sk').length]")
+                check(keyed == ([25, 0, "Length", "12:00", 0] if word == "plays" else [0, 25, "Length", "12:00", 0]), "... the Length stays the big number and the count of the sort is the bright one (%s)" % keyed)
+            tab.ev("(function () { var s = document.getElementById('s-sort'); s.value = 'new'; s.dispatchEvent(new Event('change')); })()")
+            check(until(tab, "location.search === ''") is True, "the Sort box goes back to the plain address")
+            # a recording that is gone or older: its numbers, a plain count
+            for address, plays, likes in (("/matches?rec=removed", "356", "41"), ("/matches?rec=old", "1,234", "312")):
+                reset()
+                open_page(tab, address)
+                until(tab, "document.querySelectorAll('#body .m').length === 1")
+                time.sleep(0.5)
+                plain = tab.ev("(function () { var g = document.querySelector('#body .m .act .pl'); return [g.querySelector('.pv').textContent, g.querySelector('.lk').textContent, g.querySelector('.lk').tagName, g.querySelector('.lk').className, document.querySelectorAll('#body .m button.lk').length]; })()")
+                check(plain == [plays, likes, "SPAN", "lk flat", 0], "%s: the numbers stay, the heart is a plain count and no button (%s)" % (address, plain))
+                check(not calls("GET"), "... and the door is not asked about it: %s" % door.calls)
+            # a tap: signed in
+            reset(liked=set())
+            open_page(tab, "/matches")
+            check(wait_hearts(tab), "the list again, nothing liked")
+            until(tab, "!!document.querySelector('#body .m .act .lk')")
+            time.sleep(0.4)
+            tab.ev(mark + ".click()")
+            check(until(tab, "document.querySelectorAll('#body .m')[0].querySelectorAll('.lk.on').length === 2 && document.querySelector('#body .m .act .lk .n').textContent === '8'") is True, "a tap on a heart: lit, 8, on both hearts of the card")
+            posts = calls("POST")
+            check(len(posts) == 1 and posts[0][1] == "/counts/like/" + ID_PEOPLE and posts[0][2] == door.csrf, "... one POST /counts/like/<id> with the token that the look gave: %s" % posts)
+            tab.ev(mark + ".click()")
+            check(until(tab, "document.querySelectorAll('#body .m .lk.on').length === 0 && document.querySelector('#body .m .act .lk .n').textContent === '7'") is True and calls("POST")[1][1] == "/counts/unlike/" + ID_PEOPLE, "a second tap takes it back: not lit, 7, POST /counts/unlike/<id>")
+            reset(liked=set(), refuse=429)
+            open_page(tab, "/matches")
+            wait_hearts(tab)
+            time.sleep(0.4)
+            tab.ev(mark + ".click()")
+            check(until(tab, "!!document.querySelector('.lkask.line') && document.querySelector('.lkask.line').textContent === 'Slow down a little.'") is True and tab.ev("document.querySelectorAll('#body .m .lk.on').length + '|' + document.querySelector('#body .m .act .lk .n').textContent") == "0|7", "a refused tap: the heart goes back (not lit, 7) and a plain line says \"Slow down a little.\"")
+            shot(tab, "likes-list-refused")
+            reset(liked=set())
+            open_page(tab, "/matches")
+            wait_hearts(tab)
+            time.sleep(0.4)
+            door.set(csrf="fedcba9876543210fedcba9876543210")            # (the token that the look gave is out of date)
+            tab.ev(mark + ".click()")
+            lit = until(tab, "document.querySelectorAll('#body .m')[0].querySelectorAll('.lk.on').length === 2")
+            end = time.time() + 5
+            while len(calls("POST")) < 2 and time.time() < end:                      # (the heart is lit at once: the second call comes after the refusal and the look)
+                time.sleep(0.05)
+            time.sleep(0.3)
+            check(lit is True and [c[:2] for c in door.calls][1:] == [["POST", "/counts/like/" + ID_PEOPLE], ["GET", "/counts/mine"], ["POST", "/counts/like/" + ID_PEOPLE]] and calls("POST")[1][2] == door.csrf, "a token that is refused (403): the page looks again and the like is made with the new token (%s %s)" % (lit, door.calls))
+            reset(likes_off=True)
+            open_page(tab, "/matches")
+            wait_hearts(tab)
+            check(until(tab, "document.querySelectorAll('#body .m button.lk').length === 0 && document.querySelectorAll('#body .m .lk.flat').length === 50") is True, "likes that are off: every heart is a plain count, with its number")
+            # a tap: not logged in
+            reset(signed=False)
+            open_page(tab, "/matches")
+            wait_hearts(tab)
+            time.sleep(0.4)
+            tab.ev(mark + ".click()")
+            check(until(tab, "!!document.querySelector('.lkask')") is True, "not logged in: a tap shows the card")
+            card = tab.ev("(function () { var c = document.querySelector('.lkask'), a = c.querySelector('a'), q = c.getBoundingClientRect(), h = document.querySelector('#body .m .act .lk').getBoundingClientRect(); return [c.querySelector('p').firstChild.textContent, c.querySelector('small').textContent, a.textContent, a.getAttribute('href'), q.left >= 0 && q.right <= window.innerWidth, q.top >= h.bottom, c.querySelectorAll('button').length]; })()")
+            check(card == ["Log in to like a replay.", "Only the count shows. Nobody sees who liked.", "Log in with Discord", "/hub/login?next=matches", True, True, 0], "... the words, the small line and the way in, under the heart and inside the window (%s)" % card)
+            check(not calls("POST") and len(calls("GET")) == 1, "... and the door is asked for nothing more: %s" % [c[:2] for c in door.calls])
+            shot(tab, "likes-list-not-logged-in")
+            tab.ev("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))")
+            check(until(tab, "!document.querySelector('.lkask')") is True, "Escape takes the card away")
+            tab.close()
+            # a phone
+            reset()
+            tab = new_tab(390, 844, 2, True)
+            open_page(tab, "/matches")
+            wait_hearts(tab)
+            until(tab, "document.querySelector('#body .m .info .lk').classList.contains('on')")
+            shown = tab.ev("[document.querySelector('#body .m .act .pl').getBoundingClientRect().width > 0, document.querySelector('#body .m .info .pl').getBoundingClientRect().width > 0, document.documentElement.scrollWidth <= window.innerWidth, document.querySelector('#body .m .info .pl').getBoundingClientRect().right <= window.innerWidth]")
+            check(shown == [False, True, True, True], "a phone shows the group under the tags, inside the window, and not the one of a computer (%s)" % shown)
+            tab.ev("document.querySelector('#body .m .info .lk').click()")
+            check(until(tab, "document.querySelectorAll('#body .m .lk.on').length === 0 && document.querySelector('#body .m .info .lk .n').textContent === '6'") is True, "... its heart takes the like back")
+            shot(tab, "likes-list-phone")
+            tab.close()
+            # the match page
+            reset()
+            tab = new_tab(1000, 900)
+            open_page(tab, "/match?id=" + ID_PEOPLE)
+            check(until(tab, "!!document.getElementById('like') && document.getElementById('like').classList.contains('on')") is True, "the match page: the heart is lit for a match that this visitor likes")
+            mine = calls("GET")
+            check(len(mine) == 1 and mine[0][1] == "/counts/mine", "... after one look at the door")
+            hero = tab.ev("(function () { var m = document.querySelector('.hero .meta'), l = document.getElementById('like'); return [m.textContent, l.tagName, l.textContent, l.previousSibling === document.getElementById('show'), m.querySelector('.pv').textContent]; })()")
+            check(hero[0].endswith(" · 12 plays") and hero[1:] == ["BUTTON", "7", True, "12 plays"], "the plays end the line under the title, the heart beside Show replay (%s)" % hero)
+            shot(tab, "likes-match")
+            tab.ev("document.getElementById('like').click()")
+            check(until(tab, "!document.getElementById('like').classList.contains('on') && document.getElementById('like').textContent === '6'") is True and calls("POST")[0][1] == "/counts/unlike/" + ID_PEOPLE, "a tap takes the like back: not lit, 6")
+            tab.ev("document.getElementById('like').click()")
+            check(until(tab, "document.getElementById('like').classList.contains('on') && document.getElementById('like').textContent === '7' && document.getElementById('like').getAttribute('aria-pressed') === 'true'") is True, "and a tap likes it again: lit, 7")
+            for ident, words, number, kind in ((ID_COMMUNITY, "1 play", "1", "BUTTON"), (ID_OLD, "1,234 plays", "312", "SPAN"), (ID_REMOVED, "356 plays", "41", "SPAN")):
+                reset()
+                open_page(tab, "/match?id=" + ident)
+                until(tab, "!!document.getElementById('like')")
+                time.sleep(0.4)
+                got = tab.ev("[document.querySelector('.hero .meta .pv').textContent, document.getElementById('like').textContent, document.getElementById('like').tagName, document.getElementById('like').className.indexOf('flat') !== -1]")
+                check(got == [words, number, kind, kind == "SPAN"], "%s: %s, a heart with %s, %s (%s)" % (ident, words, number, "a plain count" if kind == "SPAN" else "a button", got))
+            reset(signed=False)
+            open_page(tab, "/match?id=" + ID_PEOPLE)
+            until(tab, "!!document.getElementById('like')")
+            time.sleep(0.4)
+            tab.ev("document.getElementById('like').click()")
+            check(until(tab, "!!document.querySelector('.lkask')") is True and tab.ev("document.querySelector('.lkask a').getAttribute('href')") == "/hub/login?next=match&id=" + ID_PEOPLE and not calls("POST"), "not logged in: a tap shows the card, and its button goes to the way in of this match, with nothing sent")
+            shot(tab, "likes-match-not-logged-in")
+            tab.close()
+            reset()
+            tab = new_tab(390, 844, 2, True)
+            open_page(tab, "/match?id=" + ID_PEOPLE)
+            until(tab, "!!document.getElementById('like')")
+            check(tab.ev("document.documentElement.scrollWidth <= window.innerWidth") is True and tab.ev("document.getElementById('like').getBoundingClientRect().right <= window.innerWidth") is True, "a phone: the match page and its heart are inside the window")
+            shot(tab, "likes-match-phone")
+            tab.close()
+            reset()
         if args.only in ("", "frame"):
             print("[web matches] part frame: the replay, only when it is asked for")
             fresh()
@@ -623,7 +832,7 @@ def main():
             open_page(tab, "/match?id=" + ID_PEOPLE)
             until(tab, "!!document.getElementById('board')")
             time.sleep(1.0)
-            asked = [h for h in door.hits if not h.startswith(("/history", "/live", "/maps", "/front/", "/matches.css", "/match_stats.css", "/death_map.css", "/history_page.js", "/match_stats.js", "/death_map.js", "/replay_page.js", "/match", "/favicon"))]
+            asked = [h for h in door.hits if not h.startswith(("/history", "/live", "/maps", "/front/", "/matches.css", "/match_stats.css", "/death_map.css", "/history_page.js", "/match_stats.js", "/death_map.js", "/replay_page.js", "/replay_likes.js", "/counts/mine", "/site_nav", "/update_notice", "/manifest", "/match", "/favicon"))]
             check(asked == [], "before the button: nothing of the game and no recording is asked for (%s)" % asked)
             check(tab.ev("document.querySelectorAll('iframe').length") == 0, "... and there is no frame")
             tab.ev("document.getElementById('show').click()")

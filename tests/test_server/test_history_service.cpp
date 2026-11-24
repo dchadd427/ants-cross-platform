@@ -256,10 +256,10 @@ std::string dump_table(db::Database& d, const std::string& table, const std::str
     return out;
 }
 
-// The five tables of the history, as one text. The counted_at column is left out of the matches (the time a row was made): a row is copied with its own, and the rest must be equal
+// The tables of the history, as one text; the plays and the likes' numbers are columns of the matches (the rows of the likes, which hold references, are not copied: HV1.2). The counted_at column is left out of the matches (the time a row was made): a row is copied with its own, and the rest must be equal
 std::string dump_history(db::Database& d) {
     return dump_table(d, "history_matches", "id") + "--\n" + dump_table(d, "history_seats", "match_id, seat") + "--\n" + dump_table(d, "history_markers", "id") + "--\n" + dump_table(d, "history_deaths", "id") + "--\n" +
-           dump_table(d, "map_plays", "map, hash");
+           dump_table(d, "history_action", "id") + "--\n" + dump_table(d, "map_plays", "map, hash");
 }
 
 size_t table_rows(db::Database& d, const std::string& table) {
@@ -462,6 +462,10 @@ int main() {
         ASSERT_TRUE(game.open());
         const std::vector<std::string> ids = game.keep_and_count({0, 1, 2, 3, 4, 5});
         ASSERT_EQ(game.server.mgr.history_store()->count(), ids.size());
+        // some of the matches have been played and liked (docs/REPLAY_COUNTS.md): the numbers are on the matches' rows and the likes' rows are a table, and both are copied
+        uint32_t likes = 0;
+        ASSERT_TRUE(game.server.mgr.history_store()->add_play(ids[0]) == HistoryStore::Counted::Done && game.server.mgr.history_store()->add_play(ids[0]) == HistoryStore::Counted::Done);
+        ASSERT_TRUE(game.server.mgr.history_store()->like(ids[1], "0123456789abcdef", likes) == HistoryStore::Counted::Done && game.server.mgr.history_store()->like(ids[1], "fedcba9876543210", likes) == HistoryStore::Counted::Done && likes == 2);
         // the recordings go (their 30 days), and the game server's store forgets them
         for (const std::string& f : recording_files(game.recordings())) fs::remove(game.recordings() / f);
         fs::last_write_time(game.recordings(), fs::file_time_type(std::chrono::hours(100000)));
@@ -484,13 +488,97 @@ int main() {
         const ctl::JsonValue list = json_of(ask(service, "GET", "/history"));
         ASSERT_TRUE(list.get("total").as_int_or(0) == 6 && list.get("history").at(0).get("recording").str() == "removed" && list.get("history").at(0).get("file").is_null());
         ASSERT_EQ(json_of(ask(service, "GET", "/history/deaths", "map=TREASURE.LVL")).get("matches").as_int_or(0), int64_t{2});
+        ASSERT_TRUE(json_of(ask(service, "GET", "/history/" + ids[0])).get("plays").as_int_or(-1) == 2 && json_of(ask(service, "GET", "/history/" + ids[1])).get("likes").as_int_or(-1) == 2);
+        ASSERT_EQ(json_of(ask(service, "GET", "/history", "sort=likes&limit=1")).get("history").at(0).get("id").str(), ids[1]);        // (the sorts are the service's own too)
         service.stop();
         db::Database copy;
         ASSERT_TRUE(copy.open((work.path / "history.db").string()).ok());
         const std::string theirs = dump_history(copy);
-        ASSERT_EQ(dump_history(game.server.database), theirs);                       // (every table of the history, row for row, the play counts and the maps of deaths too)
-        std::cout << "\n    tables: " << theirs.size() << " bytes, " << table_rows(copy, "history_deaths") << " maps of deaths, " << table_rows(copy, "map_plays") << " play counts";
-        ASSERT_TRUE(theirs.size() > 1000 && table_rows(copy, "history_deaths") >= 1 && table_rows(copy, "map_plays") > 0);
+        ASSERT_EQ(dump_history(game.server.database), theirs);                       // (every table of the history, row for row, the play counts, the maps of deaths and the actions too)
+        std::cout << "\n    tables: " << theirs.size() << " bytes, " << table_rows(copy, "history_deaths") << " maps of deaths, " << table_rows(copy, "history_action") << " actions, " << table_rows(copy, "map_plays") << " play counts";
+        ASSERT_TRUE(theirs.size() > 1000 && table_rows(copy, "history_deaths") >= 1 && table_rows(copy, "history_action") >= 1 && table_rows(copy, "map_plays") > 0);
+        ASSERT_EQ(service.import_report().action, table_rows(copy, "history_action"));
+        ASSERT_EQ(table_rows(game.server.database, "replay_likes"), size_t{2});
+        ASSERT_EQ(table_rows(copy, "replay_likes"), size_t{0});                       // (the numbers are copied with the matches; the rows that say who liked are not: they hold the hub's references, and Forget me does not reach this file)
+    } TEST_END();
+
+    TEST_CASE("HV1.2c A game database that is older than the plays and the likes (schema 11, no such column, no table of likes) is copied with 0 in their place, and the service's file has them from then on") {
+        if (match_file(0).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        TempDir work;
+        const std::string id = "ants-TINY-20261008-143209Z";
+        {
+            db::Database old_game;
+            const std::vector<db::Migration>& all = db_migrations();
+            const std::vector<db::Migration> eleven(all.begin(), all.begin() + 11);
+            ASSERT_TRUE(db::open_and_migrate(old_game, (work.path / "old.db").string(), eleven, db::OpenOptions()).ok());
+            ASSERT_TRUE(old_game.exec("INSERT INTO history_matches (id, ended, map, game, turns, finished, quitter, mode, format, result, computers_only, best_score, best_kills, best_hatched, search, rows_json, counted_at)"
+                                      " VALUES ('" + id + "', 1, 'TINY.LVL', 'v1', 2400, 1, NULL, 'highest-score', '1v1', 'decided', 0, 5, 5, 0, 'tiny ann', '[]', 1)").ok());
+            ASSERT_TRUE(old_game.exec("INSERT INTO history_seats VALUES ('" + id + "', 0, 'Ann', '', 5, 5, 0, 0, 0, 0, 0, 0, 1)").ok());
+        }
+        fs::create_directories(work.path / "none");
+        auto log = std::make_shared<Collector>();
+        ServiceConfig cfg = base_config(work.path, work.path / "none", log);
+        cfg.game_db_path = (work.path / "old.db").string();
+        cfg.submissions_dir = (work.path / "submissions").string();
+        HistoryService service(cfg);
+        std::string why;
+        ASSERT_TRUE(service.start(why));
+        ASSERT_TRUE(service.import_report().imported && service.import_report().matches == 1);
+        const ctl::JsonValue one = json_of(ask(service, "GET", "/history/" + id));
+        ASSERT_TRUE(one.get("id").str() == id && one.get("plays").as_int_or(-1) == 0 && one.get("likes").as_int_or(-1) == 0);
+        service.stop();
+    } TEST_END();
+
+    TEST_CASE("HV1.2b A row of history_action in the game server's database that is not a field of this version is not copied (the same guarantee as the store's put()): the others are, the report counts both, and the record of a match that has none gives no action") {
+        if (match_file(0).empty() || match_file(4).empty() || match_file(5).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        GameSide game;
+        ASSERT_TRUE(game.open());
+        const std::vector<std::string> ids = game.keep_and_count({0, 4, 5});
+        const size_t actions = table_rows(game.server.database, "history_action");
+        ASSERT_TRUE(actions >= 2);
+        // two rows go bad (the column's own check holds only the length): a text that is no JSON, and one of another version
+        std::string first, last;
+        {
+            db::Statement st;
+            ASSERT_TRUE(game.server.database.prepare(st, "SELECT min(id), max(id) FROM history_action").ok() && st.step() == db::Statement::Step::Row);
+            first = st.column_text(0);
+            last = st.column_text(1);
+        }
+        ASSERT_TRUE(first != last);
+        ASSERT_TRUE(game.server.database.exec("UPDATE history_action SET action = 'not a field' WHERE id = '" + first + "'").ok());
+        ASSERT_TRUE(game.server.database.exec("UPDATE history_action SET action = '{\"v\":2}' WHERE id = '" + last + "'").ok());
+        for (const std::string& f : recording_files(game.recordings())) fs::remove(game.recordings() / f);
+        fs::last_write_time(game.recordings(), fs::file_time_type(std::chrono::hours(100000)));
+        game.server.mgr.replay_store()->rescan();
+        TempDir work;
+        fs::create_directories(work.path / "none");
+        auto log = std::make_shared<Collector>();
+        ServiceConfig cfg = base_config(work.path, work.path / "none", log);
+        cfg.game_db_path = game.database().string();
+        cfg.submissions_dir = (work.path / "submissions").string();
+        HistoryService service(cfg);
+        std::string why;
+        ASSERT_TRUE(service.start(why));
+        ASSERT_TRUE(service.import_report().imported && service.import_report().matches == ids.size());
+        ASSERT_EQ(service.import_report().action, actions - 2);
+        ASSERT_EQ(service.import_report().action_refused, size_t{2});
+        ASSERT_TRUE(json_of(ask(service, "GET", "/history/" + first)).get("id").is_string() && !json_of(ask(service, "GET", "/history/" + first)).has("action"));
+        ASSERT_TRUE(json_of(ask(service, "GET", "/history/" + last)).get("id").is_string() && !json_of(ask(service, "GET", "/history/" + last)).has("action"));
+        size_t served = 0;
+        for (const std::string& id : ids) {
+            if (id != first && id != last && json_of(ask(service, "GET", "/history/" + id)).get("action").is_object()) ++served;
+        }
+        ASSERT_EQ(served, actions - 2);
+        service.stop();
+        db::Database copy;
+        ASSERT_TRUE(copy.open((work.path / "history.db").string()).ok());
+        ASSERT_EQ(table_rows(copy, "history_action"), actions - 2);
     } TEST_END();
 
     TEST_CASE("HV1.3 The limits are the door's: a clock that runs on makes the same time box and the same budget answer, with the same words, and the plain list is not held back") {
@@ -1283,7 +1371,7 @@ int main() {
         {
             db::Database check;                                                                                     // (the file of the newer program is as it was: its row is the last)
             ASSERT_TRUE(check.open((work.path / "newer.db").string()).ok());
-            ASSERT_EQ(table_rows(check, "schema_version"), size_t{5});
+            ASSERT_EQ(table_rows(check, "schema_version"), history_db_migrations().size() + 1);
         }
         HistoryService never(base_config(work.path, work.path / "rec", log));                                       // (not started)
         const ctl::HttpResponse r = ask(never, "GET", "/history");

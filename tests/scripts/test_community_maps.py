@@ -384,9 +384,9 @@ class TheList(unittest.TestCase):
 
     def test_the_other_documents_give_the_same_numbers(self):
         n = len(self.rows)
-        self.assertEqual(len(re.findall(r"Community-Maps/` holds the %d that pass" % n, read_text(REPO, "docs", "BOTS.md"))), 1)
+        self.assertEqual(len(re.findall(r"Community-Maps/` holds the %d that pass" % n, read_text(REPO, "docs", "BOT_LIMITS.md"))), 1)
         self.assertNotIn("email", read_text(REPO, "AGENTS.md").split("**The original game.**")[1].split("\n")[0])
-        self.assertNotIn("email", read_text(REPO, "docs", "TESTING.md").split("| 2.18.1 Community maps")[1].split("\n")[0])
+        self.assertNotIn("email", read_text(REPO, "docs", "TESTING_SUITES.md").split("| 2.18.1 Community maps")[1].split("\n")[0])
         self.assertIn("the repository holds only the part of the maps that is in `Community-Maps/`", read_text(REPO, "docs", "GAME_REVERSE_ENGINEERING.md"))
 
 

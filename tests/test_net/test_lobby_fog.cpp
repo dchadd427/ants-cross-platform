@@ -1,4 +1,4 @@
-// Tests of Fog of War in the room before a match (network protocol 28, docs/PLAY_IN_BROWSER.md "Fog of War"): the leader's plan sets it, everybody is shown it, a plan with fog and a computer player is refused as a whole with the
+// Tests of Fog of War in the room before a match (network protocol 28, docs/PLAY_MATCH_SETUP.md "Fog of War"): the leader's plan sets it, everybody is shown it, a plan with fog and a computer player is refused as a whole with the
 // room's own words, the marks of Ready and the plan's other parts are as they were, a new leader and the rematch keep it (N4.65 - N4.67)
 #include "lobby_fixtures.hpp"
 

@@ -166,6 +166,7 @@ int main() {
         const std::vector<db::Migration> every = db_migrations();
         ASSERT_TRUE(every.size() >= 10 && every[8].version == 9 && every[9].version == 10 && db_schema_version() == every.back().version);
         const std::vector<db::Migration> v9(every.begin(), every.begin() + 9);
+        const std::vector<db::Migration> v10(every.begin(), every.begin() + 10);               // (the version this case is about: a later migration is not its business)
         {
             db::Database old;
             int version = 0;
@@ -180,7 +181,7 @@ int main() {
         {
             db::Database db10;
             int version = 0;
-            ASSERT_TRUE(db::open_and_migrate(db10, live, every, db::OpenOptions(), &version).ok() && version == 10 && version == db_schema_version());
+            ASSERT_TRUE(db::open_and_migrate(db10, live, v10, db::OpenOptions(), &version).ok() && version == 10);
             ASSERT_EQ(scalar(db10, "SELECT COUNT(*) FROM bot_rotation"), int64_t{0});
             ASSERT_EQ(scalar(db10, "SELECT COUNT(*) FROM bot_schedules"), int64_t{1});
             ASSERT_EQ(text_of(db10, "SELECT name FROM bot_schedules"), std::string("Hourly rotation"));
@@ -194,7 +195,7 @@ int main() {
             db10.close();
             db::Database again;
             version = 0;
-            ASSERT_TRUE(db::open_and_migrate(again, live, every, db::OpenOptions(), &version).ok() && version == 10);                    // (idempotent)
+            ASSERT_TRUE(db::open_and_migrate(again, live, v10, db::OpenOptions(), &version).ok() && version == 10);                    // (idempotent)
             ASSERT_EQ(scalar(again, "SELECT COUNT(*) FROM schema_version"), int64_t{10});
             ASSERT_EQ(scalar(again, "SELECT COUNT(*) FROM bot_rotation"), int64_t{1});
             again.close();

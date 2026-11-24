@@ -7,7 +7,7 @@ The game server's SUBMISSION door (ants_server --submit-port 4030, docs/MAP_SUBM
     list of the newest version) and the fallback that asks the game server for the file and the picture of an APPROVED map; everything else under /admin/ is a 404 (there is no helper, no callback);
   - what is passed on: nothing the visitor sent but the few headers that each block names (the token of a maker, the CSRF token of the admin, the type of the body), the real client address in
     X-Client-Address (a header of that name from a visitor never gets through), and no cookie in either direction;
-  - the admin's door (docs/HUB.md "The admin page's door"): the chat hub's gate is asked once for each request of /admin/api/ (a stand-in hub plays it below), only its signed pass goes to the game server, a visitor
+  - the admin's door (docs/HUB_ROLES.md "The admin page's door"): the chat hub's gate is asked once for each request of /admin/api/ (a stand-in hub plays it below), only its signed pass goes to the game server, a visitor
     whom it does not let in is answered here in JSON, a gate in trouble is a 503, a request of another site is turned away first, and the allowance is for each address;
   - the limits that nginx holds before the game server is asked: the size of a map (under a million bytes for a Classic one, 4 MiB for an Extended one), the methods, an allowance for each address;
   - a game server that is not there is a JSON 503, never a page of the site; the admin page is never kept by a cache, has a strict content security policy and cannot be framed.
@@ -82,7 +82,7 @@ class Door(BaseHTTPRequestHandler):
         self.send_header("Content-Type", kind)
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
-        if self.name in ("door", "testdoor"):
+        if self.name in ("door", "testdoor", "counts"):
             self.send_header("Set-Cookie", "evil=1")                  # (a game server that sets a cookie: the site never passes one on)
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
@@ -119,6 +119,40 @@ class Gate(BaseHTTPRequestHandler):
             self.send_header(admin_pass.PASS_HEADER, made)
         if status == 302:
             self.send_header("Location", "/somewhere")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    do_GET = do_POST = do_PUT = do_DELETE = handle_any
+
+    def log_message(self, *args):
+        pass
+
+
+LIKE_SESSION, LIKE_BROKEN_SESSION, LIKE_SHUT_SESSION, LIKE_BUSY_SESSION = "7" * 32, "8" * 32, "9" * 32, "6" * 32
+
+
+class LikeGate(BaseHTTPRequestHandler):
+    """A stand-in for the chat hub's like gate (GET /hub/likes/gate, docs/REPLAY_COUNTS.md): the login cookie decides. LIKE_SESSION: 204 and a pass of its own (`v1.stand-in.<n>`); LIKE_BROKEN_SESSION: 500; LIKE_SHUT_SESSION:
+    503 (no good key); LIKE_BUSY_SESSION: 429; no cookie or any other value: 401. It writes down every request exactly as it came."""
+    seen = []
+    passes = []
+    lock = threading.Lock()
+    name = "likegate"
+
+    def handle_any(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(length) if length else b""
+        cookie = self.headers.get("Cookie", "")
+        session = cookie.split(HUB_COOKIE, 1)[1][:32] if HUB_COOKIE in cookie else ""
+        status = {LIKE_SESSION: 204, LIKE_BROKEN_SESSION: 500, LIKE_SHUT_SESSION: 503, LIKE_BUSY_SESSION: 429}.get(session, 401)
+        with self.lock:
+            made = "v1.stand-in.%d" % (len(self.passes) + 1) if status == 204 else None
+            self.seen.append((self.command, self.path, list(self.headers.items()), len(body), self.request_version))
+            if made:
+                self.passes.append(made)
+        self.send_response(status)
+        if made:
+            self.send_header("X-Ants-Like-Pass", made)
         self.send_header("Content-Length", "0")
         self.end_headers()
 
@@ -170,16 +204,20 @@ class Rig:
                 f.write(own)
         if hub_port is None:
             self.gate, self.gate_server, self.gate_port = stub("gate", Gate)
+            self.like_gate, self.like_gate_server, self.like_gate_port = stub("likegate", LikeGate)
         else:
             self.gate = self.gate_server = self.gate_port = None
+            self.like_gate = self.like_gate_server = self.like_gate_port = None
         if real_ports is None:
             self.door, self.door_server, self.door_port = stub("door")
             self.replay, self.replay_server, self.replay_port = stub("replay")
             self.test_door, self.test_door_server, self.test_door_port = stub("testdoor")
+            self.counts_door, self.counts_door_server, self.counts_door_port = stub("counts")
         else:
-            self.door = self.replay = self.door_server = self.replay_server = self.test_door = self.test_door_server = None
+            self.door = self.replay = self.door_server = self.replay_server = self.test_door = self.test_door_server = self.counts_door = self.counts_door_server = None
             self.door_port, self.replay_port = real_ports[0], real_ports[1]
             self.test_door_port = real_ports[2] if len(real_ports) > 2 else real_ports[0]
+            self.counts_door_port = real_ports[3] if len(real_ports) > 3 else real_ports[0]
         text = RAW
         text = text.replace("/usr/share/nginx/html", self.work + "/html")
         text = text.replace("/etc/nginx/ants-trusted-proxies/", self.work + "/trusted/").replace("/etc/nginx/ants-trusted-proxies.d/", self.work + "/trusted.d/")
@@ -188,8 +226,11 @@ class Rig:
         else:                                                                                    # (the gate's block only: the other doors of the hub stay as they were, a hub that is not there)
             at = text.index("location = /hub/admin/gate {")
             text = text[:at] + text[at:].replace("set $ants_hub ants-hub:4040;", "set $ants_hub 127.0.0.1:%d;" % self.gate_port, 1)
+            at = text.index("location = /hub/likes/gate {")                                      # (the like gate's block: its own stand-in)
+            text = text[:at] + text[at:].replace("set $ants_hub ants-hub:4040;", "set $ants_hub 127.0.0.1:%d;" % self.like_gate_port, 1)
         text = text.replace("set $ants_submit ants-server:4030;", "set $ants_submit 127.0.0.1:%d;" % self.door_port)
         text = text.replace("set $ants_test_maps ants-server:4031;", "set $ants_test_maps 127.0.0.1:%d;" % self.test_door_port)
+        text = text.replace("set $ants_counts ants-server:4032;", "set $ants_counts 127.0.0.1:%d;" % self.counts_door_port)
         text = text.replace("set $ants_replays ants-server:4020;", "set $ants_replays 127.0.0.1:%d;" % self.replay_port)
         text = text.replace("set $ants_replays ants-server:4002;", "set $ants_replays 127.0.0.1:%d;" % self.replay_port)
         text = text.replace("set $ants_server ants-server:4002;", "set $ants_server 127.0.0.1:%d;" % self.replay_port)
@@ -199,6 +240,7 @@ class Rig:
             text = re.sub(r"(zone=ants_submit_read:1m rate=)10r/s", r"\g<1>100000r/s", text)
             text = re.sub(r"(zone=ants_test_maps:1m rate=)10r/m", r"\g<1>100000r/s", text)
             text = re.sub(r"(zone=ants_admin_api:1m rate=)1r/s", r"\g<1>100000r/s", text)
+            text = re.sub(r"(zone=ants_counts_(?:play_one|play|like|mine):1m rate=)\d+r/m", r"\g<1>100000r/s", text)
         text = text.replace("/srv/community-maps/", self.work + "/srv/").replace("/var/cache/nginx/", self.work + "/cache/")
         self.log_file = os.path.join(self.work, "access.log")
         text = text.replace("access_log /dev/stdout ants_noquery;", ("access_log %s ants_noquery;" % self.log_file) if log else "access_log off;")          # (the image logs to its output)
@@ -215,7 +257,7 @@ class Rig:
     def stop(self):
         self.proc.terminate()
         self.proc.wait(timeout=10)
-        for server in (self.door_server, self.replay_server, self.test_door_server, self.gate_server):
+        for server in (self.door_server, self.replay_server, self.test_door_server, self.gate_server, self.counts_door_server, self.like_gate_server):
             if server is not None:
                 server.shutdown()
                 server.server_close()

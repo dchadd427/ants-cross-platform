@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the moderators' powers (hub/chat.py `allowed`, `command`, `carry_out`, hub/roles.py `fresh`, `confirm`, hub/pseudo.py, the moderators' log in hub/store/, hub/admin.py `log`, the ids that no representation prints; docs/HUB.md 'Moderation' and 'The moderators' log') for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose (a power that a role does not have, a person who may be acted on, a kick that does not end the login, a ban that does not close the sockets, a named line that names the moderator or is not kept, an action on an answer that is old, a lookup that is not waited for or not asked, a log row that is not written or holds an id, a reference that is not keyed, an id that a command prints), and a test of tests/scripts/test_hub_powers.py or test_hub_store_contract.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hub_powers_mutants.json --keep-going --jobs 1 --baseline-every 40; every mutant must be caught.",
+ "note": "Mutants of the moderators' powers (hub/chat.py `allowed`, `command`, `carry_out`, hub/roles.py `fresh`, `confirm`, hub/pseudo.py, the moderators' log in hub/store/, hub/admin.py `log`, the ids that no representation prints; docs/HUB.md 'Moderation' and docs/HUB_ROLES.md 'The moderators' log') for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose (a power that a role does not have, a person who may be acted on, a kick that does not end the login, a ban that does not close the sockets, a named line that names the moderator or is not kept, an action on an answer that is old, a lookup that is not waited for or not asked, a log row that is not written or holds an id, a reference that is not keyed, an id that a command prints), and a test of tests/scripts/test_hub_powers.py or test_hub_store_contract.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hub_powers_mutants.json --keep-going --jobs 1 --baseline-every 40; every mutant must be caught.",
  "baseline": {
   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest tests.scripts.test_hub_powers tests.scripts.test_hub_store_contract"
  },
@@ -609,8 +609,8 @@
   {
    "id": "the_chat_uses_no_secret_of_the_hub",
    "file": "hub/chat.py",
-   "old": "        return pseudo.reference(self.secret, account)",
-   "new": "        return pseudo.reference(b\"x\" * 32, account)",
+   "old": "ref = self.ref_cache[account] = pseudo.reference(self.secret, account)",
+   "new": "ref = self.ref_cache[account] = pseudo.reference(b\"x\" * 32, account)",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLog tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_powers.TheReference"
   },
   {

@@ -1,6 +1,6 @@
 #pragma once
 
-// The map of deaths of a match (docs/REPLAYS.md "The map of deaths"): where each ant died, kept in a small field of its own next to the `details` of a match's record, with a cap of its own
+// The map of deaths of a match (docs/HEATMAPS.md "The map of deaths"): where each ant died, kept in a small field of its own next to the `details` of a match's record, with a cap of its own
 // (kDeathsMaxBytes), so that the cap of the details (kDetailsMaxBytes) is not touched and the map is kept even when the details drop their list of kills. Pure: no clock, no disk, no database. The page
 // (web/death_map.js) reads it as data from a server: every number is clamped, every character is checked.
 //

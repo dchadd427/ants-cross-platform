@@ -1,4 +1,4 @@
-/* The map "Where ants died" (docs/REPLAYS.md "The map of deaths"; web/death_map.js): the card of the match page and the smaller one of the Stats panel on the replay page. It uses the tokens of matches.css (the
+/* The map "Where ants died" (docs/HEATMAPS.md "The map of deaths"; web/death_map.js): the card of the match page and the smaller one of the Stats panel on the replay page. It uses the tokens of matches.css (the
    match page) and of the game page; the few that the two pages name differently have a fallback. The colors of the teams are the page's (--c-green, --c-red, --c-blue and --c-black, set by data-c on a mark, a square or a dot), never a color of this file. */
 .dm { --dm-muted: var(--muted, #8fb3a6); --dm-gold: var(--gold, #f6d058); --dm-cream: var(--cream, #f4ece2); --dm-edge: var(--edge, #050a08); --dm-shadow: var(--shadow, #9d0d17); }
 .dm .head .count { white-space: normal; text-align: right; }

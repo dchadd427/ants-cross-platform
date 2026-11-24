@@ -156,8 +156,8 @@
         { key: 'color', label: 'Color', options: [['all', 'Any color'], ['green', 'Green'], ['red', 'Red'], ['blue', 'Blue'], ['black', 'Black']] },
         { key: 'mode', label: 'Mode', options: [['all', 'Any mode'], ['highest-score', 'Highest score'], ['187', '187']] }
     ];
-    var SORTS = [['new', 'Newest first'], ['old', 'Oldest first'], ['score', 'Highest score'], ['kills', 'Most kills'], ['hatched', 'Most hatched'], ['long', 'Longest'], ['short', 'Shortest']];
-    var SORT_KEYS = { score: ['Top score', 'score'], kills: ['Most kills', 'killed'], hatched: ['Most hatched', 'hatched'] };       // what a sort by a count shows on each card
+    var SORTS = [['new', 'Newest first'], ['old', 'Oldest first'], ['score', 'Highest score'], ['kills', 'Most kills'], ['hatched', 'Most hatched'], ['long', 'Longest'], ['short', 'Shortest'], ['plays', 'Most watched'], ['likes', 'Most liked']];
+    var SORT_KEYS = { score: ['Top score', 'score'], kills: ['Most kills', 'killed'], hatched: ['Most hatched', 'hatched'] };       // what a sort by a count shows on each card (plays and likes are not here: those two sorts keep the length and the card brightens its own small count, web/replay_likes.js)
     var Q_MAX = 40;                                      // the server's limit for a search text
 
     function defaults() { return { who: 'all', format: 'all', result: 'all', rec: 'all', color: 'all', mode: 'all', sort: 'new', q: '', page: 1 }; }
@@ -319,7 +319,8 @@
     // ---- the stats of a match on the game page in replay mode (web/shell.html, web/replay_stats.css) ----
     // The server's record of the match on show (GET /history/<id>) as a panel: the "Stats" button of the header (a wide screen) opens it over the corner of the picture, a row under the controls (a phone)
     // opens it in the page. The numbers are the final ones of the match; they do not follow the picture. A recording with no record (or a server that does not answer) gets no button.
-    // env = { document, fetch, file, deathMap, redraw }; the elements are the page's own: stats-btn, mstats (the panel), mstats-flow (the row) and the header. `deathMap` (web/death_map.js create(), optional) makes the small
+    // env = { document, fetch, file, deathMap, redraw, onRecord }; the elements are the page's own: stats-btn, mstats (the panel), mstats-flow (the row) and the header. `onRecord` (optional) is given the record once it is
+    // known to be this match's, for the activity curve of the timeline (web/replay_activity.js): the one question to the server serves both. `deathMap` (web/death_map.js create(), optional) makes the small
     // card "Where ants died" under the table (a match without positions gets none); `redraw` draws it again for its size when a closed panel is opened (a card in a hidden box has no size).
     function replayStats(env) {
         var doc = env.document, id = idOfFile(env.file);
@@ -393,7 +394,10 @@
         var request;
         try { request = env.fetch('/history/' + id, { cache: 'no-store', credentials: 'omit' }); } catch (e) { return; }
         request.then(function (response) { return response.ok ? response.json() : null; }).then(function (rec) {
-            if (rec && typeof rec === 'object' && rec.id === id && Array.isArray(rec.seats)) mount(rec);
+            if (rec && typeof rec === 'object' && rec.id === id && Array.isArray(rec.seats)) {
+                if (typeof env.onRecord === 'function') { try { env.onRecord(rec); } catch (e) { /* the curve is one more thing: whatever it does, the panel is made */ } }
+                mount(rec);
+            }
         }).catch(function () { /* no stats: no button */ });
     }
 

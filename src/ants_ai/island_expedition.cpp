@@ -23,7 +23,7 @@ int32_t index_of(const sim::Grid& grid, sim::TileCoord t) noexcept { return t.y 
 int32_t line_dist(sim::TileCoord a, sim::TileCoord b) noexcept { return std::abs(a.x - b.x) + std::abs(a.y - b.y); }
 
 /// The ticks from a click to the moment the ant's tile is the hat's tile, for a hat `tiles` tiles away from an ant at rest on a tile centre (or on the centre that the click snaps it to): 10 for the
-/// next tile and 8 for each tile more (measured at all eight entrances of the corner rows of ISLANDS, docs/BOTS.md "Timed clicks"; 9 for the next tile when the walk goes east or south, the cancel
+/// next tile and 8 for each tile more (measured at all eight entrances of the corner rows of ISLANDS, docs/BOT_ISLANDS.md "Timed clicks"; 9 for the next tile when the walk goes east or south, the cancel
 /// then takes one tick more: the window used is from this to one tick more, which is inside both). The next click must be APPLIED in the window that starts there: earlier, the ant has not entered
 /// the hat's tile yet and the click finds no way across the hat; three ticks later, the ant takes the hat.
 constexpr uint32_t leg_ticks(int32_t tiles) noexcept { return 10u + 8u * static_cast<uint32_t>(tiles > 1 ? tiles - 1 : 0); }

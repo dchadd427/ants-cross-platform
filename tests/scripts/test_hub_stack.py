@@ -158,7 +158,7 @@ class TheServices(unittest.TestCase):
     def test_the_settings_it_is_given(self):
         for name, text in self.files.items():
             hub = service(text, "ants-hub")
-            self.assertEqual(sorted(re.findall(r"(?m)^      (ANTS_[A-Z_]+):", hub)), ["ANTS_ADMIN_GATE_SECRET", "ANTS_HUB_ADMIN_GATE_SECRET", "ANTS_HUB_AI_KEYS", "ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_DISCORD_CLIENT_ID", "ANTS_HUB_DISCORD_CLIENT_SECRET",
+            self.assertEqual(sorted(re.findall(r"(?m)^      (ANTS_[A-Z_]+):", hub)), ["ANTS_ADMIN_GATE_SECRET", "ANTS_HUB_ADMIN_GATE_SECRET", "ANTS_HUB_AI_KEYS", "ANTS_HUB_COUNTS_URL", "ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_DISCORD_CLIENT_ID", "ANTS_HUB_DISCORD_CLIENT_SECRET",
                                                                                      "ANTS_HUB_DISCORD_GUILD", "ANTS_HUB_GAME_ADMIN_URL", "ANTS_HUB_IMAGE_CONVERTER_URL", "ANTS_HUB_IMAGE_DIR", "ANTS_HUB_MIN_ACCOUNT_DAYS", "ANTS_HUB_OWNER", "ANTS_HUB_PUBLIC_URL",
                                                                                      "ANTS_HUB_ROLE_ADMIN", "ANTS_HUB_ROLE_IMAGES", "ANTS_HUB_ROLE_MOD", "ANTS_HUB_ROLE_RECHECK_SECONDS"], name)
             for secret in ("ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_DISCORD_GUILD", "ANTS_HUB_ROLE_ADMIN", "ANTS_HUB_ROLE_MOD", "ANTS_HUB_ROLE_IMAGES", "ANTS_HUB_OWNER", "ANTS_HUB_ADMIN_GATE_SECRET", "ANTS_ADMIN_GATE_SECRET"):

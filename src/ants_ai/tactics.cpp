@@ -18,7 +18,7 @@ constexpr uint8_t kSecureOpening = static_cast<uint8_t>((1u << static_cast<unsig
 LevelPlan plan_for(Level level) noexcept {
     LevelPlan p;
     p.level = level;
-    // The contest batch (docs/BOT_FOOD.md, "Easy: the race"; docs/BOTS.md, "Fights of its own", "Fire play", "Behind the leader and the endgame"): the rules of the report of 2026-10-05, at every level, scaled below; bot_arena's `prev` key
+    // The contest batch (docs/BOT_FOOD.md, "Easy: the race"; docs/BOT_TACTICS.md, "Fights of its own", "Fire play", "Behind the leader and the endgame"): the rules of the report of 2026-10-05, at every level, scaled below; bot_arena's `prev` key
     // switches these flags off again (the strategy of v0.5.0, for the tournaments' comparison; the controller's refusal of special orders onto an ant is no plan field and stays)
     p.race = true;
     p.health_aware = true;
@@ -71,7 +71,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.contest_opening_ants = 1;
             p.denial_order = true;              // the denial order: contested food first, the own safe piles last (docs/BOT_FOOD.md)
             p.skip_hopeless = true;             // a pile that a nearer enemy eats first is left alone while another pile has food (docs/BOT_FOOD.md)
-            p.bomb_detour = 1;                  // the economy, the power-up trips and the fights go round a visible bomb of another team (docs/BOTS.md, "Bombs on the way")
+            p.bomb_detour = 1;                  // the economy, the power-up trips and the fights go round a visible bomb of another team (docs/BOT_PLAY.md, "Bombs on the way")
             p.bomb_route = true;
             p.secure_side = true;
             p.secure_kinds = kSecureOpening;
@@ -79,7 +79,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.takes_combat = true;
             p.takes_thief = true;
             p.intercepts = false;
-            p.guards = false;                    // the Combat Ant is a worker that fights: it harvests, its reflex punches what comes near, a fight takes it first (measured: docs/BOTS.md, "Aggression")
+            p.guards = false;                    // the Combat Ant is a worker that fights: it harvests, its reflex punches what comes near, a fight takes it first (measured: docs/BOT_TACTICS.md, "Aggression")
             p.combat_harvests = true;
             p.combat_when_attacked = false;      // taken in the opening, with the other power-ups of the side
             p.raids = true;
@@ -134,7 +134,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.takes_combat = true;
             p.takes_thief = true;
             p.intercepts = false;
-            p.guards = false;                    // the Combat Ant is a worker that fights: it harvests, its reflex punches what comes near, a fight takes it first (measured: docs/BOTS.md, "Aggression")
+            p.guards = false;                    // the Combat Ant is a worker that fights: it harvests, its reflex punches what comes near, a fight takes it first (measured: docs/BOT_TACTICS.md, "Aggression")
             p.combat_harvests = true;
             p.combat_when_attacked = false;      // taken in the opening, with the other power-ups of the side
             p.raids = true;
@@ -146,13 +146,13 @@ LevelPlan plan_for(Level level) noexcept {
             p.hatch_extra = 2;
             p.gate = true;                       // guiding for eating: +4 to +23 percent alone on every shipped map (docs/BOTS.md)
             p.gate_leaver_ticks = 60;            // the click waits for the ant that leaves over the ramp (a small gain: 170 to 140 refused gate clicks in 240 matches)
-            p.avoids_guarded_hills = false;      // (a Combat Ant of the enemy is a worker that fights, not a guard: the raids of this bot go where the hole is open; measured, docs/BOTS.md "Aggression")
+            p.avoids_guarded_hills = false;      // (a Combat Ant of the enemy is a worker that fights, not a guard: the raids of this bot go where the hole is open; measured, docs/BOT_TACTICS.md "Aggression")
             p.raid_min_loot = 15;                // a raid for 15 points is a swing of 30 and a trip of a few hundred ticks: it pays (raidmin 10 / 30 / 60: 96.5 / 94.1 / 93.1 percent against Medium, Medium, Easy)
             p.hunt_force = 3;
             p.hunt_reach = 10;
             p.hunt_leader_carriers = true;       // Hard also hunts the carriers of the leading team wherever they are
             // (p.skirmish, the stronger force at a carrier or a worker at a pile, is built and OFF: against three bots of v0.5.0 on TREASURE a Hard bot with it won 14.1 percent of 96 matches and 28.6
-            // without it, 25 being equal; it keeps three ants from the piles for up to 600 ticks at a time and the enemy's defenders come: docs/BOTS.md, "Fights of its own")
+            // without it, 25 being equal; it keeps three ants from the piles for up to 600 ticks at a time and the enemy's defenders come: docs/BOT_TACTICS.md, "Fights of its own")
             p.islands = true;
             p.island_expedition = true;
             p.island_timed_row = true;
@@ -161,9 +161,9 @@ LevelPlan plan_for(Level level) noexcept {
             p.island_ferry_reorder = true;
             p.island_mine_reach = true;              // a Bomber lays no mine on ground it cannot walk to, so it is free to fly to the ring pile
             p.island_mine_from = 600;                // the flight starts as soon as the expedition is over (the clock only keeps it from the first minutes)
-            p.island_flower_link = true;             // the swarm: a Swimmer digs the tiles from the ring half to the flower strips, the spare ants wait there and take the Swimmers that fall (docs/BOTS.md, "The swarm")
+            p.island_flower_link = true;             // the swarm: a Swimmer digs the tiles from the ring half to the flower strips, the spare ants wait there and take the Swimmers that fall (docs/BOT_ISLANDS.md, "The swarm")
             p.island_swarm_rows = 1300;              // ... and the corner rows that nobody works are taken on foot, from the tick at which the own row is done
-            p.island_link_cost = true;               // ... the link that is dug is the cheapest one, not the first of the list (docs/BOTS.md, "Bridges for ants")
+            p.island_link_cost = true;               // ... the link that is dug is the cheapest one, not the first of the list (docs/BOT_ISLANDS.md, "Bridges for ants")
             p.island_return = true;                  // ... a hurt ant that stands stranded on another island gets a bridge home and heals,
             p.island_feeder = true;                  // ... one that stands beside food that the hill could not reach gets the bridge that opens it,
             p.island_power_bridge = true;            // ... and one that stands idle gets the bridge to a power-up that the plan wants
@@ -174,7 +174,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.island_builders = 0;
             break;
     }
-    // The war batch (docs/BOTS.md, "The war batch"; requested 2026-10-09: the bots start more fights with each other, fire at their opponent, and try to kill their
+    // The war batch (docs/BOT_TACTICS.md, "The war batch"; requested 2026-10-09: the bots start more fights with each other, fire at their opponent, and try to kill their
     // fire ant if they try to come for them, and the bomber bombs up the food). Every level fights over the food that is left and, with the food gone and an ant of nothing to do, goes for the
     // enemy ants; the weaker the level the later it starts and the better the odds it asks for. Medium and Hard also light the ring round the gate of the best opponent whether or not he can put the fire out (a
     // Fire Ant is cheap, and the walls that stand cost the owner his way out), hunt the Fire and Bomber Ants that come near the own hill, and lay mines at the piles an enemy works and round his gate while
@@ -247,11 +247,11 @@ LevelPlan plan_for(Level level) noexcept {
             p.raider_radius = 6;
             p.war_free_only = true;
             p.war_bombers = 1;                       // (two Bombers wanted cost the ISLANDS expedition 5 percent of its food: the crew needs the Bombers of its row)
-            p.mine_per_pile = 10;                    // (requested 2026-10-10: the bomber places more than three bombs and bombs up a whole area: 10 at a pile, mines that touch, and 12 round the own hill, off the way of the own carriers (four bots that all mine the lanes lose food); the gate keeps 3 (5 for a loser) so that the fire-in still has tiles to light: docs/BOTS.md, "The stand batch")
+            p.mine_per_pile = 10;                    // (requested 2026-10-10: the bomber places more than three bombs and bombs up a whole area: 10 at a pile, mines that touch, and 12 round the own hill, off the way of the own carriers (four bots that all mine the lanes lose food); the gate keeps 3 (5 for a loser) so that the fire-in still has tiles to light: docs/BOT_TACTICS.md, "The stand batch")
             p.mine_apart = 1;
             p.mine_gate = 3;
             p.behind_war = true;                     // (tiers 15, 35, 70; the odds 12 percent less at every tier, the Combat Ants off the piles from tier 3: from tier 2 they cost Hard 4 percent of its food four against four)
-            p.fire_duel = true;                      // the stand batch (docs/BOTS.md, "The stand batch"; fire_draft stays off: the draft cost food and won nothing the duel did not)
+            p.fire_duel = true;                      // the stand batch (docs/BOT_TACTICS.md, "The stand batch"; fire_draft stays off: the draft cost food and won nothing the duel did not)
             p.ramp_unjam = true;
             p.behind_mine_tier = 2;                  // (tier 1 cost four Hard bots against four 10 percent of their food on TREASURE, tier 2 four percent, tier 3 nothing)
             p.behind_mine_gate = 5;
@@ -277,7 +277,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.hit_follow_up = true;
             break;
     }
-    // The food-gone batch (docs/BOTS.md, "When the food is gone"): when no food is left to get, a bot gets points some other way, by stealing and by fighting, instead of standing. Every level has it, the weaker
+    // The food-gone batch (docs/BOT_TACTICS.md, "When the food is gone"): when no food is left to get, a bot gets points some other way, by stealing and by fighting, instead of standing. Every level has it, the weaker
     // the level the later it begins and the more it asks before it risks its last ant: Hard begins after 20 seconds of no work and steals for 10 points, Medium after 40 and for 15, Easy after 80 and for 30 and keeps its last ant
     // out of every fight that has points to lose. `--tune gone=0` is the bot before the batch.
     p.gone = true;
@@ -325,7 +325,7 @@ LevelPlan plan_for(Level level) noexcept {
         p.idle_swap = true;
         p.idle_swap_ticks = level == Level::Hard ? 300u : 600u;
     }
-    // The thief batch (docs/BOTS.md, "Thieves: the answer to a raid"): Medium and Hard look at a hole again while a thief walks to it, and do not take a Fire power-up that the ant could not carry home.
+    // The thief batch (docs/BOT_TACTICS.md, "Thieves: the answer to a raid"): Medium and Hard look at a hole again while a thief walks to it, and do not take a Fire power-up that the ant could not carry home.
     // The meeting with an enemy Thief and the trap (thief_guard, thief_trap) are built and OFF: measured on TREASURE they cost the seat points (docs/BOTS.md). `--tune thief_batch=0` is the bot before the batch.
     if (level != Level::Easy) {
         p.raid_recheck = true;
@@ -427,7 +427,7 @@ LevelPlan plan_for(Level level, Style style, BotRng& rng) noexcept {
                 p.defenders += 1;
                 p.harass = true;                                                             // the visible part: Combat Ants go for the carriers of the best opponent that are near them (a militia: it harvests when nothing is near)
                 p.harass_idle_release = 20;
-                p.harass_range = 8;                                                          // (14 tiles lost 35 points of the group wins in the cross table against the raider, 8 tiles and the learning below 12: docs/BOTS.md "Styles")
+                p.harass_range = 8;                                                          // (14 tiles lost 35 points of the group wins in the cross table against the raider, 8 tiles and the learning below 12: docs/BOT_PLAY.md "Styles")
                 p.harass_retreat_hp = 7;                                                     // a member that is hurt leaves, and its team is left alone for a while (twice as long every time)
                 p.harass_pause_ticks = 3000;
                 p.harass_strong_defence = 3;                                                 // so is a team that answers with three ants at once (a Hard bot's defenders)
@@ -455,7 +455,7 @@ LevelPlan plan_for(Level level, Style style, BotRng& rng) noexcept {
                 p.avoids_guarded_hills = false;
                 break;
             case Style::Defensive:
-                p.wall_trigger = WallTrigger::Early;                                         // (no interception of thieves: it measured 15 percent of the wins against the mix, docs/BOTS.md "Styles")
+                p.wall_trigger = WallTrigger::Early;                                         // (no interception of thieves: it measured 15 percent of the wins against the mix, docs/BOT_PLAY.md "Styles")
                 p.defenders += 1;
                 p.ally_help = true;
                 p.contest_opening_ants = 0;

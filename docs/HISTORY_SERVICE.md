@@ -6,7 +6,7 @@
 
 ## Why a program of its own
 
-The game server runs on one thread. Counting a match means playing its recording again with no screen (0.3 to 0.6 s), which the server does only while no room runs a match, and the lists and the files of the public door are made on the same thread. A busy server counts late, and the counting shares its thread with the games. The service moves all of that to another process: the game server writes each recording when a match ends, as before, and the service does the counting and the serving.
+The game server runs on one thread. Counting a match means playing its recording again with no screen (0.3 to 0.6 s), which the server does in steps of a few milliseconds (a match with a person in it that has just ended at once, the other recordings only while no room with a person in it runs a match), and the lists and the files of the public door are made on the same thread. A busy server counts late, and the counting shares its thread with the games. The service moves all of that to another process: the game server writes each recording when a match ends, as before, and the service does the counting and the serving.
 
 ## Starting it
 
@@ -18,7 +18,7 @@ ants_history --db FILE --recordings DIR --maps DIR --port N
 
 | Option | Meaning |
 |---|---|
-| `--db FILE` | The service's own SQLite file, made when it is not there. It holds the match history and nothing else (the tables `history_matches`, `history_seats`, `history_markers`, `history_deaths`, `map_plays` and `meta`, made by the same SQL as the game server's). |
+| `--db FILE` | The service's own SQLite file, made when it is not there. It holds the match history and nothing else (the tables `history_matches`, `history_seats`, `history_markers`, `history_deaths`, `history_action`, `map_plays`, `replay_likes` and `meta`, made by the same SQL as the game server's; the plays and likes of replays are two columns of `history_matches`). |
 | `--recordings DIR` | The folder of the game server's recordings (its `--replays-dir`). It is only read: the service deletes, writes and renames nothing in it. |
 | `--maps DIR`, `--community-maps DIR` | The folders of the maps (the game server's `--maps` and `--community-maps`): a recording is played on its map. A folder that is named must be there. |
 | `--game-db FILE`, `--submissions-dir DIR` | The game server's database (its `--db`) and its folder of submitted maps (its `--submissions-dir`). The database is opened read only. See "The first start" and "Maps of the players". |
@@ -43,7 +43,7 @@ The two meet in the database file (WAL: a reader never waits for the writer; a f
 
 ## The first start
 
-A new database file has no history. With `--game-db` the service copies the game server's history into it once, at the first start: the matches, their seats, the markers of matches that the operator took out (so that a match whose recording is still there is not counted again), the maps of deaths and the play counts of the maps, in **one transaction** together with a row `history_import` of `meta`. The game database is opened read only and read in one read transaction, so the game server may go on writing. What follows from that:
+A new database file has no history. With `--game-db` the service copies the game server's history into it once, at the first start: the matches, their seats, the markers of matches that the operator took out (so that a match whose recording is still there is not counted again), the maps of deaths, the actions of the matches, the play counts of the maps (the numbers of plays and likes of the replays are columns of the matches' rows and go with them; the rows of the table of likes, which hold the hub's references, are not copied: [`REPLAY_COUNTS.md`](REPLAY_COUNTS.md#the-history-service)), in **one transaction** together with a row `history_import` of `meta`. The game database is opened read only and read in one read transaction, so the game server may go on writing. What follows from that:
 
 - A start again finds the row and copies nothing, whatever the game database holds now. The recordings that the game server counts after the copy are counted by the service from their files, once (the matches that were copied are known by their ids and are not counted again).
 - A file of the service that already holds history of its own, and no such row, is left as it is: the play counts are sums and cannot be told apart from the game server's. The log says so; start with a new file to copy.
@@ -65,8 +65,8 @@ The service deletes no record, no recording and no marker. A marker (the row tha
 
 ## What it does not do yet
 
-The game server keeps these until they move: the operator's `DELETE /history/<id>` and `DELETE /replays/<file>` (a deleted match leaves a marker so that its recording is not counted again), the hourly purge of recordings, the play counts that `/maps` reads (the service keeps its own `map_plays`, which `/maps` does not read), the site statistics, and the database of the maps and accounts. The service has no secret and no write route.
+The game server keeps these until they move: the operator's `DELETE /history/<id>` and `DELETE /replays/<file>` (a deleted match leaves a marker so that its recording is not counted again), the hourly purge of recordings, the play counts that `/maps` reads (the service keeps its own `map_plays`, which `/maps` does not read), the plays and the likes of replays (its file has their columns and the table of the likes, lists and sorts by them, and copies the numbers at the first start but not the rows of the likes; the door that counts them and the pass that names a person stay on the game server, [`REPLAY_COUNTS.md`](REPLAY_COUNTS.md), so the route of `/history` must not move to the service before it takes them), the site statistics, and the database of the maps and accounts. The service has no secret and no write route.
 
 ## Tests
 
-The cases are in [`TESTING.md`](TESTING.md), 2.19.20; the mutants of the service's rules are in `tests/data/history_service_mutants.json`.
+The cases are in [`TESTING_SUITES.md`](TESTING_SUITES.md), 2.19.20; the mutants of the service's rules are in `tests/data/history_service_mutants.json`.

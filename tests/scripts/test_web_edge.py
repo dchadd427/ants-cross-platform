@@ -238,7 +238,7 @@ class TheWindowedMargin(PageCase):
         self.assertIn("In a window the map keeps scrolling while the pointer is just past the edge of the game (about an inch)", self.page)
 
     def test_the_browser_page_and_the_notes_say_what_the_margin_is(self):
-        page = read(os.path.join(REPO, "docs", "PLAY_IN_BROWSER.md"))
+        page = read(os.path.join(REPO, "docs", "PLAY_PICTURE.md"))
         self.assertIn("The margin of a windowed page", page)
         self.assertIn("ANTS_EDGE_MARGIN", page)
         self.assertIn("test_web_edge.sh --only margin", page)
@@ -261,7 +261,7 @@ class ThePagesOwnCode(unittest.TestCase):
         self.assertIn("0 failures", done.stdout)
 
     def test_the_page_hands_the_menu_its_pick_function_and_its_lock(self):
-        """the call of AntsGameMenu.forPage, run as the page writes it (tests/scripts/web_menu_handover_check.js): the menu's Picture shape row and Fullscreen mouse row work only through what it is handed"""
+        """the call of AntsGameMenu.forPage, run as the page writes it (tests/scripts/web_menu_handover_check.js): the menu's Picture shape row and Fullscreen mouse row work only through what it is handed; and the ready callback, run too: the page loads the menu, in the frame of a match page as well"""
         done = subprocess.run([shutil.which("node"), os.path.join(REPO, "tests", "scripts", "web_menu_handover_check.js"), SHELL], capture_output=True, text=True, timeout=120)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("0 failures", done.stdout)

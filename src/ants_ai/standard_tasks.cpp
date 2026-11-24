@@ -597,7 +597,7 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<Attac
         end = true;                                                              // it died, left sight, stands on a power-up or went into a hill
         return;
     }
-    // A survivor with one hit point walks home (the engine sends it) at the speed of its hunters: with a lead of two tiles it is not caught any more (measured: docs/BOTS.md, "Hunting the kill"), so the
+    // A survivor with one hit point walks home (the engine sends it) at the speed of its hunters: with a lead of two tiles it is not caught any more (measured: docs/BOT_TACTICS.md, "Hunting the kill"), so the
     // fight is over and the ant is left alone for a while
     if (plan.health_aware && !f.thief && !f.defenders.empty() && target->hp == 1 && target->state == sim::UnitState::Walking && w_blows == 0) {
         int32_t nearest = 99;

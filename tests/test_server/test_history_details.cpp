@@ -16,6 +16,8 @@
 
 #include "../common/test_assert.hpp"
 #include "ants_replay/match_stats.hpp"
+#include "ants_server/history_action.hpp"
+#include "ants_server/history_deaths.hpp"
 #include "ants_server/history_details.hpp"
 #include "history_fixtures.hpp"
 
@@ -390,6 +392,41 @@ int main() {
         ASSERT_TRUE(!d.outcome.ran && !d.stats.ok);
     } TEST_END();
 
+    TEST_CASE("HD1.5b A play in pieces (StatsPlayback, 1, 3 and 97 turns at a time) gives what play_with_stats() gives, on four kinds of recording: the outcome and its state hash, the record that is made of it (as the doors give it), the details, the action and the map of deaths") {
+        bool some_action = false, some_deaths = false;                                                 // (the comparison is of something: a recording or two have an action and a map of deaths)
+        for (const int k : {0, 2, 4, 5}) {
+            Real m = load(k);
+            if (!m.ok) {
+                std::cout << "SKIPPED (no map)\n";
+                return;
+            }
+            const replay::StatsPlay whole = replay::play_with_stats(m.rep, m.level);
+            ASSERT_TRUE(whole.outcome.ok && whole.stats.ok);
+            const std::string id = id_at(kT0 + k);
+            const HistoryRecord whole_rec = make_history_record(id, kT0, m.rep, whole.outcome);
+            const std::string whole_json = ctl::to_json(history_record_to_json(whole_rec, true));
+            const std::string whole_details = make_history_details(whole.stats, whole_rec);
+            const std::string whole_action = make_history_action(whole.stats);
+            const std::string whole_deaths = make_history_deaths(whole.stats);
+            ASSERT_FALSE(whole_details.empty());
+            some_action = some_action || !whole_action.empty();
+            some_deaths = some_deaths || !whole_deaths.empty();
+            for (const uint32_t piece : {1u, 3u, 97u}) {
+                replay::StatsPlayback playback(m.rep, m.level);
+                while (!playback.advance(piece)) {
+                }
+                const replay::StatsPlay got = playback.take();
+                ASSERT_TRUE(got.outcome.ok && got.stats.ok && got.outcome.hash == whole.outcome.hash && got.outcome.turns == whole.outcome.turns && got.outcome.hashes_checked == whole.outcome.hashes_checked);
+                const HistoryRecord rec = make_history_record(id, kT0, m.rep, got.outcome);
+                ASSERT_EQ(ctl::to_json(history_record_to_json(rec, true)), whole_json);
+                ASSERT_EQ(make_history_details(got.stats, rec), whole_details);
+                ASSERT_EQ(make_history_action(got.stats), whole_action);
+                ASSERT_EQ(make_history_deaths(got.stats), whole_deaths);
+            }
+        }
+        ASSERT_TRUE(some_action && some_deaths);
+    } TEST_END();
+
     TEST_CASE("HD1.5 Held against an observer of its own that finds the same facts another way (the engine's record of every ant, read by number): the kills, the hit points of each team on each seat, the power-ups, the raids, the food trips and the seats that ran out of ants are the same, on matches with power-ups, thieves, bombs, drownings and a wiped out seat") {
         for (int k : {4, 5}) {
             Real m = load(k);
@@ -485,6 +522,9 @@ int main() {
             ASSERT_EQ(st.kills.size(), size_t{2});
             for (const MatchStats::Kill& k : st.kills) ASSERT_TRUE(k.victim == 0 && k.killer == MatchStats::kNoKiller);   // (no seat killed it: its own fire did)
             ASSERT_EQ(sum_of(st.damage_dealt), int64_t{0});                                    // (hurting yourself deals nothing)
+            uint64_t hurt = 0;
+            for (const uint32_t n : st.action[static_cast<size_t>(MatchStats::Action::Hit)]) hurt += n;
+            ASSERT_TRUE(hurt >= 2 && hurt <= 2 * (b.turns / MatchStats::kSampleTurns + 1));    // (two ants burned for hundreds of ticks: one hit for each in each bucket of 5 seconds, not one for every tick)
             ASSERT_TRUE(st.damage_taken[0] >= 18 && st.damage_from[0][0] == st.damage_taken[0]);
             ASSERT_TRUE(st.damage_taken[1] == 0 && st.damage_from[1][0] == 0);
             ASSERT_TRUE(st.wipes[0] == 2 && st.wipes[1] == 0);
@@ -517,6 +557,7 @@ int main() {
             const MatchStats st = b.collector.take(b.turns);
             ASSERT_TRUE(st.ok);
             ASSERT_EQ(sum_of(st.bombs_off), int64_t{0});                                       // (taken away by an ant: it did not go off)
+            ASSERT_TRUE(st.action[static_cast<size_t>(MatchStats::Action::Bomb)].empty());     // (nor is it a bomb in the activity curve)
         }
         {
             // a bomb that went off is its planter's, whichever seat that is: one of each seat, set off by an ant of the other
@@ -540,6 +581,25 @@ int main() {
             ASSERT_FALSE(b.engine.has_bomb_at({31, 30}));
             const MatchStats st = b.collector.take(b.turns);
             ASSERT_TRUE(st.ok && st.bombs_off[0] == 1 && st.bombs_off[1] == 1 && sum_of(st.bombs_off) == 2);
+        }
+        {
+            // a bomb that goes off is a bomb of the activity curve, in the bucket of the 5 seconds it went off in (turn / 100): two in the first, one after 5 seconds in the next
+            Bench b(shell);
+            const uint32_t bomber = b.engine.spawn_unit(0, sim::AntType::Bomber, {10, 10});
+            const uint32_t walker = b.engine.spawn_unit(1, sim::AntType::Worker, {12, 10});
+            b.step(2);
+            ASSERT_TRUE(b.engine.plant_bomb(bomber, {11, 10}) && b.engine.plant_bomb(bomber, {9, 10}));
+            b.step(2);
+            b.engine.trigger_bomb_detonation(walker, {11, 10});
+            b.step(2);
+            b.engine.trigger_bomb_detonation(walker, {9, 10});
+            b.step(150);
+            ASSERT_TRUE(b.engine.plant_bomb(bomber, {10, 11}));
+            b.step(2);
+            b.engine.trigger_bomb_detonation(walker, {10, 11});
+            b.step(2);
+            const MatchStats st = b.collector.take(b.turns);
+            ASSERT_TRUE(st.ok && sum_of(st.bombs_off) == 3 && st.action[static_cast<size_t>(MatchStats::Action::Bomb)] == std::vector<uint32_t>({2, 1}));
         }
         {
             Bench b(shell);

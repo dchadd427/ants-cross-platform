@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The "Game type" control of the front page's lobby in REAL browsers (opt-in; see tests/scripts/test_web_game_type.sh and docs/PLAY_IN_BROWSER.md "Game type").
+"""The "Game type" control of the front page's lobby in REAL browsers (opt-in; see tests/scripts/test_web_game_type.sh and docs/PLAY_MATCH_SETUP.md "Game type").
 
 Needs the web image of this tree served by nginx (tools/web_without_docker.py builds and serves it without Docker), the native `ants_server` of this tree, a Chromium-based browser and Python 3. The
 check starts the server, puts a front door before the site (/ws goes to the server, everything else to the site) and drives the front page like a person. Parts:

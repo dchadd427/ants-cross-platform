@@ -69,6 +69,8 @@ cp -f "${SCRIPT_DIR}/web/match_stats.js" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/match_stats.css" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/death_map.js" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/death_map.css" "${DIST_DIR}/"
+cp -f "${SCRIPT_DIR}/web/replay_activity.js" "${SCRIPT_DIR}/web/replay_activity.css" "${DIST_DIR}/"
+cp -f "${SCRIPT_DIR}/web/replay_plays.js" "${SCRIPT_DIR}/web/replay_likes.js" "${DIST_DIR}/"                                                                    # the play counter of the replay page and the plays and hearts of the match pages
 cp -f "${SCRIPT_DIR}/web/replay_stats.css" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/rejoin_key.js" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/hub_here.js" "${DIST_DIR}/"

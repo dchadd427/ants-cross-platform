@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The contract of the hub's data (hub/store/base.py; docs/HUB.md, "Data"): the same checks run against every backend.
+"""The contract of the hub's data (hub/store/base.py; docs/HUB_LOGIN.md, "Data"): the same checks run against every backend.
 
 A backend is a subclass of `Contract` that says how to make a store (`make_store(clock)`) and how to make writes fail (`refusing_writes(store)`).
 SQLite is the default and always runs. A backend that needs a server (the hook at the bottom) is SKIPPED, visibly, when no server is configured: it never passes without one.
@@ -1339,6 +1339,223 @@ class Contract(unittest.TestCase):
         self.assertEqual([(r.id, r.unread) for r in self.store.alerts(self.REF_A)], [(mine.id, 1)])
 
 
+    # ---- follows, private messages and the reports of them (hub/follows.py, hub/messages.py) ----
+
+    def test_the_people_that_an_account_follows_are_kept_by_references_up_to_a_number_in_the_order_they_were_followed(self):
+        a, b, c = self.REF_A, self.REF_B, "c" * 16
+        self.assertEqual((self.store.follows(a), self.store.followers(b)), ([], []))
+        self.assertTrue(self.store.follow_add(a, b, "Ben", 2))
+        self.clock.now += 5
+        self.assertTrue(self.store.follow_add(a, c, "Cleo", 2))
+        self.assertFalse(self.store.follow_add(a, "d" * 16, "Dan", 2))                              # (a third person: over the number)
+        self.assertTrue(self.store.follow_add(a, b, "Benjamin", 2))                                   # (followed already: the name is what changes, not the place)
+        self.assertTrue(self.store.follow_add(c, b, "Ben", 2))
+        self.assertEqual(self.store.follows(a), [(b, "Benjamin"), (c, "Cleo")])
+        self.assertEqual(sorted(self.store.followers(b)), sorted([a, c]))
+        self.assertEqual(self.store.followers(a), [])                                                 # (a follow is one way)
+        self.assertTrue(self.store.follow_remove(a, b))
+        self.assertFalse(self.store.follow_remove(a, b))
+        self.assertEqual((self.store.follows(a), self.store.followers(b)), ([(c, "Cleo")], [c]))
+        with self.assertRaises(ValueError):
+            self.store.follow_add(a, b, 5)
+
+    def test_forgetting_an_account_takes_its_follows_and_every_follow_of_it(self):
+        me, other, third = self.store.ref("1001"), self.REF_B, "c" * 16
+        self.store.follow_add(me, other, "Ben")
+        self.store.follow_add(other, me, "Alice")
+        self.store.follow_add(other, third, "Cleo")
+        self.store.forget("1001")
+        self.assertEqual((self.store.follows(me), self.store.follows(other), self.store.followers(me)), ([], [(third, "Cleo")], []))
+
+    def test_a_message_is_kept_by_the_references_and_each_person_sees_what_is_theirs(self):
+        a, b = self.REF_A, self.REF_B
+        one = self.store.dm_add(a, b, "Anna", "Ben", "hello")
+        self.clock.now += 1
+        two = self.store.dm_add(b, a, "Ben", "Anna", "hi")
+        hidden = self.store.dm_add(a, b, "Anna", "Ben", "hidden from ben", hide=True)
+        self.assertEqual((one.frm, one.to, one.text, one.frm_name, one.to_name), (a, b, "hello", "Anna", "Ben"))
+        self.assertEqual([m.text for m in self.store.dm_thread(a, b)], ["hello", "hi", "hidden from ben"])      # (the sender keeps its own copy of what it wrote)
+        self.assertEqual([m.text for m in self.store.dm_thread(b, a)], ["hello", "hi"])
+        self.assertEqual(self.store.dm_get(b, a, one.id).text, "hello")
+        self.assertIsNone(self.store.dm_get(b, a, hidden.id))                                         # (not hidden messages: they are not the receiver's to see or to report)
+        self.assertIsNone(self.store.dm_get(a, b, one.id))                                            # (nor its own: a report is of what the other person wrote)
+        self.assertIsNone(self.store.dm_get(b, a, two.id))
+        third = self.store.dm_add("c" * 16, b, "Cleo", "Ben", "from cleo to ben")
+        self.assertIsNone(self.store.dm_get(b, a, third.id))                                          # (a message of another person is not this person's, whoever it was sent to)
+        self.assertEqual(self.store.dm_get(b, "c" * 16, third.id).text, "from cleo to ben")
+        self.assertEqual(self.store.dm_partners(a), [b])
+        self.assertEqual(self.store.dm_unread(b, a), 1)
+        self.assertEqual(self.store.dm_unread(a, b), 1)
+        with self.assertRaises(ValueError):
+            self.store.dm_add(a, a, "Anna", "Anna", "to myself")
+
+    def test_the_conversations_of_a_person_are_listed_newest_first_with_what_is_not_read_and_a_hidden_message_is_not_one(self):
+        a, b, c = self.REF_A, self.REF_B, "c" * 16
+        self.store.dm_add(b, a, "Ben", "Anna", "from ben")
+        self.clock.now += 1
+        self.store.dm_add(c, a, "Cleo", "Anna", "from cleo")
+        self.store.dm_add(c, a, "Cleo", "Anna", "hidden", hide=True)
+        self.store.dm_add(a, c, "Anna", "Cleo", "to cleo")
+        listing = self.store.dm_conversations(a)
+        self.assertEqual([(other, last.text, unread) for other, last, unread in listing], [(c, "to cleo", 1), (b, "from ben", 1)])
+        self.assertEqual(self.store.dm_read(a, c), 1)
+        self.assertEqual(self.store.dm_read(a, c), 0)
+        self.assertEqual([(unread) for _, _, unread in self.store.dm_conversations(a)], [0, 1])
+        self.assertEqual([other for other, _, _ in self.store.dm_conversations(b)], [a])
+        self.assertEqual([other for other, _, _ in self.store.dm_conversations(a, limit=1)], [c])
+        self.assertEqual(self.store.dm_conversations("e" * 16), [])
+
+    def test_a_conversation_that_one_person_deletes_is_gone_for_them_and_for_both_it_is_gone_from_the_file(self):
+        a, b = self.REF_A, self.REF_B
+        self.store.dm_add(a, b, "Anna", "Ben", "one")
+        self.store.dm_add(b, a, "Ben", "Anna", "two")
+        self.store.dm_add(a, b, "Anna", "Ben", "hidden", hide=True)
+        self.assertEqual(self.store.dm_delete(a, b), 3)
+        self.assertEqual((self.store.dm_thread(a, b), [m.text for m in self.store.dm_thread(b, a)]), ([], ["one", "two"]))
+        self.assertEqual(self.store.dm_usage()[0], 3)
+        self.assertEqual(self.store.dm_delete(b, a), 2)
+        self.assertEqual(self.store.dm_usage()[0], 0)                                                # (gone for both: not in the file, and the one that was hidden went with it)
+        self.store.dm_add(a, b, "Anna", "Ben", "again")
+        self.assertEqual([m.text for m in self.store.dm_thread(a, b)], ["again"])
+
+    def test_a_message_is_kept_dm_days_and_a_conversation_its_newest_300_or_the_number_asked_for(self):
+        a, b = self.REF_A, self.REF_B
+        for n in range(7):
+            self.store.dm_add(a, b, "Anna", "Ben", "m%d" % n, keep=5)
+        self.assertEqual([m.text for m in self.store.dm_thread(a, b, 100)], ["m2", "m3", "m4", "m5", "m6"])
+        self.assertEqual([m.text for m in self.store.dm_thread(a, b, 2)], ["m5", "m6"])
+        self.clock.now += 7 * DAY - 1
+        self.assertEqual(len(self.store.dm_thread(a, b)), 5)
+        self.clock.now += 2
+        self.assertEqual((self.store.dm_thread(a, b), self.store.dm_conversations(a)), ([], []))     # (past its days: not shown, whatever the file holds)
+        self.assertEqual(self.store.dm_usage()[0], 5)
+        self.store.purge()
+        self.assertEqual(self.store.dm_usage()[0], 0)
+
+    def test_a_report_is_a_copy_of_the_message_and_those_before_it_and_the_same_message_is_one_report(self):
+        a, b = self.REF_A, self.REF_B
+        for n in range(8):
+            self.store.dm_add(b if n % 2 == 0 else a, a if n % 2 == 0 else b, "x", "y", "m%d" % n)
+        last = self.store.dm_add(b, a, "Ben", "Anna", "the last", hide=False)
+        self.assertEqual(self.store.report_add(a, b, "Anna", "Ben", "abuse", last.id, 5), 1)
+        self.assertEqual(self.store.report_add(a, b, "Anna", "Ben", "spam", last.id, 5), 1)
+        report = self.store.reports()[0]
+        self.assertEqual([(who, text) for _, who, text in report.messages], [("r", "m3"), ("d", "m4"), ("r", "m5"), ("d", "m6"), ("r", "m7"), ("d", "the last")][-6:])
+        self.assertEqual((report.reporter, report.reported, report.why, report.closed, len(report.messages)), (a, b, "abuse", 0, 6))
+        self.assertIsNone(self.store.report_add(a, b, "Anna", "Ben", "abuse", 999))
+        self.assertIsNone(self.store.report_add(b, a, "Ben", "Anna", "abuse", last.id))               # (not a message that was sent to the reporter)
+        with self.assertRaises(ValueError):
+            self.store.report_add(a, b, "Anna", "Ben", "rude", last.id)
+
+    def test_what_is_hidden_from_the_other_person_is_cut_by_itself_and_never_takes_the_place_of_what_they_see(self):
+        a, b = self.REF_A, self.REF_B
+        for n in range(3):
+            self.store.dm_add(a, b, "Anna", "Ben", "v%d" % n, keep=4)
+        for n in range(6):
+            self.store.dm_add(a, b, "Anna", "Ben", "h%d" % n, hide=True, keep=4)
+        self.assertEqual([m.text for m in self.store.dm_thread(b, a, 100)], ["v0", "v1", "v2"])
+        self.assertEqual([m.text for m in self.store.dm_thread(a, b, 100)], ["v0", "v1", "v2", "h2", "h3", "h4", "h5"])
+        self.assertEqual(self.store.dm_usage()[0], 7)
+        for n in range(3, 6):
+            self.store.dm_add(a, b, "Anna", "Ben", "v%d" % n, keep=4)                                  # (what they see is cut at its own number, and the hidden ones stay)
+        self.assertEqual([m.text for m in self.store.dm_thread(b, a, 100)], ["v2", "v3", "v4", "v5"])
+        self.assertEqual([m.text for m in self.store.dm_thread(a, b, 100)], ["v2", "h2", "h3", "h4", "h5", "v3", "v4", "v5"])
+        self.assertEqual(self.store.dm_usage()[0], 8)
+
+    def test_a_message_past_its_days_cannot_be_got_to_report_even_before_the_purge_has_run(self):
+        a, b = self.REF_A, self.REF_B
+        one = self.store.dm_add(b, a, "Ben", "Anna", "one")
+        self.clock.now += 7 * DAY - 1
+        self.assertEqual(self.store.dm_get(a, b, one.id).text, "one")
+        self.clock.now += 2
+        self.assertIsNone(self.store.dm_get(a, b, one.id))
+        self.assertEqual(self.store.dm_usage()[0], 1)
+
+    def test_the_copy_of_a_report_holds_only_what_the_reporter_could_see_not_what_they_deleted_and_not_what_is_past_its_days(self):
+        a, b = self.REF_A, self.REF_B
+        self.store.dm_add(b, a, "Ben", "Anna", "past its days")
+        self.clock.now += 6 * DAY
+        self.store.dm_add(b, a, "Ben", "Anna", "deleted by anna")
+        self.store.dm_add(a, b, "Anna", "Ben", "anna s, deleted")
+        self.clock.now += 2 * DAY
+        self.store.dm_delete(a, b)
+        self.store.dm_add(b, a, "Ben", "Anna", "after the delete")
+        self.store.dm_add(a, b, "Anna", "Ben", "anna s answer")
+        last = self.store.dm_add(b, a, "Ben", "Anna", "reported")
+        self.store.report_add(a, b, "Anna", "Ben", "abuse", last.id)
+        self.assertEqual([(who, text) for _, who, text in self.store.reports()[0].messages], [("d", "after the delete"), ("r", "anna s answer"), ("d", "reported")])
+
+    def test_a_report_is_found_by_its_reporter_and_the_message_and_closing_it_writes_its_note_in_the_same_step(self):
+        a, b = self.REF_A, self.REF_B
+        one = self.store.dm_add(b, a, "Ben", "Anna", "one")
+        self.assertIsNone(self.store.report_find(a, one.id))
+        first = self.store.report_add(a, b, "Anna", "Ben", "abuse", one.id)
+        self.assertEqual((self.store.report_find(a, one.id), self.store.report_find(b, one.id), self.store.report_find(a, one.id + 1)), (first, None, None))
+        with self.assertRaises(ValueError):
+            self.store.report_close(first, note=("1234", "report_close", "", str(first)))              # (a note that is refused closes nothing)
+        self.assertEqual([r.closed for r in self.store.reports()], [0])
+        self.assertTrue(self.store.report_close(first, note=(base.TERMINAL, "report_close", "", str(first))))
+        self.assertFalse(self.store.report_close(first, note=(base.TERMINAL, "report_close", "", str(first))))
+        self.assertEqual([(r.actor, r.action, r.target, r.detail) for r in self.store.actions()], [(base.TERMINAL, "report_close", "", "1")])
+
+    def test_a_report_is_closed_once_and_kept_30_days_after_that_or_90_if_nobody_closes_it(self):
+        a, b = self.REF_A, self.REF_B
+        one = self.store.dm_add(b, a, "Ben", "Anna", "one")
+        two = self.store.dm_add(b, a, "Ben", "Anna", "two")
+        first, second = self.store.report_add(a, b, "Anna", "Ben", "abuse", one.id), self.store.report_add(a, b, "Anna", "Ben", "other", two.id)
+        self.assertTrue(self.store.report_close(first))
+        self.assertFalse(self.store.report_close(first))
+        self.assertEqual([r.id for r in self.store.reports()], [second])
+        self.assertEqual([r.id for r in self.store.reports(True)], [second, first])
+        self.assertTrue(all(r.closed > 0 for r in self.store.reports(True) if r.id == first))
+        self.clock.now += 31 * DAY
+        self.store.purge()
+        self.assertEqual([r.id for r in self.store.reports(True)], [second])
+        self.clock.now += 60 * DAY
+        self.store.purge()
+        self.assertEqual(self.store.reports(True), [])
+
+    def test_forgetting_takes_the_messages_of_both_people_and_keeps_a_report_without_the_name_or_the_reporter(self):
+        me, other = self.store.ref("1001"), self.REF_B
+        mine = self.store.dm_add(me, other, "Alice", "Ben", "from alice")
+        theirs = self.store.dm_add(other, me, "Ben", "Alice", "from ben")
+        self.store.report_add(me, other, "Alice", "Ben", "abuse", theirs.id)
+        third = self.store.dm_add(other, "c" * 16, "Ben", "Cleo", "to cleo")
+        self.store.report_add("c" * 16, other, "Cleo", "Ben", "spam", third.id)
+        self.store.forget("1001")
+        self.assertEqual(self.store.dm_partners(other), ["c" * 16])
+        self.assertEqual(self.store.dm_usage()[0], 1)
+        reports = {r.reporter_name or "-": r for r in self.store.reports()}
+        self.assertEqual(sorted(reports), ["-", "Cleo"])
+        self.assertEqual((reports["-"].reporter, reports["-"].reported_name, [t for _, _, t in reports["-"].messages]), ("", "Ben", ["from alice", "from ben"]))      # (the copy is what it was)
+        del mine
+
+    def test_an_alert_that_replaces_takes_the_ones_of_the_same_kind_from_the_same_person_and_no_other(self):
+        a, b, c = self.REF_A, self.REF_B, "c" * 16
+        self.store.add_alert(a, "msg", '{"n":1}', from_ref=b)
+        self.store.add_alert(a, "msg", '{"n":2}', from_ref=c)
+        self.store.add_alert(a, "mention", '{"n":3}', from_ref=b)
+        self.store.add_alert(a, "msg", '{"n":4}', from_ref=b, replace=True)
+        self.assertEqual(sorted(r.body for r in self.store.alerts(a)), ['{"n":2}', '{"n":3}', '{"n":4}'])
+        self.assertEqual(self.store.drop_alerts_from(a, b, "msg"), 1)
+        self.assertEqual(self.store.drop_alerts_from(a, b, "msg"), 0)
+        self.assertEqual(sorted(r.body for r in self.store.alerts(a)), ['{"n":2}', '{"n":3}'])
+        self.assertEqual(self.store.drop_alerts_from("e" * 16, b, "msg"), 0)
+
+    def test_a_refused_write_leaves_the_follows_messages_and_reports_as_they_were(self):
+        a, b = self.REF_A, self.REF_B
+        self.assertTrue(self.store.follow_add(a, b, "Ben"))
+        one = self.store.dm_add(b, a, "Ben", "Anna", "one")
+        report = self.store.report_add(a, b, "Anna", "Ben", "abuse", one.id)
+        self.store.add_alert(a, "msg", "{}", from_ref=b)
+        with self.refusing_writes(self.store):
+            for write in (lambda: self.store.follow_add(a, "c" * 16, "Cleo"), lambda: self.store.follow_remove(a, b), lambda: self.store.dm_add(a, b, "Anna", "Ben", "two"), lambda: self.store.dm_read(a, b),
+                          lambda: self.store.dm_delete(a, b), lambda: self.store.report_add(a, b, "Anna", "Ben", "spam", one.id), lambda: self.store.report_close(report), lambda: self.store.drop_alerts_from(a, b, "msg")):
+                with self.assertRaises(base.StoreError):
+                    write()
+        self.assertEqual((self.store.follows(a), [m.text for m in self.store.dm_thread(a, b)], [r.id for r in self.store.reports()]), ([(b, "Ben")], ["one"], [report]))
+
+
 class SqliteContract(Contract):
     """The default backend: one file."""
 
@@ -1377,6 +1594,25 @@ class SqliteContract(Contract):
         self.store.ignore_add(ref, "c" * 16, "Cleo")
         self.assertIn("ignores", self.tables())
 
+    def test_the_tables_of_the_follows_the_messages_and_the_reports_are_made_by_the_first_one_and_not_by_reading_purging_or_forgetting(self):
+        mine = {"follows", "dms", "reports"}
+        a, b = self.REF_A, self.REF_B
+        self.assertTrue(mine.isdisjoint(self.tables()))
+        self.assertEqual((self.store.follows(a), self.store.followers(b), self.store.dm_thread(a, b), self.store.dm_conversations(a), self.store.dm_read(a, b), self.store.dm_delete(a, b), self.store.dm_get(a, b, 1),
+                          self.store.dm_partners(a), self.store.dm_unread(a, b), self.store.dm_usage(), self.store.reports(), self.store.report_close(1), self.store.follow_remove(a, b)),
+                         ([], [], [], [], 0, 0, None, [], 0, (0, 0, 0), [], False, False))
+        self.say(1)
+        self.clock.now += 40 * DAY
+        self.store.purge()
+        self.store.forget("1001")
+        self.assertTrue(mine.isdisjoint(self.tables()), "reading, purging and forgetting made a table")
+        self.store.follow_add(a, b, "Ben")
+        self.assertEqual(mine & self.tables(), {"follows"})
+        self.store.dm_add(b, a, "Ben", "Anna", "one")
+        self.assertEqual(mine & self.tables(), {"follows", "dms"})
+        self.store.report_add(a, b, "Anna", "Ben", "abuse", 1)
+        self.assertEqual(mine & self.tables(), mine)
+
     def test_another_connection_makes_the_tables_and_this_one_notices(self):
         other = storemod.Store(self.path, clock=self.clock, busy_ms=50)
         self.addCleanup(other.close)
@@ -1391,6 +1627,17 @@ class SqliteContract(Contract):
         again = storemod.Store(self.path, clock=self.clock, busy_ms=50)
         self.addCleanup(again.close)
         self.assertEqual((again.ignores(), len(again.alerts(self.REF_A))), ({self.REF_A: {self.REF_B: "Ben"}}, 1))
+        self.store = again
+
+    def test_the_messages_follows_and_reports_are_there_after_a_restart(self):
+        a, b = self.REF_A, self.REF_B
+        self.store.follow_add(a, b, "Ben")
+        one = self.store.dm_add(b, a, "Ben", "Anna", "one")
+        self.store.report_add(a, b, "Anna", "Ben", "abuse", one.id)
+        self.store.close()
+        again = storemod.Store(self.path, clock=self.clock, busy_ms=50)
+        self.addCleanup(again.close)
+        self.assertEqual((again.follows(a), [m.text for m in again.dm_thread(a, b)], len(again.reports())), ([(b, "Ben")], ["one"], 1))
         self.store = again
 
     def test_the_operations_that_only_this_backend_has_stay_on_its_class(self):

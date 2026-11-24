@@ -1,6 +1,6 @@
 #pragma once
 
-// The answer to a raid that needs no fire and no bomb (docs/BOTS.md, "Thieves: the answer to a raid"; rank 5 like a fight, Medium and Hard, plan.thief_guard):
+// The answer to a raid that needs no fire and no bomb (docs/BOT_TACTICS.md, "Thieves: the answer to a raid"; rank 5 like a fight, Medium and Hard, plan.thief_guard):
 //
 // An enemy Thief that comes for the own hole is a target that does not fight back. A blow takes one hit point (a Combat Ant's punch two, and throws it four tiles), cancels the walk of the
 // Thief (its raid is over; its owner has to order it again) and leaves it standing for about a second, so even one worker that meets it head on wears it down, and a Combat Ant kills it

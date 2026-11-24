@@ -35,8 +35,8 @@
   {
    "id": "state_runs_out_after_a_day",
    "file": "hub/login.py",
-   "old": "self.states[digest(state)] = (wall + self.limits.state_seconds, back)",
-   "new": "self.states[digest(state)] = (wall + 86400, back)",
+   "old": "(wall + self.limits.state_seconds, back, ident)",
+   "new": "(wall + 86400, back, ident)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback"
   },
   {
@@ -126,7 +126,7 @@
   {
    "id": "way_back_always_the_room",
    "file": "hub/login.py",
-   "old": "(\"Location\", NEXT[back])",
+   "old": "(\"Location\", back)",
    "new": "(\"Location\", NEXT[\"room\"])",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheStart tests.scripts.test_hub_login.TheCallback"
   },
@@ -917,8 +917,8 @@
   {
    "id": "redirect_keeps_the_referrer",
    "file": "hub/login.py",
-   "old": "(\"Location\", NEXT[back]), (\"Referrer-Policy\", \"no-referrer\"), ",
-   "new": "(\"Location\", NEXT[back]), ",
+   "old": "(\"Location\", back), (\"Referrer-Policy\", \"no-referrer\"), ",
+   "new": "(\"Location\", back), ",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallback"
   },
   {
@@ -1274,8 +1274,8 @@
   {
    "id": "nginx_admin_gate_gets_every_cookie",
    "file": "docker/nginx.conf",
-   "old": "Cookie $hub_cookie_session;\n        proxy_set_header X-Client-Address $remote_addr;",
-   "new": "Cookie $http_cookie;\n        proxy_set_header X-Client-Address $remote_addr;",
+   "old": "proxy_pass http://$ants_hub/hub/admin/gate;               # (an explicit address: the visitor's query is not passed on)\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Cookie $hub_cookie_session;\n        proxy_set_header X-Client-Address $remote_addr;",
+   "new": "proxy_pass http://$ants_hub/hub/admin/gate;               # (an explicit address: the visitor's query is not passed on)\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Cookie $http_cookie;\n        proxy_set_header X-Client-Address $remote_addr;",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
   },
   {
@@ -1644,21 +1644,21 @@
   },
   {
    "id": "docs_forget_the_trusted_proxies",
-   "file": "docs/HUB.md",
+   "file": "docs/HUB_LOGIN.md",
    "old": "(0) **Before the login goes live:** name the reverse proxy in front of the site in `docker/trusted-proxies.conf`",
    "new": "(0) name the reverse proxy in front of the site in `docker/trusted-proxies.conf`",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDocumentsSayWhatAnOperatorNeedsToKnow"
   },
   {
    "id": "docs_forget_the_fresh_account",
-   "file": "docs/HUB.md",
+   "file": "docs/HUB_LOGIN.md",
    "old": "**Try it with a fresh Discord account** that never authorized the application",
    "new": "Try it",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDocumentsSayWhatAnOperatorNeedsToKnow"
   },
   {
    "id": "docs_forget_the_rollback",
-   "file": "docs/HUB.md",
+   "file": "docs/HUB_LOGIN.md",
    "old": "**The schema is 4** (`PRAGMA user_version`; the `sessions` table came with version 3). A hub of an earlier version does not start on such a database",
    "new": "The schema is 4. A hub of an earlier version reads such a database",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDocumentsSayWhatAnOperatorNeedsToKnow"

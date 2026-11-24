@@ -1,18 +1,20 @@
-"""The Discord login of the chat hub (docs/HUB.md, "Login"): who a visitor is, from one cookie and the one scope `identify`.
+"""The Discord login of the chat hub (docs/HUB_LOGIN.md, "Login"): who a visitor is, from one cookie and the one scope `identify`.
 
 The pages (nginx passes these five, /hub/pic/<name>.png and /hub/ws to the hub, docker/nginx.conf):
-  GET  /hub/login?next=home|room|admin|mapmaker   a random state (128 bits, one use, 10 minutes) is kept here and in a short cookie, and the visitor is sent to Discord
+  GET  /hub/login?next=home|room|admin|mapmaker|matches|match[&id=<match id>]   a random state (128 bits, one use, 10 minutes) is kept here and in a short cookie, and the visitor is sent to Discord
   GET  /hub/callback               Discord sends the visitor back with a code: the state of the cookie, of the address and of this hub must be one, the code is exchanged (hub/discord.py),
                                    the id, the username and the display name are kept (a login: the SHA-256 of a random cookie value, the id, the username, 30 days; and the account's
                                    profile, refreshed at every login: the username, the display name if it has a usable one, and which of the two the account is shown by) and the
                                    visitor goes back to the front page
   GET  /hub/me                     who the cookie says the visitor is: what the welcome's `you` says (same origin only)
   POST /hub/logout                 ends this login (same origin only: the Origin and Sec-Fetch-Site of a page of the site)
-  POST /hub/forget                 ends every login of the account and deletes its chat lines (same origin only); a ban or a mute stays, by id, whatever the account does
+  POST /hub/forget                 ends every login of the account and deletes its chat lines (same origin only), after the person's likes of replays were asked back at the game server's counts door (hub/likedoor.py;
+                                   a door that is on and does not answer does not stop it: the answer says `"likes":"later"` and the hub asks again by its clock, see hub/likedoor.py); a ban or a mute stays, by id, whatever the account does
   GET  /hub/pic/<name>.png         the small copy of a Discord picture that hub/pictures.py kept (it is fetched after the callback has answered, never before; a login does not wait for it)
 and, for a WebSocket, identify(): the login's cookie in the handshake is who the socket is for its whole life.
 
-Rules that the tests hold (tests/scripts/test_hub_login.py): the return address is one of two fixed words and never what the visitor wrote; a state is good for one callback whatever it
+Rules that the tests hold (tests/scripts/test_hub_login.py, test_hub_likes.py): the return address is one of a fixed list of words and never what the visitor wrote (the word `match` brings a visitor back to that match's page,
+and the one thing taken from the request for it is an id of the exact shape of a match id, `MATCH_ID`: an id that does not have it makes the way back /matches, and the address is made only from the id that was checked); a state is good for one callback whatever it
 ends in; the cookie of the state is `__Host-` (a sibling subdomain cannot set it), so is the login's; a Discord that fails costs the visitor a calm page and the readers nothing; no
 token, no code, no state, no cookie value, no id and no name is ever logged; a name is untrusted text (the username is checked as a name and refuses the login if it is not one; the display
 name is cleaned by text.clean_shown and is never a reason to refuse or fail a login: one that cannot be shown is none, and the chat shows the username; both are only ever written into a JSON body).
@@ -24,7 +26,7 @@ import re
 import secrets
 import urllib.parse
 
-from . import config, discord as discordmod, http, limits as limitmod, pictures as picturesmod, session, text
+from . import config, discord as discordmod, gamedoor, http, limits as limitmod, pictures as picturesmod, session, text
 from .store import StoreError
 
 COOKIE = "__Host-ants_hub"                  # the login: a random 128-bit value, Path=/, Secure, HttpOnly, SameSite=Strict (only its SHA-256 is kept)
@@ -34,6 +36,9 @@ CODE = re.compile(r"[\x21-\x7e]{1,512}\Z")
 NEXT = {"home": "/", "room": "/#room"}      # where the visitor goes back to: a fixed list, chosen by a word
 NEXT["admin"] = "/admin"                    # (the admin page's "Log in with Discord": hub/admindoor.py)
 NEXT["mapmaker"] = "/mapmaker"            # (the Map Maker's "Connect an AI" sheet: a person who is not logged in is sent back to the page that they came from, docs/MAP_AI.md)
+NEXT["matches"] = "/matches"              # (the list of matches: a heart's "Log in with Discord", docs/REPLAY_COUNTS.md)
+NEXT["match"] = "/match"                  # (one match's page: with `&id=<match id>`, which is checked, the way back is /match?id=<id>: `way_back`)
+MATCH_ID = re.compile(r"ants-[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(?:-[0-9]{1,4})?\Z")      # the shape of a match's id (the only thing of the request that the address of `match` is made from)
 DISCORD_EPOCH_MS = 1420070400000            # the time that the first bits of a Discord id count from
 MAX_QUERY = 1500
 
@@ -66,6 +71,14 @@ PAGE_HEADERS = (("Content-Security-Policy", "default-src 'none'; style-src 'unsa
 def digest(value):
     """What is kept of a cookie's value: its SHA-256 in hex (a copy of the database does not log anybody in)."""
     return hashlib.sha256(value.encode("ascii")).hexdigest()
+
+
+def way_back(word, ident=""):
+    """The address that a word of NEXT stands for. The word `match` stands for /match?id=<id>, where `ident` is an id that `start` kept because it has the shape of a match id (none else is kept), or for
+    the list of matches when there is none."""
+    if word == "match":
+        return "%s?id=%s" % (NEXT["match"], ident) if ident else NEXT["matches"]
+    return NEXT[word]
 
 
 def cookies_of(header):
@@ -102,7 +115,7 @@ class DiscordLogin(session.Sessions):
     def __init__(self, cfg):
         self.cfg = cfg
         self.hub = self.store = self.limits = self.log = self.discord = self.pictures = self.picture_route = None        # (attach() has them)
-        self.states = collections.OrderedDict()                     # SHA-256 of a state -> (when it runs out, the word for where the visitor goes back to); in order of time
+        self.states = collections.OrderedDict()                     # SHA-256 of a state -> (when it runs out, the word for where the visitor goes back to, the match id that the word `match` needs, else ''); in order of time
         self.routes = {"/hub/login": self.start, "/hub/callback": self.callback, "/hub/me": self.me, "/hub/logout": self.logout, "/hub/forget": self.forget}
 
     def attach(self, hub):
@@ -176,9 +189,10 @@ class DiscordLogin(session.Sessions):
     def fail(status, code, headers=None):
         return http.response(status, {"error": code}, headers)
 
-    def page(self, kind, back="home", cookies=()):
+    def page(self, kind, back=NEXT["home"], cookies=()):
+        """`back` is the address that the page's link goes to (a value of NEXT, or what `way_back` made)."""
         status, heading, line = PAGES[kind]
-        html = TEMPLATE.replace("@HEADING@", heading).replace("@LINE@", line).replace("@BACK@", NEXT[back])
+        html = TEMPLATE.replace("@HEADING@", heading).replace("@LINE@", line).replace("@BACK@", back)
         return http.response(status, headers=list(PAGE_HEADERS) + [("Set-Cookie", c) for c in cookies], page=html)
 
     def clear(self, name, same_site):
@@ -201,12 +215,16 @@ class DiscordLogin(session.Sessions):
             return self.page("site")                                         # and it is turned away before the limit is asked, so that a hostile page cannot spend a visitor's tries)
         if not self.rate_login.take(address, self.hub.clock()):
             return self.page("busy")
-        wanted = params_of(request.split()[1]).get("next")
+        params = params_of(request.split()[1])
+        wanted = params.get("next")
         back = wanted if wanted in NEXT else "home"                          # (a word of the list, else Home: the address is never made from what was sent)
+        ident = params.get("id") if back == "match" else None
+        if not (isinstance(ident, str) and MATCH_ID.match(ident)):
+            ident = ""                                                        # (the one thing taken from the request for an address: an id of the shape of a match id, and nothing else is kept)
         wall = self.store.clock()
         self.sweep(wall)
         state = secrets.token_hex(16)
-        self.states[digest(state)] = (wall + self.limits.state_seconds, back)
+        self.states[digest(state)] = (wall + self.limits.state_seconds, back, ident)
         while len(self.states) > self.limits.login_states_max:
             self.states.popitem(last=False)
         return http.response(302, headers=[("Location", self.discord.authorize_url(state)), ("Referrer-Policy", "no-referrer"),
@@ -233,7 +251,7 @@ class DiscordLogin(session.Sessions):
         kept = None
         if isinstance(state, str) and VALUE.match(state):
             kept = self.states.pop(digest(state), None)                      # (one use: the state is gone whatever the rest of this call ends in; nothing waits between here and the pop)
-        back = kept[1] if kept else "home"
+        back = way_back(kept[1], kept[2]) if kept else NEXT["home"]
         if not mine or not VALUE.match(mine):
             return self.page("cookie", back, gone)
         if not isinstance(state, str) or not VALUE.match(state) or not hmac.compare_digest(mine.encode("ascii"), state.encode("ascii")):
@@ -271,7 +289,7 @@ class DiscordLogin(session.Sessions):
             return self.page("unavailable", back, gone)
         self.log.event("login", tag=self.log.tag(address))
         self.pictures.offer(account, avatar)                                 # (the picture is fetched after this answer, in the background: it never delays or fails a login)
-        return http.response(302, headers=[("Location", NEXT[back]), ("Referrer-Policy", "no-referrer"), ("Set-Cookie", cookie_line(COOKIE, value, int(self.limits.session_seconds), "Strict")),
+        return http.response(302, headers=[("Location", back), ("Referrer-Policy", "no-referrer"), ("Set-Cookie", cookie_line(COOKIE, value, int(self.limits.session_seconds), "Strict")),
                                            ("Set-Cookie", gone[0])])
 
     def display_of(self, shown, username):
@@ -331,13 +349,26 @@ class DiscordLogin(session.Sessions):
             who = self.who_of(request.headers)
             if who is None:
                 return self.fail(401, "login", [("Set-Cookie", cookie_line(COOKIE, "", 0, "Strict"))])
+            likes, later = 0, False
+            if self.hub.likes.wanted:                                # (the likes of replays are taken back first, at the game server; Forget me never depends on that door: what it does not answer is tried
+                ref = self.hub.chat.ref(who.account_id)              # again by the hub's clock, and everything that the hub owns is deleted here and now)
+                try:
+                    likes = await self.hub.likes.forget_likes(ref)
+                except gamedoor.DoorError as e:
+                    if e.kind == "off":                              # (no good key: no pass can be made, so nothing can be asked; the setting is on, the door is shut: there is nothing to queue)
+                        self.log.event("forget_likes_skipped", kind=e.kind)
+                    else:
+                        self.log.event("forget_likes_failed", kind=e.kind)
+                        later = self.hub.likes.queue(ref)
             lines = self.store.forget(who.account_id, self.hub.chat.deleted_seq)
         except StoreError:
             return self.fail(503, "busy")
         self.hub.end_logins(account=who.account_id)
         self.hub.chat.commands.forget(who.account_id)               # (the list of the people that it ignores, and its place on the lists of the others)
         self.hub.chat.people.forget(who.account_id)                 # (its invitations, and the alerts of the others that are from it)
+        self.hub.chat.follows.forget(who.account_id)                # (the people that it followed and every follow of it are out of the store: the lists that are open are sent again)
+        self.hub.chat.messages.forget(who.account_id)               # (its private messages, for the others of them as well)
         self.sync_pictures()
         self.hub.chat.drop_lines(lines)
-        self.log.event("forget", tag=self.log.tag(address), lines=len(lines))
-        return http.response(200, {"ok": True}, [("Set-Cookie", cookie_line(COOKIE, "", 0, "Strict"))])
+        self.log.event("forget", tag=self.log.tag(address), lines=len(lines), likes=likes)
+        return http.response(200, {"ok": True, "likes": "later"} if later else {"ok": True}, [("Set-Cookie", cookie_line(COOKIE, "", 0, "Strict"))])

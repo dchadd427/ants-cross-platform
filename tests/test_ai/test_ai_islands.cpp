@@ -1,4 +1,4 @@
-// AI14: the water analysis of the bots (island_info.hpp, docs/BOTS.md "Islands"): ISLANDS and SMALL against the facts that were measured, and every flight, bridge and row of power-ups the
+// AI14: the water analysis of the bots (island_info.hpp, docs/BOT_ISLANDS.md "Islands"): ISLANDS and SMALL against the facts that were measured, and every flight, bridge and row of power-ups the
 // analysis lists against the engine itself (a bomb is planted and an ant walks onto it, a swimmer digs a chain of tiles and a worker crosses it, a worker walks a row of power-ups).
 #include "ai_test.hpp"
 

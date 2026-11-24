@@ -333,7 +333,7 @@
             if (asked) return;
             asked = true;
             var parts = 2;
-            function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; }, load: lazy }); inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); } } catch (e) { dock = null; } }
+            function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; }, load: lazy }); inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); wantMessages(); } } catch (e) { dock = null; } }
             function load() {
                 try {
                     var tail = doc.head || doc.body, css = el('link'), js = el('script');
@@ -373,7 +373,7 @@
             askedAlerts = true;
             lazy('home/alerts', function () {
                 if (!win.AntsHomeAlerts) return;
-                alerts = win.AntsHomeAlerts.mount({ doc: doc, win: win, core: win.AntsAlertCore, ctl: { show: show, screen: function () { return screen; }, join: joinInvite, chat: openChat }, bar: right, menuBtn: menuHome, dock: function () { return dock; }, signedIn: function () { return !!(dock && dock.you && dock.you()); } });
+                alerts = win.AntsHomeAlerts.mount({ doc: doc, win: win, core: win.AntsAlertCore, ctl: { show: show, screen: function () { return screen; }, join: joinInvite, chat: openChat, messages: function (h, name) { if (messages) messages.open(h, name); }, seeing: function (h) { return !!messages && messages.isOpen(h); } }, bar: right, menuBtn: menuHome, dock: function () { return dock; }, signedIn: function () { return !!(dock && dock.you && dock.you()); } });
                 waitingOver.splice(0).forEach(function (d) { alerts.alert('over', d); });         // (the match that this tab came back from: told before the part was here)
             });
         }
@@ -382,14 +382,24 @@
             lazy('home/split', function () { if (win.AntsHomeSplit) split = win.AntsHomeSplit.mount({ doc: doc, win: win, host: host, main: main }); });
         }
 
-        var askedMod = false, askedSheet = false, mod = null;
+        var askedMod = false, askedSheet = false, mod = null, messages = null, askedMessages = false;
+        function wantMessages() {                           // the Messages button and its panel (messages.js, messages.css), after the dock, for a person who is logged in: a guest never downloads it
+            if (askedMessages || !dock || !dock.tap || !dock.you) return;
+            function load() {
+                if (askedMessages || !dock.you()) return;
+                askedMessages = true;
+                lazy('home/messages', function () { if (win.AntsHomeMessages) messages = win.AntsHomeMessages.mount({ doc: doc, win: win, dock: dock, say: function (words, tone) { return !!alerts && alerts.say(words, tone) === true; } }); });
+            }
+            dock.tap(function (kind) { if (kind === 'live' || kind === 'you') load(); });
+            load();
+        }
         function meet() { if (mod && players && mod.people) mod.people(players); }       // (the sheet and the list, whichever is second)
         function loadMod() {
             if (askedSheet) return;
             askedSheet = true;
-            lazy('home/mod', function () { if (win.AntsHomeMod) mod = win.AntsHomeMod.mount({ doc: doc, win: win, dock: dock, say: function (words, tone) { return !!alerts && alerts.say(words, tone) === true; } }); meet(); });
+            lazy('home/mod', function () { if (win.AntsHomeMod) mod = win.AntsHomeMod.mount({ doc: doc, win: win, dock: dock, say: function (words, tone) { return !!alerts && alerts.say(words, tone) === true; }, messages: function () { return messages; } }); meet(); });
         }
-        function wantSheet() { var y = dock && dock.you ? dock.you() : null; if ((y && y.role !== 'none') || (players && holds())) loadMod(); }       // (the sheet of a person: for staff, and for anybody who holds a room, so that they can invite; nobody else downloads it)
+        function wantSheet() { var y = dock && dock.you ? dock.you() : null; if (y || (players && holds())) loadMod(); }       // (the sheet of a person: for anybody who is logged in, so that they can message, follow, ignore and invite; a visitor who holds a room can invite; nobody else downloads it)
         function wantMod() {                                // the sheet (mod.js, mod.css): once, after the dock names a visitor with a role, or after the page holds a room
             if (askedMod || !dock || !dock.tap || !dock.you) return;
             askedMod = true;
