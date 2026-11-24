@@ -517,6 +517,8 @@ void test_pieces(const hud_art::Art& art) {
     };
     hud_art::Art other;
     check(other.parse(resized("sprite sc_well_t ", -1)) && !window_art::has_results_page(other), "a set whose well has an edge of another length is not the new page");
+    hud_art::Art other_tab;
+    check(other_tab.parse(resized("sprite sc_tab_m_down ", 1)) && !window_art::has_results_page(other_tab), "a set whose tab has a run of another length is not the new page");
     hud_art::Art other_watch;
     check(other_watch.parse(resized("sprite sc_watch_down ", 1)) && !window_art::has_results_page(other_watch), "a set whose Watch is another size is not the new page");
     hud_art::Art none;

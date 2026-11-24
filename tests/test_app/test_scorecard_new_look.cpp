@@ -265,7 +265,7 @@ void test_podium(const assets::AssetArchive& arc, const hud_art::Art& art) {
     for (int extra = 0; extra < 8; ++extra) {
         ScorecardModal utf;
         const std::string pad(static_cast<size_t>(extra), 'x');
-        utf.set_player_names({"\xC3\x9C" "n\xC3\xAF" "c\xC3\xB6" "d\xC3\xA9 W\xC3\xA4" "rri\xC3\xB6" "r Qu\xC3\xA9\xC3\xA9" "n of the \xC3\x81" "ntz", pad + "\xC3\x89" "l\xC3\xA9" "onore \xC3\x89" "tienne \xC3\x86" "gir \xC3\x98" "rsted \xC3\x85" "sa \xC3\x9C" "nal \xC3\x87" "elik \xC3\x8F" "\xC3\xB1" "igo \xC3\x96" "zt\xC3\xBC" "rk Zo\xC3\xAB Bront\xC3\xAB", "Dot", "Eve"});
+        utf.set_player_names({pad + "\xC3\x9C" "n\xC3\xAF" "c\xC3\xB6" "d\xC3\xA9 W\xC3\xA4" "rri\xC3\xB6" "r Qu\xC3\xA9\xC3\xA9" "n of the \xC3\x81" "ntz", pad + "\xC3\x89" "l\xC3\xA9" "onore \xC3\x89" "tienne \xC3\x86" "gir \xC3\x98" "rsted \xC3\x85" "sa \xC3\x9C" "nal \xC3\x87" "elik \xC3\x8F" "\xC3\xB1" "igo \xC3\x96" "zt\xC3\xBC" "rk Zo\xC3\xAB Bront\xC3\xAB", "Dot", "Eve"});
         open(utf, &art, kPhoneUp, sample(false));
         const auto spyu = draw(arc, utf, kPhoneUp);
         bool ok = !spyu->face_lines.empty() && !spyu->lines.empty();
@@ -430,6 +430,19 @@ void test_187(const assets::AssetArchive& arc, const hud_art::Art& art) {
     quitter.quitter = 3;
     open(quit, &art, kWide720, quitter, sim::GameMode::Kills187, true, &rep);
     check(quit.headline().empty() && has_ink(*draw(arc, quit, kWide720), quit.rows()[0].name + " win the match.   12:40 played"), "a match that a quit ended has no headline: the sentence is the plain one");
+    // a headline of long names with accents is cut at the end of its room, at whole characters (a name a letter longer moves the cut by a byte: eight of them cover every place a cut can fall)
+    int cut_whole = 0;
+    for (int extra = 0; extra < 8; ++extra) {
+        ScorecardModal utf;
+        const std::string pad(static_cast<size_t>(extra), 'x');
+        utf.set_player_names({pad + "\xC3\x9C" "n\xC3\xAF" "c\xC3\xB6" "d\xC3\xA9 W\xC3\xA4" "rri\xC3\xB6" "r Qu\xC3\xA9\xC3\xA9" "n of the \xC3\x81" "ntz", "\xC3\x89" "l\xC3\xA9" "onore \xC3\x89" "tienne \xC3\x86" "gir \xC3\x98" "rsted \xC3\x85" "sa", "Dot", "Eve"});
+        open(utf, &art, kPhoneUp, both, sim::GameMode::Kills187);
+        const auto spyu = draw(arc, utf, kPhoneUp);
+        bool ok = false;
+        for (const ArtSpy::Line& line : spyu->lines) ok = ok || (line.text.size() > 3 && line.text.compare(line.text.size() - 3, 3, "...") == 0 && is_utf8(line.text) && line.text.find("last colon") == std::string::npos);
+        cut_whole += ok ? 1 : 0;
+    }
+    check(cut_whole == 8, "a headline that is too long for its room ends in three dots after a whole character, whatever the names are made of (" + std::to_string(cut_whole) + " of 8)");
     // a long headline is cut at the end of the room, at whole characters
     ScorecardModal narrow;
     narrow.set_player_names({"Bartholomew the Third of Antwerp", "Cornelius the Mighty Builder of Hills", "Dot", "Eve"});

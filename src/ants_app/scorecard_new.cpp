@@ -555,10 +555,9 @@ LayoutRect ScorecardModal::tab_rect(Page which) const noexcept {
 }
 
 void ScorecardModal::show_page(Page page) {
-    if (page == Page::Stats && !(new_look_ && phase_ == Phase::Rows && report_.ok)) return;
-    if (page == page_) return;
+    if (!new_look_ || page == page_) return;
     page_ = page;
-    update_new_look();
+    update_new_look();                                                // (which takes the second page back at once when there are no rows yet or no report that is ok)
 }
 
 // The new page (scorecard_layout.hpp) is there while the art has every piece of it and the canvas holds 360 units on its shorter side. Its layouts follow the canvas, the rows and what was counted
@@ -588,7 +587,7 @@ void ScorecardModal::update_new_look() {
         st.w = scale_.w;
         st.h = scale_.h;
         st.seats = 0;
-        for (const Row& r : rows_) st.seats += r.has_second() ? 2 : 1;
+        for (const Row& r : rows_) st.seats += r.has_second() ? 2u : 1u;
         st.seats = std::max<size_t>(1, st.seats);
         st.is_187 = in.is_187;
         stats_ = compute_stats(st);

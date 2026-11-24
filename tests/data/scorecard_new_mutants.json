@@ -193,8 +193,8 @@
     {
       "id": "the_second_page_needs_no_report",
       "file": "src/ants_app/scorecard_new.cpp",
-      "old": "if (page == Page::Stats && !(new_look_ && phase_ == Phase::Rows && report_.ok)) return;",
-      "new": "if (page == Page::Stats && !(new_look_ && phase_ == Phase::Rows)) return;",
+      "old": "if (page_ == Page::Stats && !(rows_shown && report_.ok)) page_ = Page::Results;",
+      "new": "if (page_ == Page::Stats && !rows_shown) page_ = Page::Results;",
       "build": "test_scorecard_new",
       "test": "./build/tests/test_app/test_scorecard_new",
       "expect": "[counted]"
