@@ -10,7 +10,7 @@ Nothing is drawn here (drawing takes about 40 seconds): the committed manifest a
     plus the bubble sprites 641 to 650, each the size of its sprite: 32 x 32), the four teams' bombs 298 to 305, the explosion 306 to 315 with its light (30000 plus them) and the fire wall (50000
     plus the sprites 316 to 320), and variants 1 to 15 exist exactly for the plain tiles 640 to 657, 726 to 731 and 901 and the bigger bubbles;
   - TheEffects: the bombs are solid; the explosion, its light and the fire wall are see-through by heat (no opaque pixel, more than one level of opacity, not empty but for the light of the four
-    smoke-only frames), and a frame's light is never more opaque than the whole frame;
+    smoke-only frames), and a frame's light (the fire with the bloom round it) is never more than the bloom's share more opaque than the whole frame;
   - TheChecksAreNotVacuous: each rule above refuses a copy of the real data that is broken in that one way.
 Needs numpy and Pillow (the tests are skipped only on a machine that has none; CI has both).
 """
@@ -46,6 +46,7 @@ FIRE_WALL = {50000 + n for n in range(316, 321)}                # the fire wall'
 EFFECTS = BOMBS | EXPLOSION | EXPLOSION_LIGHT | FIRE_WALL
 SEE_THROUGH = EXPLOSION | EXPLOSION_LIGHT | FIRE_WALL           # drawn as light: opacity by heat
 NO_FIRE = {30312, 30313, 30314, 30315}                          # the last four frames of the blast are smoke only: their light is empty
+BLOOM = 64                                                      # how much more opaque (of 255) a frame's light may be than the frame itself: the glow round the hot parts of the fire reaches a little past it
 NUMBER = re.compile(r"0|[1-9][0-9]*")
 
 
@@ -173,15 +174,15 @@ def alpha_problems(arrays, sprites):
 
 
 def light_problems(arrays, sprites):
-    """a frame's light (the fire alone) is never more opaque than the whole frame, pixel for pixel"""
+    """a frame's light (the fire and the bloom round its hot parts) is never more than BLOOM more opaque than the whole frame, pixel for pixel"""
     out = []
     whole = {(n, s): pic for n, s, pic in crops(arrays, sprites, EXPLOSION)}
     for number, scale, pic in crops(arrays, sprites, EXPLOSION_LIGHT):
         other = whole.get((number - 30000, scale))
         if other is None or other.shape != pic.shape:
             out.append("the light %d at %dx has no whole picture of its size" % (number, scale))
-        elif (pic[..., 3] > other[..., 3]).any():
-            out.append("the light %d at %dx is more opaque than its frame" % (number, scale))
+        elif (pic[..., 3].astype(int) > other[..., 3].astype(int) + BLOOM).any():
+            out.append("the light %d at %dx is more opaque than its frame and the bloom" % (number, scale))
     return out
 
 
@@ -276,7 +277,7 @@ class TheEffects(Committed):
     def test_the_bombs_are_solid_and_the_explosion_its_light_and_the_fire_wall_are_see_through(self):
         self.assertEqual(alpha_problems(self.arrays, self.sprites), [])
 
-    def test_the_light_is_never_more_opaque_than_the_frame_it_belongs_to(self):
+    def test_the_light_is_never_more_opaque_than_the_frame_it_belongs_to_and_its_bloom(self):
         self.assertEqual(light_problems(self.arrays, self.sprites), [])
 
     def test_the_effects_are_each_one_picture_of_the_originals_size(self):
@@ -391,15 +392,17 @@ class TheChecksAreNotVacuous(Committed):
         self.picture_of(a, 1, record)[...] = 0
         self.assertEqual(len(alpha_problems(a, [record])), 1)
 
-    def test_a_light_that_is_more_opaque_than_its_frame_or_has_no_frame_is_found(self):
+    def test_a_light_that_is_more_opaque_than_its_frame_and_the_bloom_or_has_no_frame_is_found(self):
         wholes = [s for s in self.sprites if s[0] in (306, 30306)]
         arrays = {3: self.arrays[3].copy()}
         self.assertEqual(light_problems(arrays, wholes), [])
         light = next(s for s in wholes if s[0] == 30306)
         pic = self.picture_of(arrays, 3, light)
-        y, x = np.argwhere(pic[..., 3] > 0)[0]
         whole = self.picture_of(arrays, 3, next(s for s in wholes if s[0] == 306))
-        pic[y, x, 3] = min(255, int(whole[y, x, 3]) + 1)
+        y, x = np.argwhere((pic[..., 3] > 0) & (whole[..., 3] <= 180))[0]
+        pic[y, x, 3] = int(whole[y, x, 3]) + BLOOM          # as opaque as the frame and the whole bloom: allowed
+        self.assertEqual(light_problems(arrays, wholes), [])
+        pic[y, x, 3] = int(whole[y, x, 3]) + BLOOM + 1      # one level more: found
         self.assertEqual(len(light_problems(arrays, wholes)), 1)
         self.assertEqual(len(light_problems(arrays, [light])), 1)                              # its frame is not there
 

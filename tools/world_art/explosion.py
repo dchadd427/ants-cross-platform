@@ -1,14 +1,15 @@
-"""The bomb's explosion (sprites 306 to 315, the ten frames of the blast): the approved version, drawn as light (README.md).
+"""The bomb's explosion (sprites 306 to 315, the ten frames of the blast): the approved smooth version, drawn as light (README.md).
 
-The original's own shapes, frames, sizes and offsets are kept; what changes is how the picture sits on the world, as with the fire wall (fire.py): no outline, see-through.
-  - The fireball has six hard color steps from red to the white core and an opacity by heat (0.72 at the red rim to 0.98 in the white core), a soft edge that fades out, no outline.
-  - The smoke is a matte, see-through veil in the original's three tones: its ragged cloud kept, its opacity 0.72 to 0.85 by tone, a little uneven inside, fading out at the edge instead of
-    ending in a line. The ground, the water and the ant show through it where it is thin.
-Each frame is two pictures: the whole (smoke and fire), packed under its sprite's number, and the light (the fire alone, over nothing), packed under 30000 plus it, for a pass that adds the fire
-to the ground as light. 1x is the original's pixels, each with its class's color and opacity.
+The original's own shapes, frames, sizes and offsets are kept (where the fire and the smoke are comes from the original's frames, read as classes: classify); what changes is how the picture sits on
+the world, as with the fire wall (fire.py): no outline, see-through, and no hard step anywhere.
+  - The fire is one continuous heat field: a smooth color and opacity ramp from the dark red rim through orange and yellow to a white core, a fine curl of flame on it, and a bloom round the hot parts.
+  - The smoke is a volume: billowing puffs with a lit side (toward the upper left) and a shaded side, lit warm by the fire near it, its rim broken up by the billows and fading out at a soft edge; its
+    opacity is 0.72 to 0.85 by the original's tone. The ground, the water and the ant show through it where it is thin.
+Each frame is two pictures: the whole (smoke and fire), packed under its sprite's number, and the light (the fire and its bloom alone, over nothing), packed under 30000 plus it, for a pass that adds
+the fire to the ground as light. No color of the original is copied: only its shapes and how light its smoke is.
 
-The drawing is on a master of 12 samples for each world pixel (and a margin of 4 pixels, cut off again), in single precision as it was approved; 3x and 2x are averages of it. The smoke's
-unevenness is a value noise (Pillow's bicubic enlargement of a seeded random grid), so it is as reproducible as Pillow's resize is.
+The drawing is on a master of 12 samples for each world pixel (and a margin of 4 pixels, cut off again), in single precision as it was approved; 1x, 2x and 3x are all averages of that one
+painting. The unevenness of the smoke and the flame is a value noise (Pillow's bicubic enlargement of a seeded random grid), so it is as reproducible as Pillow's resize is.
 """
 import math
 
@@ -20,9 +21,11 @@ from catalog import sprite
 SS = 12                                                             # master samples for each world pixel
 PAD = 4                                                             # world pixels of margin round a sprite while it is drawn
 F = np.float32
-HEAT = [(214, 34, 40), (250, 62, 66), (255, 112, 60), (255, 168, 12), (255, 222, 36), (255, 255, 238)]     # the six steps of the fireball, coolest red to the white core
-HEAT_ALPHA = [0.0, 0.72, 0.78, 0.74, 0.80, 0.90, 0.98]             # their opacity (index 0: none)
-SMOKE_ALPHA = (0.72, 0.85)                                          # the smoke's opacity: its darkest tone to its lightest
+LIGHT = np.array([-0.62, -0.78])                                    # toward the light on screen (up and left), as in the original's shading
+RAMP_T = [0.0, 0.08, 0.20, 0.36, 0.54, 0.72, 0.90, 1.0]            # the fire's heat ...
+RAMP_C = [(150, 14, 24), (206, 30, 38), (246, 58, 60), (255, 108, 54), (255, 164, 22), (255, 216, 44), (255, 246, 170), (255, 255, 240)]       # ... to its color: dark red, the red rim, orange, yellow, the white core
+RAMP_A = [0.0, 0.55, 0.74, 0.78, 0.80, 0.88, 0.95, 0.98]           # ... to its opacity
+SMOKE_ALPHA = (0.72, 0.85)                                          # the smoke's opacity: its thin parts to its thick parts
 
 
 def box(a, r, axis):
@@ -149,59 +152,81 @@ def classify(number):
     return a[..., :3], al, smoke, lev
 
 
+def mix(a, b, t):
+    a = np.asarray(a, F)
+    b = np.asarray(b, F)
+    if np.ndim(t) == 2 and (a.ndim in (1, 3) or b.ndim in (1, 3)):
+        t = t[..., None]
+    return a * (1 - t) + b * t
+
+
+def ramp(t, ys):
+    ys = np.asarray(ys, F)
+    if ys.ndim == 2:
+        return np.stack([np.interp(t, RAMP_T, ys[:, c]) for c in range(ys.shape[1])], -1).astype(F)
+    return np.interp(t, RAMP_T, ys).astype(F)
+
+
+def fbm(shape, cell, seed, octaves=4):
+    """smooth noise of several sizes, about -1 to 1"""
+    out = np.zeros(shape, F)
+    amp = 1.0
+    tot = 0.0
+    for o in range(octaves):
+        out += amp * noise(shape, max(2.0, cell * SS / 2 ** o), seed * 31 + o)
+        tot += amp
+        amp *= 0.55
+    return out / tot
+
+
 def paint(number):
-    """the frame on the master: (color, opacity) of the whole, (color, opacity) of the fire alone, and the classes"""
+    """the frame on the master: (color, opacity) of the whole and (color, opacity) of the fire and its bloom alone"""
     rgb1, al1, smoke1, lev1 = classify(number)
-    fire1 = lev1 > 0
     H, W = (al1.shape[0] + 2 * PAD) * SS, (al1.shape[1] + 2 * PAD) * SS
-    # the smoke: one veil under the fire, the original's ragged shape, fading at its edge, a little uneven inside
-    sa = sstep(0.22, 0.66, field(al1, 0.55))
-    lum1 = rgb1 @ np.array([0.3, 0.6, 0.1])
-    tone = mblur(np.repeat(lum1[..., None], 3, 2), smoke1, 0.7)[..., 0] if smoke1.any() else np.full((H, W), 180.0, F)
-    scol = mblur(rgb1, smoke1, 0.6) if smoke1.any() else np.zeros((H, W, 3), F) + 200
-    A = sa * (SMOKE_ALPHA[0] + (SMOKE_ALPHA[1] - SMOKE_ALPHA[0]) * sstep(160, 205, tone)) * (0.9 + 0.1 * noise((H, W), 2.5 * SS, number))
-    col = scol.copy()
-    FA = np.zeros((H, W), F)
-    fcol = np.zeros((H, W, 3), F)
-    if fire1.any():
-        K = np.zeros((H, W), int)
-        prev = None
-        for k in range(1, 7):                                       # the heat steps lie one inside the next
-            reg = field(lev1 >= k, 0.45) > 0.5
-            if prev is not None:
-                reg &= prev
-            K[reg] = k
-            prev = reg
-        fade = sstep(0.20, 0.62, field(fire1, 0.42))
-        FA = gblur(np.array(HEAT_ALPHA, F)[K], 0.14 * SS) * fade
-        fcol = np.array(HEAT, F)[np.clip(K - 1, 0, 5)]
-        fcol = np.where((K > 0)[..., None], fcol, np.array(HEAT[0], F))
-        col = col * (1 - FA[..., None]) + fcol * FA[..., None]
+    shape = (H, W)
+    # the smoke: a volume
+    body = field(al1, 0.75)
+    wide = field(al1, 1.6)
+    billow = fbm(shape, 5.0, number, 3)
+    fine = fbm(shape, 2.0, number + 50, 2)
+    thick = sstep(0.10, 0.92, body * (1 + 0.42 * billow) + 0.14 * wide)                 # how much smoke is in the way: full in the middle of a puff, thinning to nothing, its rim broken up by the billows
+    hgt = gblur(thick * (1 + 0.60 * billow + 0.10 * fine), 1.1 * SS)
+    gy, gx = np.gradient(hgt)
+    slope = (gx * LIGHT[0] + gy * LIGHT[1]) * SS * 1.6                                   # lit where the puff's side faces the upper left
+    shade = np.clip(0.90 + 0.30 * np.tanh(-slope * 1.5) + 0.10 * (hgt - 0.5), 0.60, 1.14)
+    tone = mblur(np.repeat((rgb1 @ np.array([0.3, 0.6, 0.1]))[..., None], 3, 2), smoke1, 0.9)[..., 0] if smoke1.any() else np.full(shape, 190.0, F)       # only how light the original's smoke is there (its three tones), not its color
+    k = sstep(150, 212, tone)
+    base = mix(np.array((150, 140, 134), F), np.array((226, 216, 204), F), k)
+    scol = base * shade[..., None]
+    scol = mix(scol, np.array((112, 104, 104), F), np.clip(0.55 - shade, 0, 1) * 0.9)  # the shaded side falls a little cool and dark
+    A = thick * (SMOKE_ALPHA[0] + (SMOKE_ALPHA[1] - SMOKE_ALPHA[0]) * k) * np.clip(0.90 + 0.14 * fine, 0, 1)
+    # the fire: one heat field
+    FA = np.zeros(shape, F)
+    fcol = np.zeros(shape + (3,), F)
+    col = scol
+    LA = FA
+    if (lev1 > 0).any():
+        heat1 = np.array([0.0, 0.20, 0.36, 0.52, 0.68, 0.84, 1.0], F)[lev1]
+        soft = gblur(up(pad(heat1)), 0.62 * SS)
+        core = gblur(up(pad(heat1)), 0.30 * SS)
+        T = np.clip(0.62 * soft + 0.40 * core, 0, 1)
+        T = np.clip(T ** 1.25 + 0.10 * fbm(shape, 1.6, number + 90, 3) * sstep(0.04, 0.3, T), 0, 1)      # smooth, with the fine curl of flame
+        fcol = ramp(T, RAMP_C)
+        FA = ramp(T, RAMP_A) * sstep(0.015, 0.16, T)
+        warm = np.clip(gblur(FA, 2.6 * SS) * 1.8, 0, 1)
+        scol = mix(scol, scol * np.array((1.10, 0.90, 0.66), F) + np.array((26, 8, 0), F), warm * 0.75)   # the smoke near the fire is lit warm by it
+        col = scol * (1 - FA[..., None]) + fcol * FA[..., None]
         A = A * (1 - FA) + FA
-    return col, A, fcol, FA, (rgb1, al1, smoke1, lev1)
-
-
-def pixels_1x(rgb1, smoke1, lev1, light):
-    """1x: the original's pixels, each with its class's color and opacity (the smoke keeps the original's color); the light is the fire alone"""
-    h, w = smoke1.shape
-    out = np.zeros((h, w, 4), np.uint8)
-    if not light:
-        lum = rgb1 @ np.array([0.3, 0.6, 0.1])
-        sa = SMOKE_ALPHA[0] + (SMOKE_ALPHA[1] - SMOKE_ALPHA[0]) * np.clip((lum - 160) / 45.0, 0, 1)
-        out[smoke1, :3] = rgb1[smoke1]
-        out[smoke1, 3] = np.round(sa[smoke1] * 255)
-    for k in range(1, 7):
-        m = lev1 == k
-        out[m, :3] = HEAT[k - 1]
-        out[m, 3] = int(round(HEAT_ALPHA[k] * 255))
-    return out
+        bloom = np.clip(gblur(FA * T, 1.5 * SS) * 1.5, 0, 1) * 0.55                      # the light picture: the fire, and a bloom round its hot parts
+        LA = np.clip(FA + bloom * (1 - FA), 0, 1)
+        fcol = mix(np.array((255, 176, 70), F) * np.ones(shape + (3,), F), fcol, np.clip(FA / np.maximum(LA, 1e-4), 0, 1))
+    ys, xs = np.mgrid[0:H, 0:W]
+    edge = np.minimum(np.minimum(xs - PAD * SS, (W - PAD * SS - 1) - xs), np.minimum(ys - PAD * SS, (H - PAD * SS - 1) - ys)) / SS
+    fade = np.clip(edge / 1.5, 0, 1).astype(F)                                           # nothing is cut by the sprite's border: the last pixel and a half fades out
+    return np.clip(col, 0, 255), A * fade, fcol, LA * fade
 
 
 def explosion_pictures(number):
     """({scale: RGBA array} of the whole frame, the same of its light) of the explosion's frame `number` (the original's sprite 306 to 315)"""
-    col, A, fcol, FA, (rgb1, al1, smoke1, lev1) = paint(number)
-    whole, light = {}, {}
-    for scale in (1, 2, 3):
-        whole[scale] = pixels_1x(rgb1, smoke1, lev1, False) if scale == 1 else down(col, A, scale)
-        light[scale] = pixels_1x(rgb1, smoke1, lev1, True) if scale == 1 else down(fcol, FA, scale)
-    return whole, light
+    col, A, fcol, FA = paint(number)
+    return {scale: down(col, A, scale) for scale in (1, 2, 3)}, {scale: down(fcol, FA, scale) for scale in (1, 2, 3)}
