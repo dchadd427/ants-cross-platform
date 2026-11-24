@@ -160,7 +160,7 @@ The changelog page (`/changelog`), the Legal page (`/legal`) and Sprites and sou
 ## The screen stays on
 
 - The game page asks the browser to keep the screen awake (the Screen Wake Lock, `navigator.wakeLock`, as a video page does) while a match is played, from the countdown card to the results, and while a recording plays or a live match is watched (`web/wake_lock.js`, called by `web/shell.html`). A paused recording, its end and a file that cannot be shown do not hold it. The lock is let go on pause, at the results and when the page is left, and asked for again on play, on "Watch again", for the next match and when the tab is shown again (the browser drops it while a tab is hidden). The power button still locks a phone ([the limits of a hidden tab](#a-network-match-keeps-playing-in-a-hidden-or-minimised-tab)).
-- A browser without the Screen Wake Lock (iOS before 16.4, and others) is left as it is: no message, no stand-in. A request that the browser refuses (a low battery, a power saver, a policy) or never answers is dropped without a word and asked again after 15 seconds, or when the tab is shown. The game never waits for it and nothing is drawn. Tests: [`TESTING.md`](TESTING.md).
+- A browser without the Screen Wake Lock (iOS before 16.4, and others) is left as it is: no message, no stand-in. A request that the browser refuses (a low battery, a power saver, a policy) or never answers is dropped without a word and asked again after 15 seconds, or when the tab is shown. The game never waits for it and nothing is drawn. Tests: [`TESTING_PYTHON.md`](TESTING_PYTHON.md).
 
 ## Your own orders show at once in a network match
 

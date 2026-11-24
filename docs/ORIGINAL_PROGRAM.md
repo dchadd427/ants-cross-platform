@@ -61,7 +61,7 @@ The reverse-engineering tools read the program. When it is missing they stop wit
 
 ## Tests and the original program's bytes
 
-The test suites do not need the program. The two that compare the remake with static tables inside it, 1.1 `test_movement_tables` and 2.15 `test_movement_differential` (the suite ids of `./run_tests.sh`, see [`TESTING.md`](TESTING.md)), pin every byte of `Ants.exe` that they read: the address, size and SHA-256 digest of each region are fixed in `tests/common/original_program_bytes.hpp`.
+The test suites do not need the program. The two that compare the remake with static tables inside it, 1.1 `test_movement_tables` and 2.15 `test_movement_differential` (the suite ids of `./run_tests.sh`, see [`TESTING_SUITES.md`](TESTING_SUITES.md)), pin every byte of `Ants.exe` that they read: the address, size and SHA-256 digest of each region are fixed in `tests/common/original_program_bytes.hpp`.
 
 - **With your copy** in `Original-Ants/`, they check its layout and every region against the digests and read the bytes from it. A copy of a different build fails that check (test case 5.0 of `test_movement_tables`, 0.1 of `test_movement_differential`).
 - **Without it**, they lay the remake's own generated tables out like the program's, check that those bytes hash to the same digests (computed from the original program, so a match means the bytes are the original's, byte for byte) and read them instead. Each test prints which source it used ("Bytes of the original program: ...").
