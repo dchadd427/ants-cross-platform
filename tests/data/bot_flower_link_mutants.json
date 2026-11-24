@@ -43,7 +43,7 @@
   {
    "id": "thief_of_the_strip_taken",
    "file": "src/ants_ai/standard_tasks_powerup.cpp",
-   "old": "if (kind == sim::AntType::Thief && is_link_flower(p.tile)) continue;",
+   "old": "if (kind == sim::AntType::Thief && is_link_flower(p.tile) && !(tactics_.plan.island_endraid && tactics_.endraid)) continue;",
    "new": "if (false) continue;",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI44.5 ' ./build/tests/test_ai/test_ai",
    "expect": "AI44.5"
@@ -163,7 +163,7 @@
   {
    "id": "swarm_keeps_ants_when_enough",
    "file": "src/ants_ai/island_swarm.cpp",
-   "old": "if (swimmers >= want || v.ticks_left() < params_.min_ticks_left) {",
+   "old": "if ((swimmers >= want && !thief_wanted) || v.ticks_left() < params_.min_ticks_left) {",
    "new": "if (v.ticks_left() < params_.min_ticks_left) {",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI44.18 ' ./build/tests/test_ai/test_ai",
    "expect": "AI44.18"

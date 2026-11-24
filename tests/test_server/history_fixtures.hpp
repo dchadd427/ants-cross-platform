@@ -133,7 +133,7 @@ struct MatchSpec {
         if (((spec.roster >> seat) & 1u) != 0) arena.bots.push_back(ai::BotSpec{seat, "standard", ai::Level::Hard, ai::Style::Random});
     }
     // (the recordings are fixtures of the history code, whose numbers are pinned: the bots play them as they did when the numbers were taken, without the walk round bombs, the Bomber's
-    // route, the rule for Hopeless piles, the thief batch and the unstick batch)
+    // route, the rule for Hopeless piles, the thief batch, the unstick batch and the idle batch)
     arena.factory = [](const ai::BotSpec& b) {
         return std::make_unique<ai::StandardBot>(b.level, b.style, [](ai::LevelPlan& p) {
             p.bomb_detour = 0;
@@ -141,6 +141,7 @@ struct MatchSpec {
             p.skip_hopeless = false;
             ai::without_thief_batch(p);
             ai::without_unstick_batch(p);
+            ai::without_idle_batch(p);
         });
     };
     const ai::ArenaResult played = ai::play_match(arena);

@@ -139,7 +139,7 @@ void PlugTask::look(TaskContext& c) {
     const sim::Grid& grid = v.grid();
     const HillInfo& hill = c.map.hill(c.seat);
     if (!hill.present) return;
-    const std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, c.seat, v.walk_context());
+    const std::vector<uint8_t>& mask = v.walkable_mask(c.seat);
     const std::vector<int32_t> label = label_parts(grid, mask);
     int32_t home = -1;                                                                                   // the part of the hill: its queue row
     for (int32_t dx = 0; dx <= 2 && home < 0; ++dx) {

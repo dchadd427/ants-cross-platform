@@ -288,6 +288,33 @@ struct LevelPlan {
     uint32_t rescue_after{200};          // a Thief with loot is walled in (and the Fire Ant sent for the walls) when it has shown the can't-go clip on the raid tile of a hole for this many ticks: a refusal that ends by itself is not
     bool plugs{true};                    // a power-up that plugs the way between the own hill and an ant or a pile of the seat is taken by one ant, which opens it (PlugTask, docs/BOT_UNSTUCK.md; false, the ablation plugs=0:
                                          // the bot as it was)
+    // the idle batch (docs/BOT_IDLE.md; ON at every level, the keys of `bot_arena --tune idlebatch=0` (the bot as it was before it) and one key a rule; the rules of the island play work where the island tasks do,
+    // Hard's swarm and bridge planner, and are inert elsewhere)
+    bool bridge_headon{true};            // two ants face to face on a bridge: the own one that is nearer to land steps back and is held there until the other has passed (BridgeHeadOnTask; `headon=0`: the bot as it was)
+    bool contact_strike{true};           // a free ant strikes an enemy that stands beside it, when it is not the weaker and nothing that fights stands near (ContactTask; `contact=0`: the bot as it was)
+    bool island_endraid{true};           // (Hard's island play) once the food is nearly gone an own Thief is wanted: an idle Swimmer or a spare at a flower strip takes the Thief that falls, a Swimmer digs the chain from its island to the
+                                         // own hill's and to the richest enemy hill's, and the raid task raids over it (`endraid=0`: the bot as it was)
+    uint32_t endraid_from{1200};         // ... the Thief is wanted from this tick even while food is left (the first drop of a Thief falls after the first minute; measured: the sooner the better, docs/BOT_IDLE.md)
+    uint32_t endraid_food{600};          // ... or when the points that the piles still hold are at most this many
+    uint32_t endraid_thieves{2};         // ... Thieves that the bot wants (the steals of two Thieves go on while one waits for its chain)
+    uint32_t endraid_tiles{12};          // ... the most water tiles of the chain (the Thief's island to the own hill's, and to the enemy's)
+    uint32_t endraid_wait{40};           // ... a Thief that has stood still this long away from the hill gets its chain
+    uint32_t endraid_walk{500};          // ... a hill that the own hill's ants walk to in at most this many ticks needs no chain, and no raid is begun over a longer walk (the bridges last 3,600 ticks)
+    uint32_t endraid_min_life{500};      // ... a raid is begun only when every bridge tile on the way there and back will last this many ticks more than the round trip needs
+    uint32_t endraid_keep_swimmers{3};   // ... Swimmers that stay Swimmers (one of the others may take the Thief)
+    bool thief_answer{false};             // an enemy Thief that comes for the own hole is met by the free ants that stand idle near it: blockers on the tiles in front of the hole, strikers at the posts (ThiefGuardTask in its   // OFF by default: no gain in the arena (ISLANDS -7 +/- 11, TREASURE -23 +/- 69 over 36 seeds, docs/BOT_IDLE.md); `bot_arena --tune tanswer=1` plays it. Retired or removed within two releases unless a bench Thief that raids like a person shows a gain
+                                         // answer mode, docs/BOT_TACTICS.md, "Thieves"), and with the food gone the hole is held by blockers for the rest of the match (`tanswer=0`: the bot as it was)
+    bool fire_hats{true};                // a Fire hat is taken when a walk home can be made for the ant (the chain is dug: BridgeJob::Kind::Home), and a Fire Ant left where no walk leads home gets the chain (`firehats=0`: the bot as it was)
+    uint32_t fire_hat_tiles{6};          // ... the most water tiles of that chain
+    uint32_t fire_hat_wait{60};          // ... a Fire Ant that has stood still this long away from the hill gets its chain
+    bool bridge_more{true};              // with the food gone the bridge planner digs for more ants (a longer chain, a shorter wait, one Swimmer is enough) and a hurt or idle ant that no walk leads to gets one (`bridgemore=0`: the bot as it was)
+    uint32_t bridge_more_tiles{5};       // ... the chain of the older jobs (Return, Feeder, Power) may be this long
+    uint32_t bridge_more_idle{120};      // ... an ant that has stood idle this long away from the hill is waiting for a bridge
+    bool idle_jobs{true};                // an ant that no task holds and that has stood idle for `idle_after` ticks gets a job: with the food gone it holds a post in front of the own thief hole, a hurt one walks home to heal
+                                         // (IdleJobsTask; `idlejobs=0`: the bot as it was)
+    uint32_t idle_after{400};            // ... idle this long before the job
+    uint32_t idle_heal_hp{8};            // ... a hurt ant with at most this many hit points walks home
+    uint32_t idle_posts{3};              // ... the posts in front of the own thief hole that the idle ants hold (one for each tile of the three)
     // the stall detector (StandardBot, docs/BOTS.md; 0 switches a trigger off): stall_ticks without a point, or repeat_limit equal orders within repeat_window with nothing banked, send the seat to the
     // plain economy for fallback_ticks (doubled at every stall, at most 9,600)
     uint32_t stall_ticks{3600};
@@ -507,6 +534,8 @@ void without_home_mines(LevelPlan& plan) noexcept;
 void without_kill_batch(LevelPlan& plan) noexcept;
 /// The thief batch off (docs/BOT_TACTICS.md, "Thieves: the answer to a raid"): the bot as it was before it
 void without_thief_batch(LevelPlan& plan) noexcept;
+/// The idle batch off (docs/BOT_IDLE.md): the bot as it was before it. For `bot_arena --tune idlebatch=0` and the tests whose subject is an older rule
+void without_idle_batch(LevelPlan& plan) noexcept;
 /// The unstick batch off (docs/BOT_UNSTUCK.md): no plug task, no refusal memory, no rescue of a walled-in Thief: the bot as it was before it. For `bot_arena --tune unstick=0` and
 /// the tests whose subject is an older rule
 void without_unstick_batch(LevelPlan& plan) noexcept;
@@ -726,6 +755,8 @@ struct Tactics {
     bool gone_thief{false};
     /// Food lies beyond water (the island play) or behind a gate or a field (the gate goals): the few ants of the seat are the crews of that work
     bool far_work{false};
+    /// The island play owns this map (LevelPlan::islands and the island task is live; set at every look by StandardBot): far_work without the gate and field maps
+    bool island_play{false};
     /// The ants that no fight takes: the last ones (a wipe-out forces a hatch of 200 points, or ends the team); with LevelPlan::idle_hunt and no work (nothing to bank, nothing to lose) only the last one
     size_t reserve_of(const BotView& view) const noexcept { return plan.idle_hunt && no_work ? 1u : plan.fight_reserve + (view.eggs() == 0 ? 1u : 0u); }
     Standing standing;                   // where the bot stands at this look
@@ -735,6 +766,13 @@ struct Tactics {
     uint32_t wall_keeper{0};             // the Fire Ant that keeps the walls of the own thief hole (set by the WallTask at its last step; 0: none): the sabotage uses another one
     /// Bridge tiles that no trip may be planned over now (index = y * width + x; empty: none): the bridges that will not last another trip (set by the IslandTask at its last refresh)
     std::vector<uint8_t> shut_tiles;
+    /// The ticks that a finished bridge tile has left (index = y * width + x; -1: not a bridge tile that the island task has seen; kForever: one that the map file made), set by the IslandTask at its last refresh
+    std::vector<int32_t> bridge_life;
+    static constexpr int32_t kForever = 1 << 30;
+    /// The island play wants an own Thief for the steals at this look (set by StandardBot: LevelPlan::island_endraid, the food nearly gone or the tick of endraid_from reached, an island map, time left)
+    bool endraid{false};
+    /// The food is gone or nearly (the points on the piles are at most LevelPlan::endraid_food): the late game of the island play (set by StandardBot)
+    bool late{false};
     /// The links from an island that the bot's crew lands on to a flower strip (set by the FlowerLinkTask at its first look; empty where there is none): the component of the ring half, the
     /// component of the strip, the drop tile of its flower and the water tiles to dig, from the ring half outward
     struct FlowerLink {

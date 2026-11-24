@@ -54,6 +54,7 @@ add_executable(test_ai
     test_ai_thief.cpp
     test_ai_gone.cpp
     test_ai_unstick.cpp
+    test_ai_idle.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/bot_watch_people.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/bot_arena_tune.cpp
 )

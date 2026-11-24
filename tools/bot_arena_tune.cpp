@@ -135,6 +135,32 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "freethief") return flag(p.free_thief);                              // the Thief in the can't-go loop is clicked away at the tick the engine takes it (0: the bot as it was; docs/BOT_UNSTUCK.md)
     if (key == "rescueguard") { p.rescue_guard = static_cast<uint32_t>(v); return true; }
     if (key == "rescueafter") { p.rescue_after = static_cast<uint32_t>(v); return true; }
+    if (key == "idlebatch") {                                                        // the idle batch of docs/BOT_IDLE.md (0: the bot as it was before it; 1: the plan that ships; one key a rule below)
+        if (v == 0) ai::without_idle_batch(p);
+        return true;
+    }
+    if (key == "headon") return flag(p.bridge_headon);                              // two ants face to face on a bridge: one gives way (0: the bot as it was; docs/BOT_IDLE.md)
+    if (key == "contact") return flag(p.contact_strike);                            // a free ant strikes an enemy that stands beside it (0: the bot as it was; docs/BOT_IDLE.md)
+    if (key == "endraid") return flag(p.island_endraid);                            // the Thief of the endgame on the island maps: a drop at a strip, a chain, the raid (0: the bot as it was)
+    if (key == "endraidfrom") { p.endraid_from = static_cast<uint32_t>(v); return true; }
+    if (key == "endraidfood") { p.endraid_food = static_cast<uint32_t>(v); return true; }
+    if (key == "endraidtiles") { p.endraid_tiles = static_cast<uint32_t>(v); return true; }
+    if (key == "endraidwait") { p.endraid_wait = static_cast<uint32_t>(v); return true; }
+    if (key == "endraidthieves") { p.endraid_thieves = static_cast<uint32_t>(v); return true; }
+    if (key == "endraidwalk") { p.endraid_walk = static_cast<uint32_t>(v); return true; }
+    if (key == "endraidlife") { p.endraid_min_life = static_cast<uint32_t>(v); return true; }
+    if (key == "endraidkeep") { p.endraid_keep_swimmers = static_cast<uint32_t>(v); return true; }
+    if (key == "tanswer") return flag(p.thief_answer);                              // the answer to an enemy Thief at the own hole: blockers, strikers, the held hole (0: the bot as it was)
+    if (key == "firehats") return flag(p.fire_hats);                                // a Fire hat is taken where a chain for the walk home can be dug (0: the bot as it was)
+    if (key == "fhtiles") { p.fire_hat_tiles = static_cast<uint32_t>(v); return true; }
+    if (key == "fhwait") { p.fire_hat_wait = static_cast<uint32_t>(v); return true; }
+    if (key == "bridgemore") return flag(p.bridge_more);                            // with the food gone the bridge planner digs for more ants (0: the bot as it was)
+    if (key == "bmtiles") { p.bridge_more_tiles = static_cast<uint32_t>(v); return true; }
+    if (key == "bmidle") { p.bridge_more_idle = static_cast<uint32_t>(v); return true; }
+    if (key == "idlejobs") return flag(p.idle_jobs);                                // a job for the ant that no task holds (0: the bot as it was)
+    if (key == "idleafter") { p.idle_after = static_cast<uint32_t>(v); return true; }
+    if (key == "idleposts") { p.idle_posts = static_cast<uint32_t>(v); return true; }
+    if (key == "idleheal") { p.idle_heal_hp = static_cast<uint32_t>(v); return true; }
     if (key == "plugs") return flag(p.plugs);                                       // the power-ups that plug a way are taken (0: the bot as it was; docs/BOT_UNSTUCK.md)
     if (key == "sabotage") return flag(p.sabotage);
     if (key == "fireextra") { p.fire_extra = static_cast<uint32_t>(v); return true; }

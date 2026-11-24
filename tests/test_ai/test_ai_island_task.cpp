@@ -327,6 +327,7 @@ void run_island_task_tests() {
             p.denial_order = false;                                                                                          // not the denial order: the match on which the premise below was counted)
             without_war_batch(p);
             without_kill_batch(p);                                                                                           // (the match of the premise: before the kill batch)
+            without_idle_batch(p);
         });
         m.run(7200);
         std::map<uint32_t, uint64_t> last;
