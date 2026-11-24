@@ -1,6 +1,7 @@
 // What the game page hands the settings menu (web/shell.html: the call of AntsGameMenu.forPage in antsLoadGameMenu), RUN as the page writes it, with every name that it uses made a marker: the menu's two rows that are the
 // page's own, the Picture shape row and the Fullscreen mouse row, work only through `pickShape` and `lock` (and the small form's keys through `cancelsKey`), so the call must hand over the page's own antsPickShape and antsLock (not a copy, not nothing), and what the menu
 // asks of the page must be there: the stage, the canvas, the module, the fullscreen calls. A page that stops handing one of them leaves its row out of the menu without a word (no other control has them any more).
+// And the page's ready callback, run the same way, loads the menu once the game runs, in the frame of a match page as well (the frame's bar has the Settings button and the panel of a recording's own page).
 // usage: node web_menu_handover_check.js <web/shell.html>     (exit 0: every row holds)
 'use strict';
 const fs = require('fs');
@@ -37,6 +38,31 @@ expect('the fullscreen and pointer calls are the page\'s', ['enter', 'leave', 'i
 expect('the menu can make the picture\'s picker from the page\'s table', [typeof captured.picker, typeof captured.shapes], ['function', 'function']);
 expect('the game is asked through the page\'s Module, and the page says when the game is ready', [typeof captured.module, typeof captured.ready, captured.module() && captured.module().marker], ['function', 'function', 'Module']);
 expect('the menu knows the mode (a recording, a live match)', [captured.replay && captured.replay.marker, captured.live && captured.live.marker], ['ANTS_REPLAY_MODE', 'ANTS_LIVE_MODE']);
+
+// Where the page loads the menu: its ready callback (Module.postRun), RUN as the page writes it, loads the menu once the game runs, in the frame of a match page (play?replay=...&embed=1) as well as on the page's own address:
+// the frame has the same Settings button and panel as a recording's own page. The names the callback uses are markers; the two the check watches are the page's flag for the frame and its loader of the menu.
+const ready = text.indexOf('postRun: [function');
+let readyEnd = -1;
+if (ready >= 0) {
+    depth = 0;
+    for (let i = text.indexOf('{', ready); i < text.length; i++) {
+        if (text[i] === '{') depth++;
+        else if (text[i] === '}') { depth--; if (depth === 0) { readyEnd = i; break; } }
+    }
+}
+if (readyEnd < 0) { failed++; console.log('FAIL the page has no ready callback (Module.postRun)'); }
+else {
+    const callback = text.slice(text.indexOf('function', ready), readyEnd + 1);
+    const loadsOf = (embed) => {
+        let loads = 0;
+        const names = { ANTS_EMBED: embed, antsLoadGameMenu: function () { loads++; }, window: {}, progressContainer: { style: {} } };
+        const around = new Proxy({}, { has: () => true, get: (target, name) => (name === Symbol.unscopables ? undefined : name === 'undefined' ? undefined : Object.prototype.hasOwnProperty.call(names, name) ? names[name] : function () { return undefined; }) });
+        try { new Function('scope', 'with (scope) { (' + callback + ')(); }')(around); } catch (e) { failed++; console.log('FAIL the ready callback does not run: ' + e.message); }
+        return loads;
+    };
+    expect('a game page that is ready loads the settings menu once', loadsOf(false), 1);
+    expect('the frame of a match page loads the settings menu once too', loadsOf(true), 1);
+}
 
 console.log('web menu handover: ' + checks + ' checks, ' + failed + ' failures');
 process.exit(failed ? 1 : 0);
