@@ -262,7 +262,7 @@
     function restoreWork() {
         store.readWork(function (work) {
             var decided = false;
-            function end() { keepReady = true; keepSoon(); }
+            function end() { keepReady = true; keepSoon(); addressMap(); }
             function toss() { if (!decided) { decided = true; store.clearWork(end); } }
             function pick() {
                 if (decided) return;
@@ -276,6 +276,27 @@
                 title: 'Pick up your unsaved work?', cls: 'narrow', onClose: pick,
                 build: function (body) { body.appendChild(el('p', 'fatalmsg', 'Last time you drew on \u201c' + MapStore.clean(work.name) + '\u201d and did not save it as a new map or download it. It was kept in this browser.')); },
                 buttons: [{ id: 'pick', text: 'Pick it up', onClick: pick }, { id: 'toss', text: 'Throw it away', ghost: true, onClick: toss }]
+            });
+        });
+    }
+
+    // A library map named in the address, /mapmaker?mapfile=<file name> (the "Open in Map maker" button of the map pages, docs/MAP_PAGES.md): it is fetched as "Start from a game map" fetches one and opens as a copy under a free name, after the
+    // question about unsaved drawing (leave); the address loses that one word of its query, so that a reload does not open it again. A name that is no map is the same message as a map that the site does not have.
+    function addressMap() {
+        var file = '';
+        try {
+            var q = new win.URLSearchParams(win.location.search), rest;
+            file = q.get('mapfile') || '';
+            q['delete']('mapfile');
+            rest = q.toString();
+            if (file) win.history.replaceState(null, '', win.location.pathname + (rest ? '?' + rest : '') + win.location.hash);
+        } catch (e) { return; }
+        if (!file) return;
+        store.onLibrary(function () {
+            store.fetchMap(file, function (error, bytes) {
+                if (error || !bytes) return dialogs.message('This map could not be opened', error || 'The map file could not be downloaded.');
+                var item = store.libraryList().filter(function (m) { return m.file === file; })[0];
+                leave(function () { openBytes(bytes, freeName(item ? item.name : win.Array.from(file.replace(/\.[^.]*$/, '')).slice(0, 40).join('').replace(/^\s+|\s+$/g, '') || 'Opened map')); });
             });
         });
     }

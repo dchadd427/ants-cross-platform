@@ -58,6 +58,12 @@ PICKER_BUDGET, PICKER_GZIP_BUDGET = 17_000, 5_500      # the picture's dropdown
 WAKE_LOCK_BUDGET, WAKE_LOCK_GZIP_BUDGET = 8_100, 2_900   # the screen lock of a match and a replay (web/wake_lock.js)
 P2P_BUDGET, P2P_GZIP_BUDGET = 17_500, 5_600             # the data channels to the other players (web/p2p.js)
 TOUCH_KEYS_BUDGET, TOUCH_KEYS_GZIP_BUDGET = 35_700, 11_200   # the hotkey buttons of a touch screen, with the Shift button (web/touch_keys.js and web/touch_keys.css together)
+# the map pages (docs/MAP_PAGES.md): the style and the script of the index, and what tools/map_pages.py makes (the list that the index reads, one page of a map, one page of the index)
+MAP_PAGES_BUDGET, MAP_PAGES_GZIP_BUDGET = 4_200, 1_600         # web/map_pages.css
+MAP_LIBRARY_BUDGET, MAP_LIBRARY_GZIP_BUDGET = 9_000, 3_300     # web/map_library.js
+MAP_PLAYS_BUDGET, MAP_PLAYS_GZIP_BUDGET = 2_800, 1_300        # web/map_plays.js
+MAP_DATA_BUDGET, MAP_DATA_GZIP_BUDGET = 66_000, 18_500         # map_library_data.js: raise with the library, one number
+MAP_PAGE_BUDGET, MAP_INDEX_PAGE_BUDGET = 10_500, 25_500        # one map's page, one page of the index (each is also what a search engine reads)
 # the front page (web/home/, web/front/player_name.js)
 HOME_BUDGET, HOME_GZIP_BUDGET = 53_600, 15_900
 GAMES_BUDGET, GAMES_GZIP_BUDGET = 105_000, 29_800

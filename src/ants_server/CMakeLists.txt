@@ -21,6 +21,7 @@ add_library(ants_server_core STATIC
     replay_store.cpp
     live_board.cpp
     history_record.cpp
+    history_action.cpp
     history_deaths.cpp
     history_details.cpp
     history_store.cpp

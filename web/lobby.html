@@ -561,6 +561,7 @@
             var m = model || blankModel();
             var v = Rules.viewOf(m, context());
             removing = v.removing; lastView = v;
+            if (picker) picker.refresh();       // (the map list, when it is open, marks the room's map as it is now)
             tilesNow = !!tilesQuery && tilesQuery.matches === true; document.body.classList.toggle('tiles', tilesNow);
             document.body.classList.toggle('guest', v.ro);
             document.body.classList.toggle('offline', !!v.offline);
@@ -1255,7 +1256,7 @@
         function runLobby() {
             showRejoin();
             var wantedCode = wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted) ? wanted.toLowerCase() : '';          // (a room code is lower case: a link that came in capitals leads to the same room)
-            var stored = loadSession() || loadMemory(), test = backBar.begin(function () { forgetSession(); connect({ code: newCode(), name: myName(), own: true }); });
+            var stored = loadSession() || loadMemory(), test = backBar.begin(function () { forgetSession(); connect({ code: newCode(), name: myName(), own: true }); }, !!stored);
             Home.start(test || wantedCode, stored);          // (the Room opens for a link and a test room; a plain visit is Home, and makes no room: Quick host does)
             if (test) return;
             if (wantedCode && !(stored && stored.code === wantedCode)) {

@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the rematch of a lobby room for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the reserved seats of net::HostLobby against test_lobby N4.41 - N4.49d, the room manager's rematch against test_server S3.194 - S3.203 (the restart record of a code that comes back: S3.203), the game's word to its page against test_network_app N5.98 - N5.99, and the pages (web/front/rematch.js, lobby_net.js, lobby_rules.js) against tests/scripts/web_rematch_check.js, web_lobby_rules_check.js, web_lobby_client_check.js and web_lobby_net_check.js. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/rematch_mutants.json --keep-going --jobs 2. Every mutant must be caught; tests/scripts/test_web_rematch.py runs the pages' ones (those with no build) in the quick tier on a copy of the files.",
+ "note": "Mutants of the rematch of a lobby room for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the reserved seats of net::HostLobby against test_lobby N4.41 - N4.49d, the room manager's rematch against test_server S3.194 - S3.203 (the restart record of a code that comes back: S3.203), the game's word to its page against test_network_app N5.98 - N5.99, and the pages (web/front/rematch.js, lobby_net.js, lobby_rules.js) against tests/scripts/web_rematch_check.js, web_lobby_rules_check.js, web_lobby_client_check.js and web_lobby_net_check.js, and the room that /?hostmap=<file name> opens on a map of the library. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/rematch_mutants.json --keep-going --jobs 2. Every mutant must be caught; tests/scripts/test_web_rematch.py runs the pages' ones (those with no build) in the quick tier on a copy of the files.",
  "mutants": [
   {
    "id": "lobby_reserved_seat_leads",
@@ -1029,6 +1029,34 @@
    "file": "web/front/rematch.js",
    "old": "        function look(back, mine, tries) {\n            if (mine !== round) return;",
    "new": "        function look(back, mine, tries) {",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_hostmap_makes_a_room_for_a_page_that_holds_one",
+   "file": "web/front/rematch.js",
+   "old": "if (held || !validMap(file)) return false;",
+   "new": "if (!validMap(file)) return false;",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_hostmap_takes_any_name",
+   "file": "web/front/rematch.js",
+   "old": "if (held || !validMap(file)) return false;",
+   "new": "if (held) return false;",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_hostmap_plans_for_a_guest",
+   "file": "web/front/rematch.js",
+   "old": "if (pendingHost && !pendingHost.sent && model && !model.guest && !model.starting) {",
+   "new": "if (pendingHost && !pendingHost.sent && model && !model.starting) {",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_hostmap_is_sent_at_every_look",
+   "file": "web/front/rematch.js",
+   "old": "if (warmMap) warmMap(pendingHost.file); pendingHost.sent = true; }",
+   "new": "if (warmMap) warmMap(pendingHost.file); }",
    "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
   }
  ]

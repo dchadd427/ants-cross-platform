@@ -76,6 +76,7 @@ struct HistoryRecord {
     uint8_t heavy_orders{0};             // the seats (a bit for each) whose orders went over their budget (the replay head's field 18): given back in `details` as "heavy_orders", not kept in a column
     std::string details;                 // JSON text, "" when none: the stats that the replay pass keeps about a match (ants_server/history_details.hpp); stored and given back as it is
     std::string deaths;                  // JSON text, "" when none: where each ant died, a field of its own with its own cap (ants_server/history_deaths.hpp); stored in its own table, given back under "deaths"
+    std::string action;                  // JSON text, "" when none: how many deaths, bombs, thefts, fires and hits happened in every few seconds, a field of its own with its own cap (ants_server/history_action.hpp); stored in its own table, given back under "action"
     uint32_t seconds() const noexcept { return turns / 20; }
     /// Whether the match counts as one play of its map (docs/SERVER.md "The database", map_plays): a person took part (a match of computer players only does not count) and it ran at least kMapPlayMinTurns,
     /// however it ended (a draw, a quit and a time-out count as the history records them). The site's count of online games has the same two rules (SiteStats).
@@ -93,7 +94,7 @@ bool rank_history_rows(const std::string& mode, int quitter, uint8_t standing, s
 /// What the engine said about a match that was played again: the record of it. `id` and `ended_s` come from the file's name. Pure: no clock, no disk.
 HistoryRecord make_history_record(const std::string& id, int64_t ended_s, const replay::Replay& replay, const replay::Outcome& outcome);
 
-/// The record as JSON. `full` adds the numbers that the list leaves out (bombs, fires, the layout number, the details and the map of deaths).
+/// The record as JSON. `full` adds the numbers that the list leaves out (bombs, fires, the layout number, the details, the map of deaths and the action).
 ctl::JsonValue history_record_to_json(const HistoryRecord& record, bool full);
 
 /// The rows of a record as a JSON array text (what the database keeps in `history_matches.rows_json`) and back; false when the text is not such an array

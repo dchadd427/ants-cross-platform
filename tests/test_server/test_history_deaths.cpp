@@ -1,4 +1,4 @@
-// Tests of the map of deaths of a match (docs/REPLAYS.md "The map of deaths"): where each ant died, found by the replay pass (ants_replay/match_stats.hpp: the tile of every lost ant), packed into a field of its
+// Tests of the map of deaths of a match (docs/HEATMAPS.md "The map of deaths"): where each ant died, found by the replay pass (ants_replay/match_stats.hpp: the tile of every lost ant), packed into a field of its
 // own with its own cap (ants_server/history_deaths.hpp), kept in its own table (db_schema.cpp, version 7) by the feeder and given back by GET /history/<id> under "deaths" and, added up for a game map, by
 // GET /history/deaths?map=NAME. What is checked:
 //   - the packing: every ant round trips (extreme tiles and seconds, every type, drowned, every team to blame and none), a text that is not a field is refused (DD1.x);
@@ -9,6 +9,13 @@
 //     not a field or is over its cap is not kept (the match is), the row goes with its match (DD4.x);
 //   - the sum of a map: the matches of the newest file of that name, a name looked up among the known ones (case folded, never used as anything else), cached until the history changes, bounded (DD5.x);
 //   - the route: the query is one key, every wrong query is a 400 with fixed words, an unknown map 404 without a word of the request in the answer, only a GET (DD6.x).
+// The action of a match (docs/HEATMAPS.md "The activity curve": deaths, bombs, thefts, fires and hits in every 5 seconds, a sibling field with its own cap and table, ants_server/history_action.hpp) is tested here too, for it is
+// found, kept and given back the way the map of deaths is (DD7.x):
+//   - the collector: each kind is counted in the bucket of its own turn (turn / 100), the totals are the engine's own, an independent observer of the counters and the hit points agrees, the pass still only watches (DD7.1);
+//   - the field: the letters, the count that is never more than 63, the bucket of 5 seconds and the buckets that double for a long match, no field for a match with none of the five, the reader refuses what is not a field (DD7.2 - DD7.4);
+//   - the cap: never passed whatever the length of the match and the counts (DD7.5);
+//   - the store: its own table, its own key in the record's JSON, an older record has none, a maker that throws costs nothing else, a text that is not a field or is over its cap is not kept, the row goes with its match, the
+//     migration (DD7.6 - DD7.8).
 // The recordings are real matches of the standard computer players on the shipped TINY map (history_fixtures.hpp).
 #include <algorithm>
 #include <cstdint>
@@ -25,6 +32,7 @@
 
 #include "../common/test_assert.hpp"
 #include "ants_replay/match_stats.hpp"
+#include "ants_server/history_action.hpp"
 #include "ants_server/history_deaths.hpp"
 #include "ants_server/history_details.hpp"
 #include "history_fixtures.hpp"
@@ -160,6 +168,47 @@ std::string field_at(uint32_t w, uint32_t h, std::vector<std::pair<int, int>> ti
     uint32_t turn = 20;
     for (const auto& t : tiles) kills.push_back(kill_at(turn += 20, t.first, t.second, team, 1));
     return make_history_deaths(stats_of(w, h, kills));
+}
+
+// ---- the action of a match ----
+
+// A counted match of `turns` turns with the given events: events[kind] is a list of (bucket of 5 seconds, count)
+MatchStats action_stats(uint32_t turns, std::vector<std::vector<std::pair<size_t, uint32_t>>> events) {
+    MatchStats s;
+    s.ok = true;
+    s.turns = turns;
+    s.roster = 0x0F;
+    for (size_t k = 0; k < events.size() && k < MatchStats::kActionKinds; ++k) {
+        for (const auto& e : events[k]) {
+            if (s.action[k].size() <= e.first) s.action[k].resize(e.first + 1);
+            s.action[k][e.first] += e.second;
+        }
+    }
+    return s;
+}
+
+ActionView action_view(const std::string& text) {
+    ActionView v;
+    if (!parse_history_action(text, v)) v = ActionView();
+    return v;
+}
+
+constexpr size_t kDeath = static_cast<size_t>(MatchStats::Action::Death);
+constexpr size_t kBomb = static_cast<size_t>(MatchStats::Action::Bomb);
+constexpr size_t kTheft = static_cast<size_t>(MatchStats::Action::Theft);
+constexpr size_t kFire = static_cast<size_t>(MatchStats::Action::Fire);
+constexpr size_t kHit = static_cast<size_t>(MatchStats::Action::Hit);
+
+uint64_t sum_of(const std::vector<uint32_t>& v) {
+    uint64_t n = 0;
+    for (const uint32_t x : v) n += x;
+    return n;
+}
+
+// The head of a field as the layout says it, for a text that is not one
+std::string action_text(int64_t v, int64_t s, int64_t n, const std::string& death, const std::string& bomb, const std::string& theft, const std::string& fire, const std::string& hit) {
+    return "{\"v\":" + std::to_string(v) + ",\"s\":" + std::to_string(s) + ",\"n\":" + std::to_string(n) + ",\"death\":\"" + death + "\",\"bomb\":\"" + bomb + "\",\"theft\":\"" + theft + "\",\"fire\":\"" + fire +
+           "\",\"hit\":\"" + hit + "\"}";
 }
 
 }  // namespace
@@ -912,6 +961,299 @@ int main() {
         ASSERT_FALSE(rig.history.find(id_at(kT0 + 10), r));
         ASSERT_TRUE(rig.history.map_deaths("TINY.LVL", json) == HistoryStore::DeathsSum::Unavailable);
         ASSERT_TRUE(json.empty());
+    } TEST_END();
+
+
+    // ---- the action of a match: deaths, bombs, thefts, fires and hits in every 5 seconds ----------------------------------------------------
+
+    TEST_CASE("DD7.1 The collector counts each kind in the bucket of its own turn, and the totals are the engine's own: deaths and thefts are the entries of kills and raids at turn / 100, bombs the bombs that went off, fires the seats' fires lit, hits the ants that lost hit points; an independent observer of the counters and the hit points agrees") {
+        bool any = false, hits = false;
+        for (int k = 0; k < 6; ++k) {
+            Real m = load(k);
+            if (!m.ok) {
+                std::cout << "SKIPPED (no map)\n";
+                return;
+            }
+            std::vector<uint32_t> fires_seen, hits_seen;                                         // (what an observer of the world finds, by bucket)
+            std::array<uint32_t, 4> fires_before{};
+            std::vector<int32_t> hp;
+            std::vector<bool> there;
+            std::vector<uint32_t> hurt_in;                                                       // (the bucket in which an ant was last counted as hurt)
+            replay::Hooks hooks;
+            hooks.after_tick = [&](uint32_t turns, sim::SimulationEngine& engine) {
+                const size_t bucket = turns / MatchStats::kSampleTurns;
+                for (size_t seat = 0; seat < 4; ++seat) {
+                    const uint32_t lit = engine.stats_manager().get_player_stats(static_cast<uint8_t>(seat)).fires_lit;
+                    if (lit > fires_before[seat]) {
+                        if (fires_seen.size() <= bucket) fires_seen.resize(bucket + 1);
+                        fires_seen[bucket] += lit - fires_before[seat];
+                    }
+                    fires_before[seat] = lit;
+                }
+                for (const sim::AntSnapshot& snap : engine.get_world_state().ants) {
+                    if (snap.id >= hp.size()) {
+                        hp.resize(std::max<size_t>(hp.size() * 2, size_t{snap.id} + 1), 0);
+                        there.resize(hp.size(), false);
+                        hurt_in.resize(hp.size(), 0xFFFFFFFFu);
+                    }
+                    if (there[snap.id] && snap.player_id < 4 && snap.hp < hp[snap.id] && hurt_in[snap.id] != bucket) {      // (an ant that is hurt is one hit in the bucket, however often it is hurt in it)
+                        hurt_in[snap.id] = static_cast<uint32_t>(bucket);
+                        if (hits_seen.size() <= bucket) hits_seen.resize(bucket + 1);
+                        ++hits_seen[bucket];
+                    }
+                    there[snap.id] = true;
+                    hp[snap.id] = snap.hp;
+                }
+            };
+            const replay::Outcome plain = replay::play(m.rep, m.level, hooks);
+            const replay::StatsPlay p = replay::play_with_stats(m.rep, m.level);
+            ASSERT_TRUE(plain.ok && p.outcome.ok && p.stats.ok && p.outcome.hash == plain.hash);                // (the collector changes nothing: the same hash)
+            const MatchStats& st = p.stats;
+            std::vector<uint32_t> deaths_at, thefts_at;
+            for (const MatchStats::Kill& kl : st.kills) {
+                if (deaths_at.size() <= kl.turn / 100) deaths_at.resize(kl.turn / 100 + 1);
+                ++deaths_at[kl.turn / 100];
+            }
+            for (const MatchStats::Raid& r : st.raids) {
+                if (thefts_at.size() <= r.turn / 100) thefts_at.resize(r.turn / 100 + 1);
+                ++thefts_at[r.turn / 100];
+            }
+            ASSERT_TRUE(st.action[kDeath] == deaths_at);                                                       // (each death in the bucket of its second: the same as the map of deaths gives it)
+            ASSERT_TRUE(st.action[kTheft] == thefts_at);
+            uint64_t bombs = 0, fires = 0;
+            for (size_t seat = 0; seat < 4; ++seat) bombs += st.bombs_off[seat];
+            for (const HistorySeat& seat : make_history_record("ants-TINY-20261008-143209Z", kT0, m.rep, p.outcome).seats) fires += seat.fires_lit;
+            ASSERT_EQ(sum_of(st.action[kBomb]), bombs);
+            ASSERT_EQ(sum_of(st.action[kFire]), fires);
+            ASSERT_TRUE(st.action[kFire] == fires_seen);                                                       // (a fire in the bucket of the tick that lit it)
+            ASSERT_TRUE(st.action[kHit] == hits_seen);                                                         // (a hit in the bucket of the tick that took the points, once for an ant in a bucket)
+            for (size_t kind = 0; kind < MatchStats::kActionKinds; ++kind) ASSERT_TRUE(st.action[kind].size() <= st.turns / 100 + 1);
+            any = any || !st.kills.empty();
+            hits = hits || sum_of(st.action[kHit]) > 0;
+        }
+        ASSERT_TRUE(any && hits);                                                                              // (the recordings are matches in which ants were lost and hit)
+    } TEST_END();
+
+    TEST_CASE("DD7.2 The field is one letter for each count of each kind: A is none, a count is its letter, 63 is _ and a bucket with more says 63; a match of up to 20 minutes has buckets of 5 seconds, one for each 100 turns, and the last tick of a match that ends on a bucket's edge is counted in its last bucket") {
+        const MatchStats st = action_stats(2399, {{{0, 1}, {2, 3}, {5, 200}}, {{1, 2}}, {{3, 26}}, {{4, 27}}, {{6, 63}, {6, 1}}});
+        const std::string text = make_history_action(st);
+        const auto quiet = [](const std::string& head) { return head + std::string(24 - head.size(), 'A'); };
+        ASSERT_EQ(text, action_text(1, 5, 24, quiet("BADAA_"), quiet("AC"), quiet("AAAa"), quiet("AAAAb"), quiet("AAAAAA_")));         // (B is 1, D is 3, a is 26, b is 27, _ is 63: the letters are the alphabet's)
+        const ActionView v = action_view(text);
+        ASSERT_TRUE(v.seconds == 5 && v.buckets == 24);                                                        // (2399 turns: the buckets 0 to 23)
+        ASSERT_TRUE(v.counts[kDeath][0] == 1 && v.counts[kDeath][2] == 3 && v.counts[kDeath][5] == 63 && v.counts[kDeath][1] == 0);
+        ASSERT_TRUE(v.counts[kBomb][1] == 2 && v.counts[kTheft][3] == 26 && v.counts[kFire][4] == 27 && v.counts[kHit][6] == 63);
+        const ActionView edge = action_view(make_history_action(action_stats(100, {{{1, 4}, {0, 1}}})));      // (turn 100 is bucket 1 of a match of 100 turns, which has one: the last tick is counted in it)
+        ASSERT_TRUE(edge.buckets == 1 && edge.seconds == 5 && edge.counts[kDeath][0] == 5);
+        ASSERT_EQ(action_view(make_history_action(action_stats(99, {{{0, 1}}}))).buckets, uint32_t{1});
+        ASSERT_EQ(action_view(make_history_action(action_stats(101, {{{0, 1}}}))).buckets, uint32_t{2});
+        const ActionView twenty = action_view(make_history_action(action_stats(24000, {{{0, 1}, {240, 2}}})));  // (20 minutes: 240 buckets of 5 seconds, and the last tick is in the last)
+        ASSERT_TRUE(twenty.buckets == 240 && twenty.seconds == 5 && twenty.counts[kDeath][0] == 1 && twenty.counts[kDeath][239] == 2);
+    } TEST_END();
+
+    TEST_CASE("DD7.3 A match of more than 20 minutes has buckets that double (10, 20, 40 seconds ...) until at most 240 hold it, and a bucket is the sum of the 5 seconds it holds (never more than 63)") {
+        const MatchStats st = action_stats(24100, {{{0, 1}, {1, 2}, {2, 4}, {239, 5}, {240, 7}}, {{3, 40}, {2, 30}}});
+        const ActionView v = action_view(make_history_action(st));
+        ASSERT_TRUE(v.seconds == 10 && v.buckets == 121);                                                      // (241 buckets of 5 seconds in 121 of 10)
+        ASSERT_TRUE(v.counts[kDeath][0] == 3 && v.counts[kDeath][1] == 4 && v.counts[kDeath][119] == 5 && v.counts[kDeath][120] == 7);
+        ASSERT_EQ(static_cast<int>(v.counts[kBomb][1]), 63);                                                   // (30 + 40 is more than a letter holds)
+        uint64_t total = 0;
+        for (const uint8_t c : v.counts[kDeath]) total += c;
+        ASSERT_EQ(total, uint64_t{19});                                                                        // (no event is lost to a bucket: 1 + 2 + 4 + 5 + 7)
+        const ActionView longer = action_view(make_history_action(action_stats(100 * 960, {{{0, 1}, {959, 1}}})));      // (80 minutes: 960 buckets of 5 seconds, 4 in each of 240)
+        ASSERT_TRUE(longer.seconds == 20 && longer.buckets == 240 && longer.counts[kDeath][0] == 1 && longer.counts[kDeath][239] == 1);
+        const ActionView huge = action_view(make_history_action(action_stats(4000000000u, {{{0, 1}}})));
+        ASSERT_TRUE(huge.seconds == 5u * 262144u && huge.buckets == 153 && huge.counts[kDeath][0] == 1 && huge.seconds <= kActionMaxSeconds);
+    } TEST_END();
+
+    TEST_CASE("DD7.4 A match with none of the five kinds, a pass that failed and a match that never began have no field at all (an empty text); and the reader refuses a text that is not a field") {
+        ASSERT_TRUE(make_history_action(action_stats(24000, {})).empty());
+        MatchStats failed = action_stats(24000, {{{3, 2}}});
+        failed.ok = false;
+        ASSERT_TRUE(make_history_action(failed).empty());
+        ASSERT_TRUE(make_history_action(MatchStats()).empty());
+        const std::string a2(2, 'A');
+        ActionView out;
+        ASSERT_TRUE(parse_history_action(action_text(1, 5, 2, a2, a2, a2, a2, a2), out) && out.buckets == 2 && out.seconds == 5);
+        ASSERT_TRUE(parse_history_action(action_text(1, 5, 2, "A_", "AA", "AA", "AA", "AA"), out) && out.counts[kDeath][1] == 63);
+        ASSERT_FALSE(parse_history_action(action_text(2, 5, 2, a2, a2, a2, a2, a2), out));                       // (another version)
+        ASSERT_FALSE(parse_history_action(action_text(1, 4, 2, a2, a2, a2, a2, a2), out));                       // (a bucket that is not a multiple of 5 seconds, or is none)
+        ASSERT_FALSE(parse_history_action(action_text(1, 0, 2, a2, a2, a2, a2, a2), out));
+        ASSERT_FALSE(parse_history_action(action_text(1, 7, 2, a2, a2, a2, a2, a2), out));
+        ASSERT_FALSE(parse_history_action(action_text(1, static_cast<int64_t>(kActionMaxSeconds) + 5, 2, a2, a2, a2, a2, a2), out));
+        ASSERT_FALSE(parse_history_action(action_text(1, 5, 0, "", "", "", "", ""), out));                       // (no bucket, and one more than the cap)
+        ASSERT_FALSE(parse_history_action(action_text(1, 5, static_cast<int64_t>(kActionMaxBuckets) + 1, std::string(kActionMaxBuckets + 1, 'A'), std::string(kActionMaxBuckets + 1, 'A'), std::string(kActionMaxBuckets + 1, 'A'),
+                                                      std::string(kActionMaxBuckets + 1, 'A'), std::string(kActionMaxBuckets + 1, 'A')), out));
+        ASSERT_FALSE(parse_history_action(action_text(1, 5, 2, a2, a2, a2, a2, "A"), out));                      // (a text that is not n letters)
+        ASSERT_FALSE(parse_history_action(action_text(1, 5, 2, a2, a2, a2, a2, "AAA"), out));
+        ASSERT_FALSE(parse_history_action(action_text(1, 5, 2, a2, a2, a2, a2, "A!"), out));                     // (a letter outside the 64)
+        ASSERT_FALSE(parse_history_action(action_text(1, 5, 2, a2, a2, a2, a2, "A+"), out));
+        ASSERT_FALSE(parse_history_action("{\"v\":1,\"s\":5,\"n\":2,\"death\":\"AA\",\"bomb\":\"AA\",\"theft\":\"AA\",\"fire\":\"AA\"}", out));      // (a kind that is missing)
+        ASSERT_FALSE(parse_history_action("{\"v\":1,\"s\":5,\"n\":2,\"death\":1,\"bomb\":\"AA\",\"theft\":\"AA\",\"fire\":\"AA\",\"hit\":\"AA\"}", out));
+        ASSERT_FALSE(parse_history_action("not a field", out));
+        ASSERT_FALSE(parse_history_action("[]", out));
+        ASSERT_FALSE(parse_history_action("", out));
+    } TEST_END();
+
+    TEST_CASE("DD7.5 The field never passes its cap, whatever the match: every length from nothing to 4 billion turns, every count, every kind at its largest; the text is a field that parses and never has more than 240 buckets") {
+        size_t longest = 0;
+        for (const uint32_t turns : {0u, 1u, 99u, 100u, 23999u, 24000u, 24100u, 48000u, 48100u, 100000u, 1000000u, 12960000u, 123456789u, 4000000000u, 4294967295u}) {
+            MatchStats st = action_stats(turns, {});
+            for (size_t kind = 0; kind < MatchStats::kActionKinds; ++kind) {
+                st.action[kind].assign(static_cast<size_t>(std::min<uint64_t>(turns / 100 + 1, 70000)), 1000000u);       // (every bucket of every kind at more than a letter holds; a match of 4 billion turns has more buckets than a test needs)
+            }
+            const std::string text = make_history_action(st);
+            ASSERT_FALSE(text.empty());
+            ASSERT_TRUE(text.size() <= kActionMaxBytes);
+            const ActionView v = action_view(text);
+            ASSERT_TRUE(v.buckets >= 1 && v.buckets <= kActionMaxBuckets && v.seconds >= 5 && v.seconds % 5 == 0);
+            for (size_t kind = 0; kind < MatchStats::kActionKinds; ++kind) ASSERT_TRUE(v.counts[kind].size() == v.buckets && v.counts[kind].front() == 63);
+            longest = std::max(longest, text.size());
+        }
+        ASSERT_TRUE(longest > 1200 && longest <= kActionMaxBytes);                                             // (the longest is 5 x 240 letters and a short head)
+        MatchStats beyond = action_stats(100, {{{0, 1}}});
+        beyond.action[kHit].assign(1000, 5u);                                                                  // (a series longer than the match: the field still holds it, in the last bucket)
+        const std::string text = make_history_action(beyond);
+        ActionView whole;
+        ASSERT_TRUE(!text.empty() && text.size() <= kActionMaxBytes && parse_history_action(text, whole) && whole.buckets == 1 && whole.counts[kHit][0] == 63);
+    } TEST_END();
+
+    TEST_CASE("DD7.6 A match that the feeder counts has its action next to its details and its map of deaths, from the same play: in its own table, in the record's JSON under \"action\"; the list leaves it out; an older record gets none (no backfill) and the page draws its deaths alone") {
+        if (match_file(0).empty() || match_file(1).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        Rig rig;
+        ASSERT_TRUE(rig.open());
+        const std::string id = counted(rig, 0);
+        HistoryRecord rec;
+        ASSERT_TRUE(rig.history.find(id, rec) && !rec.action.empty() && !rec.deaths.empty() && !rec.details.empty());
+        Real m = load(0);
+        const replay::StatsPlay p = replay::play_with_stats(m.rep, m.level);
+        ASSERT_EQ(rec.action, make_history_action(p.stats));
+        ASSERT_TRUE(rec.action.size() <= kActionMaxBytes && rec.details.size() <= kDetailsMaxBytes);
+        const ActionView v = action_view(rec.action);
+        ASSERT_TRUE(v.buckets >= 1 && v.seconds == 5);
+        uint64_t deaths = 0;
+        for (const uint8_t c : v.counts[kDeath]) deaths += c;
+        ASSERT_TRUE(deaths > 0 && deaths <= p.stats.kills.size());                                             // (the deaths of the field are the ants that were lost, none more)
+        const JsonValue j = history_record_to_json(rec, true);
+        ASSERT_TRUE(j.get("action").is_object() && j.get("action").get("n").as_int_or(0) == static_cast<int64_t>(v.buckets) && j.get("action").get("death").is_string() && j.get("deaths").is_object() && j.get("details").is_object());
+        ASSERT_FALSE(history_record_to_json(rec, false).has("action"));                                        // (the list leaves it out, like the details)
+        const HistoryPage page = rig.history.query(HistoryQuery(), [](const std::string&) { return Recording::Watch; });
+        ASSERT_TRUE(page.ok && page.items.size() == 1 && page.items[0].action.empty());                        // (and does not read it)
+        // an older record: its details come from its recording, and it gets no action
+        Rig other;
+        ASSERT_TRUE(other.open());
+        const std::string older = other.keep(match_file(1));
+        const Played pl = play_file(match_file(1));
+        ASSERT_TRUE(pl.ok);
+        std::string why;
+        ASSERT_TRUE(other.history.put(make_history_record(older, other.now, pl.rep, pl.outcome), why));
+        other.drain(8);
+        HistoryRecord old;
+        ASSERT_TRUE(other.history.find(older, old) && !old.details.empty() && other.feeder.backfilled() == 1 && old.action.empty() && old.deaths.empty());
+        ASSERT_FALSE(history_record_to_json(old, true).has("action"));
+    } TEST_END();
+
+    TEST_CASE("DD7.7 The counters, the details and the map of deaths of a match are written whatever the pass of the action does: a maker that throws leaves no action, a line in the log and the record; a text that is not a field, or is over its cap, is not kept (the match is); a field is replaced with its match and goes with it") {
+        if (match_file(1).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        Rig rig;
+        ASSERT_TRUE(rig.open());
+        rig.feeder.set_action_maker([](const replay::MatchStats&) -> std::string { throw std::out_of_range("the action broke"); });       // (not a runtime_error: the feeder holds back any exception)
+        const std::string id = counted(rig, 1);
+        HistoryRecord rec;
+        ASSERT_TRUE(rig.history.find(id, rec) && rec.action.empty() && !rec.details.empty() && rec.details != history_details_marker() && rec.seats.size() == 2 && rig.feeder.counted() == 1 && rig.feeder.left_out() == 0);
+        ASSERT_EQ(lines_with(rig.history.take_notes(), "the action broke"), size_t{1});
+        Rig none;
+        ASSERT_TRUE(none.open());
+        none.feeder.set_action_maker(nullptr);
+        const std::string id2 = counted(none, 1);
+        ASSERT_TRUE(none.history.find(id2, rec) && rec.action.empty() && !rec.details.empty());
+        // the store
+        Rig store;
+        ASSERT_TRUE(store.open());
+        std::string why;
+        const std::string field = make_history_action(action_stats(2400, {{{2, 3}}, {{5, 1}}, {}, {{7, 2}}, {{1, 9}}}));
+        HistoryRecord a = synthetic(id_at(kT0 + 10), "TINY.LVL", 5, kT0 + 10, std::string());
+        a.action = field;
+        ASSERT_TRUE(store.history.put(a, why));
+        HistoryRecord got;
+        ASSERT_TRUE(store.history.find(a.id, got) && got.action == field && got.deaths.empty());
+        HistoryRecord junk = synthetic(id_at(kT0 + 20), "TINY.LVL", 5, kT0 + 20, std::string());
+        junk.action = "not a field";
+        ASSERT_TRUE(store.history.put(junk, why) && store.history.find(junk.id, got) && got.action.empty() && got.seats.size() == 2);
+        HistoryRecord big = synthetic(id_at(kT0 + 30), "TINY.LVL", 5, kT0 + 30, std::string());
+        big.action = field + std::string(kActionMaxBytes, ' ');
+        ASSERT_TRUE(store.history.put(big, why) && store.history.find(big.id, got) && got.action.empty());
+        HistoryRecord bad = synthetic(id_at(kT0 + 40), "TINY.LVL", 5, kT0 + 40, std::string());
+        const std::string two(2, 'A');
+        bad.action = action_text(1, 5, 2, two, two, two, two, "A!");
+        ASSERT_TRUE(store.history.put(bad, why) && store.history.find(bad.id, got) && got.action.empty());
+        HistoryRecord shown = synthetic(id_at(kT0 + 50), "TINY.LVL", 5, kT0 + 50, std::string());           // (the record's JSON gives the action only when it is a field of this version, as put() keeps it)
+        shown.action = field;
+        ASSERT_TRUE(history_record_to_json(shown, true).get("action").get("n").as_int_or(0) == static_cast<int64_t>(action_view(field).buckets));
+        for (const std::string& text : {std::string("not a field"), std::string("{\"v\":1}"), action_text(2, 5, 2, two, two, two, two, two), field + std::string(kActionMaxBytes, ' ')}) {
+            shown.action = text;
+            ASSERT_FALSE(history_record_to_json(shown, true).has("action"));
+        }
+        a.action.clear();                                                                                      // (kept again without it: the old row goes)
+        ASSERT_TRUE(store.history.put(a, why) && store.history.find(a.id, got) && got.action.empty());
+        a.action = field;
+        ASSERT_TRUE(store.history.put(a, why) && store.history.find(a.id, got) && got.action == field);
+        ASSERT_TRUE(store.history.remove(a.id, true, why) == HistoryStore::Removal::Done);
+        ASSERT_FALSE(store.history.find(a.id, got));
+        ASSERT_TRUE(store.history.put(a, why) && store.history.find(a.id, got) && got.action == field);        // (kept again: the marker goes, the row is back)
+    } TEST_END();
+
+    TEST_CASE("DD7.8 The action is schema version 11 (history service: 5) and a database of the version before it, with a match in it, gets the table without losing a row; the cap of the column is the cap of the field and the row goes with its match") {
+        ASSERT_TRUE(db_schema_version() >= 11);
+        const std::vector<db::Migration> every = db_migrations();
+        const std::vector<db::Migration>& service = history_db_migrations();
+        ASSERT_TRUE(every.size() >= 11 && every[10].version == 11 && std::string(every[10].name) == "history_action");
+        ASSERT_TRUE(service.size() == 5 && service[4].version == 5 && std::string(service[4].name) == "history_action");
+        const auto one = [](db::Database& d, const std::string& sql) {
+            db::Statement st;
+            return d.prepare(st, sql).ok() && st.step() == db::Statement::Step::Row ? st.column_int64(0) : int64_t{-1};
+        };
+        const std::string id = "ants-TINY-20261008-143209Z";
+        // the game server's file (10 -> 11) and the history service's own (4 -> 5): a match with its seats, its map of deaths and its play count is kept before the upgrade and is all there after it
+        for (const bool server_file : {true, false}) {
+            const std::vector<db::Migration>& all = server_file ? every : service;
+            const std::vector<db::Migration> before(all.begin(), all.end() - 1);
+            TempDir dir;
+            const std::string path = (dir.path / "history.db").string();
+            {
+                db::Database d;
+                ASSERT_TRUE(db::open_and_migrate(d, path, before, db::OpenOptions()).ok());
+                ASSERT_EQ(one(d, "SELECT count(*) FROM sqlite_master WHERE name = 'history_action'"), int64_t{0});
+                ASSERT_TRUE(d.exec("INSERT INTO history_matches (id, ended, map, game, turns, finished, quitter, mode, format, result, computers_only, best_score, best_kills, best_hatched, search, rows_json, counted_at)"
+                                   " VALUES ('" + id + "', 1, 'TINY.LVL', 'v1', 2400, 1, NULL, 'highest-score', '1v1', 'decided', 0, 5, 5, 0, 'tiny ann', '[]', 1)").ok());
+                ASSERT_TRUE(d.exec("INSERT INTO history_seats VALUES ('" + id + "', 0, 'Ann', '', 5, 5, 0, 0, 0, 0, 0, 0, 1)").ok());
+                ASSERT_TRUE(d.exec("INSERT INTO history_seats VALUES ('" + id + "', 1, 'Bo', 'Hard', 0, 0, 5, 0, 0, 0, 0, 0, 0)").ok());
+                ASSERT_TRUE(d.exec("INSERT INTO history_deaths (id, map, hash, ended, w, h, n, deaths) VALUES ('" + id + "', 'TINY.LVL', '0123456789abcdef', 1, 60, 60, 1, 'kept as it was')").ok());
+                ASSERT_TRUE(d.exec("INSERT INTO map_plays (map, hash, plays, last_played) VALUES ('TINY.LVL', '0123456789abcdef', 3, 1)").ok());
+            }
+            db::Database up;
+            ASSERT_TRUE(db::open_and_migrate(up, path, all, db::OpenOptions()).ok());
+            ASSERT_EQ(one(up, "SELECT count(*) FROM history_matches WHERE id = '" + id + "' AND turns = 2400 AND best_score = 5 AND search = 'tiny ann'"), int64_t{1});
+            ASSERT_EQ(one(up, "SELECT count(*) FROM history_seats WHERE match_id = '" + id + "' AND ((seat = 0 AND name = 'Ann' AND winner = 1) OR (seat = 1 AND name = 'Bo' AND bot = 'Hard' AND lost = 5))"), int64_t{2});
+            ASSERT_EQ(one(up, "SELECT count(*) FROM history_deaths WHERE id = '" + id + "' AND deaths = 'kept as it was'"), int64_t{1});
+            ASSERT_EQ(one(up, "SELECT plays FROM map_plays WHERE map = 'TINY.LVL'"), int64_t{3});
+            ASSERT_EQ(one(up, "SELECT count(*) FROM history_action"), int64_t{0});
+            const auto insert = [&](const std::string& text) {
+                db::Statement st;
+                if (!up.prepare(st, "INSERT INTO history_action (id, action) VALUES ('" + id + "', ?1)").ok() || !st.bind_text(1, text).ok()) return false;
+                return st.step() == db::Statement::Step::Done;
+            };
+            ASSERT_FALSE(insert(std::string(kActionMaxBytes + 1, 'A')));                      // (the cap of the column is the cap of the field)
+            ASSERT_TRUE(insert(std::string(kActionMaxBytes, 'A')));
+            ASSERT_TRUE(up.exec("DELETE FROM history_matches WHERE id = '" + id + "'").ok());
+            ASSERT_EQ(one(up, "SELECT count(*) FROM history_action"), int64_t{0});             // (the row went with its match)
+        }
     } TEST_END();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Failed:           " << g_test_failures << "\n=======================================================\n";

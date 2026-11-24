@@ -135,7 +135,7 @@ public:
     /// The play count of every map that was played, ordered by file name and hash (for the list of maps). False, with `out` empty, when the database does not answer (the store is unavailable then).
     bool map_plays(std::vector<MapPlays>& out) const;
 
-    /// The sum of the maps of deaths of the matches on one map (GET /history/deaths?map=NAME, docs/REPLAYS.md "The map of deaths"): `name` is looked up among the names of the maps that have a map of deaths here
+    /// The sum of the maps of deaths of the matches on one map (GET /history/deaths?map=NAME, docs/HEATMAPS.md "The map of deaths"): `name` is looked up among the names of the maps that have a map of deaths here
     /// (compared without regard to the case of an ASCII letter, so a name a browser or a file system folded finds the same map), never used as a path or a pattern; the matches are those of the newest map file
     /// of that name (its hash and size), at most the newest kDeathsSumMatches of them. `json` is the answer (history_deaths.hpp add_up_deaths); it is made once for each state of the history (cached, until a match
     /// is kept or taken out) and for at most kDeathsSumCache maps. Unknown: no map of that name has a map of deaths. Unavailable: the database does not answer.
@@ -269,6 +269,11 @@ public:
     using DeathsMaker = std::function<std::string(const replay::MatchStats&)>;
     void set_deaths_maker(DeathsMaker maker) { deaths_maker_ = std::move(maker); }
 
+    /// Makes the action of a counted match, for the activity curve of the replay page (make_history_action by default; only for a match counted here: an older record has none, the page draws its deaths alone). A test hands a
+    /// maker that throws, to see that the counters, the details and the map of deaths are written whatever it does.
+    using ActionMaker = std::function<std::string(const replay::MatchStats&)>;
+    void set_action_maker(ActionMaker maker) { action_maker_ = std::move(maker); }
+
     /// One piece of work: at most one file. `idle` is asked only when a file is due (a quiet server: no room runs a match). True when a file was played (counted or left out).
     bool step(const std::function<bool()>& idle, uint32_t now_ms);
 
@@ -293,6 +298,7 @@ private:
     std::vector<std::string> map_dirs_;               // the folders of the maps, asked in order
     DetailsMaker details_maker_;
     DeathsMaker deaths_maker_;
+    ActionMaker action_maker_;
     std::function<uint64_t()> clock_us_;
     uint64_t seen_revision_{~uint64_t{0}};
     std::vector<std::string> queue_;                  // file names, the next one at the back (the newest are counted first)

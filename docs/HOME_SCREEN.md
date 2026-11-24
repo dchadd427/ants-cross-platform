@@ -92,6 +92,7 @@ The address `/?vp` loads `web/home/vp.js` (only for that address: a plain visit 
 | `/` | Home |
 | `/#room` | the Room (Quick host and Quick join push it; Back, while the page holds the room, shows the Room still) |
 | `/?room=CODE` | the Room, behind the name card (a link opens the Room directly) |
+| `/?hostmap=FILE` | the Room, in a room of the page's own on the library map FILE (`Treasure 2.lvl`: the **Play it** button of a map's page, [`MAP_PAGES.md`](MAP_PAGES.md)): the room is made as a test room is, the map is planned once the leader may plan, and the address loses its query. A page that holds a room already makes none and changes none (the answer of Quick host), a name that is no map file is ignored, and a person with no name is asked for one, as for any room |
 | a reload, in a tab that holds a seat | the Room again (whatever the address says); in a tab with none, Home (`/#room` is Home there) |
 
 **While the page holds a room, the middle panel is always the Room: there is no Games view then, and Leave is the way out.** Back, a reload, a link and the Menu's Home lead to the Room; Quick host shows it (it changes nothing). Back comes to the entry before the Room, finds a page that holds a room, shows the Room and writes the Room's address into that entry, so that one more Back leaves the page. The page writes nothing to the history until a button is pressed; the entry that it opened on is marked with its screen the first time a button leaves it, with its address unchanged.

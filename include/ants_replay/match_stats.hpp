@@ -1,7 +1,8 @@
 #pragma once
 
 // What a replay pass counts about a match besides the totals that the engine keeps (docs/REPLAYS.md "The match pages"): the score and the kills over time, who killed whom and when, the damage, the raids
-// on the hills, the power-ups taken, the food carried, the bombs that went off, when a seat ran out of ants, and the orders of every seat by minute and by kind.
+// on the hills, the power-ups taken, the food carried, the bombs that went off, when a seat ran out of ants, the orders of every seat by minute and by kind, and how many events of each of five kinds (a death, a bomb, a
+// theft, a fire, a hit) happened in every 5 seconds (the field `action` that the activity curve of the replay page is drawn from, docs/HEATMAPS.md "The activity curve").
 //
 // It only WATCHES: the collector is given to replay::play() as its hooks and reads what the engine already says, through the public readers (the counters, the world after every tick, the record of an ant
 // that is gone: the engine keeps it, with the team of the last damage, until the match is over) and the queues of cues. It changes nothing, so a played match ends in the same hashes with or without it
@@ -33,6 +34,12 @@ struct MatchStats {
     enum class OrderKind : uint8_t { Move, Attack, Bomb, Fire, Bridge, Raid, Special, Stop, Hatch, Team, Count };
     static constexpr size_t kOrderKinds = static_cast<size_t>(OrderKind::Count);
     static const char* order_kind_name(OrderKind kind) noexcept;     // "move", "attack", "bomb", "fire", "bridge", "raid", "special", "stop", "hatch", "team"
+
+    /// The kinds of event that the activity curve of the replay page counts (docs/HEATMAPS.md "The activity curve"; the counts are `action`): the Auto camera's big events that are a fight and not food or a bridge. The order is the one of the
+    /// keys of the stored field (ants_server/history_action.hpp).
+    enum class Action : uint8_t { Death, Bomb, Theft, Fire, Hit, Count };
+    static constexpr size_t kActionKinds = static_cast<size_t>(Action::Count);
+    static const char* action_name(Action kind) noexcept;        // "death", "bomb", "theft", "fire", "hit"
 
     /// The totals of every seat every kSampleTurns turns (the first after turn 100)
     struct Sample {
@@ -72,6 +79,9 @@ struct MatchStats {
     std::array<uint32_t, kSeats> damage_dealt{};           // hit points that its ants took from the other seats' ants (an ant counts for the team of the last damage it took)
     std::array<uint32_t, kSeats> damage_taken{};
     std::array<std::array<uint32_t, kSeats>, kSeats> damage_from{};   // [the team of the damage][the seat that lost the points]; a seat can hurt itself (its own fire wall)
+    /// action[kind][bucket]: events of that kind in the 5 seconds (kSampleTurns turns) of the bucket, bucket b being the turns 100 b to 100 b + 99 (the same second as the kill's: turn / 20). A death is an entry of
+    /// `kills`, a theft one of `raids`, a bomb one of `bombs_off` and a fire one of the seats' `fires_lit`; a hit is an ant that lost hit points, counted once for each ant in each bucket (so a long fight is as big as the ants in it, not as long as it lasts).
+    std::array<std::vector<uint32_t>, kActionKinds> action;
     std::array<std::array<uint32_t, 5>, kSeats> powerups{};            // [seat][bomber, fire, thief, combat, swimmer]: power-ups taken that changed the ant's type
     std::array<uint32_t, kSeats> food_trips{};             // times an ant picked food up
     std::array<int64_t, kSeats> food_points{};             // the points it held then
@@ -109,9 +119,11 @@ private:
         int32_t tile_x{0};
         int32_t tile_y{0};
         uint32_t last_seen{0};                             // the turn at which the world last showed it
+        uint32_t hit_bucket{0xFFFFFFFFu};                  // the bucket of `action` in which it was last counted as hurt (a hit is counted once for an ant in a bucket)
     };
     void on_command(uint32_t turn, const sim::Command& command, sim::SimulationEngine& engine);
     void on_tick(uint32_t turns, sim::SimulationEngine& engine);
+    void count(MatchStats::Action kind, uint32_t turns, uint32_t events = 1);
     void fail(const char* what);
 
     MatchStats stats_;
@@ -120,6 +132,7 @@ private:
     std::vector<Ant> ants_;                                // by ant id (the engine numbers ants 1, 2, 3 ...)
     std::array<int32_t, MatchStats::kSeats> prev_score_{};
     std::array<uint32_t, MatchStats::kSeats> prev_hatched_{};
+    std::array<uint32_t, MatchStats::kSeats> prev_fires_{};
     std::array<bool, MatchStats::kSeats> was_wiped_{};
     uint32_t bombs_planted_{0};
     uint32_t bombs_defused_{0};

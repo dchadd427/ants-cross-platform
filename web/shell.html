@@ -22,7 +22,7 @@
     <meta name="apple-mobile-web-app-title" content="Ants!">
     <link rel="shortcut icon" href="/favicon.ico?v=67dc022d">
     <link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>
-    <link rel="stylesheet" href="site_nav.css"><link rel="stylesheet" href="game_bar.css"><link rel="stylesheet" href="replay_stats.css"><link rel="stylesheet" href="death_map.css"><link rel="stylesheet" href="front/rematch.css"><link rel="stylesheet" href="touch_keys.css"><link rel="stylesheet" href="update_notice.css">
+    <link rel="stylesheet" href="site_nav.css"><link rel="stylesheet" href="game_bar.css"><link rel="stylesheet" href="replay_stats.css"><link rel="stylesheet" href="death_map.css"><link rel="stylesheet" href="replay_activity.css"><link rel="stylesheet" href="front/rematch.css"><link rel="stylesheet" href="touch_keys.css"><link rel="stylesheet" href="update_notice.css">
     <style>
         /* The look of the front page (web/lobby.html), which is the look of the 1998 game's own menus: the orange clay, the thin green frame, teal bevelled buttons with a red shadow, black
            inset boxes, the game's own font (Libre Franklin, SIL OFL) and the "ants!" logo, all from web/front/. The colors are the front page's, token for token (tests/scripts/test_web_game.py
@@ -832,6 +832,14 @@
         .tl:focus-visible { outline: none; } .tl:focus-visible .thumb { outline: 3px solid var(--gold); outline-offset: 2px; }
         .clock { grid-area: clock; font-variant-numeric: tabular-nums; font-size: 20px; white-space: nowrap; text-align: right; min-width: 118px; }
         .clock small { font-size: 17px; opacity: .72; }
+        /* a replay's bar on a computer (wider than 700 px): the timeline has a row of its own, as on a phone, so that it is as wide as the picture (beside the buttons it kept 0 - 330 px) and the activity curve above it has
+           room (web/replay_activity.js); a live bar and the fullscreen bar keep their one row, and the Settings button is the gear alone (a phone's gear lies above the bar, game_menu.css) */
+        @media (min-width: 701px) {
+            .rbar:not(.over):not(.islive) { grid-template-columns: auto auto 1fr auto auto auto auto; grid-template-areas: "tl tl tl tl tl tl tl" "play rew clock cam speed pic set"; gap: 4px 8px; }
+            .rbar:not(.over):not(.islive) .clock { text-align: left; padding-left: 12px; min-width: max-content; }
+            .rbar:not(.over):not(.islive) .gm-bar { grid-area: set; min-width: 44px; justify-content: center; }
+            .rbar:not(.over):not(.islive) .gm-bar .gm-txt { display: none; }
+        }
         .rbar .speed { grid-area: speed; }
         /* the camera button (Auto camera lit, Manual camera plain; docs/REPLAYS.md "Camera"): an icon and a word; the word goes where the bar is narrower than 900 px (the button keeps its name for a screen reader), and in fullscreen only the icon stays */
         .rbar .camb { grid-area: cam; min-height: 36px; white-space: nowrap; } .rbar .camb .ic-man, .rbar .camb[data-mode="manual"] .ic-auto { display: none; } .rbar .camb[data-mode="manual"] .ic-man { display: block; }
@@ -1140,7 +1148,7 @@
 
     <div class="toast" id="toast" role="status" hidden></div>
 
-    <script src="site_nav.js"></script><script src="game_bar.js"></script><script src="update_notice.js" data-window="no"></script><script src="rejoin_key.js"></script><script src="hub_here.js"></script><script src="shapes.js"></script><script src="shape_picker.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="alert_core.js"></script><script src="hud_fullscreen.js"></script><script src="wake_lock.js"></script><script src="p2p.js"></script><script src="touch_keys.js"></script><script src="front/lobby_net.js"></script><script src="front/player_name.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
+    <script src="site_nav.js"></script><script src="game_bar.js"></script><script src="update_notice.js" data-window="no"></script><script src="rejoin_key.js"></script><script src="hub_here.js"></script><script src="shapes.js"></script><script src="shape_picker.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="replay_activity.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="alert_core.js"></script><script src="hud_fullscreen.js"></script><script src="wake_lock.js"></script><script src="p2p.js"></script><script src="touch_keys.js"></script><script src="front/lobby_net.js"></script><script src="front/player_name.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
     <script>
         var ANTS_BUILD_VER = '@@BUILD_TIMESTAMP@@';
         if (!ANTS_BUILD_VER || ANTS_BUILD_VER.indexOf('@') !== -1) {
@@ -3229,6 +3237,7 @@
                 var p = total > 0 ? Math.min(1, seconds / total) * 100 : 0;
                 $('tl-fill').style.width = p + '%';
                 $('tl-thumb').style.left = p + '%';
+                if (window.antsReplayCurve) window.antsReplayCurve.played(p);               // (the activity curve above the timeline: the part played is in color)
                 $('t-now').textContent = R.lengthText(seconds);
                 $('t-all').textContent = liveOn ? (atNow ? '' : '/ ' + R.lengthText(limit)) : '/ ' + R.lengthText(total);
                 var tl = $('tl');
@@ -3701,7 +3710,7 @@
 
         // ---- the stats of the match on show (docs/REPLAYS.md "The match pages"): the server's record of it as a panel (the Stats button on a wide screen, a row under the controls on a phone); web/history_page.js.
         // Only for a recording of the server's own store: a live match, a file from elsewhere and the frame of a match page have none. ----
-        if (ANTS_REPLAY_MODE && !ANTS_LIVE_MODE && !ANTS_EMBED && ANTS_REPLAY_FILE && typeof fetch === 'function') window.AntsHistory.replayStats({ document: document, fetch: fetch.bind(window), file: ANTS_REPLAY_FILE, redraw: window.AntsDeathMap && window.AntsDeathMap.redraw, deathMap: window.AntsDeathMap && window.AntsDeathMap.create(document, function (name) { return getComputedStyle(document.documentElement).getPropertyValue(name); }, { replay: window.AntsReplay, storage: (function () { try { return window.localStorage; } catch (e) { return null; } })() }) });      // (the small map "Where ants died" in the panel: web/death_map.js)
+        if (ANTS_REPLAY_MODE && !ANTS_LIVE_MODE && !ANTS_EMBED && ANTS_REPLAY_FILE && typeof fetch === 'function') window.AntsHistory.replayStats({ document: document, fetch: fetch.bind(window), file: ANTS_REPLAY_FILE, redraw: window.AntsDeathMap && window.AntsDeathMap.redraw, deathMap: window.AntsDeathMap && window.AntsDeathMap.create(document, function (name) { return getComputedStyle(document.documentElement).getPropertyValue(name); }, { replay: window.AntsReplay, storage: (function () { try { return window.localStorage; } catch (e) { return null; } })() }), onRecord: window.AntsActivity && function (rec) { window.AntsActivity.mount(window, rec); } });      // (the small map "Where ants died" in the panel: web/death_map.js; the activity curve of the timeline from the same record: web/replay_activity.js)
     </script>
     <!-- END replay glue -->
     <script>
