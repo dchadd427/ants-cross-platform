@@ -1077,7 +1077,7 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
             for (size_t k = 1; k < s.took.size(); ++k) j.field(kind_name(k), uint64_t{s.took[k]});
             j.end_object();
             j.field("took_at_flowers", uint64_t{s.took_at_flowers});
-            j.key("idle");                                                  // the idle tally (docs/BOTS.md, "When the food is gone"): ant-ticks, the idle ones, the same two from the last food taken to the end, raids begun and the points they took
+            j.key("idle");                                                  // the idle tally (docs/BOT_TACTICS.md, "When the food is gone"): ant-ticks, the idle ones, the same two from the last food taken to the end, raids begun and the points they took
             j.begin_object();
             j.field("ant_ticks", s.ant_ticks);
             j.field("idle_ticks", s.idle_ticks);
@@ -1261,7 +1261,7 @@ int run_tool(const Options& o, const std::function<std::unique_ptr<ai::Bot>(cons
         for (const std::string& note : sink.store->take_notes()) std::fprintf(g_out, "bot_arena: %s\n", note.c_str());
     }
     {
-        // what the seats' ants said "Can't go there." (docs/BOTS.md, "The can't-go loop"): all reactions, the first of each, the orders given and the orders that were refused
+        // what the seats' ants said "Can't go there." (docs/BOT_PLAY.md, "The can't-go loop"): all reactions, the first of each, the orders given and the orders that were refused
         uint64_t cantgo = 0, began = 0, orders = 0, refused = 0, again = 0;
         for (const MatchReport& r : reports) {
             for (const ai::ArenaSeatResult& s : r.result.seats) {
@@ -1298,7 +1298,7 @@ int run_tool(const Options& o, const std::function<std::unique_ptr<ai::Bot>(cons
         }
     }
     {
-        // the droplets that landed on the flowers and what the seats' ants took of them (docs/BOTS.md, "The flowers")
+        // the droplets that landed on the flowers and what the seats' ants took of them (docs/BOT_TACTICS.md, "The flowers")
         uint64_t landings = 0, took = 0, at_flowers = 0;
         for (const MatchReport& r : reports) {
             landings += r.result.landings;
@@ -1313,7 +1313,7 @@ int run_tool(const Options& o, const std::function<std::unique_ptr<ai::Bot>(cons
         }
     }
     {
-        // the expeditions over water, per seat (docs/BOTS.md, "Islands"): the matches in which one was planned, the mean tick of the first bomb, the first landing and the first Swimmer
+        // the expeditions over water, per seat (docs/BOT_ISLANDS.md, "Islands"): the matches in which one was planned, the mean tick of the first bomb, the first landing and the first Swimmer
         // (over the matches that got so far), the Swimmers taken a match, the attempts given up, and the duds among the bombs
         struct Row {
             uint64_t matches{0}, plants{0}, landings{0}, swimmers{0}, taken{0}, given_up{0}, bombs{0}, duds{0};

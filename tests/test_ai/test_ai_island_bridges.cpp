@@ -1,4 +1,4 @@
-// AI54: the cheapest flower link first and the bridges for ants that stand away from the hill (island_link.hpp, island_bridge.hpp, docs/BOTS.md "Bridges for ants"). ISLANDS, one Hard bot on seat 0, the
+// AI54: the cheapest flower link first and the bridges for ants that stand away from the hill (island_link.hpp, island_bridge.hpp, docs/BOT_ISLANDS.md "Bridges for ants"). ISLANDS, one Hard bot on seat 0, the
 // expedition, the miner and the mines off: the ants and the Swimmers that a test puts on the map are the only ones there. Hill 0 stands on the island (18 .. 28, 19 .. 28); the satellite west of it
 // (10 .. 15, 22 .. 27, a Bomber power-up on it) is two water tiles away, the satellite north of it (22 .. 29, 9 .. 15, two piles of 10 units of 30) three.
 #include <functional>

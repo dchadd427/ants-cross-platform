@@ -1,5 +1,5 @@
 // The gate task of the standard bot (B4-1, AI10.x): "guiding for eating", measured against the engine's own queue in a hand-made hill with a pile north of it,
-// quick enough for suite 2.20. The engine's rules that it rests on are documented in docs/BOTS.md ("The gate").
+// quick enough for suite 2.20. The engine's rules that it rests on are documented in docs/BOT_PLAY.md ("The gate").
 //
 //   AI10.1  the throughput: with the gate guided by hand a hill banks much more than with the engine's queue (8 workers), and never less (3 workers); the median gap between deposits
 //           at saturation, and the far waiting tile stays empty

@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the reach guard of the computer players (docs/BOTS.md, 'The can't-go loop', orders over water) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the guard's filter, the engine's goal of a click, the Swimmer, the Fire Ant, the power-ups, the timed chain, the plan and the tune key against test_ai AI48, AI7.8 and AI27.9. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_reach_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "note": "Mutants of the reach guard of the computer players (docs/BOT_PLAY.md, 'The can't-go loop', orders over water) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the guard's filter, the engine's goal of a click, the Swimmer, the Fire Ant, the power-ups, the timed chain, the plan and the tune key against test_ai AI48, AI7.8 and AI27.9. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_reach_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
  "mutants": [
   {
    "id": "reach_guard_off_in_filter",

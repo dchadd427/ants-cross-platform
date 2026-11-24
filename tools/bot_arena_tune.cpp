@@ -10,23 +10,23 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "leash") { p.leash_tiles = static_cast<int32_t>(v); return true; }
     if (key == "linger") { p.fight_linger_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "aid") return flag(p.carrier_aid);
-    if (key == "flowers") { p.flower_sides = p.flower_fire = p.flower_recover = p.flower_recall = p.flower_watch = v != 0; return true; }       // the flower play of docs/BOTS.md, "The flowers" (0: the bot as it was): every rule at once
+    if (key == "flowers") { p.flower_sides = p.flower_fire = p.flower_recover = p.flower_recall = p.flower_watch = v != 0; return true; }       // the flower play of docs/BOT_TACTICS.md, "The flowers" (0: the bot as it was): every rule at once
     if (key == "fside") return flag(p.flower_sides);
     if (key == "ffire") return flag(p.flower_fire);
     if (key == "frecover") return flag(p.flower_recover);
     if (key == "frecall") return flag(p.flower_recall);
     if (key == "fwatch") return flag(p.flower_watch);
-    if (key == "drops") { p.drop_retake = p.drop_contest = v != 0; return true; }       // the dropped power-ups of docs/BOTS.md, "Dropped power-ups" (0: the bot as it was): both rules at once
+    if (key == "drops") { p.drop_retake = p.drop_contest = v != 0; return true; }       // the dropped power-ups of docs/BOT_TACTICS.md, "Dropped power-ups" (0: the bot as it was): both rules at once
     if (key == "dretake") return flag(p.drop_retake);
     if (key == "dcontest") return flag(p.drop_contest);
     if (key == "dkinds") { p.drop_retake_kinds = static_cast<uint8_t>(v); return true; }
     if (key == "dmem") { p.drop_memory_ticks = static_cast<uint32_t>(v); return true; }
-    if (key == "rg") return flag(p.reach_guard);                                     // the reach guard of docs/BOTS.md, "The can't-go loop" (0: the bot as it was before it)
+    if (key == "rg") return flag(p.reach_guard);                                     // the reach guard of docs/BOT_PLAY.md, "The can't-go loop" (0: the bot as it was before it)
     if (key == "nohope") return flag(p.skip_hopeless);                               // the Hopeless piles are left alone while another pile has food (0: the bot as it was)
     if (key == "det") { p.bomb_detour = static_cast<uint8_t>(v > 2 ? 2 : v); return true; }   // the detour round visible bombs of other teams: 0 none, 1 Medium's, 2 Hard's
     if (key == "detpct") { p.detour_extra_percent = static_cast<uint32_t>(v); return true; }
     if (key == "broute") return flag(p.bomb_route);                                  // the Bomber's defuse by route (0: the bot as it was)
-    if (key == "cg") return flag(p.cantgo_aware);                                    // the can't-go fixes of docs/BOTS.md, "The can't-go loop" (0: the bot as it was before them)
+    if (key == "cg") return flag(p.cantgo_aware);                                    // the can't-go fixes of docs/BOT_PLAY.md, "The can't-go loop" (0: the bot as it was before them)
     if (key == "gatebombs") return flag(p.gate_spare_map_bombs);                     // the counters leave a gate map's own bombs alone (0: they counter them, as before)
     if (key == "field") return flag(p.gate_field);                                   // the field breach (0: the gate goals' shore breach, as before)
     if (key == "fpick") return flag(p.field_pick);                                   // the field breach's click on the power-up under the ant (0: off the power-up and back on)
@@ -201,7 +201,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
         p.guards = false;
         return true;
     }
-    if (key == "war") {                                                               // the war batch of docs/BOTS.md, "The war batch" (0: the bot as it was before it; 1: the plan that ships)
+    if (key == "war") {                                                               // the war batch of docs/BOT_TACTICS.md, "The war batch" (0: the bot as it was before it; 1: the plan that ships)
         if (v == 0) ai::without_war_batch(p);
         return true;
     }
@@ -223,7 +223,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
         else p.brawl.solo_ants = static_cast<uint32_t>(v);
         return true;
     }
-    if (key == "behind") return flag(p.behind_war);                                  // the losers fight harder (docs/BOTS.md, "The war batch"; 0: the war batch without it)
+    if (key == "behind") return flag(p.behind_war);                                  // the losers fight harder (docs/BOT_TACTICS.md, "The war batch"; 0: the war batch without it)
     if (key == "bt1") { p.behind_tier1 = static_cast<uint32_t>(v); return true; }
     if (key == "bt2") { p.behind_tier2 = static_cast<uint32_t>(v); return true; }
     if (key == "bt3") { p.behind_tier3 = static_cast<uint32_t>(v); return true; }
@@ -256,7 +256,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
         if (v == 0) ai::without_unstick_batch(p);
         return true;
     }
-    if (key == "thief_batch") {                                                       // the thief batch of docs/BOTS.md, "Thieves: the answer to a raid" (0: the bot as it was before it; 1: the plan that ships, the look again and the Fire Ant's way home; the meeting and the trap are `tguard=1` and `ttrap=1`)
+    if (key == "thief_batch") {                                                       // the thief batch of docs/BOT_TACTICS.md, "Thieves: the answer to a raid" (0: the bot as it was before it; 1: the plan that ships, the look again and the Fire Ant's way home; the meeting and the trap are `tguard=1` and `ttrap=1`)
         if (v == 0) ai::without_thief_batch(p);
         else p.raid_recheck = p.fire_home_only = true;
         return true;
@@ -325,7 +325,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "oppharv") { p.opportunity_harvest_d = static_cast<int32_t>(v); return true; }
     if (key == "reach") return flag(p.reach_fights);
     if (key == "idlehunt") return flag(p.idle_hunt);
-    if (key == "gone") {                                                                // the food-gone batch of docs/BOTS.md, "When the food is gone" (0: the bot as it was before it; 1: the plan that ships)
+    if (key == "gone") {                                                                // the food-gone batch of docs/BOT_TACTICS.md, "When the food is gone" (0: the bot as it was before it; 1: the plan that ships)
         if (v == 0) ai::without_gone_batch(p);
         else p.gone = true;
         return true;
@@ -345,7 +345,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "iswap") return flag(p.idle_swap);                                      // the idle swap of docs/BOT_GONE.md (0: an idle typed ant stays as it was)
     if (key == "iswapticks") { p.idle_swap_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "worth") return flag(p.chore_worth);
-    if (key == "stand") {                                                             // the stand batch of docs/BOTS.md, "The stand batch" (0: the bot as it was before it; 1: the plan that ships)
+    if (key == "stand") {                                                             // the stand batch of docs/BOT_TACTICS.md, "The stand batch" (0: the bot as it was before it; 1: the plan that ships)
         if (v == 0) ai::without_stand_batch(p);
         return true;
     }
@@ -401,7 +401,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
         if (p.takes_thief && p.max_thief < 2) p.max_thief = 2;
         return true;
     }
-    if (key == "islands") return flag(p.islands);                                     // the island machinery as a whole (0: the standard bot as it was before it: the tournaments of docs/BOTS.md "Islands")
+    if (key == "islands") return flag(p.islands);                                     // the island machinery as a whole (0: the standard bot as it was before it: the tournaments of docs/BOT_ISLANDS.md "Islands")
     if (key == "expedition") return flag(p.island_expedition);
     if (key == "ferry") return flag(p.island_ferry);
     if (key == "iswim") { p.island_swimmers = static_cast<uint32_t>(v); return true; }

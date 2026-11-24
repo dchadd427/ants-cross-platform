@@ -1,4 +1,4 @@
-// AI43: the mines at the ring pile (miner_flight_task.hpp, MineTask::collect_island_targets, docs/BOTS.md "Islands") and the ferry that sends a stopped Swimmer again (FerryTask::reorder_hurt).
+// AI43: the mines at the ring pile (miner_flight_task.hpp, MineTask::collect_island_targets, docs/BOT_ISLANDS.md "Islands") and the ferry that sends a stopped Swimmer again (FerryTask::reorder_hurt).
 // ISLANDS, one bot on seat 0; a second team is there only where a test needs an enemy ant.
 #include <functional>
 #include <memory>

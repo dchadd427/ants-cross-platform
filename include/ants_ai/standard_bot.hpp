@@ -18,13 +18,13 @@
 //
 // What the tournaments measured as a loss is OFF in every shipped plan, and stays in the code behind a flag for the next round: the Combat Ant on a guard post, the interception of
 // thieves, hatching, the strict contest order, the strike and the wipe-out focus (the strike is part of the Hard Aggressive style), the ambush at a thief hole, the sabotage with a
-// single Fire Ant, the harassment squad (but in the Aggressive style) (docs/BOTS.md, "Aggression").
+// single Fire Ant, the harassment squad (but in the Aggressive style) (docs/BOT_TACTICS.md, "Aggression").
 //
 // The task that sends a hurt ant that is in danger home to heal (HealTask, docs/BOT_PEOPLE.md, "Step 2: hurt ants heal") is built and OFF in every plan: it did not move the numbers it was built for.
 // `bot_arena --tune heal=1` turns it on.
 //
 // THE STALL DETECTOR (every level): a seat that banks nothing for a while, or sends the same order again and again with nothing banked, plays the plain economy for a time
-// (docs/BOTS.md, "The stall detector"); it counts ticks of the views and of the release, nothing else.
+// (docs/BOT_PLAY.md, "The stall detector"); it counts ticks of the views and of the release, nothing else.
 //
 // It is a virtual client like every bot (project rule 8): it reads the world through the BotView, sends commands that a person could click, and has no knowledge that a person of its
 // seat could not have. It answers an invitation to team up by the accept rule (accepts_invitation), never invites and never breaks an alliance. The worker bot stays what it was: the

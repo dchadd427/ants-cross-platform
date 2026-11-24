@@ -1,4 +1,4 @@
-// The island matches (docs/BOTS.md, "Islands"): whole matches of four standard bots on ISLANDS and SMALL at every level, the bots as they play. One program; run_tests.sh runs it as suite 2.28.
+// The island matches (docs/BOT_ISLANDS.md, "Islands"): whole matches of four standard bots on ISLANDS and SMALL at every level, the bots as they play. One program; run_tests.sh runs it as suite 2.28.
 #include "ai_test.hpp"
 
 void run_island_match_tests();

@@ -1,4 +1,4 @@
-// AI44: the flower link and the swarm (island_link.hpp, island_swarm.hpp, docs/BOTS.md "The swarm"). ISLANDS, one Hard bot on seat 0: a Swimmer digs the one tile between the western half of the ring
+// AI44: the flower link and the swarm (island_link.hpp, island_swarm.hpp, docs/BOT_ISLANDS.md "The swarm"). ISLANDS, one Hard bot on seat 0: a Swimmer digs the one tile between the western half of the ring
 // and the top flower strip, a spare ant of the ring walks over, waits at the strip and takes the Swimmer that the flower lets fall; the corner rows that nobody works are taken on foot. The expedition,
 // the miner and the mines are off, so the ants that a test puts on the ring are the only ones there (the tests of the rows on foot switch the expedition on).
 #include <functional>

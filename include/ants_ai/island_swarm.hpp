@@ -1,6 +1,6 @@
 #pragma once
 
-// The swarm of the standard bot (docs/BOTS.md, "Islands", "The swarm"; plan.island_flower_link, Hard): the Swimmers of the corner rows are taken in the first minute and then there are none left (twelve
+// The swarm of the standard bot (docs/BOT_ISLANDS.md, "Islands", "The swarm"; plan.island_flower_link, Hard): the Swimmers of the corner rows are taken in the first minute and then there are none left (twelve
 // tokens, three to a corner), but the two flower strips let a Swimmer fall every minute (70 percent of the drops) and an ant that stands beside the drop tile takes it. Every ant that no other
 // task holds, that a walk over the bridges that stand reaches the strip from (the crew's spares on the ring half, a Bomber that flew over) and that is not a Swimmer yet goes to the strip and
 // waits there beside the drop tile, `stage` ants to a strip, and the nearest of them walks onto the Swimmer when one lies on the drop tile. A typed ant takes the drop as well (it leaves its

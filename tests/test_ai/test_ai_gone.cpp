@@ -1,4 +1,4 @@
-// AI56: when the food is gone (docs/BOTS.md, "When the food is gone"): the food-gone batch of the standard bot and the idle tally of the arena, in hand-made worlds with the real engine.
+// AI56: when the food is gone (docs/BOT_TACTICS.md, "When the food is gone"): the food-gone batch of the standard bot and the idle tally of the arena, in hand-made worlds with the real engine.
 //
 // With no food that the hill can walk to (every pile eaten, or what is left out of reach and the island, gate and field work banking nothing), a bot does not stand: after LevelPlan::gone_wait ticks
 // its free ants steal for a smaller loot, fight, and heal. The cases play a bot of a level through the rig (b41_helpers.hpp) on the empty field of the older tests (no pile at all, so the food is gone

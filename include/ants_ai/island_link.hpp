@@ -1,6 +1,6 @@
 #pragma once
 
-// The flower link of the standard bot (docs/BOTS.md, "Islands", "The flower link"; plan.island_flower_link, Hard): the crew that is flown to the Swimmers lands on a half of the ring round the
+// The flower link of the standard bot (docs/BOT_ISLANDS.md, "Islands", "The flower link"; plan.island_flower_link, Hard): the crew that is flown to the Swimmers lands on a half of the ring round the
 // lake, and a flower strip lies one or two water tiles from that half. A ferry Swimmer digs those tiles (a special order onto one water tile at a time, from the ring outward), and the spare
 // ants of the crew walk over them to wait at the strip and take the Swimmer that the flower lets fall next to them (SwarmTask). The tiles are found in the analysis of the start (IslandInfo): the
 // channels between a component that holds a flower and a component that holds none and is no hill's island, at most `max_tiles` long: every strip within reach of a ring half is a link. A finished tile lasts 3,600 ticks and is dug again only

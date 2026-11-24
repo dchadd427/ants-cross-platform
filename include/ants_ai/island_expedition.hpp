@@ -1,6 +1,6 @@
 #pragma once
 
-// The expedition of the standard bot (docs/BOTS.md, "Islands"): where no Swimmer lies within a walk of the hill (ISLANDS: the twelve are in rows of power-ups in the corners of the map, on the far
+// The expedition of the standard bot (docs/BOT_ISLANDS.md, "Islands"): where no Swimmer lies within a walk of the hill (ISLANDS: the twelve are in rows of power-ups in the corners of the map, on the far
 // side of the water), a crew of plain workers is flown there bomb by bomb (island_info.hpp, Flight) and one worker takes one token of the row (Fire, Fire, Swimmer, ...) and walks out.
 //
 //   route   the cheapest way by flights to the row whose entrance is nearest to where the last flight lands: a flight costs 2, and with `fly_on` one more from an island that has no Bomber to
@@ -11,7 +11,7 @@
 //   row     the crew ant nearest to the end of the row takes the first token (a planned pick-up) and walks out, then the next one goes in; the Bomber takes only the last Swimmer that is wanted
 //   timed   (Hard) one ant takes a Swimmer behind the Fire hats of the row, and walks out over them again, without taking a hat: a hat is taken when a walk ENDS on its tile, and the walk can be
 //           ended by the next click (a plain order across hats finds no path, the planner treats hats as solid). The ant stands at rest in front of the row; its clicks are chained (Orders::chain)
-//           to the hats one after the other, each applied about when the ant's tile became the hat's tile (docs/BOTS.md, "Timed clicks"). A late click takes the hat, which is the old row as it was
+//           to the hats one after the other, each applied about when the ant's tile became the hat's tile (docs/BOT_ISLANDS.md, "Timed clicks"). A late click takes the hat, which is the old row as it was
 //
 //   on foot (swarm) from a tick on, a row whose Swimmers are all still there belongs to nobody (the corner of an empty seat, of a player who does not play): the bot wants Swimmers beyond the level's
 //           number, and the plain ants that a walk reaches the row from (the crew's spares that stand on the same side of the lake, the ants that wait at a strip) go in over the hats like the

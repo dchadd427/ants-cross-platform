@@ -1,6 +1,6 @@
 #pragma once
 
-// The standard bot's answer to an invitation to team up (docs/BOTS.md, "Alliances") as ONE pure function of what its seat can see: the bot answers by it, and the application asks the
+// The standard bot's answer to an invitation to team up (docs/BOT_PLAY.md, "Alliances") as ONE pure function of what its seat can see: the bot answers by it, and the application asks the
 // same function why a bot declined, so the line that tells the player is the rule that decided.
 
 #include <cstdint>
