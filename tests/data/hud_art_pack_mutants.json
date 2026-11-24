@@ -1,0 +1,45 @@
+{
+  "note": "Mutants of tools/hud_art/pack.py: sprites that do not fit a texture go on a second sheet instead of failing (the first sheet is filled as far as it goes, the derived sprites stay on it, every sprite is where its record says). Each must be noticed by tests/scripts/test_hud_art_pack.py. No build: python3 tools/mutate.py tests/data/hud_art_pack_mutants.json --keep-going --jobs 1, from the repository folder.",
+  "mutants": [
+    {
+      "id": "a_full_sheet_is_not_split",
+      "file": "tools/hud_art/pack.py",
+      "old": "    if first is None:                                                   # full:",
+      "new": "    if False:                                                           # full:",
+      "test": "python3 tests/scripts/test_hud_art_pack.py",
+      "expect": "test_sprites_that_do_not_fit_go_on_a_second_sheet"
+    },
+    {
+      "id": "every_sprite_claims_the_first_sheet",
+      "file": "tools/hud_art/pack.py",
+      "old": "place[n] = (index, x + PAD, y + PAD)",
+      "new": "place[n] = (0, x + PAD, y + PAD)",
+      "test": "python3 tests/scripts/test_hud_art_pack.py",
+      "expect": "test_sprites_that_do_not_fit_go_on_a_second_sheet"
+    },
+    {
+      "id": "the_first_sheet_takes_one_sprite_less",
+      "file": "tools/hud_art/pack.py",
+      "old": "        first = fit(sizes_top, sizes_rest[:lo])",
+      "new": "        lo = max(0, lo - 1)\n        first = fit(sizes_top, sizes_rest[:lo])",
+      "test": "python3 tests/scripts/test_hud_art_pack.py",
+      "expect": "test_sprites_that_do_not_fit_go_on_a_second_sheet"
+    },
+    {
+      "id": "the_second_sheet_has_no_record",
+      "file": "tools/hud_art/pack.py",
+      "old": "        lines.append('sheet2size %d %d' % (second[0], second[1]))",
+      "new": "        pass",
+      "test": "python3 tests/scripts/test_hud_art_pack.py",
+      "expect": "test_sprites_that_do_not_fit_go_on_a_second_sheet"
+    },
+    {
+      "id": "a_derived_sprite_may_go_on_the_second_sheet",
+      "file": "tools/hud_art/pack.py",
+      "old": "        lo, hi = 0, len(sizes_rest)                                     # the most sprites",
+      "new": "        sizes_rest = sizes_rest + sizes_top\n        sizes_top = []\n        lo, hi = 0, len(sizes_rest)                                     # the most sprites",
+      "test": "python3 tests/scripts/test_hud_art_pack.py",
+      "expect": "test_the_derived_sprites_stay_on_the_first_sheet"
+    }
+  ]
+}

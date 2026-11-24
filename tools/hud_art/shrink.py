@@ -19,6 +19,7 @@ CANDIDATES = ('qh_part_', 'op_part_', 'cd_title')       # the sprites that may b
 EXACT = ('cd_dot_',)                                    # the sprites that are never rounded: the color squares of the countdown card's rows (they are 11 x 11 pixels, and the color names the player)
 DERIVE_MAX = 3.5                                        # levels: the most that a plain lettering's 2x picture made from the 3x one may differ (mean, over the pixels that show) from the one drawn at 2x
 DERIVE_LIMIT = 25                                       # levels: the 2x picture of any sprite made from the 3x one may differ this much (mean) from the one drawn at 2x: more means the 3x picture is not the same drawing
+DERIVE_LIMITS = {'sc_k_': 45}                           # the gold labels of the results screen (small capitals, a dark seat under every stroke): thin strokes whose edges are most of what shows, so the same drawing differs more between two grids
 PERIODIC = {'panel_t': 'x', 'panel_b': 'x', 'panel_l': 'y', 'panel_r': 'y'}      # frame pieces that the game repeats along an axis: rounded as if the picture went on round that axis
 
 
@@ -111,8 +112,9 @@ def shrink(images):
     worst = ('', 0.0)
     for name in images[3]:
         err = derive_error(drawn[name], images[3][name])
-        if err > DERIVE_LIMIT:
-            raise SystemExit('the 2x picture of %s made from its 3x one differs from the one drawn at 2x by %.1f levels (the limit is %d): it is not the same drawing' % (name, err, DERIVE_LIMIT))
+        limit = next((v for prefix, v in DERIVE_LIMITS.items() if name.startswith(prefix)), DERIVE_LIMIT)
+        if err > limit:
+            raise SystemExit('the 2x picture of %s made from its 3x one differs from the one drawn at 2x by %.1f levels (the limit is %d): it is not the same drawing' % (name, err, limit))
         worst = max(worst, (name, err), key=lambda t: t[1])
         images[2][name] = DV.derive(images[3][name])
     print('2x made from 3x: %d sprites, the largest mean difference from a drawing at 2x is %.1f levels (%s)' % (len(images[3]), worst[1], worst[0]), flush=True)

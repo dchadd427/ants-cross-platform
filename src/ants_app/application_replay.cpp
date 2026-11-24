@@ -134,6 +134,7 @@ void Application::begin_recording(replay::Header head) {
 // The Start of a network match, as net_load_match has just applied it: the same data on every machine, so every machine's file holds the same match (the seat that wrote it is the only difference)
 void Application::begin_net_recording() {
     recorder_.reset();
+    live_stats_.start(sim_);                                                 // (the count of the numbers of the results: from the first turn, with or without a file; the web build keeps none)
     const net::StartMsg& start = net_->start_info();
     replay::Header head;
     head.venue = "network game";
@@ -153,6 +154,7 @@ void Application::begin_net_recording() {
 // is kept when something happened in it, the player at this machine gave an order (the quit is one; the computer players' orders and the other machines' do not count) or a minute went by
 // (docs/REPLAYS.md); one that is left at once leaves nothing. A recording that cannot be a file is dropped with a line on the console and the match goes on as it did.
 void Application::finish_recording() {
+    if (!sim_.is_match_over()) live_stats_.abandon();          // (a match that is left has no results: what was counted is dropped; the report of one that ended stays until the next begins)
     if (!recorder_) return;
     if (!sim_.is_match_over() && recorder_->own_commands() == 0 && recorder_->turns() < kLeftMatchKeptTurns) {
         recorder_.reset();
@@ -218,10 +220,6 @@ void Application::withdraw_replay() {
 // init: the file is read and checked before anything is opened, so that every way it can fail ends in a failure of the replay, never in a game that does not start
 void Application::prepare_replay() {
     replay_mode_ = true;
-    replay_failure_ = ReplayFailure::None;
-    replay_failure_text_.clear();
-    replay_file_.reset();
-    replay_live_ = false;
     std::vector<uint8_t> bytes;
     {
         std::ifstream in(config_.replay_path, std::ios::binary);
@@ -230,6 +228,15 @@ void Application::prepare_replay() {
             if (bytes.size() > replay::kMaxFileBytesWithMap) bytes.clear();
         }
     }
+    load_replay(bytes);
+}
+
+// The bytes of a recording are decoded and checked (the rules, the map, the roster): the file is shown, or replay_failure_ says why not
+void Application::load_replay(const std::vector<uint8_t>& bytes) {
+    replay_failure_ = ReplayFailure::None;
+    replay_failure_text_.clear();
+    replay_file_.reset();
+    replay_live_ = false;
     auto replay = std::make_unique<replay::Replay>();
     std::string why;
     if (bytes.empty() || !replay::decode(bytes.data(), bytes.size(), *replay, why)) {
@@ -300,6 +307,7 @@ void Application::start_replay() {
     if (!discard_sink_) discard_sink_ = std::make_unique<DiscardSink>();
     hud_.set_command_sink(discard_sink_.get());
     recorder_.reset();                                                     // (a viewer records nothing)
+    live_stats_.reset();                                                   // (and counts nothing: no numbers of an earlier match, which the results of a viewed recording would show)
     withdraw_replay();
     if (!replay_file_ || replay_failure_ != ReplayFailure::None) {
         report_replay_to_page();
@@ -460,6 +468,7 @@ void Application::run_replay(float dt) {
         if (turn_of(sim_) >= replay_jump_target_) {
             replay_jumping_ = false;
             auto_camera_.reset();                                          // (nobody saw the turns of the jump: the camera starts from what the picture shows now)
+            focus_watched_tile();                                          // (Watch: ... on the place of the moment)
             catch_up_backlog_ = true;                                      // (what the turns of the jump made is not told: the sounds are dropped, the news stay in the chat log)
             post_tick();
             tick_accumulator_ = 0.0f;
@@ -475,6 +484,58 @@ void Application::run_replay(float dt) {
     }
     if (replay_live_ && turn_of(sim_) >= replay_limit()) tick_accumulator_ = 0.0f;       // (waiting for the next copy: the time that passes meanwhile is not owed, or the picture would rush when it comes)
     if (replay_failure_ == ReplayFailure::None && !replay_live_ && turn_of(sim_) >= file.total_turns && !replay_cut_ && !sim_.is_match_over()) replay_ends();
+}
+
+// The results' Play of the game (scorecard.hpp, set_on_watch): the desktop game keeps the file of a game on this computer in memory (last_replay_), and the viewer can jump to a turn. A match of a room has no
+// file here (the game server records it) and the web build keeps none, so there is no Watch there. Nothing is changed unless the file can be shown: it was made by this build a moment ago, so it plays here, but a
+// map that cannot be found again leaves the results as they were.
+bool Application::can_watch_play() const noexcept {
+#if defined(__EMSCRIPTEN__)
+    return false;
+#else
+    if (network_active()) return false;
+    if (watching_own_match_) return replay_file_ != nullptr && replay_failure_ == ReplayFailure::None;      // (the viewer of the match just played: from its end page, Watch jumps again)
+    return !replay_mode_ && !last_replay_.empty();
+#endif
+}
+
+void Application::watch_play(uint32_t turn, int32_t tile_x, int32_t tile_y) {
+    if (!can_watch_play()) return;
+    watch_focus_ = tile_x >= 0 && tile_y >= 0;
+    watch_focus_x_ = tile_x;
+    watch_focus_y_ = tile_y;
+    if (watching_own_match_) {                                       // (from the viewer's own end page: the file is loaded, and a jump to an earlier turn starts the match again)
+        scorecard_.hide();
+        replay_jump_to(turn);
+        if (!replay_jumping_) focus_watched_tile();
+        return;
+    }
+    const MatchReport report = live_stats_.report();                 // (start_replay lets go of the count: the report is kept for the viewer's end page)
+    load_replay(last_replay_);                                       // (start_replay lets go of last_replay_: the file is decoded before)
+    if (replay_failure_ != ReplayFailure::None || !replay_file_) {
+        replay_file_.reset();
+        replay_failure_ = ReplayFailure::None;
+        replay_failure_text_.clear();
+        return;
+    }
+    replay_mode_ = true;
+    watching_own_match_ = true;
+    watched_report_ = report;
+    config_.label_unnamed_teams = true;                              // (every seat of the match is shown, by its name or its color)
+    replay_paused_ = false;
+    stop_bots();                                                     // (the computer players of the match are over: a viewer only looks)
+    scorecard_.hide();
+    start_replay();
+    replay_jump_to(turn);
+    if (!replay_jumping_) focus_watched_tile();
+}
+
+// The view is put on the tile of the Play of the game when the turns before it have been played (the Auto camera, reset by the jump, has no action to look at until the moment comes, and then takes the view where it is)
+void Application::focus_watched_tile() {
+    if (!watch_focus_) return;
+    watch_focus_ = false;
+    if (!renderer_) return;
+    renderer_->camera().center_on(watch_focus_x_ * 32 + 16, watch_focus_y_ * 32 + 16, current_level_.width(), current_level_.height());
 }
 
 // Quit and Leave Game: back to the page's list of matches (a native game ends)

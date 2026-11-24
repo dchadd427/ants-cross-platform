@@ -1,0 +1,869 @@
+{
+ "note": "Mutants of the numbers of the results screen: the honors and the Play of the game (src/ants_app/match_report.cpp), the live count and its fall back to a report that is not ok when a tick or a turn was missed (src/ants_app/live_match_stats.cpp), the places that the application feeds it from (application_sim.cpp, application_menu.cpp, application_replay.cpp, application_match.cpp) and what the stats pass adds for it (bombs, fires, hits credited, the tile of a raid: src/ants_replay/match_stats.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: python3 tools/mutate.py tests/data/match_report_mutants.json --keep-going --jobs 2; every mutant must be caught by test_match_report.",
+ "mutants": [
+  {
+   "id": "mvp_counts_a_thing_nobody_did",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "        if (total <= 0) continue;\n        ++done;\n        sum += thing[seat] * 1000 / total;",
+   "new": "        ++done;\n        if (total > 0) sum += thing[seat] * 1000 / total;",
+   "expect": "MR1.1",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "mvp_share_rounds_up",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "sum += thing[seat] * 1000 / total;",
+   "new": "sum += (thing[seat] * 1000 + total - 1) / total;",
+   "expect": "MR1.",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "mvp_average_rounds_up",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "return done == 0 ? 0u : static_cast<uint32_t>(sum / done);",
+   "new": "return done == 0 ? 0u : static_cast<uint32_t>((sum + done - 1) / done);",
+   "expect": "MR1.1",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "mvp_tie_goes_to_the_higher_seat",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "        if (share > best) {",
+   "new": "        if (share >= best) {",
+   "expect": "MR1.3",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "mvp_is_not_of_the_winning_side",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "        if (((report.winners >> s) & 1u) == 0) continue;\n        const uint32_t share",
+   "new": "        const uint32_t share",
+   "expect": "MR1.3",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "mvp_counts_a_drowned_kill",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "{ return !kill.drowned && kill.killer < kSeats && kill.killer != kill.victim; }",
+   "new": "{ return kill.killer < kSeats && kill.killer != kill.victim; }",
+   "expect": "MR1.",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_team_kills_itself_for_the_honors",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "{ return !kill.drowned && kill.killer < kSeats && kill.killer != kill.victim; }",
+   "new": "{ return !kill.drowned && kill.killer < kSeats; }",
+   "expect": "MR1.4",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "mvp_counts_banked_points_below_zero",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "things[2][s] = std::max<int64_t>(0, st.banked[s]);",
+   "new": "things[2][s] = st.banked[s];",
+   "expect": "MR1.2",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "mvp_value_is_the_damage",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "static_cast<int64_t>(share), 0};",
+   "new": "static_cast<int64_t>(st.damage_dealt[s]), 0};",
+   "expect": "MR1.3",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_seat_that_does_not_play_has_a_share",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "    if (!plays(st.roster, seat)) return 0;",
+   "new": "    if (seat >= kSeats) return 0;",
+   "expect": "MR1.2",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_winning_side_is_one_seat",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "        if (rows[0].has_second() && rows[0].second < kSeats) report.winners = static_cast<uint8_t>(report.winners | (1u << rows[0].second));",
+   "new": "        (void)0;",
+   "expect": "MR1.3",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_winning_side_ignores_the_local_seat",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "= result.rows(local_seat);",
+   "new": "= result.rows(static_cast<uint8_t>(local_seat & 0u));",
+   "expect": "MR1.3",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "first_blood_is_the_last_kill",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "if (!report.first_blood.present || kill.turn < report.first_blood.turn)",
+   "new": "if (true)",
+   "expect": "MR1.4",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "first_blood_ignores_the_turn",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "kill.turn < report.first_blood.turn",
+   "new": "false",
+   "expect": "MR1.4",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "first_blood_of_one_turn_is_the_later",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "kill.turn < report.first_blood.turn",
+   "new": "kill.turn <= report.first_blood.turn",
+   "expect": "MR1.4",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "biggest_raid_takes_the_later_of_two_equal",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "raid.points <= most",
+   "new": "raid.points < most",
+   "expect": "MR1.5",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "biggest_raid_takes_a_raid_that_took_nothing",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "        int32_t most = 0;\n        for (const MatchStats::Raid& raid : st.raids) {",
+   "new": "        int32_t most = -1;\n        for (const MatchStats::Raid& raid : st.raids) {",
+   "expect": "MR1.5",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_honor_of_the_other_mode",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "    if (mode == sim::GameMode::Kills187) {",
+   "new": "    if (mode != sim::GameMode::Kills187) {",
+   "expect": "MR1.5",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "last_stand_is_the_first_to_run_out",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "            if (st.out_turn[s] > latest) {",
+   "new": "            if (latest < 0 || st.out_turn[s] < latest) {",
+   "expect": "MR1.5",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "last_stand_may_be_the_winner",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "if (!plays(st.roster, s) || ((report.winners >> s) & 1u) != 0 || st.out_turn[s] < 0) continue;",
+   "new": "if (!plays(st.roster, s) || st.out_turn[s] < 0) continue;",
+   "expect": "MR1.5",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "last_stand_tie_goes_to_the_higher_seat",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "            if (st.out_turn[s] > latest) {",
+   "new": "            if (st.out_turn[s] >= latest) {",
+   "expect": "MR1.5",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_count_that_is_unsure_is_believed",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "if (!st.ok || !st.events_ok) return report;",
+   "new": "if (!st.ok) return report;",
+   "expect": "MR",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_count_that_failed_is_believed",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "if (!st.ok || !st.events_ok) return report;",
+   "new": "if (!st.events_ok) return report;",
+   "expect": "MR1.10",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_floor_is_27",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "constexpr uint32_t kMinPlayScore = 28;",
+   "new": "constexpr uint32_t kMinPlayScore = 27;",
+   "expect": "MR1.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_floor_is_29",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "constexpr uint32_t kMinPlayScore = 28;",
+   "new": "constexpr uint32_t kMinPlayScore = 29;",
+   "expect": "MR1.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "weight_death_is_13",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "{14, 10, 6, 5, 2};",
+   "new": "{13, 10, 6, 5, 2};",
+   "expect": "MR1.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "weight_death_is_15",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "{14, 10, 6, 5, 2};",
+   "new": "{15, 10, 6, 5, 2};",
+   "expect": "MR1.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "weight_bomb_is_9",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "{14, 10, 6, 5, 2};",
+   "new": "{14, 9, 6, 5, 2};",
+   "expect": "MR1.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "weight_bomb_is_11",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "{14, 10, 6, 5, 2};",
+   "new": "{14, 11, 6, 5, 2};",
+   "expect": "MR1.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "weight_theft_is_5",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "{14, 10, 6, 5, 2};",
+   "new": "{14, 10, 5, 5, 2};",
+   "expect": "MR1.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "weight_fire_is_6",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "{14, 10, 6, 5, 2};",
+   "new": "{14, 10, 6, 6, 2};",
+   "expect": "MR1.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "weight_hit_is_1",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "{14, 10, 6, 5, 2};",
+   "new": "{14, 10, 6, 5, 1};",
+   "expect": "MR1.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "weight_hit_is_3",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "{14, 10, 6, 5, 2};",
+   "new": "{14, 10, 6, 5, 3};",
+   "expect": "MR1.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_window_is_one_bucket",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "score += kWeight[k] * (count_at(k, b) + count_at(k, b + 1));",
+   "new": "score += kWeight[k] * count_at(k, b);",
+   "expect": "MR1.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_window_is_three_buckets",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "score += kWeight[k] * (count_at(k, b) + count_at(k, b + 1));",
+   "new": "score += kWeight[k] * (count_at(k, b) + count_at(k, b + 1) + count_at(k, b + 2));",
+   "expect": "MR1.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "of_two_equal_windows_the_later",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "windows.emplace_back(score, b);",
+   "new": "windows.insert(windows.begin(), std::make_pair(score, b));",
+   "expect": "MR1.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "of_two_equal_seats_the_higher",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "seats.push_back(s);",
+   "new": "seats.insert(seats.begin(), s);",
+   "expect": "MR1.",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "of_two_equal_kinds_the_later",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "if (weighted(seat, k) > 0) kinds.push_back(k);",
+   "new": "if (weighted(seat, k) > 0) kinds.insert(kinds.begin(), k);",
+   "expect": "MR1.7",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "hits_are_nobody_s",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "events[seat][kHit] += st.hit_credit[b][seat];",
+   "new": "events[seat][kHit] += 0;",
+   "expect": "MR1.7",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "only_the_first_bucket_hits_count",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "b < best_bucket + 2 && b < st.hit_credit.size()",
+   "new": "b < best_bucket + 1 && b < st.hit_credit.size()",
+   "expect": "MR1.7",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_drowned_death_is_nobody_s_in_a_bomb",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "return !kill.drowned && kill.victim != seat && kill.turn >= bomb.turn",
+   "new": "return kill.victim != seat && kill.turn >= bomb.turn",
+   "expect": "MR1.8",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_planter_s_own_ant_is_a_victim",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "kill.victim != seat && kill.turn >= bomb.turn",
+   "new": "kill.turn >= bomb.turn",
+   "expect": "MR1.8",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_bomb_reaches_19_turns",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "constexpr uint32_t kBombReachTurns = 20;",
+   "new": "constexpr uint32_t kBombReachTurns = 19;",
+   "expect": "MR1.8",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_bomb_reaches_21_turns",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "constexpr uint32_t kBombReachTurns = 20;",
+   "new": "constexpr uint32_t kBombReachTurns = 21;",
+   "expect": "MR1.8",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_bomb_reaches_3_tiles",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "constexpr int32_t kBombReachTiles = 4;",
+   "new": "constexpr int32_t kBombReachTiles = 3;",
+   "expect": "MR1.8",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_bomb_reaches_5_tiles",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "constexpr int32_t kBombReachTiles = 4;",
+   "new": "constexpr int32_t kBombReachTiles = 5;",
+   "expect": "MR1.8",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_bomb_of_the_moment_is_the_first",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "            if (taken > busiest) {",
+   "new": "            if (taken > busiest && false) {",
+   "expect": "MR1.8",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_fire_reaches_2_tiles",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "constexpr int32_t kFireReachTiles = 3;",
+   "new": "constexpr int32_t kFireReachTiles = 2;",
+   "expect": "MR1.8",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_fire_reaches_4_tiles",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "constexpr int32_t kFireReachTiles = 3;",
+   "new": "constexpr int32_t kFireReachTiles = 4;",
+   "expect": "MR1.8",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_fire_burns_179_seconds",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "180 * MatchReport::kTurnsPerSecond",
+   "new": "179 * MatchReport::kTurnsPerSecond",
+   "expect": "MR1.8",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_fire_burns_181_seconds",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "180 * MatchReport::kTurnsPerSecond",
+   "new": "181 * MatchReport::kTurnsPerSecond",
+   "expect": "MR1.8",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_fire_victim_may_drown",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "return !kill.drowned && kill.victim != seat && in_window(kill.turn, lo, hi)",
+   "new": "return kill.victim != seat && in_window(kill.turn, lo, hi)",
+   "expect": "MR1.8",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_firing_seat_s_own_ant_is_a_victim",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "return !kill.drowned && kill.victim != seat && in_window(kill.turn, lo, hi)",
+   "new": "return !kill.drowned && in_window(kill.turn, lo, hi)",
+   "expect": "MR1.8",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_fire_victim_may_be_out_of_the_window",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "return !kill.drowned && kill.victim != seat && in_window(kill.turn, lo, hi)",
+   "new": "return !kill.drowned && kill.victim != seat",
+   "expect": "MR1.8",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_fire_of_the_moment_is_the_first",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "if (moment == nullptr || taken > busiest) {",
+   "new": "if (moment == nullptr || (taken > busiest && false)) {",
+   "expect": "MR1.8",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_fight_counts_kills_out_of_the_window",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "if (is_kill_of_a_seat(kill) && kill.killer == seat && in_window(kill.turn, lo, hi)) made.push_back(&kill);",
+   "new": "if (is_kill_of_a_seat(kill) && kill.killer == seat) made.push_back(&kill);",
+   "expect": "MR1.8",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_fight_s_place_is_its_first_kill",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "(made.size() - 1) / 2",
+   "new": "0",
+   "expect": "MR1.",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_fight_s_place_is_its_last_kill",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "(made.size() - 1) / 2",
+   "new": "(made.size() - 1)",
+   "expect": "MR1.",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_fight_with_no_kill_of_its_own_has_no_place",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "if (made.empty()) return false;",
+   "new": "if (made.empty()) return true;",
+   "expect": "MR1.7",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_raid_of_the_moment_is_the_smallest",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "if (moment == nullptr || raid.points > moment->points) moment = &raid;",
+   "new": "if (moment == nullptr || raid.points < moment->points) moment = &raid;",
+   "expect": "MR1.7",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_skipped_tick_is_believed",
+   "file": "src/ants_app/live_match_stats.cpp",
+   "old": "    if (tick != last_tick_ + 1 && !(tick == last_tick_ && engine.is_match_over())) fail(\"a tick was not seen\");",
+   "new": "    (void)tick;",
+   "expect": "MR3.1",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_tick_that_ends_the_match_is_a_missed_tick",
+   "file": "src/ants_app/live_match_stats.cpp",
+   "old": "!(tick == last_tick_ && engine.is_match_over())",
+   "new": "true",
+   "expect": "MR3.1",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_tick_told_twice_is_believed",
+   "file": "src/ants_app/live_match_stats.cpp",
+   "old": "tick == last_tick_ && engine.is_match_over()",
+   "new": "tick == last_tick_",
+   "expect": "MR3.1",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_trailing_tick_is_believed",
+   "file": "src/ants_app/live_match_stats.cpp",
+   "old": "    if (engine.current_tick() != last_tick_) fail(\"a tick ran that was not seen\");",
+   "new": "    (void)last_tick_;",
+   "expect": "MR3.1",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_match_that_was_not_played_from_its_first_turn_is_believed",
+   "file": "src/ants_app/live_match_stats.cpp",
+   "old": "    if (last_tick_ != 0) fail(\"the match was not played from its first turn\");",
+   "new": "    (void)last_tick_;",
+   "expect": "MR3.1",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_skipped_turn_is_believed",
+   "file": "src/ants_app/live_match_stats.cpp",
+   "old": "    if (turn.turn != turns_) fail(\"a turn was not seen\");",
+   "new": "    (void)turn;",
+   "expect": "MR3.1",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_new_match_keeps_the_last_report",
+   "file": "src/ants_app/live_match_stats.cpp",
+   "old": "    reset();\n    collector_ = std::make_unique",
+   "new": "    abandon();\n    collector_ = std::make_unique",
+   "expect": "MR3.1",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_finish_without_a_start_gives_the_last_report",
+   "file": "src/ants_app/live_match_stats.cpp",
+   "old": "if (state_ != State::Counting) return none_;",
+   "new": "if (state_ != State::Counting) return report_;",
+   "expect": "MR3.1",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_play_that_counts_nothing_is_still_a_play",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "play.present = play.count > 0;\n        return play.present;",
+   "new": "play.present = true;\n        return true;",
+   "expect": "MR1.9",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "mvp_counts_carried_food_not_banked_points",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "things[2][s] = std::max<int64_t>(0, st.banked[s]);",
+   "new": "things[2][s] = std::max<int64_t>(0, st.food_points[s]);",
+   "expect": "MR1.1",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_ants_alone_are_the_old_ones_when_the_world_is_stale",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "    if (!impl_->world_state_dirty_) return impl_->world_state_cache_.ants;\n    impl_->snapshot_ants(impl_->ant_snapshots_.ants);",
+   "new": "    if (true) return impl_->world_state_cache_.ants;\n    impl_->snapshot_ants(impl_->ant_snapshots_.ants);",
+   "expect": "MR3.4",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "mvp_counts_loot_again",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "std::array<std::array<int64_t, kSeats>, 3> things{};",
+   "new": "std::array<std::array<int64_t, kSeats>, 4> things{};\n    for (const MatchStats::Raid& raid : st.raids) {\n        if (raid.thief < kSeats) things[3][raid.thief] += std::max<int32_t>(0, raid.points);\n    }",
+   "expect": "MR1.1",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_play_has_no_next_window",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "        if (play.present) return play;\n    }",
+   "new": "        return play;\n    }",
+   "expect": "MR1.9",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_play_is_the_least_busy_window",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "return x.first > y.first;",
+   "new": "return x.first < y.first;",
+   "expect": "MR1.9",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_viewer_s_report_is_not_forgotten",
+   "file": "src/ants_app/live_match_stats.cpp",
+   "old": "    abandon();\n    report_ = MatchReport{};\n    stats_ = replay::MatchStats{};",
+   "new": "    abandon();",
+   "expect": "MR",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_local_tick_is_not_counted",
+   "file": "src/ants_app/application_sim.cpp",
+   "old": "                live_stats_.on_tick(sim_);\n",
+   "new": "",
+   "expect": "MR2.3",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_network_turn_is_not_counted",
+   "file": "src/ants_app/application_menu.cpp",
+   "old": "        live_stats_.on_turn(turn, sim_);\n",
+   "new": "",
+   "expect": "MR2.4",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_report_is_not_made_when_the_match_ends",
+   "file": "src/ants_app/application_sim.cpp",
+   "old": "    live_stats_.finish(sim_, local_player_id_);                  // (the numbers of the results: counted for every tick of the match, or not at all; before the screen opens)\n",
+   "new": "",
+   "expect": "MR2.",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_network_match_is_not_counted_from_its_start",
+   "file": "src/ants_app/application_replay.cpp",
+   "old": "    live_stats_.start(sim_);                                                 // (the count of the numbers of the results: from the first turn, with or without a file; the web build keeps none)\n",
+   "new": "",
+   "expect": "MR2.4",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_local_match_is_not_counted_from_its_start",
+   "file": "src/ants_app/application_match.cpp",
+   "old": "    live_stats_.start(sim_);                                      // (the numbers of the results are counted from here whether the match can be recorded or not)\n",
+   "new": "",
+   "expect": "MR2.3",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_bomb_is_the_wrong_seat_s",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "MatchStats::BombOff{turns, bomb.owner, bomb.x, bomb.y}",
+   "new": "MatchStats::BombOff{turns, static_cast<uint8_t>(bomb.owner ^ 1u), bomb.x, bomb.y}",
+   "expect": "MR2.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_bomb_is_on_the_wrong_tile",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "MatchStats::BombOff{turns, bomb.owner, bomb.x, bomb.y}",
+   "new": "MatchStats::BombOff{turns, bomb.owner, bomb.y, bomb.x}",
+   "expect": "MR2.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_defused_bomb_next_to_one_that_went_off_is_not_told_apart",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "ant.action == sim::AntUnit::kActionBlast",
+   "new": "false",
+   "expect": "MR2.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_defused_bomb_goes_off",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "    const size_t taken_away = defused > bombs_defused_ ? defused - bombs_defused_ : 0;",
+   "new": "    const size_t taken_away = 0;",
+   "expect": "MR2.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_fire_is_the_wrong_seat_s",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "fire.seat = static_cast<uint8_t>(seat);",
+   "new": "fire.seat = 0;",
+   "expect": "MR2.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_fire_is_on_the_wrong_tile",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "fire.tile_x = fresh[i]->x;",
+   "new": "fire.tile_x = fresh[i]->y;",
+   "expect": "MR2.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_fire_has_no_tile",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "fire.has_tile = true;",
+   "new": "fire.has_tile = false;",
+   "expect": "MR2.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_wall_that_burnt_out_is_remembered",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "    fires_.erase(std::remove_if(fires_.begin(), fires_.end(), [&](const Spot& f) { return !engine.has_fire_at(sim::TileCoord{f.x, f.y}); }), fires_.end());\n",
+   "new": "",
+   "expect": "MR2.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_wall_that_nobody_lit_is_believed",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "if (!known && wall.owner >= kSeats) stats_.events_ok = false;",
+   "new": "if (!known && wall.owner >= kSeats && false) stats_.events_ok = false;",
+   "expect": "MR2.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "two_new_walls_for_one_fire_are_believed",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "if (fresh.size() > lit_now[seat]) stats_.events_ok = false;",
+   "new": "if (false) stats_.events_ok = false;",
+   "expect": "MR2.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_walls_of_the_map_are_new_walls",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "            fires_ = scan(engine, false);",
+   "new": "            fires_.clear();",
+   "expect": "MR2.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "bombs_planted_is_not_kept",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "            stats_.bombs_planted[s] = st.bombs_planted;",
+   "new": "",
+   "expect": "MR2.",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "fires_lit_is_not_kept",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "            stats_.fires_lit[s] = st.fires_lit;",
+   "new": "",
+   "expect": "MR2.",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_hit_is_credited_to_the_one_hurt",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "credit_hit(turns / MatchStats::kSampleTurns, source);",
+   "new": "credit_hit(turns / MatchStats::kSampleTurns, snap.player_id);",
+   "expect": "MR2.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_hit_on_its_own_ants_is_credited",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "if (source != MatchStats::kNoKiller && source != snap.player_id) credit_hit",
+   "new": "if (source != MatchStats::kNoKiller) credit_hit",
+   "expect": "MR2.6",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "a_raid_has_no_tile",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "points, snap.tile_x, snap.tile_y}",
+   "new": "points, 0, 0}",
+   "expect": "MR2.1",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  }
+ ]
+}

@@ -846,6 +846,8 @@ void run_suite_6_scorecard_and_audio_routing() {
         ApplicationConfig cfg;
         cfg.headless = true;
         cfg.start_in_map_select = false;
+        cfg.hud_art_given = true;                                                 // (the original's page, whose button is not there while the scores are awaited: the new look's Leave Game is, from the first moment)
+        cfg.hud_art_new = false;
         ASSERT_TRUE(app.init(cfg));
         app.note_pointer(550, 20);                                                // the pointer rests where the Leave button will be
         app.scorecard().show(app.sim().get_world_state().match_result, 0);
