@@ -57,16 +57,20 @@ void BridgeHeadOnTask::step(TaskContext& c) {
     for (auto it = held_.begin(); it != held_.end();) {
         const AntView* a = find_ant(v.mine(), it->first);
         const bool owned = a != nullptr && c.ledger.owner(it->first) == id();
-        if (!owned || now >= it->second.until || a->holding || a->carried_points > 0) {
+        if (!owned || now >= it->second.until || (!it->second.loaded && (a->holding || a->carried_points > 0))) {
             if (owned) c.ledger.release(it->first, id());
             it = held_.erase(it);
             continue;
         }
         // a click that has not been carried out (the ant stands where it stood on a bridge tile): given again, no oftener than every 40 ticks
-        if (a->tile != it->second.shore && now >= it->second.ordered + 40u && grid.in_bounds(a->tile) && grid.get_cell(a->tile).has_completed_bridge()) {
+        const bool on_bridge = grid.in_bounds(a->tile) && grid.get_cell(a->tile).has_completed_bridge();
+        // (a plug at the foot of a bridge, plan.bridge_foot: it stands on land, and the click that has not been carried out is given again, at most max_orders times)
+        const bool foot_again = it->second.loaded && it->second.orders < params_.max_orders;
+        if (a->tile != it->second.shore && now >= it->second.ordered + 40u && (on_bridge || foot_again)) {
             if (a->takes_orders()) c.orders.move({a->id}, it->second.shore, Priority::Urgent);
             else if (a->state == sim::UnitState::CantGo) c.orders.volley(a->id, it->second.shore, {0, 3, 7, 10, 14, 17}, Priority::Urgent);
             it->second.ordered = now;
+            ++it->second.orders;
         }
         ++it;
     }
@@ -195,8 +199,9 @@ void BridgeHeadOnTask::clear_feet(TaskContext& c) {
     for (const AntView& a : v.others()) note_jam(a);
     for (auto it = jam_.begin(); it != jam_.end();) it = now > it->second.last + 60u ? jam_.erase(it) : std::next(it);
     std::map<uint32_t, Still> next;
+    const bool foot = tactics_.plan.bridge_foot;
     for (const AntView& a : v.mine()) {
-        if (!a.idle() || a.type == sim::AntType::Swimmer) continue;
+        if (!(foot ? holds_tile(a) : a.idle()) || a.type == sim::AntType::Swimmer) continue;                   // (plan.bridge_foot: an ant in the can't-go clip or blocked on its walk holds its tile too)
         const auto was = idle_.find(a.id);
         next[a.id] = was != idle_.end() && was->second.tile == a.tile ? was->second : Still{a.tile, now};
     }
@@ -207,7 +212,9 @@ void BridgeHeadOnTask::clear_feet(TaskContext& c) {
         if (held_.size() >= params_.max_hold_ants) return;
         if (now < e.second.since + params_.plug_ticks || held_.count(e.first) != 0 || cooldown_.count(e.first) != 0) continue;
         const AntView* a = find_ant(v.mine(), e.first);
-        if (a == nullptr || a->hp == 0 || !a->takes_orders() || a->holding || a->carried_points > 0 || v.powerup_at(a->tile) != nullptr) continue;
+        const bool loaded = a != nullptr && (a->holding || a->carried_points > 0);
+        if (a == nullptr || a->hp == 0 || v.powerup_at(a->tile) != nullptr) continue;
+        if (foot ? (!a->takes_orders() && a->state != sim::UnitState::CantGo) : (!a->takes_orders() || loaded)) continue;       // (a load is no reason to stand in the way of the ant that comes off the bridge: plan.bridge_foot)
         const TaskId owner = c.ledger.owner(a->id);
         if (owner != kNoTask && owner != id() && c.ledger.rank(owner) >= c.ledger.rank(id())) continue;
         if (!grid.in_bounds(a->tile) || grid.get_cell(a->tile).has_any_bridge() || !at_bridge_foot(grid, a->tile)) continue;
@@ -223,11 +230,14 @@ void BridgeHeadOnTask::clear_feet(TaskContext& c) {
         int32_t cost = 0;
         const sim::TileCoord shore = shore_for(c, *a, mask, sim::TileCoord{-1, -1}, true, cost);
         if (shore.x < 0 || !c.ledger.take(a->id, id())) continue;
-        c.orders.move({a->id}, shore, Priority::Urgent);
+        if (a->takes_orders()) c.orders.move({a->id}, shore, Priority::Urgent);
+        else c.orders.volley(a->id, shore, {0, 3, 7, 10, 14, 17}, Priority::Urgent);                  // (in the can't-go clip: the click that takes is the one at the tick between two clips)
         Held h;
         h.shore = shore;
         h.until = now + params_.hold_ticks;
         h.ordered = now;
+        h.loaded = loaded;
+        h.orders = 1;
         held_[a->id] = h;
         cooldown_[a->id] = now + params_.cooldown_ticks;
         ++plugs_;

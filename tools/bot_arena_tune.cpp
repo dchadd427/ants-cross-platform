@@ -139,6 +139,9 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
         if (v == 0) ai::without_idle_batch(p);
         return true;
     }
+    if (key == "bloaded") return flag(p.bridge_loaded);                             // an ant that holds a load gets a bridge home, with one Swimmer (0: the bot as it was; docs/BOT_UNSTUCK.md)
+    if (key == "bholdrel") { p.bridge_hold_release = static_cast<uint32_t>(v); return true; }
+    if (key == "foot") return flag(p.bridge_foot);                                  // an ant with a load or in the can't-go clip steps back off the foot of a bridge (0: the bot as it was; docs/BOT_UNSTUCK.md)
     if (key == "headon") return flag(p.bridge_headon);                              // two ants face to face on a bridge: one gives way (0: the bot as it was; docs/BOT_IDLE.md)
     if (key == "contact") return flag(p.contact_strike);                            // a free ant strikes an enemy that stands beside it (0: the bot as it was; docs/BOT_IDLE.md)
     if (key == "endraid") return flag(p.island_endraid);                            // the Thief of the endgame on the island maps: a drop at a strip, a chain, the raid (0: the bot as it was)

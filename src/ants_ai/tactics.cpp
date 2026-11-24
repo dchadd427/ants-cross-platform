@@ -356,6 +356,8 @@ void without_thief_batch(LevelPlan& p) noexcept {
 }
 
 void without_idle_batch(LevelPlan& p) noexcept {
+    p.bridge_loaded = false;
+    p.bridge_foot = false;                                                          // (part 2 of the fight batch hangs on the head-on rule: no head-on, no foot)
     p.bridge_headon = false;
     p.contact_strike = false;
     p.island_endraid = false;

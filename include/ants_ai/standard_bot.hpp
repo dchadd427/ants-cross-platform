@@ -247,6 +247,7 @@ private:
         p.walker_bridge = plan.island_walker_bridge;
         p.bridge_ants = plan.island_bridge_ants;
         p.guard = plan.island_guard;
+        p.hold_release = plan.bridge_loaded ? plan.bridge_hold_release : 0u;
         // the margins grow with the latency of the level (Easy looks every 100 ticks and reacts after 60): its bridges are given up earlier and its ants kept away from them longer
         switch (plan.level) {
             case Level::Easy:

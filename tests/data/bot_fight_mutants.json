@@ -1,0 +1,77 @@
+{
+ "note": "Mutants of the fight batch of the computer players, part 2 of G9 (docs/BOT_CONTEST.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the foot of a bridge (an ant with a load or in the can't-go clip steps back off the landing, its switch), the loaded ants (one Swimmer digs the way home of an ant that holds a load, the guard gives the load back), standing on power-ups, the plan of a fight and the contest at a flower strip against test_ai AI58 and AI59 to AI61. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_fight_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "foot_load_is_a_reason_to_stay",
+   "file": "src/ants_ai/bridge_headon.cpp",
+   "old": "if (foot ? (!a->takes_orders() && a->state != sim::UnitState::CantGo) : (!a->takes_orders() || loaded)) continue;",
+   "new": "if (!a->takes_orders() || loaded) continue;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI58.15 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI58.15"
+  },
+  {
+   "id": "foot_cantgo_ant_is_left_alone",
+   "file": "src/ants_ai/bridge_headon.cpp",
+   "old": "(!a->takes_orders() && a->state != sim::UnitState::CantGo)",
+   "new": "!a->takes_orders()",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI58.15 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI58.15"
+  },
+  {
+   "id": "foot_switch_ignored",
+   "file": "src/ants_ai/bridge_headon.cpp",
+   "old": "const bool foot = tactics_.plan.bridge_foot;",
+   "new": "const bool foot = false;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI58.15 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI58.15"
+  },
+  {
+   "id": "foot_no_volley_in_the_clip",
+   "file": "src/ants_ai/bridge_headon.cpp",
+   "old": "else c.orders.volley(a->id, shore, {0, 3, 7, 10, 14, 17}, Priority::Urgent);                  // (in the can't-go clip",
+   "new": "else {}                  // (in the can't-go clip",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI58.15 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI58.15"
+  },
+  {
+   "id": "loaded_needs_three_swimmers",
+   "file": "src/ants_ai/island_bridge.cpp",
+   "old": "if ((few_swimmers && !(plan.bridge_loaded && swimmers >= 1)) ||",
+   "new": "if (few_swimmers ||",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI58.16 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI58.16"
+  },
+  {
+   "id": "loaded_carrier_gets_no_chain",
+   "file": "src/ants_ai/island_bridge.cpp",
+   "old": "const bool loaded_carrier = plan.bridge_loaded && return_on && !loaded_thief && a.holding;",
+   "new": "const bool loaded_carrier = false;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI58.16 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI58.16"
+  },
+  {
+   "id": "loaded_switch_ignored",
+   "file": "src/ants_ai/island_bridge.cpp",
+   "old": "(plan.bridge_loaded && a->holding)",
+   "new": "(false && a->holding)",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI58.16 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI58.16"
+  },
+  {
+   "id": "guard_never_gives_the_load_back",
+   "file": "src/ants_ai/island_tasks.cpp",
+   "old": "} else if (params_.hold_release != 0 && carrying && still && hot_dist(a.tile) > radius + 1 && now >= gd.since + params_.hold_release) {",
+   "new": "} else if (false) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI58.17 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI58.17"
+  }
+ ]
+}
