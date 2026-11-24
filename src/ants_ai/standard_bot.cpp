@@ -63,6 +63,7 @@ void StandardBot::start(const BotContext& context) {
     ledger_.set_rank(kFlowerLink, kRankPowerUps);                 // (the Swimmer that digs the tiles to a flower strip: taken from the ferry, which has the lower rank)
     ledger_.set_rank(kThiefGuard, kRankFight);                    // (the fighters that meet an enemy Thief: taken from the economy, the guard and the ferry, never from a pick-up, a raid, a wall or a fight)
     ledger_.set_rank(kPlugs, kRankPowerUps);                      // (the ant that takes a power-up that plugs the way of the seat: the stranded ants first, else an ant the economy can spare)
+    ledger_.set_rank(kContact, kRankFight);                       // (the ant that strikes the enemy beside it: taken from the economy, the guard and the ferry, like a fight's)
     ledger_.set_rank(kHeadOn, kRankFight);                        // (the ant that gives way on a bridge: taken from every task below a fight, never from a fight, a heal or a goal)
     ledger_.set_rank(kFerry, kRankGuard);                         // (the Swimmers that carry food: the island task takes one when a bridge is wanted)
 }
@@ -226,6 +227,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     heal_.step(context);                                                                      // (after the fights, which give back the defenders that are too hurt; nothing when the plan has no heal: it gives back what it held)
     thief_guard_.step(context);                                                               // (after the fights and the heals: an enemy Thief that comes for the own hole is met by the nearest free fighters; nothing when the plan has none)
     head_on_.step(context);                                                                   // (two ants face to face on a bridge: one steps back to land; nothing when the plan has none)
+    contact_.step(context);                                                                   // (a free ant beside an enemy that stands still strikes it; nothing when the plan has none)
     if (plan.rush || rush_.active()) rush_.step(context);                                   // (when the plan has no rush the task only gives back what it held)
     if (!gate_breaching) walls_.step(context);
     if (plan.free_thief) free_thief_.step(context);                                         // (a Thief that shows the can't-go loop is clicked again and again, a volley; a free one with loot is sent home when a walk exists)

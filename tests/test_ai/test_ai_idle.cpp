@@ -2,6 +2,7 @@
 // map that the rules were found on.
 //
 //   AI58.1  two ants face to face on a bridge: the engine leaves them standing for ever, the bot's head-on rule steps one back to land and the other crosses; with the rule off they stand
+//   AI58.2  one free ant beside an enemy that stands still strikes it (and not when the enemy is the stronger, when an enemy Combat Ant stands near, with the rule off)
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -37,6 +38,19 @@ LevelPlan plan_headon(bool on) {
     LevelPlan p = peace_plan(Level::Hard);
     p.bridge_headon = on;
     return p;
+}
+
+// The plan of the hand-made worlds of the idle batch with exactly one rule on or off (the others as the level plays them: the world has nothing for them to do)
+LevelPlan plan_of(Level level, const std::function<void(LevelPlan&)>& tweak) {
+    LevelPlan p = peace_plan(level);
+    p.idle_jobs = p.thief_answer = p.contact_strike = p.bridge_headon = false;
+    tweak(p);
+    return p;
+}
+
+uint16_t hp_of(const sim::SimulationEngine& sim, uint32_t id) {
+    const sim::AntSnapshot* a = snapshot_of(sim, id);
+    return a == nullptr ? 0u : a->hp;
 }
 
 }  // namespace
@@ -91,4 +105,37 @@ void run_idle_tests() {
         ASSERT_TRUE(on.north_crossed || on.south_crossed);                                       // one of them crossed
         ASSERT_TRUE(on.stood < 200);                                                             // and the bridge was clear again soon
     } TEST_END();
+    TEST_CASE("AI58.2 One Free Ant Beside An Enemy That Stands Still Strikes It: A Worker Next To An Idle Enemy Worker Hits It; Not When The Enemy Has More Hit Points, When An Enemy Combat Ant Stands Near, Or With The Rule Off (A Hard Bot)") {
+        struct Out {
+            uint16_t enemy_hp{0};
+            uint32_t started{0};
+        };
+        const auto play = [&](bool rule, uint16_t own_hp, uint16_t enemy_hp, bool combat_near) {
+            sim::SimulationEngine sim;
+            empty_field(sim, 33);
+            const uint32_t mine = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{30, 30});
+            const uint32_t foe = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{31, 30});
+            if (combat_near) sim.spawn_unit(1, sim::AntType::Combat, TileCoord{34, 30});
+            sim.get_unit(mine).hp = own_hp;
+            sim.get_unit(foe).hp = enemy_hp;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_of(Level::Hard, [&](LevelPlan& p) { p.contact_strike = rule; })), 4, 4);
+            rig.run(500);
+            Out out;
+            out.enemy_hp = hp_of(sim, foe);
+            out.started = rig.as<StandardBot>().contact().started();
+            return out;
+        };
+        const Out on = play(true, 10, 10, false);
+        ASSERT_TRUE(on.started >= 1u);
+        ASSERT_TRUE(on.enemy_hp < 10u);                                                          // the blows landed
+        const Out off = play(false, 10, 10, false);
+        ASSERT_EQ(off.started, 0u);
+        ASSERT_EQ(off.enemy_hp, 10u);
+        const Out weaker = play(true, 7, 10, false);                                             // the own ant is the weaker: no blow
+        ASSERT_EQ(weaker.started, 0u);
+        ASSERT_EQ(weaker.enemy_hp, 10u);
+        const Out combat = play(true, 10, 10, true);                                             // an enemy Combat Ant stands near: a person looks first
+        ASSERT_EQ(combat.started, 0u);
+    } TEST_END();
+
 }
