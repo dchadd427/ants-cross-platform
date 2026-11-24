@@ -257,9 +257,12 @@ bool Application::init(const ApplicationConfig& config) {
         midi_player_.stop(); // In-game music stays silent
     });
 
+    scorecard_.set_on_watch([this](uint32_t turn, int32_t tile_x, int32_t tile_y) { watch_play(turn, tile_x, tile_y); });    // (the Play of the game's Watch: the recording of this match, five seconds before the moment)
     scorecard_.set_on_quit([this]() {
         leave_game();                                         // (a network match that the start menu led to: back to the menu; a local match, and every run without a menu: the program ends)
     });
+    scorecard_.set_on_back_to_room([this]() { back_to_room(); });       // (a lobby room's match: the results' two buttons, set_page_exits)
+    scorecard_.set_on_back_to_hub([this]() { back_to_hub(); });
     scorecard_.set_on_play_sfx([this](uint32_t sound_id) { play_ui_sound(sound_id); });
 
     hud_.set_sim_query(&sim_);           // the cursor asks the simulation whether a tile is a valid special target
@@ -502,6 +505,7 @@ bool Application::init(const ApplicationConfig& config) {
         emscripten_run_script(script.c_str());
     };
     on_match_over_ = [](const std::string& json) { ants_match_over(json.c_str()); };      // the page's rematch strip (web/front/rematch.js)
+    connect_page_exits();                                        // ... and the results' two buttons after a room's match
 #endif
     return true;
 }

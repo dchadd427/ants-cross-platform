@@ -54,6 +54,7 @@ void Application::net_finish_load() {
         begin_net_recording();                                               // (the runner's tap, attach_net, tells it every turn from the first, a catch-up's too)
     } else {
         recorder_.reset();
+        live_stats_.abandon();
     }
     net_->report_loaded(ok);
 }
@@ -78,6 +79,7 @@ void Application::poll_map_fetch() {
         std::cerr << "[Application] The map " << name << " could not be fetched: " << status.message << std::endl;
         local_player_id_ = net_->my_seat();
         recorder_.reset();
+        live_stats_.abandon();
         net_->report_loaded(false, status.message);
         return;
     }
