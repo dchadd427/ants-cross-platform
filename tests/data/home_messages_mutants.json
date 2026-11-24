@@ -110,24 +110,10 @@
    "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
   },
   {
-   "id": "a_guest_has_no_button",
-   "file": "web/home/messages.js",
-   "old": "btn.hidden = !(you && live);",
-   "new": "btn.hidden = false;",
-   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
-  },
-  {
    "id": "a_typed_msg_opens_the_conversation",
    "file": "web/home/messages.js",
    "old": "else if (kind === 'open' && m && typeof m.h === 'string' && HANDLE.test(m.h)) openThread(m.h, typeof m.to === 'string' ? m.to : '');",
    "new": "",
-   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
-  },
-  {
-   "id": "the_count_stops_at_99",
-   "file": "web/home/messages.js",
-   "old": "return n > 99 ? '99+' : String(n);",
-   "new": "return n > 999 ? '99+' : String(n);",
    "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
   },
   {
@@ -254,6 +240,55 @@
    "file": "web/home/messages.js",
    "old": "e.pointerType === 'mouse' || ",
    "new": "",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "a_guest_has_no_conversations",
+   "file": "web/home/messages.js",
+   "old": "convs: function () { return you && live ?",
+   "new": "convs: function () { return true ?",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "the_list_of_conversations_is_a_copy",
+   "file": "web/home/messages.js",
+   "old": "return you && live ? convs.slice() : [];",
+   "new": "return you && live ? convs : [];",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "a_hub_that_is_gone_has_no_count",
+   "file": "web/home/messages.js",
+   "old": "count: function () { return you && live ? count() : 0; }",
+   "new": "count: function () { return count(); }",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "the_bell_is_told_of_a_new_list",
+   "file": "web/home/messages.js",
+   "old": "if (shade && menuOn) paintMenu();\n            changed();\n        }",
+   "new": "if (shade && menuOn) paintMenu();\n        }",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "the_arrow_asks_the_bell_for_the_list",
+   "file": "web/home/messages.js",
+   "old": "function () { closePanel(); toList(); })",
+   "new": "function () { closePanel(); })",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "a_deleted_conversation_asks_the_bell_for_the_list",
+   "file": "web/home/messages.js",
+   "old": "closePanel(); changed(); toList();",
+   "new": "closePanel(); changed();",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "the_focus_goes_back_to_what_opened_the_conversation",
+   "file": "web/home/messages.js",
+   "old": "opener = back || null;",
+   "new": "opener = null;",
    "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
   }
  ]
