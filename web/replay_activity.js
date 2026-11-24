@@ -1,4 +1,4 @@
-/* The activity curve of the replay page (docs/REPLAYS.md "The activity curve"): a soft filled curve just above the timeline that says where the action is in a match, the height at each moment being how much happened
+/* The activity curve of the replay page (docs/HEATMAPS.md "The activity curve"): a soft filled curve just above the timeline that says where the action is in a match, the height at each moment being how much happened
    then: deaths most of all, then bombs that went off, thefts, fires and fights (the Auto camera's own weights, include/ants_app/auto_camera.hpp). On a computer it shows only while the pointer is over the timeline, with a
    line and a small label such as "2:41 · 3 deaths, 1 bomb"; on a touch screen, which has no hover, it is always there, faint, and solid while a finger is on the timeline.
    The data is what the server's replay pass keeps under a record's `action` (one letter for each count of each kind in every few seconds: ants_server/history_action.hpp); a record without it (a match counted before it

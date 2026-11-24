@@ -196,7 +196,7 @@ const char* const kAccountsSql =
     "UPDATE map_submissions SET decided_by = COALESCE((SELECT r.actor_name FROM review_log r WHERE r.submission = map_submissions.id AND r.action IN ('approve', 'decline', 'take_down', 'put_back') ORDER BY r.id DESC LIMIT 1), '')"
     " WHERE state IN ('approved', 'declined', 'taken_down');";
 
-// Version 7. history_deaths: the map of deaths of a match (docs/REPLAYS.md "The map of deaths", ants_server/history_deaths.hpp), one row for each match whose replay pass found where its ants died; a match
+// Version 7. history_deaths: the map of deaths of a match (docs/HEATMAPS.md "The map of deaths", ants_server/history_deaths.hpp), one row for each match whose replay pass found where its ants died; a match
 // that was counted before this version, a match in which nobody died and one that the pass could not count have no row (they are not counted again for it). `deaths` is the JSON text of the field (at most
 // 3,000 characters: the cap of this field, apart from the cap of `details`); `map` and `hash` (the map's file name and its FNV-1a 64 as 16 hex digits, as map_plays has them) are what the sum of a map's
 // matches groups by (another file under the same name is another map), `w` and `h` the map's size in tiles, `n` how many ants died, `ended` the match's end time. The row goes with its match.
@@ -275,7 +275,7 @@ const char* const kBotRotationSql =
     " updated_at INTEGER NOT NULL DEFAULT 0"
     ") WITHOUT ROWID;";
 
-// Version 11. history_action: the action of a match (docs/REPLAYS.md "The activity curve", ants_server/history_action.hpp), how many deaths, bombs, thefts, fires and hits happened in every few seconds, one row for each
+// Version 11. history_action: the action of a match (docs/HEATMAPS.md "The activity curve", ants_server/history_action.hpp), how many deaths, bombs, thefts, fires and hits happened in every few seconds, one row for each
 // match whose replay pass counted any; a match that was counted before this version, a match in which none of the five happened and one that the pass could not count have no row (they are not counted again for
 // it: the page draws what the deaths alone say). `action` is the JSON text of the field (at most 1,500 characters: the cap of this field, apart from the cap of `details` and of `history_deaths`). The row goes with its match.
 const char* const kActionSql =

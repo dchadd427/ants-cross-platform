@@ -1,6 +1,6 @@
 #pragma once
 
-// The action of a match (docs/REPLAYS.md "The activity curve"): how many deaths, bombs, thefts, fires and hits happened in every few seconds of a match, found by the replay pass (ants_replay/match_stats.hpp:
+// The action of a match (docs/HEATMAPS.md "The activity curve"): how many deaths, bombs, thefts, fires and hits happened in every few seconds of a match, found by the replay pass (ants_replay/match_stats.hpp:
 // `MatchStats::action`) and kept in a small field of its own next to the `details` of a match's record, with a cap of its own (kActionMaxBytes), so that the cap of the details (kDetailsMaxBytes) is not touched. The
 // replay page draws the curve over its timeline from it, with the weights of the Auto camera (the page's own table: a weight can be tuned without counting a match again). Pure: no clock, no disk, no database. The
 // page (web/replay_activity.js) reads it as data from a server: every number is clamped, every character is checked.

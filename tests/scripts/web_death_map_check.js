@@ -53,7 +53,7 @@ const STYLE = { '--c-green': '#79bf93', '--c-red': '#d4707f', '--c-blue': '#8f8f
 function memory() { const m = {}; return { getItem: (k) => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = String(v); }, data: m }; }
 const text = (n) => (n ? n.textContent : '');
 
-// ---- the field as a server writes it. `pack` is this file's own encoder of the layout (docs/REPLAYS.md "The map of deaths"); the C++ program's text below is the other side of the same layout ----
+// ---- the field as a server writes it. `pack` is this file's own encoder of the layout (docs/HEATMAPS.md "The map of deaths"); the C++ program's text below is the other side of the same layout ----
 const L = DM.LETTERS;
 function put(v, n) { let s = ''; for (let i = 0; i < n; i++) s += L[Math.floor(v / Math.pow(64, i)) % 64]; return s; }
 function packAnt(a) { return put(a.x, 2) + put(a.y, 2) + put(a.t, 3) + put((a.team & 3) | ((a.type || 0) << 2) | (a.drowned ? 32 : 0) | (((a.killer === undefined || a.killer < 0) ? 7 : a.killer) << 6), 2); }

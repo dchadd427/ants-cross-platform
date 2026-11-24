@@ -44,7 +44,7 @@ class Node {
 const document = { createElement: (t) => new Node(t), createElementNS: (ns, t) => new Node(t), createTextNode: (t) => new Node('#text', t) };
 const has = (n, c) => n.className.split(' ').includes(c);
 
-// ---- the field as a server writes it. `letters` is this file's own encoder of the layout (docs/REPLAYS.md "The activity curve"); the literal below is the text of the C++ program's own test of the same layout ----
+// ---- the field as a server writes it. `letters` is this file's own encoder of the layout (docs/HEATMAPS.md "The activity curve"); the literal below is the text of the C++ program's own test of the same layout ----
 const L = A.LETTERS;
 const letters = (n, spec) => { const a = new Array(n).fill('A'); Object.keys(spec || {}).forEach((i) => { a[+i] = spec[i]; }); return a.join(''); };       // n letters, all A but those at the given places
 const pad = (head, n) => head + 'A'.repeat(n - head.length);

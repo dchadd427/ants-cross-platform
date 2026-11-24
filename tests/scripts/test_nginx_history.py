@@ -298,7 +298,7 @@ server {
 
 @unittest.skipUnless(shutil.which("docker"), "docker is not installed: the blocks of docker/nginx.conf for /history were NOT run (tests/scripts/test_nginx_history.py)")
 class TheMapOfDeathsLocation(unittest.TestCase):
-    """GET /history/deaths?map=NAME (docs/REPLAYS.md "The map of deaths"): the game server adds up the stored positions of a map's matches, so it has an exact location, a query of one key made of the characters of a
+    """GET /history/deaths?map=NAME (docs/HEATMAPS.md "The map of deaths"): the game server adds up the stored positions of a map's matches, so it has an exact location, a query of one key made of the characters of a
     percent-encoded name, an allowance of its own and a short cache of its own; nothing of the visitor's request is passed on but Host and Connection."""
 
     @staticmethod

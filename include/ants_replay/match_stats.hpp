@@ -2,7 +2,7 @@
 
 // What a replay pass counts about a match besides the totals that the engine keeps (docs/REPLAYS.md "The match pages"): the score and the kills over time, who killed whom and when, the damage, the raids
 // on the hills, the power-ups taken, the food carried, the bombs that went off, when a seat ran out of ants, the orders of every seat by minute and by kind, and how many events of each of five kinds (a death, a bomb, a
-// theft, a fire, a hit) happened in every 5 seconds (the field `action` that the activity curve of the replay page is drawn from, docs/REPLAYS.md "The activity curve").
+// theft, a fire, a hit) happened in every 5 seconds (the field `action` that the activity curve of the replay page is drawn from, docs/HEATMAPS.md "The activity curve").
 //
 // It only WATCHES: the collector is given to replay::play() as its hooks and reads what the engine already says, through the public readers (the counters, the world after every tick, the record of an ant
 // that is gone: the engine keeps it, with the team of the last damage, until the match is over) and the queues of cues. It changes nothing, so a played match ends in the same hashes with or without it
@@ -35,7 +35,7 @@ struct MatchStats {
     static constexpr size_t kOrderKinds = static_cast<size_t>(OrderKind::Count);
     static const char* order_kind_name(OrderKind kind) noexcept;     // "move", "attack", "bomb", "fire", "bridge", "raid", "special", "stop", "hatch", "team"
 
-    /// The kinds of event that the activity curve of the replay page counts (docs/REPLAYS.md "The activity curve"; the counts are `action`): the Auto camera's big events that are a fight and not food or a bridge. The order is the one of the
+    /// The kinds of event that the activity curve of the replay page counts (docs/HEATMAPS.md "The activity curve"; the counts are `action`): the Auto camera's big events that are a fight and not food or a bridge. The order is the one of the
     /// keys of the stored field (ants_server/history_action.hpp).
     enum class Action : uint8_t { Death, Bomb, Theft, Fire, Hit, Count };
     static constexpr size_t kActionKinds = static_cast<size_t>(Action::Count);

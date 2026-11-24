@@ -1,4 +1,4 @@
-// Tests of the map of deaths of a match (docs/REPLAYS.md "The map of deaths"): where each ant died, found by the replay pass (ants_replay/match_stats.hpp: the tile of every lost ant), packed into a field of its
+// Tests of the map of deaths of a match (docs/HEATMAPS.md "The map of deaths"): where each ant died, found by the replay pass (ants_replay/match_stats.hpp: the tile of every lost ant), packed into a field of its
 // own with its own cap (ants_server/history_deaths.hpp), kept in its own table (db_schema.cpp, version 7) by the feeder and given back by GET /history/<id> under "deaths" and, added up for a game map, by
 // GET /history/deaths?map=NAME. What is checked:
 //   - the packing: every ant round trips (extreme tiles and seconds, every type, drowned, every team to blame and none), a text that is not a field is refused (DD1.x);
@@ -9,7 +9,7 @@
 //     not a field or is over its cap is not kept (the match is), the row goes with its match (DD4.x);
 //   - the sum of a map: the matches of the newest file of that name, a name looked up among the known ones (case folded, never used as anything else), cached until the history changes, bounded (DD5.x);
 //   - the route: the query is one key, every wrong query is a 400 with fixed words, an unknown map 404 without a word of the request in the answer, only a GET (DD6.x).
-// The action of a match (docs/REPLAYS.md "The activity curve": deaths, bombs, thefts, fires and hits in every 5 seconds, a sibling field with its own cap and table, ants_server/history_action.hpp) is tested here too, for it is
+// The action of a match (docs/HEATMAPS.md "The activity curve": deaths, bombs, thefts, fires and hits in every 5 seconds, a sibling field with its own cap and table, ants_server/history_action.hpp) is tested here too, for it is
 // found, kept and given back the way the map of deaths is (DD7.x):
 //   - the collector: each kind is counted in the bucket of its own turn (turn / 100), the totals are the engine's own, an independent observer of the counters and the hit points agrees, the pass still only watches (DD7.1);
 //   - the field: the letters, the count that is never more than 63, the bucket of 5 seconds and the buckets that double for a long match, no field for a match with none of the five, the reader refuses what is not a field (DD7.2 - DD7.4);

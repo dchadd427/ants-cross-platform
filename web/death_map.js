@@ -1,4 +1,4 @@
-/* The map "Where ants died" (docs/REPLAYS.md "The map of deaths"): a card of the match page, a smaller one in the Stats panel of the replay page, and the same map added up over all the matches of a game map. It reads
+/* The map "Where ants died" (docs/HEATMAPS.md "The map of deaths"): a card of the match page, a smaller one in the Stats panel of the replay page, and the same map added up over all the matches of a game map. It reads
    what the server's replay pass keeps under a record's `deaths` (a packed field of its own: base64url letters, nine for each ant, or eight for each square of tiles when a match had too many deaths to keep one by one),
    and draws the match's own map picture with a soft glow where many ants died (Heat) or a mark on the tile of each ant (Dots, and squares with their counts when the data is in squares); chips pick one team's ants, a switch
    hides the ants that drowned, two rings mark the first blood and the last kill, + and - and the mouse wheel and two fingers zoom, a drag moves, and a tap or a hover on a mark names the tile, the time, the kind of ant and

@@ -135,7 +135,7 @@ public:
     /// The play count of every map that was played, ordered by file name and hash (for the list of maps). False, with `out` empty, when the database does not answer (the store is unavailable then).
     bool map_plays(std::vector<MapPlays>& out) const;
 
-    /// The sum of the maps of deaths of the matches on one map (GET /history/deaths?map=NAME, docs/REPLAYS.md "The map of deaths"): `name` is looked up among the names of the maps that have a map of deaths here
+    /// The sum of the maps of deaths of the matches on one map (GET /history/deaths?map=NAME, docs/HEATMAPS.md "The map of deaths"): `name` is looked up among the names of the maps that have a map of deaths here
     /// (compared without regard to the case of an ASCII letter, so a name a browser or a file system folded finds the same map), never used as a path or a pattern; the matches are those of the newest map file
     /// of that name (its hash and size), at most the newest kDeathsSumMatches of them. `json` is the answer (history_deaths.hpp add_up_deaths); it is made once for each state of the history (cached, until a match
     /// is kept or taken out) and for at most kDeathsSumCache maps. Unknown: no map of that name has a map of deaths. Unavailable: the database does not answer.

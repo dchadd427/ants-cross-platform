@@ -1,4 +1,4 @@
-/* The activity curve over the timeline of the replay page (web/replay_activity.js, docs/REPLAYS.md "The activity curve"): a soft curve in the room above the bar. On a computer it shows only while the pointer is over the
+/* The activity curve over the timeline of the replay page (web/replay_activity.js, docs/HEATMAPS.md "The activity curve"): a soft curve in the room above the bar. On a computer it shows only while the pointer is over the
    timeline (class `on`), with a line, a dot on the curve and a small label; on a touch screen it is always there, faint (`faint`), and solid while a finger is on the timeline. It uses the page's own tokens. */
 .act { --act-h: 22px; position: absolute; left: 0; right: 0; top: calc(6px - var(--act-h)); height: var(--act-h); z-index: 2; opacity: 0; pointer-events: none; transition: opacity .15s ease; }
 .act.on { opacity: 1; }
