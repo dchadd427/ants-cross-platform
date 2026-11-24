@@ -29,7 +29,6 @@
 .al-ic { flex: none; display: grid; place-items: center; box-sizing: border-box; width: 40px; height: 40px; color: #9fe0b8; border: 2px solid #1c4a3b; border-radius: 50%; }
 .al-ic .al-ico { width: 22px; height: 22px; }
 .al-item[data-k="invite"] .al-ic { color: var(--gold); border-color: #8a6f14; }
-.al-item[data-k="msg"] .al-ic { color: #aab6ff; border-color: #3c4aa8; }
 .al-tx { flex: 1 1 auto; min-width: 0; }
 .al-t, .al-s { display: block; overflow-wrap: anywhere; }
 .al-t { font-size: 16px; line-height: 1.25; }
@@ -57,6 +56,23 @@
 .al-clear:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 @media (forced-colors: active) { .al-sw { border-color: CanvasText; } .al-line.on .al-sw { background: Highlight; } .al-sw::after { background: CanvasText; } .al-line:focus-visible, .al-clear:focus-visible { outline-color: Highlight; } .al-item.unread { border-color: Highlight; box-shadow: none; } }
 @media (max-width: 700px) { .al-title { font-size: 24px; } }
+
+/* ---- the tabs of the list, Alerts and Messages (a person who is logged in has both), and the conversations of the Messages tab ---- */
+.al-tabs { flex: none; display: flex; gap: 8px; margin: 0 0 10px; }
+.al-tab { flex: 1 1 0; min-width: 0; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 4px 8px; font: inherit; font-size: 16px; color: var(--cream); background: #0a1016; border: 2px solid #17382f; border-radius: 6px; cursor: pointer; }
+.al-tab[data-on="true"] { background: #0b1a17; border-color: #2b6b4f; border-bottom: 4px solid var(--gold); }
+.al-tab:focus-visible, .al-conv:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.al-tn, .al-u { box-sizing: border-box; min-width: 22px; height: 22px; padding: 0 6px; font-size: 14px; font-weight: 700; line-height: 22px; text-align: center; color: #0c0805; background: var(--gold); border-radius: 11px; }
+.al-conv { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.al-conv:hover { background: #0b1a17; }
+.al-conv .al-ic { font-size: 18px; }
+.al-conv .al-t bdi { font-weight: 500; }
+.al-conv.unread .al-t bdi { font-weight: 700; }
+.al-conv .al-s { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.al-meta { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.al-when { font-size: 13px; color: #a8cfc0; }
+.al-star { display: inline-block; flex: none; width: 13px; height: 13px; margin-left: 6px; vertical-align: -1px; background: var(--gold); clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); }
+@media (forced-colors: active) { .al-tab[data-on="true"] { border-color: Highlight; } .al-tn, .al-u { border: 1px solid CanvasText; } }
 
 /* ---- the toast ---- */
 .al-toast { box-sizing: border-box; position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 65; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; width: max-content; max-width: min(560px, calc(100vw - 24px)); min-height: 52px; padding: 2px 6px 2px 14px;

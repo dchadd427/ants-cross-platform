@@ -469,7 +469,7 @@
   {
    "id": "an_empty_list_is_told_as_read_again",
    "file": "web/home/alerts.js",
-   "old": "if (!count()) return;",
+   "old": "if (!countOf(rows())) return;",
    "new": "",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   },
@@ -679,8 +679,85 @@
   {
    "id": "a_message_row_opens_the_conversation",
    "file": "web/home/alerts.js",
-   "old": "else if (row.k === 'msg') { if (ctl.messages) ctl.messages(row.h, row.from); }",
-   "new": "else if (row.k === 'msg') { if (ctl.chat) ctl.chat(); }",
+   "old": "if (ctl.messages) ctl.messages(c.h, c.name, back);",
+   "new": "if (ctl.messages) ctl.messages(c.h, c.h, back);",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_guest_has_no_messages_tab",
+   "file": "web/home/alerts.js",
+   "old": "try { return signedIn() && !!ctl.convs &&",
+   "new": "try { return !!ctl.convs &&",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_messages_tab_waits_for_the_part",
+   "file": "web/home/alerts.js",
+   "old": " && !!ctl.messagesReady && !!ctl.messagesReady(); } catch",
+   "new": "; } catch",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_bell_counts_the_conversations",
+   "file": "web/home/alerts.js",
+   "old": "function count() { return countOf(rows()) + messageCount(); }",
+   "new": "function count() { return countOf(rows()); }",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_message_row_of_the_hub_is_not_a_row_of_the_list",
+   "file": "web/home/alerts.js",
+   "old": ".filter(function (r) { return r.k !== 'msg'; });",
+   "new": ".filter(function (r) { return true; });",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_conversation_opens_with_the_focus_back_on_the_bell",
+   "file": "web/home/alerts.js",
+   "old": "ctl.messages(c.h, c.name, back); });",
+   "new": "ctl.messages(c.h, c.name); });",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_conversation_closes_the_list",
+   "file": "web/home/alerts.js",
+   "old": "var back = opener; close(); if (ctl.messages) ctl.messages(c.h, c.name, back);",
+   "new": "var back = opener; if (ctl.messages) ctl.messages(c.h, c.name, back);",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "above_99_the_count_says_99_plus",
+   "file": "web/home/alerts.js",
+   "old": "function countBig(n) { return n > 99 ? '99+' : String(n); }",
+   "new": "function countBig(n) { return n > 999 ? '99+' : String(n); }",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_messages_tab_has_no_gear",
+   "file": "web/home/alerts.js",
+   "old": "if (view === 'list' && tab === 'alerts') top.appendChild(iconButton('al-gear'",
+   "new": "if (view === 'list') top.appendChild(iconButton('al-gear'",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_list_opens_on_the_messages_tab_when_asked",
+   "file": "web/home/alerts.js",
+   "old": "tab = which === 'messages' && hasMessages() ? 'messages' : 'alerts'; unreadAtOpen = {};",
+   "new": "tab = 'alerts'; unreadAtOpen = {};",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_change_of_conversations_draws_the_list_again",
+   "file": "web/home/alerts.js",
+   "old": "if (shade && view === 'list') { if (tab === 'messages' || hasMessages()) paint(); }",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_circle_has_no_dots_of_a_cut",
+   "file": "web/home/alerts.js",
+   "old": "? first.slice(0, -1) : first;",
+   "new": "? first : first;",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   }
  ]

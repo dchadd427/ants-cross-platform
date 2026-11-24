@@ -135,7 +135,7 @@ div.gm-ri { background: #0b1117; }
 .gm-act.gm-off > .gm-ico:first-child { color: #7f9c92; }
 
 /* ---- the rows of a person who is logged in (Message, Follow, Ignore, Report): the same sheet as the invitation's ---- */
-.gm-act[data-kind="lock"] > .gm-ico:first-child { color: #aab6ff; }
+.gm-act[data-kind="lock"] > .gm-ico:first-child { color: #9fe0b8; }
 .gm-act[data-kind="star"] > .gm-ico:first-child { color: var(--gold); }
 .gm-act.gm-gold { background: #1b1a0c; border-color: #8a6f14; }
 .gm-act.gm-gold > .gm-ico:first-child { fill: var(--gold); }
