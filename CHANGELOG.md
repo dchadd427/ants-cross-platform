@@ -7,9 +7,6 @@ An entry is 5 - 15 lines in a fixed template: the heading `## vX.Y.Z - YYYY-MM-D
 <!--
 Template of an entry (copy it, keep the labels and the order, leave out a paragraph that has nothing to say):
 
-**Fixes:**
-- On a phone, the "What's new" window fits the screen, so its Close button is no longer below the bottom of the page.
-
 ## vX.Y.Z - YYYY-MM-DD - title
 
 **For players:**
@@ -33,6 +30,9 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - **Special ants on a match's page.** A new section under the Scoreboard shows what each type of ant did: a card for each type that somebody had (Swimmer: bridges built and taken down; Fire Ant: fires lit and put out; Bomber: bombs set, defused and gone off; Thief: raids that brought loot home, "5 of 8", and the loot), and a card for food and fighting. A type that nobody used is left out with one line. Bombs set, Defused and Fires lit moved there from the Scoreboard. A match played before this release shows what was counted then (no bridges, fires put out or loot).
+
+**Fixes:**
+- On a phone, the "What's new" window fits the screen, so its Close button is no longer below the bottom of the page.
 
 ## v0.21.3 - 2026-11-24 - Follows, private messages, replay likes and the activity curve
 
