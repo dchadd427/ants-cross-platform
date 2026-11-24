@@ -37,6 +37,7 @@
 #include <tuple>
 
 #include "ants_ai/bomb_detour.hpp"
+#include "ants_ai/bridge_headon.hpp"
 #include "ants_ai/bot.hpp"
 #include "ants_ai/brawl_task.hpp"
 #include "ants_ai/field_task.hpp"
@@ -102,7 +103,8 @@ private:
           thief_guard_(kThiefGuard, tactics_),
           swarm_(kSwarm, tactics_),
           plugs_(kPlugs, tactics_),
-          free_thief_(kFreeThief) {
+          free_thief_(kFreeThief),
+          head_on_(kHeadOn, tactics_) {
         thief_guard_.attach(&walls_);
         island_.attach(&harvest_);
         expedition_.attach(&island_);
@@ -156,6 +158,7 @@ public:
     /// The plug task for a lab that changes its parameters (AI57.6 looks at every tick)
     PlugTask& plugs_for_labs() noexcept { return plugs_; }
     const FreeThiefTask& free_thief() const noexcept { return free_thief_; }
+    const BridgeHeadOnTask& head_on() const noexcept { return head_on_; }
     FreeThiefTask& free_thief_for_labs() noexcept { return free_thief_; }
     /// Whether the bot plays the gate goals on this map (Medium and Hard, a walled map that the island play does not own; known after the first look)
     bool gate_map() const noexcept { return tactics_.gate_map; }
@@ -209,6 +212,7 @@ public:
     static constexpr TaskId kSwarm = 27;
     static constexpr TaskId kPlugs = 28;
     static constexpr TaskId kFreeThief = 29;
+    static constexpr TaskId kHeadOn = 30;
     static constexpr TaskId kHeal = kHealTaskId;                  // (23: tasks.hpp names it for the tasks that leave a carrier to it)
 
 private:
@@ -367,6 +371,7 @@ private:
     SwarmTask swarm_;
     PlugTask plugs_;
     FreeThiefTask free_thief_;
+    BridgeHeadOnTask head_on_;
     RefusalMemory refusals_;
     void note_repeat(const sim::Command& command, uint64_t tick);
     void update_progress(const BotView& view);
