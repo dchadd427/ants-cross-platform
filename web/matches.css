@@ -293,7 +293,6 @@ button { font: inherit; color: inherit; }
     .sc-card.w { background: var(--won-bg); border-color: var(--won-edge); }
     .sc-card .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
     .sc-card .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-    .sc-card .grid.two { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 8px; padding-top: 8px; border-top: 1px solid #1c3a30; }
     .sc-card .cell { display: grid; gap: 1px; }
     .sc-card .cell span { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
     .sc-card .cell b { font-weight: 500; font-size: 20px; font-variant-numeric: tabular-nums; line-height: 1.15; }

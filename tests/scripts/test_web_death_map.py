@@ -183,7 +183,7 @@ class TheFiles(unittest.TestCase):
             self.fail("the script asks for nothing itself: the page gives it the one question (env.sum)")
 
     def test_the_card_is_the_entry_right_after_over_time_and_a_match_with_no_stats_gets_one_box_not_two(self):
-        self.assertIn("var SECTIONS = [resultSection, replaySection, stats.summary, boardSection, stats.overtime, deathsSection, stats.activity, moreSection, aboutSection];", self.page)
+        self.assertIn("var SECTIONS = [resultSection, replaySection, stats.summary, boardSection, stats.special, stats.overtime, deathsSection, stats.activity, moreSection, aboutSection];", self.page)
         self.assertIn("if (window.AntsMatchStats.noStatsNote(rec)) return null;\n        try { return deathMap.card(rec, {}); } catch (e) { return null; }", self.page)      # (a card that throws costs the page nothing)
         self.assertIn("window.AntsDeathMap.redraw(document)", self.page)
         self.assertEqual(self.page.count("window.AntsDeathMap.redraw(document)"), 2)               # (after the page is built, and when the window changes size)
