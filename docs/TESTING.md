@@ -169,7 +169,7 @@ The numbers are `./run_tests.sh`'s; `--list` names every suite with its tier. A 
 
 The CI (see [Continuous Integration](#continuous-integration)) shows pass / fail for every pull request.
 
-### The python tests (suite 5.2)
+## The python tests (suite 5.2)
 
 Suite 5.2 runs every `tests/scripts/test_*.py`:
 
