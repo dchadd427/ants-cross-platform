@@ -243,6 +243,33 @@
       "build": "test_ai",
       "test": "timeout 900 env ANTS_TEST_FILTER='AI58.14 ' ./build/tests/test_ai/test_ai",
       "expect": "AI58.14"
+    },
+    {
+      "id": "mask_ignores_dropped_teams",
+      "file": "src/ants_ai/map_info.cpp",
+      "old": "if (ah.team_id != team && !ctx.dropped(ah.team_id) && by - 1 >= 0 && by - 1 < h) {",
+      "new": "if (ah.team_id != team && by - 1 >= 0 && by - 1 < h) {",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI1.24' ./build/tests/test_ai/test_ai",
+      "expect": "AI1.24"
+    },
+    {
+      "id": "field_now_memo_never_expires",
+      "file": "src/ants_ai/map_info.cpp",
+      "old": "memo.ctx.dropped_mask == ctx.dropped_mask && memo.mask == mask) return memo.field;",
+      "new": "memo.ctx.dropped_mask == ctx.dropped_mask) return memo.field;",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI1.24' ./build/tests/test_ai/test_ai",
+      "expect": "AI1.24"
+    },
+    {
+      "id": "swarm_fields_kept_for_ever",
+      "file": "src/ants_ai/island_swarm.cpp",
+      "old": "fields_ctx_.dropped_mask == ctx.dropped_mask && fields_mask_ == mask;",
+      "new": "fields_ctx_.dropped_mask == ctx.dropped_mask;",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI44' ./build/tests/test_ai/test_ai",
+      "expect": "AI44"
     }
   ]
 }

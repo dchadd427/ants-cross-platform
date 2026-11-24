@@ -114,7 +114,7 @@ void BridgePlanner::upkeep(TaskContext& c, const IslandInfo& info) {
         if (left > static_cast<int64_t>(params_.evacuate_life) || !a.takes_orders() || c.ledger.owner(a.id) == StandardBot::kIslands) continue;       // (an ant of the island task has that task's guard)
         const auto last = evacuated_at_.find(a.id);
         if (last != evacuated_at_.end() && now < last->second + params_.evacuate_gap) continue;
-        if (walk.empty()) walk = MapInfo::walkable_mask(grid, c.seat, v.walk_context());
+        if (walk.empty()) walk = v.walkable_mask(c.seat);
         // the nearest land tile that the ant can walk to now, round the ants that stand in the way (an ant on the only shore tile shuts that end: the other end is the way off): not water, not a piece of a bridge
         std::vector<uint8_t> free_walk = walk;
         for (const AntView& o : v.others()) {
@@ -154,6 +154,7 @@ const BridgeJob* BridgePlanner::look(TaskContext& c, const Tactics& tactics, con
     const bool power_on = plan.island_power_bridge;
     const bool raid_on = plan.island_endraid && tactics.endraid;                                  // an own Thief that no walk joins to a hill that it could raid (docs/BOT_IDLE.md)
     const bool home_on = plan.fire_hats;                                                          // a Fire Ant that took a hat where no walk leads home
+    walk_ttl_ = (plan.island_endraid || plan.fire_hats || plan.bridge_more) ? kWalkTicks : 0u;
     if (!(return_on || feeder_on || power_on || raid_on || home_on) || info.empty()) {
         still_.clear();
         return nullptr;
@@ -502,8 +503,8 @@ const BridgeJob* BridgePlanner::look(TaskContext& c, const Tactics& tactics, con
 
 const MapInfo::NowField& BridgePlanner::walk_now(TaskContext& c) {
     const uint64_t now = c.view.tick();
-    if (!walk_made_ || now >= walk_tick_ + kWalkTicks) {
-        walk_ = c.map.field_now(c.view.grid(), c.seat, c.view.walk_context());
+    if (!walk_made_ || (walk_ttl_ == 0 ? now > walk_tick_ : now >= walk_tick_ + walk_ttl_)) {
+        walk_ = c.map.field_now(c.view.grid(), c.seat, c.view.walk_context(), c.view.walkable_mask(c.seat));
         walk_tick_ = now;
         walk_made_ = true;
     }

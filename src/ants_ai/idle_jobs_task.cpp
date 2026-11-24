@@ -59,7 +59,7 @@ void IdleJobsTask::step(TaskContext& c) {
     for (const AntView& a : v.mine()) swimmers += a.type == sim::AntType::Swimmer ? 1u : 0u;
     const auto joined_now = [&]() -> const MapInfo::NowField& {
         if (!joined_made_ || now >= joined_tick_ + kJoinedTicks) {
-            joined_ = c.map.field_now(grid, c.seat, v.walk_context());
+            joined_ = c.map.field_now(grid, c.seat, v.walk_context(), v.walkable_mask(c.seat));
             joined_tick_ = now;
             joined_made_ = true;
         }

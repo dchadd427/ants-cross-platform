@@ -1211,10 +1211,9 @@ void run_bot_tests() {
         constexpr double kStopMsPerSecond = 300.0;
         constexpr double kStopPassMs = 750.0;
         constexpr double kRatioBound = 6.0;
-        // The island map's bots do more (the swarm, the flower link, the bridge planner, the endgame's Thief) and its idle row is a few milliseconds a second, so the ratio is wider and depends on the
-        // host: 4.9 to 5.1 times the idle bots before the idle batch and 5.3 with it on a quiet Mac, 8.1 and 10.8 with it on the two Windows runners (the same code reads 1.5 times higher there on
-        // TINY and TREASURE). The bound is 14: a bot whose work doubles over today's is over it on every host
-        constexpr double kRatioBoundIslands = 14.0;
+        // The island map's bots do more (the swarm, the flower link, the bridge planner, the endgame's Thief), and its idle row is a few milliseconds a second: the row has the bound of the others,
+        // 8 (a quiet Mac reads 3.7 times the idle bots, the Windows runners about half as much again)
+        constexpr double kRatioBoundIslands = 8.0;
         const auto within_stops = [](const Result& r) { return r.ms_per_second < kStopMsPerSecond && r.worst_pass_ms < kStopPassMs && r.start_pass_ms < kStopPassMs; };
         const auto best_of = [&](const char* map, const char* kind, ai::Level level, bool via_fill, Result& out, int room_count = 12, int window_passes = 3000) {
             std::string readings;

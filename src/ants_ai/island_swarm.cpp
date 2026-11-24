@@ -38,12 +38,18 @@ const std::vector<int32_t>& SwarmTask::field_for(TaskContext& c, size_t link) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
     if (!fields_valid_ || now >= fields_tick_ + params_.refresh_ticks || fields_.size() != tactics_.flower_links.size()) {
-        std::vector<uint8_t> mask = MapInfo::walkable_mask(v.grid(), c.seat, v.walk_context());
+        std::vector<uint8_t> mask = v.walkable_mask(c.seat);
         for (size_t i = 0; i < mask.size() && i < tactics_.shut_tiles.size(); ++i) {
             if (tactics_.shut_tiles[i] != 0) mask[i] = 0;
         }
-        fields_.clear();
-        for (const Tactics::FlowerLink& l : tactics_.flower_links) fields_.push_back(MapInfo::cost_field_onto(v.grid(), mask, c.seat, l.drop, v.walk_context()));
+        const WalkContext ctx = v.walk_context();
+        const bool same = fields_valid_ && fields_.size() == tactics_.flower_links.size() && fields_ctx_.ally == ctx.ally && fields_ctx_.dropped_mask == ctx.dropped_mask && fields_mask_ == mask;
+        if (!same) {                                                                           // (the walks are a function of the mask: the same mask keeps them, no flood)
+            fields_.clear();
+            for (const Tactics::FlowerLink& l : tactics_.flower_links) fields_.push_back(MapInfo::cost_field_onto(v.grid(), mask, c.seat, l.drop, ctx));
+            fields_mask_ = std::move(mask);
+            fields_ctx_ = ctx;
+        }
         fields_tick_ = now;
         fields_valid_ = true;
     }

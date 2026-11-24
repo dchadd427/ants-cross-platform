@@ -113,7 +113,7 @@ void BridgeHeadOnTask::step(TaskContext& c) {
         }
         if (other == nullptr) continue;
         // the way back to land that does not lead through the other ant: the nearest tile that is no bridge piece
-        if (mask.empty()) mask = MapInfo::walkable_mask(grid, c.seat, v.walk_context());
+        if (mask.empty()) mask = v.walkable_mask(c.seat);
         int32_t best = 1 << 30;
         const sim::TileCoord shore = shore_for(c, a, mask, other->tile, false, best);
         if (shore.x < 0) continue;
@@ -219,7 +219,7 @@ void BridgeHeadOnTask::clear_feet(TaskContext& c) {
             if (s.first != a->id && now >= s.second.since + params_.stand_ticks && s.second.tile.chebyshev_dist(a->tile) <= 1) jammed = true;
         }
         if (!jammed) continue;
-        if (mask.empty()) mask = MapInfo::walkable_mask(grid, c.seat, v.walk_context());
+        if (mask.empty()) mask = v.walkable_mask(c.seat);
         int32_t cost = 0;
         const sim::TileCoord shore = shore_for(c, *a, mask, sim::TileCoord{-1, -1}, true, cost);
         if (shore.x < 0 || !c.ledger.take(a->id, id())) continue;

@@ -54,7 +54,7 @@ int32_t life_of(const sim::Grid& grid, const std::map<int32_t, uint64_t>& seen, 
 // The walkable tiles of the seat as the engine's rules have them now, without the bridge pieces that are not finished (the stages of a dig: a failed dig takes them away again)
 std::vector<uint8_t> walk_mask_now(const BotView& view, uint8_t seat) {
     const sim::Grid& grid = view.grid();
-    std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, seat, view.walk_context());
+    std::vector<uint8_t> mask = view.walkable_mask(seat);
     const std::vector<sim::TileCell>& cells = grid.cells();
     for (size_t i = 0; i < cells.size() && i < mask.size(); ++i) {
         if (cells[i].has_partial_bridge()) mask[i] = 0;

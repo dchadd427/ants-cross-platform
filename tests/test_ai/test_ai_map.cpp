@@ -1027,4 +1027,56 @@ void run_map_tests() {
         ASSERT_TRUE(m.reaches_hill(again, TileCoord{h.origin.x + 1, h.origin.y - 4}));
         ASSERT_FALSE(m.reaches_hill(again, TileCoord{40, 30}));
     } TEST_END();
+    TEST_CASE("AI1.24 The Walkable Mask Is The Engine's Walking Rules For Every Tile (MapInfo::walkable Asked Of Each Tile), Whoever The Team And Whatever The Context: On Every Shipped Map With Bombs, Fire Walls And A Dropped Team On It; And The Field Of The Moment Is The Same Whether It Is Made Or Given Back From The Last Look") {
+        for (const char* name : {"TINY", "SMALL", "TREASURE", "ISLANDS", "GAUNTLET"}) {
+            sim::SimulationEngine sim;
+            start_match(sim, name, 1, 0x0F);
+            for (int i = 0; i < 300; ++i) sim.tick();
+            const sim::Grid& grid = sim.grid();
+            for (const uint8_t team : {uint8_t{0}, uint8_t{2}}) {
+                for (const WalkContext& ctx : {WalkContext{}, WalkContext{static_cast<uint8_t>(team == 0 ? 3 : 1), static_cast<uint8_t>(0x08)}}) {
+                    const std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, team, ctx);
+                    ASSERT_EQ(mask.size(), static_cast<size_t>(grid.width()) * static_cast<size_t>(grid.height()));
+                    size_t bad = 0;
+                    for (int y = 0; y < static_cast<int>(grid.height()); ++y) {
+                        for (int x = 0; x < static_cast<int>(grid.width()); ++x) {
+                            const bool walk = MapInfo::walkable(grid, team, TileCoord{x, y}, ctx);
+                            bad += (mask[static_cast<size_t>(y) * grid.width() + static_cast<size_t>(x)] != 0) != walk ? 1u : 0u;
+                        }
+                    }
+                    ASSERT_EQ(bad, 0u);
+                }
+            }
+            const MapInfo m(sim);
+            const MapInfo::NowField first = m.field_now(grid, 0);
+            const std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, 0, WalkContext{});
+            const MapInfo::NowField again = m.field_now(grid, 0, WalkContext{}, mask);                // (the same mask: the field of the first call is given back)
+            ASSERT_TRUE(first.cost == again.cost);
+            const MapInfo::NowField fresh = MapInfo(sim).field_now(grid, 0, WalkContext{}, mask);     // (a map that has made no field before: the flood itself)
+            ASSERT_TRUE(fresh.cost == again.cost);
+            for (int y = 0; y < static_cast<int>(grid.height()); ++y) {                               // (a bridge on a water tile changes the mask: the field is made again, not given back)
+                for (int x = 0; x < static_cast<int>(grid.width()); ++x) {
+                    if (grid.terrain_class_at(TileCoord{x, y}) != sim::movement::kTerrainWater) continue;
+                    bool next_to_the_walk = false;                                                    // (a water tile that the hill's walk reaches the shore of: a bridge on it is new ground)
+                    for (int dy = -1; dy <= 1; ++dy) {
+                        for (int dx = -1; dx <= 1; ++dx) {
+                            const TileCoord n{x + dx, y + dy};
+                            next_to_the_walk = next_to_the_walk || (grid.in_bounds(n) && again.cost[static_cast<size_t>(n.y) * grid.width() + static_cast<size_t>(n.x)] >= 0);
+                        }
+                    }
+                    bool in_a_mound = false;
+                    for (const auto& ah : grid.anthills()) in_a_mound = in_a_mound || (x >= static_cast<int>(ah.x) && x <= static_cast<int>(ah.x) + 3 && y >= static_cast<int>(ah.y) && y <= static_cast<int>(ah.y) + 3);
+                    if (!next_to_the_walk || in_a_mound || grid.is_solid_object(TileCoord{x, y}) || y == MapInfo::kPathSentinelRow) continue;
+                    sim.grid_mut().set_bridge_at(TileCoord{x, y}, 4, 1000000);
+                    const std::vector<uint8_t> changed = MapInfo::walkable_mask(sim.grid(), 0, WalkContext{});
+                    ASSERT_TRUE(changed != mask);
+                    const MapInfo::NowField after = m.field_now(sim.grid(), 0, WalkContext{}, changed);
+                    ASSERT_TRUE(after.cost == MapInfo(sim).field_now(sim.grid(), 0, WalkContext{}, changed).cost);
+                    ASSERT_TRUE(after.cost != again.cost);
+                    y = static_cast<int>(grid.height());
+                    break;
+                }
+            }
+        }
+    } TEST_END();
 }

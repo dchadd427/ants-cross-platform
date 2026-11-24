@@ -77,6 +77,8 @@ private:
     const IslandTask* islands_{nullptr};
     std::map<uint32_t, Place> staged_;       // ant -> where it waits
     std::vector<std::vector<int32_t>> fields_;   // by link: the walking cost onto the drop tile from every tile, searched at fields_tick_
+    std::vector<uint8_t> fields_mask_;       // the mask that fields_ were searched over (a refresh that finds the same mask and context keeps them: the walks are a function of it)
+    WalkContext fields_ctx_;
     uint64_t fields_tick_{0};
     bool fields_valid_{false};
     uint32_t pickups_{0};

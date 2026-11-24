@@ -194,6 +194,9 @@ public:
     /// What the engine's dynamic walking rules need besides the grid for this seat's ants: its ally (own and allied bombs block) and the teams that dropped out (their queue rows are
     /// open). Pass it to MapInfo::approach_now / field_now / walkable.
     WalkContext walk_context() const noexcept;
+    /// The tiles that the ants of `team` can walk now: MapInfo::walkable_mask over this view's grid and walk context, made the first time a look asks and shared by every task of the look (the
+    /// view does not change within a look; a flood of the whole grid for each task was a fifth of the bots' time). The reference holds as long as the view; a task that changes the mask copies it
+    const std::vector<uint8_t>& walkable_mask(uint8_t team) const;
 
     /// Whether this view still borrows the engine (true for the view that think() gets; false for a copy)
     bool has_grid() const noexcept { return grid_ != nullptr; }
@@ -238,6 +241,8 @@ private:
     std::vector<FlowerView> flowers_;
     std::vector<BombView> bombs_;
     std::vector<FireWallView> fire_walls_;
+    mutable std::array<std::vector<uint8_t>, sim::MAX_PLAYERS> walkable_;   // walkable_mask(), by team, made on the first ask
+    mutable uint8_t walkable_made_{0};
     std::vector<sim::TileCoord> dying_;              // the tiles of the ants in their death clip (not in mine_ or others_)
 };
 

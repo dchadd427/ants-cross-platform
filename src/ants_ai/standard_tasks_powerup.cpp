@@ -103,7 +103,7 @@ const std::vector<int32_t>& PowerUpTask::field_for(TaskContext& c, sim::TileCoor
     Cached& e = fields_[key_of(tile)];
     if (e.field.empty() || now >= e.tick + params_.field_ttl_ticks) {
         if (mask_tick_ != now) {                                                                   // (the mask is made when a field is made: a look that finds every field fresh floods nothing)
-            mask_ = MapInfo::walkable_mask(v.grid(), c.seat, v.walk_context());
+            mask_ = v.walkable_mask(c.seat);
             for (size_t i = 0; i < mask_.size() && i < tactics_.shut_tiles.size(); ++i) {
                 if (tactics_.shut_tiles[i] != 0) mask_[i] = 0;                                     // (the bridges that will not last the trip: the island task)
             }

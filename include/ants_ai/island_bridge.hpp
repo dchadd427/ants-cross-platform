@@ -69,6 +69,7 @@ public:
     void walk_home(TaskContext& context);
     /// The walks to the own hill as the map is now (a flood of the whole grid: made at most once in kWalkTicks, it changes slowly), shared by the look and the walk home
     static constexpr uint64_t kWalkTicks = 20;
+    uint64_t walk_ttl_{0};                   // kWalkTicks while the idle batch's rules are on, 0 (the walks of this look) without them: the bot as it was looks at the map as it is
     const MapInfo::NowField& walk_now(TaskContext& context);
     /// A tile of a job was ordered
     void note_ordered(BridgeJob::Kind kind) noexcept { ++ordered_[static_cast<size_t>(kind)]; }

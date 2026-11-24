@@ -120,7 +120,7 @@ bool RaidTask::hole_shut(TaskContext& c, uint8_t t, uint32_t thief_id) const { r
 const MapInfo::NowField& RaidTask::joined_now(TaskContext& c) {
     const uint64_t now = c.view.tick();
     if (!stage_joined_made_ || now >= stage_joined_tick_ + kJoinedTicks) {
-        stage_joined_ = c.map.field_now(c.view.grid(), c.seat, c.view.walk_context());
+        stage_joined_ = c.map.field_now(c.view.grid(), c.seat, c.view.walk_context(), c.view.walkable_mask(c.seat));
         stage_joined_tick_ = now;
         stage_joined_made_ = true;
     }
@@ -147,7 +147,7 @@ bool RaidTask::launch(TaskContext& c, const AntView& thief) {
     teams.erase(std::remove_if(teams.begin(), teams.end(), [&](uint8_t t) { return hole_shut(c, t, thief.id); }), teams.end());
     if (teams.empty()) return false;
     std::stable_sort(teams.begin(), teams.end(), [&](uint8_t x, uint8_t y) { return v.rows()[x].score > v.rows()[y].score; });
-    const std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, c.seat, v.walk_context());
+    const std::vector<uint8_t>& mask = v.walkable_mask(c.seat);
     const std::vector<int32_t> field = MapInfo::cost_field(grid, mask, thief.tile);
     if (field.empty()) return false;
     const bool island_mode = plan.island_endraid && tactics_.island_play;                    // (the island play: the hills are joined by bridges that go, and the loot is banked at the own hill)
@@ -245,7 +245,7 @@ bool RaidTask::recheck(TaskContext& c, const AntView& thief, std::map<uint32_t, 
         r.next_path = now + 60u;
         const HillInfo& hill = c.map.hill(r.team);
         const sim::Grid& grid = v.grid();
-        const std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, c.seat, v.walk_context());
+        const std::vector<uint8_t>& mask = v.walkable_mask(c.seat);
         const std::vector<int32_t> field = MapInfo::cost_field(grid, mask, thief.tile);
         bool reach = false;
         for (const sim::TileCoord& e : east_tiles(hill)) reach = reach || (grid.in_bounds(e) && !field.empty() && field[tile_index(grid, e)] >= 0);
