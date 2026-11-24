@@ -1,4 +1,4 @@
-/* The stats sections of the match page (web/match_stats.js, docs/REPLAYS.md "The match pages"): the band of highlights, "Over time" and "Activity". They use the tokens and the boxes of matches.css (the panel, the table,
+/* The stats sections of the match page (web/match_stats.js, docs/REPLAYS.md "The match pages"): the band of highlights, "Special ants", "Over time" and "Activity". They use the tokens and the boxes of matches.css (the panel, the table,
    the seat cards, the meters, the seat colors); the cells of the heat strip are painted by the script (the seat's color mixed into the dark box, with the ink that reads on it). */
 .stat .head .count { white-space: normal; text-align: right; }
 .stat h3.ct { margin: 22px 0 8px; font-weight: 500; }
@@ -56,10 +56,35 @@
 .tblbox { margin-top: 2px; }
 .sc-card .grid.cols3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } .sc-card .grid.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
+/* special ants: a card for each type of ant, a row for each seat (the scoreboard's boxes, meters and colors) */
+.abgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.abcard { background: #0a1016; border: 1px solid #1c3a30; border-radius: 4px; padding: 10px 12px 10px; min-width: 0; }
+.abcard.wide { grid-column: 1 / -1; }
+.abcard h3 { font-size: 17px; font-weight: 500; margin-bottom: 2px; }
+.abt { width: 100%; border-collapse: separate; border-spacing: 0 4px; font-variant-numeric: tabular-nums; table-layout: fixed; }
+.abt th { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 500; text-align: right; padding: 0 6px 1px 2px; vertical-align: bottom; line-height: 1.25; }
+.abt th:first-child { text-align: left; padding-left: 10px; width: 38%; }
+.abcard.wide .abt th:first-child { width: 24%; }
+.abt td { padding: 6px 8px 6px; background: #0d171f; border-top: 1px solid #1c3a30; border-bottom: 1px solid #1c3a30; text-align: right; vertical-align: top; font-size: 17px; }
+.abt td:first-child { text-align: left; border-left: 1px solid #1c3a30; border-radius: 4px 0 0 4px; padding-left: 10px; font-size: 15px; overflow: hidden; }
+.abt td:last-child { border-right: 1px solid #1c3a30; border-radius: 0 4px 4px 0; }
+.abt td b { font-weight: 500; }
+.abt td .of { font-size: 12px; color: var(--muted); margin-left: 3px; }
+.abt td.pu, .abt th.pu { border-right: 1px solid #1c3a30; }
+.abt .who { flex-wrap: nowrap; gap: 7px; align-items: baseline; } .abt .who i.sq { align-self: center; } .abt .who span { overflow-wrap: anywhere; line-height: 1.2; }
+.abt tr.none td { color: #6f8a7f; } .abt tr.none .mb { visibility: hidden; }
+.abcard .lgd { margin-top: 6px; font-size: 13px; }
+.abnote { margin-top: 12px; color: #c3d6cd; font-size: 15px; }
+
 @media (max-width: 960px) {
     .chips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 720px) {
+    .abgrid { grid-template-columns: 1fr; gap: 10px; }
+    .abcard { padding: 9px 9px 8px; }
+    .abt th { font-size: 10px; letter-spacing: .03em; padding: 0 5px 1px 1px; } .abt th:first-child { width: 36%; padding-left: 8px; }
+    .abt td { padding: 6px 5px; font-size: 16px; } .abt td:first-child { font-size: 14px; padding-left: 8px; }
+    .abcard.wide .abt th:first-child { width: 28%; }
     .band { padding: 10px; }
     .chips { grid-template-columns: 1fr; gap: 8px; }
     .chips a { padding: 7px 10px 8px; }
