@@ -243,7 +243,7 @@ class TheWholeWay(unittest.TestCase):
             self.assertEqual(server.history()[1]["history"][0]["plays"], 1)
         finally:
             out, err = server.stop()
-        self.assertIn("likes are OFF", out + err)
+        self.assertIn("counts, likes are OFF", out + err)           # (the line of the start: the line of a refused pass says the same words)
         self.assertNotIn(SECRET, out + err)
 
     def test_without_the_port_nothing_listens_and_a_taken_port_switches_the_door_off_and_the_game_goes_on(self):
@@ -286,7 +286,7 @@ class TheWholeWay(unittest.TestCase):
         out, err = s.stop()
         text = out + err
         self.assertIn("plays and likes of replays on port", text)
-        self.assertIn("likes are ON", text)
+        self.assertIn("counts, likes are ON", text)
         self.assertIn("a pass was refused", text)
         for secret in (SECRET, REF_ANN, REF_BO, "v1.e30", "127.0.0.1"):
             self.assertNotIn(secret, text)

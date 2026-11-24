@@ -279,7 +279,7 @@
    "id": "every_refusal_is_a_line",
    "file": "src/ants_server/replay_counts_api.cpp",
    "old": "    if (at != 0 && now_s - at < kNoticeEveryS) return;\n",
-   "new": "    if (at != 0 && now_s - at < 0) return;\n"
+   "new": "    if (at != 0 && now_s - at < kNoticeEveryS - kNoticeEveryS) return;\n"
   },
   {
    "id": "the_pass_is_in_the_line",
