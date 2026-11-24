@@ -3,6 +3,8 @@
 //
 //   AI58.1  two ants face to face on a bridge: the engine leaves them standing for ever, the bot's head-on rule steps one back to land and the other crosses; with the rule off they stand
 //   AI58.2  one free ant beside an enemy that stands still strikes it (and not when the enemy is the stronger, when an enemy Combat Ant stands near, with the rule off)
+//   AI58.4  with the food gone the idle ants hold the three tiles in front of the thief hole, and a raid of a Thief of another team ends in the can't-go clip; with the rule off it takes its 50 points
+//   AI58.5  a hurt ant that stands idle walks home and is whole again; with the rule off it stands
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -52,6 +54,9 @@ uint16_t hp_of(const sim::SimulationEngine& sim, uint32_t id) {
     const sim::AntSnapshot* a = snapshot_of(sim, id);
     return a == nullptr ? 0u : a->hp;
 }
+
+// The score of a team after a Thief of team 1 has been told to raid the hill of team 0 (its mound's entrance at (5, 5)), and the Thief
+void send_raid(sim::SimulationEngine& sim, uint32_t thief) { sim.apply_command(command_of(CommandType::GroupSpecial, 1, {thief}, 5, 5)); }
 
 }  // namespace
 
@@ -138,4 +143,62 @@ void run_idle_tests() {
         ASSERT_EQ(combat.started, 0u);
     } TEST_END();
 
+    TEST_CASE("AI58.4 With The Food Gone The Idle Ants Hold The Three Tiles In Front Of The Thief Hole: A Raid Of Another Team's Thief Then Ends In The Can't-Go Clip And The Hill Keeps Its Points; With The Rule Off It Takes 50 (A Hard Bot, Six Idle Workers)") {
+        struct Out {
+            int32_t score{0};
+            size_t holders{0};
+            uint32_t holds{0};
+        };
+        const auto play = [&](bool rule, bool gone = true, bool fire_ant = false) {
+            sim::SimulationEngine sim;
+            empty_field(sim, 37);
+            sim.set_player_score(0, 300);
+            for (int i = 0; i < 6; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{10 + i % 3, 8 + i / 3});
+            if (fire_ant) sim.spawn_unit(0, sim::AntType::Fire, TileCoord{12, 12});
+            LevelPlan plan = plan_for(Level::Hard);                                              // (the food-gone batch on: the empty field is a match whose food is gone)
+            without_war_batch(plan);
+            if (!gone) without_gone_batch(plan);
+            plan.thief_answer = false;
+            plan.idle_jobs = rule;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(1500);                                                                       // the batch begins after 400 ticks, the ants have stood idle for 200 by then
+            Out out;
+            for (int dy = 1; dy <= 3; ++dy) {
+                for (const sim::AntSnapshot& a : sim.get_world_state().ants) out.holders += (a.player_id == 0 && a.tile_x == 8 && a.tile_y == 4 + dy) ? 1u : 0u;
+            }
+            const uint32_t thief = sim.spawn_unit(1, sim::AntType::Thief, TileCoord{19, 6});
+            send_raid(sim, thief);
+            rig.run(500);
+            out.score = sim.get_player_score(0);
+            out.holds = rig.as<StandardBot>().idle_jobs().holds();
+            return out;
+        };
+        const Out off = play(false);
+        ASSERT_EQ(off.holders, 0u);
+        ASSERT_EQ(off.score, 250);
+        const Out on = play(true);
+        ASSERT_EQ(on.holders, 3u);                                                               // one ant on each tile
+        ASSERT_EQ(on.score, 300);
+        ASSERT_TRUE(on.holds >= 3u);
+        const Out early = play(true, false);                                                     // (no food gone, no Thief seen before the one at 1,500: nobody holds a post before it)
+        ASSERT_EQ(early.holders, 0u);
+        const Out keeper = play(true, true, true);                                               // (a Fire Ant that can walk home keeps the walls, which a holder would stand in the way of)
+        ASSERT_EQ(keeper.holders, 0u);
+    } TEST_END();
+
+    TEST_CASE("AI58.5 A Hurt Ant That Stands Idle Walks Home And Is Whole Again: A Worker With 4 Hit Points Far From The Hill Is At The Hill's Door And Has Its 10 Hit Points Back Within 1,500 Ticks; With The Rule Off It Stands (A Medium Bot)") {
+        const auto play = [&](bool rule, uint16_t hp) {
+            sim::SimulationEngine sim;
+            empty_field(sim, 39);
+            const uint32_t ant = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{30, 30});
+            sim.get_unit(ant).hp = hp;
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan_of(Level::Medium, [&](LevelPlan& p) { p.idle_jobs = rule; })), 4, 4);
+            rig.run(1500);
+            const sim::AntSnapshot* a = snapshot_of(sim, ant);
+            return std::make_pair(hp_of(sim, ant), a != nullptr ? TileCoord{a->tile_x, a->tile_y} : TileCoord{-1, -1});
+        };
+        ASSERT_EQ(play(false, 4).first, 4u);
+        ASSERT_EQ(play(true, 4).first, 10u);
+        ASSERT_TRUE(play(true, 10).second == (TileCoord{30, 30}));                               // a whole ant has nothing to heal: it stays where it is
+    } TEST_END();
 }

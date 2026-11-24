@@ -40,6 +40,7 @@ add_library(ants_ai STATIC
     free_thief_task.cpp
     bridge_headon.cpp
     contact_task.cpp
+    idle_jobs_task.cpp
     standard_bot.cpp
     brawl_task.cpp
     team_up.cpp
