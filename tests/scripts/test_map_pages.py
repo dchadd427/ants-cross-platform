@@ -231,7 +231,7 @@ class TheAddresses(unittest.TestCase):
         self.assertEqual(sorted(slugs.values()).count("fire"), 1)
         for file in ("Fire.lvl", "Fire!!!!.lvl"):
             self.assertRegex(slugs[file], r"^fire-[0-9a-f]{4,}$", file)
-        alone, _ = mp.plan([fake("FiRe.lvl"), fake("Fire.lvl")])                                  # (the tag is of the file's name: another map being there or not does not change it)
+        alone, _ = mp.plan([fake("Aardvark.lvl"), fake("FiRe.lvl"), fake("Fire.lvl")])             # (the tag is of the file's name: other maps being there or not do not change it)
         self.assertEqual({m.file: m.slug for m in alone}["Fire.lvl"], slugs["Fire.lvl"])
 
     def test_an_original_keeps_its_word_against_a_map_of_the_players(self):
@@ -642,11 +642,11 @@ class TheTextOfAPlayerIsData(unittest.TestCase):
         self.assertNotIn("</script><script>", page)
 
     def test_the_list_that_the_index_reads_cannot_end_its_script_and_keeps_the_text(self):
-        maps = [fake("Evil </script><script>alert(1)</script>.lvl", "  </script>", data=b"e2")]
+        maps = [fake("Evil </script><script>alert(1)</script>.lvl", "one\u2028two\u2029three </script>", data=b"e2")]
         mp.plan(maps)
         text = mp.library_data(maps)
         self.assertNotIn("</script>", text)
-        self.assertNotIn(" ", text)
+        self.assertTrue(text.isascii(), text)                                                      # (the two line separators, and every other character that is not ASCII, are escapes)
         data = json.loads(text[len("window.ANTS_MAP_LIBRARY="):].rstrip(";\n"))
         self.assertEqual(data["maps"][0][1], "Evil </script><script>alert(1)</script>")
 

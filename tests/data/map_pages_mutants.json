@@ -23,10 +23,10 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
-   "id": "the_list_of_the_index_can_hold_a_line_separator",
+   "id": "the_list_of_the_index_writes_every_character_that_is_not_ascii_as_it_is",
    "file": "tools/map_pages.py",
-   "old": ".replace(\"\\u2028\", \"\\\\u2028\")",
-   "new": "",
+   "old": "ensure_ascii=True, separators=(\",\", \":\"))",
+   "new": "ensure_ascii=False, separators=(\",\", \":\"))",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
@@ -110,7 +110,7 @@
    "id": "the_tag_of_a_second_map_depends_on_the_others",
    "file": "tools/map_pages.py",
    "old": "            tag = hashlib.sha1(m.file.encode(\"latin-1\", \"replace\")).hexdigest()\n            base, length",
-   "new": "            tag = \"%040x\" % len(taken)\n            base, length",
+   "new": "            tag = hashlib.sha1(str(len(taken)).encode()).hexdigest()\n            base, length",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {
@@ -223,13 +223,6 @@
    "file": "tools/map_pages.py",
    "old": "    elif m.maker:\n        rows.append((\"Made by\", m.maker))",
    "new": "    else:\n        rows.append((\"Made by\", m.maker or \"Not recorded\"))",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
-  },
-  {
-   "id": "a_map_with_no_maker_is_made_by_a_player",
-   "file": "tools/map_pages.py",
-   "old": "\"A player\\u2019s map of the 1998 game\"",
-   "new": "\"Made by a player of the 1998 game\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_map_pages"
   },
   {

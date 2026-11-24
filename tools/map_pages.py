@@ -414,9 +414,9 @@ def map_body(m):
 
 
 def json_for_script(value):
-    """JSON that is safe inside a <script> element: the characters of markup, and the two line separators, are written as escapes."""
+    """JSON that is safe inside a <script> element: the characters of markup are written as escapes, and so is every character that is not ASCII (the two line separators among them)."""
     text = json.dumps(value, ensure_ascii=True, separators=(",", ":"))
-    return text.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
+    return text.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
 
 
 def breadcrumbs(origin, m):
