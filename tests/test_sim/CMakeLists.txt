@@ -288,7 +288,7 @@ target_link_libraries(test_map_roundtrip PRIVATE ants_test_paths)
 
 add_test(NAME test_map_roundtrip COMMAND test_map_roundtrip)
 
-# The hash ledger (docs/TESTING.md): the 540 maps' state hashes at ticks 0, 200 and 2,400 in a file that two builds are compared with. A tool, run by hand (the whole library takes minutes)
+# The hash ledger (docs/TESTING_SUITES.md): the 540 maps' state hashes at ticks 0, 200 and 2,400 in a file that two builds are compared with. A tool, run by hand (the whole library takes minutes)
 add_executable(hash_ledger
     hash_ledger.cpp
 )

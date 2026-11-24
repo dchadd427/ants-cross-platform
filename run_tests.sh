@@ -222,7 +222,7 @@ run_worker_bot_suite() {
 }
 
 # The players' maps (Community-Maps/): every one loads and is played with the roster of all four teams (and green and black alone where it has both) without a crash, a hang or an
-# error, deterministically (the sweep's own verdict), and every one passes the rule that took it in (tools/community_maps.py verify reads the sweep's report; docs/TESTING.md).
+# error, deterministically (the sweep's own verdict), and every one passes the rule that took it in (tools/community_maps.py verify reads the sweep's report; docs/TESTING_SUITES.md).
 # Under ASan + UBSan (unoptimised) a play of 100 ticks is enough to meet the memory the sweep touches. A failing sweep shows all its findings (the log before them is a table of every play).
 run_community_maps_suite() {
     local report="$BUILD_DIR/community_sweep.json" log="$BUILD_DIR/community_sweep.log" ticks=600

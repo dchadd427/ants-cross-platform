@@ -373,7 +373,7 @@ class TheDocumentsSayWhatIsBuilt(unittest.TestCase):
             self.assertIn('"%s"' % part, self.check_source, part)               # (the parts of the check are named in the check itself)
         for needle in ("tests/scripts/web_rejoin_check.py", "tests/scripts/test_web_rejoin.sh", "`holdsThisSeat`", "`REJOINKEY`", "`--no-reconnect`", "Known limits"):
             self.assertIn(needle, section, needle)
-        self.assertIn("web_rejoin_check.py", read("docs", "TESTING.md"))
+        self.assertIn("web_rejoin_check.py", read("docs", "TESTING_PYTHON.md"))
 
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the Rejoin block's rules were NOT run (tests/scripts/web_rejoin_block_check.js)")
