@@ -28,8 +28,8 @@
   {
    "id": "a_name_is_not_cleaned",
    "file": "web/home/players.js",
-   "old": "var name = Chat.clip(Chat.plain(raw.name.slice(0, LIMIT.name * 4), true), LIMIT.name);",
-   "new": "var name = raw.name;",
+   "old": "\n        var name = Chat.clip(Chat.plain(raw.name.slice(0, LIMIT.name * 4), true), LIMIT.name);",
+   "new": "\n        var name = raw.name;",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -294,15 +294,15 @@
   {
    "id": "a_join_in_the_own_room",
    "file": "web/home/players.js",
-   "old": "join: r.listed && r.code !== own",
-   "new": "join: r.listed",
+   "old": "label: key === 'mod', join: r.listed && r.code !== own",
+   "new": "label: key === 'mod', join: r.listed",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "a_join_for_every_row",
    "file": "web/home/players.js",
-   "old": "join: r.listed && r.code !== own",
-   "new": "join: true",
+   "old": "label: key === 'mod', join: r.listed && r.code !== own",
+   "new": "label: key === 'mod', join: true",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -469,8 +469,8 @@
   {
    "id": "a_join_without_a_games_row",
    "file": "web/home/players.js",
-   "old": "join: r.listed && r.code !== own",
-   "new": "join: r.code !== '' && r.code !== own",
+   "old": "label: key === 'mod', join: r.listed && r.code !== own",
+   "new": "label: key === 'mod', join: r.code !== '' && r.code !== own",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -630,8 +630,8 @@
   {
    "id": "alone_shows_the_groups_and_guests_too",
    "file": "web/home/players.js",
-   "old": "if (!empty) {                                                // (alone:",
-   "new": "if (true) {                                                // (alone:",
+   "old": "} else if (!empty) {                                         // (alone:",
+   "new": "} else if (true) {                                         // (alone:",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -889,8 +889,8 @@
   {
    "id": "a_person_is_found_by_any_value",
    "file": "web/home/players.js",
-   "old": "var row = whole(i, 0, LIMIT.ids) && live && supported ? model.rows[i] : null;",
-   "new": "var row = live && supported ? model.rows[i] : null;",
+   "old": "var row = whole(i, 0, LIMIT.ids) && live && supported ? model.rows[i] : null, f;",
+   "new": "var row = live && supported ? model.rows[i] : null, f;",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -1031,6 +1031,104 @@
    "file": "web/home/players.js",
    "old": "if (r.id !== me && r.at !== 'away' && r.name.toLowerCase() === want) { if (found) return null; found = r; }",
    "new": "if (r.id !== me && r.at !== 'away' && r.name.toLowerCase() === want) { found = r; }",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "follows_not_more_than_a_hundred",
+   "file": "web/home/players.js",
+   "old": "m.rows.length > LIMIT.follows",
+   "new": "m.rows.length > 1e9",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_follow_has_a_handle_of_the_hubs_shape",
+   "file": "web/home/players.js",
+   "old": "typeof raw.h !== 'string' || !/^[0-9a-f]{12}$/.test(raw.h) || typeof raw.name !== 'string'",
+   "new": "typeof raw.name !== 'string'",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_person_who_is_away_is_not_here_on_the_following_tab",
+   "file": "web/home/players.js",
+   "old": "key = row && row.at !== 'away' ? row.at : 'gone'",
+   "new": "key = row ? row.at : 'gone'",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_visitors_own_row_is_not_on_the_following_tab",
+   "file": "web/home/players.js",
+   "old": "f.i >= 0 && f.i !== me ? model.rows[f.i] : null",
+   "new": "f.i >= 0 ? model.rows[f.i] : null",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_star_only_after_a_person_that_is_followed",
+   "file": "web/home/players.js",
+   "old": "copy.following = !!fol[row.id];",
+   "new": "copy.following = true;",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_guest_has_no_tabs",
+   "file": "web/home/players.js",
+   "old": "if (you) { paintTabs(); body.appendChild(tabs); }",
+   "new": "if (true) { paintTabs(); body.appendChild(tabs); }",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_new_socket_forgets_the_follows",
+   "file": "web/home/players.js",
+   "old": "model = fresh(); follows = []; indexFollows();",
+   "new": "model = fresh(); indexFollows();",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_person_who_is_not_here_has_a_number_of_their_own",
+   "file": "web/home/players.js",
+   "old": "var FAR = 9e8;",
+   "new": "var FAR = 5;",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_following_tab_says_who_sees_the_list",
+   "file": "web/home/players.js",
+   "old": "if (onFollowing) body.appendChild(keepNote);",
+   "new": "if (false) body.appendChild(keepNote);",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_follow_is_matched_by_the_key_of_its_lines",
+   "file": "web/home/players.js",
+   "old": "if (follows[i].k === who.k) return true;",
+   "new": "return true;",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_person_who_is_not_here_is_named_by_the_handle",
+   "file": "web/home/players.js",
+   "old": "word: 'h:' + f.h,",
+   "new": "word: 'row:' + i,",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_person_of_the_list_is_named_by_the_row",
+   "file": "web/home/players.js",
+   "old": "word: 'row:' + row.id,",
+   "new": "word: 'h:' + row.id,",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_follows_frame_before_the_welcome_is_nothing",
+   "file": "web/home/players.js",
+   "old": "var fs = live && supported ? followsOf(m, Chat) : null;",
+   "new": "var fs = followsOf(m, Chat);",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "nobody_followed_says_how_to_follow",
+   "file": "web/home/players.js",
+   "old": "if (!follows.length) put(list,",
+   "new": "if (false) put(list,",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]

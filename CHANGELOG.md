@@ -30,6 +30,8 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - **Where the action is, on a replay.** A soft curve over the replay's timeline shows the fights: deaths most of all, then bombs, thefts, fires and hits. On a computer it shows while the pointer is over the timeline, with the time and what happened ("2:41 · 3 deaths, 1 bomb"); on a phone it is always there, faint, and solid under your finger. The timeline has a row of its own on a computer now, as wide as the picture. Matches played before this version show a curve of their deaths alone.
+- **Follow** a player from the same menu (or **/follow NAME**): a **Following** tab in the players list, a star by their name, and an alert with Join when they open a public room. Nobody is told that you follow them, and nobody sees who follows whom.
+- Write to a player **privately**: **Message** in the menu, a **Messages** button in the chat (a panel, or a sheet on a phone), a count and a bell row for each new message. Messages are kept for 7 days and only the two of you can read them; **Ignore** blocks a person, and **Report** sends a message and the 5 before it to the admins.
 
 **Fixes:**
 - Watching a replay on a match page has the Settings button too.
@@ -37,6 +39,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **For operators:**
 - The game server's database moves to schema version 11 (the table `history_action`, the counts that the activity curve is drawn from; the history service's own file to its version 5): an older program refuses the newer file, and the update does not copy it, so stop the server and copy `ants.db` before the update; that copy is the way back ([`docs/HEATMAPS.md`](docs/HEATMAPS.md#the-activity-curve)).
+- New `follows`, `dms` (private messages, 7 days) and `reports` tables, made by the first use and deleted by Forget me; reports are read with `python -m hub.admin reports` and closed with `report-close ID`, and each report, look and close is a row of the moderators' log ([private messages](docs/HUB_MESSAGES.md)). The Legal page has a section for them.
 
 ## v0.21.2 - 2026-11-23 - Invites, mentions, the bell, map pages and Random map
 
@@ -575,20 +578,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f6969023...5aee057e)
 
-## v0.14.1 - 2026-11-09 - Discord names in games, the Players list, replay files, and a Hard bot that answers a blow
+## Older versions (v0.14.1 and before)
 
-**For players:**
-- **Your Discord name in rooms and games.** On the website nobody types a name any more: if you are logged in with Discord (Log in, in the chat), rooms and games show that name; everybody else plays as "Guest" and six digits, kept by this browser. A name with letters the game cannot show uses the Discord username instead.
-- **Display names in the chat.** The chat shows your Discord display name, and the More menu has a switch to show your username instead. A login from before this version shows the username until you log out and in again. Moderators see the username next to a display name.
-- **Who is here.** Home has a Players list: the people on the front page now, grouped as waiting in a room, playing and looking around (guests are counted, not named). The host of a public room that waits has a Join button in the list. On a phone the list opens from the Players button.
-- **The Games list** shows the picture of a map that a player made, and on a wide window the docked list sits in the middle. On a narrow phone the label of the Room's Public | Private switch stays inside its button.
-- **Watch a replay file you downloaded.** Matches has "Open a replay file" (or drop the file on the page): it plays in this tab and is not uploaded.
-- **The Hard computer player answers a blow.** When one of its ants is struck, that ant and the ants near it that can strike answer together, as many as the attacker has there and one more (five at most), and keep fighting while their side is at least three fifths as strong. Medium, Easy and the game type 187 play as before. The desktop game's Hard player does the same.
-
-**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.14.0 page or game still joins. The rest of this release is internal: large source files split into smaller ones, tools and tests for the computer players, and computer-player work that is built but switched off.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/26714f6f...4fd8a6ad)
-
-## Older versions (v0.14.0 and before)
-
-Every release before v0.14.1, and the long notes of v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.15.0, and the long notes of v0.14.1, v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

@@ -403,8 +403,29 @@
   {
    "id": "a_name_of_the_hub_is_not_cut",
    "file": "web/home/cmds.js",
-   "old": "typeof m.to === 'string' ? clean(m.to, LIMIT.name) : ''",
-   "new": "typeof m.to === 'string' ? m.to : ''",
+   "old": "var r = m.r, to = typeof m.to === 'string' ? clean(m.to, LIMIT.name) : ''",
+   "new": "var r = m.r, to = typeof m.to === 'string' ? m.to : ''",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "a_follow_is_a_private_matter_of_words",
+   "file": "web/home/cmds.js",
+   "old": "if (r === 'open') return null;",
+   "new": "if (r === 'open') return say('x');",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "a_person_cannot_follow_themselves",
+   "file": "web/home/cmds.js",
+   "old": "self: ['You cannot follow yourself.', '', 'You cannot message yourself.']",
+   "new": "self: ['', '', '']",
+   "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
+  },
+  {
+   "id": "the_list_of_follows_is_a_hundred",
+   "file": "web/home/cmds.js",
+   "old": "full: 'You follow 100 people. Type /unfollow NAME to make room.'",
+   "new": "full: 'You follow 10 people. Type /unfollow NAME to make room.'",
    "test": "node tests/scripts/web_home_cmds_check.js web/lobby.html"
   }
  ]
