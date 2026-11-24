@@ -29,6 +29,7 @@ Work that is not released yet is written in the same template under a heading th
 ## Next
 
 **For players:**
+- **Computer players stand idle less.** On ISLANDS the Hard bots take the Thief and the Fire hats, dig to a rival's hill and steal. At every level two ants that meet on a bridge sort it out, an idle ant beside a standing enemy hits it, and idle ants shut their Thief hole once the food is gone. Computer players only.
 - **Where the action is, on a replay.** A soft curve over the replay's timeline shows the fights: deaths most of all, then bombs, thefts, fires and hits. On a computer it shows while the pointer is over the timeline, with the time and what happened ("2:41 · 3 deaths, 1 bomb"); on a phone it is always there, faint, and solid under your finger. The timeline has a row of its own on a computer now, as wide as the picture. Matches played before this version show a curve of their deaths alone.
 
 **Fixes:**

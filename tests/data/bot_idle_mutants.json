@@ -1,0 +1,185 @@
+{
+  "note": "Mutants of the idle batch of the computer players (docs/BOT_IDLE.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the head-on rule on a bridge (one ant of a pair gives way, is held on land, the rule's switch), the blow for the ant beside the enemy (the stronger enemy, an enemy Combat Ant near, the switch), the answer to a Thief at the hole (the switch), the jobs of the ants that nothing holds (the heal of a hurt ant only, the posts only once the food is gone or a Thief was seen, none while a Fire Ant keeps the walls, the switch), the Thief of the endgame (the chain to a hill, the walk home before the first raid), the Fire hats (the chain that makes a hat worth taking, the chain home for the Fire Ant) and the bridges for idle ants against test_ai AI58. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_idle_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+  "mutants": [
+    {
+      "id": "headon_both_give_way",
+      "file": "src/ants_ai/bridge_headon.cpp",
+      "old": "if (b.id == a.id || held_.count(b.id) != 0) continue;",
+      "new": "if (b.id == a.id) continue;",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.1 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.1"
+    },
+    {
+      "id": "headon_pair_gives_way_twice",
+      "file": "src/ants_ai/bridge_headon.cpp",
+      "old": "if (asked.count(p.ant->id) != 0 || asked.count(p.other->id) != 0) continue;",
+      "new": "if (false) continue;",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.1 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.1"
+    },
+    {
+      "id": "headon_no_hold_on_land",
+      "file": "src/ants_ai/bridge_headon.cpp",
+      "old": "h.until = now + params_.hold_ticks;",
+      "new": "h.until = now;",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.1 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.1"
+    },
+    {
+      "id": "headon_rule_off_ignored",
+      "file": "src/ants_ai/bridge_headon.cpp",
+      "old": "if (!plan.bridge_headon || !v.has_grid()) {",
+      "new": "if (!v.has_grid() || (false && plan.bridge_headon)) {",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.1 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.1"
+    },
+    {
+      "id": "contact_stronger_struck",
+      "file": "src/ants_ai/contact_task.cpp",
+      "old": "if (e.type == sim::AntType::Combat || e.hp > a.hp) continue;",
+      "new": "if (e.type == sim::AntType::Combat) continue;",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.2 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.2"
+    },
+    {
+      "id": "contact_combat_near_ignored",
+      "file": "src/ants_ai/contact_task.cpp",
+      "old": "if (combat || fighters >= 2) continue;",
+      "new": "if ((combat && false) || fighters >= 2) continue;",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.2 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.2"
+    },
+    {
+      "id": "contact_rule_off_ignored",
+      "file": "src/ants_ai/contact_task.cpp",
+      "old": "if (!plan.contact_strike || !v.has_grid() || tactics_.guard_stance) {",
+      "new": "if (!v.has_grid() || (false && plan.contact_strike) || tactics_.guard_stance) {",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.2 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.2"
+    },
+    {
+      "id": "answer_rule_off_ignored",
+      "file": "src/ants_ai/thief_guard.cpp",
+      "old": "if (!(plan.thief_guard || plan.thief_answer) || !v.has_grid()",
+      "new": "if (!v.has_grid()",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.3 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.3"
+    },
+    {
+      "id": "idle_rule_off_ignored",
+      "file": "src/ants_ai/idle_jobs_task.cpp",
+      "old": "if (!plan.idle_jobs || !v.has_grid()",
+      "new": "if (!v.has_grid()",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.4 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.4"
+    },
+    {
+      "id": "hold_before_the_food_is_gone",
+      "file": "src/ants_ai/idle_jobs_task.cpp",
+      "old": "const bool hold_on = (tactics_.gone || tactics_.memory.thief_last_seen() != 0) && !keeper;",
+      "new": "const bool hold_on = !keeper;",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.4 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.4"
+    },
+    {
+      "id": "hold_over_the_walls_of_a_keeper",
+      "file": "src/ants_ai/idle_jobs_task.cpp",
+      "old": "thief_last_seen() != 0) && !keeper;",
+      "new": "thief_last_seen() != 0);",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.4 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.4"
+    },
+    {
+      "id": "heal_whole_ants",
+      "file": "src/ants_ai/idle_jobs_task.cpp",
+      "old": "if (a->hp <= plan.idle_heal_hp && a->tile.chebyshev_dist(hill.entrance) > 3) {",
+      "new": "if (a->tile.chebyshev_dist(hill.entrance) > 3) {",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.5 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.5"
+    },
+    {
+      "id": "more_bridges_off",
+      "file": "src/ants_ai/island_bridge.cpp",
+      "old": "const bool more = plan.bridge_more && tactics.late;",
+      "new": "const bool more = false;",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.8 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.8"
+    },
+    {
+      "id": "more_idle_ants_stay",
+      "file": "src/ants_ai/island_bridge.cpp",
+      "old": "returning_.insert(a->id);",
+      "new": "(void)a;",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.8 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.8"
+    },
+    {
+      "id": "fire_hat_taken_without_a_chain",
+      "file": "src/ants_ai/standard_tasks_powerup.cpp",
+      "old": "const bool chain_home = tactics_.plan.fire_hats &&",
+      "new": "const bool chain_home = false &&",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.7 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.7"
+    },
+    {
+      "id": "fire_ant_gets_no_chain_home",
+      "file": "src/ants_ai/island_bridge.cpp",
+      "old": "const bool home_on = plan.fire_hats;",
+      "new": "const bool home_on = false;",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.7 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.7"
+    },
+    {
+      "id": "raid_chain_not_dug",
+      "file": "src/ants_ai/island_bridge.cpp",
+      "old": "const bool raid_on = plan.island_endraid && tactics.endraid;",
+      "new": "const bool raid_on = false;",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.6 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.6"
+    },
+    {
+      "id": "thief_not_sent_home_first",
+      "file": "src/ants_ai/standard_tasks_raid.cpp",
+      "old": "if (own.present && a.tile.chebyshev_dist(own.entrance) > 12) {",
+      "new": "if (own.present && a.tile.chebyshev_dist(own.entrance) > 1200) {",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.6 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.6"
+    },
+    {
+      "id": "contact_ferry_strikes",
+      "file": "src/ants_ai/contact_task.cpp",
+      "old": "if (a.type == sim::AntType::Swimmer && a.type != v.default_ant_type()) return false;",
+      "new": "if (false && a.type == sim::AntType::Swimmer && a.type != v.default_ant_type()) return false;",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.2 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.2"
+    },
+    {
+      "id": "island_raid_mode_on_gate_maps",
+      "file": "src/ants_ai/standard_tasks_raid.cpp",
+      "old": "const bool island_mode = plan.island_endraid && tactics_.island_play;",
+      "new": "const bool island_mode = plan.island_endraid && tactics_.far_work;",
+      "build": "test_ai",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI58.9 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI58.9"
+    }
+  ]
+}

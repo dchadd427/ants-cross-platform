@@ -1,6 +1,6 @@
 # Bots on water maps: ISLANDS and SMALL
 
-Part of [Bots (computer players)](BOTS.md). The tactics of the standard bot are in [BOT_TACTICS.md](BOT_TACTICS.md), the rest of its play in [BOT_PLAY.md](BOT_PLAY.md).
+Part of [Bots (computer players)](BOTS.md). The tactics of the standard bot are in [BOT_TACTICS.md](BOT_TACTICS.md), the rest of its play in [BOT_PLAY.md](BOT_PLAY.md). The Thief of the endgame on these maps (a drop at a strip, a chain of bridges to a rival hill, the raid over it), the Fire hats and the bridges for them, and the jobs of the ants that nothing holds are in [BOT_IDLE.md](BOT_IDLE.md).
 
 ## Islands
 
