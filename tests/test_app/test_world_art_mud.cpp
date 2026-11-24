@@ -3,7 +3,7 @@
 //   [depth]     the map's border is no bank; a bank has depth 0; a strip of mud two cells wide or a small field has no look at all
 //   [looks]     a look is exactly nothing before its first depth; deeper it darkens, tints and ripples; the same cell gives the same looks
 //   [bubbles]   shallow cells keep the approved bubbles; deep ones have bigger bubbles and a share of the plain ones bubble on the original's own time
-//   [render]    the real renderer: banks and shallow mud are the approved pictures, the deep middle is not; the same frame twice is the same; a small budget gets there frame by frame; the caches are bounded
+//   [render]    the real renderer: banks and shallow mud are the approved pictures, the deep middle is not; the same frame twice is the same; a small budget gets there frame by frame; the memory is bounded (a limit, the least recently used go first, what does not fit is the approved picture, a scale limit, small looks)
 // Usage: test_world_art_mud. Exit code 0 when every check passes.
 #include <SDL.h>
 
@@ -376,43 +376,79 @@ void test_render(const assets::AssetArchive& arc, const world_art::Pack& pack) {
         }
         check(same_pixels(last, dense), "...and goes on, a cell a frame, to the picture that the unlimited budget gives (" + std::to_string(frames) + " frames)");
     }
-    // the caches are bounded: once the view has moved, the cells that are not in it are let go (the limit says how many bytes may stay), and when it comes back it is the same picture
+    // the memory is bounded: the baked pictures and the looks together never pass the limit, what was used least recently goes first, and what does not fit is the approved picture
     {
-        const auto cells_in = [&](double x, double y, size_t limit, size_t& kept_after_first) {
-            zoomtest::PixelRig away(arc, mud_wars(), kW, kH);
-            away.renderer.set_world_art(&pack);
-            away.renderer.set_dense_mud_budget_ms(-1);
-            away.renderer.set_dense_mud_cache_limit(limit);
-            away.look(0, y);
-            away.shoot();
-            kept_after_first = away.renderer.mud_baked_cells();
-            away.look(x, y);
-            away.shoot();
-            return away.renderer.mud_baked_cells();
-        };
-        size_t first_alone = 0, ignore = 0;
-        const size_t unbounded = cells_in(230, best_y, 1024u * 1024u * 1024u, first_alone);
-        const size_t second_alone = [&]() {
-            zoomtest::PixelRig only(arc, mud_wars(), kW, kH);
-            only.renderer.set_world_art(&pack);
-            only.renderer.set_dense_mud_budget_ms(-1);
-            only.look(230, best_y);
-            only.shoot();
-            return only.renderer.mud_baked_cells();
-        }();
-        const size_t bounded = cells_in(230, best_y, 1, ignore);
-        check(first_alone > 0 && unbounded > second_alone, "without a limit the cells of the first view stay (" + std::to_string(unbounded) + " kept, the second view alone has " + std::to_string(second_alone) + ")");
-        check(bounded == second_alone, "with a small limit only the cells of the view that is shown stay (" + std::to_string(bounded) + " of " + std::to_string(second_alone) + ")");
-        zoomtest::PixelRig again(arc, mud_wars(), kW, kH);
-        again.renderer.set_world_art(&pack);
-        again.renderer.set_dense_mud_budget_ms(-1);
-        again.renderer.set_dense_mud_cache_limit(1);
-        again.look(0, best_y);
-        const zoomtest::Picture home = again.shoot();
-        again.look(230, best_y);
-        again.shoot();
-        again.look(0, best_y);
-        check(same_pixels(again.shoot(), home), "...and the first view comes back as the same picture");
+        const auto kept = [](zoomtest::PixelRig& r) { return r.renderer.mud_baked_bytes() + r.renderer.mud_looks_bytes(); };
+        zoomtest::PixelRig only(arc, mud_wars(), kW, kH);                         // the second view alone, without a limit that matters
+        only.renderer.set_world_art(&pack);
+        only.renderer.set_dense_mud_budget_ms(-1);
+        only.look(230, best_y);
+        const zoomtest::Picture second = only.shoot();
+        const size_t second_bytes = kept(only), second_cells = only.renderer.mud_baked_cells();
+        check(second_bytes < only.renderer.mud_cache_limit(), "the second view's looks and pictures fit the default limit of " + std::to_string(only.renderer.mud_cache_limit() / 1024 / 1024) + " MB: " + std::to_string(second_bytes / 1024) + " KB");
+        // a limit that holds one view but not two: the first view goes, the second is complete
+        zoomtest::PixelRig lim(arc, mud_wars(), kW, kH);
+        lim.renderer.set_world_art(&pack);
+        lim.renderer.set_dense_mud_budget_ms(-1);
+        const size_t limit = second_bytes + second_bytes / 20;
+        lim.renderer.set_dense_mud_cache_limit(limit);
+        lim.look(0, best_y);
+        lim.shoot();
+        check(kept(lim) <= limit, "after the first view the memory is within the limit: " + std::to_string(kept(lim)) + " of " + std::to_string(limit));
+        lim.look(230, best_y);
+        const zoomtest::Picture moved = lim.shoot();
+        check(kept(lim) <= limit, "after the second view too: " + std::to_string(kept(lim)) + " of " + std::to_string(limit));
+        check(same_pixels(moved, second) && lim.renderer.mud_baked_cells() == second_cells, "...and the second view is complete: the same picture, the same cells as without the first view (" + std::to_string(lim.renderer.mud_baked_cells()) + " of " + std::to_string(second_cells) + ")");
+        lim.look(0, best_y);
+        const zoomtest::Picture back = lim.shoot();
+        lim.look(230, best_y);
+        check(kept(lim) <= limit && same_pixels(lim.shoot(), second), "going back and forth keeps within the limit and gives the same pictures");
+        // a limit far too small for the view: within it, and what does not fit is the approved picture; no room at all is the approved picture exactly
+        zoomtest::PixelRig tiny(arc, mud_wars(), kW, kH);
+        tiny.renderer.set_world_art(&pack);
+        tiny.renderer.set_dense_mud_budget_ms(-1);
+        tiny.renderer.set_dense_mud_cache_limit(second_bytes / 4);
+        tiny.look(230, best_y);
+        const zoomtest::Picture partial = tiny.shoot();
+        check(kept(tiny) <= second_bytes / 4 && tiny.renderer.mud_baked_cells() > 0 && tiny.renderer.mud_baked_cells() < second_cells && !same_pixels(partial, second), "a quarter of the room: within it, some cells have their looks (" + std::to_string(tiny.renderer.mud_baked_cells()) + " of " + std::to_string(second_cells) + ") and the rest the approved picture");
+        zoomtest::PixelRig none(arc, mud_wars(), kW, kH);
+        none.renderer.set_world_art(&pack);
+        none.renderer.set_dense_mud_budget_ms(-1);
+        none.renderer.set_dense_mud_cache_limit(0);
+        none.look(230, best_y);
+        const zoomtest::Picture approved = none.shoot();
+        none.renderer.set_dense_mud(false);
+        check(none.renderer.mud_baked_cells() == 0 && kept(none) == 0 && same_pixels(approved, none.shoot()), "no room at all is exactly the approved picture, and nothing is kept");
+        (void)back;
+    }
+    // the looks of a cell are small, and the mud is baked at the scale the limit of scale says, at a larger output as well
+    {
+        zoomtest::PixelRig big(arc, mud_wars(), kW, kH, 0, 3);
+        big.renderer.set_world_art(&pack);
+        big.renderer.set_dense_mud_budget_ms(-1);
+        big.look(best_x, best_y);
+        big.renderer.set_dense_mud_max_scale(2);
+        big.shoot();
+        const size_t cells = big.renderer.mud_baked_cells(), looks = big.renderer.mud_looks_cells();
+        check(cells > 50 && looks > 50, "a frame at 3x has deep cells with looks (" + std::to_string(cells) + " pictures)");
+        check(big.renderer.mud_baked_bytes() / cells == 4u * 64u * 64u, "with the limit of scale 2 the mud is baked at 2x at the output of 3x: 16 KB a cell, " + std::to_string(big.renderer.mud_baked_bytes() / cells) + " bytes");
+        check(big.renderer.mud_looks_bytes() / looks < 7u * 1024u, "the looks of a cell take less than 7 KB: " + std::to_string(big.renderer.mud_looks_bytes() / looks) + " bytes");
+        check(big.renderer.mud_pictures_bytes() < 8u * 1024u * 1024u, "the mud's own pictures, at 2x, are less than 8 MB: " + std::to_string(big.renderer.mud_pictures_bytes() / 1024) + " KB");
+        const zoomtest::Picture p2 = big.shoot();
+        big.renderer.set_dense_mud_max_scale(1);
+        big.shoot();
+        check(big.renderer.mud_baked_bytes() / big.renderer.mud_baked_cells() <= 4u * 64u * 64u && big.renderer.mud_baked_cells() > cells, "with the limit of scale 1 the pictures baked next are 4 KB (the cells that were baked at 2x stay while they are used)");
+        (void)p2;
+    }
+    // the defaults: what a computer and the browser keep, and the largest scale
+    {
+#if defined(__EMSCRIPTEN__)
+        check(mud::kCacheLimit == 8u * 1024u * 1024u && mud::kMaxScale == 1, "the browser keeps 8 MB for the looks and the pictures and bakes the mud at 1x");
+#else
+        check(mud::kCacheLimit == 16u * 1024u * 1024u && mud::kMaxScale == 2, "a computer keeps 16 MB for the looks and the pictures and bakes the mud at 2x at most");
+#endif
+        zoomtest::PixelRig fresh(arc, mud_wars(), kW, kH);
+        check(fresh.renderer.mud_cache_limit() == mud::kCacheLimit, "a renderer starts with that limit");
     }
     // the bubbles move with the template clock: a deep field at two moments of the bubbling time
     {

@@ -37,8 +37,6 @@ double ripple_field(double x, double y) {                  // the field whose co
     return fbm(xs, ys, 300.0, 21, 3, 0.55);
 }
 
-int16_t quantize(double v, double unit) { return static_cast<int16_t>(std::lround(v * unit)); }
-
 }  // namespace
 
 // ============================================================================
@@ -181,46 +179,40 @@ Look wet_and_patch_at(double x, double y, double depth) {
 
 CellLooks CellLooks::compute(const Depth& depth, int32_t col, int32_t row) {
     CellLooks out;
-    constexpr int32_t S = kSamples;
-    std::vector<double> d(static_cast<size_t>(S) * S);
+    constexpr int32_t C = kSmooth, S = kRipple;
     double deepest = 0.0;
-    for (int32_t b = 0; b < S; ++b) {
-        for (int32_t a = 0; a < S; ++a) {
-            const double x = col * kTile + (a - 0.5) * 0.5, y = row * kTile + (b - 0.5) * 0.5;
-            const double v = depth.at(x, y);
-            d[static_cast<size_t>(b) * S + static_cast<size_t>(a)] = v;
-            deepest = std::max(deepest, v);
-        }
+    for (int32_t b = 0; b < C; ++b) {
+        for (int32_t a = 0; a < C; ++a) deepest = std::max(deepest, depth.at(col * kTile + 2.0 * a - 1.0, row * kTile + 2.0 * b - 1.0));
     }
     if (deepest + kWander < kFirstLook) return out;                               // a bank, a small field, a corner: the approved picture
-    out.data_.assign(kPlanes * static_cast<size_t>(S) * S, 0);
-    constexpr int32_t G = S + 2;                                                  // the ripple field with a margin of two samples (one for the gradient)
-    std::vector<double> phi;
+    out.smooth_.assign(static_cast<size_t>(6) * C * C, 0);
+    const size_t plane = static_cast<size_t>(C) * C;
     bool ripples = false;
-    std::vector<double> wd(static_cast<size_t>(S) * S);
-    for (size_t i = 0; i < wd.size(); ++i) {
-        const int32_t a = static_cast<int32_t>(i % S), b = static_cast<int32_t>(i / S);
-        wd[i] = wandered_depth(col * kTile + (a - 0.5) * 0.5, row * kTile + (b - 0.5) * 0.5, d[i]);
-        ripples = ripples || wd[i] >= 1.8;
-    }
-    if (ripples) {
-        phi.resize(static_cast<size_t>(G) * G);
-        for (int32_t b = 0; b < G; ++b) {
-            for (int32_t a = 0; a < G; ++a) phi[static_cast<size_t>(b) * G + static_cast<size_t>(a)] = ripple_field(col * kTile + (a - 1.5) * 0.5, row * kTile + (b - 1.5) * 0.5);
+    for (int32_t b = 0; b < C; ++b) {                                              // the smooth looks, one sample for two world pixels
+        for (int32_t a = 0; a < C; ++a) {
+            const double x = col * kTile + 2.0 * a - 1.0, y = row * kTile + 2.0 * b - 1.0;
+            const double d = depth.at(x, y);
+            ripples = ripples || wandered_depth(x, y, d) >= 1.7;
+            const Look look = wet_and_patch_at(x, y, d);
+            const size_t i = static_cast<size_t>(b) * C + static_cast<size_t>(a);
+            for (size_t k = 0; k < 3; ++k) {
+                out.smooth_[k * plane + i] = static_cast<uint8_t>(std::clamp(std::lround(look.mult[k] * 255.0), 0l, 255l));
+                out.smooth_[(3 + k) * plane + i] = static_cast<uint8_t>(std::clamp(std::lround(look.add[k] * 4.0) + 128, 0l, 255l));
+            }
         }
     }
-    const size_t plane = static_cast<size_t>(S) * S;
+    out.ripple_.assign(static_cast<size_t>(S) * S, 0);
+    if (!ripples) return out;
+    constexpr int32_t G = S + 2;                                                  // the ripple field with a margin of two samples (one for the gradient)
+    std::vector<double> phi(static_cast<size_t>(G) * G);
+    for (int32_t b = 0; b < G; ++b) {
+        for (int32_t a = 0; a < G; ++a) phi[static_cast<size_t>(b) * G + static_cast<size_t>(a)] = ripple_field(col * kTile + (a - 1.5) * 0.5, row * kTile + (b - 1.5) * 0.5);
+    }
     for (int32_t b = 0; b < S; ++b) {
         for (int32_t a = 0; a < S; ++a) {
-            const size_t i = static_cast<size_t>(b) * S + static_cast<size_t>(a);
             const double x = col * kTile + (a - 0.5) * 0.5, y = row * kTile + (b - 0.5) * 0.5;
-            Look look;
-            if (wd[i] >= kFirstLook) look = wet_and_patch_at(x, y, d[i]);
-            for (int k = 0; k < 3; ++k) {
-                out.data_[static_cast<size_t>(k) * plane + i] = quantize(look.mult[k], 4096.0);
-                out.data_[static_cast<size_t>(3 + k) * plane + i] = quantize(look.add[k], 16.0);
-            }
-            if (wd[i] < 1.8) continue;
+            const double wd = wandered_depth(x, y, depth.at(x, y));
+            if (wd < 1.8) continue;
             // the ripples: the lines of the field, a soft ridge with a lit flank and a shaded one, here and there, fading in and out along their length
             const size_t p = static_cast<size_t>(b + 1) * G + static_cast<size_t>(a + 1);
             const double gx = (phi[p + 1] - phi[p - 1]) / 1.0, gy = (phi[p + G] - phi[p - G]) / 1.0;      // central differences, 0.5 world pixel to a step
@@ -234,7 +226,8 @@ CellLooks CellLooks::compute(const Depth& depth, int32_t col, int32_t row) {
             const double line = -2.3 * xx * std::exp(-xx * xx);
             const double cover = ramp(fbm(x, y, 340.0, 77, 2), 0.30, 0.46);
             const double broken = ramp(fbm(x, y, 110.0, 63, 2), 0.36, 0.52);
-            out.data_[6 * plane + i] = quantize(kRippleAmp * line * cover * broken * ramp(wd[i], 1.8, 5.0), 16.0);
+            const double rip = kRippleAmp * line * cover * broken * ramp(wd, 1.8, 5.0);
+            out.ripple_[static_cast<size_t>(b) * S + static_cast<size_t>(a)] = static_cast<int8_t>(std::clamp(std::lround(rip * 8.0), -127l, 127l));
         }
     }
     return out;
@@ -246,23 +239,34 @@ void CellLooks::at(double u, double v, double mult[3], double add[3], double& ri
         add[k] = 0.0;
     }
     ripple = 0.0;
-    if (data_.empty()) return;
-    constexpr int32_t S = kSamples;
-    const double fa = std::clamp(u * 2.0 + 0.5, 0.0, S - 1.001), fb = std::clamp(v * 2.0 + 0.5, 0.0, S - 1.001);
-    const int32_t a = static_cast<int32_t>(fa), b = static_cast<int32_t>(fb);
-    const double ta = fa - a, tb = fb - b;
-    const size_t plane = static_cast<size_t>(S) * S;
-    const size_t i = static_cast<size_t>(b) * S + static_cast<size_t>(a);
-    const auto sample = [&](size_t p) {
-        const double top = data_[p * plane + i] * (1 - ta) + data_[p * plane + i + 1] * ta;
-        const double bottom = data_[p * plane + i + S] * (1 - ta) + data_[p * plane + i + S + 1] * ta;
-        return top * (1 - tb) + bottom * tb;
-    };
-    for (size_t k = 0; k < 3; ++k) {
-        mult[k] = sample(k) / 4096.0;
-        add[k] = sample(3 + k) / 16.0;
+    if (smooth_.empty()) return;
+    {
+        constexpr int32_t C = kSmooth;
+        const double fa = std::clamp((u + 1.0) / 2.0, 0.0, C - 1.001), fb = std::clamp((v + 1.0) / 2.0, 0.0, C - 1.001);
+        const int32_t a = static_cast<int32_t>(fa), b = static_cast<int32_t>(fb);
+        const double ta = fa - a, tb = fb - b;
+        const size_t plane = static_cast<size_t>(C) * C;
+        const size_t i = static_cast<size_t>(b) * C + static_cast<size_t>(a);
+        const auto sample = [&](size_t p) {
+            const double top = smooth_[p * plane + i] * (1 - ta) + smooth_[p * plane + i + 1] * ta;
+            const double bottom = smooth_[p * plane + i + C] * (1 - ta) + smooth_[p * plane + i + C + 1] * ta;
+            return top * (1 - tb) + bottom * tb;
+        };
+        for (size_t k = 0; k < 3; ++k) {
+            mult[k] = sample(k) / 255.0;
+            add[k] = (sample(3 + k) - 128.0) / 4.0;
+        }
     }
-    ripple = sample(6) / 16.0;
+    {
+        constexpr int32_t S = kRipple;
+        const double fa = std::clamp(u * 2.0 + 0.5, 0.0, S - 1.001), fb = std::clamp(v * 2.0 + 0.5, 0.0, S - 1.001);
+        const int32_t a = static_cast<int32_t>(fa), b = static_cast<int32_t>(fb);
+        const double ta = fa - a, tb = fb - b;
+        const size_t i = static_cast<size_t>(b) * S + static_cast<size_t>(a);
+        const double top = ripple_[i] * (1 - ta) + ripple_[i + 1] * ta;
+        const double bottom = ripple_[i + S] * (1 - ta) + ripple_[i + S + 1] * ta;
+        ripple = (top * (1 - tb) + bottom * tb) / 8.0;
+    }
 }
 
 std::vector<uint8_t> apply_looks(const CellLooks& looks, const uint8_t* rgb, const uint8_t* plain, int32_t scale) {

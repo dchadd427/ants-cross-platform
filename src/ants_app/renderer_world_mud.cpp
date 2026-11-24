@@ -75,7 +75,58 @@ bool Renderer::ensure_mud_pictures(int32_t scale) {
     return true;
 }
 
-// The looks of a cell: kept, or made now when the frame has work left (at least one set of looks in every frame); null when they are not there yet
+size_t Renderer::mud_pictures_bytes() const noexcept {
+    size_t n = 0;
+    for (const auto& scale : mud_pictures_) {
+        for (const auto& p : scale) n += p.second.size();
+    }
+    return n;
+}
+
+// Makes room for `bytes` more in what the dense mud keeps (the baked pictures and the looks together): lets go of what was used least recently, never what this frame used. False when that is not
+// enough: the cell then shows the approved picture, so a limit that is too small for the view costs looks and nothing else
+bool Renderer::make_room_for_mud(size_t bytes) {
+    if (mud_looks_bytes_ + mud_baked_bytes_ + bytes <= mud_cache_limit_) return true;
+    struct Candidate {
+        uint64_t used;
+        bool baked;
+        uint64_t key;
+    };
+    std::vector<Candidate> order;
+    for (const auto& e : mud_baked_) {
+        if (e.second.used != mud_frame_) order.push_back(Candidate{e.second.used, true, e.first});
+    }
+    for (const auto& e : mud_looks_) {
+        if (e.second.used != mud_frame_) order.push_back(Candidate{e.second.used, false, e.first});
+    }
+    std::sort(order.begin(), order.end(), [](const Candidate& a, const Candidate& b) { return a.used != b.used ? a.used < b.used : (a.baked != b.baked ? a.baked : a.key < b.key); });
+    for (const Candidate& c : order) {
+        if (mud_looks_bytes_ + mud_baked_bytes_ + bytes <= mud_cache_limit_) break;
+        if (c.baked) {
+            const auto it = mud_baked_.find(c.key);
+            if (it->second.texture) SDL_DestroyTexture(it->second.texture);
+            mud_baked_bytes_ -= it->second.bytes;
+            mud_baked_.erase(it);
+        } else {
+            const auto it = mud_looks_.find(static_cast<uint32_t>(c.key));
+            mud_looks_bytes_ -= it->second.looks.bytes() + sizeof(MudLooks);
+            mud_looks_.erase(it);
+        }
+    }
+    return mud_looks_bytes_ + mud_baked_bytes_ + bytes <= mud_cache_limit_;
+}
+
+// Whether this frame has work left for the dense mud (every frame may do one piece, the first one is free); the work is a set of looks or a baked picture
+bool Renderer::mud_work_left() const {
+    return mud_budget_ms_ < 0 || mud_made_ == 0 || mud_spent_us_ < static_cast<int64_t>(mud_budget_ms_) * 1000;
+}
+
+void Renderer::mud_work_done(uint64_t since) {
+    mud_spent_us_ += static_cast<int64_t>((SDL_GetPerformanceCounter() - since) * UINT64_C(1000000) / SDL_GetPerformanceFrequency());
+    ++mud_made_;
+}
+
+// The looks of a cell: kept, or made now when the frame has work left and the memory has room; null when they are not there yet
 const world_art::mud::CellLooks* Renderer::mud_cell_looks(int32_t col, int32_t row) {
     const uint32_t cell = static_cast<uint32_t>(row) * static_cast<uint32_t>(ground_map_.width) + static_cast<uint32_t>(col);
     auto it = mud_looks_.find(cell);
@@ -83,53 +134,18 @@ const world_art::mud::CellLooks* Renderer::mud_cell_looks(int32_t col, int32_t r
         it->second.used = mud_frame_;
         return &it->second.looks;
     }
-    const bool unlimited = mud_budget_ms_ < 0;
-    if (!unlimited && mud_made_ > 0 && mud_spent_us_ >= static_cast<int64_t>(mud_budget_ms_) * 1000) return nullptr;
+    if (!mud_work_left() || !make_room_for_mud(world_art::mud::CellLooks::kBytes + sizeof(MudLooks))) return nullptr;
     const uint64_t t0 = SDL_GetPerformanceCounter();
     MudLooks made;
     made.looks = world_art::mud::CellLooks::compute(mud_depth_, col, row);
     made.used = mud_frame_;
-    mud_spent_us_ += static_cast<int64_t>((SDL_GetPerformanceCounter() - t0) * UINT64_C(1000000) / SDL_GetPerformanceFrequency());
-    ++mud_made_;
+    mud_work_done(t0);
     mud_looks_bytes_ += made.looks.bytes() + sizeof(MudLooks);
-    const auto inserted = mud_looks_.emplace(cell, std::move(made));
-    if (mud_looks_bytes_ > mud_cache_limit_) evict_mud(false);
-    return &inserted.first->second.looks;
-}
-
-// Lets go of what was used least recently (not in this frame) until what is kept is under a share of the limit
-void Renderer::evict_mud(bool baked) {
-    const size_t limit = mud_cache_limit_ - mud_cache_limit_ / 10;
-    if (baked) {
-        std::vector<std::pair<uint64_t, uint64_t>> order;
-        for (const auto& e : mud_baked_) {
-            if (e.second.used != mud_frame_) order.emplace_back(e.second.used, e.first);
-        }
-        std::sort(order.begin(), order.end());
-        for (const auto& o : order) {
-            if (mud_baked_bytes_ <= limit) break;
-            const auto it = mud_baked_.find(o.second);
-            if (it->second.texture) SDL_DestroyTexture(it->second.texture);
-            mud_baked_bytes_ -= it->second.bytes;
-            mud_baked_.erase(it);
-        }
-    } else {
-        std::vector<std::pair<uint64_t, uint32_t>> order;
-        for (const auto& e : mud_looks_) {
-            if (e.second.used != mud_frame_) order.emplace_back(e.second.used, e.first);
-        }
-        std::sort(order.begin(), order.end());
-        for (const auto& o : order) {
-            if (mud_looks_bytes_ <= limit) break;
-            const auto it = mud_looks_.find(o.second);
-            mud_looks_bytes_ -= it->second.looks.bytes() + sizeof(MudLooks);
-            mud_looks_.erase(it);
-        }
-    }
+    return &mud_looks_.emplace(cell, std::move(made)).first->second.looks;
 }
 
 // Draws a cell of a big mud field with its looks, from the picture that its template shows now; false (the caller draws the world art's picture) when the cell is not of that kind, is shallow, its looks
-// are not ready, or a sheet cannot be had
+// are not ready or do not fit the memory, or a sheet cannot be had
 bool Renderer::draw_dense_mud_cell(int32_t col, int32_t row, int32_t anim_id, int32_t sx, int32_t sy) {
     using namespace world_art::mud;
     if (!dense_mud_ || world_art_ == nullptr || !archive_ || anim_id < 0 || static_cast<size_t>(anim_id) >= archive_->animation_count()) return false;
@@ -148,11 +164,12 @@ bool Renderer::draw_dense_mud_cell(int32_t col, int32_t row, int32_t anim_id, in
     int32_t scale = world_art_scale_now();
     while (scale >= 1 && world_art_texture(scale) == nullptr) --scale;             // (the sheet that the ground is drawn from: a device that cannot take the sheet has the original's mud as well)
     if (scale < 1) return false;
+    scale = std::min(scale, mud_max_scale_);                                       // (the mud is baked at a smaller scale where memory is short, and enlarged by the graphics card)
     const uint8_t variant = world_variant_;
     const uint64_t key = (static_cast<uint64_t>(at) << 32) | (static_cast<uint64_t>(number) << 8) | (static_cast<uint64_t>(variant) << 2) | static_cast<uint64_t>(scale - 1);
     auto baked = mud_baked_.find(key);
     if (baked == mud_baked_.end()) {
-        if (!ensure_mud_pictures(scale)) return false;
+        if (!mud_work_left() || !ensure_mud_pictures(scale)) return false;
         const auto& pictures = mud_pictures_[static_cast<size_t>(scale - 1)];
         const world_art::Picture* shown = world_art_->find(number, variant);
         const world_art::Picture* plain = world_art_->find(kPlainMud, variant);
@@ -163,6 +180,9 @@ bool Renderer::draw_dense_mud_cell(int32_t col, int32_t row, int32_t anim_id, in
         const CellLooks* looks = mud_cell_looks(col, row);
         if (looks == nullptr) return false;                                       // not made yet: the approved picture for now
         if (looks->identity() && number == native) return false;                  // nothing changes in this cell
+        const size_t texture_bytes = static_cast<size_t>(4) * static_cast<size_t>(32 * scale) * static_cast<size_t>(32 * scale);
+        if (!make_room_for_mud(texture_bytes)) return false;                      // (the looks that were just used are safe: they carry this frame's mark)
+        const uint64_t t0 = SDL_GetPerformanceCounter();
         const std::vector<uint8_t> pixels = apply_looks(*looks, rgb->second.data(), base->second.data(), scale);
         const int32_t n = 32 * scale;
         SDL_Texture* tex = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, n, n);
@@ -175,9 +195,7 @@ bool Renderer::draw_dense_mud_cell(int32_t col, int32_t row, int32_t anim_id, in
         entry.used = mud_frame_;
         mud_baked_bytes_ += entry.bytes;
         baked = mud_baked_.emplace(key, entry).first;
-        if (mud_baked_bytes_ > mud_cache_limit_) evict_mud(true);
-        baked = mud_baked_.find(key);
-        if (baked == mud_baked_.end()) return false;
+        mud_work_done(t0);
     }
     baked->second.used = mud_frame_;
     world_art_filter(baked->second.texture, scale);

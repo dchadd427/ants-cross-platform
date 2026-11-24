@@ -227,10 +227,46 @@
    "expect": "[bubbles]"
   },
   {
-   "id": "mud_cache_never_lets_go",
+   "id": "mud_switch_is_ignored",
    "file": "src/ants_app/renderer_world_mud.cpp",
-   "old": "        if (mud_baked_bytes_ > mud_cache_limit_) evict_mud(true);\n",
-   "new": "",
+   "old": "    if (!dense_mud_ || world_art_ == nullptr || !archive_",
+   "new": "    if (world_art_ == nullptr || !archive_",
+   "build": "test_world_art_mud",
+   "test": "./build/tests/test_app/test_world_art_mud",
+   "expect": "[render]"
+  },
+  {
+   "id": "mud_limit_is_not_enforced",
+   "file": "src/ants_app/renderer_world_mud.cpp",
+   "old": "    if (mud_looks_bytes_ + mud_baked_bytes_ + bytes <= mud_cache_limit_) return true;\n    struct Candidate {",
+   "new": "    if (true) return true;\n    struct Candidate {",
+   "build": "test_world_art_mud",
+   "test": "./build/tests/test_app/test_world_art_mud",
+   "expect": "[render]"
+  },
+  {
+   "id": "mud_evicts_what_is_in_view",
+   "file": "src/ants_app/renderer_world_mud.cpp",
+   "old": "        if (e.second.used != mud_frame_) order.push_back(Candidate{e.second.used, true, e.first});",
+   "new": "        order.push_back(Candidate{e.second.used, true, e.first});",
+   "build": "test_world_art_mud",
+   "test": "./build/tests/test_app/test_world_art_mud",
+   "expect": "[render]"
+  },
+  {
+   "id": "mud_scale_limit_is_ignored",
+   "file": "src/ants_app/renderer_world_mud.cpp",
+   "old": "    scale = std::min(scale, mud_max_scale_);",
+   "new": "    (void)mud_max_scale_;",
+   "build": "test_world_art_mud",
+   "test": "./build/tests/test_app/test_world_art_mud",
+   "expect": "[render]"
+  },
+  {
+   "id": "mud_looks_take_no_room",
+   "file": "src/ants_app/renderer_world_mud.cpp",
+   "old": "!make_room_for_mud(world_art::mud::CellLooks::kBytes + sizeof(MudLooks))",
+   "new": "!make_room_for_mud(0)",
    "build": "test_world_art_mud",
    "test": "./build/tests/test_app/test_world_art_mud",
    "expect": "[render]"
@@ -238,17 +274,17 @@
   {
    "id": "mud_budget_is_ignored",
    "file": "src/ants_app/renderer_world_mud.cpp",
-   "old": "    if (!unlimited && mud_made_ > 0 && mud_spent_us_ >= static_cast<int64_t>(mud_budget_ms_) * 1000) return nullptr;",
-   "new": "    (void)unlimited;",
+   "old": "    return mud_budget_ms_ < 0 || mud_made_ == 0 || mud_spent_us_ < static_cast<int64_t>(mud_budget_ms_) * 1000;",
+   "new": "    return true;",
    "build": "test_world_art_mud",
    "test": "./build/tests/test_app/test_world_art_mud",
    "expect": "[render]"
   },
   {
-   "id": "mud_switch_is_ignored",
+   "id": "mud_work_is_not_counted",
    "file": "src/ants_app/renderer_world_mud.cpp",
-   "old": "    if (!dense_mud_ || world_art_ == nullptr || !archive_",
-   "new": "    if (world_art_ == nullptr || !archive_",
+   "old": "    ++mud_made_;\n}",
+   "new": "}",
    "build": "test_world_art_mud",
    "test": "./build/tests/test_app/test_world_art_mud",
    "expect": "[render]"

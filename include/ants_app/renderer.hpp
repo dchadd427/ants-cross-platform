@@ -536,16 +536,22 @@ public:
     size_t world_art_textures() const noexcept;
     uint32_t world_art_sheets() const noexcept;       // which sheets are textures: bit 0 the 1x, bit 1 the 2x, bit 2 the 3x
     uint8_t ground_variant_at(int32_t col, int32_t row);
-    /// Dense mud (world_art_mud.hpp): on by default while the world art is; the looks of a big mud field are made cell by cell as the cells come into view, within `ms` milliseconds of work for each frame (at
-    /// least one cell: 0; no limit: -1, which the tests and the picture maker use), and a cell that is not made yet shows the approved picture. `limit_bytes` bounds the baked pictures and the looks that are kept.
+    /// Dense mud (world_art_mud.hpp): on by default while the world art is. The looks of a big mud field are made cell by cell as the cells come into view, within `ms` milliseconds of work for each frame (at
+    /// least one piece of work: 0; no limit: -1, which the tests and the picture maker use), and a cell that is not made yet shows the approved picture. Its memory is bounded: the baked pictures and the looks that
+    /// are kept never take more than `limit_bytes` together (what was used least recently is let go first; a cell that cannot be had within it shows the approved picture), and the mud is baked at a scale of
+    /// at most `max_scale` (the picture is then enlarged by the graphics card): the mud's own pictures, cut from the sheet, are 1.9 MB at 1x and 7.7 MB at 2x and stay as long as the world art does.
     void set_dense_mud(bool on) noexcept { dense_mud_ = on; }
     void set_dense_mud_budget_ms(int32_t ms) noexcept { mud_budget_ms_ = ms; }
     void set_dense_mud_cache_limit(size_t limit_bytes) noexcept { mud_cache_limit_ = limit_bytes; }
-    /// (for the tests) the depth of the mud at the center of a cell (0 for a cell outside the map and for one that is not plain mud), and how many baked cell pictures and sets of looks are kept
+    void set_dense_mud_max_scale(int32_t max_scale) noexcept { mud_max_scale_ = std::clamp(max_scale, 1, 3); }
+    /// (for the tests) the depth of the mud at the center of a cell (0 for a cell outside the map and for one that is not plain mud), and what the dense mud keeps
     double mud_depth_at_cell(int32_t col, int32_t row);
     size_t mud_baked_cells() const noexcept { return mud_baked_.size(); }
     size_t mud_baked_bytes() const noexcept { return mud_baked_bytes_; }
     size_t mud_looks_cells() const noexcept { return mud_looks_.size(); }
+    size_t mud_looks_bytes() const noexcept { return mud_looks_bytes_; }
+    size_t mud_pictures_bytes() const noexcept;
+    size_t mud_cache_limit() const noexcept { return mud_cache_limit_; }
     /// (for the tests) pretends that the device takes no texture with a side above `limit` pixels, as a small phone's does (0: the device's own limit); it applies to the HUD art and the world art alike
     void set_art_texture_limit(int32_t limit) noexcept { art_texture_limit_ = limit; }
     void set_origin(int32_t x, int32_t y) override { origin_ = LayoutPoint{x, y}; }
@@ -783,7 +789,8 @@ private:
     uint8_t world_variant_{0};                             // which picture of a plain ground tile the cell being drawn shows (render_terrain_layer1); 0 for everything else
     bool dense_mud_{true};                                 // the looks of big mud fields (world_art_mud.hpp), while the world art is on
     int32_t mud_budget_ms_{8};                             // the work for the looks that a frame may take (set_dense_mud_budget_ms)
-    size_t mud_cache_limit_{32u * 1024u * 1024u};          // the bytes that the baked cell pictures may take, and as many again for the looks
+    size_t mud_cache_limit_{world_art::mud::kCacheLimit};  // the bytes that the baked cell pictures and the looks may take together (set_dense_mud_cache_limit)
+    int32_t mud_max_scale_{world_art::mud::kMaxScale};     // the largest scale the mud is baked at (set_dense_mud_max_scale)
     world_art::mud::Depth mud_depth_;                      // the depth of the mud, made when the first mud cell is drawn (ensure_mud_depth)
     bool mud_depth_ready_{false};
     struct MudLooks {
@@ -814,7 +821,9 @@ private:
     bool ensure_mud_pictures(int32_t scale);
     const world_art::mud::CellLooks* mud_cell_looks(int32_t col, int32_t row);
     bool draw_dense_mud_cell(int32_t col, int32_t row, int32_t anim_id, int32_t sx, int32_t sy);
-    void evict_mud(bool baked);
+    bool make_room_for_mud(size_t bytes);
+    bool mud_work_left() const;
+    void mud_work_done(uint64_t since);
     void drop_mud_caches();
     void drop_art_textures();
     SDL_Texture* art_texture(const hud_art::Art& art, int32_t scale);

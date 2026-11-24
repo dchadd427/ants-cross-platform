@@ -24,6 +24,16 @@ inline constexpr double kWander = 0.45;                // the depth lines wander
 inline constexpr double kFirstLook = 1.5;              // the depth at which the first look (the patches) begins; a cell that is shallower than this less the wander is the approved picture
 inline constexpr double kRippleMedian = 0.001720718;   // the median length of the ripple field's gradient (tools/world_art/mud_reference.py)
 
+// ---- the memory of the dense mud (renderer_world_mud.cpp): what the baked pictures and the looks of cells may take together, and the largest scale that the mud is baked at. A big mud field in view at 2x
+// needs about 11 MB; the browser, which a phone runs, gets half of that and the 1x pictures (about 6 MB for the view), the mud's own pictures (7.7 MB at 2x, 1.9 MB at 1x) come on top.
+#if defined(__EMSCRIPTEN__)
+inline constexpr size_t kCacheLimit = size_t{8} * 1024 * 1024;
+inline constexpr int32_t kMaxScale = 1;
+#else
+inline constexpr size_t kCacheLimit = size_t{16} * 1024 * 1024;
+inline constexpr int32_t kMaxScale = 2;
+#endif
+
 // ---- the noise (the approved generator's, whole-number hash, doubles)
 
 /// A lattice point's value, 0 to 1, from integers
@@ -75,21 +85,23 @@ double wandered_depth(double x, double y, double depth);
 
 // ---- a cell
 
-/// The looks of one cell, sampled twice for each world pixel (64 x 64 samples) with one more sample all round (66 x 66), so that a picture of any scale reads them without a seam at the cell's border.
-/// Empty (identity()) for a cell where nothing changes.
+/// The looks of one cell, kept small: the smooth ones (the color factor, the levels added) are sampled once for two world pixels (18 x 18 samples, one more all round), the ripples twice for each world pixel
+/// (66 x 66, one more all round), so that a picture of any scale reads them without a seam at the cell's border; 6.3 KB a cell. Empty (identity()) for a cell where nothing changes.
 class CellLooks {
 public:
-    static constexpr int32_t kSamples = 66;
-    static constexpr size_t kPlanes = 7;               // mult r g b, add r g b, ripple
-    bool identity() const noexcept { return data_.empty(); }
+    static constexpr int32_t kSmooth = 18;             // samples of the smooth looks, 2 world pixels apart, the first at -1
+    static constexpr int32_t kRipple = 66;             // samples of the ripples, half a world pixel apart, the first at -0.25 ... : (a - 0.5) / 2
+    static constexpr size_t kBytes = 6 * kSmooth * kSmooth + static_cast<size_t>(kRipple) * kRipple;     // what a cell with looks takes
+    bool identity() const noexcept { return smooth_.empty(); }
     /// The looks at the world offset (u, v) inside the cell (0 .. 32): bilinear; mult 0 .. 1, add and ripple in levels
     void at(double u, double v, double mult[3], double add[3], double& ripple) const noexcept;
-    size_t bytes() const noexcept { return data_.size() * sizeof(int16_t); }
-    /// Computes the looks of the cell (col, row) of a map; the work is about 5 ms.
+    size_t bytes() const noexcept { return smooth_.size() + ripple_.size(); }
+    /// Computes the looks of the cell (col, row) of a map; the work is about 3 ms.
     static CellLooks compute(const Depth& depth, int32_t col, int32_t row);
 
 private:
-    std::vector<int16_t> data_;        // [plane][sample row][sample column]: mult in 1/4096, add and ripple in 1/16 level
+    std::vector<uint8_t> smooth_;      // [mult r g b, add r g b][row][column]: mult in 1/255, add in 1/4 level with 128 for none
+    std::vector<int8_t> ripple_;       // [row][column] in 1/8 level
 };
 
 /// The picture of an RGB cell with the looks laid over it: `rgb` is the plain picture of the cell at `scale` (w = 32 * scale square, 3 bytes a pixel), `plain` the plain mud's picture of the same variant (the
