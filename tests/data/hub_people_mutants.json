@@ -147,7 +147,7 @@
   {
    "id": "a_hub_that_starts_again_keeps_the_invitations_open",
    "file": "hub/people.py",
-   "old": "if alert.kind == \"invite\" and alert.id not in self.live:",
+   "old": "if alert.kind in (\"invite\", \"room\") and alert.id not in self.live:",
    "new": "if False:",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
   },
@@ -434,8 +434,8 @@
   {
    "id": "staff_can_be_ignored_into_silence",
    "file": "hub/commands.py",
-   "old": "and self.chat.ref(person) in mine and not self.chat.is_mod(person)",
-   "new": "and self.chat.ref(person) in mine",
+   "old": "person_ref in mine and not self.chat.is_mod(person)",
+   "new": "person_ref in mine",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
   },
   {
@@ -616,7 +616,7 @@
   {
    "id": "an_ignore_is_not_kept",
    "file": "hub/commands.py",
-   "old": "kept = chat.store.ignore_add(chat.ref(me), chat.ref(target), shown, chat.limits.ignore_max)",
+   "old": "kept = chat.store.ignore_add(chat.ref(me), ref, shown, chat.limits.ignore_max)",
    "new": "kept = True",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
   },
@@ -630,8 +630,8 @@
   {
    "id": "an_ignore_is_kept_without_its_name",
    "file": "hub/commands.py",
-   "old": "chat.ref(target), shown, chat.limits.ignore_max)",
-   "new": "chat.ref(target), \"\", chat.limits.ignore_max)",
+   "old": "ref, shown, chat.limits.ignore_max)",
+   "new": "ref, \"\", chat.limits.ignore_max)",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_people tests.scripts.test_hub_store_contract"
   },
   {

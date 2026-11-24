@@ -1,0 +1,155 @@
+{
+ "note": "Mutants of the private messages of Home (web/home/messages.js and messages.css; docs/HUB_MESSAGES.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_home_messages_check.js (the part against a fake chat dock and a fake clock): each breaks one rule of the product on purpose (what is not read, what is sent, who has the button, what Delete and Block do, what a report is) and the check must fail. tests/scripts/test_web_home_messages.py runs every one on a copy.",
+ "baseline": {
+  "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+ },
+ "mutants": [
+  {
+   "id": "a_handle_is_twelve_hex_digits",
+   "file": "web/home/messages.js",
+   "old": "/^[0-9a-f]{12}$/",
+   "new": "/^[0-9a-f]+$/",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "fifty_conversations_at_the_most",
+   "file": "web/home/messages.js",
+   "old": "m.rows.length > LIMIT.convs",
+   "new": "m.rows.length > 1e9",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "a_count_of_unread_is_a_whole_number",
+   "file": "web/home/messages.js",
+   "old": "|| !whole(raw.u, 0, 1e9)",
+   "new": "",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "a_message_in_the_open_conversation_is_not_unread",
+   "file": "web/home/messages.js",
+   "old": "if (c.me || open) c.u = 0;",
+   "new": "if (c.me) c.u = 0;",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "an_open_conversation_reads_what_comes_in",
+   "file": "web/home/messages.js",
+   "old": "if (!c.me && open) read(c.h);",
+   "new": "if (false) read(c.h);",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "an_own_message_is_not_read_to_the_hub",
+   "file": "web/home/messages.js",
+   "old": "if (!c.me && open) read(c.h);",
+   "new": "if (open) read(c.h);",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "a_hidden_page_is_not_looking",
+   "file": "web/home/messages.js",
+   "old": "&& cur === h && !doc.hidden;",
+   "new": "&& cur === h;",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "only_the_echo_shows_a_message_as_sent",
+   "file": "web/home/messages.js",
+   "old": "if (c.me && sending && sending.h === c.h) {",
+   "new": "if (sending && sending.h === c.h) {",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "markup_is_not_sent",
+   "file": "web/home/messages.js",
+   "old": "if (/[<>]/.test(words)) { setStatus(TEXT.markup); return; }",
+   "new": "if (false) { setStatus(TEXT.markup); return; }",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "a_long_message_is_not_sent",
+   "file": "web/home/messages.js",
+   "old": "if (Chat.points(words) > LIMIT.text) { setStatus(DMX.long); return; }",
+   "new": "if (false) { setStatus(DMX.long); return; }",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "an_empty_message_is_not_sent",
+   "file": "web/home/messages.js",
+   "old": "if (!words) { setStatus(DMX.empty); return; }",
+   "new": "if (false) { setStatus(DMX.empty); return; }",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "unblock_is_unignore",
+   "file": "web/home/messages.js",
+   "old": "dock.call((t.b ? '/unignore h:' : '/ignore h:') + h,",
+   "new": "dock.call('/ignore h:' + h,",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "a_conversation_is_deleted_at_the_second_press",
+   "file": "web/home/messages.js",
+   "old": "if (!armed) { armed = true; paintMenu(); later('arm', 4000, disarm); return; }",
+   "new": "",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "only_a_message_of_theirs_can_be_reported",
+   "file": "web/home/messages.js",
+   "old": "if (!g.me) meta.appendChild(button('pm-rep'",
+   "new": "if (true) meta.appendChild(button('pm-rep'",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "the_newest_message_of_theirs_is_reported",
+   "file": "web/home/messages.js",
+   "old": "for (i = t.rows.length - 1; i >= 0 && !last; i--) if (!t.rows[i].me) last = t.rows[i];",
+   "new": "for (i = 0; i < t.rows.length && !last; i++) if (!t.rows[i].me) last = t.rows[i];",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "a_guest_has_no_button",
+   "file": "web/home/messages.js",
+   "old": "btn.hidden = !(you && live);",
+   "new": "btn.hidden = false;",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "a_typed_msg_opens_the_conversation",
+   "file": "web/home/messages.js",
+   "old": "else if (kind === 'open' && m && typeof m.h === 'string' && HANDLE.test(m.h)) openThread(m.h, typeof m.to === 'string' ? m.to : '');",
+   "new": "",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "the_count_stops_at_99",
+   "file": "web/home/messages.js",
+   "old": "return n > 99 ? '99+' : String(n);",
+   "new": "return n > 999 ? '99+' : String(n);",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "a_message_is_in_a_conversation_once",
+   "file": "web/home/messages.js",
+   "old": "if (t && t.loaded && !t.rows.some(function (r) { return r.id === g.id; })) {",
+   "new": "if (t && t.loaded) {",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "a_report_names_the_reason_that_was_chosen",
+   "file": "web/home/messages.js",
+   "old": "radios.forEach(function (r) { if (r.checked) why = r.getAttribute('value'); });",
+   "new": "",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  },
+  {
+   "id": "a_thread_keeps_a_hundred_messages",
+   "file": "web/home/messages.js",
+   "old": "m.rows.length > LIMIT.rows) return null;",
+   "new": "m.rows.length > 1e9) return null;",
+   "test": "node tests/scripts/web_home_messages_check.js web/lobby.html"
+  }
+ ]
+}

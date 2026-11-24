@@ -133,3 +133,11 @@ div.gm-ri { background: #0b1117; }
 .gm-act.gm-off b { color: #a8cfc0; }
 .gm-act.gm-off small { color: var(--gold); }
 .gm-act.gm-off > .gm-ico:first-child { color: #7f9c92; }
+
+/* ---- the rows of a person who is logged in (Message, Follow, Ignore, Report): the same sheet as the invitation's ---- */
+.gm-act[data-kind="lock"] > .gm-ico:first-child { color: #aab6ff; }
+.gm-act[data-kind="star"] > .gm-ico:first-child { color: var(--gold); }
+.gm-act.gm-gold { background: #1b1a0c; border-color: #8a6f14; }
+.gm-act.gm-gold > .gm-ico:first-child { fill: var(--gold); }
+.gm-act.gm-flag > .gm-ico:first-child { color: #ff7a6b; }
+.gm-rule { grid-column: 1 / -1; width: 100%; height: 0; margin: 2px 0; border: 0; border-top: 1px solid #1d3a31; }

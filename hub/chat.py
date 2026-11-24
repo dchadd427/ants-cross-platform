@@ -5,11 +5,13 @@ Messages (JSON, "v":1; docs/HUB.md has the table):
   up    {"t":"say","text":"..."}   {"t":"ping"}   {"t":"who"}   {"t":"here",...}      (the last two: hub/presence.py)
         {"t":"pics","on":true|false}                 the switch of the account's Discord picture (a login is needed; a hub without the Discord login does not know it); switching off deletes the copy at once,
                                                      switching on shows nothing until the next login; the answer is the whole `you` again (the account's every socket; for a request that changes nothing, the asking socket alone), or `err pics` (not a boolean, past the limit, blocked)
+        {"t":"dm"|"dmopen"|"dmread"|"dmdel"|"dmreport",...}   private messages (a login is needed; hub/messages.py has the frames and every refusal)
         {"t":"pick","pick":"display"|"username"}     which of its two names the account is shown by (only an account that has a display name as well may); stored, then every socket of
                                                      the account is closed (the same call as a logout's: end_logins), and the page connects again and reads the new name in the welcome
   down  {"t":"welcome",...}  {"t":"line",...}  {"t":"del","id":n}  {"t":"online","n":n}  {"t":"who",...}  {"t":"err","code":"login|rate|quota|muted|banned|long|empty|young|bad|here|pick|pics|power|role|who"}
         {"t":"cmds","rows":[...]}                    the commands that the account has (hub/commands.py): after the welcome of a login and with every `you` that a change of role makes
         {"t":"reply","c":word,"r":code,...}          the private answer to a command of hub/commands.py (/help, /ignore, /unignore, /bots; a word that is not the account's own is `unknown`)
+        {"t":"follows","rows":[...]}                 the people that the account follows, to its own sockets only (hub/follows.py); {"t":"msgs"|"msg"|"thread"|"dmx"|"dmreported",...}: private messages (hub/messages.py)
         {"t":"you","you":{...}}                      the whole `you` again, to every socket of an account whose role changed (hub/roles.py: who is a moderator or an administrator) or whose picture
                                                      arrived, went, was switched or blocked (hub/pictures.py `sync`)
         {"t":"ok","c":"mute|unmute|del|kick|ban|unban|nopic|pic"}   the private answer to a moderator's command that was done
@@ -35,7 +37,7 @@ import json
 import os
 import re
 
-from . import PROTOCOL, admin as adminmod, commands as commandsmod, images as imagesmod, people as peoplemod, presence as presencemod, pseudo, session as sessionmod, text as textrules
+from . import PROTOCOL, admin as adminmod, commands as commandsmod, follows as followsmod, images as imagesmod, messages as messagesmod, people as peoplemod, presence as presencemod, pseudo, session as sessionmod, text as textrules
 from .commands import NEEDS, RANK
 from .limits import AccountLimits, RateByAccount, TokenBucket
 from .store import PICKS, StoreError
@@ -94,6 +96,9 @@ class Chat:
         self.peers = presencemod.Peers()
         self.presence = presencemod.Presence(self, limits, clock, dumps)       # (who is here: the list of the front page)
         self.people = peoplemod.People(self, limits, clock, dumps)              # (the alerts of an account's bell, invitations to a room, mentions: hub/people.py)
+        self.follows = followsmod.Follows(self, limits, clock, dumps)           # (the people that an account follows, and the alert when one of them opens a room: hub/follows.py)
+        self.messages = messagesmod.Messages(self, limits, clock, dumps)        # (private messages and the reports of them: hub/messages.py)
+        self.ref_cache = {}                         # account -> its reference (a keyed hash that never changes while the hub's secret does not: made once)
         self.on_store_error = None                  # called with the error when the database cannot be used for a message (the hub logs it, not more than once in a while)
         self.end_ai = None                          # end_ai(account): the hub's call that disarms the account's Map Maker tab (hub/airelay.py); a kick and a ban call it, whether or not a chat socket is open
         self.end_logins = None                      # end_logins(account=...): the hub's call that closes every socket of an account (a logout's and a forget's too); the hub sets it
@@ -321,6 +326,8 @@ class Chat:
             self.people.on_clear(peer, msg)
         elif kind == "note":
             self.people.on_note(peer, msg)
+        elif kind in messagesmod.FRAMES:
+            self.messages.on_frame(peer, kind, msg)
         elif kind == "pics" and self.pictures is not None:
             self.on_pics(peer, msg)
         else:
@@ -348,9 +355,33 @@ class Chat:
 
     def ref(self, account):
         """The pseudonymous reference of an account (hub/pseudo.py): what is written about a person where the Discord id must not be."""
-        if self.secret is None:
-            self.secret = self.store.secret()
-        return pseudo.reference(self.secret, account)
+        ref = self.ref_cache.get(account)
+        if ref is None:
+            if self.secret is None:
+                self.secret = self.store.secret()
+            if len(self.ref_cache) >= 20000:
+                self.ref_cache.clear()
+            ref = self.ref_cache[account] = pseudo.reference(self.secret, account)
+        return ref
+
+    def handle(self, ref):
+        """A short handle of the person with this reference for the pages of this run of the hub (a keyed hash, new with every start, as `key_of` is): a page names a person to the hub by it (a private message, an unfollow),
+        and the hub knows only the handles that it sent to that account. It says nothing of the reference to a page."""
+        return hmac.new(self.salt, b"handle\0" + ref.encode("ascii"), hashlib.sha256).hexdigest()[:12]
+
+    def refs_online(self):
+        """{reference: account} of the people who have a socket open now (a banned account is as much here as any: the callers that must not name it look at the bans)."""
+        return {self.ref(a): a for a in self.accounts()}
+
+    def account_of_ref(self, ref):
+        """The account with this reference when it has a socket open or wrote a line that is in the chat's memory, else None (the hub never learns an account from a reference: the other way round only)."""
+        found = self.refs_online().get(ref)
+        if found is not None:
+            return found
+        for line in self.ring:
+            if line.account and self.ref(line.account) == ref:
+                return line.account
+        return None
 
     def on_say(self, peer, raw, img=None):
         who = peer.identity

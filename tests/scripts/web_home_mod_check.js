@@ -143,7 +143,7 @@ function rig(o) {
     }
     const host = new El(env, 'div', 'home');
     body.appendChild(host);
-    const CmdsApi = o.room ? loadScript(fs.readFileSync(path.join(lobbyDir, 'home', 'cmds.js'), 'utf8'), 'AntsHomeCmds', clock) : null;       // (a room to invite to: the helper is on the dock as home.js loads it, and says the words of an invitation's answer)
+    const CmdsApi = o.room || o.cmds ? loadScript(fs.readFileSync(path.join(lobbyDir, 'home', 'cmds.js'), 'utf8'), 'AntsHomeCmds', clock) : null;       // (a room to invite to: the helper is on the dock as home.js loads it, and says the words of an invitation's answer)
     const dock = ChatApi.mount({ doc, win, host, chip: null, screen: () => 'home', fetch: undefined, now: () => clock.t, random: () => 0, WebSocket: HubSocket, error: (e) => { throw e; }, load: CmdsApi ? (base, done) => { win.AntsHomeCmds = CmdsApi; clock.setTimeout(done, 0); } : undefined });
     dock.shown(true);
     const mine = (l) => (l.who === 'Me' ? Object.assign({}, l, { role: role === 'none' ? undefined : role, mod: role !== 'none' }) : l);       // (the viewer's own line says the viewer's own role)
@@ -164,7 +164,7 @@ function rig(o) {
     r.model = () => (r.room ? { slots: [0, 1, 2, 3].map((i) => ({ kind: i < r.room.people ? 'person' : i < r.room.size ? 'open' : 'nobody' })) } : null);
     const taps = [], spyDock = Object.assign({}, dock, { tap: (fn) => { taps.push(fn); return dock.tap(fn); } });       // (the sheet's own taps, so that a test can tell it what the dock would)
     r.tell = (kind, m) => taps.forEach((fn) => fn(kind, m));
-    r.mount = () => { r.mod = Mod.mount({ doc, win, dock: spyDock, say: o.say, now: () => clock.t, error: (e) => { throw e; } }); return r.mod; };
+    r.mount = () => { r.mod = Mod.mount({ doc, win, dock: spyDock, say: o.say, messages: o.messages, now: () => clock.t, error: (e) => { throw e; } }); return r.mod; };
     if (!o.noMod && !o.modLast) r.mount();
     if (o.people) {
         const yard = new El(env, 'main'), quick = new El(env, 'button'), games = new El(env, 'button');
@@ -257,7 +257,7 @@ function rig(o) {
     const u = rig({ noMod: true });
     same('you(): the name and the role (nothing else)', u.dock.you(), { name: 'Me', role: 'admin' });
     same('line(id): a copy of a person\'s line, with the role it says and whether it is one\'s own (no account key)', [u.dock.line(148), u.dock.line(150).own, u.dock.line(147).sys, u.dock.line(999), u.dock.line(null)],
-        [{ id: 148, who: 'Clover', text: 'FREE ant gold!!! see my page', role: 'none', sys: false, u: 'clover.4782', img: false, own: false }, true, true, null, null]);
+        [{ id: 148, who: 'Clover', text: 'FREE ant gold!!! see my page', role: 'none', sys: false, u: 'clover.4782', img: false, own: false, k: 'k-clover' }, true, true, null, null]);
     check('line(id) is a copy: changing it changes nothing', (() => { const l = u.dock.line(148); l.text = 'x'; return u.dock.line(148).text === 'FREE ant gold!!! see my page'; })());
     u.dock.note('Done: a thing.');
     same('note(text): one private line, in the log, for this visitor', u.privates(), ['Done: a thing.']);
@@ -1331,12 +1331,28 @@ function welcomeWith(sock, role) {
     bring(env, 'chat', 'AntsHomeChat');
     env.advance(0);
     check('the dock is there but nobody has said who the visitor is: still nothing', filesOf(env, 'mod').length === 0);
+    welcomeWith(socks[0], null);
+    env.advance(10);
+    check('a visitor who is not logged in: the page never asks for the sheet', filesOf(env, 'mod').length === 0);
+    check('...nor for the Messages part', filesOf(env, 'messages').length === 0);
+}
+{
+    const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
+    const socks = hubFor(env);
+    env.advance(0); bring(env, 'chat', 'AntsHomeChat'); env.advance(0);
     welcomeWith(socks[0], 'none');
     env.advance(10);
-    check('a visitor with no role: the page never asks for the sheet', filesOf(env, 'mod').length === 0);
+    same('a person who is logged in and holds no role has the sheet too (Message, Follow, Ignore, Report): the style and the script are asked for, once, async', filesOf(env, 'mod').map((n) => n.tagName + ':' + (n.href || n.src) + ':' + (n.rel || '') + ':' + (n.async === true ? 'async' : '')), ['link:home/mod.css:stylesheet:', 'script:home/mod.js::async']);
+    same('...and so are the style and the script of the Messages part, once (a person who is logged in has the Messages button)', filesOf(env, 'messages').map((n) => n.tagName + ':' + (n.href || n.src) + ':' + (n.rel || '') + ':' + (n.async === true ? 'async' : '')), ['link:home/messages.css:stylesheet:', 'script:home/messages.js::async']);
+    let handed = null;
+    env.win.AntsHomeMessages = { mount(o) { handed = o; return { open() {}, report() {}, isOpen: () => false }; } };
+    filesOf(env, 'messages').forEach((n) => { if (n.onload) n.onload(); });
+    check('...it is mounted on the chat dock, with the alerts\' toast for its answers', !!handed && typeof handed.dock.tap === 'function' && typeof handed.dock.send === 'function' && typeof handed.dock.call === 'function' && typeof handed.say === 'function');
+    env.advance(10);
+    check('...and a second welcome of the same page asks for nothing more of it', filesOf(env, 'messages').length === 2);
     socks[0].onmessage({ data: JSON.stringify({ t: 'you', you: { name: 'Maya', mod: true, role: 'mod', k: 'k-maya' } }) });
     env.advance(0);
-    same('...a `you` that gives the role: the style and the script of the sheet are asked for, once, async', filesOf(env, 'mod').map((n) => n.tagName + ':' + (n.href || n.src) + ':' + (n.rel || '') + ':' + (n.async === true ? 'async' : '')), ['link:home/mod.css:stylesheet:', 'script:home/mod.js::async']);
+    same('...a `you` that gives the role: nothing more is asked for, the files are the same', filesOf(env, 'mod').map((n) => n.tagName + ':' + (n.href || n.src) + ':' + (n.rel || '') + ':' + (n.async === true ? 'async' : '')), ['link:home/mod.css:stylesheet:', 'script:home/mod.js::async']);
     socks[0].onmessage({ data: JSON.stringify({ t: 'you', you: { name: 'Maya', mod: true, role: 'admin', k: 'k-maya' } }) });
     env.advance(10);
     check('...and a second `you` asks for nothing more', filesOf(env, 'mod').length === 2);
@@ -1367,10 +1383,10 @@ function welcomeWith(sock, role) {
     const socks = hubFor(env);
     env.advance(0); bring(env, 'chat', 'AntsHomeChat'); env.advance(0);
     env.win.AntsHomePlayers = { mount() { return { root: new El(env, 'div'), list: new El(env, 'div'), person: () => null, drawn() {}, directory: () => ({}) }; } };
-    welcomeWith(socks[0], 'none'); env.advance(0);
+    welcomeWith(socks[0], null); env.advance(0);
     filesOf(env, 'players').forEach((n) => { if (n.onload) n.onload(); });
     env.advance(0);
-    check('a visitor with no role who holds no room: no sheet', filesOf(env, 'mod').length === 0);
+    check('a visitor who is not logged in and holds no room: no sheet', filesOf(env, 'mod').length === 0);
     env.makeRoom();
     env.arrive({ seat: 0, key: H.KEY, seats: [[H.C, 'Maya'], [H.E, ''], [H.E, ''], [H.E, '']], room: { you: 0, leader: 0 } });
     env.advance(0);
@@ -1408,9 +1424,84 @@ function welcomeWith(sock, role) {
     const s3 = hubFor(none), told = [];
     none.advance(0); bring(none, 'chat', 'AntsHomeChat'); none.advance(0);
     none.win.AntsHomePlayers = { mount() { return { root: new El(none, 'div'), list: new El(none, 'div'), person: () => null, drawn() {} }; } };
-    welcomeWith(s3[0], 'none'); none.advance(0);
+    welcomeWith(s3[0], null); none.advance(0);
     filesOf(none, 'players').forEach((n) => { if (n.onload) n.onload(); });
-    check('a visitor with no role: the list comes, no sheet is asked for, nobody is told of anything', filesOf(none, 'mod').length === 0 && told.length === 0);
+    check('a visitor who is not logged in: the list comes, no sheet is asked for, nobody is told of anything', filesOf(none, 'mod').length === 0 && told.length === 0);
+}
+
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 5e. Message, Follow, Ignore and Report: the sheet of a person who is logged in (docs/HUB_PEOPLE.md, docs/HUB_MESSAGES.md)
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const P = Pure, HANDLE = 'a1b2c3d4e5f6', opened = [], reported = [], said = [];
+    const api = { open: (h, name) => opened.push([h, name]), report: (h) => reported.push(h) };
+    const social = (role, o) => withPeople(role, Object.assign({ history: [], cmds: true, messages: () => api, say: (words, tone) => { said.push([words, tone]); return true; } }, o || {}));
+    const person = (o) => Object.assign({ id: 5, who: 'Juniper', role: 'none', person: true, where: 'Looking', own: false, sys: false, text: '' }, o);
+    same('actions: a person who is logged in is offered Message, Follow, Ignore and Report on anybody else, and nothing on themselves', [P.actionsOf('', person({}), false, true), P.actionsOf('', person({ own: true }), false, true), P.actionsOf('', person({ sys: true }), false, true)], [['message', 'follow', 'ignore', 'report'], [], []]);
+    same('...the invitation first when they hold a room, and no Ignore on a moderator or an administrator (the hub never lets them be ignored)', [P.actionsOf('', person({}), true, true), P.actionsOf('', person({ role: 'mod' }), false, true), P.actionsOf('', person({ role: 'admin' }), false, true)], [['invite', 'message', 'follow', 'ignore', 'report'], ['message', 'follow', 'report'], ['message', 'follow', 'report']]);
+    same('...a person that is followed and is not here: the same four, no invitation', [P.actionsOf('', person({ far: true }), true, true), P.actionsOf('', person({ far: true }), true, false)], [['message', 'follow', 'ignore', 'report'], []]);
+    same('...a moderator is offered the four first and the moderation after them', P.actionsOf('mod', person({}), false, true), ['message', 'follow', 'ignore', 'report', 'mute', 'kick']);
+    same('...and without the Messages part or without a login the sheet is as it always was', [P.actionsOf('', person({}), false, false), P.actionsOf('mod', person({}), false, false)], [[], ['mute', 'kick']]);
+    const q = social('none');
+    check('a person with no role who is logged in and holds no room: every row of the list can be pressed but the visitor\'s own, and a moderator\'s too', sortedIds(q.pacts()) === '1,2,4,5,6,9');
+    same('a right click on a person of the list: the sheet', [q.pmenu(5), q.shade() !== null], [true, true]);
+    same('...the invitation is there, dim, with the way out; then Message, Follow, Ignore, Report and Cancel', [titles(q), q.box().findAll((e) => e.tagName === 'small').map((e) => e.textContent).slice(0, 5)], [
+        ['Invite to my room', 'Message', 'Follow', 'Ignore', 'Report', 'Cancel'], ['Open a room first', 'A private message', 'Get an alert when they open a public room.', 'Hide their lines, messages and invitations. They are not told.', 'Tell the admins about this person.']]);
+    q.press('Invite to my room');
+    same('...a press on the dim row sends nothing', [q.said(), q.shade() !== null], [[], true]);
+    q.press('Message');
+    same('Message asks the hub for the conversation by the number of the row (`/msg row:5`)', q.said(), ['/msg row:5']);
+    q.recv({ t: 'reply', c: 'msg', r: 'open', h: HANDLE, to: 'Juniper' });
+    same('...the answer opens the conversation by the handle that the hub gave, and the sheet goes', [opened, q.shade()], [[[HANDLE, 'Juniper']], null]);
+    q.pmenu(5); q.press('Report');
+    same('Report asks for the same, and hands the Messages part the handle to find the newest message of the person by (a person who wrote none is told so there)', [q.said().slice(-1), (q.recv({ t: 'reply', c: 'msg', r: 'open', h: HANDLE, to: 'Juniper' }), reported), q.shade()], [['/msg row:5'], [HANDLE], null]);
+    q.pmenu(5); q.press('Follow');
+    same('Follow is `/follow row:5`; the answer is the words of the command, as a toast and a line of the chat', q.said().slice(-1), ['/follow row:5']);
+    q.recv({ t: 'reply', c: 'follow', r: 'ok', to: 'Juniper', n: 1 });
+    same('...', [said.slice(-1)[0], q.privates().slice(-1)[0]], [['Done. You follow Juniper. You get an alert when they open a public room, and nobody is told.', ''], 'Done. You follow Juniper. You get an alert when they open a public room, and nobody is told.']);
+    q.recv({ t: 'follows', rows: [{ h: HANDLE, name: 'Juniper', i: 5, k: 'k-juniper' }] });
+    q.pmenu(5);
+    same('a person that the hub says is followed: the row says Following, in gold, and a press stops it (`/unfollow row:5`)', [titles(q).slice(0, 3), q.named('Following') !== null && cls(q.named('Following')).indexOf('gm-gold') !== -1], [['Invite to my room', 'Message', 'Following'], true]);
+    q.press('Following');
+    same('...', q.said().slice(-1), ['/unfollow row:5']);
+    q.recv({ t: 'reply', c: 'unfollow', r: 'ok', n: 0 });
+    q.pmenu(5); q.press('Ignore');
+    same('Ignore is `/ignore row:5`, and the words of the answer say that lines and private messages are hidden', q.said().slice(-1), ['/ignore row:5']);
+    q.recv({ t: 'reply', c: 'ignore', r: 'ok', n: 1 });
+    same('...', said.slice(-1)[0][0], 'Done. You will not see that person’s lines or private messages any more. You ignore 1 person now.');
+    q.pmenu(2);
+    same('a moderator of the list: Message, Follow and Report, and no Ignore', titles(q).slice(1), ['Message', 'Follow', 'Report', 'Cancel']);
+    q.press('Cancel');
+    q.recv({ t: 'follows', rows: [{ h: HANDLE, name: 'Birch', i: -1, k: '' }] });
+    q.players.root.findAll((e) => e.getAttribute && e.getAttribute('data-tab') === 'following')[0].click();       // (the Following tab: the people who are not here are only there)
+    const far = q.card(900000000);
+    check('a person that is followed and is not here has a card of their own, and it opens the same sheet', far !== undefined && q.pmenu(far) && q.shade() !== null);
+    same('...with no invitation: Message, Following (it is followed), Ignore, Report and Cancel; the head says where they are', [titles(q), one(q.box(), 'gm-sub').textContent], [['Message', 'Following', 'Ignore', 'Report', 'Cancel'], 'Not here']);
+    q.press('Message');
+    same('...and the hub is told by the handle, never a number or a name', q.said().slice(-1), ['/msg h:' + HANDLE]);
+    q.recv({ t: 'reply', c: 'msg', r: 'nobody' });
+    same('a refusal of the hub is said in the words of the command', said.slice(-1)[0], ['Nobody in the chat has that name.', 'warn']);
+    // a line of the chat: the name of the line, by its number, and the follow state by the key of its author
+    q.recv({ t: 'line', id: 300, at: T0 + 300, who: 'Juniper', text: 'hello', mod: false, k: 'k-juniper' });
+    q.recv({ t: 'follows', rows: [{ h: HANDLE, name: 'Juniper', i: 5, k: 'k-juniper' }] });
+    q.menu(one(q.row(300), 'gc-who'));
+    same('the name of a line of a person that is followed: the same sheet, Following', [titles(q).slice(0, 3), q.shade() !== null], [['Invite to my room', 'Message', 'Following'], true]);
+    q.press('Message');
+    same('...and its commands name the number of the line (`/msg #300`)', q.said().slice(-1), ['/msg #300']);
+    q.recv({ t: 'reply', c: 'msg', r: 'self' });
+    // a Messages part that is gone
+    const gone = rig({ role: 'none', people: true, history: [], messages: () => null, say: (w, t) => { said.push([w, t]); return true; } }); gone.who(ROWS);
+    gone.pmenu(5); gone.press('Message'); gone.recv({ t: 'reply', c: 'msg', r: 'open', h: HANDLE, to: 'Juniper' });
+    same('a Messages part that is not there when the answer comes: the page says that it did not work, and opens nothing', [said.slice(-1)[0][1], opened.length], ['warn', 1]);
+    // the old sheet
+    const old = withPeople('none', { history: [] });
+    check('a page without the Messages part: a person with no role has no marks and no sheet, as before', old.pacts().length === 0 && !old.pmenu(5) && old.shade() === null);
+    const guest = rig({ guest: true, people: true, history: [], messages: () => api }); guest.who(ROWS);
+    check('a visitor who is not logged in is offered none of the four', guest.pacts().length === 0 && !guest.pmenu(5));
+    const staff = social('admin');
+    staff.pmenu(5);
+    same('an administrator on a person: the four, then the moderation', titles(staff).filter((x) => x !== 'Cancel').map((x) => x.replace(/ Juniper.*/, '')), ['Invite to my room', 'Message', 'Follow', 'Ignore', 'Report', 'Mute', 'Kick', 'Ban']);
 }
 
 console.log(failures === 0 ? 'OK: ' + checks + ' checks' : failures + ' of ' + checks + ' checks FAILED');

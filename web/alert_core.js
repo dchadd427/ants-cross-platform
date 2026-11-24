@@ -20,7 +20,7 @@
     var LOOK_MS = 500;                                     // the game page looks for the countdown card this often (when it has no timer that a hidden page does not slow)
     var SOUND_GAP_MS = 2000;                               // at most one sound in this time, whatever happens
     var SOUND_VOLUME = 0.5;
-    var NAMES = ['invite', 'mention', 'join', 'start', 'soundJoin', 'soundStart'];    // the switches: an alert when a person invites me, when one mentions me, when one joins my room, the tab alert of my match, and (only where a sound is wired) a sound for each
+    var NAMES = ['invite', 'mention', 'join', 'start', 'soundJoin', 'soundStart', 'room'];    // the switches: an alert when a person invites me, when one mentions me, when one joins my room, the tab alert of my match, and (only where a sound is wired) a sound for each
     var SOUND_SWITCH = { join: 'soundJoin', start: 'soundStart' };
     // THE SOUNDS: the path of the file of each event, '' for none. To assign an approved sound, write its path here (the file goes in web/home/, which the image copies whole), for example join: '/home/alert_join.mp3';
     // nothing else changes: the switch for it appears in the sheet and the sound plays with the alert.

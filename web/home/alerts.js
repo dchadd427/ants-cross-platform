@@ -23,19 +23,21 @@
     var SVG = 'http://www.w3.org/2000/svg';
     var MATCH_ID = /^ants-[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?$/;       // a match's id: its replay's file name without .antsrep (web/history_page.js, web/front/rematch.js)
     var PHONE = '(max-width: 700px), (max-height: 500px)';
+    var KINDS = ['invite', 'mention', 'join', 'over', 'room', 'msg'];       // the kinds of row that the hub sends (docs/HUB_PEOPLE.md)
     var TEXT = {
         title: 'Alerts', settings: 'Alert settings', group: 'On this page', lead: 'Nothing to allow. These work while Ants is open, also in a background tab.', close: 'Close', back: 'Back', gear: 'Alert settings', open: 'Open', doJoin: 'Join',
-        joined: ' joined your room', invited: ' invited you', mentioned: ' mentioned you', inChat: 'In the chat', closed: 'The room has closed.', as: 'as ', in: ' in', of: ' of ', now: 'just now', yesterday: 'Yesterday',
+        joined: ' joined your room', invited: ' invited you', mentioned: ' mentioned you', opened: ' opened a room', messaged: ' sent you a private message', inChat: 'In the chat', closed: 'The room has closed.', as: 'as ', in: ' in', of: ' of ', now: 'just now', yesterday: 'Yesterday',
         none: 'No alerts yet', noneLine: 'Invitations, people who join your room and your mentions in the chat show up here.', noneGuest: 'People who join your room show up here.',
         keptAccount: 'Kept on your account for 7 days.', keptBrowser: 'Kept in this browser for 7 days.', loginNote: 'Log in to get invitations from other players.', list: 'My list', clear: 'Clear my alerts',
         clearAccount: 'Kept on your account for 7 days, the last 30.', clearBrowser: 'Kept in this browser for 7 days, the last 30.', unread: ' unread',
-        toastInvite: ' invited you to ', toastMention: ' mentioned you in the chat.', youInvited: 'You invited ', sent: 'Invitation sent to ', gone: 'That room is not open any more.',
+        toastInvite: ' invited you to ', toastMention: ' mentioned you in the chat.', toastRoom: ' opened a room: ', toastMessage: ' sent you a private message.', lineRoom: ' opened a room.', youInvited: 'You invited ', sent: 'Invitation sent to ', gone: 'That room is not open any more.',
         over: 'Your match is over', view: 'View', places: ['1st place', '2nd place', '3rd place', '4th place'],
         invite: ['Alert when someone invites me', 'From a player who is logged in.'], mention: ['Alert when someone mentions me', 'Someone writes @ and my name in the chat.'],
+        room: ['Alert when someone I follow opens a room', 'A public room, never an invite-only one.'],
         join: ['Alert when someone joins my room', 'A person, not a computer player.'], start: ['Flash the tab when my match starts', 'The tab title blinks while this page is in the background.'],
         soundJoin: ['Sound when someone joins my room', 'A person, not a computer player.'], soundStart: ['Sound when my match starts', 'Plays while this page is in the background.']
     };
-    var ROWS = [['invite', null, true], ['mention', null, true], ['join', null, false], ['start', null, false], ['soundJoin', 'join', false], ['soundStart', 'start', false]];      // [the switch, the sound that the row is for (null: none), whether only a person who is logged in has it]
+    var ROWS = [['invite', null, true], ['mention', null, true], ['room', null, true], ['join', null, false], ['start', null, false], ['soundJoin', 'join', false], ['soundStart', 'start', false]];      // [the switch, the sound that the row is for (null: none), whether only a person who is logged in has it]
     var PATHS = {
         bell: ['M6 17h12l-1.6-2.4V10a4.4 4.4 0 0 0-8.8 0v4.6L6 17z', 'M10 20a2 2 0 0 0 4 0'],
         user: ['M12 12.2a3.6 3.6 0 1 0 0-7.2 3.6 3.6 0 0 0 0 7.2z', 'M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5'],
@@ -43,6 +45,7 @@
         chat: ['M5 5h14a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 16h-8l-4.5 3.5V16H5a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 5 5z'],
         gear: ['M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z', 'M19.4 13.5a7.6 7.6 0 0 0 0-3l1.9-1.5-1.9-3.3-2.3.9a7.5 7.5 0 0 0-2.6-1.5l-.4-2.4h-3.8l-.4 2.4a7.5 7.5 0 0 0-2.6 1.5l-2.3-.9-1.9 3.3 1.9 1.5a7.6 7.6 0 0 0 0 3l-1.9 1.5 1.9 3.3 2.3-.9a7.5 7.5 0 0 0 2.6 1.5l.4 2.4h3.8l.4-2.4a7.5 7.5 0 0 0 2.6-1.5l2.3.9 1.9-3.3z'],
         flag: ['M6 21V4', 'M6 5h11l-2.2 4 2.2 4H6'],
+        home: ['M4 11.5L12 4l8 7.5', 'M6 10v9h12v-9', 'M10 19v-5h4v5'], lock: ['M7 11h10v8H7z', 'M9 11V8.5a3 3 0 0 1 6 0V11'],
         x: ['M6 6l12 12', 'M18 6L6 18'], back: ['M15 5l-7 7 7 7'], check: ['M5 12.5l4.5 4.5L19 7'], warn: ['M12 4l9 16H3z', 'M12 10v4', 'M12 17.2v.1']
     };
 
@@ -53,16 +56,19 @@
     function possessive(name) { return name + (/s$/i.test(name) ? '\u2019' : '\u2019s'); }
     // One row of a list, cleaned (a hub's, or this browser's own): { id, at, k, u (unread), and by kind: invite { from, map (a file name or ''), n, of, open, code }, mention { from, text }, join { name, seat }, over { map, place (0 when not said), match (an id, or '') } }, or null when it is no row of ours
     function rowOf(raw, Chat, rules) {
-        if (!raw || typeof raw !== 'object' || !whole(raw.id, 0, 1e15) || !whole(raw.at, 0, 4e9) || (raw.k !== 'invite' && raw.k !== 'mention' && raw.k !== 'join' && raw.k !== 'over')) return null;
+        if (!raw || typeof raw !== 'object' || !whole(raw.id, 0, 1e15) || !whole(raw.at, 0, 4e9) || KINDS.indexOf(raw.k) === -1) return null;
         var plain = function (s, max, strict) { return typeof s === 'string' ? Chat.clip(Chat.plain(s.slice(0, max * 4), strict), max) : ''; };
         var row = { id: raw.id, at: raw.at, k: raw.k, u: raw.u === 1 };
-        if (raw.k === 'invite') {
+        if (raw.k === 'invite' || raw.k === 'room') {
             row.from = plain(raw.from, 32, true);
             if (!row.from || !whole(raw.n, 0, 4) || !whole(raw.of, 1, 4) || raw.n > raw.of) return null;
             row.n = raw.n; row.of = raw.of;
             row.map = typeof raw.map === 'string' && rules && rules.validMapFile(raw.map) ? raw.map : '';
             row.code = raw.o === 1 && typeof raw.code === 'string' && /^[a-z0-9_-]{1,32}$/.test(raw.code) ? raw.code : '';
             row.open = row.code !== '';
+        } else if (raw.k === 'msg') {
+            row.from = plain(raw.from, 32, true); row.h = typeof raw.h === 'string' && /^[0-9a-f]{12}$/.test(raw.h) ? raw.h : '';
+            if (!row.from || !row.h) return null;
         } else if (raw.k === 'mention') {
             row.from = plain(raw.from, 32, true); row.text = plain(raw.text, 80, false);
             if (!row.from) return null;
@@ -84,12 +90,14 @@
     // The words of a row: { title, sub, action ('Join', 'Open' or ''), dim } for the list (`now`: seconds since 1970; `agoOf` the chat dock's way to say how long ago)
     function wordsOf(row, rules, now, agoOf) {
         var ago = agoOf(row.at, now), map, parts;
-        if (row.k === 'invite') {
-            if (!row.open) return { title: row.from + TEXT.invited, sub: TEXT.closed + ' \u00b7 ' + ago, action: '', dim: true };
+        if (row.k === 'invite' || row.k === 'room') {
+            var said = row.k === 'room' ? TEXT.opened : TEXT.invited;
+            if (!row.open) return { title: row.from + said, sub: TEXT.closed + ' \u00b7 ' + ago, action: '', dim: true };
             map = mapNameOf(row.map, rules);
             parts = [map, row.n + TEXT.of + row.of + TEXT.in, ago].filter(Boolean);
-            return { title: row.from + TEXT.invited, sub: parts.join(' \u00b7 '), action: TEXT.doJoin, dim: false };
+            return { title: row.from + said, sub: parts.join(' \u00b7 '), action: TEXT.doJoin, dim: false };
         }
+        if (row.k === 'msg') return { title: row.from + TEXT.messaged, sub: ago, action: TEXT.open, dim: false };
         if (row.k === 'over') return { title: TEXT.over, sub: [mapNameOf(row.map, rules), row.place ? TEXT.places[row.place - 1] : '', ago].filter(Boolean).join(' \u00b7 '), action: TEXT.view, dim: false };
         if (row.k === 'mention') return { title: row.from + TEXT.mentioned, sub: (row.text ? '\u201c' + row.text + '\u201d' : TEXT.inChat) + ' \u00b7 ' + ago, action: TEXT.open, dim: false };
         return { title: row.name + TEXT.joined, sub: TEXT.as + row.seat + ' \u00b7 ' + ago, action: TEXT.open, dim: false };
@@ -181,13 +189,14 @@
         function act(row) {                                // what the button of a row does: it counts as read (the list closes)
             var back = opener;
             close();
-            if (row.k === 'invite') { if (ctl.join) ctl.join(row, back); }
+            if (row.k === 'invite' || row.k === 'room') { if (ctl.join) ctl.join(row, back); }
+            else if (row.k === 'msg') { if (ctl.messages) ctl.messages(row.h, row.from); }
             else if (row.k === 'mention') { if (ctl.chat) ctl.chat(); }
             else if (row.k === 'over') { try { win.open(row.match ? '/match?id=' + encodeURIComponent(row.match) : '/matches', '_blank', 'noopener,noreferrer'); } catch (e) { /* the page that shows the match is another tab: a browser that refuses it shows none */ } }
             else if (ctl.show) ctl.show('room', 'push');
         }
         function item(row) {
-            var w = wordsOf(row, rules(), now(), Chat().agoOf), li = el('div', 'al-item' + (unreadAtOpen[row.id] ? ' unread' : '') + (w.dim ? ' dim' : '')), ic = el('span', 'al-ic'), tx = el('span', 'al-tx'), i = icon(row.k === 'invite' ? 'invite' : row.k === 'mention' ? 'chat' : row.k === 'over' ? 'flag' : 'user');
+            var w = wordsOf(row, rules(), now(), Chat().agoOf), li = el('div', 'al-item' + (unreadAtOpen[row.id] ? ' unread' : '') + (w.dim ? ' dim' : '')), ic = el('span', 'al-ic'), tx = el('span', 'al-tx'), i = icon(row.k === 'invite' ? 'invite' : row.k === 'mention' ? 'chat' : row.k === 'over' ? 'flag' : row.k === 'room' ? 'home' : row.k === 'msg' ? 'lock' : 'user');
             li.setAttribute('data-id', String(row.id)); li.setAttribute('data-k', row.k);
             if (i) ic.appendChild(i);
             tx.appendChild(el('span', 'al-t', w.title)); tx.appendChild(el('span', 'al-s', w.sub));
@@ -364,11 +373,16 @@
         function news(row) {                               // a new alert of the hub: where the person is looking decides how it is said
             if (row.k === 'join' || row.k === 'over') return;       // (the page that holds the room said it already: alert('join'); the page that came back from the match showed it: alert('over'))
             var chat = onChat(), d = dock();
-            if (row.k === 'invite') {
-                if (!set.on('invite')) return;
-                flash.start('\u25cf ' + shorten(row.from) + TEXT.invited);
+            if (row.k === 'invite' || row.k === 'room') {
+                var room = row.k === 'room';
+                if (!set.on(room ? 'room' : 'invite')) return;
+                flash.start('\u25cf ' + shorten(row.from) + (room ? TEXT.opened : TEXT.invited));
                 if (chat && d && d.block) { invitation(row); return; }
-                up(row.from + TEXT.toastInvite + (mapNameOf(row.map, rules()) || 'a room') + ' (' + row.n + TEXT.of + row.of + ').', { icon: 'invite', ms: INVITE_MS, action: { label: TEXT.doJoin, run: function () { if (ctl.join) ctl.join(row, null); } } });
+                up(row.from + (room ? TEXT.toastRoom : TEXT.toastInvite) + (mapNameOf(row.map, rules()) || (room ? 'a public room' : 'a room')) + ' (' + row.n + TEXT.of + row.of + ').', { icon: room ? 'home' : 'invite', ms: INVITE_MS, action: { label: TEXT.doJoin, run: function () { if (ctl.join) ctl.join(row, null); } } });
+            } else if (row.k === 'msg') {
+                if (ctl.seeing && ctl.seeing(row.h)) return;        // (the conversation is on the screen: the Messages part reads it, and there is nothing to tell)
+                flash.start('\u25cf ' + shorten(row.from) + TEXT.messaged);
+                up(row.from + TEXT.toastMessage, { icon: 'lock', ms: INVITE_MS, action: { label: TEXT.open, run: function () { if (ctl.messages) ctl.messages(row.h, row.from); } } });
             } else {
                 if (!set.on('mention')) return;
                 flash.start('\u25cf ' + shorten(row.from) + TEXT.mentioned);
@@ -379,7 +393,7 @@
             var d = dock(), state = { row: row }, entry;
             function draw(box) {
                 var cur = state.row, body = el('div', 'al-cl'), tx = el('div', 'al-ct'), who = el('div', 'gc-pl');
-                who.appendChild(el('bdi', 'gc-cmd', cur.from)); who.appendChild(el('span', 'gc-pw', ' invited you to their room.'));
+                who.appendChild(el('bdi', 'gc-cmd', cur.from)); who.appendChild(el('span', 'gc-pw', cur.k === 'room' ? TEXT.lineRoom : ' invited you to their room.'));
                 tx.appendChild(who);
                 tx.appendChild(el('div', 'gc-pl al-cs', cur.open ? [mapNameOf(cur.map, rules()), cur.n + TEXT.of + cur.of + TEXT.in].filter(Boolean).join(' \u00b7 ') : TEXT.closed));
                 body.appendChild(tx);
@@ -393,7 +407,7 @@
             Object.keys(invitations).forEach(function (id) {
                 var inv = invitations[id], cur = null, was = inv.state.row;
                 hub.forEach(function (r) { if (String(r.id) === id) cur = r; });
-                if (!cur || !cur.open) { inv.state.row = cur || { id: was.id, at: was.at, k: 'invite', from: was.from, n: was.n, of: was.of, open: false, code: '', map: was.map, u: false }; if (inv.entry && inv.entry.redraw) inv.entry.redraw(); delete invitations[id]; }
+                if (!cur || !cur.open) { inv.state.row = cur || { id: was.id, at: was.at, k: was.k, from: was.from, n: was.n, of: was.of, open: false, code: '', map: was.map, u: false }; if (inv.entry && inv.entry.redraw) inv.entry.redraw(); delete invitations[id]; }
             });
         }
         function tap(kind, m) {                            // the chat dock's news: who the visitor is, the list, a new alert

@@ -609,8 +609,8 @@
   {
    "id": "the_chat_uses_no_secret_of_the_hub",
    "file": "hub/chat.py",
-   "old": "        return pseudo.reference(self.secret, account)",
-   "new": "        return pseudo.reference(b\"x\" * 32, account)",
+   "old": "ref = self.ref_cache[account] = pseudo.reference(self.secret, account)",
+   "new": "ref = self.ref_cache[account] = pseudo.reference(b\"x\" * 32, account)",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLog tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_powers.TheReference"
   },
   {
