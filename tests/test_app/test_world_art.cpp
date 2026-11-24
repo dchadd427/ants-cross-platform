@@ -464,10 +464,18 @@ void test_scale(const assets::AssetArchive& arc, const world_art::Pack& pack) {
         look_at_treasure(rig);
         rig.look(320, 672, 1.5f);
         rig.shoot();
-        check(rig.renderer.world_art_textures() == 1 && rig.renderer.world_art_scale_now() == 3, "a zoomed frame of an output of 3x makes the 1x sheet's texture only");
+        check(rig.renderer.world_art_sheets() == 1u && rig.renderer.world_art_scale_now() == 3, "a zoomed frame of an output of 3x makes the 1x sheet's texture only");
         rig.look(320, 672, 1.0f);
         rig.shoot();
-        check(rig.renderer.world_art_textures() == 2, "...and the frame at the zoom 1 the 3x sheet's");
+        check(rig.renderer.world_art_sheets() == 5u, "...and the frame at the zoom 1 the 3x sheet's");
+    }
+    {
+        // zoomed out, the pass's target is larger than the canvas and SDL measures that as the output: the pass must still take the 1x sheet
+        zoomtest::PixelRig rig(arc, "TREASURE", kW, kH, 0, 1);
+        rig.renderer.set_world_art(&pack);
+        rig.look(320, 672, 0.5f);
+        rig.shoot();
+        check(rig.renderer.world_art_sheets() == 1u, "a frame zoomed out to 0.5 draws from the 1x sheet only");
     }
     {
         zoomtest::PixelRig rig(arc, "TREASURE", kW, kH, 0, 3);
@@ -475,7 +483,7 @@ void test_scale(const assets::AssetArchive& arc, const world_art::Pack& pack) {
         rig.renderer.set_world_art(&pack);
         rig.renderer.set_art_texture_limit(2100);                                // the 3x sheet (3072 wide) is too wide, the 2x one (2048) is not
         const zoomtest::Picture two = rig.shoot();
-        check(rig.renderer.world_art_textures() == 1 && !same_pixels(two, classic), "a device that takes no texture of 3072 gets the 2x sheet at the 3x output");
+        check(rig.renderer.world_art_sheets() == 2u && !same_pixels(two, classic), "a device that takes no texture of 3072 gets the 2x sheet at the 3x output");
         rig.renderer.set_world_art(nullptr);
         rig.renderer.set_world_art(&pack);
         rig.renderer.set_art_texture_limit(1000);                                // not even the 1x sheet (1024)

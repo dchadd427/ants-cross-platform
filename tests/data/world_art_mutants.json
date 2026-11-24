@@ -32,7 +32,7 @@
    "id": "pictures_not_sorted_is_fine",
    "file": "src/ants_app/world_art.cpp",
    "old": "            if (!pictures_.empty() && key <= last_key) sorted_ok = false;\n",
-   "new": "",
+   "new": "            if (false && !pictures_.empty() && key <= last_key) sorted_ok = false;\n",
    "build": "test_world_art",
    "test": "./build/tests/test_app/test_world_art",
    "expect": "[manifest]"
@@ -41,7 +41,7 @@
    "id": "the_sheet_size_is_not_looked_at",
    "file": "src/ants_app/world_art.cpp",
    "old": "if (!png || be32(16) != sheet_w_[k] || be32(20) != sheet_h_[k] || head[24] != 8 || head[25] != 6) {",
-   "new": "if (!png || head[24] != 8 || head[25] != 6) {",
+   "new": "if (!png || be32(16) < 0 || be32(20) < 0 || head[24] != 8 || head[25] != 6) {",
    "build": "test_world_art",
    "test": "./build/tests/test_app/test_world_art",
    "expect": "[manifest]"
@@ -104,7 +104,7 @@
    "id": "every_cell_shows_the_plain_picture",
    "file": "src/ants_app/renderer_terrain.cpp",
    "old": "world_variant_ = at < ground_variant_.size() ? ground_variant_[at] : uint8_t{0};",
-   "new": "world_variant_ = 0;",
+   "new": "world_variant_ = at > ground_variant_.size() * 2 ? ground_variant_[at] : uint8_t{0};",
    "build": "test_world_art",
    "test": "./build/tests/test_app/test_world_art",
    "expect": "[draw]"
@@ -116,13 +116,13 @@
    "new": "renderer_->set_world_art(world_art_.loaded() ? &world_art_ : nullptr);",
    "build": "test_game_menu",
    "test": "./build/tests/test_app/test_game_menu",
-   "expect": "test_game_menu"
+   "expect": "the world's new pictures too"
   },
   {
    "id": "beside_another_kind_is_not_damp",
    "file": "src/ants_app/world_art.cpp",
    "old": "if (dist[at(x, y)] == 1) cls = u < k65 ? 2 : 1;",
-   "new": "if (dist[at(x, y)] == 1) cls = 0;",
+   "new": "if (dist[at(x, y)] == 1) cls = u > k65 + 70000 ? 2 : 0;",
    "build": "test_world_art",
    "test": "./build/tests/test_app/test_world_art",
    "expect": "[variants]"
@@ -140,7 +140,7 @@
    "id": "objects_do_not_scuff_the_ground",
    "file": "src/ants_app/world_art.cpp",
    "old": "else if (near_object && u < k50) cls = 1;",
-   "new": "else if (false) cls = 1;",
+   "new": "else if (near_object && u > k50 + 70000) cls = 1;",
    "build": "test_world_art",
    "test": "./build/tests/test_app/test_world_art",
    "expect": "[variants]"

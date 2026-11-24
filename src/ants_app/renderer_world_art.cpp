@@ -38,8 +38,14 @@ size_t Renderer::world_art_textures() const noexcept {
     return n;
 }
 
+uint32_t Renderer::world_art_sheets() const noexcept {
+    uint32_t mask = 0;
+    for (size_t k = 0; k < world_art_textures_.size(); ++k) mask |= world_art_textures_[k] != nullptr ? (1u << k) : 0u;
+    return mask;
+}
+
 // A zoomed pass draws at the world's own pixels (one texel for each, scaled afterwards: begin_world_target), so it uses the 1x sheet; the zoom 1 picture is drawn straight into the output, at the scale of
-// the output (the same rule as the HUD art's sheets)
+// the output (the same rule as the HUD art's sheets). (Inside the pass SDL measures the target as the output, which can be larger than the canvas when the world is zoomed out: it must not choose.)
 int32_t Renderer::world_art_scale_now() const {
     return in_world_target_ ? 1 : art_scale_for_output(nullptr);
 }

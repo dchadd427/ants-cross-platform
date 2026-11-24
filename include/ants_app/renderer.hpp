@@ -533,6 +533,7 @@ public:
     /// (for the tests) the scale of the sheet that a picture would be drawn from now, how many sheets are textures (0 until a picture is drawn), and the picture that the cell shows (0 for a cell that is not plain ground)
     int32_t world_art_scale_now() const;
     size_t world_art_textures() const noexcept;
+    uint32_t world_art_sheets() const noexcept;       // which sheets are textures: bit 0 the 1x, bit 1 the 2x, bit 2 the 3x
     uint8_t ground_variant_at(int32_t col, int32_t row);
     /// (for the tests) pretends that the device takes no texture with a side above `limit` pixels, as a small phone's does (0: the device's own limit); it applies to the HUD art and the world art alike
     void set_art_texture_limit(int32_t limit) noexcept { art_texture_limit_ = limit; }
