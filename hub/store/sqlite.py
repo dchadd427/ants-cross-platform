@@ -7,12 +7,13 @@ room: `make_room` deletes the oldest lines, and the pages they free are reused b
 """
 import contextlib
 import functools
+import json
 import os
 import re
 import sqlite3
 import time
 
-from .base import AI_DIGEST, AI_KEY_ID, AI_SCOPES, ALERT_BODY_MAX, ALERT_KINDS, IMAGE_NAME, IMAGE_TYPES, MAX_LINES, NOIMAGES_MAX, PICKS, PICTURE_DAYS, PICTURE_NAME, PROFILE_DAYS, PUBLIC, REFERENCE, SHOW_BLOCKED, SHOW_OFF, SHOW_ON, Action, AiKey, Alert, Image, ImageGone, Line, Profile, StoreBase, StoreError, Usage, check_note
+from .base import AI_DIGEST, AI_KEY_ID, AI_SCOPES, ALERT_BODY_MAX, ALERT_KINDS, IMAGE_NAME, IMAGE_TYPES, MAX_LINES, NOIMAGES_MAX, PICKS, PICTURE_DAYS, PICTURE_NAME, PROFILE_DAYS, PUBLIC, REFERENCE, REPORT_REASONS, SHOW_BLOCKED, SHOW_OFF, SHOW_ON, Action, AiKey, Alert, Image, ImageGone, Line, Message, Profile, Report, StoreBase, StoreError, Usage, check_note
 from ..pseudo import reference
 
 SCHEMA = 4
@@ -136,6 +137,10 @@ class Store(StoreBase):
         # them, an older hub never looks at them, and rolling the hub back needs no step; docs/HUB_PEOPLE.md)
         self.alert_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'alerts'").fetchone() is not None
         self.ignore_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ignores'").fetchone() is not None
+        # (the follows, the private messages and the reports of them are additive tables made the same way, by the first follow and the first message; docs/HUB_PEOPLE.md, docs/HUB_MESSAGES.md)
+        self.follow_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'follows'").fetchone() is not None
+        self.dm_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'dms'").fetchone() is not None
+        self.report_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'reports'").fetchone() is not None
         # (the keys of a person's AI and the log of their calls are additive tables as well, made when the first key is made, so a hub that never has a key holds nothing of them: an older hub never looks at
         # them, and rolling the hub back needs no step; docs/MAP_AI.md)
         self.ai_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ai_keys'").fetchone() is not None
@@ -250,6 +255,10 @@ class Store(StoreBase):
             self.db.execute("DELETE FROM modlog WHERE id IN (SELECT id FROM modlog ORDER BY id DESC LIMIT -1 OFFSET ?)", (self.max_modlog,))
             if self.has_alerts():
                 self.cut_alerts(now)
+            if self.has_dms():
+                self.db.execute("DELETE FROM dms WHERE at < ?", (now - int(self.dm_days * 86400),))
+            if self.has_reports():
+                self.db.execute("DELETE FROM reports WHERE (closed > 0 AND closed < ?) OR (closed = 0 AND at < ?)", (now - int(self.report_closed_days * 86400), now - int(self.report_open_days * 86400)))
             if self.has_ai():
                 self.db.execute("DELETE FROM ai_keys WHERE ends < ? OR (revoked > 0 AND revoked < ?)", (now - int(self.ai_ended_days * 86400), now - int(self.ai_ended_days * 86400)))
                 self.db.execute("DELETE FROM ai_log WHERE at < ?", (now - int(self.ai_log_days * 86400),))
@@ -382,6 +391,13 @@ class Store(StoreBase):
                 self.db.execute("DELETE FROM alerts WHERE ref = ? OR from_ref = ?", (self.ref(account), self.ref(account)))      # (its own list, and every alert of the others that is from it: an invitation or a mention carries its name)
             if self.has_ignores():
                 self.db.execute("DELETE FROM ignores WHERE ref = ? OR other = ?", (self.ref(account), self.ref(account)))        # (the list of the people that it ignores, and its place on the lists of the others)
+            if self.has_follows():
+                self.db.execute("DELETE FROM follows WHERE ref = ? OR other = ?", (self.ref(account), self.ref(account)))        # (the people that it follows, and every follow of it)
+            if self.has_dms():
+                self.db.execute("DELETE FROM dms WHERE frm = ? OR tor = ?", (self.ref(account), self.ref(account)))             # (its private messages, for the other people of them as well)
+            if self.has_reports():
+                self.db.execute("UPDATE reports SET reporter = '', reporter_name = '' WHERE reporter = ?", (self.ref(account),))      # (a report stays, as a ban does: it is what keeps the others safe; the reporter is not in it any more, and the person that it is of keeps no name)
+                self.db.execute("UPDATE reports SET reported_name = '' WHERE reported = ?", (self.ref(account),))
             self.drop_ai(self.ref(account))                          # (the keys of its AI go with it, and the log of their calls)
         try:
             self.checkpoint()
@@ -417,15 +433,23 @@ class Store(StoreBase):
     def drop_orphan_alerts(self):
         self.alerts_dropped += self.db.execute("DELETE FROM alerts WHERE line IS NOT NULL AND line NOT IN (SELECT id FROM lines)").rowcount
 
-    def add_alert(self, ref, kind, body, from_ref="", line=None, keep=30, days=7, unread=1):
+    def add_alert(self, ref, kind, body, from_ref="", line=None, keep=30, days=7, unread=1, replace=False):
         if kind not in ALERT_KINDS or not isinstance(body, str) or len(body.encode("utf-8")) > ALERT_BODY_MAX:
             raise ValueError("not an alert")
         self.ensure_alerts()
         now = int(self.clock())
         with self.transaction():
+            if replace and from_ref:
+                self.db.execute("DELETE FROM alerts WHERE ref = ? AND kind = ? AND from_ref = ?", (ref, kind, from_ref))
             cur = self.db.execute("INSERT INTO alerts (ref, at, kind, body, from_ref, line, unread) VALUES (?, ?, ?, ?, ?, ?, ?)", (ref, now, kind, body, from_ref, line, 1 if unread else 0))
             self.db.execute("DELETE FROM alerts WHERE ref = ? AND (at < ? OR id NOT IN (SELECT id FROM alerts WHERE ref = ? ORDER BY id DESC LIMIT ?))", (ref, now - int(days * 86400), ref, int(keep)))
         return Alert(cur.lastrowid, now, kind, body, line, 1 if unread else 0)
+
+    def drop_alerts_from(self, ref, from_ref, kind):
+        if not self.has_alerts() or not from_ref:
+            return 0
+        with self.transaction():
+            return self.db.execute("DELETE FROM alerts WHERE ref = ? AND kind = ? AND from_ref = ?", (ref, kind, from_ref)).rowcount
 
     def alerts(self, ref, keep=30, days=7):
         if not self.has_alerts():
@@ -506,6 +530,191 @@ class Store(StoreBase):
             return False
         with self.transaction():
             return self.db.execute("DELETE FROM ignores WHERE ref = ? AND other = ?", (ref, other)).rowcount > 0
+
+    # ---- the people that an account follows (hub/follows.py) ------------------------------------------------------------------------------------
+
+    def has_follows(self):
+        if not self.follow_tables:
+            self.follow_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'follows'").fetchone() is not None
+        return self.follow_tables
+
+    def ensure_follows(self):
+        if self.has_follows():
+            return
+        self.db.executescript("""
+            BEGIN;
+            CREATE TABLE IF NOT EXISTS follows (ref TEXT NOT NULL, other TEXT NOT NULL, name TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (ref, other));
+            CREATE INDEX IF NOT EXISTS follows_other ON follows (other);
+            COMMIT;""")
+        self.follow_tables = True
+
+    def follows(self, ref):
+        if not self.has_follows():
+            return []
+        return [(other, name) for other, name in self.db.execute("SELECT other, name FROM follows WHERE ref = ? ORDER BY at, rowid", (ref,)).fetchall()]
+
+    def follow_add(self, ref, other, name, most=100):
+        if not (isinstance(ref, str) and isinstance(other, str) and isinstance(name, str)):
+            raise ValueError("not a follow")
+        self.ensure_follows()
+        with self.transaction():
+            if self.db.execute("SELECT 1 FROM follows WHERE ref = ? AND other = ?", (ref, other)).fetchone() is not None:
+                self.db.execute("UPDATE follows SET name = ? WHERE ref = ? AND other = ?", (name, ref, other))
+                return True
+            if self.db.execute("SELECT COUNT(*) FROM follows WHERE ref = ?", (ref,)).fetchone()[0] >= int(most):
+                return False
+            self.db.execute("INSERT INTO follows (ref, other, name, at) VALUES (?, ?, ?, ?)", (ref, other, name, int(self.clock())))
+        return True
+
+    def follow_remove(self, ref, other):
+        if not self.has_follows():
+            return False
+        with self.transaction():
+            return self.db.execute("DELETE FROM follows WHERE ref = ? AND other = ?", (ref, other)).rowcount > 0
+
+    def followers(self, other):
+        if not self.has_follows():
+            return []
+        return [r for r, in self.db.execute("SELECT ref FROM follows WHERE other = ? ORDER BY at, rowid", (other,)).fetchall()]
+
+    # ---- private messages and the reports of them (hub/messages.py) -----------------------------------------------------------------------------------
+
+    def has_dms(self):
+        if not self.dm_tables:
+            self.dm_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'dms'").fetchone() is not None
+        return self.dm_tables
+
+    def ensure_dms(self):
+        if self.has_dms():
+            return
+        self.db.executescript("""
+            BEGIN;
+            CREATE TABLE IF NOT EXISTS dms (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, frm TEXT NOT NULL, tor TEXT NOT NULL, frm_name TEXT NOT NULL, to_name TEXT NOT NULL, text TEXT NOT NULL,
+                                            hide INTEGER NOT NULL DEFAULT 0, gone_frm INTEGER NOT NULL DEFAULT 0, gone_to INTEGER NOT NULL DEFAULT 0, unread INTEGER NOT NULL DEFAULT 1);
+            CREATE INDEX IF NOT EXISTS dms_frm ON dms (frm, tor, id);
+            CREATE INDEX IF NOT EXISTS dms_to ON dms (tor, frm, id);
+            COMMIT;""")
+        self.dm_tables = True
+
+    def has_reports(self):
+        if not self.report_tables:
+            self.report_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'reports'").fetchone() is not None
+        return self.report_tables
+
+    def ensure_reports(self):
+        if self.has_reports():
+            return
+        self.db.executescript("""
+            BEGIN;
+            CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, reporter TEXT NOT NULL, reported TEXT NOT NULL, reporter_name TEXT NOT NULL, reported_name TEXT NOT NULL,
+                                                why TEXT NOT NULL, msg INTEGER NOT NULL, copy TEXT NOT NULL, closed INTEGER NOT NULL DEFAULT 0);
+            CREATE INDEX IF NOT EXISTS reports_reporter ON reports (reporter, msg);
+            COMMIT;""")
+        self.report_tables = True
+
+    COLUMNS_DM = "id, at, frm, tor, text, frm_name, to_name"
+    VISIBLE_DM = "((frm = :r AND tor = :o AND gone_frm = 0) OR (frm = :o AND tor = :r AND gone_to = 0 AND hide = 0))"       # (what `r` sees of its conversation with `o`: its own messages, and the ones to it that it did not delete and that were not hidden from it)
+
+    def dm_add(self, frm, to, frm_name, to_name, text, hide=False, keep=300):
+        if not (isinstance(frm, str) and isinstance(to, str) and isinstance(frm_name, str) and isinstance(to_name, str) and isinstance(text, str)) or frm == to:
+            raise ValueError("not a message")
+        self.ensure_dms()
+        now = int(self.clock())
+        with self.transaction():
+            cur = self.db.execute("INSERT INTO dms (at, frm, tor, frm_name, to_name, text, hide) VALUES (?, ?, ?, ?, ?, ?, ?)", (now, frm, to, frm_name, to_name, text, 1 if hide else 0))
+            self.db.execute("DELETE FROM dms WHERE id IN (SELECT id FROM dms WHERE (frm = ? AND tor = ?) OR (frm = ? AND tor = ?) ORDER BY id DESC LIMIT -1 OFFSET ?)", (frm, to, to, frm, int(keep)))
+        return Message(cur.lastrowid, now, frm, to, text, frm_name, to_name)
+
+    def dm_thread(self, ref, other, limit=100):
+        if not self.has_dms():
+            return []
+        rows = self.db.execute("SELECT %s FROM dms WHERE at >= :cut AND %s ORDER BY id DESC LIMIT :n" % (self.COLUMNS_DM, self.VISIBLE_DM),
+                               {"r": ref, "o": other, "cut": int(self.clock()) - int(self.dm_days * 86400), "n": int(limit)}).fetchall()
+        return [Message(*r) for r in reversed(rows)]
+
+    def dm_conversations(self, ref, limit=50):
+        if not self.has_dms():
+            return []
+        found = self.db.execute("SELECT CASE WHEN frm = :r THEN tor ELSE frm END AS other, MAX(id), SUM(CASE WHEN tor = :r AND unread = 1 THEN 1 ELSE 0 END) FROM dms "
+                                "WHERE at >= :cut AND ((frm = :r AND gone_frm = 0) OR (tor = :r AND gone_to = 0 AND hide = 0)) GROUP BY other ORDER BY MAX(id) DESC LIMIT :n",
+                                {"r": ref, "cut": int(self.clock()) - int(self.dm_days * 86400), "n": int(limit)}).fetchall()
+        out = []
+        for other, last, unread in found:
+            row = self.db.execute("SELECT %s FROM dms WHERE id = ?" % self.COLUMNS_DM, (last,)).fetchone()
+            out.append((other, Message(*row), unread or 0))
+        return out
+
+    def dm_unread(self, ref, other):
+        if not self.has_dms():
+            return 0
+        return self.db.execute("SELECT COUNT(*) FROM dms WHERE tor = ? AND frm = ? AND unread = 1 AND gone_to = 0 AND hide = 0", (ref, other)).fetchone()[0]
+
+    def dm_read(self, ref, other):
+        if not self.has_dms():
+            return 0
+        with self.transaction():
+            return self.db.execute("UPDATE dms SET unread = 0 WHERE tor = ? AND frm = ? AND unread = 1 AND hide = 0", (ref, other)).rowcount
+
+    def dm_delete(self, ref, other):
+        if not self.has_dms():
+            return 0
+        with self.transaction():
+            mine = self.db.execute("UPDATE dms SET gone_frm = 1 WHERE frm = ? AND tor = ? AND gone_frm = 0", (ref, other)).rowcount
+            seen = self.db.execute("UPDATE dms SET gone_to = 1 WHERE tor = ? AND frm = ? AND gone_to = 0 AND hide = 0", (ref, other)).rowcount
+            self.db.execute("UPDATE dms SET gone_to = 1 WHERE tor = ? AND frm = ? AND hide = 1", (ref, other))           # (what was hidden from it was never its own to see)
+            self.db.execute("DELETE FROM dms WHERE gone_frm = 1 AND gone_to = 1 AND ((frm = ? AND tor = ?) OR (frm = ? AND tor = ?))", (ref, other, other, ref))
+        self.unsettled = True                                   # (what went is in the log file until the hub's clock cuts it)
+        return mine + seen
+
+    def dm_get(self, ref, other, message_id):
+        if not self.has_dms():
+            return None
+        row = self.db.execute("SELECT %s FROM dms WHERE id = ? AND frm = ? AND tor = ? AND gone_to = 0 AND hide = 0" % self.COLUMNS_DM, (int(message_id), other, ref)).fetchone()
+        return Message(*row) if row else None
+
+    def dm_partners(self, ref):
+        if not self.has_dms():
+            return []
+        return [o for o, in self.db.execute("SELECT DISTINCT CASE WHEN frm = :r THEN tor ELSE frm END FROM dms WHERE (frm = :r AND gone_frm = 0) OR (tor = :r AND gone_to = 0 AND hide = 0)", {"r": ref}).fetchall()]
+
+    def dm_usage(self):
+        rows = nbytes = reports = 0
+        if self.has_dms():
+            rows, nbytes = self.db.execute("SELECT COUNT(*), COALESCE(SUM(LENGTH(text) + LENGTH(frm_name) + LENGTH(to_name) + 96), 0) FROM dms").fetchone()
+        if self.has_reports():
+            reports, more = self.db.execute("SELECT COUNT(*), COALESCE(SUM(LENGTH(copy) + LENGTH(reporter_name) + LENGTH(reported_name) + 96), 0) FROM reports").fetchone()
+            nbytes += more
+        return rows, reports, nbytes
+
+    def report_add(self, reporter, reported, reporter_name, reported_name, why, message_id, context=5):
+        if why not in REPORT_REASONS or not (isinstance(reporter, str) and isinstance(reported, str) and isinstance(reporter_name, str) and isinstance(reported_name, str)):
+            raise ValueError("not a report")
+        self.ensure_reports()
+        now = int(self.clock())
+        with self.transaction():
+            if self.dm_get(reporter, reported, message_id) is None:
+                return None
+            old = self.db.execute("SELECT id FROM reports WHERE reporter = ? AND msg = ?", (reporter, int(message_id))).fetchone()
+            if old is not None:
+                return old[0]
+            rows = self.db.execute("SELECT at, frm, text FROM dms WHERE id <= :m AND ((frm = :a AND tor = :b) OR (frm = :b AND tor = :a AND hide = 0)) ORDER BY id DESC LIMIT :n",
+                                   {"m": int(message_id), "a": reporter, "b": reported, "n": int(context) + 1}).fetchall()
+            copy = json.dumps([[at, "r" if frm == reporter else "d", text] for at, frm, text in reversed(rows)], ensure_ascii=False, separators=(",", ":"))
+            cur = self.db.execute("INSERT INTO reports (at, reporter, reported, reporter_name, reported_name, why, msg, copy) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                                  (now, reporter, reported, reporter_name, reported_name, why, int(message_id), copy))
+        return cur.lastrowid
+
+    def reports(self, closed=False):
+        if not self.has_reports():
+            return []
+        rows = self.db.execute("SELECT id, at, reporter, reported, reporter_name, reported_name, why, closed, copy FROM reports %s ORDER BY id DESC" % ("" if closed else "WHERE closed = 0")).fetchall()
+        return [Report(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], [tuple(m) for m in json.loads(r[8])]) for r in rows]
+
+    def report_close(self, report_id):
+        if not self.has_reports():
+            return False
+        with self.transaction():
+            return self.db.execute("UPDATE reports SET closed = ? WHERE id = ? AND closed = 0", (max(1, int(self.clock())), int(report_id))).rowcount > 0
 
     # ---- profiles -------------------------------------------------------------------------------------------------------------------------
 

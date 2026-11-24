@@ -8,7 +8,7 @@ A line that starts with a single `/` is a command, and **a command is never a li
 
 | Who | Commands |
 |---|---|
-| everybody who is logged in | `/help`, `/invite NAME`, `/ignore NAME`, `/unignore NAME` |
+| everybody who is logged in | `/help`, `/invite NAME`, `/msg NAME`, `/follow NAME`, `/unfollow NAME`, `/ignore NAME`, `/unignore NAME` |
 | a moderator (the role comes from Discord: [Roles](HUB.md#roles)), and the above | `/mute NAME MINUTES`, `/unmute NAME`, `/del NUMBER`, `/kick NAME`, `/mutes` |
 | an administrator (the role, or the operator's account), and all the above | `/ban NAME [purge]`, `/unban NAME`, `/bans`, `/nopic NAME`, `/pic NAME`, `/noimages NAME`, `/images NAME`, `/bots ...` |
 | a reader | none: it cannot write, and it is sent no list |
@@ -30,6 +30,8 @@ The moderators' words and `/nopic` and `/pic` are described in [Moderation](#mod
 | `help` | `list` | the page opens its list |
 | `invite` | `ok`, `usage`, `nobody`, `ambiguous`, `self`, `noroom`, `full`, `busy`, `person`, `total` | the answers of an invitation to a room, with `to` (the person's shown name), `n` and `of`, `wait`: [HUB_PEOPLE.md](HUB_PEOPLE.md#invitations) says every one |
 | `ignore`, `unignore` | `ok`, `usage`, `nobody`, `ambiguous`, `self`, `staff`, `full`, `not` | `ok` has `n`, how many people the account ignores now |
+| `follow`, `unfollow` | `ok`, `usage`, `nobody`, `ambiguous`, `self`, `full`, `not` | `ok` has `to` (the person's shown name) and, for `follow`, `n`, how many people the account follows now: [HUB_PEOPLE.md](HUB_PEOPLE.md#follows) says every one |
+| `msg` | `open`, `usage`, `nobody`, `ambiguous`, `self` | `open` has `h`, the handle that the page opens the conversation by, and `to`: [HUB_MESSAGES.md](HUB_MESSAGES.md) |
 | `bots` | `started` | `asked`, `started`, `queued`, `at_once` (when known), `every_s` (when the batch has a spacing), `held` (`cap`, `places`, `people` or `busy`: why the first start waits, when it does) |
 | `bots` | `status` | `at_once`, `running`, `waiting`, `busy` (percent), `queues`: at most five, the oldest first, each `total`, `remaining`, `finished`, `running`, `kept`, `every_s`, `next_in` (seconds, -1 for none), `held`, `by` (the name of who started it, plain text of 40 characters at most) |
 | `bots` | `stopped` | `stopped` (matches ended), `dropped` (starts cancelled) |
@@ -72,7 +74,7 @@ The moderators' log ([The moderators' log](HUB.md#the-moderators-log)) gets one 
 
 ### `/ignore` and `/unignore`
 
-`/ignore NAME` hides the lines of a person from the account, in every one of its tabs: they are not sent live and are left out of the history that the account is sent when it connects. NAME is the rest of the line, read in any letter case against the **name that is shown** (never a username) of the people who have a socket open or whose line is in the chat's memory. One person: ignored (`ok`, with `n`); nobody: `nobody`; two or more who show that name: `ambiguous`; the account itself: `self`; a person who holds a role (a moderator, an administrator, the operator's account): `staff`. The list holds 50 people (`full`); asking again for one that is on it changes nothing. `/unignore NAME` takes a person off by the name that was shown when they were put on (`ok`, or `not`). The hub's own lines and the lines of a person who holds a role now, or held one when they wrote the line, are never left out, a deletion still reaches everybody, and **the person who is ignored is told nothing and sees no change**.
+`/ignore NAME` hides the lines of a person from the account, in every one of its tabs: they are not sent live and are left out of the history that the account is sent when it connects. It is also **Block**: the person's invitations and mentions are dropped and their **private messages** are never shown to the account ([HUB_MESSAGES.md](HUB_MESSAGES.md#a-blocked-sender)). NAME is the rest of the line, read in any letter case against the **name that is shown** (never a username) of the people who have a socket open or whose line is in the chat's memory; the words `row:N`, `#N` and `h:HANDLE` of [`/follow`](HUB_PEOPLE.md#follows) name a person too (the sheet and the Messages panel use them), and `/unignore h:HANDLE` lifts a block by the handle. One person: ignored (`ok`, with `n`); nobody: `nobody`; two or more who show that name: `ambiguous`; the account itself: `self`; a person who holds a role (a moderator, an administrator, the operator's account): `staff`. The list holds 50 people (`full`); asking again for one that is on it changes nothing. `/unignore NAME` takes a person off by the name that was shown when they were put on (`ok`, or `not`). The hub's own lines and the lines of a person who holds a role now, or held one when they wrote the line, are never left out, a deletion still reaches everybody, and **the person who is ignored is told nothing and sees no change**.
 
 The list is **kept in the store**, in the table `ignores` (made by the first `/ignore`): the account's reference, the reference of the person and the name that was shown, never an id. The hub reads every list when it starts, so a restart does not give an ignored person back the line, the invitation and the mention that the account had shut out ([HUB_PEOPLE.md](HUB_PEOPLE.md)). Forget me ([Login](HUB.md#login)) drops the account's list and its place on the lists of the others.
 
@@ -84,7 +86,7 @@ All per account, across all its tabs (the hub's own key of the account, never th
 |---|---|
 | `/bots COUNT ...` (any line that begins like a start, one that cannot be read too) | a burst of 3, then one every 10 seconds |
 | `/bots status`, `/bots stop` | a burst of 5, then one every 2 seconds |
-| `/help`, `/ignore`, `/unignore` and every word that is no command of the account's own | a burst of 10, then one every 2 seconds |
+| `/help`, `/msg`, `/follow`, `/unfollow`, `/ignore`, `/unignore` and every word that is no command of the account's own | a burst of 10, then one every 2 seconds |
 | the moderators' words | no limit of their own: the frame budget of the socket, and the share of the commands that wait for a lookup ([Limits](HUB.md#limits)) |
 | a call to the game server | 3 seconds to connect, 10 in all, 128 KiB of answer; one for an account at a time and two for the hub; the list of maps is kept 5 minutes (2,000 entries at most) |
 | the people that an account ignores | 50 |

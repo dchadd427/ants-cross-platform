@@ -337,6 +337,8 @@ class DiscordLogin(session.Sessions):
         self.hub.end_logins(account=who.account_id)
         self.hub.chat.commands.forget(who.account_id)               # (the list of the people that it ignores, and its place on the lists of the others)
         self.hub.chat.people.forget(who.account_id)                 # (its invitations, and the alerts of the others that are from it)
+        self.hub.chat.follows.forget(who.account_id)                # (the people that it followed and every follow of it are out of the store: the lists that are open are sent again)
+        self.hub.chat.messages.forget(who.account_id)               # (its private messages, for the others of them as well)
         self.sync_pictures()
         self.hub.chat.drop_lines(lines)
         self.log.event("forget", tag=self.log.tag(address), lines=len(lines))

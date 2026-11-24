@@ -2238,6 +2238,31 @@ process.env.TZ = 'UTC';       // (the local day and hour of these checks; one of
     t.clock.advance(60000); t.live(W({ login: true, you: ME }));
     const fresh2 = []; t.dock.tap((kind, m) => fresh2.push([kind, m && m.t]));
     same('and not after a new welcome that came with none: the list of the link before is not the account\'s now', fresh2, [['live', 'welcome']]);
+    // the people that the account follows and its private messages: the dock hands the frames on and keeps the last two lists for a part that comes later
+    const fm = rig({}), sawF = [];
+    fm.dock.tap((kind, m) => sawF.push([kind, m && m.t]));
+    fm.live(W({ login: true, you: ME }));
+    for (const f of [{ t: 'follows', rows: [] }, { t: 'msgs', n: 0, rows: [] }, { t: 'msg', h: 'a1b2c3d4e5f6' }, { t: 'thread', h: 'a1b2c3d4e5f6', rows: [] }, { t: 'dmx', h: 'a1b2c3d4e5f6', why: 'rate' }, { t: 'dmreported', h: 'a1b2c3d4e5f6', id: 3 }]) fm.s().recv(f);
+    same('a follows list, a list of conversations, a message, a thread, a refusal and a thanks are handed on, whole', sawF.map((x) => x.join(':')), ['live:welcome', 'follows:follows', 'msgs:msgs', 'msg:msg', 'thread:thread', 'dmx:dmx', 'dmreported:dmreported']);
+    const lateF = []; fm.dock.tap((kind, m) => lateF.push([kind, m && m.t]));
+    same('a part that comes later hears the welcome and the last follows and conversations (not a message that came and went)', lateF, [['live', 'welcome'], ['follows', 'follows'], ['msgs', 'msgs']]);
+    fm.s().fail(); fm.clock.advance(60000); fm.live(W({ login: true, you: ME }));
+    const freshF = []; fm.dock.tap((kind, m) => freshF.push([kind, m && m.t]));
+    same('after a new welcome the lists of the link before are not replayed: they are not the account\'s now', freshF, [['live', 'welcome']]);
+    const typed = rig({}); typed.live(W({ login: true, you: ME }));
+    const opens = []; typed.dock.tap((kind, m) => { if (kind === 'open') opens.push([m.h, m.to]); });
+    typed.dock.say('/msg juniper'); typed.s().recv({ t: 'reply', c: 'msg', r: 'open', h: 'a1b2c3d4e5f6', to: 'juniper' });
+    same('a typed /msg that the hub opens is told to the parts as `open`, and it is no private line of the chat', [opens, typed.rows().filter((x) => cls(x).indexOf('gc-private') !== -1).length], [[['a1b2c3d4e5f6', 'juniper']], 0]);
+    const viaSheet = rig({}); viaSheet.live(W({ login: true, you: ME }));
+    const sheetGot = [], opens2 = []; viaSheet.dock.tap((kind, m) => { if (kind === 'open') opens2.push(m.h); });
+    viaSheet.dock.call('/msg row:5', (code, m) => sheetGot.push([code, m && m.r, m && m.h]));
+    viaSheet.s().recv({ t: 'reply', c: 'msg', r: 'open', h: 'a1b2c3d4e5f6', to: 'juniper' });
+    same('...and the sheet\'s own /msg is answered to the sheet alone, the parts are told nothing', [sheetGot, opens2], [[['reply', 'open', 'a1b2c3d4e5f6']], []]);
+    const words = [['follow', 'ok'], ['unfollow', 'ok'], ['ignore', 'ok'], ['unignore', 'ok'], ['msg', 'nobody']];
+    const answers = words.map(([c, r]) => { const w = rig({}); w.live(W({ login: true, you: ME })); const g = []; w.dock.call('/' + c + ' row:5', (code, m) => g.push([code, m && m.c])); w.s().recv({ t: 'reply', c, r }); return g[0]; });
+    same('a follow, an unfollow, an ignore, an unignore and a message that the sheet sent get the hub\'s reply whole', answers, words.map(([c]) => ['reply', c]));
+    const own = rig({}); own.live(W({ login: true, you: ME })); own.s().recv({ t: 'line', id: 41, at: 5, who: 'pebble', text: 'hi', k: 'k-pebble' });
+    same('the copy of a line says the key of its author, for the sheet to tell a person who is followed', [own.dock.line(41).k, own.dock.line(41).who], ['k-pebble', 'pebble']);
     // an invitation through the dock: any person who is logged in, one answer
     const c = rig({}); c.live(W({ login: true, you: ME }));
     const got = [];

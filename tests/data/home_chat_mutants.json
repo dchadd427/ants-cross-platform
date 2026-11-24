@@ -1327,8 +1327,8 @@
   {
    "id": "dock_mounted_free_while_going",
    "file": "web/home/home.js",
-   "old": "inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); } } catch (e) { dock = null; } ",
-   "new": "dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); } } catch (e) { dock = null; } ",
+   "old": "inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); wantMessages(); } } catch (e) { dock = null; }",
+   "new": "dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); wantMessages(); } } catch (e) { dock = null; }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -1425,8 +1425,8 @@
   {
    "id": "dock_mount_error_reaches_the_page",
    "file": "web/home/home.js",
-   "old": "try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; }, load: lazy }); inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); } } catch (e) { dock = null; }",
-   "new": "if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; }, load: lazy }); inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); }",
+   "old": "try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; }, load: lazy }); inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); wantMessages(); } } catch (e) { dock = null; }",
+   "new": "if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; }, load: lazy }); inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); wantMessages(); }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -3868,7 +3868,7 @@
   {
    "id": "the_answer_of_an_invitation_is_a_plain_failure",
    "file": "web/home/chat.js",
-   "old": "if (entry && entry.done && m.c === 'invite') entry.done('reply', m);",
+   "old": "if (entry && entry.done && SHEET.indexOf(m.c) !== -1) entry.done('reply', m);",
    "new": "if (entry && entry.done && false) entry.done('reply', m);",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -3913,6 +3913,48 @@
    "old": "function roster() { try { return directoryFn ? directoryFn() : null; } catch (e) { return null; } }",
    "new": "function roster() { return directoryFn ? directoryFn() : null; }",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_sheets_commands_are_answered_to_the_sheet",
+   "file": "web/home/chat.js",
+   "old": "var SHEET = ['invite', 'follow', 'unfollow', 'msg', 'ignore', 'unignore'];",
+   "new": "var SHEET = ['invite'];",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_part_that_comes_later_has_the_follows",
+   "file": "web/home/chat.js",
+   "old": "if (lastFollows) tell1(fn, 'follows', lastFollows);",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_part_that_comes_later_has_the_conversations",
+   "file": "web/home/chat.js",
+   "old": "if (lastMsgs) tell1(fn, 'msgs', lastMsgs);",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_typed_msg_opens_the_conversation",
+   "file": "web/home/chat.js",
+   "old": "else if (m.c === 'msg' && m.r === 'open') tapped('open', m);",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_line_says_the_key_of_its_author",
+   "file": "web/home/chat.js",
+   "old": "own: !!e.own, k: e.k || '' }; }",
+   "new": "own: !!e.own }; }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_new_welcome_forgets_the_follows",
+   "file": "web/home/chat.js",
+   "old": "hello = null; lastAlerts = null; lastFollows = null; lastMsgs = null;\n            if (!stopped)",
+   "new": "hello = null; lastAlerts = null;\n            if (!stopped)",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]
 }

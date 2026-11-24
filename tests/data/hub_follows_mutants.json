@@ -1,0 +1,134 @@
+{
+ "note": "Mutants of the follows of the chat hub (hub/follows.py, hub/presence.py `here`, hub/commands.py `/follow` and `/unfollow`, hub/store/ follows; docs/HUB_PEOPLE.md, 'Follows') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): each breaks one rule on purpose (who may follow whom and how many, who is told of a room and who never is, who gets the list) and tests/scripts/test_hub_follows.py or the store's contract must fail (every one must be caught).",
+ "baseline": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_follows tests.scripts.test_hub_store_contract"
+ },
+ "mutants": [
+  {
+   "id": "follow_oneself",
+   "file": "hub/follows.py",
+   "old": "if person.ref == mine:\n            return say(\"self\")",
+   "new": "if False:\n            return say(\"self\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_follows tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "follow_limit_is_the_stores",
+   "file": "hub/store/sqlite.py",
+   "old": "if self.db.execute(\"SELECT COUNT(*) FROM follows WHERE ref = ?\", (ref,)).fetchone()[0] >= int(most):",
+   "new": "if self.db.execute(\"SELECT COUNT(*) FROM follows WHERE ref = ?\", (ref,)).fetchone()[0] > int(most):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_follows tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_banned_person_is_nobody",
+   "file": "hub/follows.py",
+   "old": "banned = set() if banned_ok else chat.presence.restricted()[0]",
+   "new": "banned = set()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_follows tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_handle_is_the_accounts_own",
+   "file": "hub/follows.py",
+   "old": "found = self.known.get(account, {}).get(handle)",
+   "new": "found = self.known.get(account, {}).get(handle) or next((v for table in self.known.values() for h, v in table.items() if h == handle), None)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_follows tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_room_without_a_code_is_no_alert",
+   "file": "hub/follows.py",
+   "old": "where.at != \"wait\" or not where.code:",
+   "new": "where.at != \"wait\":",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_follows tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "one_wave_for_a_host_in_an_hour",
+   "file": "hub/follows.py",
+   "old": "if not self.hosts.take(chat.key_of(account), now):\n            return",
+   "new": "if False:\n            return",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_follows tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "six_room_alerts_a_day",
+   "file": "hub/follows.py",
+   "old": "or not self.days.take(chat.key_of(target), now):",
+   "new": "or False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_follows tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_person_in_a_match_is_not_told",
+   "file": "hub/follows.py",
+   "old": "if chat.presence.doing(target) == \"play\" or (chat.presence.room_of(target) is not None",
+   "new": "if (chat.presence.room_of(target) is not None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_follows tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_person_in_the_room_is_not_told",
+   "file": "hub/follows.py",
+   "old": "or (chat.presence.room_of(target) is not None and chat.presence.room_of(target).code == where.code):",
+   "new": "):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_follows tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_person_who_ignores_the_host_is_told_nothing",
+   "file": "hub/follows.py",
+   "old": "if chat.commands.ignores_person(target, account) or not self.days",
+   "new": "if not self.days",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_follows tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_host_who_may_not_chat_has_no_alert",
+   "file": "hub/follows.py",
+   "old": "or account in chat.presence.restricted()[1]:",
+   "new": "or False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_follows tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_young_host_has_no_alert",
+   "file": "hub/follows.py",
+   "old": "if who.young or account in",
+   "new": "if account in",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_follows tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_full_room_is_no_alert",
+   "file": "hub/follows.py",
+   "old": "if n is None or size is None or n >= size:",
+   "new": "if n is None or size is None:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_follows tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_list_goes_to_the_accounts_sockets_alone",
+   "file": "hub/follows.py",
+   "old": "for peer in self.chat.presence.sockets(account):\n            peer.send_text(frame)\n        if not self.list_of(account):",
+   "new": "for peer in self.chat.peers:\n            peer.send_text(frame)\n        if not self.list_of(account):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_follows tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_number_of_a_row_is_for_people_here",
+   "file": "hub/follows.py",
+   "old": "if there is not None and there not in banned and there in chat.presence.ids:",
+   "new": "if there is not None and there in chat.presence.ids:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_follows tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "forgetting_takes_the_follows_of_both",
+   "file": "hub/store/sqlite.py",
+   "old": "self.db.execute(\"DELETE FROM follows WHERE ref = ? OR other = ?\", (self.ref(account), self.ref(account)))",
+   "new": "self.db.execute(\"DELETE FROM follows WHERE ref = ?\", (self.ref(account),))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_follows tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_welcome_has_the_list_only_when_there_is_one",
+   "file": "hub/follows.py",
+   "old": "if force or has:",
+   "new": "if True:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_follows tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_row_is_sent_again_when_a_person_came_or_went",
+   "file": "hub/follows.py",
+   "old": "if not self.list_of(account) and account not in self.last:\n                continue",
+   "new": "continue",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_follows tests.scripts.test_hub_store_contract"
+  }
+ ]
+}

@@ -11,6 +11,8 @@
     docker exec ants-hub python -m hub.admin aikeys                      (the keys of people's AIs that work now, docs/MAP_AI.md: key id, account reference, scope, when made and ended, last use, calls)
     docker exec ants-hub python -m hub.admin aikey-revoke KEY_ID         (one key stops working at once)
     docker exec ants-hub python -m hub.admin aikeys-revoke ACCOUNT       (every key of an account stops working at once)
+    docker exec ants-hub python -m hub.admin reports [--all]             (the reports of private messages that nobody closed, docs/HUB_MESSAGES.md: each is the reported message and the 5 before it, with both names and the reason; --all adds the closed ones)
+    docker exec ants-hub python -m hub.admin report-close REPORT_ID      (a closed report is deleted 30 days later)
     docker exec ants-hub python -m hub.admin del LINE_ID
     docker exec ants-hub python -m hub.admin log [--days N] [--lines N]
     docker exec ants-hub python -m hub.admin status
@@ -107,6 +109,20 @@ def show_log(store, days, count, out):
     for row in rows:
         out.write("  %s %-6s by %s%s%s%s\n" % (when(row.at), row.action, row.actor, " (%s)" % names[row.actor] if row.actor in names else "",
                                                " to %s%s" % (row.target, " (%s)" % names[row.target] if row.target in names else "") if row.target else "", " %s" % row.detail if row.detail else ""))
+    if not rows:
+        out.write("  nothing\n")
+
+
+def show_reports(store, closed, out):
+    """The reports of private messages (docs/HUB_MESSAGES.md), newest first: what the hub copied when somebody reported a message, and nothing else of anybody's messages. The person's reference is what `ban` and `mute` take."""
+    rows = store.reports(closed)
+    out.write("reports of private messages (newest first; %d days after they were closed, %d if nobody closes them):\n" % (store.report_closed_days, store.report_open_days))
+    for row in rows:
+        out.write("  report %d, %s, %s, reason %s\n" % (row.id, when(row.at), "closed %s" % when(row.closed) if row.closed else "open", row.why))
+        out.write("    reported %s (%s)\n" % (row.reported_name or "-", row.reported))
+        out.write("    by %s%s\n" % (row.reporter_name or "-", " (%s)" % row.reporter if row.reporter else " (the account forgot itself)"))
+        for at, who, text in row.messages:
+            out.write("      %s %s: %s\n" % (when(at), "reported" if who == "d" else "reporter", text))
     if not rows:
         out.write("  nothing\n")
 
@@ -221,6 +237,9 @@ def run(argv, out=None, err=None, env=None):
     sub.add_parser("aikeys", help="the keys of people's AIs that work now")
     sub.add_parser("aikey-revoke", help="revoke one key of a person's AI by its id").add_argument("key_id")
     sub.add_parser("aikeys-revoke", help="revoke every key of an account's AI").add_argument("account")
+    p = sub.add_parser("reports", help="the reports of private messages that nobody closed")
+    p.add_argument("--all", action="store_true", help="the closed ones as well")
+    sub.add_parser("report-close", help="close a report of a private message").add_argument("report_id", type=int)
     sub.add_parser("del", help="delete a chat line by its id").add_argument("line_id", type=int)
     p = sub.add_parser("log", help="the moderators' log")
     p.add_argument("--days", type=int, default=30)
@@ -234,6 +253,9 @@ def run(argv, out=None, err=None, env=None):
         return 2 if e.code else 0
     if args.command == "mute" and not 0 <= args.minutes <= MAX_MINUTES:
         err.write("hub.admin: MINUTES is 0 to %d\n" % MAX_MINUTES)
+        return 2
+    if args.command == "report-close" and not 0 < args.report_id < 2 ** 62:
+        err.write("hub.admin: REPORT_ID is a number from 1\n")
         return 2
     if args.command == "del" and not 0 < args.line_id < 2 ** 62:
         err.write("hub.admin: LINE_ID is a number from 1\n")
@@ -260,6 +282,15 @@ def run(argv, out=None, err=None, env=None):
             show_usage(store, limitmod.Limits().db_max_bytes, out)
             show_pictures(store, limitmod.Limits(), out)
             show_images(store, limitmod.Limits(), out)
+            return 0
+        if args.command == "reports":
+            show_reports(store, args.all, out)
+            return 0
+        if args.command == "report-close":
+            if not store.report_close(args.report_id):
+                err.write("hub.admin: no such report, or it is closed already\n")
+                return 1
+            out.write("report %d closed\n" % args.report_id)
             return 0
         if args.command == "aikeys":
             show_ai_keys(store, out)

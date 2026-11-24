@@ -1,0 +1,253 @@
+{
+ "note": "Mutants of the private messages of the chat hub (hub/messages.py, hub/commands.py `/msg` and `/ignore`, hub/people.py, hub/admin.py, hub/store/ dms and reports; docs/HUB_MESSAGES.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): each breaks one rule on purpose (who may write, every limit, what a blocked sender sees, what is kept and for how long, what a report holds, what forgetting takes) and tests/scripts/test_hub_messages.py or the store's contract must fail (every one must be caught).",
+ "baseline": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+ },
+ "mutants": [
+  {
+   "id": "a_message_to_oneself",
+   "file": "hub/messages.py",
+   "old": "if person is None or person.ref == mine:\n            return self.refuse(peer, handle, \"who\")",
+   "new": "if person is None:\n            return self.refuse(peer, handle, \"who\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_banned_person_may_not_write",
+   "file": "hub/messages.py",
+   "old": "if chat.store.is_banned(me):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_muted_person_may_not_write",
+   "file": "hub/messages.py",
+   "old": "if chat.store.muted_until(me):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_young_account_may_not_write",
+   "file": "hub/messages.py",
+   "old": "if who.young:\n            return self.refuse(peer, handle, \"young\")",
+   "new": "if False:\n            return self.refuse(peer, handle, \"young\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_long_message_is_refused",
+   "file": "hub/messages.py",
+   "old": "if why is None and len(text) > limits.dm_chars:",
+   "new": "if why is None and len(text) > limits.dm_chars + 100000:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_burst_of_five",
+   "file": "hub/messages.py",
+   "old": "if not burst.ready(now):\n            return \"rate\"",
+   "new": "if False:\n            return \"rate\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "three_hundred_a_day",
+   "file": "hub/messages.py",
+   "old": "if not day.ready(now):\n            return \"quota\"",
+   "new": "if False:\n            return \"quota\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_same_text_twice_is_dropped",
+   "file": "hub/messages.py",
+   "old": "if (partner, text) in said:\n            return \"dup\"",
+   "new": "if False:\n            return \"dup\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "ten_new_conversations_an_hour",
+   "file": "hub/messages.py",
+   "old": "if new and not news.ready(now):\n            return \"new\"",
+   "new": "if False:\n            return \"new\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_tables_stop_at_a_quarter",
+   "file": "hub/messages.py",
+   "old": "if self.full():\n            return self.refuse(peer, handle, \"full\")",
+   "new": "if False:\n            return self.refuse(peer, handle, \"full\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_blocked_sender_is_hidden_from_the_receiver",
+   "file": "hub/messages.py",
+   "old": "blocked = chat.commands.ignores_ref(person.ref, mine, me)",
+   "new": "blocked = False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_blocked_sender_sends_the_receiver_nothing",
+   "file": "hub/messages.py",
+   "old": "if blocked or person.account is None or not chat.presence.sockets(person.account):",
+   "new": "if person.account is None or not chat.presence.sockets(person.account):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_person_who_holds_a_role_is_never_blocked",
+   "file": "hub/commands.py",
+   "old": "return bool(mine) and person_ref in mine and not self.chat.is_mod(person)",
+   "new": "return bool(mine) and person_ref in mine",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "one_bell_row_for_each_sender",
+   "file": "hub/messages.py",
+   "old": "from_account=me, replace=True)",
+   "new": "from_account=me, replace=False)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_conversation_keeps_300",
+   "file": "hub/messages.py",
+   "old": "hide=blocked, keep=limits.dm_thread_max)",
+   "new": "hide=blocked, keep=10 ** 9)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "opening_a_conversation_reads_it",
+   "file": "hub/messages.py",
+   "old": "peer.send_text(self.dumps(frame))\n        self.read(me, person)",
+   "new": "peer.send_text(self.dumps(frame))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_conversation_deleted_by_one_is_gone_for_them_alone",
+   "file": "hub/store/sqlite.py",
+   "old": "DELETE FROM dms WHERE gone_frm = 1 AND gone_to = 1 AND",
+   "new": "DELETE FROM dms WHERE gone_frm = 1 OR gone_to = 1 AND",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_report_copies_the_5_before",
+   "file": "hub/messages.py",
+   "old": "person.name, why, number, self.limits.report_context)",
+   "new": "person.name, why, number, 0)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_hidden_message_is_not_in_the_copy",
+   "file": "hub/store/sqlite.py",
+   "old": "(frm = :b AND tor = :a AND hide = 0)",
+   "new": "(frm = :b AND tor = :a)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "only_a_message_that_was_sent_to_the_reporter_is_reported",
+   "file": "hub/store/sqlite.py",
+   "old": "WHERE id = ? AND frm = ? AND tor = ? AND gone_to = 0 AND hide = 0\" % self.COLUMNS_DM, (int(message_id), other, ref)",
+   "new": "WHERE id = ? AND (frm = ? OR 1) AND tor = ? AND gone_to = 0 AND hide = 0\" % self.COLUMNS_DM, (int(message_id), other, ref)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "five_reports_a_day",
+   "file": "hub/messages.py",
+   "old": "if not self.reports.take(key, now):\n            return self.refuse(peer, handle, \"rate\")",
+   "new": "if False:\n            return self.refuse(peer, handle, \"rate\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_message_reported_twice_is_one_report",
+   "file": "hub/store/sqlite.py",
+   "old": "if old is not None:\n                return old[0]",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_message_is_kept_7_days",
+   "file": "hub/store/sqlite.py",
+   "old": "self.db.execute(\"DELETE FROM dms WHERE at < ?\", (now - int(self.dm_days * 86400),))",
+   "new": "self.db.execute(\"DELETE FROM dms WHERE at < ?\", (now - int(self.dm_days * 86400 * 2),))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_closed_report_is_kept_30_days",
+   "file": "hub/store/sqlite.py",
+   "old": "(now - int(self.report_closed_days * 86400), now - int(self.report_open_days * 86400))",
+   "new": "(now - int(self.report_closed_days * 86400 * 3), now - int(self.report_open_days * 86400))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "an_unclosed_report_is_kept_90_days",
+   "file": "hub/store/sqlite.py",
+   "old": "(now - int(self.report_closed_days * 86400), now - int(self.report_open_days * 86400))",
+   "new": "(now - int(self.report_closed_days * 86400), now - int(self.report_open_days * 86400 * 3))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "forgetting_takes_the_messages_of_both",
+   "file": "hub/store/sqlite.py",
+   "old": "self.db.execute(\"DELETE FROM dms WHERE frm = ? OR tor = ?\", (self.ref(account), self.ref(account)))",
+   "new": "self.db.execute(\"DELETE FROM dms WHERE frm = ?\", (self.ref(account),))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_reporter_who_forgets_is_not_in_the_report",
+   "file": "hub/store/sqlite.py",
+   "old": "\"UPDATE reports SET reporter = '', reporter_name = '' WHERE reporter = ?\"",
+   "new": "\"UPDATE reports SET reporter = reporter WHERE reporter = ?\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_person_that_holds_a_role_cannot_be_ignored",
+   "file": "hub/commands.py",
+   "old": "if target is not None and (chat.roles.role_of(target) != \"none\" or self.is_owner(target)):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_handle_blocks_a_person",
+   "file": "hub/commands.py",
+   "old": "if any(r.match(name) for r in (followsmod.ROW_WORD, followsmod.LINE_WORD, followsmod.HANDLE_WORD)):",
+   "new": "if any(r.match(name) for r in (followsmod.ROW_WORD, followsmod.LINE_WORD)):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_refusal_costs_a_frame",
+   "file": "hub/messages.py",
+   "old": "peer.charge()                            # (a refusal is no mistake of the socket, but it is not free either)",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_frame_has_exactly_its_keys",
+   "file": "hub/messages.py",
+   "old": "if set(msg) != SHAPES[kind] or not isinstance(handle, str)",
+   "new": "if not isinstance(handle, str)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_guest_has_no_messages",
+   "file": "hub/messages.py",
+   "old": "if who is None:\n            return chat.mistake(peer, \"login\")\n        handle",
+   "new": "if who is None:\n            return\n        handle",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_page_that_asks_too_often_is_refused",
+   "file": "hub/messages.py",
+   "old": "if not self.reads.take(key, now):\n                return self.refuse(peer, handle, \"rate\")",
+   "new": "if False:\n                return self.refuse(peer, handle, \"rate\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_list_follows_a_purge",
+   "file": "hub/messages.py",
+   "old": "self.used = None\n        self.refresh_all()\n\n    # ---- the frames",
+   "new": "self.used = None\n\n    # ---- the frames",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_text_is_cleaned_as_a_line_is",
+   "file": "hub/messages.py",
+   "old": "text, why = textrules.clean_line(raw)",
+   "new": "text, why = (raw if isinstance(raw, str) else None), (None if isinstance(raw, str) else \"bad\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  }
+ ]
+}
