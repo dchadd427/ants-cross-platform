@@ -46,7 +46,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **For operators:**
 - The keys are off until the hub is started with `ANTS_HUB_AI_KEYS=on`; with it off every key door answers 503 and no tab can be armed ([`docs/MAP_AI.md`](docs/MAP_AI.md)).
-- The game server's database moves to schema version 11 (the table `history_action`, the counts that the activity curve is drawn from; the history service's own file to its version 5): an older program refuses the newer file, so copy `ants.db` before the update ([`docs/REPLAYS.md`](docs/REPLAYS.md#the-activity-curve)).
+- The game server's database moves to schema version 11 (the table `history_action`, the counts that the activity curve is drawn from; the history service's own file to its version 5): an older program refuses the newer file, so copy `ants.db` before the update ([`docs/REPLAYS.md`](docs/HEATMAPS.md#the-activity-curve)).
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2bdfe98e...d65954fa)
 
