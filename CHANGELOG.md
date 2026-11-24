@@ -34,6 +34,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Fixes:**
 - On a phone, the "What's new" window fits the screen, so its Close button is no longer below the bottom of the page.
+- Private messages on a phone: the conversation is a sheet that follows what you can see, so with the keyboard open the field sits just above it, the head with the name and the X stays on the screen and the messages fill the room over the field. The X, the arrow, Escape, a pull down on the head and the phone's Back button each close the sheet and leave you on the page where you were, not on the bell's list.
 
 ## v0.21.3 - 2026-11-24 - Follows, private messages, replay likes and the activity curve
 
