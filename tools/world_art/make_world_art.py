@@ -3,7 +3,7 @@
 
 usage: make_world_art.py [--out DIR] [--work DIR]
 
-    python3 tools/world_art/make_world_art.py              writes assets/world_art/sheet_1x.png, sheet_2x.png, sheet_3x.png and world_art.txt
+    python3 tools/world_art/make_world_art.py              writes page 0: assets/world_art/sheet_1x.png, sheet_2x.png, sheet_3x.png, and its records in world_art.txt (the other pages stay)
 
 Needs Python 3 with Pillow and numpy; the libdeflate library is optional (sheets 5% smaller: tools/hud_art/png_write.py). The drawing is deterministic. `--work DIR` keeps the drawn pictures
 (<DIR>/<scale>x/sprite_NNNN.png); without it they go to a temporary folder that is removed at the end.
@@ -42,7 +42,7 @@ def main():
     try:
         keys = draw_all.draw_all(work)
         print('drawn: %d pictures at 1x, 2x and 3x in %.0f s' % (len(keys), time.time() - started), flush=True)
-        sizes = pack.pack(work, args.out, keys)
+        sizes = pack.pack(work, args.out, keys=keys)
     finally:
         if not args.work:
             shutil.rmtree(work, ignore_errors=True)

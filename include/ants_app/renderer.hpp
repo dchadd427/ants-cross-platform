@@ -535,7 +535,7 @@ public:
     /// (for the tests) the scale of the sheet that a picture would be drawn from now, how many sheets are textures (0 until a picture is drawn), and the picture that the cell shows (0 for a cell that is not plain ground)
     int32_t world_art_scale_now() const;
     size_t world_art_textures() const noexcept;
-    uint32_t world_art_sheets() const noexcept;       // which sheets are textures: bit 0 the 1x, bit 1 the 2x, bit 2 the 3x
+    uint32_t world_art_sheets() const noexcept;       // which sheets are textures: bit 0, 1 and 2 the 1x, 2x and 3x of page 0, bit 3, 4 and 5 those of page 1 ...
     uint8_t ground_variant_at(int32_t col, int32_t row);
     /// Dense mud (world_art_mud.hpp): on by default while the world art is. The looks of a big mud field are made cell by cell as the cells come into view, within `ms` milliseconds of work for each frame (at
     /// least one piece of work: 0; no limit: -1, which the tests and the picture maker use; never set: 8 ms, and no limit while the animation clock is pinned), and a cell that is not made yet shows the approved picture. Its memory is bounded: the baked pictures and the looks that
@@ -798,8 +798,8 @@ private:
     int32_t art_texture_limit_{0};                         // (for the tests) the largest side of a texture that is made; 0: the device's own
     const world_art::Pack* world_art_{nullptr};            // the new pictures of the world (set_world_art); null: the original's sprites
     uint64_t world_art_generation_{0};                     // the pack that world_art_textures_ were made from
-    std::array<bool, 3> world_art_failed_{};               // a sheet that could not be read or made a texture: said once, and not tried again until another pack comes
-    std::array<SDL_Texture*, 3> world_art_textures_{};     // its sheets at 1x, 2x and 3x, made when first needed
+    std::array<bool, world_art::kMaxPages * 3> world_art_failed_{};      // a sheet that could not be read or made a texture: said once, and not tried again until another pack comes
+    std::array<SDL_Texture*, world_art::kMaxPages * 3> world_art_textures_{};   // its sheets page by page, each at 1x, 2x and 3x, made when first needed
     uint8_t world_variant_{0};                             // which picture of a plain ground tile the cell being drawn shows (render_terrain_layer1); 0 for everything else
     bool dense_mud_{true};                                 // the looks of big mud fields (world_art_mud.hpp), while the world art is on
     int32_t mud_budget_ms_{world_art::mud::kDefaultBudget};   // the work for the looks and the transitions that a frame may take (set_dense_mud_budget_ms; the default: kFrameBudgetMs, none while the clock is pinned)
@@ -855,7 +855,8 @@ private:
     int64_t mud_spent_us_{0};                              // the work of the looks in this frame
     int32_t mud_made_{0};                                  // the sets of looks made in this frame
     void drop_world_art_textures();
-    SDL_Texture* world_art_texture(int32_t scale);
+    SDL_Texture* world_art_texture(int32_t page, int32_t scale);
+    SDL_Texture* world_art_sheet(int32_t page, int32_t& scale);
     bool draw_world_art_part(uint32_t sprite_index, int32_t x, int32_t y, int32_t w, int32_t h);
     void ensure_ground_variants();
     void index_ground(const ants::assets::LevelData& level);

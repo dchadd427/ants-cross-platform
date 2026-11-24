@@ -66,7 +66,7 @@ bool read_text(const std::string& path, std::string& out) {
     return true;
 }
 
-/// A copy of the shipped pack in a folder of its own, with the manifest changed by `edit` and the sheets cut after their header where `cut` says (the first 80 bytes stay: the header is right, the body is not)
+/// A copy of the shipped pack in a folder of its own, with the manifest changed by `edit` and the sheets of the first page cut after their header where `cut` says (the first 80 bytes stay: the header is right, the body is not)
 std::string pack_copy(const std::string& tag, const std::function<std::string(const std::string&)>& edit, const std::vector<int32_t>& cut = {}) {
     namespace fs = std::filesystem;
     const fs::path dir = fs::temp_directory_path() / ("ants_world_art_" + tag + "_" + std::to_string(static_cast<long long>(SDL_GetTicks())));
@@ -79,23 +79,41 @@ std::string pack_copy(const std::string& tag, const std::function<std::string(co
         std::ofstream out(dir / "world_art.txt", std::ios::binary | std::ios::trunc);
         out << edit(text);
     }
-    for (int32_t scale = 1; scale <= 3; ++scale) {
-        const std::string name = "sheet_" + std::to_string(scale) + "x.png";
-        if (std::find(cut.begin(), cut.end(), scale) == cut.end()) {
-            fs::copy_file(pack_folder() + "/" + name, dir / name, fs::copy_options::overwrite_existing, ignored);
-            continue;
+    for (const std::string prefix : {"sheet", "plants"}) {
+        for (int32_t scale = 1; scale <= 3; ++scale) {
+            const std::string name = prefix + "_" + std::to_string(scale) + "x.png";
+            if (prefix != "sheet" || std::find(cut.begin(), cut.end(), scale) == cut.end()) {
+                fs::copy_file(pack_folder() + "/" + name, dir / name, fs::copy_options::overwrite_existing, ignored);
+                continue;
+            }
+            std::ifstream in(pack_folder() + "/" + name, std::ios::binary);
+            std::vector<char> head(80);
+            in.read(head.data(), static_cast<std::streamsize>(head.size()));
+            std::ofstream out(dir / name, std::ios::binary | std::ios::trunc);
+            out.write(head.data(), in.gcount());
         }
-        std::ifstream in(pack_folder() + "/" + name, std::ios::binary);
-        std::vector<char> head(80);
-        in.read(head.data(), static_cast<std::streamsize>(head.size()));
-        std::ofstream out(dir / name, std::ios::binary | std::ios::trunc);
-        out.write(head.data(), in.gcount());
     }
     g_copies.push_back(dir.string());
     return dir.string();
 }
 
 std::string identity(const std::string& s) { return s; }
+
+/// The manifest of the first page alone (the ground, the bridge and the effects of batches 1 to 3): the tests of the ground and of its scales, its textures and its fallbacks are about those sheets, and what
+/// stands on the ground (the grass and the plants, test_world_art_plants.cpp) has pictures of its own on a page of its own, which a scene of these tests would draw as well
+std::string first_page_only(const std::string& manifest) {
+    std::istringstream in(manifest);
+    std::string line, out;
+    while (std::getline(in, line)) {
+        std::istringstream words(line);
+        std::string kind, first, second, third;
+        words >> kind >> first >> second >> third;
+        if (kind == "sheet" && first != "0") continue;                      // sheet <page> <scale> ...
+        if (kind == "sprite" && third != "0") continue;                     // sprite <number> <variant> <page> ...
+        out += line + "\n";
+    }
+    return out;
+}
 
 /// The world art of the batch of the ground alone: the looks of big mud fields and the transitions are made over frames and have their own tests (test_world_art_mud.cpp, test_world_art_edges.cpp)
 void use_art(Renderer& renderer, const world_art::Pack& pack) {
@@ -108,16 +126,18 @@ void use_art(Renderer& renderer, const world_art::Pack& pack) {
 // [manifest]
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-/// A tiny manifest: the header, three sheet rows and the given sprite rows
-std::string tiny(const std::string& sprites, const std::string& sheets = "sheet 1 a.png 100 100\nsheet 2 b.png 200 200\nsheet 3 c.png 300 300\n") {
-    return "ants-world-art 1\n" + sheets + sprites;
+/// A tiny manifest: the header, the three sheet rows of page 0 and the given sprite rows
+std::string tiny(const std::string& sprites, const std::string& sheets = "sheet 0 1 a.png 100 100\nsheet 0 2 b.png 200 200\nsheet 0 3 c.png 300 300\n") {
+    return "ants-world-art 2\n" + sheets + sprites;
 }
 
 void test_manifest(const assets::AssetArchive& arc) {
     group("manifest", "the shipped manifest and its sheets, and every way to break a manifest");
     world_art::Pack pack;
     check(pack.load(pack_folder()) && pack.loaded(), "the shipped pack is read: " + pack.what());
-    check(pack.pictures().size() == 1020, "the pack holds the 1,020 pictures of the batches so far (the plain ones and their variants, the bigger bubbles, the bombs, the explosion and the fire wall): " + std::to_string(pack.pictures().size()));
+    size_t on_first_page = 0;
+    for (const world_art::Picture& pic : pack.pictures()) on_first_page += pic.page == world_art::kGroundPage ? 1u : 0u;
+    check(pack.page_count() == 2 && on_first_page == 1020 && pack.pictures().size() == 1066, "the pack has two pages: 1,020 pictures of the ground, the bridge and the effects (the plain ones and their variants, the bigger bubbles, the bombs, the explosion and the fire wall) and 46 of the grass and the plants: " + std::to_string(on_first_page) + " and " + std::to_string(pack.pictures().size() - on_first_page));
     size_t effects = 0;
     for (uint32_t sprite = 298; sprite <= 315; ++sprite) effects += pack.find(sprite, 0) != nullptr && pack.find(sprite, 0)->number == sprite ? 1u : 0u;
     for (uint32_t sprite = 306; sprite <= 315; ++sprite) effects += pack.find(30000 + sprite, 0) != nullptr && pack.find(30000 + sprite, 0)->number == 30000 + sprite ? 1u : 0u;
@@ -128,10 +148,13 @@ void test_manifest(const assets::AssetArchive& arc) {
         for (uint8_t v = 0; v < world_art::kVariants; ++v) bigger += (pack.find(10000 + sprite, v) != nullptr && pack.find(10000 + sprite, v)->variant == v ? 1u : 0u) + (pack.find(20000 + sprite, v) != nullptr && pack.find(20000 + sprite, v)->variant == v ? 1u : 0u);
     }
     check(bigger == 320, "the medium and the large bubble have a picture for each of the ten frames and sixteen variants: " + std::to_string(bigger));
-    for (const int32_t scale : world_art::kScales) {
-        check(pack.sheet_width(scale) > 0 && pack.sheet_width(scale) <= 4096 && pack.sheet_height(scale) > 0 && pack.sheet_height(scale) <= 4096, "the sheet of scale " + std::to_string(scale) + " fits a texture of 4096");
-        DecodedImage image;
-        check(pack.sheet_pixels(scale, image) && image.width == pack.sheet_width(scale) && image.height == pack.sheet_height(scale), "the sheet of scale " + std::to_string(scale) + " decodes to the size the manifest states");
+    for (int32_t page = 0; page < pack.page_count(); ++page) {
+        for (const int32_t scale : world_art::kScales) {
+            const std::string what = "the sheet of page " + std::to_string(page) + " at scale " + std::to_string(scale);
+            check(pack.sheet_width(page, scale) > 0 && pack.sheet_width(page, scale) <= 4096 && pack.sheet_height(page, scale) > 0 && pack.sheet_height(page, scale) <= 4096, what + " fits a texture of 4096");
+            DecodedImage image;
+            check(pack.sheet_pixels(page, scale, image) && image.width == pack.sheet_width(page, scale) && image.height == pack.sheet_height(page, scale), what + " decodes to the size the manifest states");
+        }
     }
 
     // every sprite that the ground's animations and the bridge use has a picture that fits the original's sprite
@@ -161,45 +184,65 @@ void test_manifest(const assets::AssetArchive& arc) {
 
     // ways to break it
     world_art::Pack p;
-    const std::string good = tiny("sprite 1 0 10 10 1 1 1 1 1 1\nsprite 2 0 10 10 20 1 40 1 60 1\n");
+    const std::string good = tiny("sprite 1 0 0 10 10 1 1 1 1 1 1\nsprite 2 0 0 10 10 20 1 40 1 60 1\n");
     check(p.parse(good) && p.pictures().size() == 2, "a small manifest is read");
     check(!p.parse(""), "an empty manifest is refused");
-    check(!p.parse("ants-world-art 2\n"), "another version is refused");
+    check(!p.parse("ants-world-art 1\n") && !p.parse("ants-world-art 3\n"), "another version is refused");
     check(!p.parse("ants-hud-art 1\n"), "another header is refused");
     check(!p.parse(good.substr(0, good.find('\n') + 1)), "a manifest without sheets is refused");
-    check(!p.parse(tiny("", "sheet 1 a.png 100 100\nsheet 3 c.png 300 300\n")), "a missing sheet row is refused");
-    check(!p.parse(tiny("", "sheet 2 b.png 200 200\nsheet 1 a.png 100 100\nsheet 3 c.png 300 300\n")), "sheet rows out of order are refused");
-    check(!p.parse(tiny("", "sheet 1 a.png 100 100\nsheet 2 b.png 200 200\nsheet 3 c.png 300 300\nsheet 3 d.png 300 300\n")), "a sheet row twice is refused");
-    check(!p.parse(tiny("", "sheet 1 ../a.png 100 100\nsheet 2 b.png 200 200\nsheet 3 c.png 300 300\n")), "a sheet in another folder is refused");
-    check(!p.parse(tiny("", "sheet 1 sub/a.png 100 100\nsheet 2 b.png 200 200\nsheet 3 c.png 300 300\n")), "a sheet in a sub folder is refused");
-    check(!p.parse(tiny("", "sheet 1 a.png 0 100\nsheet 2 b.png 200 200\nsheet 3 c.png 300 300\n")), "a sheet of no size is refused");
-    check(!p.parse("sprite 1 0 10 10 1 1 1 1 1 1\n" + tiny("")), "a sprite before the header is refused");
-    check(!p.parse("ants-world-art 1\nsprite 1 0 10 10 1 1 1 1 1 1\nsheet 1 a.png 100 100\nsheet 2 b.png 200 200\nsheet 3 c.png 300 300\n"), "a sprite before the sheets is refused");
-    check(!p.parse(tiny("sprite 1 0 10 10 1 1 1 1\n")), "a sprite row that is short is refused");
-    check(!p.parse(tiny("sprite 1 0 10 10 1 1 1 1 1 x\n")), "a sprite row that holds a word is refused");
-    check(!p.parse(tiny("sprite 1 0 10 10 1 1 1 1 1 1\nsprite 1 0 10 10 20 1 40 1 60 1\n")), "a picture twice is refused");
-    check(!p.parse(tiny("sprite 2 0 10 10 1 1 1 1 1 1\nsprite 1 0 10 10 20 1 40 1 60 1\n")), "pictures out of order are refused");
-    check(!p.parse(tiny("sprite 1 16 10 10 1 1 1 1 1 1\n")), "a variant above 15 is refused");
-    check(!p.parse(tiny("sprite 1 0 0 10 1 1 1 1 1 1\n")), "a picture of no width is refused");
-    check(!p.parse(tiny("sprite 1 0 10 10 0 1 1 1 1 1\n")), "a picture with no room for its ring (x = 0) is refused");
-    check(!p.parse(tiny("sprite 1 0 10 10 1 0 1 1 1 1\n")), "a picture with no room for its ring (y = 0) is refused");
-    check(!p.parse(tiny("sprite 1 0 10 10 90 1 1 1 1 1\n")), "a picture whose ring crosses the sheet's right side at 1x is refused");
-    check(!p.parse(tiny("sprite 1 0 10 10 1 1 1 190 1 1\n")), "a picture whose ring crosses the sheet's bottom at 2x is refused");
-    check(p.parse(tiny("sprite 1 0 10 10 89 89 179 179 269 269\n")), "a picture that ends exactly at its ring against the side is read");
-    check(!p.parse(tiny("sprite 1 0 10 10 1 1 1 1 1 1\nblob 3\n")), "a record of another kind is refused");
-    check(!p.parse("ants-world-art 1\r\nsheet 1 a.png 100 100\r\n"), "CR LF line ends are refused");
+    check(!p.parse(tiny("", "sheet 0 1 a.png 100 100\nsheet 0 3 c.png 300 300\n")), "a missing sheet row is refused");
+    check(!p.parse(tiny("", "sheet 0 2 b.png 200 200\nsheet 0 1 a.png 100 100\nsheet 0 3 c.png 300 300\n")), "sheet rows out of order are refused");
+    check(!p.parse(tiny("", "sheet 0 1 a.png 100 100\nsheet 0 2 b.png 200 200\nsheet 0 3 c.png 300 300\nsheet 0 3 d.png 300 300\n")), "a sheet row twice is refused");
+    check(!p.parse(tiny("", "sheet 0 1 ../a.png 100 100\nsheet 0 2 b.png 200 200\nsheet 0 3 c.png 300 300\n")), "a sheet in another folder is refused");
+    check(!p.parse(tiny("", "sheet 0 1 sub/a.png 100 100\nsheet 0 2 b.png 200 200\nsheet 0 3 c.png 300 300\n")), "a sheet in a sub folder is refused");
+    check(!p.parse(tiny("", "sheet 0 1 a.png 0 100\nsheet 0 2 b.png 200 200\nsheet 0 3 c.png 300 300\n")), "a sheet of no size is refused");
+    check(!p.parse("sprite 1 0 0 10 10 1 1 1 1 1 1\n" + tiny("")), "a sprite before the header is refused");
+    check(!p.parse("ants-world-art 2\nsprite 1 0 0 10 10 1 1 1 1 1 1\nsheet 0 1 a.png 100 100\nsheet 0 2 b.png 200 200\nsheet 0 3 c.png 300 300\n"), "a sprite before the sheets is refused");
+    check(!p.parse(tiny("sprite 1 0 0 10 10 1 1 1 1\n")), "a sprite row that is short is refused");
+    check(!p.parse(tiny("sprite 1 0 0 10 10 1 1 1 1 1 x\n")), "a sprite row that holds a word is refused");
+    check(!p.parse(tiny("sprite 1 0 0 10 10 1 1 1 1 1 1\nsprite 1 0 0 10 10 20 1 40 1 60 1\n")), "a picture twice is refused");
+    check(!p.parse(tiny("sprite 2 0 0 10 10 1 1 1 1 1 1\nsprite 1 0 0 10 10 20 1 40 1 60 1\n")), "pictures out of order are refused");
+    check(!p.parse(tiny("sprite 1 16 0 10 10 1 1 1 1 1 1\n")), "a variant above 15 is refused");
+    check(!p.parse(tiny("sprite 1 0 0 0 10 1 1 1 1 1 1\n")), "a picture of no width is refused");
+    check(!p.parse(tiny("sprite 1 0 0 10 10 0 1 1 1 1 1\n")), "a picture with no room for its ring (x = 0) is refused");
+    check(!p.parse(tiny("sprite 1 0 0 10 10 1 0 1 1 1 1\n")), "a picture with no room for its ring (y = 0) is refused");
+    check(!p.parse(tiny("sprite 1 0 0 10 10 90 1 1 1 1 1\n")), "a picture whose ring crosses the sheet's right side at 1x is refused");
+    check(!p.parse(tiny("sprite 1 0 0 10 10 1 1 1 190 1 1\n")), "a picture whose ring crosses the sheet's bottom at 2x is refused");
+    check(p.parse(tiny("sprite 1 0 0 10 10 89 89 179 179 269 269\n")), "a picture that ends exactly at its ring against the side is read");
+    check(!p.parse(tiny("sprite 1 0 0 10 10 1 1 1 1 1 1\nblob 3\n")), "a record of another kind is refused");
+    check(!p.parse("ants-world-art 2\r\nsheet 0 1 a.png 100 100\r\n"), "CR LF line ends are refused");
     check(!p.parse("not a manifest") && !p.loaded() && p.pictures().empty(), "a manifest that was refused leaves a pack that is not loaded and holds nothing");
     world_art::Pack gone;
     check(!gone.load(pack_folder() + "/nothing here") && !gone.loaded(), "a folder without a manifest is not a pack");
+    // pages: each has its own three sheets, a picture lies inside the sheets of ITS page, and a picture is on one page only
+    const std::string pages = tiny("", "sheet 0 1 a.png 100 100\nsheet 0 2 b.png 200 200\nsheet 0 3 c.png 300 300\nsheet 1 1 d.png 50 50\nsheet 1 2 e.png 100 100\nsheet 1 3 f.png 150 150\n");
+    check(p.parse(pages + "sprite 1 0 0 10 10 1 1 1 1 1 1\nsprite 2 0 1 10 10 1 1 1 1 1 1\n") && p.page_count() == 2 && p.find(1, 0)->page == 0 && p.find(2, 0)->page == 1, "a manifest of two pages is read, each picture on its page");
+    check(p.sheet_file(1, 2) == "e.png" && p.sheet_width(1, 3) == 150 && p.sheet_height(0, 3) == 300 && p.sheet_width(2, 1) == 0 && p.sheet_file(-1, 1).empty(), "...each page has its own sheets, and a page that is not there has none");
+    check(p.parse(pages + "sprite 1 0 0 10 10 45 1 1 1 1 1\n") && !p.parse(pages + "sprite 1 0 1 10 10 45 1 1 1 1 1\n"), "a picture must lie inside the sheet of its own page: the same place is inside the sheet of page 0 and outside the narrower sheet of page 1");
+    check(!p.parse(pages + "sprite 1 0 2 10 10 1 1 1 1 1 1\n"), "a picture on a page that the manifest does not have is refused");
+    check(!p.parse(pages + "sprite 1 0 0 10 10 1 1 1 1 1 1\nsprite 1 0 1 10 10 1 1 1 1 1 1\n"), "a picture on two pages is refused");
+    check(!p.parse(tiny("sprite 1 0 0 10 10 1 1 1 1 1 1\n", "sheet 0 1 a.png 100 100\nsheet 0 2 b.png 200 200\nsheet 0 3 c.png 300 300\nsheet 1 1 d.png 50 50\n")), "a page with fewer than three sheet rows is refused");
+    check(!p.parse(tiny("", "sheet 1 1 d.png 50 50\nsheet 1 2 e.png 100 100\nsheet 1 3 f.png 150 150\nsheet 0 1 a.png 100 100\nsheet 0 2 b.png 200 200\nsheet 0 3 c.png 300 300\n")), "pages out of order are refused");
+    check(!p.parse(pages + "sprite 1 0 0 10 10 1 1 1 1 1 1\nsheet 2 1 g.png 10 10\n"), "a sheet row after a sprite is refused");
+    std::string many = "";
+    for (int32_t page = 0; page <= world_art::kMaxPages; ++page) {
+        for (int32_t scale = 1; scale <= 3; ++scale) many += "sheet " + std::to_string(page) + " " + std::to_string(scale) + " p" + std::to_string(page * 3 + scale) + ".png 100 100\n";
+    }
+    check(!p.parse(tiny("", many)), "more pages than the game keeps (" + std::to_string(world_art::kMaxPages) + ") are refused");
+    std::error_code ignored_error;
     const std::string cut = pack_copy("manifest_cut", identity, {2});
     world_art::Pack cut_pack;
     check(cut_pack.load(cut) && cut_pack.loaded(), "a sheet with a good header and no body passes the header look");
     DecodedImage image;
-    check(!cut_pack.sheet_pixels(2, image) && image.width == 0, "...and cannot be decoded when it is needed");
+    check(!cut_pack.sheet_pixels(world_art::kGroundPage, 2, image) && image.width == 0, "...and cannot be decoded when it is needed");
+    const std::string without_sheet = pack_copy("manifest_lacking", identity);                // the second page's 3x sheet is not in the folder: the pack is not whole, and it is the original's art from the start
+    std::filesystem::remove(std::filesystem::path(without_sheet) / "plants_3x.png", ignored_error);
+    world_art::Pack lacking_pack;
+    check(!lacking_pack.load(without_sheet) && !lacking_pack.loaded(), "a pack whose second page lacks a sheet is refused at the start");
     const std::string wrong = pack_copy("manifest_wrong", [](const std::string& t) {
         std::string s = t;
-        const size_t at = s.find("sheet 3 sheet_3x.png 3072");                       // the 3x sheet is stated one pixel narrower than the file: the file is not the picture the manifest says
-        if (at != std::string::npos) s.replace(at, 25, "sheet 3 sheet_3x.png 3071");
+        const size_t at = s.find("sheet 0 3 sheet_3x.png 3072");                     // the 3x sheet is stated one pixel narrower than the file: the file is not the picture the manifest says
+        if (at != std::string::npos) s.replace(at, 27, "sheet 0 3 sheet_3x.png 3071");
         return s;
     });
     world_art::Pack wrong_pack;
@@ -426,7 +469,7 @@ void test_draw(const assets::AssetArchive& arc, const world_art::Pack& pack) {
     group("draw", "the real renderer's ground at 1x, 2x and 3x is the sheet's picture of the cell, with the variant the rule chose");
     DecodedImage sheets[3];
     for (const int32_t s : world_art::kScales) {
-        if (!pack.sheet_pixels(s, sheets[s - 1])) {
+        if (!pack.sheet_pixels(world_art::kGroundPage, s, sheets[s - 1])) {
             check(false, "the sheet of scale " + std::to_string(s) + " is read");
             return;
         }
@@ -555,18 +598,18 @@ void test_fallback(const assets::AssetArchive& arc, const world_art::Pack&) {
     const zoomtest::QuietStdout quiet;
 
     // every picture states a size that is not the original's sprite's: none is used
-    const std::string wide = pack_copy("wide", [](const std::string& t) {
-        std::istringstream in(t);
+    const std::string wide = pack_copy("wide", [](const std::string& manifest) {
+        std::istringstream in(first_page_only(manifest));
         std::string line, out;
         while (std::getline(in, line)) {
             if (line.rfind("sprite ", 0) == 0) {
                 std::istringstream words(line);
-                std::string word, number, variant;
+                std::string word, number, variant, page;
                 int w = 0, h = 0;
-                words >> word >> number >> variant >> w >> h;
+                words >> word >> number >> variant >> page >> w >> h;
                 std::string rest;
                 std::getline(words, rest);
-                line = "sprite " + number + " " + variant + " " + std::to_string(w + 1) + " " + std::to_string(h) + rest;
+                line = "sprite " + number + " " + variant + " " + page + " " + std::to_string(w + 1) + " " + std::to_string(h) + rest;
             }
             out += line + "\n";
         }
@@ -579,13 +622,13 @@ void test_fallback(const assets::AssetArchive& arc, const world_art::Pack&) {
 
     // a sheet that is cut after its header: the manifest passes, the texture cannot be made; the output gets the next smaller sheet (the 1x one), and a pack with no sheet that can be had is the original's frame
     world_art::Pack cut_pack;
-    check(cut_pack.load(pack_copy("cut2", identity, {2})), "a pack with a cut 2x sheet is read");
+    check(cut_pack.load(pack_copy("cut2", first_page_only, {2})), "a pack with a cut 2x sheet is read");
     use_art(rig.renderer, cut_pack);
     const zoomtest::Picture smaller = rig.shoot();
     check(!same_pixels(smaller, classic) && rig.renderer.world_art_textures() == 1, "...and a 2x output draws from its 1x sheet: one texture, not the original's frame");
     check(same_pixels(rig.shoot(), smaller) && rig.renderer.world_art_textures() == 1, "...and again the same (a sheet that failed is not read at every frame)");
     world_art::Pack all_cut;
-    check(all_cut.load(pack_copy("cut123", identity, {1, 2, 3})), "a pack with all three sheets cut is read");
+    check(all_cut.load(pack_copy("cut123", first_page_only, {1, 2, 3})), "a pack with all three sheets cut is read");
     use_art(rig.renderer, all_cut);
     check(same_pixels(rig.shoot(), classic) && rig.renderer.world_art_textures() == 0, "...and its frame is the original's, with no texture");
     check(same_pixels(rig.shoot(), classic), "...and again");
@@ -977,6 +1020,74 @@ void make_effect_pictures(const assets::AssetArchive& arc, const world_art::Pack
     std::printf("pictures written to %s\n", dir.c_str());
 }
 
+/// The pictures of the grass and the plants (ANTS_WORLD_ART_SHOTS=FOLDER ANTS_WORLD_ART_SET=plants): the busiest view of each of the original's maps (the most different kinds of plant in a window of 15 x 9
+/// cells), the whole new look of the game (ground, transitions, plants) beside Classic, at 1x, 2x and 3x, with the animated flower at the moment of its first frame
+void make_plant_pictures(const assets::AssetArchive& arc, const world_art::Pack& pack, const std::string& dir) {
+    namespace fs = std::filesystem;
+    std::error_code ignored;
+    fs::create_directories(dir, ignored);
+    std::set<uint32_t> plant_anims;
+    for (uint32_t id = 0; id < arc.animation_count(); ++id) {
+        const std::string& name = arc.get_animation(id).name;
+        for (const char* prefix : {"grass", "clover", "flower", "dflower", "leaf", "stick", "mush", "plant", "ivy"}) {
+            if (name.rfind(prefix, 0) == 0) plant_anims.insert(id);
+        }
+    }
+    for (const char* map : {"TREASURE", "ISLANDS", "GAUNTLET", "MEDIUM", "SMALL"}) {
+        for (const int32_t os : {1, 2, 3}) {
+            zoomtest::PixelRig rig(arc, map, kW, kH, 0, os);
+            if (!rig.ok) {
+                std::fprintf(stderr, "picture: cannot start %s\n", map);
+                continue;
+            }
+            // the window with the most different plants (then the most plants): the plants of the object list and the grass of the second layer
+            std::vector<std::pair<uint32_t, std::pair<int32_t, int32_t>>> items;
+            for (const auto& spawn : rig.level.anthill_spawns) {
+                if (spawn.team_id == 255 && plant_anims.count(spawn.tile_id) != 0) items.push_back({spawn.tile_id, {spawn.x, spawn.y}});
+            }
+            for (uint32_t y = 0; y < rig.level.height(); ++y) {
+                for (uint32_t x = 0; x < rig.level.width(); ++x) {
+                    const uint16_t id = rig.level.get_cell_layer2(x, y).tile_index;
+                    if (id != assets::LVL_EMPTY_TILE && plant_anims.count(id) != 0) items.push_back({id, {static_cast<int32_t>(x), static_cast<int32_t>(y)}});
+                }
+            }
+            int32_t best_c = 0, best_r = 0, best_score = -1;
+            for (int32_t r = 0; r + 9 <= static_cast<int32_t>(rig.tiles_h); r += 2) {
+                for (int32_t c = 0; c + 15 <= static_cast<int32_t>(rig.tiles_w); c += 2) {
+                    std::set<uint32_t> kinds;
+                    int32_t count = 0;
+                    for (const auto& item : items) {
+                        if (item.second.first >= c && item.second.first < c + 15 && item.second.second >= r && item.second.second < r + 9) {
+                            kinds.insert(item.first);
+                            ++count;
+                        }
+                    }
+                    const int32_t score = static_cast<int32_t>(kinds.size()) * 100 + std::min(count, 99);
+                    if (score > best_score) {
+                        best_score = score;
+                        best_c = c;
+                        best_r = r;
+                    }
+                }
+            }
+            const int32_t w = os == 3 ? 320 : 480, h = os == 3 ? 192 : 288;
+            rig.world = rig.engine.get_world_state();
+            rig.world.ants.clear();
+            rig.look(best_c * 32, best_r * 32);
+            const LayoutRect view = rig.layout.view();
+            const auto cut = [&](const zoomtest::Picture& pic, const char* tag) {
+                const std::string path = dir + "/plants_" + map + "_" + std::to_string(os) + "x_" + tag + ".png";
+                if (!write_crop(path, pic, view.x * os, view.y * os, w * os, h * os)) std::fprintf(stderr, "picture: cannot write %s\n", path.c_str());
+            };
+            rig.renderer.set_dense_mud_budget_ms(-1);
+            cut(rig.shoot(), "classic");
+            rig.renderer.set_world_art(&pack);
+            cut(rig.shoot(), "new");
+        }
+    }
+    std::printf("pictures written to %s\n", dir.c_str());
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -984,27 +1095,29 @@ int main(int argc, char* argv[]) {
     (void)argv;                                                  // SDL2main renames main to SDL_main(int, char**) on Windows: the signature must be this one
     assets::AssetArchive arc;
     world_art::Pack pack;
-    if (!arc.load_chd(std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd") || !pack.load(pack_folder())) {
-        std::fprintf(stderr, "cannot open ants.chd or the world art: %s\n", pack.what().c_str());
+    world_art::Pack ground;                                      // the first page alone (first_page_only): what the tests of the ground draw from
+    if (!arc.load_chd(std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd") || !pack.load(pack_folder()) || !ground.load(pack_copy("ground", first_page_only))) {
+        std::fprintf(stderr, "cannot open ants.chd or the world art: %s %s\n", pack.what().c_str(), ground.what().c_str());
         return 2;
     }
     if (const char* shots = std::getenv("ANTS_WORLD_ART_SHOTS")) {
         const zoomtest::QuietStdout quiet;
         const char* set = std::getenv("ANTS_WORLD_ART_SET");
-        if (set != nullptr && std::string(set) == "mud") make_mud_pictures(arc, pack, shots);
-        else if (set != nullptr && std::string(set) == "edges") make_edge_pictures(arc, pack, shots);
-        else if (set != nullptr && std::string(set) == "effects") make_effect_pictures(arc, pack, shots);
-        else make_pictures(arc, pack, shots);
+        if (set != nullptr && std::string(set) == "mud") make_mud_pictures(arc, ground, shots);
+        else if (set != nullptr && std::string(set) == "edges") make_edge_pictures(arc, ground, shots);
+        else if (set != nullptr && std::string(set) == "effects") make_effect_pictures(arc, ground, shots);
+        else if (set != nullptr && std::string(set) == "plants") make_plant_pictures(arc, pack, shots);
+        else make_pictures(arc, ground, shots);
         return 0;
     }
     test_manifest(arc);
     test_variants();
-    test_draw(arc, pack);
-    test_scale(arc, pack);
-    test_classic(arc, pack);
-    test_fallback(arc, pack);
-    test_fog(arc, pack);
-    test_hash(arc, pack);
+    test_draw(arc, ground);
+    test_scale(arc, ground);
+    test_classic(arc, ground);
+    test_fallback(arc, ground);
+    test_fog(arc, ground);
+    test_hash(arc, ground);
     std::error_code ignored;
     for (const std::string& dir : g_copies) std::filesystem::remove_all(dir, ignored);
     std::printf("\nworld art: %d checks, %d failures\n", g_checks, g_failures);

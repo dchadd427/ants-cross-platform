@@ -14,7 +14,7 @@ namespace ants::app::world_art {
 namespace {
 
 constexpr int32_t kMaxSheet = 16384;           // a side of a sheet that the manifest may state (the device's own limit is asked when the texture is made)
-constexpr int32_t kMaxSprite = 256;            // the largest sprite of the original is far smaller
+constexpr int32_t kMaxSprite = 512;            // a sprite of the original is at most 262 pixels each way (a leaf of the plants)
 constexpr uint32_t kMaxNumber = 100000;
 
 bool to_int(const std::string& text, int64_t& out) {
@@ -59,9 +59,9 @@ const Picture* Pack::find(uint32_t number, uint8_t variant) const noexcept {
     return it == index_.end() ? nullptr : &pictures_[it->second];
 }
 
-const std::string& Pack::sheet_file(int32_t scale) const {
+const std::string& Pack::sheet_file(int32_t page, int32_t scale) const {
     static const std::string none;
-    return scale >= 1 && scale <= 3 ? sheets_[static_cast<size_t>(scale - 1)] : none;
+    return in_range(page, scale) ? sheets_[index(page, scale)].file : none;
 }
 
 bool Pack::parse(const std::string& manifest) {
@@ -78,7 +78,7 @@ bool Pack::parse(const std::string& manifest) {
     std::string line;
     int32_t line_no = 0;
     bool header = false;
-    int32_t sheets_seen = 0;
+    int32_t sheet_rows = 0;
     bool sorted_ok = true;
     uint64_t last_key = 0;
     while (std::getline(in, line)) {
@@ -89,43 +89,49 @@ bool Pack::parse(const std::string& manifest) {
         const std::string where = "line " + std::to_string(line_no) + ": ";
         if (w.empty()) continue;
         if (!header) {
-            if (w.size() != 2 || w[0] != "ants-world-art" || w[1] != "1") return fail(where + "the first record must be \"ants-world-art 1\"");
+            if (w.size() != 2 || w[0] != "ants-world-art" || w[1] != "2") return fail(where + "the first record must be \"ants-world-art 2\"");
             header = true;
             continue;
         }
         if (w[0] == "sheet") {
-            int64_t scale = 0, width = 0, height = 0;
-            if (w.size() != 5 || !to_int(w[1], scale) || !to_int(w[3], width) || !to_int(w[4], height)) return fail(where + "a sheet record is: sheet <scale> <png file> <width> <height>");
-            if (scale != sheets_seen + 1 || scale > 3) return fail(where + "the sheet records are for scale 1, 2 and 3, in that order, once each");
+            if (!pictures_.empty()) return fail(where + "the sheet records come before the sprites");
+            int64_t page = 0, scale = 0, width = 0, height = 0;
+            if (w.size() != 6 || !to_int(w[1], page) || !to_int(w[2], scale) || !to_int(w[4], width) || !to_int(w[5], height)) return fail(where + "a sheet record is: sheet <page> <scale> <png file> <width> <height>");
+            if (page != sheet_rows / 3 || scale != sheet_rows % 3 + 1 || page >= kMaxPages) return fail(where + "the sheet records are for the pages in order and, in each page, for scale 1, 2 and 3 in that order, once each");
             if (width < 1 || height < 1 || width > kMaxSheet || height > kMaxSheet) return fail(where + "a sheet's size is out of range");
-            if (w[2].find('/') != std::string::npos || w[2].find('\\') != std::string::npos || w[2].find("..") != std::string::npos || w[2] == "." || w[2].empty()) return fail(where + "a sheet's file must be a name in the folder");
-            sheets_[static_cast<size_t>(scale - 1)] = w[2];
-            sheet_w_[static_cast<size_t>(scale - 1)] = static_cast<int32_t>(width);
-            sheet_h_[static_cast<size_t>(scale - 1)] = static_cast<int32_t>(height);
-            ++sheets_seen;
+            if (w[3].find('/') != std::string::npos || w[3].find('\\') != std::string::npos || w[3].find("..") != std::string::npos || w[3] == "." || w[3].empty()) return fail(where + "a sheet's file must be a name in the folder");
+            Sheet& sheet = sheets_[static_cast<size_t>(sheet_rows)];
+            sheet.file = w[3];
+            sheet.w = static_cast<int32_t>(width);
+            sheet.h = static_cast<int32_t>(height);
+            ++sheet_rows;
+            pages_ = (sheet_rows + 2) / 3;
             continue;
         }
         if (w[0] == "sprite") {
-            if (sheets_seen != 3) return fail(where + "the three sheet records come before the sprites");
-            int64_t v[10] = {};
-            if (w.size() != 11) return fail(where + "a sprite record is: sprite <number> <variant> <w> <h> <x1> <y1> <x2> <y2> <x3> <y3>");
-            for (size_t k = 0; k < 10; ++k) {
+            if (sheet_rows == 0 || sheet_rows % 3 != 0) return fail(where + "the three sheet records of each page come before the sprites");
+            int64_t v[11] = {};
+            if (w.size() != 12) return fail(where + "a sprite record is: sprite <number> <variant> <page> <w> <h> <x1> <y1> <x2> <y2> <x3> <y3>");
+            for (size_t k = 0; k < 11; ++k) {
                 if (!to_int(w[k + 1], v[k])) return fail(where + "a sprite record holds whole numbers only");
             }
             if (v[0] < 0 || v[0] > static_cast<int64_t>(kMaxNumber)) return fail(where + "a sprite number is out of range");
             if (v[1] < 0 || v[1] >= kVariants) return fail(where + "a variant is 0 to 15");
-            if (v[2] < 1 || v[3] < 1 || v[2] > kMaxSprite || v[3] > kMaxSprite) return fail(where + "a sprite's size is out of range");
+            if (v[2] < 0 || v[2] >= pages_) return fail(where + "a sprite's page is not one of the manifest's");
+            if (v[3] < 1 || v[4] < 1 || v[3] > kMaxSprite || v[4] > kMaxSprite) return fail(where + "a sprite's size is out of range");
             Picture p;
             p.number = static_cast<uint32_t>(v[0]);
             p.variant = static_cast<uint8_t>(v[1]);
-            p.w = static_cast<int32_t>(v[2]);
-            p.h = static_cast<int32_t>(v[3]);
+            p.page = static_cast<uint8_t>(v[2]);
+            p.w = static_cast<int32_t>(v[3]);
+            p.h = static_cast<int32_t>(v[4]);
             for (int32_t s = 1; s <= 3; ++s) {
-                const int64_t x = v[4 + (s - 1) * 2];
-                const int64_t y = v[5 + (s - 1) * 2];
+                const int64_t x = v[5 + (s - 1) * 2];
+                const int64_t y = v[6 + (s - 1) * 2];
+                const Sheet& sheet = sheets_[index(p.page, s)];
                 // the picture and its one-pixel ring lie inside the sheet
-                if (x < 1 || y < 1 || x + static_cast<int64_t>(p.w) * s + 1 > sheet_w_[static_cast<size_t>(s - 1)] || y + static_cast<int64_t>(p.h) * s + 1 > sheet_h_[static_cast<size_t>(s - 1)]) {
-                    return fail(where + "the picture of sprite " + w[1] + " does not lie inside the sheet of scale " + std::to_string(s) + " with its ring");
+                if (x < 1 || y < 1 || x + static_cast<int64_t>(p.w) * s + 1 > sheet.w || y + static_cast<int64_t>(p.h) * s + 1 > sheet.h) {
+                    return fail(where + "the picture of sprite " + w[1] + " does not lie inside the sheet of its page at scale " + std::to_string(s) + " with its ring");
                 }
                 p.x[static_cast<size_t>(s - 1)] = static_cast<int32_t>(x);
                 p.y[static_cast<size_t>(s - 1)] = static_cast<int32_t>(y);
@@ -141,7 +147,7 @@ bool Pack::parse(const std::string& manifest) {
         return fail(where + "a record is \"sheet\" or \"sprite\"");
     }
     if (!header) return fail("the manifest is empty");
-    if (sheets_seen != 3) return fail("the manifest lacks a sheet record");
+    if (sheet_rows == 0 || sheet_rows % 3 != 0) return fail("the manifest lacks a sheet record");
     if (!sorted_ok) return fail("the sprite records are not sorted by number and variant");
     generation_ = ++next_generation;
     loaded_ = true;
@@ -161,31 +167,33 @@ bool Pack::load(const std::string& folder) {
     folder_ = dir;
     // The sheets are decoded later (when a texture needs one), but they must be there and be the size that the manifest states: the header of each file is read now, so that a folder that lacks a sheet, or has
     // another one, is the original's art from the start and not a ground that is missing
-    for (const int32_t scale : kScales) {
-        const size_t k = static_cast<size_t>(scale - 1);
-        std::ifstream sheet(dir + sheets_[k], std::ios::binary);
-        uint8_t head[33] = {};
-        sheet.read(reinterpret_cast<char*>(head), sizeof(head));
-        const bool png = sheet.gcount() == static_cast<std::streamsize>(sizeof(head)) && std::memcmp(head, "\x89PNG\r\n\x1a\n", 8) == 0 && std::memcmp(head + 12, "IHDR", 4) == 0;
-        const auto be32 = [&head](size_t at) { return (static_cast<int64_t>(head[at]) << 24) | (static_cast<int64_t>(head[at + 1]) << 16) | (static_cast<int64_t>(head[at + 2]) << 8) | head[at + 3]; };
-        if (!png || be32(16) != sheet_w_[k] || be32(20) != sheet_h_[k] || head[24] != 8 || head[25] != 6) {
-            const std::string why = "the sheet " + dir + sheets_[k] + " is missing, or is not a " + std::to_string(sheet_w_[k]) + " x " + std::to_string(sheet_h_[k]) + " picture of 8-bit RGBA";
-            *this = Pack{};
-            what_ = why;
-            return false;
+    for (int32_t page = 0; page < pages_; ++page) {
+        for (const int32_t scale : kScales) {
+            const Sheet& sheet = sheets_[index(page, scale)];
+            std::ifstream in(dir + sheet.file, std::ios::binary);
+            uint8_t head[33] = {};
+            in.read(reinterpret_cast<char*>(head), sizeof(head));
+            const bool png = in.gcount() == static_cast<std::streamsize>(sizeof(head)) && std::memcmp(head, "\x89PNG\r\n\x1a\n", 8) == 0 && std::memcmp(head + 12, "IHDR", 4) == 0;
+            const auto be32 = [&head](size_t at) { return (static_cast<int64_t>(head[at]) << 24) | (static_cast<int64_t>(head[at + 1]) << 16) | (static_cast<int64_t>(head[at + 2]) << 8) | head[at + 3]; };
+            if (!png || be32(16) != sheet.w || be32(20) != sheet.h || head[24] != 8 || head[25] != 6) {
+                const std::string why = "the sheet " + dir + sheet.file + " is missing, or is not a " + std::to_string(sheet.w) + " x " + std::to_string(sheet.h) + " picture of 8-bit RGBA";
+                *this = Pack{};
+                what_ = why;
+                return false;
+            }
         }
     }
     return true;
 }
 
-bool Pack::sheet_pixels(int32_t scale, DecodedImage& out) const {
+bool Pack::sheet_pixels(int32_t page, int32_t scale, DecodedImage& out) const {
     out = DecodedImage{};
-    const std::string& file = sheet_file(scale);
+    const std::string& file = sheet_file(page, scale);
     if (!loaded_ || file.empty()) return false;
     std::string bytes;
     if (!read_file(folder_ + file, bytes)) return false;
     if (!decode_png_rgba(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), out)) return false;
-    if (out.width != sheet_width(scale) || out.height != sheet_height(scale)) {
+    if (out.width != sheet_width(page, scale) || out.height != sheet_height(page, scale)) {
         out = DecodedImage{};
         return false;
     }

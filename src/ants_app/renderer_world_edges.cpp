@@ -52,10 +52,10 @@ bool Renderer::ensure_edge_pictures(int32_t scale) {
     if (edge_pictures_state_[k] != 0) return edge_pictures_state_[k] == 1;
     edge_pictures_state_[k] = 2;                                                  // (until it works: a sheet that fails is not read at every cell)
     DecodedImage sheet;
-    if (world_art_ == nullptr || !world_art_->sheet_pixels(scale, sheet)) return false;
+    if (world_art_ == nullptr || !world_art_->sheet_pixels(world_art::kGroundPage, scale, sheet)) return false;
     for (size_t kind = 1; kind < world_art::edges::kKinds; ++kind) {
         const world_art::Picture* p = world_art_->find(kPlainSprite[kind], 0);
-        if (p == nullptr || p->w != 32 || p->h != 32) return false;
+        if (p == nullptr || p->page != world_art::kGroundPage || p->w != 32 || p->h != 32) return false;
         std::vector<uint8_t> rgb(static_cast<size_t>(32 * scale) * static_cast<size_t>(32 * scale) * 3u);
         for (int32_t y = 0; y < 32 * scale; ++y) {
             for (int32_t x = 0; x < 32 * scale; ++x) {
@@ -98,7 +98,7 @@ void Renderer::draw_transition(int32_t col, int32_t row, int32_t sx, int32_t sy)
     const size_t at = static_cast<size_t>(row) * static_cast<size_t>(edge_map_.width) + static_cast<size_t>(col);
     if (edge_has_[at] == 0) return;
     int32_t scale = world_art_scale_now();
-    while (scale >= 1 && world_art_texture(scale) == nullptr) --scale;             // (the sheet that the ground is drawn from)
+    while (scale >= 1 && world_art_texture(world_art::kGroundPage, scale) == nullptr) --scale;             // (the sheet that the ground is drawn from)
     if (scale < 1) return;
     scale = std::min(scale, edge_max_scale_);
     const uint64_t key = (static_cast<uint64_t>(at) << 8) | static_cast<uint64_t>(scale);

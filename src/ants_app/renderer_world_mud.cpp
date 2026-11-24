@@ -53,12 +53,12 @@ bool Renderer::ensure_mud_pictures(int32_t scale) {
     if (mud_pictures_state_[k] != 0) return mud_pictures_state_[k] == 1;
     mud_pictures_state_[k] = 2;                                                  // (until it works: a sheet that fails is not read at every cell)
     DecodedImage sheet;
-    if (world_art_ == nullptr || !world_art_->sheet_pixels(scale, sheet)) return false;
+    if (world_art_ == nullptr || !world_art_->sheet_pixels(world_art::kGroundPage, scale, sheet)) return false;
     for (const world_art::Picture& p : world_art_->pictures()) {
         const uint32_t base = p.number % kBigBubbleStep;
         const bool big = p.number >= kBigBubbleStep;
         if (big ? (base < world_art::mud::kBubbleFirst || base > world_art::mud::kBubbleLast) : !world_art::mud::is_mud_sprite(p.number)) continue;
-        if (p.w != 32 || p.h != 32) continue;
+        if (p.page != world_art::kGroundPage || p.w != 32 || p.h != 32) continue;
         std::vector<uint8_t> rgb(static_cast<size_t>(32 * scale) * static_cast<size_t>(32 * scale) * 3u);
         for (int32_t y = 0; y < 32 * scale; ++y) {
             for (int32_t x = 0; x < 32 * scale; ++x) {
@@ -165,7 +165,7 @@ bool Renderer::draw_dense_mud_cell(int32_t col, int32_t row, int32_t anim_id, in
     const BubbleChoice choice = choose_bubble(col, row, native, template_now_ms_, mud_depth_.cell(col, row));
     const uint32_t number = choice.size == 0 ? choice.sprite : choice.sprite + static_cast<uint32_t>(choice.size) * kBigBubbleStep;
     int32_t scale = world_art_scale_now();
-    while (scale >= 1 && world_art_texture(scale) == nullptr) --scale;             // (the sheet that the ground is drawn from: a device that cannot take the sheet has the original's mud as well)
+    while (scale >= 1 && world_art_texture(world_art::kGroundPage, scale) == nullptr) --scale;             // (the sheet that the ground is drawn from: a device that cannot take the sheet has the original's mud as well)
     if (scale < 1) return false;
     scale = std::min(scale, mud_max_scale_);                                       // (the mud is baked at a smaller scale where memory is short, and enlarged by the graphics card)
     const uint8_t variant = world_variant_;

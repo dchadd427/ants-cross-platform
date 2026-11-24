@@ -56,7 +56,7 @@ artwork, sounds, music and maps are not covered by it: they belong to their copy
 - What: Libre Baskerville, Copyright 2012 The Libre Baskerville Project Authors, <https://github.com/impallari/Libre-Baskerville>; Lora, Copyright 2011 The Lora Project Authors, <https://github.com/cyrealtype/Lora-Cyrillic>.
 - Licence: SIL Open Font License, Version 1.1. The full text is in each licence file; it stays together with the fonts, and the font is shipped unmodified under its own name, with the licence text.
 - The pictures of `assets/hud_art/` are this project's own drawings (MIT, like its code), made by that generator; they are not the original game's artwork.
-- The pictures of `assets/world_art/` (the ground, its edges and the bridge) are this project's own drawings (MIT, like its code), made by `tools/world_art/` in the shapes and colors of the original's decoded sprites; they are not the original game's artwork.
+- The pictures of `assets/world_art/` (the ground, its edges, the bridge, the bombs, the explosion and the fire wall; and the grass and the plants) are this project's own drawings (MIT, like its code), made by `tools/world_art/` and, for the grass and the plants, by hand and in Blender, in the shapes and colors of the original's decoded sprites; they are not the original game's artwork.
 
 ## Local files of the original, not part of the repository
 

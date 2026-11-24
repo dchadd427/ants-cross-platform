@@ -74,9 +74,7 @@ SDL_Texture* Renderer::fire_glow_texture(int32_t scale) {
 // Draws a fire wall at the cell whose top left is (wx, wy) of the world: the glow, then the wall's frame blended by its own opacity and added once more as light. Without a picture or a sheet the original's wall.
 void Renderer::draw_fire_wall(int32_t wx, int32_t wy) {
     int32_t scale = world_art_ != nullptr ? world_art_scale_now() : 0;
-    SDL_Texture* sheet = nullptr;
-    for (; scale >= 1 && sheet == nullptr; --scale) sheet = world_art_texture(scale);
-    ++scale;
+    SDL_Texture* sheet = world_art_sheet(world_art::kGroundPage, scale);
     if (sheet == nullptr || !archive_ || anim_id_fire_ < 0) {
         draw_template_world(anim_id_fire_, wx, wy);
         return;
@@ -100,7 +98,7 @@ void Renderer::draw_fire_wall(int32_t wx, int32_t wy) {
         const auto& original = archive_->get_sprite(f.sprite_index);
         const world_art::Picture* pic = world_art_->find(kFireWall + f.sprite_index, 0);
         const SDL_Rect dst = placed(sx + f.dx, sy + f.dy, static_cast<int>(original.width), static_cast<int>(original.height));
-        if (pic == nullptr || pic->w != static_cast<int32_t>(original.width) || pic->h != static_cast<int32_t>(original.height)) {
+        if (pic == nullptr || pic->page != world_art::kGroundPage || pic->w != static_cast<int32_t>(original.width) || pic->h != static_cast<int32_t>(original.height)) {
             SDL_Texture* tex = texture_cache_->get_sprite_texture(f.sprite_index, false, TEAM_NONE);
             if (tex) SDL_RenderCopy(renderer_, tex, nullptr, &dst);
             continue;
@@ -120,10 +118,10 @@ bool Renderer::ensure_blast_alpha() {
     if (blast_alpha_state_ != 0) return blast_alpha_state_ == 1;
     blast_alpha_state_ = 2;
     DecodedImage sheet;
-    if (world_art_ == nullptr || !world_art_->sheet_pixels(1, sheet)) return false;
+    if (world_art_ == nullptr || !world_art_->sheet_pixels(world_art::kGroundPage, 1, sheet)) return false;
     for (uint32_t i = 0; i < blast_alpha_.size(); ++i) {
         const world_art::Picture* p = world_art_->find(kBlastLight + kFirstBlast + i, 0);
-        if (p == nullptr) continue;
+        if (p == nullptr || p->page != world_art::kGroundPage) continue;
         std::vector<uint8_t> alpha(static_cast<size_t>(p->w) * static_cast<size_t>(p->h));
         for (int32_t y = 0; y < p->h; ++y) {
             for (int32_t x = 0; x < p->w; ++x) alpha[static_cast<size_t>(y) * static_cast<size_t>(p->w) + static_cast<size_t>(x)] = sheet.rgba[(static_cast<size_t>(p->y[0] + y) * static_cast<size_t>(sheet.width) + static_cast<size_t>(p->x[0] + x)) * 4u + 3u];
@@ -203,15 +201,13 @@ void Renderer::draw_blast_light(const ants::assets::AnimationSubItem& sub, int32
     }
     draw_frame_parts(sub, sx, sy);
     int32_t scale = world_art_scale_now();
-    SDL_Texture* sheet = nullptr;
-    for (; scale >= 1 && sheet == nullptr; --scale) sheet = world_art_texture(scale);
-    ++scale;
+    SDL_Texture* sheet = world_art_sheet(world_art::kGroundPage, scale);
     if (sheet == nullptr) return;
     const size_t k = static_cast<size_t>(scale - 1);
     for (const auto& f : sub.frames) {
         const world_art::Picture* light = world_art_->find(kBlastLight + f.sprite_index, 0);
         const auto& original = archive_->get_sprite(f.sprite_index);
-        if (light == nullptr || light->w != static_cast<int32_t>(original.width) || light->h != static_cast<int32_t>(original.height)) continue;
+        if (light == nullptr || light->page != world_art::kGroundPage || light->w != static_cast<int32_t>(original.width) || light->h != static_cast<int32_t>(original.height)) continue;
         world_art_filter(sheet, scale);
         const SDL_Rect src = {light->x[k], light->y[k], light->w * scale, light->h * scale};
         const SDL_Rect dst = placed(sx + f.dx, sy + f.dy, light->w, light->h);

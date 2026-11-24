@@ -63,34 +63,44 @@ int32_t Renderer::world_art_scale_now() const {
 
 // The texture of a sheet: read and decoded from its file once (the pixels are not kept), made static with the alpha blend. Null when the file cannot be read or decoded, or the device cannot make the
 // texture (said once on stderr; the caller then tries a sheet of a smaller scale and in the end draws the original's sprite)
-SDL_Texture* Renderer::world_art_texture(int32_t scale) {
-    if (world_art_ == nullptr || scale < 1 || scale > 3) return nullptr;
+SDL_Texture* Renderer::world_art_texture(int32_t page, int32_t scale) {
+    if (world_art_ == nullptr || page < 0 || page >= world_art_->page_count() || scale < 1 || scale > 3) return nullptr;
     if (world_art_generation_ != world_art_->generation()) {
         drop_world_art_textures();
         world_art_generation_ = world_art_->generation();
     }
-    const size_t k = static_cast<size_t>(scale - 1);
+    const size_t k = static_cast<size_t>(page) * 3u + static_cast<size_t>(scale - 1);
     if (world_art_textures_[k]) return world_art_textures_[k];
     if (world_art_failed_[k]) return nullptr;
     world_art_failed_[k] = true;                                                // (until it works: a sheet that fails is not read again at every picture of every frame)
     DecodedImage image;
-    if (!world_art_->sheet_pixels(scale, image)) {
-        std::cerr << "[Renderer] The world art's sheet " << world_art_->sheet_file(scale) << " cannot be read" << std::endl;
+    if (!world_art_->sheet_pixels(page, scale, image)) {
+        std::cerr << "[Renderer] The world art's sheet " << world_art_->sheet_file(page, scale) << " cannot be read" << std::endl;
         return nullptr;
     }
     if (art_texture_limit_ > 0 && (image.width > art_texture_limit_ || image.height > art_texture_limit_)) {
-        std::cerr << "[Renderer] The world art's sheet " << world_art_->sheet_file(scale) << " is larger than a texture of this device" << std::endl;
+        std::cerr << "[Renderer] The world art's sheet " << world_art_->sheet_file(page, scale) << " is larger than a texture of this device" << std::endl;
         return nullptr;
     }
     SDL_Texture* tex = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, image.width, image.height);
     if (!tex) {
-        std::cerr << "[Renderer] The world art's sheet " << world_art_->sheet_file(scale) << " cannot be made a texture: " << SDL_GetError() << std::endl;
+        std::cerr << "[Renderer] The world art's sheet " << world_art_->sheet_file(page, scale) << " cannot be made a texture: " << SDL_GetError() << std::endl;
         return nullptr;
     }
     SDL_UpdateTexture(tex, nullptr, image.rgba.data(), image.width * 4);
     SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
     world_art_failed_[k] = false;
     world_art_textures_[k] = tex;
+    return tex;
+}
+
+// The texture of the sheet of a page at the scale asked for, or at the next smaller one that can be had (a device that cannot take the sheet, a file that cannot be read); `scale` becomes the scale of the
+// sheet that was found, and is 0 when there is none: the sprite is then drawn as the original has it
+SDL_Texture* Renderer::world_art_sheet(int32_t page, int32_t& scale) {
+    SDL_Texture* tex = nullptr;
+    for (; scale >= 1 && tex == nullptr; --scale) tex = world_art_texture(page, scale);
+    ++scale;
+    if (tex == nullptr) scale = 0;
     return tex;
 }
 
@@ -109,9 +119,7 @@ bool Renderer::draw_world_art_part(uint32_t sprite_index, int32_t x, int32_t y, 
     const world_art::Picture* pic = world_art_->find(sprite_index, world_variant_);
     if (pic == nullptr || pic->w != w || pic->h != h) return false;
     int32_t scale = world_art_scale_now();
-    SDL_Texture* tex = nullptr;
-    for (; scale >= 1 && tex == nullptr; --scale) tex = world_art_texture(scale);        // (a sheet that cannot be had: the next smaller one)
-    ++scale;
+    SDL_Texture* tex = world_art_sheet(pic->page, scale);                                // (a sheet that cannot be had: the next smaller one)
     if (tex == nullptr) return false;
     world_art_filter(tex, scale);
     const size_t k = static_cast<size_t>(scale - 1);
