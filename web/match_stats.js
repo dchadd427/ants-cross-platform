@@ -1,4 +1,4 @@
-/* The stats sections of the match page (docs/REPLAYS.md "The match pages"): a band of highlights, "Over time" and "Activity". They read what the server's replay pass keeps under a record's `details`
+/* The stats sections of the match page (docs/REPLAYS.md "The match pages"): a band of highlights, "Special ants", "Over time" and "Activity". They read what the server's replay pass keeps under a record's `details`
    (`AntsHistory.detailsOf`: a plain object or nothing) and build a panel from the keys they know, or nothing when the keys are not there, so a match without them looks as it did before. `details` is data
    that came from a server: every number is read as a number (anything else is 0), every list as a list, a seat as 0 to 3, and a name is put in as text, never as markup. The charts are inline SVG, with
    no library: each seat has its color and its own shape (circle, square, triangle, diamond), so that no chart depends on the color alone.
@@ -29,6 +29,81 @@
     // Details come from a server and are trusted for nothing: a length, a step or a list that is not what a match can have is cut here, so that a damaged record can make a wrong chart but never a hang
     function turnsOf(x, fallback) { var n = num(x); return Math.min(MAX_TURNS, Math.max(1, n > 0 ? n : fallback)); }
     function px(v) { return v < -100000 ? -100000 : v > 100000 ? 100000 : v; }      // a coordinate of a chart: finite and short, so that a path never has an exponent in it
+
+    // ---- special ants: what each type of ant did, a card for each type and a row for each seat (docs/REPLAYS.md "The match pages", "Special ants") ----
+    // The numbers come from four places, and a record may lack any of them: the seats' rows (bombs set and defused, fires lit), `details.economy` (the ants of each type that took a power-up, the bombs that went off, the food
+    // trips), `details.combat` (the damage) and `details.special` (bridges, fires put out, the raids: only a record counted by a build that has them). A column is shown only when every seat has its number, so an older
+    // record shows what it has and hides what it lacks; a type that nobody used is left out, with one line that says so.
+    var MAX_COUNT = 1000000000;
+    function whole(x, debt) { return typeof x === 'number' && isFinite(x) && (x >= 0 || debt === true) ? Math.max(-MAX_COUNT, Math.min(MAX_COUNT, Math.round(x))) : null; }      // a number that a record holds, or null when it holds none; only a loot can be below zero (a debt)
+    function bySeat(a, seat) { return whole(list(a)[seat]); }
+    function inSeat(a, seat, i, debt) { return whole(list(list(a)[seat])[i], debt); }
+    function seatRow(ctx, seat, key) { var r = ctx.by[seat]; return r && typeof r === 'object' ? whole(r[key]) : null; }
+    function one(n) { return n === null ? null : { n: n }; }
+    // the raids that an older record has: only how many were begun, counted from the list of raids when that is whole (the list is cut at 30 and left out when the text was too long)
+    function beganOf(combat) {
+        var c = obj(combat), raids = c.raids;
+        if (!Array.isArray(raids) || c.raids_n !== undefined) return null;
+        var began = [0, 0, 0, 0];
+        raids.slice(0, 30).forEach(function (r) { var t = seatOf(list(r)[1]); if (t >= 0) began[t]++; });
+        return began;
+    }
+    function raidCell(c, s) {
+        var tried = inSeat(c.sp.raids, s, 0), home = inSeat(c.sp.raids, s, 1);
+        if (tried !== null && home !== null) return { n: home, of: tried };
+        var began = c.began ? c.began[s] : null;
+        return typeof began === 'number' ? { n: began, tag: 'tried' } : null;
+    }
+    // [name, the index of its power-up in `economy.taken`, the columns [label, title, how a seat's number is read, the sentence of the key line that says what it is]]. The key line of a card is the sentences of
+    // the columns that it shows.
+    var PU_TITLE = 'Ants of the seat that took this power-up and became this type';
+    var RAIDS_NOTE = 'Raids: \u201c5 of 8\u201d is 8 times a Thief went into an enemy hill, 5 times the loot reached its own hill.';
+    var CARDS = [
+        ['Swimmer', 4, [['Built', 'Water squares that its Swimmers bridged all the way', function (c, s) { return one(bySeat(c.sp.built, s)); }, 'Built: water squares bridged all the way.'],
+                        ['Taken down', 'Finished bridges that its Swimmers dug away', function (c, s) { return one(bySeat(c.sp.undug, s)); }, 'Taken down: finished bridges its Swimmers dug away. A bridge that falls by itself after 3 minutes is not counted.']]],
+        ['Fire Ant', 1, [['Lit', 'Fire walls that its Fire Ants lit', function (c, s) { return one(seatRow(c, s, 'fires_lit')); }, 'Lit: fire walls started.'],
+                         ['Put out', 'Fires that its Fire Ants put out', function (c, s) { return one(bySeat(c.sp.out, s)); }, 'Put out: fires its Fire Ants put out, its own or anyone\u2019s. A fire that burns out by itself after 3 minutes is not counted.']]],
+        ['Bomber', 0, [['Set', 'Bombs that its Bombers put down', function (c, s) { return one(seatRow(c, s, 'bombs_planted')); }, 'Set: bombs put down.'],
+                       ['Defused', 'Enemy bombs that its Bombers took away', function (c, s) { return one(seatRow(c, s, 'bombs_defused')); }, 'Defused: enemy bombs taken away.'],
+                       ['Went off', 'Its bombs that an ant stepped on', function (c, s) { return one(bySeat(c.eco.bombs_off, s)); }, 'Went off: its bombs that an ant stepped on.']]],
+        ['Thief', 2, [['Raids', 'Raids that brought loot home, of the raids tried', raidCell, RAIDS_NOTE],
+                      ['Loot', 'Points that its Thieves brought home', function (c, s) { return one(inSeat(c.sp.raids, s, 2, true)); }, 'Loot: the points brought home.']]]];
+    var OTHER = ['Food and fighting', [['Food trips', 'Times an ant picked food up', function (c, s) { return c.mode187 ? null : one(inSeat(c.eco.food, s, 0)); }, 'Food trips: times an ant picked food up.'],
+                                      ['Combat Ants', 'Ants that took the Combat power-up', function (c, s) { return one(inSeat(c.eco.taken, s, 3)); }, 'Combat Ants: ants that took the Combat power-up.'],
+                                      ['Damage dealt', 'Hit points its ants took from enemy ants', function (c, s) { return one(bySeat(c.com.dealt, s)); }, 'Damage: hit points taken from enemy ants, and lost to them.'],
+                                      ['Damage taken', 'Hit points its ants lost', function (c, s) { return one(bySeat(c.com.taken, s)); }, '']]];
+    function listOf(names) { return names.length < 2 ? names.join('') : names.slice(0, -1).join(', ') + ' or ' + names[names.length - 1]; }
+    // What the section shows, as data: {order, cards: [{name, cols: [{label, title, pu, cells: [a cell for each seat of order], note}], note, none: [bool for each seat]}], gone: [names of the types that nobody had] or null when the
+    // record cannot say (it has no count of the ants of each type), other: a card like the others or null, known: whether the record has those counts}; null when the record has nothing to show
+    function specialOf(ctx) {
+        var d = ctx.d, order = [];
+        H.sidesOf(ctx.rec).forEach(function (sd) { sd.seats.forEach(function (seat) { if (seatOf(seat.seat) >= 0) order.push(seat.seat); }); });
+        if (!order.length) return null;
+        var c = { by: ctx.by, eco: obj(d && d.economy), com: obj(d && d.combat), sp: obj(d && d.special), mode187: ctx.mode187, began: null };
+        c.began = beganOf(c.com);
+        var known = Array.isArray(c.eco.taken);
+        function colOf(def, pu) {
+            var cells = order.map(function (s) { return pu === undefined ? def[2](c, s) : one(inSeat(c.eco.taken, s, pu)); });
+            if (!cells.every(function (x) { return x !== null; })) return null;
+            var raidsTried = pu === undefined && def[2] === raidCell && cells.some(function (x) { return x.tag; });         // (an older record has only the raids that were begun)
+            return { label: pu === undefined ? def[0] : 'Ants', title: pu === undefined ? def[1] : PU_TITLE, pu: pu !== undefined, cells: cells, note: pu !== undefined ? '' : raidsTried ? 'Raids: times a Thief went into an enemy hill.' : def[3] };
+        }
+        function cardOf(name, defs, pu) {
+            var cols = (pu === undefined ? [] : [colOf(null, pu)]).concat(defs.map(function (def) { return colOf(def); })).filter(Boolean);
+            if (!cols.length) return null;
+            var none = order.map(function (s, i) { return cols.every(function (col) { var x = col.cells[i]; return !(x.n || x.of); }); });
+            return { name: name, cols: cols, note: cols.map(function (col) { return col.note; }).filter(Boolean).join(' '), none: none, used: none.some(function (n) { return !n; }) };
+        }
+        var cards = [], gone = [];
+        CARDS.forEach(function (def) {
+            var card = cardOf(def[0], def[2], def[1]);
+            if (card && card.used) cards.push(card);
+            else if (known) gone.push(def[0]);
+        });
+        var other = cardOf(OTHER[0], OTHER[1]);
+        if (!cards.length && !other && !known) return null;
+        return { order: order, cards: cards, gone: known ? gone : null, other: other, known: known };
+    }
 
     // The context of one record: the seats that played (by seat number), its details, and the helpers that read a seat's name
     function contextOf(rec) {
@@ -354,13 +429,57 @@
             return s;
         }
 
-        return { summaryBand: summaryBand, overTime: overTime, activity: activity };
+        // ---- special ants: a card for each type that somebody had, and the card of food and fighting ----
+        function signed(n) { return n < 0 ? '\u2212' + n0(-n) : n0(n); }
+        function abTable(ctx, model, card) {
+            var t = el('table', 'abt'), hr = el('tr'), th = el('thead'), tb = el('tbody');
+            var max = card.cols.map(function (col) { return Math.max.apply(null, col.cells.map(function (x) { return x.n; }).concat([0])); });
+            t.appendChild(el('caption', 'sr', card.name + ' of every seat'));
+            hr.appendChild(el('th', '', 'Player'));
+            card.cols.forEach(function (col) { var h = el('th', col.pu ? 'pu' : '', col.label); h.title = col.title; hr.appendChild(h); });
+            th.appendChild(hr); t.appendChild(th);
+            model.order.forEach(function (seat, i) {
+                var tr = el('tr', card.none[i] ? 'none' : ''), td = el('td'), w = el('span', 'who');
+                w.appendChild(sq(seat)); w.appendChild(el('span', '', nameText(ctx, seat))); td.appendChild(w); tr.appendChild(td);
+                card.cols.forEach(function (col, k) {
+                    var x = col.cells[i], cell = el('td', col.pu ? 'pu' : ''), mb = el('span', 'mb'), f = el('i');
+                    var share = x.of !== undefined ? (x.of ? x.n / x.of : 0) : (max[k] > 0 ? x.n / max[k] : 0);
+                    cell.title = col.title;
+                    cell.appendChild(el('b', x.n || x.of ? '' : 'zero', signed(x.n)));
+                    if (x.of) cell.appendChild(el('span', 'of', 'of ' + n0(x.of)));
+                    else if (x.tag) cell.appendChild(el('span', 'of', x.tag));
+                    f.style.width = Math.round(100 * Math.max(0, Math.min(1, share))) + '%'; f.setAttribute('data-c', SEATS[seat]);
+                    mb.appendChild(f); cell.appendChild(mb); tr.appendChild(cell);
+                });
+                tb.appendChild(tr);
+            });
+            t.appendChild(tb); return t;
+        }
+        function specialAnts(rec) {
+            var ctx = contextOf(rec), model = specialOf(ctx);
+            if (!model) return null;
+            var s = panel('special', 'Special ants', 'What each type of ant did, seat by seat'), grid = el('div', 'abgrid');
+            function add(card, wide) {
+                var c = el('div', 'abcard' + (wide ? ' wide' : '')); c.appendChild(el('h3', '', card.name)); c.appendChild(abTable(ctx, model, card)); if (card.note) c.appendChild(el('p', 'lgd', card.note)); grid.appendChild(c);
+            }
+            model.cards.forEach(function (card) { add(card, false); });
+            if (model.other) add(model.other, true);
+            // what nobody did: a type that was not taken as a power-up and did nothing (a level may start its ants as a type, so "nobody had one" would not always be true); said before the cards when no type was used
+            var gone = model.gone && model.gone.length ? el('p', 'abnote', 'No ' + listOf(model.gone) + ' took a power-up or did anything in this match.') : null;
+            if (gone && !model.cards.length) s.appendChild(gone);
+            if (grid.children.length) s.appendChild(grid);
+            if (gone && model.cards.length) s.appendChild(gone);
+            if (model.cards.length && model.cards.some(function (c) { return c.cols[0].pu; })) s.appendChild(el('p', 'lgd', 'Ants: how many of the seat\u2019s ants took the power-up and became this type.'));
+            return s;
+        }
+
+        return { summaryBand: summaryBand, specialAnts: specialAnts, overTime: overTime, activity: activity };
     }
 
     // The sections of the page, for a document (and a way to read a color of the page's style): each makes a panel from a record, or null. The page's SECTIONS list holds them.
     function sections(doc, getStyle) {
         var b = builder(doc, getStyle);
-        return { summary: b.summaryBand, overtime: b.overTime, activity: b.activity };
+        return { summary: b.summaryBand, special: b.specialAnts, overtime: b.overTime, activity: b.activity };
     }
     // A chart is drawn for the width of its box: after the page is built, and again when the window changes size
     function redraw(rootNode) {
@@ -381,6 +500,6 @@
         return what + 'the recording a few minutes after a match ends. They are not ready for this match yet.';
     }
 
-    return { sections: sections, redraw: redraw, hasStats: hasStats, noStatsNote: noStatsNote, contextOf: contextOf, chipsOf: chipsOf, overTimeFacts: overTimeFacts, activityFacts: activityFacts, leadersOf: leadersOf,
+    return { sections: sections, redraw: redraw, hasStats: hasStats, noStatsNote: noStatsNote, contextOf: contextOf, chipsOf: chipsOf, overTimeFacts: overTimeFacts, activityFacts: activityFacts, leadersOf: leadersOf, specialOf: specialOf,
              leadSentence: leadSentence, niceStep: niceStep, tintOf: tintOf, clock: clock };
 });

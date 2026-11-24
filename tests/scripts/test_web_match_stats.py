@@ -84,6 +84,35 @@ class TheSections(unittest.TestCase):
         "an older version is not named": ("(rec && typeof rec.game === 'string' && rec.game ? rec.game : 'unknown')", "'unknown'"),
         "a removed recording is told as not ready": ("if (st.kind === 'removed') return what + 'the recording. This one was removed before they were, so only the totals above were kept.';", ""),
         "a name is markup": ("w.appendChild(doc.createTextNode(nameText(ctx, seat))); return w;", "w.innerHTML = nameText(ctx, seat); return w;"),
+        "a column that is not shown keeps its key line": ("note: cols.map(function (col) { return col.note; }).filter(Boolean).join(' ')", "note: defs.map(function (def) { return def[3]; }).filter(Boolean).join(' ')"),
+        "the raids of an older record say 5 of 8": ("raidsTried ? 'Raids: times a Thief went into an enemy hill.' : def[3]", "def[3]"),
+        "a count of ants is read from the first power-up": ("one(inSeat(c.eco.taken, s, pu))", "one(inSeat(c.eco.taken, s, 0))"),
+        "the combat ants are the swimmers": ("function (c, s) { return one(inSeat(c.eco.taken, s, 3)); }", "function (c, s) { return one(inSeat(c.eco.taken, s, 4)); }"),
+        "a column is shown when only some seats have it": ("if (!cells.every(function (x) { return x !== null; })) return null;", "if (!cells.some(function (x) { return x !== null; })) return null;"),
+        "a type that nobody had has a card": ("if (card && card.used) cards.push(card);", "if (card) cards.push(card);"),
+        "raids that were tried do not make a type used": ("return !(x.n || x.of);", "return !x.n;"),
+        "the types that nobody had are not named": ("else if (known) gone.push(def[0]);", "else if (false) gone.push(def[0]);"),
+        "a record that cannot say is told to have none of a type": ("else if (known) gone.push(def[0]);", "else gone.push(def[0]);"),
+        "a match with no power-up has no line that says so": ("if (gone && !model.cards.length) s.appendChild(gone);", ""),
+        "the line of the types that nobody used says that nobody had one": ("' took a power-up or did anything in this match.'", "' had no ant in this match.'"),
+        "a count below zero is a count": ("(x >= 0 || debt === true)", "true"),
+        "a debt is not a loot": ("(x >= 0 || debt === true)", "x >= 0"),
+        "a loot is read as a count that cannot be a debt": ("return one(inSeat(c.sp.raids, s, 2, true));", "return one(inSeat(c.sp.raids, s, 2));"),
+        "the line of ants is there when no card has the column": ("if (model.cards.length && model.cards.some(function (c) { return c.cols[0].pu; }))", "if (true)"),
+        "the seats are in the order of the colors": ("H.sidesOf(ctx.rec).forEach(function (sd) { sd.seats.forEach(function (seat) { if (seatOf(seat.seat) >= 0) order.push(seat.seat); }); });", "ctx.played.forEach(function (seat) { order.push(seat); });"),
+        "a seat that is not 0 to 3 is a row": ("if (seatOf(seat.seat) >= 0) order.push(seat.seat);", "order.push(seat.seat);"),
+        "a loot below zero has no sign": ("function signed(n) { return n < 0 ? '\\u2212' + n0(-n) : n0(n); }", "function signed(n) { return n0(n); }"),
+        "a bar can be below its box": ("Math.round(100 * Math.max(0, Math.min(1, share)))", "Math.round(100 * Math.min(1, share))"),
+        "the bar of the raids is against the best seat": ("var share = x.of !== undefined ? (x.of ? x.n / x.of : 0) : (max[k] > 0 ? x.n / max[k] : 0);", "var share = max[k] > 0 ? x.n / max[k] : 0;"),
+        "the raids of an older record are counted for the hill that was robbed": ("var t = seatOf(list(r)[1]); if (t >= 0) began[t]++;", "var t = seatOf(list(r)[2]); if (t >= 0) began[t]++;"),
+        "a cut list of raids is trusted": ("if (!Array.isArray(raids) || c.raids_n !== undefined) return null;", "if (!Array.isArray(raids)) return null;"),
+        "mode 187 has food trips": ("return c.mode187 ? null : one(inSeat(c.eco.food, s, 0));", "return one(inSeat(c.eco.food, s, 0));"),
+        "a count is not bounded": ("Math.max(-MAX_COUNT, Math.min(MAX_COUNT, Math.round(x)))", "Math.round(x)"),
+        "a record that has nothing to show has a section": ("if (!cards.length && !other && !known) return null;", ""),
+        "a seat with none of a type is not dim": ("tr = el('tr', card.none[i] ? 'none' : '')", "tr = el('tr', '')"),
+        "the card of food and fighting is not wide": ("if (model.other) add(model.other, true);", "if (model.other) add(model.other, false);"),
+        "every bar is the color of the first seat": ("f.style.width = Math.round(100 * Math.max(0, Math.min(1, share))) + '%'; f.setAttribute('data-c', SEATS[seat]);", "f.style.width = Math.round(100 * Math.max(0, Math.min(1, share))) + '%'; f.setAttribute('data-c', SEATS[0]);"),
+        "a name of the special ants is markup": ("w.appendChild(sq(seat)); w.appendChild(el('span', '', nameText(ctx, seat))); td.appendChild(w); tr.appendChild(td);\n                card.cols", "w.appendChild(sq(seat)); var nm = el('span', ''); nm.innerHTML = nameText(ctx, seat); w.appendChild(nm); td.appendChild(w); tr.appendChild(td);\n                card.cols"),
     }
 
     def test_the_check_can_fail(self):
@@ -116,7 +145,7 @@ class TheFiles(unittest.TestCase):
         self.assertNotIn("setAttribute('style'", self.script)
 
     def test_the_sections_are_entries_of_the_pages_list_and_a_match_without_stats_says_why(self):
-        self.assertIn("var SECTIONS = [resultSection, replaySection, stats.summary, boardSection, stats.overtime, deathsSection, stats.activity, moreSection, aboutSection];", self.page)
+        self.assertIn("var SECTIONS = [resultSection, replaySection, stats.summary, boardSection, stats.special, stats.overtime, deathsSection, stats.activity, moreSection, aboutSection];", self.page)
         self.assertIn("window.AntsMatchStats.noStatsNote(rec)", self.page)
         self.assertIn("window.AntsMatchStats.redraw(document)", self.page)
         self.assertEqual(self.page.count("addEventListener('resize'"), 1)                                       # (the charts are drawn again for a new width)

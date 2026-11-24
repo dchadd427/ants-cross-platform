@@ -108,9 +108,8 @@ for (const sc of [[1, 1, 1], [1, 1], [2, 1], [5, 3, 3, 1], [99, 1], [1, 2, 3, 4,
 }
 
 // ---- the columns, the state of the recording, the details ----
-same('the columns of the scoreboard', H.columnsOf(rec2v2).map((c) => c.key), ['score', 'killed', 'lost', 'hatched', 'bombs_planted', 'bombs_defused', 'fires_lit']);
-same('... none is a score in mode 187', H.columnsOf(rec187).map((c) => c.key), ['killed', 'lost', 'hatched', 'bombs_planted', 'bombs_defused', 'fires_lit']);
-same('the actions start their own group', H.columnsOf(rec2v2).filter((c) => c.first).map((c) => c.key), ['bombs_planted']);
+same('the columns of the scoreboard (what the special ants did is a section of its own)', H.columnsOf(rec2v2).map((c) => c.key), ['score', 'killed', 'lost', 'hatched']);
+same('... none is a score in mode 187', H.columnsOf(rec187).map((c) => c.key), ['killed', 'lost', 'hatched']);
 same('a recording that can be watched', [H.recState(rec2v2).kind, H.recState(rec2v2).label, H.recState(rec2v2).file], ['watch', 'Replay', 'ants-TREASURE-20261015-051557Z.antsrep']);
 same('one of an older version cannot be played and says by whom it was made', [H.recState(recOld).kind, H.recState(recOld).label, /v0\.12\.0/.test(H.recState(recOld).note), H.recState(recOld).file], ['old', 'Older version', true, 'ants-TREASURE-20261009-202133Z.antsrep']);
 same('one that is gone', [H.recState(recDraw).kind, H.recState(recDraw).label, H.recState(recDraw).file], ['removed', 'Replay removed', '']);
