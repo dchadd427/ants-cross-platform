@@ -68,17 +68,18 @@ MAP_PAGE_BUDGET, MAP_INDEX_PAGE_BUDGET = 10_500, 25_500        # one map's page,
 # the front page (web/home/, web/front/player_name.js)
 HOME_BUDGET, HOME_GZIP_BUDGET = 53_600, 15_900
 GAMES_BUDGET, GAMES_GZIP_BUDGET = 105_000, 29_800
-PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET = 46_500, 14_400       # players.js and players.css: raised from 39,500 and 12,300 for the room that the page says for invitations and the directory of who can be invited (docs/HUB_PEOPLE.md)
+PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET = 61_000, 18_500       # players.js and players.css: raised from 46,500 and 14,400 for the Everyone and Following tabs, the star and the people who are not here (docs/HUB_PEOPLE.md)
 VP_BUDGET, VP_GZIP_BUDGET = 4_200, 1_900            # vp.js: the screen numbers of /?vp (loaded for that address only)
-CHAT_BUDGET, CHAT_GZIP_BUDGET = 112_000, 33_800     # chat.js and chat.css: raised from 105,500 and 32,000 for the names that the hub marks in a line, the alerts that the dock hands on and the parts that it lends the helper and the sheet of a person (docs/HUB_PEOPLE.md)
+CHAT_BUDGET, CHAT_GZIP_BUDGET = 125_000, 37_500     # chat.js and chat.css: raised from 112,000 and 33,800 for the frames of follows and private messages that the dock hands on and the answers of the sheet's own commands (docs/HUB_PEOPLE.md)
 IMAGES_BUDGET, IMAGES_GZIP_BUDGET = 46_000, 15_800    # pics.js, pics.css, post.js and post.css: the thumbnails, the viewer and the poster of the chat's images (loaded when the first image is drawn; post.* for a person who may post only); raised from 41,500 and 14,500 for the viewer's Share, Copy link and Save in the installed app
 TALK_BUDGET, TALK_GZIP_BUDGET = 80_600, 28_900
-MOD_BUDGET, MOD_GZIP_BUDGET = 72_600, 21_000        # mod.js and mod.css: the sheet of a person, with the invitation for anybody in a room and the moderation for staff
-CMDS_BUDGET, CMDS_GZIP_BUDGET = 57_500, 17_500       # cmds.js and cmds.css: the helper of the chat's commands (and of the names after /invite and an @), the /bots builder and the private answers (loaded for an account that has commands only)
+MOD_BUDGET, MOD_GZIP_BUDGET = 86_500, 25_000        # mod.js and mod.css: the sheet of a person, with Message, Follow, Ignore and Report for anybody who is logged in, the invitation for anybody in a room and the moderation for staff; raised from 72,600 and 21,000 for the four rows
+CMDS_BUDGET, CMDS_GZIP_BUDGET = 64_500, 19_500       # cmds.js and cmds.css: the helper of the chat's commands (and of the names after /invite and an @), the /bots builder and the private answers (loaded for an account that has commands only); raised from 57,500 and 17,500 for the words of /follow, /unfollow and /msg
 SPLIT_BUDGET, SPLIT_GZIP_BUDGET = 16_000, 5_200     # split.js and split.css: the drag handles of Home
 ROOM_BUDGET, ROOM_GZIP_BUDGET = 38_000, 11_200       # room.css, roomchat.js and roomchat.css: the room inside Home and the room's tab of the chat box
-ALERTS_BUDGET, ALERTS_GZIP_BUDGET = 48_500, 14_500   # alerts.js and alerts.css: the bell's list of alerts and its settings, the invitation and mention toasts, the join alert of Home and the entry of the match that is over
+ALERTS_BUDGET, ALERTS_GZIP_BUDGET = 54_500, 16_500   # alerts.js and alerts.css: the bell's list of alerts and its settings, the invitation, room, message and mention toasts, the join alert of Home and the entry of the match that is over; raised from 48,500 and 14,500 for the room and message rows
 ALERT_CORE_BUDGET, ALERT_CORE_GZIP_BUDGET = 13_000, 4_400   # web/alert_core.js: the switches, the tab alert and the sound table that the front page and the game page share
+MESSAGES_BUDGET, MESSAGES_GZIP_BUDGET = 47_000, 14_000   # messages.js and messages.css: the Messages button of the chat's head, the panel (a sheet on a phone), the conversations, the report card (loaded for a person who is logged in only; docs/HUB_MESSAGES.md)
 SCRIPT_BUDGET, SCRIPT_GZIP_BUDGET = 13_000, 4_500       # player_name.js
 # the installable web app (web/app/, web/manifest.webmanifest): the four icons together (measured 5,922 bytes: the original game's icon, 12 colors and fine detail), and the manifest (measured 1,166, revalidated on every visit)
 APP_ICONS_BUDGET = 6_500

@@ -307,6 +307,8 @@ class Hub:
             peer.send_text(chatmod.dumps(self.chat.welcome(peer)))
             self.chat.commands.send_list(peer)                       # (the commands that the account has: none for a reader)
             self.chat.people.send_list(peer, force=False)            # (the account's alerts, for the bell: none for a reader, and nothing when the list is empty)
+            self.chat.follows.send_list(peer)                        # (the people that the account follows, to its own sockets: nothing for a reader, and nothing when the list is empty)
+            self.chat.messages.send_list(peer)                       # (its private conversations: the same)
         except BaseException:
             self.per_address.remove(address)
             if peer is not None:
@@ -456,6 +458,8 @@ class Hub:
             self.chat.named_limits.forget_idle(now)
             self.chat.commands.forget_idle(now)
             self.chat.people.forget_idle(now)
+            self.chat.follows.forget_idle(now)
+            self.chat.messages.forget_idle(now)
             self.admin.forget_idle(now)
             self.likes.forget_idle(now)
             self.ai.forget_idle(now)
@@ -469,6 +473,7 @@ class Hub:
             if gone:
                 self.log.event("purge", lines=gone)
             self.chat.people.store_dropped()                           # (the mention of a line that the purge deleted went with it: the open pages are sent their lists again)
+            self.chat.messages.after_purge()                           # (the messages past their 7 days went with it: the open pages are sent their conversations again)
         elif self.store.unsettled and now >= self.next_checkpoint:
             self.next_checkpoint = now + self.limits.checkpoint_retry_seconds
             self.store.checkpoint()

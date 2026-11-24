@@ -189,7 +189,7 @@
   {
    "id": "a_person_who_holds_a_role_may_be_ignored",
    "file": "hub/commands.py",
-   "old": "        if chat.roles.role_of(target) != \"none\" or self.is_owner(target):",
+   "old": "        if target is not None and (chat.roles.role_of(target) != \"none\" or self.is_owner(target)):",
    "new": "        if False:",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
   },
