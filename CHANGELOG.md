@@ -574,20 +574,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/26714f6f...4fd8a6ad)
 
-## v0.14.0 - 2026-11-07 - New rules: 187's closed hill, the last side standing, fire walls and long orders
+## Older versions (v0.14.0 and before)
 
-**For players:**
-- **A new game version; older ones cannot join.** A v0.13 game is refused, and a page that stayed open shows "A newer version of Ants is out. Reload the page to update."
-- **The game type 187 has a closed hill.** No ant can enter its hill, so nothing heals: an order to go home is refused ("Can't go there.") and an ant at 1 hit point no longer walks home. 187 also ends fairly in two rare cases: a team with only eggs it cannot hatch (no hill) no longer keeps a match going, and a room with more seats than teams no longer ends it at once.
-- **The original's game ends when one side is left and no food can score** (before, it played on to the clock). The highest score wins, even for a side with no ant left; a tie for the top, all 0 for example, goes to the side still standing. Power-ups and bombs are not food. It shows on the 29 library maps with no food, such as ARENA and FIGHT.
-- **Five fire-wall maps play a little differently** (ANTS_PARTY-V.3.0.5, A_Coaster_Mix_Turnament_Map, Welcome_from_chaos, thief craker2.0, ~~PlAyEr'S_rEvEnGe2): a fire wall that the map file places is free ground once it is put out, as in the original (a dying ant's power-up and the computer players' bombs can use its cell).
-- **Long orders on big maps.** The wide search finds a path for an order of 450 tiles, where the original gives up at about 400. The Map Maker (v1.8.0) gives it to a new Extended map by itself where the map plays like the original with it, and the side panel shows "Rules 2" (long orders). A map of the original's rules that is taller than 90 rows keeps its wall at row 90 when it is resized and stays taller (before, Resize took it down). Earlier game versions cannot open a Rules 2 map.
-- **Old recordings still play** under the rules they were made with. When the server is updated, matches still running end.
-
-**Rules / network:** network protocol 23 (was 22): no message changed, but 187, the end of the original's game and the fire walls of map files play differently, so a v0.13 game cannot play with this one. The replay rules number is 9 for the original's game (was 5) and 11 for 187 (was 6); recordings of 5 and 6 play as before.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/76545ba9...b86dab0c)
-
-## Older versions (v0.13.2 and before)
-
-Every release before v0.14.0, and the long notes of v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.14.1, and the long notes of v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
