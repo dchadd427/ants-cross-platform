@@ -1,0 +1,82 @@
+{
+ "note": "Mutants of the routes of the map pages (docker/nginx.conf: /map/NAME, /map-library, the other names of a map, docs/MAP_PAGES.md) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose and a test of tests/scripts/test_nginx_map_pages.py (which runs the real file in the web server's image, docker needed) must notice - another name of a map is a 301 to its page with the query; the file a page is made of and a slash after an address go to the clean address; a page number is a plain number, page 1 without one, and never a path; every other name is the site's 404. Run from the checkout with docker: python3 tools/mutate.py tests/data/nginx_map_pages_mutants.json --keep-going --jobs 1.",
+ "mutants": [
+  {
+   "id": "a_map_page_asked_another_way_is_not_redirected",
+   "file": "docker/nginx.conf",
+   "old": "    if ($ants_map_redirect) {\n        return 301 $ants_map_redirect$is_args$args;\n    }\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_map_pages"
+  },
+  {
+   "id": "the_other_names_are_never_read",
+   "file": "docker/nginx.conf",
+   "old": "    include /etc/nginx/ants-map-pages/*.map;\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_map_pages"
+  },
+  {
+   "id": "a_slash_after_a_map_is_a_404",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^/map/(?<ants_map_slashed>[a-z0-9-]+)/\\z\" /map/$ants_map_slashed;\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_map_pages"
+  },
+  {
+   "id": "the_file_of_a_map_page_is_an_address",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^/map_pages/map/(?<ants_map_file>[a-z0-9-]+)\\.html\\z\" /map/$ants_map_file;\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_map_pages"
+  },
+  {
+   "id": "the_file_of_an_index_page_is_an_address",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^/map_pages/library/[1-9][0-9]*\\.html\\z\" /map-library;\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_map_pages"
+  },
+  {
+   "id": "a_slash_after_the_index_is_a_404",
+   "file": "docker/nginx.conf",
+   "old": "    /map-library/ /map-library;\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_map_pages"
+  },
+  {
+   "id": "a_page_number_that_is_not_one_is_page_one",
+   "file": "docker/nginx.conf",
+   "old": "    default 0;\n    \"\" 1;",
+   "new": "    default 1;\n    \"\" 1;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_map_pages"
+  },
+  {
+   "id": "the_index_without_a_page_number_is_a_404",
+   "file": "docker/nginx.conf",
+   "old": "    \"\" 1;\n    \"~^[1-9]",
+   "new": "    \"~^[1-9]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_map_pages"
+  },
+  {
+   "id": "a_page_number_may_be_a_path",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^[1-9][0-9]{0,2}\\z\" $arg_page;",
+   "new": "    \"~.+\" $arg_page;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_map_pages"
+  },
+  {
+   "id": "a_map_page_is_served_from_a_file_that_is_not_there",
+   "file": "docker/nginx.conf",
+   "old": "rewrite ^/map/([a-z0-9-]+)$ /map_pages/map/$1.html last;",
+   "new": "rewrite ^/map/([a-z0-9-]+)$ /map_pages/map/$1.htm last;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_map_pages"
+  },
+  {
+   "id": "the_index_is_served_from_a_file_that_is_not_there",
+   "file": "docker/nginx.conf",
+   "old": "rewrite ^ /map_pages/library/$ants_library_page.html last;",
+   "new": "rewrite ^ /map_pages/library/$ants_library_page.htm last;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_map_pages"
+  }
+ ]
+}

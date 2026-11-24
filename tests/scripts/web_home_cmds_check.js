@@ -143,7 +143,7 @@ const ALLOWED_TAGS = ['div', 'p', 'span', 'bdi', 'b', 'i', 'mark', 'kbd', 'butto
         rows.map((r) => [r.w, r.a.length, r.d.length, r.g, r.d === '<b>x</b> ban' ? 'text' : '']), [['/ban', 12, 12, 'Administrators', 'text'], ['/help', 0, 5, 'Everyone', ''], ['/long', 161, 61, 'Commands', ''], ['/nog', 0, 0, 'Commands', '']]);
     same('rowsOf: not a list is no rows, and a list is read up to 24 rows', [P.rowsOf(null), P.rowsOf('x'), P.rowsOf({}), P.rowsOf(new Array(40).fill(0).map((x, i) => ({ w: '/c' + i, a: '', d: 'd' }))).length], [[], [], [], 24]);
     const all = P.rowsOf(cmdRows('admin'));
-    same('narrow: a slash is every row; letters keep the words that start with them, in any case; nothing that matches is no row', [P.narrow(all, '/').length, P.narrow(all, '/b').map((r) => r.w), P.narrow(all, '/BO').map((r) => r.w), P.narrow(all, '/ban').map((r) => r.w), P.narrow(all, '/zzz').length, P.narrow(all, '/o')], [14, ['/ban', '/bans', '/bots'], ['/bots'], ['/ban', '/bans'], 0, []]);
+    same('narrow: a slash is every row; letters keep the words that start with them, in any case; nothing that matches is no row', [P.narrow(all, '/').length, P.narrow(all, '/b').map((r) => r.w), P.narrow(all, '/BO').map((r) => r.w), P.narrow(all, '/ban').map((r) => r.w), P.narrow(all, '/zzz').length, P.narrow(all, '/o')], [15, ['/ban', '/bans', '/bots'], ['/bots'], ['/ban', '/bans'], 0, []]);
     same('narrow: a word starts with what is typed; a letter inside a word does not count', P.narrow(all, '/o').concat(P.narrow(all, '/ic'), P.narrow(all, '/ots')), []);
     same('countOf: whole numbers from 1 to 10,000, digits only (blanks and commas are dropped); 0, 10,001, six digits, a point, a sign, an exponent, other digits and nothing are refused', ['1', '10000', '10001', '0', '', 'abc', '1e3', '1.5', '-1', '1,000', ' 12 ', '\u0663', '00005', '123456', '\uff11'].map(P.countOf), [1, 10000, -1, -1, -1, -1, -1, -1, -1, 1000, 12, -1, 5, -1, -1]);
     same('everyOf: nothing or 0 is no spacing; whole or half minutes up to 120; 120.5, 121, a quarter, a sign and words are refused; a comma is a point',
@@ -232,19 +232,19 @@ const ALLOWED_TAGS = ['div', 'p', 'span', 'bdi', 'b', 'i', 'mark', 'kbd', 'butto
     same('files that never come change nothing: the field works, a command is sent as typed, no error', [slow.pop(), (slow.submit('/ignore pebble'), slow.said().map((m) => m.text)), slow.errors.length], [null, ['/ignore pebble'], 0]);
 }
 {   // each role's list: what the hub sent, nothing more, and a role that goes takes the rows away
-    const ROLES = { none: ['/help', '/ignore', '/unignore'], mod: ['/help', '/ignore', '/unignore', '/mute', '/unmute', '/del', '/kick', '/mutes'] };
+    const ROLES = { none: ['/help', '/invite', '/ignore', '/unignore'], mod: ['/help', '/invite', '/ignore', '/unignore', '/mute', '/unmute', '/del', '/kick', '/mutes'] };
     Object.keys(ROLES).forEach((role) => {
         const r = rig(); r.live(W({ you: asRole(role) })); r.type('/');
         same(role + ': a slash opens the list: every row that the hub sent and no other, in its order, the first one chosen', [r.popRows(), r.selected()], [ROLES[role], ['/help']]);
     });
     const admin = rig(); admin.live(W({ you: asRole('admin') })); admin.type('/');
-    same('admin: the groups are the hub\'s own words, one caption each, in order; the count says how many', [byClass(admin.pop(), 'gh-cap').map((c) => c.textContent), one(admin.pop(), 'gh-top').textContent, admin.popRows().length], [['Everyone', 'Moderators', 'Administrators'], 'Commands you can use14 in all', 14]);
+    same('admin: the groups are the hub\'s own words, one caption each, in order; the count says how many', [byClass(admin.pop(), 'gh-cap').map((c) => c.textContent), one(admin.pop(), 'gh-top').textContent, admin.popRows().length], [['Everyone', 'Moderators', 'Administrators'], 'Commands you can use15 in all', 15]);
     const none = rig(); none.live(W({ you: asRole('none') }));
     ['/b', '/bo', '/ban', '/bots', '/mute', '/del', '/BOTS', '/b '].forEach((t) => { none.type(t); });
     none.type('/bo');
     same('a player is never offered a command of a higher role, whatever is typed: /bo finds nothing, and the list says so', [none.popRows(), one(none.pop(), 'gh-none').textContent], [[], 'No command of yours starts with /bo. Type /help to see them.']);
     none.type('/i');
-    same('... and /i finds the player\'s own two', none.popRows(), ['/ignore', '/unignore'].filter((w) => w.indexOf('/i') === 0));
+    same('... and /i finds the player\'s own three', none.popRows(), ['/invite', '/ignore', '/unignore'].filter((w) => w.indexOf('/i') === 0));
     // a role that goes: the hub's `you` and the new `cmds`
     const demoted = rig(); demoted.live(W({ you: asRole('admin') })); demoted.type('/b');
     same('before the demotion the list holds /ban, /bans and /bots', demoted.popRows(), ['/ban', '/bans', '/bots']);
@@ -261,10 +261,10 @@ const ALLOWED_TAGS = ['div', 'p', 'span', 'bdi', 'b', 'i', 'mark', 'kbd', 'butto
     const r = open('admin', '/');
     const down = r.key('ArrowDown');
     same('Down chooses the next row (the key is the list\'s: not passed on), Up the one before, never past the ends', [down.prevented, r.selected(), (r.key('ArrowDown'), r.selected()), (r.key('ArrowUp'), r.key('ArrowUp'), r.key('ArrowUp'), r.selected()), r.key('ArrowUp').prevented, (() => { for (let i = 0; i < 40; i++) r.key('ArrowDown'); return r.selected(); })()],
-        [true, ['/ignore'], ['/unignore'], ['/help'], true, ['/bots']]);
+        [true, ['/invite'], ['/ignore'], ['/help'], true, ['/bots']]);
     const t = open('admin', '/'); t.key('ArrowDown'); t.key('ArrowDown');
     const tab = t.key('Tab');
-    same('Tab completes the chosen row into the field (a command that takes names gets its space) and the list closes (a field with a space is no slash word)', [tab.prevented, t.field().value, t.pop()], [true, '/unignore ', null]);
+    same('Tab completes the chosen row into the field (a command that takes names gets its space) and the list closes (a field with a space is no slash word)', [tab.prevented, t.field().value, t.pop()], [true, '/ignore ', null]);
     const nm = open('admin', '/b'); nm.key('ArrowDown'); nm.key('Tab');
     same('Tab on a command that takes nothing more writes the word alone, and the list shows it again with its usage chosen', [nm.field().value, nm.popRows(), nm.selected()], ['/bans', ['/bans'], ['/bans']]);
     const e = nm.key('Enter');
@@ -285,7 +285,7 @@ const ALLOWED_TAGS = ['div', 'p', 'span', 'bdi', 'b', 'i', 'mark', 'kbd', 'butto
     same('the field losing the focus closes the list', [bl.pop()], [null]);
     const tp = open('admin', '/bo'); byClass(tp.pop(), 'gh-row')[0].click();
     same('a tap on a row is a choice: /bots writes its word and opens the builder', [tp.field().value, tp.builder() !== null, tp.pop()], ['/bots ', true, null]);
-    const tm = open('mod', '/'); byClass(tm.pop(), 'gh-row')[3].click();
+    const tm = open('mod', '/'); byClass(tm.pop(), 'gh-row')[4].click();
     same('a tap on /mute writes it with a space, and the focus is on the field', [tm.field().value, tm.doc.activeElement === tm.field(), tm.pop()], ['/mute ', true, null]);
     const kb = open('admin', '/'); kb.key('ArrowDown');
     same('the field says which row is chosen (aria-activedescendant) and what it controls; both are gone when the list closes', [kb.field().getAttribute('aria-activedescendant'), kb.field().getAttribute('aria-controls'), (kb.key('Escape'), [kb.field().getAttribute('aria-activedescendant'), kb.field().getAttribute('aria-controls')])],
@@ -308,13 +308,13 @@ const ALLOWED_TAGS = ['div', 'p', 'span', 'bdi', 'b', 'i', 'mark', 'kbd', 'butto
 {   // /help and //
     const r = rig(); r.live(W({ you: asRole('mod') }));
     r.submit('/help');
-    same('/help typed and sent is never sent: the field keeps a slash and the list opens (the same list as the helper)', [r.said().length, r.field().value, r.popRows()], [0, '/', ['/help', '/ignore', '/unignore', '/mute', '/unmute', '/del', '/kick', '/mutes']]);
+    same('/help typed and sent is never sent: the field keeps a slash and the list opens (the same list as the helper)', [r.said().length, r.field().value, r.popRows()], [0, '/', ['/help', '/invite', '/ignore', '/unignore', '/mute', '/unmute', '/del', '/kick', '/mutes']]);
     r.clock.advance(2600); r.type('/HELP me'); r.submit('/HELP me');
     same('in any case, and with words after it', [r.said().length, r.field().value], [0, '/']);
     r.clock.advance(2600); r.submit('//shrug');
     same('a line with two slashes is sent as typed and is not a command: the field is empty, no list', [r.said().map((m) => m.text), r.field().value, r.pop()], [['//shrug'], '', null]);
     r.s().recv({ t: 'reply', c: 'help', r: 'list' });
-    same('a hub that answers a /help anyway (`reply help list`) opens the list: the page never prints a list in the log', [r.popRows().length, r.field().value, r.blocks().length], [8, '/', 0]);
+    same('a hub that answers a /help anyway (`reply help list`) opens the list: the page never prints a list in the log', [r.popRows().length, r.field().value, r.blocks().length], [9, '/', 0]);
     const q = rig(); q.live(W({ you: asRole('none') })); q.clock.advance(2600); q.submit('/ignore pebble');
     same('another command goes to the hub as typed, once, and the field is empty (no list)', [q.said().map((m) => m.text), q.field().value, q.pop()], [['/ignore pebble'], '', null]);
 }
@@ -486,6 +486,92 @@ const write = (r) => button(r.builder(), 'Write the command');
     same('the chosen row shows how the command is typed (the hub\'s own text), only on the chosen row', [byClass(r.pop(), 'gh-a').map((x) => x.textContent), r.selected()], [['/bots COUNT [every MINUTES] [map NAME] | status | stop'], ['/bots']]);
     r.type('/b');
     same('the typed letters are marked in each word', byClass(r.pop(), 'gh-w').map((w) => w.children[0] ? [w.children[0].tagName, w.children[0].textContent, w.children[1] ? w.children[1].textContent : w.textContent] : [w.textContent]), [['mark', '/b', 'an'], ['mark', '/b', 'ans'], ['mark', '/b', 'ots']]);
+}
+
+// ---- 5. people: the names after `/invite ` and after an `@`, and the words of an invitation's answer ----
+{
+    const P = Cmds;
+    const PEOPLE = [{ id: 1, name: 'juniper', at: 'look' }, { id: 5, name: 'Wren', at: 'wait' }, { id: 2, name: 'maple.leaf', at: 'look' }, { id: 3, name: 'tess', at: 'look' }, { id: 4, name: 'Clover', at: 'wait' }, { id: 6, name: 'moss', at: 'play' }, { id: 9, name: 'Me', at: 'look', me: true }, { id: 10, name: 'rowan', at: 'away' }];
+    const WHY = { Wren: 'In your room', moss: 'Playing a match' }, T0 = 1700000000;
+    const NOWS = Math.floor(Date.now() / 1000);       // (the helper says how long ago with the real clock)
+    const HIST = [{ id: 1, at: NOWS - 3600, who: 'marigold', text: 'b', k: 'kmari' }, { id: 2, at: NOWS - 1200, who: 'birch', text: 'a', k: 'kbirch' }, { id: 3, at: NOWS - 60, who: 'juniper', text: 'c', k: 'kjun' }, { id: 4, at: NOWS - 30, who: 'maple', text: 'd', k: 'kme' }, { id: 5, at: NOWS - 90, who: 'rowan', text: 'e', k: 'krow' }];
+    function withPeople(o) {
+        const r = rig(); r.live(W({ you: Object.assign(asRole('none'), { k: 'kme' }), history: HIST.map((h) => Object.assign({}, h)) }));
+        r.invited = [];
+        r.field().setSelectionRange = (a, b) => { r.field().selectionStart = a; r.field().selectionEnd = b; };       // (the fake text area keeps no caret of its own: a typed text puts it at the end, as a keyboard does)
+        const typed = r.type; r.type = (text) => { r.field().selectionStart = r.field().selectionEnd = text.length; typed(text); };
+        r.dock.directory(() => ({ rows: PEOPLE, why: (row) => WHY[row.name] || '', invited: (name) => r.invited.push(name) }));
+        if (o && o.none) r.dock.directory(null);
+        return r;
+    }
+    const heads = (r) => [one(r.pop(), 'gh-top').children.map((c) => c.textContent), byClass(r.pop(), 'gh-cap').map((c) => c.textContent)];
+    const row = (r, name) => byClass(r.pop(), 'gh-row').filter((x) => one(x, 'gh-w').textContent === name)[0];
+    const sub = (r, name) => one(row(r, name), 'gh-d').textContent;
+    let r = withPeople();
+    r.type('/inv');
+    same('the command narrows as any command does, and a Tab writes it with the space where a name follows', [r.popRows(), (r.key('Tab'), r.field().value), r.popRows()[0]], [['/invite'], '/invite ', 'juniper']);
+    same('after `/invite ` the people who are here: the ones who can be invited first, then the dim ones with the reason; not the visitor, not a person who is away', [r.popRows(), heads(r)[0], heads(r)[1]], [['juniper', 'maple.leaf', 'tess', 'Clover', 'Wren', 'moss'], ['People here, to invite', '6 online'], []]);
+    same('the first is chosen and shows the command that it makes; a dim row is dim, with its reason where the place was', [r.selected(), one(row(r, 'juniper'), 'gh-a').textContent, cls(row(r, 'Wren')).indexOf('gh-dim') !== -1, sub(r, 'Wren'), sub(r, 'moss'), sub(r, 'tess'), cls(row(r, 'tess')).indexOf('gh-dim') !== -1], [['juniper'], '/invite juniper', true, 'In your room', 'Playing a match', 'Looking', false]);
+    r.type('/invite m');
+    same('letters narrow it (the names that start with them, in any case), the matching letters marked, the ones who cannot be invited after', [r.popRows(), heads(r)[0], byClass(row(r, 'maple.leaf'), 'gh-w')[0].children[0].textContent], [['maple.leaf', 'moss'], ['People here', '2 matches'], 'm']);
+    r.type('/invite M'); check('in any case', r.popRows().join() === 'maple.leaf,moss');
+    r.type('/invite zzz');
+    same('a name that nobody has: the list says so, and a Tab chooses nothing', [byClass(r.pop(), 'gh-none')[0].textContent, r.key('Tab').prevented, r.field().value], ['Nobody here by that name.', false, '/invite zzz']);
+    r.type('/invite m'); r.key('Tab');
+    same('Tab writes the chosen name after the command, and the list stays with its one row', [r.field().value, r.popRows(), r.said().length], ['/invite maple.leaf', ['maple.leaf'], 0]);
+    r.key('Enter');
+    same('and Enter now sends it, as typed and once: a whole name is not chosen again', r.said().map((m) => m.text), ['/invite maple.leaf']);
+    r.type('/invite '); r.key('Escape');
+    same('Escape closes the list', [r.pop(), r.field().value], [null, '/invite ']);
+    r.type('/invitation');
+    same('a word that only starts with the command is no command and no names: the list of commands says so', byClass(r.pop(), 'gh-none')[0].textContent.slice(0, 31), 'No command of yours starts with');
+    r.type('/invite2');
+    check('the command with something glued to it that is no letter is no command and has no names', r.pop() === null);
+    r.type('/invite e');
+    same('a name is matched from its start: a letter inside a name is none', byClass(r.pop(), 'gh-none')[0].textContent, 'Nobody here by that name.');
+    r.type('/invite'); check('the command alone, with no space, is the command\'s row, not the names', r.popRows().join() === '/invite');
+    const dim = withPeople(); dim.type('/invite '); dim.key('ArrowDown'); dim.key('ArrowDown'); dim.key('ArrowDown'); dim.key('ArrowDown'); dim.key('Tab');
+    check('a dim row can be chosen too: the hub answers what the reason says', dim.field().value === '/invite Wren');
+    // an @ in the line
+    r = withPeople();
+    r.type('@');
+    same('an @ opens the people to mention: those here (with where they are), then those who wrote lately and are not here, newest first', [r.popRows(), heads(r)[0], heads(r)[1], sub(r, 'juniper'), sub(r, 'Clover'), sub(r, 'moss'), sub(r, 'birch'), sub(r, 'marigold')], [
+        ['juniper', 'Wren', 'maple.leaf', 'tess', 'Clover', 'moss', 'rowan', 'birch', 'marigold'], ['People to mention', '9 people'], ['Here now', 'Wrote lately'], 'Looking', 'In a room', 'Playing a match', 'Wrote 20 min ago · not here', 'Wrote 1 hour ago · not here']);
+    same('the first is chosen and shows what it writes; a person who is here and wrote is only here; the visitor\'s own name (by its key) is not among the ones who wrote lately; a person who is away and wrote is', [r.selected(), one(row(r, 'juniper'), 'gh-a').textContent, r.popRows().filter((n) => n === 'juniper').length, r.popRows().indexOf('maple'), sub(r, 'rowan')], [['juniper'], '@juniper', 1, -1, 'Wrote 1 min ago \u00b7 not here']);
+    r.type('hey @m');
+    same('in the middle of a line, narrowing as it is typed', [r.popRows(), heads(r)[0], heads(r)[1]], [['maple.leaf', 'moss', 'marigold'], ['People to mention', '3 matches'], ['Here now', 'Wrote lately']]);
+    r.key('Tab');
+    same('Tab writes the name in place of the @ and the letters, with a space after it, and closes the list', [r.field().value, r.pop(), r.field().selectionStart], ['hey @maple.leaf ', null, 16]);
+    r.type('hi @juniper, and @t'); r.key('Enter');
+    same('Enter picks while the list is open (it does not send)', [r.field().value, r.said().length], ['hi @juniper, and @tess ', 0]);
+    r.type('@ma'); r.key('ArrowDown'); r.key('Tab');
+    check('the arrows choose before Tab', r.field().value === '@marigold ' || r.field().value === '@maple.leaf ' || r.field().value === '@marigold ');
+    r.type('mail me at a@b'); check('an @ inside a word is no mention: no list', r.pop() === null);
+    r.type('a @'); check('an @ after a space is', r.pop() !== null);
+    r.type('@zzz'); check('letters that match nobody: the @ and the letters are words', r.pop() === null);
+    r.type('/ignore @t'); check('a command line has no mentions', r.pop() === null);
+    r.type('@juniper '); check('a name that is finished with its space: no list', r.pop() === null);
+    r.type('@'); r.key('Escape'); check('Escape closes it', r.pop() === null);
+    const none = withPeople({ none: true }); none.type('@');
+    same('the players list is not there: only the people who wrote lately are offered', [none.popRows(), heads(none)[1]], [['rowan', 'juniper', 'birch', 'marigold'], ['Wrote lately']]);
+    const lonely = rig(); lonely.live(W({ you: asRole('none') })); lonely.dock.directory(() => ({ rows: [], why: () => '' })); lonely.type('@');
+    check('nobody is here and nobody wrote: nothing to show', lonely.pop() === null);
+    const caret = withPeople(); caret.field().value = 'x @ju here'; caret.field().selectionStart = caret.field().selectionEnd = 5; caret.field().fire('input', {});
+    same('the caret decides: the letters before it are the ones that count, and the words after it stay', [caret.popRows(), (caret.key('Tab'), caret.field().value)], [['juniper'], 'x @juniper here']);
+    // the words of the answer of /invite
+    const reply = (m, typed) => P.replyOf(Object.assign({ t: 'reply', c: 'invite' }, m), typed || '/invite pat', 1700000000000, null);
+    same('the words of every answer', [reply({ r: 'ok', to: 'juniper' }).lines, reply({ r: 'usage' }).lines, reply({ r: 'ambiguous' }).lines, reply({ r: 'self' }).lines, reply({ r: 'noroom' }).lines, reply({ r: 'full', n: 4, of: 4 }).lines,
+        reply({ r: 'busy', to: 'moss' }).lines, reply({ r: 'person', to: 'juniper', wait: 45 }).lines, reply({ r: 'person', to: 'juniper', wait: 1 }).lines, reply({ r: 'total', wait: 30 }).lines, reply({ r: 'rate', wait: 3 }).lines, reply({ r: 'what' }).lines], [
+        ['Invitation sent to juniper.'], ['Type /invite NAME, for example /invite pebble.'], ['Several people show that name, so it cannot be told which one you mean.'], ['You cannot invite yourself.'], ['You are not in a room. Use Quick host to open one, then invite.'], ['Your room is full (4 of 4).'],
+        ['moss is playing a match.'], ['You invited juniper a moment ago. Try again in 45 seconds.'], ['You invited juniper a moment ago. Try again in 1 second.'], ['Too many invitations. Wait a minute, then try again.'], ['Too fast: wait 3 seconds before the next /invite.'],
+        ['That did not work, try again']]);
+    same('a person nobody has: the name that was typed is in the words, as text, and a row or a line number has the plain words', [reply({ r: 'nobody' }, '/invite zed').lines, reply({ r: 'nobody' }, '/invite row:5').lines, reply({ r: 'nobody' }, '/invite #3').lines, reply({ r: 'nobody' }, '/invite <b>x</b>').lines], [
+        ['Nobody called “zed” is here. Type /invite and a space to see who is.'], ['Nobody here by that name. Type /invite and a space to see who is.'], ['Nobody here by that name. Type /invite and a space to see who is.'], ['Nobody called “<b>x</b>” is here. Type /invite and a space to see who is.']]);
+    same('a refusal has the red edge, the answer that is ok has none; the words are never markup, a name is cut at 32', [[reply({ r: 'noroom' }).cls, reply({ r: 'usage' }).cls, reply({ r: 'total' }).cls].join(), reply({ r: 'ok', to: 'x' }).cls, reply({ r: 'ok', to: 'n'.repeat(60) }).lines[0].length, reply({ r: 'ok', to: '<img src=x>' }).lines[0]], ['gc-err,gc-err,gc-err', '', 'Invitation sent to '.length + 33 + 1, 'Invitation sent to <img src=x>.']);
+    const q = withPeople(); q.submit('/invite juniper'); q.s().recv({ t: 'reply', c: 'invite', r: 'ok', to: 'juniper' });
+    same('the answer is a private block with the typed command above it, and the list greys the person at once', [q.answers(), q.invited], [['/invite juniper\nInvitation sent to juniper.'], ['juniper']]);
+    q.clock.advance(2600); q.submit('/invite tess'); q.s().recv({ t: 'reply', c: 'invite', r: 'person', to: 'tess', wait: 20 });
+    same('a refusal is a block with the red edge and greys nobody', [cls(q.blocks()[1]).indexOf('gc-err') !== -1, q.invited], [true, ['juniper']]);
 }
 
 console.log('home chat commands: ' + checks + ' checks, ' + failures + ' failed');

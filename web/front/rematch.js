@@ -12,7 +12,8 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    var BACK_KEY = 'ants.back';                     // sessionStorage: the match that this tab comes back from { c: code, t: epoch ms, m: map file, p: [four names], w: the winner's words }
+    var BACK_KEY = 'ants.back';                     // sessionStorage: the match that this tab comes back from { c: code, t: epoch ms, m: map file, p: [four names], w: the winner's words, r: this seat's place (1 to 4, 0 or none: unknown) }
+    var OVER_KEY = 'ants.over';                     // sessionStorage: the time (epoch ms) of the match that the bell was told of, so that a reload or another tab of the same session does not tell it twice
     var LOBBY_KEY = 'ants.lobby';                   // sessionStorage: the front page's room { c, k, n, o } (web/lobby.html): the hand-over puts the reserved seat there
     var REJOIN_PREFIX = 'ants.rejoin.';             // localStorage: the game's key of a seat (src/ants_app/rejoin_store.cpp)
     var MAX_AGE_MS = 3 * 60 * 60 * 1000;            // a key lives three hours (the game's kRejoinMaxAgeMs), and so does the server's reservation
@@ -71,24 +72,31 @@
         return v.k.toLowerCase();
     }
 
+    // This seat's place in the results (the rows are best first; a winning row is first whatever its place in the list, so that two rows that tied are both first): 1 to 4, or 0 for a seat that is in no row
+    function placeOf(over) {
+        for (var i = 0; i < over.rows.length; i++) if (over.rows[i].seats.indexOf(over.seat) !== -1) return over.rows[i].won ? 1 : i + 1;
+        return 0;
+    }
+
     // ---- the hand-over to the front page ---------------------------------------------------------------------------------------------------------------------------------------------------------------
     // "Back to the lobby": the front page of this tab finds its room (the code and the key: it takes the reserved seat back with them) and the match it comes back from. False when the storage refuses
     // the room (the front page could not take the seat back: nothing may go); a match that is not kept only leaves the front page without its strip.
     function handOver(session, over, key, name, nowMs) {
         var lobby = JSON.stringify({ c: over.room, k: key, n: printable(name, 32) ? name : '', o: 0 });
-        var back = JSON.stringify({ c: over.room, t: Math.floor(nowMs), m: over.map, p: over.names, w: winnerWords(over) });
+        var back = JSON.stringify({ c: over.room, t: Math.floor(nowMs), m: over.map, p: over.names, w: winnerWords(over), r: placeOf(over) });
         if (!storageSet(session, LOBBY_KEY, lobby)) return false;
         storageSet(session, BACK_KEY, back);
         return true;
     }
-    // The match that the room `code` comes back from: { code, t, map, people: the names of the match, names: the four by seat ('' for a seat that did not play), winner }, or null (none, another room's, older
+    // The match that the room `code` comes back from: { code, t, map, people: the names of the match, names: the four by seat ('' for a seat that did not play), winner, place (0: not known) }, or null (none, another room's, older
     // than three hours or from the future, or not this shape)
     function readBack(session, code, nowMs) {
         var v;
         try { v = JSON.parse(storageGet(session, BACK_KEY)); } catch (e) { return null; }
         if (!v || typeof v !== 'object' || v.c !== code || !validRoom(code) || !isWhole(v.t) || nowMs - v.t > MAX_AGE_MS || v.t - nowMs > 60000) return null;
         if ((v.m !== '' && !validMap(v.m)) || !Array.isArray(v.p) || v.p.length !== 4 || !v.p.every(function (n) { return printable(n, 32); }) || !printable(v.w, 160)) return null;
-        return { code: code, t: v.t, map: v.m, people: v.p.filter(function (n) { return n !== ''; }), names: v.p.slice(), winner: v.w };
+        if (v.r !== undefined && !(isWhole(v.r) && v.r >= 0 && v.r <= 4)) return null;
+        return { code: code, t: v.t, map: v.m, people: v.p.filter(function (n) { return n !== ''; }), names: v.p.slice(), winner: v.w, place: v.r || 0 };
     }
     function forgetBack(session) { try { session.removeItem(BACK_KEY); } catch (e) { /* nothing was kept */ } }
 
@@ -134,6 +142,21 @@
         return '';
     }
     function statsHref(id) { return id ? '/match?id=' + encodeURIComponent(id) : '/matches'; }
+    // What the bell is told of the match that this tab came back from (web/home/alerts.js alert('over')): { map, place, match } (a place that is not known and a match that was not found are left out), or null for a match with no map
+    function overNote(back, id) {
+        if (!back || !back.map) return null;
+        var note = { map: back.map };
+        if (back.place) note.place = back.place;
+        if (id) note.match = id;
+        return note;
+    }
+    // Whether the bell has not been told of this match yet in this session (it marks the match as told): a match is told once, by the page that shows its strip first
+    function takeOver(session, back) {
+        var told = storageGet(session, OVER_KEY);
+        if (told === String(back.t)) return false;
+        storageSet(session, OVER_KEY, String(back.t));
+        return true;
+    }
 
     // ---- the browser's platform (what the Hello tells the room: web/lobby.html's rule) ----
     function platformOf(nav) {
@@ -308,17 +331,20 @@
     // The strip at the top of the page: "Back from the match." The match's stats and replay are looked up in the public list (a moment after the match, twice more if they are not there yet: the list is cached
     // for five seconds). Also drives an unlisted test-map room opened from the map maker (?testroom=<id>). env: { doc, win, before (the element that the strip goes in front of), fetch (window.fetch or null), later(fn, ms) }.
     function frontStrip(env) {
-        var bar = null, link = null, round = 0, tbar = null, known = Object.create(null), pendingTest = null, lastTest = null, testError = false, handoffId = '', paintedKey = '';
+        var bar = null, link = null, round = 0, tbar = null, known = Object.create(null), pendingTest = null, lastTest = null, testError = false, handoffId = '', paintedKey = '', pendingHost = null;
+        function tell(back, id) { if (env.over) { try { env.over(back, id); } catch (e) { /* the bell is the page's own */ } } }      // (the bell is told once the match is found, or when it will not be: web/home/alerts.js)
         function look(back, mine, tries) {
-            if (!env.fetch || mine !== round) return;
+            if (mine !== round) return;
+            if (!env.fetch) { tell(back, ''); return; }
             var done = function (id) {
                 if (mine !== round) return;
-                if (id) link.href = statsHref(id);
+                if (id) { link.href = statsHref(id); tell(back, id); }
                 else if (tries > 1) env.later(function () { look(back, mine, tries - 1); }, 4000);
+                else tell(back, '');
             };
             try {
                 env.fetch('/replays', { cache: 'no-store', credentials: 'omit' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (list) { done(findReplay(list, back)); }, function () { done(''); });
-            } catch (e) { /* no list: the link goes to the list of matches */ }
+            } catch (e) { tell(back, ''); }              // (no list: the link goes to the list of matches)
         }
         // The line under START says that online matches are recorded; a match on a test map from the map maker is not (no replay, no result, no name), so in such a room the line says that
         var notice = null, noticeWas = '';
@@ -398,6 +424,10 @@
                 return { name: title, info: details };      // (its picture is the address that AntsMapPicker.previewPath makes of the file name)
             },
             sync: function (model, sendPlan, warmMap) {
+                if (pendingHost && !pendingHost.sent && model && !model.guest && !model.starting) {            // (the room that the address /?hostmap=<file> asked for: its map, once, as soon as the room lets its leader plan; a later room of the page is an ordinary one)
+                    if (String(model.mapFile).toUpperCase() === pendingHost.file.toUpperCase()) pendingHost.sent = true;
+                    else if (sendPlan && sendPlan({ file: pendingHost.file })) { if (warmMap) warmMap(pendingHost.file); pendingHost.sent = true; }
+                }
                 if (pendingTest && !pendingTest.sent && model && !model.guest && !model.starting && model.mapFile !== pendingTest.file) {
                     var kinds = [0, 0, 0, 0], moveTo = -1;
                     if (Array.isArray(pendingTest.usable)) {
@@ -424,12 +454,21 @@
             },
             // The page made its room again (the first one was closed, the server restarted, the link was lost for long): the new room has the default map, so the test map is sent to it again
             remade: function () { if (lastTest) { pendingTest = lastTest; pendingTest.sent = false; } },
-            begin: function (onReady) {
+            // The two addresses that make a room: /?testroom=<id> (a test map from the Map Maker, below) and /?hostmap=<file name> (a map of the library, from the Play it button of its page, docs/MAP_PAGES.md): `held` says that the page
+            // holds a room already, in which case the second makes no room and changes none (the front page's own answer to a press on Quick host while it holds one), and the address loses its query either way.
+            begin: function (onReady, held) {
                 var win = env.win;
                 if (!win || !win.location) return false;
                 var q = null;
                 try { q = new URLSearchParams(win.location.search || ''); } catch (e) { return false; }
-                var id = q.get('testroom');
+                var id = q.get('testroom'), file = q.get('hostmap');
+                if (!id && file !== null) {
+                    try { win.history.replaceState(null, '', win.location.pathname.replace(/^\/+/, '/')); } catch (e) {}
+                    if (held || !validMap(file)) return false;
+                    pendingHost = { file: file, sent: false };
+                    onReady();
+                    return true;
+                }
                 if (!id || !/^[a-z0-9]{6,32}$/.test(id)) return false;
                 handoffId = id;
                 try { win.history.replaceState(null, '', win.location.pathname.replace(/^\/+/, '/')); } catch (e) {}
@@ -467,9 +506,9 @@
     }
 
     return {
-        BACK_KEY: BACK_KEY, LOBBY_KEY: LOBBY_KEY, ASK_AFTER_MS: ASK_AFTER_MS, COLORS: COLORS, DOTS: DOTS,
+        BACK_KEY: BACK_KEY, OVER_KEY: OVER_KEY, LOBBY_KEY: LOBBY_KEY, ASK_AFTER_MS: ASK_AFTER_MS, COLORS: COLORS, DOTS: DOTS,
         parseOver: parseOver, winnerWords: winnerWords, seatKey: seatKey, handOver: handOver, readBack: readBack, forgetBack: forgetBack,
-        chipsOf: chipsOf, chipText: chipText, backLine: backLine, findReplay: findReplay, statsHref: statsHref, platformOf: platformOf,
+        chipsOf: chipsOf, chipText: chipText, backLine: backLine, findReplay: findReplay, statsHref: statsHref, overNote: overNote, takeOver: takeOver, placeOf: placeOf, platformOf: platformOf,
         gamePage: gamePage, frontStrip: frontStrip, failWords: failWords, TEST_NOTICE: TEST_NOTICE
     };
 });

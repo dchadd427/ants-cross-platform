@@ -134,6 +134,7 @@ class TheRoutesRun(unittest.TestCase):
         os.makedirs(os.path.join(html, "test_3d"))
         for name, text in (("lobby.html", LOBBY_PAGE), ("matches.html", MATCHES_PAGE), ("match.html", MATCH_PAGE), ("matches.css", ":root { --won: #f6d058; }\n"), ("replay_stats.css", "body.embed { padding-top: 10px; }\n"), ("replay_page.js", "window.AntsReplay = {};\n"),
                            ("history_page.js", "window.AntsHistory = {};\n"), ("match_stats.js", "window.AntsMatchStats = {};\n"), ("match_stats.css", ".chips { display: grid; }\n"), ("death_map.js", "window.AntsDeathMap = {};\n"), ("death_map.css", ".dm-stage { position: relative; }\n"), ("index.html", GAME_PAGE), ("play.html", GAME_PAGE), ("changelog.html", CLASSIC_PAGE), ("legal.html", CLASSIC_PAGE), ("mapmaker.html", MAPMAKER_PAGE),
+                           ("map_pages.css", ".grid { display: grid; }\n"), ("map_library.js", "window.ANTS_MAP_INDEX = {};\n"), ("map_plays.js", "window.ANTS_MAP_PLAYS = {};\n"), ("map_library_data.js", "window.ANTS_MAP_LIBRARY = {};\n"),         # (stand-ins: the real ones are put in below, with the pages)
                            ("404.html", read(os.path.join(REPO, "web", "404.html"))), ("50x.html", read(os.path.join(REPO, "web", "50x.html"))),         # (the real pages: the checks read their words)
                            (os.path.join("asset_catalog", "index.html"), CLASSIC_PAGE),
                            (os.path.join("test_3d", "compare.html"), CLASSIC_PAGE), (os.path.join("test_3d", "viewer.html"), CLASSIC_PAGE),
@@ -158,6 +159,10 @@ class TheRoutesRun(unittest.TestCase):
             with open(os.path.join(html, name), "wb") as f:
                 f.write(data)
         subprocess.run([sys.executable, os.path.join(REPO, "tools", "seo_files.py"), "https://site.example", html], check=True)       # the files for search engines, made by the tool that the image's build runs
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import map_pages_rig                                                               # the map pages of the real library, made by the tool that the image's build runs (docs/MAP_PAGES.md)
+        moved = os.path.join(cls.tmp, "ants-map-pages")
+        map_pages_rig.put_pages(html, moved)
         conf = os.path.join(cls.tmp, "default.conf")
         text = read(CONF)
         if not os.path.exists("/proc/net/if_inet6"):                                       # a kernel without IPv6 cannot listen on [::]: the rest of the file is the one under test
@@ -171,7 +176,7 @@ class TheRoutesRun(unittest.TestCase):
         cls.port = s.getsockname()[1]
         s.close()
         ran = subprocess.run(["docker", "run", "-d", "--rm", "--name", cls.name, "-p", "127.0.0.1:%d:80" % cls.port, "-v", conf + ":/etc/nginx/conf.d/default.conf:ro",
-                              "-v", html + ":/usr/share/nginx/html:ro", IMAGE], capture_output=True, text=True)
+                              "-v", html + ":/usr/share/nginx/html:ro", "-v", moved + ":/etc/nginx/ants-map-pages:ro", IMAGE], capture_output=True, text=True)
         if ran.returncode != 0:
             cls.why = "the container did not start: " + ran.stderr.strip()[:200]
             return

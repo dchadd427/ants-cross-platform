@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the rematch of a lobby room for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the reserved seats of net::HostLobby against test_lobby N4.41 - N4.49d, the room manager's rematch against test_server S3.194 - S3.203 (the restart record of a code that comes back: S3.203), the game's word to its page against test_network_app N5.98 - N5.99, and the pages (web/front/rematch.js, lobby_net.js, lobby_rules.js) against tests/scripts/web_rematch_check.js, web_lobby_rules_check.js, web_lobby_client_check.js and web_lobby_net_check.js. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/rematch_mutants.json --keep-going --jobs 2. Every mutant must be caught; tests/scripts/test_web_rematch.py runs the pages' ones (those with no build) in the quick tier on a copy of the files.",
+ "note": "Mutants of the rematch of a lobby room for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the reserved seats of net::HostLobby against test_lobby N4.41 - N4.49d, the room manager's rematch against test_server S3.194 - S3.203 (the restart record of a code that comes back: S3.203), the game's word to its page against test_network_app N5.98 - N5.99, and the pages (web/front/rematch.js, lobby_net.js, lobby_rules.js) against tests/scripts/web_rematch_check.js, web_lobby_rules_check.js, web_lobby_client_check.js and web_lobby_net_check.js, and the room that /?hostmap=<file name> opens on a map of the library. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/rematch_mutants.json --keep-going --jobs 2. Every mutant must be caught; tests/scripts/test_web_rematch.py runs the pages' ones (those with no build) in the quick tier on a copy of the files.",
  "mutants": [
   {
    "id": "lobby_reserved_seat_leads",
@@ -925,6 +925,139 @@
    "new": "r.public_by = 0u;",
    "build": "test_server",
    "test": "timeout 600 env ANTS_TEST_FILTER=S3.241 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "over_place_is_the_row_of_the_list_for_a_tie",
+   "file": "web/front/rematch.js",
+   "old": "return over.rows[i].won ? 1 : i + 1;",
+   "new": "return i + 1;",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "over_place_of_a_seat_in_no_row_is_first",
+   "file": "web/front/rematch.js",
+   "old": "        return 0;\n    }\n\n    // ---- the hand-over to the front page",
+   "new": "        return 1;\n    }\n\n    // ---- the hand-over to the front page",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "over_place_is_not_handed_over",
+   "file": "web/front/rematch.js",
+   "old": "w: winnerWords(over), r: placeOf(over) });",
+   "new": "w: winnerWords(over) });",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "over_place_is_not_read_back",
+   "file": "web/front/rematch.js",
+   "old": "winner: v.w, place: v.r || 0 };",
+   "new": "winner: v.w, place: 0 };",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "over_any_place_is_read_back",
+   "file": "web/front/rematch.js",
+   "old": "if (v.r !== undefined && !(isWhole(v.r) && v.r >= 0 && v.r <= 4)) return null;",
+   "new": "if (false) return null;",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "over_note_has_a_place_that_is_not_known",
+   "file": "web/front/rematch.js",
+   "old": "        if (back.place) note.place = back.place;\n",
+   "new": "        note.place = back.place;\n",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "over_note_without_a_match_says_none",
+   "file": "web/front/rematch.js",
+   "old": "        if (id) note.match = id;\n",
+   "new": "        note.match = id;\n",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "over_note_of_a_match_with_no_map",
+   "file": "web/front/rematch.js",
+   "old": "if (!back || !back.map) return null;",
+   "new": "if (!back) return null;",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "over_is_told_every_time",
+   "file": "web/front/rematch.js",
+   "old": "        if (told === String(back.t)) return false;\n",
+   "new": "        if (false) return false;\n",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "over_is_never_marked_as_told",
+   "file": "web/front/rematch.js",
+   "old": "        storageSet(session, OVER_KEY, String(back.t));\n",
+   "new": "        void OVER_KEY;\n",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "over_is_told_before_the_match_is_found",
+   "file": "web/front/rematch.js",
+   "old": "                else if (tries > 1) env.later(function () { look(back, mine, tries - 1); }, 4000);\n                else tell(back, '');",
+   "new": "                else if (tries > 1) { env.later(function () { look(back, mine, tries - 1); }, 4000); tell(back, ''); }\n                else tell(back, '');",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "over_is_not_told_when_the_look_gave_up",
+   "file": "web/front/rematch.js",
+   "old": "                else if (tries > 1) env.later(function () { look(back, mine, tries - 1); }, 4000);\n                else tell(back, '');",
+   "new": "                else if (tries > 1) env.later(function () { look(back, mine, tries - 1); }, 4000);",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "over_is_not_told_when_the_match_is_found",
+   "file": "web/front/rematch.js",
+   "old": "if (id) { link.href = statsHref(id); tell(back, id); }",
+   "new": "if (id) { link.href = statsHref(id); }",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "over_is_not_told_without_fetch",
+   "file": "web/front/rematch.js",
+   "old": "if (!env.fetch) { tell(back, ''); return; }",
+   "new": "if (!env.fetch) { return; }",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "over_is_told_after_the_strip_was_hidden",
+   "file": "web/front/rematch.js",
+   "old": "        function look(back, mine, tries) {\n            if (mine !== round) return;",
+   "new": "        function look(back, mine, tries) {",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_hostmap_makes_a_room_for_a_page_that_holds_one",
+   "file": "web/front/rematch.js",
+   "old": "if (held || !validMap(file)) return false;",
+   "new": "if (!validMap(file)) return false;",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_hostmap_takes_any_name",
+   "file": "web/front/rematch.js",
+   "old": "if (held || !validMap(file)) return false;",
+   "new": "if (held) return false;",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_hostmap_plans_for_a_guest",
+   "file": "web/front/rematch.js",
+   "old": "if (pendingHost && !pendingHost.sent && model && !model.guest && !model.starting) {",
+   "new": "if (pendingHost && !pendingHost.sent && model && !model.starting) {",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_hostmap_is_sent_at_every_look",
+   "file": "web/front/rematch.js",
+   "old": "if (warmMap) warmMap(pendingHost.file); pendingHost.sent = true; }",
+   "new": "if (warmMap) warmMap(pendingHost.file); }",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
   }
  ]
 }

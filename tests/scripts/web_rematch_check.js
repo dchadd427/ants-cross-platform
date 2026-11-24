@@ -133,9 +133,9 @@ const room = (seats, o) => { const m = N.decode(roomBytes(seats, o)); if (m === 
 
 async function main() {
     // ---- 0. what the library offers ---------------------------------------------------------------------------------------------------------------------------------------------------------------
-    same('the library exports exactly these names (a new one needs a table here)', Object.keys(RAW).sort(), ['ASK_AFTER_MS', 'BACK_KEY', 'COLORS', 'DOTS', 'LOBBY_KEY', 'TEST_NOTICE', 'backLine', 'chipText', 'chipsOf', 'failWords', 'findReplay', 'forgetBack',
-        'frontStrip', 'gamePage', 'handOver', 'parseOver', 'platformOf', 'readBack', 'seatKey', 'statsHref', 'winnerWords']);
-    same('the two keys of this tab\'s session storage', [R.BACK_KEY, R.LOBBY_KEY], ['ants.back', 'ants.lobby']);
+    same('the library exports exactly these names (a new one needs a table here)', Object.keys(RAW).sort(), ['ASK_AFTER_MS', 'BACK_KEY', 'COLORS', 'DOTS', 'LOBBY_KEY', 'OVER_KEY', 'TEST_NOTICE', 'backLine', 'chipText', 'chipsOf', 'failWords', 'findReplay', 'forgetBack',
+        'frontStrip', 'gamePage', 'handOver', 'overNote', 'parseOver', 'placeOf', 'platformOf', 'readBack', 'seatKey', 'statsHref', 'takeOver', 'winnerWords']);
+    same('the three keys of this tab\'s session storage', [R.BACK_KEY, R.LOBBY_KEY, R.OVER_KEY], ['ants.back', 'ants.lobby', 'ants.over']);
     same('the results screen asks for its seat two seconds after the game said that the match is over (the server ends the match in a pass of its own)', R.ASK_AFTER_MS, 2000);
     check('the front page tells the strip when it made its room again (a room that the page made again has the default map: web/lobby.html onWelcome)', /if \(e\.created\) \{ newRoom = true; backBar\.remade\(\); \}/.test(fs.readFileSync(lobbyPath, 'utf8')));
     check('the front page keeps its room under the same key (web/lobby.html LOBBY_KEY): the hand-over is the front page\'s own entry', fs.readFileSync(lobbyPath, 'utf8').indexOf("var LOBBY_KEY = 'ants.lobby';") !== -1);
@@ -194,15 +194,29 @@ async function main() {
         same('none from a storage that is not there or that throws', [R.seatKey(null, 'k7m2xq', 1), R.seatKey(broken, 'k7m2xq', 1)], [null, null]);
     }
 
+    // ---- 3b. the place of a seat in the results, what the bell is told of a match, and that it is told once ------------------------------------------------------------------------------------------------
+    {
+        const place = (name) => R.placeOf(R.parseOver(golden[name]));
+        same('the place: the row of the seat, best first (second, the pair of an alliance is third behind the two rows above it, a tie at the top is first for both)', [place('two-players'), place('alliance-187'), place('tie-with-a-bot')], [2, 3, 1]);
+        const tie = R.parseOver(golden['tie-with-a-bot']);
+        same('... a tie: the second winning row is first as well, the row after them is third, and a seat that is in no row has none', [R.placeOf(Object.assign({}, tie, { seat: 1 })), R.placeOf(Object.assign({}, tie, { seat: 3 })), R.placeOf(Object.assign({}, tie, { seat: 2 }))], [1, 3, 0]);
+        const T = 1760600000000;
+        same('the bell is told the map, the place and the match, and what is not known is left out', [R.overNote({ map: 'TREASURE.LVL', place: 2 }, 'ants-TREASURE-20261016-071320Z'), R.overNote({ map: 'TREASURE.LVL', place: 0 }, ''), R.overNote({ map: '', place: 1 }, 'x'), R.overNote(null, 'x')],
+            [{ map: 'TREASURE.LVL', place: 2, match: 'ants-TREASURE-20261016-071320Z' }, { map: 'TREASURE.LVL' }, null, null]);
+        const s = storage();
+        same('a match is told once in a session: the time of the match is marked, and another match is told again', [R.takeOver(s, { t: T }), R.takeOver(s, { t: T }), R.takeOver(s, { t: T + 1 }), R.takeOver(s, { t: T + 1 }), s.items['ants.over']], [true, false, true, false, String(T + 1)]);
+        check('a storage that throws never tells it twice nor throws', (() => { try { return R.takeOver(broken, { t: T }) === true; } catch (e) { return false; } })());
+    }
+
     // ---- 4. the hand-over to the front page, and what the front page reads back ------------------------------------------------------------------------------------------------------------------------
     {
         const T = 1760600000000;
         const s = storage();
         check('the hand-over is written', R.handOver(s, two, KEYHEX, 'Sam', T + 0.6) === true);
         same('ants.lobby is the front page\'s own entry: the code, the key of the seat, the name, not the room\'s maker', JSON.parse(s.items['ants.lobby']), { c: 'k7m2xq', k: KEYHEX, n: 'Sam', o: 0 });
-        same('ants.back is the match: the code, the time, the map, the four names and the winner in words', JSON.parse(s.items['ants.back']), { c: 'k7m2xq', t: T, m: 'TREASURE.LVL', p: ['Maple', 'Sam', '', ''], w: 'Maple won with 2,040.' });
+        same('ants.back is the match: the code, the time, the map, the four names, the winner in words and this seat\'s place', JSON.parse(s.items['ants.back']), { c: 'k7m2xq', t: T, m: 'TREASURE.LVL', p: ['Maple', 'Sam', '', ''], w: 'Maple won with 2,040.', r: 2 });
         same('the front page reads it back: the people are the names that played, the names are the four by seat', R.readBack(s, 'k7m2xq', T + 5000),
-            { code: 'k7m2xq', t: T, map: 'TREASURE.LVL', people: ['Maple', 'Sam'], names: ['Maple', 'Sam', '', ''], winner: 'Maple won with 2,040.' });
+            { code: 'k7m2xq', t: T, map: 'TREASURE.LVL', people: ['Maple', 'Sam'], names: ['Maple', 'Sam', '', ''], winner: 'Maple won with 2,040.', place: 2 });
         same('... for its own room only, for three hours, and not from the future (a minute of clocks that disagree is let through)',
             [R.readBack(s, 'other1', T), R.readBack(s, 'k7m2xq', T + 3 * 3600 * 1000) !== null, R.readBack(s, 'k7m2xq', T + 3 * 3600 * 1000 + 1), R.readBack(s, 'k7m2xq', T - 60000) !== null, R.readBack(s, 'k7m2xq', T - 60001)],
             [null, true, null, true, null]);
@@ -210,6 +224,8 @@ async function main() {
         same('a damaged entry is none: a time that is no whole number, a map that is no map, three names, a name that is no text, a winner that is too long or no text',
             [damaged((v) => { v.t = 'x'; }), damaged((v) => { v.m = '../a.lvl'; }), damaged((v) => { v.p.pop(); }), damaged((v) => { v.p[0] = 7; }), damaged((v) => { v.w = 'x'.repeat(161); }), damaged((v) => { delete v.w; })],
             [null, null, null, null, null, null]);
+        same('a place that is not 0 to 4 whole is none, and an entry with no place (an older one) has place 0', [damaged((v) => { v.r = 5; }), damaged((v) => { v.r = -1; }), damaged((v) => { v.r = 1.5; }), damaged((v) => { v.r = '2'; }), damaged((v) => { delete v.r; }).place, damaged((v) => { v.r = 0; }).place],
+            [null, null, null, null, 0, 0]);
         same('... and so is broken JSON, nothing, or a storage that throws', [R.readBack(storage({ 'ants.back': '{' }), 'k7m2xq', T), R.readBack(storage(), 'k7m2xq', T), R.readBack(broken, 'k7m2xq', T), R.readBack(null, 'k7m2xq', T)], [null, null, null, null]);
         same('a name that the game cannot show is not handed over (the front page asks the room\'s)', (() => { const t = storage(); R.handOver(t, two, KEYHEX, 'José', T); return JSON.parse(t.items['ants.lobby']).n; })(), '');
         check('a storage that refuses: the hand-over says so', R.handOver(broken, two, KEYHEX, 'Sam', T) === false);
@@ -326,7 +342,7 @@ async function main() {
         byClass(p.host, 'btn').fire('click');
         check('"Back to the lobby": the link goes quietly (no Leave: the seat is kept for the front page) and is not made again', socket.closed && socket.sent.length === sentBefore && p.gp.state.client.status === 'closed');
         same('... the front page of this tab is handed the room, the key, the name the room shows, and the match', [JSON.parse(p.session.items['ants.lobby']), JSON.parse(p.session.items['ants.back'])],
-            [{ c: 'k7m2xq', k: KEYHEX, n: 'Sam', o: 0 }, { c: 'k7m2xq', t: 1760600000000, m: 'TREASURE.LVL', p: ['Maple', 'Sam', '', ''], w: 'Maple won with 2,040.' }]);
+            [{ c: 'k7m2xq', k: KEYHEX, n: 'Sam', o: 0 }, { c: 'k7m2xq', t: 1760600000000, m: 'TREASURE.LVL', p: ['Maple', 'Sam', '', ''], w: 'Maple won with 2,040.', r: 2 }]);
         same('... and the tab goes to the room\'s address', p.loc.assigned, ['/?room=k7m2xq']);
         p.w.advance(600000);
         check('... where nothing of this page comes back', p.w.sockets.length === 1);
@@ -552,6 +568,55 @@ async function main() {
         quiet.show(back);
         check('a browser without fetch: the strip and the link to the matches', body.children.length === 3 && find(body.children[1], (x) => x.tag === 'a').href === '/matches');
 
+        // the bell is told of the match, once it is found or will not be
+        {
+            const told = [];
+            let reply = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ replays: [] }) });
+            const laterOver = [];
+            const found = { replays: [{ file: 'ants-TREASURE-20261016-071320Z.antsrep', ended: Math.floor(T / 1000) + 10, map: 'TREASURE.LVL', players: ['Green (Maple)', 'Red (Sam)'], finished: true }] };
+            const s = R.frontStrip({ doc, before: screen, fetch: () => reply(), later: (fn, ms) => laterOver.push([fn, ms]), over: (b, id) => told.push([b.map, id]) });
+            s.show(back);
+            await flush(); await flush();
+            same('the match is not in the list yet: the bell is not told, it waits for the look', [told, laterOver.length], [[], 1]);
+            reply = () => Promise.resolve({ ok: true, json: () => Promise.resolve(found) });
+            laterOver.shift()[0]();
+            await flush(); await flush();
+            same('found: the bell is told once, with the match', told, [['TREASURE.LVL', 'ants-TREASURE-20261016-071320Z']]);
+            reply = () => Promise.reject(new Error('offline'));
+            told.length = 0;
+            s.show(back);
+            await flush(); await flush();
+            laterOver.shift()[0](); await flush(); await flush();
+            same('still not told while there is a look to come', told, []);
+            laterOver.shift()[0](); await flush(); await flush();
+            same('a list that cannot be had after three looks: the bell is told with no match, once', told, [['TREASURE.LVL', '']]);
+            told.length = 0;
+            let release = null;
+            reply = () => new Promise((resolve) => { release = () => resolve({ ok: true, json: () => Promise.resolve(found) }); });
+            s.show(back);
+            s.hide();
+            release();
+            await flush(); await flush();
+            same('hidden meanwhile: a match that is found afterwards is not told', told, []);
+            let looks = 0;
+            reply = () => { looks++; return Promise.resolve({ ok: true, json: () => Promise.resolve({ replays: [] }) }); };
+            laterOver.length = 0;
+            s.show(back);
+            await flush(); await flush();
+            const nextLook = laterOver.shift()[0];
+            s.hide();
+            const before = looks;
+            nextLook();
+            await flush(); await flush();
+            same('hidden before its next look: the look is not made and nothing is told', [looks - before, told], [0, []]);
+            const bare = R.frontStrip({ doc, before: screen, fetch: null, later: () => { throw new Error('nothing to wait for'); }, over: (b, id) => told.push([b.map, id]) });
+            bare.show(back);
+            same('a browser without fetch: told at once, with no match', told, [['TREASURE.LVL', '']]);
+            const thrower = R.frontStrip({ doc, before: screen, fetch: null, later: () => {}, over: () => { throw new Error('the bell is broken'); } });
+            thrower.show(back);
+            check('a bell that throws does not stop the strip', true);
+        }
+
         // unlisted test-map room (?testroom=<id>)
         const tBody = node('body'), tScreen = node('div');
         tBody.appendChild(tScreen);
@@ -587,6 +652,49 @@ async function main() {
         check('the test-room strip is shown above the screen with Back to editor', tBar && !tBar.hidden && /Popcorn Remix \(31 x 31\)/.test(tBar.textContent));
         byClass(tBar, 'testbar-back').fire('click');
         same('Back to editor notifies the opener and closes the tab', [backCalls, closedCalls], [['k7m2xq9abc12'], 1]);
+
+        // a room on a map of the library (/?hostmap=<file name>: the Play it button of a map's page, docs/MAP_PAGES.md)
+        {
+            const hostStrip = (search, held) => {
+                const replaced = [], b = node('body'), sc = node('div');
+                b.appendChild(sc);
+                const st = R.frontStrip({ doc, win: { location: { search, pathname: '//lobby.html' }, history: { replaceState: (a, t, url) => replaced.push(url) } }, before: sc, fetch: () => { throw new Error('a room on a library map asks the server for nothing here'); }, later: (fn) => fn() });
+                let ready = 0;
+                const began = st.begin(() => { ready++; }, held);
+                return { st, began, ready: () => ready, replaced };
+            };
+            const room = (mapFile, extra) => Object.assign({ guest: false, starting: false, you: 0, mapFile }, extra || {});
+            const h = hostStrip('?hostmap=Treasure%202.lvl', false);
+            same('begin takes /?hostmap=<file>: it makes the room of the page (onReady once) and the address loses its query', [h.began, h.ready(), h.replaced], [true, 1, ['/lobby.html']]);
+            const sent = [], warm = [];
+            h.st.sync(room('TREASURE.LVL'), (ch) => { sent.push(ch); return true; }, (f) => warm.push(f));
+            same('sync sends the map once, by its file name, and warms it', [sent, warm], [[{ file: 'Treasure 2.lvl' }], ['Treasure 2.lvl']]);
+            h.st.sync(room('TREASURE.LVL'), (ch) => { sent.push(ch); return true; });
+            h.st.remade();
+            h.st.sync(room('TREASURE.LVL'), (ch) => { sent.push(ch); return true; });
+            same('it is sent once: a later look, and a room that the page makes again, are ordinary', sent.length, 1);
+            const kept = hostStrip('?hostmap=Treasure%202.lvl', false), tries = [];
+            kept.st.sync(room('TREASURE.LVL'), (ch) => { tries.push(ch); return false; });
+            kept.st.sync(room('TREASURE.LVL'), (ch) => { tries.push(ch); return true; });
+            same('a plan that the room does not take yet is sent again at the next look', tries.length, 2);
+            const already = hostStrip('?hostmap=treasure.LVL', false), none = [];
+            already.st.sync(room('TREASURE.LVL'), (ch) => { none.push(ch); return true; });
+            same('a room that has the map already (any letter case) is sent nothing', none, []);
+            const guestRoom = hostStrip('?hostmap=Treasure%202.lvl', false), g = [];
+            guestRoom.st.sync(room('TREASURE.LVL', { guest: true }), (ch) => { g.push(ch); return true; });
+            guestRoom.st.sync(room('TREASURE.LVL', { starting: true }), (ch) => { g.push(ch); return true; });
+            guestRoom.st.sync(null, (ch) => { g.push(ch); return true; });
+            same('only the leader of a room that has not started plans: a guest, a started room and no room are sent nothing', g, []);
+            const held = hostStrip('?hostmap=Treasure%202.lvl', true), heldSent = [];
+            held.st.sync(room('TREASURE.LVL'), (ch) => { heldSent.push(ch); return true; });
+            same('a page that holds a room already makes none and changes none (the front page\'s own answer), and the address loses its query', [held.began, held.ready(), heldSent, held.replaced], [false, 0, [], ['/lobby.html']]);
+            for (const bad of ['', '../x.lvl', 'a/b.lvl', 'x.txt', 'a:b.lvl', '.hidden.lvl', 'x'.repeat(61) + '.lvl', 'ab.lv']) {
+                const b = hostStrip('?hostmap=' + encodeURIComponent(bad), false);
+                same('no room for a name that is no map file (' + JSON.stringify(bad.slice(0, 12)) + ')', [b.began, b.ready(), b.replaced.length], [false, 0, 1]);
+            }
+            const plain = hostStrip('?x=1', false);
+            same('an address with no hostmap is left alone', [plain.began, plain.ready(), plain.replaced], [false, 0, []]);
+        }
 
         // draft map where Green (Seat 0) is not usable moves the host to the first usable color, and error strip survives sync()
         const tBody2 = node('body'), tScreen2 = node('div');

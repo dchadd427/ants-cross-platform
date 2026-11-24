@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the alerts that need no permission (web/alert_core.js, web/home/alerts.js and alerts.css, the loader in web/home/home.js, the join hook in web/lobby.html, the countdown block of web/shell.html; docs/HOME_SCREEN.md 'Alerts') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_home_alerts_check.js and the checks of tests/scripts/test_web_home_alerts.py: the switches (on by default, kept), the tab alert (only in the background, once a second, stopped and put back when the page is looked at), the match alert (the card, ready, the switch, 'has started'), no sound assigned and a sound that obeys its switch and the two seconds, the join alert (a switch, Home and not the Room, the page's own toast not twice, the title in the background), the sheet (a row for no sound, a press, Escape, the dimmed page, the focus), the Menu's row, the loaders; every one must be caught (tools/mutate.py tests/data/home_alerts_mutants.json --keep-going --jobs 1).",
+ "note": "Mutants of the alerts (web/alert_core.js, web/home/alerts.js and alerts.css, the loader in web/home/home.js, the join hook in web/lobby.html, the countdown block of web/shell.html; docs/HOME_SCREEN.md 'Alerts') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_home_alerts_check.js and the checks of tests/scripts/test_web_home_alerts.py: the switches (on by default, kept), the tab alert (only in the background, once a second, stopped and put back when the page is looked at), the match alert (the card, ready, the switch, 'has started'), no sound assigned and a sound that obeys its switch and the two seconds, the join alert (a switch, Home and not the Room, the page's own toast not twice, the title in the background), the bell's number (the unread, 9+, read when the list is closed, told to the hub up to the newest), the list (newest first, the last 7 days and 30, a visitor's own in the browser and only joins, the hub's for a person who is logged in, a new welcome, the same alert twice), the settings behind the gear (the rows, a press, Escape, the dimmed page, the focus, Clear), an invitation and a mention (a toast or a line of the chat, one place, the switches that leave the entry and show nothing, Join, Open, a room that is gone), a row that is checked (a code, seats, a map), the loaders; every one must be caught (tools/mutate.py tests/data/home_alerts_mutants.json --keep-going --jobs 1).",
  "baseline": {
   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
  },
@@ -117,45 +117,10 @@
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   },
   {
-   "id": "alert_on_the_room_screen_too",
-   "file": "web/home/alerts.js",
-   "old": "if (home) toastUp(String(data.text || ''));",
-   "new": "toastUp(String(data.text || ''));",
-   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
-  },
-  {
-   "id": "row_for_every_sound",
-   "file": "web/home/alerts.js",
-   "old": "if (!r[1] || (env.table || core.SOUNDS)[r[1]]) out.push(r[0]);",
-   "new": "out.push(r[0]);",
-   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
-  },
-  {
-   "id": "press_does_not_turn_the_switch",
-   "file": "web/home/alerts.js",
-   "old": "b.addEventListener('click', function () { set.set(name, !set.on(name)); paint(b, name); });",
-   "new": "b.addEventListener('click', function () { paint(b, name); });",
-   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
-  },
-  {
-   "id": "escape_does_not_close",
-   "file": "web/home/alerts.js",
-   "old": "if (e.key === 'Escape') { if (e.preventDefault) e.preventDefault(); close(); return; }",
-   "new": "if (e.key === 'Escape') { return; }",
-   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
-  },
-  {
    "id": "press_that_began_in_the_card_closes",
    "file": "web/home/alerts.js",
    "old": "hit = down && e.target === shade;",
    "new": "hit = e.target === shade;",
-   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
-  },
-  {
-   "id": "no_tab_alert_for_a_join",
-   "file": "web/home/alerts.js",
-   "old": "flash.start('\\u25CF ' + shorten(data.name || '') + TEXT.joined);",
-   "new": "void 0;",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   },
   {
@@ -166,24 +131,10 @@
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   },
   {
-   "id": "no_row_in_the_menu",
-   "file": "web/home/home.js",
-   "old": "if (alerts) menuBox.appendChild(alertsRow());",
-   "new": "/* none */",
-   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
-  },
-  {
    "id": "home_alert_is_dropped",
    "file": "web/home/home.js",
-   "old": "alert: function (kind, data) { try { return !!alerts && alerts.alert(kind, data); }",
+   "old": "alert: function (kind, data) { try { if (!alerts) { if (kind === 'over') waitingOver.push(data); return false; } return alerts.alert(kind, data); }",
    "new": "alert: function (kind, data) { try { return false; }",
-   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
-  },
-  {
-   "id": "page_toast_as_well_as_home",
-   "file": "web/lobby.html",
-   "old": "if (!Home.alert('join', { name: e.name, text: text })) say(text);",
-   "new": "Home.alert('join', { name: e.name, text: text }); say(text);",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   },
   {
@@ -243,80 +194,10 @@
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   },
   {
-   "id": "bell_granted_is_not_on",
-   "file": "web/home/alerts.js",
-   "old": "return p === 'granted' ? 'on' : p === 'denied' ? 'blocked' : 'off';",
-   "new": "return p === 'granted' ? 'off' : p === 'denied' ? 'blocked' : 'off';",
-   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
-  },
-  {
-   "id": "bell_denied_is_not_blocked",
-   "file": "web/home/alerts.js",
-   "old": "p === 'denied' ? 'blocked' : 'off';",
-   "new": "p === 'denied' ? 'off' : 'off';",
-   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
-  },
-  {
-   "id": "bell_dot_for_a_visitor_who_is_not_logged_in",
-   "file": "web/home/alerts.js",
-   "old": "if (!(env.signedIn && env.signedIn())) return 'guest';",
-   "new": "/* every visitor */",
-   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
-  },
-  {
-   "id": "bell_where_there_are_no_notifications",
-   "file": "web/home/alerts.js",
-   "old": "if (!p && !phone) return null;",
-   "new": "/* always a bell */",
-   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
-  },
-  {
-   "id": "bell_iphone_app_still_needs_the_app",
-   "file": "web/home/alerts.js",
-   "old": "if (phone && !installed()) return 'needs';",
-   "new": "if (phone) return 'needs';",
-   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
-  },
-  {
-   "id": "bell_asks_when_pressed",
-   "file": "web/home/alerts.js",
-   "old": "bell.addEventListener('click', function () { open(bell); });",
-   "new": "bell.addEventListener('click', function () { if (win.Notification && win.Notification.requestPermission) win.Notification.requestPermission(); open(bell); });",
-   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
-  },
-  {
-   "id": "bell_asks_when_it_is_read",
-   "file": "web/home/alerts.js",
-   "old": "bell.hidden = !state;",
-   "new": "bell.hidden = !state; if (win.Notification && win.Notification.requestPermission) win.Notification.requestPermission();",
-   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
-  },
-  {
-   "id": "bell_press_opens_nothing",
-   "file": "web/home/alerts.js",
-   "old": "bell.addEventListener('click', function () { open(bell); });",
-   "new": "bell.addEventListener('click', function () { });",
-   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
-  },
-  {
    "id": "bell_in_front_of_the_account_button",
    "file": "web/home/alerts.js",
    "old": "env.menuBtn && env.menuBtn.parentNode === env.bar ? env.menuBtn : null",
    "new": "env.bar.firstChild",
-   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
-  },
-  {
-   "id": "bell_does_not_follow_the_browser",
-   "file": "web/home/alerts.js",
-   "old": "if (status) status.onchange = refresh;",
-   "new": "/* none */",
-   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
-  },
-  {
-   "id": "bell_dot_when_on",
-   "file": "web/home/alerts.js",
-   "old": "if (state === 'off' && !seen.is()) m = el('span', 'al-mark al-dotmark');",
-   "new": "if ((state === 'off' || state === 'on') && !seen.is()) m = el('span', 'al-mark al-dotmark');",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   },
   {
@@ -327,52 +208,430 @@
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   },
   {
-   "id": "bell_reads_again_for_a_list_of_players",
+   "id": "alert_on_the_room_screen_too",
    "file": "web/home/alerts.js",
-   "old": "if (kind === 'live' || kind === 'you' || kind === 'lost') refresh();",
+   "old": "if (home) up(",
+   "new": "if (true) up(",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "row_for_every_sound",
+   "file": "web/home/alerts.js",
+   "old": "if ((!r[1] || (env.table || core.SOUNDS)[r[1]]) && (!r[2] || signedIn())) out.push(r[0]);",
+   "new": "if (!r[2] || signedIn()) out.push(r[0]);",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_visitor_gets_the_switches_of_a_name",
+   "file": "web/home/alerts.js",
+   "old": "&& (!r[2] || signedIn())) out.push(r[0]);",
+   "new": "&& true) out.push(r[0]);",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "press_does_not_turn_the_switch",
+   "file": "web/home/alerts.js",
+   "old": "b.addEventListener('click', function () { set.set(name, !set.on(name)); paintSwitch(b, name); });",
+   "new": "b.addEventListener('click', function () { paintSwitch(b, name); });",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "escape_does_not_close",
+   "file": "web/home/alerts.js",
+   "old": "if (e.key === 'Escape') { if (e.preventDefault) e.preventDefault(); if (view === 'settings') { view = 'list'; paint(); focusFirst(); } else close(); return; }",
+   "new": "if (e.key === 'Escape') { return; }",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "escape_closes_from_the_settings_at_once",
+   "file": "web/home/alerts.js",
+   "old": "if (view === 'settings') { view = 'list'; paint(); focusFirst(); } else close(); return; }",
+   "new": "close(); return; }",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "no_tab_alert_for_a_join",
+   "file": "web/home/alerts.js",
+   "old": "flash.start('\\u25cf ' + shorten(data.name || '') + ' joined your room');",
+   "new": "void 0;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "page_toast_as_well_as_home",
+   "file": "web/lobby.html",
+   "old": "if (!Home.alert('join', { name: e.name, text: text, seat: COLORS[e.seat].name })) say(text);",
+   "new": "Home.alert('join', { name: e.name, text: text, seat: COLORS[e.seat].name }); say(text);",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_count_of_everything_not_of_the_unread",
+   "file": "web/home/alerts.js",
+   "old": "if (r.u) n++;",
+   "new": "n++;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "nine_plus_from_ten_on_is_nine_plus_from_eleven_on",
+   "file": "web/home/alerts.js",
+   "old": "return n > 9 ? '9+' : String(n);",
+   "new": "return n > 10 ? '9+' : String(n);",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "closing_the_list_does_not_read_it",
+   "file": "web/home/alerts.js",
+   "old": "readAll(); refresh();",
    "new": "refresh();",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   },
   {
-   "id": "dot_stays_after_the_sheet_is_opened",
+   "id": "seen_of_no_number",
    "file": "web/home/alerts.js",
-   "old": "seen.mark(); refresh();",
-   "new": "refresh();",
+   "old": "d.send({ t: 'seen', upto: newest() })",
+   "new": "d.send({ t: 'seen', upto: 0 })",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   },
   {
-   "id": "dot_comes_back_on_the_next_visit",
-   "file": "web/alert_core.js",
-   "old": "try { win.localStorage.setItem(LOOKED_KEY, '1'); }",
-   "new": "try { }",
-   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
-  },
-  {
-   "id": "dot_ignores_that_the_sheet_was_looked_at",
+   "id": "an_unread_entry_is_plain",
    "file": "web/home/alerts.js",
-   "old": "dot = state === 'off' && !seen.is();",
-   "new": "dot = state === 'off';",
+   "old": "(unreadAtOpen[row.id] ? ' unread' : '')",
+   "new": "''",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   },
   {
-   "id": "looking_is_forgotten_where_the_browser_refuses_storage",
-   "file": "web/alert_core.js",
-   "old": "mark: function () { visit = true; try",
-   "new": "mark: function () { try",
-   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
-  },
-  {
-   "id": "bell_has_the_dot_after_the_sheet_was_looked_at",
+   "id": "an_invitation_is_a_toast_while_the_chat_shows",
    "file": "web/home/alerts.js",
-   "old": "if (state === 'off' && !seen.is()) m = el('span', 'al-mark al-dotmark');",
-   "new": "if (state === 'off') m = el('span', 'al-mark al-dotmark');",
+   "old": "if (chat && d && d.block) { invitation(row); return; }",
+   "new": "if (false) { invitation(row); return; }",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   },
   {
-   "id": "arrow_of_the_iphone_goes_with_the_dot",
+   "id": "the_invitation_switch_is_ignored",
    "file": "web/home/alerts.js",
-   "old": "else if (state === 'needs') {",
-   "new": "else if (state === 'never') {",
+   "old": "if (!set.on('invite')) return;",
+   "new": "if (false) return;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_mention_switch_is_ignored",
+   "file": "web/home/alerts.js",
+   "old": "if (!set.on('mention')) return;",
+   "new": "if (false) return;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_mention_is_a_toast_while_the_chat_shows",
+   "file": "web/home/alerts.js",
+   "old": "if (!chat) up(",
+   "new": "if (true) up(",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_join_that_the_hub_sends_back_is_news",
+   "file": "web/home/alerts.js",
+   "old": "if (row.k === 'join' || row.k === 'over') return;",
+   "new": "if (false) return;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_join_is_not_told_to_the_hub",
+   "file": "web/home/alerts.js",
+   "old": "if (signedIn() && d && d.send) d.send({ t: 'note', k: 'join', name: String(data.name || ''), seat: seat });",
+   "new": "if (signedIn() && d && d.send) void 0;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_member_keeps_a_list_in_the_browser_too",
+   "file": "web/home/alerts.js",
+   "old": "else if (!signedIn()) { addLocal(",
+   "new": "else if (true) { addLocal(",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_closed_invitation_keeps_its_join",
+   "file": "web/home/alerts.js",
+   "old": "row.open = row.code !== '';",
+   "new": "row.open = true;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_room_code_is_not_checked",
+   "file": "web/home/alerts.js",
+   "old": "/^[a-z0-9_-]{1,32}$/.test(raw.code)",
+   "new": "/^.*$/.test(raw.code)",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "seats_are_not_checked_against_each_other",
+   "file": "web/home/alerts.js",
+   "old": "|| raw.n > raw.of) return null;",
+   "new": ") return null;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_map_is_not_checked",
+   "file": "web/home/alerts.js",
+   "old": "typeof raw.map === 'string' && rules && rules.validMapFile(raw.map) ? raw.map : ''",
+   "new": "typeof raw.map === 'string' ? raw.map : ''",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_visitors_list_holds_what_a_member_gets",
+   "file": "web/home/alerts.js",
+   "old": "if (r && (r.k === 'join' || r.k === 'over')) out.push(r);",
+   "new": "if (r) out.push(r);",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_list_is_not_cut_at_seven_days",
+   "file": "web/home/alerts.js",
+   "old": "return now - r.at < DAYS * 86400;",
+   "new": "return true;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_list_is_not_cut_at_thirty",
+   "file": "web/home/alerts.js",
+   "old": ".sort(function (a, b) { return b.id - a.id; }).slice(0, KEEP); }",
+   "new": ".sort(function (a, b) { return b.id - a.id; }).slice(0, KEEP + 1); }",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_list_is_oldest_first",
+   "file": "web/home/alerts.js",
+   "old": "return b.id - a.id; })",
+   "new": "return a.id - b.id; })",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "clear_does_not_tell_the_hub",
+   "file": "web/home/alerts.js",
+   "old": "if (d && d.send) d.send({ t: 'clearalerts' }); hub = [];",
+   "new": "hub = [];",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "clear_keeps_a_visitors_list",
+   "file": "web/home/alerts.js",
+   "old": "else { local = []; saveLocal(); }",
+   "new": "else { saveLocal(); }",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "join_on_an_invitation_does_nothing",
+   "file": "web/home/alerts.js",
+   "old": "{ if (ctl.join) ctl.join(row, back); }",
+   "new": "{ }",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "open_on_a_mention_does_not_show_the_chat",
+   "file": "web/home/alerts.js",
+   "old": "else if (row.k === 'mention') { if (ctl.chat) ctl.chat(); }",
+   "new": "else if (row.k === 'mention') { }",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_visitor_takes_the_hubs_list",
+   "file": "web/home/alerts.js",
+   "old": "var next = signedIn() ? fromHub(m && m.rows) : null;",
+   "new": "var next = fromHub(m && m.rows);",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "an_alert_that_comes_twice_is_two",
+   "file": "web/home/alerts.js",
+   "old": "|| hub.some(function (r) { return r.id === row.id; })",
+   "new": "|| false",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_new_welcome_keeps_the_old_list",
+   "file": "web/home/alerts.js",
+   "old": "if (kind === 'live') { hub = []; refresh(); flushOver(); }",
+   "new": "if (kind === 'live') { refresh(); flushOver(); }",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_line_that_is_gone_is_not_drawn_again",
+   "file": "web/home/alerts.js",
+   "old": "if (inv.entry && inv.entry.redraw) inv.entry.redraw();",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_dim_invitation_offers_join",
+   "file": "web/home/alerts.js",
+   "old": "action: '', dim: true }",
+   "new": "action: TEXT.doJoin, dim: true }",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "an_empty_list_is_told_as_read_again",
+   "file": "web/home/alerts.js",
+   "old": "if (!count()) return;",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_bell_does_not_say_how_many",
+   "file": "web/home/alerts.js",
+   "old": "bell.setAttribute('aria-label', TEXT.title + (n ? ', ' + n + TEXT.unread : ''));",
+   "new": "bell.setAttribute('aria-label', TEXT.title);",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "an_invitation_toast_goes_in_six_seconds",
+   "file": "web/home/alerts.js",
+   "old": "ms: INVITE_MS,",
+   "new": "ms: TOAST_MS,",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_line_of_the_chat_has_no_join",
+   "file": "web/home/alerts.js",
+   "old": "if (cur.open) { var b = el('button'",
+   "new": "if (false) { var b = el('button'",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "an_over_entry_of_this_browser_is_unread",
+   "file": "web/home/alerts.js",
+   "old": "raw.id = id; raw.at = now(); raw.u = raw.k === 'join' ? 1 : 0;",
+   "new": "raw.id = id; raw.at = now(); raw.u = 1;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "view_always_opens_the_list_of_matches",
+   "file": "web/home/alerts.js",
+   "old": "row.match ? '/match?id=' + encodeURIComponent(row.match) : '/matches'",
+   "new": "'/matches'",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "view_opens_the_match_in_this_tab",
+   "file": "web/home/alerts.js",
+   "old": "'_blank', 'noopener,noreferrer'",
+   "new": "'_self', 'noopener,noreferrer'",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_match_is_told_before_the_dock_has_spoken",
+   "file": "web/home/alerts.js",
+   "old": "if (liveKnown) deliverOver(data); else waiting.push(data);",
+   "new": "deliverOver(data);",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_waiting_match_is_not_told_when_the_dock_is_live",
+   "file": "web/home/alerts.js",
+   "old": "refresh(); flushOver(); }",
+   "new": "refresh(); }",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_waiting_match_is_not_kept_when_the_link_is_lost",
+   "file": "web/home/alerts.js",
+   "old": "if (kind === 'lost') flushOver();",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_waiting_match_is_lost_when_there_is_no_dock",
+   "file": "web/home/alerts.js",
+   "old": "            else flushOver();                              // (no chat on this page",
+   "new": "            else if (false) flushOver();                              // (no chat on this page",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_visitor_tells_the_hub_of_the_match",
+   "file": "web/home/alerts.js",
+   "old": "            if (signedIn()) {\n                if (!d || !d.send) return;\n                note = ",
+   "new": "            if (true) {\n                if (!d || !d.send) return;\n                note = ",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_same_match_twice_is_two_entries_of_this_browser",
+   "file": "web/home/alerts.js",
+   "old": "!mine().some(function (r) { return r.k === 'over' && r.match && r.match === row.match; })",
+   "new": "true",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "any_place_of_a_match_is_taken",
+   "file": "web/home/alerts.js",
+   "old": "row.place = whole(raw.place, 1, 4) ? raw.place : 0;",
+   "new": "row.place = typeof raw.place === 'number' ? raw.place : 0;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "any_match_of_a_match_is_taken",
+   "file": "web/home/alerts.js",
+   "old": "typeof raw.match === 'string' && MATCH_ID.test(raw.match) ? raw.match : '';",
+   "new": "typeof raw.match === 'string' ? raw.match : '';",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "any_map_of_a_match_is_taken",
+   "file": "web/home/alerts.js",
+   "old": "if (typeof raw.map !== 'string' || !rules || !rules.validMapFile(raw.map)) return null;",
+   "new": "if (typeof raw.map !== 'string') return null;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_new_match_of_the_hub_is_said_like_a_mention",
+   "file": "web/home/alerts.js",
+   "old": "if (row.k === 'join' || row.k === 'over') return;",
+   "new": "if (row.k === 'join') return;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_words_of_a_match_leave_out_the_place",
+   "file": "web/home/alerts.js",
+   "old": "row.place ? TEXT.places[row.place - 1] : ''",
+   "new": "''",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_list_of_this_browser_holds_only_the_people_who_joined",
+   "file": "web/home/alerts.js",
+   "old": "if (r && (r.k === 'join' || r.k === 'over')) out.push(r);",
+   "new": "if (r && r.k === 'join') out.push(r);",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_list_of_this_browser_forgets_the_place_and_the_match",
+   "file": "web/home/alerts.js",
+   "old": "seat: r.seat, map: r.map, place: r.place || undefined, match: r.match || undefined };",
+   "new": "seat: r.seat, map: r.map };",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_match_told_before_the_part_is_lost",
+   "file": "web/home/home.js",
+   "old": "if (kind === 'over') waitingOver.push(data); return false;",
+   "new": "return false;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_match_that_waited_is_not_given_to_the_part",
+   "file": "web/home/home.js",
+   "old": "waitingOver.splice(0).forEach(function (d) { alerts.alert('over', d); });",
+   "new": "waitingOver.length = 0;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_match_is_told_to_the_bell_every_time_the_page_loads",
+   "file": "web/lobby.html",
+   "old": "if (note && Rematch.takeOver(window.sessionStorage, b)) Home.alert('over', note);",
+   "new": "if (note) Home.alert('over', note);",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_page_that_comes_back_never_tells_the_bell",
+   "file": "web/lobby.html",
+   "old": "Home.alert('over', note);",
+   "new": "void note;",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   }
  ]

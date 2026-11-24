@@ -17,11 +17,13 @@ the game page has the stage (id="game-stage"; the build writes it with or withou
 /front/classic.css, the font          the Classic look's own files: served as files (an unknown address is the page of a 404, so the type is checked), the stylesheet with the pages' revalidation
 /matches, /match, their stylesheet and the code that they and the game page in replay mode (play?replay=<file>) share; /matches.html and /match.html
                                       (and the old /watch.html, to /matches) go to the clean address with the query (a 301); /live-now, /live-now/ and /live.html go to / with no query (a 301); /live is the game server's list, not a page
-/robots.txt, /sitemap.xml             the files for search engines (docs/BUILD_AND_RUN.md "Search engines and share cards"): files with their own types, revalidated; an address that only starts like one is a 404 with the page
+/robots.txt, /sitemap.xml, /sitemap-library.xml   the files for search engines (docs/BUILD_AND_RUN.md "Search engines and share cards"): files with their own types, revalidated; an address that only starts like one is a 404 with the page
 /manifest.webmanifest, /app/icon-192.png, /favicon.png, /favicon.ico  the web app's manifest (revalidated), an icon and the browser-tab icon (with or without ?v=): files, not the game page; /?vp is the front page and /home/vp.js its script of numbers
 /changelog, /legal, /mapmaker,        the other pages of the site: each is its own page with the pages' headers (the map maker has its own policy) and links /front/classic.css (not the map maker);
 /asset_catalog/                         the .html address of each (not changelog.html, legal.html, matches.html: they answer 200, as before; and /asset_catalog/index.html, to /asset_catalog/) is a 301 to the clean one with the query, a slash after the clean one goes to it; /catalog, /viewer and /asset_catalog go to the catalog;
                                         /admin.html, /404.html and /50x.html are plain 404s (no page has a .html address of its own)
+/map/treasure, /map-library           the map pages (docs/MAP_PAGES.md: one page for each map of the library at /map/NAME, the index at /map-library and /map-library?page=N): pages with the pages' headers, revalidated; a slash after one, and the file that a page is
+                                        made from (/map_pages/map/NAME.html), go to the clean address with the query; a name that is no page (no such map, other letters, two hyphens in a row, a page number that is not a plain number or is past the last) is a 404 with the page of the site
 an address that is nothing                a 404 with web/404.html (the page of the site, no game started, revalidated like every page); under the name of a door (/ws/, /busy/, /stats/, /lobbies/, /test-maps/, /hub/) a short plain 404 with no page (a file of a page's kind there too)
 Exit status 0: every check passed; 1: a check failed; 3: nothing answers at the address.
 """
@@ -144,7 +146,7 @@ def main():
           "/manifest.webmanifest is the manifest (%s, %s)" % (status, headers.get("content-type")))
     check(headers.get("cache-control") == "no-cache, must-revalidate" and names.count("cache-control") == 1, "/manifest.webmanifest: Cache-Control is exactly one line, no-cache, must-revalidate (%s)" % headers.get("cache-control"))
     print("[web routes] robots.txt and sitemap.xml are files of the site with their own types, revalidated, never the page that an unknown address gets")
-    for path, kind, marker in (("/robots.txt", "text/plain; charset=utf-8", "User-agent:"), ("/sitemap.xml", "application/xml; charset=utf-8", "<urlset")):
+    for path, kind, marker in (("/robots.txt", "text/plain; charset=utf-8", "User-agent:"), ("/sitemap.xml", "application/xml; charset=utf-8", "<urlset"), ("/sitemap-library.xml", "application/xml; charset=utf-8", "<urlset")):
         status, headers, names, body = get(path)
         check(status == 200 and headers.get("content-type") == kind and marker in body and not GAME.search(body) and not LOBBY.search(body) and not NOT_FOUND.search(body), "%s is the file (%s, %s)" % (path, status, headers.get("content-type")))
         check(headers.get("cache-control") == "no-cache, must-revalidate" and names.count("cache-control") == 1 and headers.get("x-content-type-options") == "nosniff", "%s: Cache-Control is exactly one line, no-cache, must-revalidate, and nosniff is sent (%s)" % (path, headers.get("cache-control")))
@@ -240,6 +242,31 @@ def main():
         except OSError:                 # (the path goes to the game server, which this check does not start: nginx waits for it, and that is not a page either)
             continue
         check(not (status == 200 and "text/html" in headers.get("content-type", "")) and "location" not in headers, "%s is not a page and is not redirected (%s)" % (path, status))
+    print("[web routes] the map pages: /map/NAME and /map-library are pages, the files they are made from are no addresses, and a name that is no page is a 404 with the page of the site")
+    for path, marker in (("/map/treasure", "<h1>Treasure "), ("/map/treasure?utm_source=x", "<h1>Treasure "), ("/map-library", 'id="list"'), ("/map-library?page=2", 'id="list"'), ("/map-library?page=1&x=y", 'id="list"')):
+        status, headers, names, body = get(path)
+        page_headers(path, status, headers, names)
+        check(marker in body and "@@" not in body and not GAME.search(body) and not LOBBY.search(body), "%s is its own page, filled in, not the game page or the front page" % path)
+        tag = headers.get("etag")
+        check(bool(tag) and get(path, {"If-None-Match": tag})[0] == 304, "%s: an unchanged page is answered 304 to If-None-Match" % path)
+        check(get(path, method="HEAD")[0] == 200 and get(path, method="POST")[0] == 405, "%s: HEAD works and POST is refused" % path)
+        check(names.count("content-security-policy") == 1 and "frame-ancestors" in headers.get("content-security-policy", "") and headers.get("x-frame-options") == "DENY", "%s carries the policy of a page" % path)
+    check('rel="canonical" href="' in get("/map/treasure")[3] and get("/map/treasure")[3].count('/map/treasure"') >= 1, "/map/treasure names its own address as canonical")
+    for path in ("/map/nosuchmap", "/map/Treasure", "/map/TREASURE", "/map/", "/map/a--b", "/map/-treasure", "/map/treasure-", "/map/treasure/x", "/map/" + "a" * 90, "/map/tre%20sure", "/map-library?page=0", "/map-library?page=02",
+                 "/map-library?page=abc", "/map-library?page=99999", "/map-library?page=-1", "/map-library?page=../../matches", "/map-library?page=../404", "/map-library?page=", "/map-library/x", "/map_pages/", "/map_pages/map/", "/map_pages/library/", "/map_pages/library/0.html"):
+        status, headers, names, body = get(path)
+        if path == "/map-library?page=":                                                     # (an empty page number is no number: page 1)
+            check(status == 200, "%s is page 1 (%s)" % (path, status))
+            continue
+        check(status == 404 and "location" not in headers and bool(NOT_FOUND.search(body)) and not GAME.search(body) and not LOBBY.search(body), "%s is a 404 with the page of the site, not a game or the front page (%s)" % (path, status))
+    for old, want in (("/map/treasure/", "/map/treasure"), ("/map/treasure/?x=1", "/map/treasure?x=1"), ("/map-library/", "/map-library"), ("/map-library/?page=2", "/map-library?page=2"), ("/map_pages/map/treasure.html", "/map/treasure"),
+                      ("/map_pages/map/treasure.html?x=1", "/map/treasure?x=1"), ("/map_pages/library/1.html", "/map-library"), ("/map_pages/library/2.html", "/map-library")):
+        status, headers, names, body = get(old)
+        check(status == 301 and headers.get("location") == want and "content-security-policy" not in headers, "%s answers 301 to %s (%s %s)" % (old, want, status, headers.get("location")))
+    for path, kind in (("/map_pages.css", "text/css"), ("/map_library.js", "javascript"), ("/map_plays.js", "javascript"), ("/map_library_data.js", "javascript")):
+        status, headers, names, body = get(path)
+        check(status == 200 and kind in headers.get("content-type", "") and not GAME.search(body) and headers.get("cache-control") == "no-cache, must-revalidate" and names.count("cache-control") == 1, "%s is the file, revalidated (%s, %s)" % (path, status, headers.get("content-type")))
+    check("window.ANTS_MAP_LIBRARY=" in get("/map_library_data.js")[3] and 'src="/map_library_data.js"' in get("/map-library")[3], "the index loads the list that the build made")
     print("[web routes] an address that is nothing is a 404 with the page of the site (web/404.html), revalidated like every page, and never the game; a name that only starts like a page's is one too")
     for path in ("/no/such/page", "/nothing", "/nothing?room=k7m2xq", "/playx", "/matchesx", "/legal/x", "/mapmaker/x", "/changelogs", "/match/x", "/robots.txt.x", "/sitemap.xml.x", "/front/", "/app", "/index"):
         status, headers, names, body = get(path)

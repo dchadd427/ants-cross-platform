@@ -196,8 +196,8 @@
   {
    "id": "the_list_of_the_ignored_has_no_end",
    "file": "hub/commands.py",
-   "old": "        if chat.ref(target) not in mine and len(mine) >= chat.limits.ignore_max:",
-   "new": "        if False:",
+   "old": "        if not kept:\n            return self.reply(peer, \"ignore\", \"full\")",
+   "new": "        if False:\n            return self.reply(peer, \"ignore\", \"full\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
   },
   {

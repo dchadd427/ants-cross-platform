@@ -1,6 +1,6 @@
 // The alerts that need no permission (docs/HOME_SCREEN.md, "Alerts"): what the front page (web/home/alerts.js) and the game page (web/shell.html) share. Nothing here is sent anywhere and nothing is asked of the browser.
-//   * settings(win): the person's switches, kept in this browser only (localStorage `ants.alerts.v1`, every read and write guarded: a browser that refuses keeps them for the visit). Every switch is on until it is turned off.
-//   * looked(win): whether the person has opened the Alerts sheet on this device (localStorage `ants.alerts.looked.v1`, guarded the same way). The bell's gold dot means "not looked yet" and goes for good once the sheet has been opened.
+//   * settings(win): the person's switches, kept in this browser only (localStorage `ants.alerts.v1`, every read and write guarded: a browser that refuses keeps them for the visit). Every switch is on until it is turned off. The list of alerts that
+//     the bell shows is not here: it is the account's own on the hub, and a visitor's in web/home/alerts.js.
 //   * flasher({ win, doc }): the tab alert. While the page is in the background (hidden, or not the window that has the focus) the tab's title alternates once a second with a line of its own and the tab's icon gets a red
 //     dot; it stops, and the title and the icon are put back, as soon as the page is shown and has the focus again (or goes away).
 //   * watchMatch(env): for the game page: when the countdown card of a match comes up and the page is in the background, the tab alert starts ("Your match is starting!"), and when the card goes it says "Your match has
@@ -16,12 +16,11 @@
     'use strict';
 
     var KEY = 'ants.alerts.v1';
-    var LOOKED_KEY = 'ants.alerts.looked.v1';
     var BLINK_MS = 1000;                                   // the title changes this often
     var LOOK_MS = 500;                                     // the game page looks for the countdown card this often (when it has no timer that a hidden page does not slow)
     var SOUND_GAP_MS = 2000;                               // at most one sound in this time, whatever happens
     var SOUND_VOLUME = 0.5;
-    var NAMES = ['join', 'start', 'soundJoin', 'soundStart'];    // the switches: an alert when a person joins my room, the tab alert of my match, and (only where a sound is wired) a sound for each
+    var NAMES = ['invite', 'mention', 'join', 'start', 'soundJoin', 'soundStart'];    // the switches: an alert when a person invites me, when one mentions me, when one joins my room, the tab alert of my match, and (only where a sound is wired) a sound for each
     var SOUND_SWITCH = { join: 'soundJoin', start: 'soundStart' };
     // THE SOUNDS: the path of the file of each event, '' for none. To assign an approved sound, write its path here (the file goes in web/home/, which the image copies whole), for example join: '/home/alert_join.mp3';
     // nothing else changes: the switch for it appears in the sheet and the sound plays with the alert.
@@ -29,14 +28,6 @@
     var TEXT = { starting: '\u25B6 Your match is starting!', started: '\u25B6 Your match has started!', sheet: 'Alerts', sheetSounds: 'Alerts and sounds' };
 
     // ---- the switches ----
-    // looked(win): is() whether the Alerts sheet has been opened in this browser, mark() to say it has (kept where the browser lets us, and for the visit where it does not)
-    function looked(win) {
-        var visit = false;
-        return {
-            is: function () { try { return visit || win.localStorage.getItem(LOOKED_KEY) === '1'; } catch (e) { return visit; } },
-            mark: function () { visit = true; try { win.localStorage.setItem(LOOKED_KEY, '1'); } catch (e) { /* the visit keeps it */ } }
-        };
-    }
     function read(win) {
         try {
             var text = win.localStorage.getItem(KEY), v = text === null ? null : JSON.parse(text);
@@ -178,5 +169,5 @@
         return { look: look, flash: flash };
     }
 
-    return { KEY: KEY, LOOKED_KEY: LOOKED_KEY, NAMES: NAMES, SOUNDS: SOUNDS, TEXT: TEXT, BLINK_MS: BLINK_MS, SOUND_GAP_MS: SOUND_GAP_MS, settings: settings, looked: looked, sounds: sounds, wired: wired, title: title, flasher: flasher, watchMatch: watchMatch };
+    return { KEY: KEY, NAMES: NAMES, SOUNDS: SOUNDS, TEXT: TEXT, BLINK_MS: BLINK_MS, SOUND_GAP_MS: SOUND_GAP_MS, settings: settings, sounds: sounds, wired: wired, title: title, flasher: flasher, watchMatch: watchMatch };
 });

@@ -1,0 +1,313 @@
+{
+ "note": "Mutants of the map index's script (web/map_library.js), of the play count of a map's page (web/map_plays.js) and of the Map Maker's opening of the library map that its address names (addressMap of web/front/mapmaker_app.js) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule of docs/MAP_PAGES.md on purpose and a test of tests/scripts/test_web_map_library.py must notice - the page stays until a control is used; the search reads every word of the name and the line, in any case; the sizes and lengths are the ones that the page says; Most played asks the site once; 48 to a page; everything that came with the list is text; the Map Maker asks before it replaces unsaved drawing, opens the map once and says when the site has none. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/map_library_mutants.json --keep-going --jobs 1.",
+ "mutants": [
+  {
+   "id": "a_map_of_exactly_the_top_of_a_size_is_left_out",
+   "file": "web/map_library.js",
+   "old": "(value <= table[key] &&",
+   "new": "(value < table[key] &&",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "a_size_has_no_bottom",
+   "file": "web/map_library.js",
+   "old": "(at === 0 || value > table[keys[at - 1]])",
+   "new": "true",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "original_shows_the_maps_of_the_players_too",
+   "file": "web/map_library.js",
+   "old": "        if (state.kind === 'original' && !m.original) return false;\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "made_by_players_shows_the_originals_too",
+   "file": "web/map_library.js",
+   "old": "        if (state.kind === 'player' && m.original) return false;\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "only_the_first_word_of_a_search_counts",
+   "file": "web/map_library.js",
+   "old": "if (m.text.indexOf(words[i]) < 0) return false;",
+   "new": "if (m.text.indexOf(words[i]) < 0 && i === 0) return false;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "a_search_is_case_sensitive",
+   "file": "web/map_library.js",
+   "old": "var words = state.q.toLowerCase().split(",
+   "new": "var words = state.q.split(",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "a_search_reads_the_name_only",
+   "file": "web/map_library.js",
+   "old": "text: (r[1] + ' ' + r[2]).toLowerCase(),",
+   "new": "text: (r[1]).toLowerCase(),",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_signs_in_front_of_a_name_decide_its_place",
+   "file": "web/map_library.js",
+   "old": "key: r[1].toLowerCase().replace(/^[^a-z0-9]+/, '') }",
+   "new": "key: r[1].toLowerCase() }",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "every_size_is_the_top_size",
+   "file": "web/map_library.js",
+   "old": "out[e[0]] = e[1] === null ? Infinity : e[1];",
+   "new": "out[e[0]] = Infinity;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_fewest_plays_come_first",
+   "file": "web/map_library.js",
+   "old": "return played(b) - played(a) || a.at - b.at;",
+   "new": "return played(a) - played(b) || a.at - b.at;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_plays_of_a_map_are_looked_up_in_another_letter_case",
+   "file": "web/map_library.js",
+   "old": "return plays && plays[m.file.toLowerCase()] || 0;",
+   "new": "return plays && plays[m.file] || 0;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_plays_of_the_site_are_kept_in_the_letter_case_they_came_in",
+   "file": "web/map_library.js",
+   "old": "plays[m.file.toLowerCase()] = m.plays;",
+   "new": "plays[m.file] = m.plays;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_list_of_maps_is_asked_again_and_again",
+   "file": "web/map_library.js",
+   "old": "if (asked || typeof fetch !== 'function') return;",
+   "new": "if (typeof fetch !== 'function') return;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "any_order_asks_the_site_for_the_plays",
+   "file": "web/map_library.js",
+   "old": "if (key === 'order' && value === 'plays') askPlays();",
+   "new": "if (key === 'order') askPlays();",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "a_page_of_the_search_starts_at_the_wrong_map",
+   "file": "web/map_library.js",
+   "old": "first = (page - 1) * PAGE;",
+   "new": "first = (page - 1) * (PAGE - 1);",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_pager_of_the_first_page_names_no_neighbour",
+   "file": "web/map_library.js",
+   "old": "if (page === 1) { keep[2] = keep[3] = true; }",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_players_choice_alone_does_not_count_as_a_choice",
+   "file": "web/map_library.js",
+   "old": "return !state.q && !state.kind && !state.size && !state.length && !state.players && !state.order;",
+   "new": "return !state.q && !state.kind && !state.size && !state.length && !state.order;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_filters_never_appear",
+   "file": "web/map_library.js",
+   "old": "    tools.hidden = false;\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "clearing_every_control_leaves_the_count_of_the_search",
+   "file": "web/map_library.js",
+   "old": " count.textContent = still.count;",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "a_text_of_a_map_goes_in_as_markup",
+   "file": "web/map_library.js",
+   "old": "if (text !== undefined) n.textContent = text;",
+   "new": "if (text !== undefined) n.innerHTML = text;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "a_card_links_to_the_name_of_the_map_not_its_page",
+   "file": "web/map_library.js",
+   "old": "a.href = '/map/' + m.slug;",
+   "new": "a.href = '/map/' + m.name;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "a_card_shows_no_picture_of_the_map",
+   "file": "web/map_library.js",
+   "old": "img.src = m.pic;",
+   "new": "img.src = '';",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_list_is_not_brought_into_view_on_a_new_page",
+   "file": "web/map_library.js",
+   "old": "if (scroll && d.getElementById('list-h') && d.getElementById('list-h').scrollIntoView) d.getElementById('list-h').scrollIntoView();",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_page_that_is_open_can_be_pressed_again",
+   "file": "web/map_library.js",
+   "old": "button(String(n), 'pg num', n === page ? 0 : n, n === page)",
+   "new": "button(String(n), 'pg num', n, n === page)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "no_match_says_nothing",
+   "file": "web/map_library.js",
+   "old": "if (!found.length) list.appendChild(make('li', 'empty', 'No map has that in its name or its words.'));",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_play_count_is_taken_without_a_look_at_it",
+   "file": "web/map_plays.js",
+   "old": "if (whole(m.plays)) show(m.plays); return;",
+   "new": "show(m.plays); return;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_play_count_of_another_letter_case_is_another_map",
+   "file": "web/map_plays.js",
+   "old": "m.file.toLowerCase() === file",
+   "new": "m.file === file",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "an_answer_of_no_is_read_all_the_same",
+   "file": "web/map_plays.js",
+   "old": "r.ok ? r.json() : null",
+   "new": "r.json()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "a_failure_of_the_request_is_left_unhandled",
+   "file": "web/map_plays.js",
+   "old": "}).catch(function () { /* no answer: the page stays as it came */ });",
+   "new": "});",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "any_address_is_made_a_link_to_the_matches",
+   "file": "web/map_plays.js",
+   "old": "if (matches.indexOf('/matches') === 0) {",
+   "new": "if (true) {",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_play_count_is_put_in_as_markup",
+   "file": "web/map_plays.js",
+   "old": "cell.textContent = n ? n + (n === 1 ? ' match' : ' matches') : 'Not yet';",
+   "new": "cell.innerHTML = n ? n + (n === 1 ? ' match' : ' matches') : 'Not yet';",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_fact_is_shown_for_a_page_that_got_no_number",
+   "file": "web/map_plays.js",
+   "old": "if (!answer || !Array.isArray(answer.maps)) return;",
+   "new": "fact.hidden = false; if (!answer || !Array.isArray(answer.maps)) return;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_map_maker_opens_over_unsaved_drawing_without_asking",
+   "file": "web/front/mapmaker_app.js",
+   "old": "                leave(function () { openBytes(bytes, freeName(",
+   "new": "                (function () { openBytes(bytes, freeName(",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_address_keeps_the_word_so_a_reload_opens_the_map_again",
+   "file": "web/front/mapmaker_app.js",
+   "old": "            q['delete']('mapfile');\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_address_is_changed_when_it_names_no_map",
+   "file": "web/front/mapmaker_app.js",
+   "old": "            if (file) win.history.replaceState(",
+   "new": "            win.history.replaceState(",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_map_maker_reads_another_word_of_the_address",
+   "file": "web/front/mapmaker_app.js",
+   "old": "file = q.get('mapfile') || '';",
+   "new": "file = q.get('map') || '';",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "a_map_that_the_site_does_not_have_is_not_said",
+   "file": "web/front/mapmaker_app.js",
+   "old": "if (error || !bytes) return dialogs.message('This map could not be opened', error || 'The map file could not be downloaded.');",
+   "new": "if (error || !bytes) return;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_copy_takes_the_name_of_a_map_that_is_there",
+   "file": "web/front/mapmaker_app.js",
+   "old": "openBytes(bytes, freeName(item ? item.name :",
+   "new": "openBytes(bytes, (item ? item.name :",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_name_of_the_library_s_map_is_never_found",
+   "file": "web/front/mapmaker_app.js",
+   "old": "return m.file === file; })[0];\n                leave(",
+   "new": "return m.file === file; })[1];\n                leave(",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_map_maker_never_looks_at_the_address",
+   "file": "web/front/mapmaker_app.js",
+   "old": "function end() { keepReady = true; keepSoon(); addressMap(); }",
+   "new": "function end() { keepReady = true; keepSoon(); }",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_random_link_goes_to_a_page_that_is_not_a_map_s",
+   "file": "web/map_library.js",
+   "old": "random.href = '/map/' + maps[",
+   "new": "random.href = '/maps/' + maps[",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_random_link_can_only_be_a_map_of_the_first_page",
+   "file": "web/map_library.js",
+   "old": "Math.random() * maps.length",
+   "new": "Math.random() * Math.min(maps.length, 48)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_random_link_shows_with_no_map_to_go_to",
+   "file": "web/map_library.js",
+   "old": "if (random && maps.length) {",
+   "new": "if (random) {",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  },
+  {
+   "id": "the_random_link_keeps_its_first_map_for_every_use",
+   "file": "web/map_library.js",
+   "old": "        random.addEventListener('click', roll);\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_map_library"
+  }
+ ]
+}

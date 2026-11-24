@@ -14,15 +14,15 @@
   {
    "id": "an_administrators_line_has_actions",
    "file": "web/home/mod.js",
-   "old": "if (line.role === 'admin') return [];",
-   "new": "if (false) return [];",
+   "old": "if (line.role === 'admin') return first;",
+   "new": "if (false) return first;",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_moderator_acts_on_a_moderator",
    "file": "web/home/mod.js",
-   "old": "if (line.role === 'mod' && viewer !== 'admin') return [];",
-   "new": "if (false) return [];",
+   "old": "if (line.role === 'mod' && viewer !== 'admin') return first;",
+   "new": "if (false) return first;",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
@@ -42,15 +42,15 @@
   {
    "id": "the_hubs_own_line_has_actions",
    "file": "web/home/mod.js",
-   "old": "if (!line || line.sys || (viewer !== 'mod' && viewer !== 'admin')) return [];",
-   "new": "if (!line || (viewer !== 'mod' && viewer !== 'admin')) return [];",
+   "old": "if (!line || line.sys) return [];",
+   "new": "if (!line) return [];",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_visitor_with_no_role_has_actions",
    "file": "web/home/mod.js",
-   "old": "if (!line || line.sys || (viewer !== 'mod' && viewer !== 'admin')) return [];",
-   "new": "if (!line || line.sys) return [];",
+   "old": "if (viewer !== 'mod' && viewer !== 'admin') return first;",
+   "new": "if (false) return first;",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
@@ -385,8 +385,8 @@
   {
    "id": "control_arrows_are_ours",
    "file": "web/home/mod.js",
-   "old": "if (!e || !viewer() || sheet || e.ctrlKey || e.altKey || e.metaKey || s.keeps(e.target)) return;",
-   "new": "if (!e || !viewer() || sheet || s.keeps(e.target)) return;",
+   "old": "if (!e || !on() || sheet || e.ctrlKey || e.altKey || e.metaKey || s.keeps(e.target)) return;",
+   "new": "if (!e || !on() || sheet || s.keeps(e.target)) return;",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
@@ -511,8 +511,8 @@
   {
    "id": "the_controls_stay_live_while_waiting",
    "file": "web/home/mod.js",
-   "old": "s.ctl.forEach(function (c) { c.setAttribute('aria-disabled', 'true'); });",
-   "new": "",
+   "old": "l = s.line; role = l.role; s.busy = true;\n            s.ctl.forEach(function (c) { c.setAttribute('aria-disabled', 'true'); });",
+   "new": "l = s.line; role = l.role; s.busy = true;\n            ",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
@@ -581,8 +581,8 @@
   {
    "id": "back_loses_the_mute_button",
    "file": "web/home/mod.js",
-   "old": ": arg === 'mute' && mute ? mute : del || mute;",
-   "new": ": del || mute;",
+   "old": "arg === 'mute' && mute ? mute : del || mute ||",
+   "new": "del || mute ||",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
@@ -700,8 +700,8 @@
   {
    "id": "the_quote_is_made_with_innerhtml",
    "file": "web/home/mod.js",
-   "old": "quote = person || !said(l) ? null : el('p', 'gm-quote', said(l));",
-   "new": "quote = person || !said(l) ? null : el('p', 'gm-quote'); if (quote) quote.innerHTML = said(l);",
+   "old": "quote = person || !staff || !said(l) ? null : el('p', 'gm-quote', said(l));",
+   "new": "quote = person || !staff || !said(l) ? null : el('p', 'gm-quote'); if (quote) quote.innerHTML = said(l);",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
@@ -805,15 +805,15 @@
   {
    "id": "a_line_has_no_description",
    "file": "web/home/mod.js",
-   "old": "row.setAttribute('aria-description', o.rowHint);",
+   "old": "row.setAttribute('aria-description', staff ? o.rowHint : TEXT.inviteHint);",
    "new": "",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "every_line_is_marked",
    "file": "web/home/mod.js",
-   "old": "var on = !!viewer() && !!s.target(id);",
-   "new": "var on = true;",
+   "old": "var yes = !!s.target(id), staff = !!viewer(), whole =",
+   "new": "var yes = true, staff = !!viewer(), whole =",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
@@ -896,7 +896,7 @@
   {
    "id": "a_visitor_with_no_role_may_send_a_command",
    "file": "web/home/chat.js",
-   "old": "if (!you || you.role === 'none') { entry.done('power'); return; }",
+   "old": "if (!you || (you.role === 'none' && anyone !== true)) { entry.done('power'); return; }",
    "new": "if (!you) { entry.done('power'); return; }",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
@@ -908,10 +908,10 @@
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
-   "id": "a_person_with_no_role_is_told_of_the_rows",
+   "id": "the_sheet_is_not_told_of_a_line_of_a_person_with_no_role",
    "file": "web/home/chat.js",
-   "old": "if (tools()) rowFns.forEach(",
-   "new": "rowFns.forEach(",
+   "old": "rowFns.forEach(function (fn) { tell1(fn, e.id, r); });",
+   "new": "if (tools()) rowFns.forEach(function (fn) { tell1(fn, e.id, r); });",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
@@ -938,22 +938,22 @@
   {
    "id": "home_asks_for_the_sheet_for_everybody",
    "file": "web/home/home.js",
-   "old": "!(y = dock.you()) || y.role === 'none') return;",
-   "new": "!(y = dock.you())) return;",
+   "old": "if ((y && y.role !== 'none') || (players && holds())) loadMod();",
+   "new": "loadMod();",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "home_asks_for_the_sheet_again_and_again",
    "file": "web/home/home.js",
-   "old": "if (askedSheet || (kind !== 'live' && kind !== 'you')",
-   "new": "if ((kind !== 'live' && kind !== 'you')",
+   "old": "if (askedSheet) return;\n            askedSheet = true;\n            lazy('home/mod'",
+   "new": "askedSheet = true;\n            lazy('home/mod'",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "home_does_not_give_the_dock_to_the_sheet",
    "file": "web/home/home.js",
-   "old": "win.AntsHomeMod.mount({ doc: doc, win: win, dock: dock })",
-   "new": "win.AntsHomeMod.mount({ doc: doc, win: win })",
+   "old": "win.AntsHomeMod.mount({ doc: doc, win: win, dock: dock, say:",
+   "new": "win.AntsHomeMod.mount({ doc: doc, win: win, say:",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
@@ -1036,7 +1036,7 @@
   {
    "id": "a_role_that_goes_keeps_the_hint",
    "file": "web/home/mod.js",
-   "old": "                if (!viewer()) s.status.textContent = '';\n",
+   "old": "                if (!on()) s.status.textContent = '';\n",
    "new": "",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
@@ -1260,8 +1260,8 @@
   {
    "id": "a_person_is_offered_delete",
    "file": "web/home/mod.js",
-   "old": "return line.person ? all.slice(1) : all;",
-   "new": "return all;",
+   "old": "return first.concat(line.person ? all.slice(1) : all);",
+   "new": "return first.concat(all);",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
@@ -1274,7 +1274,7 @@
   {
    "id": "the_state_of_mutes_is_never_asked",
    "file": "web/home/mod.js",
-   "old": "if (l.person) learn(sheet);",
+   "old": "if (l.person && viewer()) learn(sheet);",
    "new": "",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
@@ -1491,15 +1491,15 @@
   {
    "id": "a_list_that_comes_second_is_not_told_to_the_sheet",
    "file": "web/home/home.js",
-   "old": "page: page }); meet(); inert(held);",
-   "new": "page: page }); inert(held);",
+   "old": "wantMod(); meet(); inert(held);",
+   "new": "wantMod(); inert(held);",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_sheet_that_comes_second_is_not_told_of_the_list",
    "file": "web/home/home.js",
-   "old": "mod = win.AntsHomeMod.mount({ doc: doc, win: win, dock: dock }); meet(); });",
-   "new": "mod = win.AntsHomeMod.mount({ doc: doc, win: win, dock: dock }); });",
+   "old": "alerts.say(words, tone) === true; } }); meet(); });",
+   "new": "alerts.say(words, tone) === true; } }); });",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
@@ -1542,6 +1542,118 @@
    "file": "web/home/players.js",
    "old": "return row && i !== me && row.at !== 'away' ? {",
    "new": "return row && i !== me ? {",
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "the_sheet_is_not_asked_for_a_room",
+   "file": "web/home/home.js",
+   "old": " || (players && holds())",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "a_person_with_no_role_has_no_invitation",
+   "file": "web/home/mod.js",
+   "old": "var first = invite && !line.own ? ['invite'] : [];",
+   "new": "var first = [];",
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "an_invitation_to_oneself",
+   "file": "web/home/mod.js",
+   "old": "var first = invite && !line.own ? ['invite'] : [];",
+   "new": "var first = invite ? ['invite'] : [];",
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "the_text_of_a_line_opens_the_sheet_for_a_person_with_no_role",
+   "file": "web/home/mod.js",
+   "old": "if (r && o.nameOnly && !viewer() && !(node.closest && node.closest(o.nameOnly))) return null;",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "the_arrows_are_taken_from_a_person_with_no_role",
+   "file": "web/home/mod.js",
+   "old": "if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && viewer()) {",
+   "new": "if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {",
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "a_dim_row_can_be_pressed",
+   "file": "web/home/mod.js",
+   "old": "if (!info.ok) { invite.setAttribute('aria-disabled', 'true'); invite.classList.add('gm-off'); }",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "the_invitation_names_a_person",
+   "file": "web/home/mod.js",
+   "old": "return '/invite ' + (line.person ? 'row:' : '#') + line.id;",
+   "new": "return '/invite ' + line.who;",
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "the_invitation_is_not_said_in_the_chat",
+   "file": "web/home/mod.js",
+   "old": "dock.note(ok ? TEXT.youInvited + to + '.' : words);",
+   "new": "dock.note(words);",
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "a_sent_invitation_is_not_remembered",
+   "file": "web/home/mod.js",
+   "old": "if (ok && dir && dir.invited) dir.invited(to);",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "the_room_is_not_told_before_the_invitation",
+   "file": "web/home/mod.js",
+   "old": "if (dir && dir.flush) dir.flush();                          // (the hub is told the room as it is now, in front of the command)",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "a_room_that_is_left_keeps_the_sheet",
+   "file": "web/home/mod.js",
+   "old": "if (sheet && !sheet.busy && !on()) { close(true); return; }",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "the_buttons_stay_live_while_an_invitation_waits",
+   "file": "web/home/mod.js",
+   "old": "l = s.line; s.busy = true;\n            s.ctl.forEach(function (c) { c.setAttribute('aria-disabled', 'true'); });",
+   "new": "l = s.line; s.busy = true;\n            ",
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "a_refusal_is_said_as_a_success",
+   "file": "web/home/mod.js",
+   "old": "tell(words, !ok);",
+   "new": "tell(words, false);",
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "a_name_of_a_line_is_not_marked_for_a_person_with_no_role",
+   "file": "web/home/mod.js",
+   "old": "if (name) { if (yes) name.setAttribute('data-act', 'true'); else name.removeAttribute('data-act'); }",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "a_person_with_no_role_has_the_moderators_hint",
+   "file": "web/home/mod.js",
+   "old": "s.hint.textContent = viewer() ? o.hintText : o.inviteText;",
+   "new": "s.hint.textContent = o.hintText;",
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "a_visitor_is_not_dim",
+   "file": "web/home/players.js",
+   "old": "if (!o.you) return TEXT.login;",
+   "new": "",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   }
  ]

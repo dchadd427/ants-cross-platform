@@ -312,7 +312,7 @@ function rig(options) {
         AbortController: function () { this.signal = { aborted: false }; this.abort = () => { this.signal.aborted = true; }; }, now: () => clock.now,
         matchMedia: () => ({ matches: !!options.coarse }), canOpen: () => allow.open, canChoose: () => allow.choose,
         room: () => (options.room === undefined ? '' : options.room), originals: options.originals === undefined ? ORIGINALS : options.originals,
-        onChoose: (e) => log.chosen.push(e.file), onList: () => { log.lists++; }, onClose: () => { log.closed++; }, onOpen: () => { log.opened++; }
+        random: options.random, onChoose: (e) => { log.chosen.push(e.file); if (options.follow) options.room = e.file; }, onList: () => { log.lists++; }, onClose: () => { log.closed++; }, onOpen: () => { log.opened++; }
     });
     const fire = (ms) => { timers.filter((t) => t.live && (ms === undefined || t.ms === ms)).forEach((t) => { t.live = false; t.f(); }); };
     return { picker, host, overlay, doc, store, log, timers, allow, clock, fire, setAnswer: (f) => { answer = f; },
@@ -751,6 +751,97 @@ function rig(options) {
         same('an original chosen from the fallback is handed over by its file', [f.log.chosen, f.overlay.hidden], [['TINY.LVL'], true]);
         same('the facts of the card: kind, players, minutes, size, as far as the list knows them', [P.factsOf(null, false), P.factsOf(null, true), P.factsOf(P.parseList(RAW)[1], false), P.factsOf(P.parseList(RAW)[2], true), P.factsOf({ original: false, kind: 'extended', players: 1, minutes: 0, width: 0, height: 0 }, true)],
             [['Original'], ["Players' map"], ['Original', '4 players', '10 min', '60\u00d760'], ["Players' map", '4 players', '10 min', '20\u00d720'], ['Extended', '1 player']]);
+    }
+    // 16. the Random map row: a map of those that are shown, that the room can play and that is not the room's, handed over at once; the list stays open for another
+    {
+        const room = (file) => ({ room: file, random: () => 0 });
+        const row = (r) => r.host.querySelector('.pk-rand'), go = (r) => row(r).querySelector('button'), say = (r) => row(r).querySelector('.pk-meta').textContent;
+        let r = rig(room(''));
+        check('the row is not there before the list is opened, and is under the sorts and above the list when it is', r.host.querySelector('.pk-rand') === null);
+        r.picker.open(''); await settle();
+        const order = r.host.children.map((c) => c.className);
+        check('the row stands between the sorts and the list', order.indexOf('pk-rand') === order.indexOf('pk-sorts') + 1 && order.indexOf('pk-out') === order.indexOf('pk-rand') + 1, order.join());
+        same('it offers a pick, and says from how many maps', [go(r).textContent, go(r).disabled, /\b7\b/.test(say(r))], ['Pick one', false, true]);
+        go(r).dispatch('click');
+        same('Pick one hands a map over at once, the dialog stays open, and the map is the picked row', [r.log.chosen, r.overlay.hidden, r.log.closed, r.sel()], [['TINY.LVL'], false, 0, ['TINY.LVL']]);
+        same('the button then offers another, and the line names the pick', [go(r).textContent, /Tiny/.test(say(r))], ['Pick another', true]);
+        go(r).dispatch('click');
+        same('Pick another is another map, also before the room has said that the first is its map now', r.log.chosen, ['TINY.LVL', 'TREASURE.LVL']);
+        go(r).dispatch('click'); go(r).dispatch('click');
+        same('and on: never the map that was picked just before', r.log.chosen.map((f, i) => i > 0 && f === r.log.chosen[i - 1]), [false, false, false, false]);
+        r.picker.close(); r.picker.open('');
+        same('opened again, the row starts afresh', [go(r).textContent, /Tiny|Treasure/.test(say(r))], ['Pick one', false]);
+        // the room's own map is never the pick
+        r = rig(room('TINY.LVL')); r.picker.open('TINY.LVL'); await settle();
+        go(r).dispatch('click');
+        same('the room\'s map is not on offer', r.log.chosen, ['TREASURE.LVL']);
+        // only what is shown: a search narrows what the row picks from
+        r = rig(room('')); r.picker.open(''); await settle();
+        const q = r.host.querySelector('.pk-q');
+        q.value = 'mango'; q.dispatch('input'); r.fire(120);
+        go(r).dispatch('click');
+        same('the row picks from the maps that the search shows', r.log.chosen, ['Mango tree.lvl']);
+        const only = rig({ room: 'Zebra.lvl', random: () => 0 }); only.picker.open('Zebra.lvl'); await settle();
+        const q2 = only.host.querySelector('.pk-q'); q2.value = 'zebra'; q2.dispatch('input'); only.fire(120);
+        check('when the only map shown is the room\'s there is nothing to pick', go(only).disabled === true);
+        go(only).dispatch('click');
+        same('and a press does nothing', only.log.chosen, []);
+        q2.value = 'zzzz'; q2.dispatch('input'); only.fire(120);
+        check('a search with no result leaves nothing to pick either', go(only).disabled === true);
+        q2.value = ''; q2.dispatch('input'); only.fire(120);
+        check('and clearing it brings the row back', go(only).disabled === false);
+        // a map that the room cannot play is never the pick, whatever the die says
+        const dice = { v: 0 };
+        const over = rig({ room: '', random: () => dice.v, answer: () => Promise.resolve(response({ format: 2, maps: [M('Over.lvl', { online: false, online_why: 'ants' }), M('Fine.lvl', {}), M('Fine two.lvl', {})] })) });
+        over.picker.open(''); await settle();
+        const got = [];
+        for (const v of [0, 0.2, 0.34, 0.5, 0.67, 0.8, 0.99]) { dice.v = v; over.picker.close(); over.picker.open(''); go(over).dispatch('click'); got.push(over.log.chosen[over.log.chosen.length - 1]); }
+        check('a map over the cap of ants is never picked, and the others are', got.indexOf('Over.lvl') < 0 && got.indexOf('Fine.lvl') >= 0 && got.indexOf('Fine two.lvl') >= 0, got.join());
+        // every map that is shown can be the pick
+        let seen = {}, n = 7;
+        for (let i = 0; i < n; i++) {
+            const x = rig({ room: '', random: () => (i + 0.5) / n }); x.picker.open(''); await settle();
+            go(x).dispatch('click'); seen[x.log.chosen[0]] = true;
+        }
+        same('every map that is shown is reachable, the last at the top of the dice too', Object.keys(seen).length, 7);
+        { const x = rig({ room: '', random: () => 1 }); x.picker.open(''); await settle(); go(x).dispatch('click'); check('a die that says 1 is the last map, not none', x.log.chosen.length === 1); }
+        // the room changed hands: nothing is chosen
+        r = rig(room('')); r.picker.open(''); await settle();
+        r.allow.choose = false; go(r).dispatch('click');
+        same('a room that is not the host\'s any more takes nothing, and the list closes as it does for Choose map', [r.log.chosen, r.overlay.hidden], [[], true]);
+        // the room's map changes after the pick: the marks follow, the list stays where it was, and nothing is made again while the room's map is the same
+        {
+            const g = rig({ room: '', random: () => 0 }); g.picker.open(''); await settle();
+            const marked = () => g.rows().filter((n) => n.querySelector('.pk-here')).map((n) => n.attrs['data-file']);
+            const first = g.rows()[0];
+            g.picker.refresh();
+            check('nothing is made again while the room\'s map is the same', g.rows()[0] === first);
+            go(g).dispatch('click');
+            g.picker.refresh();
+            same('the room not yet naming the pick: no row is the room\'s', marked(), []);
+            const asked = { room: '', random: () => 0 }, h = rig(asked); h.picker.open(''); await settle();
+            go(h).dispatch('click');
+            asked.room = 'tiny.lvl';                                                   // (the server has said so: the room's map, in the case that the room writes it)
+            h.out().scrollTop = 33;
+            h.picker.refresh();
+            same('when the room names the pick, it is marked In this room, and the list has not moved', [h.rows().filter((n) => n.querySelector('.pk-here')).map((n) => n.attrs['data-file']), h.out().scrollTop], [['TINY.LVL'], 33]);
+            go(h).dispatch('click');
+            same('with the room naming it, the next press is not the room\'s map either', h.log.chosen, ['TINY.LVL', 'TREASURE.LVL']);
+            const w = rig({ room: '', random: () => 0, follow: true }); w.picker.open(''); await settle();
+            go(w).dispatch('click');
+            same('a room that answers at once is marked at once', w.rows().filter((n) => n.querySelector('.pk-here')).map((n) => n.attrs['data-file']), ['TINY.LVL']);
+        }
+        // the six originals when the list cannot be had
+        const fb = rig({ answer: () => Promise.reject(new Error('offline')), room: '', random: () => 0 }); fb.picker.open(''); await settle();
+        go(fb).dispatch('click');
+        same('with the list down, the row picks among the six that the page has', fb.log.chosen, ['TINY.LVL']);
+        // the keyboard: the button is a stop of the Tab key, after the sorts, and not while it is off
+        const k = rig(room('')); k.picker.open(''); await settle();
+        const sorts = k.host.querySelectorAll('[data-sort]'), last = sorts[sorts.length - 1];
+        last.focus(); k.host.dispatch('keydown', { key: 'Tab' });
+        check('Tab goes from the last sort to the button', k.doc.activeElement === go(k));
+        k.host.dispatch('keydown', { key: 'Tab' });
+        check('and then to the list', k.rows().indexOf(k.doc.activeElement) >= 0 || k.doc.activeElement.attrs['data-file'] !== undefined);
     }
     console.log((failures ? 'FAILED: ' + failures + ' of ' : 'ok: ') + checks + ' checks');
     process.exit(failures ? 1 : 0);
