@@ -793,8 +793,8 @@ private:
     uint64_t art_generation_{0};                           // the HUD art that art_textures_ were made from (hud_art::Art::generation; 0: none)
     uint64_t cursor_art_generation_{0};                    // the HUD art that cursor_art_fit_ was asked for
     std::array<int8_t, 14> cursor_art_fit_{};              // for each CursorType: whether that art's cursor fits the original's (-1: not asked yet, 0: no, 1: yes)
-    std::array<bool, 3> art_failed_{};                     // a sheet that could not be read or made a texture: said once, and not tried again until another set comes
-    std::array<SDL_Texture*, 3> art_textures_{};           // its sheets at 1x, 2x and 3x, made when first needed
+    std::array<bool, 6> art_failed_{};                     // a sheet that could not be read or made a texture: said once, and not tried again until another set comes
+    std::array<SDL_Texture*, 6> art_textures_{};           // its sheets at 1x, 2x and 3x (then the second sheet's, if the set has one), made when first needed
     int32_t art_texture_limit_{0};                         // (for the tests) the largest side of a texture that is made; 0: the device's own
     const world_art::Pack* world_art_{nullptr};            // the new pictures of the world (set_world_art); null: the original's sprites
     uint64_t world_art_generation_{0};                     // the pack that world_art_textures_ were made from
@@ -880,7 +880,7 @@ private:
     void drop_mud_caches();
     void drop_edge_caches();
     void drop_art_textures();
-    SDL_Texture* art_texture(const hud_art::Art& art, int32_t scale);
+    SDL_Texture* art_texture(const hud_art::Art& art, int32_t scale, int32_t sheet = 0);
     int32_t art_scale_for_output(double* out = nullptr) const;
     std::array<SDL_Texture*, 12> fixed_glyphs_{};   // draw_fixed_text: '0' .. '9', '-' and '+', built on first use
     std::unordered_map<uint64_t, SDL_Texture*> blend_textures_;   // draw_rgba_blended: one for each different picture (by what it holds)

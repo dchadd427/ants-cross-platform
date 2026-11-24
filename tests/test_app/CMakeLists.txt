@@ -674,6 +674,42 @@ target_link_libraries(test_hud_art PRIVATE ants_test_paths)
 add_test(NAME test_hud_art COMMAND test_hud_art)
 set_tests_properties(test_hud_art PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# The results screen in the new look (scorecard_layout.hpp, scorecard_new.cpp): the unit of the page and its layout at every size, the art's pieces, the page drawn by the real renderer, the choice between the
+# new page and the original's, Leave Game's states and clicks, the application's picture
+add_executable(test_scorecard_new
+    test_scorecard_new.cpp
+    test_scorecard_new_look.cpp
+)
+
+target_include_directories(test_scorecard_new PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_scorecard_new PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_scorecard_new PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_scorecard_new PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_scorecard_new PRIVATE ants_test_paths)
+
+add_test(NAME test_scorecard_new COMMAND test_scorecard_new)
+set_tests_properties(test_scorecard_new PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # The world art (world_art.hpp): the new pictures of the ground, its edges and the bridge, the manifest, the choice of a ground tile's picture, the real renderer's frame at 1x, 2x and 3x against the sheets, the
 # original's frame unchanged, the fall back to the original's sprites
 add_executable(test_world_art
@@ -1574,6 +1610,42 @@ target_link_libraries(test_health_changes PRIVATE ants_test_paths)
 
 add_test(NAME test_health_changes COMMAND test_health_changes)
 set_tests_properties(test_health_changes PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# The numbers of the results screen besides the original's four (match_report.hpp, live_match_stats.hpp): the honors and the Play of the game on made-up counts, the live pass against the recording's pass
+# (a game on one machine, a match of the network, a catch-up) field by field, a tick that was missed, and that counting changes nothing
+add_executable(test_match_report
+    test_match_report.cpp
+)
+
+target_include_directories(test_match_report PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_match_report PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_replay
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_match_report PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_match_report PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_match_report PRIVATE ants_test_paths)
+
+add_test(NAME test_match_report COMMAND test_match_report)
+set_tests_properties(test_match_report PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
 # The numbers in the game's font: the sizes against the classic drawing, the shrink, the output's pixels, the cache and the fallback
 add_executable(test_font_numbers

@@ -41,6 +41,7 @@
 #include "ants_app/fps_overlay.hpp"
 #include "ants_app/game_menu.hpp"
 #include "ants_app/health_changes.hpp"
+#include "ants_app/live_match_stats.hpp"
 #include "ants_app/connections_overlay.hpp"
 #include "ants_app/latency_corner.hpp"
 #include "ants_app/local_teams.hpp"
@@ -317,8 +318,18 @@ public:
     void replay_control(ReplayControl what, int value);
     /// The recording as the file says it (null when there is none)
     const replay::Replay* replay_file() const noexcept { return replay_file_.get(); }
+    /// The results' Play of the game: Watch opens the recording of the game on this computer that just ended at `turn` (the viewer's own jump: a moment's wait on a long match); only where it has one (the desktop game, not a
+    /// match of a room, not a recording that is being watched from a file, and not the web build, which keeps no file). The viewer's end page is the match's own results again, with the report that was counted (the
+    /// honors, the Play of the game with Watch, Match stats). Leave Game from there is what it is in a viewer: the program ends.
+    bool can_watch_play() const noexcept;
+    void watch_play(uint32_t turn, int32_t tile_x = -1, int32_t tile_y = -1);        // (a tile that is not on the map, -1: the view is left to the Auto camera)
     /// The recording of the match that is being played (null: none is made, or the match has ended)
     const replay::Recorder* recorder() const noexcept { return recorder_.get(); }
+    /// The numbers of the results screen besides the original's four (match_report.hpp), counted while the match was played on the confirmed engine, whole or not at all: valid from the end of a match until the next one begins, and
+    /// `ok` is false for a match that was not counted from its first turn to its last (the screen then shows the original's numbers only). A viewer of a recording counts nothing. Made in check_match_over, before the results open.
+    const MatchReport& match_report() const noexcept { return live_stats_.report(); }
+    /// The count itself, for the tests (what the pass counted in the match whose report that is)
+    const LiveMatchStats& live_stats() const noexcept { return live_stats_; }
     /// The engine that the match screen SHOWS and that the HUD asks (the picture, the minimap, the panel, the selection, the pointer's cursor, what a click picks): `sim()`, the confirmed
     /// engine, except in a match of the network that predicts the player's own orders (net::Prediction, docs/NETWORK_PORT.md "Prediction of one's own orders"), where it is the predicted
     /// engine: the player's orders show at once and everything else is the confirmed state a few ticks ahead. The cues, the news, the scores, the end of the match and the hashes stay the
@@ -558,9 +569,22 @@ public:
     /// the game for the front page's numbers (web/shell.html antsReportLocalGame, docs/SERVER.md, "The site statistics, GET /stats and POST /stats/local"). A native game sets nothing and so reports nothing.
     void set_on_local_match_started(std::function<void()> hook) { on_local_match_started_ = std::move(hook); }
     /// The match of a server's room is over (check_match_over: once for each match, BEFORE the key of the seat is let go of): `fn` is told what the results show, as the text of match_over_json. The web build
-    /// tells its page (window.antsMatchOver, web/front/rematch.js), which holds the seat that the rematch of a lobby room keeps for this player and offers "Back to the lobby" (docs/SERVER.md "Lobby rooms");
+    /// tells its page (window.antsMatchOver, web/front/rematch.js), which holds the seat that the rematch of a lobby room keeps for this player and offers "Back to the room" and "Back to Ants & Uncles" (docs/SERVER.md "Lobby rooms");
     /// the tests give a function of their own. Never called for a game of one machine, a room of the local network (no room code) or a recording.
     void set_on_match_over(std::function<void(const std::string&)> fn) { on_match_over_ = std::move(fn); }
+    /// The page that holds the game can take the player somewhere else at the end of a lobby room's match (the web build, on the page itself: connect_page_exits): `to_room` takes the tab back to the room and
+    /// says so (false: it cannot, no seat is kept for this player), `to_hub` takes it to the front page, "Ants & Uncles". With both, the results of a room's match have two buttons instead of Leave Game
+    /// (room_choice_applies). A game on this computer, a native game and a game in a frame of another page have none: Leave Game, as ever.
+    void set_page_exits(std::function<bool()> to_room, std::function<void()> to_hub) {
+        on_back_to_room_ = std::move(to_room);
+        on_back_to_hub_ = std::move(to_hub);
+    }
+    /// The results screen of this match has the choice: the match is a server room's (with a seat of this machine) and the page has both exits
+    bool room_choice_applies() const noexcept;
+    /// "Back to the room": the page takes the tab to the room, where the seat is kept for the rematch; where it cannot, the way is the other button's. The keys Enter, C, Q and X of the results do this
+    void back_to_room();
+    /// "Back to Ants & Uncles": the seat in the room is given up at once (leave_network_match: the room keeps the others, the host's role passes as ever), then the page takes the tab to the front page
+    void back_to_hub();
     /// The text that set_on_match_over's function is told: {"room","seat","map","mode","names":[the four seats' names, "" for a seat that did not play],"rows":[{"seats":[one, or two allies],"score","won"}]}.
     /// The rows are the results screen's as the server orders them (MatchResult::rows(255): no seat's own tie rule), `won` is true when the row's team plays the winner cue on its own screen (a tie: both rows).
     /// The names and the map are the Start's (printable ASCII: a quote and a backslash are escaped, anything else becomes '?').
@@ -663,6 +687,7 @@ public:
 private:
     void handle_events();
     void refresh_page_visibility();                       // web build: asks the browser whether the page is hidden (set_page_hidden); a native build has no page, nothing to ask
+    void connect_page_exits();                            // web build: the page itself (not a frame of another page) has the room and the front page to go to (set_page_exits)
     bool background_step();                               // background_pump without asking the browser first
     bool wake_may_step();                                 // the wake-ups drive the match now: hidden page, network, no step running, and the frame loop slower than the turns
     void background_run(double elapsed);                  // the step itself: the network for `elapsed` seconds (at most kMaxWakeSeconds for the clock, see there), no sound
@@ -735,6 +760,7 @@ private:
     uint8_t local_player_id_{0};
     uint8_t local_roster_{0x0F};                           // the seats of the local game that was started (all four, or the local player and the bots)
     std::unique_ptr<replay::Recorder> recorder_;          // the recording of the match that is on (replay.hpp; empty: none is made, or the match has ended); the sinks below hold a reference to it
+    LiveMatchStats live_stats_;                           // the count of the match that is on (the web build has it too: it records nothing, and counts the same); fed from the places that the recorder is, and the report of the match that ended
     bool replay_mode_{false};                             // --replay: the game shows a recording
     health::ChangeTracker health_changes_;                // the damage and heal numbers (health_changes.hpp): read from the confirmed engine after every tick, drawn by the renderer; view only
     double health_clock_ms_{0.0};                         // ... their clock: real milliseconds that pass while the match runs (it stops while a match or a replay is paused)
@@ -762,6 +788,11 @@ private:
     double camera_pan_px_{0.0};                           // what two fingers have panned lately (a pinch drifts a pixel or two: that is not taking the camera)
     double camera_pan_at_ms_{0.0};
     bool replay_paused_{false};
+    bool watch_focus_{false};                             // the view goes to this tile when the jump of Watch is over (focus_watched_tile)
+    int32_t watch_focus_x_{0};
+    int32_t watch_focus_y_{0};
+    bool watching_own_match_{false};                      // the viewer shows the match that was just played here (the results' Watch): its end page is the match's Podium again, from the report that was kept
+    MatchReport watched_report_{};
     bool replay_cut_{false};                              // the end of a recording that stops before its match did is reached
     bool replay_jumping_{false};
     uint32_t replay_jump_target_{0};
@@ -783,6 +814,8 @@ private:
     double start_when_pressed_ms_{-1.0e9};                // --start-when: when the hook last pressed START
     std::function<void(uint8_t)> on_seat_known_;           // (set_on_seat_known)
     std::function<void(const std::string&)> on_match_over_;   // (set_on_match_over)
+    std::function<bool()> on_back_to_room_;                    // (set_page_exits)
+    std::function<void()> on_back_to_hub_;
     uint8_t seat_told_{255};                               // the seat that on_seat_known_ was last told (255: none, or the session ended)
     bool page_hidden_{false};                              // the browser's page is hidden (set_page_hidden): a network match belongs to the wake-ups, see background_pump
     bool advancing_{false};                                // a frame or a background step is advancing the clocks and the match: no other one may start inside it
@@ -944,11 +977,13 @@ private:
     // Replays (replay.hpp, docs/REPLAYS.md; application_replay.cpp): every match is recorded as it is played, and the file is made when it ends
     // Watching a replay (application_replay.cpp)
     void prepare_replay();                                             // init: the file is read, its rules and its map are checked (replay_failure_ says what is wrong)
+    void load_replay(const std::vector<uint8_t>& bytes);               // the bytes of a file are decoded and checked the same way (prepare_replay's, and the Watch of the results')
     void start_replay();                                               // the match of the file is set up on the engine and the screen, at its first turn
     void run_replay(float dt);                                         // a frame of it: the turns that the clock and the speed allow, or a step of a jump
     bool replay_turn(bool picture);                                    // one turn: the orders due, the tick; false when the recording is at its end (the end is handled)
     void replay_ends();                                                // the last turn is played: the results (the match was over) or the note (it was not)
     void replay_jump_to(uint32_t turn);
+    void focus_watched_tile();                                         // the view of the viewer is put on the tile of the moment that Watch opened (the Auto camera takes over from there with the action that comes)
     uint32_t replay_limit() const noexcept;                            // the last turn that may be played now (the file's end; while following, kLiveHoldTurns short of it)
     void replay_extend();                                              // --replay-live: the file is read again, and taken when it is the same match with more turns
     void replay_diverged(uint32_t turn);

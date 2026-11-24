@@ -9,6 +9,7 @@
 #include "ants_app/renderer.hpp"
 #include "ants_app/text_layout.hpp"
 #include "ants_app/ui_anim.hpp"
+#include "ants_app/unit_pen.hpp"
 #include "hud_internal.hpp"
 
 namespace ants::app {
@@ -94,50 +95,6 @@ std::vector<hud_art::Draw> sprite_on_card(const hud_art::Art& art, const char* n
     return {hud_art::Draw{id, LayoutRect{ux, uy, s->w, s->h}, LayoutRect{0, 0, s->w, s->h}}};
 }
 
-/// The card's own text at sizes of the card's units: the game's face at any size when the renderer has it, else the nearest of the original's sizes (a renderer that only records)
-class CardPen {
-public:
-    CardPen(IRenderer& renderer, const CountdownCard& card) : r_(renderer), card_(card), face_(renderer.face_text_ready()) {}
-    int32_t width(const std::string& text, double em_units) const {
-        if (face_) return r_.face_text_width(text, card_.em_tenths(em_units));
-        return r_.get_text_width(text, nearest(em_units));
-    }
-    /// `x` is the left edge (align 0), the middle (1) or the right edge (2) of the line, `baseline` its baseline in canvas pixels
-    void draw(const std::string& text, int32_t x, int32_t baseline, assets::ColorRGBA color, double em_units, int align = 0) const {
-        if (text.empty()) return;
-        const int32_t w = width(text, em_units);
-        const int32_t left = align == 0 ? x : align == 1 ? x - w / 2 : x - w;
-        if (face_) {
-            r_.draw_face_text(text, left, baseline, color, card_.em_tenths(em_units));
-        } else {
-            const FontSize size = nearest(em_units);
-            r_.draw_text(text, left, baseline - font_cell_height(size) * 4 / 5, color, size);
-        }
-    }
-    /// The text cut at the end with three dots until it is no wider than `max_w`
-    std::string fit(std::string text, int32_t max_w, double em_units) const {
-        if (width(text, em_units) <= max_w) return text;
-        while (!text.empty() && width(text + "...", em_units) > max_w) {
-            size_t cut = text.size() - 1;
-            while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xC0) == 0x80) --cut;      // (never in the middle of a character)
-            text.resize(cut);
-        }
-        return text + "...";
-    }
-
-private:
-    FontSize nearest(double em_units) const {
-        const double cell = em_units * card_.scale.f * 1.2;
-        for (FontSize size : {FontSize::Px12, FontSize::Px14, FontSize::Px18, FontSize::Px20, FontSize::Px24, FontSize::Px27, FontSize::Px35}) {
-            if (static_cast<double>(font_cell_height(size)) + 0.5 >= cell) return size;
-        }
-        return FontSize::Px96;
-    }
-    IRenderer& r_;
-    const CountdownCard& card_;
-    bool face_;
-};
-
 assets::ColorRGBA mix(assets::ColorRGBA a, assets::ColorRGBA b, int32_t t255) {
     const auto lerp = [&](uint8_t x, uint8_t y) { return static_cast<uint8_t>((x * (255 - t255) + y * t255 + 127) / 255); };
     return assets::ColorRGBA{lerp(a.r, b.r), lerp(a.g, b.g), lerp(a.b, b.b), 255};
@@ -154,7 +111,7 @@ void HUD::render_match_countdown_new(IRenderer& renderer, const assets::AssetArc
     const hud_art::Art& art = *art_;
     const CountdownCard card = countdown_card_now();
     const LayoutRect& c = card.card;
-    const CardPen pen(renderer, card);
+    const UnitPen pen(renderer, card.scale.f);
     const ColorRGBA cream{244, 236, 226, 255};
     const ColorRGBA gold{246, 208, 88, 255};
     const ColorRGBA dim{168, 194, 184, 255};

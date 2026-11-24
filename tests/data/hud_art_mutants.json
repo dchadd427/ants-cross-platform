@@ -166,8 +166,8 @@
   {
    "id": "preload_says_yes_without_a_texture",
    "file": "src/ants_app/renderer_art.cpp",
-   "old": "return art_texture(art, art_scale_for_output(nullptr)) != nullptr;",
-   "new": "return art_texture(art, art_scale_for_output(nullptr)) != nullptr || true;",
+   "old": "return art_texture(art, scale) != nullptr && (!art.has_second_sheet() || art_texture(art, scale, 1) != nullptr);",
+   "new": "return art_texture(art, scale) != nullptr || true;",
    "build": "test_hud_art",
    "test": "./build/tests/test_app/test_hud_art",
    "expect": "preload_art says"
@@ -526,8 +526,8 @@
   {
    "id": "derive_only_applies_to_the_3x_sheet",
    "file": "src/ants_app/hud_art.cpp",
-   "old": "if (scale == 2 && derived_rows_ > 0) {",
-   "new": "if (scale == 3 && derived_rows_ > 0) {",
+   "old": "if (sheet == 0 && scale == 2 && derived_rows_ > 0) {",
+   "new": "if (sheet == 0 && scale == 3 && derived_rows_ > 0) {",
    "build": "test_hud_art",
    "test": "./build/tests/test_app/test_hud_art",
    "expect": "[png]"
@@ -567,6 +567,42 @@
    "build": "test_hud_art",
    "test": "./build/tests/test_app/test_hud_art",
    "expect": "[png]"
+  },
+  {
+   "id": "a_sprite2_is_a_sprite_of_the_first_sheet",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "s.sheet = w[0] == \"sprite2\" ? 1 : 0;",
+   "new": "s.sheet = 0;",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[manifest]"
+  },
+  {
+   "id": "a_sprite2_is_checked_against_the_first_sheet",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "if (s.sheet_x + s.w > sheet_width(s.sheet) || s.sheet_y + s.h > sheet_height(s.sheet))",
+   "new": "if (s.sheet_x + s.w > sheet_width(0) || s.sheet_y + s.h > sheet_height(0))",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[manifest]"
+  },
+  {
+   "id": "a_second_sheet_is_drawn_from_the_first_texture",
+   "file": "src/ants_app/renderer_art.cpp",
+   "old": "SDL_Texture* tex = art_texture(art, scale, s->sheet);",
+   "new": "SDL_Texture* tex = art_texture(art, scale);",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[second_sheet]"
+  },
+  {
+   "id": "preload_does_not_make_the_second_sheet",
+   "file": "src/ants_app/renderer_art.cpp",
+   "old": " && (!art.has_second_sheet() || art_texture(art, scale, 1) != nullptr);",
+   "new": ";",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[unusable]"
   }
  ]
 }

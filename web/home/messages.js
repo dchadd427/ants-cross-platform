@@ -12,7 +12,7 @@
     'use strict';
 
     var HANDLE = /^[0-9a-f]{12}$/, WHY = ['abuse', 'spam', 'other'], SVG = 'http://www.w3.org/2000/svg', PHONE = '(max-width: 700px), (max-height: 500px)';
-    var LIMIT = { convs: 50, rows: 100, threads: 40, name: 32, text: 500, at: 4e9, wait: 8000 };
+    var LIMIT = { convs: 50, rows: 100, threads: 40, name: 32, text: 500, at: 4e9, wait: 8000, pull: 80, keyboard: 120 };
     var TEXT = {
         button: 'Messages', title: 'Private messages', close: 'Close', back: 'Back to the list', more: 'More', tag: 'Private', unread: ' unread', loading: 'Loading\u2026', empty: 'Nothing here yet. Say hello.', today: 'Today', you: 'You: ',
         none: 'No private messages yet', noneLine: 'Open a person\u2019s menu and press Message, or type /msg NAME.', followed: 'You follow this person', report: 'Report', markup: 'Messages cannot hold < or >', offline: 'Chat is offline',
@@ -61,7 +61,7 @@
         if (!dock || typeof dock.tap !== 'function' || !Chat || !doc.createElement) return null;
         var now = env.now || function () { return Date.now(); };
         var you = null, live = false, convs = [], threads = {}, cur = '', view = 'list', shade = null, panel = null, opener = null, listBox = null, logBox = null, field = null, sendBtn = null, status = null, moreBtn = null;
-        var menuOn = false, armed = false, timers = {}, sending = null, asking = null, card = null, cardShade = null, cardOpener = null, btn = null, badge = null;
+        var menuOn = false, armed = false, timers = {}, sending = null, asking = null, card = null, cardShade = null, cardOpener = null, btn = null, badge = null, pinned = false, watching = null;
 
         function el(tag, cls, text) { var e = doc.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
         function put(parent, kids) { kids.forEach(function (k) { if (k) parent.appendChild(k); }); return parent; }
@@ -195,10 +195,10 @@
         // ---- the panel ----
         function paint() {                                              // the panel again, for a view
             if (!panel) return;
-            var thread = view === 'thread', t = threads[cur] || null, name = t ? t.name : '', top = el('div', 'pm-top'), form, tag;
+            var thread = view === 'thread', t = threads[cur] || null, name = t ? t.name : '', top = el('div', 'pm-top'), form, tag, grab;
             clear(panel); listBox = logBox = field = sendBtn = status = moreBtn = null;
             panel.setAttribute('data-view', view); panel.setAttribute('aria-label', TEXT.title + (thread ? ': ' + name : ''));
-            panel.appendChild(el('div', 'pm-grab'));
+            grab = el('div', 'pm-grab'); panel.appendChild(grab); pull(grab); pull(top);
             if (!thread) {
                 listBox = el('div', 'pm-list');
                 put(panel, [put(top, [el('h2', 'pm-title', TEXT.title), iconButton('pm-x', TEXT.close, 'x', closePanel)]), listBox, el('p', 'pm-keep', TEXT.keep)]);
@@ -217,6 +217,8 @@
             sendBtn = button('pm-send', undefined, submit); put(sendBtn, [icon('lock'), el('span', '', TEXT.send)]);
             field.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Enter') { if (e.preventDefault) e.preventDefault(); submit(); } }));
             field.addEventListener('input', guard(function () { status.textContent = ''; }));
+            field.addEventListener('focus', guard(function () { fit(); later('inview', 120, inView); }));          // (the keyboard comes a moment later: the field is brought into view when it has)
+            field.addEventListener('blur', guard(function () { later('inview', 250, fit); }));
             form.addEventListener('submit', guard(function (e) { if (e && e.preventDefault) e.preventDefault(); submit(); }));       // (a keyboard that submits the form is a send, never a new page)
             put(form, [field, sendBtn]);
             put(panel, [top, el('p', 'pm-note', TEXT.notePre + name + TEXT.notePost), logBox, status, el('p', 'pm-to', TEXT.toPre + name + TEXT.toPost), form]);
@@ -225,6 +227,66 @@
         function focusFirst() {
             var q = function (s) { return shade && shade.querySelector ? shade.querySelector(s) : null; }, b = view === 'thread' ? (phone() ? q('.pm-back') : null) || q('.pm-input') : q('.pm-row') || q('.pm-x');
             if (b && b.focus) b.focus();
+        }
+        // ---- the sheet follows what can be seen: the visible part of the window (a keyboard takes the bottom of it), and Back, a pull down and Escape close it ----
+        function seen() {                                               // the part of the window that the person sees: the visual viewport (the keyboard is out of it), else the window
+            var v = null, high = win.innerHeight || 0;
+            try { v = win.visualViewport || null; } catch (e) { v = null; }
+            return { high: high, h: v && v.height > 0 ? v.height : high, top: v && v.offsetTop > 0 ? v.offsetTop : 0, v: v };
+        }
+        function fit() {                                                // a phone's sheet is exactly the visible part, so the head stays on the screen and the field sits just above the keyboard
+            if (!shade) return;
+            var ph = phone(), w = seen(), kb = ph && ((!!field && doc.activeElement === field) || (w.high - w.h > LIMIT.keyboard));
+            shade.className = 'pm-shade' + (ph ? ' phone' : '') + (kb ? ' kb' : '');
+            if (ph && w.h > 0) { shade.style.top = Math.round(w.top) + 'px'; shade.style.height = Math.round(w.h) + 'px'; } else { shade.style.top = ''; shade.style.height = ''; }
+            place();
+        }
+        function inView() {                                             // the field is in view, and the log is at its end
+            fit();
+            if (field && field.scrollIntoView) field.scrollIntoView({ block: 'nearest' });
+            if (logBox && view === 'thread') logBox.scrollTop = logBox.scrollHeight || 0;
+        }
+        function watch() {                                              // while the sheet is open: a keyboard that comes or goes, the page that scrolls under it, a turn of the phone
+            var v = seen().v;
+            if (watching || !v || !v.addEventListener) return;
+            watching = guard(fit); v.addEventListener('resize', watching); v.addEventListener('scroll', watching);
+        }
+        function unwatch() {
+            var v = seen().v;
+            if (watching && v && v.removeEventListener) { v.removeEventListener('resize', watching); v.removeEventListener('scroll', watching); }
+            watching = null;
+        }
+        function pin() {                                                // the sheet has an entry of its own in the history, so that the phone's Back button closes the sheet and leaves the page where it was
+            if (pinned) return;
+            try {
+                var h = win.history, was = h && h.state, o = {}, k;
+                if (!h || !h.pushState) return;
+                if (was && typeof was === 'object') for (k in was) if (Object.prototype.hasOwnProperty.call(was, k)) o[k] = was[k];
+                o.pm = 1; h.pushState(o, ''); pinned = true;
+            } catch (e) { pinned = false; }
+        }
+        function unpin() { if (!pinned) return; pinned = false; try { win.history.back(); } catch (e) { /* the entry stays */ } }       // (closed by a button: the entry goes, and the page is where it was)
+        function inButton(n, zone) { for (; n && n !== zone; n = n.parentNode) if (String(n.tagName).toLowerCase() === 'button') return true; return false; }
+        function pull(zone) {                                           // a finger that pulls the head of the sheet down closes it (the sheet follows the finger)
+            var y0 = null, dy = 0, id = null;
+            function stopPull(close) {
+                var go = close && dy > LIMIT.pull;
+                y0 = null; dy = 0; id = null;
+                if (panel) { panel.style.transform = ''; panel.style.transition = ''; }
+                if (go) closePanel();
+            }
+            zone.addEventListener('pointerdown', guard(function (e) {
+                if (!e || !panel || e.pointerType === 'mouse' || (e.button && e.button !== 0) || inButton(e.target, zone)) return;
+                y0 = e.clientY; dy = 0; id = e.pointerId;
+                try { if (zone.setPointerCapture && id !== undefined) zone.setPointerCapture(id); } catch (x) { /* the move is heard anyway */ }
+            }));
+            zone.addEventListener('pointermove', guard(function (e) {
+                if (y0 === null || !panel || (id !== undefined && e.pointerId !== id)) return;
+                dy = Math.max(0, e.clientY - y0);
+                panel.style.transition = 'none'; panel.style.transform = dy ? 'translateY(' + Math.round(dy) + 'px)' : '';
+            }));
+            zone.addEventListener('pointerup', guard(function () { stopPull(true); }));
+            zone.addEventListener('pointercancel', guard(function () { stopPull(false); }));
         }
         function place() {                                              // a wide window: under the bar, down to the chat; a phone's sheet is the style's
             if (!panel) return;
@@ -243,14 +305,14 @@
             shade.appendChild(panel);
             shade.addEventListener('click', function (e) { if (e.target === shade) closePanel(); });       // (a press on the page outside)
             paint();
-            doc.body.appendChild(shade); place(); focusFirst(); paintButton();
+            doc.body.appendChild(shade); fit(); watch(); pin(); focusFirst(); paintButton();
             return true;
         }
         function closePanel() {
             if (!shade) return;
             var s = shade, back = opener;
             if (card) closeCard();
-            shade = panel = listBox = logBox = field = sendBtn = status = moreBtn = opener = null; menuOn = false; view = 'list'; cur = ''; disarm(); endSend();
+            shade = panel = listBox = logBox = field = sendBtn = status = moreBtn = opener = null; menuOn = false; view = 'list'; cur = ''; disarm(); endSend(); stop('inview'); unwatch(); unpin();
             if (s.parentNode && s.parentNode.removeChild) s.parentNode.removeChild(s);
             paintButton();
             if (back && back.focus) back.focus();
@@ -388,7 +450,14 @@
             else if (menuOn) { menuOn = false; disarm(); paintMenu(); if (moreBtn && moreBtn.focus) moreBtn.focus(); } else closePanel();
         }));
         doc.addEventListener('visibilitychange', guard(function () { var c = conv(cur); if (!doc.hidden && isOpen(cur) && c && c.u) { c.u = 0; read(cur); paintButton(); } }));
-        try { win.addEventListener('resize', guard(function () { if (shade) { shade.className = 'pm-shade' + (phone() ? ' phone' : ''); place(); } })); } catch (e) { /* the panel keeps its place */ }
+        try { win.addEventListener('resize', guard(function () { fit(); })); } catch (e) { /* the panel keeps its place */ }
+        try {
+            win.addEventListener('popstate', guard(function () {                // Back: the report card first, then the menu, then the sheet (the entry that Back took is made again for what stays)
+                if (!shade) return;
+                pinned = false;
+                if (card) { closeCard(); pin(); } else if (menuOn) { menuOn = false; disarm(); paintMenu(); pin(); } else closePanel();
+            }));
+        } catch (e) { /* no Back to hear */ }
 
         makeButton();
         dock.tap(guard(tap));

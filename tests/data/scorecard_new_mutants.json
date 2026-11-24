@@ -1,0 +1,400 @@
+{
+  "note": "Mutants of the new results screen, the Podium: which page shows (the original's or the new one: the art, the canvas, the size of the window), the whole canvas as its picture, the original's page that stays what it was (with a report too), the rows and the gold score, the two columns and the one by the width, the unit and the sheet by the output's scale, the panel to the canvas's last pixel, the buttons' rectangles, states and the link to the other page, the choice of a lobby room's match (\"Back to the room\" and \"Back to Ants & Uncles\": it stays until pressed, the keys keep the seat, a game on this computer and the original's page keep Leave Game), a report that is not ok (the original's numbers only), the counted report that reaches the screen, Watch (offered only where the recording can be opened, five seconds before the moment), the pieces that the art must have, and the sentence cut at whole characters (src/ants_app/scorecard.cpp, scorecard_new.cpp, scorecard_layout.cpp, window_art.cpp, application_match.cpp, application_view.cpp, application_sim.cpp, application_replay.cpp; include/ants_app/scorecard.hpp, scorecard_layout.hpp, match_report.hpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: python3 tools/mutate.py tests/data/scorecard_new_mutants.json --keep-going --jobs 1; every mutant must be caught by the test and the text named in it.",
+  "mutants": [
+    {
+      "id": "window_too_small_takes_the_new_page",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "new_look_ = scale_.usable();",
+      "new": "new_look_ = true;",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[switch]"
+    },
+    {
+      "id": "art_without_every_piece_takes_the_new_page",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "&& window_art::has_results_page(*art_)",
+      "new": "&& true",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[switch]"
+    },
+    {
+      "id": "art_taken_away_keeps_the_new_page",
+      "file": "src/ants_app/scorecard.cpp",
+      "old": "    art_ = art;\n    art_generation_ = generation;\n    update_new_look();\n}",
+      "new": "    art_generation_ = generation;\n    update_new_look();\n}",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[switch]"
+    },
+    {
+      "id": "the_originals_page_changes_with_a_report",
+      "file": "src/ants_app/scorecard.cpp",
+      "old": "    draw_animation_frame0(renderer, assets, quit_.pressed() ? \"leave3\" : (quit_.hovered() ? \"leave2\" : \"leave1\"), layout.dx, 0);",
+      "new": "    if (!report_.ok) draw_animation_frame0(renderer, assets, quit_.pressed() ? \"leave3\" : (quit_.hovered() ? \"leave2\" : \"leave1\"), layout.dx, 0);",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[switch]"
+    },
+    {
+      "id": "classic_art_gets_the_whole_canvas",
+      "file": "src/ants_app/application_view.cpp",
+      "old": "if (scorecard_.is_open() && scorecard_.new_look()) return canvas().rect();",
+      "new": "if (scorecard_.is_open()) return canvas().rect();",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[app]"
+    },
+    {
+      "id": "new_page_is_the_page_in_the_middle",
+      "file": "src/ants_app/application_view.cpp",
+      "old": "return canvas().rect();            // (the new results page",
+      "new": "return canvas().page();            // (the new results page",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[app]"
+    },
+    {
+      "id": "the_last_other_is_not_drawn",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "for (size_t i = 0; i < p.other_count && i + 1 < rows.size(); ++i) {",
+      "new": "for (size_t i = 0; i + 1 < p.other_count && i + 1 < rows.size(); ++i) {",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[podium]"
+    },
+    {
+      "id": "the_winners_score_is_not_gold",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "c.pen.draw(win.numbers[0], c.X(p.name_x), c.Y(p.score_base), kGold, score_em, 0);",
+      "new": "c.pen.draw(win.numbers[0], c.X(p.name_x), c.Y(p.score_base), kCream, score_em, 0);",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[podium]"
+    },
+    {
+      "id": "a_fourth_team_has_no_place",
+      "file": "src/ants_app/scorecard_layout.cpp",
+      "old": "std::min<size_t>(std::max<size_t>(in.rows, 1), kMaxRows)",
+      "new": "std::min<size_t>(std::max<size_t>(in.rows, 1), kMaxRows - 1)",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[podium]"
+    },
+    {
+      "id": "the_187_page_has_three_tiles",
+      "file": "src/ants_app/scorecard_layout.cpp",
+      "old": "(in.is_187 ? 2 : 3)",
+      "new": "3",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[podium]"
+    },
+    {
+      "id": "a_narrow_picture_keeps_two_columns",
+      "file": "include/ants_app/scorecard_layout.hpp",
+      "old": "kNarrowBelow = 520;",
+      "new": "kNarrowBelow = 400;",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[podium]"
+    },
+    {
+      "id": "a_page_of_two_columns_is_a_short_page_too",
+      "file": "include/ants_app/scorecard_layout.hpp",
+      "old": "(w >= kNarrowBelow || h >= kNarrowMinHeight)",
+      "new": "true",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[scale]"
+    },
+    {
+      "id": "the_unit_follows_the_longer_side",
+      "file": "include/ants_app/scorecard_layout.hpp",
+      "old": "const double shorter = static_cast<double>(canvas_w < canvas_h ? canvas_w : canvas_h);",
+      "new": "const double shorter = static_cast<double>(canvas_w > canvas_h ? canvas_w : canvas_h);",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[scale]"
+    },
+    {
+      "id": "a_landscape_picture_can_be_narrow",
+      "file": "include/ants_app/scorecard_layout.hpp",
+      "old": "while (s.k > 1 && canvas_w >= canvas_h && std::floor",
+      "new": "while (false && s.k > 1 && canvas_w >= canvas_h && std::floor",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[scale]"
+    },
+    {
+      "id": "a_unit_of_four_has_a_sheet_of_four",
+      "file": "include/ants_app/scorecard_layout.hpp",
+      "old": "s.sheet = s.k > 3 ? 3 : s.k;",
+      "new": "s.sheet = s.k;",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[scale]"
+    },
+    {
+      "id": "the_panel_stops_short_of_the_edge",
+      "file": "include/ants_app/scorecard_layout.hpp",
+      "old": "int32_t x(int32_t u) const noexcept { return u >= w ? canvas_w :",
+      "new": "int32_t x(int32_t u) const noexcept { return u >= w + 1 ? canvas_w :",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[scale]"
+    },
+    {
+      "id": "the_button_is_clicked_in_units",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "        leave = scale_.rect(podium_.leave);",
+      "new": "        leave = podium_.leave;",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[buttons]"
+    },
+    {
+      "id": "the_button_shows_the_wrong_state",
+      "file": "include/ants_app/scorecard.hpp",
+      "old": "Look leave_look() const noexcept { return quit_.pressed() ? Look::Down : quit_.hovered() ? Look::Hover : Look::Up; }",
+      "new": "Look leave_look() const noexcept { return quit_.hovered() ? Look::Down : quit_.pressed() ? Look::Hover : Look::Up; }",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[buttons]"
+    },
+    {
+      "id": "the_link_always_leads_to_the_second_page",
+      "file": "include/ants_app/scorecard.hpp",
+      "old": "Page link_target() const noexcept { return page_ == Page::Results ? Page::Stats : Page::Results; }",
+      "new": "Page link_target() const noexcept { return Page::Stats; }",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[buttons]"
+    },
+    {
+      "id": "a_report_that_is_not_ok_has_the_link",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "in.report = rows_shown && report_.ok;",
+      "new": "in.report = rows_shown;",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[counted]"
+    },
+    {
+      "id": "a_report_that_is_not_ok_has_the_damage",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "const bool counted = rep.ok;",
+      "new": "const bool counted = true;",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[counted]"
+    },
+    {
+      "id": "the_second_page_needs_no_report",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "if (page_ == Page::Stats && !(rows_shown && report_.ok)) page_ = Page::Results;",
+      "new": "if (page_ == Page::Stats && !rows_shown) page_ = Page::Results;",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[counted]"
+    },
+    {
+      "id": "a_well_with_a_short_edge_is_a_page",
+      "file": "src/ants_app/window_art.cpp",
+      "old": "size_is(\"sc_well_t\", scorecard_layout::kWellRun, c) &&",
+      "new": "true &&",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[pieces]"
+    },
+    {
+      "id": "a_small_button_of_another_height_is_a_page",
+      "file": "src/ants_app/window_art.cpp",
+      "old": "!size_is((\"sc_sm_m_\" + st).c_str(), scorecard_layout::kBigRun, scorecard_layout::kSmallH)",
+      "new": "false",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[pieces]"
+    },
+    {
+      "id": "the_report_does_not_reach_the_screen",
+      "file": "src/ants_app/application_sim.cpp",
+      "old": "    scorecard_.set_report(watching_own_match_ ? watched_report_ : live_stats_.report());",
+      "new": "    (void)live_stats_;",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[app]"
+    },
+    {
+      "id": "watch_is_always_offered",
+      "file": "src/ants_app/application_sim.cpp",
+      "old": "scorecard_.set_watch_available(can_watch_play());",
+      "new": "scorecard_.set_watch_available(true);",
+      "build": "test_scorecard_new test_replay_app",
+      "test": "./build/tests/test_app/test_scorecard_new && ./build/tests/test_app/test_replay_app",
+      "expect": "RA7.1"
+    },
+    {
+      "id": "watch_does_not_jump",
+      "file": "src/ants_app/application_replay.cpp",
+      "old": "    replay_jump_to(turn);\n    if (!replay_jumping_) focus_watched_tile();\n}",
+      "new": "    (void)turn;\n    if (!replay_jumping_) focus_watched_tile();\n}",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[app]"
+    },
+    {
+      "id": "watch_opens_at_the_moment",
+      "file": "include/ants_app/match_report.hpp",
+      "old": "kWatchLeadTurns = 5 * kTurnsPerSecond;",
+      "new": "kWatchLeadTurns = 0 * kTurnsPerSecond;",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[counted]"
+    },
+    {
+      "id": "the_viewer_s_end_page_loses_the_report",
+      "file": "src/ants_app/application_sim.cpp",
+      "old": "watching_own_match_ ? watched_report_ : live_stats_.report()",
+      "new": "live_stats_.report()",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[app]"
+    },
+    {
+      "id": "watch_leaves_the_view_where_it_was",
+      "file": "src/ants_app/application_replay.cpp",
+      "old": "    if (!watch_focus_) return;\n    watch_focus_ = false;",
+      "new": "    if (!watch_focus_ || true) return;\n    watch_focus_ = false;",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[app]"
+    },
+    {
+      "id": "watch_does_not_pass_the_tile",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "on_watch_(report_.play.watch_turn(), report_.play.tile_x, report_.play.tile_y);",
+      "new": "on_watch_(report_.play.watch_turn(), 0, 0);",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[counted]"
+    },
+    {
+      "id": "the_mvp_card_says_the_share_wrong",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "std::to_string(rep.mvp.value / 10) + \"% of the play\"",
+      "new": "std::to_string(rep.mvp.value) + \"% of the play\"",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[counted]"
+    },
+    {
+      "id": "the_originals_pressed_button_is_the_resting_one",
+      "file": "src/ants_app/scorecard.cpp",
+      "old": "const ButtonRect pressed{l.leave_pressed.x, l.leave_pressed.y, l.leave_pressed.w, l.leave_pressed.h};",
+      "new": "const ButtonRect pressed = up;",
+      "build": "test_wide_pages",
+      "test": "./build/tests/test_app/test_wide_pages"
+    },
+    {
+      "id": "the_sentence_is_cut_inside_a_character",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "while (!text.empty() && width(text + \"...\") > max_w) UnitMeter::cut_last_character(text);",
+      "new": "while (!text.empty() && width(text + \"...\") > max_w) text.pop_back();",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[podium]"
+    },
+    {
+      "id": "the_choice_is_a_timer",
+      "file": "src/ants_app/scorecard.cpp",
+      "old": "    if (phase_ == Phase::Waiting && elapsed_ms_ >= WAIT_MS) build_rows();\n}",
+      "new": "    if (phase_ == Phase::Waiting && elapsed_ms_ >= WAIT_MS) build_rows();\n    if (room_choice() && elapsed_ms_ >= 30000.0) leave();\n}",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[room]"
+    },
+    {
+      "id": "the_keys_give_the_seat_up",
+      "file": "include/ants_app/scorecard.hpp",
+      "old": "room_choice() ? on_back_to_room_ : on_quit_;",
+      "new": "room_choice() ? on_back_to_hub_ : on_quit_;",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[room]"
+    },
+    {
+      "id": "a_game_on_this_computer_has_the_choice",
+      "file": "include/ants_app/scorecard.hpp",
+      "old": "bool room_choice() const noexcept { return room_choice_ && new_look_; }",
+      "new": "bool room_choice() const noexcept { return new_look_; }",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[room]"
+    },
+    {
+      "id": "the_originals_page_has_the_choice",
+      "file": "include/ants_app/scorecard.hpp",
+      "old": "bool room_choice() const noexcept { return room_choice_ && new_look_; }",
+      "new": "bool room_choice() const noexcept { return room_choice_; }",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[room]"
+    },
+    {
+      "id": "the_front_page_button_does_nothing",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "    } else if (hub_.on_release(x, y)) {\n        if (on_back_to_hub_) on_back_to_hub_();",
+      "new": "    } else if (hub_.on_release(x, y)) {\n        (void)0;",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[room]"
+    },
+    {
+      "id": "the_front_page_button_is_the_room_button",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "    } else if (hub_.on_release(x, y)) {\n        if (on_back_to_hub_) on_back_to_hub_();",
+      "new": "    } else if (hub_.on_release(x, y)) {\n        leave();",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[room]"
+    },
+    {
+      "id": "the_waiting_page_has_no_choice",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "waiting_ = compute_waiting(scale_.w, scale_.h, room_choice_);",
+      "new": "waiting_ = compute_waiting(scale_.w, scale_.h, false);",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[room]"
+    },
+    {
+      "id": "the_second_page_has_no_choice",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "st.choice = room_choice_;",
+      "new": "st.choice = false;",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[room]"
+    },
+    {
+      "id": "a_narrow_page_lays_the_two_buttons_over_each_other",
+      "file": "src/ants_app/scorecard_layout.cpp",
+      "old": "out.leave = LayoutRect{bottom.x, bottom.y - kStackPitch, bottom.w, bottom.h};",
+      "new": "out.leave = LayoutRect{bottom.x, bottom.y - kStackPitch + 12, bottom.w, bottom.h};",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[room]"
+    },
+    {
+      "id": "a_game_on_this_computer_is_offered_the_room",
+      "file": "src/ants_app/application_match.cpp",
+      "old": "return on_back_to_room_ && on_back_to_hub_ && network_active() && !net_->join_target().room.empty() && net_->my_seat() < sim::MAX_PLAYERS;",
+      "new": "return on_back_to_room_ && on_back_to_hub_;",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[app]"
+    }
+  ]
+}

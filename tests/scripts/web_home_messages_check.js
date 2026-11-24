@@ -91,6 +91,15 @@ function rig(o) {
     env.root = new El(env, 'html', '');
     const state = { phone: !!o.phone };
     const win = { AntsHomeChat: Chat, innerWidth: o.phone ? 390 : 1280, innerHeight: o.phone ? 844 : 800, matchMedia: () => ({ matches: state.phone }), listeners: {}, addEventListener(t, fn) { (win.listeners[t] = win.listeners[t] || []).push(fn); } };
+    // the history, as a browser keeps it: an entry for the page, one more for each pushState; back() takes the newest entry away and says popstate (the page's own entry is never taken)
+    const entries = [{ ants: 'home' }];
+    win.history = { get state() { return entries[entries.length - 1]; }, pushState(st) { entries.push(JSON.parse(JSON.stringify(st))); }, back() { if (entries.length > 1) { entries.pop(); (win.listeners.popstate || []).forEach((fn) => fn({})); } } };
+    if (o.vv) {                                          // the visual viewport: what the person sees (the keyboard is out of it); resize(h, top) is what a keyboard or a pan does
+        const vl = {};
+        win.visualViewport = { height: win.innerHeight, offsetTop: 0, addEventListener(t, fn) { (vl[t] = vl[t] || []).push(fn); }, removeEventListener(t, fn) { vl[t] = (vl[t] || []).filter((f) => f !== fn); }, listeners: vl, scale: 1 };
+        win.resizeVisual = (h, top) => { win.visualViewport.height = h; win.visualViewport.offsetTop = top || 0; (vl.resize || []).slice().forEach((fn) => fn({})); };
+        win.panVisual = (top) => { win.visualViewport.offsetTop = top; (vl.scroll || []).slice().forEach((fn) => fn({})); };
+    }
     const bar = new El(env, 'div'), box = new El(env, 'div', 'gchat'), head = new El(env, 'div'), here = new El(env, 'span');
     bar.className = 'hbar'; bar.getBoundingClientRect = () => ({ top: 0, bottom: 70, left: 0, right: 100, width: 100, height: 70 });
     box.getBoundingClientRect = () => ({ top: 550, bottom: 790, left: 0, right: 700, width: 700, height: 240 });
@@ -105,7 +114,7 @@ function rig(o) {
         when: o.noWhen ? undefined : (at) => ({ time: '10:' + String(at % 60).padStart(2, '0'), full: 'full', day: dayOf(at), key: dayOf(at) })
     };
     const part = Mod.mount({ doc, win, dock, say: o.noSay ? undefined : (w, t) => said.push([w, t]), now: () => NOW * 1000, error: (e) => errors.push(e) });
-    const r = { env, clock, Mod, doc, win, box, head, here, bar, part, dock, sent, calls, taps, said, noted, errors, link, state };
+    const r = { env, clock, entries, Mod, doc, win, box, head, here, bar, part, dock, sent, calls, taps, said, noted, errors, link, state };
     r.emit = (kind, m) => taps.forEach((fn) => fn(kind, m));
     r.live = (you) => { r.link.open = true; r.emit('live', { t: 'welcome', v: 1, you: you === undefined ? { name: 'hazel', mod: false, role: 'none', k: 'k1' } : you, login: true, presence: true, history: [] }); return r; };
     r.list = (rows) => { r.emit('msgs', { t: 'msgs', n: rows.reduce((n, c) => n + c.u, 0), rows }); return r; };
@@ -592,6 +601,99 @@ function rig(o) {
     const g = rig().live(null);
     g.emit('open', { t: 'reply', c: 'msg', r: 'open', h: H2, to: 'tess' });
     check('...and a guest is never shown it', !g.panel());
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 12. a phone: the sheet is the visible part of the window (a keyboard takes the bottom of it), the field stays in view, and X, Back, a pull down, Escape and a press outside all close the whole sheet
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const r = rig({ phone: true, vv: true }).openThread(H1, 'maple', [theirs(1, 'first'), mine(2, 'second')]);
+    const sh = () => r.shade();
+    same('on a phone the sheet is exactly the visible part of the window: from its top, as high as it', [sh().style.top, sh().style.height, cls(sh()).indexOf('kb') !== -1], ['0px', '844px', false]);
+    r.win.resizeVisual(430, 0);
+    same('a keyboard (the visible part is 430 px high) makes the sheet 430 px high, with the room for the messages: the class that the style reads', [sh().style.height, sh().style.top, cls(sh()).indexOf('kb') !== -1], ['430px', '0px', true]);
+    r.win.panVisual(120);
+    same('...the page that is panned under the keyboard moves the sheet with the visible part', [sh().style.top, sh().style.height], ['120px', '430px']);
+    r.win.resizeVisual(844, 0);
+    same('...and a keyboard that goes gives the sheet its height back', [sh().style.top, sh().style.height, cls(sh()).indexOf('kb') !== -1], ['0px', '844px', false]);
+    const seenInView = [];
+    r.field().scrollIntoView = (o) => seenInView.push(o);
+    r.field().focus(); r.field().fire('focus', {});
+    check('the field with the focus makes room at once (the keyboard comes a moment later)', cls(sh()).indexOf('kb') !== -1);
+    r.clock.advance(300);
+    same('...and when the keyboard is there the field is brought into view', seenInView, [{ block: 'nearest' }]);
+    r.win.resizeVisual(430, 0);
+    r.field().blur(); r.clock.advance(400);
+    check('...a field that lost the focus with the keyboard still up keeps the sheet at the visible part', sh().style.height === '430px' && cls(sh()).indexOf('kb') !== -1);
+    r.win.resizeVisual(844, 0);
+    r.part.close();
+    check('the sheet that is closed stops listening to the viewport: nothing is left on it', (r.win.visualViewport.listeners.resize || []).length === 0 && (r.win.visualViewport.listeners.scroll || []).length === 0);
+    const w = rig({ vv: true }).openThread(H1, 'maple', []);
+    check('in a wide window the sheet is not sized by the script (the panel has its own place)', w.shade().style.top === '' && w.shade().style.height === '' && cls(w.shade()).indexOf('kb') === -1);
+    const n = rig({ phone: true }).openThread(H1, 'maple', []);
+    check('a browser with no visual viewport: the sheet is the window\'s height', n.shade().style.height === '844px' && n.shade().style.top === '0px');
+}
+{
+    const open = () => rig({ phone: true, vv: true }).openThread(H1, 'maple', [theirs(1, 'first')]);
+    const closed = (r, what) => { check(what + ': the sheet is gone (not the list, not another panel), the page is as it was', r.part.state() === 'closed' && !r.shade() && byClass(r.doc.body, 'pm-shade').length === 0 && r.entries.length === 1 && r.doc.activeElement === r.btn()); };
+    let r = open();
+    check('opening a conversation makes one entry of its own in the history (the page\'s own state is kept in it)', r.entries.length === 2 && r.entries[1].pm === 1 && r.entries[1].ants === 'home');
+    one(r.panel(), 'pm-x').click();
+    closed(r, 'X');
+    r = open();
+    one(r.panel(), 'pm-back').click();
+    check('the arrow goes back to the list of conversations (the sheet stays, with its entry)', r.part.state() === 'list' && !!r.panel() && r.entries.length === 2);
+    one(r.panel(), 'pm-x').click();
+    closed(r, 'X on the list');
+    r = open(); r.key('Escape');
+    closed(r, 'Escape');
+    r = open(); r.shade().click();
+    closed(r, 'a press outside');
+    r = open(); r.win.history.back();
+    check('the phone\'s Back button closes the sheet and leaves the page where it was', r.part.state() === 'closed' && !r.shade() && r.entries.length === 1 && r.doc.activeElement === r.btn());
+    r = open();
+    r.menu();
+    r.win.history.back();
+    check('Back with the menu open closes the menu first: the sheet stays, with an entry again', r.part.state() === 'thread' && !!r.panel() && !one(r.panel(), 'pm-menu') && r.entries.length === 2);
+    r.win.history.back();
+    check('...and the next Back closes the sheet', r.part.state() === 'closed' && r.entries.length === 1);
+    r = open();
+    r.emit('thread', thread(H1, 'maple', [theirs(1, 'first')]));
+    one(r.panel(), 'pm-rep').click();
+    check('the report card is up', !!r.card());
+    r.win.history.back();
+    check('Back with the report card up closes the card first: the sheet stays, with an entry again', !r.card() && r.part.state() === 'thread' && r.entries.length === 2);
+    r.win.history.back();
+    r.win.history.back();
+    check('...and a Back that comes when nothing is open does nothing (the page is not touched)', r.part.state() === 'closed' && r.entries.length === 1);
+    r = open(); one(r.panel(), 'pm-x').click(); r.part.open(H1, 'maple');
+    check('a sheet that opens again after a close has one entry again, not two', r.entries.length === 2);
+}
+{
+    const open = () => rig({ phone: true, vv: true }).openThread(H1, 'maple', [theirs(1, 'first')]);
+    const down = (z, y, extra) => z.fire('pointerdown', Object.assign({ pointerType: 'touch', pointerId: 7, clientY: y, target: z }, extra));
+    const move = (z, y) => z.fire('pointermove', { pointerType: 'touch', pointerId: 7, clientY: y });
+    const up = (z) => z.fire('pointerup', { pointerType: 'touch', pointerId: 7 });
+    let r = open(), grab = one(r.panel(), 'pm-grab');
+    down(grab, 100); move(grab, 150);
+    check('a finger on the grip pulls the sheet down with it', r.panel().style.transform === 'translateY(50px)');
+    up(grab);
+    check('...a short pull lets it go back to its place and does not close it', r.panel().style.transform === '' && r.part.state() === 'thread');
+    r = open(); grab = one(r.panel(), 'pm-grab');
+    down(grab, 100); move(grab, 260); up(grab);
+    check('a long pull (80 px or more) closes the sheet, and the page is as it was', r.part.state() === 'closed' && !r.shade() && r.entries.length === 1 && r.doc.activeElement === r.btn());
+    r = open(); const top = one(r.panel(), 'pm-top');
+    down(top, 100, { target: one(top, 'pm-who') }); move(top, 300); up(top);
+    check('the head of the sheet pulls it down too', r.part.state() === 'closed');
+    r = open(); const x = one(r.panel(), 'pm-x'), head = one(r.panel(), 'pm-top');
+    down(head, 100, { target: x }); move(head, 400); up(head);
+    check('a press that starts on a button of the head is a press, not a pull', r.part.state() === 'thread' && r.panel().style.transform === '');
+    down(head, 100, { pointerType: 'mouse' }); move(head, 400); up(head);
+    check('a mouse does not pull the sheet (it has the X)', r.part.state() === 'thread');
+    down(head, 100); move(head, 400); head.fire('pointercancel', {});
+    check('a pull that is cancelled (the browser took the touch) closes nothing and the sheet is back in its place', r.part.state() === 'thread' && r.panel().style.transform === '');
+    move(head, 500); up(head);
+    check('a move or a lift with no press before it does nothing', r.part.state() === 'thread');
 }
 
 console.log(failures ? failures + ' of ' + checks + ' checks FAILED' : 'all ' + checks + ' checks hold');

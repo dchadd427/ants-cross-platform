@@ -6,6 +6,9 @@
 #include <array>
 #include <functional>
 
+#include "ants_app/hud_art.hpp"
+#include "ants_app/match_report.hpp"
+#include "ants_app/scorecard_layout.hpp"
 #include "ants_assets/asset_archive.hpp"
 #include "ants_sim/game_mode.hpp"
 #include "ants_sim/match_stats.hpp"
@@ -26,6 +29,12 @@ namespace ants::app {
  *
  * In a 960 x 540 canvas the page is recomposed for the whole picture (results_layout.hpp): the layout is `ResultsLayout::of(wide_layout())`, and the Leave button, the rows and the label of the
  * waiting phase stand where it puts them. The four numbers of a row are the original's single-line labels (left aligned, a surface that clips what is wider), drawn in the original's 8 px digits.
+ *
+ * With the HUD art New (and a picture of two columns or a tall column, scorecard_layout.hpp) the page is the NEW one instead, the "Podium": the clay panel over the whole canvas, Victory! or Defeat with a sentence, the winner's
+ * well, the others ranked, and Leave Game, in units of whole device pixels for any size and shape of the canvas (render_new, scorecard_new.cpp); the same rows, headline and keys. A match whose numbers were counted
+ * (match_report.hpp) adds the damage, the honors, the Play of the game with Watch and a second page "Match stats" behind one button ("All stats", and "Back to results" on the second page); one that was not shows the original's
+ * numbers only. While the scores are added up it is "Game Over" and Leave Game. After the match of a lobby room Leave Game is two buttons (set_room_choice): "Back to the room" and "Back to Ants & Uncles",
+ * and the screen stays until one is pressed. Classic art is the page above, untouched.
  *
  * The game mode 187 has its own page (results_layout.hpp, docs/GAMEPLAY.md "187"): the baked column headings are not drawn, three headings of the game's own letters stand instead, a row has three
  * numbers (the kills, which are the score; the ants lost; the ants that are left) and the headline says who won and how: "<Name> is the last colony standing!" (two allied teams that are both left:
@@ -64,6 +73,7 @@ public:
         uint8_t second{sim::PLAYER_NEUTRAL};       // its ally, PLAYER_NEUTRAL for a single team
         std::string name;                          // "A" or "A & B", at most 35 characters
         std::array<std::string, 4> numbers;        // score, friendly lost, enemy killed, new hatched (187: kills, ants lost, ants left, and nothing)
+        int32_t score_value{0};                    // the score (187: the kills) as a number: the new page's bars
         bool has_second() const noexcept { return second != sim::PLAYER_NEUTRAL; }
     };
 
@@ -91,12 +101,70 @@ public:
     void set_wide_layout(bool wide);
     bool wide_layout() const noexcept { return wide_; }
 
+    /// The HUD art New (null: Classic, the page above): the new page needs the art to have every piece of it (window_art::has_results_page) and a canvas of at least 360 units on its shorter side
+    void set_art(const hud_art::Art* art);
+    /// The canvas that the page is drawn on, in canvas pixels, and how many device pixels one of them is (IRenderer::output_scale): the new page's layout follows both
+    void set_screen(int32_t canvas_w, int32_t canvas_h, double output_scale);
+    /// The new page is the one that shows: its picture is the whole canvas (Application::picture_for_state)
+    bool new_look() const noexcept { return new_look_; }
+    const scorecard_layout::Scale& scale() const noexcept { return scale_; }
+
+    /// What the counting of the match made of its numbers (match_report.hpp), set before show(): a report that is `ok` gives the new page its link "All stats", the damage, the honors, the Play of the game and a
+    /// second page "Match stats"; a report that is not shows the original's numbers only
+    void set_report(const MatchReport& report) { report_ = report; update_new_look(); }
+    const MatchReport& report() const noexcept { return report_; }
+    /// The application can open the replay at the Play of the game (a game on this computer that has its recording): without it the card has no Watch button (default: no)
+    void set_watch_available(bool available) {
+        watch_available_ = available;
+        update_button();
+    }
+    bool watch_available() const noexcept { return watch_available_; }
+    /// The match was a lobby room's and its page offers the way back (Application::room_choice_applies), set before show(): the new page's Leave Game is "Back to the room" (the keys do it too) and "Back to
+    /// Ants & Uncles". The screen waits for one of them (no timer). The original's page (Classic art) has Leave Game only. Default: no (a game on this computer, a replay)
+    void set_room_choice(bool choice) {
+        room_choice_ = choice;
+        update_new_look();
+    }
+    /// The two buttons are there (a room's match, on the new page)
+    bool room_choice() const noexcept { return room_choice_ && new_look_; }
+    /// The new page's pages: the results (the podium) and the second page of counted numbers (only with a report that is ok)
+    enum class Page : uint8_t { Results, Stats };
+    Page page() const noexcept { return page_; }
+    void show_page(Page page);
+    /// The page that the link leads to: the second page from the podium, the podium from the second page
+    Page link_target() const noexcept { return page_ == Page::Results ? Page::Stats : Page::Results; }
+    /// What the layouts of the new page have made of the screen (the page that shows now; the waiting page until the rows are built)
+    const scorecard_layout::Podium& podium() const noexcept { return podium_; }
+    const scorecard_layout::Waiting& waiting_layout() const noexcept { return waiting_; }
+    const scorecard_layout::StatsPage& stats_layout() const noexcept { return stats_; }
+    /// What the new page's drawing reads: the name of a team's row, the local team, the screen's clock (the ants animate with it), the place of the local team's row (0: the first; -1: none) and the match's
+    /// result (the 187 page names the last colony that stands)
+    std::string seat_name(uint8_t team) const { return name_of(team); }
+    uint8_t local_seat() const noexcept { return local_player_id_; }
+    double clock_ms() const noexcept { return elapsed_ms_; }
+    int viewer_rank() const noexcept;
+    const sim::MatchResult& result() const noexcept { return result_; }
+    /// How a button of the new page is drawn now: resting, pointed at, pressed
+    enum class Look : uint8_t { Up, Hover, Down };
+    Look leave_look() const noexcept { return quit_.pressed() ? Look::Down : quit_.hovered() ? Look::Hover : Look::Up; }       // (Leave Game, or "Back to the room")
+    Look hub_look() const noexcept { return hub_.pressed() ? Look::Down : hub_.hovered() ? Look::Hover : Look::Up; }
+    Look link_look() const noexcept { return link_.pressed() ? Look::Down : link_.hovered() ? Look::Hover : Look::Up; }
+    Look watch_look() const noexcept { return watch_.pressed() ? Look::Down : watch_.hovered() ? Look::Hover : Look::Up; }
+    /// The rectangles of the new page's buttons on the canvas (empty where the page has none now): Leave Game (a room's match: "Back to the room"), "Back to Ants & Uncles", the link to the other page, Watch
+    LayoutRect leave_rect() const noexcept;
+    LayoutRect hub_rect() const noexcept;
+    LayoutRect link_rect() const noexcept;
+    LayoutRect watch_rect() const noexcept;
+
     /// The Leave button only exists once the rows do
     bool handle_mouse_down(int32_t x, int32_t y);
     bool handle_mouse_up(int32_t x, int32_t y);
     void handle_mouse_motion(int32_t x, int32_t y);
-    /// FUN_01015b47: leave (the keys Enter, C, Q and X do it, at any time)
-    void leave() { if (on_quit_) on_quit_(); }
+    /// FUN_01015b47: leave (the keys Enter, C, Q and X do it, at any time). The match of a lobby room: back to the room, the way that keeps the seat (the other button is only ever a click)
+    void leave() {
+        const std::function<void()>& way = room_choice() ? on_back_to_room_ : on_quit_;
+        if (way) way();
+    }
 
     void render(IRenderer& renderer, const assets::AssetArchive& assets);
 
@@ -107,6 +175,11 @@ public:
     // Action callbacks
     void set_on_replay(std::function<void()> cb) { on_replay_ = std::move(cb); }
     void set_on_quit(std::function<void()> cb) { on_quit_ = std::move(cb); }
+    /// A lobby room's match (set_room_choice): "Back to the room" and "Back to Ants & Uncles" were pressed
+    void set_on_back_to_room(std::function<void()> cb) { on_back_to_room_ = std::move(cb); }
+    void set_on_back_to_hub(std::function<void()> cb) { on_back_to_hub_ = std::move(cb); }
+    /// Watch (the Play of the game's button) was pressed: the replay opens at this turn, five seconds before the moment, with the view on this tile (the place of the moment)
+    void set_on_watch(std::function<void(uint32_t, int32_t, int32_t)> cb) { on_watch_ = std::move(cb); }
     void set_on_play_sfx(std::function<void(uint32_t)> cb) { on_play_sfx_ = std::move(cb); }
     void play_sfx(uint32_t sound_id) { if (on_play_sfx_) on_play_sfx_(sound_id); }
 
@@ -117,6 +190,13 @@ private:
     enum class Phase : uint8_t { Waiting, Rows };
 
     void build_rows();
+    void update_new_look();                  // the new page's scale, layout and Leave button from the art, the canvas and the rows
+    void update_button();                    // the Leave button's rectangles: the page's own (the new page's buttons: update_new_buttons)
+    void update_new_buttons();               // the new page's buttons from the layout of the page that shows
+    bool new_mouse_down(int32_t x, int32_t y);
+    bool new_mouse_up(int32_t x, int32_t y);
+    void new_mouse_motion(int32_t x, int32_t y);
+    void render_new(IRenderer& renderer, const assets::AssetArchive& assets);
     std::string headline_187() const;
     std::string name_of(uint8_t team) const;
     void draw_portrait(IRenderer& renderer, const assets::AssetArchive& assets, uint8_t team, int32_t x, int32_t y) const;
@@ -125,6 +205,19 @@ private:
     std::array<std::string, 4> player_names_{};
     uint8_t shown_mask_{0x0F};
 
+    const hud_art::Art* art_{nullptr};    // the HUD art that the new page is drawn from (null: Classic)
+    uint64_t art_generation_{0};          // ... and the manifest that was read when it was given (a new reading checks the pieces again)
+    int32_t canvas_w_{0};                 // the canvas and its output scale, from the application (set_screen)
+    int32_t canvas_h_{0};
+    double output_{1.0};
+    bool new_look_{false};                // the new page shows (art_ has the pieces, the canvas is big enough)
+    scorecard_layout::Scale scale_{};
+    scorecard_layout::Podium podium_{};   // the layouts of the new page (update_new_look)
+    scorecard_layout::Waiting waiting_{};
+    scorecard_layout::StatsPage stats_{};
+    MatchReport report_{};
+    bool watch_available_{false};
+    Page page_{Page::Results};
     bool wide_{false};                    // the page is the 16:9 one
     bool is_active_{false};
     Phase phase_{Phase::Waiting};
@@ -135,10 +228,17 @@ private:
     sim::MatchResult result_{};           // what the screen was created with, reduced to the shown teams
     std::vector<Row> rows_{};
     uint32_t audio_to_play_{0};           // Sound 56 (winner) vs Sound 42 (loser), set when the rows are built
-    ScreenButton quit_{ButtonRect{QUIT_BTN_X, QUIT_BTN_Y, QUIT_BTN_W, QUIT_BTN_H}, QUIT_BTN_PRESSED};      // exists once the rows are there
+    ScreenButton quit_{ButtonRect{QUIT_BTN_X, QUIT_BTN_Y, QUIT_BTN_W, QUIT_BTN_H}, QUIT_BTN_PRESSED};      // exists once the rows are there (on the new page: from the first moment)
+    bool room_choice_{false};             // (set_room_choice)
+    ScreenButton hub_;                    // the new page's other buttons: "Back to Ants & Uncles", the link to the other page, and Watch
+    ScreenButton link_;
+    ScreenButton watch_;
 
     std::function<void()> on_replay_;
     std::function<void()> on_quit_;
+    std::function<void()> on_back_to_room_;
+    std::function<void()> on_back_to_hub_;
+    std::function<void(uint32_t, int32_t, int32_t)> on_watch_;
     std::function<void(uint32_t)> on_play_sfx_{nullptr};
 };
 

@@ -482,6 +482,9 @@ public:
 
     // State Inspection
     const WorldState& get_world_state() const;
+    /// The ants as get_world_state() shows them (the same values at every moment), without the rest of the snapshot: when the cached world state is stale the grid is not copied, so asking for the ants of every tick of a
+    /// catch-up costs the ants and not the map. The reference holds until the engine changes.
+    const std::vector<AntSnapshot>& get_ant_snapshots() const;
     /// The team that `player_id` is allied with now (the ally field of its team, the same value as WorldState::player_alliances[player_id]), or ALLIANCE_NONE (4) for none and for a
     /// seat that does not exist. Cheap (no snapshot of the world is built): a host that relays chat asks it for every team line (ants_net/session.hpp).
     uint8_t alliance_of(uint8_t player_id) const noexcept;

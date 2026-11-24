@@ -248,6 +248,7 @@ bool Application::set_aspect(Aspect aspect) {
 // 640 x 480 canvas the original's own pages are the whole canvas
 LayoutRect Application::picture_for_state() const {
     if (match_running()) return canvas().centred(layout_.width, layout_.height);
+    if (scorecard_.is_open() && scorecard_.new_look()) return canvas().rect();            // (the new results page is made for the whole canvas, whatever its shape: scorecard_layout.hpp)
     return canvas().page();
 }
 
@@ -259,7 +260,7 @@ bool Application::page_up() const {
 // The frame rate, the version and the network's readout stand in the corner of the picture that is up: the canvas's corner in a match (the viewport: the same in every layout), and on a page the
 // page's own corner, which is the canvas's where the page is the canvas (16:9, 4:3) and the 960 x 540 page's in the other wide shapes, so that the readout is never in the black beside a page
 LayoutRect Application::corner_area() const {
-    return page_up() ? canvas().page() : canvas().rect();
+    return page_up() && !(scorecard_.is_open() && scorecard_.new_look()) ? canvas().page() : canvas().rect();
 }
 
 // The setup screen has a wide version for the 16:9 canvas of 960 x 540, which is also the page of every bigger canvas of the shape table (CanvasLayout::page: centred in them); any other canvas draws the original's page
@@ -281,6 +282,8 @@ bool Application::wide_pages() const {
 void Application::update_picture() {
     map_select_.set_wide_layout(wide_setup());                                              // (the screen is drawn and answers the pointer as its wide version when the canvas is 960 x 540)
     const bool wide = wide_pages();
+    scorecard_.set_art(hud_.art());                                                         // (the results screen has the HUD's art: the new page, or the original's when the art is Classic or cannot be used)
+    scorecard_.set_screen(canvas().width, canvas().height, renderer_ ? renderer_->output_scale() : 1.0);       // (the new results page is laid out for the canvas and its output)
     scorecard_.set_wide_layout(wide);                                                       // (so are the results, the start menu and the quick help's button: they stand where the wide pages put them)
     start_menu_.set_wide_layout(wide);
     if (wide != quick_help_wide_) {

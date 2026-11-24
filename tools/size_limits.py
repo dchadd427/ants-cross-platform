@@ -79,7 +79,7 @@ SPLIT_BUDGET, SPLIT_GZIP_BUDGET = 16_000, 5_200     # split.js and split.css: th
 ROOM_BUDGET, ROOM_GZIP_BUDGET = 38_000, 11_200       # room.css, roomchat.js and roomchat.css: the room inside Home and the room's tab of the chat box
 ALERTS_BUDGET, ALERTS_GZIP_BUDGET = 54_500, 16_500   # alerts.js and alerts.css: the bell's list of alerts and its settings, the invitation, room, message and mention toasts, the join alert of Home and the entry of the match that is over; raised from 48,500 and 14,500 for the room and message rows
 ALERT_CORE_BUDGET, ALERT_CORE_GZIP_BUDGET = 13_000, 4_400   # web/alert_core.js: the switches, the tab alert and the sound table that the front page and the game page share
-MESSAGES_BUDGET, MESSAGES_GZIP_BUDGET = 47_000, 14_000   # messages.js and messages.css: the Messages button of the chat's head, the panel (a sheet on a phone), the conversations, the report card (loaded for a person who is logged in only; docs/HUB_MESSAGES.md)
+MESSAGES_BUDGET, MESSAGES_GZIP_BUDGET = 53_500, 15_500   # messages.js and messages.css: raised from 47,000 and 14,000 for the sheet that follows the visible part of a phone's window (the keyboard), and the ways out of it (Back, a pull down); the Messages button of the chat's head, the panel (a sheet on a phone), the conversations, the report card (loaded for a person who is logged in only; docs/HUB_MESSAGES.md)
 SCRIPT_BUDGET, SCRIPT_GZIP_BUDGET = 13_000, 4_500       # player_name.js
 # the installable web app (web/app/, web/manifest.webmanifest): the four icons together (measured 5,922 bytes: the original game's icon, 12 colors and fine detail), and the manifest (measured 1,166, revalidated on every visit)
 APP_ICONS_BUDGET = 6_500

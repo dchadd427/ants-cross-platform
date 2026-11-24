@@ -424,14 +424,15 @@ def switch_ring(x, y):
     return S.rrect(x + .5, y + .5, 45, 19, 2.5, 'none', ' stroke="#a6e0c4" stroke-opacity=".9" stroke-width="1"')
 
 
-def field(uid, x, y, w, h, wl=4, wt=4, wr=6, wb=6):
+def field(uid, x, y, w, h, wl=4, wt=4, wr=6, wb=6, flat=None):
     """an edit field: the dark ground (x, y, w, h) where the game writes, in a bezel of brushed green steel of the original's widths (4 left and above, 6 right and below, of which the outer 2
-    are its cast shadow): a lit upper-left edge with a broken glint, a deep lower-right one, and the field's own wall inside it. The picture is (w + 10) x (h + 10) from (x - 4, y - 4)."""
+    are its cast shadow): a lit upper-left edge with a broken glint, a deep lower-right one, and the field's own wall inside it. The picture is (w + 10) x (h + 10) from (x - 4, y - 4).
+    `flat`: one color for the whole bezel instead of the gradient that falls from its top to its bottom (a well that the game stretches to any height has the same bezel at every height)."""
     _tn[0] += 1
     u = '%s_e%d' % (uid, _tn[0])
     X, Y, Wd, Ht = x - wl, y - wt, w + wl + wr - 2, h + wt + wb - 2
     b = S.rrect(X + 2, Y + 2, Wd, Ht, 2, '#3a0c00', ' fill-opacity=".5"') + contact(uid, X, Y, Wd, Ht, 2)
-    b += '<defs>%s</defs>' % S.vgrad(u + '_bz', Y + 1, Y + Ht - 1, [(0, '#2d6c59'), (.2, '#205243'), (1, '#153a2f')])
+    b += '<defs>%s</defs>' % S.vgrad(u + '_bz', Y + 1, Y + Ht - 1, [(0, flat), (1, flat)] if flat else [(0, '#2d6c59'), (.2, '#205243'), (1, '#153a2f')])
     b += S.raised(u, X, Y, Wd, Ht, 2, 'url(#%s_bz)' % u, hl='#4c9778', sh='#0a2a20', rim='#05120c')
     b += brush(X + 2, Y + 2, Wd - 4, Ht - 4, 0)
     b += glint(X + 3, Y + 1, Wd - 6, .8)
