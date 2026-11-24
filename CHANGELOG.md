@@ -26,7 +26,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.21.3 - 2026-11-24 - Follows, private messages, replay likes and the activity curve
 
 **For players:**
 - **Where the action is, on a replay.** A soft curve over the replay's timeline shows the fights: deaths most of all, then bombs, thefts, fires and hits. On a computer it shows while the pointer is over the timeline, with the time and what happened ("2:41 · 3 deaths, 1 bomb"); on a phone it is always there, faint, and solid under your finger. The timeline has a row of its own on a computer now, as wide as the picture. Matches played before this version show a curve of their deaths alone.
@@ -36,13 +36,14 @@ Work that is not released yet is written in the same template under a heading th
 - **A new results screen.** With the New HUD art the end of a match is a podium: the winner, the others ranked, honors, the Play of the game and a page of numbers. Classic keeps the original's page.
 
 **Fixes:**
-- Watching a replay on a match page has the Settings button too.
-- A match you played shows on the Matches page right after it ends, not only when the server is idle.
+- Watching a replay on a match page has the Settings button too, and a match you played shows on the Matches page right after it ends, not only when the server is idle.
 
 **For operators:**
 - The game server's database moves to schema version 12 (the table `history_action`, the counts that the activity curve is drawn from, and the plays and likes of replays; the history service's own file to its version 6): an older program refuses the newer file, and the update does not copy it, so stop the server and copy `ants.db` before the update; that copy is the way back ([`docs/HEATMAPS.md`](docs/HEATMAPS.md#the-activity-curve), [`docs/REPLAY_COUNTS.md`](docs/REPLAY_COUNTS.md)).
 - Plays and likes of replays: a new door of the game server (`--counts-port`, 4032 in the stack files; [`docs/REPLAY_COUNTS.md`](docs/REPLAY_COUNTS.md)) and a like gate of the hub that signs a short pass for the person's login (the admin page's key, `ANTS_ADMIN_GATE_SECRET`; without a good one likes are off and plays still count). Only numbers are kept for plays, and for a like the hub's opaque reference of the account. **Forget me** asks the door to take the person's likes back (`ANTS_HUB_COUNTS_URL`, `http://ants-server:4032` in the stack; empty it when `ANTS_COUNTS_PORT` is 0) and never depends on it: a door that does not answer is asked again by the hub for a day.
 - New `follows`, `dms` (private messages, 7 days) and `reports` tables, made by the first use and deleted by Forget me; reports are read with `python -m hub.admin reports` and closed with `report-close ID`, and each report, look and close is a row of the moderators' log ([private messages](docs/HUB_MESSAGES.md)). The Legal page has a section for them.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5e23309d...266e2c4c)
 
 ## v0.21.2 - 2026-11-23 - Invites, mentions, the bell, map pages and Random map
 
