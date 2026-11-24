@@ -217,7 +217,7 @@ The economy is nearly insensitive to reaction time and command rate (a harvestin
 |---|---|---|---|---|---|
 | Easy | 5 s | 3 s | 0.4 (2) | nearest pile first, at most 4 ants per pile | strikes back with one ant, fire walls at its thief hole once an enemy Thief has been seen (the only power-up it takes is a Fire one), counters enemy fire and bombs, races for the contested food with the ants that the gate cannot use, hunts a wounded enemy next to its ants, raids only when far behind; on water maps (ISLANDS, SMALL) takes two Swimmers (a bomb-flight expedition on ISLANDS) and ferries food with them, slowly (one order in 2.5 s) |
 | Medium | 1 s | 1.2 s | 1.5 (6) | piles by points per trip | adds the Fire, Bomber and Thief power-ups of its own side, a Combat Ant that harvests and fights, raids on the leader, the race for the contested food, hunts of the wounded within its leash, two defenders, walls when a thief is seen or can come; on water maps takes three Swimmers (the expedition) that ferry food |
-| Hard | 0.2 s | 0.4 s | 3.0 (10) | as Medium, and every carrier guided at the gate by hand | adds the power-ups that the flowers of its side let fall, the Fire that lands within its reach and a watcher at the flower of its side ("The flowers"), walls before an enemy plays, theft of an unguarded Thief power-up and a second thief, a second Combat Ant once attacked, raids for 15 points, three defenders, the race for the contested food, hunts of wounded ants and of the leader's carriers, and an aggressive or a raider style (harassment squad, sabotage, strike), and the island play of Medium, quicker (shore kills: not built; alliance invitations: a bot never invites) |
+| Hard | 0.2 s | 0.4 s | 3.0 (10) | as Medium, and every carrier guided at the gate by hand | adds the power-ups that the flowers of its side let fall, the Fire that lands within its reach and a watcher at the flower of its side ("The flowers") and a strike with the edge at the enemy ants that wait at a flower strip ([BOT_CONTEST.md](BOT_CONTEST.md#the-flower-strip-rule-3)), walls before an enemy plays, theft of an unguarded Thief power-up and a second thief, a second Combat Ant once attacked, raids for 15 points, three defenders, the race for the contested food, hunts of wounded ants and of the leader's carriers, and an aggressive or a raider style (harassment squad, sabotage, strike), and the island play of Medium, quicker (shore kills: not built; alliance invitations: a bot never invites) |
 
 The profile numbers (look, reaction, rate, burst) are fairness limits and did not change in B4-1; the numbers of the plans were decided by the tournaments of B4-1 and are in `tactics.cpp` (`plan_for`); B5 tunes by self-play. The burst is the depth of the bucket, what a bot that has been quiet can send at once; every bot STARTS with one token (the opening, since v0.1.1), so its first orders come one by one.
 
@@ -274,6 +274,9 @@ Everything else is the same at every level: a hit carrier is sent home at once, 
 | [Walled maps (the gate goals)](BOT_PLAY.md#walled-maps-the-gate-goals) | [Play](BOT_PLAY.md) |
 | [187: the brawl](BOT_PLAY.md#187-the-brawl) | [Play](BOT_PLAY.md) |
 | [Islands](BOT_ISLANDS.md#islands) | [Water maps](BOT_ISLANDS.md) |
+| [Standing on a power-up](BOT_CONTEST.md#standing-on-a-power-up-rule-1) | [Contest](BOT_CONTEST.md) |
+| [A fight with a plan](BOT_CONTEST.md#a-fight-with-a-plan-rule-2) | [Contest](BOT_CONTEST.md) |
+| [The flower strip](BOT_CONTEST.md#the-flower-strip-rule-3) | [Contest](BOT_CONTEST.md) |
 | [Known limits](BOT_LIMITS.md#known-limits) | [Known limits](BOT_LIMITS.md) |
 
 ## Names

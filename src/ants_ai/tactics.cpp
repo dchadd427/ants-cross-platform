@@ -129,6 +129,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.flower_recover = true;
             p.flower_recall = true;
             p.flower_watch = true;
+            p.strip_fight = true;                    // the ants that wait at a flower strip strike the enemy ants that wait there, when they have the edge (docs/BOT_CONTEST.md, "The flower strip")
             p.drop_retake = true;
             p.drop_contest = true;
             p.takes_combat = true;
@@ -356,6 +357,7 @@ void without_thief_batch(LevelPlan& p) noexcept {
 }
 
 void without_idle_batch(LevelPlan& p) noexcept {
+    p.strip_fight = false;                                                          // (part 2 of the fight batch)
     p.bridge_loaded = false;
     p.bridge_foot = false;                                                          // (part 2 of the fight batch hangs on the head-on rule: no head-on, no foot)
     p.bridge_headon = false;

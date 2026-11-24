@@ -634,6 +634,22 @@ ArenaResult play_match(const ArenaSpec& spec) {
             r.fight_batch.foot_plugs = sb->head_on().plugs();
             r.fight_batch.loads_released = sb->islands().loads_released();
             r.fight_batch.return_tiles = sb->flower_link().bridges().tiles_ordered(BridgeJob::Kind::Return);
+            r.fight_batch.stand_chains = sb->power_stand().chains();
+            r.fight_batch.stand_held = sb->power_stand().held();
+            r.fight_batch.stand_missed = sb->power_stand().missed();
+            r.fight_batch.stand_taken = sb->power_stand().taken();
+            r.fight_batch.stand_refuge = sb->power_stand().stands(PowerStandTask::Why::Refuge);
+            r.fight_batch.stand_deny = sb->power_stand().stands(PowerStandTask::Why::Deny);
+            r.fight_batch.plan_engagements = sb->fight_plan().engagements();
+            r.fight_batch.plan_fights = sb->fight_plan().fights();
+            r.fight_batch.plan_skipped = sb->fight_plan().skipped();
+            r.fight_batch.plan_pulls = sb->fight_plan().pulls();
+            r.fight_batch.plan_attacks = sb->fight_plan().attacks();
+            r.fight_batch.strip_contests = sb->strip().contests();
+            r.fight_batch.strip_strikes = sb->strip().strikes();
+            r.fight_batch.strip_leaves = sb->strip().leaves();
+            r.fight_batch.strip_helped = sb->strip().helped();
+            r.fight_batch.strip_attacks = sb->strip().attacks();
             r.miner_flight = read_miner_flight(sb->miner_flight());
         }
         read_seat_result(sim, b.seat, r);

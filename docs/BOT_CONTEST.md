@@ -1,0 +1,106 @@
+# Contesting: standing on power-ups, a fight with a plan and the flower strip
+
+Part of [Bots (computer players)](BOTS.md). The rest of the standard bot's fights are in [BOT_TACTICS.md](BOT_TACTICS.md) and [BOT_FIGHT.md](BOT_FIGHT.md), the hurt ants that walk home in [BOT_PEOPLE.md](BOT_PEOPLE.md#step-2-hurt-ants-heal), the flowers in [BOT_TACTICS.md](BOT_TACTICS.md#the-flowers), the water maps in [BOT_ISLANDS.md](BOT_ISLANDS.md), the ants that stand nowhere (the foot of a bridge, the ants that hold a load: rule 0 of the same batch) in [BOT_UNSTUCK.md](BOT_UNSTUCK.md#the-rules). Source: `power_stand.hpp` / `power_stand.cpp`, `fight_plan.hpp` / `fight_plan.cpp`, `strip_task.hpp` / `strip_task.cpp` in `include/ants_ai` and `src/ants_ai` (the fields of `LevelPlan` in `tactics.hpp`); tests AI59 (`test_ai_powerstand.cpp`), AI60 (`test_ai_fightplan.cpp`), AI61 (`test_ai_strip.cpp`), the shared worlds in `contest_world.hpp`; mutants `tests/data/bot_fight_mutants.json`.
+
+## What was asked, and the rule that holds
+
+Part 2 of the fight batch ("G9") asked for four things: the ants that stand nowhere on ISLANDS (rule 0: [BOT_UNSTUCK.md](BOT_UNSTUCK.md), on), **standing on power-ups** (rule 1), **fighting with a plan** (rule 2) and **contesting the flower** (rule 3), each a switch of the plan with a key of `bot_arena --tune`, on only where the arena shows that it wins, and otherwise off with an expiry. [BOT_TACTICS.md](BOT_TACTICS.md#aggression) says that the earlier tests of aggression lost points and ship off. All three rules are built, tested and measured: **rule 3 wins on ISLANDS and ships on at Hard, in the form that never leaves; rules 1 and 2 do not win and ship off** (`power_stand` and `fight_plan` are false in the plan of every level and in a plan made by hand; `strip_fight` is true in Hard's plan only). A switch that is off by default is retired or removed within two releases (rule 9 of [AGENTS.md](../AGENTS.md)): the pull request that does it takes the task, its tests and its mutants out with it, or turns the switch on where a measurement shows a win.
+
+Everything here is a virtual client like every bot ([BOTS.md](BOTS.md#the-rule)): the commands are those of a person's clicks (a move, a pick-up click, an attack click, a Stop), through the controller's budget and reaction time, and what a task reads is on the screen of the seat (the ants' tiles, hit points and drawn states, the power-ups with who stands on them, the flowers, the grid's surfaces). No rule of the simulation, no command, no hash changes; a match with the switches off is the match of the plan before (the tasks do nothing and give back what they held).
+
+## Standing on a power-up (rule 1)
+
+**What the original does.** An ant can STAND on a power-up: click the power-up, and while the ant has crossed into the power-up's tile and has not yet landed on its center, give an order that is accepted and goes nowhere ("Can't go there."): the pick-up is cancelled, and the ant stays. A power-up is a solid object, so no attack order, reflex, bomb or fire wall reaches the ant on it, and nobody else can take the power-up; a click on the tile the ant stands on takes it later ([GAME_REVERSE_ENGINEERING.md](GAME_REVERSE_ENGINEERING.md), the cancel window; the engine's test is `tests/test_sim/test_powerup_actions.cpp`, 1.3, 1.5, 1.7, 1.18, and the owner's description in the notes of 2026-09-29 and 2026-11-16).
+
+**The window.** It is a few ticks wide and depends on the two surfaces and the direction of the step. `stand_window(from, to, west_north)` is the table, measured on the engine with the orders of the controller (an order, `gap` ticks, a click on an island of the test world; AI59.1 plays the whole table again, 4 x 4 surfaces x 4 steps, and compares): ticks after the click on the power-up, first to last at which the cancel works.
+
+| from \ to | grass | mud | dirt | sand |
+|---|---|---|---|---|
+| grass | 9-12 (W, N 10-12) | 9-18 (10-17) | 9-14 (10-14) | 9-12 (10-13) |
+| mud | 15-19 (16-19) | 15-23 (16-23) | 15-20 (16-20) | 15-18 (16-19) |
+| dirt | 10-14 (12-15) | 10-19 (12-18) | 10-14 (12-14) | 10-13 (12-14) |
+| sand | 8-12 (9-12) | 8-17 (9-15) | 8-13 (9-13) | 8-11 (9-11) |
+
+The east and the south steps are the first number of each pair; the west and the north ones are in brackets. The ant has to stand on a tile beside the power-up (one of its four neighbours), at rest, with nothing waiting for the path manager: a Worker only (the windows are a Worker's). A click that comes too early puts the ant back on the tile it came from (harmless: it tries again, twice at most); one that comes too late is the pick-up (the ant is typed, the power-up gone).
+
+**What the bot does** (`PowerStandTask`, task 33, the rank of the gate goals: it takes an ant from the economy, a pick-up trip and a fight, and nothing takes it back). The ant walks to the tile beside the power-up (a plain move), and when it stands there idle the task gives a chain (`Orders::chain`, the machinery of the timed rows of the island play): the click on the power-up, and `hi - 1` to `hi` ticks later (late in the window: a path that the manager delivers a tick late moves the window later, never earlier) a click on a tile that no walk of the ant's part of the map reaches (`cancel_tile`: a pocket of rocks or another island, else a tile that no tile of the part lies within four tiles of: the goal adjustment finds nothing and the order is a silent stop). That click is marked (`Intent::cancel`), because it is meant to be refused and the reach guard, which takes out a click that no walk leads to, leaves it alone. On a map with no such tile (TINY, MEDIUM) the rule does nothing.
+
+- **The refuge** (`stand_refuge`, key `prefuge`): an own Worker with `stand_refuge_hp` (5) hit points or fewer, empty-handed, with an enemy ant within `stand_threat` (3) tiles, that no enemy ant is nearer to the tile beside a power-up than it is itself, steps onto the power-up and stands there. It leaves when no enemy has been within 8 tiles for 160 ticks (or after 1,200), and walks home to heal.
+- **The deny** (`stand_deny`, `pdeny`): an ant that the economy has no work for (`Tactics::surplus`), whole, stands on a power-up of a kind that the bot does not want, with an enemy ant within 5 tiles of it, and stays while an enemy comes near (`stand_deny_calm` 600 ticks without one).
+- **The take** (`stand_take`, `ptake`): a power-up of a kind that the plan wants that an own Worker stands on is taken by that Worker, with a click on its own tile, but a refuge only once the enemy is gone (an ant that took it is no longer immune).
+
+Keys: `pstand` (the master switch), `prefuge`, `pdeny`, `ptake`, `prefhp`, `pthreat`, `pcalmr`, `pdenyr`, `pdenycalm`, `pdenykinds`, `pmax`.
+
+**Measured**: the table "All the numbers" below has every row. On ISLANDS, TREASURE and the four small maps the seats that play the rule score within the noise of the seats that do not (-12, -2 and -1 points a seat, each inside twice its standard error), and against the bench aggressor and the rusher the matches are won as often with the rule as without it (214 : 214 and 213 : 214 of 216; the standard bots win all but one or two of them). The rule does what it was built for (AI59.2: with it off the hurt worker dies, with it on the worker is there at the end, whole as it was), and it fires rarely: 0.05 to 0.8 refuges a seat and match (ISLANDS 0.8, TREASURE 0.16, the small maps 0.07), the deny 0.02 on the small maps and never on ISLANDS and TREASURE (an enemy that stands near a power-up that the bot does not want, with an ant to spare, is a rarer case still). A hurt ant that an enemy is striking is a rare ant, the walk to the power-up costs it the blows that fell on the way, and what a standing ant does after the enemy has gone is what a hurt ant that walked home does. Nothing in the numbers is a win, and on ISLANDS the matches won fall from 120 to 94 of 216 (inside the noise, and on the wrong side). **Off.**
+
+## A fight with a plan (rule 2)
+
+`FightPlanTask` (task 34, a fight's rank: it takes ants from the economy, the guard, the walls and the like, never from a fight) looks at every place where an own ant and an enemy ant are within 3 tiles of each other (an engagement: the contacts, grouped within 6 tiles) and weighs the two sides by the strength of the fights ([BOT_PEOPLE.md](BOT_PEOPLE.md): the hit points times the blows of one round; an ant that carries food does not fight):
+
+- **An edge** (`fp_edge_percent`, 150): the own ants that can fight within `fp_reach` (8) tiles, at most `fp_max_force` (6), have 150 percent of the enemy's strength: all of them strike the enemy ant with the fewest hit points (`fp_focus`; one that dies stops striking), one attack order each time an ant is idle again; no strike at an enemy that stands on a bridge tile (`fp_bridge_hold`: the ants hold the shore of a one-tile way); an own carrier that an enemy is near counts as a contact (`fp_guard`), so that the ants near it guard it.
+- **No edge**: nobody is sent by this task (the answer to a blow and the hunt are the other tasks'), and an ant with `fp_pull_hp` (3) hit points or fewer that an enemy is near is pulled back, into its hill, which heals it (`fp_pull`; with rule 1 on, the task that takes the ant to a power-up has the higher rank and comes first).
+
+Keys: `fplan` (the master switch), `fpedge`, `fpreach`, `fpforce`, `fpfocus`, `fppull`, `fppullhp`, `fpbridge`, `fpguard`. Tests AI60.1 to AI60.7 (an edge strikes, an equal fight does not, the weakest first, the hurt pulled back and never struck, the bridge held, the carrier guarded).
+
+**Measured** (the same arrangement as rule 1; the full rows are in "All the numbers"): on TREASURE the seats with the rule score 1,528 against 1,799 (-272, twice the standard error 92) and win 54 matches of 216 against 161; on the four small maps 695 against 917 (-221) and 84 against 201; against the bench aggressor 1,207 against 1,697 and against the rusher 2,143 against 2,458 (the standard bots win the same matches, 213 to 214 of 216, with and without it). The rule does what it says: more kills (TREASURE 3.97 a seat and match against 1.99, ISLANDS 1.99 against 0.59, the small maps 3.04 against 1.90) and not more losses (2.97 against 3.04, 1.18 against 1.55, 2.40 against 2.56): it costs the food, because the ants that fight do not carry any, as the earlier tests found ([BOT_PEOPLE.md](BOT_PEOPLE.md#what-answering-more-does): "plain answering buys 1.7 kills a match and pays for it with 275 points"). On ISLANDS, where a third of the ant time is idle ([BOT_IDLE.md](BOT_IDLE.md)) and there is no food for a fighter to leave, it is neutral (-1 +- 44, 111 matches won against 102): the kills are free there and win nothing. `fpspare=1` (only ants that no task holds are sent: the ants that the economy is not using) costs less on TREASURE (-119 points a seat, 77 matches won against 135) and on the small maps (-22) and is neutral on ISLANDS (+1, 110 against 104 matches won), and wins nothing either: the ants that no task holds at an instant are mostly ants that are about to be sent to a pile. **Off.**
+
+## The flower strip (rule 3)
+
+`StripTask` (task 35, a fight's rank: it takes the posts from the swarm and the watcher) fights for a flower. Where a flower drops, the spare ants of a bot wait beside the drop tile for the power-up that falls (the swarm on ISLANDS, the watcher on SMALL, MEDIUM and GAUNTLET), and so do the ants of the other teams: a report after a match on ISLANDS, four teams' ants side by side under one flower and nobody touching anybody ("they should fight for the flower"). The task:
+
+- **A contest**: an own ant waits within `strip_radius` (3) tiles of a flower's drop tile and an enemy ant waits there (idle, or just struck; not one on a power-up: it is immune).
+- **The edge**: the own ants there and the own ants that can fight within `strip_help_reach` (12) tiles (the posts at the other strips, an ant of the economy near: "help from the posts near") against the enemy ants within 5 tiles of the drop tile: with `strip_edge_percent` (150) of their strength all of them strike the enemy ant with the fewest hit points, one attack order each time an ant is idle again.
+- **Holding**: once no enemy ant waits there the own ants stay where they wait (they are the swarm's again); a blow throws a worker a tile away, so an enemy that is struck is driven off the strip.
+- **Leaving** (`strip_leave_percent`, **0 in the plan that ships: never**): with less than that share of the enemy's strength the own posts walk home and the strip is shut to the bot's own swarm for `strip_close_ticks` (600). Built as asked ("leave when losing") and measured: it costs the flower power-ups, because the swarm that is shut out of a strip does not post there and the strip falls to the others (ISLANDS -98 points a seat, 3.80 power-ups taken at flowers a seat and match down to 2.97, 92 matches won against 123); the ants stay and the fight is taken only with the edge.
+
+Keys: `sfight` (the switch), `sradius`, `sreach`, `sforce`, `sedge`, `sleave` (80 plays the leaving), `sclose`. Tests AI61.1 to AI61.5.
+
+**Measured** (the arrangement of rule 1; all the rows are in "All the numbers"). The form that ships (`sfight=1,sleave=0`), ISLANDS, seeds 1 to 36: 1,411 against 1,385 points a seat (+25, twice the standard error 44), 116 matches won against 94, 3.31 power-ups taken at the flowers a seat and match against 2.91, 1.69 kills against 0.66 and 1.08 losses against 1.39. Played again on 72 seeds that nothing was chosen on (seeds 37 to 108, 432 matches): 1,412 against 1,384 (+27, 2 SE 31), **238 matches won against 187**, 3.33 against 2.93 power-ups at the flowers, 1.82 kills against 0.58, 1.06 losses against 1.44. The gain in points is about two standard errors on both samples together; the matches won (354 against 281 of 648) and the power-ups taken at the flowers are what carry it. A strike at an edge of 300 percent instead of 150 does the same with fewer blows (+24, 118 matches won). On the four small maps and against the bench aggressor and rusher on SMALL it is neutral (see the table). Medium and Easy post no ants at a strip, so the rule is inert for them and they play as before. **On at Hard**; `sfight=0` or `idlebatch=0` is the bot as it was.
+
+## All the numbers, the arena's counters and how to repeat them
+
+Every row is the same arrangement: `bot_arena` with four Hard bots, `--rotate` (every one of the six ways to seat two bots of one kind and two of the other), seeds 1 to 36 (12 on the four small maps), the whole match; two seats play the rule (`--seat N=standard+styled=1,KEYS:hard`) and two the plan that ships (`standard+styled=1:hard`), so that the same matches are the comparison. Columns: the number of matches, the mean score of a seat with the rule and without it, the gain (the mean over the matches of the seats with minus the seats without, and twice its standard error in brackets), the matches that a seat of the group won outright, the kills and the losses a seat and match, and the power-ups that a seat's ants took within one tile of a drop tile (the flowers).
+
+| rule, keys | maps | matches | score with : without | gain (2 SE) | matches won | kills | losses | at flowers |
+|---|---|---|---|---|---|---|---|---|
+| 1 (`pstand=1,pdeny=1`) | ISLANDS | 216 | 1392 : 1405 | -12 (46) | 94 : 120 | 0.69 : 0.66 | 0.75 : 0.78 | 2.88 : 3.00 |
+| 1 | TREASURE | 216 | 2082 : 2084 | -2 (68) | 109 : 101 | 2.35 : 2.31 | 2.36 : 2.35 | 0.00 : 0.00 |
+| 1 | GAUNTLET, MEDIUM, SMALL, TINY | 288 | 883 : 884 | -1 (30) | 144 : 141 | 2.33 : 2.38 | 2.38 : 2.34 | 1.50 : 1.49 |
+| 2 (`fplan=1`) | TREASURE | 216 | 1528 : 1799 | -272 (92) | 54 : 161 | 3.97 : 1.99 | 2.97 : 3.04 | 0.00 : 0.00 |
+| 2 | ISLANDS | 216 | 1397 : 1398 | -1 (44) | 111 : 102 | 1.99 : 0.59 | 1.18 : 1.55 | 3.28 : 2.95 |
+| 2 | GAUNTLET, MEDIUM, SMALL, TINY | 288 | 695 : 917 | -221 (40) | 84 : 201 | 3.04 : 1.90 | 2.40 : 2.56 | 1.32 : 1.38 |
+| 2, spare ants only (`fplan=1,fpspare=1`) | ISLANDS | 216 | 1398 : 1397 | +1 (46) | 110 : 104 | 0.86 : 0.65 | 0.81 : 0.88 | 2.98 : 2.97 |
+| 2, spare | TREASURE | 216 | 1921 : 2041 | -119 (77) | 77 : 135 | 2.82 : 2.11 | 2.59 : 2.37 | 0.00 : 0.00 |
+| 2, spare | GAUNTLET, MEDIUM, SMALL, TINY | 288 | 863 : 885 | -22 (29) | 128 : 154 | 2.40 : 2.02 | 2.20 : 2.27 | 1.49 : 1.41 |
+| 3, with the leaving (`sfight=1,sleave=80`) | ISLANDS | 216 | 1348 : 1446 | -98 (45) | 92 : 123 | 1.92 : 0.63 | 1.34 : 1.38 | 2.97 : 3.80 |
+| 3, with the leaving | GAUNTLET, MEDIUM, SMALL, TINY | 288 | 882 : 884 | -2 (31) | 141 : 141 | 2.36 : 2.34 | 2.35 : 2.37 | 1.48 : 1.48 |
+| 3 as it ships (`sfight=1`; seeds 1-36) | ISLANDS | 216 | 1411 : 1385 | +25 (44) | 116 : 94 | 1.69 : 0.66 | 1.08 : 1.39 | 3.31 : 2.91 |
+| 3 as it ships, seeds 37-108 (held out) | ISLANDS | 432 | 1411 : 1384 | +27 (31) | 238 : 187 | 1.82 : 0.58 | 1.06 : 1.44 | 3.33 : 2.93 |
+| 3 as it ships (24 seeds) | GAUNTLET, MEDIUM, SMALL, TINY | 576 | 887 : 888 | -1 (21) | 284 : 286 | 2.25 : 2.25 | 2.26 : 2.26 | 1.46 : 1.46 |
+| 3, edge 300 (`sedge=300`) | ISLANDS | 216 | 1410 : 1386 | +24 (46) | 118 : 95 | 1.34 : 0.69 | 1.00 : 1.21 | 3.09 : 2.93 |
+
+Against the bench bots of `tools/bench_aggressor.hpp` on TREASURE (SMALL for the flower strip), two standard seats against two bench seats, with the rule on and with it off (432 matches each), the score of a standard seat with : without, the matches that the standard seats won (of 216), kills and losses of a standard seat:
+
+| rule | against | score | matches won | kills | losses |
+|---|---|---|---|---|---|
+| 1 (`pstand=1,pdeny=1`) | aggressor | 1,695 : 1,697 | 214 : 214 | 5.04 : 5.06 | 2.97 : 2.97 |
+| 1 | rusher | 2,443 : 2,458 | 213 : 214 | 2.11 : 2.10 | 2.70 : 2.67 |
+| 2 (`fplan=1`) | aggressor | 1,207 : 1,697 | 213 : 214 | 5.55 : 5.06 | 3.49 : 2.97 |
+| 2 | rusher | 2,143 : 2,458 | 214 : 214 | 3.10 : 2.10 | 3.16 : 2.67 |
+| 3 as it ships (`sfight=1`, SMALL) | aggressor | 1,339 : 1,351 | 214 : 214 | 0.81 : 0.84 | 1.36 : 1.32 |
+| 3 as it ships (SMALL) | rusher | 990 : 987 | 112 : 107 | 1.68 : 1.71 | 1.74 : 1.72 |
+
+**The counters.** The report of `bot_arena` (format 10) has `fight_batch` for every seat: `foot_plugs`, `loads_released`, `return_tiles` (rule 0), `stand_chains`, `stand_held`, `stand_missed`, `stand_taken`, `stand_refuge`, `stand_deny` (rule 1: chains given, stands that held, chains that came too early or too late, power-ups that the ant took, stands by reason), `plan_engagements`, `plan_fights`, `plan_skipped`, `plan_pulls`, `plan_attacks` (rule 2: the places where an own and an enemy ant were in contact, those where the own side struck and those where it did not, the hurt ants pulled back, the attack orders), `strip_contests`, `strip_strikes`, `strip_leaves`, `strip_helped`, `strip_attacks` (rule 3). They count looks, not events: a place that stays an engagement is counted at every look.
+
+**To repeat a row.**
+
+```
+bot_arena --map ISLANDS --seeds 1..36 --seat 0=standard+styled=1,pstand=1,pdeny=1:hard --seat 1=standard+styled=1,pstand=1,pdeny=1:hard --seat 2=standard+styled=1:hard --seat 3=standard+styled=1:hard --rotate --threads 3 --out report.json
+bot_arena --map TREASURE --seeds 1..36 --seat 0=standard+styled=1,fplan=1:hard --seat 1=standard+styled=1,fplan=1:hard --seat 2=rusher:hard --seat 3=rusher:hard --rotate --out report.json
+```
+
+**What is not built, and what the numbers cannot say.** Rule 1 stands only a Worker (the windows are a Worker's) on a map that has a tile for the cancel (not TINY and MEDIUM), and the chain's timing rests on the sink's own clock (`CommandSink::applied_at`: the arena's model of a room, two ticks a turn; a room's turns are one tick, which the window of three or more ticks tolerates; AI59.1 and the matches of AI59.7 are played through the arena's sink, not a real room's). Rule 2 holds a bridge by not chasing onto it; it does not hold the gate or a ramp by standing there. Rule 3 posts nobody of its own (the swarm and the watcher do); it fights for the ants that wait, and its gain is on ISLANDS (on the other maps its strikes are rare: 0.64 a seat and match). None of the three has been played against people.
+
+## Tests and mutants
+
+AI59 (`tests/test_ai/test_ai_powerstand.cpp`: the window against the engine, the refuge, its end, the take, the deny, the cancel tile, whole matches that replay), AI60 (`test_ai_fightplan.cpp`: an edge strikes, an equal fight does not, the weakest first, the hurt pulled back, the bridge held, the carrier guarded, spare ants only, whole matches that replay), AI61 (`test_ai_strip.cpp`: an edge at a flower, the post that leaves and the strip that is shut, the help of the posts near, holding, whole matches that replay); the worlds are in `contest_world.hpp`. Every test plays the real engine and the real controller. The mutants (`python3 tools/mutate.py tests/data/bot_fight_mutants.json --keep-going --jobs 1`) break the rules one at a time (the table of windows, the cancel coming early, the cancel cut by the reach guard, the take while the enemy is near, the strike without an edge, the nearest instead of the weakest, no pull, a chase onto a bridge, no help from the posts near, a post that never leaves, each switch ignored) and every one is caught.

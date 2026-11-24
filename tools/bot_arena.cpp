@@ -1119,6 +1119,22 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
             j.field("foot_plugs", uint64_t{s.fight_batch.foot_plugs});
             j.field("loads_released", uint64_t{s.fight_batch.loads_released});
             j.field("return_tiles", uint64_t{s.fight_batch.return_tiles});
+            j.field("stand_chains", uint64_t{s.fight_batch.stand_chains});
+            j.field("stand_held", uint64_t{s.fight_batch.stand_held});
+            j.field("stand_missed", uint64_t{s.fight_batch.stand_missed});
+            j.field("stand_taken", uint64_t{s.fight_batch.stand_taken});
+            j.field("stand_refuge", uint64_t{s.fight_batch.stand_refuge});
+            j.field("stand_deny", uint64_t{s.fight_batch.stand_deny});
+            j.field("plan_engagements", uint64_t{s.fight_batch.plan_engagements});
+            j.field("plan_fights", uint64_t{s.fight_batch.plan_fights});
+            j.field("plan_skipped", uint64_t{s.fight_batch.plan_skipped});
+            j.field("plan_pulls", uint64_t{s.fight_batch.plan_pulls});
+            j.field("plan_attacks", uint64_t{s.fight_batch.plan_attacks});
+            j.field("strip_contests", uint64_t{s.fight_batch.strip_contests});
+            j.field("strip_strikes", uint64_t{s.fight_batch.strip_strikes});
+            j.field("strip_leaves", uint64_t{s.fight_batch.strip_leaves});
+            j.field("strip_helped", uint64_t{s.fight_batch.strip_helped});
+            j.field("strip_attacks", uint64_t{s.fight_batch.strip_attacks});
             j.end_object();
             j.key("expedition");                                            // the flights over water of a standard bot (all 0 where it made none); the ticks are 0 for what never happened
             j.begin_object();
