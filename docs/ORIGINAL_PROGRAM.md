@@ -10,7 +10,7 @@ Its method is reverse engineering of the original 1998 program (`Ants.exe`): Cap
 
 ## What comes from the original and what does not
 
-- **Read from the original's data files:** the artwork, animations and sounds of `Original-Ants/ants.chd` and the maps `Original-Ants/Maps/*.LVL` ([the asset catalog](PLAY_IN_BROWSER.md#interactive-asset-catalog) shows what is inside the archive).
+- **Read from the original's data files:** the artwork, animations and sounds of `Original-Ants/ants.chd` and the maps `Original-Ants/Maps/*.LVL` ([the asset catalog](PLAY_PICTURE.md#interactive-asset-catalog) shows what is inside the archive).
 - **Re-derived from the original:** the simulation's mechanics, timings and constants, to match the original exactly where that can be checked. This was done one system at a time over many releases, not in one step; [`../CHANGELOG.md`](../CHANGELOG.md) says which release did which (from v0.0.90; the earlier ones are only in git history).
 - **This project's own additions:** network play (lock-step turns, state hashes, the dedicated server), computer players, widescreen, zoom and touch control.
 - **Network play:** the original's game is not lock-step. The remake keeps its lobby flow, texts and rules, but not its transport, trust model or sync model ([`NETWORK_PORT.md`](NETWORK_PORT.md#what-the-original-does); the evidence is section 5.46 of [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md)).

@@ -231,7 +231,7 @@ What the image serves:
 |---|---|
 | `/` | the front page (the game page when the address has `?join=`) |
 | `/play` | the game page ([`PLAY_IN_BROWSER.md`](PLAY_IN_BROWSER.md#the-game-page-and-its-addresses)) |
-| `/asset_catalog/` | the asset catalog ([`PLAY_IN_BROWSER.md`](PLAY_IN_BROWSER.md#interactive-asset-catalog)) |
+| `/asset_catalog/` | the asset catalog ([`PLAY_IN_BROWSER.md`](PLAY_PICTURE.md#interactive-asset-catalog)) |
 | `/changelog` | the short changelog, built from `CHANGELOG.md` when the image is built |
 
 ### What the image's nginx sends, checks and logs

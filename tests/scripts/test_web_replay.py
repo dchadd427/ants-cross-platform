@@ -470,7 +470,7 @@ class TheRewindButton(unittest.TestCase):
 
     def test_the_docs_name_it(self):
         self.assertIn("Back 30 seconds", read("docs", "REPLAYS.md"))
-        self.assertIn("Back 30 seconds", read("docs", "PLAY_IN_BROWSER.md"))
+        self.assertIn("Back 30 seconds", read("docs", "PLAY_PICTURE.md"))
 
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the Picture button's code was NOT run (tests/scripts/web_picture_popover_check.js)")

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The map picker of the front page in a REAL browser (opt-in; see tests/scripts/test_web_map_picker.sh and docs/PLAY_IN_BROWSER.md "Choosing a map").
+"""The map picker of the front page in a REAL browser (opt-in; see tests/scripts/test_web_map_picker.sh and docs/PLAY_MATCH_SETUP.md "Choosing a map").
 
 Needs the web image of this tree served by nginx (tools/web_without_docker.py builds and serves it without Docker), the native `ants_server` of this tree, a Chromium-based browser and Python 3. The
 check starts the server (the six originals and, as the site has them, all the players' maps (Community-Maps/ with its pictures), and a database with made-up play counts), puts the front door of web_map_fetch_check.py before the site

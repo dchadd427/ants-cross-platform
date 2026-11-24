@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# OPT-IN, not part of ./run_tests.sh: the lobby's Game type control in REAL browsers (docs/PLAY_IN_BROWSER.md, "Game type"): the leader's field and list, the plan that reaches the room, the note and the tag,
+# OPT-IN, not part of ./run_tests.sh: the lobby's Game type control in REAL browsers (docs/PLAY_MATCH_SETUP.md, "Game type"): the leader's field and list, the plan that reaches the room, the note and the tag,
 # a second browser that joins and sees the read-only line change, the keys, the phone's bottom sheet, the leader's last choice for the next room (and a word that no mode has, and a browser that refuses
 # its storage), and a list with rows added as data. --shots DIR saves the pictures that the check looks at.
 #

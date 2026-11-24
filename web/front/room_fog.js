@@ -1,4 +1,4 @@
-// The Fog of War switch of the front page's Room (web/lobby.html; protocol 28, docs/PLAY_IN_BROWSER.md "Fog of War"): one row of the Rules sheet (front/room_sheet.js): the name, the switch (role "switch", the look of the
+// The Fog of War switch of the front page's Room (web/lobby.html; protocol 28, docs/PLAY_MATCH_SETUP.md "Fog of War"): one row of the Rules sheet (front/room_sheet.js): the name, the switch (role "switch", the look of the
 // Direct connection switch) and one line of what it does. For the leader it works; for a guest it shows the room's state and takes no press. It knows nothing of the room: the page says what to show (paint) and is told what the leader
 // pressed (onPress). The question that turning fog on asks when computer players are planned is built here (question) and asked by the page.
 //   * ES5 and no module system: a page gets the global AntsRoomFog, node gets module.exports (the DOM comes in as doc).
