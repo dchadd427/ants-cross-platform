@@ -1,10 +1,12 @@
+// The sheet of a person (docs/HOME_CHAT.md, "Roles and commands" and "Invite from a person"). Any person who is in a room, and a visitor who is not logged in, gets one row on it, "Invite to my room" (a visitor's is dim, with the way out: log in, or Share); staff get the moderation below it. It opens
+// from a row of the players list and from the name of a chat line (staff: the whole line). The invitation is the hub's own command, `/invite row:N` or `/invite #N` through the dock's `call` (docs/HUB_PEOPLE.md); the room, the person and the reason a row is dim come from the players list's `directory`.
 // The moderation sheet of Home's chat (docs/HOME_CHAT.md, "Roles and commands"): staff (the hub's `you.role` is mod or admin) act on a person's line without typing: a right click on the line, a long press on it (a touch
 // screen), or the keyboard (Up and Down choose a line of the log, Enter, the menu key or Shift and F10 open it) opens a sheet with what the viewer may do to that line's author: Delete the line, Mute (four times and a
 // custom number of minutes), Kick, Ban (administrators; also with the person's lines of the last hour taken off every screen). Delete, Kick and Ban ask once more in a confirm card whose safe answer has the focus. On another person's line a first row, Recent messages from the person (n), opens the lines of that person that are in
 // the page's log (newest first; the dock finds them by the hub's key, the sheet only holds the number of one of them); a line of the list opens the sheet of that line. ES5,
 // no module system: a page gets AntsHomeMod, node gets module.exports (tests/scripts/web_home_mod_check.js).
-//   * Loaded by web/home/home.js, with web/home/mod.css, only after the chat dock names a visitor with a role, and mounted into that dock. A person with no role never downloads it and sees no change: no line is marked, a
-//     right click and a long press are the browser's own. A `you` frame that takes the role away closes the sheet and takes the marks off at once.
+//   * Loaded by web/home/home.js, with web/home/mod.css, only after the chat dock names a visitor with a role or the page holds a room, and mounted into that dock. A person with no role who holds no room never downloads it and sees no change: no line is marked, a
+//     right click and a long press are the browser's own. A `you` frame that takes the role away closes the sheet and takes the marks off at once; so does a room that is left, for a person with no role.
 //   * It sends nothing by itself: it types the hub's own commands through the dock (`dock.command`), by the NUMBER of the line (`/mute #148 60`, `/kick #148`, `/ban #148`, `/ban #148 purge`, `/del 148`), so there is no new power:
 //     the hub's table of the powers and its fresh check of the roles decide, and what the page offers is only its guess. A line is never found by a name that was typed or guessed.
 //   * The same sheet opens from a person of the players list (the list's own script is handed to `people(list)` by home.js): the same ways in on a row, and the person is named to the hub by the NUMBER of the row, `row:<n>`,
@@ -31,7 +33,9 @@
         recent: 'Recent messages from ', recentSmall: 'Their lines in this chat, newest first', recentSub: ' in this chat', one: ' message', more: ' messages', thisLine: 'this line', recentNone: 'None of their lines is in the chat now.', recentName: 'Recent messages, newest first', recentKeys: 'Up and Down move between the lines, Home and End go to the first and the last.',
         ok: 'OK', example: 'for example 45', admin: 'administrator', mod: 'moderator', you: 'you', line: 'line #', image: 'An image',
         unmute: 'Unmute ', until: 'Muted until ', today: ' today', checking: 'Checking whether ', checkingEnd: ' is muted', again: 'Check again', againSmall: 'Could not tell whether ',
-        listHint: 'For moderators: Up and Down choose a person, Enter opens the actions.', personHint: 'Moderation: press Enter, the menu key or Shift and F10 on this person for the actions.'
+        listHint: 'For moderators: Up and Down choose a person, Enter opens the actions.', personHint: 'Moderation: press Enter, the menu key or Shift and F10 on this person for the actions.',
+        inviteHint: 'Press Enter, the menu key or Shift and F10 on this name to invite the person to your room.', inviteList: 'Up and Down choose a person, Enter opens the sheet to invite them to your room.', inviteLog: 'Press Enter, the menu key or Shift and F10 on a name to invite the person.',
+        invite: 'Invite to my room', youInvited: 'You invited ', inviting: 'Inviting\u2026'
     };
     var NOTE = {                                                          // the words of an answer (the toast and the private line of the chat are these, and nothing else)
         power: 'You cannot do that to ', role: 'Could not confirm your role with Discord, try again in a moment.', rate: 'Too fast: wait a moment and try again.', offline: 'Chat is offline: nothing was done.',
@@ -45,20 +49,24 @@
         kick: [['path', 'd:M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4'], ['polyline', 'points:16 17 21 12 16 7'], ['line', 'x1:21;y1:12;x2:9;y2:12']],
         ban: [['circle', 'cx:12;cy:12;r:10'], ['line', 'x1:4.93;y1:4.93;x2:19.07;y2:19.07']],
         recent: [['line', 'x1:8;y1:6;x2:21;y2:6'], ['line', 'x1:8;y1:12;x2:21;y2:12'], ['line', 'x1:8;y1:18;x2:21;y2:18'], ['line', 'x1:3;y1:6;x2:3.01;y2:6'], ['line', 'x1:3;y1:12;x2:3.01;y2:12'], ['line', 'x1:3;y1:18;x2:3.01;y2:18']],
+        invite: [['path', 'd:M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2'], ['circle', 'cx:9;cy:7;r:4'], ['line', 'x1:19;y1:8;x2:19;y2:14'], ['line', 'x1:22;y1:11;x2:16;y2:11']],
         chev: [['polyline', 'points:9 18 15 12 9 6']],
         check: [['path', 'd:M22 11.08V12a10 10 0 1 1-5.93-9.14'], ['polyline', 'points:22 4 12 14.01 9 11.01']],
         warn: [['path', 'd:M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'], ['line', 'x1:12;y1:9;x2:12;y2:13'], ['line', 'x1:12;y1:17;x2:12.01;y2:17']]
     };
 
     // ---- the pure parts ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    function actionsOf(viewer, line) {                                    // what a viewer ('mod' or 'admin') is offered on a person's line, or on a person of the players list (`line.person`): the page's guess; the hub decides all the same (a role that changed since the line was written is refused `power`)
-        if (!line || line.sys || (viewer !== 'mod' && viewer !== 'admin')) return [];
+    function actionsOf(viewer, line, invite) {                            // what a viewer ('mod' or 'admin', or '' for a person with no role) is offered on a person's line, or on a person of the players list (`line.person`): the page's guess; the hub decides all the same (a role that changed since the line was written is refused `power`). `invite`: the viewer is in a room, so the person may be invited (the sheet's first row, for anybody)
+        if (!line || line.sys) return [];
+        var first = invite && !line.own ? ['invite'] : [];
+        if (viewer !== 'mod' && viewer !== 'admin') return first;
         if (line.own) return ['del'];                                     // (anybody with a role may delete a line of their own: that is no power over a person)
-        if (line.role === 'admin') return [];                             // (nobody acts on an administrator here)
-        if (line.role === 'mod' && viewer !== 'admin') return [];         // (only an administrator acts on a moderator)
+        if (line.role === 'admin') return first;                          // (nobody acts on an administrator here)
+        if (line.role === 'mod' && viewer !== 'admin') return first;      // (only an administrator acts on a moderator)
         var all = viewer === 'admin' ? ['del', 'mute', 'kick', 'ban'] : ['del', 'mute', 'kick'];
-        return line.person ? all.slice(1) : all;                          // (a person of the players list has no line to delete)
+        return first.concat(line.person ? all.slice(1) : all);            // (a person of the players list has no line to delete)
     }
+    function inviteCommand(line) { return '/invite ' + (line.person ? 'row:' : '#') + line.id; }       // the hub's command for the invitation: by the number of the row of the players list or of the line, never by a name
     function commandOf(kind, line, minutes) {                             // the hub's command for an action: by the number of the line (`#148`) or of the row of the players list (`row:4`), never by a name
         var n = line.id, who = (line.person ? 'row:' : '#') + n;
         if (kind === 'del') return line.person ? '' : '/del ' + n;
@@ -124,6 +132,19 @@
             return svg;
         }
         function viewer() { var y = dock.you(); return y && (y.role === 'mod' || y.role === 'admin') ? y.role : ''; }
+        function directory() { try { return dock.people ? dock.people() : null; } catch (e) { return null; } }       // (the players list's: the room, the people, why a person cannot be invited)
+        function inviteOf(t) {                                          // the row "Invite to my room" for a line or a person: { ok, title, sub, where }, or null where the viewer has no room to invite to (and so no row), or the line is the viewer's own
+            var dir = directory(), info;
+            if (!dir || !dir.mine || !t || t.own || t.sys) return null;
+            info = dir.inviteOf({ name: t.who, row: t.person ? t.id : null });
+            return info && info.shown ? info : null;
+        }
+        function on() { var dir = directory(); return !!viewer() || !!(dir && dir.mine); }       // (the sheet is for staff, and for anybody who has a room to invite to)
+        function tell(words, bad) {                                     // an answer: the alerts' toast (above the chat), or this sheet's own at the top
+            var done = false;
+            try { done = !!env.say && env.say(words, bad ? 'warn' : '') !== false; } catch (e) { done = false; }
+            if (!done) toast(words, bad);
+        }
         function personOf(id) {                                         // a row of the players list as the sheet holds it (a person, not a line: no text, no username, `where` instead)
             var p = people ? people.person(id) : null;
             return p ? { id: p.i, who: p.name, role: p.role, where: p.where, person: true, own: false, sys: false, text: '' } : null;
@@ -133,21 +154,27 @@
         function surface(o) {
             var s = { kind: o.kind, el: o.el, cur: null, press: null, hint: o.hint, status: o.status, cancel: null, say: o.say, top: !!o.top };
             s.idOf = function (row) { var n = row && row.getAttribute ? row.getAttribute(o.attr) : null; return n !== null && /^[0-9]{1,9}$/.test(n) ? Number(n) : null; };
-            s.rowOf = function (node) { var r = node && node.closest ? node.closest(o.row) : null; return r && s.el.contains(r) ? r : null; };
+            s.rowOf = function (node) {                                 // the row that a node is in; on the log, a person with no role has only the author's name (the rest of the line keeps the browser's own menu and Copy)
+                var r = node && node.closest ? node.closest(o.row) : null;
+                if (r && o.nameOnly && !viewer() && !(node.closest && node.closest(o.nameOnly))) return null;
+                return r && s.el.contains(r) ? r : null;
+            };
             s.keeps = function (node) { var a = node && node.closest ? node.closest(o.keep) : null; return !!a && s.el.contains(a); };       // (a link or a button of the row is its own: it keeps the browser's menu and its press)
             s.rows = function () { return [].slice.call(s.el.querySelectorAll(o.row)); };
-            s.target = function (id) { var t = id === null ? null : o.find(id); return t && actionsOf(viewer(), t).length ? t : null; };       // (the line or the person of a number that the viewer has an action on)
+            s.target = function (id) { var t = id === null ? null : o.find(id); return t && actionsOf(viewer(), t, !!inviteOf(t)).length ? t : null; };       // (the line or the person of a number that the viewer has an action on)
             s.subjects = function () { return [s.cur, s.press && s.press.shown ? s.press.id : null, sheet && !!sheet.line.person === (s.kind === 'person') ? sheet.line.id : null]; };
             s.decorate = function (row, id) {
-                var on = !!viewer() && !!s.target(id);
-                if (on) { row.setAttribute('data-act', 'true'); row.setAttribute('aria-description', o.rowHint); } else { row.removeAttribute('data-act'); row.removeAttribute('aria-description'); }
+                var yes = !!s.target(id), staff = !!viewer(), whole = yes && (staff || s.kind === 'person'), name = !staff && s.kind === 'line' && row.querySelector ? row.querySelector(o.nameOnly) : null;
+                if (whole) { row.setAttribute('data-act', 'true'); row.setAttribute('aria-description', staff ? o.rowHint : TEXT.inviteHint); } else { row.removeAttribute('data-act'); row.removeAttribute('aria-description'); }
+                if (name) { if (yes) name.setAttribute('data-act', 'true'); else name.removeAttribute('data-act'); }       // (a person with no role: the name of the line only is marked, and the rest of the line keeps the browser's own press and menu)
                 if (row.classList) row.classList.toggle('gm-on', s.subjects().indexOf(id) !== -1);
             };
             s.refresh = function () {                                   // every row again (the role changed, or the list was drawn again)
                 s.rows().forEach(function (r) { var id = s.idOf(r); if (id !== null) s.decorate(r, id); });
-                s.hint.hidden = !viewer();
-                if (!viewer()) s.status.textContent = '';
-                if (viewer()) s.el.setAttribute('aria-describedby', s.hint.id); else { s.el.removeAttribute('aria-describedby'); s.cur = null; }       // (the words for a screen reader go with the role)
+                s.hint.hidden = !on();
+                s.hint.textContent = viewer() ? o.hintText : o.inviteText;
+                if (!on()) s.status.textContent = '';
+                if (on()) s.el.setAttribute('aria-describedby', s.hint.id); else { s.el.removeAttribute('aria-describedby'); s.cur = null; }       // (the words for a screen reader go with the role, and with the room)
             };
             s.paint = function () { var on = s.subjects(); s.rows().forEach(function (r) { var id = s.idOf(r); if (id !== null && r.classList) r.classList.toggle('gm-on', on.indexOf(id) !== -1); }); };
             s.rowById = function (id) { return s.rows().filter(function (r) { return s.idOf(r) === id; })[0] || null; };
@@ -282,13 +309,13 @@
             });
         }
         function view(name, arg) {
-            var s = sheet, box = s.box, l = s.line, who = l.who, acts = actionsOf(viewer(), l), first = null, list, quote, ask = function (kind) { return function () { view('confirm', kind); }; };
+            var s = sheet, box = s.box, l = s.line, who = l.who, acts = actionsOf(viewer(), l, !!inviteOf(l)), first = null, list, quote, ask = function (kind) { return function () { view('confirm', kind); }; };
             box.textContent = ''; box.className = 'gm-box'; s.ctl = []; s.view = name; s.armed = false; s.offer = acts.join();
             box.removeAttribute('aria-describedby');
             box.appendChild(el('div', 'gm-grab'));
             if (name === 'line') {
-                var person = !!l.person;
-                quote = person || !said(l) ? null : el('p', 'gm-quote', said(l));
+                var person = !!l.person, staff = !!viewer(), info = acts.indexOf('invite') !== -1 ? inviteOf(l) : null, invite = null, cancelBtn;
+                quote = person || !staff || !said(l) ? null : el('p', 'gm-quote', said(l));
                 if (quote) quote.id = 'gm-quote';
                 box.setAttribute('aria-describedby', quote ? quote.id : 'gm-sub');          // (the dialog is described by the quoted line, or for a person by where they are)
                 list = el('div', 'gm-acts');
@@ -296,9 +323,11 @@
                 var del = acts.indexOf('del') !== -1 ? act('del', TEXT.del, TEXT.delSmall, true, false, ask('del')) : null, mute = acts.indexOf('mute') === -1 ? null : person ? muteRow(s) : act('mute', TEXT.mute + who + '\u2026', TEXT.muteSmall, false, true, function () { view('mute'); });
                 var kick = acts.indexOf('kick') !== -1 ? act('kick', TEXT.kick + who, TEXT.kickSmall, true, false, ask('kick')) : null, ban = acts.indexOf('ban') !== -1 ? act('ban', TEXT.ban + who, TEXT.banSmall, true, false, ask('ban')) : null;
                 s.recent = recent; s.mute = person ? mute : null;
-                put(list, [del, mute, kick, ban]);
-                put(box, [head(l, l.who, false, person ? personSub(l) : undefined), quote, recent ? put(el('div', 'gm-acts gm-nav'), [recent]) : null, list, button('btn gm-cancel', TEXT.cancel, function () { close(true); })]);
-                first = arg === 'recent' && recent ? recent : arg === 'mute' && mute ? mute : del || mute;
+                if (info) { invite = act('invite', TEXT.invite, info.sub, false, false, function (c) { sendInvite(c); }); if (!info.ok) { invite.setAttribute('aria-disabled', 'true'); invite.classList.add('gm-off'); } }       // (a row that cannot be pressed says why under its title)
+                cancelBtn = button('btn gm-cancel', TEXT.cancel, function () { close(true); });
+                put(list, [invite, del, mute, kick, ban]);
+                put(box, [head(l, l.who, false, person ? personSub(l) : staff ? undefined : (info && info.where) || ''), quote, recent ? put(el('div', 'gm-acts gm-nav'), [recent]) : null, list, cancelBtn]);
+                first = arg === 'recent' && recent ? recent : arg === 'mute' && mute ? mute : del || mute || (invite && info.ok ? invite : cancelBtn);
             } else if (name === 'recent') {
                 var hd = head(l, TEXT.recent + who, true, ''), back = button('btn gm-cancel', TEXT.back, function () { leave('recent'); }), rl = el('div', 'gm-rl');
                 rl.setAttribute('role', 'group'); rl.setAttribute('aria-label', TEXT.recentName);
@@ -366,7 +395,7 @@
             shade.addEventListener('mousedown', guard(function (e) { if (held()) stay(e); }));       // (the mouse press that the browser makes of the lifting finger moves no focus)
             shade.addEventListener('pointerdown', guard(function () { finger = false; quiet = 0; }));       // (a new touch is a press)
             view('line');
-            if (l.person) learn(sheet);
+            if (l.person && viewer()) learn(sheet);
             return true;
         }
         function close(back) {
@@ -400,6 +429,25 @@
             to = e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : at === -1 ? (up ? n - 1 : 0) : Math.max(0, Math.min(n - 1, at + (up ? -1 : 1)));
             stay(e); s.items[to].focus(); s.cur = Number(s.items[to].getAttribute('data-n'));
         }
+        function inviteWords(code, m, l) {                              // what the answer to an invitation says: the words of the command's own answer (web/home/cmds.js), or the sheet's words for a failure of the way (offline, silent)
+            var said = code === 'reply' && m && dock.words ? dock.words(m) : '';
+            return said || refusedWords(code === 'reply' ? 'generic' : code, 'invite', l.who, l.role);
+        }
+        function sendInvite(b) {                                        // the invitation: the hub's `/invite row:N` or `/invite #N`, one at a time; the answer is a toast over the page and a private line of the chat
+            var s = sheet, l, dir = directory();
+            if (!s || s.busy) return;
+            l = s.line; s.busy = true;
+            s.ctl.forEach(function (c) { c.setAttribute('aria-disabled', 'true'); });
+            if (b) { b.setAttribute('aria-busy', 'true'); b.classList.add('gm-wait'); }
+            if (dir && dir.flush) dir.flush();                          // (the hub is told the room as it is now, in front of the command)
+            dock.call(inviteCommand(l), function (code, m) {
+                var ok = code === 'reply' && !!m && m.r === 'ok', words = inviteWords(code, m, l), to = ok && typeof m.to === 'string' && m.to ? m.to : l.who;
+                if (sheet === s) close(true);
+                tell(words, !ok);
+                dock.note(ok ? TEXT.youInvited + to + '.' : words);
+                if (ok && dir && dir.invited) dir.invited(to);
+            });
+        }
         function send(kind, minutes, purge, b) {                        // one command at a time: the buttons take no press until the hub has answered (the dock says when, at most 8 s)
             var s = sheet, l, role;
             if (!s || s.busy) return;
@@ -421,7 +469,7 @@
             function cancelPress() { var p = s.press; if (!p) return; clearTimeout(p.mark); clearTimeout(p.hold); s.press = null; if (p.shown) s.paint(); }
             s.cancel = cancelPress;
             s.el.addEventListener('contextmenu', guard(function (e) {
-                if (!viewer()) return;
+                if (!on()) return;
                 var t = e && e.target, id;
                 if (s.keeps(t)) return;                                // (a link or a button keeps the browser's own menu: copy the address, open in a new tab)
                 id = s.idOf(s.rowOf(t));
@@ -431,7 +479,7 @@
             s.el.addEventListener('pointerdown', guard(function (e) {
                 var id, p;
                 if (s.cur !== null && !sheet) { s.cur = null; s.paint(); }          // (a pointer is used now: the row that the keys had chosen is let go, so that two rows are not marked)
-                if (!viewer() || sheet || !e || (e.pointerType !== 'touch' && e.pointerType !== 'pen') || e.isPrimary === false) { cancelPress(); return; }
+                if (!on() || sheet || !e || (e.pointerType !== 'touch' && e.pointerType !== 'pen') || e.isPrimary === false) { cancelPress(); return; }
                 if (s.keeps(e.target)) return;                         // (a press that starts on a link or a button is that control's, never the sheet's)
                 id = s.idOf(s.rowOf(e.target));
                 if (!s.target(id)) return;
@@ -446,8 +494,8 @@
             s.el.addEventListener('blur', guard(function () { if (!sheet && s.cur !== null) { s.cur = null; s.paint(); } }));
             s.el.addEventListener('keydown', guard(function (e) {
                 var list, at, id, r, t;
-                if (!e || !viewer() || sheet || e.ctrlKey || e.altKey || e.metaKey || s.keeps(e.target)) return;       // (a key that starts on a link or a button of a row is that control's: Join joins, the arrows scroll)
-                if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                if (!e || !on() || sheet || e.ctrlKey || e.altKey || e.metaKey || s.keeps(e.target)) return;       // (a key that starts on a link or a button of a row is that control's: Join joins, the arrows scroll)
+                if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && viewer()) {       // (a person with no role keeps the arrows for scrolling: the menu key opens the first person's sheet)
                     list = s.ids();
                     if (!list.length) return;
                     at = list.indexOf(s.cur);
@@ -472,7 +520,7 @@
         hintBox = el('p', 'gc-news', TEXT.logHint); hintBox.id = 'gchat-mod-hint';
         statusBox = el('p', 'gc-news'); statusBox.setAttribute('role', 'status'); statusBox.setAttribute('aria-live', 'polite');
         dock.root.appendChild(hintBox); dock.root.appendChild(statusBox);
-        lines = surface({ kind: 'line', el: log, row: '.gc-line[data-n]', attr: 'data-n', keep: 'a', rowHint: TEXT.rowHint, hint: hintBox, status: statusBox, find: function (id) { return dock.line(id); }, say: function (l) { return l.who + ': ' + (String(l.text || '').trim() ? cut(l.text, 80) : l.img ? TEXT.image : '') + '. ' + TEXT.rowHint; } });
+        lines = surface({ kind: 'line', el: log, row: '.gc-line[data-n]', attr: 'data-n', keep: 'a', nameOnly: '.gc-who', rowHint: TEXT.rowHint, hintText: TEXT.logHint, inviteText: TEXT.inviteLog, hint: hintBox, status: statusBox, find: function (id) { return dock.line(id); }, say: function (l) { return l.who + ': ' + (String(l.text || '').trim() ? cut(l.text, 80) : l.img ? TEXT.image : '') + '. ' + TEXT.rowHint; } });
         watch(lines);
         dock.rows(function (id, row) { lines.decorate(row, id); });
         function attach(p) {                                           // the players list (its own script), once it is there: its rows open the sheet of a person in the same ways; the person is named to the hub by the NUMBER of the row (`row:<n>`), never by a name
@@ -481,12 +529,12 @@
             hint.id = 'gchat-mod-list-hint'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
             p.root.appendChild(hint); p.root.appendChild(status);
             people = p;
-            persons = surface({ kind: 'person', el: p.list, top: true, row: '.pl-card[data-i]', attr: 'data-i', keep: 'a, button', rowHint: TEXT.personHint, hint: hint, status: status, find: personOf, say: function (t) { return t.who + ': ' + t.where + '. ' + TEXT.personHint; } });
+            persons = surface({ kind: 'person', el: p.list, top: true, row: '.pl-card[data-i]', attr: 'data-i', keep: 'a, button', rowHint: TEXT.personHint, hintText: TEXT.listHint, inviteText: TEXT.inviteList, hint: hint, status: status, find: personOf, say: function (t) { return t.who + ': ' + t.where + '. ' + TEXT.personHint; } });
             watch(persons);
-            p.drawn(guard(function () { persons.refresh(); if (sheet && sheet.line.person && !sheet.busy && p.state() === 'on' && !personOf(sheet.line.id)) { close(true); toast(NOTE.away, true); } }));       // (the list was drawn again: the marks follow, and a person who has gone has no sheet; a hub that is gone is the socket's, not this)
+            p.drawn(guard(function () { persons.refresh(); lines.refresh(); if (sheet && !sheet.busy && !on()) { close(true); return; } if (sheet && sheet.line.person && !sheet.busy && p.state() === 'on' && !personOf(sheet.line.id)) { close(true); tell(NOTE.away, true); } }));       // (the list was drawn again: the marks follow, and a person who has gone has no sheet; a hub that is gone is the socket's, not this)
             persons.refresh();
         }
-        function stale(s) { return !!s.line.person || actionsOf(viewer(), dock.line(s.line.id)).join() !== s.offer; }       // (a new welcome: what the viewer is offered on that line is not what the sheet shows: the line is not in the log any more, or the role is another)
+        function stale(s) { var l = dock.line(s.line.id); return !!s.line.person || actionsOf(viewer(), l, !!inviteOf(l)).join() !== s.offer; }       // (a new welcome: what the viewer is offered on that line is not what the sheet shows: the line is not in the log any more, or the role is another)
         function changed() {                                           // a line came or went: the count on the sheet and the list of the recent step follow
             var s = sheet, n;
             if (!s || s.busy) return;
@@ -499,7 +547,7 @@
         dock.arrived(guard(changed));
         dock.tap(guard(function (kind, m) {
             var person = !!sheet && !!sheet.line.person;
-            if (kind === 'you' || kind === 'live') { if (sheet && (kind === 'you' || stale(sheet))) close(true); if (!viewer()) { lines.cancel(); lines.cur = null; if (persons) { persons.cancel(); persons.cur = null; } } refresh(); if (kind === 'live') changed(); }
+            if (kind === 'you' || kind === 'live') { if (sheet && (kind === 'you' || stale(sheet))) close(true); if (!on()) { lines.cancel(); lines.cur = null; if (persons) { persons.cancel(); persons.cur = null; } } refresh(); if (kind === 'live') changed(); }
             else if (kind === 'lost' && person) close(true);           // (the row numbers are the hub's own for the length of one run: a sheet of a person does not outlive the socket it was opened on; a new welcome is always after a lost socket)
             else if (kind === 'del' && m && sheet && !person && !sheet.busy && m.id === sheet.line.id && sheet.view !== 'recent') { close(true); toast(NOTE.gone, true); }
             else if (kind === 'del') changed();
@@ -508,5 +556,5 @@
         return { close: close, open: open, people: attach, openPerson: openPerson, state: function () { return sheet ? sheet.view : ''; } };
     }
 
-    return { LIMIT: LIMIT, TEXT: TEXT, TIMES: TIMES, actionsOf: actionsOf, commandOf: commandOf, minutesOf: minutesOf, lengthOf: lengthOf, doneWords: doneWords, refusedWords: refusedWords, mount: mount };
+    return { LIMIT: LIMIT, TEXT: TEXT, TIMES: TIMES, actionsOf: actionsOf, commandOf: commandOf, inviteCommand: inviteCommand, minutesOf: minutesOf, lengthOf: lengthOf, doneWords: doneWords, refusedWords: refusedWords, mount: mount };
 });

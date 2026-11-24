@@ -49,6 +49,7 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [Public rooms and the list of games](docs/PUBLIC_ROOMS.md): the leader's choice, the idle rule and `GET /lobbies` of the game server (network protocol 22)
 - [The site statistics](docs/SITE_STATS.md): `GET /stats` and `POST /stats/local`, the counters and the nginx blocks
 - [The chat hub](docs/HUB.md): `ants-hub`, the global chat service next to the game server: its protocol and limits, the text rules, moderation from a terminal, the stack and nginx wiring
+- [Alerts, invitations and mentions](docs/HUB_PEOPLE.md): the account's list behind the bell, `/invite` and `@name`: the frames, the limits and who is never told
 - [The chat commands](docs/HUB_COMMANDS.md): the slash commands of the chat, who may use which, the helper, `/bots` and the hub's door to the game server
 - [Images in the chat](docs/HUB_IMAGES.md): who may post images, the converter that re-encodes them, the limits, moderation and `/noimages`, how they are stored and served
 - [Testing and CI](docs/TESTING.md): the test suites and tiers, the browser checks, continuous integration

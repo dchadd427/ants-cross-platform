@@ -15,6 +15,9 @@
 //   * Staff on a touch screen or with a mouse act on a line through the moderation sheet (web/home/mod.js, loaded by home.js only for a role): the dock gives it its log, `you()`, `line(id)`, `command(text, done)` (a
 //     command sent as typed, one at a time, answered once), `mutes(done)` (the same for `/mutes`: done('ok', { until, i } rows, never a name), or a code), `note(text)`, `rows(fn)`, `by(id)` (the lines of the author of line `id`, newest first), `when(at)` and `arrived(fn)`, and the tap kind `del`. Nothing of it exists for a person with no role.
 //   * Images (docs/HUB_IMAGES.md): a `line` may carry `img`, drawn by web/home/pics.js (loaded when the first one is); `you.img` is `on` for a person who may post, and web/home/post.js is loaded then. The hub decides.
+//   * People (docs/HUB_PEOPLE.md): a `line` may carry `m`, the names that the hub marked in it ([start, length, key] in UTF-16 units of the text: only a mark that starts at an `@` is drawn, as a pill, and the visitor's own, by its key, is the gold one, with a soft
+//     gold edge on the line); `alerts` and `alert` frames are passed to the alerts part (web/home/alerts.js) as taps. The dock lends its private blocks to that part (`block`), asks the hub a command for any person who is logged in (`call`: an invitation; the
+//     answer is `done('reply', frame)`), and tells the helper (web/home/cmds.js) who is here (`directory`, which the players list gives) and who wrote lately (`authors`).
 //   * In a hidden tab the socket stays and the model follows, but nothing is painted (the screen is made again when the tab is back); a line that comes while the dock is folded, on the Room or in a hidden tab is unread.
 (function (root, factory) {
     var api = factory();
@@ -139,7 +142,19 @@
         if (!shows(text) && !img) return null;                           // (an image may have no words)
         var out = { id: m.id, who: nameOf(m.who) || '?', text: text, mod: !sys && m.mod === true, role: sys ? 'none' : roleOf(m.role, m.mod), sys: sys, k: nameOf(m.k), u: nameOf(m.u) };
         out.img = img;
+        out.marks = sys ? [] : marksOf(m.m, text);
         if (dayOf(m.at) !== '') out.at = m.at;                           // (the hub's own time of the line, seconds since 1970; a line without one shows no time: the page never makes one up)
+        return out;
+    }
+    // The names that the hub marked in a line: [{ s (start), n (length), k (the named person's key) }], at most ten, in order, apart from each other, each one starting at an `@` of the text as this page holds it (a mark that does not is left out: the page never draws what its words do not say)
+    function marksOf(list, text) {
+        var out = [], last = 0, i, r;
+        if (!Array.isArray(list)) return out;
+        for (i = 0; i < list.length && i < 10; i++) {
+            r = list[i];
+            if (!Array.isArray(r) || r.length !== 3 || count(r[0]) === null || count(r[1]) === null || typeof r[2] !== 'string' || r[0] < last || r[1] < 2 || r[0] + r[1] > text.length || text.charAt(r[0]) !== '@') continue;
+            out.push({ s: r[0], n: r[1], k: nameOf(r[2]) }); last = r[0] + r[1];
+        }
         return out;
     }
     var LINKRE = /(^|[^\w@.\/:-])((?:https?:\/\/|www\.)[^\s<>]+)/gi;
@@ -169,6 +184,13 @@
         }
         if (at < text.length) out.push({ s: text.slice(at) });
         return out;
+    }
+    function agoOf(at, now) {                                            // how long ago a time was, in words ("just now", "14 min ago", "3 hours ago", "Yesterday", "3 days ago"); both are seconds since 1970
+        var sec = Math.max(0, now - at), m = Math.floor(sec / 60), h = Math.floor(m / 60), d = Math.floor(h / 24);
+        if (m < 1) return 'just now';
+        if (m < 60) return m + ' min ago';
+        if (h < 24) return h + (h === 1 ? ' hour ago' : ' hours ago');
+        return d === 1 ? 'Yesterday' : d + ' days ago';
     }
     function wordOfRole(role) { return role === 'admin' ? TEXT.administrator : TEXT.moderator; }
     function roleClass(role) { return role === 'admin' ? ' gc-r-admin' : role === 'mod' ? ' gc-r-mod' : ''; }       // (the name in red or yellow: chat.css)
@@ -229,7 +251,7 @@
         var barredShown = false;                                                 // (whether the last paint showed the field off for a ban: the pieces that stand beside the field are told when it changes)
         var picsApi = null, picsAsked = false, postAsked = false, delWait = [];                                  // the readers' part (pics.js), the posters' part (post.js: asked once), the author's deletes that wait
         var cmdsApi = null, cmdsRows = [], cmdsAsked = false, cmdsHeld = [];       // the helper (cmds.js), the hub's `cmds` rows, replies that came before it was there
-        var taps = [], hello = null, rowFns = [], arrivalFns = [];                                             // the players list listens through this socket: fn(kind, frame), kind 'live' (the welcome), 'who', 'lost' or 'shown' (Home shows or not); hello: the open socket's welcome
+        var taps = [], hello = null, rowFns = [], arrivalFns = [], lastAlerts = null, directoryFn = null;                                             // the players list listens through this socket: fn(kind, frame), kind 'live' (the welcome), 'who', 'lost' or 'shown' (Home shows or not); hello: the open socket's welcome
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -307,15 +329,15 @@
                 return r;
             }
             if (e.sys) { r = put(el('div', 'gc-line gc-event'), [stamp(e), el('bdi', 'gc-text', e.text)]); r.setAttribute('data-n', String(e.id)); return r; }       // (a line of the hub's own, drawn quietly; it names the person in its words, and has no author)
-            r = el('div', 'gc-line' + (e.mod ? ' gc-mod' : '') + (admin ? ' gc-admin' : '') + (e.own ? ' gc-me' : ''));
+            r = el('div', 'gc-line' + (e.mod ? ' gc-mod' : '') + (admin ? ' gc-admin' : '') + (e.own ? ' gc-me' : '') + (!e.own && named(e) ? ' gc-named' : ''));
             r.setAttribute('data-n', String(e.id)); put(r, [stamp(e)]);       // (the number stays in the line as data, for the menu of a moderator; it is never shown)
             var name = el('bdi', 'gc-who', e.who);
             if (e.mod) { r.appendChild(el('span', 'gc-sr', wordOfRole(e.role) + ' ')); name.setAttribute('title', wordOfRole(e.role)); }       // (the name is red or yellow: the word is in the accessible name too, so that color is never the only sign)
             put(r, [name]);
             if (tools() && e.u) put(r, [el('bdi', 'gc-u', ' (' + e.u + ')')]);       // (a moderator is shown the username where it differs from the name; nobody else ever is)
-            put(r, [el('span', 'gc-sep', ': '), words(e.text)]);
+            put(r, [el('span', 'gc-sep', ': '), words(e.text, e.marks)]);
             if (e.img) pic(e, r);
-            if (tools()) rowFns.forEach(function (fn) { tell1(fn, e.id, r); });       // (the moderation sheet marks the lines that its viewer may act on)
+            rowFns.forEach(function (fn) { tell1(fn, e.id, r); });                   // (the sheet of a person marks the lines that its viewer may act on: staff on any line, anybody in a room on the name of a line)
             return r;
         }
         function pic(e, r) {                                                     // the thumbnail of a line's image (pics.js, loaded the first time: the log is drawn again when it is there)
@@ -330,16 +352,27 @@
             t.setAttribute('title', tools() && !e.sys ? '#' + e.id + ' ' + full : full);
             return t;
         }
-        function words(text) {                                                   // the words of a line: one bdi; an address in them is a link made of an element and an attribute, never markup
-            var parts = partsOf(text);
-            if (parts.length === 1 && parts[0].url === undefined) return el('bdi', 'gc-text', text);
-            return put(el('bdi', 'gc-text'), parts.map(function (p) {
-                if (p.url === undefined) return el('span', '', p.s);
-                var a = el('a', 'gc-a', p.s);
-                a.setAttribute('href', p.url); a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener noreferrer nofollow ugc'); a.setAttribute('referrerpolicy', 'no-referrer'); a.setAttribute('title', p.title);
-                return a;
-            }));
+        function link(p) {
+            if (p.url === undefined) return el('span', '', p.s);
+            var a = el('a', 'gc-a', p.s);
+            a.setAttribute('href', p.url); a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener noreferrer nofollow ugc'); a.setAttribute('referrerpolicy', 'no-referrer'); a.setAttribute('title', p.title);
+            return a;
         }
+        function words(text, marks) {                                            // the words of a line: one bdi; an address in them is a link made of an element and an attribute, never markup; a name that the hub marked is a pill (the visitor's own is the gold one)
+            var parts = partsOf(text), kids = [], at = 0;
+            if (marks && marks.length) {
+                marks.forEach(function (m) {
+                    if (m.s > at) partsOf(text.slice(at, m.s)).forEach(function (p) { kids.push(link(p)); });
+                    var pill = el('span', 'gc-pill' + (you && you.k && m.k === you.k ? ' gc-pill-me' : ''), text.slice(m.s, m.s + m.n));
+                    kids.push(pill); at = m.s + m.n;
+                });
+                if (at < text.length) partsOf(text.slice(at)).forEach(function (p) { kids.push(link(p)); });
+                return put(el('bdi', 'gc-text'), kids);
+            }
+            if (parts.length === 1 && parts[0].url === undefined) return el('bdi', 'gc-text', text);
+            return put(el('bdi', 'gc-text'), parts.map(link));
+        }
+        function named(e) { var i; if (!you || !you.k || !e.marks) return false; for (i = 0; i < e.marks.length; i++) if (e.marks[i].k === you.k) return true; return false; }       // (the line names the visitor: the hub says it by the visitor's key)
         function unrow(e) { if (e.div && e.div.parentNode) e.div.parentNode.removeChild(e.div); e.div = null; if (e.el && e.el.parentNode) e.el.parentNode.removeChild(e.el); }
         function days() {                                                        // a small divider before the first line and wherever two neighbours are of different local days (kept in step after every change of the log)
             var last = 0;
@@ -464,7 +497,7 @@
         function lost() {                                                        // the socket is gone (closed, failed, silent, or it sent what no hub sends): say so, and try again later
             drop();
             if (liveSince !== null && now() - liveSince >= MS.stable) attempt = 0;       // (a link that held for a while starts over at 1 s; one that is closed at once keeps growing)
-            liveSince = null; welcomed = false; state = 'offline'; hello = null;
+            liveSince = null; welcomed = false; state = 'offline'; hello = null; lastAlerts = null;
             if (!stopped) { var soon = wokeAt !== null && now() - wokeAt < MS.wake; wokeAt = null; timers.retry = setTimeout(guard(go), soon ? 0 : delayOf(attempt, rnd())); attempt++; }
             tapped('lost');
             render();
@@ -533,6 +566,10 @@
             push(e);
             if (seen() && !stale) { settle(true); e.el = row(e); log.appendChild(e.el); days(); reveal(e); } else stale = true;
             render();
+            return e;
+        }
+        function redraw(e) {                                                    // a private block that another part keeps (an invitation) is drawn again where it stands, or with the next repaint
+            if (seen() && !stale && e.el && e.el.parentNode) { var old = e.el; e.el = row(e); old.parentNode.replaceChild(e.el, old); } else { stale = true; render(); }
         }
         function reveal(e) {                                                     // an answer taller than the log is read from its first line, not from its last (a list of commands)
             setTimeout(guard(function () { if (e.el && e.el.getBoundingClientRect && log.getBoundingClientRect && e.el.offsetHeight > log.clientHeight) log.scrollTop += e.el.getBoundingClientRect().top - log.getBoundingClientRect().top; }), 1);
@@ -618,14 +655,15 @@
                 cmdsAsked = true;
                 env.load('home/cmds', function () {
                     if (!win.AntsHomeCmds) return;
-                    cmdsApi = win.AntsHomeCmds.mount({ doc: doc, win: win, dock: { root: box, field: field, grow: grow, block: function (draw, cls) { answer([], draw, cls); } } }); cmdsApi.rows(cmdsRows);
+                    cmdsApi = win.AntsHomeCmds.mount({ doc: doc, win: win, dock: { root: box, field: field, grow: grow, block: function (draw, cls) { answer([], draw, cls); }, people: roster, authors: authors, agoOf: agoOf } }); cmdsApi.rows(cmdsRows);
                     cmdsHeld.splice(0).forEach(function (h) { cmdsApi.reply(h[0], h[1]); });
                 });
             }
         }
         function onReply(m) {                                                   // the hub's private answer to a command: the oldest command that waits is answered, as with `ok`
             var at = oldest(true), entry = at >= 0 ? unanswered.splice(at, 1)[0] : null, typed = entry ? entry.text : '';
-            if (entry && entry.done) entry.done(m.r === 'rate' ? 'rate' : m.r === 'unknown' ? 'power' : 'bad');       // (the sheet's own command: the sheet says the words)
+            if (entry && entry.done && m.c === 'invite') entry.done('reply', m);              // (the invitation of the person's sheet: it says the words of the answer)
+            else if (entry && entry.done) entry.done(m.r === 'rate' ? 'rate' : m.r === 'unknown' ? 'power' : 'bad');       // (the sheet's own command: the sheet says the words)
             else if (cmdsApi) cmdsApi.reply(m, typed); else if (cmdsHeld.length < 10) cmdsHeld.push([m, typed]);
         }
         function onOk(m) {                                                       // a command was done: the oldest command that waits is answered
@@ -650,6 +688,8 @@
             else if (m.t === 'bye') onBye(m);
             else if (m.t === 'online') { people = count(m.n); render(); }
             else if (m.t === 'who') tapped('who', m);
+            else if (m.t === 'alerts') { lastAlerts = m; tapped('alerts', m); }
+            else if (m.t === 'alert') tapped('alert', m);
             else if (m.t === 'err' && picWait && (m.code === 'pics' || m.code === 'login')) failPic(m.code === 'login');
             else if (m.t === 'err' && (SAID.indexOf(m.code) !== -1 || ABOUT.indexOf(m.code) !== -1)) refuse(m.code);
             else if (m.t === 'err' && m.code === 'pick') tell('failed');
@@ -730,11 +770,11 @@
             waiting(); unanswered.push({ text: text, key: nfc(text), at: now(), cmd: cmd });       // (a command has no answer when the hub takes it, and `bad` when it is wrong)
             return '';
         }
-        function command(text, done, rows) {                                    // a command of the moderation sheet, sent as typed, one at a time; done(code) is called once: 'ok', a code of the hub (power, role, who, rate, bad...), 'offline', or 'silent' (8 s). The sheet says the words, the dock adds nothing to the log. With `rows` (`/mutes`) the `mutes` frame is the answer
+        function command(text, done, rows, anyone) {                            // a command of the moderation sheet, sent as typed, one at a time; done(code) is called once: 'ok', a code of the hub (power, role, who, rate, bad...), 'offline', or 'silent' (8 s). The sheet says the words, the dock adds nothing to the log. With `rows` (`/mutes`) the `mutes` frame is the answer
             var entry = { text: text, key: nfc(text), at: now(), cmd: true, rows: rows === true }, fired = false;
             entry.done = function (code, list) { if (fired) return; fired = true; clearTimeout(entry.timer); tell1(function () { done(code, list); }); };
             waiting();
-            if (!you || you.role === 'none') { entry.done('power'); return; }
+            if (!you || (you.role === 'none' && anyone !== true)) { entry.done('power'); return; }          // (`anyone`: the invitation of a person's sheet, which any person who is logged in has)
             if (!sock || sock.readyState !== 1 || !welcomed || state !== 'live') { entry.done('offline'); return; }
             if (oldest(true) >= 0) { entry.done('rate'); return; }
             sendHeld(entry, { t: 'say', text: entry.text });
@@ -751,6 +791,16 @@
             for (i = feed.length - 1; i >= 0; i--) { e = feed[i]; if (!e.priv && !e.sys && e.k === from.k) out.push({ id: e.id, text: e.text, at: e.at, img: !!e.img }); }
             return out;
         }
+        function roster() { try { return directoryFn ? directoryFn() : null; } catch (e) { return null; } }       // (who is here and which room the visitor holds: what the players list lends the dock)
+        function authors() {                                                    // the people who wrote in the log, newest first, once each by the hub's key (never the visitor, never a line of the hub's own): [{ name, k, at }]
+            var out = [], seenK = {}, i, e;
+            for (i = feed.length - 1; i >= 0; i--) {
+                e = feed[i];
+                if (e.priv || e.sys || !e.k || e.own || seenK[e.k]) continue;
+                seenK[e.k] = true; out.push({ name: e.who, k: e.k, at: e.at });
+            }
+            return out;
+        }
         function clockOf(at) { return typeof at === 'number' && dayOf(at) !== '' ? { time: timeOf(at), full: fullOf(at), day: dayWord(at), key: localDay(new Date(at * 1000)) } : null; }       // the log's own words for a time of a line: the clock, the full date, the divider's word and a number per local day
         function setOpen(on) { open = !!on; if (seen()) stale = true; render(); }
         function setMenu(on) { menuOn = !!on; render(); }
@@ -759,7 +809,7 @@
         }
         function relink() {                                                     // the login changed (the hub closes the sockets of the old one): this page connects again at once, and is told who it is now
             drop();
-            liveSince = null; welcomed = false; attempt = 0; you = null; menuOn = false; hello = null; removed = '';
+            liveSince = null; welcomed = false; attempt = 0; you = null; menuOn = false; hello = null; removed = ''; lastAlerts = null;
             for (var i = feed.length - 1; i >= 0; i--) if (feed[i].priv) feed.splice(i, 1);       // (the private answers go too: a list of bans is not for the next person)
             setCmds([]); cmdsHeld.length = 0;
             stale = true;                                                        // (the log is made again at once, without the usernames and numbers of a moderator: nobody sees them after a Log out)
@@ -843,12 +893,14 @@
         return {
             root: box, slot: slot, field: field, log: log, grow: grow, say: sendLine, state: function () { return state; },
             you: function () { return you ? { name: you.name, role: you.role } : null; }, line: lineById, by: byAuthor, when: clockOf, arrived: function (fn) { arrivalFns.push(fn); }, command: guard(command), mutes: guard(function (done) { command('/mutes', done, true); }), note: guard(function (text) { answer([String(text)]); }), rows: function (fn) { rowFns.push(fn); },
-            tap: function (fn) { taps.push(fn); if (hello) tell1(fn, 'live', hello); else if (state === 'offline') tell1(fn, 'lost'); },
+            tap: function (fn) { taps.push(fn); if (hello) { tell1(fn, 'live', hello); if (lastAlerts) tell1(fn, 'alerts', lastAlerts); } else if (state === 'offline') tell1(fn, 'lost'); },
             send: out,
+            block: guard(function (draw, cls) { var e = answer([], draw, cls); return { redraw: function () { redraw(e); } }; }), call: guard(function (text, done) { command(text, done, false, true); }), onScreen: function () { return seen() && !stale; },
+            words: function (m) { try { return cmdsApi && cmdsApi.words ? cmdsApi.words(m) : ''; } catch (e) { return ''; } }, authors: authors, directory: function (fn) { directoryFn = typeof fn === 'function' ? fn : null; }, people: roster,
             shown: guard(function (on) { isHome = !!on; if (!on) menuOn = false; if (seen()) stale = true; render(); tapped('shown', !!on); }), open: guard(setOpen),
             away: guard(function (on) { on = !!on; if (aside === on) return; aside = on; if (seen()) stale = true; render(); })
         };
     }
 
-    return { PATH: PATH, LIMIT: LIMIT, MS: MS, PACE: PACE, TEXT: TEXT, ERR: ERR, plain: plain, points: points, clip: clip, parse: parse, count: count, lineOf: lineOf, partsOf: partsOf, mutesOf: mutesOf, youOf: youOf, picOf: picOf, picture: picture, roleOf: roleOf, wordOfRole: wordOfRole, bansOf: bansOf, wordOfCommand: wordOfCommand, wordOf: wordOf, delayOf: delayOf, addressOf: addressOf, mount: mount };
+    return { PATH: PATH, LIMIT: LIMIT, marksOf: marksOf, agoOf: agoOf, MS: MS, PACE: PACE, TEXT: TEXT, ERR: ERR, plain: plain, points: points, clip: clip, parse: parse, count: count, lineOf: lineOf, partsOf: partsOf, mutesOf: mutesOf, youOf: youOf, picOf: picOf, picture: picture, roleOf: roleOf, wordOfRole: wordOfRole, bansOf: bansOf, wordOfCommand: wordOfCommand, wordOf: wordOf, delayOf: delayOf, addressOf: addressOf, mount: mount };
 });

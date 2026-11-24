@@ -124,3 +124,10 @@
 .gc-swb:disabled, .gc-swb[aria-disabled="true"] { cursor: default; }
 .gc-swn { margin: 0 0 4px 32px; font-size: 14px; line-height: 1.4; color: #a8cfc0; }
 .gc-again { min-height: 46px; margin: 6px 0 0 32px; max-width: calc(100% - 32px); white-space: normal; }
+
+/* a name that the hub marked in a line (docs/HUB_PEOPLE.md "Mentions"): a quiet green pill; the visitor's own is gold, and the line that names the visitor has a soft gold edge */
+.gc-pill { display: inline; padding: 0 6px; margin: 0 1px; color: #9fe0b8; background: #17382f; border-radius: 5px; }
+.gc-pill-me { color: #1a1405; background: var(--gold); }
+.gc-line.gc-named { background: rgba(246, 208, 88, .10); box-shadow: -8px 0 0 0 rgba(246, 208, 88, .10); border-radius: 3px; }
+.gc-line.gc-named::before { content: ""; position: absolute; left: -9px; top: 0; bottom: 0; width: 4px; border-radius: 2px; background: var(--gold); }
+@media (forced-colors: active) { .gc-pill { outline: 1px solid CanvasText; } .gc-line.gc-named { outline: 2px solid Highlight; } .gc-line.gc-named::before { display: none; } }

@@ -189,9 +189,9 @@ function rig(o) {
         [{ people: 1, size: 4 }, { people: 2, size: 3 }, { people: 4, size: 4 }, null, null, null]);
     const say = P.announceOf;
     same('no room: looking', [say(null, null, false), say({}, null, false), say({ room: null }, null, false)], [{ at: 'look' }, { at: 'look' }, { at: 'look' }]);
-    same('a private room that waits says only that: no map, no seats, no code', say(CLIENT(ROOM({ isPublic: false })), { people: 2, size: 4 }, false), { at: 'wait', pub: false });
-    same('a public room that waits says its map, seats and code', say(CLIENT(ROOM({ isPublic: true })), { people: 2, size: 4 }, false), { at: 'wait', pub: true, map: 'TREASURE.LVL', n: 2, of: 4, code: 'c1v3rr' });
-    same('a guest of a public room says its map and seats and not the code (the host\'s row has the Join)', say(CLIENT(ROOM({ isPublic: true }), 'c1v3rr', true), { people: 2, size: 4 }, false), { at: 'wait', pub: true, map: 'TREASURE.LVL', n: 2, of: 4 });
+    same('a private room that waits says only that about itself (no map, no seats, no code in the row), and says its code and seats apart, for invitations', say(CLIENT(ROOM({ isPublic: false })), { people: 2, size: 4 }, false), { at: 'wait', pub: false, inv: { code: 'c1v3rr', n: 2, of: 4 } });
+    same('a public room that waits says its map, seats and code', say(CLIENT(ROOM({ isPublic: true })), { people: 2, size: 4 }, false), { at: 'wait', pub: true, map: 'TREASURE.LVL', n: 2, of: 4, code: 'c1v3rr', inv: { code: 'c1v3rr', n: 2, of: 4 } });
+    same('a guest of a public room says its map and seats and not the code (the host\'s row has the Join)', say(CLIENT(ROOM({ isPublic: true }), 'c1v3rr', true), { people: 2, size: 4 }, false), { at: 'wait', pub: true, map: 'TREASURE.LVL', n: 2, of: 4, inv: { code: 'c1v3rr', n: 2, of: 4 } });
     same('a client that cannot say whether it leads says no code', say({ room: ROOM({ isPublic: true }), code: 'c1v3rr' }, null, false), { at: 'wait', pub: true, map: 'TREASURE.LVL' });
     same('a public room whose seats are not known yet (or are more than the room) says the rest', [say(CLIENT(ROOM({ isPublic: true })), null, false), say(CLIENT(ROOM({ isPublic: true })), { people: 5, size: 4 }, false)], [{ at: 'wait', pub: true, map: 'TREASURE.LVL', code: 'c1v3rr' }, { at: 'wait', pub: true, map: 'TREASURE.LVL', code: 'c1v3rr' }]);
     same('a match that is starting, a page on its way to a game, a room that a game made: playing; a match has no code, a private one says nothing', [
@@ -280,15 +280,15 @@ function rig(o) {
     to(2999);
     check('... still not, a moment before the 3 seconds are over', r.hereFrames().length === 1);
     to(4000);
-    same('... then said once, with the room\'s details (at the next look after the 3 seconds)', r.hereFrames().slice(1), [{ t: 'here', at: 'wait', pub: true, map: 'TREASURE.LVL', n: 1, of: 4, code: 'c1v3rr' }]);
+    same('... then said once, with the room\'s details (at the next look after the 3 seconds)', r.hereFrames().slice(1), [{ t: 'here', at: 'wait', pub: true, map: 'TREASURE.LVL', n: 1, of: 4, code: 'c1v3rr', inv: { code: 'c1v3rr', n: 1, of: 4, map: 'TREASURE.LVL' } }]);
     r.state.count = { people: 2, size: 4 }; to(4000); r.state.count = { people: 3, size: 4 }; to(5000); r.state.count = { people: 2, size: 4 }; to(5900);
     check('a room that changes again and again inside the 3 seconds is not told at each change', r.hereFrames().length === 2);
     to(6000);
-    same('... it is told once, as it is when they are over', r.hereFrames().slice(2), [{ t: 'here', at: 'wait', pub: true, map: 'TREASURE.LVL', n: 2, of: 4, code: 'c1v3rr' }]);
+    same('... it is told once, as it is when they are over', r.hereFrames().slice(2), [{ t: 'here', at: 'wait', pub: true, map: 'TREASURE.LVL', n: 2, of: 4, code: 'c1v3rr', inv: { code: 'c1v3rr', n: 2, of: 4, map: 'TREASURE.LVL' } }]);
     r.state.count = { people: 3, size: 4 }; to(7000); r.state.count = { people: 4, size: 4 }; to(8000); r.state.count = { people: 3, size: 4 }; to(8500); r.state.count = { people: 4, size: 4 }; to(8999);
     check('a flapping room: nothing before the 3 seconds are over', r.hereFrames().length === 3);
     to(9000);
-    same('... then the last state, once', r.hereFrames().slice(3), [{ t: 'here', at: 'wait', pub: true, map: 'TREASURE.LVL', n: 4, of: 4, code: 'c1v3rr' }]);
+    same('... then the last state, once', r.hereFrames().slice(3), [{ t: 'here', at: 'wait', pub: true, map: 'TREASURE.LVL', n: 4, of: 4, code: 'c1v3rr', inv: { code: 'c1v3rr', n: 4, of: 4, map: 'TREASURE.LVL' } }]);
     r.state.count = { people: 4, size: 4 }; to(10000);
     check('a room that went and came back to what the hub has is told nothing', r.hereFrames().length === 4);
     r.state.client = CLIENT(ROOM({ isPublic: true, starting: true }), 'c1v3rr'); to(12000);
@@ -300,7 +300,7 @@ function rig(o) {
     check('nothing is said while nothing changes', r.sent.length === n);
     r.lost(); r.state.client = CLIENT(ROOM({ isPublic: false }), 'k7m2xq');
     r.live();
-    same('a new socket is told everything again at once (what the visitor is doing now, and the ask), without waiting', r.sent.slice(n), [{ t: 'here', at: 'wait', pub: false }, { t: 'who' }]);
+    same('a new socket is told everything again at once (what the visitor is doing now, and the ask), without waiting', r.sent.slice(n), [{ t: 'here', at: 'wait', pub: false, inv: { code: 'k7m2xq', n: 4, of: 4, map: 'TREASURE.LVL' } }, { t: 'who' }]);
     r.state.client = null; to(61000); to(64100);
     const m = r.sent.length; to(90000);
     check('(and the next change is told as always, then nothing more)', r.hereFrames().slice(-1)[0].at === 'look' && r.sent.length === m);
@@ -823,11 +823,11 @@ function bringPlayers(env) {
     same('the list: Waiting and Playing rows say what each is', ['pat', 'quinn', 'rex', 'sky', 'tom'].map((n) => r.metaOf(n)), ['Private room', 'Private game', 'Treasure · vs computer', 'Islands · 3 players', 'In a game']);
     const lockOf = (n) => { const c = byClass(r.panel(), 'pl-card').find((x) => one(x, 'pl-nm').textContent === n); return c ? byClass(c, 'pl-lock').length : -1; };
     same('a lock only on the private rows, and no Join or button anywhere on them', [lockOf('pat'), lockOf('quinn'), lockOf('rex'), lockOf('sky'), r.joins().length, r.panel().findAll((e) => e.tagName === 'button').length], [1, 1, 0, 0, 0, 0]);
-    same('the hub is told a private room is private, and nothing else of it', (() => {
+    same('the hub is told a private room is private, and its code, seats and map apart, for invitations', (() => {
         const q = rig({ client: CLIENT(ROOM({ isPublic: false }), 'k7m2xq'), count: { people: 2, size: 4 } });
         q.live(W({})); q.tick(0);
         return q.hereFrames();
-    })(), [{ t: 'here', at: 'wait', pub: false }]);
+    })(), [{ t: 'here', at: 'wait', pub: false, inv: { code: 'k7m2xq', n: 2, of: 4, map: 'TREASURE.LVL' } }]);
 }
 {   // the visitor's own card: another tab in a match makes it Playing
     const r = rig();
@@ -894,6 +894,58 @@ check('the hash of the note is the game page\'s own', ['c1v3rr', 'a', 'k7m2xq', 
     broken.list.drawn(() => { throw new Error('a sheet that breaks'); });
     broken.live(); broken.who(FULL(CROWD, { n: 13, g: 4 }));
     check('a hook that throws is the error handler\'s, and the list is drawn all the same', broken.errors.length >= 1 && byClass(broken.panel(), 'pl-card').length > 0);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 10. People (docs/HUB_PEOPLE.md): the room that the page waits in, for an invitation, and who can be invited now
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const P = Pure, valid = Rules.validMapFile;
+    const SLOTS = (names) => names.map((n, i) => ({ state: n === null ? 0 : 1, name: n || '' }));
+    const MINE = (o) => ROOM(Object.assign({ isPublic: false, you: 0, leader: 0, slots: SLOTS(['Maple', 'Wren', null, null]) }, o || {}));
+    same('invOf: the code, the seats and the map of a room that waits, whether it is public or not; none for a match, no room or no seats', [
+        P.invOf(CLIENT(MINE()), { people: 2, size: 4 }, valid), P.invOf(CLIENT(MINE({ isPublic: true })), { people: 1, size: 3 }, valid), P.invOf(CLIENT(MINE()), { people: 2, size: 4 }), P.invOf(CLIENT(MINE({ starting: true })), { people: 2, size: 4 }, valid),
+        P.invOf(CLIENT(MINE({ lobby: false })), { people: 2, size: 4 }, valid), P.invOf({ room: null, code: 'c1v3rr' }, { people: 2, size: 4 }, valid), P.invOf(CLIENT(MINE()), null, valid), P.invOf(CLIENT(MINE()), { people: 5, size: 4 }, valid),
+        P.invOf(CLIENT(MINE(), 'NOT A CODE'), { people: 2, size: 4 }, valid), P.invOf(CLIENT(MINE({ map: '../x' })), { people: 2, size: 4 }, valid)], [
+        { code: 'c1v3rr', n: 2, of: 4, map: 'TREASURE.LVL' }, { code: 'c1v3rr', n: 1, of: 3, map: 'TREASURE.LVL' }, { code: 'c1v3rr', n: 2, of: 4 }, null, null, null, null, null, null, { code: 'c1v3rr', n: 2, of: 4 }]);
+    const mine = P.mineOf(CLIENT(MINE()), { people: 2, size: 4 }, false, Rules);
+    same('mineOf: the room for the row of the sheet, its map\'s name, its free seats, the other people in it', [mine.code, mine.mapName, mine.n, mine.of, mine.free, mine.host, mine.names], ['c1v3rr', 'Treasure', 2, 4, 2, '', ['Wren']]);
+    same('a guest in somebody\'s room has the host\'s name', P.mineOf(CLIENT(MINE({ you: 1, leader: 0 }), 'c1v3rr', true), { people: 2, size: 4 }, false, Rules).host, 'Maple');
+    same('no room to invite to while the page is on its way to a match', P.mineOf(CLIENT(MINE()), { people: 2, size: 4 }, true, Rules), null);
+    same('inviteLine: the map, the seats and the seats that are free; for a guest the host\'s room instead of the free seats', [P.inviteLine(mine), P.inviteLine(Object.assign({}, mine, { free: 1 })), P.inviteLine(Object.assign({}, mine, { host: 'Wren', free: 2 })), P.inviteLine(Object.assign({}, mine, { host: 'Wrénds', mapName: '' }))],
+        ['Treasure · 2 of 4 · 2 seats free', 'Treasure · 2 of 4 · 1 seat free', 'Wren’s room · Treasure · 2 of 4', 'Wrénds’ room · 2 of 4']);
+    const why = (o) => P.inviteWhy(Object.assign({ you: true, mine: mine, row: { name: 'juniper', at: 'look' }, last: 0, now: 100000 }, o));
+    same('inviteWhy: ok where nothing is in the way (and where the page holds no room: the command says so)', [why({}), why({ mine: null })], ['', '']);
+    same('... a visitor who is not logged in, a full room, a person in the room, a person who plays, a person invited fifteen seconds ago', [why({ you: false }), why({ mine: Object.assign({}, mine, { free: 0, n: 4 }) }), why({ row: { name: 'Wren', at: 'wait' } }), why({ row: { name: 'moss', at: 'play' } }), why({ last: 85000 }), why({ last: 40001 }), why({ last: 40000 })],
+        ['Log in to invite people. Share sends your link.', 'Your room is full (4 of 4).', 'In your room', 'Playing a match', 'Invited 15 s ago. Again in 45 s.', 'Invited 59 s ago. Again in 1 s.', '']);
+    // the list's own directory
+    const r = rig({ client: CLIENT(MINE()), count: { people: 2, size: 4 } });
+    r.state.client.room.slots = SLOTS(['Maple', 'Wren', null, null]);
+    r.live(W({ me: 1 })); r.who(FULL([row(2, 'juniper'), row(3, 'Wren', 'wait'), row(4, 'moss', 'play'), row(5, 'tess', 'away'), row(1, 'maple')]));
+    const d = r.list.directory();
+    same('the directory: the people in the order of the list, the visitor\'s own row marked out, the room', [d.rows.map((x) => x.name + ':' + x.at), d.you, d.mine && d.mine.code], [['juniper:look', 'Wren:wait', 'moss:play', 'tess:away'], true, 'c1v3rr']);
+    same('the row of the sheet for a person of the list (by its number) and for a person of the chat (by name)', [d.inviteOf({ name: 'juniper', row: 2 }), d.inviteOf({ name: 'juniper', row: null }).ok, d.inviteOf({ name: 'JUNIPER', row: null }).where], [
+        { shown: true, ok: true, title: 'Invite to my room', sub: 'Treasure · 2 of 4 · 2 seats free', where: 'Looking' }, true, 'Looking']);
+    same('a person in the room, a person who plays, a person who is not here, and nobody known by that name', [d.inviteOf({ name: 'Wren', row: 3 }).sub, d.inviteOf({ name: 'moss', row: 4 }).sub, d.inviteOf({ name: 'ghost', row: null }).sub, d.inviteOf({ name: 'ghost', row: null }).ok], ['In your room', 'Playing a match', 'ghost is not here now.', false]);
+    d.invited('juniper');
+    check('a person who was just invited is dim for the minute that the hub holds a second invitation back', /^Invited \d+ s ago\. Again in \d+ s\.$/.test(r.list.directory().inviteOf({ name: 'juniper', row: 2 }).sub) && r.list.directory().inviteOf({ name: 'juniper', row: 2 }).ok === false);
+    r.tick(61000);
+    check('and ready again after it', r.list.directory().inviteOf({ name: 'juniper', row: 2 }).ok === true);
+    r.who(FULL([row(2, 'juniper'), row(3, 'Wren', 'wait'), row(4, 'moss', 'play'), row(1, 'maple'), row(7, 'twin'), row(8, 'Twin')]));
+    same('a name that two people show is no one person: the row of the sheet for a name of the chat says so', [r.list.directory().inviteOf({ name: 'twin', row: null }).sub, r.list.directory().inviteOf({ name: 'twin', row: 7 }).ok], ['twin is not here now.', true]);
+    const empty = rig({}); empty.live(W({ me: 1 })); empty.who(FULL([row(2, 'juniper')]));
+    same('with no room: no row for the sheet at all', [empty.list.directory().mine, empty.list.directory().inviteOf({ name: 'juniper', row: 2 }).shown], [null, false]);
+    const guest = rig({ client: CLIENT(MINE()), count: { people: 2, size: 4 } }); guest.state.client.room.slots = SLOTS(['Maple', 'Wren', null, null]); guest.live(W({ you: null, login: true, me: undefined })); guest.who(FULL([row(2, 'juniper')]));
+    same('a visitor who is not logged in has the row, dim, with the way out', guest.list.directory().inviteOf({ name: 'juniper', row: 2 }), { shown: true, ok: false, title: 'Invite to my room', sub: 'Log in to invite people. Share sends your link.', where: 'Looking' });
+    // the room goes to the hub at once when a command is about to ask about it
+    const f = rig({ client: CLIENT(MINE()), count: { people: 2, size: 4 } }); f.live(W({ me: 1 })); f.tick(0);
+    const before = f.hereFrames().length;
+    f.state.count = { people: 3, size: 4 }; f.tick(500);
+    check('a change of seats waits for the pace of one every three seconds ...', f.hereFrames().length === before);
+    r.list.directory(); f.list.directory().flush();
+    check('... but not when an invitation is about to ask: the hub is told now, the room as it is', f.hereFrames().length === before + 1 && f.hereFrames()[before].inv.n === 3);
+    f.list.directory().flush();
+    check('and once, not twice', f.hereFrames().length === before + 1);
 }
 
 console.log('players list: ' + checks + ' checks, ' + failures + ' failed');
