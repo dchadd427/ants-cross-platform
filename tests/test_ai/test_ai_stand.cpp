@@ -126,7 +126,7 @@ void run_stand_tests() {
             sim::SimulationEngine sim;
             uint32_t keeper = 0, enemy = 0;
             build(sim, keeper, enemy);
-            LevelPlan plan = plan_for(Level::Hard);
+            LevelPlan plan = plan_as_was(Level::Hard);
             plan.fire_defence_hold = 0;
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(40);
@@ -148,7 +148,7 @@ void run_stand_tests() {
             sim::SimulationEngine sim;
             uint32_t keeper = 0, enemy = 0;
             build(sim, keeper, enemy);
-            LevelPlan plan = plan_for(Level::Hard);
+            LevelPlan plan = plan_as_was(Level::Hard);
             plan.fire_defence_hold = 0;
             plan.fire_duel = false;
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
@@ -167,7 +167,7 @@ void run_stand_tests() {
                 sim.grid_mut().clear_firewall(static_cast<uint32_t>(home.ring[2].x), static_cast<uint32_t>(home.ring[2].y));
                 sim.kill_unit(enemy);
                 sim.spawn_unit(1, sim::AntType::Thief, TileCoord{home.origin.x + 12, home.origin.y + 9});
-                LevelPlan plan = plan_for(Level::Hard);
+                LevelPlan plan = plan_as_was(Level::Hard);
                 without_thief_batch(plan);                                                                   // (the subject is the duel: the ants that a Thief in sight would call to the hole are the fire hunt's here)
                 plan.fire_defence_hold = 0;
                 plan.fire_duel_walls = walls;
@@ -189,7 +189,7 @@ void run_stand_tests() {
             for (int i = 0; i < 5; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{9 + i, 12});
             for (int i = 0; i < 3; ++i) sim.grid_mut().place_firewall(static_cast<uint32_t>(home.ring[static_cast<size_t>(i)].x), static_cast<uint32_t>(home.ring[static_cast<size_t>(i)].y), 1);
             sim.spawn_unit(1, sim::AntType::Fire, home.ring[0]);
-            LevelPlan plan = plan_for(Level::Hard);
+            LevelPlan plan = plan_as_was(Level::Hard);
             plan.fire_defence_hold = 0;
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(300);
@@ -241,7 +241,7 @@ void run_stand_tests() {
     {
         const Home home(93);
         const TileCoord ramp{home.origin.x + 1, home.origin.y};
-        LevelPlan plan = plan_for(Level::Hard);
+        LevelPlan plan = plan_as_was(Level::Hard);
         plan.guards = false;
         plan.combat_harvests = false;
         plan.sabotage = plan.raids = plan.assault = plan.raider_hunt = false;

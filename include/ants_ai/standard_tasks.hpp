@@ -228,6 +228,7 @@ private:
     bool try_start(TaskContext& context, sim::AntType kind);
     bool swappable(const AntView& ant, sim::AntType kind, uint64_t now) const;
     void watch(TaskContext& context);
+    uint32_t swimmers_{0};                       // the own Swimmers at the last look (the Thief of the island play is made of one of them while the ferry keeps its own: LevelPlan::endraid_keep_swimmers)
     sim::TileCoord free_spot(TaskContext& context, sim::TileCoord drop, const std::vector<int32_t>& field, sim::TileCoord from, uint32_t self) const;
     bool is_link_flower(sim::TileCoord drop) const noexcept;
     void step_off(TaskContext& context);
@@ -503,6 +504,8 @@ public:
     uint32_t ambushes() const noexcept { return ambushes_; }
     size_t waiting() const noexcept { return waiting_.size(); }
     uint32_t unjams() const noexcept { return unjams_; }
+    /// Thieves of the island play that were sent home before their first raid (plan.island_endraid)
+    uint32_t homed() const noexcept { return homed_; }
     /// Raids on their way that were called off at a look because the hole had been shut meanwhile (plan.raid_recheck), and of those the ones that went to another hill
     uint32_t rechecks() const noexcept { return rechecks_; }
     uint32_t retargets() const noexcept { return retargets_; }
@@ -548,6 +551,19 @@ private:
     std::map<uint32_t, Raid> raids_;
     std::map<uint32_t, uint64_t> aside_;           // the ants that were sent aside to let a thief out of a hole (the tick): not sent to a raid again for a while
     uint32_t unjams_{0};
+    std::map<uint32_t, uint64_t> homing_;          // the Thieves of the island play that were sent home (the tick of the next click): they raid from the own island
+    /// The walk from the own hill as the map is now (a flood of the whole grid: made at most once in kJoinedTicks, it changes slowly), and the walk back from a raid tile (once a look, by the tile)
+    static constexpr uint64_t kJoinedTicks = 40;
+    /// An island Thief that found no raid to order is looked at again after this many ticks (the search for one floods the map)
+    static constexpr uint64_t kRelaunchTicks = 60;
+    const MapInfo::NowField& joined_now(TaskContext& context);
+    MapInfo::NowField stage_joined_;
+    uint64_t stage_joined_tick_{0};
+    bool stage_joined_made_{false};
+    std::map<size_t, std::vector<int32_t>> back_fields_;   // the cost field from a raid tile, made in this look (the Thieves of one look that go for one hill share it)
+    uint64_t back_tick_{0};
+    std::map<uint32_t, uint64_t> nolaunch_;        // the Thieves of the island play that found no raid: not looked at again before this tick
+    uint32_t homed_{0};
     uint32_t rechecks_{0};
     uint32_t retargets_{0};
     std::map<uint8_t, uint64_t> black_;

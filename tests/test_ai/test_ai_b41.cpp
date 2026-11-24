@@ -495,9 +495,9 @@ void run_b41_tests() {
 
     TEST_CASE("AI7.9 Interception Of A Thief (Off In Every Level's Plan: Measured, It Costs More Than It Takes; The Plan Flag Turns It On): A Thief That Stands Near The Hill Is Attacked And Hit, A Thief That WALKS To The Hill Is Never Chased (It Cannot Be Caught From Behind: The Walls And The Guard Are For It)") {
         for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) {
-            ASSERT_FALSE(plan_for(level).intercepts);                                             // the plans as shipped: no level intercepts
+            ASSERT_FALSE(plan_as_was(level).intercepts);                                             // the plans as shipped: no level intercepts
             for (const bool enabled : {false, true}) {
-                LevelPlan plan = plan_for(level);
+                LevelPlan plan = plan_as_was(level);
                 without_thief_batch(plan);                                                          // (the subject is the plan flag; the thief batch's own meetings are AI53)
                 plan.intercepts = enabled;
                 // (a) a thief that stands 4 tiles from the raid tile
@@ -742,7 +742,7 @@ void run_b41_tests() {
             for (int i = 0; i < 3; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{10 + i, 10});
             const uint32_t keeper = sim.spawn_unit(0, sim::AntType::Fire, TileCoord{12, 7});
             sim.spawn_unit(1, sim::AntType::Thief, TileCoord{55, 55});                                  // a thief in sight, far away: the threat lasts
-            Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan_for(level)), 4, 4);
+            Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan_as_was(level)), 4, 4);
             size_t open_after_first = 0;
             size_t fewest = 3;
             bool built = false;
@@ -774,7 +774,7 @@ void run_b41_tests() {
             for (int i = 0; i < 3; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{10 + i, 10});
             sim.spawn_unit(0, sim::AntType::Fire, TileCoord{12, 7});
             sim.spawn_unit(1, sim::AntType::Thief, TileCoord{55, 55});
-            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_as_was(Level::Hard)), 4, 4);
             rig.run(600);
             for (const auto& e : rig.proposed) ASSERT_FALSE(e.second.tile_x == 8 && e.second.tile_y == 6);
             ASSERT_EQ(walls_east(sim, kFightHills[0]), 2u);                                              // the other two
@@ -783,7 +783,7 @@ void run_b41_tests() {
     } TEST_END();
 
     TEST_CASE("AI7.14 Pick-Ups: The Ant That Goes Is The One With The Shortest WALK, Not The Nearest As The Crow Flies (A Rock Wall Between), Alone And By A Plain Click On The Tile; No Trip When Every Walk Is Too Long; A Power-Up That An Enemy Would Reach First Is Not Contested For; One That Somebody Stands On Is No Goal; A Trip That Fails Blacklists The Ant And The Tile And The Next Ant Is Sent") {
-        LevelPlan plan = plan_for(Level::Medium);
+        LevelPlan plan = plan_as_was(Level::Medium);
         plan.secure_side = false;                                                                        // the Fire Ant is wanted for the walls (an enemy Thief is in sight), nothing else
         plan.steals = true;                                                                              // (the rock wall puts the power-up on another hill's side by the walking cost: this test is about the trips, AI7.24 about the sides)
         const auto build = [&](sim::SimulationEngine& sim, bool with_wall) {

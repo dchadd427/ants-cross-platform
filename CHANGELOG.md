@@ -30,6 +30,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - **Special ants on a match's page.** A new section under the Scoreboard shows what each type of ant did: a card for each type that somebody had (Swimmer: bridges built and taken down; Fire Ant: fires lit and put out; Bomber: bombs set, defused and gone off; Thief: raids that brought loot home, "5 of 8", and the loot), and a card for food and fighting. A type that nobody used is left out with one line. Bombs set, Defused and Fires lit moved there from the Scoreboard. A match played before this release shows what was counted then (no bridges, fires put out or loot).
+- **Computer players stand idle less.** On ISLANDS Hard bots take the Thief and Fire hats and dig to a rival's hill to steal; at every level ants that meet on a bridge sort it out. Bots only.
 - **Messages are under the bell.** The bell's list has two tabs, **Alerts** and **Messages** (your conversations, with a count on the tab), and the bell's number counts both, so your messages are one press away from every view and every size. A conversation opens from there: its arrow comes back to the Messages tab and its X closes everything. The Messages button of the chat is gone. The messages and their report card have the site's own look (the dark panels, green frames and steel buttons) instead of indigo.
 
 **Fixes:**

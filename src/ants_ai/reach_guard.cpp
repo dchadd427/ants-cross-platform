@@ -77,7 +77,7 @@ std::vector<sim::Command> ReachGuard::filter(const BotView& view, uint8_t seat, 
     const int w = static_cast<int>(grid.width());
     const int h = static_cast<int>(grid.height());
     if (w <= 0 || h <= 0) return gone;
-    std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, seat, view.walk_context());
+    std::vector<uint8_t> mask = view.walkable_mask(seat);
     for (const PowerUpView& pu : view.powerups()) {                                           // (a power-up is solid for the planner, but a walk onto it takes it and the walk goes on: the island tasks' rows of
         if (pu.tile.x < 0 || pu.tile.y < 0 || pu.tile.x >= w || pu.tile.y >= h) continue;       // power-ups are walked over, so one never cuts a place off here)
         if (MapInfo::can_step_onto(grid, seat, pu.tile, view.walk_context())) mask[static_cast<size_t>(pu.tile.y) * static_cast<size_t>(w) + static_cast<size_t>(pu.tile.x)] = 1;

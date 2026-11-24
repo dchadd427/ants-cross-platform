@@ -54,7 +54,7 @@ int32_t life_of(const sim::Grid& grid, const std::map<int32_t, uint64_t>& seen, 
 // The walkable tiles of the seat as the engine's rules have them now, without the bridge pieces that are not finished (the stages of a dig: a failed dig takes them away again)
 std::vector<uint8_t> walk_mask_now(const BotView& view, uint8_t seat) {
     const sim::Grid& grid = view.grid();
-    std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, seat, view.walk_context());
+    std::vector<uint8_t> mask = view.walkable_mask(seat);
     const std::vector<sim::TileCell>& cells = grid.cells();
     for (size_t i = 0; i < cells.size() && i < mask.size(); ++i) {
         if (cells[i].has_partial_bridge()) mask[i] = 0;
@@ -479,6 +479,7 @@ void IslandTask::refresh(TaskContext& c) {
         limits_.clear();
         hot_entries_.clear();
         tactics_.shut_tiles.clear();
+        tactics_.bridge_life.clear();
         field_.valid = false;
     }
     if (!might_plan && !have_bridges) return;
@@ -528,6 +529,8 @@ void IslandTask::refresh(TaskContext& c) {
     };
     tactics_.shut_tiles.assign(n, 0);                                                              // no other task plans a walk over a retired bridge
     for (const auto& e : seen_) tactics_.shut_tiles[static_cast<size_t>(e.first)] = retired(e.first) ? 1 : 0;
+    tactics_.bridge_life.assign(n, -1);                                                            // the life that each finished tile has left: the raid task asks before it sends a Thief over a bridge and back
+    for (const auto& e : seen_) tactics_.bridge_life[static_cast<size_t>(e.first)] = life_at(e.first);
 
     // ---- the walk from the hill over what stands now: the field that the guard reads ---
     Search now_search = search(grid, walk, nullptr, starts, seen_, now, params_.tile_cost, params_.max_new_tiles, life_eff);
