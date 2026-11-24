@@ -10,7 +10,8 @@
 //          hole alone; the Thief of a person is told so at once). The own ants never use those tiles (the entrance is on the other side of the mound), and the points that a hill holds when the food is
 //          gone can only be lost to a Thief. The holders are the tasks' to take again at any look (rank 2); a hurt one goes home first; Swimmers stay out of it while the bot has `endraid_keep_swimmers`
 //          or fewer (they dig the bridges), Fire Ants (the keeper of the walls) and Thieves always
-// Everything it reads is on the view; it sends plain moves.
+// Everything it reads is on the view; it sends plain moves. The map's walks as it is now (the flood that tells which ants a walk leads home) are looked at once in 100 ticks: the cost of the task on a
+// server that runs many bots is the cost of that flood.
 
 #include <cstdint>
 #include <map>
@@ -44,6 +45,12 @@ private:
         uint64_t ordered{0};
     };
     void release_all(TaskContext& context);
+
+    /// The walks to the own hill as the map is now (a flood of the whole grid: made at most once in kJoinedTicks, it changes slowly)
+    static constexpr uint64_t kJoinedTicks = 100;
+    MapInfo::NowField joined_;
+    uint64_t joined_tick_{0};
+    bool joined_made_{false};
 
     Tactics& tactics_;
     std::map<uint32_t, Idle> idle_;          // the own ants that stand idle and empty-handed with no task: where and since when

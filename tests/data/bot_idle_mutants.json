@@ -85,8 +85,8 @@
     {
       "id": "hold_before_the_food_is_gone",
       "file": "src/ants_ai/idle_jobs_task.cpp",
-      "old": "const bool hold_on = (tactics_.gone || tactics_.memory.thief_last_seen() != 0) && !keeper;",
-      "new": "const bool hold_on = !keeper;",
+      "old": "const bool want_hold = tactics_.gone || tactics_.memory.thief_last_seen() != 0;",
+      "new": "const bool want_hold = true;",
       "build": "test_ai",
       "test": "timeout 900 env ANTS_TEST_FILTER='AI58.4 ' ./build/tests/test_ai/test_ai",
       "expect": "AI58.4"
@@ -94,8 +94,8 @@
     {
       "id": "hold_over_the_walls_of_a_keeper",
       "file": "src/ants_ai/idle_jobs_task.cpp",
-      "old": "thief_last_seen() != 0) && !keeper;",
-      "new": "thief_last_seen() != 0);",
+      "old": "const bool hold_on = want_hold && !keeper;",
+      "new": "const bool hold_on = want_hold;",
       "build": "test_ai",
       "test": "timeout 900 env ANTS_TEST_FILTER='AI58.4 ' ./build/tests/test_ai/test_ai",
       "expect": "AI58.4"

@@ -20,6 +20,7 @@ void IdleJobsTask::release_all(TaskContext& c) {
 void IdleJobsTask::finish(AntLedger& ledger) {
     healing_.clear();
     holders_.clear();
+    joined_made_ = false;
     Task::finish(ledger);
 }
 
@@ -56,19 +57,23 @@ void IdleJobsTask::step(TaskContext& c) {
     }
     uint32_t swimmers = 0;
     for (const AntView& a : v.mine()) swimmers += a.type == sim::AntType::Swimmer ? 1u : 0u;
-    MapInfo::NowField joined;
-    bool joined_made = false;
+    const auto joined_now = [&]() -> const MapInfo::NowField& {
+        if (!joined_made_ || now >= joined_tick_ + kJoinedTicks) {
+            joined_ = c.map.field_now(grid, c.seat, v.walk_context());
+            joined_tick_ = now;
+            joined_made_ = true;
+        }
+        return joined_;
+    };
     // the walls of a Fire Ant that can walk home are the better answer (they last 3,600 ticks and cost no ant), and the keeper lights none on a tile that an ant holds: with one, nobody holds
+    const bool want_hold = tactics_.gone || tactics_.memory.thief_last_seen() != 0;
     bool keeper = false;
     for (const AntView& a : v.mine()) {
+        if (!want_hold) break;                                                                      // (nobody holds: the keeper is of no matter, and the flood is not made)
         if (a.type != sim::AntType::Fire || a.hp < 4) continue;
-        if (!joined_made) {
-            joined = c.map.field_now(grid, c.seat, v.walk_context());
-            joined_made = true;
-        }
-        keeper = keeper || c.map.reaches_hill(joined, a.tile, a.type);
+        keeper = keeper || c.map.reaches_hill(joined_now(), a.tile, a.type);
     }
-    const bool hold_on = (tactics_.gone || tactics_.memory.thief_last_seen() != 0) && !keeper;
+    const bool hold_on = want_hold && !keeper;
     std::vector<sim::TileCoord> open;                                                               // the tiles in front of the thief hole that nothing holds: wall, bomb, rock, power-up or an ant of another team
     for (const sim::TileCoord& e : east_tiles(hill)) {
         const EastTile k = classify_tile(grid, e);
@@ -99,11 +104,7 @@ void IdleJobsTask::step(TaskContext& c) {
         if (a->type == sim::AntType::Fire || a->type == sim::AntType::Thief || c.ledger.owner(a->id) == id()) continue;
         // a hurt ant walks home when a walk leads there
         if (a->hp <= plan.idle_heal_hp && a->tile.chebyshev_dist(hill.entrance) > 3) {
-            if (!joined_made) {
-                joined = c.map.field_now(grid, c.seat, v.walk_context());
-                joined_made = true;
-            }
-            if (c.map.reaches_hill(joined, a->tile, a->type) && c.ledger.claim(a->id, id())) {
+            if (c.map.reaches_hill(joined_now(), a->tile, a->type) && c.ledger.claim(a->id, id())) {
                 c.orders.move({a->id}, hill.entrance, Priority::Normal);
                 healing_[a->id] = now;
                 ++heals_;
