@@ -26,7 +26,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.21.2 - 2026-11-23 - Invites, mentions, the bell, map pages and Random map
 
 **For players:**
 - The bell shows your recent alerts, newest first, with the number of unread ones: invitations, mentions, people who joined your room and your own finished match (with a View link). The settings are behind a gear in that list; a visitor keeps a short list in the browser.
@@ -39,6 +39,8 @@ Work that is not released yet is written in the same template under a heading th
 **For operators:**
 - The hub keeps an account's last 30 alerts of 7 days and its `/ignore` list (new `alerts` and `ignores` tables, made by the first one; Forget me deletes them), and limits invitations and mentions ([the hub's document](docs/HUB_PEOPLE.md)).
 - The map pages are made when the image is built (`tools/map_pages.py`, [`docs/MAP_PAGES.md`](docs/MAP_PAGES.md)) and listed in `sitemap-library.xml`; the maps that players send and you approve have no page yet.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/dc2bfafd...e0d5b1bf)
 
 ## v0.21.1 - 2026-11-23 - Connect an AI in the Map Maker
 
