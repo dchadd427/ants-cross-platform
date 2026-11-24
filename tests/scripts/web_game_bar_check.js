@@ -11,8 +11,9 @@
 //   side:   a tab that the front page opened only because its person holds a room (Watch on a live match, Matches: web/site_nav.js, which every page with the bar loads): with a front page that answers on the channel
 //           "ants-watch" for it, its Home (the bar's and the Menu's) closes the tab and the front page's tab is not touched, also on the pages that the tab's links lead to; with none (not at all, not for that tab,
 //           not any more, a wrong token), no channel, a tab that cannot be closed, a press with a modifier key, a link that is not Home, or a page that is not such a tab, it is a plain link of the tab;
-//   Menu:   the lines the page adds each time it opens (the note while a match runs, "Reload page" last of the small links, a recording's Copy link, Download and Open another file on a narrow window only and
-//           not for a file of your own or a live view, each one pressing the button of the bar that it stands for).
+//   Menu:   the lines the page adds each time it opens (the note while a match runs, "Reload page" last of the small links, a recording's Download and Open another file on a narrow window only and
+//           not for a file of your own or a live view, each one pressing the button of the bar that it stands for; no Copy link: the bar has that button at every width);
+//   Copy:   the bar's Copy link at each width: its words on a wide window, the share glyph alone (a square of at least 44 px) on a phone, never for a file of your own.
 // usage: node web_game_bar_check.js game_bar.js game_bar.css [shell.html [site_nav.js site_nav.css]]     (exit 0: every check holds; 1: one fails; 3: no browser to run it in)
 'use strict';
 const fs = require('fs');
@@ -335,7 +336,7 @@ const active = (p) => p.evaluate(() => { const a = document.activeElement; retur
             expect('"Reload page" reloads and closes the Menu', [(await log(p)).reloads, await menuOpen(p)], [1, false]);
             for (let i = 0; i < 3; i++) { await p.click('.sbtn'); await p.click('.sbtn'); }
             await p.click('.sbtn');
-            expect('opened again and again: one "Reload page", and no line made twice', await p.evaluate(() => [document.querySelectorAll('#sbm .gb-reload').length, document.querySelectorAll('#sbm .gb-x').length]), [1, 3]);
+            expect('opened again and again: one "Reload page", and no line made twice', await p.evaluate(() => [document.querySelectorAll('#sbm .gb-reload').length, document.querySelectorAll('#sbm .gb-x').length]), [1, 2]);
             await p.click('.sbtn');
             await p.evaluate(() => { window.__busy = true; });
             await p.click('.sbtn');
@@ -345,9 +346,9 @@ const active = (p) => p.evaluate(() => { const a = document.activeElement; retur
             await context.close();
         }
         for (const [w, h, body, wanted, label] of [
-            [390, 844, 'replay', ['Copy link', 'Download'], 'a recording on a phone'],
+            [390, 844, 'replay', ['Download'], 'a recording on a phone'],
             [390, 844, 'replay ownfile', [], 'a file of your own on a phone'],
-            [390, 844, 'replay live', ['Copy link'], 'a live view on a phone'],
+            [390, 844, 'replay live', [], 'a live view on a phone'],
             [1280, 800, 'replay', [], 'a recording on a wide window (the bar has the buttons)'],
         ]) {
             const { context, p } = await open(browser, w, h, body);
@@ -369,15 +370,30 @@ const active = (p) => p.evaluate(() => { const a = document.activeElement; retur
         {
             const { context, p } = await open(browser, 390, 844, 'replay');
             await p.evaluate(() => {
-                document.getElementById('copy-btn').addEventListener('click', () => window.__log.clicks.push({ id: 'copy-pressed' }));
                 document.querySelector('[data-dl]').addEventListener('click', (e) => { e.preventDefault(); window.__log.clicks.push({ id: 'download-pressed' }); });
             });
             await p.click('.sbtn');
-            await p.click('#sbm .gb-copy');
-            await p.click('.sbtn');
             await p.click('#sbm .gb-dl');
             const ids = (await log(p)).clicks.map((c) => c.id);
-            expect('Copy link and Download of the Menu press the bar\'s own buttons', [ids.includes('copy-pressed'), ids.includes('download-pressed')], [true, true]);
+            expect('Download of the Menu presses the bar\'s own button', ids.includes('download-pressed'), true);
+            await context.close();
+        }
+        // ---- the bar's Copy link: words on a wide window, the glyph alone on a phone ----
+        for (const [w, h, body, label] of [[1280, 800, 'replay live', 'a live view on a wide window'], [390, 844, 'replay live', 'a live view on a phone'], [320, 640, 'replay live', 'a live view on the narrowest phone'],
+                                           [390, 844, 'replay', 'a recording on a phone'], [701, 800, 'replay', 'a recording at 701 px'], [700, 800, 'replay', 'a recording at 700 px']]) {
+            const { context, p } = await open(browser, w, h, body);
+            const g = await p.evaluate(() => {
+                const b = document.getElementById('copy-btn'), r = b.getBoundingClientRect(), shown = (n) => !!n && getComputedStyle(n).display !== 'none' && n.getClientRects().length > 0;
+                return { shown: shown(b), w: r.width, h: r.height, glyph: shown(b.querySelector('.cl-ic')), words: shown(b.querySelector('.cl-tx')), name: b.getAttribute('aria-label'), vw: window.innerWidth, right: r.right };
+            });
+            const phone = w <= 700;
+            expect(label + ': the button is in the bar, with the glyph alone on a phone and the words from 701 px', [g.shown, g.glyph, g.words, g.name], [true, phone, !phone, 'Copy link']);
+            if (phone) expect(label + ': a target of at least 44 px, inside the window', [g.w >= 44, g.h >= 44, g.right <= g.vw], [true, true, true]);
+            await context.close();
+        }
+        {
+            const { context, p } = await open(browser, 390, 844, 'replay ownfile');
+            expect('a file of your own: there is no link to copy, so no button', await p.evaluate(() => getComputedStyle(document.getElementById('copy-btn')).display), 'none');
             await context.close();
         }
         // ---- Reload page asks while a game is played ----

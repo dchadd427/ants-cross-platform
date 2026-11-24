@@ -172,15 +172,8 @@
   {
    "id": "a_wide_window_repeats_the_bars_buttons_in_the_menu",
    "file": "web/game_bar.css",
-   "old": "@media (min-width: 701px) { body.replay .sbm a.gb-copy, body.replay .sbm a.gb-dl, body.replay .sbm a.gb-file { display: none; } }",
+   "old": "@media (min-width: 701px) { body.replay .sbm a.gb-dl, body.replay .sbm a.gb-file { display: none; } }",
    "new": "",
-   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
-  },
-  {
-   "id": "a_file_of_your_own_offers_copy_link",
-   "file": "web/game_bar.css",
-   "old": "body.ownfile .sbm a.gb-dl, body.ownfile .sbm a.gb-copy { display: none; }",
-   "new": "body.ownfile .sbm a.gb-dl { display: none; }",
    "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
   },
   {
@@ -427,6 +420,41 @@
    "old": "window.history && window.history.length === 1 ? own : ''",
    "new": "own",
    "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "a_phone_has_no_copy_link_in_the_bar",
+   "file": "web/game_bar.css",
+   "old": "    .sb #copy-btn .cl-ic { display: block; }\n",
+   "new": "",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "a_phone_shows_the_words_of_copy_link_too",
+   "file": "web/game_bar.css",
+   "old": "    .sb #copy-btn .cl-tx { display: none; }\n",
+   "new": "",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "the_copy_link_glyph_shows_on_a_wide_window",
+   "file": "web/game_bar.css",
+   "old": ".sb #copy-btn .cl-ic { display: none; fill: none;",
+   "new": ".sb #copy-btn .cl-ic { fill: none;",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "the_copy_link_target_is_smaller_than_a_finger",
+   "file": "web/game_bar.css",
+   "old": "    .sb #copy-btn { min-width: 44px; min-height: 44px; margin: -1px 0; padding: 0; }\n",
+   "new": "    .sb #copy-btn { margin: -1px 0; padding: 0; }\n",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "the_menu_offers_copy_link_again",
+   "file": "web/game_bar.js",
+   "old": "            top.push(action('gb-own gb-dl', 'Download', press('dl')));\n",
+   "new": "            top.push(action('gb-own gb-copy', 'Copy link', press('copy-btn')));\n            top.push(action('gb-own gb-dl', 'Download', press('dl')));\n",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
   }
  ]
 }

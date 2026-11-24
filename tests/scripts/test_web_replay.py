@@ -8,6 +8,7 @@ play.html?replay=<file>) and in live mode (play.html?live=<id>) and the code tha
     the live glue (the id's shape check, the doors it asks, the controls it calls, the words of its notes), nothing made from text that a recording or the door carries (a name is text), the file's name
     shape shared by the page, the nginx rules and the store, and that the image, the CI and the local web build carry the new files.
 """
+import json
 import os
 import re
 import shutil
@@ -479,6 +480,34 @@ class ThePictureButtonsOwnCode(unittest.TestCase):
         done = subprocess.run([shutil.which("node"), os.path.join(REPO, "tests", "scripts", "web_picture_popover_check.js"), os.path.join(REPO, "web", "shell.html")], capture_output=True, text=True, timeout=120)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("every row holds", done.stdout)
+
+
+@unittest.skipUnless(shutil.which("node"), "node is not installed: the Copy link button's code was NOT run (tests/scripts/web_copy_link_check.js)")
+class TheCopyLinkButtonsOwnCode(unittest.TestCase):
+    """the bar's Copy link: the address that it copies, the share sheet of a phone, the clipboard and "Copied!", a clipboard that refuses (tests/scripts/web_copy_link_check.js runs the block of web/shell.html on
+    a page of fakes); the bar's own look and place at each width is tests/scripts/web_live_check.py (part link, opt-in) and web_game_bar_check.js"""
+    def test_address_share_sheet_clipboard_and_a_refusal(self):
+        done = subprocess.run([shutil.which("node"), os.path.join(REPO, "tests", "scripts", "web_copy_link_check.js"), os.path.join(REPO, "web", "shell.html")], capture_output=True, text=True, timeout=120)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("every row holds", done.stdout)
+
+    def test_every_mutant_of_it_is_seen(self):
+        """tests/data/copy_link_mutants.json (tools/mutate.py runs the same list): each change, made in a copy of the page, must fail the check"""
+        spec = json.loads(read("tests", "data", "copy_link_mutants.json"))
+        self.assertGreaterEqual(len(spec["mutants"]), 30)
+        ids = [m["id"] for m in spec["mutants"]]
+        self.assertEqual(len(ids), len(set(ids)), "an id twice")
+        page = read("web", "shell.html")
+        with tempfile.TemporaryDirectory() as tmp:
+            copy = os.path.join(tmp, "shell.html")
+            for m in spec["mutants"]:
+                with self.subTest(m["id"]):
+                    self.assertEqual(m["file"], "web/shell.html")
+                    self.assertEqual(page.count(m["old"]), 1, "%s: the text is not in the page exactly once" % m["id"])
+                    with open(copy, "w", encoding="utf-8", newline="") as f:
+                        f.write(page.replace(m["old"], m["new"]))
+                    done = subprocess.run([shutil.which("node"), os.path.join(REPO, "tests", "scripts", "web_copy_link_check.js"), copy], capture_output=True, text=True, timeout=120)
+                    self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
 
 
 class TheFiles(unittest.TestCase):
