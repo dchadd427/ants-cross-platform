@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The map "Where ants died" (run by ./run_tests.sh --fast and by the CI): web/death_map.js and web/death_map.css, and how the match page and the replay page use them. docs/REPLAYS.md "The map of deaths" says what
+"""The map "Where ants died" (run by ./run_tests.sh --fast and by the CI): web/death_map.js and web/death_map.css, and how the match page and the replay page use them. docs/HEATMAPS.md "The map of deaths" says what
 it shows and where the field comes from (the replay pass, ants_replay/match_stats.hpp, ants_server/history_deaths.hpp).
 
   - the code is RUN (node, when it is installed): the field as the server writes it (one text is made by the C++ program), a field that is damaged, the glow, the dots, the squares of a big match, the chips, the
@@ -221,7 +221,7 @@ class TheFiles(unittest.TestCase):
 
 class TheDocument(unittest.TestCase):
     def test_the_replays_page_describes_the_map_the_field_and_the_pass(self):
-        text = read("docs", "REPLAYS.md")
+        text = read("docs", "HEATMAPS.md")
         for needle in ("The map of deaths", "web/death_map.js", "ants_server/history_deaths", "kDeathsMaxBytes", "history_deaths", "/history/deaths", "No map of deaths for this match.", "tile_x"):
             self.assertIn(needle, text, needle)
         server = read("docs", "SERVER.md")

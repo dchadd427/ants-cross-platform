@@ -141,8 +141,8 @@
   {
    "id": "a_bomb_that_went_off_is_nobodys",
    "file": "src/ants_replay/match_stats.cpp",
-   "old": "if (old.owner < kSeats) ++stats_.bombs_off[old.owner];",
-   "new": "if (old.owner < kSeats) ++stats_.bombs_off[0];",
+   "old": "++stats_.bombs_off[old.owner];",
+   "new": "++stats_.bombs_off[0];",
    "build": "test_history_details",
    "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
   },

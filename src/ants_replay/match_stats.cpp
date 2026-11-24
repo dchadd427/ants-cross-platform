@@ -37,6 +37,18 @@ const char* MatchStats::order_kind_name(OrderKind kind) noexcept {
     return "?";
 }
 
+const char* MatchStats::action_name(Action kind) noexcept {
+    switch (kind) {
+        case Action::Death: return "death";
+        case Action::Bomb: return "bomb";
+        case Action::Theft: return "theft";
+        case Action::Fire: return "fire";
+        case Action::Hit: return "hit";
+        case Action::Count: break;
+    }
+    return "?";
+}
+
 MatchStatsCollector::MatchStatsCollector(const Replay& replay) : roster_(replay.head.roster) {
     stats_.roster = replay.head.roster;
     stats_.samples.reserve(replay.total_turns / MatchStats::kSampleTurns + 1);
@@ -54,6 +66,14 @@ MatchStats MatchStatsCollector::take(uint32_t turns_played) {
     stats_.turns = turns_played;
     stats_.ok = !failed_;
     return std::move(stats_);
+}
+
+// More events of a kind in the bucket of the turn (a bucket is the 5 seconds of kSampleTurns turns)
+void MatchStatsCollector::count(MatchStats::Action kind, uint32_t turns, uint32_t events) {
+    const size_t bucket = turns / MatchStats::kSampleTurns;
+    std::vector<uint32_t>& series = stats_.action[static_cast<size_t>(kind)];
+    if (series.size() <= bucket) series.resize(bucket + 1);
+    series[bucket] += events;
 }
 
 void MatchStatsCollector::fail(const char* what) {
@@ -135,6 +155,8 @@ void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine)
             hatched[s] = st.new_hatched;
             planted += st.bombs_planted;
             defused += st.bombs_defused;
+            if (st.fires_lit > prev_fires_[s]) count(MatchStats::Action::Fire, turns, st.fires_lit - prev_fires_[s]);          // (a fire lit in this tick)
+            prev_fires_[s] = st.fires_lit;
             if (!plays(roster_, s)) continue;
             int64_t cost = 0;
             if (hatched[s] > prev_hatched_[s] && engine.game_mode() != sim::GameMode::Kills187) cost = std::min<int64_t>(sim::HATCH_COST_POINTS, std::max<int32_t>(0, prev_score_[s]));
@@ -170,6 +192,10 @@ void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine)
             }
             if (snap.player_id < kSeats) {
                 if (snap.hp < ant.hp) {                                 // it lost hit points; the damage is the team's of the last damage it took
+                    if (ant.hit_bucket != turns / MatchStats::kSampleTurns) {          // (once for an ant in a bucket: a fight that goes on does not make a bigger one)
+                        ant.hit_bucket = turns / MatchStats::kSampleTurns;
+                        count(MatchStats::Action::Hit, turns);
+                    }
                     uint8_t source = MatchStats::kNoKiller;
                     try {
                         const uint8_t killer = engine.get_unit(snap.id).killer_team;
@@ -203,6 +229,7 @@ void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine)
                     } catch (const std::runtime_error&) {
                     }
                     stats_.raids.push_back(MatchStats::Raid{turns, snap.player_id, snap.target_team_id, points});
+                    count(MatchStats::Action::Theft, turns);
                 }
             }
             ant.hp = snap.hp;
@@ -228,7 +255,10 @@ void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine)
                 if (unit.killer_team < kSeats && unit.killer_team != ant.player) kill.killer = unit.killer_team;     // (a team does not kill itself: the engine counts no kill then)
             } catch (const std::runtime_error&) {
             }
-            if (ant.player < kSeats) stats_.kills.push_back(kill);
+            if (ant.player < kSeats) {
+                stats_.kills.push_back(kill);
+                count(MatchStats::Action::Death, turns);
+            }
         }
 
         // 4. the bombs on the map: looked at only in a tick in which a bomb was planted or defused or went off; one that is gone and was not defused went off
@@ -248,7 +278,10 @@ void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine)
                     --gone_defused;                                     // taken away by an ant (the counter says so)
                     continue;
                 }
-                if (old.owner < kSeats) ++stats_.bombs_off[old.owner];
+                if (old.owner < kSeats) {
+                    ++stats_.bombs_off[old.owner];
+                    count(MatchStats::Action::Bomb, turns);
+                }
             }
             bombs_ = std::move(now);
             bombs_planted_ = planted;

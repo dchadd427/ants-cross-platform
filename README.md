@@ -39,6 +39,7 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [Touch](docs/TOUCH.md): playing with a finger on a phone or a tablet
 - [Network play and bots](docs/MULTIPLAYER.md): LAN and server games, lag and drop-outs, computer players
 - [Replays](docs/REPLAYS.md): recording a match in the desktop game, the file, and the tool that lists every order of a recorded match
+- [Heatmaps](docs/HEATMAPS.md): where ants died and where the action was in a match: the map of deaths and the activity curve of the replay page
 - [Command-line options](docs/COMMAND_LINE.md): every option of the game and its environment variables
 
 **Building, running and testing**

@@ -9,6 +9,7 @@
 #include <iostream>
 
 #include "../common/test_assert.hpp"
+#include "ants_server/history_action.hpp"
 #include "ants_server/history_deaths.hpp"
 #include "ants_server/history_details.hpp"
 #include "big_map_fixtures.hpp"
@@ -194,6 +195,8 @@ int main() {
             expected.details = rec.details;
             ASSERT_TRUE(rec.deaths.size() <= kDeathsMaxBytes);                       // (the map of deaths of the same play: test_history_deaths.cpp checks what is in it)
             expected.deaths = rec.deaths;
+            ASSERT_TRUE(rec.action.size() <= kActionMaxBytes);                       // (the action of the same play: test_history_deaths.cpp checks what is in it)
+            expected.action = rec.action;
             ASSERT_EQ(ctl::to_json(history_record_to_json(rec, true)), ctl::to_json(history_record_to_json(expected, true)));
             // both doors list it
             const ctl::HttpResponse owner = r.call("GET", "/history");

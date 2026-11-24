@@ -75,7 +75,7 @@ def put(value, letters):
 
 
 def pack_ant(x, y, second, team, killer, kind=0, drowned=False):
-    """One ant of nine letters, as ants_server/history_deaths.hpp writes it (docs/REPLAYS.md "The map of deaths")"""
+    """One ant of nine letters, as ants_server/history_deaths.hpp writes it (docs/HEATMAPS.md "The map of deaths")"""
     return put(x, 2) + put(y, 2) + put(second, 3) + put((team & 3) | (kind << 2) | (32 if drowned else 0) | ((7 if killer < 0 else killer) << 6), 2)
 
 

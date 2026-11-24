@@ -1,4 +1,4 @@
-// The migrations of the server's database (docs/SERVER.md "The database"). Version 1 is the foundation (`meta`); version 2 holds the match history (docs/REPLAYS.md "The match history"); version 3 the play counts of the maps; version 4 the site statistics; version 7 the map of deaths of a match; version 8 retires the accounts of the admin page; version 9 the schedules of the server's own bot matches; version 10 the lists of their rotation.
+// The migrations of the server's database (docs/SERVER.md "The database"). Version 1 is the foundation (`meta`); version 2 holds the match history (docs/REPLAYS.md "The match history"); version 3 the play counts of the maps; version 4 the site statistics; version 7 the map of deaths of a match; version 8 retires the accounts of the admin page; version 9 the schedules of the server's own bot matches; version 10 the lists of their rotation; version 11 the action of a match.
 #include "ants_server/db_schema.hpp"
 
 namespace ants::server {
@@ -196,7 +196,7 @@ const char* const kAccountsSql =
     "UPDATE map_submissions SET decided_by = COALESCE((SELECT r.actor_name FROM review_log r WHERE r.submission = map_submissions.id AND r.action IN ('approve', 'decline', 'take_down', 'put_back') ORDER BY r.id DESC LIMIT 1), '')"
     " WHERE state IN ('approved', 'declined', 'taken_down');";
 
-// Version 7. history_deaths: the map of deaths of a match (docs/REPLAYS.md "The map of deaths", ants_server/history_deaths.hpp), one row for each match whose replay pass found where its ants died; a match
+// Version 7. history_deaths: the map of deaths of a match (docs/HEATMAPS.md "The map of deaths", ants_server/history_deaths.hpp), one row for each match whose replay pass found where its ants died; a match
 // that was counted before this version, a match in which nobody died and one that the pass could not count have no row (they are not counted again for it). `deaths` is the JSON text of the field (at most
 // 3,000 characters: the cap of this field, apart from the cap of `details`); `map` and `hash` (the map's file name and its FNV-1a 64 as 16 hex digits, as map_plays has them) are what the sum of a map's
 // matches groups by (another file under the same name is another map), `w` and `h` the map's size in tiles, `n` how many ants died, `ended` the match's end time. The row goes with its match.
@@ -275,6 +275,15 @@ const char* const kBotRotationSql =
     " updated_at INTEGER NOT NULL DEFAULT 0"
     ") WITHOUT ROWID;";
 
+// Version 11. history_action: the action of a match (docs/HEATMAPS.md "The activity curve", ants_server/history_action.hpp), how many deaths, bombs, thefts, fires and hits happened in every few seconds, one row for each
+// match whose replay pass counted any; a match that was counted before this version, a match in which none of the five happened and one that the pass could not count have no row (they are not counted again for
+// it: the page draws what the deaths alone say). `action` is the JSON text of the field (at most 1,500 characters: the cap of this field, apart from the cap of `details` and of `history_deaths`). The row goes with its match.
+const char* const kActionSql =
+    "CREATE TABLE history_action ("
+    " id TEXT PRIMARY KEY NOT NULL REFERENCES history_matches (id) ON DELETE CASCADE,"
+    " action TEXT NOT NULL CHECK (length(action) <= 1500)"
+    ") WITHOUT ROWID;";
+
 }  // namespace
 
 const std::vector<db::Migration>& db_migrations() {
@@ -289,6 +298,7 @@ const std::vector<db::Migration>& db_migrations() {
         {8, "admin_pass", kAdminPassSql, true},                // (the old password hashes and names are in free pages of the file until it is rewritten)
         {9, "bot_schedules", kBotSchedulesSql},
         {10, "bot_rotation", kBotRotationSql},
+        {11, "history_action", kActionSql},
     };
     return list;
 }
@@ -300,6 +310,7 @@ const std::vector<db::Migration>& history_db_migrations() {
         {2, "history", kHistorySql},
         {3, "map_plays", kMapPlaysSql},
         {4, "history_deaths", kDeathsSql},
+        {5, "history_action", kActionSql},
     };
     return list;
 }

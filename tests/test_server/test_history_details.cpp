@@ -485,6 +485,9 @@ int main() {
             ASSERT_EQ(st.kills.size(), size_t{2});
             for (const MatchStats::Kill& k : st.kills) ASSERT_TRUE(k.victim == 0 && k.killer == MatchStats::kNoKiller);   // (no seat killed it: its own fire did)
             ASSERT_EQ(sum_of(st.damage_dealt), int64_t{0});                                    // (hurting yourself deals nothing)
+            uint64_t hurt = 0;
+            for (const uint32_t n : st.action[static_cast<size_t>(MatchStats::Action::Hit)]) hurt += n;
+            ASSERT_TRUE(hurt >= 2 && hurt <= 2 * (b.turns / MatchStats::kSampleTurns + 1));    // (two ants burned for hundreds of ticks: one hit for each in each bucket of 5 seconds, not one for every tick)
             ASSERT_TRUE(st.damage_taken[0] >= 18 && st.damage_from[0][0] == st.damage_taken[0]);
             ASSERT_TRUE(st.damage_taken[1] == 0 && st.damage_from[1][0] == 0);
             ASSERT_TRUE(st.wipes[0] == 2 && st.wipes[1] == 0);
@@ -517,6 +520,7 @@ int main() {
             const MatchStats st = b.collector.take(b.turns);
             ASSERT_TRUE(st.ok);
             ASSERT_EQ(sum_of(st.bombs_off), int64_t{0});                                       // (taken away by an ant: it did not go off)
+            ASSERT_TRUE(st.action[static_cast<size_t>(MatchStats::Action::Bomb)].empty());     // (nor is it a bomb in the activity curve)
         }
         {
             // a bomb that went off is its planter's, whichever seat that is: one of each seat, set off by an ant of the other
@@ -540,6 +544,25 @@ int main() {
             ASSERT_FALSE(b.engine.has_bomb_at({31, 30}));
             const MatchStats st = b.collector.take(b.turns);
             ASSERT_TRUE(st.ok && st.bombs_off[0] == 1 && st.bombs_off[1] == 1 && sum_of(st.bombs_off) == 2);
+        }
+        {
+            // a bomb that goes off is a bomb of the activity curve, in the bucket of the 5 seconds it went off in (turn / 100): two in the first, one after 5 seconds in the next
+            Bench b(shell);
+            const uint32_t bomber = b.engine.spawn_unit(0, sim::AntType::Bomber, {10, 10});
+            const uint32_t walker = b.engine.spawn_unit(1, sim::AntType::Worker, {12, 10});
+            b.step(2);
+            ASSERT_TRUE(b.engine.plant_bomb(bomber, {11, 10}) && b.engine.plant_bomb(bomber, {9, 10}));
+            b.step(2);
+            b.engine.trigger_bomb_detonation(walker, {11, 10});
+            b.step(2);
+            b.engine.trigger_bomb_detonation(walker, {9, 10});
+            b.step(150);
+            ASSERT_TRUE(b.engine.plant_bomb(bomber, {10, 11}));
+            b.step(2);
+            b.engine.trigger_bomb_detonation(walker, {10, 11});
+            b.step(2);
+            const MatchStats st = b.collector.take(b.turns);
+            ASSERT_TRUE(st.ok && sum_of(st.bombs_off) == 3 && st.action[static_cast<size_t>(MatchStats::Action::Bomb)] == std::vector<uint32_t>({2, 1}));
         }
         {
             Bench b(shell);
