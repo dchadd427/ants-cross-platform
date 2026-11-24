@@ -2,8 +2,8 @@
 """The settings menu of the game page (Esc, or a Settings button; docs/GAME_MENU.md; run by ./run_tests.sh --fast and by the CI). The game's side is tests/test_app/test_game_menu.cpp; what the page and its
 script can say without a browser is checked here:
 
-  - the page: has no tag and no markup of the menu (the script fetches itself and makes its buttons and panel), loads it once the game runs and never in the frame of a match page, retries once and then says
-    so in the toast, calls it with the pieces of the page that it needs, and has no key handler of its own for Esc (the game asks, through window.antsGameMenuAsk, when Esc has nothing to cancel);
+  - the page: has no tag and no markup of the menu (the script fetches itself and makes its buttons and panel), loads it once the game runs (the frame of a match page too: its ready callback is run by
+    tests/scripts/web_menu_handover_check.js), retries once and then says so in the toast, calls it with the pieces of the page that it needs, and has no key handler of its own for Esc (the game asks, through window.antsGameMenuAsk, when Esc has nothing to cancel);
   - the script: puts every text in with textContent (no markup is ever written), reads and writes the game only through the five exports of src/ants_app/application_game_menu.cpp, uses the numbers of
     game_menu.hpp for rows, facts and acts, handles by name only rows that the C++ table has, listens to nothing outside the panel's life, and leaves the lifts of keys to the game;
   - the style: no button of the menu lies over the picture in fullscreen, on any device (the header, under-the-picture and replay-bar buttons are all that is left), and the list of a section scrolls
@@ -58,10 +58,7 @@ class ThePage(unittest.TestCase):
             self.assertNotIn('id="%s' % name, self.page, "the script makes the buttons and the panel")
             self.assertNotIn('class="%s' % name, self.page)
 
-    def test_it_is_fetched_once_the_game_runs_and_not_in_a_frame(self):
-        ready = self.page[self.page.index("isReadyToPlay = true;"):]
-        ready = ready[:ready.index("hideLoadingScreen();")]
-        self.assertIn("if (!ANTS_EMBED) antsLoadGameMenu();", ready)
+    def test_it_is_fetched_once_the_game_runs(self):
         self.assertEqual(len(re.findall(r"antsLoadGameMenu\(", self.page)), 3, "the definition, its retry and the one call")
         self.assertIn("script.src = 'game_menu.js?v=' + ANTS_BUILD_VER;", self.loader)
         self.assertIn("document.head.appendChild(script);", self.loader)

@@ -30,8 +30,10 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - **Where the action is, on a replay.** A soft curve over the replay's timeline shows the fights: deaths most of all, then bombs, thefts, fires and hits. On a computer it shows while the pointer is over the timeline, with the time and what happened ("2:41 · 3 deaths, 1 bomb"); on a phone it is always there, faint, and solid under your finger. The timeline has a row of its own on a computer now, as wide as the picture. Matches played before this version show a curve of their deaths alone.
-
 - **A new results screen.** With the New HUD art the scores are in the new look and fit any screen: a table of players, and a card for each player on a narrow one. The same rows and numbers; Classic keeps the original's page.
+
+**Fixes:**
+- Watching a replay on a match page has the Settings button too.
 
 **For operators:**
 - The game server's database moves to schema version 11 (the table `history_action`, the counts that the activity curve is drawn from; the history service's own file to its version 5): an older program refuses the newer file, and the update does not copy it, so stop the server and copy `ants.db` before the update; that copy is the way back ([`docs/HEATMAPS.md`](docs/HEATMAPS.md#the-activity-curve)).

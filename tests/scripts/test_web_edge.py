@@ -261,7 +261,7 @@ class ThePagesOwnCode(unittest.TestCase):
         self.assertIn("0 failures", done.stdout)
 
     def test_the_page_hands_the_menu_its_pick_function_and_its_lock(self):
-        """the call of AntsGameMenu.forPage, run as the page writes it (tests/scripts/web_menu_handover_check.js): the menu's Picture shape row and Fullscreen mouse row work only through what it is handed"""
+        """the call of AntsGameMenu.forPage, run as the page writes it (tests/scripts/web_menu_handover_check.js): the menu's Picture shape row and Fullscreen mouse row work only through what it is handed; and the ready callback, run too: the page loads the menu, in the frame of a match page as well"""
         done = subprocess.run([shutil.which("node"), os.path.join(REPO, "tests", "scripts", "web_menu_handover_check.js"), SHELL], capture_output=True, text=True, timeout=120)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("0 failures", done.stdout)
