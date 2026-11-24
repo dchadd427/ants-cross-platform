@@ -31,8 +31,8 @@ All are plan switches that ship on at every level (`LevelPlan`, `plan_for`); the
 
 | | | score a seat | idle % | idle % after the last food | steals a seat (points) | bridge tiles a seat | Fire hats a seat | matches won | score gain, on minus off (± 2 SE) |
 |---|---|---|---|---|---|---|---|---|---|
-| Hard | batch | 1479 | 43 | 75 | 4.16 (208) | 16.8 | 0.84 | 178 | +166 ± 25 |
-| | none | 1312 | 52 | 91 | 0.00 (0) | 5.9 | 0.19 | 34 | |
+| Hard | batch | 1478 | 43 | 75 | 4.23 (212) | 16.8 | 0.86 | 179 | +164 ± 27 |
+| | none | 1314 | 52 | 91 | 0.01 (1) | 6.0 | 0.22 | 34 | |
 | Medium | batch | 1402 | 61 | 86 | 0.00 (0) | 0.0 | 2.00 | 36 | +1 ± 1 |
 | | none | 1402 | 62 | 87 | 0.00 (0) | 0.0 | 2.00 | 36 | |
 | Easy | batch | 1044 | 67 | 74 | 0.00 (0) | 0.0 | 2.00 | 33 | -1 ± 2 |
@@ -42,29 +42,29 @@ All are plan switches that ship on at every level (`LevelPlan`, `plan_for`); the
 
 | | | score a seat | idle % | idle % after the last food | steals a seat (points) | bridge tiles a seat | Fire hats a seat | matches won | score gain, on minus off (± 2 SE) |
 |---|---|---|---|---|---|---|---|---|---|
-| The Thief of the endgame | all on | 1475 | 43 | 74 | 3.96 (198) | 16.9 | 0.89 | 178 | +159 ± 30 |
-| | this rule off | 1317 | 48 | 81 | 0.00 (0) | 8.0 | 0.83 | 34 | |
-| Jobs for idle ants | all on | 1398 | 44 | 77 | 2.25 (112) | 13.1 | 0.83 | 116 | +4 ± 26 |
-| | this rule off | 1394 | 45 | 78 | 2.12 (106) | 12.6 | 0.91 | 99 | |
-| A blow beside the enemy | all on | 1399 | 44 | 75 | 2.25 (112) | 13.6 | 0.99 | 105 | +7 ± 11 |
-| | this rule off | 1393 | 44 | 76 | 2.27 (114) | 13.5 | 1.00 | 102 | |
-| Head-on on a bridge | all on | 1394 | 44 | 75 | 2.25 (113) | 13.4 | 0.88 | 104 | -4 ± 20 |
-| | this rule off | 1398 | 44 | 76 | 2.27 (113) | 13.0 | 0.88 | 109 | |
-| Fire hats | all on | 1396 | 44 | 75 | 2.17 (108) | 14.1 | 1.03 | 106 | -0 ± 12 |
-| | this rule off | 1396 | 46 | 80 | 2.32 (116) | 12.5 | 0.55 | 109 | |
-| More bridges | all on | 1397 | 44 | 75 | 2.26 (113) | 13.5 | 0.94 | 105 | +1 ± 6 |
-| | this rule off | 1396 | 44 | 76 | 2.27 (114) | 12.9 | 0.90 | 105 | |
-| The answer to a Thief | all on | 1394 | 44 | 75 | 2.21 (110) | 13.5 | 0.93 | 107 | -5 ± 14 |
-| | this rule off | 1399 | 44 | 76 | 2.22 (111) | 12.8 | 0.91 | 106 | |
+| The Thief of the endgame | all on | 1476 | 43 | 74 | 3.98 (199) | 17.1 | 0.93 | 177 | +161 ± 25 |
+| | this rule off | 1315 | 49 | 81 | 0.02 (1) | 7.7 | 0.77 | 35 | |
+| Jobs for idle ants | all on | 1398 | 45 | 77 | 2.21 (111) | 12.9 | 0.80 | 114 | +3 ± 26 |
+| | this rule off | 1395 | 45 | 78 | 2.02 (101) | 12.7 | 0.94 | 102 | |
+| A blow beside the enemy | all on | 1402 | 44 | 76 | 2.24 (112) | 13.4 | 0.89 | 111 | +12 ± 10 |
+| | this rule off | 1390 | 44 | 76 | 2.22 (111) | 13.6 | 0.98 | 105 | |
+| Head-on on a bridge | all on | 1396 | 44 | 75 | 2.31 (115) | 13.3 | 0.87 | 106 | +1 ± 19 |
+| | this rule off | 1395 | 44 | 76 | 2.31 (115) | 13.2 | 0.85 | 110 | |
+| Fire hats | all on | 1397 | 44 | 76 | 2.21 (111) | 13.6 | 0.94 | 102 | +2 ± 13 |
+| | this rule off | 1396 | 46 | 81 | 2.33 (117) | 12.0 | 0.51 | 111 | |
+| More bridges | all on | 1395 | 44 | 76 | 2.28 (114) | 13.3 | 0.94 | 107 | -4 ± 5 |
+| | this rule off | 1399 | 44 | 76 | 2.27 (113) | 12.6 | 0.85 | 109 | |
+| The answer to a Thief | all on | 1393 | 44 | 75 | 2.19 (109) | 13.5 | 0.88 | 110 | -7 ± 11 |
+| | this rule off | 1400 | 44 | 76 | 2.26 (113) | 12.5 | 0.84 | 106 | |
 
 *The answer to a Thief, with the meeting of the thief batch made wider (`tgrad=24,tgreach=16`: it takes ants from farther away), against the answer off:*
 
 | | | score a seat | idle % | idle % after the last food | steals a seat (points) | bridge tiles a seat | Fire hats a seat | matches won | score gain, on minus off (± 2 SE) |
 |---|---|---|---|---|---|---|---|---|---|
-| The answer to a Thief | all on | 1393 | 44 | 74 | 2.22 (111) | 13.0 | 0.89 | 105 | -4 ± 12 |
-| | answer off | 1398 | 44 | 75 | 2.20 (110) | 12.8 | 0.87 | 106 | |
+| The answer to a Thief | all on | 1393 | 44 | 75 | 2.22 (111) | 13.0 | 0.84 | 108 | -6 ± 16 |
+| | answer off | 1399 | 44 | 76 | 2.18 (109) | 12.4 | 0.83 | 103 | |
 
-*The other maps (Hard, 8 seeds: the maps of the rotation and the three community maps):*
+*The other maps (Hard, 8 seeds; HELLRAISER 48):*
 
 | | | score a seat | idle % | idle % after the last food | steals a seat (points) | bridge tiles a seat | Fire hats a seat | matches won | score gain, on minus off (± 2 SE) |
 |---|---|---|---|---|---|---|---|---|---|
@@ -78,8 +78,8 @@ All are plan switches that ship on at every level (`LevelPlan`, `plan_for`); the
 | | none | 273 | 1 | 12 | 5.56 (265) | 0.0 | 1.02 | 28 | |
 | TREASURE | batch | 2046 | 0 | 10 | 3.38 (167) | 0.0 | 1.08 | 25 | +8 ± 104 |
 | | none | 2038 | 0 | 13 | 3.27 (162) | 0.0 | 1.06 | 23 | |
-| POPcOrN | batch | 633 | 38 | 55 | 2.68 (134) | 1.0 | 1.34 | 25 | +98 ± 124 |
-| | none | 535 | 49 | 83 | 0.88 (44) | 1.0 | 1.18 | 21 | |
+| POPcOrN | batch | 651 | 37 | 54 | 3.04 (152) | 1.0 | 1.34 | 25 | +128 ± 120 |
+| | none | 523 | 49 | 83 | 0.90 (45) | 1.0 | 1.17 | 21 | |
 | HELLRAISER | batch | 179 | 34 | 39 | 0.00 (0) | 0.0 | 0.01 | 123 | -3 ± 6 |
 | | none | 182 | 34 | 39 | 0.00 (0) | 0.0 | 0.01 | 126 | |
 | Bombz_Away | batch | 545 | 1 | 10 | 0.00 (0) | 0.0 | 0.00 | 24 | +36 ± 24 |
@@ -102,31 +102,31 @@ All are plan switches that ship on at every level (`LevelPlan`, `plan_for`); the
 | MEDIUM Easy | batch | 1227 | 2 | 12 | 0.03 (1) | 0.0 | 0.03 | 18 | +7 ± 9 |
 | | none | 1220 | 3 | 17 | 0.00 (0) | 0.0 | 0.00 | 18 | |
 
-*What it costs in orders and in ants that stand nowhere (ISLANDS, Hard; the maps without the batch's island play for comparison; [BOT_UNSTUCK.md](BOT_UNSTUCK.md) has the two counters):*
+*What it costs in orders and in ants that stand nowhere (ISLANDS, Hard, with the maps that have Thieves without the batch's island play for comparison; [BOT_UNSTUCK.md](BOT_UNSTUCK.md) has the two counters):*
 
 | | | orders a seat | refused per 1,000 orders | stuck ants a seat and match | in the can't-go clip | carrying with no order |
 |---|---|---|---|---|---|---|
-| ISLANDS Hard | batch | 542 | 48.7 | 0.25 | 0.10 | 0.14 |
-|  | none | 473 | 13.6 | 0.05 | 0.01 | 0.03 |
+| ISLANDS Hard | batch | 543 | 50.4 | 0.28 | 0.10 | 0.17 |
+|  | none | 473 | 13.5 | 0.06 | 0.01 | 0.03 |
 | TREASURE Hard | batch | 508 | 11.4 | 0.23 | 0.20 | 0.00 |
 |  | none | 509 | 13.2 | 0.21 | 0.19 | 0.01 |
 | MEDIUM Hard | batch | 283 | 3.0 | 0.08 | 0.04 | 0.04 |
 |  | none | 286 | 4.9 | 0.18 | 0.07 | 0.01 |
-| POPcOrN Hard | batch | 157 | 75.9 | 0.19 | 0.11 | 0.07 |
-|  | none | 129 | 62.6 | 0.18 | 0.09 | 0.08 |
+| POPcOrN Hard | batch | 160 | 73.5 | 0.19 | 0.11 | 0.07 |
+|  | none | 130 | 62.3 | 0.18 | 0.09 | 0.08 |
 
-*The counters of the batch in the "batch" seats of the first table:* headon_jams 0.79, headon_backoffs 0.79, contact_jobs 1.02, contact_blows 2.17, meets 1.73, meet_strikes 7.23, holds 1.09, heals 1.84, swarm_thieves 1.10, homed 7.36, raid_tiles 10.56, home_tiles 0.31.
+*The counters of the batch in the "batch" seats of the first table, a seat and match:* headon_jams 0.79, headon_backoffs 0.79, contact_jobs 1.09, contact_blows 2.31, meets 1.70, meet_strikes 3.78, holds 1.11, heals 1.92, swarm_thieves 1.11, homed 7.37, raid_tiles 10.52, home_tiles 0.30.
 
-*Four seats of one kind (36 seeds, ISLANDS, Hard, every match replayed): the batch on in all four seats, a mean score of 1,397 a seat; off in all four, 1,399. Every replay played out to the same hashes, in both runs.*
+*Four seats of one kind (36 seeds, ISLANDS, Hard, every match replayed): the batch on in all four seats, a mean score of 1,396 a seat; off in all four, 1,399. Every replay played out to the same hashes, in both runs.*
 
 ## What the numbers say
 
-- **The gain is the Thief of the endgame, and it is taken from the other seats.** With it the bots steal about four times a match and a seat (208 points) where they stole none, they dig 17 bridge tiles a seat where they dug 6, and a seat that plays the batch scores 166 more than one that does not (159 with the Thief of the endgame as the only rule off), and loses 83 points to steals where the others lose 135. When all four seats have it the mean stays where it was (1,397 against 1,399): a steal moves 50 points from one seat to another. The batch is a way to win a match against the bots that lack it, not a larger score for everybody.
-- **The other six rules are inside the noise of the score on ISLANDS** (all within twice the standard error: -5 to +7), and none costs anything. Each does what it was built for in its own counters: the Fire hats are taken twice as often (0.55 to 1.03 a seat and match, and a gain of 1.6 bridge tiles a seat), the bridge rule digs 0.6 more, 1.8 hurt ants a seat walk home, 0.8 head-on jams a seat are undone, 1.1 holds of the thief hole begin. The idle share after the last food falls from 91% to 75% with the batch, 7 points of the 16 of them with the Thief of the endgame and 5 with the Fire hats; what is left stands because standing is the work (the three ants at the thief hole, the ferry's Swimmers, the Thief that waits for its chain).
-- **The two defences show nothing in the arena.** The answer to a Thief (-5 ± 14, and -4 ± 12 with the wider meeting) leaves the points raided from a seat where they were (117 with it, 113 without; the steals of the others: 2.2 a seat and match either way), and so do the holds of the idle jobs (111 and 116). Both cost nothing, and AI58.3 and AI58.4 show the hill that keeps its 50 points in a world with a Thief that goes for it, so they stay on; the bots' own Thieves (2.2 steals a seat and match) are too few to be the test (the match that was watched had 13 steals by a person). A bench Thief that raids like the person is what would measure them ("Left out").
-- **Medium and Easy do not change** (+1 and -1 on ISLANDS; every row of the small-map table is inside twice its standard error): the rules of the island play need Hard's machinery, and what the other rules do at those levels is too little to show. The other maps do not change either, except where there is a Thief to steal with: POPcOrN (steals 0.9 to 2.7 a seat, idle after the last food 83% to 55%) and Bombz Away (idle after the last food 22% to 10%; +36 ± 24 in score, the one other gain that is more than its error). POPcOrN has a wide error (8 seeds: +98 ± 124).
-- **What it costs.** On ISLANDS the refused orders rise from 14 to 49 in 1,000 and the ants that stood nowhere for 10 seconds from 0.05 to 0.25 a seat and match: most of them are Thieves that stand with their loot (seen in a sample of 24 matches). That is what a Thief does on the other maps too (TREASURE, without the batch: 13 refused in 1,000 and 0.21 stuck ants; POPcOrN: 63 and 0.18), and the orders stay inside the budget of the level; it is not solved here.
-- **Where it was found by measuring.** An early build ran the raid task's island mode on the gate maps as well (HELLRAISER's idle share doubled, its raids moved): `Tactics::island_play` ties it to the island maps, and AI58.9 plays HELLRAISER with the island rules on and off to the same match. The blows of the ferry's Swimmers were refused again and again by the engine (a fifth of the batch's refused orders): `ContactTask` leaves them to the ferry.
+- **The gain is the Thief of the endgame, and it is taken from the other seats.** With it the bots steal about four times a match and a seat (212 points) where they stole none, they dig 17 bridge tiles a seat where they dug 6, and a seat that plays the batch scores 164 more than one that does not (161 with the Thief of the endgame as the only rule off), and loses 86 points to steals where the others lose 134. When all four seats have it the mean stays where it was (1,396 against 1,399): a steal moves 50 points from one seat to another. The batch is a way to win a match against the bots that lack it, not a larger score for everybody.
+- **The other six rules are at the edge of the noise of the score on ISLANDS** (-7 to +12, each within about twice its standard error; the blow beside the enemy, +12 ± 10, is the largest) and none costs anything. Each does what it was built for in its own counters: the Fire hats are taken twice as often (0.51 to 0.94 a seat and match, and 1.6 bridge tiles a seat more), the bridge rule digs 0.7 more, 1.9 hurt ants a seat walk home, 0.8 head-on jams a seat are undone, 1.1 holds of the thief hole begin. The idle share after the last food falls from 91% to 75% with the batch, 7 points of the 16 of them with the Thief of the endgame and 5 with the Fire hats; what is left stands because standing is the work (the three ants at the thief hole, the ferry's Swimmers, the Thief that waits for its chain).
+- **The two defences show nothing in the arena.** The answer to a Thief (-7 ± 11, and -6 ± 16 with the wider meeting) leaves the points raided from a seat where they were (116 with it, 113 without; the steals of the others: 2.2 a seat and match either way), and so do the holds of the idle jobs (108 and 111). Both cost nothing, and AI58.3 and AI58.4 show the hill that keeps its 50 points in a world with a Thief that goes for it, so they stay on; the bots' own Thieves (2.2 steals a seat and match) are too few to be the test (the match that was watched had 13 steals by a person). A bench Thief that raids like the person is what would measure them ("Left out").
+- **Medium and Easy do not change** (+1 and -1 on ISLANDS; every row of the small-map table is inside twice its standard error): the rules of the island play need Hard's machinery, and what the other rules do at those levels is too little to show. The other maps do not change either, except where there is a Thief to steal with: POPcOrN (steals 0.9 to 3.0 a seat, idle after the last food 83% to 54%; +128 ± 120 with 8 seeds) and Bombz Away (idle after the last food 22% to 10%; +36 ± 24 in score, the one other gain that is more than its error). HELLRAISER, with 48 seeds, reads -3 ± 6.
+- **What it costs.** On ISLANDS the refused orders rise from 14 to 50 in 1,000 and the ants that stood nowhere for 10 seconds from 0.06 to 0.28 a seat and match: most of them are Thieves that stand with their loot (seen in a sample of 24 matches). That is what a Thief does on the other maps too (TREASURE, without the batch: 13 refused in 1,000 and 0.21 stuck ants; POPcOrN: 62 and 0.18), and the orders stay inside the budget of the level; it is not solved here. The server's test of what a Hard bot costs reads 2.6 times the idle bots on TREASURE (the bound is 6).
+- **Where it was found by measuring.** An early build ran the raid task's island mode on the gate maps as well (HELLRAISER's idle share doubled, its raids moved): `Tactics::island_play` ties it to the island maps, and AI58.9 plays HELLRAISER with the island rules on and off to the same match. The blows of the ferry's Swimmers were refused again and again by the engine (a fifth of the batch's refused orders): `ContactTask` leaves them to the ferry. The idle jobs flooded the whole map at every look while a Fire Ant stood on it (three times the time of a match of four Hard bots): they look at the walks once in 100 ticks, and only when a hold is wanted or a hurt ant waits.
 
 ## Left out
 
