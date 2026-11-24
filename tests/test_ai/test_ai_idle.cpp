@@ -2,7 +2,7 @@
 // map that the rules were found on.
 //
 //   AI58.1  two ants face to face on a bridge: the engine leaves them standing for ever, the bot's head-on rule steps one back to land and the other crosses; with the rule off they stand
-//   AI58.2  one free ant beside an enemy that stands still strikes it (and not when the enemy is the stronger, when an enemy Combat Ant stands near, with the rule off)
+//   AI58.2  one free ant beside an enemy that stands still strikes it (and not when the enemy is the stronger, when an enemy Combat Ant stands near, for a Swimmer, with the rule off)
 //   AI58.3  an enemy Thief that walks to the own hole is met by the idle ants (blockers on the three tiles, a blow for the Thief): the hill keeps its points; with the rule off the raid goes through
 //   AI58.4  with the food gone the idle ants hold the three tiles in front of the thief hole, and a raid of a Thief of another team ends in the can't-go clip; with the rule off it takes its 50 points
 //   AI58.5  a hurt ant that stands idle walks home and is whole again; with the rule off it stands
@@ -121,10 +121,10 @@ void run_idle_tests() {
             uint16_t enemy_hp{0};
             uint32_t started{0};
         };
-        const auto play = [&](bool rule, uint16_t own_hp, uint16_t enemy_hp, bool combat_near) {
+        const auto play = [&](bool rule, uint16_t own_hp, uint16_t enemy_hp, bool combat_near, sim::AntType own_type = sim::AntType::Worker) {
             sim::SimulationEngine sim;
             empty_field(sim, 33);
-            const uint32_t mine = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{30, 30});
+            const uint32_t mine = sim.spawn_unit(0, own_type, TileCoord{30, 30});
             const uint32_t foe = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{31, 30});
             if (combat_near) sim.spawn_unit(1, sim::AntType::Combat, TileCoord{34, 30});
             sim.get_unit(mine).hp = own_hp;
@@ -147,6 +147,9 @@ void run_idle_tests() {
         ASSERT_EQ(weaker.enemy_hp, 10u);
         const Out combat = play(true, 10, 10, true);                                             // an enemy Combat Ant stands near: a person looks first
         ASSERT_EQ(combat.started, 0u);
+        const Out ferry = play(true, 10, 10, false, sim::AntType::Swimmer);                      // the ferry's ant does not strike (from the water the engine refuses the blow)
+        ASSERT_EQ(ferry.started, 0u);
+        ASSERT_EQ(ferry.enemy_hp, 10u);
     } TEST_END();
 
     TEST_CASE("AI58.3 An Enemy Thief That Walks To The Own Hole Is Met By The Idle Ants: Blockers Stand On The Tiles In Front Of It, The Hill Keeps Its Points, The Thief Is Struck; With The Rule Off The Raid Goes Through (A Hard Bot, Six Idle Workers)") {

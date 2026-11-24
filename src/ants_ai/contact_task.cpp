@@ -14,10 +14,11 @@ namespace {
 
 bool is_ally(const BotView& v, uint8_t team) noexcept { return v.ally() < sim::MAX_PLAYERS && team == v.ally(); }
 
-// An ant of the seat that may be sent to strike: it can strike at all, is neither the keeper of the walls (a Fire Ant) nor a Thief (it holds the loot or raids), and is free or holds a chore of rank 2 or
-// less (the economy, the guard, the ferry)
+// An ant of the seat that may be sent to strike: it can strike at all, is neither the keeper of the walls (a Fire Ant), a Thief (it holds the loot or raids) nor a Swimmer that is no worker (the ferry's ant:
+// from the water it hits nothing, and the engine refuses the blow again and again), and is free or holds a chore of rank 2 or less (the economy, the guard, the ferry)
 bool striker_ok(const BotView& v, const AntLedger& ledger, TaskId mine, const AntView& a, uint8_t min_hp) noexcept {
     if (!can_strike(v, a) || a.hp < min_hp || !a.idle() || a.type == sim::AntType::Fire || a.type == sim::AntType::Thief) return false;
+    if (a.type == sim::AntType::Swimmer && a.type != v.default_ant_type()) return false;
     const TaskId owner = ledger.owner(a.id);
     return owner == kNoTask || owner == mine || ledger.rank(owner) <= 2;
 }

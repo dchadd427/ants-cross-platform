@@ -6,7 +6,7 @@
 // struck (docs/BOT_IDLE.md). A person who sees an ant of another team stand still beside his idle ant hits it, when he is not the one to lose: an ant that is not ordered to fight does not fight back (only a
 // Combat Ant's reflex does), so the blow costs nothing, and what it takes (a hit point a blow, a Thief's raid, a carrier's walk) is the enemy's.
 //
-// The task takes an own ant that is free (or holds a chore of rank 2 or less: the economy, the guard, the ferry), that can strike, is not a Fire Ant (the keeper of the walls) or a Thief (the loot), has the
+// The task takes an own ant that is free (or holds a chore of rank 2 or less: the economy, the guard, the ferry), that can strike, is not a Fire Ant (the keeper of the walls), a Thief (the loot) or a Swimmer (the ferry's: its blows from the water are refused), has the
 // hit points (`min_hp`) and stands idle, and an enemy ant that stands within one tile of it and has stood still for `stand_ticks` (a Thief any time: it cancels no raid by standing), that can be hit
 // (attackable: not on a power-up or a hill tile, not in a clip), is no Combat Ant, has no more hit points than the striker and no ally of the seat. It is not begun where an enemy Combat Ant stands within
 // `crowd_tiles` or two enemy ants that were drawn fighting lately do (a person looks first), nor within `home_tiles` of the enemy's hill (its ants answer there), nor in the last minute of a bot that leads (the
