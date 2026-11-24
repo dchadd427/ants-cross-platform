@@ -69,6 +69,14 @@ struct WorldStateCache : WorldState {
     WorldStateCache& operator=(const WorldStateCache&) { return *this; }
 };
 
+/// The ants of get_ant_snapshots() while the world state is stale: derived too, so a copy of the engine starts with none
+struct AntSnapshotCache {
+    std::vector<AntSnapshot> ants;
+    AntSnapshotCache() = default;
+    AntSnapshotCache(const AntSnapshotCache&) {}
+    AntSnapshotCache& operator=(const AntSnapshotCache&) { return *this; }
+};
+
 /// "The cached world state is out of date": true from the start, and true again in a copy of an engine and in an engine that was assigned to (see WorldStateCache).
 class StaleFlag {
 public:
@@ -264,6 +272,8 @@ public:
 
     mutable WorldStateCache world_state_cache_;
     mutable StaleFlag       world_state_dirty_;
+    mutable AntSnapshotCache ant_snapshots_;                // the ants alone (get_ant_snapshots), made when the world state is stale
+    void snapshot_ants(std::vector<AntSnapshot>& out) const;
     // Effect sprite created at pixel (px, py); tile effects pass the tile top-left and y_key = row*32.
     // Sound ownership (tracked sounds): effect sprites get an owner id from here (ants use their own id)
     uint32_t next_audio_owner_{0x40000000u};

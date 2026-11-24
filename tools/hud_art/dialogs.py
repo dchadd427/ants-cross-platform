@@ -6,6 +6,7 @@ cursors.py does (README.md, "The windows").
   the options window op_on_* and op_off_* (the switches), op_thumb_* (the slider's thumb), op_part_NN (the fixed layer, cut into pieces)
   the quick help     qh_part_NN (the fixed layer), qh_pedestal_move and qh_pedestal_special (small copies of the HUD's pedestals)
   the countdown card cd_title, cd_count_well, cd_row_well, cd_dot_0 .. cd_dot_3 (the Fullscreen button is dlg_btn_fullscreen_<up|down>)
+  the results screen sc_* (results_art.py): its lettering, the nine-slice well of its rows and the Leave Game button; they have no animation: the game lays the screen out itself
   window animations  one animation per picture of the original that a piece replaces (same name, same first frame time), with the places in the window's own numbers
 
 Places: every window's numbers are those of the original's 640 x 480 picture; the countdown card's are the card's own (its top left is (0, 0)): the game puts the card in the middle of the map view.
@@ -16,6 +17,7 @@ import dialog_kit as K
 import dialog_pieces as DP
 import dialog_windows as DW
 import orig_anim as OA
+import results_art as RA
 import shrink as SH
 
 SHEET_W = 700                        # the drawing sheet of the browser (not the game's sheet)
@@ -133,15 +135,22 @@ def export(scales, images):
     spots, height = _shelf(sizes + list(EMPTY_CELLS), SHEET_W)
     card_sizes = [(n, d[0], d[1]) for n, d in card_one.items()]
     card_spots, card_height = _shelf(card_sizes, SHEET_W)
+    # the results screen's pieces have a sheet of their own too (the sprites above keep the pixels they have)
+    res_cells, res_cut, res_trim = RA.drawings()
+    res_sizes = [(n, d[0], d[1]) for n, d in res_cells.items()]
+    res_spots, res_height = _shelf(res_sizes, SHEET_W)
     pics = {}
+    res_pics = {}
     for k in scales:
         sheet = K.render([(spots[n][0], spots[n][1], d[4]) for n, d in one.items()], SHEET_W, height, k, 'dialogs')
         pics[k] = {key: sheet.crop((spots[key][0] * k, spots[key][1] * k, (spots[key][0] + w) * k, (spots[key][1] + h) * k)) for key, w, h in sizes}
         card_sheet = K.render([(card_spots[n][0], card_spots[n][1], d[4]) for n, d in card_one.items()], SHEET_W, card_height, k, 'dialogs_card')
         pics[k].update({key: card_sheet.crop((card_spots[key][0] * k, card_spots[key][1] * k, (card_spots[key][0] + w) * k, (card_spots[key][1] + h) * k)) for key, w, h in card_sizes})
+        res_sheet = K.render([(res_spots[n][0], res_spots[n][1], d[2]) for n, d in res_cells.items()], SHEET_W, res_height, k, 'dialogs_results')
+        res_pics[k] = {key: res_sheet.crop((res_spots[key][0] * k, res_spots[key][1] * k, (res_spots[key][0] + w) * k, (res_spots[key][1] + h) * k)) for key, w, h in res_sizes}
         for key, (w, h, svg) in solo.items():
             pics[k][key] = K.render([(0, 0, svg)], w, h, k, 'dialogs_' + key.replace(':', '_'))
-        print('dialogs', k, len(sizes) + len(card_sizes) + len(solo), flush=True)
+        print('dialogs', k, len(sizes) + len(card_sizes) + len(res_sizes) + len(solo), flush=True)
     for k in scales:
         err = DP.check_periodic(pics[k]['_panel'], k)
         if err > 1:
@@ -160,6 +169,12 @@ def export(scales, images):
     for name, (w, h, x, y, _) in list(one.items()) + list(card_one.items()):
         for k in scales:
             out[k][name] = pics[k][name]
+        rows.append(_row(name, w, h, x, y))
+    # the results screen's lettering, well and button
+    res_out, res_rows = RA.pieces(res_cells, res_cut, res_trim, res_pics, scales)
+    for name, w, h, x, y in res_rows:
+        for k in scales:
+            out[k][name] = res_out[k][name]
         rows.append(_row(name, w, h, x, y))
     # the layers, cut into pieces
     parts = {}

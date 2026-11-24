@@ -468,6 +468,7 @@ void Application::attach_net() {
     net_->set_on_tick([this]() { post_tick(); });
     net_->set_on_executed([this](const net::TurnMsg& turn) {                       // every turn that the confirmed engine runs, the catch-up's too: the replay's recorder (docs/REPLAYS.md)
         if (recorder_) recorder_->on_turn(turn, sim_);
+        live_stats_.on_turn(turn, sim_);
     });
     net_->set_on_wake([this]() { background_pump(); });                            // the browser build: a message of the server wakes a hidden page (docs/NETWORK_PORT.md)
     net_->set_on_chat([this](const net::ChatMsg& m) {

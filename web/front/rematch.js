@@ -2,7 +2,8 @@
 // once, with the match's plan and a seat reserved for each person's key. This file is the pages' side of it, with no game in it:
 //   * the game page (web/shell.html): the game tells the page that its match is over (window.antsMatchOver, src/ants_app/application.cpp); the page reads the key of its seat (the game's own entry, before the game
 //     lets go of it), holds its reserved seat from the results screen with that key (a game's Hello: the seat stays reserved, and the others see "on the results screen"), and shows the strip under the game:
-//     "The match is over", who is back, and "Back to the lobby", which hands the key to the front page (this tab's session storage) and goes there;
+//     "The match is over", who is back, and the person's choice: "Back to the room", which hands the key to the front page (this tab's session storage) and goes there, and "Back to Ants & Uncles", which
+//     gives the seat up and goes to the front page without it (the game's results screen has the same two buttons: window.antsLeaveToRoom, window.antsLeaveToHub; nothing is chosen for the person: the screen waits);
 //   * the front page (web/lobby.html): the strip "Back from the match." at the top of the page, with the winner and a link to the match's stats and replay.
 // ES5 and no module system, as the site's other scripts: a page gets the global AntsRematch, node gets module.exports (tests/scripts/web_rematch_check.js). A name is only ever set as text.
 (function (root, factory) {
@@ -79,7 +80,7 @@
     }
 
     // ---- the hand-over to the front page ---------------------------------------------------------------------------------------------------------------------------------------------------------------
-    // "Back to the lobby": the front page of this tab finds its room (the code and the key: it takes the reserved seat back with them) and the match it comes back from. False when the storage refuses
+    // "Back to the room": the front page of this tab finds its room (the code and the key: it takes the reserved seat back with them) and the match it comes back from. False when the storage refuses
     // the room (the front page could not take the seat back: nothing may go); a match that is not kept only leaves the front page without its strip.
     function handOver(session, over, key, name, nowMs) {
         var lobby = JSON.stringify({ c: over.room, k: key, n: printable(name, 32) ? name : '', o: 0 });
@@ -187,7 +188,7 @@
         if (!join || !/^\/ws(\/[A-Za-z0-9._~\/-]*)?$/.test(join) || join.indexOf('//') !== -1 || join.indexOf('..') !== -1 || !env.host || !env.Net) return null;
         var name = (q.get('name') || '').replace(/[^\x20-\x7e]/g, '').trim().substring(0, 32);
         var url = (loc.protocol === 'https:' ? 'wss://' : 'ws://') + loc.host + join;
-        var st = { over: null, key: null, client: null, shown: false, removed: false, blocked: false, room: null };
+        var st = { over: null, key: null, client: null, shown: false, removed: false, blocked: false, left: false, room: null };
         var nodes = null;
         function relayout() { try { win.dispatchEvent(new win.Event('resize')); } catch (e) { /* no layout to tell */ } }
         function build() {
@@ -204,14 +205,18 @@
             who.setAttribute('aria-label', 'Who is back in the room');
             main.appendChild(who);
             var go = el(doc, 'div', 'rmt-go');
-            var button = el(doc, 'button', 'btn big', 'Back to the lobby');
+            var button = el(doc, 'button', 'btn big', 'Back to the room');
             button.type = 'button';
             button.addEventListener('click', back);
             go.appendChild(button);
-            go.appendChild(el(doc, 'div', 'rmt-note', 'The game’s own “Leave Game” brings you back here too.'));
+            var hub = el(doc, 'button', 'btn big', 'Back to Ants & Uncles');
+            hub.type = 'button';
+            hub.addEventListener('click', toHub);
+            go.appendChild(hub);
+            go.appendChild(el(doc, 'div', 'rmt-note', 'The same two buttons are on the game’s results screen.'));
             env.host.appendChild(main);
             env.host.appendChild(go);
-            nodes = { text: text, who: who, button: button, go: go };
+            nodes = { text: text, who: who, button: button, hub: hub, go: go };
         }
         function paint() {
             if (!nodes) return;
@@ -239,7 +244,7 @@
         function removed() {                                       // the host took this player out of the room (or the seat waited three hours): the strip says so, and has no button
             st.removed = true;
             if (!nodes) return;
-            nodes.text.textContent = 'Your seat in the room is not kept any more. The game’s own “Leave Game” goes to the menu.';
+            nodes.text.textContent = 'Your seat in the room is not kept any more. The game’s buttons go to the front page.';
             nodes.who.textContent = '';
             nodes.go.hidden = true;
             relayout();
@@ -258,6 +263,13 @@
             if (st.client) st.client.drop();                       // (no Leave: the seat is the front page's in a moment, with the key)
             loc.assign('/?room=' + encodeURIComponent(st.over.room));
         }
+        // "Back to Ants & Uncles": the seat is given up (a Leave: the room keeps the others and its host passes as ever) and the tab goes to the front page, where nothing is waiting for this person. It needs no key
+        // and no strip: a person whose seat is gone, or whose browser refuses the storage, can always go
+        function toHub() {
+            if (st.client) st.client.leave();
+            st.left = true;
+            loc.assign('/');
+        }
         // The results screen's link: a game's Hello with the key of the seat. A Welcome of the MATCH (the rejoin flag: only a match that still runs says it, when the server had not ended it yet) is let go
         // of without a word, and the seat is asked for again a moment later, `tries` times in all
         function ask(opts, tries) {
@@ -266,7 +278,7 @@
             c.on('welcome', function (w) {
                 if (w && w.rejoin) {
                     c.drop();
-                    if (tries > 1) later(function () { ask(opts, tries - 1); }, ASK_AFTER_MS);
+                    if (tries > 1) later(function () { if (!st.left) ask(opts, tries - 1); }, ASK_AFTER_MS);
                     return;
                 }
                 show();
@@ -289,9 +301,9 @@
             var opts = { url: url, code: over.room, name: name || over.names[over.seat], key: env.Net.bytesOfHex(key), join: true, kind: 'game', keyOnly: true, platform: platformOf(win.navigator) };
             var extra = env.clientOptions || {};
             for (var k in extra) if (Object.prototype.hasOwnProperty.call(extra, k)) opts[k] = extra[k];
-            later(function () { ask(opts, 3); }, ASK_AFTER_MS);
+            later(function () { if (!st.left) ask(opts, 3); }, ASK_AFTER_MS);
         };
-        // The game's own Leave Game on the results screen (src/ants_app/application_match.cpp, Application::quit) asks the page before it goes to the front page: while the strip's button works, the same hand-over is made
+        // The game's own "Back to the room" on the results screen (src/ants_app/application_match.cpp, Application::back_to_room; the original's page has Leave Game, Application::quit) asks the page before it goes to the front page: while the strip's button works, the same hand-over is made
         // and the tab goes to the room, so that the way back does not depend on the strip being seen (in fullscreen it is out of sight). False (the game goes to the front page, giving the seat up): no strip,
         // no key, a seat that is not kept any more, or a browser that refuses the storage.
         win.antsLeaveToRoom = function () {
@@ -299,8 +311,14 @@
             back();
             return !st.blocked;
         };
-        // The page goes some other way (the game's Leave Game with no strip, a closed tab, a reload, the Home button): the seat is given up (Leave), so that START does not wait for a person who cannot come back to it (the game let go of
-        // the key when the match ended, and this page's copy goes with the page). After "Back to the lobby", which hands the seat over, the client has let go already and says nothing.
+        // The game's "Back to Ants & Uncles" on the results screen (Application::back_to_hub): the same as the strip's button. True: the seat is given up and the tab is on its way to the front page
+        win.antsLeaveToHub = function () {
+            if (!st.over) return false;
+            toHub();
+            return true;
+        };
+        // The page goes some other way (the game's results screen with no strip, a closed tab, a reload, the Home button): the seat is given up (Leave), so that START does not wait for a person who cannot come back to it (the game let go of
+        // the key when the match ended, and this page's copy goes with the page). After "Back to the room", which hands the seat over, the client has let go already and says nothing.
         if (win.addEventListener) win.addEventListener('pagehide', function () { if (st.client) st.client.leave(); });
         return { state: st, back: back };
     }

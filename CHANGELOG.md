@@ -29,12 +29,23 @@ Work that is not released yet is written in the same template under a heading th
 ## Next
 
 **For players:**
-- **Special ants on a match's page.** A new section under the Scoreboard shows what each type of ant did: a card for each type that somebody had (Swimmer: bridges built and taken down; Fire Ant: fires lit and put out; Bomber: bombs set, defused and gone off; Thief: raids that brought loot home, "5 of 8", and the loot), and a card for food and fighting. A type that nobody used is left out with one line. Bombs set, Defused and Fires lit moved there from the Scoreboard. A match played before this release shows what was counted then (no bridges, fires put out or loot).
 - **Copy link on a phone.** A live view and a replay have the button in the top bar on a phone now (a share symbol, 44 px; on a computer it says Copy link as before). It opens the phone's share sheet where there is one, otherwise copies the match's address and says Copied!. The bar shows Matches and Full instead of All matches and Fullscreen on a narrow phone, so that all five buttons fit in one row.
 - **Computer players stand idle less.** On ISLANDS Hard bots take the Thief and Fire hats and dig to a rival's hill to steal; at every level ants that meet on a bridge sort it out. Bots only.
+- **A new results screen.** With the New HUD the end of a match is a page that fits any window or phone: Victory! or Defeat, the winner and the others ranked, the damage, three honors and a Play of the game, with Watch on the desktop. "All stats" opens every player's numbers and "Back to results" returns (the arrow keys work too).
+- **You choose after a room's match.** The results of a match that began in a lobby room have two buttons, "Back to the room" and "Back to Ants & Uncles", and wait until you press one.
+
+**Fixes:**
+- Private messages on a phone: the conversation is a sheet that follows what you can see, so with the keyboard open the field sits just above it, the head with the name and the X stays on the screen and the messages fill the room over the field. The X, the arrow, Escape, a pull down on the head and the phone's Back button each close the sheet and leave you on the page where you were, not on the bell's list.
+
+## v0.21.4 - 2026-11-24 - Special ants on the match page, What's new fits a phone
+
+**For players:**
+- **Special ants on a match's page.** A new section under the Scoreboard shows what each type of ant did: a card for each type that somebody had (Swimmer: bridges built and taken down; Fire Ant: fires lit and put out; Bomber: bombs set, defused and gone off; Thief: raids that brought loot home, "5 of 8", and the loot), and a card for food and fighting. A type that nobody used is left out with one line. Bombs set, Defused and Fires lit moved there from the Scoreboard. A match played before this release shows what was counted then (no bridges, fires put out or loot).
 
 **Fixes:**
 - On a phone, the "What's new" window fits the screen, so its Close button is no longer below the bottom of the page.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/3430f45a...e6b312bf)
 
 ## v0.21.3 - 2026-11-24 - Follows, private messages, replay likes and the activity curve
 
@@ -570,15 +581,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/629baa19...4396bf2d)
 
-## v0.15.1 - 2026-11-10 - The game server can always write each finished match's result file
+## Older versions (v0.15.1 and before)
 
-**For players:**
-- **The game server can always save a finished match's result.** A change to the server stack makes sure the folder where each finished match's result file is written belongs to the game server, also on a server whose storage was made by an older image. Nothing changes on the web pages or in the game.
-
-**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.15.0 page or game still joins. The rest of this release is internal: tests and documents.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5b17384e...0a24e791)
-
-## Older versions (v0.15.0 and before)
-
-Every release before v0.15.1, and the long notes of v0.15.0, v0.14.1, v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.16.0, and the long notes of v0.15.1, v0.15.0, v0.14.1, v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

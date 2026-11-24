@@ -53,7 +53,7 @@
 // (want_seat 0 - 3: the game page that the front page's "Rejoin" opens with a key that the match left behind: the person is back, as a game); a game's Hello with it that asks for none (255: the game page's
 // results screen) holds the seat and leaves it reserved. While a seat is reserved only a person of the match leads (the order of the match: a newcomer never leads, so never removes or starts), and nobody new
 // is taken while no person of the match is back. A reservation ends when its person comes back, is removed, or after reserve_ms; and when no person of the match is in the room (nobody back, no results screen that holds a seat) while somebody else is, the seats that no results screen holds end after hold_ms, so that the room's own rule leads again. A person whose game said that it is not in a browser (protocol 15's platform: a
-// game of the desktop or a phone's app, which has no "Back to the lobby") gets no seat: the color is free in the lobby that follows, for them or anybody to join by the code (the server keeps no seat either
+// game of the desktop or a phone's app, which has no "Back to the room") gets no seat: the color is free in the lobby that follows, for them or anybody to join by the code (the server keeps no seat either
 // for a person whom the match dropped: Room::take_rematch).
 //
 // (8) Public rooms (protocol 22, docs/NETWORK_PORT.md "Protocol 22"). A new lobby room is private. The leader of an open lobby room, while its START does not wait, makes it public or private with VisibilityMsg (within a budget of its

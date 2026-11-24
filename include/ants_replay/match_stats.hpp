@@ -10,7 +10,11 @@
 // (ants_server/history_details.hpp), in the same pass that counts the totals.
 //
 // What this cannot tell (it needs an event sink in the engine, a later change): what caused each hit (a blow, a bomb, a fire wall) and the type of the ant that struck. The tile of every lost ant is read from the
-// same world snapshot (the tile of its last look: nothing is added to the engine for it).
+// same snapshot of the ants (the tile of its last look). The ants are read with SimulationEngine::get_ant_snapshots: the ants alone, so a catch-up that counts hundreds of turns a frame does not copy the map for each of them.
+//
+// The same pass is also run LIVE, while a match is played (ants_app/live_match_stats.hpp): the application hands every tick that its confirmed engine executes to on_tick(), and the numbers that the results screen
+// shows (ants_app/match_report.hpp) are made from what it counted. Counted live or from the recording, the numbers are the same (tests/test_app/test_match_report.cpp checks it): so the pass reads the world and the
+// counters only, never the engine's queues of cues and news (a game's own code drains them: a pass that took them would take the sounds of the match), and a tick that it was not told of makes it fail. (A pass over a recording, StatsPlayback, has replay::Playback clear both queues after every tick, so nothing piles up there.)
 
 #include <array>
 #include <cstddef>
@@ -59,12 +63,30 @@ struct MatchStats {
         int32_t tile_x{0};
         int32_t tile_y{0};
     };
-    /// A Thief started to raid a hill; `points` is the loot that the raid took (the hill lost it, the thief carried it off: 0 for a hill with nothing)
+    /// A Thief started to raid a hill; `points` is the loot that the raid took (the hill lost it, the thief carried it off: 0 for a hill with nothing); `tile_x` / `tile_y` the tile the thief stood on when the raid began
     struct Raid {
         uint32_t turn{0};
         uint8_t thief{0};
         uint8_t victim{0};
         int32_t points{0};
+        int32_t tile_x{0};
+        int32_t tile_y{0};
+    };
+    /// A bomb that went off: the seat that planted it, the turn of the tick in which it was gone, the tile it lay on
+    struct BombOff {
+        uint32_t turn{0};
+        uint8_t owner{0};
+        int32_t tile_x{0};
+        int32_t tile_y{0};
+    };
+    /// A fire that a seat lit (the engine's own count of fires lit says when; the fire wall that appeared says where: `has_tile` is false for a fire that the engine counted and that left no wall, which it does not place
+    /// on the tiles at the entrance of a hill)
+    struct FireLit {
+        uint32_t turn{0};
+        uint8_t seat{0};
+        bool has_tile{false};
+        int32_t tile_x{0};
+        int32_t tile_y{0};
     };
 
     bool ok{false};                                        // false: the pass could not count this match (`why`); nothing below is to be believed
@@ -83,6 +105,17 @@ struct MatchStats {
     /// `kills`, a theft one of `raids`, a bomb one of `bombs_off` and a fire one of the seats' `fires_lit`; a hit is an ant that lost hit points, counted once for each ant in each bucket (so a long fight is as big as the ants in it, not as long as it lasts).
     std::array<std::vector<uint32_t>, kActionKinds> action;
     std::array<std::array<uint32_t, 5>, kSeats> powerups{};            // [seat][bomber, fire, thief, combat, swimmer]: power-ups taken that changed the ant's type
+    // What the results screen needs besides the totals (ants_app/match_report.hpp); all of it only added, nothing above changed
+    std::vector<BombOff> bomb_events;                      // the bombs that went off, in the order they did (their count is `bombs_off`)
+    std::vector<FireLit> fire_events;                      // the fires that were lit, in the order they were (their count is `fires_lit`)
+    std::array<uint32_t, kSeats> bombs_planted{};          // the engine's own count of bombs a seat planted
+    std::array<uint32_t, kSeats> fires_lit{};              // ... and of fires it lit
+    /// hit_credit[bucket][seat]: the hits of `action` (an ant that lost hit points, once for an ant in a bucket) that were taken by the ants of OTHER seats from damage of this seat's team, the team of the last damage that
+    /// the ant had taken (a hit that no team did, or that a seat did to its own ants, is nobody's)
+    std::vector<std::array<uint32_t, kSeats>> hit_credit;
+    /// false: the place or the owner of a bomb or a fire could not be told for sure (a bomb was defused in the same tick as another went off, and nothing says which was which; a fire wall that no count of fires lit accounts
+    /// for). The totals are still right. `ok` does not depend on it: the match pages never read the lists above; the results screen does, and shows no honors then.
+    bool events_ok{true};
     std::array<uint32_t, kSeats> food_trips{};             // times an ant picked food up
     std::array<int64_t, kSeats> food_points{};             // the points it held then
     std::array<int64_t, kSeats> banked{};                  // what the hill gained: the score's rises, a thief's loot included, the cost of a hatch not taken off
@@ -108,10 +141,19 @@ struct MatchStats {
 class MatchStatsCollector {
 public:
     explicit MatchStatsCollector(const Replay& replay);
+    /// A collector for a match that is counted while it is played (the application's live pass, ants_app/live_match_stats.hpp): the seats that play (bit s: seat s) and a guess of how many turns it will have (0: none)
+    explicit MatchStatsCollector(uint8_t roster, uint32_t expected_turns = 0);
     MatchStatsCollector(const MatchStatsCollector&) = delete;
     MatchStatsCollector& operator=(const MatchStatsCollector&) = delete;
     /// The hooks to play with; they point at this collector, which must outlive the play
     Hooks hooks();
+    /// What the hooks call. A command: before the engine is given it (the pass counts the orders of every seat by kind; it needs the engine as it stands before the command, which a live game cannot always give: the live pass counts none).
+    void on_command(uint32_t turn, const sim::Command& command, sim::SimulationEngine& engine);
+    /// A tick has run: `turns` ticks have been played so far (1 after the first). Reads the engine; changes nothing and takes nothing out of its queues.
+    void on_tick(uint32_t turns, sim::SimulationEngine& engine);
+    /// The pass cannot be believed (a tick was not seen): `ok` of the result is false and `why` says it. The first reason stays.
+    void fail(const char* what);
+    bool failed() const noexcept { return failed_; }
     /// The result, once play() has returned (`turns` is what play() played). Moves the data out.
     MatchStats take(uint32_t turns_played);
 
@@ -136,10 +178,10 @@ private:
         int32_t raid{-1};                                  // (a Thief) the entry of `raids` of its latest raid, until its loot is picked up
         int32_t loot{-1};                                  // (a Thief) the entry of `raids` whose loot it carries
     };
-    void on_command(uint32_t turn, const sim::Command& command, sim::SimulationEngine& engine);
-    void on_tick(uint32_t turns, sim::SimulationEngine& engine);
     void count(MatchStats::Action kind, uint32_t turns, uint32_t events = 1);
-    void fail(const char* what);
+    void credit_hit(uint32_t bucket, uint8_t seat);
+    void track_bombs(sim::SimulationEngine& engine, uint32_t turns, uint32_t planted, uint32_t defused, const std::vector<sim::AntSnapshot>& ants);
+    void track_fires(sim::SimulationEngine& engine, uint32_t turns, const std::array<uint32_t, MatchStats::kSeats>& lit_now);
     void work_of(const sim::AntSnapshot& snap, sim::SimulationEngine& engine, Work& kind, int32_t& x, int32_t& y) const;
     void settle(Ant& ant, Work now, int32_t x, int32_t y, sim::SimulationEngine& engine);
     void note_work(Ant& ant, Work now, int32_t x, int32_t y, sim::SimulationEngine& engine) const;
@@ -155,12 +197,14 @@ private:
     std::array<bool, MatchStats::kSeats> was_wiped_{};
     uint32_t bombs_planted_{0};
     uint32_t bombs_defused_{0};
-    struct Bomb {
+    struct Spot {                                          // a bomb or a fire wall on the map: its tile and the seat that owns it
         int32_t x{0};
         int32_t y{0};
         uint8_t owner{255};
     };
-    std::vector<Bomb> bombs_;                              // the bombs on the map as last looked at
+    static std::vector<Spot> scan(sim::SimulationEngine& engine, bool bombs);
+    std::vector<Spot> bombs_;                              // the bombs on the map as last looked at
+    std::vector<Spot> fires_;                              // the fire walls on the map as last looked at (the owner of a wall is the seat that lit it; the map's own walls are known from the first tick)
     std::vector<std::array<int32_t, 3>> settled_;          // the work (kind, tile) that was found done in this tick: one fire put out or one bridge dug away is one, whatever the number of ants that were at it
 };
 
