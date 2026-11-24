@@ -298,6 +298,7 @@ class Hub:
             writer.write(http.response(101, headers={"Upgrade": "websocket", "Connection": "Upgrade", "Sec-WebSocket-Accept": ws.accept_key(key)}))
             peer.send_text(chatmod.dumps(self.chat.welcome(peer)))
             self.chat.commands.send_list(peer)                       # (the commands that the account has: none for a reader)
+            self.chat.people.send_list(peer, force=False)            # (the account's alerts, for the bell: none for a reader, and nothing when the list is empty)
         except BaseException:
             self.per_address.remove(address)
             if peer is not None:
@@ -426,6 +427,7 @@ class Hub:
                 self.online_shown, self.online_at = count, now
                 self.chat.online()
             self.chat.presence.flush(now)
+            self.chat.people.sweep(now)                                # (an invitation whose room is gone ends)
         except Exception as e:
             self.presence_trouble(now, e)
         if now >= self.next_deletions:
@@ -441,6 +443,7 @@ class Hub:
             self.image_door.forget_idle(now)
             self.chat.named_limits.forget_idle(now)
             self.chat.commands.forget_idle(now)
+            self.chat.people.forget_idle(now)
             self.admin.forget_idle(now)
             self.ai.forget_idle(now)
             if hasattr(self.sessions, "forget_idle"):
@@ -452,6 +455,7 @@ class Hub:
             self.next_checkpoint = now + self.limits.checkpoint_retry_seconds
             if gone:
                 self.log.event("purge", lines=gone)
+            self.chat.people.store_dropped()                           # (the mention of a line that the purge deleted went with it: the open pages are sent their lists again)
         elif self.store.unsettled and now >= self.next_checkpoint:
             self.next_checkpoint = now + self.limits.checkpoint_retry_seconds
             self.store.checkpoint()
@@ -464,6 +468,7 @@ class Hub:
                 self.next_room = now + self.limits.tick_seconds
                 if gone:
                     self.log.event("prune", lines=gone)
+                    self.chat.people.store_dropped()
                 elif self.store.size() >= self.limits.prune_from_bytes:           # (nothing went and it is still over the mark: it is not asked again at every tick)
                     held = self.store.unsettled                                    # (make_room has just tried to cut the log file: if that was refused, a reader holds the database)
                     self.next_room = now + (self.limits.checkpoint_retry_seconds if held else self.limits.purge_failure_seconds)

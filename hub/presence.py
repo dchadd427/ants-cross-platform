@@ -13,6 +13,7 @@ Messages (JSON, docs/HUB.md has the table):
   down  {"t":"who","full":bool,"n","g","more","rows":[row,...],"gone":[id,...]}
         the welcome of a login says `me`, the number of the row that is the account's own
 A private room or match is a row with `priv`:true (kept for an account that may not chat too: a fact, never a map, seats or code); a game against the computer is `solo`:true, with `map` where the page said one. A row is {"i": a number that names it while the person is here, "name", "at", "pic" (the public name of the account's picture, 32 hex digits, where it has one that may be shown), "mod" and "role" (`mod` or `admin`: moderators only), and for a public room "pub", "map" (a file name), "n", "of", "code"}. A socket that said nothing is looking.
+A `here` of a page that waits in a room may carry `inv` {"code","map","n","of"}: the room's code (even of an invite-only room), its map's file name and its seats, kept for invitations only (docs/HUB_PEOPLE.md) and never in a row or a frame.
 A `here` that is not what a page says is refused with the code `here` and is a mistake of the socket; a second `who` too soon is not (it costs the socket a frame more, like any refusal that is not its doing).
 """
 import collections
@@ -30,6 +31,7 @@ ROOM_CODE = re.compile(r"[a-z0-9_-]{1,32}\Z")           # (the codes that the ga
 MAP_FILE = re.compile(r"[ -~]{5,64}\Z")                 # (a map's file name as the game takes it, net::valid_map_name: printable ASCII, 5 to 64 characters; double spaces and dots are fine)
 NOT_IN_A_FILE_NAME = frozenset('/\\:*?"<>|')
 
+Room = collections.namedtuple("Room", "code map n of seq")        # the room that a page that waits in one is in, as it told the hub for invitations (docs/HUB_PEOPLE.md): never in the list, never to a page, only in an invitation's alert
 Where = collections.namedtuple("Where", "at map n of pub code seq priv solo", defaults=(False, False))       # priv: the page said the room or match is private (a fact and nothing else); solo: a game against the computer (no room)
 
 
@@ -66,6 +68,21 @@ def parse_here(msg, seq):
     if at == "play":
         return Where(at, file, n, None, True, None, seq)
     return Where(at, file, n, size, True, code, seq)
+
+
+def parse_room(msg, seq):
+    """The `inv` of a `here` (a page that waits in a room says which, so that the account can invite: its code, its map's file name and its seats): a Room, None when the frame has none, and False when it is not what a
+    page says (not an object of exactly these fields, a code, a map or seats that are none of the rules'). It is for invitations only: it is kept in memory for as long as the socket is open and the page says it, and no
+    list and no other page ever has it, whether the room is public or not."""
+    inv = msg.get("inv")
+    if inv is None:
+        return None
+    if not isinstance(inv, dict) or not set(inv) <= {"code", "map", "n", "of"} or not isinstance(inv.get("code"), str) or not ROOM_CODE.match(inv["code"]):
+        return False
+    file, n, size = inv.get("map"), inv.get("n"), inv.get("of")
+    if (file is not None and map_file(file) is None) or not whole(n, 0, SEATS) or not whole(size, 1, SEATS) or n > size:
+        return False
+    return Room(inv["code"], file, n, size, seq)
 
 
 AWAY_WHERE = Where(AWAY, None, None, None, False, None, 0)      # (the whole of what an Away row says: the word)
@@ -129,6 +146,7 @@ class Presence:
         self.clock = clock
         self.dumps = dumps
         self.where = {}                 # peer -> Where: what its page last said (a socket that never said anything is looking)
+        self.rooms = {}                 # peer -> Room: the room that its page said it waits in, for invitations (docs/HUB_PEOPLE.md); no list shows it
         self.watchers = set()           # the peers that asked for the list
         self.asked = {}                 # peer -> when it last asked for the whole list
         self.ids = {}                   # account id -> the number that names its row for as long as the account has a socket open (the welcome says it to the account's own sockets, never the account)
@@ -282,9 +300,38 @@ class Presence:
             return self.chat.mistake(peer, "login")
         self.seq += 1
         where = parse_here(msg, self.seq)
-        if where is None:
+        room = parse_room(msg, self.seq)
+        if where is None or room is False or (room is not None and where.at != "wait"):
             return self.chat.mistake(peer, REFUSED)
         self.where[peer] = where
+        if room is None:
+            self.rooms.pop(peer, None)
+        else:
+            self.rooms[peer] = room
+
+    # ---- what an account is doing, for invitations ----------------------------------------------------------------------------------------------------------------------------------------
+
+    def sockets(self, account):
+        return [p for p in self.chat.peers if p.identity is not None and p.identity.account_id == account and not getattr(p, "closed", False)]
+
+    def doing(self, account):
+        """What the account is doing now, as its row says it (`look`, `wait` or `play`: the sockets' newest word of the one that does the most), or None when it has no socket open."""
+        best = None
+        for peer in self.sockets(account):
+            where = self.where.get(peer)
+            key = (WEIGHT[where.at], where.seq) if where else (0, 0)
+            if best is None or key > best[0]:
+                best = (key, where.at if where else "look")
+        return best[1] if best else None
+
+    def room_of(self, account):
+        """The Room that the account's newest page that waits in a room said it is in, or None (no socket, no room, a page that said nothing of one)."""
+        best = None
+        for peer in self.sockets(account):
+            room, where = self.rooms.get(peer), self.where.get(peer)
+            if room is not None and where is not None and where.at == "wait" and (best is None or room.seq > best.seq):
+                best = room
+        return best
 
     # ---- the clock's work ------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -298,6 +345,7 @@ class Presence:
         alive = {p for p in self.chat.peers if not getattr(p, "closed", False)}
         self.counted_version = None                 # (the number of people is counted again at least once a tick)
         self.where = {p: w for p, w in self.where.items() if p in alive}
+        self.rooms = {p: r for p, r in self.rooms.items() if p in alive}
         self.asked = {p: t for p, t in self.asked.items() if p in alive}
         self.watchers &= alive
         here = {p.identity.account_id: p.identity.name for p in alive if p.identity is not None}

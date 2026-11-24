@@ -23,6 +23,7 @@
     var TEXT = {
         title: 'Players', here: ' here now', you: 'you', moderator: 'moderator', administrator: 'administrator', privateRoom: 'Private room', privateGame: 'Private game', vsComputer: 'vs computer', publicRoom: 'Public room', inRoom: 'In a room', inGame: 'In a game', join: 'Join', gone: 'That game is not open any more.',
         guest: ' guest', guests: ' guests', notIn: 'not logged in', more: ' more', and: 'and ', many: '500+', player: ' player', players: ' players', of: ' of ',
+        inviteTitle: 'Invite to my room', seatFree: ' seat free', seatsFree: ' seats free', room: ' room', roomFull: 'Your room is full', inYourRoom: 'In your room', playing: 'Playing a match', login: 'Log in to invite people. Share sends your link.', notHere: ' is not here now.',
         off: 'Players list is off right now', offNote: 'The chat hub is not answering. Games and rooms work as always; this list comes back by itself.'
     };
 
@@ -118,17 +119,57 @@
     }
     // What this page tells the hub it is doing, from its own room (client: the page's LobbyClient or null; count: countOf of the room's model, or null; handing: the page is on its way to a game).
     // Looking: no room. Waiting: a room that has not started. Playing: it has (or the page is on its way to it). A public room adds its map and seats, and its code if the visitor is its host; a private one says `pub`:false and nothing more.
-    function announceOf(client, count, handing) {
+    function announceOf(client, count, handing, validMap) {
         var room = client && client.room;
         if (!room) return { at: 'look' };
-        var say = { at: room.starting || handing || !room.lobby ? 'play' : 'wait' };
+        var say = { at: room.starting || handing || !room.lobby ? 'play' : 'wait' }, inv = say.at === 'wait' ? invOf(client, count, validMap) : null;
         if (room.isPublic === true) {
             say.pub = true;
             if (typeof room.map === 'string' && room.map) say.map = room.map;
             if (count && count.size >= 1 && count.people <= count.size) { say.n = count.people; say.of = count.size; }
             if (say.at === 'wait' && typeof client.code === 'string' && ROOM.test(client.code) && client.isLeader && client.isLeader()) say.code = client.code;      // (the host's row has the Join, not each guest's)
         } else say.pub = false;                                          // (a private room says only that: the hub keeps a mark, never a map, seats or a code)
+        if (inv) say.inv = inv;                                          // (a room that waits, public or not, says its code, map and seats for invitations only: the hub keeps it for the account's invitations and shows it to nobody)
         return say;
+    }
+    // The room that this page waits in, for an invitation: { code, map (a file name the page's rule accepts: left out otherwise), n, of } or null (no room that waits, no seats known)
+    function invOf(client, count, validMap) {
+        var room = client && client.room, out;
+        if (!room || !room.lobby || room.starting || !count || count.size < 1 || count.people > count.size || typeof client.code !== 'string' || !ROOM.test(client.code)) return null;
+        out = { code: client.code, n: count.people, of: count.size };
+        if (typeof validMap === 'function' && typeof room.map === 'string' && validMap(room.map)) out.map = room.map;
+        return out;
+    }
+    // The room as the invitation's row and the people's list need it: { code, map, mapName, n, of, free, host (the leader's name where the visitor is a guest in the room, else ''), names (the other people of the room) } or null where there is no room to invite to (none, or a match)
+    function mineOf(client, count, handing, rules) {
+        var inv = invOf(client, count, rules && rules.validMapFile), room = client && client.room, leader, known, names = [], i, st;
+        if (!inv || handing) return null;
+        leader = room.slots && room.slots[room.leader];
+        known = inv.map ? rules.mapOfFile(inv.map) : null;
+        for (i = 0; room.slots && i < room.slots.length; i++) { st = room.slots[i].state; if (i !== room.you && (st === 1 || st === 2) && typeof room.slots[i].name === 'string') names.push(room.slots[i].name); }
+        return { code: inv.code, map: inv.map || '', mapName: known ? known.name : inv.map ? String(rules.communityName(inv.map)).slice(0, LIMIT.map) : '', n: inv.n, of: inv.of, free: inv.of - inv.n,
+                 host: client.isLeader && !client.isLeader() && leader && typeof leader.name === 'string' ? leader.name : '', names: names };
+    }
+    // What the row "Invite to my room" says under its title, for a room: "Treasure . 2 of 4 . 2 seats free", and for a guest in another's room "Wren's room . Treasure . 2 of 4"
+    function inviteLine(mine) {
+        var parts = [];
+        if (mine.host) parts.push(possessive(mine.host) + TEXT.room);
+        if (mine.mapName) parts.push(mine.mapName);
+        parts.push(mine.n + TEXT.of + mine.of);
+        if (!mine.host) parts.push(mine.free + (mine.free === 1 ? TEXT.seatFree : TEXT.seatsFree));
+        return parts.join(' \u00b7 ');
+    }
+    // Why a person cannot be invited now ('' when the person can): the visitor is not logged in; the room is full; the person is in the room; the person is in a match; the person was invited less than a minute ago (`last`: when, in ms, or none; `now` in ms)
+    function inviteWhy(o) {
+        var left;
+        if (!o.you) return TEXT.login;
+        if (!o.mine) return '';
+        if (o.mine.free <= 0) return TEXT.roomFull + ' (' + o.mine.n + TEXT.of + o.mine.of + ').';
+        if (o.row && o.mine.names.indexOf(o.row.name) !== -1) return TEXT.inYourRoom;
+        if (o.row && o.row.at === 'play') return TEXT.playing;
+        left = typeof o.last === 'number' ? Math.ceil(60 - (o.now - o.last) / 1000) : 0;
+        if (left > 0 && left <= 60) return 'Invited ' + Math.max(1, 60 - left) + ' s ago. Again in ' + left + ' s.';
+        return '';
     }
 
     // The note that the game page reads when this page hands the visitor over (web/hub_here.js; sessionStorage `ants.here`, this tab only): { v: 1, named, r, pub, map, n, of } and nothing else: `named` is 1 for a person who is logged in,
@@ -272,6 +313,26 @@
             var row = whole(i, 0, LIMIT.ids) && live && supported ? model.rows[i] : null;
             return row && i !== me && row.at !== 'away' ? { i: row.id, name: row.name, role: row.role, at: row.at, where: whereOf(named(row)) } : null;
         }
+        // ---- the people, for the sheet of a person, the helper of the chat and the invitation ----
+        var invitedAt = {};                                              // the name (lower case) of a person that this page invited -> when (ms): the hub holds a second invitation back for a minute, and the row says so before it is pressed
+        function personNamed(name) {                                     // the one row of the list that has this name (any letter case), never the visitor's own: null where none has it or two have
+            var want = String(name).toLowerCase(), found = null, id;
+            for (id in model.rows) { var r = model.rows[id]; if (r.id !== me && r.at !== 'away' && r.name.toLowerCase() === want) { if (found) return null; found = r; } }
+            return found;
+        }
+        function mine() { var client = page.client ? page.client() : null, info = client && page.info ? page.info() : {}; return mineOf(client, client ? countOf(info.model) : null, !!(page.handing && page.handing()), rules); }
+        function reasonOf(row) { var m = mine(); return inviteWhy({ you: !!you, mine: m, row: row, last: row ? invitedAt[row.name.toLowerCase()] : undefined, now: now() }); }
+        function directory() {                                           // what the chat's helper and the person's sheet ask: { you, mine, rows (in the list's order, with `me`), why(row), invited(name), flush(), inviteOf({ name, row (a row's number or null) }) }
+            var shown = listOf(model, me), rows = [], m = mine();
+            GROUPS.forEach(function (g) { shown[g[0]].forEach(function (r) { rows.push({ id: r.id, name: r.name, at: r.at, mod: r.mod, role: r.role, me: false }); }); });
+            return { you: !!you, mine: m, rows: rows, why: reasonOf, invited: function (name) { invitedAt[String(name).toLowerCase()] = now(); }, flush: function () { tell(true); },
+                inviteOf: function (who) {                               // the row of the sheet: { shown (a sheet has it), ok, title, sub, where } for a person of the list (by number) or of the chat (by name)
+                    var row = who.row !== null && who.row !== undefined && model.rows[who.row] && who.row !== me ? model.rows[who.row] : personNamed(who.name), why;
+                    if (!m) return { shown: false, ok: false, title: TEXT.inviteTitle, sub: '', where: row ? whereOf(row) : '' };
+                    why = row ? reasonOf(row) : !you ? TEXT.login : who.name + TEXT.notHere;
+                    return { shown: true, ok: why === '', title: TEXT.inviteTitle, sub: why || inviteLine(m), where: row ? whereOf(row) : '' };
+                } };
+        }
         function paint() {
             var shown = phase !== 'none', on = phase === 'on';
             root.hidden = !shown;
@@ -299,13 +360,13 @@
         // ---- what the page says, and what the hub says ----------------------------------------------------------------------------------------------------------------------------------------------
         function look() {
             var client = page.client ? page.client() : null, info = client && page.info ? page.info() : {};
-            return announceOf(client, client ? countOf(info.model) : null, !!(page.handing && page.handing()));
+            return announceOf(client, client ? countOf(info.model) : null, !!(page.handing && page.handing()), rules.validMapFile);
         }
-        function tell() {                                                // the hub is told what the page does, when it changed and not oftener than every 3 seconds
+        function tell(now1) {                                            // the hub is told what the page does, when it changed and not oftener than every 3 seconds (`now1`: at once: an invitation is about to ask the hub about the room)
             if (!live || !supported || !you) return;
             var said = look(), sig = JSON.stringify(said), wait = lastSent === null ? 0 : lastSent + MS.tell - now();
             if (sig === sentSig) return;
-            if (wait > 0) return;                                        // (the next look, a second later, says it when the 3 seconds are over)
+            if (wait > 0 && now1 !== true) return;                       // (the next look, a second later, says it when the 3 seconds are over)
             var frame = { t: 'here' };
             for (var k in said) frame[k] = said[k];
             if (dock.send(frame)) { sentSig = sig; lastSent = now(); }
@@ -353,8 +414,8 @@
         }));
         doing = look();
         clock();
-        return { root: root, list: list, state: function () { return phase; }, model: function () { return model; }, person: person, drawn: function (fn) { drawnFns.push(fn); }, sync: guard(sync) };
+        return { root: root, list: list, state: function () { return phase; }, model: function () { return model; }, person: person, directory: directory, drawn: function (fn) { drawnFns.push(fn); }, sync: guard(sync) };
     }
 
-    return { LIMIT: LIMIT, MS: MS, TEXT: TEXT, GROUPS: GROUPS, rowOf: rowOf, apply: apply, listOf: listOf, metaOf: metaOf, whereOf: whereOf, seatsText: seatsText, announceOf: announceOf, countOf: countOf, noteOf: noteOf, hashOf: hashOf, possessive: possessive, roleOf: roleOf, mount: mount };
+    return { LIMIT: LIMIT, MS: MS, TEXT: TEXT, GROUPS: GROUPS, rowOf: rowOf, apply: apply, listOf: listOf, metaOf: metaOf, whereOf: whereOf, seatsText: seatsText, announceOf: announceOf, invOf: invOf, mineOf: mineOf, inviteLine: inviteLine, inviteWhy: inviteWhy, countOf: countOf, noteOf: noteOf, hashOf: hashOf, possessive: possessive, roleOf: roleOf, mount: mount };
 });

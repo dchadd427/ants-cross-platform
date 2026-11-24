@@ -144,7 +144,7 @@ function rig(o) {
         P.parse('{"t":"x"}') !== null && P.parse(5) === null && P.parse(new ArrayBuffer(4)) === null && P.parse('x'.repeat(P.LIMIT.frame + 1)) === null && P.parse('{') === null && P.parse('[1]') === null && P.parse('3') === null
         && P.parse('null') === null && P.parse('{}') === null && P.parse('{"t":5}') === null && P.parse('{"t":"a","__proto__":{"x":1}}') !== null && P.parse('{"t":"ok"}'.padEnd(P.LIMIT.frame, ' ')) !== null);
     same('count: whole numbers from 0 only', [P.count(0), P.count(7), P.count(-1), P.count(1.5), P.count('3'), P.count(null), P.count(NaN), P.count(Infinity), P.count(1e12)], [0, 7, null, null, null, null, null, null, null]);
-    same('lineOf: a good line is cleaned, the mod flag is a boolean true only', [P.lineOf({ id: 4, who: 'a', text: ' hi  there ', mod: true }), P.lineOf({ id: 4, who: 'a', text: 'x', mod: 'yes' }).mod, P.lineOf({ id: 0, who: 'a', text: 'x' }).id], [{ id: 4, who: 'a', text: 'hi there', mod: true, role: 'mod', sys: false, k: '', u: '', img: null }, false, 0]);
+    same('lineOf: a good line is cleaned, the mod flag is a boolean true only', [P.lineOf({ id: 4, who: 'a', text: ' hi  there ', mod: true }), P.lineOf({ id: 4, who: 'a', text: 'x', mod: 'yes' }).mod, P.lineOf({ id: 0, who: 'a', text: 'x' }).id], [{ id: 4, who: 'a', text: 'hi there', mod: true, role: 'mod', sys: false, k: '', u: '', img: null, marks: [] }, false, 0]);
     same('lineOf: not a line when the id is not a whole number, the name or text is not a string, or nothing is left of the text',
         [{ who: 'a', text: 'x' }, { id: '4', who: 'a', text: 'x' }, { id: -1, who: 'a', text: 'x' }, { id: 1.5, who: 'a', text: 'x' }, { id: 4, who: 5, text: 'x' }, { id: 4, who: 'a', text: 5 }, { id: 4, who: 'a', text: ' \u202e \u200b ' }, null, 'x', []].map((m) => P.lineOf(m)),
         [null, null, null, null, null, null, null, null, null, null]);
@@ -1341,7 +1341,7 @@ const menuOf = (r) => { const live = r.live; r.live = (...args) => { const sock 
     const P = Pure;
     same('lineOf: the key and the username of the author, cleaned like a name', [P.lineOf({ id: 4, who: 'Maple Leaf', text: 'x', mod: false, k: MINE, u: 'maple.leaf' }), P.lineOf({ id: 4, who: 'a', text: 'x', k: 5, u: 5 }), P.lineOf({ id: 4, who: 'a', text: 'x', k: null, u: [] }),
         P.lineOf({ id: 4, who: 'a', text: 'x', u: '<b>x</b> \u202eevil\u202c \u200b' }).u, P.lineOf({ id: 4, who: 'a', text: 'x', u: 'u'.repeat(60) }).u, P.lineOf({ id: 4, who: 'a', text: 'x', u: '\u3164\u2800' }).u],
-        [{ id: 4, who: 'Maple Leaf', text: 'x', mod: false, role: 'none', sys: false, k: MINE, u: 'maple.leaf', img: null }, { id: 4, who: 'a', text: 'x', mod: false, role: 'none', sys: false, k: '', u: '', img: null }, { id: 4, who: 'a', text: 'x', mod: false, role: 'none', sys: false, k: '', u: '', img: null }, '<b>x</b> evil', 'u'.repeat(32) + '\u2026', '']);
+        [{ id: 4, who: 'Maple Leaf', text: 'x', mod: false, role: 'none', sys: false, k: MINE, u: 'maple.leaf', img: null, marks: [] }, { id: 4, who: 'a', text: 'x', mod: false, role: 'none', sys: false, k: '', u: '', img: null, marks: [] }, { id: 4, who: 'a', text: 'x', mod: false, role: 'none', sys: false, k: '', u: '', img: null, marks: [] }, '<b>x</b> evil', 'u'.repeat(32) + '\u2026', '']);
     same('the words of the switch', [P.TEXT.shows, P.TEXT.names, P.TEXT.use], ['Chat shows your ', ['display name', 'username'], 'Show my ']);
     check('the names of other scripts are fine as they are: cleaned for display they come out whole, and are not cut at 32 code points', NAMED.every((n) => P.plain(n, true) === n && P.clip(n, 32) === n && P.lineOf({ id: 1, who: n, text: 'x', u: n }).who === n && P.lineOf({ id: 1, who: n, text: 'x', u: n }).u === n));
 }
@@ -2199,6 +2199,84 @@ process.env.TZ = 'UTC';       // (the local day and hour of these checks; one of
     check('no lines, no divider', none.days().length === 0);
     const again = make([at(11, 13, 9, 0), at(11, 14, 9, 0)]); again.s().recv({ t: 'you', you: asRole('mod') });
     same('the log made again (a role changes) has the same dividers', again.days(), ['Yesterday', 'Today']);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// People (docs/HUB_PEOPLE.md): the names that the hub marks in a line, the alerts that the dock hands on, an invitation through the dock, the blocks that it lends
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const P = Pure, OTHER_K = 'cccccccccccc';
+    same('marksOf: marks that start at an @ of the text, in order and apart, ten at the most; the rest are left out', [
+        P.marksOf([[0, 4, 'k1'], [9, 6, 'k2']], '@ben and @maple'), P.marksOf([[1, 3, 'k1']], '@ben'), P.marksOf([[0, 9, 'k1']], '@ben'), P.marksOf([[5, 4, 'k1'], [0, 4, 'k2']], '@ben @ben'), P.marksOf([[0, 4, 'k1'], [2, 2, 'k2']], '@ben'),
+        P.marksOf([[0, 1, 'k1']], '@'), P.marksOf([[-1, 4, 'k1']], '@ben'), P.marksOf([[0, 4]], '@ben'), P.marksOf([[0, 4, 5]], '@ben'), P.marksOf([[0, 4, 'k1', 'x']], '@ben'), P.marksOf('@ben', '@ben'), P.marksOf(null, '@ben'),
+        P.marksOf(Array.from({ length: 12 }, (_, i) => [i * 3, 2, 'k']), '@a '.repeat(12)).length], [
+        [{ s: 0, n: 4, k: 'k1' }, { s: 9, n: 6, k: 'k2' }], [], [], [{ s: 5, n: 4, k: 'k1' }], [{ s: 0, n: 4, k: 'k1' }], [], [], [], [], [], [], [], 10]);
+    same('agoOf says how long ago a time was', [P.agoOf(100, 130), P.agoOf(100, 100 + 14 * 60), P.agoOf(100, 100 + 3600), P.agoOf(100, 100 + 7200), P.agoOf(100, 100 + 86400), P.agoOf(100, 100 + 3 * 86400), P.agoOf(500, 100)], ['just now', '14 min ago', '1 hour ago', '2 hours ago', 'Yesterday', '3 days ago', 'just now']);
+    const r = rig({}); r.live(W({ login: true, you: ME, history: [
+        { id: 5, at: 5, who: 'pebble', text: 'hey @Maple Leaf and @juniper, hi', k: OTHERS, m: [[4, 11, MINE], [20, 8, OTHER_K]] },
+        { id: 6, at: 6, who: 'pebble', text: 'only @juniper here', k: OTHERS, m: [[5, 8, OTHER_K]] },
+        { id: 7, at: 7, who: 'pebble', text: 'not at an at: hello', k: OTHERS, m: [[3, 5, MINE]] },
+        { id: 8, at: 8, who: 'Maple Leaf', text: 'talking to @Maple Leaf myself', k: MINE, m: [[11, 11, MINE]] },
+        { id: 9, at: 9, who: 'pebble', text: 'see @juniper at https://x.example/a ok', k: OTHERS, m: [[4, 8, OTHER_K]] }] }));
+    const rowsNow = r.rows(), pills = (row) => byClass(row, 'gc-pill').map((x) => [x.textContent, cls(x).indexOf('gc-pill-me') !== -1]);
+    same('a name that the hub marked is a pill, and the visitor\'s own is the gold one', [pills(rowsNow[0]), pills(rowsNow[1])], [[['@Maple Leaf', true], ['@juniper', false]], [['@juniper', false]]]);
+    same('the words of a line with marks are the same words', rowsNow.map((x) => x.textContent), ['pebble: hey @Maple Leaf and @juniper, hi', 'pebble: only @juniper here', 'pebble: not at an at: hello', 'Maple Leaf: talking to @Maple Leaf myself', 'pebble: see @juniper at https://x.example/a ok']);
+    same('the line that names the visitor has the soft edge; one that names others, one whose mark does not start at an @, and the visitor\'s own line have not', rowsNow.map((x) => cls(x).indexOf('gc-named') !== -1), [true, false, false, false, false]);
+    same('a mark that does not start at an @ is no pill', pills(rowsNow[2]), []);
+    check('an address next to a pill is still a link', byClass(rowsNow[4], 'gc-a').length === 1 && pills(rowsNow[4]).length === 1);
+    r.s().recv({ t: 'line', id: 10, at: 10, who: 'pebble', text: 'live: @Maple Leaf', k: OTHERS, m: [[6, 11, MINE]] });
+    check('a line that comes live is drawn the same', pills(r.rows()[5]).length === 1 && cls(r.rows()[5]).indexOf('gc-named') !== -1);
+    check('nothing of a line is markup, whatever its marks say', r.env.innerHTMLWrites.length === 0 && r.errors.length === 0);
+    // the alerts that the dock hands on
+    const t = rig({}), heard = []; t.dock.tap((kind, m) => heard.push([kind, m && m.t]));
+    t.live(W({ login: true, you: ME })); t.s().recv({ t: 'alerts', rows: [{ id: 1, at: 1, k: 'join', name: 'x', seat: 'Red' }] }); t.s().recv({ t: 'alert', row: { id: 2 } });
+    same('the list and a new alert are handed on, whole', heard, [['live', 'welcome'], ['alerts', 'alerts'], ['alert', 'alert']]);
+    const late = []; t.dock.tap((kind, m) => late.push([kind, m && m.t]));
+    same('a part that comes later hears the welcome and the last list, so that it misses nothing', late, [['live', 'welcome'], ['alerts', 'alerts']]);
+    t.s().fail(); const later = []; t.dock.tap((kind) => later.push(kind));
+    same('after the link is lost the list is not replayed', later, ['lost']);
+    t.clock.advance(60000); t.live(W({ login: true, you: ME }));
+    const fresh2 = []; t.dock.tap((kind, m) => fresh2.push([kind, m && m.t]));
+    same('and not after a new welcome that came with none: the list of the link before is not the account\'s now', fresh2, [['live', 'welcome']]);
+    // an invitation through the dock: any person who is logged in, one answer
+    const c = rig({}); c.live(W({ login: true, you: ME }));
+    const got = [];
+    c.dock.call('/invite row:5', (code, m) => got.push([code, m && m.r, m && m.to]));
+    same('the command goes out as typed, and the hub\'s reply is the answer, whole', [c.said().map((m) => m.text), (c.s().recv({ t: 'reply', c: 'invite', r: 'ok', to: 'juniper' }), got)], [['/invite row:5'], [['reply', 'ok', 'juniper']]]);
+    const staffOnly = []; c.dock.command('/invite row:5', (code) => staffOnly.push(code));
+    check('the moderators\' own call stays for them: a person with no role is refused it, and nothing is sent', staffOnly.join() === 'power' && c.said().length === 1);
+    const two = []; c.dock.call('/invite #3', (code) => two.push(code)); c.dock.call('/invite #4', (code) => two.push(code));
+    same('one at a time: the second is told to wait', two, ['rate']);
+    c.clock.advance(8100);
+    check('a hub that says nothing for eight seconds: the answer is "silent"', two.join() === 'rate,silent');
+    const g = rig({}); g.live(W({ login: false })); const none = []; g.dock.call('/invite #3', (code) => none.push(code));
+    check('a reader cannot, and sends nothing', none.join() === 'power' && g.said().length === 0);
+    const lost = rig({}); lost.live(W({ login: true, you: ME })); lost.s().fail(); const off = []; lost.dock.call('/invite #3', (code) => off.push(code));
+    check('with no link: "offline"', off.join() === 'offline');
+    // the blocks that the dock lends: a private line that another part draws and draws again
+    const k = rig({}); k.live(W({ login: true, you: ME, history: [HISTORY[0]] }));
+    const state = { text: 'one' }, handle = k.dock.block((row) => { const d = new H.El(k.env, 'div', ''); d.className = 'gc-pl'; d.textContent = state.text; row.appendChild(d); }, 'mine');
+    const mineRow = () => k.rows().filter((x) => cls(x).indexOf('mine') !== -1)[0];
+    check('a block is a private line, with its own class, drawn under "Only you"', typeof handle.redraw === 'function' && mineRow().textContent === 'Only youone');
+    k.dock.block((row) => { const d = new H.El(k.env, 'div', ''); d.textContent = 'next'; row.appendChild(d); }, 'second');
+    state.text = 'two'; handle.redraw();
+    same('a block that is drawn again says its new words and stays where it stands', [mineRow().textContent, k.rows().map((x) => cls(x).indexOf('mine') !== -1 ? 'mine' : cls(x).indexOf('second') !== -1 ? 'second' : 'line').join()], ['Only youtwo', 'line,mine,second']);
+    // who is here and who wrote lately, for the helper
+    const a = rig({}); a.live(W({ login: true, you: ME, history: [
+        { id: 1, at: 1, who: 'pebble', text: 'a', k: OTHERS }, { id: 2, at: 2, who: 'Maple Leaf', text: 'b', k: MINE }, { id: 3, at: 3, who: 'clover', text: 'c', k: OTHER_K }, { id: 4, at: 4, who: 'pebble', text: 'd', k: OTHERS },
+        { id: 5, at: 5, who: 'system', text: 'e', sys: true }] }));
+    same('the authors of the log, newest first, once each, never the visitor and never the hub\'s own line', a.dock.authors().map((x) => [x.name, x.k, x.at]), [['pebble', OTHERS, 4], ['clover', OTHER_K, 3]]);
+    check('no directory: nothing is known of who is here', a.dock.people() === null);
+    a.dock.directory(() => ({ rows: [1] })); same('the directory that the players list gives is the one that the dock lends', a.dock.people(), { rows: [1] });
+    a.dock.directory(() => { throw new Error('a list that breaks'); }); check('a directory that breaks is none', a.dock.people() === null);
+    // is the chat on the screen?
+    const o = rig({ width: 1280, height: 800 }); o.live(W({ login: true, you: ME }));
+    check('the chat is on the screen when it is open, Home shows and the page is in front', o.dock.onScreen() === true);
+    o.dock.open(false); check('folded: not on the screen', o.dock.onScreen() === false);
+    o.dock.open(true); o.hidden(true); check('a hidden page: not on the screen', o.dock.onScreen() === false);
+    // the rows are told of to every part that marks them, for a person with no role too
+    const w = rig({}); const marked = []; w.dock.rows((id) => marked.push(id)); w.live(W({ login: true, you: ME, history: [HISTORY[0], HISTORY[1]] }));
+    check('a person with no role: the sheet of a person is told of every line', marked.length >= 2);
 }
 
 setImmediate(() => {       // (after the promises of the checks above, which are about locks that are let go)

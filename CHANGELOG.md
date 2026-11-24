@@ -29,6 +29,17 @@ Work that is not released yet is written in the same template under a heading th
 ## Next
 
 **For players:**
+- The bell shows your recent alerts, newest first, with the number of unread ones: invitations, mentions, people who joined your room and your own finished match (with a View link). The settings are behind a gear in that list; a visitor keeps a short list in the browser.
+- Right-click a player in the list, or a name in the chat (long-press on a phone), to **Invite to my room**. They see it as a line in their chat (a toast when the chat is not on screen) and in their bell, with Join; it turns grey when the room closes.
+- **/invite NAME**, with a helper that narrows the names as you type.
+- Type **@** in the chat to pick a player: a mention is a pill for everyone, gold for the person named, and an alert in their bell. No @here, no @everyone.
+
+**For operators:**
+- The hub keeps an account's last 30 alerts of 7 days and its `/ignore` list (new `alerts` and `ignores` tables, made by the first one; Forget me deletes them), and limits invitations and mentions ([the hub's document](docs/HUB_PEOPLE.md)).
+
+## v0.21.1 - 2026-11-23 - Connect an AI in the Map Maker
+
+**For players:**
 - **Connect an AI in the Map Maker.** A new Connect an AI sheet makes a key (look only, or look and edit; it ends after 7, 30 or 90 days) for your own AI assistant (Claude Code, Cursor, any program that speaks MCP or plain web calls). Turn on "Let an AI work in this tab" and it can look at the map you have open and, with an edit key, change it while you watch: a strip with Stop and Undo AI changes stays on top, and each change is one step of your own history.
 - **Six skills for your AI**, to download from /ai/skills/ (one zip with all of them): the map file's words, the terrain, the layout of a fair map, the Map Maker's tools, and how to check and fix a map.
 - **Where the action is, on a replay.** A soft curve over the replay's timeline shows the fights: deaths most of all, then bombs, thefts, fires and hits. On a computer it shows while the pointer is over the timeline, with the time and what happened ("2:41 · 3 deaths, 1 bomb"); on a phone it is always there, faint, and solid under your finger. The timeline has a row of its own on a computer now, as wide as the picture. Matches played before this version show a curve of their deaths alone.
@@ -36,6 +47,8 @@ Work that is not released yet is written in the same template under a heading th
 **For operators:**
 - The keys are off until the hub is started with `ANTS_HUB_AI_KEYS=on`; with it off every key door answers 503 and no tab can be armed ([`docs/MAP_AI.md`](docs/MAP_AI.md)).
 - The game server's database moves to schema version 11 (the table `history_action`, the counts that the activity curve is drawn from; the history service's own file to its version 5): an older program refuses the newer file, so copy `ants.db` before the update ([`docs/REPLAYS.md`](docs/REPLAYS.md#the-activity-curve)).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2bdfe98e...d65954fa)
 
 ## v0.21.0 - 2026-11-23 - A new room, Fog of War switch, the can't-go gap
 

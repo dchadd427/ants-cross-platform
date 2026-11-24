@@ -161,8 +161,8 @@
   {
    "id": "the_match_is_not_playing",
    "file": "web/home/players.js",
-   "old": "var say = { at: room.starting || handing || !room.lobby ? 'play' : 'wait' };",
-   "new": "var say = { at: room.starting || !room.lobby ? 'play' : 'wait' };",
+   "old": "var say = { at: room.starting || handing || !room.lobby ? 'play' : 'wait' }, inv",
+   "new": "var say = { at: room.starting || !room.lobby ? 'play' : 'wait' }, inv",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -357,8 +357,8 @@
   {
    "id": "a_list_that_comes_late_is_not_inert",
    "file": "web/home/home.js",
-   "old": "page: page }); meet(); inert(held); var c = ",
-   "new": "page: page }); meet(); var c = ",
+   "old": "wantMod(); meet(); inert(held); var c = ",
+   "new": "wantMod(); meet(); var c = ",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -392,8 +392,8 @@
   {
    "id": "a_tap_that_comes_late_hears_nothing",
    "file": "web/home/chat.js",
-   "old": "taps.push(fn); if (hello) tell1(fn, 'live', hello); else if (state === 'offline') tell1(fn, 'lost'); },",
-   "new": "taps.push(fn); },",
+   "old": "taps.push(fn); if (hello) { tell1(fn, 'live', hello);",
+   "new": "taps.push(fn); if (false) { tell1(fn, 'live', hello);",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -919,6 +919,118 @@
    "file": "web/home/players.js",
    "old": "if (kind !== 'nobody') size++;",
    "new": "size++;",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_private_room_says_no_code_for_invitations",
+   "file": "web/home/players.js",
+   "old": "if (inv) say.inv = inv;",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_match_says_a_room",
+   "file": "web/home/players.js",
+   "old": "inv = say.at === 'wait' ? invOf(client, count, validMap) : null;",
+   "new": "inv = invOf(client, count, validMap);",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_room_with_no_seats_known_is_invited_to",
+   "file": "web/home/players.js",
+   "old": "|| !count || count.size < 1 || count.people > count.size ||",
+   "new": "|| count.people > count.size ||",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_code_is_not_checked_for_an_invitation",
+   "file": "web/home/players.js",
+   "old": "typeof client.code !== 'string' || !ROOM.test(client.code)) return null;\n        out = ",
+   "new": "false) return null;\n        out = ",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_map_is_not_checked_for_an_invitation",
+   "file": "web/home/players.js",
+   "old": "if (typeof validMap === 'function' && typeof room.map === 'string' && validMap(room.map)) out.map = room.map;",
+   "new": "if (typeof room.map === 'string') out.map = room.map;",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_full_room_is_not_said_full",
+   "file": "web/home/players.js",
+   "old": "if (o.mine.free <= 0) return TEXT.roomFull",
+   "new": "if (false) return TEXT.roomFull",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_person_in_the_room_is_invited",
+   "file": "web/home/players.js",
+   "old": "if (o.row && o.mine.names.indexOf(o.row.name) !== -1) return TEXT.inYourRoom;",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_person_who_plays_is_invited",
+   "file": "web/home/players.js",
+   "old": "if (o.row && o.row.at === 'play') return TEXT.playing;",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_visitor_may_invite",
+   "file": "web/home/players.js",
+   "old": "if (!o.you) return TEXT.login;",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_person_just_invited_is_not_dim",
+   "file": "web/home/players.js",
+   "old": "left = typeof o.last === 'number' ? Math.ceil(60 - (o.now - o.last) / 1000) : 0;",
+   "new": "left = 0;",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_host_is_not_named_for_a_guest",
+   "file": "web/home/players.js",
+   "old": "host: client.isLeader && !client.isLeader() && leader",
+   "new": "host: false && leader",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_people_of_the_room_are_not_listed",
+   "file": "web/home/players.js",
+   "old": "if (i !== room.you && (st === 1 || st === 2) && typeof room.slots[i].name === 'string') names.push(room.slots[i].name);",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_list_does_not_tell_the_hub_at_once",
+   "file": "web/home/players.js",
+   "old": "flush: function () { tell(true); },",
+   "new": "flush: function () { },",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_pace_of_three_seconds_is_ignored_always",
+   "file": "web/home/players.js",
+   "old": "if (wait > 0 && now1 !== true) return;",
+   "new": "if (wait > 0 && now1 === true) return;",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "an_invited_person_is_not_remembered",
+   "file": "web/home/players.js",
+   "old": "invited: function (name) { invitedAt[String(name).toLowerCase()] = now(); }",
+   "new": "invited: function (name) { }",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_name_of_two_people_is_one_person",
+   "file": "web/home/players.js",
+   "old": "if (r.id !== me && r.at !== 'away' && r.name.toLowerCase() === want) { if (found) return null; found = r; }",
+   "new": "if (r.id !== me && r.at !== 'away' && r.name.toLowerCase() === want) { found = r; }",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]

@@ -125,9 +125,9 @@ class TheFolderAndTheScript(unittest.TestCase):
         self.assertEqual(sorted(re.findall(r"\bgetJson\(([A-Z_]+),", self.code)), ["OPTIONS", "SUMMARY"], "the two calls of the builder (a call is made with a constant of this file, never an address that came from outside)")
         self.assertNotRegex(self.code, r"\bmethod\s*:|\bbody\s*:|X-Ants|csrf", "it changes nothing on the game server: starting and stopping are commands that the hub runs")
 
-    def test_it_sends_nothing_and_takes_nothing_from_the_dock_but_four_things(self):
+    def test_it_sends_nothing_and_takes_nothing_from_the_dock_but_seven_things(self):
         self.assertNotRegex(self.code, r"dock\.(send|say|command|tap)\b|\.submit\(|requestSubmit|dispatchEvent|\.send\(")
-        self.assertEqual(sorted(set(re.findall(r"\bdock\.(\w+)", self.code))), ["block", "field", "grow", "root"], "its field (to write into), the log's block (to answer in), the dock's height and its box")
+        self.assertEqual(sorted(set(re.findall(r"\bdock\.(\w+)", self.code))), ["agoOf", "authors", "block", "field", "grow", "people", "root"], "its field (to write into), the log's block (to answer in), the dock's height and its box, and for the names after /invite and an @: who is here, who wrote lately and how long ago")
         self.assertNotRegex(self.code, r"/mute [a-z]|/kick [a-z]|/ban [a-z]", "no command by a name, and no table of commands of its own: the rows are the hub's")
         self.assertNotRegex(self.code, r"\[\s*'/(help|mute|unmute|del|kick|mutes|ban|unban|bans|nopic|pic|ignore|unignore)'", "no row of a command in this file: what is drawn is what `cmds` carried")
 
