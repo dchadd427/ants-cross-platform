@@ -643,6 +643,274 @@ void run_suite_4_audio_mixer() {
         mixer.stop_music();
         ASSERT_FALSE(mixer.is_music_playing());
     } TEST_END();
+
+    TEST_CASE("4.7 Pre-Decode DSP: DC-Offset Removal, Edge Anti-Click Taper & Stereo/16-Bit Decode") {
+        AudioMixer mixer;
+        mixer.set_headless_mode(true);
+        mixer.init(archive);
+
+        // 1. DC-offset removal on sound 79 (waterattack.wav has +16.14% raw DC bias in ants.chd)
+        auto clip79 = mixer.active_clip(79);
+        ASSERT_TRUE(clip79 != nullptr && !clip79->empty());
+        double mean79 = 0.0;
+        for (float s : clip79->samples) mean79 += static_cast<double>(s);
+        mean79 /= static_cast<double>(clip79->samples.size());
+        ASSERT_LT(std::abs(mean79), 0.002);
+
+        // 2. Edge anti-click taper on clips with non-zero boundary jumps (63 cantgo end, 67 firestarta end, 68 firestartb start)
+        for (uint32_t sid : {63u, 67u, 68u}) {
+            auto clip = mixer.active_clip(sid);
+            ASSERT_TRUE(clip != nullptr && clip->frame_count() > 10u);
+            ASSERT_LE(std::abs(clip->samples.front()), 0.03f);
+            ASSERT_LE(std::abs(clip->samples.back()), 0.03f);
+        }
+        ASSERT_LT(std::abs(mixer.active_clip(63u)->samples.back()), 0.005f);
+        ASSERT_LT(std::abs(mixer.active_clip(67u)->samples.back()), 0.005f);
+        ASSERT_LT(std::abs(mixer.active_clip(68u)->samples.front()), 0.005f);
+
+        // 3. Stereo 8-bit CHD clip (45 chatsnda.wav) decodes as 2-channel stereo, not half-speed mono
+        auto clip45 = mixer.active_clip(45);
+        ASSERT_TRUE(clip45 != nullptr);
+        ASSERT_EQ(clip45->channels, 2u);
+        ASSERT_EQ(clip45->frame_count(), archive.get_sound(45).pcm_data.size() / 2u);
+
+        // 4. Synthetic 16-bit signed LE stereo clip decode (DC removal + edge anti-click + stereo separation)
+        ants::assets::SoundClip synth;
+        synth.format.channels = 2;
+        synth.format.bits_per_sample = 16;
+        synth.format.samples_per_sec = 44100;
+        constexpr size_t kFrames = 4400; // Exact 44 cycles of 441 Hz (100 samples/cycle)
+        synth.pcm_data.resize(kFrames * 2u * 2u);
+        for (size_t f = 0; f < kFrames; ++f) {
+            const double phase = 2.0 * 3.141592653589793 * 441.0 * static_cast<double>(f) / 44100.0;
+            const int16_t sl = static_cast<int16_t>(std::lround((0.25 + 0.40 * std::cos(phase)) * 32767.0));
+            const int16_t sr = static_cast<int16_t>(std::lround((-0.20 + 0.30 * std::sin(phase)) * 32767.0));
+            const size_t base = f * 4u;
+            synth.pcm_data[base + 0] = static_cast<uint8_t>(static_cast<uint16_t>(sl) & 0xFFu);
+            synth.pcm_data[base + 1] = static_cast<uint8_t>((static_cast<uint16_t>(sl) >> 8) & 0xFFu);
+            synth.pcm_data[base + 2] = static_cast<uint8_t>(static_cast<uint16_t>(sr) & 0xFFu);
+            synth.pcm_data[base + 3] = static_cast<uint8_t>((static_cast<uint16_t>(sr) >> 8) & 0xFFu);
+        }
+        DecodedClip dec = AudioMixer::decode_sound_clip(synth);
+        ASSERT_EQ(dec.channels, 2u);
+        ASSERT_EQ(dec.sample_rate, 44100u);
+        ASSERT_EQ(dec.frame_count(), kFrames);
+        double dc_l = 0.0, dc_r = 0.0;
+        constexpr size_t kInteriorStart = 200;
+        constexpr size_t kInteriorEnd = kFrames - 200;
+        for (size_t f = kInteriorStart; f < kInteriorEnd; ++f) {
+            dc_l += static_cast<double>(dec.samples[f * 2u]);
+            dc_r += static_cast<double>(dec.samples[f * 2u + 1u]);
+        }
+        const double interior_count = static_cast<double>(kInteriorEnd - kInteriorStart);
+        ASSERT_LT(std::abs(dc_l / interior_count), 0.002);
+        ASSERT_LT(std::abs(dc_r / interior_count), 0.002);
+        ASSERT_LT(std::abs(dec.samples[0]), 0.005f);
+        ASSERT_LT(std::abs(dec.samples[(kFrames - 1u) * 2u]), 0.005f);
+    } TEST_END();
+
+    TEST_CASE("4.8 Soft-Knee Master Bus Limiter: Strictly Linear <= 0.85, Smooth Saturation > 1.0") {
+        // Exact identity in linear region
+        for (float x : {-0.85f, -0.50f, -0.10f, 0.0f, 0.10f, 0.50f, 0.85f}) {
+            ASSERT_EQ(AudioMixer::soft_limit_sample(x), x);
+        }
+        // Smooth, monotonic compression above 0.85 toward 1.0 with odd symmetry
+        const float y095 = AudioMixer::soft_limit_sample(0.95f);
+        const float y150 = AudioMixer::soft_limit_sample(1.50f);
+        const float y500 = AudioMixer::soft_limit_sample(5.00f);
+        ASSERT_GT(y095, 0.85f);
+        ASSERT_LT(y095, 0.95f);
+        ASSERT_GT(y150, y095);
+        ASSERT_LT(y150, 1.0f);
+        ASSERT_GE(y500, y150);
+        ASSERT_LE(y500, 1.0f);
+        ASSERT_NEAR(AudioMixer::soft_limit_sample(-1.50f), -y150, 1e-6f);
+
+        // Multi-voice hot mix stays bounded without integer overflow or harsh flat-top clipping at 0.95
+        AudioMixer mixer;
+        mixer.set_headless_mode(true);
+        mixer.init(archive);
+        std::vector<float> sine(2048);
+        for (size_t i = 0; i < sine.size(); ++i) {
+            sine[i] = 0.55f * std::sin(2.0f * 3.14159265f * 440.0f * static_cast<float>(i) / 44100.0f);
+        }
+        ASSERT_TRUE(mixer.set_clip_override(0, sine, 44100, 1));
+        for (int v = 0; v < 4; ++v) mixer.play_sfx(0, 1.0f, 100);
+        auto pcm = mixer.render_frames(512);
+        int16_t peak = 0;
+        for (int16_t s : pcm) peak = std::max<int16_t>(peak, static_cast<int16_t>(std::abs(s)));
+        ASSERT_GT(peak, 29000);
+        ASSERT_LE(peak, 32767);
+    } TEST_END();
+
+    TEST_CASE("4.9 De-Click Release Tails on stop_owner(), Preemption & Live stop_all() With Immediate active_channel_count() Drop") {
+        std::vector<float> tone(4410);
+        for (size_t i = 0; i < tone.size(); ++i) {
+            tone[i] = 0.70f * std::sin(2.0f * 3.14159265f * 440.0f * static_cast<float>(i) / 44100.0f);
+        }
+
+        // 1. stop_owner(): immediate active_channel_count drop + smooth 4 ms release tail
+        AudioMixer mixer;
+        mixer.set_headless_mode(true);
+        mixer.init(archive);
+        ASSERT_TRUE(mixer.set_clip_override(0, tone, 44100, 1));
+        ASSERT_GE(mixer.play_sfx(0, 1.0f, 100, false, 42u), 0);
+        auto before = mixer.render_frames(225); // Sine is near peak amplitude here
+        const int16_t last_sample = before[(225u - 1u) * 2u];
+        ASSERT_GT(std::abs(last_sample), 10000);
+
+        mixer.stop_owner(42u);
+        ASSERT_EQ(mixer.active_channel_count(), 0u);
+        ASSERT_EQ(mixer.active_release_tail_count(), 1u);
+
+        auto tail_pcm = mixer.render_frames(400);
+        const int first_step = std::abs(static_cast<int>(tail_pcm[0]) - static_cast<int>(last_sample));
+        ASSERT_LT(first_step * 4, std::abs(static_cast<int>(last_sample))); // Smooth continuation, no jump to 0
+        ASSERT_EQ(mixer.active_release_tail_count(), 0u);
+        for (size_t f = 250; f < 400; ++f) {
+            ASSERT_EQ(tail_pcm[f * 2u], 0);
+        }
+
+        // 2. Voice preemption spawns a bounded release tail
+        for (int i = 0; i < 32; ++i) ASSERT_GE(mixer.play_sfx(0, 0.2f, 10), 0);
+        (void)mixer.render_frames(64);
+        ASSERT_GE(mixer.play_sfx(0, 0.2f, 200), 0);
+        ASSERT_EQ(mixer.active_channel_count(), 32u);
+        ASSERT_EQ(mixer.active_release_tail_count(), 1u);
+        (void)mixer.render_frames(300);
+        ASSERT_EQ(mixer.active_release_tail_count(), 0u);
+
+        // 3. Live stop_all() (!headless) fades smoothly while immediately dropping active_channel_count
+        AudioMixer live_mixer;
+        live_mixer.init(archive);
+        ASSERT_TRUE(live_mixer.set_clip_override(0, tone, 44100, 1));
+        ASSERT_GE(live_mixer.play_sfx(0, 1.0f, 100), 0);
+        (void)live_mixer.render_frames(225);
+        live_mixer.stop_all();
+        ASSERT_EQ(live_mixer.active_channel_count(), 0u);
+        ASSERT_EQ(live_mixer.active_release_tail_count(), 1u);
+        auto live_tail = live_mixer.render_frames(300);
+        ASSERT_GT(std::abs(live_tail[0]), 5000);
+        ASSERT_EQ(live_tail[299u * 2u], 0);
+        ASSERT_EQ(live_mixer.active_release_tail_count(), 0u);
+    } TEST_END();
+
+    TEST_CASE("4.10 Presentation-Side Alarm Priority Preemption & Same-Tick Duplicate Gain Damping") {
+        ASSERT_GT(AudioMixer::sim_event_priority(SoundID::BaseAlarmSiren, 1), AudioMixer::sim_event_priority(SoundID::BombDetonate, 2));
+        ASSERT_GT(AudioMixer::sim_event_priority(SoundID::BombDetonate, 2), AudioMixer::sim_event_priority(SoundID::MeleeAttack, 1));
+        ASSERT_GT(AudioMixer::sim_event_priority(SoundID::MeleeAttack, 1), AudioMixer::sim_event_priority(SoundID::Bump, 1));
+
+        // Saturate all 32 voices with sim-priority-1 Bump events, then ingest sim-priority-1 BaseAlarmSiren
+        AudioMixer mixer;
+        mixer.set_headless_mode(true);
+        mixer.init(archive);
+        std::vector<AudioMixer::SoundStart> starts;
+        mixer.set_start_log(&starts);
+
+        std::vector<AudioEvent> bumps(32, AudioEvent{SoundID::Bump, 100, 100, 1, 255});
+        mixer.ingest_simulation_events(bumps, 0);
+        ASSERT_EQ(mixer.active_channel_count(), 32u);
+        ASSERT_EQ(starts.size(), 32u);
+
+        // Critical alarm must preempt low-priority Bump even though sim sent priority 1
+        mixer.ingest_simulation_events({AudioEvent{SoundID::BaseAlarmSiren, 0, 0, 1, 0}}, 0);
+        ASSERT_EQ(starts.size(), 33u);
+        ASSERT_EQ(starts.back().sound_id, SoundID::BaseAlarmSiren);
+        ASSERT_GE(starts.back().priority, 200u);
+
+        // Same-tick duplicate gain damping: 2 identical events sum to 1.5x (1.0 + 0.5), not 2.0x
+        std::vector<float> tone(512);
+        for (size_t i = 0; i < tone.size(); ++i) {
+            tone[i] = 0.25f * std::sin(2.0f * 3.14159265f * 440.0f * static_cast<float>(i) / 44100.0f);
+        }
+        AudioMixer one, two;
+        one.set_headless_mode(true);
+        two.set_headless_mode(true);
+        one.init(archive);
+        two.init(archive);
+        ASSERT_TRUE(one.set_clip_override(SoundID::MeleeAttack, tone, 44100, 1));
+        ASSERT_TRUE(two.set_clip_override(SoundID::MeleeAttack, tone, 44100, 1));
+        one.ingest_simulation_events({AudioEvent{SoundID::MeleeAttack, 0, 0, 1, 255}}, 0);
+        two.ingest_simulation_events({AudioEvent{SoundID::MeleeAttack, 0, 0, 1, 255},
+                                      AudioEvent{SoundID::MeleeAttack, 0, 0, 1, 255}}, 0);
+        ASSERT_EQ(two.active_channel_count(), 2u);
+        auto p1 = one.render_frames(256);
+        auto p2 = two.render_frames(256);
+        int16_t max1 = 0, max2 = 0;
+        for (int16_t s : p1) max1 = std::max<int16_t>(max1, static_cast<int16_t>(std::abs(s)));
+        for (int16_t s : p2) max2 = std::max<int16_t>(max2, static_cast<int16_t>(std::abs(s)));
+        ASSERT_GT(max1, 5000);
+        const float ratio = static_cast<float>(max2) / static_cast<float>(max1);
+        ASSERT_NEAR(ratio, 1.5f, 0.05f);
+    } TEST_END();
+
+    TEST_CASE("4.11 Clip Override & Clear API (Stereo Float32 & Validation)") {
+        AudioMixer mixer;
+        mixer.set_headless_mode(true);
+        mixer.init(archive);
+
+        // Invalid override rejections
+        ASSERT_FALSE(mixer.set_clip_override(999u, {0.1f, 0.2f}, 44100, 1));
+        ASSERT_FALSE(mixer.set_clip_override(0u, {}, 44100, 1));
+        ASSERT_FALSE(mixer.set_clip_override(0u, {0.1f, 0.2f}, 0, 1));
+        ASSERT_FALSE(mixer.set_clip_override(0u, {0.1f, 0.2f}, 44100, 3));
+        ASSERT_FALSE(mixer.set_clip_override(0u, {0.1f, 0.2f, 0.3f}, 44100, 2)); // Odd length for stereo
+        ASSERT_FALSE(mixer.has_clip_override(0u));
+
+        // Stereo override: L = +0.5, R = -0.25 at 44100 Hz (LPF bypassed)
+        std::vector<float> stereo(256 * 2u);
+        for (size_t f = 0; f < 256; ++f) {
+            stereo[f * 2u] = 0.5f;
+            stereo[f * 2u + 1u] = -0.25f;
+        }
+        ASSERT_TRUE(mixer.set_clip_override(0u, stereo, 44100, 2));
+        ASSERT_TRUE(mixer.has_clip_override(0u));
+        ASSERT_GE(mixer.play_sfx(0u, 1.0f, 100), 0);
+        auto pcm = mixer.render_frames(64);
+        ASSERT_NEAR(static_cast<float>(pcm[32u * 2u]) / 32767.0f, 0.5f, 0.01f);
+        ASSERT_NEAR(static_cast<float>(pcm[32u * 2u + 1u]) / 32767.0f, -0.25f, 0.01f);
+
+        // Clear single override -> reverts to CHD mono clip
+        mixer.clear_clip_override(0u);
+        ASSERT_FALSE(mixer.has_clip_override(0u));
+        auto base0 = mixer.active_clip(0u);
+        ASSERT_TRUE(base0 != nullptr && base0->channels == 1u && base0->sample_rate == archive.get_sound(0).format.samples_per_sec);
+
+        // Clear all overrides
+        ASSERT_TRUE(mixer.set_clip_override(1u, stereo, 44100, 2));
+        ASSERT_TRUE(mixer.set_clip_override(2u, stereo, 44100, 2));
+        mixer.clear_clip_overrides();
+        ASSERT_FALSE(mixer.has_clip_override(1u));
+        ASSERT_FALSE(mixer.has_clip_override(2u));
+    } TEST_END();
+
+    TEST_CASE("4.12 MP3 Sample-Rate Conversion Fallback (48 kHz), Large-Block Mixing & Smooth Pause Ramp") {
+        AudioMixer mixer;
+        mixer.set_headless_mode(true);
+        mixer.init(archive, 48000); // Non-44.1 kHz output exercises MP3 SRC fallback
+
+        std::string intro_path = std::string(ORIGINAL_ASSETS_DIR) + "/INTRO.mp3";
+        ASSERT_TRUE(mixer.play_music(intro_path, true));
+        mixer.set_music_volume(0.8f);
+
+        // Render > 4096 frames to exercise chunked fixed-stack mixing path
+        auto pcm = mixer.render_frames(8192);
+        ASSERT_EQ(pcm.size(), 8192u * 2u);
+        int non_zero = 0;
+        for (int16_t s : pcm) {
+            if (s != 0) ++non_zero;
+        }
+        ASSERT_GT(non_zero, 4000);
+
+        // Smooth pause ramp: is_music_playing drops immediately, audio ramps smoothly to silence
+        mixer.pause_music();
+        ASSERT_FALSE(mixer.is_music_playing());
+        auto pause_tail = mixer.render_frames(512);
+        for (size_t f = 350; f < 512; ++f) {
+            ASSERT_EQ(pause_tail[f * 2u], 0);
+            ASSERT_EQ(pause_tail[f * 2u + 1u], 0);
+        }
+    } TEST_END();
 }
 
 // ============================================================================
