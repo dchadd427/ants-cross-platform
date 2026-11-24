@@ -37,6 +37,7 @@
 #include "ants_app/screen_layout.hpp"
 #include "ants_app/view_zoom.hpp"
 #include "ants_app/world_art.hpp"
+#include "ants_app/world_art_mud.hpp"
 #include "ants_assets/asset_archive.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/sim_engine.hpp"
@@ -535,6 +536,16 @@ public:
     size_t world_art_textures() const noexcept;
     uint32_t world_art_sheets() const noexcept;       // which sheets are textures: bit 0 the 1x, bit 1 the 2x, bit 2 the 3x
     uint8_t ground_variant_at(int32_t col, int32_t row);
+    /// Dense mud (world_art_mud.hpp): on by default while the world art is; the looks of a big mud field are made cell by cell as the cells come into view, within `ms` milliseconds of work for each frame (at
+    /// least one cell: 0; no limit: -1, which the tests and the picture maker use), and a cell that is not made yet shows the approved picture. `limit_bytes` bounds the baked pictures and the looks that are kept.
+    void set_dense_mud(bool on) noexcept { dense_mud_ = on; }
+    void set_dense_mud_budget_ms(int32_t ms) noexcept { mud_budget_ms_ = ms; }
+    void set_dense_mud_cache_limit(size_t limit_bytes) noexcept { mud_cache_limit_ = limit_bytes; }
+    /// (for the tests) the depth of the mud at the center of a cell (0 for a cell outside the map and for one that is not plain mud), and how many baked cell pictures and sets of looks are kept
+    double mud_depth_at_cell(int32_t col, int32_t row);
+    size_t mud_baked_cells() const noexcept { return mud_baked_.size(); }
+    size_t mud_baked_bytes() const noexcept { return mud_baked_bytes_; }
+    size_t mud_looks_cells() const noexcept { return mud_looks_.size(); }
     /// (for the tests) pretends that the device takes no texture with a side above `limit` pixels, as a small phone's does (0: the device's own limit); it applies to the HUD art and the world art alike
     void set_art_texture_limit(int32_t limit) noexcept { art_texture_limit_ = limit; }
     void set_origin(int32_t x, int32_t y) override { origin_ = LayoutPoint{x, y}; }
@@ -708,6 +719,8 @@ private:
         std::vector<ObjectListSprite> object_list_sprites;
         world_art::GroundMap ground_map;
         std::vector<uint8_t> ground_variant;
+        world_art::mud::Depth mud_depth;
+        bool mud_depth_ready{false};
     };
     void swap_level_state(LevelState& other) noexcept;
 
@@ -768,11 +781,41 @@ private:
     std::array<bool, 3> world_art_failed_{};               // a sheet that could not be read or made a texture: said once, and not tried again until another pack comes
     std::array<SDL_Texture*, 3> world_art_textures_{};     // its sheets at 1x, 2x and 3x, made when first needed
     uint8_t world_variant_{0};                             // which picture of a plain ground tile the cell being drawn shows (render_terrain_layer1); 0 for everything else
+    bool dense_mud_{true};                                 // the looks of big mud fields (world_art_mud.hpp), while the world art is on
+    int32_t mud_budget_ms_{8};                             // the work for the looks that a frame may take (set_dense_mud_budget_ms)
+    size_t mud_cache_limit_{32u * 1024u * 1024u};          // the bytes that the baked cell pictures may take, and as many again for the looks
+    world_art::mud::Depth mud_depth_;                      // the depth of the mud, made when the first mud cell is drawn (ensure_mud_depth)
+    bool mud_depth_ready_{false};
+    struct MudLooks {
+        world_art::mud::CellLooks looks;
+        uint64_t used{0};
+    };
+    struct MudBaked {
+        SDL_Texture* texture{nullptr};
+        uint64_t used{0};
+        size_t bytes{0};
+    };
+    std::unordered_map<uint32_t, MudLooks> mud_looks_;     // the looks of the cells, by cell (row * width + column)
+    std::unordered_map<uint64_t, MudBaked> mud_baked_;     // the pictures of cells with their looks laid on, by cell, picture and scale
+    size_t mud_looks_bytes_{0};
+    size_t mud_baked_bytes_{0};
+    std::array<std::unordered_map<uint64_t, std::vector<uint8_t>>, 3> mud_pictures_;   // the RGB pictures of the mud at each scale (by number and variant), cut from the sheet when first needed
+    std::array<uint8_t, 3> mud_pictures_state_{};          // 0: not read, 1: read, 2: could not be read
+    uint64_t mud_frame_{0};                                // the frame that is being drawn (what the caches' `used` says)
+    int64_t mud_spent_us_{0};                              // the work of the looks in this frame
+    int32_t mud_made_{0};                                  // the sets of looks made in this frame
     void drop_world_art_textures();
     SDL_Texture* world_art_texture(int32_t scale);
     bool draw_world_art_part(uint32_t sprite_index, int32_t x, int32_t y, int32_t w, int32_t h);
     void ensure_ground_variants();
     void index_ground(const ants::assets::LevelData& level);
+    void world_art_filter(SDL_Texture* tex, int32_t scale);
+    void ensure_mud_depth();
+    bool ensure_mud_pictures(int32_t scale);
+    const world_art::mud::CellLooks* mud_cell_looks(int32_t col, int32_t row);
+    bool draw_dense_mud_cell(int32_t col, int32_t row, int32_t anim_id, int32_t sx, int32_t sy);
+    void evict_mud(bool baked);
+    void drop_mud_caches();
     void drop_art_textures();
     SDL_Texture* art_texture(const hud_art::Art& art, int32_t scale);
     int32_t art_scale_for_output(double* out = nullptr) const;

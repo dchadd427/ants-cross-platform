@@ -1,18 +1,19 @@
-"""Draws every picture of the world art at 1x, 2x and 3x: the ground tiles, the edge tiles and the bridge (README.md has the list).
+"""Draws every picture of the world art at 1x, 2x and 3x: the ground tiles, the edge tiles, the bridge and the bigger bubbles of the mud (README.md has the list).
 
-The pictures are written as `<folder>/<scale>x/sprite_NNNN.png` (NNNN is the original's sprite number; a position variant of a plain tile is `sprite_NNNN_vK.png`, K from 1 to 15), each at the
-original sprite's size times the scale. The drawing is deterministic (every random choice has a fixed seed), so the same inputs give the same pictures.
+The pictures are written as `<folder>/<scale>x/sprite_NNNN.png` (NNNN is the original's sprite number, or 10000 or 20000 plus it for a bigger bubble; a position variant of a plain tile is
+`sprite_NNNN_vK.png`, K from 1 to 15), each at the original sprite's size times the scale. The drawing is deterministic (every random choice has a fixed seed), so the same inputs give the same pictures.
 """
 import multiprocessing
 import os
 
 from PIL import Image
 
+import big_bubbles
 import dirt_slate
 import edges
 import gravel
 import mud_water
-from catalog import BRIDGE, VARIANT_COUNT, ground_numbers, tile_sprites
+from catalog import BRIDGE, VARIANT_COUNT, big_bubble_numbers, ground_numbers, tile_sprites
 
 MUD_AND_BUBBLES = list(range(640, 658)) + [901]       # the plain mud (640) and its bubbles, sixteen pictures each
 GRAVEL = (726, 727)
@@ -33,6 +34,7 @@ def jobs():
         out += [(number, v, 'bubble', None) for number in MUD_AND_BUBBLES[1:]]
         out += [(number, v, 'gravel', None) for number in GRAVEL]
         out += [(tile_sprites('d01' + c)[0][0], v, 'dirt', None) for c in 'abcd']
+        out += [(number, v, 'bigbubble', None) for number in big_bubble_numbers()]
     out += [(690 + f, 0, 'water', None) for f in range(4)]
     out += [(tile_sprites('s01' + c)[0][0], 0, 'slate', None) for c in 'abcdefghi']
     for family, suffixes in BANK_FAMILIES:
@@ -52,6 +54,8 @@ def draw(job):
         pictures = mud_water.mud_tile(variant).pictures()
     elif kind == 'bubble':
         pictures = mud_water.bubble_frame(number, variant).pictures()
+    elif kind == 'bigbubble':
+        pictures = big_bubbles.big_bubble(number, variant)
     elif kind == 'gravel':
         pictures = gravel.gravel_tile(number, variant).pictures()
     elif kind == 'dirt':
@@ -77,9 +81,9 @@ def draw_all(folder, workers=None, say=print):
     keys = [(j[0], j[1]) for j in todo]
     if len(set(keys)) != len(keys):
         raise SystemExit('a picture is drawn twice')
-    expected = set(ground_numbers()) | set(BRIDGE)                     # every sprite of the ground's tiles and of the bridge, no other
+    expected = set(ground_numbers()) | set(BRIDGE) | set(big_bubble_numbers())      # every sprite of the ground's tiles and of the bridge and the numbers of the bigger bubbles, no other
     if {number for number, _ in keys} != expected:
-        raise SystemExit('the pictures drawn are not every sprite of the ground tiles and the bridge: missing %s, extra %s' % (sorted(expected - {k[0] for k in keys}), sorted({k[0] for k in keys} - expected)))
+        raise SystemExit('the pictures drawn are not every sprite of the ground tiles and the bridge and every bigger bubble: missing %s, extra %s' % (sorted(expected - {k[0] for k in keys}), sorted({k[0] for k in keys} - expected)))
     for scale in (1, 2, 3):
         os.makedirs(os.path.join(folder, '%dx' % scale), exist_ok=True)
     workers = workers or min(8, os.cpu_count() or 1)

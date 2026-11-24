@@ -2285,6 +2285,7 @@ int main(int argc, char* argv[]) {
         };
         const int32_t cw = app.renderer().canvas_w(), ch = app.renderer().canvas_h();
         app.renderer().pin_animation_clock(1500);                                          // (the water and the plants move with the clock: the same frame twice needs it still)
+        app.renderer().set_dense_mud_budget_ms(-1);                                        // (the looks of a big mud field are made over several frames: the same frame twice needs them all at once)
         const auto frame = [&](int when, std::vector<uint8_t>& px) {                    // (the canvas as drawn: the window may be a whole multiple of it, which is sampled back)
             if (!app.game_menu_set(game_menu::kAntHealth, when)) return false;
             app.render_frame();

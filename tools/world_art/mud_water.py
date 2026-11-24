@@ -44,20 +44,22 @@ BUB = {1: (99, 95, 85), 2: (113, 112, 108), 3: (131, 130, 118), 4: (158, 157, 15
 BUB_SHADOW = (54, 54, 56)
 
 
-def bubble_frame(sprite_number, variant):
-    """the mud of the variant with the original's bubble of that frame drawn as a dome or ring with form"""
-    tile = mud_tile(variant)
+def bubble_classes(sprite_number):
+    """the original's bubble of a frame as a 1x map of classes: 0 the mud, 1 to 5 the colors of the bubble (BUBBLE_COLORS)"""
     rgb = K.original(sprite_number)
     lab = np.zeros((T, T), int)
     for y in range(T):
         for x in range(T):
             lab[y, x] = BUBBLE_COLORS.get(tuple(int(v) for v in rgb[y, x]), 0)
-    if not lab.any():
-        return tile
-    cm = K.classmap(lab, 6, soft=0.25, border=0.0001)
+    return lab
+
+
+def draw_bubble(tile, cm, f=1.0):
+    """paints a bubble on a tile as a dome or ring with form: `cm` is the master map of its classes, `f` how many times bigger than the original's it is (the cast shadow and the form's soft edge grow with it)"""
     under = cm > 0
-    tile.paint(K.shift(under, 0.9, 1.0) & ~under, BUB_SHADOW)
-    form = K.dome(under, 0.55, hi=0.84, lo=0.18)
+    g = f ** 0.6
+    tile.paint(K.shift(under, 0.9 * g, 1.0 * g) & ~under, BUB_SHADOW)
+    form = K.dome(under, 0.55 * f, hi=0.84, lo=0.18)
     for k in (1, 2, 3, 4, 5):
         m = cm == k
         if not m.any():
@@ -71,6 +73,14 @@ def bubble_frame(sprite_number, variant):
         tile.paint(m & (form == 1), shade)
         tile.paint(m & (form == 2), col)
         tile.paint(m & (form == 3), lit)
+
+
+def bubble_frame(sprite_number, variant):
+    """the mud of the variant with the original's bubble of that frame drawn as a dome or ring with form"""
+    tile = mud_tile(variant)
+    lab = bubble_classes(sprite_number)
+    if lab.any():
+        draw_bubble(tile, K.classmap(lab, 6, soft=0.25, border=0.0001))
     return tile
 
 

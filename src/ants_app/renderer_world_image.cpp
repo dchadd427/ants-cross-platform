@@ -43,6 +43,8 @@ void Renderer::swap_level_state(LevelState& o) noexcept {
     object_list_sprites_.swap(o.object_list_sprites);
     std::swap(ground_map_, o.ground_map);
     ground_variant_.swap(o.ground_variant);
+    std::swap(mud_depth_, o.mud_depth);
+    std::swap(mud_depth_ready_, o.mud_depth_ready);
 }
 
 bool Renderer::render_world_image(const ants::assets::LevelData& level, const ants::sim::WorldState& world, const ants::sim::Grid& grid, WorldImage& out, std::string* why, int32_t max_side) {

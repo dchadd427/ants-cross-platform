@@ -15,6 +15,8 @@ TABLE = os.path.join(ROOT, 'docs', 'chd_table4_animations.json')
 GROUND_FIRST, GROUND_LAST = 431, 669          # the animations (tiles) of the ground in the table
 BRIDGE = range(112, 117)                      # the five sprites of the bridge
 VARIANT_COUNT = 16                            # a plain tile has sixteen pictures (the position variants 0 to 15)
+BUBBLE_SPRITES = range(641, 651)              # the original's bubble frames that have bigger copies: two sets of five (big_bubbles.py)
+BIG_BUBBLE_CLASS = {'M': 10000, 'L': 20000}   # the number of a bigger bubble's picture is this plus the original's sprite number (10641 to 10650 medium, 20641 to 20650 large)
 
 _table = None
 
@@ -64,7 +66,17 @@ def sprite(number):
     return Image.open(sprite_path(number)).convert('RGBA')
 
 
+def original_number(number):
+    """the original's sprite that a picture's number stands for: itself, or for a bigger bubble (10000 or 20000 plus the sprite) the bubble's sprite"""
+    return number % 10000
+
+
+def big_bubble_numbers():
+    """the numbers of the pictures of the bigger bubbles, sorted"""
+    return sorted(base + sprite for base in BIG_BUBBLE_CLASS.values() for sprite in BUBBLE_SPRITES)
+
+
 def sprite_size(number):
-    """(width, height) of a decoded sprite of the original, read from its file's header"""
-    with Image.open(sprite_path(number)) as im:
+    """(width, height) of the original's sprite that a picture's number stands for, read from its file's header"""
+    with Image.open(sprite_path(original_number(number))) as im:
         return im.size

@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the world art (src/ants_app/world_art.cpp, renderer_world_art.cpp, renderer_world_image.cpp, renderer_terrain.cpp, application_game_menu.cpp): the manifest's rules (a variant that is not there is the plain picture, a picture and its ring lie inside the sheet, the order, the sheet's size), the choice of a ground tile's picture (damp beside another kind, worn in a corridor, scuffed round objects, the map's border is no edge, another kind is an edge), the fit of a picture to the original sprite, the sheet by the output's scale and a zoomed pass's 1x sheet, the device's texture limit and the next smaller sheet, the art taken away, a map's picture the original's look and the setting that gives Classic the original's sprites, for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: python3 tools/mutate.py tests/data/world_art_mutants.json --keep-going --jobs 1; every mutant must be caught by the test and the text named in it.",
+ "note": "Mutants of the world art (src/ants_app/world_art.cpp, renderer_world_art.cpp, renderer_world_image.cpp, renderer_terrain.cpp, application_game_menu.cpp): the manifest's rules (a variant that is not there is the plain picture, a picture and its ring lie inside the sheet, the order, the sheet's size), the choice of a ground tile's picture (damp beside another kind, worn in a corridor, scuffed round objects, the map's border is no edge, another kind is an edge), the fit of a picture to the original sprite, the sheet by the output's scale and a zoomed pass's 1x sheet, the device's texture limit and the next smaller sheet, the art taken away, a map's picture the original's look and the setting that gives Classic the original's sprites, and of the dense mud (the looks begin at their depth, the wander of the depth, the bubbles: when they change, how big, the share of plain cells that bubble by themselves and the time of it, the budget of a frame, the bounded caches, the switch) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: python3 tools/mutate.py tests/data/world_art_mutants.json --keep-going --jobs 1; every mutant must be caught by the test and the text named in it.",
  "mutants": [
   {
    "id": "variant_falls_back_to_the_plain_picture",
@@ -85,8 +85,8 @@
   {
    "id": "taking_the_art_away_keeps_its_textures",
    "file": "src/ants_app/renderer_world_art.cpp",
-   "old": "if (world_art_ == nullptr || world_art_generation_ != world_art_->generation()) drop_world_art_textures();",
-   "new": "if (world_art_ != nullptr && world_art_generation_ != world_art_->generation()) drop_world_art_textures();",
+   "old": "    if (world_art_ == nullptr || world_art_generation_ != world_art_->generation()) {\n        drop_world_art_textures();",
+   "new": "    if (world_art_ != nullptr && world_art_generation_ != world_art_->generation()) {\n        drop_world_art_textures();",
    "build": "test_world_art",
    "test": "./build/tests/test_app/test_world_art",
    "expect": "[classic]"
@@ -162,6 +162,96 @@
    "build": "test_world_art",
    "test": "./build/tests/test_app/test_world_art",
    "expect": "[variants]"
+  },
+  {
+   "id": "mud_looks_begin_too_early",
+   "file": "src/ants_app/world_art_mud.cpp",
+   "old": "        const double w = ramp(d, kFirstLook, 5.0);\n        const double q",
+   "new": "        const double w = ramp(d, 0.5, 5.0);\n        const double q",
+   "build": "test_world_art_mud",
+   "test": "./build/tests/test_app/test_world_art_mud",
+   "expect": "[looks]"
+  },
+  {
+   "id": "mud_is_not_darker",
+   "file": "src/ants_app/world_art_mud.cpp",
+   "old": "constexpr double kWetDark[3] = {0.200, 0.220, 0.230};",
+   "new": "constexpr double kWetDark[3] = {0.0, 0.0, 0.0};",
+   "build": "test_world_art_mud",
+   "test": "./build/tests/test_app/test_world_art_mud",
+   "expect": "[golden]"
+  },
+  {
+   "id": "mud_depth_does_not_wander",
+   "file": "src/ants_app/world_art_mud.cpp",
+   "old": "double wandered_depth(double x, double y, double depth) { return depth + kWander * (fbm(x, y, 190.0, 91, 2) - 0.5) * 2.0; }",
+   "new": "double wandered_depth(double x, double y, double depth) { (void)x; (void)y; return depth; }",
+   "build": "test_world_art_mud",
+   "test": "./build/tests/test_app/test_world_art_mud",
+   "expect": "[golden]"
+  },
+  {
+   "id": "mud_bubbles_change_too_early",
+   "file": "src/ants_app/world_art_mud.cpp",
+   "old": "    const double wb = ramp(depth, 2.2, 5.0);",
+   "new": "    const double wb = ramp(depth, 0.2, 5.0);",
+   "build": "test_world_art_mud",
+   "test": "./build/tests/test_app/test_world_art_mud",
+   "expect": "[bubbles]"
+  },
+  {
+   "id": "mud_plain_cells_never_bubble",
+   "file": "src/ants_app/world_art_mud.cpp",
+   "old": "if (cell_hash(col, row, 6) < 0.45 * wb) {",
+   "new": "if (cell_hash(col, row, 6) < 0.0 * wb) {",
+   "build": "test_world_art_mud",
+   "test": "./build/tests/test_app/test_world_art_mud",
+   "expect": "[bubbles]"
+  },
+  {
+   "id": "mud_bubbles_are_not_bigger",
+   "file": "src/ants_app/world_art_mud.cpp",
+   "old": "if (native >= kBubbleFirst && native <= kBubbleLast) return BubbleChoice{native, size};",
+   "new": "if (native >= kBubbleFirst && native <= kBubbleLast) return BubbleChoice{native, 0 * size};",
+   "build": "test_world_art_mud",
+   "test": "./build/tests/test_app/test_world_art_mud",
+   "expect": "[bubbles]"
+  },
+  {
+   "id": "mud_bubbling_time_is_shorter",
+   "file": "src/ants_app/world_art_mud.cpp",
+   "old": "constexpr Step kCycleSmall[6] = {{1200, 640},",
+   "new": "constexpr Step kCycleSmall[6] = {{600, 640},",
+   "build": "test_world_art_mud",
+   "test": "./build/tests/test_app/test_world_art_mud",
+   "expect": "[bubbles]"
+  },
+  {
+   "id": "mud_cache_never_lets_go",
+   "file": "src/ants_app/renderer_world_mud.cpp",
+   "old": "        if (mud_baked_bytes_ > mud_cache_limit_) evict_mud(true);\n",
+   "new": "",
+   "build": "test_world_art_mud",
+   "test": "./build/tests/test_app/test_world_art_mud",
+   "expect": "[render]"
+  },
+  {
+   "id": "mud_budget_is_ignored",
+   "file": "src/ants_app/renderer_world_mud.cpp",
+   "old": "    if (!unlimited && mud_made_ > 0 && mud_spent_us_ >= static_cast<int64_t>(mud_budget_ms_) * 1000) return nullptr;",
+   "new": "    (void)unlimited;",
+   "build": "test_world_art_mud",
+   "test": "./build/tests/test_app/test_world_art_mud",
+   "expect": "[render]"
+  },
+  {
+   "id": "mud_switch_is_ignored",
+   "file": "src/ants_app/renderer_world_mud.cpp",
+   "old": "    if (!dense_mud_ || world_art_ == nullptr || !archive_",
+   "new": "    if (world_art_ == nullptr || !archive_",
+   "build": "test_world_art_mud",
+   "test": "./build/tests/test_app/test_world_art_mud",
+   "expect": "[render]"
   }
  ]
 }

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """The packed world art (assets/world_art/, made by tools/world_art/make_world_art.py; tools/world_art/README.md): run by ./run_tests.sh and the CI with the other python tests of tests/scripts.
 
-Nothing is drawn here (drawing takes about half a minute): the committed manifest and the three committed sheets are read, and held to the rules that the game's reader relies on:
+Nothing is drawn here (drawing takes about 40 seconds): the committed manifest and the three committed sheets are read, and held to the rules that the game's reader relies on:
   - TheManifest: the header, the three sheet rows (real PNG files of 8-bit RGBA with the sizes they state, as wide as 1024, 2048 and 3072 pixels and at most 4096 high), the sprite records
     (ten whole numbers each, sorted by number and variant, none twice, UTF-8 with LF and nothing else);
   - ThePictures: every picture is the size of the original's sprite (asset_catalog/sprites) times the scale, lies inside its sheet with its one-pixel ring, no two pictures (rings included) overlap,
     and the ring repeats the picture's own edge pixels (a corner pixel repeats the corner);
-  - TheSet: the numbers are exactly every sprite of the ground tiles 431 to 669 of docs/chd_table4_animations.json and the bridge sprites 112 to 116, and variants 1 to 15 exist exactly for the
-    plain tiles 640 to 657, 726 to 731 and 901;
+  - TheSet: the numbers are exactly every sprite of the ground tiles 431 to 669 of docs/chd_table4_animations.json, the bridge sprites 112 to 116 and the bigger bubbles of the mud (10000 or 20000
+    plus the bubble sprites 641 to 650, each the size of its sprite: 32 x 32), and variants 1 to 15 exist exactly for the plain tiles 640 to 657, 726 to 731 and 901 and the bigger bubbles;
   - TheChecksAreNotVacuous: each rule above refuses a copy of the real data that is broken in that one way.
 Needs numpy and Pillow (the tests are skipped only on a machine that has none; CI has both).
 """
@@ -35,6 +35,7 @@ VARIANTS = 16
 VARIANT_TILES = set(range(640, 658)) | set(range(726, 732)) | {901}
 GROUND_TILES = (431, 669)
 BRIDGE = set(range(112, 117))
+BIG_BUBBLES = {base + sprite for base in (10000, 20000) for sprite in range(641, 651)}      # a bigger bubble's number: 10000 (medium) or 20000 (large) plus the original's bubble sprite
 NUMBER = re.compile(r"0|[1-9][0-9]*")
 
 
@@ -79,10 +80,12 @@ _sizes = {}
 
 
 def original_size(number):
-    if number not in _sizes:
-        with Image.open(os.path.join(SPRITES, "sprite_%04d.png" % number)) as im:
-            _sizes[number] = im.size
-    return _sizes[number]
+    """the size of the original's sprite that a number stands for (a bigger bubble is the size of its bubble sprite)"""
+    sprite = number % 10000
+    if sprite not in _sizes:
+        with Image.open(os.path.join(SPRITES, "sprite_%04d.png" % sprite)) as im:
+            _sizes[sprite] = im.size
+    return _sizes[sprite]
 
 
 def sheet_problems(arrays):
@@ -135,11 +138,11 @@ def expected_numbers():
         table = json.load(f)
     assert table[GROUND_TILES[0]]["entry_index"] == GROUND_TILES[0] and table[GROUND_TILES[1]]["entry_index"] == GROUND_TILES[1]
     ground = {f["sprite_index"] for entry in table[GROUND_TILES[0]:GROUND_TILES[1] + 1] for item in entry["subitems"] for f in item["frames"]}
-    return ground | BRIDGE
+    return ground | BRIDGE | BIG_BUBBLES
 
 
 def set_problems(sprites, numbers):
-    """the numbers drawn are exactly `numbers`, and a number has variants 0 to 15 if it is a plain tile and only 0 if it is not"""
+    """the numbers drawn are exactly `numbers`, and a number has variants 0 to 15 if it is a plain tile or a bigger bubble and only 0 if it is not"""
     out = []
     found = {}
     for number, variant, _, _, _ in sprites:
@@ -149,7 +152,7 @@ def set_problems(sprites, numbers):
     for number in sorted(set(found) - numbers):
         out.append("sprite %d is not a ground tile or a bridge sprite" % number)
     for number, variants in sorted(found.items()):
-        want = set(range(VARIANTS)) if number in VARIANT_TILES else {0}
+        want = set(range(VARIANTS)) if number in VARIANT_TILES | BIG_BUBBLES else {0}
         if variants != want:
             out.append("sprite %d has the variants %s, not %s" % (number, sorted(variants), sorted(want)))
     return out
@@ -202,13 +205,19 @@ class ThePictures(Committed):
 
 
 class TheSet(Committed):
-    def test_the_numbers_are_every_ground_tile_and_the_bridge_with_variants_of_the_plain_tiles(self):
+    def test_the_numbers_are_every_ground_tile_the_bridge_and_the_bigger_bubbles_with_variants_of_the_plain_tiles_and_the_bubbles(self):
         numbers = expected_numbers()
         self.assertEqual(set_problems(self.sprites, numbers), [])
         self.assertEqual(len({s[0] for s in self.sprites}), len(numbers))
 
     def test_the_count_of_the_set(self):
-        self.assertEqual(len(self.sprites), len(expected_numbers()) + (VARIANTS - 1) * len(VARIANT_TILES))
+        self.assertEqual(len(self.sprites), len(expected_numbers()) + (VARIANTS - 1) * (len(VARIANT_TILES) + len(BIG_BUBBLES)))
+
+    def test_the_bigger_bubbles_are_the_numbers_of_both_classes_each_32_by_32_with_sixteen_variants(self):
+        self.assertEqual(sorted(BIG_BUBBLES), list(range(10641, 10651)) + list(range(20641, 20651)))
+        records = [s for s in self.sprites if s[0] in BIG_BUBBLES]
+        self.assertEqual([(s[0], s[1]) for s in records], [(n, v) for n in sorted(BIG_BUBBLES) for v in range(VARIANTS)])
+        self.assertEqual({(s[2], s[3]) for s in records}, {(32, 32)})
 
 
 class TheChecksAreNotVacuous(Committed):
@@ -287,6 +296,18 @@ class TheChecksAreNotVacuous(Committed):
         self.assertEqual(len(set_problems(self.sprites + [(640, 16, 32, 32, {})], numbers)), 1)
         self.assertEqual(len(set_problems(self.sprites + [(112, 1, 16, 16, {})], numbers)), 1)
         self.assertEqual(len(set_problems([s for s in self.sprites if s[0] != 901 or s[1] == 0], numbers)), 1)
+
+    def test_a_bigger_bubble_that_is_missing_short_of_a_variant_extra_or_the_wrong_size_is_found(self):
+        numbers = expected_numbers()
+        self.assertEqual(len(set_problems([s for s in self.sprites if s[0] != 10641], numbers)), 1)
+        self.assertEqual(len(set_problems([s for s in self.sprites if s[0] != 20650], numbers)), 1)
+        self.assertEqual(len(set_problems([s for s in self.sprites if (s[0], s[1]) != (20645, 15)], numbers)), 1)
+        self.assertEqual(len(set_problems([s for s in self.sprites if s[0] != 10650 or s[1] == 0], numbers)), 1)
+        self.assertEqual(len(set_problems(self.sprites + [(10651, 0, 32, 32, {})], numbers)), 1)
+        self.assertEqual(len(set_problems(self.sprites + [(10641, 16, 32, 32, {})], numbers)), 1)
+        first = next(i for i, s in enumerate(self.sprites) if s[0] == 10641)
+        self.assertEqual(len(size_problems(self.broken(self.sprites, first, w=16))), 1)
+        self.assertEqual(len(size_problems(self.broken(self.sprites, first, h=64))), 1)
 
 
 if __name__ == "__main__":

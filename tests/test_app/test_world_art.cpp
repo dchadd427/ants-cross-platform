@@ -16,6 +16,7 @@
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <cmath>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -96,6 +97,12 @@ std::string pack_copy(const std::string& tag, const std::function<std::string(co
 
 std::string identity(const std::string& s) { return s; }
 
+/// The world art of the batch of the ground alone: the looks of big mud fields are made over frames and have their own test (test_world_art_mud.cpp)
+void use_art(Renderer& renderer, const world_art::Pack& pack) {
+    renderer.set_world_art(&pack);
+    renderer.set_dense_mud(false);
+}
+
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // [manifest]
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -109,7 +116,12 @@ void test_manifest(const assets::AssetArchive& arc) {
     group("manifest", "the shipped manifest and its sheets, and every way to break a manifest");
     world_art::Pack pack;
     check(pack.load(pack_folder()) && pack.loaded(), "the shipped pack is read: " + pack.what());
-    check(pack.pictures().size() == 667, "the pack holds the 667 pictures of the batch (the plain ones and their variants): " + std::to_string(pack.pictures().size()));
+    check(pack.pictures().size() == 987, "the pack holds the 987 pictures of the batches so far (the plain ones and their variants, and the bigger bubbles): " + std::to_string(pack.pictures().size()));
+    size_t bigger = 0;
+    for (uint32_t sprite = 641; sprite <= 650; ++sprite) {
+        for (uint8_t v = 0; v < world_art::kVariants; ++v) bigger += (pack.find(10000 + sprite, v) != nullptr && pack.find(10000 + sprite, v)->variant == v ? 1u : 0u) + (pack.find(20000 + sprite, v) != nullptr && pack.find(20000 + sprite, v)->variant == v ? 1u : 0u);
+    }
+    check(bigger == 320, "the medium and the large bubble have a picture for each of the ten frames and sixteen variants: " + std::to_string(bigger));
     for (const int32_t scale : world_art::kScales) {
         check(pack.sheet_width(scale) > 0 && pack.sheet_width(scale) <= 4096 && pack.sheet_height(scale) > 0 && pack.sheet_height(scale) <= 4096, "the sheet of scale " + std::to_string(scale) + " fits a texture of 4096");
         DecodedImage image;
@@ -421,7 +433,7 @@ void test_draw(const assets::AssetArchive& arc, const world_art::Pack& pack) {
         }
         look_at_treasure(rig);
         const zoomtest::Picture classic = rig.shoot();
-        rig.renderer.set_world_art(&pack);
+        use_art(rig.renderer, pack);
         check(rig.renderer.world_art_scale_now() == os, "the output of " + std::to_string(os) + " pixels for a canvas pixel draws from the sheet of scale " + std::to_string(os));
         const zoomtest::Picture art = rig.shoot();
         check(rig.renderer.world_art_textures() == 1, "...and only that sheet is a texture");
@@ -447,7 +459,7 @@ void test_draw(const assets::AssetArchive& arc, const world_art::Pack& pack) {
 
     // the choice of the picture is by the cell: two cells of the same plain tile show different pictures somewhere on the map
     zoomtest::PixelRig rig(arc, "TREASURE", kW, kH);
-    rig.renderer.set_world_art(&pack);
+    use_art(rig.renderer, pack);
     std::set<uint8_t> shown;
     for (int32_t r = 0; r < 20; ++r) {
         for (int32_t c = 0; c < 20; ++c) shown.insert(rig.renderer.ground_variant_at(c, r));
@@ -463,7 +475,7 @@ void test_scale(const assets::AssetArchive& arc, const world_art::Pack& pack) {
     group("scale", "the world pass's sheet by the output's scale; a zoomed pass uses the 1x sheet; a device without room for a sheet gets the next smaller one");
     {
         zoomtest::PixelRig rig(arc, "TREASURE", kW, kH, 0, 3);
-        rig.renderer.set_world_art(&pack);
+        use_art(rig.renderer, pack);
         look_at_treasure(rig);
         rig.look(320, 672, 1.5f);
         rig.shoot();
@@ -475,7 +487,7 @@ void test_scale(const assets::AssetArchive& arc, const world_art::Pack& pack) {
     {
         // zoomed out, the pass's target is larger than the canvas and SDL measures that as the output: the pass must still take the 1x sheet
         zoomtest::PixelRig rig(arc, "TREASURE", kW, kH, 0, 1);
-        rig.renderer.set_world_art(&pack);
+        use_art(rig.renderer, pack);
         rig.look(320, 672, 0.5f);
         rig.shoot();
         check(rig.renderer.world_art_sheets() == 1u, "a frame zoomed out to 0.5 draws from the 1x sheet only");
@@ -483,18 +495,18 @@ void test_scale(const assets::AssetArchive& arc, const world_art::Pack& pack) {
     {
         zoomtest::PixelRig rig(arc, "TREASURE", kW, kH, 0, 3);
         const zoomtest::Picture classic = [&]() { look_at_treasure(rig); return rig.shoot(); }();
-        rig.renderer.set_world_art(&pack);
-        rig.renderer.set_art_texture_limit(2100);                                // the 3x sheet (3072 wide) is too wide, the 2x one (2048) is not
+        use_art(rig.renderer, pack);
+        rig.renderer.set_art_texture_limit(2200);                                // the 3x sheet (3072 x 3136) is too big, the 2x one (2048 x 2112) is not
         const zoomtest::Picture two = rig.shoot();
         check(rig.renderer.world_art_sheets() == 2u && !same_pixels(two, classic), "a device that takes no texture of 3072 gets the 2x sheet at the 3x output");
         rig.renderer.set_world_art(nullptr);
-        rig.renderer.set_world_art(&pack);
-        rig.renderer.set_art_texture_limit(1000);                                // not even the 1x sheet (1024)
+        use_art(rig.renderer, pack);
+        rig.renderer.set_art_texture_limit(1000);                                // not even the 1x sheet (1024 x 1122)
         const zoomtest::Picture none = rig.shoot();
         check(rig.renderer.world_art_textures() == 0 && same_pixels(none, classic), "a device that takes no sheet at all draws the original's frame");
         rig.renderer.set_art_texture_limit(0);
         rig.renderer.set_world_art(nullptr);
-        rig.renderer.set_world_art(&pack);
+        use_art(rig.renderer, pack);
         const zoomtest::Picture again = rig.shoot();
         check(rig.renderer.world_art_textures() == 1 && !same_pixels(again, classic), "the same pack is used again when the device takes the sheets");
     }
@@ -506,7 +518,7 @@ void test_classic(const assets::AssetArchive& arc, const world_art::Pack& pack) 
         zoomtest::PixelRig rig(arc, "TREASURE", kW, kH, 0, os);
         look_at_treasure(rig);
         const zoomtest::Picture classic = rig.shoot();
-        rig.renderer.set_world_art(&pack);
+        use_art(rig.renderer, pack);
         const zoomtest::Picture art = rig.shoot();
         check(!same_pixels(art, classic), "the art changes the frame at " + std::to_string(os) + "x");
         rig.renderer.set_world_art(nullptr);
@@ -514,7 +526,7 @@ void test_classic(const assets::AssetArchive& arc, const world_art::Pack& pack) 
         check(same_pixels(rig.shoot(), classic), "the frame at " + std::to_string(os) + "x after the art was taken away is the original's, byte for byte");
         rig.look(320, 672, 0.5f);
         const zoomtest::Picture small_classic = rig.shoot();
-        rig.renderer.set_world_art(&pack);
+        use_art(rig.renderer, pack);
         rig.look(320, 672, 0.5f);
         check(!same_pixels(rig.shoot(), small_classic), "a frame zoomed out has the art too");
     }
@@ -523,7 +535,7 @@ void test_classic(const assets::AssetArchive& arc, const world_art::Pack& pack) 
     WorldImage plain_image, art_image;
     std::string why;
     check(rig.renderer.render_world_image(rig.level, rig.world, rig.engine.grid(), plain_image, &why), "the picture of a map is made: " + why);
-    rig.renderer.set_world_art(&pack);
+    use_art(rig.renderer, pack);
     check(rig.renderer.render_world_image(rig.level, rig.world, rig.engine.grid(), art_image, &why), "...and with the art set: " + why);
     check(plain_image.width == art_image.width && plain_image.rgba == art_image.rgba, "the picture of a map is the same with the art set");
     check(rig.renderer.world_art() == &pack, "...and the art is still set after it");
@@ -556,19 +568,19 @@ void test_fallback(const assets::AssetArchive& arc, const world_art::Pack&) {
     });
     world_art::Pack wide_pack;
     check(wide_pack.load(wide) && wide_pack.loaded(), "a pack whose pictures are all one pixel too wide is read");
-    rig.renderer.set_world_art(&wide_pack);
+    use_art(rig.renderer, wide_pack);
     check(same_pixels(rig.shoot(), classic), "...and draws the original's sprites, for none fits");
 
     // a sheet that is cut after its header: the manifest passes, the texture cannot be made; the output gets the next smaller sheet (the 1x one), and a pack with no sheet that can be had is the original's frame
     world_art::Pack cut_pack;
     check(cut_pack.load(pack_copy("cut2", identity, {2})), "a pack with a cut 2x sheet is read");
-    rig.renderer.set_world_art(&cut_pack);
+    use_art(rig.renderer, cut_pack);
     const zoomtest::Picture smaller = rig.shoot();
     check(!same_pixels(smaller, classic) && rig.renderer.world_art_textures() == 1, "...and a 2x output draws from its 1x sheet: one texture, not the original's frame");
     check(same_pixels(rig.shoot(), smaller) && rig.renderer.world_art_textures() == 1, "...and again the same (a sheet that failed is not read at every frame)");
     world_art::Pack all_cut;
     check(all_cut.load(pack_copy("cut123", identity, {1, 2, 3})), "a pack with all three sheets cut is read");
-    rig.renderer.set_world_art(&all_cut);
+    use_art(rig.renderer, all_cut);
     check(same_pixels(rig.shoot(), classic) && rig.renderer.world_art_textures() == 0, "...and its frame is the original's, with no texture");
     check(same_pixels(rig.shoot(), classic), "...and again");
 
@@ -576,12 +588,12 @@ void test_fallback(const assets::AssetArchive& arc, const world_art::Pack&) {
     zoomtest::PixelRig one(arc, "TREASURE", kW, kH, 0, 1);
     look_at_treasure(one);
     const zoomtest::Picture classic1 = one.shoot();
-    one.renderer.set_world_art(&cut_pack);
+    use_art(one.renderer, cut_pack);
     check(!same_pixels(one.shoot(), classic1) && one.renderer.world_art_textures() == 1, "a cut 2x sheet does not stop a 1x output from drawing its own");
 
     // a pack that was never loaded is none
     world_art::Pack empty;
-    one.renderer.set_world_art(&empty);
+    use_art(one.renderer, empty);
     check(one.renderer.world_art() == nullptr && same_pixels(one.shoot(), classic1), "a pack that is not loaded is the original's sprites");
 }
 
@@ -597,7 +609,7 @@ void test_fog(const assets::AssetArchive& arc, const world_art::Pack& pack) {
         for (int32_t c = c0 + 4; c < c0 + 9; ++c) rig.world.fog_revealed[static_cast<size_t>(r) * static_cast<size_t>(W) + static_cast<size_t>(c)] = 1;
     }
     const zoomtest::Picture classic = rig.shoot();
-    rig.renderer.set_world_art(&pack);
+    use_art(rig.renderer, pack);
     const zoomtest::Picture art = rig.shoot();
     const LayoutRect view = rig.layout.view();
     // the original covers a shrouded cell with a stipple (dither0, every other pixel opaque black) over the ground, which shows through the rest: the stipple's pixels are the same with either art, and what lies
@@ -638,7 +650,7 @@ void test_hash(const assets::AssetArchive& arc, const world_art::Pack& pack) {
     zoomtest::PixelRig rig(arc, "TREASURE", kW, kH);
     sim::SimulationEngine other;
     other.init(rig.level, 1337);
-    rig.renderer.set_world_art(&pack);
+    use_art(rig.renderer, pack);
     look_at_treasure(rig);
     for (int32_t t = 0; t < 60; ++t) {
         rig.engine.tick();
@@ -743,8 +755,71 @@ void make_pictures(const assets::AssetArchive& arc, const world_art::Pack& pack,
                 if (!write_crop(path, pic, view.x * os, view.y * os, w * os, h * os)) std::fprintf(stderr, "picture: cannot write %s\n", path.c_str());
             };
             cut(rig.shoot(), "classic");
-            rig.renderer.set_world_art(&pack);
+            use_art(rig.renderer, pack);
             cut(rig.shoot(), "new");
+        }
+    }
+    std::printf("pictures written to %s\n", dir.c_str());
+}
+
+/// The pictures of dense mud (ANTS_WORLD_ART_SHOTS=FOLDER ANTS_WORLD_ART_SET=mud): the world art with and without the looks of big mud fields, on a big field of a players' map, on GAUNTLET's pool, and on
+/// TREASURE's crossing, and the bubbles of the big field at several moments
+void make_mud_pictures(const assets::AssetArchive& arc, const world_art::Pack& pack, const std::string& dir) {
+    namespace fs = std::filesystem;
+    std::error_code ignored;
+    fs::create_directories(dir, ignored);
+    struct MudScene {
+        std::string name, map;
+        int32_t w, h;                                // the crop in world pixels at 1x and 2x (3x shows 2/3 of it)
+        bool deepest;                                // centered on the deepest cell (else the crop is at x, y)
+        int32_t x, y;
+        bool moments;                                // the bubbles at several moments (3x only)
+    };
+    const std::vector<MudScene> scenes = {
+        {"mudwars", std::string(ANTS_SOURCE_DIR) + "/Community-Maps/Mud Wars.lvl", 480, 288, true, 0, 0, true},
+        {"gauntlet", "GAUNTLET", 480, 288, true, 0, 0, false},
+        {"treasure_crossing", "TREASURE", 480, 288, true, 0, 0, false},
+    };
+    for (const MudScene& sc : scenes) {
+        for (const int32_t os : {1, 2, 3}) {
+            zoomtest::PixelRig rig(arc, sc.map, kW, kH, 0, os);
+            if (!rig.ok) {
+                std::fprintf(stderr, "picture: cannot start %s\n", sc.name.c_str());
+                continue;
+            }
+            rig.renderer.set_world_art(&pack);
+            rig.renderer.set_dense_mud_budget_ms(-1);
+            const int32_t w = os == 3 ? sc.w * 2 / 3 : sc.w, h = os == 3 ? sc.h * 2 / 3 : sc.h;
+            int32_t cx = sc.x / 32, cy = sc.y / 32;
+            if (sc.deepest) {
+                double best = -1.0, best_away = 1e9;                 // (the deepest; of equally deep ones the nearest to the middle of the map)
+                for (int32_t r = 0; r < static_cast<int32_t>(rig.tiles_h); ++r) {
+                    for (int32_t c = 0; c < static_cast<int32_t>(rig.tiles_w); ++c) {
+                        const double d = rig.renderer.mud_depth_at_cell(c, r);
+                        const double away = std::hypot(c - rig.tiles_w / 2.0, r - rig.tiles_h / 2.0);
+                        if (d > best + 1e-6 || (d > best - 1e-6 && away < best_away)) best = d, best_away = away, cx = c, cy = r;
+                    }
+                }
+                std::printf("%s: deepest mud %.2f tiles at cell (%d, %d)\n", sc.name.c_str(), best, cx, cy);
+            }
+            rig.world = rig.engine.get_world_state();
+            rig.world.ants.clear();
+            rig.look(cx * 32 + 16 - sc.w / 2, cy * 32 + 16 - sc.h / 2);
+            const LayoutRect view = rig.layout.view();
+            const auto cut = [&](const zoomtest::Picture& pic, const std::string& tag) {
+                const std::string path = dir + "/" + sc.name + "_" + std::to_string(os) + "x_" + tag + ".png";
+                if (!write_crop(path, pic, view.x * os, view.y * os, w * os, h * os)) std::fprintf(stderr, "picture: cannot write %s\n", path.c_str());
+            };
+            rig.renderer.set_dense_mud(false);
+            cut(rig.shoot(), "without");
+            rig.renderer.set_dense_mud(true);
+            cut(rig.shoot(), "dense");
+            if (sc.moments && os == 3) {
+                for (const uint32_t t : {1000u, 1250u, 1320u, 1420u, 1480u}) {
+                    rig.renderer.pin_animation_clock(t);
+                    cut(rig.shoot(), "dense_t" + std::to_string(t));
+                }
+            }
         }
     }
     std::printf("pictures written to %s\n", dir.c_str());
@@ -763,7 +838,9 @@ int main(int argc, char* argv[]) {
     }
     if (const char* shots = std::getenv("ANTS_WORLD_ART_SHOTS")) {
         const zoomtest::QuietStdout quiet;
-        make_pictures(arc, pack, shots);
+        const char* set = std::getenv("ANTS_WORLD_ART_SET");
+        if (set != nullptr && std::string(set) == "mud") make_mud_pictures(arc, pack, shots);
+        else make_pictures(arc, pack, shots);
         return 0;
     }
     test_manifest(arc);

@@ -709,6 +709,40 @@ target_link_libraries(test_world_art PRIVATE ants_test_paths)
 add_test(NAME test_world_art COMMAND test_world_art)
 set_tests_properties(test_world_art PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# The dense mud of the world art (world_art_mud.hpp): the noise, the depth and the looks against the approved generator's values, the bubbles, the real renderer's big mud fields
+add_executable(test_world_art_mud
+    test_world_art_mud.cpp
+)
+
+target_include_directories(test_world_art_mud PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_world_art_mud PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_world_art_mud PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_world_art_mud PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_world_art_mud PRIVATE ants_test_paths)
+
+add_test(NAME test_world_art_mud COMMAND test_world_art_mud)
+set_tests_properties(test_world_art_mud PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # The PNG writer of the server's pictures (png_encode.hpp): the deflate stream, the zlib wrapper and the PNG file, read back by the repository's own reader and checked against the formats. No window
 add_executable(test_png_encode
     test_png_encode.cpp

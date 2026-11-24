@@ -364,6 +364,7 @@ void Renderer::shutdown() {
     blend_textures_.clear();
     drop_art_textures();
     drop_world_art_textures();
+    drop_mud_caches();
     for (PassTexture& t : pass_levels_) destroy_texture(t);
     pass_levels_.clear();
     destroy_texture(lattice_);
@@ -598,6 +599,9 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
 void Renderer::begin_frame() {
     if (!renderer_) return;
     ++frame_counter_;
+    ++mud_frame_;                                       // (the frame of the looks of big mud fields: renderer_world_mud.cpp)
+    mud_spent_us_ = 0;
+    mud_made_ = 0;
     template_now_ms_ = (anim_clock_pin_ms_ >= 0) ? static_cast<uint32_t>(anim_clock_pin_ms_)
                                                  : SDL_GetTicks() - map_epoch_ms_;
     SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255); // Black letterbox / background

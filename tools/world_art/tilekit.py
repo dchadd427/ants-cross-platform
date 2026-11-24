@@ -51,15 +51,19 @@ def _cubic(t, a=-0.5):
     return np.where(t <= 1, (a + 2) * t ** 3 - (a + 3) * t ** 2 + 1, np.where(t < 2, a * t ** 3 - 5 * a * t ** 2 + 8 * a * t - 4 * a, 0.0))
 
 
-def _weights(n, pad=3):
-    """cubic-convolution weights that read an n-sample line (padded by `pad` samples each side) at MS samples per source sample"""
-    x = (np.arange(n * MS) + 0.5) / MS - 0.5
+def weights_at(x, n, pad=3):
+    """cubic-convolution weights that read an n-sample line (padded by `pad` samples each side) at the source coordinates `x` (sample i is centered at i)"""
     i0 = np.floor(x).astype(int)
-    w = np.zeros((n * MS, n + 2 * pad))
+    w = np.zeros((len(x), n + 2 * pad))
     for k in range(-1, 3):
         idx = i0 + k
-        w[np.arange(n * MS), np.clip(idx + pad, 0, n + 2 * pad - 1)] += _cubic(x - idx)
+        w[np.arange(len(x)), np.clip(idx + pad, 0, n + 2 * pad - 1)] += _cubic(x - idx)
     return w
+
+
+def _weights(n, pad=3):
+    """cubic-convolution weights that read an n-sample line (padded by `pad` samples each side) at MS samples per source sample"""
+    return weights_at((np.arange(n * MS) + 0.5) / MS - 0.5, n, pad)
 
 
 def up_edge(m):

@@ -29,7 +29,12 @@ void Renderer::drop_world_art_textures() {
 
 void Renderer::set_world_art(const world_art::Pack* pack) {
     world_art_ = (pack != nullptr && pack->loaded()) ? pack : nullptr;
-    if (world_art_ == nullptr || world_art_generation_ != world_art_->generation()) drop_world_art_textures();
+    if (world_art_ == nullptr || world_art_generation_ != world_art_->generation()) {
+        drop_world_art_textures();
+        drop_mud_caches();
+        for (auto& pictures : mud_pictures_) pictures.clear();
+        mud_pictures_state_.fill(0);
+    }
 }
 
 size_t Renderer::world_art_textures() const noexcept {
@@ -83,6 +88,14 @@ SDL_Texture* Renderer::world_art_texture(int32_t scale) {
     return tex;
 }
 
+// One world pixel is `scale` pixels of the sheet. A copy at the output's own scale is exact (nearest); a sheet that is finer than the output is filtered, so that it does not shimmer.
+void Renderer::world_art_filter(SDL_Texture* tex, int32_t scale) {
+    double output = 1.0;
+    art_scale_for_output(&output);
+    const double device = in_world_target_ ? 1.0 : output;
+    SDL_SetTextureScaleMode(tex, std::fabs(device - static_cast<double>(scale)) < 1e-6 ? SDL_ScaleModeNearest : SDL_ScaleModeLinear);
+}
+
 // Draws the new picture of sprite `sprite_index` into the rectangle (x, y, w, h) of the picture, the one the original's sprite of that size fills; false when the set has none that fits (another size
 // than the sprite's times the scale: the sprite is drawn as the original has it) or no sheet can be used
 bool Renderer::draw_world_art_part(uint32_t sprite_index, int32_t x, int32_t y, int32_t w, int32_t h) {
@@ -94,11 +107,7 @@ bool Renderer::draw_world_art_part(uint32_t sprite_index, int32_t x, int32_t y, 
     for (; scale >= 1 && tex == nullptr; --scale) tex = world_art_texture(scale);        // (a sheet that cannot be had: the next smaller one)
     ++scale;
     if (tex == nullptr) return false;
-    // One world pixel is `scale` pixels of the sheet. A copy at the output's own scale is exact (nearest); a sheet that is finer than the output is filtered, so that it does not shimmer.
-    double output = 1.0;
-    art_scale_for_output(&output);
-    const double device = in_world_target_ ? 1.0 : output;
-    SDL_SetTextureScaleMode(tex, std::fabs(device - static_cast<double>(scale)) < 1e-6 ? SDL_ScaleModeNearest : SDL_ScaleModeLinear);
+    world_art_filter(tex, scale);
     const size_t k = static_cast<size_t>(scale - 1);
     const SDL_Rect src = {pic->x[k], pic->y[k], w * scale, h * scale};
     const SDL_Rect dst = placed(x, y, w, h);
@@ -110,6 +119,9 @@ bool Renderer::draw_world_art_part(uint32_t sprite_index, int32_t x, int32_t y, 
 void Renderer::index_ground(const ants::assets::LevelData& level) {
     ground_map_ = world_art::GroundMap{};
     ground_variant_.clear();
+    mud_depth_ = world_art::mud::Depth{};
+    mud_depth_ready_ = false;
+    drop_mud_caches();
     const int32_t w = static_cast<int32_t>(level.width());
     const int32_t h = static_cast<int32_t>(level.height());
     if (w <= 0 || h <= 0 || !archive_) return;
