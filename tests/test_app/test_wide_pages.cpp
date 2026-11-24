@@ -1475,6 +1475,8 @@ struct AppFixture {
         cfg.has_window_size = true;
         cfg.window_w = canvas_width_of(aspect);
         cfg.window_h = canvas_height_of(aspect);
+        cfg.hud_art_given = true;                                                    // these cases are about the original's pages: the new look of the results screen is test_scorecard_new's
+        cfg.hud_art_new = false;
         QuietStdout quiet;
         ok = app.init(cfg);
         window = find_window();

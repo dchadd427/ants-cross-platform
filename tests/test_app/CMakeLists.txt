@@ -674,6 +674,42 @@ target_link_libraries(test_hud_art PRIVATE ants_test_paths)
 add_test(NAME test_hud_art COMMAND test_hud_art)
 set_tests_properties(test_hud_art PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# The results screen in the new look (scorecard_layout.hpp, scorecard_new.cpp): the unit of the page and its layout at every size, the art's pieces, the page drawn by the real renderer, the choice between the
+# new page and the original's, Leave Game's states and clicks, the application's picture
+add_executable(test_scorecard_new
+    test_scorecard_new.cpp
+    test_scorecard_new_look.cpp
+)
+
+target_include_directories(test_scorecard_new PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_scorecard_new PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_scorecard_new PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_scorecard_new PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_scorecard_new PRIVATE ants_test_paths)
+
+add_test(NAME test_scorecard_new COMMAND test_scorecard_new)
+set_tests_properties(test_scorecard_new PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # The PNG writer of the server's pictures (png_encode.hpp): the deflate stream, the zlib wrapper and the PNG file, read back by the repository's own reader and checked against the formats. No window
 add_executable(test_png_encode
     test_png_encode.cpp

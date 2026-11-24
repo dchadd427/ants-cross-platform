@@ -3,6 +3,7 @@
 #include "ants_app/results_layout.hpp"
 #include "ants_app/text_layout.hpp"
 #include "ants_app/ui_anim.hpp"
+#include "ants_app/window_art.hpp"
 #include "ants_sim/game_strings.hpp"
 
 #include <algorithm>
@@ -33,8 +34,58 @@ ScorecardModal::ScorecardModal() = default;
 void ScorecardModal::set_wide_layout(bool wide) {
     if (wide_ == wide) return;
     wide_ = wide;
-    const ResultsLayout& l = ResultsLayout::of(wide_);
-    quit_ = ScreenButton(ButtonRect{l.leave.x, l.leave.y, l.leave.w, l.leave.h}, ButtonRect{l.leave_pressed.x, l.leave_pressed.y, l.leave_pressed.w, l.leave_pressed.h});
+    update_button();
+}
+
+// The Leave button's rectangles: the new page's face, or the original's pictures (a button whose rectangles did not change keeps its state)
+void ScorecardModal::update_button() {
+    ButtonRect up;
+    ButtonRect pressed;
+    if (new_look_) {
+        const LayoutRect r = scale_.rect(layout_.leave);
+        up = pressed = ButtonRect{r.x, r.y, r.w, r.h};
+    } else {
+        const ResultsLayout& l = ResultsLayout::of(wide_);
+        up = ButtonRect{l.leave.x, l.leave.y, l.leave.w, l.leave.h};
+        pressed = ButtonRect{l.leave_pressed.x, l.leave_pressed.y, l.leave_pressed.w, l.leave_pressed.h};
+    }
+    if (quit_.up_rect() == up && quit_.pressed_rect() == pressed) return;
+    quit_ = ScreenButton(up, pressed);
+}
+
+void ScorecardModal::set_art(const hud_art::Art* art) {
+    const uint64_t generation = art != nullptr ? art->generation() : 0;
+    if (art == art_ && generation == art_generation_) return;
+    art_ = art;
+    art_generation_ = generation;
+    update_new_look();
+}
+
+void ScorecardModal::set_screen(int32_t canvas_w, int32_t canvas_h, double output_scale) {
+    if (canvas_w == canvas_w_ && canvas_h == canvas_h_ && output_scale == output_) return;
+    canvas_w_ = canvas_w;
+    canvas_h_ = canvas_h;
+    output_ = output_scale;
+    update_new_look();
+}
+
+// The new page (scorecard_layout.hpp) is there while the art has every piece of it and the canvas holds 360 units on its shorter side; its layout follows the canvas, the rows and the headline
+void ScorecardModal::update_new_look() {
+    new_look_ = false;
+    if (art_ != nullptr && canvas_w_ > 0 && canvas_h_ > 0 && window_art::has_results_page(*art_)) {
+        scale_ = scorecard_layout::scale_for(canvas_w_, canvas_h_, output_);
+        new_look_ = scale_.usable();
+    }
+    if (new_look_) {
+        scorecard_layout::Input in;
+        in.w = scale_.w;
+        in.h = scale_.h;
+        in.rows = !rows_.empty() ? rows_.size() : std::max<size_t>(1, result_.rows(local_player_id_).size());      // (before the rows are built: the rows that will be)
+        in.columns = mode_ == sim::GameMode::Kills187 ? 3 : 4;
+        in.headline_lines = headline_.empty() ? 0 : std::max(1, headline_lines_);
+        layout_ = scorecard_layout::compute(in);
+    }
+    update_button();
 }
 
 // FUN_010153a1: the screen is created; its portraits exist but are not on the screen yet, the Leave button does not exist yet, a label says that it waits, and a
@@ -51,6 +102,8 @@ void ScorecardModal::show(const sim::MatchResult& result, uint8_t local_player_i
     rows_.clear();
     result_ = result;
     result_.present_mask = static_cast<uint8_t>(result.present_mask & shown_mask_);
+    headline_lines_ = 0;
+    update_new_look();
 }
 
 void ScorecardModal::update(float dt_seconds) {
@@ -86,6 +139,7 @@ void ScorecardModal::build_rows() {
     if (mode_ == sim::GameMode::Kills187) headline_ = headline_187();
     audio_to_play_ = result_.is_winner(local_player_id_) ? sim::SoundID::VictoryFanfare : sim::SoundID::PlayerDefeat;
     phase_ = Phase::Rows;
+    update_new_look();
 }
 
 // 187: who won and how. The side that is left (MatchResult::standing: its lowest-numbered team) is named by its row, in the player names of the rows; an alliance whose two teams both still have ants is
@@ -151,6 +205,10 @@ void ScorecardModal::draw_portrait(IRenderer& renderer, const assets::AssetArchi
 
 void ScorecardModal::render(IRenderer& renderer, const assets::AssetArchive& assets) {
     if (!is_active_) return;
+    if (new_look_) {
+        render_new(renderer, assets);
+        return;
+    }
     const ResultsLayout& layout = ResultsLayout::of(wide_);
 
     // 1. The page. In the original's picture: the authentic re_screen composite (149 frame elements from Table 4 Animation 25), rendered in reverse order to produce the authentic 640x480 terracotta

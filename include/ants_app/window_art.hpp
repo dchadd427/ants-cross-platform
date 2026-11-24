@@ -29,6 +29,9 @@ Pieces check(const hud_art::Art& art, const assets::AssetArchive& assets);
 /// True when the set has the six pictures of the Fullscreen button (the three states, and the three that leave fullscreen)
 bool has_fullscreen_button(const hud_art::Art& art) noexcept;
 
+/// True when the set has the panel and every piece of the new results screen (scorecard_layout.hpp kSprites), each of the size that the layout counts on: a set that lacks one gives the original's page
+bool has_results_page(const hud_art::Art& art);
+
 /// True when the art's piece keeps the original's place (`original`): the same corner within a pixel, and the same far edges within a pixel less or `shadow` pixels more (the cast shadow)
 bool fits(const LayoutRect& art_piece, const LayoutRect& original, int32_t shadow = 4) noexcept;
 

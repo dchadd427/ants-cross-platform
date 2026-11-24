@@ -6,6 +6,8 @@
 #include <array>
 #include <functional>
 
+#include "ants_app/hud_art.hpp"
+#include "ants_app/scorecard_layout.hpp"
 #include "ants_assets/asset_archive.hpp"
 #include "ants_sim/game_mode.hpp"
 #include "ants_sim/match_stats.hpp"
@@ -26,6 +28,9 @@ namespace ants::app {
  *
  * In a 960 x 540 canvas the page is recomposed for the whole picture (results_layout.hpp): the layout is `ResultsLayout::of(wide_layout())`, and the Leave button, the rows and the label of the
  * waiting phase stand where it puts them. The four numbers of a row are the original's single-line labels (left aligned, a surface that clips what is wider), drawn in the original's 8 px digits.
+ *
+ * With the HUD art New (and a picture of at least 360 units on its shorter side) the page is the NEW one instead: the clay panel over the whole canvas, the rows in wells, laid out in units of whole device
+ * pixels by scorecard_layout.hpp for any size and shape of the canvas (render_new, scorecard_new.cpp); the same rows, headings, headline and Leave button, the same keys. Classic art is the page above, untouched.
  *
  * The game mode 187 has its own page (results_layout.hpp, docs/GAMEPLAY.md "187"): the baked column headings are not drawn, three headings of the game's own letters stand instead, a row has three
  * numbers (the kills, which are the score; the ants lost; the ants that are left) and the headline says who won and how: "<Name> is the last colony standing!" (two allied teams that are both left:
@@ -91,6 +96,15 @@ public:
     void set_wide_layout(bool wide);
     bool wide_layout() const noexcept { return wide_; }
 
+    /// The HUD art New (null: Classic, the page above): the new page needs the art to have every piece of it (window_art::has_results_page) and a canvas of at least 360 units on its shorter side
+    void set_art(const hud_art::Art* art);
+    /// The canvas that the page is drawn on, in canvas pixels, and how many device pixels one of them is (IRenderer::output_scale): the new page's layout follows both
+    void set_screen(int32_t canvas_w, int32_t canvas_h, double output_scale);
+    /// The new page is the one that shows: its picture is the whole canvas (Application::picture_for_state)
+    bool new_look() const noexcept { return new_look_; }
+    const scorecard_layout::Scale& scale() const noexcept { return scale_; }
+    const scorecard_layout::Layout& new_layout() const noexcept { return layout_; }
+
     /// The Leave button only exists once the rows do
     bool handle_mouse_down(int32_t x, int32_t y);
     bool handle_mouse_up(int32_t x, int32_t y);
@@ -117,6 +131,9 @@ private:
     enum class Phase : uint8_t { Waiting, Rows };
 
     void build_rows();
+    void update_new_look();                  // the new page's scale, layout and Leave button from the art, the canvas and the rows
+    void update_button();                    // the Leave button's rectangles: the new page's or the page's own
+    void render_new(IRenderer& renderer, const assets::AssetArchive& assets);
     std::string headline_187() const;
     std::string name_of(uint8_t team) const;
     void draw_portrait(IRenderer& renderer, const assets::AssetArchive& assets, uint8_t team, int32_t x, int32_t y) const;
@@ -125,6 +142,15 @@ private:
     std::array<std::string, 4> player_names_{};
     uint8_t shown_mask_{0x0F};
 
+    const hud_art::Art* art_{nullptr};    // the HUD art that the new page is drawn from (null: Classic)
+    uint64_t art_generation_{0};          // ... and the manifest that was read when it was given (a new reading checks the pieces again)
+    int32_t canvas_w_{0};                 // the canvas and its output scale, from the application (set_screen)
+    int32_t canvas_h_{0};
+    double output_{1.0};
+    bool new_look_{false};                // the new page shows (art_ has the pieces, the canvas is big enough)
+    scorecard_layout::Scale scale_{};
+    scorecard_layout::Layout layout_{};
+    int32_t headline_lines_{0};           // the 187 headline's lines as the renderer wrapped them in the last frame (the layout makes room for them)
     bool wide_{false};                    // the page is the 16:9 one
     bool is_active_{false};
     Phase phase_{Phase::Waiting};

@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "ants_app/scorecard_layout.hpp"
 #include "ants_app/text_layout.hpp"
 
 namespace ants::app::window_art {
@@ -87,6 +88,28 @@ Pieces check(const hud_art::Art& art, const assets::AssetArchive& assets) {
                   has_sprites(art, {"cd_dot_0", "cd_dot_1", "cd_dot_2", "cd_dot_3", "dlg_btn_fullscreen_up", "dlg_btn_fullscreen_down"});
     p.fullscreen = has_fullscreen_button(art);
     return p;
+}
+
+bool has_results_page(const hud_art::Art& art) {
+    if (!art.loaded() || !hud_art::has_panel(art)) return false;
+    for (const char* name : scorecard_layout::kSprites) {
+        if (art.find_sprite(name) < 0) return false;
+    }
+    const auto size_is = [&](const char* name, int32_t w, int32_t h) {
+        const hud_art::Sprite* s = art.sprite_at(art.find_sprite(name));
+        return s != nullptr && s->w == w && s->h == h;
+    };
+    constexpr int32_t c = scorecard_layout::kWellCorner;
+    constexpr int32_t e = scorecard_layout::kBigEnd;
+    for (const char* state : {"up", "hover", "down"}) {
+        const std::string st = state;
+        if (!size_is(("sc_btn_l_" + st).c_str(), e, scorecard_layout::kBigH) || !size_is(("sc_btn_m_" + st).c_str(), scorecard_layout::kBigRun, scorecard_layout::kBigH) ||
+            !size_is(("sc_btn_r_" + st).c_str(), e, scorecard_layout::kBigH) || !size_is(("sc_leave_" + st).c_str(), scorecard_layout::kLeaveW, scorecard_layout::kLeaveH)) {
+            return false;
+        }
+    }
+    return size_is("sc_well_tl", c, c) && size_is("sc_well_tr", c, c) && size_is("sc_well_bl", c, c) && size_is("sc_well_br", c, c) && size_is("sc_well_t", scorecard_layout::kWellRun, c) &&
+           size_is("sc_well_b", scorecard_layout::kWellRun, c) && size_is("sc_well_l", c, scorecard_layout::kWellRunY) && size_is("sc_well_r", c, scorecard_layout::kWellRunY);
 }
 
 bool has_fullscreen_button(const hud_art::Art& art) noexcept {

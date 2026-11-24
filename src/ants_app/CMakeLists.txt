@@ -67,6 +67,8 @@ add_library(ants_app STATIC
     pedestal.cpp
     ui_anim.cpp
     scorecard.cpp
+    scorecard_layout.cpp
+    scorecard_new.cpp
     map_select.cpp
     map_select_wide.cpp
     options_screen.cpp
