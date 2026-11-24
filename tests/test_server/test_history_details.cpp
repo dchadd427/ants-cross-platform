@@ -16,6 +16,7 @@
 
 #include "../common/test_assert.hpp"
 #include "ants_replay/match_stats.hpp"
+#include "ants_sim/game_strings.hpp"
 #include "ants_server/history_action.hpp"
 #include "ants_server/history_deaths.hpp"
 #include "ants_server/history_details.hpp"
@@ -47,6 +48,8 @@ namespace {
 
 using replay::MatchStats;
 using ctl::JsonValue;
+using A4 = std::array<uint32_t, 4>;                        // (a number for each seat)
+using L4 = std::array<int64_t, 4>;
 
 // ---- stats made by hand: a match of `turns` turns with a sample every 100 turns, all zero --------------------------------------------------------
 
@@ -147,6 +150,8 @@ struct Oracle {
         uint8_t target{255};
         bool holding{false};
         uint8_t player{0};
+        bool loot{false};                                  // a thief that holds the loot of a raid (the engine's flag), with what it holds
+        int32_t loot_points{0};
     };
     std::vector<Unit> units;
     std::array<std::array<uint32_t, 4>, 4> from{};
@@ -155,12 +160,18 @@ struct Oracle {
     std::array<std::array<uint32_t, 5>, 4> powerups{};
     std::vector<std::array<uint32_t, 3>> raids;          // turn, thief, victim
     std::array<uint32_t, 4> trips{};
+    std::array<uint32_t, 4> loot_home{};                  // raids whose loot a thief took into its own hill: its hands were empty again while it was still in the world
+    std::array<int64_t, 4> loot_points{};
+    std::array<uint32_t, 4> fires_out{};                  // "Fire put out.": the engine's own news, said to the seat of the Fire Ant that put a fire out
     std::array<int32_t, 4> wipe_turn{-1, -1, -1, -1}, out_turn{-1, -1, -1, -1};
     std::array<uint32_t, 4> wipes{};
     std::array<bool, 4> was_zero{};
     uint8_t roster{0x0F};
 
     void tick(uint32_t turns, sim::SimulationEngine& engine) {
+        for (const sim::NewsEvent& ev : engine.poll_news_events()) {
+            if (ev.string_id == sim::strings::kFirePutOut && ev.target_player < 4) ++fires_out[ev.target_player];
+        }
         std::array<uint32_t, 4> alive{};
         for (uint32_t id = 1;; ++id) {
             sim::AntUnit* ant = nullptr;
@@ -178,6 +189,7 @@ struct Oracle {
             }
             if (u.removed) continue;
             if (ant->removed) {
+                u.loot = false;                                        // (a thief that is killed with the loot: it never got home)
                 const uint8_t killer = ant->killer_team < 4 && ant->killer_team != u.player ? ant->killer_team : uint8_t{255};
                 kills.push_back({turns, killer, u.player, u.own_type, ant->death_status == sim::DeathStatus::Drowned ? 1u : 0u});
                 u.removed = true;
@@ -190,6 +202,14 @@ struct Oracle {
             const uint8_t type = static_cast<uint8_t>(ant->type);
             if (type != u.own_type && type >= 1 && type <= 5) ++powerups[u.player][type - 1u];
             if (ant->is_holding() && !u.holding && !ant->is_thief_steal) ++trips[u.player];
+            if (ant->is_holding() && ant->is_thief_steal) {
+                u.loot = true;
+                u.loot_points = ant->carried_signed();
+            } else if (!ant->is_holding() && u.loot) {
+                u.loot = false;
+                ++loot_home[u.player];
+                loot_points[u.player] += u.loot_points;
+            }
             if (ant->target_team_id < 4 && u.target >= 4 && engine.ant_type(*ant) == sim::AntType::Thief) raids.push_back({turns, u.player, ant->target_team_id});
             u.hp = ant->hp;
             u.own_type = type;
@@ -205,6 +225,46 @@ struct Oracle {
             }
             if (alive[s] != 0) was_zero[s] = false;
             if (out_turn[s] < 0 && alive[s] == 0 && engine.get_player_eggs(s) == 0 && engine.get_pending_hatch_count(s) == 0) out_turn[s] = static_cast<int32_t>(turns);
+        }
+    }
+};
+
+
+// ---- a bench: an engine with no map and a collector that is told each tick, as play() tells it (worlds made by hand) --------------------------------------------------------------
+
+struct Bench {
+    sim::SimulationEngine engine;
+    replay::MatchStatsCollector collector;
+    replay::Hooks hooks;
+    uint32_t turns{0};
+    std::vector<sim::NewsEvent> news;                      // what the engine said in every tick (its own words of "Fire put out."), taken before the queue is cleared
+    explicit Bench(const replay::Replay& r) : collector(r), hooks(collector.hooks()) { engine.init_test_world(60, 60, 1); }
+    void step(uint32_t n = 1) {
+        for (uint32_t i = 0; i < n; ++i) {
+            engine.tick();
+            ++turns;
+            hooks.after_tick(turns, engine);
+            for (sim::NewsEvent& ev : engine.poll_news_events()) news.push_back(std::move(ev));
+            engine.clear_news_events();
+            engine.clear_audio_events();
+        }
+    }
+    // steps until `done` (at most `limit` ticks); whether it was reached
+    template <class F>
+    bool until(F done, uint32_t limit) {
+        for (uint32_t i = 0; i < limit && !done(); ++i) step();
+        return done();
+    }
+    size_t told(uint8_t seat, uint16_t string_id) const {
+        size_t n = 0;
+        for (const sim::NewsEvent& ev : news) n += (ev.target_player == seat && ev.string_id == string_id) ? 1 : 0;
+        return n;
+    }
+    // the fire of its own team burns the ant, one point at a time, until it is gone
+    void burn_to_death(uint32_t ant) {
+        for (uint32_t guard = 0; guard < 4000 && !engine.get_unit(ant).removed; ++guard) {
+            if (engine.get_unit(ant).loco_action == sim::AntUnit::kActionIdle) engine.resolve_fire_contact(ant, 1, 0);
+            step();
         }
     }
 };
@@ -458,11 +518,16 @@ int main() {
             ASSERT_EQ(st.raids.size(), oracle.raids.size());
             for (size_t i = 0; i < st.raids.size(); ++i) ASSERT_TRUE(st.raids[i].turn == oracle.raids[i][0] && st.raids[i].thief == oracle.raids[i][1] && st.raids[i].victim == oracle.raids[i][2]);
             for (const MatchStats::Raid& r : st.raids) ASSERT_TRUE(r.points >= 0 && r.points <= 50);
+            // the loot that got home (the observer watches the thieves' hands) and the fires put out (the observer reads the engine's own news): the same numbers, and both happen in these matches
+            ASSERT_TRUE(st.raids_home == oracle.loot_home && st.loot_home == oracle.loot_points && st.fires_out == oracle.fires_out);
+            ASSERT_TRUE(sum_of(st.raids_home) >= 1 && sum_of(st.fires_out) >= 1);
+            if (k == 5) {
+                ASSERT_TRUE(st.raids_home == A4({1, 0, 1, 1}) && st.loot_home == L4({50, 0, 50, 50}) && st.fires_out == A4({0, 0, 0, 1}));
+                ASSERT_TRUE(sum_of(st.bridges_built) == 0 && sum_of(st.bridges_undug) == 0);              // (no Swimmer builds in these matches; the hand-made worlds of HD1.7 do)
+            }
             if (k == 5) ASSERT_TRUE(st.wipes[3] == 1 && st.wipe_turn[3] == 6014 && st.out_turn[3] == -1);           // (a seat with no ant gets one for free from an egg)
             if (k != 4) continue;
             // the numbers of this recording are fixed (seed 21, 7000 turns, four Hard computer players): the golden values
-            using A4 = std::array<uint32_t, 4>;
-            using L4 = std::array<int64_t, 4>;
             uint32_t drowned = 0;
             for (const MatchStats::Kill& kl : st.kills) drowned += kl.drowned ? 1 : 0;
             ASSERT_TRUE(st.kills.size() == 8 && drowned == 4 && st.raids.size() == 4);
@@ -472,6 +537,251 @@ int main() {
             const std::array<std::array<uint32_t, 5>, 4> power = {{{0, 1, 1, 1, 0}, {0, 1, 1, 1, 0}, {1, 1, 1, 1, 0}, {1, 1, 1, 1, 0}}};
             ASSERT_TRUE(st.powerups == power);
             ASSERT_TRUE(st.wipes == A4({0, 0, 0, 0}) && st.samples.size() == 70 && st.samples.back().turn == 7000);
+            ASSERT_TRUE(st.raids_home == A4({1, 1, 0, 0}) && st.loot_home == L4({50, 50, 0, 0}) && st.fires_out == A4({0, 0, 2, 2}));          // (4 raids begun, 2 of them home; 4 fires put out of the 21 lit)
+        }
+    } TEST_END();
+
+
+    TEST_CASE("HD1.7 What the special ants did, counted from the world: a bridge is built when its fourth stage stands (a half built one, and one put back after a dig that was cut short, are none), dug away when the last stage goes (a bridge that falls by itself is none, even when a dig is cut short in the tick it falls); a fire is put out by the seat of the Fire Ant, once however many ants were at it, and never when it burns out (checked against the engine's own news for every timer of a sweep); a raid is home when its loot is in the thief's own hill (not when the thief is killed on the way, nor when the hill had no points)") {
+        replay::Replay shell;
+        shell.head.roster = 0x03;
+        const sim::TileCoord spot{11, 10};
+        const auto wet = [&](Bench& b, sim::TileCoord at) { b.engine.set_terrain(at.x, at.y, sim::TERRAIN_WATER); };
+        const auto stage = [&](Bench& b, sim::TileCoord at) { return b.engine.get_bridge_stage(at); };
+        const auto none_of = [](const A4& a) { return a == A4({0, 0, 0, 0}); };
+        {
+            // built: the fourth stage stands, and it is the seat of the Swimmer's
+            Bench b(shell);
+            wet(b, spot);
+            const uint32_t swimmer = b.engine.spawn_unit(1, sim::AntType::Swimmer, {10, 10});
+            b.step(2);
+            ASSERT_TRUE(b.engine.build_bridge_step(swimmer, spot));
+            ASSERT_TRUE(b.until([&] { return stage(b, spot) == 4; }, 600));
+            b.step(40);
+            ASSERT_EQ(stage(b, spot), 4);
+            const MatchStats st = b.collector.take(b.turns);
+            ASSERT_TRUE(st.ok && st.bridges_built == A4({0, 1, 0, 0}) && none_of(st.bridges_undug) && none_of(st.fires_out));
+        }
+        {
+            // a half built bridge is no bridge: a blow cuts the build short at the second stage, and the stage goes
+            Bench b(shell);
+            wet(b, spot);
+            const uint32_t swimmer = b.engine.spawn_unit(0, sim::AntType::Swimmer, {10, 10});
+            const uint32_t striker = b.engine.spawn_unit(1, sim::AntType::Worker, {10, 9});
+            b.step(2);
+            ASSERT_TRUE(b.engine.build_bridge_step(swimmer, spot));
+            ASSERT_TRUE(b.until([&] { return stage(b, spot) == 2; }, 600));
+            b.engine.execute_melee_attack(striker, swimmer);
+            ASSERT_TRUE(b.until([&] { return stage(b, spot) == 0; }, 120));
+            b.step(60);
+            const MatchStats st = b.collector.take(b.turns);
+            ASSERT_TRUE(st.ok && none_of(st.bridges_built) && none_of(st.bridges_undug));
+        }
+        {
+            // dug away: the last stage goes, and it is the digger's seat that has it (not the seat that built); the bridge was not built here, so nothing is built
+            Bench b(shell);
+            wet(b, spot);
+            b.engine.set_bridge_at(spot, 4, 3600);
+            const uint32_t swimmer = b.engine.spawn_unit(1, sim::AntType::Swimmer, {10, 10});
+            b.step(2);
+            ASSERT_TRUE(b.engine.demolish_bridge_step(swimmer, spot));
+            ASSERT_TRUE(b.until([&] { return stage(b, spot) == 0; }, 900));
+            b.step(40);
+            const MatchStats st = b.collector.take(b.turns);
+            ASSERT_TRUE(st.ok && st.bridges_undug == A4({0, 1, 0, 0}) && none_of(st.bridges_built));
+        }
+        {
+            // a dig that a blow cuts short puts the finished bridge back: it is not dug away, and the bridge that came back is not built; the dig of another Swimmer that goes on to its end is counted, for its seat
+            Bench b(shell);
+            wet(b, spot);
+            b.engine.set_bridge_at(spot, 4, 3600);
+            const uint32_t first = b.engine.spawn_unit(0, sim::AntType::Swimmer, {10, 10});
+            const uint32_t second = b.engine.spawn_unit(1, sim::AntType::Swimmer, {11, 11});
+            const uint32_t striker = b.engine.spawn_unit(1, sim::AntType::Worker, {10, 9});
+            b.step(2);
+            ASSERT_TRUE(b.engine.demolish_bridge_step(first, spot));
+            ASSERT_TRUE(b.until([&] { return stage(b, spot) == 2; }, 900));
+            b.engine.execute_melee_attack(striker, first);
+            ASSERT_TRUE(b.until([&] { return stage(b, spot) == 4; }, 120));
+            b.step(60);
+            ASSERT_EQ(stage(b, spot), 4);
+            ASSERT_TRUE(b.engine.demolish_bridge_step(second, spot));
+            ASSERT_TRUE(b.until([&] { return stage(b, spot) == 0; }, 900));
+            b.step(40);
+            const MatchStats st = b.collector.take(b.turns);
+            ASSERT_TRUE(st.ok && st.bridges_undug == A4({0, 1, 0, 0}) && none_of(st.bridges_built));
+        }
+        {
+            // a bridge that falls by itself is not dug away: with no Swimmer at it, and when it falls under a dig and the Swimmer is lost before the dig ends (the empty tile is not its work)
+            Bench b(shell);
+            const sim::TileCoord lone{20, 20};
+            wet(b, spot);
+            wet(b, lone);
+            b.engine.set_bridge_at(lone, 4, 30);
+            b.engine.set_bridge_at(spot, 4, 3600);
+            const uint32_t swimmer = b.engine.spawn_unit(0, sim::AntType::Swimmer, {10, 10});
+            b.step(2);
+            ASSERT_TRUE(b.engine.demolish_bridge_step(swimmer, spot));
+            b.step(3);                                                                                                         // (the dig has been seen at work)
+            b.engine.grid_mut().get_cell_mut(static_cast<uint32_t>(spot.x), static_cast<uint32_t>(spot.y)).timer_ticks = 1;      // (it falls in the next tick, during the first pass of the dig)
+            b.step(1);
+            ASSERT_EQ(stage(b, spot), 0);
+            b.engine.kill_unit(swimmer);
+            b.step(60);
+            ASSERT_EQ(stage(b, lone), 0);
+            const MatchStats st = b.collector.take(b.turns);
+            ASSERT_TRUE(st.ok && none_of(st.bridges_undug) && none_of(st.bridges_built));
+        }
+        {
+            // a fire is put out by the seat of the Fire Ant, not of the one that lit it; the engine says so in its own news
+            Bench b(shell);
+            const uint32_t lighter = b.engine.spawn_unit(0, sim::AntType::Fire, {10, 10});
+            const uint32_t keeper = b.engine.spawn_unit(1, sim::AntType::Fire, {12, 10});
+            b.step(2);
+            ASSERT_TRUE(b.engine.ignite_fire(lighter, spot));
+            ASSERT_TRUE(b.until([&] { return b.engine.has_fire_at(spot); }, 200));
+            b.step(60);
+            ASSERT_TRUE(b.engine.extinguish_fire(keeper, spot, false));
+            ASSERT_TRUE(b.until([&] { return !b.engine.has_fire_at(spot); }, 200));
+            b.step(40);
+            const MatchStats st = b.collector.take(b.turns);
+            ASSERT_TRUE(st.ok && st.fires_out == A4({0, 1, 0, 0}));
+            ASSERT_TRUE(b.told(1, sim::strings::kFirePutOut) == 1 && b.told(0, sim::strings::kFirePutOut) == 0);
+        }
+        {
+            // a fire that burns out by itself is not put out, with nobody at it, and with a Fire Ant at it whose clip is still playing when the fire goes
+            Bench b(shell);
+            const uint32_t keeper = b.engine.spawn_unit(0, sim::AntType::Fire, {10, 10});
+            b.step(2);
+            b.engine.set_fire_at({30, 30}, 40);
+            b.engine.set_fire_at(spot, 12);
+            ASSERT_TRUE(b.engine.extinguish_fire(keeper, spot, false));
+            b.step(200);
+            ASSERT_TRUE(!b.engine.has_fire_at(spot) && !b.engine.has_fire_at({30, 30}));
+            const MatchStats st = b.collector.take(b.turns);
+            ASSERT_TRUE(st.ok && none_of(st.fires_out) && b.told(0, sim::strings::kFirePutOut) == 0);
+        }
+        {
+            // a clip that a blow cuts short puts nothing out: the fire stays, and the Fire Ant that was hit is given nothing
+            Bench b(shell);
+            const uint32_t keeper = b.engine.spawn_unit(1, sim::AntType::Fire, {10, 10});
+            const uint32_t striker = b.engine.spawn_unit(0, sim::AntType::Worker, {10, 9});
+            b.step(2);
+            b.engine.set_fire_at(spot, 3600);
+            ASSERT_TRUE(b.engine.extinguish_fire(keeper, spot, false));
+            b.step(8);
+            b.engine.execute_melee_attack(striker, keeper);
+            b.step(80);
+            ASSERT_TRUE(b.engine.has_fire_at(spot));
+            const MatchStats st = b.collector.take(b.turns);
+            ASSERT_TRUE(st.ok && none_of(st.fires_out) && b.told(1, sim::strings::kFirePutOut) == 0);
+        }
+        {
+            // for every timer the collector says what the engine says: put out when the clip ends first, burnt out when the fire goes first, whatever the tick that they meet in
+            bool put = false, burnt = false;
+            for (uint32_t timer = 2; timer <= 60; ++timer) {
+                Bench b(shell);
+                const uint32_t keeper = b.engine.spawn_unit(0, sim::AntType::Fire, {10, 10});
+                b.step(2);
+                b.engine.set_fire_at(spot, timer);
+                ASSERT_TRUE(b.engine.extinguish_fire(keeper, spot, false));
+                b.step(120);
+                ASSERT_FALSE(b.engine.has_fire_at(spot));
+                const MatchStats st = b.collector.take(b.turns);
+                const size_t said = b.told(0, sim::strings::kFirePutOut);
+                ASSERT_TRUE(said <= 1 && st.fires_out[0] == said && st.fires_out[1] == 0);
+                (said != 0 ? put : burnt) = true;
+            }
+            ASSERT_TRUE(put && burnt);
+        }
+        {
+            // a fire that never burns out (lit in the last 3 minutes, no timer) is put out like any other
+            Bench b(shell);
+            const uint32_t keeper = b.engine.spawn_unit(1, sim::AntType::Fire, {10, 10});
+            b.step(2);
+            b.engine.set_fire_at(spot, 0);
+            ASSERT_TRUE(b.engine.extinguish_fire(keeper, spot, false));
+            ASSERT_TRUE(b.until([&] { return !b.engine.has_fire_at(spot); }, 200));
+            b.step(30);
+            const MatchStats st = b.collector.take(b.turns);
+            ASSERT_TRUE(st.ok && st.fires_out == A4({0, 1, 0, 0}) && b.told(1, sim::strings::kFirePutOut) == 1);
+        }
+        for (const bool same_clip : {false, true}) {
+            // two Fire Ants of two seats at one fire: it is put out once. An ant that faces south (it stands north of the fire) has the shorter clip, so that one is first, and it is the one that is credited; on the two
+            // sides that have the same clip the engine says which was first, and either way the total is one
+            Bench b(shell);
+            const uint32_t first = b.engine.spawn_unit(0, sim::AntType::Fire, same_clip ? sim::TileCoord{10, 10} : sim::TileCoord{11, 11});
+            const uint32_t second = b.engine.spawn_unit(1, sim::AntType::Fire, same_clip ? sim::TileCoord{12, 10} : sim::TileCoord{11, 9});
+            b.step(2);
+            b.engine.set_fire_at(spot, 3600);
+            ASSERT_TRUE(b.engine.extinguish_fire(first, spot, false) && b.engine.extinguish_fire(second, spot, false));
+            b.step(120);
+            ASSERT_FALSE(b.engine.has_fire_at(spot));
+            const MatchStats st = b.collector.take(b.turns);
+            ASSERT_TRUE(st.ok && st.fires_out[0] + st.fires_out[1] == 1 && st.fires_out[2] + st.fires_out[3] == 0);
+            ASSERT_TRUE(b.told(0, sim::strings::kFirePutOut) + b.told(1, sim::strings::kFirePutOut) == 1);
+            if (!same_clip) ASSERT_TRUE(st.fires_out[1] == 1 && b.told(1, sim::strings::kFirePutOut) == 1);
+        }
+        // the raids: the hills are at (40, 40) for the thief's seat and (10, 10) for the seat that is robbed; the raid tile is (13, 12)
+        struct Raided {
+            MatchStats st;
+            int32_t score_of_thief{0};
+            int32_t score_of_victim{0};
+            bool had_loot{false};                                                                  // (the thief held the loot at some time before it was killed)
+        };
+        const auto raid = [&](int32_t victims_points, bool kill_with_loot) {
+            Bench b(shell);
+            b.engine.set_anthill(0, {40, 40});
+            b.engine.set_anthill(1, {10, 10});
+            b.engine.set_player_score(1, victims_points);
+            const uint32_t thief = b.engine.spawn_unit(0, sim::AntType::Thief, {13, 12});
+            b.step(2);
+            b.engine.start_thief_infiltration(thief, 1);
+            bool had_loot = false;
+            if (kill_with_loot) {
+                had_loot = b.until([&] { return b.engine.get_unit(thief).is_holding(); }, 400);
+                b.engine.kill_unit(thief);
+            }
+            b.step(1500);
+            Raided out;
+            out.score_of_thief = b.engine.stats_manager().get_player_stats(0).score;
+            out.score_of_victim = b.engine.stats_manager().get_player_stats(1).score;
+            out.had_loot = had_loot;
+            out.st = b.collector.take(b.turns);
+            return out;
+        };
+        {
+            const auto home = raid(120, false);                                                   // 50 points are taken and the thief walks them home
+            ASSERT_TRUE(home.st.ok && home.st.raids.size() == 1 && home.st.raids[0].thief == 0 && home.st.raids[0].victim == 1 && home.st.raids[0].points == 50);
+            ASSERT_TRUE(home.score_of_thief == 50 && home.score_of_victim == 70);                // (the hill has them)
+            ASSERT_TRUE(home.st.raids_home == A4({1, 0, 0, 0}) && home.st.loot_home == L4({50, 0, 0, 0}) && home.st.banked[0] == 50);
+            const auto empty = raid(0, false);                                                    // a hill with no points: the raid is begun, there is nothing to bring
+            ASSERT_TRUE(empty.st.ok && empty.st.raids.size() == 1 && empty.st.raids[0].points == 0 && empty.score_of_thief == 0);
+            ASSERT_TRUE(none_of(empty.st.raids_home) && empty.st.loot_home == L4({0, 0, 0, 0}));
+            const auto killed = raid(120, true);                                                  // the thief has the loot and dies on the way home
+            ASSERT_TRUE(killed.had_loot && killed.st.ok && killed.st.raids.size() == 1 && killed.st.raids[0].points == 50 && killed.score_of_thief == 0 && killed.score_of_victim == 70);
+            ASSERT_TRUE(none_of(killed.st.raids_home) && killed.st.loot_home == L4({0, 0, 0, 0}));
+            {
+                // two raids of one thief on two hills, each with loot that gets home: each is its own raid, with its own points
+                Bench b(shell);
+                b.engine.set_anthill(0, {40, 40});
+                b.engine.set_anthill(1, {10, 10});
+                b.engine.set_anthill(2, {10, 30});
+                b.engine.set_player_score(1, 30);
+                b.engine.set_player_score(2, 45);
+                const uint32_t thief = b.engine.spawn_unit(0, sim::AntType::Thief, {13, 12});
+                b.step(2);
+                b.engine.start_thief_infiltration(thief, 1);
+                b.step(1500);
+                b.engine.start_thief_infiltration(thief, 2);
+                b.step(1500);
+                const MatchStats st = b.collector.take(b.turns);
+                ASSERT_TRUE(st.ok && st.raids.size() == 2 && st.raids[0].points == 30 && st.raids[1].points == 45);
+                ASSERT_TRUE(st.raids_home == A4({2, 0, 0, 0}) && st.loot_home == L4({75, 0, 0, 0}) && b.engine.stats_manager().get_player_stats(0).score == 75);
+            }
+            const auto debt = raid(-30, false);                                                   // a hill below zero gives a negative loot, and the debt comes home too
+            ASSERT_TRUE(debt.st.ok && debt.st.raids.size() == 1 && debt.st.raids[0].points == -30 && debt.score_of_thief == -30);
+            ASSERT_TRUE(debt.st.raids_home == A4({1, 0, 0, 0}) && debt.st.loot_home == L4({-30, 0, 0, 0}));
         }
     } TEST_END();
 
@@ -480,30 +790,6 @@ int main() {
     TEST_CASE("HD1.6 Facts that a world made by hand can show and the matches played in the tests do not: an ant hurt by its own team is nobody's kill and no damage dealt, a seat that runs out of ants twice is wiped out twice, the free hatch of a seat with under 200 points costs what it had, a bomb that was defused did not go off and one that went off is its planter's, a Stop is a Stop, and an order names only the ants of its issuer") {
         replay::Replay shell;
         shell.head.roster = 0x03;
-        // a bench: an engine with no map and a collector that is told each tick, as play() tells it
-        struct Bench {
-            sim::SimulationEngine engine;
-            replay::MatchStatsCollector collector;
-            replay::Hooks hooks;
-            uint32_t turns{0};
-            explicit Bench(const replay::Replay& r) : collector(r), hooks(collector.hooks()) { engine.init_test_world(60, 60, 1); }
-            void step(uint32_t n = 1) {
-                for (uint32_t i = 0; i < n; ++i) {
-                    engine.tick();
-                    ++turns;
-                    hooks.after_tick(turns, engine);
-                    engine.clear_news_events();
-                    engine.clear_audio_events();
-                }
-            }
-            // the fire of its own team burns the ant, one point at a time, until it is gone
-            void burn_to_death(uint32_t ant) {
-                for (uint32_t guard = 0; guard < 4000 && !engine.get_unit(ant).removed; ++guard) {
-                    if (engine.get_unit(ant).loco_action == sim::AntUnit::kActionIdle) engine.resolve_fire_contact(ant, 1, 0);
-                    step();
-                }
-            }
-        };
         {
             Bench b(shell);
             const uint32_t first = b.engine.spawn_unit(0, sim::AntType::Worker, {10, 10});
@@ -818,6 +1104,26 @@ int main() {
         ASSERT_TRUE(at_int(e.get("taken"), 1, 2) == 2 && at_int(e.get("taken"), 1, 4) == 3 && e.get("bombs_off").at(0).as_int_or(0) == 4);
     } TEST_END();
 
+    TEST_CASE("HD2.8 The special ants in the JSON: the pass's counts of bridges built and dug away and of fires put out, seat by seat; a raid is [begun, home, loot that got home], with the raids begun counted from the whole list of raids by the seat of the thief (not only its first 30), and a loot that is a debt kept with its sign") {
+        MatchStats st = blank(2000);
+        st.bridges_built = {5, 0, 2, 0};
+        st.bridges_undug = {1, 0, 3, 0};
+        st.fires_out = {0, 7, 0, 1};
+        for (uint32_t i = 0; i < 35; ++i) st.raids.push_back(MatchStats::Raid{200 + i, static_cast<uint8_t>(i % 2 + 2), static_cast<uint8_t>(i % 2), 50});
+        st.raids_home = {0, 0, 4, 1};
+        st.loot_home = {0, 0, 200, -20};
+        const JsonValue sp = details_of(st, record_for({0})).get("special");
+        ASSERT_TRUE(sp.get("built").at(0).as_int_or(-1) == 5 && sp.get("built").at(2).as_int_or(-1) == 2 && sp.get("built").at(1).as_int_or(-1) == 0);
+        ASSERT_TRUE(sp.get("undug").at(0).as_int_or(-1) == 1 && sp.get("undug").at(2).as_int_or(-1) == 3 && sp.get("out").at(1).as_int_or(-1) == 7 && sp.get("out").at(3).as_int_or(-1) == 1);
+        ASSERT_TRUE(sp.get("raids").size() == 4 && sp.get("raids").at(0).size() == 3);
+        ASSERT_TRUE(at_int(sp.get("raids"), 2, 0) == 18 && at_int(sp.get("raids"), 2, 1) == 4 && at_int(sp.get("raids"), 2, 2) == 200);       // (18 raids of thief 2 begun: 35 in all, the list of events keeps 30)
+        ASSERT_TRUE(at_int(sp.get("raids"), 3, 0) == 17 && at_int(sp.get("raids"), 3, 1) == 1 && at_int(sp.get("raids"), 3, 2) == -20);
+        ASSERT_TRUE(at_int(sp.get("raids"), 0, 0) == 0 && at_int(sp.get("raids"), 1, 2) == 0);
+        // a match with none of it has the key, with zeros (a record that has no key is one counted before: the page tells them apart)
+        const JsonValue quiet = details_of(blank(2000), record_for({0})).get("special");
+        ASSERT_TRUE(quiet.is_object() && sum_of(std::vector<int64_t>{quiet.get("built").at(0).as_int_or(1), quiet.get("raids").at(0).at(0).as_int_or(1), quiet.get("raids").at(3).at(2).as_int_or(1)}) == 0);
+    } TEST_END();
+
     TEST_CASE("HD2.7 A pass that did not count gives no text and the marker is one fixed text; a match with no look at all (shorter than 5 seconds) still has the rest") {
         MatchStats bad;
         bad.ok = false;
@@ -827,7 +1133,7 @@ int main() {
         const JsonValue m = parse_text(history_details_marker());
         ASSERT_TRUE(m.get("v").as_int_or(0) == kDetailsVersion && m.get("n").as_int_or(0) == 1 && !m.has("over_time"));
         const JsonValue d = details_of(blank(50, 0x03), record_for({0}));
-        ASSERT_TRUE(d.get("v").as_int_or(0) == 1 && !d.has("over_time") && d.has("activity") && d.has("combat") && d.has("economy"));
+        ASSERT_TRUE(d.get("v").as_int_or(0) == 1 && !d.has("over_time") && d.has("activity") && d.has("combat") && d.has("economy") && d.has("special"));
     } TEST_END();
 
     // ---- the text: its layout and its size ------------------------------------------------------------------------------------------------------
@@ -844,14 +1150,16 @@ int main() {
         ASSERT_TRUE(!text.empty() && text.size() < 3000 && text.find(' ') == std::string::npos);
         const JsonValue d = parse_text(text);
         ASSERT_TRUE(d.is_object() && d.get("v").as_int_or(0) == 1 && d.get("turns").as_int_or(0) == static_cast<int64_t>(m.rep.total_turns));
-        for (const char* key : {"over_time", "highlights", "activity", "combat", "economy"}) ASSERT_TRUE(d.get(key).is_object());
+        for (const char* key : {"over_time", "highlights", "activity", "combat", "economy", "special"}) ASSERT_TRUE(d.get(key).is_object());
         ASSERT_TRUE(d.get("over_time").get("score").size() == 4 && d.get("over_time").get("kills").size() == 4);
         for (const char* key : {"dealt", "taken", "stolen", "robbed"}) ASSERT_EQ(d.get("combat").get(key).size(), size_t{4});
         for (const char* key : {"banked", "hatch_cost", "bombs_off"}) ASSERT_EQ(d.get("economy").get(key).size(), size_t{4});
         ASSERT_TRUE(d.get("combat").get("kills").size() == 4 && d.get("combat").get("kills").at(0).size() == 4 && d.get("combat").get("hp").size() == 4 && d.get("economy").get("taken").at(0).size() == 5);
         ASSERT_TRUE(d.get("activity").get("per_minute").size() == 4 && d.get("activity").get("ants").size() == 4 && d.get("economy").get("food").at(0).size() == 2);
         // the keys are the ones that the page reads and nothing else
-        ASSERT_TRUE(d.keys() == std::vector<std::string>({"v", "turns", "step", "over_time", "highlights", "activity", "combat", "economy"}));
+        ASSERT_TRUE(d.keys() == std::vector<std::string>({"v", "turns", "step", "over_time", "highlights", "activity", "combat", "economy", "special"}));
+        for (const char* key : {"built", "undug", "out", "raids"}) ASSERT_EQ(d.get("special").get(key).size(), size_t{4});
+        ASSERT_TRUE(d.get("special").keys() == std::vector<std::string>({"built", "undug", "out", "raids"}) && d.get("special").get("raids").at(0).size() == 3);
         ASSERT_TRUE(d.get("combat").keys() == std::vector<std::string>({"kills", "ev", "dealt", "taken", "hp", "raids", "stolen", "robbed"}) || d.get("combat").keys() == std::vector<std::string>({"kills", "ev", "dealt", "taken", "hp", "stolen", "robbed"}) ||
                     d.get("combat").keys() == std::vector<std::string>({"kills", "dealt", "taken", "hp", "stolen", "robbed"}));
         // the record's own JSON gives it back whole under "details"
@@ -935,7 +1243,7 @@ int main() {
         const std::string hour = make_history_details(fill(60), record_for({0}));
         ASSERT_TRUE(!hour.empty() && hour.size() <= 5000);
         const JsonValue h = parse_text(hour);
-        ASSERT_TRUE(h.get("v").as_int_or(0) == 1 && h.has("activity") && h.get("activity").get("per_minute").at(0).size() == 60 && !h.has("combat") && !h.has("economy"));   // (the last lists to go)
+        ASSERT_TRUE(h.get("v").as_int_or(0) == 1 && h.has("activity") && h.get("activity").get("per_minute").at(0).size() == 60 && !h.has("combat") && !h.has("economy") && !h.has("special"));   // (the last lists to go)
         const std::string two_hours = make_history_details(fill(120), record_for({0}));
         ASSERT_EQ(two_hours, history_details_marker());                                         // (nothing short enough is left to say: the pass is told as not counted)
         ASSERT_TRUE(two_hours.size() <= 5000);

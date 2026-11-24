@@ -30,6 +30,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - **Where the action is, on a replay.** A soft curve over the replay's timeline shows the fights: deaths most of all, then bombs, thefts, fires and hits. On a computer it shows while the pointer is over the timeline, with the time and what happened ("2:41 · 3 deaths, 1 bomb"); on a phone it is always there, faint, and solid under your finger. The timeline has a row of its own on a computer now, as wide as the picture. Matches played before this version show a curve of their deaths alone.
+- **Special ants on a match's page.** A new section under the Scoreboard shows what each type of ant did: a card for each type that somebody had (Swimmer: bridges built and taken down; Fire Ant: fires lit and put out; Bomber: bombs set, defused and gone off; Thief: raids that brought loot home, "5 of 8", and the loot), and a card for food and fighting. A type that nobody had is left out with one line. Bombs set, Defused and Fires lit moved there from the Scoreboard. A match played before this release shows what was counted then (no bridges, fires put out or loot).
 - **Plays and likes of replays.** A replay counts as played after 10 seconds of playing (pauses do not count), once a day in a browser. The list of matches and a match's page show how often it was played and how many people like it; a logged-in person taps the heart to like and taps again to take it back, and nobody sees who liked. New sorts, **Most watched** and **Most liked**; the Sort box is wider so no name is cut. Not logged in, a tap on a heart says "Log in to like a replay."
 - **Follow** a player from the same menu (or **/follow NAME**): a **Following** tab in the players list, a star by their name, and an alert with Join when they open a public room. Nobody is told that you follow them, and nobody sees who follows whom.
 - Write to a player **privately**: **Message** in the menu, a **Messages** button in the chat (a panel, or a sheet on a phone), a count and a bell row for each new message. Messages are kept for 7 days and only the two of you can read them; **Ignore** blocks a person, and **Report** sends a message and the 5 before it to the admins.
@@ -568,18 +569,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5b17384e...0a24e791)
 
-## v0.15.0 - 2026-11-10 - A three-panel Home, notices over the page, and games in progress with Watch
+## Older versions (v0.15.0 and before)
 
-**For players:**
-- **A new Home.** Games are on the left, Players on the right and the chat at the bottom; the Yard is no longer on the front page. On a phone you see one view at a time, with a strip of buttons to move between Games, Players and Chat, and a phone held sideways keeps the account line.
-- **Notices float over the page.** A notice such as "Your room is public now." is a small box over the page, so the page no longer moves when it comes; it goes after 6 seconds, and one that asks something (Rejoin, Make public) stays until you answer. OK closes it, and so does Escape while it has the focus.
-- **Games in progress stay in the Games list.** A match that is running is a row of the list with a Watch button, which opens the live match in a new tab. The switch "Show games in progress" at the top of the list hides these rows; this browser remembers the choice.
-- **The chat keeps the newest 200 lines.** Besides the limit of 7 days, the chat's history keeps the newest 200 lines; older lines are deleted for good (the Legal page says so).
-
-**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.14.1 page or game still joins. The rest of this release is internal: tests and documents.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f6969023...5aee057e)
-
-## Older versions (v0.14.1 and before)
-
-Every release before v0.15.0, and the long notes of v0.14.1, v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.15.1, and the long notes of v0.15.0, v0.14.1, v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

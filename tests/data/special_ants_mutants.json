@@ -1,0 +1,182 @@
+{
+ "note": "Mutants of the special ants' counts (docs/REPLAYS.md 'The match pages', 'Special ants'): bridges built and dug away, fires put out, raids that got home, and the key `special` of a match's details, for tools/mutate.py (docs/TESTING.md 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/special_ants_mutants.json --keep-going --jobs 1 --timeout 600. Every mutant must be caught by test_history_details (HD1.5, HD1.7, HD2.8, HD3.1, HD3.4); the page's own rules are the broken copies of tests/scripts/test_web_match_stats.py.",
+ "defaults": {},
+ "mutants": [
+  {
+   "id": "a_fire_is_put_out_at_its_last_tick",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "if (!still && !engine.has_fire_at(tile) && ant.work_state != 1) tally = &stats_.fires_out[ant.player];",
+   "new": "if (!still && !engine.has_fire_at(tile)) tally = &stats_.fires_out[ant.player];",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "a_fire_is_put_out_though_a_blow_cut_the_clip",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "if (!still && !engine.has_fire_at(tile) && ant.work_state != 1) tally = &stats_.fires_out[ant.player];",
+   "new": "if (!still && ant.work_state != 1) tally = &stats_.fires_out[ant.player];",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "a_fire_is_given_to_an_ant_that_is_still_at_it",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "if (!still && !engine.has_fire_at(tile) && ant.work_state != 1) tally = &stats_.fires_out[ant.player];",
+   "new": "if (!engine.has_fire_at(tile) && ant.work_state != 1) tally = &stats_.fires_out[ant.player];",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "a_fire_is_put_out_for_the_first_seat",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "tally = &stats_.fires_out[ant.player];",
+   "new": "tally = &stats_.fires_out[0];",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "two_ants_at_one_fire_are_two_put_outs",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "if (std::find(settled_.begin(), settled_.end(), key) != settled_.end()) return false;",
+   "new": "",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "a_half_built_bridge_is_built",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "if (engine.get_bridge_stage(tile) == 4) tally = &stats_.bridges_built[ant.player];",
+   "new": "if (engine.get_bridge_stage(tile) >= 2) tally = &stats_.bridges_built[ant.player];",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "a_bridge_is_built_for_the_first_seat",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "tally = &stats_.bridges_built[ant.player];",
+   "new": "tally = &stats_.bridges_built[0];",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "a_dug_bridge_is_a_built_one",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "tally = &stats_.bridges_undug[ant.player];",
+   "new": "tally = &stats_.bridges_built[ant.player];",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "a_dig_that_is_cut_short_is_dug_away",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "if (!still && engine.get_bridge_stage(tile) == 0) tally = &stats_.bridges_undug[ant.player];",
+   "new": "if (!still) tally = &stats_.bridges_undug[ant.player];",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "a_dig_in_progress_is_dug_away_when_the_bridge_falls",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "if (!still && engine.get_bridge_stage(tile) == 0) tally = &stats_.bridges_undug[ant.player];",
+   "new": "if (engine.get_bridge_stage(tile) == 0) tally = &stats_.bridges_undug[ant.player];",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "a_bridge_that_fell_under_a_dig_is_given_to_the_digger_that_is_lost",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "} else if (engine.get_bridge_stage(tile) == 0) {                    // (no bridge on the tile",
+   "new": "} else if (false) {                    // (no bridge on the tile",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "a_bridge_is_dug_away_for_the_first_seat",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "tally = &stats_.bridges_undug[ant.player];",
+   "new": "tally = &stats_.bridges_undug[0];",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "a_raid_is_home_when_the_loot_is_taken",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "ant.loot = ant.raid;",
+   "new": "ant.loot = ant.raid; ++stats_.raids_home[snap.player_id];",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "the_loot_of_every_raid_is_the_first_raids",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "ant.raid = static_cast<int32_t>(stats_.raids.size());",
+   "new": "ant.raid = 0;",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "a_raid_is_home_for_the_hill_that_was_robbed",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "++stats_.raids_home[snap.player_id];",
+   "new": "++stats_.raids_home[stats_.raids[static_cast<size_t>(ant.loot)].victim];",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "the_loot_that_got_home_is_not_added",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "stats_.loot_home[snap.player_id] += stats_.raids[static_cast<size_t>(ant.loot)].points;",
+   "new": "",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "the_loot_of_a_thief_is_forgotten",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "ant.loot = ant.raid;",
+   "new": "ant.loot = -1;",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "the_special_counts_swap_built_and_dug",
+   "file": "src/ants_server/history_details.cpp",
+   "old": "o.set(\"built\", ints(st.bridges_built));",
+   "new": "o.set(\"built\", ints(st.bridges_undug));",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "the_raids_begun_are_counted_for_the_hill_that_was_robbed",
+   "file": "src/ants_server/history_details.cpp",
+   "old": "if (r.thief < kSeats) ++begun[r.thief];",
+   "new": "if (r.victim < kSeats) ++begun[r.victim];",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "the_raids_row_has_its_numbers_in_another_order",
+   "file": "src/ants_server/history_details.cpp",
+   "old": "row({begun[s], st.raids_home[s], st.loot_home[s]})",
+   "new": "row({st.raids_home[s], begun[s], st.loot_home[s]})",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "the_loot_that_got_home_loses_its_sign",
+   "file": "src/ants_server/history_details.cpp",
+   "old": "row({begun[s], st.raids_home[s], st.loot_home[s]})",
+   "new": "row({begun[s], st.raids_home[s], st.loot_home[s] < 0 ? -st.loot_home[s] : st.loot_home[s]})",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "the_special_counts_stay_when_combat_and_economy_go",
+   "file": "src/ants_server/history_details.cpp",
+   "old": "        d.set(\"special\", special(st));\n    }\n    return ctl::to_json(d);",
+   "new": "    }\n    d.set(\"special\", special(st));\n    return ctl::to_json(d);",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  }
+ ]
+}

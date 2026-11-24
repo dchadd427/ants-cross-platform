@@ -326,6 +326,22 @@ JsonValue economy(const MatchStats& st) {
     return e;
 }
 
+// What the special ants did, by seat (docs/REPLAYS.md "The match pages", "Special ants"): bridges built and dug away, fires put out, and the raids of the Thieves as [begun, home, loot that got home]
+JsonValue special(const MatchStats& st) {
+    JsonValue o = JsonValue::make_object();
+    o.set("built", ints(st.bridges_built));
+    o.set("undug", ints(st.bridges_undug));
+    o.set("out", ints(st.fires_out));
+    std::array<uint32_t, kSeats> begun{};
+    for (const MatchStats::Raid& r : st.raids) {
+        if (r.thief < kSeats) ++begun[r.thief];
+    }
+    JsonValue raids = JsonValue::make_array();
+    for (size_t s = 0; s < kSeats; ++s) raids.push_back(row({begun[s], st.raids_home[s], st.loot_home[s]}));
+    o.set("raids", std::move(raids));
+    return o;
+}
+
 // `shed` makes the text smaller, step by step: 1 no list of kills, 2 no list of raids either, 3 and 4 a series of half and a quarter the points, 5 no combat and no economy
 JsonValue heavy_seats(uint8_t mask) {
     JsonValue seats = JsonValue::make_array();
@@ -348,6 +364,7 @@ std::string build(const MatchStats& st, const HistoryRecord& record, int shed) {
     if (shed < 5) {
         d.set("combat", combat(st, shed < 1, shed < 2));
         d.set("economy", economy(st));
+        d.set("special", special(st));
     }
     return ctl::to_json(d);
 }

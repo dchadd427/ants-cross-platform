@@ -44,7 +44,7 @@ const DETAILS = {
     combat: { kills: [[0, 4, 3, 0], [2, 0, 0, 5], [2, 0, 0, 1], [0, 1, 1, 0]], dealt: [96, 115, 18, 50], taken: [67, 87, 57, 68] },
 };
 const text = (n) => (n ? n.textContent : '');
-function build(rec) { const out = { summary: S.summary(rec), overtime: S.overtime(rec), activity: S.activity(rec) }; return out; }
+function build(rec) { const out = { summary: S.summary(rec), special: S.special(rec), overtime: S.overtime(rec), activity: S.activity(rec) }; return out; }
 function draw(node, width) { node.byClass('chartbox').forEach((b) => { b.clientWidth = width; }); MS.redraw(node); }
 
 // ---- the plain functions ----
@@ -146,12 +146,127 @@ same('... nothing when nobody led', MS.leadSentence([]), null);
     same('mode 187 has no score: one chart of kills, titled so', [b187.overtime.byTag('svg').length, b187.overtime.byTag('h3').map(text), /^Kills of every seat/.test(b187.overtime.byTag('svg')[0].attrs['aria-label'])], [1, ['Kills so far'], true]);
 }
 
+// ---- special ants: a card for each type that somebody had, a row for each seat in the scoreboard's order, the numbers from the seats' rows and from details ----
+{
+    const SEATS4 = [seat(0, 'Hazel', '', { winner: true, fires_lit: 9, bombs_planted: 4, bombs_defused: 0 }), seat(1, 'Clover', '', { winner: true, fires_lit: 14, bombs_planted: 0, bombs_defused: 0 }),
+        seat(2, 'Fern', '', { fires_lit: 5, bombs_planted: 7, bombs_defused: 6 }), seat(3, 'Pip', 'Hard', { fires_lit: 0, bombs_planted: 12, bombs_defused: 1 })];
+    const ROWS = [{ seats: [0, 1], score: 3050, killed: 14, lost: 9, hatched: 0, winner: true }, { seats: [2, 3], score: 2010, killed: 5, lost: 10, hatched: 1, winner: false }];
+    const SP = {
+        economy: { food: [[22, 550], [17, 425], [19, 475], [12, 300]], banked: [0, 0, 0, 0], hatch_cost: [0, 0, 0, 0], bombs_off: [3, 0, 2, 4],
+            taken: [[1, 1, 2, 2, 2], [0, 2, 1, 1, 0], [2, 1, 1, 0, 1], [3, 0, 0, 3, 1]] },
+        combat: { kills: [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], dealt: [41, 19, 30, 12], taken: [19, 41, 12, 30] },
+        special: { built: [6, 0, 3, 2], undug: [1, 0, 4, 0], out: [2, 0, 7, 0], raids: [[8, 5, 250], [3, 3, 130], [6, 2, 100], [0, 0, 0]] },
+    };
+    const withSpecial = (details, extra) => record(Object.assign({ v: 1, turns: 14405, step: 300 }, details), Object.assign({ seats: SEATS4, rows: ROWS }, extra || {}));
+    const rec = withSpecial(SP), sec = S.special(rec), model = MS.specialOf(MS.contextOf(rec));
+    same('the section: its id, its title and what it says it shows', [sec.id, sec.attrs['aria-labelledby'], text(sec.byTag('h2')[0]), text(sec.byClass('count')[0])], ['special', 'special-h', 'Special ants', 'What each type of ant did, seat by seat']);
+    same('the seats are in the scoreboard\'s order (the winning side first), not in the order of the colors', [model.order, MS.specialOf(MS.contextOf(withSpecial(SP, { rows: [{ seats: [3], winner: true }, { seats: [0, 1] }, { seats: [2] }] }))).order], [[0, 1, 2, 3], [3, 0, 1, 2]]);
+    same('a card for each type that somebody had, and the card of food and fighting last and wide', [sec.byClass('abcard').map((c) => text(c.byTag('h3')[0])), sec.byClass('abcard').map((c) => c.className)],
+        [['Swimmer', 'Fire Ant', 'Bomber', 'Thief', 'Food and fighting'], ['abcard', 'abcard', 'abcard', 'abcard', 'abcard wide']]);
+    same('the columns of each card: the ants of the type first, then the numbers of the type', sec.byClass('abt').map((t) => t.byTag('th').map(text)),
+        [['Player', 'Ants', 'Built', 'Taken down'], ['Player', 'Ants', 'Lit', 'Put out'], ['Player', 'Ants', 'Set', 'Defused', 'Went off'], ['Player', 'Ants', 'Raids', 'Loot'], ['Player', 'Food trips', 'Combat Ants', 'Damage dealt', 'Damage taken']]);
+    const rowsOf = (card) => card.byTag('tbody')[0].byTag('tr').map((r) => r.byTag('td').map((d) => text(d.byTag('b')[0] || d)));
+    same('Swimmer: the ants that took the power-up, the bridges built and the bridges dug away', rowsOf(sec.byClass('abt')[0]), [['Hazel', '2', '6', '1'], ['Clover', '0', '0', '0'], ['Fern', '1', '3', '4'], ['Pip (bot, Hard)', '1', '2', '0']]);
+    same('Fire Ant: the fires lit are the seat\'s row, the fires put out are the pass\'s', rowsOf(sec.byClass('abt')[1]), [['Hazel', '1', '9', '2'], ['Clover', '2', '14', '0'], ['Fern', '1', '5', '7'], ['Pip (bot, Hard)', '0', '0', '0']]);
+    same('Bomber: bombs set and defused are the seat\'s row, the bombs that went off are the pass\'s', rowsOf(sec.byClass('abt')[2]), [['Hazel', '1', '4', '0', '3'], ['Clover', '0', '0', '0', '0'], ['Fern', '2', '7', '6', '2'], ['Pip (bot, Hard)', '3', '12', '1', '4']]);
+    same('Thief: the raids that brought loot home, and the loot', rowsOf(sec.byClass('abt')[3]), [['Hazel', '2', '5', '250'], ['Clover', '1', '3', '130'], ['Fern', '1', '2', '100'], ['Pip (bot, Hard)', '0', '0', '0']]);
+    same('Food and fighting', rowsOf(sec.byClass('abt')[4]), [['Hazel', '22', '2', '41', '19'], ['Clover', '17', '1', '19', '41'], ['Fern', '19', '0', '30', '12'], ['Pip (bot, Hard)', '12', '3', '12', '30']]);
+    const raidCells = sec.byClass('abt')[3].byTag('tbody')[0].byTag('tr').map((r) => r.byTag('td')[2]);
+    same('raids are "5 of 8": the number home, and how many were tried, and the bar is the share that got home', [raidCells.map((c) => text(c.byClass('of')[0])), raidCells.map((c) => c.byClass('mb')[0].children[0].style.width)], [['of 8', 'of 3', 'of 6', ''], ['63%', '100%', '33%', '0%']]);
+    same('the other bars are against the best seat of the column', sec.byClass('abt')[0].byTag('tbody')[0].byTag('tr').map((r) => r.byTag('td')[2].byClass('mb')[0].children[0].style.width), ['100%', '0%', '50%', '33%']);
+    same('a seat that had none of the type is a dim row; the others are not', sec.byClass('abt').slice(0, 4).map((t) => t.byTag('tbody')[0].byTag('tr').map((r) => r.className)), [['', 'none', '', ''], ['', '', '', 'none'], ['', 'none', '', ''], ['', '', '', 'none']]);
+    same('every bar is the color of its seat', sec.byClass('abt')[0].byTag('tbody')[0].byTag('tr').map((r) => r.byTag('i').filter((i) => i.attrs['data-c'] !== undefined).map((i) => i.attrs['data-c']).join()), ['Green,Green,Green,Green', 'Red,Red,Red,Red', 'Blue,Blue,Blue,Blue', 'Black,Black,Black,Black']);
+    same('the key lines say what each number means', sec.byClass('lgd').map(text).slice(0, 4), [
+        'Built: water squares bridged all the way. Taken down: finished bridges its Swimmers dug away. A bridge that falls by itself after 3 minutes is not counted.',
+        'Lit: fire walls started. Put out: fires its Fire Ants put out, its own or anyone\u2019s. A fire that burns out by itself after 3 minutes is not counted.',
+        'Set: bombs put down. Defused: enemy bombs taken away. Went off: its bombs that an ant stepped on.',
+        'Raids: \u201c5 of 8\u201d is 8 times a Thief went into an enemy hill, 5 times the loot reached its own hill. Loot: the points brought home.']);
+    same('every type had somebody: no line about a type that nobody had, and the line of Ants closes the section', [sec.byClass('abnote').length, text(sec.byClass('lgd')[sec.byClass('lgd').length - 1])], [0, 'Ants: how many of the seat\u2019s ants took the power-up and became this type.']);
+    check('the section comes from the record: nothing is a node of its own', sec.all((n) => n.tag === 'img' || n.tag === 'script').length === 0);
+
+    // a type that nobody had is left out, with one line
+    const some = JSON.parse(JSON.stringify(SP));
+    some.economy.taken = [[1, 1, 0, 2, 0], [0, 2, 0, 1, 0], [2, 1, 0, 0, 0], [3, 0, 0, 3, 0]];
+    some.special = { built: [0, 0, 0, 0], undug: [0, 0, 0, 0], out: [2, 0, 7, 0], raids: [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]] };
+    const partial = S.special(withSpecial(some));
+    same('only the types that were used have a card; a line says which were not', [partial.byClass('abcard').map((c) => text(c.byTag('h3')[0])), partial.byClass('abnote').map(text)], [['Fire Ant', 'Bomber', 'Food and fighting'], ['Nobody had a Swimmer or Thief in this match.']]);
+    some.economy.taken = [[1, 0, 0, 2, 0], [0, 0, 0, 1, 0], [2, 0, 0, 0, 0], [3, 0, 0, 3, 0]]; some.special.out = [0, 0, 0, 0];
+    same('a type is used when its numbers say so (the fires lit are in the seats\' rows), whatever the count of its power-ups', S.special(withSpecial(some)).byClass('abcard').map((c) => text(c.byTag('h3')[0])), ['Fire Ant', 'Bomber', 'Food and fighting']);
+    same('three types that nobody had are listed with commas and an or', S.special(withSpecial(some, { seats: SEATS4.map((x) => Object.assign({}, x, { fires_lit: 0 })) })).byClass('abnote').map(text), ['Nobody had a Swimmer, Fire Ant or Thief in this match.']);
+
+    // a Thief that raided and brought nothing home, on a level whose ants are Thieves from the start (no power-up was taken): the raids say that the type was used
+    const raided = JSON.parse(JSON.stringify(SP));
+    raided.economy.taken = [[0, 0, 0, 2, 0], [0, 0, 0, 1, 0], [0, 0, 0, 0, 0], [0, 0, 0, 3, 0]];
+    raided.economy.bombs_off = [0, 0, 0, 0];
+    raided.special = { built: [0, 0, 0, 0], undug: [0, 0, 0, 0], out: [0, 0, 0, 0], raids: [[3, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]] };
+    const lone = S.special(withSpecial(raided, { seats: SEATS4.map((x) => Object.assign({}, x, { fires_lit: 0, bombs_planted: 0, bombs_defused: 0 })) }));
+    same('raids that were tried make the type used, and "0 of 3" is not dimmed', [lone.byClass('abcard').map((c) => text(c.byTag('h3')[0])), lone.byClass('abt')[0].byTag('tbody')[0].byTag('tr').map((r) => r.className), text(lone.byClass('abt')[0].byTag('tbody')[0].byTag('tr')[0].byTag('td')[2])],
+        [['Thief', 'Food and fighting'], ['', 'none', 'none', 'none'], '0of 3']);
+
+    // nobody took a power-up: one line before the card of food and fighting
+    const bare = { economy: { food: [[19, 475], [12, 300], [0, 0], [0, 0]], bombs_off: [0, 0, 0, 0], taken: [[0, 0, 0, 2, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]] },
+        combat: { kills: [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], dealt: [30, 12, 0, 0], taken: [12, 30, 0, 0] }, special: { built: [0, 0, 0, 0], undug: [0, 0, 0, 0], out: [0, 0, 0, 0], raids: [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]] } };
+    const quietSeats = SEATS4.map((x) => Object.assign({}, x, { fires_lit: 0, bombs_planted: 0, bombs_defused: 0 }));
+    const nobody = S.special(withSpecial(bare, { seats: quietSeats }));
+    same('no power-up at all: the line, then the card of food and fighting, and no line of Ants', [nobody.children.map((c) => c.className || c.tag), nobody.byClass('abnote').map(text), nobody.byClass('abcard').map((c) => text(c.byTag('h3')[0]))],
+        [['head', 'abnote', 'abgrid'], ['No ant took a power-up in this match.'], ['Food and fighting']]);
+}
+
+// ---- special ants in a record that lacks some of the numbers: it shows what it has and hides what it lacks ----
+{
+    const rowsOnly = [seat(0, 'Hazel', '', { fires_lit: 9, bombs_planted: 4, bombs_defused: 2 }), seat(1, 'Clover', '', { fires_lit: 0, bombs_planted: 0, bombs_defused: 0 })];
+    const base = { v: 1, turns: 14405, step: 300 };
+    const plain = (details) => record(details, { seats: rowsOnly, rows: [{ seats: [0] }, { seats: [1] }] });
+    const oldDetails = { economy: { food: [[5, 125], [3, 75], [0, 0], [0, 0]], bombs_off: [1, 0, 0, 0], taken: [[1, 1, 0, 0, 0], [0, 0, 1, 0, 2], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]] },
+        combat: { kills: [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], dealt: [1, 2, 0, 0], taken: [2, 1, 0, 0], raids: [[300, 0, 1, 50], [400, 0, 1, 50], [900, 1, 0, 50]] } };
+    const old = S.special(plain(Object.assign({}, base, oldDetails)));
+    const cols = (sec) => sec.byClass('abt').map((t) => t.byTag('th').map(text));
+    same('a record counted before the counts existed: no bridges, no fires put out, no loot; the raids that were begun are counted from the list', cols(old),
+        [['Player', 'Ants'], ['Player', 'Ants', 'Lit'], ['Player', 'Ants', 'Set', 'Defused', 'Went off'], ['Player', 'Ants', 'Raids'], ['Player', 'Food trips', 'Combat Ants', 'Damage dealt', 'Damage taken']]);
+    same('... a Swimmer card has only the ants, and the raids are "tried" (the list names the thief of each)', [old.byClass('abcard').map((c) => text(c.byTag('h3')[0])), old.byClass('abt')[3].byTag('tbody')[0].byTag('tr').map((r) => text(r.byTag('td')[2]))],
+        [['Swimmer', 'Fire Ant', 'Bomber', 'Thief', 'Food and fighting'], ['2tried', '1tried']]);
+    same('... when the list of raids is cut (raids_n) or left out, the raids are not known and the column is not shown', [cols(S.special(plain(Object.assign({}, base, { economy: oldDetails.economy, combat: Object.assign({}, oldDetails.combat, { raids_n: 40 }) })))).map((c) => c.includes('Raids')),
+        cols(S.special(plain(Object.assign({}, base, { economy: oldDetails.economy, combat: { dealt: [1, 2, 0, 0], taken: [2, 1, 0, 0] } })))).map((c) => c.includes('Raids'))], [[false, false, false, false, false], [false, false, false, false, false]]);
+    same('... and the key line of a card says only what its columns say (none for a card of ants alone)', old.byClass('abcard').map((c) => text(c.byClass('lgd')[0])),
+        ['', 'Lit: fire walls started.', 'Set: bombs put down. Defused: enemy bombs taken away. Went off: its bombs that an ant stepped on.', 'Raids: times a Thief went into an enemy hill.',
+         'Food trips: times an ant picked food up. Combat Ants: ants that took the Combat power-up. Damage: hit points taken from enemy ants, and lost to them.']);
+    // no details at all: the seats' rows are what there is
+    const bare = S.special(plain(undefined));
+    same('a record with no details: the numbers of the rows (fires lit, bombs set and defused) and nothing else, no line about types nobody had, no food and fighting', [cols(bare), bare.byClass('abnote').length, bare.byClass('lgd').map(text).some((t) => t.startsWith('Ants:'))], [[['Player', 'Lit'], ['Player', 'Set', 'Defused']], 0, false]);
+    same('... the Bomber and Fire Ant rows say what the seats did', bare.byClass('abt').map((t) => t.byTag('tbody')[0].byTag('tr').map((r) => r.byTag('td').map((d) => text(d.byTag('b')[0] || d)))), [[['Hazel', '9'], ['Clover', '0']], [['Hazel', '4', '2'], ['Clover', '0', '0']]]);
+    same('a record whose rows say nothing was done and that has no details has no section', S.special(record(undefined, { seats: [seat(0, 'Hazel', ''), seat(1, 'Clover', '')], rows: [{ seats: [0] }, { seats: [1] }] })), null);
+    same('a record that holds no number for a seat does not show that column (a text, a negative, nothing)', cols(S.special(record(undefined, { seats: [seat(0, 'Hazel', '', { fires_lit: 3, bombs_planted: 'x', bombs_defused: -2 }), seat(1, 'Clover', '', { fires_lit: 1, bombs_planted: 1, bombs_defused: 1 })], rows: [{ seats: [0] }, { seats: [1] }] }))), [['Player', 'Lit']]);
+    // the marker of a pass that failed: only the rows
+    same('the marker of a match that could not be counted is a record with no details, for this section', cols(S.special(plain({ v: 1, n: 1 }))), [['Player', 'Lit'], ['Player', 'Set', 'Defused']]);
+    // mode 187 has no food
+    const k187 = S.special(plain(Object.assign({}, base, oldDetails, { }))), mode = record(Object.assign({}, base, oldDetails), { mode: '187', seats: rowsOnly, rows: [{ seats: [0] }, { seats: [1] }] });
+    same('mode 187 has no food to carry: no column of food trips', [cols(k187).pop(), cols(S.special(mode)).pop()], [['Player', 'Food trips', 'Combat Ants', 'Damage dealt', 'Damage taken'], ['Player', 'Combat Ants', 'Damage dealt', 'Damage taken']]);
+}
+
+// ---- special ants: a debt that came home, and details that are damaged ----
+{
+    const seats = [seat(0, 'Hazel', '', { fires_lit: 1 }), seat(1, 'Clover', '')];
+    const debt = S.special(record({ economy: { taken: [[0, 0, 1, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]] }, special: { raids: [[1, 1, -30], [0, 0, 0], [0, 0, 0], [0, 0, 0]] } }, { seats, rows: [{ seats: [0] }, { seats: [1] }] }));
+    const thief = debt.byClass('abt')[1].byTag('tbody')[0].byTag('tr')[0].byTag('td');
+    same('a loot below zero is shown with its sign, and its bar is empty', [text(thief[3].byTag('b')[0]), thief[3].byClass('mb')[0].children[0].style.width], ['\u221230', '0%']);
+    const hostile = { economy: { taken: [['a', null, 1e999, { x: 1 }, -5], 'text', [1e12, -1e12, NaN, 3.7, 2], null], food: 5, bombs_off: 'x', banked: 1 }, combat: { dealt: [1e30, 'x'], taken: 7, raids: 'no' },
+        special: { built: [2e9, -2e9, 'z', null], undug: 'x', out: { a: 1 }, raids: [[1e20, 0, 0], 'x', [1, 1], null] } };
+    let threw = null, sec = null;
+    try { sec = S.special(record(hostile, { seats: [seat(0, '<img src=x onerror=alert(1)>', ''), seat(1, 'Clover', '', { bombs_planted: 1e999 }), seat(2, 'Fern', '', { fires_lit: 2 })], rows: [{ seats: [0, 1, 2, 9, -1, 1.5] }] })); } catch (e) { threw = e; }
+    check('damaged numbers throw nothing', threw === null, threw && threw.stack);
+    check('every number on the page is plain, short and bounded', !sec || sec.all((n) => n.tag === 'b').every((b) => /^[\u2212]?[0-9,]{1,15}$/.test(text(b))), sec && sec.all((n) => n.tag === 'b').map(text).join(' | '));
+    check('a name that looks like markup is only text', !sec || (sec.byClass('who').map(text).some((t) => t.includes('<img src=x onerror=alert(1)>')) && sec.all((n) => n.tag === 'img' || n.tag === 'script').length === 0));
+    check('a seat out of range is not a row', !sec || sec.byClass('abt').every((t) => t.byTag('tbody')[0].byTag('tr').length <= 3));
+    const odd = S.special(record({ economy: { taken: [[0, 1, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]] } }, { seats: [seat(0, 'Hazel', '', { fires_lit: 2 }), Object.assign(seat(3, 'Pip', '', { fires_lit: 1 }), { seat: 9 })], rows: [{ seats: [0, 9] }] }));
+    same('a seat that says it is number 9 is not a row', odd.byClass('abt')[0].byTag('tbody')[0].byTag('tr').map((r) => text(r.byTag('td')[0])), ['Hazel']);
+}
+
 // ---- no stats: nothing is built, and a line says why ----
 {
-    const none = (rec) => { const b = build(rec); return [b.summary, b.overtime, b.activity]; };
-    same('a record with no details builds nothing', none(record(undefined)), [null, null, null]);
-    same('... nor does one whose details are not an object', [none(record('text')), none(record([1, 2])), none(record(7)), none(record(null))], [[null, null, null], [null, null, null], [null, null, null], [null, null, null]]);
-    same('... nor the marker of a match that could not be counted', none(record({ v: 1, n: 1 })), [null, null, null]);
+    const none = (rec) => { const b = build(rec); return [b.summary, b.overtime, b.activity, b.special]; };
+    same('a record with no details builds nothing (no special ant did anything in the seats\' rows either)', none(record(undefined)), [null, null, null, null]);
+    same('... nor does one whose details are not an object', [none(record('text')), none(record([1, 2])), none(record(7)), none(record(null))], [[null, null, null, null], [null, null, null, null], [null, null, null, null], [null, null, null, null]]);
+    same('... nor the marker of a match that could not be counted', none(record({ v: 1, n: 1 })), [null, null, null, null]);
     same('whether a record has stats', [MS.hasStats(record(DETAILS)), MS.hasStats(record(undefined)), MS.hasStats(record({ v: 1, n: 1 })), MS.hasStats(record({ over_time: { kills: [] } }))], [true, false, false, true]);
     same('a match with stats has no note', MS.noStatsNote(record(DETAILS)), '');
     same('an older version says whose it was and what is kept', MS.noStatsNote(record(undefined, { recording: 'old', game: 'v0.12.0' })), 'Over time and activity are counted from a recording that this version can play. This match was recorded by an older version (v0.12.0), so only the totals above were kept.');

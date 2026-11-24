@@ -122,12 +122,11 @@
         parts.map(function (p, i) { return i; }).sort(function (a, b) { return parts[b].rest - parts[a].rest || a - b; }).slice(0, left).forEach(function (i) { parts[i].pct++; });
         return v.map(function (x, i) { return { value: x, percent: parts[i].pct }; });
     }
-    // The columns of the scoreboard, in the order of the table (a "group" is a heading over some of them); no Score in mode 187
+    // The columns of the scoreboard, in the order of the table; no Score in mode 187. (What the special ants did, bombs set and defused and fires lit among it, is the "Special ants" section, web/match_stats.js.)
     function columnsOf(rec) {
         var cols = [];
         if (!rec || rec.mode !== '187') cols.push({ key: 'score', label: 'Score' });
-        cols.push({ key: 'killed', label: 'Killed' }, { key: 'lost', label: 'Lost' }, { key: 'hatched', label: 'Hatched' },
-            { key: 'bombs_planted', label: 'Bombs set', first: true }, { key: 'bombs_defused', label: 'Defused' }, { key: 'fires_lit', label: 'Fires lit' });
+        cols.push({ key: 'killed', label: 'Killed' }, { key: 'lost', label: 'Lost' }, { key: 'hatched', label: 'Hatched' });
         return cols;
     }
     // What a recording is: "watch" (kept and played by this build), "old" (kept, other rules: cannot be played), "removed" (gone); a word that is not one is "removed" (nothing can be offered)
@@ -334,7 +333,7 @@
             return d;
         }
         function body(rec) {
-            var sides = sidesOf(rec), win = winnerSide(rec, sides), all = columnsOf(rec).filter(function (c) { return !c.first && c.key !== 'bombs_defused' && c.key !== 'fires_lit'; });
+            var sides = sidesOf(rec), win = winnerSide(rec, sides), all = columnsOf(rec);
             var box = mk('div', 'mbody'), v = mk('p', 'mv');
             if (win) { v.appendChild(mk('em', '', sideName(win))); v.appendChild(doc.createTextNode(' won')); } else v.appendChild(doc.createTextNode(noWinnerText(rec)));
             if (rankedOf(sides).length > 1) v.appendChild(mk('span', '', rankedOf(sides).map(function (sd) { return scoreText(rec, sd); }).join(' \u2013 ')));

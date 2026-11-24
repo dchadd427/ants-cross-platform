@@ -167,7 +167,7 @@ class TheMatchPage(unittest.TestCase):
     page = read("web", "match.html")
 
     def test_the_sections_are_a_list_so_that_a_later_one_is_one_more_entry(self):
-        self.assertIn("var SECTIONS = [resultSection, replaySection, stats.summary, boardSection, stats.overtime, deathsSection, stats.activity, moreSection, aboutSection];", self.page)
+        self.assertIn("var SECTIONS = [resultSection, replaySection, stats.summary, boardSection, stats.special, stats.overtime, deathsSection, stats.activity, moreSection, aboutSection];", self.page)
         self.assertIn("put(SECTIONS.map(function (f) { return f(rec, ctx); }));", self.page)
         self.assertIn("function put(nodes) { var box = $('sections'); box.textContent = ''; nodes.forEach(function (n) { if (n) box.appendChild(n); }); }", self.page)    # (a section that has nothing to say is null)
         self.assertIn("H.detailsOf", self.page)                                                              # (the comment that says how the stats sections read what a replay pass keeps: web/match_stats.js, tests/scripts/test_web_match_stats.py)
@@ -179,7 +179,7 @@ class TheMatchPage(unittest.TestCase):
         self.assertNotIn("replace(/^Match/, R.mapTitle", self.page)
 
     def test_every_number_of_the_record_is_on_the_page(self):
-        columns = ("score", "killed", "lost", "hatched", "bombs_planted", "bombs_defused", "fires_lit")
+        columns = ("score", "killed", "lost", "hatched")                                                     # (bombs set and defused and fires lit are in "Special ants": tests/scripts/web_match_stats_check.js runs them)
         helpers = read("web", "history_page.js")
         for key in columns:
             self.assertIn("key: '%s'" % key, helpers, key)

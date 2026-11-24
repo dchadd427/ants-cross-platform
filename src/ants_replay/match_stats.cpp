@@ -68,6 +68,79 @@ MatchStats MatchStatsCollector::take(uint32_t turns_played) {
     return std::move(stats_);
 }
 
+// ---- the work of the special ants -------------------------------------------------------------------------------------------------------
+
+// What the ant is doing that this pass counts, and the tile it works on: a Fire Ant putting a fire out, a Swimmer building a bridge or digging one away (what it IS, as the world shows it; the tile is the one the engine
+// keeps for the ability's order, the original's +0xb0)
+void MatchStatsCollector::work_of(const sim::AntSnapshot& snap, sim::SimulationEngine& engine, Work& kind, int32_t& x, int32_t& y) const {
+    kind = Work::None;
+    if (snap.type == sim::AntType::Fire && snap.action == sim::AntUnit::kActionExtinguish) kind = Work::PutOut;
+    else if (snap.type == sim::AntType::Swimmer && snap.action == sim::AntUnit::kActionBridgeBuild) kind = Work::Build;
+    else if (snap.type == sim::AntType::Swimmer && snap.action == sim::AntUnit::kActionBridgeDemolish) kind = Work::Dig;
+    if (kind == Work::None) return;
+    try {
+        const sim::TileCoord tile = engine.get_unit(snap.id).orig_special_tile;
+        x = tile.x;
+        y = tile.y;
+    } catch (const std::runtime_error&) {
+        kind = Work::None;
+    }
+}
+
+// True the first time a piece of work (a kind on a tile) is found done in this tick
+bool MatchStatsCollector::first_to_settle(Work kind, int32_t x, int32_t y) {
+    const std::array<int32_t, 3> key{static_cast<int32_t>(kind), x, y};
+    if (std::find(settled_.begin(), settled_.end(), key) != settled_.end()) return false;
+    settled_.push_back(key);
+    return true;
+}
+
+// An ant that was at work at the last look: is the work done now? `now` is what it does at this look (None for an ant that is gone), judged by the tile (the engine keeps no count of its own that is raised):
+//  - a fire is put out when it is gone and the ant is not at it any more, unless it was at its last tick (timer 1: it burns out before an ant's clip can end; a fire that never burns out, lit in the last 3 minutes,
+//    has timer 0);
+//  - a bridge is built when the tile has the fourth stage (the build ends in the same call that sets it: no look finds the ant still at work on a finished bridge, and a bridge that a dig that was cut short puts
+//    back is the work of a Swimmer that digs, not of one that builds);
+//  - a bridge is dug away when the tile has no bridge at all and the ant is not at it any more (a dig that is cut short puts the finished bridge back; a bridge that falls by itself under the dig ends the watch, in
+//    note_work, so that an ant that is gone afterwards is not given the empty tile).
+// Credit goes to the seat of the ant; two ants at one fire or one bridge are one fire put out or one bridge dug away.
+void MatchStatsCollector::settle(Ant& ant, Work now, int32_t x, int32_t y, sim::SimulationEngine& engine) {
+    if (ant.work == Work::None || ant.player >= kSeats) return;
+    const sim::TileCoord tile{ant.work_x, ant.work_y};
+    const bool still = now == ant.work && x == ant.work_x && y == ant.work_y;
+    uint32_t* tally = nullptr;
+    switch (ant.work) {
+        case Work::PutOut:
+            if (!still && !engine.has_fire_at(tile) && ant.work_state != 1) tally = &stats_.fires_out[ant.player];
+            break;
+        case Work::Build:
+            if (engine.get_bridge_stage(tile) == 4) tally = &stats_.bridges_built[ant.player];
+            break;
+        case Work::Dig:
+            if (!still && engine.get_bridge_stage(tile) == 0) tally = &stats_.bridges_undug[ant.player];
+            break;
+        case Work::None: break;
+    }
+    if (tally != nullptr && first_to_settle(ant.work, tile.x, tile.y)) ++*tally;
+}
+
+// What the tile is like now, for the next look: a fire's timer; and the end of the watch when there is nothing on the tile to work on any more
+void MatchStatsCollector::note_work(Ant& ant, Work now, int32_t x, int32_t y, sim::SimulationEngine& engine) const {
+    ant.work = now;
+    if (now == Work::None) return;
+    ant.work_x = x;
+    ant.work_y = y;
+    const sim::TileCoord tile{x, y};
+    if (now == Work::PutOut) {
+        if (!engine.has_fire_at(tile)) {                                // (nothing left to put out: it burnt out, or another ant was first)
+            ant.work = Work::None;
+            return;
+        }
+        ant.work_state = engine.get_fire_timer(tile);
+    } else if (engine.get_bridge_stage(tile) == 0) {                    // (no bridge on the tile: it fell by itself, or the build was cut short)
+        ant.work = Work::None;
+    }
+}
+
 // More events of a kind in the bucket of the turn (a bucket is the 5 seconds of kSampleTurns turns)
 void MatchStatsCollector::count(MatchStats::Action kind, uint32_t turns, uint32_t events) {
     const size_t bucket = turns / MatchStats::kSampleTurns;
@@ -145,6 +218,7 @@ void MatchStatsCollector::on_command(uint32_t turn, const sim::Command& c, sim::
 void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine) {
     if (failed_) return;
     try {
+        settled_.clear();
         // 1. the totals: the score's rises are what the hill banked (a hatch is paid out of it: the cost is the one rule of hatch_request, so a rise in the tick of a hatch is not hidden by it)
         std::array<int32_t, kSeats> score{};
         std::array<uint32_t, kSeats> hatched{};
@@ -220,7 +294,16 @@ void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine)
                     if (!loot) {
                         ++stats_.food_trips[snap.player_id];
                         stats_.food_points[snap.player_id] += snap.carried_points;
+                    } else {
+                        ant.loot = ant.raid;                            // (the loot of the raid it began; empty hands after a raid on a hill with no points never come here)
+                        ant.raid = -1;
                     }
+                } else if (!snap.is_holding && ant.holding && ant.loot >= 0) {      // its hands are empty again and it is still here: the loot went into its own hill (the clip of entering banks it); a thief that is killed on the way is gone, not here
+                    if (static_cast<size_t>(ant.loot) < stats_.raids.size()) {
+                        ++stats_.raids_home[snap.player_id];
+                        stats_.loot_home[snap.player_id] += stats_.raids[static_cast<size_t>(ant.loot)].points;
+                    }
+                    ant.loot = -1;
                 }
                 if (snap.target_team_id < kSeats && ant.target_team >= kSeats && snap.type == sim::AntType::Thief) {   // (the field names a team only while a thief raids its hill)
                     int32_t points = 0;
@@ -228,10 +311,16 @@ void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine)
                         points = engine.get_unit(snap.id).raid_amount;
                     } catch (const std::runtime_error&) {
                     }
+                    ant.raid = static_cast<int32_t>(stats_.raids.size());
                     stats_.raids.push_back(MatchStats::Raid{turns, snap.player_id, snap.target_team_id, points});
                     count(MatchStats::Action::Theft, turns);
                 }
             }
+            Work work = Work::None;                                     // what a Fire Ant or a Swimmer has done since the last look: a fire put out, a bridge built or dug away
+            int32_t work_x = 0, work_y = 0;
+            work_of(snap, engine, work, work_x, work_y);
+            settle(ant, work, work_x, work_y, engine);
+            note_work(ant, work, work_x, work_y, engine);
             ant.hp = snap.hp;
             ant.own_type = static_cast<uint8_t>(snap.raw_type);
             ant.holding = snap.is_holding;
@@ -242,6 +331,8 @@ void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine)
         for (size_t id = 1; id < ants_.size(); ++id) {
             Ant& ant = ants_[id];
             if (!ant.alive || ant.last_seen == turns) continue;
+            settle(ant, Work::None, 0, 0, engine);                      // (an ant that is gone at its work: a death completes a put out or a dig, as the original's SetAction says)
+            ant.work = Work::None;
             ant.alive = false;                                          // gone (RemoveAnt): the engine keeps the entry, with the team of the last damage
             MatchStats::Kill kill;
             kill.turn = turns;
