@@ -891,6 +891,47 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(o.hashes_checked, 4u);
     } TEST_END();
 
+    TEST_CASE("RP2.5b A Play In Pieces (Playback) Gives What play() Gives, Whatever The Size Of The Pieces: Each Call Plays At Most The Turns It Is Given, The Tick Hook Sees Every Turn Once, A File That Does Not Reproduce Stops At The Same Bad Hash, And A Refused File Is Done At Once") {
+        const Played p = play_scripted(tiny, 31, 450);
+        const Outcome whole = play(p.replay, tiny.level);
+        ASSERT_TRUE(whole.ok);
+        for (const uint32_t piece : {1u, 7u, 100u, 449u, 450u, 100000u}) {
+            uint32_t ticks = 0;
+            uint32_t last_seen = 0;
+            Hooks hooks;
+            hooks.after_tick = [&](uint32_t turns, sim::SimulationEngine&) {
+                ++ticks;
+                last_seen = turns;
+            };
+            Playback playback(p.replay, tiny.level, hooks);
+            ASSERT_FALSE(playback.done());
+            uint32_t before = 0;
+            uint32_t calls = 0;
+            while (!playback.advance(piece)) {
+                ASSERT_EQ(playback.turns_played(), std::min<uint32_t>(before + piece, 450u));      // (exactly the turns asked for, never more)
+                before = playback.turns_played();
+                ASSERT_TRUE(++calls < 1000u);
+            }
+            const Outcome& o = playback.outcome();
+            ASSERT_TRUE(playback.done() && o.ran && o.ok && o.complete);
+            ASSERT_TRUE(o.turns == whole.turns && o.hashes_checked == whole.hashes_checked && o.hash == whole.hash && o.match_over == whole.match_over && o.scores == whole.scores);
+            ASSERT_TRUE(ticks == 450u && last_seen == 450u);
+            ASSERT_TRUE(playback.advance(1));                                                          // (a play that is over stays over)
+            ASSERT_EQ(playback.turns_played(), 450u);
+        }
+        Replay changed = p.replay;
+        changed.head.seed += 1;                                                                        // (the first hash is taken after 100 turns and differs)
+        Playback bad(changed, tiny.level);
+        while (!bad.advance(30)) {
+        }
+        ASSERT_TRUE(bad.done() && !bad.outcome().ok && bad.outcome().first_bad_turn == 100 && bad.outcome().turns == 100 && !bad.outcome().error.empty());
+        Replay other_rules = p.replay;
+        other_rules.head.sim_rules = static_cast<uint16_t>(kSimRulesNewest + 1);
+        Playback refused(other_rules, tiny.level);
+        ASSERT_TRUE(refused.done() && !refused.outcome().ran && !refused.outcome().error.empty() && refused.turns_played() == 0);
+        ASSERT_TRUE(refused.advance(10) && refused.turns_played() == 0);
+    } TEST_END();
+
     TEST_CASE("RP2.6 Recorder: A Command That The Engine Turns Down Is Left Out And Counted, One That It Would Apply But The Wire Form Cannot Hold Spoils The Recording, A Missing Turn Spoils It, A Finished Recorder Takes Nothing More") {
         using Status = sim::CommandResult::Status;
         sim::SimulationEngine engine;

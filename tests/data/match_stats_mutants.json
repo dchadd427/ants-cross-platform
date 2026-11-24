@@ -397,16 +397,16 @@
   {
    "id": "the_hook_gives_the_wrong_turn",
    "file": "src/ants_replay/player.cpp",
-   "old": "if (hooks.after_tick) hooks.after_tick(turn + 1, engine);",
-   "new": "if (hooks.after_tick) hooks.after_tick(turn, engine);",
+   "old": "if (hooks_.after_tick) hooks_.after_tick(turn_ + 1, *engine_);",
+   "new": "if (hooks_.after_tick) hooks_.after_tick(turn_, *engine_);",
    "build": "test_history_details",
    "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
   },
   {
    "id": "the_hook_comes_after_the_queues_are_cleared",
    "file": "src/ants_replay/player.cpp",
-   "old": "        if (hooks.after_tick) hooks.after_tick(turn + 1, engine);\n        engine.clear_news_events();                                     // (nobody reads them here, and they would pile up for the whole match)\n        engine.clear_audio_events();",
-   "new": "        engine.clear_news_events();\n        engine.clear_audio_events();\n        if (hooks.after_tick) hooks.after_tick(turn + 1, engine);",
+   "old": "        if (hooks_.after_tick) hooks_.after_tick(turn_ + 1, *engine_);\n        engine_->clear_news_events();                                   // (nobody reads them here, and they would pile up for the whole match)\n        engine_->clear_audio_events();",
+   "new": "        engine_->clear_news_events();\n        engine_->clear_audio_events();\n        if (hooks_.after_tick) hooks_.after_tick(turn_ + 1, *engine_);",
    "build": "test_history_details",
    "test": "timeout 300 env ANTS_TEST_FILTER=HD1 ./build/tests/test_server/test_history_details"
   },
@@ -421,8 +421,8 @@
   {
    "id": "a_record_gets_no_marker",
    "file": "src/ants_server/history_store.cpp",
-   "old": "std::string details = history_details_marker(), why;",
-   "new": "std::string details, why;",
+   "old": "job.details = history_details_marker();",
+   "new": "job.details.clear();",
    "build": "test_history_details",
    "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
   },
@@ -437,8 +437,8 @@
   {
    "id": "a_backfilled_record_is_not_counted",
    "file": "src/ants_server/history_store.cpp",
-   "old": "    ++backfilled_;\n    return true;\n}",
-   "new": "    return true;\n}",
+   "old": "    ++backfilled_;\n    return Move::Played;\n}",
+   "new": "    return Move::Played;\n}",
    "build": "test_history_details",
    "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
   },
@@ -517,7 +517,7 @@
   {
    "id": "the_pass_trusts_the_statement_to_guard_the_details",
    "file": "src/ants_server/history_store.cpp",
-   "old": "    if (!record.details.empty()) return true;                                            // (it has some now)\n",
+   "old": "    if (!job.record.details.empty()) return Move::Played;                           // (it has some now)\n",
    "new": "\n",
    "build": "test_history_details",
    "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
@@ -525,8 +525,8 @@
   {
    "id": "a_missing_map_leaves_a_marker",
    "file": "src/ants_server/history_store.cpp",
-   "old": "else if (!load_level(rep.head, level, why)) for_now = true;",
-   "new": "else if (!load_level(rep.head, level, why)) for_now = false;",
+   "old": "load_level(job.rep.head, job.level, job.why)) {\n        job.for_now = true;",
+   "new": "load_level(job.rep.head, job.level, job.why)) {\n        job.for_now = false;",
    "build": "test_history_details",
    "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
   },

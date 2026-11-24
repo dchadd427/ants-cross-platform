@@ -377,6 +377,11 @@ struct Server {
             mgr.update(ms);
         }
     }
+    // The loop until the history holds `n` records. The server counts a recording in steps of 2 ms of the clock, so how many passes it takes depends on the machine: the passes are not counted. False when it does not within `max` passes.
+    bool run_until_counted(size_t n, int max = 8000) {
+        for (int i = 0; i < max && mgr.history_store()->count() < n; ++i) run_updates(1);
+        return mgr.history_store()->count() >= n;
+    }
     ctl::HttpResponse control(const char* method, const std::string& path, const std::string& query = std::string()) {
         ctl::HttpRequest rq;
         rq.method = method;

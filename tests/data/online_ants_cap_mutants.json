@@ -288,8 +288,8 @@
   {
    "id": "replay_over_the_cap_gets_its_stats_from_the_history",
    "file": "src/ants_server/history_store.cpp",
-   "old": "else if (!load_level(rep.head, level, why)) for_now = true;",
-   "new": "else if (!load_map_of(rep.head, level, why)) for_now = true;",
+   "old": "load_level(job.rep.head, job.level, job.why)) {",
+   "new": "load_map_of(job.rep.head, job.level, job.why)) {",
    "build": [
     "test_map_plays"
    ],
@@ -298,8 +298,8 @@
   {
    "id": "replay_over_the_cap_is_counted_by_the_feeder",
    "file": "src/ants_server/history_store.cpp",
-   "old": "if (!load_level(rep.head, level, why)) {\n        skip(id, why, true);",
-   "new": "if (!load_map_of(rep.head, level, why)) {\n        skip(id, why, true);",
+   "old": "if (!load_level(job.rep.head, job.level, why)) {\n        skip(job.id, why, true);",
+   "new": "if (!load_map_of(job.rep.head, job.level, why)) {\n        skip(job.id, why, true);",
    "build": [
     "test_map_plays"
    ],

@@ -152,4 +152,23 @@ struct StatsPlay {
 /// replay::play() with a collector: the outcome is the one that plain play() gives (same hashes), the stats what the pass counted (not `ok` when the match did not play out, or the pass failed)
 StatsPlay play_with_stats(const Replay& replay, const assets::LevelData& level);
 
+/// play_with_stats() in pieces (replay::Playback with the collector as its hooks): advance() plays a few turns, take() gives what play_with_stats() gives once the play is over. The same rules as Playback's
+/// (`replay` and `level` outlive it, one thread).
+class StatsPlayback {
+public:
+    StatsPlayback(const Replay& replay, const assets::LevelData& level);
+    StatsPlayback(const StatsPlayback&) = delete;
+    StatsPlayback& operator=(const StatsPlayback&) = delete;
+    /// Plays at most `turns` more turns; true when the play is over (done())
+    bool advance(uint32_t turns) { return playback_.advance(turns); }
+    bool done() const noexcept { return playback_.done(); }
+    uint32_t turns_played() const noexcept { return playback_.turns_played(); }
+    /// The result of a play that is over; moves the stats out, so once
+    StatsPlay take();
+
+private:
+    MatchStatsCollector collector_;          // (before the playback: its hooks point at the collector)
+    Playback playback_;
+};
+
 }  // namespace ants::replay

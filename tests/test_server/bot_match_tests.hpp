@@ -4,9 +4,13 @@
 // as any other; a map that the store lacks is skipped with one line in the log), and a match in 187 plays on every map with every seating of the computer players. Included by test_server_files.cpp, which holds (through server_fixtures.hpp) the harness (TEST_CASE, ASSERT_*, World); test_server.cpp calls run_bot_match_tests().
 #pragma once
 
+#include "ants_db/database.hpp"
+#include "ants_db/migrations.hpp"
 #include "ants_server/bot_matches.hpp"
 #include "ants_server/bot_rotation.hpp"
 #include "ants_server/bot_schedules.hpp"
+#include "ants_server/db_schema.hpp"
+#include "ants_server/history_store.hpp"
 #include "big_map_fixtures.hpp"
 
 namespace {
@@ -502,6 +506,46 @@ void run_bot_match_tests() {
         ASSERT_TRUE(run_until(w, [&] { return person_room_is(RoomState::Running); }, 12000));
         ASSERT_FALSE(w.mgr.history_may_run());                                  // (a person's match runs, whatever else runs)
         ASSERT_TRUE(w.status("BM-GATEB").state == RoomState::Running);
+    } TEST_END();
+
+    TEST_CASE("S3.184h The Match History Counts A Match That Has Just Ended Within Seconds While A Room With A Person In It Runs, And Counts An Older Recording Only When No Such Room Runs") {
+        ReplayClock clock;
+        World w;
+        db::Database database;
+        ASSERT_TRUE(db::open_and_migrate(database, ":memory:", db_migrations(), db::OpenOptions()).ok());
+        HistoryStore::Config history_config;
+        history_config.clock_s = [&clock]() { return clock.now; };                 // (the same clock as the replay store's: the age of a recording)
+        std::string why;
+        ASSERT_TRUE(w.mgr.enable_replays(replay_config("botmatch-fresh", &clock), false, why));
+        ASSERT_TRUE(w.mgr.enable_history(database, why, history_config));
+        ASSERT_TRUE(w.mgr.create_room(spec_of("BM-FRESHP", 2), w.now).ok);
+        Client& gus = w.connect("Gus", "BM-FRESHP");
+        Client& hal = w.connect("Hal", "BM-FRESHP");
+        gus.next_order_ms = hal.next_order_ms = 0xFFFFFFFFu;
+        ASSERT_TRUE(run_until(w, [&] { return w.status("BM-FRESHP").state == RoomState::Running; }, 12000));
+        ASSERT_FALSE(w.mgr.history_may_run());                                   // (a person's match runs, and it runs to the end of this test's first part)
+        const auto id_of = [](const std::string& file) { return file.substr(0, file.size() - std::string(ReplayStore::kExtension).size()); };
+        const auto bots_match = [&](const char* code) {                           // (a match of computer players that is played to its end and kept: the file name)
+            RoomSpec spec = bots_only_spec(code, 3);
+            spec.run_ms = 45u * 1000u;
+            return w.mgr.create_room(spec, w.now).ok && run_until(w, [&] { return w.status(code).replay_kept; }, 90000) ? w.status(code).replay_file : std::string();
+        };
+        const std::string old_file = bots_match("BM-FRESHA");
+        ASSERT_TRUE(!old_file.empty());
+        clock.now += 2 * 3600;                                                   // (two hours on, before the next pass of the server's loop: that recording is not a fresh one)
+        w.run(20000);
+        ASSERT_TRUE(w.mgr.history_store()->count() == 0 && !w.mgr.history_may_run());      // (an older recording waits for a quiet server)
+        const std::string fresh_file = bots_match("BM-FRESHB");
+        ASSERT_TRUE(!fresh_file.empty());
+        ASSERT_EQ(w.mgr.history_store()->count(), size_t{0});
+        ASSERT_TRUE(run_until(w, [&] { return w.mgr.history_store()->count() == 1; }, 10000));      // (counted within seconds of its being kept, while the person's match runs)
+        ASSERT_TRUE(w.status("BM-FRESHP").state == RoomState::Running && !w.mgr.history_may_run());
+        ASSERT_TRUE(w.mgr.history_store()->knows(id_of(fresh_file)) && !w.mgr.history_store()->knows(id_of(old_file)));
+        w.run(10000);
+        ASSERT_TRUE(w.mgr.history_store()->count() == 1 && w.status("BM-FRESHP").state == RoomState::Running);       // (the older one is still waiting)
+        ASSERT_TRUE(w.mgr.close_room("BM-FRESHP", w.now));
+        ASSERT_TRUE(run_until(w, [&] { return w.mgr.history_may_run(); }, 5000));
+        ASSERT_TRUE(run_until(w, [&] { return w.mgr.history_store()->knows(id_of(old_file)); }, 30000));       // (and counted when the server is quiet: the closed room's own match is kept and counted too)
     } TEST_END();
 
     TEST_CASE("S3.184f A Map Of A List That This Server Cannot Play Is Skipped With One Line In The Log, Never A Failed Match: A Server With Neither The Library Maps Nor The Players' Map, One That Has The Players' Map Under A Name That Is Another File Of The Library, One That Took The Map Down, One Whose Map Is Over A Limit Of A Room, And One With None Of The Maps That Makes No Match And Says Why; The Others Stay As Likely As Before, And A Map That Comes Back Is Played Again") {

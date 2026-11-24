@@ -10,6 +10,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -76,6 +77,37 @@ struct Outcome {
 /// Reads what a match came to from the engine that played it (the end of play(); also a room's referee, whose engine has the match's own numbers when its recording could not be made): the state hash, whether the
 /// rules ended the match, the score boxes, the seats that dropped out and the engine's MatchResult, for the seats of `roster`. Sets `ran`; `turns` is the caller's.
 void take_result_of(uint8_t roster, sim::SimulationEngine& engine, Outcome& out);
+
+/// A play in pieces: what play() does, a few turns at a time, for a caller that keeps a thread free and spreads a recording over many calls (the game server's match history). The constructor sets the engine up (a
+/// file of other simulation rules, or one out of range, is refused there: done() is true at once and outcome() says why); advance() plays turns; the outcome is the one that play() gives for the same replay, hooks and map.
+/// `replay` and `level` must outlive it, and so must whatever the hooks point at. One thread.
+class Playback {
+public:
+    Playback(const Replay& replay, const assets::LevelData& level, const Hooks& hooks = Hooks{});
+    ~Playback();
+    Playback(const Playback&) = delete;
+    Playback& operator=(const Playback&) = delete;
+
+    /// Plays at most `turns` more turns (fewer when the replay ends or a hash differs; the commands after the last tick are given when the last turn is played). True when the play is over.
+    bool advance(uint32_t turns);
+    bool done() const noexcept { return done_; }
+    /// The turns played so far
+    uint32_t turns_played() const noexcept { return out_.turns; }
+    /// How the play went; what play() returns once done() (before that: the turns so far, nothing else)
+    const Outcome& outcome() const noexcept { return out_; }
+
+private:
+    void give(const TimedCommand& tc);
+    void end();
+
+    const Replay& replay_;
+    Hooks hooks_;
+    std::unique_ptr<sim::SimulationEngine> engine_;
+    Outcome out_;
+    size_t next_{0};                // the next command to give
+    uint32_t turn_{0};              // the turns played
+    bool done_{false};
+};
 
 /// Plays `replay` on `level` (the map that load_map found). A file of other simulation rules than this build's (plays_here) is refused: it would play out differently, and `error` names both numbers.
 Outcome play(const Replay& replay, const assets::LevelData& level, const Hooks& hooks = Hooks{});
