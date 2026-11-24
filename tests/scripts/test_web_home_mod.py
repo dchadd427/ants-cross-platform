@@ -101,7 +101,7 @@ class TheFolderAndTheScript(unittest.TestCase):
         self.assertNotRegex(self.code, r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b|new Function|srcdoc|createContextualFragment|DOMParser|setTimeout\(\s*['\"]")
         self.assertNotRegex(self.code, r"\.href\b|\.src\b|setAttribute\(\s*['\"](href|src|style|on\w+|srcdoc)")
         made = sorted(set(re.findall(r"\bel\('(\w+)'", self.code)) | set(re.findall(r"createElement\('(\w+)'", self.code)))
-        self.assertEqual(made, ["b", "button", "div", "h2", "input", "p", "small", "span", "svg"], "text, boxes, the buttons and the custom field: no a, img, script, iframe, style or link")
+        self.assertEqual(made, ["b", "button", "div", "h2", "hr", "input", "p", "small", "span", "svg"], "text, boxes, the rules between the rows, the buttons and the custom field: no a, img, script, iframe, style or link")
 
     def test_it_keeps_nothing_in_the_browser_and_has_no_network_of_its_own(self):
         self.assertNotRegex(self.code, r"localStorage|sessionStorage|indexedDB|document\.cookie|new WebSocket|WebSocket\(|XMLHttpRequest|fetch\(|sendBeacon|\bcaches\b")

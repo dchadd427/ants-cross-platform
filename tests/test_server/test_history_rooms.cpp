@@ -149,7 +149,7 @@ int main() {
 
     for (const uint8_t mode : {uint8_t{0}, uint8_t{1}}) {
         const std::string mode_name = mode == 0 ? "highest-score" : "187";
-        TEST_CASE("HR1." + std::to_string(mode + 1) + " Rooms of computer players, game mode " + mode_name + ": a match is counted only while no room runs one, the record is the match (mode, bots, format, rows, the winner rule), both doors list it, and a second match is counted after it") {
+        TEST_CASE("HR1." + std::to_string(mode + 1) + " Rooms of computer players, game mode " + mode_name + ": a match is counted when its recording is kept, the record is the match (mode, bots, format, rows, the winner rule), both doors list it, and a second match is counted after it") {
             Rooms r;
             ASSERT_TRUE(r.db_ok && r.open());
             ASSERT_TRUE(r.mgr.create_room(bots_room("HIS-A", mode), r.now).ok);
@@ -161,11 +161,11 @@ int main() {
             const RoomStatus a = r.status("HIS-A");
             ASSERT_TRUE(a.replay_kept && ReplayStore::valid_file_name(a.replay_file));
             const std::string id = stem_of(a.replay_file);
-            // a second room begins at once: while it waits and plays, the first match is counted, in the quiet of its five seconds of waiting... and the second only when it is over
+            // a second room begins at once: while it loads and plays, the first match is counted (a room of computer players holds nothing up), and the second only when it is over
             r.clock += 3600;
             ASSERT_TRUE(r.mgr.create_room(bots_room("HIS-B", mode), r.now).ok);
-            ASSERT_TRUE(r.until([&] { return r.mgr.history_store()->count() == 1; }, 4000));            // (the room waits: no match runs, the feeder is let in)
-            ASSERT_TRUE(r.status("HIS-B").state != RoomState::Running);
+            ASSERT_TRUE(r.until([&] { return r.mgr.history_store()->count() == 1; }, 4000));            // (in steps of a few milliseconds, within a moment of the room's start)
+            ASSERT_TRUE(r.status("HIS-B").state == RoomState::Running);                                // (the first match is counted while the second one plays: a room of computer players holds nothing up)
             ASSERT_TRUE(r.until([&] { return r.status("HIS-B").state == RoomState::Running; }, 12000));
             r.run(8000);
             ASSERT_TRUE(r.status("HIS-B").state == RoomState::Running && r.mgr.history_store()->count() == 1);

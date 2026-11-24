@@ -1,0 +1,609 @@
+{
+ "note": "Mutants of the plays and the likes of replays (docs/REPLAY_COUNTS.md): the like pass (like_pass.cpp), the counts door (replay_counts_api.cpp), the store's numbers and likes (history_store.cpp), the sorts (control_history.cpp), the schema (db_schema.cpp: version 12 and the history service's 6), the copy at the history service's first start (history_import.cpp) and the door's wiring in main.cpp. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/replay_counts_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught: each breaks one rule of the document (the keys and their labels, the mac compared in constant time, the time and its slack, exactly three members and their shapes, a pass used once and a table of used passes that forgets its oldest and never refuses, the checks of a request in their order, the token of the person, the budgets of plays (for each replay and over all visitors, charged only for a play that can be counted) and of a person and the bound of the tables of them, the rows of the likes that the history service does not copy, a recording that is gone, 50 ids, the limits of the store, a like once, an unlike of what is there, Forget me, the numbers that a record keeps when it is put again and loses when it is taken out, the sorts and their indexes, the schema's checks, the copy of an older database, the door's wiring). Not listed on purpose, because no program can tell them apart from the real one (the door's loopback-only listening, which a check on this machine cannot see from outside, and the guard on the store's own state in front of a play, which the store repeats): the 512-byte and 256-byte caps on a pass and its payload (a pass of the hub is far under both; a larger one fails the mac or the three members as well).",
+ "defaults": {
+  "build": "test_replay_counts test_history_store",
+  "test": "./build/tests/test_server/test_replay_counts && ./build/tests/test_server/test_history_store"
+ },
+ "mutants": [
+  {
+   "id": "pass_label_is_the_admin_one",
+   "file": "src/ants_server/like_pass.cpp",
+   "old": "constexpr const char* kPassLabel = \"ants-like-pass-v1\";",
+   "new": "constexpr const char* kPassLabel = \"ants-admin-pass-v1\";"
+  },
+  {
+   "id": "csrf_label_is_the_pass_one",
+   "file": "src/ants_server/like_pass.cpp",
+   "old": "constexpr const char* kCsrfLabel = \"ants-like-csrf-v1\";",
+   "new": "constexpr const char* kCsrfLabel = \"ants-like-pass-v1\";"
+  },
+  {
+   "id": "pass_key_is_the_hex_text",
+   "file": "src/ants_server/like_pass.cpp",
+   "old": "pass_key_ = hmac_sha256(secret, kPassLabel);",
+   "new": "pass_key_ = hex_encode(hmac_sha256(secret, kPassLabel));"
+  },
+  {
+   "id": "mac_compared_with_equals",
+   "file": "src/ants_server/like_pass.cpp",
+   "old": "if (!ctl::constant_time_equal(std::string(mac), expected)) return PassVerdict::BadPass;",
+   "new": "if (std::string(mac) != expected) return PassVerdict::BadPass;"
+  },
+  {
+   "id": "extra_member_allowed",
+   "file": "src/ants_server/like_pass.cpp",
+   "old": "if (v.size() != 3) return PassVerdict::BadFields;",
+   "new": "if (v.size() < 3) return PassVerdict::BadFields;"
+  },
+  {
+   "id": "exp_equal_to_now_is_good",
+   "file": "src/ants_server/like_pass.cpp",
+   "old": "if (exp <= now) return PassVerdict::Expired;",
+   "new": "if (exp < now) return PassVerdict::Expired;"
+  },
+  {
+   "id": "long_life_allowed",
+   "file": "src/ants_server/like_pass.cpp",
+   "old": "if (exp > now + kPassSeconds + kPassSlackSeconds) return PassVerdict::BadFields;",
+   "new": "if (exp > now + kPassSeconds + kPassSlackSeconds + 3600) return PassVerdict::BadFields;"
+  },
+  {
+   "id": "slack_is_a_minute_less",
+   "file": "src/ants_server/like_pass.cpp",
+   "old": "if (exp > now + kPassSeconds + kPassSlackSeconds) return PassVerdict::BadFields;",
+   "new": "if (exp > now + kPassSeconds) return PassVerdict::BadFields;"
+  },
+  {
+   "id": "pass_used_twice",
+   "file": "src/ants_server/like_pass.cpp",
+   "old": "if (seen_.count(nonce) != 0) return PassVerdict::Replayed;",
+   "new": "if (false) return PassVerdict::Replayed;"
+  },
+  {
+   "id": "table_bound_is_one_more",
+   "file": "src/ants_server/like_pass.cpp",
+   "old": "    while (seen_.size() >= max_remembered_ && !by_age_.empty()) {",
+   "new": "    while (seen_.size() > max_remembered_ && !by_age_.empty()) {"
+  },
+  {
+   "id": "ended_passes_not_forgotten",
+   "file": "src/ants_server/like_pass.cpp",
+   "old": "while (!by_age_.empty() && by_age_.front().first <= now) {",
+   "new": "while (false) {"
+  },
+  {
+   "id": "reference_is_15_characters",
+   "file": "src/ants_server/like_pass.cpp",
+   "old": "constexpr size_t kReferenceChars = 16;",
+   "new": "constexpr size_t kReferenceChars = 15;"
+  },
+  {
+   "id": "nonce_is_8_characters",
+   "file": "src/ants_server/like_pass.cpp",
+   "old": "constexpr size_t kNonceChars = 16;",
+   "new": "constexpr size_t kNonceChars = 8;"
+  },
+  {
+   "id": "upper_case_hex_is_good",
+   "file": "src/ants_server/like_pass.cpp",
+   "old": "return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); });",
+   "new": "return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'); });"
+  },
+  {
+   "id": "token_with_no_key",
+   "file": "src/ants_server/like_pass.cpp",
+   "old": "    if (!open_) return std::string();\n    return hex_encode(hmac_sha256(csrf_key_,",
+   "new": "    return hex_encode(hmac_sha256(csrf_key_,"
+  },
+  {
+   "id": "token_is_16_characters",
+   "file": "src/ants_server/like_pass.cpp",
+   "old": ".substr(0, 32);",
+   "new": ".substr(0, 16);"
+  },
+  {
+   "id": "token_without_the_reference",
+   "file": "src/ants_server/like_pass.cpp",
+   "old": "std::string(\"csrf1\\0\", 6) + std::string(ref)",
+   "new": "std::string(\"csrf1\\0\", 6) + std::string(ref).substr(0, 0)"
+  },
+  {
+   "id": "cross_site_allowed",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "if (site != nullptr && *site != \"same-origin\" && *site != \"none\") return error_reply(403, \"cross_site\");",
+   "new": "if (site != nullptr && *site == \"x-never\") return error_reply(403, \"cross_site\");"
+  },
+  {
+   "id": "same_site_allowed",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "*site != \"same-origin\" && *site != \"none\")",
+   "new": "*site == \"cross-site\")"
+  },
+  {
+   "id": "a_body_is_read",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "    if (!request.body.empty()) return error_reply(400, \"request\");\n    const std::string* site",
+   "new": "    const std::string* site"
+  },
+  {
+   "id": "a_query_is_taken_by_a_post",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "if (!request.query.empty() || (kind != \"forget\" && !valid_history_id(id))) return error_reply(404, \"not found\");",
+   "new": "if (kind != \"forget\" && !valid_history_id(id)) return error_reply(404, \"not found\");"
+  },
+  {
+   "id": "any_id_is_taken",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "(kind != \"forget\" && !valid_history_id(id))",
+   "new": "(false)"
+  },
+  {
+   "id": "a_play_has_no_budget",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "    if (!take_play(now_ms)) return error_reply(429, \"rate\");\n",
+   "new": "    if (!take_play(now_ms) && false) return error_reply(429, \"rate\");\n"
+  },
+  {
+   "id": "a_play_of_a_gone_recording",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "    if (!playable(id)) return error_reply(404, \"not found\");                                // (a request that is no play of anything costs no budget)\n",
+   "new": ""
+  },
+  {
+   "id": "an_unlike_needs_a_recording",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "if (liking && !playable(id)) return",
+   "new": "if (!playable(id)) return"
+  },
+  {
+   "id": "a_like_of_a_gone_recording",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "if (liking && !playable(id)) return",
+   "new": "if (false) return"
+  },
+  {
+   "id": "no_token_needed",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "if (token == nullptr || !ctl::constant_time_equal(*token, gate_.csrf_token(who.ref))) return error_reply(403, \"csrf\");",
+   "new": "if (false && (token == nullptr || !ctl::constant_time_equal(*token, gate_.csrf_token(who.ref)))) return error_reply(403, \"csrf\");"
+  },
+  {
+   "id": "token_of_nobody",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "ctl::constant_time_equal(*token, gate_.csrf_token(who.ref))",
+   "new": "ctl::constant_time_equal(*token, gate_.csrf_token(std::string(16, '0')))"
+  },
+  {
+   "id": "token_compared_with_equals",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "!ctl::constant_time_equal(*token, gate_.csrf_token(who.ref))",
+   "new": "*token != gate_.csrf_token(who.ref)"
+  },
+  {
+   "id": "changes_have_no_budget",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "    if (!take(persons_, who.ref, now_ms, kPersonBurst, kPersonPerSecond, kPersonsKept)) return error_reply(429, \"rate\");\n",
+   "new": "    if (!take(persons_, who.ref, now_ms, kPersonBurst, kPersonPerSecond, kPersonsKept) && false) return error_reply(429, \"rate\");\n"
+  },
+  {
+   "id": "forget_waits_for_the_budget",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "    if (kind == \"forget\") {\n        size_t removed = 0;",
+   "new": "    if (kind == \"forget\" && !take_person(who.ref, now_ms)) return error_reply(429, \"rate\");\n    if (kind == \"forget\") {\n        size_t removed = 0;"
+  },
+  {
+   "id": "fifty_one_ids_are_taken",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "if (ids.size() > ReplayCountsApi::kMaxIds) return false;",
+   "new": "if (ids.size() > ReplayCountsApi::kMaxIds + 1) return false;"
+  },
+  {
+   "id": "fifty_ids_are_refused",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "if (ids.size() > ReplayCountsApi::kMaxIds) return false;",
+   "new": "if (ids.size() >= ReplayCountsApi::kMaxIds) return false;"
+  },
+  {
+   "id": "ids_are_not_checked",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "        if (!valid_history_id(id)) return false;\n        if (std::find",
+   "new": "        if (std::find"
+  },
+  {
+   "id": "ids_are_not_deduplicated",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "if (std::find(ids.begin(), ids.end(), id) == ids.end()) ids.push_back(id);",
+   "new": "ids.push_back(id);"
+  },
+  {
+   "id": "trailing_comma_is_good",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "        if (!valid_history_id(id)) return false;\n",
+   "new": "        if (id.empty()) { if (comma == std::string::npos) break; at = comma + 1; continue; }\n        if (!valid_history_id(id)) return false;\n"
+  },
+  {
+   "id": "mine_is_for_everybody",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "history_.liked_among(who.ref, ids, liked)",
+   "new": "history_.liked_among(std::string(16, '0'), ids, liked)"
+  },
+  {
+   "id": "mine_has_no_token",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "    o.set(\"csrf\", JsonValue::make_string(gate_.csrf_token(who.ref)));\n",
+   "new": ""
+  },
+  {
+   "id": "play_budget_is_never_refilled",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "plays_.tokens = std::min(limits_.plays_burst, plays_.tokens + elapsed * limits_.plays_per_second / 1000.0);",
+   "new": "plays_.tokens = std::min(limits_.plays_burst, plays_.tokens + elapsed * 0.0);"
+  },
+  {
+   "id": "play_budget_refills_too_fast",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "plays_.tokens = std::min(limits_.plays_burst, plays_.tokens + elapsed * limits_.plays_per_second / 1000.0);",
+   "new": "plays_.tokens = std::min(limits_.plays_burst, plays_.tokens + elapsed * limits_.plays_per_second);"
+  },
+  {
+   "id": "person_budget_is_never_refilled",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "b.tokens = std::min(burst, b.tokens + elapsed * per_second / 1000.0);",
+   "new": "b.tokens = std::min(burst, b.tokens + elapsed * 0.0);"
+  },
+  {
+   "id": "people_table_is_not_bounded",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "        if (table.size() >= kept) return false;                                             // (that many at once is a flood: nobody new is let in until some budgets are full again)\n",
+   "new": "        (void)kept;\n"
+  },
+  {
+   "id": "full_budgets_are_not_forgotten",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "it = back >= burst ? table.erase(it) : std::next(it);",
+   "new": "it = back >= burst + 1000 ? table.erase(it) : std::next(it);"
+  },
+  {
+   "id": "no_key_is_told_as_nobody",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "refusal = error_reply(503, \"likes_off\");",
+   "new": "refusal = error_reply(401, \"not_signed_in\");"
+  },
+  {
+   "id": "every_refusal_is_a_line",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "    if (at != 0 && now_s - at < kNoticeEveryS) return;\n",
+   "new": "    if (at != 0 && now_s - at < kNoticeEveryS - kNoticeEveryS) return;\n"
+  },
+  {
+   "id": "the_pass_is_in_the_line",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "std::string(\"replay counts: a pass was refused (\") + pass_verdict_word(verdict) + \")\"",
+   "new": "std::string(\"replay counts: a pass was refused (\") + pass_verdict_word(verdict) + \"): \" + (header != nullptr ? *header : std::string())"
+  },
+  {
+   "id": "play_answers_200",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "        case HistoryStore::Counted::Done: return no_content();",
+   "new": "        case HistoryStore::Counted::Done: return no_content().status == 204 ? json_reply(200, JsonValue::make_object()) : no_content();"
+  },
+  {
+   "id": "the_unlike_says_liked",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "o.set(\"liked\", JsonValue::make_bool(liking));",
+   "new": "o.set(\"liked\", JsonValue::make_bool(true));"
+  },
+  {
+   "id": "a_reference_is_in_the_answer",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "    o.set(\"likes\", JsonValue::make_int(likes));",
+   "new": "    o.set(\"likes\", JsonValue::make_int(likes));\n    o.set(\"by\", JsonValue::make_string(who.ref));"
+  },
+  {
+   "id": "forget_removes_nothing",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "if (!history_.forget_likes(who.ref, removed)) return",
+   "new": "if (!history_.forget_likes(std::string(16, '0'), removed)) return"
+  },
+  {
+   "id": "play_has_no_cap",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "SET plays = min(plays + 1, ?2) WHERE id = ?1\", {text_arg(id), int_arg(kMaxCount)});",
+   "new": "SET plays = plays + 1 WHERE id = ?1 AND ?2 > 0\", {text_arg(id), int_arg(kMaxCount)});"
+  },
+  {
+   "id": "play_of_an_unknown_id",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "    if (e.ok() && present == 0) return Counted::Unknown;                                    // (the transaction rolls back: nothing was written)\n    if (e.ok()) e = run(db_, \"UPDATE history_matches SET plays",
+   "new": "    if (e.ok()) e = run(db_, \"UPDATE history_matches SET plays"
+  },
+  {
+   "id": "a_second_like_is_a_row",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "    if (e.ok() && liked == 0) {                                                             // (a like that is there already changes nothing)",
+   "new": "    if (e.ok()) {"
+  },
+  {
+   "id": "person_limit_is_one_more",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "if (e.ok() && static_cast<size_t>(mine) >= kMaxLikesOfAPerson) return Counted::Limit;",
+   "new": "if (e.ok() && static_cast<size_t>(mine) > kMaxLikesOfAPerson) return Counted::Limit;"
+  },
+  {
+   "id": "match_limit_is_not_held",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "        if (e.ok() && now >= kMaxCount) return Counted::Limit;                              // (a replay that shows a million likes takes no more)\n",
+   "new": ""
+  },
+  {
+   "id": "like_of_an_unknown_match",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "int64_t present = 0, liked = 0, mine = 0, now = 0;\n    db::Error e = scalar(db_, \"SELECT count(*) FROM history_matches WHERE id = ?1\", {text_arg(id)}, present);\n    if (e.ok() && present == 0) return Counted::Unknown;",
+   "new": "int64_t present = 0, liked = 0, mine = 0, now = 0;\n    db::Error e = scalar(db_, \"SELECT count(*) FROM history_matches WHERE id = ?1\", {text_arg(id)}, present);\n    if (e.ok() && present == 0 && false) return Counted::Unknown;"
+  },
+  {
+   "id": "like_count_is_not_raised",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "        if (e.ok()) e = run(db_, \"UPDATE history_matches SET likes = likes + 1 WHERE id = ?1\", {text_arg(id)});",
+   "new": ""
+  },
+  {
+   "id": "unlike_takes_back_what_is_not_there",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "    if (e.ok() && liked > 0) {\n        e = run(db_, \"DELETE FROM replay_likes WHERE id = ?1 AND ref = ?2\"",
+   "new": "    if (e.ok()) {\n        e = run(db_, \"DELETE FROM replay_likes WHERE id = ?1 AND ref = ?2\""
+  },
+  {
+   "id": "unlike_keeps_the_count",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "        if (e.ok()) e = run(db_, \"UPDATE history_matches SET likes = max(likes - 1, 0) WHERE id = ?1\", {text_arg(id)});",
+   "new": ""
+  },
+  {
+   "id": "unlike_keeps_the_row",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "        e = run(db_, \"DELETE FROM replay_likes WHERE id = ?1 AND ref = ?2\", {text_arg(id), text_arg(ref)});\n        if (e.ok()) e = run(db_, \"UPDATE history_matches SET likes = max(likes - 1, 0)",
+   "new": "        e = db::Error();\n        if (e.ok()) e = run(db_, \"UPDATE history_matches SET likes = max(likes - 1, 0)"
+  },
+  {
+   "id": "liked_among_lists_everybody",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "\"SELECT id FROM replay_likes WHERE ref = ?1 AND id IN (\" + marks + \")\"",
+   "new": "\"SELECT id FROM replay_likes WHERE ?1 = ?1 AND id IN (\" + marks + \")\""
+  },
+  {
+   "id": "liked_among_loses_the_order",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "    for (const std::string& id : ids) {\n        if (mine.count(id) != 0) out.push_back(id);\n    }",
+   "new": "    for (const std::string& id : mine) out.push_back(id);\n    std::sort(out.begin(), out.end());"
+  },
+  {
+   "id": "forget_keeps_the_counts",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "        e = run(db_, \"UPDATE history_matches SET likes = max(likes - 1, 0) WHERE id IN (SELECT id FROM replay_likes WHERE ref = ?1)\", {text_arg(ref)});\n        if (e.ok()) e = run(db_, \"DELETE FROM replay_likes WHERE ref = ?1\"",
+   "new": "        e = db::Error();\n        if (e.ok()) e = run(db_, \"DELETE FROM replay_likes WHERE ref = ?1\""
+  },
+  {
+   "id": "forget_keeps_the_rows",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "        if (e.ok()) e = run(db_, \"DELETE FROM replay_likes WHERE ref = ?1\", {text_arg(ref)});\n    }\n    if (e.ok()) e = tx.commit();\n    if (!e.ok()) {\n        fail(\"the likes of a person could not be taken back\", e);",
+   "new": "    }\n    if (e.ok()) e = tx.commit();\n    if (!e.ok()) {\n        fail(\"the likes of a person could not be taken back\", e);"
+  },
+  {
+   "id": "forget_counts_nothing",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "    removed = static_cast<size_t>(n);\n    return true;",
+   "new": "    removed = 0;\n    return true;"
+  },
+  {
+   "id": "remove_keeps_the_likes",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "    if (e.ok()) e = run(db_, \"DELETE FROM replay_likes WHERE id = ?1\", {text_arg(id)});               // (the likes go with the match, and its two numbers with its row; put() keeps them when it replaces a record)\n",
+   "new": ""
+  },
+  {
+   "id": "put_forgets_the_numbers",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "int_arg(now_s()), int_arg(plays), int_arg(likes)});",
+   "new": "int_arg(now_s()), int_arg(0), int_arg(0)});"
+  },
+  {
+   "id": "sort_plays_by_likes",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "\" ORDER BY m.plays DESC, m.ended DESC, m.id DESC\"",
+   "new": "\" ORDER BY m.likes DESC, m.ended DESC, m.id DESC\""
+  },
+  {
+   "id": "sort_likes_by_plays",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "\" ORDER BY m.likes DESC, m.ended DESC, m.id DESC\"",
+   "new": "\" ORDER BY m.plays DESC, m.ended DESC, m.id DESC\""
+  },
+  {
+   "id": "sort_plays_oldest_among_equals",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "\" ORDER BY m.plays DESC, m.ended DESC, m.id DESC\"",
+   "new": "\" ORDER BY m.plays DESC, m.ended ASC, m.id ASC\""
+  },
+  {
+   "id": "record_plays_and_likes_swapped",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "    r.plays = to_u32(st.column_int64(13));\n    r.likes = to_u32(st.column_int64(14));",
+   "new": "    r.plays = to_u32(st.column_int64(14));\n    r.likes = to_u32(st.column_int64(13));"
+  },
+  {
+   "id": "sort_word_plays_is_likes",
+   "file": "src/ants_server/control_history.cpp",
+   "old": "else if (value == \"plays\") q.sort = HistoryQuery::Sort::Plays;",
+   "new": "else if (value == \"plays\") q.sort = HistoryQuery::Sort::Likes;"
+  },
+  {
+   "id": "sort_word_likes_is_not_known",
+   "file": "src/ants_server/control_history.cpp",
+   "old": "            else if (value == \"likes\") q.sort = HistoryQuery::Sort::Likes;\n",
+   "new": ""
+  },
+  {
+   "id": "list_has_no_plays",
+   "file": "src/ants_server/history_record.cpp",
+   "old": "    o.set(\"plays\", JsonValue::make_int(r.plays));\n",
+   "new": ""
+  },
+  {
+   "id": "list_has_no_likes",
+   "file": "src/ants_server/history_record.cpp",
+   "old": "    o.set(\"likes\", JsonValue::make_int(r.likes));\n",
+   "new": ""
+  },
+  {
+   "id": "plays_have_a_larger_cap",
+   "file": "src/ants_server/db_schema.cpp",
+   "old": "CHECK (plays BETWEEN 0 AND 1000000)",
+   "new": "CHECK (plays BETWEEN 0 AND 2000000)"
+  },
+  {
+   "id": "likes_may_be_negative",
+   "file": "src/ants_server/db_schema.cpp",
+   "old": "CHECK (likes BETWEEN 0 AND 1000000)",
+   "new": "CHECK (likes BETWEEN -5 AND 1000000)"
+  },
+  {
+   "id": "plays_index_is_the_wrong_way",
+   "file": "src/ants_server/db_schema.cpp",
+   "old": "CREATE INDEX history_matches_plays ON history_matches (plays DESC, ended DESC, id DESC);",
+   "new": "CREATE INDEX history_matches_plays ON history_matches (plays ASC, ended DESC, id DESC);"
+  },
+  {
+   "id": "likes_index_is_missing",
+   "file": "src/ants_server/db_schema.cpp",
+   "old": "\"CREATE INDEX history_matches_likes ON history_matches (likes DESC, ended DESC, id DESC);\"\n",
+   "new": ""
+  },
+  {
+   "id": "a_reference_is_any_length",
+   "file": "src/ants_server/db_schema.cpp",
+   "old": "CHECK (length(ref) = 16)",
+   "new": "CHECK (length(ref) > 0)"
+  },
+  {
+   "id": "a_person_may_like_twice",
+   "file": "src/ants_server/db_schema.cpp",
+   "old": " PRIMARY KEY (id, ref)\"\n    \") WITHOUT ROWID;\"\n    \"CREATE INDEX replay_likes_ref",
+   "new": " PRIMARY KEY (id, ref, rowid_extra)\"\n    \") WITHOUT ROWID;\"\n    \"CREATE INDEX replay_likes_ref"
+  },
+  {
+   "id": "service_file_has_no_likes_migration",
+   "file": "src/ants_server/db_schema.cpp",
+   "old": "        {6, \"replay_counts\", kReplayCountsSql},\n",
+   "new": ""
+  },
+  {
+   "id": "import_needs_the_new_columns",
+   "file": "src/ants_history/history_import.cpp",
+   "old": "else if (from != nullptr && t.columns[k].newer && !has_column(*from, t.name, t.columns[k].name)) out += \"0\";",
+   "new": "else if (false && from != nullptr && t.columns[k].newer && !has_column(*from, t.name, t.columns[k].name)) out += \"0\";",
+   "build": "test_history_service",
+   "test": "./build/tests/test_server/test_history_service"
+  },
+  {
+   "id": "import_forgets_the_plays",
+   "file": "src/ants_history/history_import.cpp",
+   "old": "{\"plays\", 'i', false, true}, {\"likes\", 'i', false, true}",
+   "new": "{\"plays\", 'i', false, true}",
+   "build": "test_history_service",
+   "test": "./build/tests/test_server/test_history_service"
+  },
+  {
+   "id": "door_answers_nothing",
+   "file": "src/ants_server/main.cpp",
+   "old": "return counts_api->handle(request, now); });",
+   "new": "(void)request; return ants::ctl::HttpResponse(); });",
+   "build": "ants_server bot_arena",
+   "test": "BUILD_DIR=build python3 tests/scripts/counts_server_check.py"
+  },
+  {
+   "id": "door_reads_a_body",
+   "file": "src/ants_server/main.cpp",
+   "old": "        door.body_limit = [](const ants::ctl::HttpRequest& head) { return ants::server::ReplayCountsApi::body_limit(head); };\n",
+   "new": "",
+   "build": "ants_server bot_arena",
+   "test": "BUILD_DIR=build python3 tests/scripts/counts_server_check.py"
+  },
+  {
+   "id": "door_has_no_key",
+   "file": "src/ants_server/main.cpp",
+   "old": "            if (const char* gate_key = std::getenv(\"ANTS_ADMIN_GATE_SECRET\")) cc.gate_secret = gate_key;\n            counts_api",
+   "new": "            counts_api",
+   "build": "ants_server bot_arena",
+   "test": "BUILD_DIR=build python3 tests/scripts/counts_server_check.py"
+  },
+  {
+   "id": "door_is_never_updated",
+   "file": "src/ants_server/main.cpp",
+   "old": "            counts_http->update(now, [&](const ants::ctl::HttpRequest& request) { return counts_api->handle(request, now); });",
+   "new": "            (void)now;",
+   "build": "ants_server bot_arena",
+   "test": "BUILD_DIR=build python3 tests/scripts/counts_server_check.py"
+  },
+  {
+   "id": "door_logs_the_wrong_state",
+   "file": "src/ants_server/main.cpp",
+   "old": "counts_api->likes_on() ? \"likes are ON (the hub's pass)\" : \"likes are OFF (ANTS_ADMIN_GATE_SECRET is not a good key)\"",
+   "new": "\"likes are ON (the hub's pass)\"",
+   "build": "ants_server bot_arena",
+   "test": "BUILD_DIR=build python3 tests/scripts/counts_server_check.py"
+  },
+  {
+   "id": "a_taken_port_stops_the_game",
+   "file": "src/ants_server/main.cpp",
+   "old": "if (!counts_http) log(\"plays and likes of replays are off: cannot listen on counts port \" + std::to_string(o.counts_port));",
+   "new": "if (!counts_http) { std::fprintf(stderr, \"cannot listen on counts port\\n\"); return 1; }",
+   "build": "ants_server bot_arena",
+   "test": "BUILD_DIR=build python3 tests/scripts/counts_server_check.py"
+  },
+  {
+   "id": "a_full_table_of_passes_forgets_nothing",
+   "file": "src/ants_server/like_pass.cpp",
+   "old": "    while (seen_.size() >= max_remembered_ && !by_age_.empty()) {",
+   "new": "    while (seen_.size() >= max_remembered_ + 1000000 && !by_age_.empty()) {"
+  },
+  {
+   "id": "a_full_table_of_passes_refuses",
+   "file": "src/ants_server/like_pass.cpp",
+   "old": "    while (seen_.size() >= max_remembered_ && !by_age_.empty()) {",
+   "new": "    if (seen_.size() >= max_remembered_) return PassVerdict::Full;\n    while (seen_.size() >= max_remembered_ && !by_age_.empty()) {"
+  },
+  {
+   "id": "a_replay_has_no_budget",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "    if (!take(play_ids_, id, now_ms, limits_.play_id_burst, limits_.play_id_per_second, kPlayIdsKept)) return error_reply(429, \"rate\");\n",
+   "new": "    if (!take(play_ids_, id, now_ms, limits_.play_id_burst, limits_.play_id_per_second, kPlayIdsKept) && false) return error_reply(429, \"rate\");\n"
+  },
+  {
+   "id": "every_replay_shares_one_budget",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "    if (!take(play_ids_, id, now_ms, limits_.play_id_burst, limits_.play_id_per_second, kPlayIdsKept)) return error_reply(429, \"rate\");\n",
+   "new": "    if (!take(play_ids_, std::string(\"all\"), now_ms, limits_.play_id_burst, limits_.play_id_per_second, kPlayIdsKept)) return error_reply(429, \"rate\");\n"
+  },
+  {
+   "id": "the_shared_budget_is_charged_before_the_recording_is_looked_at",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "    if (!playable(id)) return error_reply(404, \"not found\");                                // (a request that is no play of anything costs no budget)\n    if (!take(play_ids_, id, now_ms, limits_.play_id_burst, limits_.play_id_per_second, kPlayIdsKept)) return error_reply(429, \"rate\");\n    if (!take_play(now_ms)) return error_reply(429, \"rate\");\n",
+   "new": "    if (!take_play(now_ms)) return error_reply(429, \"rate\");\n    if (!playable(id)) return error_reply(404, \"not found\");                                // (a request that is no play of anything costs no budget)\n    if (!take(play_ids_, id, now_ms, limits_.play_id_burst, limits_.play_id_per_second, kPlayIdsKept)) return error_reply(429, \"rate\");\n"
+  },
+  {
+   "id": "the_replays_budget_is_charged_before_the_recording_is_looked_at",
+   "file": "src/ants_server/replay_counts_api.cpp",
+   "old": "    if (!playable(id)) return error_reply(404, \"not found\");                                // (a request that is no play of anything costs no budget)\n    if (!take(play_ids_, id, now_ms, limits_.play_id_burst, limits_.play_id_per_second, kPlayIdsKept)) return error_reply(429, \"rate\");\n",
+   "new": "    if (!take(play_ids_, id, now_ms, limits_.play_id_burst, limits_.play_id_per_second, kPlayIdsKept)) return error_reply(429, \"rate\");\n    if (!playable(id)) return error_reply(404, \"not found\");                                // (a request that is no play of anything costs no budget)\n"
+  },
+  {
+   "id": "import_copies_the_likes_rows",
+   "file": "src/ants_history/history_import.cpp",
+   "old": "{\"map_plays\", {{\"map\", 't', false}, {\"hash\", 't', false}, {\"plays\", 'i', false}, {\"last_played\", 'i', false}}, false},\n    };",
+   "new": "{\"map_plays\", {{\"map\", 't', false}, {\"hash\", 't', false}, {\"plays\", 'i', false}, {\"last_played\", 'i', false}}, false},\n        {\"replay_likes\", {{\"id\", 't', false}, {\"ref\", 't', false}}, true},\n    };",
+   "build": "test_history_service",
+   "test": "./build/tests/test_server/test_history_service"
+  }
+ ]
+}

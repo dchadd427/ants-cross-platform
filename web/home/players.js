@@ -13,17 +13,20 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    var LIMIT = { rows: 200, name: 32, seats: 4, ids: 1e9, here: 500, map: 28 };       // (the hub's own: 200 rows, names of 32, four colors; a map's name is cut for the line as the Games list cuts it)
+    var LIMIT = { rows: 200, name: 32, seats: 4, ids: 1e9, here: 500, map: 28, follows: 100 };       // (the hub's own: 200 rows, names of 32, four colors; a map's name is cut for the line as the Games list cuts it)
     var MS = { poll: 1000, tell: 3000, note: 4000 };                      // (poll: the page looks at its own room this often; tell: the hub is told what changed at most this often)
     var ROOM = /^[a-z0-9_-]{1,32}$/;
     var STATUS = ['look', 'wait', 'play'];
     var SHOWN = STATUS.concat('away');       // (what a row may say: a page says the first three; `away` is the hub's own word for a person whose last socket closed a short while ago)
     var GROUPS = [['mod', 'Staff'], ['look', 'Looking'], ['wait', 'Waiting'], ['play', 'Playing'], ['away', 'Away']];
+    var FOLLOWED = [['wait', 'Waiting'], ['play', 'Playing'], ['look', 'Looking'], ['gone', 'Not here']];       // the groups of the Following tab: by what the person does now, then the people who are not here
+    var FAR = 9e8;                                                       // the first number of a card of a person who is not here (the hub's numbers of rows are small and never come near it, and every number is under a billion): the hub's handle names them, never a row
     var WORD = { look: 'Looking', wait: 'Waiting', play: 'Playing', away: 'Away' };
     var TEXT = {
         title: 'Players', here: ' here now', you: 'you', moderator: 'moderator', administrator: 'administrator', privateRoom: 'Private room', privateGame: 'Private game', vsComputer: 'vs computer', publicRoom: 'Public room', inRoom: 'In a room', inGame: 'In a game', join: 'Join', gone: 'That game is not open any more.',
         guest: ' guest', guests: ' guests', notIn: 'not logged in', more: ' more', and: 'and ', many: '500+', player: ' player', players: ' players', of: ' of ',
         inviteTitle: 'Invite to my room', seatFree: ' seat free', seatsFree: ' seats free', room: ' room', roomFull: 'Your room is full', inYourRoom: 'In your room', playing: 'Playing a match', login: 'Log in to invite people. Share sends your link.', notHere: ' is not here now.',
+        everyone: 'Everyone', following: 'Following', farAway: 'Not here', keep: 'Only you see this list. Nobody is told that you follow them.', noFollows: 'You follow nobody yet', noFollowsNote: 'Press a name in the list or the chat, then Follow. You get an alert when that person opens a public room.', tabsName: 'Players', follows: 'following',
         off: 'Players list is off right now', offNote: 'The chat hub is not answering. Games and rooms work as always; this list comes back by itself.'
     };
 
@@ -83,6 +86,27 @@
             if (row.id !== me) out[row.mod ? 'mod' : row.at].push(row);
         }
         GROUPS.forEach(function (g) { out[g[0]].sort(function (a, b) { return (b.role === 'admin') - (a.role === 'admin') || (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id - b.id); }); });       // (the admins first, then by name)
+        return out;
+    }
+    // The people that the visitor follows, from the hub's `follows` frame: [{ h (the handle that names the person to the hub), name, i (the number of their row in the list while they are here, else -1), k (the key of their lines, or '') }], or null when it is not that frame
+    function followsOf(m, Chat) {
+        if (!m || typeof m !== 'object' || !Array.isArray(m.rows) || m.rows.length > LIMIT.follows) return null;
+        var out = [];
+        m.rows.forEach(function (raw) {
+            if (!raw || typeof raw !== 'object' || typeof raw.h !== 'string' || !/^[0-9a-f]{12}$/.test(raw.h) || typeof raw.name !== 'string') return;
+            var name = Chat.clip(Chat.plain(raw.name.slice(0, LIMIT.name * 4), true), LIMIT.name);
+            if (name) out.push({ h: raw.h, name: name, i: whole(raw.i, 0, LIMIT.ids) ? raw.i : -1, k: typeof raw.k === 'string' ? Chat.clip(Chat.plain(raw.k.slice(0, LIMIT.name * 4), true), LIMIT.name) : '' });       // (the key that marks the lines of the person, cleaned as the dock cleans the key of a line, so that the two are the same text)
+        });
+        return out;
+    }
+    // The Following tab's groups: { wait, play, look, gone } of { follow, row } (row: the list's row of the person while they are here, else null), each by name. A person whose row is Away is not here.
+    function followedList(model, follows, me) {
+        var out = { wait: [], play: [], look: [], gone: [] };
+        follows.forEach(function (f) {
+            var row = f.i >= 0 && f.i !== me ? model.rows[f.i] : null, key = row && row.at !== 'away' ? row.at : 'gone';
+            out[key].push({ follow: f, row: key === 'gone' ? null : row });
+        });
+        FOLLOWED.forEach(function (g) { out[g[0]].sort(function (a, b) { return a.follow.name < b.follow.name ? -1 : a.follow.name > b.follow.name ? 1 : a.follow.h < b.follow.h ? -1 : 1; }); });
         return out;
     }
     function seatsText(row) {                                            // "Treasure . 2 of 4": the map, and the colors that play of those in the match
@@ -196,6 +220,7 @@
         var yard = env.yard || host;
         var phase = 'none', supported = null, live = false, asked = false, you = null, model = fresh();      // phase: 'none' (nothing shows), 'off' (the hub is not there), 'on'
         var me = null, doing = null, sentSig = null, lastSent = null, painted = '', joins = [], kept = '', timers = { poll: 0, note: 0 }, drawnFns = [];
+        var follows = [], tab = 'all';                                   // the people that the visitor follows (the hub's, to this account's sockets only), and which tab of the list shows: 'all' or 'following'
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -222,6 +247,13 @@
         body.id = 'players-body'; youBox.appendChild(youList);
         status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
         list.setAttribute('tabindex', '0'); list.setAttribute('role', 'region'); list.setAttribute('aria-label', TEXT.title);
+        var tabs = el('div', 'pl-tabs'), tabAll = el('button', 'pl-tab'), tabFol = el('button', 'pl-tab'), keepNote = el('p', 'pl-keep', TEXT.keep);
+        tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', TEXT.tabsName);
+        [[tabAll, 'all'], [tabFol, 'following']].forEach(function (t) {
+            t[0].type = 'button'; t[0].setAttribute('role', 'tab'); t[0].setAttribute('data-tab', t[1]);
+            t[0].addEventListener('click', guard(function () { if (tab === t[1]) return; tab = t[1]; painted = ''; paintBody(); }));
+            tabs.appendChild(t[0]);
+        });
         put(panel, [head, body]);
         var root = el('div', 'pl-root'); root.hidden = true;
         root.appendChild(panel);
@@ -233,21 +265,24 @@
             var b = find('.gjoin[data-code="' + code + '"]'), item = b && b.parentNode, name = item && item.querySelector ? item.querySelector('.gmapname') : null;
             return b ? { name: name ? name.textContent : '' } : null;
         }
+        var fol = {};                                                    // the numbers of the rows of the people that the visitor follows and that are here
+        function indexFollows() { fol = {}; follows.forEach(function (f) { if (f.i >= 0) fol[f.i] = true; }); }
         function named(row) {                                            // the row as it is drawn: `listed` when the Games list has that room (a Join is offered only then), and its map's name only if that row shows the same
             var game = row.code ? gameOf(row.code) : null, copy = {};
             for (var k in row) copy[k] = row[k];
-            copy.listed = !!game;
+            copy.listed = !!game; copy.following = !!fol[row.id];
             if (game) copy.mapName = game.name === (row.mapName || row.guess) ? game.name : '';
             return copy;
         }
         function card(row, o) {                                          // o: { you: the visitor's own row, label: say where the person is under the name, join: a Join button (a public room that waits) }
             var li = el('li', 'pl-card'), who = el('span', 'pl-who'), name = el('span', 'pl-name'), av = el('span', 'pl-av', initial(row.name, Chat)), meta = metaOf(row, o.label, o.you);
             li.setAttribute('data-s', row.at);
-            if (!o.you) li.setAttribute('data-i', String(row.id));       // (the hub's number of the row: the moderation sheet names the person by it, `row:<n>`, never by the name)
+            if (!o.you) li.setAttribute('data-i', String(row.id));       // (the hub's number of the row: the moderation sheet names the person by it, `row:<n>`, never by the name; a person who is not here has a number from 900,000,000 and the hub's handle instead: `h:<handle>`)
             av.setAttribute('aria-hidden', 'true'); Chat.picture(el, av, row.pic, 32);
             var nm = el('bdi', 'pl-nm', row.name), word = row.role === 'admin' ? TEXT.administrator : TEXT.moderator;
             if (row.mod) { li.className += row.role === 'admin' ? ' r-admin' : ' r-mod'; nm.setAttribute('title', word); name.appendChild(el('span', 'pl-sr', word + ' ')); }       // (the name is red or yellow: the word is in the accessible name and the title as well, so that color is never the only sign)
             name.appendChild(nm);
+            if (o.star) { var star = el('i', 'pl-star'); star.setAttribute('aria-hidden', 'true'); put(name, [star, el('span', 'pl-sr', ' (' + TEXT.follows + ')')]); }
             if (o.you) name.appendChild(el('span', 'pl-tag', TEXT.you));
             who.appendChild(name);
             if (meta) {
@@ -269,8 +304,30 @@
             var s = el('section', 'pl-group'), h = el('h3', 'pl-gh'), mark = el('i', 'pl-gd'), ul = el('ul', 'pl-cards');
             s.setAttribute('data-g', key); mark.setAttribute('aria-hidden', 'true');
             put(h, [mark, el('span', '', label), el('span', 'pl-gn', String(rows.length))]);
-            rows.forEach(function (r) { ul.appendChild(card(r, { label: key === 'mod', join: r.listed && r.code !== own })); });
+            rows.forEach(function (r) { ul.appendChild(card(r, { label: key === 'mod', join: r.listed && r.code !== own, star: r.following })); });
             return put(s, [h, ul]);
+        }
+        function followedGroup(g, items, own) {                          // a group of the Following tab: the people that the visitor follows, by what they do now (a person who is not here has a card of their own: the handle names them)
+            var s = el('section', 'pl-group'), h = el('h3', 'pl-gh'), mark = el('i', 'pl-gd'), ul = el('ul', 'pl-cards');
+            s.setAttribute('data-g', g[0] === 'gone' ? 'away' : g[0]); mark.setAttribute('aria-hidden', 'true');
+            put(h, [mark, el('span', '', g[1]), el('span', 'pl-gn', String(items.length))]);
+            items.forEach(function (it) {
+                var r, li;
+                if (it.row) { r = named(it.row); ul.appendChild(card(r, { label: false, join: r.listed && r.code !== own })); return; }
+                li = card({ id: FAR + follows.indexOf(it.follow), name: it.follow.name, at: 'away', mod: false, role: 'none', pic: '', pub: false, priv: false, solo: false, map: '', mapName: '', guess: '', n: -1, of: -1, code: '' }, { label: false, join: false });
+                li.setAttribute('data-h', it.follow.h); ul.appendChild(li);
+            });
+            return put(s, [h, ul]);
+        }
+        function paintTabs() {                                           // the two tabs, Everyone and Following, with their counts
+            var fn = follows.length;
+            [[tabAll, 'all', TEXT.everyone, model.n], [tabFol, 'following', TEXT.following, fn]].forEach(function (t) {
+                var on = tab === t[1];
+                clear(t[0]);
+                if (t[1] === 'following') { var st = el('i', 'pl-star'); st.setAttribute('aria-hidden', 'true'); t[0].appendChild(st); }
+                put(t[0], [el('span', 'pl-tn', t[2]), el('span', 'pl-tc', ' ' + countText(t[3]))]);
+                t[0].setAttribute('aria-selected', on ? 'true' : 'false'); t[0].setAttribute('data-on', on ? 'true' : 'false');
+            });
         }
         function guests(n, cls) {                                        // "+ 4 guests, not logged in": counted, never named (in the list on a short window, under it otherwise)
             var g = el('div', 'pl-guests ' + cls), av = el('span', 'pl-gav', '…'), text = el('span', 'pl-gt');
@@ -283,35 +340,42 @@
             return mine && mine.at === 'play' && !(doing && doing.at === 'play') ? mine : null;
         }
         function paintBody() {                                           // the part under the header: made again only when what it shows changed (the scroll and the focus stay where they were)
-            var own = ownCode(), shown = listOf(model, me), people = 0;
+            var own = ownCode(), shown = listOf(model, me), people = 0, onFollowing = tab === 'following' && !!you;
             GROUPS.forEach(function (x) { shown[x[0]] = shown[x[0]].map(named); people += shown[x[0]].length; });
             var empty = model.n <= 1 && model.more === 0 && people === 0, mine = you ? { name: you.name, mod: you.mod, role: you.role, pic: you.pic, doing: doing, elsewhere: playingElsewhere() } : null;
-            var sig = JSON.stringify([phase, mine, own, model.n, model.g, model.more, GROUPS.map(function (x) { return shown[x[0]].map(function (r) { return [r.id, r.name, r.at, r.mod, r.role, r.pic, r.pub, r.priv, r.solo, r.mapName, r.n, r.of, r.code, r.listed]; }); })]);
+            var sig = JSON.stringify([phase, mine, own, model.n, model.g, model.more, onFollowing, follows, GROUPS.map(function (x) { return shown[x[0]].map(function (r) { return [r.id, r.name, r.at, r.mod, r.role, r.pic, r.pub, r.priv, r.solo, r.mapName, r.n, r.of, r.code, r.listed, r.following]; }); })]);
             if (sig === painted) return;
             var active = doc.activeElement, focused = active && active.getAttribute ? active.getAttribute('data-code') : null, scroll = list.scrollTop;
             painted = sig;
             clear(body); clear(list); clear(youList); clear(offBox); joins = [];
             if (phase === 'off') { put(offBox, [el('p', '', TEXT.off), el('p', 'small', TEXT.offNote)]); body.appendChild(offBox); told(); return; }
-            if (you) {                                                   // the visitor, first, as the page knows it (not as the hub last said)
+            if (you) { paintTabs(); body.appendChild(tabs); }
+            if (you && !onFollowing) {                                   // the visitor, first, as the page knows it (not as the hub last said)
                 var away = playingElsewhere(), row = rowOf(away ? { i: 0, name: you.name, at: 'play', mod: you.mod, role: you.role, pic: you.pic, pub: away.pub, priv: away.priv, solo: away.solo, map: away.map, n: away.n, of: away.of } : { i: 0, name: you.name, at: doing ? doing.at : 'look', mod: you.mod, role: you.role, pic: you.pic, pub: !!(doing && doing.pub), map: doing && doing.map, n: doing && doing.n, of: doing && doing.of }, Chat, rules);
                 if (row) { row.mapName = row.mapName || row.guess; youList.appendChild(card(row, { you: true, label: true, join: false })); put(body, [youBox, rule]); }       // (the page's own room: its map's name is its own word)
             }
             body.appendChild(status);
-            if (!empty) {                                                // (alone: the list stays blank under the visitor's own row)
+            if (onFollowing) {                                           // the Following tab: the people that the visitor follows, by what they do now (nobody else sees this list)
+                var fl = followedList(model, follows, me);
+                if (!follows.length) put(list, [put(el('div', 'pl-note pl-none'), [(function () { var st = el('i', 'pl-star big'); st.setAttribute('aria-hidden', 'true'); return st; })(), el('p', 'pl-nt', TEXT.noFollows), el('p', 'small', TEXT.noFollowsNote)])]);
+                else FOLLOWED.forEach(function (g) { if (fl[g[0]].length) list.appendChild(followedGroup(g, fl[g[0]], own)); });
+            } else if (!empty) {                                         // (alone: the list stays blank under the visitor's own row)
                 GROUPS.forEach(function (x) { if (shown[x[0]].length) list.appendChild(group(x[0], x[1], shown[x[0]], own)); });
                 if (model.more > 0) list.appendChild(el('p', 'pl-more', TEXT.and + model.more + TEXT.more));
                 if (model.g > 0) list.appendChild(guests(model.g, 'in-list'));
             }
             body.appendChild(list);
-            if (!empty && model.g > 0) body.appendChild(guests(model.g, 'pinned'));
+            if (onFollowing) body.appendChild(keepNote);
+            else if (!empty && model.g > 0) body.appendChild(guests(model.g, 'pinned'));
             list.scrollTop = scroll;
             if (focused) joins.forEach(function (b) { if (b.getAttribute('data-code') === focused && b.focus) b.focus(); });
             told();
         }
         function told() { drawnFns.forEach(function (fn) { try { fn(); } catch (e) { if (env.error) env.error(e); } }); }       // (the list was made again: whoever marks rows marks them again)
-        function person(i) {                                             // a row of the list for the moderation sheet: { i, name, role, at, where }, or null (no such row now, the visitor's own, a person who is away: the hub takes a row only for an open socket, or the hub is not there)
-            var row = whole(i, 0, LIMIT.ids) && live && supported ? model.rows[i] : null;
-            return row && i !== me && row.at !== 'away' ? { i: row.id, name: row.name, role: row.role, at: row.at, where: whereOf(named(row)) } : null;
+        function person(i) {                                             // a row of the list for the moderation sheet: { i, name, role, at, where, word (how the hub is told who: `row:<n>`, or for a person who is not here `h:<handle>`), following }, or null (no such row now, the visitor's own, a person who is away: the hub takes a row only for an open socket, or the hub is not there)
+            var row = whole(i, 0, LIMIT.ids) && live && supported ? model.rows[i] : null, f;
+            if (live && supported && whole(i, FAR, FAR + LIMIT.follows - 1) && (f = follows[i - FAR])) return { i: i, name: f.name, role: 'none', at: 'away', where: TEXT.farAway, word: 'h:' + f.h, following: true, far: true };      // (a person that the visitor follows who is not here: they can be written to, and followed no more)
+            return row && i !== me && row.at !== 'away' ? { i: row.id, name: row.name, role: row.role, at: row.at, where: whereOf(named(row)), word: 'row:' + row.id, following: !!fol[row.id] } : null;
         }
         // ---- the people, for the sheet of a person, the helper of the chat and the invitation ----
         var invitedAt = {};                                              // the name (lower case) of a person that this page invited -> when (ms): the hub holds a second invitation back for a minute, and the row says so before it is pressed
@@ -326,6 +390,7 @@
             var shown = listOf(model, me), rows = [], m = mine();
             GROUPS.forEach(function (g) { shown[g[0]].forEach(function (r) { rows.push({ id: r.id, name: r.name, at: r.at, mod: r.mod, role: r.role, me: false }); }); });
             return { you: !!you, mine: m, rows: rows, why: reasonOf, invited: function (name) { invitedAt[String(name).toLowerCase()] = now(); }, flush: function () { tell(true); },
+                following: function (who) { var i; if (who && who.k) for (i = 0; i < follows.length; i++) if (follows[i].k === who.k) return true; return !!(who && who.row !== null && who.row !== undefined && fol[who.row]); },       // (whether the visitor follows the person of a row of the list (its number) or of a line of the chat (the key of its lines))
                 inviteOf: function (who) {                               // the row of the sheet: { shown (a sheet has it), ok, title, sub, where } for a person of the list (by number) or of the chat (by name)
                     var row = who.row !== null && who.row !== undefined && model.rows[who.row] && who.row !== me ? model.rows[who.row] : personNamed(who.name), why;
                     if (!m) return { shown: false, ok: false, title: TEXT.inviteTitle, sub: '', where: row ? whereOf(row) : '' };
@@ -391,7 +456,7 @@
         if (doc.addEventListener) doc.addEventListener('visibilitychange', guard(function () { if (!doc.hidden && !timers.poll) { sync(); clock(); } }));
         dock.tap(guard(function (kind, m) {
             if (kind === 'live') {
-                supported = !!m && m.presence === true; live = true; asked = false; sentSig = null; lastSent = null; model = fresh();
+                supported = !!m && m.presence === true; live = true; asked = false; sentSig = null; lastSent = null; model = fresh(); follows = []; indexFollows();
                 me = whole(m && m.me, 0, LIMIT.ids) ? m.me : null;
                 var yo = Chat.youOf(m && m.you);                   // (the dock's one rule for who the visitor is and what role they hold)
                 you = yo ? { name: yo.name, mod: yo.mod, role: yo.role, pic: yo.pic } : null;
@@ -402,12 +467,16 @@
                 var yn = Chat.youOf(y);
                 if (!yn) return;
                 you.role = yn.role; you.mod = yn.mod; you.pic = yn.pic;
+            } else if (kind === 'follows') {
+                var fs = live && supported ? followsOf(m, Chat) : null;
+                if (!fs) return;
+                follows = fs; indexFollows();
             } else if (kind === 'who') {
                 var next = live && supported ? apply(model, m, Chat, rules) : null;
                 if (!next) return;
                 model = next; phase = 'on';
             } else if (kind === 'lost') {
-                live = false; asked = false; model = fresh(); me = null;
+                live = false; asked = false; model = fresh(); me = null; follows = []; indexFollows();
                 phase = supported === false ? 'none' : 'off';
             } else return;
             paint();
@@ -417,5 +486,5 @@
         return { root: root, list: list, state: function () { return phase; }, model: function () { return model; }, person: person, directory: directory, drawn: function (fn) { drawnFns.push(fn); }, sync: guard(sync) };
     }
 
-    return { LIMIT: LIMIT, MS: MS, TEXT: TEXT, GROUPS: GROUPS, rowOf: rowOf, apply: apply, listOf: listOf, metaOf: metaOf, whereOf: whereOf, seatsText: seatsText, announceOf: announceOf, invOf: invOf, mineOf: mineOf, inviteLine: inviteLine, inviteWhy: inviteWhy, countOf: countOf, noteOf: noteOf, hashOf: hashOf, possessive: possessive, roleOf: roleOf, mount: mount };
+    return { LIMIT: LIMIT, MS: MS, TEXT: TEXT, GROUPS: GROUPS, FAR: FAR, followsOf: followsOf, followedList: followedList, rowOf: rowOf, apply: apply, listOf: listOf, metaOf: metaOf, whereOf: whereOf, seatsText: seatsText, announceOf: announceOf, invOf: invOf, mineOf: mineOf, inviteLine: inviteLine, inviteWhy: inviteWhy, countOf: countOf, noteOf: noteOf, hashOf: hashOf, possessive: possessive, roleOf: roleOf, mount: mount };
 });

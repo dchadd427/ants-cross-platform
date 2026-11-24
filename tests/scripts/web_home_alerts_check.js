@@ -69,7 +69,7 @@ function clockPage(o) {
 {
     const p = clockPage();
     const s = p.core.settings(p.win);
-    same('every switch is on until it is turned off', p.core.NAMES.map((n) => s.on(n)), [true, true, true, true, true, true]);
+    same('every switch is on until it is turned off', p.core.NAMES.map((n) => s.on(n)), [true, true, true, true, true, true, true]);
     check('a name that is no switch is off and cannot be set', s.on('nonsense') === false && s.set('nonsense', true) === false);
     check('turning a switch off is kept in this browser', s.set('join', false) === true && p.core.settings(p.win).on('join') === false && p.core.settings(p.win).on('start') === true);
     check('and on again', (s.set('join', true), p.core.settings(p.win).on('join') === true));
@@ -370,7 +370,7 @@ const buttonsOf = (root, label) => root.findAll((e) => e.tagName === 'button' &&
             block: o.noBlock ? undefined : (draw, cls) => { const b = { draw, cls, redraws: 0 }; blocks.push(b); return { redraw() { b.redraws++; } }; } };
         const opened = [];
         const win = Object.assign({}, env.win, { AntsHomeChat: Chat, innerHeight: 800, navigator: { userAgent: 'x' }, open: (...a) => { opened.push(a); return null; } });
-        const m = A.mount({ doc: env.doc, win, core, ctl: { screen: () => o.screen || 'home', show: (n, how) => calls.push(['show', n, how]), join: (row, back) => { calls.push(['join', row.code, row.from]); return true; }, chat: () => calls.push(['chat']) },
+        const m = A.mount({ doc: env.doc, win, core, ctl: { screen: () => o.screen || 'home', show: (n, how) => calls.push(['show', n, how]), join: (row, back) => { calls.push(['join', row.code, row.from]); return true; }, chat: () => calls.push(['chat']), messages: (h, name) => calls.push(['messages', h, name]), seeing: (h) => state.seeing === h },
             bar, menuBtn: menu, signedIn: () => state.signedIn, dock: () => (state.dockUp ? dock : null), now: () => NOW });
         const bell = bar.children.filter((e) => /(^|\s)al-bell(\s|$)/.test(e.className))[0];
         const tap = (kind, m1) => state.taps.forEach((f) => f(kind, m1));
@@ -459,6 +459,49 @@ const buttonsOf = (root, label) => root.findAll((e) => e.tagName === 'button' &&
     check('the hub says the room is gone: the line is drawn again, dim, with no button and the words of the picture', b.blocks[0].redraws === 1 && /The room has closed\./.test(dim.textContent) && dim.findAll((e) => e.tagName === 'button').length === 0 && /dim/.test(dim.className));
     b.tap('alert', { row: MENTION(9) });
     same('a mention with the chat on the screen is the line\'s own mark: no toast, no second block, the bell has it', [toast(), b.blocks.length, b.marks()], [null, 1, ['2']]);
+    // the hub's other two kinds: a room that a person the account follows opened, and a private message (docs/HUB_PEOPLE.md, docs/HUB_MESSAGES.md)
+    const ROOMROW = (id, o) => Object.assign({ id, at: NOW - 30, k: 'room', u: 1, from: 'Fern', map: 'TREASURE.LVL', n: 1, of: 4, o: 1, code: 'abc234' }, o || {});
+    const MSGROW = (id, o) => Object.assign({ id, at: NOW - 20, k: 'msg', u: 1, from: 'Pebble', h: 'a1b2c3d4e5f6' }, o || {});
+    b = mountOf();
+    b.tap('alerts', { rows: [MSGROW(6), ROOMROW(5), ROOMROW(4, { o: undefined, code: undefined, u: 0 })] });
+    b.bell.click();
+    const kinds2 = items().map((i) => i.textContent);
+    same('the list holds a room, a private message and a room that has closed, each in its own words', [items().map((i) => i.getAttribute('data-k')), /Pebble sent you a private message/.test(kinds2[0]) && /Open/.test(kinds2[0]), /Fern opened a room/.test(kinds2[1]) && /Treasure/.test(kinds2[1]) && /1 of 4 in/.test(kinds2[1]) && /Join/.test(kinds2[1]), /Fern opened a room/.test(kinds2[2]) && /The room has closed\./.test(kinds2[2]) && !/Join/.test(kinds2[2])], [['msg', 'room', 'room'], true, true, true]);
+    check('a message row says who and when, and has no words of a message (the hub keeps none in it)', !/hello|secret/.test(kinds2[0]) && /Pebble/.test(kinds2[0]) && /ago|just now/.test(kinds2[0]));
+    items()[0].findAll((e) => e.tagName === 'button')[0].click();
+    same('Open on a message row opens the conversation by the handle that the hub gave, and the list goes', [b.calls.pop(), shadeOf(env)], [['messages', 'a1b2c3d4e5f6', 'Pebble'], null]);
+    b.bell.click(); items()[1].findAll((e) => e.tagName === 'button')[0].click();
+    same('Join on a room row is the invitation\'s Join', b.calls.pop().join(), 'join,abc234,Fern');
+    b = mountOf();
+    b.tap('alert', { row: ROOMROW(7) });
+    const rt = toast();
+    check('a room of a person that is followed, the chat not on the screen: a toast with who, the map and the seats, and Join', !!rt && /Fern opened a room: Treasure \(1 of 4\)\./.test(rt.textContent) && /Join/.test(rt.textContent) && b.marks().join() === '1');
+    rt.findAll((e) => e.tagName === 'button')[0].click();
+    same('...Join joins the room and the toast goes', [b.calls.pop().join(), toast()], ['join,abc234,Fern', null]);
+    b.tap('alert', { row: MSGROW(8) });
+    const mt = toast();
+    check('a private message: a toast that says who and nothing of the words, with Open', !!mt && /Pebble sent you a private message\./.test(mt.textContent) && /Open/.test(mt.textContent) && b.marks().join() === '2');
+    mt.findAll((e) => e.tagName === 'button')[0].click();
+    same('...Open opens the conversation', b.calls.pop().join(), 'messages,a1b2c3d4e5f6,Pebble');
+    b.state.seeing = 'a1b2c3d4e5f6';
+    b.tap('alert', { row: MSGROW(9) });
+    check('a message from the person whose conversation is on the screen: no toast (the Messages part reads it), the bell has it', toast() === null && b.marks().join() === '3');
+    b.state.seeing = null;
+    b = mountOf({ chat: true });
+    b.tap('alert', { row: ROOMROW(7) });
+    same('the chat is on the screen: a room is a line of the chat, as an invitation is, no toast', [b.blocks.length, toast()], [1, null]);
+    const rline = new H.El(env, 'div', ''); b.blocks[0].draw(rline);
+    check('...it says who opened a room, where and how many are in, with Join', /Fern/.test(rline.textContent) && /opened a room\./.test(rline.textContent) && !/invited/.test(rline.textContent) && /Treasure/.test(rline.textContent) && /1 of 4 in/.test(rline.textContent) && rline.findAll((e) => e.tagName === 'button').map((e) => e.textContent).join() === 'Join');
+    b.tap('alert', { row: MSGROW(8) });
+    check('a private message with the chat on the screen is still a toast (the line of the chat is public)', /Pebble sent you a private message\./.test(toast().textContent));
+    env.storage.data['ants.alerts.v1'] = '{"room":false}';
+    b = mountOf();
+    b.tap('alert', { row: ROOMROW(7) });
+    same('the switch for rooms is off: the entry is in the list, no toast, no tab alert', [toast(), b.marks(), env.doc.title.indexOf('opened a room')], [null, ['1'], -1]);
+    delete env.storage.data['ants.alerts.v1'];
+    check('a person who is logged in has the switch for the rooms of the people they follow, on until it is turned off', b.m.wired().indexOf('room') !== -1 && b.m.wired().indexOf('room') < b.m.wired().indexOf('join'));
+    const guestMount = mountOf({ signedIn: false });
+    check('a visitor who is not logged in has no such switch', guestMount.m.wired().indexOf('room') === -1);
     // the switches: the entry is kept, nothing is shown
     env.storage.data['ants.alerts.v1'] = '{"invite":false,"mention":false}';
     b = mountOf(); env.doc.hidden = false;
@@ -478,7 +521,7 @@ const buttonsOf = (root, label) => root.findAll((e) => e.tagName === 'button' &&
     // the settings of a person who is logged in
     b = mountOf(); b.bell.click();
     buttonsOf(shadeOf(env), T.gear)[0].click();
-    same('a person who is logged in has the two new switches before the other two', rows(env).map((r) => r.getAttribute('data-switch')).join(), 'invite,mention,join,start');
+    same('a person who is logged in has the three switches of the hub (invitations, mentions, rooms of the people they follow) before the other two', rows(env).map((r) => r.getAttribute('data-switch')).join(), 'invite,mention,room,join,start');
     check('they say what they are', shadeOf(env).textContent.indexOf(T.invite[0]) !== -1 && shadeOf(env).textContent.indexOf(T.mention[0]) !== -1 && shadeOf(env).textContent.indexOf(T.clearAccount) !== -1);
     rows(env)[0].click();
     check('the switch is kept in this browser', JSON.parse(env.storage.data['ants.alerts.v1']).invite === false);
@@ -510,6 +553,12 @@ const buttonsOf = (root, label) => root.findAll((e) => e.tagName === 'button' &&
     same('a row that is not one is dropped, a field of strangers is cleaned, a map that is not a file name is none', [
         A.rowOf({ id: 1, at: NOW, k: 'invite', from: 'A', n: 5, of: 4 }, Chat, rules), A.rowOf({ id: 1, at: NOW, k: 'pm', from: 'A' }, Chat, rules), A.rowOf({ id: 1, at: 'now', k: 'mention', from: 'A' }, Chat, rules), A.rowOf(null, Chat, rules),
         A.rowOf({ id: 2, at: NOW, k: 'invite', from: 'Bo‏b', n: 1, of: 4, map: '../x', o: 1, code: 'Not A Code' }, Chat, rules)], [null, null, null, null, { id: 2, at: NOW, k: 'invite', u: false, from: 'Bob', n: 1, of: 4, map: '', code: '', open: false }]);
+    {   // the hub's room and message rows: a row that is wrong in any part is no row, and only the fields of its kind are kept
+        const msg = (o) => Object.assign({ id: 1, at: NOW, k: 'msg', u: 1, from: 'Pebble', h: 'a1b2c3d4e5f6' }, o || {}), room = (o) => Object.assign({ id: 1, at: NOW, k: 'room', u: 1, from: 'Fern', map: 'TREASURE.LVL', n: 1, of: 4, o: 1, code: 'abc234' }, o || {});
+        const odd = [A.rowOf(msg({ h: 'XYZ' }), Chat, rules), A.rowOf(msg({ from: '' }), Chat, rules), A.rowOf(msg({ h: undefined }), Chat, rules), A.rowOf(room({ n: 9 }), Chat, rules), A.rowOf(room({ from: '' }), Chat, rules)];
+        same('a message or a room row that is wrong in any part is no row', odd, [null, null, null, null, null]);
+        same('...and a message row keeps its person and its handle and nothing else (no words of a message are ever kept)', [Object.keys(A.rowOf(msg({ text: 'secret words', fr: 'abc' }), Chat, rules)).sort().join(), A.rowOf(room({ text: 'x' }), Chat, rules).code], ['at,from,h,id,k,u', 'abc234']);
+    }
     same('a mention keeps its words as text, cut to eighty and the dots', [A.rowOf(MENTION(1, { text: '<b>x</b> ' + 'w'.repeat(200) }), Chat, rules).text.length, A.rowOf(MENTION(1, { text: '<b>x</b>' }), Chat, rules).text], [81, '<b>x</b>']);
     same('the unread are counted, and nine is the most that the bell says', [A.countOf([{ u: true }, { u: false }, { u: true }]), A.countText(9), A.countText(10)], [2, '9', '9+']);
     same('a visitor\'s list: the last seven days, the newest thirty, newest first', A.trim([{ id: 1, at: NOW - 8 * 86400 }, { id: 2, at: NOW }, { id: 3, at: NOW }], NOW).map((r) => r.id), [3, 2]);

@@ -891,6 +891,75 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(o.hashes_checked, 4u);
     } TEST_END();
 
+    TEST_CASE("RP2.5b A Play In Pieces (Playback) Gives What play() Gives, Whatever The Size Of The Pieces: Each Call Plays At Most The Turns It Is Given, The Tick Hook Sees Every Turn Once, A File That Does Not Reproduce Stops At The Same Bad Hash, And A Refused File Is Done At Once") {
+        const Played p = play_scripted(tiny, 31, 450);
+        const Outcome whole = play(p.replay, tiny.level);
+        ASSERT_TRUE(whole.ok);
+        for (const uint32_t piece : {1u, 7u, 100u, 449u, 450u, 100000u}) {
+            uint32_t ticks = 0;
+            uint32_t last_seen = 0;
+            Hooks hooks;
+            hooks.after_tick = [&](uint32_t turns, sim::SimulationEngine&) {
+                ++ticks;
+                last_seen = turns;
+            };
+            Playback playback(p.replay, tiny.level, hooks);
+            ASSERT_FALSE(playback.done());
+            uint32_t before = 0;
+            uint32_t calls = 0;
+            while (!playback.advance(piece)) {
+                ASSERT_EQ(playback.turns_played(), std::min<uint32_t>(before + piece, 450u));      // (exactly the turns asked for, never more)
+                before = playback.turns_played();
+                ASSERT_TRUE(++calls < 1000u);
+            }
+            const Outcome& o = playback.outcome();
+            ASSERT_TRUE(playback.done() && o.ran && o.ok && o.complete);
+            ASSERT_TRUE(o.turns == whole.turns && o.hashes_checked == whole.hashes_checked && o.hash == whole.hash && o.match_over == whole.match_over && o.scores == whole.scores);
+            ASSERT_TRUE(ticks == 450u && last_seen == 450u);
+            ASSERT_TRUE(playback.advance(1));                                                          // (a play that is over stays over)
+            ASSERT_EQ(playback.turns_played(), 450u);
+        }
+        Replay changed = p.replay;
+        changed.head.seed += 1;                                                                        // (the first hash is taken after 100 turns and differs)
+        Playback bad(changed, tiny.level);
+        while (!bad.advance(30)) {
+        }
+        ASSERT_TRUE(bad.done() && !bad.outcome().ok && bad.outcome().first_bad_turn == 100 && bad.outcome().turns == 100 && !bad.outcome().error.empty());
+        Replay other_rules = p.replay;
+        other_rules.head.sim_rules = static_cast<uint16_t>(kSimRulesNewest + 1);
+        Playback refused(other_rules, tiny.level);
+        ASSERT_TRUE(refused.done() && !refused.outcome().ran && !refused.outcome().error.empty() && refused.turns_played() == 0);
+        ASSERT_TRUE(refused.advance(10) && refused.turns_played() == 0);
+    } TEST_END();
+
+    TEST_CASE("RP2.5c A Play In Pieces Says When The Next Call Takes The State Hash (The Turn That The File Holds A Hash For, And The End), And The End Is A Call Of Its Own When The Call Before It Used Up Its Turns") {
+        const Played p = play_scripted(tiny, 31, 450);
+        ASSERT_EQ(p.replay.head.hash_period, 100u);
+        Playback playback(p.replay, tiny.level);
+        std::vector<uint32_t> before_hash;                                                             // (the turns played so far when the next call hashes)
+        while (!playback.done()) {
+            if (playback.next_takes_hash()) before_hash.push_back(playback.turns_played());
+            playback.advance(1);
+        }
+        ASSERT_TRUE(before_hash == std::vector<uint32_t>({99u, 199u, 299u, 399u, 450u}));            // (the 100th turn, the 200th ... and the end after the 450th)
+        ASSERT_FALSE(playback.next_takes_hash());                                                      // (a play that is over takes nothing)
+        Playback exact(p.replay, tiny.level);
+        ASSERT_FALSE(exact.advance(450));                                                              // (the turns it was given are all of them: the end waits for the next call)
+        ASSERT_TRUE(!exact.done() && exact.turns_played() == 450u && exact.next_takes_hash());
+        ASSERT_TRUE(exact.advance(1) && exact.done() && exact.outcome().ok && exact.turns_played() == 450u);
+        Playback more(p.replay, tiny.level);
+        ASSERT_TRUE(more.advance(451) && more.done() && more.outcome().ok);                           // (more turns than are left: the end comes with them)
+        Replay changed = p.replay;
+        changed.hashes.resize(2);                                                                      // (a file that holds two hashes only: the turns after the 200th take none)
+        Playback two(changed, tiny.level);
+        std::vector<uint32_t> hashing;
+        while (!two.done()) {
+            if (two.next_takes_hash()) hashing.push_back(two.turns_played());
+            two.advance(1);
+        }
+        ASSERT_TRUE(hashing == std::vector<uint32_t>({99u, 199u, 450u}));
+    } TEST_END();
+
     TEST_CASE("RP2.6 Recorder: A Command That The Engine Turns Down Is Left Out And Counted, One That It Would Apply But The Wire Form Cannot Hold Spoils The Recording, A Missing Turn Spoils It, A Finished Recorder Takes Nothing More") {
         using Status = sim::CommandResult::Status;
         sim::SimulationEngine engine;
@@ -1427,6 +1496,34 @@ int main(int argc, char* argv[]) {
     } TEST_END();
 
     // ---- the map in the file (the optional chunk `tmap`) -------------------------------------------------------------------------
+
+    TEST_CASE("RP6.2 A Map Is Loaded Within The Limits That The Caller Gives: A Grid Over Them Is Refused At Its Header (The Verdict Says A Grid Too Large, Not A Map That Is Missing Or Damaged), One Within Them Loads, And The Play Limits Are The Default") {
+        const std::string bytes = grown_tiny(300, 300);                                               // (90,000 cells: within the play limits of 262,144, over a room's 65,536)
+        ASSERT_FALSE(bytes.empty());
+        TempDir dir;
+        { std::ofstream out((dir.path / "BIG300.LVL").string(), std::ios::binary); out.write(bytes.data(), static_cast<std::streamsize>(bytes.size())); }
+        Header h = head_for(tiny, "BIG300", 1, 0x0F);
+        h.map_hash = net::hash_bytes(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size());
+        assets::LevelData level;
+        std::string error;
+        ASSERT_TRUE(load_map(h, dir.path.string(), level, error) && level.width() == 300u && level.height() == 300u);          // (the default: the play limits)
+        assets::LevelLimits room = assets::LevelLimits::for_play_extended();
+        room.max_cells = 256u * 256u;
+        assets::LevelData refused;
+        assets::LevelValidation verdict;
+        ASSERT_FALSE(load_map(h, std::vector<std::string>{dir.path.string()}, refused, error, room, &verdict));
+        ASSERT_TRUE(contains(error, "cannot be loaded") && verdict.first_fatal() != nullptr && verdict.first_fatal()->kind == assets::LevelProblemKind::GridTooLarge);
+        ASSERT_FALSE(load_map_file(h, (dir.path / "BIG300.LVL").string(), refused, error, room, &verdict));
+        room.max_cells = 300u * 300u;                                                                  // (exactly the cells that it has)
+        ASSERT_TRUE(load_map_file(h, (dir.path / "BIG300.LVL").string(), refused, error, room, &verdict) && refused.width() == 300u);
+        assets::LevelValidation none;                                                                  // (a map that is not there, or another file of the name, is no grid too large)
+        assets::LevelData missing;
+        ASSERT_FALSE(load_map(h, std::vector<std::string>{(dir.path / "nowhere").string()}, missing, error, room, &none));
+        ASSERT_TRUE(none.first_fatal() == nullptr);
+        h.map_hash ^= 1u;
+        ASSERT_FALSE(load_map(h, std::vector<std::string>{dir.path.string()}, missing, error, assets::LevelLimits::for_play_extended(), &none));
+        ASSERT_TRUE(contains(error, "not the file") && none.first_fatal() == nullptr);
+    } TEST_END();
 
     TEST_CASE("RP9.1 hash_bytes Is FNV-1a 64 (The Map's Identity): The Known Values, In Pieces, And The Same As The Hash Of The Same File") {
         ASSERT_EQ(net::hash_bytes(nullptr, 0), 0xcbf29ce484222325ull);

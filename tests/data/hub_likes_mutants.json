@@ -1,0 +1,484 @@
+{
+ "note": "Mutants of the likes' gate, Forget me's call to the counts door and the login's way back to a match (hub/likedoor.py, hub/login.py `way_back` and `MATCH_ID`, hub/config.py `ANTS_HUB_COUNTS_URL`, hub/server.py, hub/limits.py; docs/HUB.md, docs/REPLAY_COUNTS.md) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose (a pass for nobody, a shut door that is a 401 or is not shut, a ban that stops a like, a gate that answers a POST, takes a body, a query or a longer path, needs no address or says the missing address every time, has no limit or one limit for everybody or asks the login before the limit; the keys of the admin page's labels, the admin page's header, a nonce that is not fresh, a pass that lives ten minutes, the account's id for its reference; a Forget me that is stopped by a door that fails or has no key, does not queue the likes or does not say `later`, a queue that takes a reference twice, is not bounded or drops the newest, a try that is never made, overlaps another, never ends or keeps the reference when the door answered, a pause that does not grow, a clock that never asks again; a Forget me that skips the call, calls with no setting or with no good key, names the account by its id, sends no pass, no token or the wrong token, a length that is not 0 or a cookie, takes any status, any count, `true` or a negative one, waits for ever or reads without a limit; the login's words that go to the wrong page, an id that is not checked, that may have anything after it, a newline, a longer name, any character or a longer number, a way back with no id that goes home or forgets it; a gate that is not routed, a setting that is not read or takes any port, a start that says nothing of a setting with no key, a default limit of 6 or 600), and a test of tests/scripts/test_hub_likes.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hub_likes_mutants.json --keep-going --jobs 1 --baseline-every 15; every mutant must be caught.",
+ "baseline": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest tests.scripts.test_hub_likes tests.scripts.test_hub_admin_door.TheLoginReturnsToTheAdminPage"
+ },
+ "mutants": [
+  {
+   "id": "gate_gives_a_pass_to_nobody",
+   "file": "hub/likedoor.py",
+   "old": "if who is None:\n            return http.response(401)",
+   "new": "if False:\n            return http.response(401)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "gate_of_a_shut_door_is_a_401",
+   "file": "hub/likedoor.py",
+   "old": "if self.key is None:\n            return http.response(503)",
+   "new": "if self.key is None:\n            return http.response(401)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "gate_of_a_shut_door_is_not_shut",
+   "file": "hub/likedoor.py",
+   "old": "if self.key is None:\n            return http.response(503)",
+   "new": "if False:\n            return http.response(503)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "gate_refuses_a_banned_account",
+   "file": "hub/likedoor.py",
+   "old": "if who is None:\n            return http.response(401)",
+   "new": "if who is None or self.hub.store.is_banned(who.account_id):\n            return http.response(401)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "gate_answers_a_post",
+   "file": "hub/likedoor.py",
+   "old": "if request.method != \"GET\":",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "gate_takes_a_body",
+   "file": "hub/likedoor.py",
+   "old": "if \"transfer-encoding\" in h or h.get(\"content-length\", \"0\") != \"0\":",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "gate_takes_a_query",
+   "file": "hub/likedoor.py",
+   "old": "if request.split()[0] != GATE_PATH or \"?\" in request.path:",
+   "new": "if request.split()[0] != GATE_PATH:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "gate_takes_a_longer_path",
+   "file": "hub/likedoor.py",
+   "old": "if request.split()[0] != GATE_PATH or",
+   "new": "if not request.split()[0].startswith(GATE_PATH) or",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "gate_needs_no_address",
+   "file": "hub/likedoor.py",
+   "old": "if limitmod.address_key(request.headers.get(\"x-client-address\"), \"\") == \"unknown\":",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "gate_says_the_missing_address_every_time",
+   "file": "hub/likedoor.py",
+   "old": "if now >= self.next_address_log:",
+   "new": "if True:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "gate_has_no_limit",
+   "file": "hub/likedoor.py",
+   "old": "if not self.rate.take(address, self.hub.clock()):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "gate_has_one_limit_for_everybody",
+   "file": "hub/likedoor.py",
+   "old": "self.rate.take(address, self.hub.clock())",
+   "new": "self.rate.take(\"everybody\", self.hub.clock())",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "gate_asks_the_login_before_the_limit",
+   "file": "hub/likedoor.py",
+   "old": "            if not self.rate.take(address, self.hub.clock()):\n                return self.fail(429, \"rate\", {\"Retry-After\": \"5\"})\n            return await self.gate(request)",
+   "new": "            answer = await self.gate(request)\n            if not self.rate.take(address, self.hub.clock()):\n                return self.fail(429, \"rate\", {\"Retry-After\": \"5\"})\n            return answer",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "gate_forgets_the_retry_after",
+   "file": "hub/likedoor.py",
+   "old": "{\"Retry-After\": \"5\"}",
+   "new": "None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "pass_key_is_the_admin_pages",
+   "file": "hub/likedoor.py",
+   "old": "PASS_LABEL = b\"ants-like-pass-v1\"",
+   "new": "PASS_LABEL = b\"ants-admin-pass-v1\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "token_key_is_the_admin_pages",
+   "file": "hub/likedoor.py",
+   "old": "CSRF_LABEL = b\"ants-like-csrf-v1\"",
+   "new": "CSRF_LABEL = b\"ants-admin-csrf-v1\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "pass_header_is_the_admin_pages",
+   "file": "hub/likedoor.py",
+   "old": "PASS_HEADER = \"X-Ants-Like-Pass\"",
+   "new": "PASS_HEADER = \"X-Ants-Admin-Pass\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "pass_nonce_is_not_fresh",
+   "file": "hub/likedoor.py",
+   "old": "secrets.token_hex(8))",
+   "new": "\"0123456789abcdef\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "pass_lives_ten_minutes",
+   "file": "hub/likedoor.py",
+   "old": "PASS_SECONDS = 60",
+   "new": "PASS_SECONDS = 600",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "pass_names_the_account_by_its_id",
+   "file": "hub/likedoor.py",
+   "old": "self.made_pass(self.hub.chat.ref(who.account_id))",
+   "new": "self.made_pass(who.account_id)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "pass_lives_a_second_too_long",
+   "file": "hub/likedoor.py",
+   "old": "int(self.hub.store.clock()) + PASS_SECONDS",
+   "new": "int(self.hub.store.clock()) + PASS_SECONDS + 1",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_skips_the_call",
+   "file": "hub/login.py",
+   "old": "if self.hub.likes.wanted:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_calls_with_no_setting",
+   "file": "hub/likedoor.py",
+   "old": "return self.host is not None",
+   "new": "return True",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_names_the_account_by_its_id",
+   "file": "hub/login.py",
+   "old": "ref = self.hub.chat.ref(who.account_id)",
+   "new": "ref = who.account_id",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_call_has_no_pass",
+   "file": "hub/likedoor.py",
+   "old": "\"%s: %s\" % (PASS_HEADER, self.made_pass(ref)), ",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_call_has_no_token",
+   "file": "hub/likedoor.py",
+   "old": "\"%s: %s\" % (CSRF_HEADER, token(self.csrf_key, ref)), \"Content-Length: 0\"]",
+   "new": "\"Content-Length: 0\"]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_call_has_the_wrong_token",
+   "file": "hub/likedoor.py",
+   "old": "token(self.csrf_key, ref)), ",
+   "new": "token(self.key, ref)), ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_call_has_a_length_that_is_not_0",
+   "file": "hub/likedoor.py",
+   "old": "\"Content-Length: 0\"]",
+   "new": "\"Content-Length: 2\"]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_call_has_a_cookie",
+   "file": "hub/likedoor.py",
+   "old": "\"Connection: close\",\n",
+   "new": "\"Connection: close\", \"Cookie: __Host-ants_hub=0\",\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_takes_any_status",
+   "file": "hub/likedoor.py",
+   "old": "if status != 200:\n            raise DoorError(\"bad\")",
+   "new": "if False:\n            raise DoorError(\"bad\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_takes_any_count",
+   "file": "hub/likedoor.py",
+   "old": "if not isinstance(removed, int) or isinstance(removed, bool) or removed < 0:",
+   "new": "if removed is None:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_takes_true_for_a_count",
+   "file": "hub/likedoor.py",
+   "old": " or isinstance(removed, bool)",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_takes_a_count_below_zero",
+   "file": "hub/likedoor.py",
+   "old": " or removed < 0:",
+   "new": ":",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_waits_for_ever",
+   "file": "hub/likedoor.py",
+   "old": "await asyncio.wait_for(self.exchange(ref), self.hub.limits.door_seconds)",
+   "new": "await self.exchange(ref)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_reads_without_a_limit",
+   "file": "hub/likedoor.py",
+   "old": "self.hub.limits.door_body_max",
+   "new": "10 ** 9",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "matches_word_goes_home",
+   "file": "hub/login.py",
+   "old": "NEXT[\"matches\"] = \"/matches\"",
+   "new": "NEXT[\"matches\"] = \"/\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "match_word_goes_to_the_list",
+   "file": "hub/login.py",
+   "old": "NEXT[\"match\"] = \"/match\"",
+   "new": "NEXT[\"match\"] = \"/matches\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "match_id_is_not_checked",
+   "file": "hub/login.py",
+   "old": "if not (isinstance(ident, str) and MATCH_ID.match(ident)):",
+   "new": "if not isinstance(ident, str):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "match_id_may_have_anything_after_it",
+   "file": "hub/login.py",
+   "old": "(?:-[0-9]{1,4})?\\Z\")",
+   "new": "(?:-[0-9]{1,4})?\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "match_id_may_end_with_a_newline",
+   "file": "hub/login.py",
+   "old": "(?:-[0-9]{1,4})?\\Z\")",
+   "new": "(?:-[0-9]{1,4})?$\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "match_id_name_may_be_longer",
+   "file": "hub/login.py",
+   "old": "[A-Za-z0-9_]{1,24}",
+   "new": "[A-Za-z0-9_]{1,240}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "match_id_name_may_have_any_character",
+   "file": "hub/login.py",
+   "old": "[A-Za-z0-9_]{1,24}",
+   "new": "[^-]{1,24}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "match_id_number_may_be_longer",
+   "file": "hub/login.py",
+   "old": "(?:-[0-9]{1,4})?",
+   "new": "(?:-[0-9]+)?",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "match_without_an_id_goes_home",
+   "file": "hub/login.py",
+   "old": "if ident else NEXT[\"matches\"]",
+   "new": "if ident else NEXT[\"home\"]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "match_way_back_forgets_the_id",
+   "file": "hub/login.py",
+   "old": "way_back(kept[1], kept[2])",
+   "new": "way_back(kept[1], \"\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "likes_gate_is_not_routed",
+   "file": "hub/server.py",
+   "old": "if request.split()[0].startswith(likedoor.ROUTE_PREFIX):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "setting_is_not_read",
+   "file": "hub/config.py",
+   "old": "cfg.counts_url = parse_counts_url(env[\"ANTS_HUB_COUNTS_URL\"])",
+   "new": "cfg.counts_url = \"\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "setting_takes_any_port",
+   "file": "hub/config.py",
+   "old": "if not found or not 1 <= int(found.group(2)) <= 65535:\n        raise ConfigError(\"ANTS_HUB_COUNTS_URL",
+   "new": "if not found:\n        raise ConfigError(\"ANTS_HUB_COUNTS_URL",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "start_says_nothing_of_a_setting_with_no_key",
+   "file": "hub/server.py",
+   "old": "if cfg.counts_url and not cfg.admin_gate_on:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "default_limit_is_a_burst_of_six",
+   "file": "hub/limits.py",
+   "old": "like_burst: int = 60",
+   "new": "like_burst: int = 6",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "default_limit_is_a_burst_of_six_hundred",
+   "file": "hub/limits.py",
+   "old": "like_burst: int = 60",
+   "new": "like_burst: int = 600",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_refuses_when_the_door_fails",
+   "file": "hub/login.py",
+   "old": "later = self.hub.likes.queue(ref)",
+   "new": "return self.fail(503, \"busy\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_does_not_queue",
+   "file": "hub/login.py",
+   "old": "later = self.hub.likes.queue(ref)",
+   "new": "later = False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_does_not_say_later",
+   "file": "hub/login.py",
+   "old": "{\"ok\": True, \"likes\": \"later\"} if later else {\"ok\": True}",
+   "new": "{\"ok\": True}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_queues_what_has_no_key",
+   "file": "hub/login.py",
+   "old": "if e.kind == \"off\":",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_without_a_key_refuses",
+   "file": "hub/login.py",
+   "old": "self.log.event(\"forget_likes_skipped\", kind=e.kind)",
+   "new": "return self.fail(503, \"busy\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_calls_with_no_good_key",
+   "file": "hub/likedoor.py",
+   "old": "if self.host is None or self.key is None:",
+   "new": "if self.host is None:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "queue_takes_a_reference_twice",
+   "file": "hub/likedoor.py",
+   "old": "        if ref in self.pending:\n            return True\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "queue_is_not_bounded",
+   "file": "hub/likedoor.py",
+   "old": "while len(self.pending) >= RETRY_MAX:",
+   "new": "while False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "queue_drops_the_newest",
+   "file": "hub/likedoor.py",
+   "old": "self.pending.popitem(last=False)",
+   "new": "self.pending.popitem(last=True)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "retry_is_never_started",
+   "file": "hub/likedoor.py",
+   "old": "self.retrying = asyncio.ensure_future(self.retry(ref))",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "retry_does_not_wait_for_the_last_try",
+   "file": "hub/likedoor.py",
+   "old": "        if self.retrying is not None and not self.retrying.done():\n            return\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "retry_goes_on_for_ever",
+   "file": "hub/likedoor.py",
+   "old": "if now - entry[0] >= RETRY_GIVE_UP]",
+   "new": "if False]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "retry_keeps_the_reference_when_the_door_answers",
+   "file": "hub/likedoor.py",
+   "old": "            self.pending.pop(ref, None)\n",
+   "new": "            pass\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "retry_has_no_pause",
+   "file": "hub/likedoor.py",
+   "old": "entry[1] = self.hub.clock() + min(RETRY_LAST, RETRY_FIRST * 2 ** entry[2])",
+   "new": "entry[1] = self.hub.clock()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "retry_pause_never_grows",
+   "file": "hub/likedoor.py",
+   "old": "RETRY_FIRST * 2 ** entry[2]",
+   "new": "RETRY_FIRST",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "the_clock_never_asks_again",
+   "file": "hub/server.py",
+   "old": "            self.likes.on_tick(now)\n",
+   "new": "            pass\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "a_stopped_hub_leaves_the_try",
+   "file": "hub/likedoor.py",
+   "old": "            self.retrying.cancel()",
+   "new": "            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  }
+ ]
+}

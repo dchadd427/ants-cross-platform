@@ -3,9 +3,10 @@ hub.chat talks to.
 
 An ALERT is one row of an account's own list (hub/store/: kept by the account's pseudonymous reference, the newest 30 of the last 7 days, the same on every device of the account): `invite` (somebody asked the
 account into their room), `mention` (somebody wrote the account's name after an `@`), `join` (a person joined the account's room: the lobby's own news, told by the account's page) and `over` (the account's own match
-is over: told by the page that came back from it, kept read). A page is sent the list
+is over: told by the page that came back from it, kept read), `room` (a person that the account follows opened a public room: hub/follows.py; the same row as an invitation) and `msg` (a person sent the account a private message:
+hub/messages.py; one row for each person, with none of the words). A page is sent the list
 (`{"t":"alerts","rows":[...]}`) after the welcome of a login and again whenever it changed, and every new alert at once (`{"t":"alert","row":{...}}`). A row is {"id", "at", "k", "u": 1 while it is unread}
-and the fields of its kind: invite {"from", "map", "n", "of", "code", "o": 1 while the room is open}, mention {"from", "text"}, join {"name", "seat"}, over {"map", "place", "match"}. Up, an account with a login may say `{"t":"seen","upto":id}` (the
+and the fields of its kind: invite and room {"from", "map", "n", "of", "code", "o": 1 while the room is open}, mention {"from", "text"}, join {"name", "seat"}, over {"map", "place", "match"}, msg {"from", "h"}. Up, an account with a login may say `{"t":"seen","upto":id}` (the
 list was looked at: everything up to that number is read), `{"t":"clearalerts"}` and `{"t":"note","k":"join","name":...,"seat":...}` and `{"t":"note","k":"over","map":...[,"place":n][,"match":id]}`; a guest has no list and says none of it (`login`).
 
 INVITATIONS. `/invite NAME`, `/invite row:N` and `/invite #N` (a person of the list of the front page, the author of a line: the same words as a moderator's commands) invite the person to the room that the inviter's page
@@ -26,6 +27,7 @@ import json
 import math
 import re
 
+from . import pseudo
 from .limits import RateByAccount
 from .presence import map_file
 from .store import StoreError
@@ -82,8 +84,9 @@ class People:
 
     # ---- the list ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-    def row_of(self, alert):
-        """An alert as the page is sent it, or None for a row that is not one of the three kinds' shapes (a body that cannot be read: it is never sent on)."""
+    def row_of(self, alert, account=None):
+        """An alert as the page is sent it, or None for a row that is not one of the kinds' shapes (a body that cannot be read: it is never sent on). `account` is the account whose page it is for: a `msg` row carries the handle of the
+        sender, which the hub tells that account's pages by (hub/follows.py `teach`)."""
         try:
             body = json.loads(alert.body)
         except ValueError:
@@ -93,7 +96,7 @@ class People:
         row = {"id": alert.id, "at": alert.at, "k": alert.kind}
         if alert.unread:
             row["u"] = 1
-        if alert.kind == "invite":
+        if alert.kind in ("invite", "room"):
             fields = {"from": body.get("from"), "map": body.get("map"), "n": body.get("n"), "of": body.get("of")}
             if not isinstance(fields["from"], str) or not (isinstance(fields["n"], int) and isinstance(fields["of"], int)):
                 return None
@@ -101,6 +104,11 @@ class People:
             if alert.id in self.live and body.get("open") == 1 and isinstance(body.get("code"), str):
                 row["o"] = 1
                 row["code"] = body["code"]
+        elif alert.kind == "msg":
+            if not isinstance(body.get("from"), str) or not isinstance(body.get("fr"), str) or not pseudo.REFERENCE.match(body["fr"]):
+                return None
+            row["from"] = body["from"]
+            row["h"] = self.chat.follows.teach(account, body["fr"], body["from"]) if account is not None else self.chat.handle(body["fr"])
         elif alert.kind == "mention":
             if not isinstance(body.get("from"), str) or not isinstance(body.get("text"), str):
                 return None
@@ -124,9 +132,9 @@ class People:
         ref = self.chat.ref(account)
         out = []
         for alert in self.chat.store.alerts(ref, self.limits.alerts_keep, self.limits.alerts_days):
-            if alert.kind == "invite" and alert.id not in self.live:
+            if alert.kind in ("invite", "room") and alert.id not in self.live:
                 self.close(ref, alert)
-            row = self.row_of(alert)
+            row = self.row_of(alert, account)
             if row is not None:
                 out.append(row)
         return out
@@ -172,11 +180,17 @@ class People:
         for account in {p.identity.account_id for p in self.chat.peers if p.identity is not None and not getattr(p, "closed", False)}:
             self.send_lists(account)
 
-    def add(self, account, kind, body, from_account=None, line=None, unread=1):
-        """Keep an alert for the account and send it to its sockets at once: the new Alert, or None when the database refused it (the page that asked is not told: an alert is news, and a lost one is not a wrong answer)."""
+    def add(self, account, kind, body, from_account=None, line=None, unread=1, replace=False):
+        """Keep an alert for the account: the new Alert, or None when the database refused it (the page that asked is not told: an alert is news, and a lost one is not a wrong answer). With `replace`, the account's alerts of this kind from
+        the same person go first (one row for each person: the private messages)."""
+        chat = self.chat
+        return self.add_for_ref(chat.ref(account), kind, body, chat.ref(from_account) if from_account else "", line, unread, replace)
+
+    def add_for_ref(self, ref, kind, body, from_ref="", line=None, unread=1, replace=False):
+        """The same for an account that is known by its reference only (a person who is not here: the row waits in its list until it comes back)."""
         chat = self.chat
         try:
-            alert = chat.store.add_alert(chat.ref(account), kind, json.dumps(body, ensure_ascii=False, separators=(",", ":")), chat.ref(from_account) if from_account else "", line, self.limits.alerts_keep, self.limits.alerts_days, unread)
+            alert = chat.store.add_alert(ref, kind, json.dumps(body, ensure_ascii=False, separators=(",", ":")), from_ref, line, self.limits.alerts_keep, self.limits.alerts_days, unread, replace)
         except StoreError as e:
             if chat.on_store_error:
                 chat.on_store_error(e)
@@ -187,7 +201,7 @@ class People:
         """Tell the account's sockets of an alert that was just kept."""
         if live is not None:
             self.live[alert.id] = live
-        row = self.row_of(alert)
+        row = self.row_of(alert, account)
         if row is None:
             return
         frame = self.dumps({"t": "alert", "row": row})
