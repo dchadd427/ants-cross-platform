@@ -30,14 +30,22 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - **New ground** (the first part of the new world art). The settings row **HUD art** is now **Art**: one switch, New (the default) or Classic, for the whole look. Big mud fields get a deeper look in the middle (darker and wetter, faint ripples, color patches, bigger and more bubbles), growing with the distance from the banks. Where two plain tiles of different ground meet in a hard line (water against gravel, slate against dirt, and every other pair, in the players' maps), a natural transition is drawn: a bank on the water, soft steps between mud, gravel and dirt, rock for slate, thin on checkerboards. The fire wall and the bomb's explosion are drawn as light (the explosion smooth, with no hard step): see-through, glowing, with a warm glow on the ground (an ant in a fire is seen through the flames, one in front of it covers them); the four teams' bombs are redrawn. The grass and the plants (clovers, flowers, the animated flower, leaves, sticks, the mushroom, the ivy) are redrawn too, with more detail and sharper at 2x and 3x. Gravel, dirt, slate, mud with its bubbles, water, the edges between them and the bridge the Swimmer digs are redrawn in the game's own matte, hand-drawn look, sharper at 2x and 3x, with sixteen pictures for a plain tile so that a field does not repeat. The tiles, the animations and the rules are the original's; Classic draws the original's sprites exactly as before.
-- **Special ants on a match's page.** A new section under the Scoreboard shows what each type of ant did: a card for each type that somebody had (Swimmer: bridges built and taken down; Fire Ant: fires lit and put out; Bomber: bombs set, defused and gone off; Thief: raids that brought loot home, "5 of 8", and the loot), and a card for food and fighting. A type that nobody used is left out with one line. Bombs set, Defused and Fires lit moved there from the Scoreboard. A match played before this release shows what was counted then (no bridges, fires put out or loot).
 - **Computer players stand idle less.** On ISLANDS Hard bots take the Thief and Fire hats and dig to a rival's hill to steal; at every level ants that meet on a bridge sort it out. Bots only.
 - **A new results screen.** With the New HUD the end of a match is a page that fits any window or phone: Victory! or Defeat, the winner and the others ranked, the damage, three honors and a Play of the game, with Watch on the desktop. "All stats" opens every player's numbers and "Back to results" returns (the arrow keys work too).
 - **You choose after a room's match.** The results of a match that began in a lobby room have two buttons, "Back to the room" and "Back to Ants & Uncles", and wait until you press one.
 
 **Fixes:**
-- On a phone, the "What's new" window fits the screen, so its Close button is no longer below the bottom of the page.
 - Private messages on a phone: the conversation is a sheet that follows what you can see, so with the keyboard open the field sits just above it, the head with the name and the X stays on the screen and the messages fill the room over the field. The X, the arrow, Escape, a pull down on the head and the phone's Back button each close the sheet and leave you on the page where you were, not on the bell's list.
+
+## v0.21.4 - 2026-11-24 - Special ants on the match page, What's new fits a phone
+
+**For players:**
+- **Special ants on a match's page.** A new section under the Scoreboard shows what each type of ant did: a card for each type that somebody had (Swimmer: bridges built and taken down; Fire Ant: fires lit and put out; Bomber: bombs set, defused and gone off; Thief: raids that brought loot home, "5 of 8", and the loot), and a card for food and fighting. A type that nobody used is left out with one line. Bombs set, Defused and Fires lit moved there from the Scoreboard. A match played before this release shows what was counted then (no bridges, fires put out or loot).
+
+**Fixes:**
+- On a phone, the "What's new" window fits the screen, so its Close button is no longer below the bottom of the page.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/3430f45a...e6b312bf)
 
 ## v0.21.3 - 2026-11-24 - Follows, private messages, replay likes and the activity curve
 
@@ -561,4 +569,18 @@ Work that is not released yet is written in the same template under a heading th
 
 ## Older versions (v0.16.0 and before)
 
-Every release before v0.16.1, and the long notes of v0.16.0, v0.15.1, v0.15.0, v0.14.1, v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+**For players:**
+- **A top bar on phones.** The front page has a bar at the top with your name; the login chip is the name chip, and tapping it opens the account menu (the Forget me control is in that menu and asks once more).
+- **My room is there only when you have a room.** Quick host now asks Public or Private before it makes a room, and Host one! goes straight to a public room.
+- **The chat has an emoji picker and a voice-to-text button.** The voice button uses the browser's own speech service: Chrome, Edge and Safari send the audio to their maker; the site records nothing.
+- **The green buttons have a stamped look,** with a double frame, a weave and a deeper press. The Leave room button is red like Leave game.
+- **The Games list shows running games without a switch,** under the open games, so nothing needs scrolling when no game is open; the "Show games in progress" switch is gone.
+- **The Players list has no fold button,** and the chat no longer shows a second username next to a name to moderators.
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.15.1 page or game still joins. The stack no longer has the one-shot helper of the results folder; the operator may delete the exited container ants-results-init in Portainer. The rest of this release is internal: tests and documents.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/629baa19...4396bf2d)
+
+## Older versions (v0.15.1 and before)
+
+Every release before v0.16.0, and the long notes of v0.15.1, v0.15.0, v0.14.1, v0.14.0, v0.13.2, v0.13.1, v0.13.0, v0.12.152 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
