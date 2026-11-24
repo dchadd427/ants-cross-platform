@@ -1,18 +1,22 @@
 """Packs the rendered sprites into the game's files: one PNG sheet per scale (sheet_1x.png, sheet_2x.png, sheet_3x.png) and the manifest `hud_art.txt`. When the sprites do not fit one sheet (a texture holds LIMIT device
-pixels at most, at 3x), the sheet is filled as far as it goes and the rest are on a second one (sheet2_1x.png, sheet2_2x.png, sheet2_3x.png: the manifest's `sheet2size`, `sheet2` and `sprite2` records).
+pixels at most, at 3x), the page is filled as far as it goes and the rest are on the next page (sheet2_1x.png ...): the rule, the `sheet` records and the file names are tools/art_sheets.py's, the same as the world art's.
 
 The manifest is plain text, one record a line, so that the game reads it without a JSON reader; its format is described once, at the top of include/ants_app/hud_art.hpp. Sprites that are the same
 picture at every scale share one place in the sheets (the manifest still names each of them).
 """
 import hashlib
 import os
+import sys
 
 import numpy as np
 
-from png_write import write_png
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+
+import art_sheets  # noqa: E402  (the one home of how a pack is split over sheets)
+from png_write import write_png  # noqa: E402
 
 MAX_WIDTH = 1200            # canvas pixels: 3x of it is 3600, under the 4096 that every graphics card holds (the sheet's height is held to the same: LIMIT)
-LIMIT = 4096                # the largest texture that every graphics card takes, in device pixels (the sheet at 3x)
+LIMIT = art_sheets.LIMIT    # the largest texture that every graphics card takes, in device pixels (the sheet at 3x)
 PAD = 2                     # canvas pixels of the sprite's own edge repeated round it (so that a scaled copy never picks up a neighbor)
 
 
@@ -95,21 +99,9 @@ def pack(images, rows, anims, out_dir, canvas=(960, 540), cursor_anims=(), deriv
                 best = (width * height, width, height, dict(spots_a, **{n: (x, y + band_h) for n, (x, y) in spots_b.items()}), band_h)
         return None if best is None else best[1:]
 
-    first = fit(sizes_top, sizes_rest)
-    second = None
-    if first is None:                                                   # full: as many of the sprites as fit the first sheet (the band of derived ones always), the rest on a second
-        assert fit(sizes_top, []) is not None, 'the derived sprites alone do not fit a sheet'
-        lo, hi = 0, len(sizes_rest)                                     # the most sprites of `rest` that the first sheet takes: fit() is monotonic in the sprites it is given
-        while lo < hi:
-            mid = (lo + hi + 1) // 2
-            if fit(sizes_top, sizes_rest[:mid]) is not None:
-                lo = mid
-            else:
-                hi = mid - 1
-        first = fit(sizes_top, sizes_rest[:lo])
-        second = fit([], sizes_rest[lo:])
-        assert second is not None, 'the sprites that the first sheet could not take do not fit a second one'
-    sheets = [first] + ([second] if second is not None else [])
+    pages = art_sheets.fill_pages(sizes_rest, lambda page, chunk: fit(sizes_top if page == 0 else [], chunk))       # (the band of derived sprites is on the first page)
+    sheets = [layout for layout, _ in pages]
+    first = sheets[0]
     band_h = first[3]
     place = {}                                                          # name: (sheet, x, y), the sprite's own pixel (the padding is round it)
     for index, (_, _, spots, _) in enumerate(sheets):
@@ -130,21 +122,18 @@ def pack(images, rows, anims, out_dir, canvas=(960, 540), cursor_anims=(), deriv
                 _, px, py = place[n]
                 ext = np.pad(a, ((PAD * k, PAD * k), (PAD * k, PAD * k), (0, 0)), mode='edge')
                 sheet[(py - PAD) * k:(py - PAD) * k + ext.shape[0], (px - PAD) * k:(px - PAD) * k + ext.shape[1]] = ext
-            name = ('sheet_%dx.png' if index == 0 else 'sheet2_%dx.png') % k
+            name = art_sheets.file_name('sheet', 0, index, k)
             write_png(os.path.join(out_dir, name), sheet)
             files[(index, k)] = name
-    lines = ['ants-hud-art 1', 'canvas %d %d' % canvas, 'sheetsize %d %d' % (sheets[0][0], sheets[0][1])]
+    lines = ['ants-hud-art 2', 'canvas %d %d' % canvas]
     if derived:
         lines.append('derive2x %d' % band_h)
-    lines += ['sheet %d %s' % (k, files[(0, k)]) for k in scales]
-    if second is not None:
-        lines.append('sheet2size %d %d' % (second[0], second[1]))
-        lines += ['sheet2 %d %s' % (k, files[(1, k)]) for k in scales]
+    lines += art_sheets.sheet_rows({(index, k): (files[(index, k)], sheet_w * k, sheet_h * k) for index, (sheet_w, sheet_h, _, _) in enumerate(sheets) for k in scales})
     for r in rows:
         w, h = r['size']
         which, sx, sy = place[cell_of[r['name']]]
         x0, y0 = r['rect_960x540'][:2]
-        line = '%s %s %d %d %d %d %d %d %s %s' % ('sprite' if which == 0 else 'sprite2', r['name'], w, h, sx, sy, x0, y0, r['anchor'][0], r['anchor'][1])
+        line = 'sprite %s %d %d %d %d %d %d %d %s %s' % (r['name'], which, w, h, sx, sy, x0, y0, r['anchor'][0], r['anchor'][1])
         sl = r.get('slice')
         if sl:
             line += ' %s %d %d %d %d' % (sl['axis'], sl['start'], sl['tile'][0], sl['tile'][1], sl['end'])

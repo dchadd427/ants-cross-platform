@@ -22,8 +22,8 @@
   {
    "id": "ring_not_required_at_the_sheets_end",
    "file": "src/ants_app/world_art.cpp",
-   "old": "x + static_cast<int64_t>(p.w) * s + 1 > sheet.w",
-   "new": "x + static_cast<int64_t>(p.w) * s > sheet.w",
+   "old": "x + static_cast<int64_t>(p.w) * s + 1 > sheets_.width(p.page, s)",
+   "new": "x + static_cast<int64_t>(p.w) * s > sheets_.width(p.page, s)",
    "build": "test_world_art",
    "test": "./build/tests/test_app/test_world_art",
    "expect": "[manifest]"
@@ -33,15 +33,6 @@
    "file": "src/ants_app/world_art.cpp",
    "old": "            if (!pictures_.empty() && key <= last_key) sorted_ok = false;\n",
    "new": "            if (false && !pictures_.empty() && key <= last_key) sorted_ok = false;\n",
-   "build": "test_world_art",
-   "test": "./build/tests/test_app/test_world_art",
-   "expect": "[manifest]"
-  },
-  {
-   "id": "the_sheet_size_is_not_looked_at",
-   "file": "src/ants_app/world_art.cpp",
-   "old": "if (!png || be32(16) != sheet.w || be32(20) != sheet.h || head[24] != 8 || head[25] != 6) {",
-   "new": "if (!png || be32(16) < 0 || be32(20) < 0 || head[24] != 8 || head[25] != 6) {",
    "build": "test_world_art",
    "test": "./build/tests/test_app/test_world_art",
    "expect": "[manifest]"
@@ -66,7 +57,7 @@
   },
   {
    "id": "the_texture_limit_is_not_asked",
-   "file": "src/ants_app/renderer_world_art.cpp",
+   "file": "src/ants_app/renderer_art.cpp",
    "old": "if (art_texture_limit_ > 0 && (image.width > art_texture_limit_ || image.height > art_texture_limit_)) {",
    "new": "if (false) {",
    "build": "test_world_art",
@@ -454,17 +445,8 @@
   {
    "id": "a_picture_is_looked_for_in_the_first_pages_sheet",
    "file": "src/ants_app/world_art.cpp",
-   "old": "const Sheet& sheet = sheets_[index(p.page, s)];",
-   "new": "const Sheet& sheet = sheets_[index(0, s)];",
-   "build": "test_world_art",
-   "test": "./build/tests/test_app/test_world_art",
-   "expect": "[manifest]"
-  },
-  {
-   "id": "only_the_first_pages_sheets_are_looked_at_when_a_pack_is_read",
-   "file": "src/ants_app/world_art.cpp",
-   "old": "for (int32_t page = 0; page < pages_; ++page) {",
-   "new": "for (int32_t page = 0; page < 1; ++page) {",
+   "old": "x + static_cast<int64_t>(p.w) * s + 1 > sheets_.width(p.page, s) || y + static_cast<int64_t>(p.h) * s + 1 > sheets_.height(p.page, s)",
+   "new": "x + static_cast<int64_t>(p.w) * s + 1 > sheets_.width(0, s) || y + static_cast<int64_t>(p.h) * s + 1 > sheets_.height(0, s)",
    "build": "test_world_art",
    "test": "./build/tests/test_app/test_world_art",
    "expect": "[manifest]"

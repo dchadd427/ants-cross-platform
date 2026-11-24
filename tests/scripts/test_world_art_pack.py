@@ -13,12 +13,17 @@ Nothing is drawn here (drawing takes about 40 seconds): the committed manifest a
     smoke-only frames), and a frame's light (the fire with the bloom round it) is never more than the bloom's share more opaque than the whole frame;
   - ThePlants: the second page holds exactly the grass and the plants (46 sprites, one picture each, the original's size), none of them on the first page, and every picture is visible and stays in
     the place of its 1x picture at 2x and 3x;
+  - TheGeneratorCheck: what tools/world_art/check_sheets.py compares (the first page's sheets and records), its own part of the comparison that tools/art_sheets.py makes;
   - TheChecksAreNotVacuous: each rule above refuses a copy of the real data that is broken in that one way.
 Needs numpy and Pillow (the tests are skipped only on a machine that has none; CI has both).
 """
+import importlib.util
 import json
 import os
 import re
+import shutil
+import sys
+import tempfile
 import unittest
 
 try:
@@ -32,7 +37,11 @@ ART = os.path.join(REPO, "assets", "world_art")
 SPRITES = os.path.join(REPO, "asset_catalog", "sprites")
 TABLE = os.path.join(REPO, "docs", "chd_table4_animations.json")
 
-SCALES = (1, 2, 3)
+sys.path.insert(0, os.path.join(REPO, "tools"))
+
+import art_sheets  # noqa: E402  (the `sheet` records are read by the one parser, tests/scripts/test_art_sheets.py)
+
+SCALES = art_sheets.SCALES
 WIDTH = {1: 1024, 2: 2048, 3: 3072}
 PAGES = (0, 1)                                                  # the pages of the committed pack: 0 the ground, the bridge and the effects, 1 the grass and the plants
 FILE_NAME = {0: "sheet", 1: "plants"}                           # the first part of the files' names of each page
@@ -63,18 +72,8 @@ def parse_manifest(text):
     lines = text[:-1].split("\n")
     if lines[0] != "ants-world-art 2":
         raise ValueError("the first line is the header")
-    sheets = {}
-    at = 1
-    while at < len(lines) and lines[at].startswith("sheet "):
-        page, scale = divmod(len(sheets), 3)
-        scale += 1
-        parts = lines[at].split(" ")
-        if len(parts) != 6 or parts[1] != str(page) or parts[2] != str(scale) or not re.fullmatch(r"[a-z0-9]+_%dx\.png" % scale, parts[3]) or not all(NUMBER.fullmatch(p) for p in parts[4:]):
-            raise ValueError("line %d is the sheet row of page %d scale %d" % (at + 1, page, scale))
-        sheets[(page, scale)] = (parts[3], int(parts[4]), int(parts[5]))
-        at += 1
-    if not sheets or len(sheets) % 3:
-        raise ValueError("every page has the three sheet rows, for scale 1, 2 and 3")
+    sheets, at = art_sheets.parse_sheet_rows(lines[1:])
+    at += 1
     sprites = []
     for line in lines[at:]:
         parts = line.split(" ")
@@ -353,6 +352,52 @@ class TheNumbersAreOnePageEach(Committed):
         self.assertEqual(sorted({s[2] for s in self.sprites}), list(PAGES))
 
 
+class TheGeneratorCheck(Committed):
+    """tools/world_art/check_sheets.py compares the first page that the generator draws with the repository's (its comparison is tools/art_sheets.py's: test_art_sheets.py); here is what is its own"""
+
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location("world_art_check_sheets", os.path.join(REPO, "tools", "world_art", "check_sheets.py"))     # (by its file: the HUD art's tools have a module of the same name)
+        self.check = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.check)
+        self.tmp = tempfile.mkdtemp(prefix="ants_world_check_")
+        self.built = os.path.join(self.tmp, "built")
+        os.makedirs(self.built)
+        keep = [line for line in self.text.split("\n") if self.check.first_page(line)]
+        with open(os.path.join(self.built, "world_art.txt"), "w", encoding="utf-8", newline="\n") as f:
+            f.write("\n".join(keep) + "\n")
+        for key, (name, _, _) in self.sheets.items():
+            if key[0] == 0:
+                shutil.copyfile(os.path.join(ART, name), os.path.join(self.built, name))
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_the_first_page_and_its_records_are_what_it_compares(self):
+        records = [line for line in self.text.split("\n") if self.check.first_page(line)]
+        self.assertEqual(len(records), 1 + 3 + len(self.first))
+        self.assertTrue(records[0].startswith("ants-world-art") and not any(line.startswith("sprite") and line.split()[3] != "0" for line in records))
+        self.assertFalse(self.check.first_page("sheet 1 1 plants_1x.png 1024 684"))
+        self.assertFalse(self.check.first_page("sprite 479 0 1 241 262 1 1 1 1 1 1"))
+
+    def test_a_generator_that_made_the_first_page_alone_passes_and_a_changed_pixel_fails(self):
+        code, lines = self.check.compare(ART, self.built)
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(len(lines), 4, lines)                                           # (the manifest and the first page's three sheets: the plants' are not compared)
+        path = os.path.join(self.built, "sheet_2x.png")
+        a = np.asarray(Image.open(path)).copy()
+        a[5, 5, 0] ^= 1
+        Image.fromarray(a, "RGBA").save(path)
+        self.assertEqual(self.check.compare(ART, self.built)[0], 1)
+
+    def test_a_record_of_the_first_page_that_differs_fails(self):
+        path = os.path.join(self.built, "world_art.txt")
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text.replace("\nsprite 112 0 0 16 16 ", "\nsprite 112 0 0 16 16 1", 1))
+        self.assertEqual(self.check.compare(ART, self.built)[0], 1)
+
+
 class TheChecksAreNotVacuous(Committed):
     def broken(self, sprites, index, **change):
         """a copy of the sprite records with record `index` changed: number, variant, page, w, h or the places"""
@@ -374,7 +419,6 @@ class TheChecksAreNotVacuous(Committed):
             "a sheet row for a page out of order": self.text.replace("\nsheet 1 1 ", "\nsheet 2 1 ", 1),
             "a number on two pages": self.text.replace("\nsprite 479 0 1 ", "\nsprite 112 0 1 ", 1),
             "the sheets swapped": "\n".join([lines[0], lines[2], lines[1]] + lines[3:]),
-            "a sheet of another file": self.text.replace("sheet_2x.png", "sheet_two.png", 1),
             "a sprite record with a word": self.text.replace("\nsprite 112 0 ", "\nsprite 112 zero ", 1),
             "a sprite record with two spaces": self.text.replace("\nsprite 112 0 ", "\nsprite 112  0 ", 1),
             "a sprite record with a number short": self.text.replace("\nsprite 112 0 ", "\nsprite 112 ", 1),

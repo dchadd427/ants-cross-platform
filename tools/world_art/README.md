@@ -6,6 +6,7 @@ Draws the new ground of the game (the plain tiles, the edge tiles between two ki
 python3 tools/world_art/make_world_art.py            # writes page 0: assets/world_art/sheet_1x.png, sheet_2x.png, sheet_3x.png, and its records in world_art.txt (about 45 s); the other pages stay
 python3 tools/world_art/make_world_art.py --out DIR --work DIR
 python3 tools/world_art/pack_pictures.py --page 1 --name plants FOLDER     # packs FOLDER/<scale>x/sprite_NNNN.png into page 1: plants_1x.png, plants_2x.png, plants_3x.png and its records
+python3 tools/world_art/check_sheets.py              # draws page 0 again in a folder of its own and compares it with assets/world_art/ (about a minute)
 python3 tools/world_art/mud_reference.py             # writes tests/data/world_art_mud_golden.txt (about 5 s; numpy only), see "The mud's fields and their reference values"
 ```
 
@@ -50,6 +51,7 @@ The bombs, the explosion and the fire wall are drawn on masters with an alpha in
 | File | What it holds |
 |---|---|
 | `make_world_art.py` | the command: draws the batch and packs it |
+| `check_sheets.py` | draws page 0 again and compares it with the repository's, byte for byte: the sheets and the records of that page (`tools/art_sheets.py`'s comparison, the HUD art's too; the other pages are not drawn here) |
 | `draw_all.py` | the list of the pictures and their drawing, in parallel; writes the drawn pictures; stops when the set is not exactly the ground's sprites, the bridge's, the bigger bubbles', the bombs', the explosion's with its light and the fire wall's, or a picture is not its sprite's size times its scale |
 | `catalog.py` | the repository's root and the readers of the decoded sprites and the table |
 | `tilekit.py` | the kit of the master: the cubic enlargement of the original's stair-steps into curves, the class map, the dome (a form cut into three hard steps by the light), the three scales of a tile |
@@ -58,7 +60,7 @@ The bombs, the explosion and the fire wall are drawn on masters with an alpha in
 | `edges.py` | the edge tiles: the banks of water and gravel against mud, the soft edges (gravel and mud against dirt), the rock edges (slate against the others) |
 | `canvas.py` | the canvas of the things on the ground: a master of 6 or 12 samples for each world pixel with color multiplied by opacity, painted in layers and averaged down to a scale |
 | `bomb.py`, `fire.py`, `explosion.py` | the bombs of the four teams (6 samples, solid), the fire wall (the original's levels read as a map, drawn as light, opacity by heat) and the explosion with its light (classes read from the original's frames, drawn as light with its smoke as a veil) |
-| `pack.py` | the sheets and the manifest: the sheets of a page, and its records among the other pages' |
+| `pack.py` | the sheets and the manifest: the sheets of the pages of a set (a page is filled as far as it goes: `tools/art_sheets.py`), and their records among the other pages' |
 | `pack_pictures.py` | the command that packs a folder of finished pictures (the grass and the plants) as a page |
 | `mud_fields.py`, `mud_reference.py` | not part of the pack: the approved math of the dense mud as a standalone port, and the golden file made from it (below) |
 
@@ -68,11 +70,11 @@ The bombs, the explosion and the fire wall are drawn on masters with an alpha in
 
 ```
 ants-world-art 2
-sheet <page> <scale> <png file> <width> <height>                              three rows for each page, in order (page 0 scale 1, 2, 3, then page 1 ...); the size of that file in pixels
+sheet <page> <scale> <png file> <width> <height>                              (include/ants_app/art_sheets.hpp: three rows for each page, in order; the size of that file in pixels)
 sprite <number> <variant> <page> <w> <h> <x1> <y1> <x2> <y2> <x3> <y3>        one for each picture, sorted by number and then variant
 ```
 
-- `number` is the original's sprite number, or for a bigger bubble 10000 (medium) or 20000 (large) plus the bubble sprite's number (10641 to 10650, 20641 to 20650), for an explosion frame's light 30000 plus the frame's sprite number (30306 to 30315), for the fire wall 50000 plus the sprite's number (50316 to 50320); `variant` is 0 for the plain picture and 1 to 15 for a position variant of a plain tile (640 to 657, 726 to 731 and 901) or of a bigger bubble. `w` and `h` are the ORIGINAL sprite's size at 1x (32 x 32 for a bigger bubble: its sprite's; the explosion's light and the fire wall are the size of the sprite their number is made from); the picture at scale s is exactly (w x s, h x s). `page` is the page whose sheets hold the picture (0, the ground, the bridge and the effects; 1, the grass and the plants; up to 3 more later: a sheet is at most 4096 pixels high, so what a batch adds goes on a page of its own, and the game makes a page's texture only when something of it is drawn); a number is on one page only. (xs, ys) is the top left pixel of that picture inside the sheet of its page at scale s.
+- `number` is the original's sprite number, or for a bigger bubble 10000 (medium) or 20000 (large) plus the bubble sprite's number (10641 to 10650, 20641 to 20650), for an explosion frame's light 30000 plus the frame's sprite number (30306 to 30315), for the fire wall 50000 plus the sprite's number (50316 to 50320); `variant` is 0 for the plain picture and 1 to 15 for a position variant of a plain tile (640 to 657, 726 to 731 and 901) or of a bigger bubble. `w` and `h` are the ORIGINAL sprite's size at 1x (32 x 32 for a bigger bubble: its sprite's; the explosion's light and the fire wall are the size of the sprite their number is made from); the picture at scale s is exactly (w x s, h x s). `page` is the page whose sheets hold the picture (0, the ground, the bridge and the effects; 1, the grass and the plants; up to 2 more: a sheet is at most 4096 pixels high, so what a batch adds goes on a page of its own, and the game makes a page's texture only when something of it is drawn; the `sheet` records and the rule that splits a pack over pages, when the pictures of a batch do not fit one, are one thing for this art and the HUD art, `include/ants_app/art_sheets.hpp` and `tools/art_sheets.py`); a number is on one page only. (xs, ys) is the top left pixel of that picture inside the sheet of its page at scale s.
 - Every picture is surrounded by a ring of 1 pixel (at every scale) that repeats its own edge pixels, a corner pixel repeating the corner, so that a filtered copy never picks up a neighbor. Pixels stay as drawn, transparent ones with their own color (nothing is premultiplied), and the alpha of a see-through picture stays exactly as drawn, a partly transparent edge pixel repeated in the ring with its color and its opacity.
 - The sheets are 1024 (1x), 2048 (2x) and 3072 (3x) pixels wide and as high as the shelves need, never over 4096. The layout is deterministic shelf packing: the pictures sorted by height (the tallest first), then number and variant, laid left to right on shelves of their scale's own width, a new shelf when the next picture with its ring does not fit. Every page is laid this way in sheets of its own.
 

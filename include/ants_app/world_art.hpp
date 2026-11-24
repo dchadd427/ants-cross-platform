@@ -8,11 +8,11 @@
 // same place (the animation's own offsets) and in the same size, so the animations, their times and their footprints are the original's. A picture that does not fit (another size than the sprite's times
 // the scale) is not used; the sprite is drawn as the original has it. A plain ground tile has sixteen pictures (the variants): which one a cell shows is ground_variants().
 //
-// The files: `world_art.txt` (the manifest, one record a line) and the PNG sheets of its PAGES. A page is a set of sheets that holds the pictures of one kind of thing, so that no sheet is above 4096 pixels and a
-// page is a texture only when something of it is drawn: page 0 is the ground, the bridge and the effects (batches 1 to 3), page 1 the grass and the plants. Every page has a sheet for each scale, 1x, 2x and 3x
-// (the same drawing at 1, 2 and 3 pixels for each world pixel). The records:
+// The files: `world_art.txt` (the manifest, one record a line) and the PNG sheets of its pages (art_sheets.hpp: the `sheet` records, which every manifest of the new art writes the same way, and how a pack is
+// split over pages). Here a page is also what a batch adds, so that a view that draws nothing of it never makes its textures: page 0 is the ground, the bridge and the effects (batches 1 to 3), page 1 the
+// grass and the plants. The records:
 //     ants-world-art 2
-//     sheet <page> <scale> <png file> <width> <height>                               three rows for each page, in order: page 0 scale 1, 2, 3, page 1 scale 1, 2, 3 ...; the size of that file in pixels
+//     sheet <page> <scale> <png file> <width> <height>                               (art_sheets.hpp)
 //     sprite <number> <variant> <page> <w> <h> <x1> <y1> <x2> <y2> <x3> <y3>        one for each picture, sorted by number and variant
 // `w` and `h` are the original sprite's size at 1x; the picture at scale s is (w * s) x (h * s) pixels with its top left at (xs, ys) of the sheet of its page at that scale and a ring of one pixel round it that
 // repeats its own edge (so that a filtered copy never takes a pixel of a neighbor).
@@ -24,16 +24,14 @@
 #include <unordered_map>
 #include <vector>
 
+#include "ants_app/art_sheets.hpp"
 #include "ants_app/png_decode.hpp"
 
 namespace ants::app::world_art {
 
 /// How many pictures a plain ground tile has: the plain one (variant 0) and fifteen more
 inline constexpr int32_t kVariants = 16;
-/// The scales of the sheets
-inline constexpr std::array<int32_t, 3> kScales = {1, 2, 3};
-/// How many pages a manifest may have, and the page of the ground (the tiles' pictures, the bridge, the effects: what the mud's and the edges' own drawing cuts its colors from)
-inline constexpr int32_t kMaxPages = 4;
+/// The page of the ground (the tiles' pictures, the bridge, the effects: what the mud's and the edges' own drawing cuts its colors from)
 inline constexpr int32_t kGroundPage = 0;
 
 struct Picture {
@@ -60,10 +58,10 @@ public:
     const std::vector<Picture>& pictures() const noexcept { return pictures_; }
     /// The picture of a sprite: the one of that variant, else the plain one (variant 0), else none
     const Picture* find(uint32_t number, uint8_t variant) const noexcept;
-    int32_t page_count() const noexcept { return pages_; }
-    const std::string& sheet_file(int32_t page, int32_t scale) const;
-    int32_t sheet_width(int32_t page, int32_t scale) const noexcept { return in_range(page, scale) ? sheets_[index(page, scale)].w : 0; }
-    int32_t sheet_height(int32_t page, int32_t scale) const noexcept { return in_range(page, scale) ? sheets_[index(page, scale)].h : 0; }
+    int32_t page_count() const noexcept { return sheets_.pages(); }
+    const std::string& sheet_file(int32_t page, int32_t scale) const { return sheets_.file(page, scale); }
+    int32_t sheet_width(int32_t page, int32_t scale) const noexcept { return sheets_.width(page, scale); }
+    int32_t sheet_height(int32_t page, int32_t scale) const noexcept { return sheets_.height(page, scale); }
 
     /// The pixels of the sheet of a page at a scale, read and decoded from its file. False (what() does not change; the caller says) when the file is missing or damaged or is not the size the manifest states
     bool sheet_pixels(int32_t page, int32_t scale, DecodedImage& out) const;
@@ -76,15 +74,7 @@ private:
     std::string folder_;
     bool loaded_{false};
     uint64_t generation_{0};
-    struct Sheet {
-        std::string file;
-        int32_t w{0};
-        int32_t h{0};
-    };
-    bool in_range(int32_t page, int32_t scale) const noexcept { return page >= 0 && page < pages_ && scale >= 1 && scale <= 3; }
-    static size_t index(int32_t page, int32_t scale) noexcept { return static_cast<size_t>(page) * 3u + static_cast<size_t>(scale - 1); }
-    int32_t pages_{0};
-    std::array<Sheet, static_cast<size_t>(kMaxPages) * 3u> sheets_{};          // page by page: the sheet of scale 1, 2 and 3
+    ArtSheets sheets_;
     std::vector<Picture> pictures_;
     std::unordered_map<uint64_t, size_t> index_;     // (number << 8 | variant) -> position in pictures_
 };

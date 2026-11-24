@@ -793,13 +793,13 @@ private:
     uint64_t art_generation_{0};                           // the HUD art that art_textures_ were made from (hud_art::Art::generation; 0: none)
     uint64_t cursor_art_generation_{0};                    // the HUD art that cursor_art_fit_ was asked for
     std::array<int8_t, 14> cursor_art_fit_{};              // for each CursorType: whether that art's cursor fits the original's (-1: not asked yet, 0: no, 1: yes)
-    std::array<bool, 6> art_failed_{};                     // a sheet that could not be read or made a texture: said once, and not tried again until another set comes
-    std::array<SDL_Texture*, 6> art_textures_{};           // its sheets at 1x, 2x and 3x (then the second sheet's, if the set has one), made when first needed
+    std::array<bool, kArtMaxPages * 3> art_failed_{};                     // a sheet that could not be read or made a texture: said once, and not tried again until another set comes
+    std::array<SDL_Texture*, kArtMaxPages * 3> art_textures_{};   // its sheets page by page, each at 1x, 2x and 3x, made when first needed
     int32_t art_texture_limit_{0};                         // (for the tests) the largest side of a texture that is made; 0: the device's own
     const world_art::Pack* world_art_{nullptr};            // the new pictures of the world (set_world_art); null: the original's sprites
     uint64_t world_art_generation_{0};                     // the pack that world_art_textures_ were made from
-    std::array<bool, world_art::kMaxPages * 3> world_art_failed_{};      // a sheet that could not be read or made a texture: said once, and not tried again until another pack comes
-    std::array<SDL_Texture*, world_art::kMaxPages * 3> world_art_textures_{};   // its sheets page by page, each at 1x, 2x and 3x, made when first needed
+    std::array<bool, kArtMaxPages * 3> world_art_failed_{};      // a sheet that could not be read or made a texture: said once, and not tried again until another pack comes
+    std::array<SDL_Texture*, kArtMaxPages * 3> world_art_textures_{};   // its sheets page by page, each at 1x, 2x and 3x, made when first needed
     uint8_t world_variant_{0};                             // which picture of a plain ground tile the cell being drawn shows (render_terrain_layer1); 0 for everything else
     bool dense_mud_{true};                                 // the looks of big mud fields (world_art_mud.hpp), while the world art is on
     int32_t mud_budget_ms_{world_art::mud::kDefaultBudget};   // the work for the looks and the transitions that a frame may take (set_dense_mud_budget_ms; the default: kFrameBudgetMs, none while the clock is pinned)
@@ -880,7 +880,8 @@ private:
     void drop_mud_caches();
     void drop_edge_caches();
     void drop_art_textures();
-    SDL_Texture* art_texture(const hud_art::Art& art, int32_t scale, int32_t sheet = 0);
+    SDL_Texture* art_texture(const hud_art::Art& art, int32_t scale, int32_t page = 0);
+    SDL_Texture* make_sheet_texture(const DecodedImage& image, const char* set, const std::string& file);
     int32_t art_scale_for_output(double* out = nullptr) const;
     std::array<SDL_Texture*, 12> fixed_glyphs_{};   // draw_fixed_text: '0' .. '9', '-' and '+', built on first use
     std::unordered_map<uint64_t, SDL_Texture*> blend_textures_;   // draw_rgba_blended: one for each different picture (by what it holds)

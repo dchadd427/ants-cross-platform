@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""The comparison of tools/hud_art/check_sheets.py (tools/hud_art/README.md): run by ./run_tests.sh --fast and by the CI.
+"""The check of tools/hud_art/check_sheets.py (tools/hud_art/README.md): run by ./run_tests.sh --fast and by the CI.
 
-The check builds the HUD art's sheets again with the generator (which needs a browser that CI does not have: it is run by hand) and compares the files with assets/hud_art/. What is held here, without a browser,
-is the comparison itself: the same files pass, a file that differs in a pixel fails, the same pixels in other bytes (another compression) pass and fail with --strict, and a missing file fails. The sheets
-that the repository holds are the ones that it compares. Needs Pillow and NumPy (CI's python has both).
+The check builds the HUD art's sheets again with the generator (which needs a browser that CI does not have: it is run by hand) and compares the files with assets/hud_art/. The comparison itself is
+tools/art_sheets.py's, the same as the world art's, and is held in tests/scripts/test_art_sheets.py; what is its own is held here: that it compares `hud_art.txt` and the sheets that this manifest names,
+and that the files of the repository are the ones that it compares. Needs Pillow and NumPy (CI's python has both).
 """
+import importlib.util
 import os
 import shutil
 import sys
@@ -18,101 +19,58 @@ except ImportError:
     Image = None
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-sys.path.insert(0, os.path.join(REPO, "tools", "hud_art"))
+sys.path.insert(0, os.path.join(REPO, "tools"))
 
 
-def png(path, pixel=0, level=9):
-    a = np.zeros((8, 8, 4), np.uint8)
-    a[..., 3] = 255
-    a[3, 3, 0] = pixel
-    Image.fromarray(a, "RGBA").save(path, compress_level=level)
+def load(name, *path):
+    """a module by its file, under a name of its own (the tools of the HUD art and of the world art have modules of the same names: check_sheets, pack)"""
+    spec = importlib.util.spec_from_file_location(name, os.path.join(REPO, *path))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 @unittest.skipIf(Image is None, "Pillow and NumPy are needed")
-class TheComparison(unittest.TestCase):
+class TheCheck(unittest.TestCase):
     def setUp(self):
-        import check_sheets
-        self.check = check_sheets
-        self.tmp = tempfile.mkdtemp(prefix="ants_check_sheets_")
-        self.have = os.path.join(self.tmp, "have")
-        self.made = os.path.join(self.tmp, "made")
-        os.makedirs(self.have)
-        os.makedirs(self.made)
+        import art_sheets
+        self.sheets, self.check = art_sheets, load("hud_art_check_sheets", "tools", "hud_art", "check_sheets.py")
+        self.tmp = tempfile.mkdtemp(prefix="ants_hud_check_")
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def fill(self, folder, pixel=0, level=9):
-        with open(os.path.join(folder, "hud_art.txt"), "w") as f:
-            f.write("ants-hud-art 1\n")
-        for name in self.check.FILES[1:]:
-            png(os.path.join(folder, name), pixel, level)
+    def folder(self, name, pages, pixel=0):
+        """a folder with a manifest that names the sheets of `pages` pages, and the sheets"""
+        path = os.path.join(self.tmp, name)
+        os.makedirs(path)
+        sheets = {(page, k): (self.sheets.file_name("sheet", 0, page, k), 8 * k, 8 * k) for page in range(pages) for k in (1, 2, 3)}
+        with open(os.path.join(path, "hud_art.txt"), "w") as f:
+            f.write("ants-hud-art 2\n" + "\n".join(self.sheets.sheet_rows(sheets)) + "\n")
+        for file, w, h in sheets.values():
+            a = np.zeros((h, w, 4), np.uint8)
+            a[..., 3] = 255
+            a[3, 3, 0] = pixel
+            Image.fromarray(a, "RGBA").save(os.path.join(path, file))
+        return path
 
-    def test_the_same_files_pass(self):
-        self.fill(self.have)
-        self.fill(self.made)
-        code, lines = self.check.compare(self.have, self.made)
+    def test_it_compares_the_manifest_and_the_sheets_that_the_manifest_names_page_by_page(self):
+        have, made = self.folder("have", 2), self.folder("made", 2)
+        code, lines = self.check.compare(have, made)
         self.assertEqual(code, 0, lines)
-        self.assertTrue(all("the same bytes" in line for line in lines), lines)
+        self.assertEqual([line.split()[0] for line in lines], ["hud_art.txt", "sheet_1x.png", "sheet_2x.png", "sheet_3x.png", "sheet2_1x.png", "sheet2_2x.png", "sheet2_3x.png"])
+        self.assertEqual(self.check.compare(have, self.folder("other", 2, pixel=1))[0], 1)
 
-    def test_a_pixel_that_differs_fails(self):
-        self.fill(self.have)
-        self.fill(self.made)
-        png(os.path.join(self.made, "sheet_2x.png"), pixel=1)
-        code, lines = self.check.compare(self.have, self.made)
-        self.assertEqual(code, 1)
-        self.assertIn("DIFFERENT", [line for line in lines if line.startswith("sheet_2x")][0])
+    def test_a_second_page_that_only_one_folder_has_fails(self):
+        self.assertEqual(self.check.compare(self.folder("have", 1), self.folder("made", 2))[0], 1)
+        self.assertEqual(self.check.compare(self.folder("more", 2), self.folder("less", 1))[0], 1)
 
-    def test_a_manifest_that_differs_fails(self):
-        self.fill(self.have)
-        self.fill(self.made)
-        with open(os.path.join(self.made, "hud_art.txt"), "a") as f:
-            f.write("sprite x 1 1 0 0 0 0 left top\n")
-        self.assertEqual(self.check.compare(self.have, self.made)[0], 1)
-
-    def test_the_same_pixels_in_other_bytes_pass_unless_strict(self):
-        self.fill(self.have, level=9)
-        self.fill(self.made, level=0)
-        self.assertNotEqual(self.check.read(os.path.join(self.have, "sheet_1x.png")), self.check.read(os.path.join(self.made, "sheet_1x.png")))
-        code, lines = self.check.compare(self.have, self.made)
-        self.assertEqual(code, 0, lines)
-        self.assertIn("the same pixels", lines[1])
-        self.assertEqual(self.check.compare(self.have, self.made, strict=True)[0], 1)
-
-    def test_a_file_that_is_missing_fails(self):
-        self.fill(self.have)
-        self.fill(self.made)
-        os.remove(os.path.join(self.made, "sheet_3x.png"))
-        self.assertEqual(self.check.compare(self.have, self.made)[0], 1)
-        os.remove(os.path.join(self.have, "sheet_1x.png"))
-        self.assertEqual(self.check.compare(self.have, self.made)[0], 1)
-
-    def test_a_second_sheet_is_compared_too(self):
-        self.fill(self.have)
-        self.fill(self.made)
-        for name in self.check.SECOND:
-            png(os.path.join(self.have, name))
-            png(os.path.join(self.made, name))
-        code, lines = self.check.compare(self.have, self.made)
-        self.assertEqual(code, 0, lines)
-        self.assertEqual(len([line for line in lines if line.startswith("sheet2_")]), 3, lines)
-        png(os.path.join(self.made, "sheet2_2x.png"), pixel=1)
-        self.assertEqual(self.check.compare(self.have, self.made)[0], 1)
-        os.remove(os.path.join(self.made, "sheet2_3x.png"))
-        self.assertEqual(self.check.compare(self.have, self.made)[0], 1)
-
-    def test_a_second_sheet_that_the_repository_lacks_fails(self):
-        self.fill(self.have)
-        self.fill(self.made)
-        for name in self.check.SECOND:
-            png(os.path.join(self.made, name))
-        code, lines = self.check.compare(self.have, self.made)
-        self.assertEqual(code, 1)
-        self.assertIn("no such file", [line for line in lines if line.startswith("sheet2_1x")][0])
-
-    def test_the_repository_holds_the_four_files(self):
+    def test_the_repository_holds_the_files_that_it_compares(self):
         folder = os.path.join(REPO, "assets", "hud_art")
-        for name in self.check.FILES:
+        with open(os.path.join(folder, self.check.MANIFEST), encoding="utf-8") as f:
+            names = self.sheets.sheet_files(f.read())
+        self.assertGreaterEqual(len(names), 3)
+        for name in [self.check.MANIFEST] + names:
             self.assertTrue(os.path.isfile(os.path.join(folder, name)), name)
 
 

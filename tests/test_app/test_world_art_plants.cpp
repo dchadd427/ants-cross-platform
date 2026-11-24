@@ -238,7 +238,7 @@ static void test_draw(const assets::AssetArchive& arc, const world_art::Pack& pa
     group("draw", "the real renderer's plant is the picture of the page in the original's place, and nothing else changes");
     const Plants plants = plants_of(arc);
     DecodedImage sheets[3];
-    for (const int32_t s : world_art::kScales) {
+    for (const int32_t s : kArtScales) {
         if (!pack.sheet_pixels(kPlantPage, s, sheets[s - 1])) {
             check(false, "the second page's sheet of scale " + std::to_string(s) + " is read");
             return;

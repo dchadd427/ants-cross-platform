@@ -542,10 +542,10 @@ void test_pieces(const hud_art::Art& art) {
         while (std::getline(in, line)) {
             if (line.rfind(prefix, 0) == 0) {
                 std::istringstream words(line);
-                std::string a, name, w, h, rest;
-                words >> a >> name >> w >> h;
+                std::string a, name, page, w, h, rest;
+                words >> a >> name >> page >> w >> h;
                 std::getline(words, rest);
-                line = a + " " + name + " " + std::to_string(std::stoi(w) + dw) + " " + h + rest;
+                line = a + " " + name + " " + page + " " + std::to_string(std::stoi(w) + dw) + " " + h + rest;
             }
             out += line + "\n";
         }

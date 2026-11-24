@@ -38,6 +38,7 @@ add_library(ants_app STATIC
     renderer_health.cpp
     renderer_art.cpp
     renderer_world_art.cpp
+    art_sheets.cpp
     hud_art.cpp
     world_art.cpp
     world_art_mud.cpp

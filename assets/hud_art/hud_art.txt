@@ -1,305 +1,304 @@
-ants-hud-art 1
+ants-hud-art 2
 canvas 960 540
-sheetsize 1164 1361
 derive2x 739
-sheet 1 sheet_1x.png
-sheet 2 sheet_2x.png
-sheet 3 sheet_3x.png
-sprite top_bar 960 22 23 1198 0 0 stretch top x 140 140 332 320
-sprite left_strip 17 618 2 741 0 22 left stretch y 270 270 398 120
-sprite bottom_strip 943 19 23 1224 17 521 stretch bottom x 0 0 192 206
-sprite score_window 57 17 993 1243 211 523 left bottom
-sprite lower_panel 182 353 23 741 778 268 right stretch y 92 92 220 104
-sprite panel_top 182 8 831 1264 778 22 right top
-sprite minimap_frame 182 106 395 741 778 30 right top
-sprite card 182 116 209 741 778 136 right top
-sprite status_box 182 16 48 1247 778 252 right top
-sprite button_help_up 46 23 883 1169 788 7 right top
-sprite button_help_hover 46 23 833 1169 788 7 right top
-sprite button_help_down 47 23 731 1169 788 7 right top
-sprite button_options_up 52 23 1027 1168 837 7 right top
-sprite button_options_hover 52 23 1084 1161 837 7 right top
-sprite button_options_down 53 23 1027 1141 837 7 right top
-sprite button_quit_up 46 23 383 1171 891 7 right top
-sprite button_quit_hover 46 23 933 1169 891 7 right top
-sprite button_quit_down 47 23 782 1169 891 7 right top
-sprite send_all_up 44 24 979 1141 852 503 right bottom
-sprite send_all_hover 44 24 931 1141 852 503 right bottom
-sprite send_all_down 45 24 882 1141 852 503 right bottom
-sprite send_team_up 46 24 832 1141 899 503 right bottom
-sprite send_team_hover 46 24 782 1141 899 503 right bottom
-sprite send_team_down 47 24 731 1141 899 503 right bottom
-sprite stop_up 52 64 1109 1049 908 172 right top
-sprite stop_down 52 64 1109 981 908 172 right top
-sprite label_move 64 16 574 1247 794 136 right top
-sprite label_ally 64 16 234 1247 794 136 right top
-sprite label_hatch 64 16 506 1247 794 136 right top
-sprite label_attack 64 16 302 1247 855 136 right top
-sprite label_bomb 64 16 370 1247 855 136 right top
-sprite label_fire 64 16 438 1247 855 136 right top
-sprite label_thief 64 16 710 1247 855 136 right top
-sprite label_swim 64 16 642 1247 855 136 right top
-sprite pedestal_rise1 56 76 209 1021 796 156 right top
-sprite pedestal_rise2 56 76 269 1021 796 156 right top
-sprite pedestal_rise3 56 76 329 1021 796 156 right top
-sprite pedestal_rise4 56 76 569 1061 796 156 right top
-sprite pedestal_rise5 56 76 629 1061 796 156 right top
-sprite pedestal_move_up 56 76 509 1011 796 156 right top
-sprite pedestal_move_press1 56 76 869 981 796 156 right top
-sprite pedestal_move_press2 56 76 929 981 796 156 right top
-sprite pedestal_move_latched 56 76 809 981 796 156 right top
-sprite pedestal_move_rise6 56 76 989 981 796 156 right top
-sprite pedestal_move_rise7 56 76 1049 981 796 156 right top
-sprite pedestal_move_rise8 56 76 389 1011 796 156 right top
-sprite pedestal_move_rise9 56 76 449 1011 796 156 right top
-sprite pedestal_ally_up 56 76 1001 741 796 156 right top
-sprite pedestal_ally_press1 56 76 641 741 796 156 right top
-sprite pedestal_ally_press2 56 76 701 741 796 156 right top
-sprite pedestal_ally_latched 56 76 581 741 796 156 right top
-sprite pedestal_ally_rise6 56 76 761 741 796 156 right top
-sprite pedestal_ally_rise7 56 76 821 741 796 156 right top
-sprite pedestal_ally_rise8 56 76 881 741 796 156 right top
-sprite pedestal_ally_rise9 56 76 941 741 796 156 right top
-sprite pedestal_hatch_up 56 76 749 981 796 156 right top
-sprite pedestal_hatch_press1 56 76 209 941 796 156 right top
-sprite pedestal_hatch_press2 56 76 269 941 796 156 right top
-sprite pedestal_hatch_latched 56 76 509 931 796 156 right top
-sprite pedestal_hatch_rise6 56 76 329 941 796 156 right top
-sprite pedestal_hatch_rise7 56 76 569 981 796 156 right top
-sprite pedestal_hatch_rise8 56 76 629 981 796 156 right top
-sprite pedestal_hatch_rise9 56 76 689 981 796 156 right top
-sprite pedestal_attack_up 56 76 941 821 857 156 right top
-sprite pedestal_attack_press1 56 76 581 821 857 156 right top
-sprite pedestal_attack_press2 56 76 641 821 857 156 right top
-sprite pedestal_attack_latched 56 76 1061 741 857 156 right top
-sprite pedestal_attack_rise6 56 76 701 821 857 156 right top
-sprite pedestal_attack_rise7 56 76 761 821 857 156 right top
-sprite pedestal_attack_rise8 56 76 821 821 857 156 right top
-sprite pedestal_attack_rise9 56 76 881 821 857 156 right top
-sprite pedestal_bomb_up 56 76 329 861 857 156 right top
-sprite pedestal_bomb_press1 56 76 1061 821 857 156 right top
-sprite pedestal_bomb_press2 56 76 395 851 857 156 right top
-sprite pedestal_bomb_latched 56 76 1001 821 857 156 right top
-sprite pedestal_bomb_rise6 56 76 455 851 857 156 right top
-sprite pedestal_bomb_rise7 56 76 515 851 857 156 right top
-sprite pedestal_bomb_rise8 56 76 209 861 857 156 right top
-sprite pedestal_bomb_rise9 56 76 269 861 857 156 right top
-sprite pedestal_fire_up 56 76 995 901 857 156 right top
-sprite pedestal_fire_press1 56 76 635 901 857 156 right top
-sprite pedestal_fire_press2 56 76 695 901 857 156 right top
-sprite pedestal_fire_latched 56 76 575 901 857 156 right top
-sprite pedestal_fire_rise6 56 76 755 901 857 156 right top
-sprite pedestal_fire_rise7 56 76 815 901 857 156 right top
-sprite pedestal_fire_rise8 56 76 875 901 857 156 right top
-sprite pedestal_fire_rise9 56 76 935 901 857 156 right top
-sprite pedestal_thief_up 56 76 323 1101 857 156 right top
-sprite pedestal_thief_press1 56 76 509 1091 857 156 right top
-sprite pedestal_thief_press2 56 76 23 1098 857 156 right top
-sprite pedestal_thief_latched 56 76 449 1091 857 156 right top
-sprite pedestal_thief_rise6 56 76 83 1098 857 156 right top
-sprite pedestal_thief_rise7 56 76 143 1098 857 156 right top
-sprite pedestal_thief_rise8 56 76 203 1101 857 156 right top
-sprite pedestal_thief_rise9 56 76 263 1101 857 156 right top
-sprite pedestal_swim_up 56 76 389 1091 857 156 right top
-sprite pedestal_swim_press1 56 76 749 1061 857 156 right top
-sprite pedestal_swim_press2 56 76 809 1061 857 156 right top
-sprite pedestal_swim_latched 56 76 689 1061 857 156 right top
-sprite pedestal_swim_rise6 56 76 869 1061 857 156 right top
-sprite pedestal_swim_rise7 56 76 929 1061 857 156 right top
-sprite pedestal_swim_rise8 56 76 989 1061 857 156 right top
-sprite pedestal_swim_rise9 56 76 1049 1061 857 156 right top
-sprite pedestal_flash1 56 76 1055 901 796 156 right top
-sprite pedestal_flash2 56 76 389 931 796 156 right top
-sprite pedestal_flash3 56 76 449 931 796 156 right top
-sprite egg 12 16 1146 1213 856 158 right top
-sprite egg_hatch1 12 16 1146 1233 856 158 right top
-sprite egg_hatch2 17 14 778 1247 853 159 right top
-sprite egg_hatch3 19 6 1098 1256 851 167 right top
-sprite lunch_box 34 40 1109 1117 917 131 right top
-sprite button_fullscreen_up 21 23 671 1171 939 7 right top
-sprite button_fullscreen_hover 21 23 458 1171 939 7 right top
-sprite button_fullscreen_down 21 23 433 1171 939 7 right top
-sprite button_fullscreen_leave_up 21 23 533 1171 939 7 right top
-sprite button_fullscreen_leave_hover 21 23 508 1171 939 7 right top
-sprite button_fullscreen_leave_down 21 23 483 1171 939 7 right top
-sprite cursor_c_normal 13 23 1010 1169 0 0 left top
-sprite cursor_c_select 17 21 987 1196 0 0 left top
-sprite cursor_c_scroll 17 21 1051 1195 0 0 left top
-sprite cursor_c_mov1 25 21 1083 1188 0 0 left top
-sprite cursor_c_mov2 21 17 23 1247 0 0 left top
-sprite cursor_c_mov3 19 15 1098 1237 0 0 left top
-sprite cursor_c_targ1 26 26 671 1141 0 0 left top
-sprite cursor_c_targ2 20 19 1122 1213 0 0 left top
-sprite cursor_c_targ3 12 12 864 1247 0 0 left top
-sprite cursor_c_atk1 28 29 639 1141 0 0 left top
-sprite cursor_c_atk2 22 23 1140 1161 0 0 left top
-sprite cursor_c_atk3 18 19 1054 1237 0 0 left top
-sprite cursor_c_atk4 12 13 848 1247 0 0 left top
-sprite cursor_c_atk5 8 9 894 1247 0 0 left top
-sprite cursor_curfd01 32 32 569 1141 0 0 left top
-sprite cursor_curfd02 30 30 605 1141 0 0 left top
-sprite cursor_curfd03 26 26 701 1141 0 0 left top
-sprite cursor_curfd04 21 21 1112 1188 0 0 left top
-sprite cursor_curfd05 12 14 799 1247 0 0 left top
-sprite cursor_curfd06 12 14 815 1247 0 0 left top
-sprite cursor_curfd08 10 12 880 1247 0 0 left top
-sprite cursor_c_cant1 5 5 1145 1253 0 0 left top
-sprite cursor_c_cant2 13 13 831 1247 0 0 left top
-sprite cursor_c_cant3 18 18 1076 1237 0 0 left top
-sprite cursor_c_cant4 23 23 983 1169 0 0 left top
-sprite cursor_cur_n 21 20 1072 1213 0 0 left top
-sprite cursor_cur_ne 19 19 1008 1220 0 0 left top
-sprite cursor_cur_e 20 21 1137 1188 0 0 left top
-sprite cursor_cur_se 19 19 970 1224 0 0 left top
-sprite cursor_cur_s 21 20 1097 1213 0 0 left top
-sprite cursor_cur_sw 19 19 1122 1236 0 0 left top
-sprite cursor_cur_w 20 21 1027 1195 0 0 left top
-sprite cursor_cur_nw 19 19 1031 1220 0 0 left top
-sprite panel_c 160 120 994 2 0 0 left top
-sprite panel_tl 24 24 319 616 0 0 left top
-sprite panel_t 160 24 948 580 0 0 left top
-sprite panel_tr 24 24 347 616 0 0 left top
-sprite panel_l 24 120 994 126 0 0 left top
-sprite panel_r 24 120 1022 126 0 0 left top
-sprite panel_bl 24 24 895 615 0 0 left top
-sprite panel_b 160 24 2 569 0 0 left top
-sprite panel_br 24 24 291 616 0 0 left top
-sprite dlg_btn_yes_up 49 24 471 614 180 260 left top
-sprite dlg_btn_yes_hover 49 24 418 614 180 260 left top
-sprite dlg_btn_yes_down 49 24 1112 608 180 260 left top
-sprite dlg_btn_no_up 49 24 1059 608 292 260 left top
-sprite dlg_btn_no_hover 49 24 1006 608 292 260 left top
-sprite dlg_btn_no_down 49 24 1112 580 292 260 left top
-sprite dlg_btn_accept_up 80 24 605 586 152 260 left top
-sprite dlg_btn_accept_hover 80 24 521 586 152 260 left top
-sprite dlg_btn_accept_down 80 24 437 586 152 260 left top
-sprite dlg_btn_decline_up 80 24 857 587 284 260 left top
-sprite dlg_btn_decline_hover 80 24 773 587 284 260 left top
-sprite dlg_btn_decline_down 80 24 689 586 284 260 left top
-sprite dlg_btn_withdraw_up 80 24 334 588 220 260 left top
-sprite dlg_btn_withdraw_hover 80 24 250 588 220 260 left top
-sprite dlg_btn_withdraw_down 80 24 166 588 220 260 left top
-sprite dlg_btn_return_up 98 27 701 525 351 425 left top
-sprite dlg_btn_return_hover 98 27 1061 519 351 425 left top
-sprite dlg_btn_return_down 98 27 1061 488 351 425 left top
-sprite op_on_up 49 24 238 616 103 290 left top
-sprite op_on_hover 49 24 185 616 103 290 left top
-sprite op_on_down 49 24 132 616 103 290 left top
-sprite op_on_chosen 49 24 789 615 103 290 left top
-sprite op_on_chosen_hover 49 24 842 615 103 290 left top
-sprite op_off_up 49 24 736 615 151 290 left top
-sprite op_off_hover 49 24 683 614 151 290 left top
-sprite op_off_down 49 24 630 614 151 290 left top
-sprite op_off_chosen 49 24 524 614 151 290 left top
-sprite op_off_chosen_hover 49 24 577 614 151 290 left top
-sprite op_thumb_up 49 18 748 685 373 178 left top
-sprite op_thumb_hover 49 18 1089 680 373 178 left top
-sprite op_thumb_held 49 18 1089 658 373 178 left top
-sprite dlg_btn_fullscreen_up 97 26 240 558 0 0 left top
-sprite dlg_btn_fullscreen_down 97 26 1061 550 0 0 left top
-sprite cd_count_well 152 119 359 168 19 69 left top
-sprite cd_row_well 280 34 417 488 0 0 left top
-sprite cd_dot_0 11 11 34 726 0 0 left top
-sprite cd_dot_1 11 11 49 726 0 0 left top
-sprite cd_dot_2 11 11 64 726 0 0 left top
-sprite cd_dot_3 11 11 79 726 0 0 left top
-sprite sc_btn_l_up 12 44 1102 300 0 0 left top
-sprite sc_btn_m_up 128 44 934 396 0 0 left top
-sprite sc_btn_r_up 12 44 1150 300 0 0 left top
-sprite sc_sm_l_up 12 26 373 558 0 0 left top
-sprite sc_sm_m_up 128 26 464 556 0 0 left top
-sprite sc_sm_r_up 12 26 421 558 0 0 left top
-sprite sc_leave_up 102 26 702 556 0 0 left top
-sprite sc_watch_up 61 24 941 608 0 0 left top
-sprite sc_btn_l_hover 12 44 1086 300 0 0 left top
-sprite sc_btn_m_hover 128 44 938 348 0 0 left top
-sprite sc_btn_r_hover 12 44 1134 300 0 0 left top
-sprite sc_sm_l_hover 12 26 357 558 0 0 left top
-sprite sc_sm_m_hover 128 26 2 539 0 0 left top
-sprite sc_sm_r_hover 12 26 405 558 0 0 left top
-sprite sc_leave_hover 102 26 596 556 0 0 left top
-sprite sc_watch_hover 61 24 67 597 0 0 left top
-sprite sc_btn_l_down 12 44 1070 300 0 0 left top
-sprite sc_btn_m_down 128 44 938 300 0 0 left top
-sprite sc_btn_r_down 12 44 1118 300 0 0 left top
-sprite sc_sm_l_down 12 26 341 558 0 0 left top
-sprite sc_sm_m_down 128 26 464 526 0 0 left top
-sprite sc_sm_r_down 12 26 389 558 0 0 left top
-sprite sc_leave_down 102 26 134 539 0 0 left top
-sprite sc_watch_down 61 24 2 597 0 0 left top
-sprite sc_well_tl 12 12 1128 723 0 0 left top
-sprite sc_well_t 128 12 2 710 0 0 left top
-sprite sc_well_tr 12 12 1144 723 0 0 left top
-sprite sc_well_l 12 32 1109 348 0 0 left top
-sprite sc_well_r 12 32 1125 348 0 0 left top
-sprite sc_well_bl 12 12 710 709 0 0 left top
-sprite sc_well_b 128 12 578 709 0 0 left top
-sprite sc_well_br 12 12 1112 723 0 0 left top
-sprite sc_victory_26 168 46 994 250 5 33 left top
-sprite sc_victory_22 144 39 2 460 5 28 left top
-sprite sc_defeat_26 133 38 150 460 3 32 left top
-sprite sc_defeat_22 114 33 701 488 3 27 left top
-sprite sc_gameover_36 320 52 610 380 6 44 left top
-sprite sc_gameover_26 233 39 2 417 5 32 left top
-sprite sc_matchstats_15 136 25 808 558 3 20 left top
-sprite sc_others 109 21 923 636 2 14 left top
-sprite sc_g_damage 59 18 1089 636 29 12 left top
-sprite sc_g_food 38 16 801 685 18 13 left top
-sprite sc_g_special 82 19 662 667 40 13 left top
-sprite sc_s_done 28 10 94 726 26 8 left top
-sprite sc_s_taken 30 11 707 725 28 9 left top
-sprite sc_s_trips 27 13 804 705 25 9 left top
-sprite sc_s_points 31 11 672 725 29 9 left top
-sprite sc_s_bombs 49 11 578 725 47 9 left top
-sprite sc_s_fires 37 11 631 725 35 9 left top
-sprite sc_s_raids 28 11 2 726 26 9 left top
-sprite sc_s_loot 24 10 126 726 22 8 left top
-sprite sc_k_winner 59 13 515 709 2 10 left top
-sprite sc_k_colony 163 13 348 709 1 10 left top
-sprite sc_k_play 115 12 804 723 2 9 left top
-sprite sc_k_mvp 28 12 1080 723 14 9 left top
-sprite sc_k_blood 78 12 923 723 38 9 left top
-sprite sc_k_raid 81 12 134 710 40 9 left top
-sprite sc_k_stand 71 12 1005 723 36 9 left top
-sprite sc_leave_word_up 111 19 117 668 56 16 left top
-sprite sc_sw_allstats_up 59 15 285 709 30 12 left top
-sprite sc_sw_back_up 99 15 1049 704 50 12 left top
-sprite sc_sw_room_up 106 15 112 691 53 12 left top
-sprite sc_sw_hub_up 132 15 368 690 66 12 left top
-sprite sc_bw_room_up 155 20 259 666 78 17 left top
-sprite sc_bw_hub_up 194 20 61 644 97 17 left top
-sprite sc_leave_word_hover 111 19 2 668 56 16 left top
-sprite sc_sw_allstats_hover 59 15 222 709 30 12 left top
-sprite sc_sw_back_hover 99 15 946 704 50 12 left top
-sprite sc_sw_room_hover 106 15 2 691 53 12 left top
-sprite sc_sw_hub_hover 132 15 232 690 66 12 left top
-sprite sc_bw_room_hover 155 20 930 661 78 17 left top
-sprite sc_bw_hub_hover 194 20 573 643 97 17 left top
-sprite sc_leave_word_down 111 19 547 667 54 15 left top
-sprite sc_sw_allstats_down 59 15 741 707 28 11 left top
-sprite sc_sw_back_down 99 15 843 704 48 11 left top
-sprite sc_sw_room_down 106 15 979 685 52 11 left top
-sprite sc_sw_hub_down 132 15 843 685 65 11 left top
-sprite sc_bw_room_down 155 20 771 661 76 16 left top
-sprite sc_bw_hub_down 194 20 375 642 96 16 left top
-sprite op_part_00 380 127 610 136 44 40 left top
-sprite op_part_01 116 15 504 690 65 176 left top
-sprite op_part_02 238 32 819 488 186 177 left top
-sprite op_part_03 113 15 624 690 68 213 left top
-sprite op_part_04 238 32 2 503 186 214 left top
-sprite op_part_05 125 19 418 666 56 251 left top
-sprite op_part_06 238 30 819 524 186 251 left top
-sprite op_part_07 55 22 2 625 39 288 left top
-sprite op_part_08 126 35 287 476 213 288 left top
-sprite op_part_09 419 109 515 267 30 327 left top
-sprite qh_part_00 495 40 610 444 72 9 left top
-sprite qh_part_01 247 92 359 380 14 53 left top
-sprite qh_part_02 353 411 2 2 273 54 left top
-sprite qh_part_03 247 130 610 2 14 159 left top
-sprite qh_part_04 247 162 359 2 14 302 left top
-sprite cd_title 216 28 244 526 132 18 left top
-sprite qh_pedestal_move 41 56 1050 126 217 201 left top
-sprite qh_pedestal_special 41 56 1095 126 474 404 left top
+sheet 0 1 sheet_1x.png 1164 1361
+sheet 0 2 sheet_2x.png 2328 2722
+sheet 0 3 sheet_3x.png 3492 4083
+sprite top_bar 0 960 22 23 1198 0 0 stretch top x 140 140 332 320
+sprite left_strip 0 17 618 2 741 0 22 left stretch y 270 270 398 120
+sprite bottom_strip 0 943 19 23 1224 17 521 stretch bottom x 0 0 192 206
+sprite score_window 0 57 17 993 1243 211 523 left bottom
+sprite lower_panel 0 182 353 23 741 778 268 right stretch y 92 92 220 104
+sprite panel_top 0 182 8 831 1264 778 22 right top
+sprite minimap_frame 0 182 106 395 741 778 30 right top
+sprite card 0 182 116 209 741 778 136 right top
+sprite status_box 0 182 16 48 1247 778 252 right top
+sprite button_help_up 0 46 23 883 1169 788 7 right top
+sprite button_help_hover 0 46 23 833 1169 788 7 right top
+sprite button_help_down 0 47 23 731 1169 788 7 right top
+sprite button_options_up 0 52 23 1027 1168 837 7 right top
+sprite button_options_hover 0 52 23 1084 1161 837 7 right top
+sprite button_options_down 0 53 23 1027 1141 837 7 right top
+sprite button_quit_up 0 46 23 383 1171 891 7 right top
+sprite button_quit_hover 0 46 23 933 1169 891 7 right top
+sprite button_quit_down 0 47 23 782 1169 891 7 right top
+sprite send_all_up 0 44 24 979 1141 852 503 right bottom
+sprite send_all_hover 0 44 24 931 1141 852 503 right bottom
+sprite send_all_down 0 45 24 882 1141 852 503 right bottom
+sprite send_team_up 0 46 24 832 1141 899 503 right bottom
+sprite send_team_hover 0 46 24 782 1141 899 503 right bottom
+sprite send_team_down 0 47 24 731 1141 899 503 right bottom
+sprite stop_up 0 52 64 1109 1049 908 172 right top
+sprite stop_down 0 52 64 1109 981 908 172 right top
+sprite label_move 0 64 16 574 1247 794 136 right top
+sprite label_ally 0 64 16 234 1247 794 136 right top
+sprite label_hatch 0 64 16 506 1247 794 136 right top
+sprite label_attack 0 64 16 302 1247 855 136 right top
+sprite label_bomb 0 64 16 370 1247 855 136 right top
+sprite label_fire 0 64 16 438 1247 855 136 right top
+sprite label_thief 0 64 16 710 1247 855 136 right top
+sprite label_swim 0 64 16 642 1247 855 136 right top
+sprite pedestal_rise1 0 56 76 209 1021 796 156 right top
+sprite pedestal_rise2 0 56 76 269 1021 796 156 right top
+sprite pedestal_rise3 0 56 76 329 1021 796 156 right top
+sprite pedestal_rise4 0 56 76 569 1061 796 156 right top
+sprite pedestal_rise5 0 56 76 629 1061 796 156 right top
+sprite pedestal_move_up 0 56 76 509 1011 796 156 right top
+sprite pedestal_move_press1 0 56 76 869 981 796 156 right top
+sprite pedestal_move_press2 0 56 76 929 981 796 156 right top
+sprite pedestal_move_latched 0 56 76 809 981 796 156 right top
+sprite pedestal_move_rise6 0 56 76 989 981 796 156 right top
+sprite pedestal_move_rise7 0 56 76 1049 981 796 156 right top
+sprite pedestal_move_rise8 0 56 76 389 1011 796 156 right top
+sprite pedestal_move_rise9 0 56 76 449 1011 796 156 right top
+sprite pedestal_ally_up 0 56 76 1001 741 796 156 right top
+sprite pedestal_ally_press1 0 56 76 641 741 796 156 right top
+sprite pedestal_ally_press2 0 56 76 701 741 796 156 right top
+sprite pedestal_ally_latched 0 56 76 581 741 796 156 right top
+sprite pedestal_ally_rise6 0 56 76 761 741 796 156 right top
+sprite pedestal_ally_rise7 0 56 76 821 741 796 156 right top
+sprite pedestal_ally_rise8 0 56 76 881 741 796 156 right top
+sprite pedestal_ally_rise9 0 56 76 941 741 796 156 right top
+sprite pedestal_hatch_up 0 56 76 749 981 796 156 right top
+sprite pedestal_hatch_press1 0 56 76 209 941 796 156 right top
+sprite pedestal_hatch_press2 0 56 76 269 941 796 156 right top
+sprite pedestal_hatch_latched 0 56 76 509 931 796 156 right top
+sprite pedestal_hatch_rise6 0 56 76 329 941 796 156 right top
+sprite pedestal_hatch_rise7 0 56 76 569 981 796 156 right top
+sprite pedestal_hatch_rise8 0 56 76 629 981 796 156 right top
+sprite pedestal_hatch_rise9 0 56 76 689 981 796 156 right top
+sprite pedestal_attack_up 0 56 76 941 821 857 156 right top
+sprite pedestal_attack_press1 0 56 76 581 821 857 156 right top
+sprite pedestal_attack_press2 0 56 76 641 821 857 156 right top
+sprite pedestal_attack_latched 0 56 76 1061 741 857 156 right top
+sprite pedestal_attack_rise6 0 56 76 701 821 857 156 right top
+sprite pedestal_attack_rise7 0 56 76 761 821 857 156 right top
+sprite pedestal_attack_rise8 0 56 76 821 821 857 156 right top
+sprite pedestal_attack_rise9 0 56 76 881 821 857 156 right top
+sprite pedestal_bomb_up 0 56 76 329 861 857 156 right top
+sprite pedestal_bomb_press1 0 56 76 1061 821 857 156 right top
+sprite pedestal_bomb_press2 0 56 76 395 851 857 156 right top
+sprite pedestal_bomb_latched 0 56 76 1001 821 857 156 right top
+sprite pedestal_bomb_rise6 0 56 76 455 851 857 156 right top
+sprite pedestal_bomb_rise7 0 56 76 515 851 857 156 right top
+sprite pedestal_bomb_rise8 0 56 76 209 861 857 156 right top
+sprite pedestal_bomb_rise9 0 56 76 269 861 857 156 right top
+sprite pedestal_fire_up 0 56 76 995 901 857 156 right top
+sprite pedestal_fire_press1 0 56 76 635 901 857 156 right top
+sprite pedestal_fire_press2 0 56 76 695 901 857 156 right top
+sprite pedestal_fire_latched 0 56 76 575 901 857 156 right top
+sprite pedestal_fire_rise6 0 56 76 755 901 857 156 right top
+sprite pedestal_fire_rise7 0 56 76 815 901 857 156 right top
+sprite pedestal_fire_rise8 0 56 76 875 901 857 156 right top
+sprite pedestal_fire_rise9 0 56 76 935 901 857 156 right top
+sprite pedestal_thief_up 0 56 76 323 1101 857 156 right top
+sprite pedestal_thief_press1 0 56 76 509 1091 857 156 right top
+sprite pedestal_thief_press2 0 56 76 23 1098 857 156 right top
+sprite pedestal_thief_latched 0 56 76 449 1091 857 156 right top
+sprite pedestal_thief_rise6 0 56 76 83 1098 857 156 right top
+sprite pedestal_thief_rise7 0 56 76 143 1098 857 156 right top
+sprite pedestal_thief_rise8 0 56 76 203 1101 857 156 right top
+sprite pedestal_thief_rise9 0 56 76 263 1101 857 156 right top
+sprite pedestal_swim_up 0 56 76 389 1091 857 156 right top
+sprite pedestal_swim_press1 0 56 76 749 1061 857 156 right top
+sprite pedestal_swim_press2 0 56 76 809 1061 857 156 right top
+sprite pedestal_swim_latched 0 56 76 689 1061 857 156 right top
+sprite pedestal_swim_rise6 0 56 76 869 1061 857 156 right top
+sprite pedestal_swim_rise7 0 56 76 929 1061 857 156 right top
+sprite pedestal_swim_rise8 0 56 76 989 1061 857 156 right top
+sprite pedestal_swim_rise9 0 56 76 1049 1061 857 156 right top
+sprite pedestal_flash1 0 56 76 1055 901 796 156 right top
+sprite pedestal_flash2 0 56 76 389 931 796 156 right top
+sprite pedestal_flash3 0 56 76 449 931 796 156 right top
+sprite egg 0 12 16 1146 1213 856 158 right top
+sprite egg_hatch1 0 12 16 1146 1233 856 158 right top
+sprite egg_hatch2 0 17 14 778 1247 853 159 right top
+sprite egg_hatch3 0 19 6 1098 1256 851 167 right top
+sprite lunch_box 0 34 40 1109 1117 917 131 right top
+sprite button_fullscreen_up 0 21 23 671 1171 939 7 right top
+sprite button_fullscreen_hover 0 21 23 458 1171 939 7 right top
+sprite button_fullscreen_down 0 21 23 433 1171 939 7 right top
+sprite button_fullscreen_leave_up 0 21 23 533 1171 939 7 right top
+sprite button_fullscreen_leave_hover 0 21 23 508 1171 939 7 right top
+sprite button_fullscreen_leave_down 0 21 23 483 1171 939 7 right top
+sprite cursor_c_normal 0 13 23 1010 1169 0 0 left top
+sprite cursor_c_select 0 17 21 987 1196 0 0 left top
+sprite cursor_c_scroll 0 17 21 1051 1195 0 0 left top
+sprite cursor_c_mov1 0 25 21 1083 1188 0 0 left top
+sprite cursor_c_mov2 0 21 17 23 1247 0 0 left top
+sprite cursor_c_mov3 0 19 15 1098 1237 0 0 left top
+sprite cursor_c_targ1 0 26 26 671 1141 0 0 left top
+sprite cursor_c_targ2 0 20 19 1122 1213 0 0 left top
+sprite cursor_c_targ3 0 12 12 864 1247 0 0 left top
+sprite cursor_c_atk1 0 28 29 639 1141 0 0 left top
+sprite cursor_c_atk2 0 22 23 1140 1161 0 0 left top
+sprite cursor_c_atk3 0 18 19 1054 1237 0 0 left top
+sprite cursor_c_atk4 0 12 13 848 1247 0 0 left top
+sprite cursor_c_atk5 0 8 9 894 1247 0 0 left top
+sprite cursor_curfd01 0 32 32 569 1141 0 0 left top
+sprite cursor_curfd02 0 30 30 605 1141 0 0 left top
+sprite cursor_curfd03 0 26 26 701 1141 0 0 left top
+sprite cursor_curfd04 0 21 21 1112 1188 0 0 left top
+sprite cursor_curfd05 0 12 14 799 1247 0 0 left top
+sprite cursor_curfd06 0 12 14 815 1247 0 0 left top
+sprite cursor_curfd08 0 10 12 880 1247 0 0 left top
+sprite cursor_c_cant1 0 5 5 1145 1253 0 0 left top
+sprite cursor_c_cant2 0 13 13 831 1247 0 0 left top
+sprite cursor_c_cant3 0 18 18 1076 1237 0 0 left top
+sprite cursor_c_cant4 0 23 23 983 1169 0 0 left top
+sprite cursor_cur_n 0 21 20 1072 1213 0 0 left top
+sprite cursor_cur_ne 0 19 19 1008 1220 0 0 left top
+sprite cursor_cur_e 0 20 21 1137 1188 0 0 left top
+sprite cursor_cur_se 0 19 19 970 1224 0 0 left top
+sprite cursor_cur_s 0 21 20 1097 1213 0 0 left top
+sprite cursor_cur_sw 0 19 19 1122 1236 0 0 left top
+sprite cursor_cur_w 0 20 21 1027 1195 0 0 left top
+sprite cursor_cur_nw 0 19 19 1031 1220 0 0 left top
+sprite panel_c 0 160 120 994 2 0 0 left top
+sprite panel_tl 0 24 24 319 616 0 0 left top
+sprite panel_t 0 160 24 948 580 0 0 left top
+sprite panel_tr 0 24 24 347 616 0 0 left top
+sprite panel_l 0 24 120 994 126 0 0 left top
+sprite panel_r 0 24 120 1022 126 0 0 left top
+sprite panel_bl 0 24 24 895 615 0 0 left top
+sprite panel_b 0 160 24 2 569 0 0 left top
+sprite panel_br 0 24 24 291 616 0 0 left top
+sprite dlg_btn_yes_up 0 49 24 471 614 180 260 left top
+sprite dlg_btn_yes_hover 0 49 24 418 614 180 260 left top
+sprite dlg_btn_yes_down 0 49 24 1112 608 180 260 left top
+sprite dlg_btn_no_up 0 49 24 1059 608 292 260 left top
+sprite dlg_btn_no_hover 0 49 24 1006 608 292 260 left top
+sprite dlg_btn_no_down 0 49 24 1112 580 292 260 left top
+sprite dlg_btn_accept_up 0 80 24 605 586 152 260 left top
+sprite dlg_btn_accept_hover 0 80 24 521 586 152 260 left top
+sprite dlg_btn_accept_down 0 80 24 437 586 152 260 left top
+sprite dlg_btn_decline_up 0 80 24 857 587 284 260 left top
+sprite dlg_btn_decline_hover 0 80 24 773 587 284 260 left top
+sprite dlg_btn_decline_down 0 80 24 689 586 284 260 left top
+sprite dlg_btn_withdraw_up 0 80 24 334 588 220 260 left top
+sprite dlg_btn_withdraw_hover 0 80 24 250 588 220 260 left top
+sprite dlg_btn_withdraw_down 0 80 24 166 588 220 260 left top
+sprite dlg_btn_return_up 0 98 27 701 525 351 425 left top
+sprite dlg_btn_return_hover 0 98 27 1061 519 351 425 left top
+sprite dlg_btn_return_down 0 98 27 1061 488 351 425 left top
+sprite op_on_up 0 49 24 238 616 103 290 left top
+sprite op_on_hover 0 49 24 185 616 103 290 left top
+sprite op_on_down 0 49 24 132 616 103 290 left top
+sprite op_on_chosen 0 49 24 789 615 103 290 left top
+sprite op_on_chosen_hover 0 49 24 842 615 103 290 left top
+sprite op_off_up 0 49 24 736 615 151 290 left top
+sprite op_off_hover 0 49 24 683 614 151 290 left top
+sprite op_off_down 0 49 24 630 614 151 290 left top
+sprite op_off_chosen 0 49 24 524 614 151 290 left top
+sprite op_off_chosen_hover 0 49 24 577 614 151 290 left top
+sprite op_thumb_up 0 49 18 748 685 373 178 left top
+sprite op_thumb_hover 0 49 18 1089 680 373 178 left top
+sprite op_thumb_held 0 49 18 1089 658 373 178 left top
+sprite dlg_btn_fullscreen_up 0 97 26 240 558 0 0 left top
+sprite dlg_btn_fullscreen_down 0 97 26 1061 550 0 0 left top
+sprite cd_count_well 0 152 119 359 168 19 69 left top
+sprite cd_row_well 0 280 34 417 488 0 0 left top
+sprite cd_dot_0 0 11 11 34 726 0 0 left top
+sprite cd_dot_1 0 11 11 49 726 0 0 left top
+sprite cd_dot_2 0 11 11 64 726 0 0 left top
+sprite cd_dot_3 0 11 11 79 726 0 0 left top
+sprite sc_btn_l_up 0 12 44 1102 300 0 0 left top
+sprite sc_btn_m_up 0 128 44 934 396 0 0 left top
+sprite sc_btn_r_up 0 12 44 1150 300 0 0 left top
+sprite sc_sm_l_up 0 12 26 373 558 0 0 left top
+sprite sc_sm_m_up 0 128 26 464 556 0 0 left top
+sprite sc_sm_r_up 0 12 26 421 558 0 0 left top
+sprite sc_leave_up 0 102 26 702 556 0 0 left top
+sprite sc_watch_up 0 61 24 941 608 0 0 left top
+sprite sc_btn_l_hover 0 12 44 1086 300 0 0 left top
+sprite sc_btn_m_hover 0 128 44 938 348 0 0 left top
+sprite sc_btn_r_hover 0 12 44 1134 300 0 0 left top
+sprite sc_sm_l_hover 0 12 26 357 558 0 0 left top
+sprite sc_sm_m_hover 0 128 26 2 539 0 0 left top
+sprite sc_sm_r_hover 0 12 26 405 558 0 0 left top
+sprite sc_leave_hover 0 102 26 596 556 0 0 left top
+sprite sc_watch_hover 0 61 24 67 597 0 0 left top
+sprite sc_btn_l_down 0 12 44 1070 300 0 0 left top
+sprite sc_btn_m_down 0 128 44 938 300 0 0 left top
+sprite sc_btn_r_down 0 12 44 1118 300 0 0 left top
+sprite sc_sm_l_down 0 12 26 341 558 0 0 left top
+sprite sc_sm_m_down 0 128 26 464 526 0 0 left top
+sprite sc_sm_r_down 0 12 26 389 558 0 0 left top
+sprite sc_leave_down 0 102 26 134 539 0 0 left top
+sprite sc_watch_down 0 61 24 2 597 0 0 left top
+sprite sc_well_tl 0 12 12 1128 723 0 0 left top
+sprite sc_well_t 0 128 12 2 710 0 0 left top
+sprite sc_well_tr 0 12 12 1144 723 0 0 left top
+sprite sc_well_l 0 12 32 1109 348 0 0 left top
+sprite sc_well_r 0 12 32 1125 348 0 0 left top
+sprite sc_well_bl 0 12 12 710 709 0 0 left top
+sprite sc_well_b 0 128 12 578 709 0 0 left top
+sprite sc_well_br 0 12 12 1112 723 0 0 left top
+sprite sc_victory_26 0 168 46 994 250 5 33 left top
+sprite sc_victory_22 0 144 39 2 460 5 28 left top
+sprite sc_defeat_26 0 133 38 150 460 3 32 left top
+sprite sc_defeat_22 0 114 33 701 488 3 27 left top
+sprite sc_gameover_36 0 320 52 610 380 6 44 left top
+sprite sc_gameover_26 0 233 39 2 417 5 32 left top
+sprite sc_matchstats_15 0 136 25 808 558 3 20 left top
+sprite sc_others 0 109 21 923 636 2 14 left top
+sprite sc_g_damage 0 59 18 1089 636 29 12 left top
+sprite sc_g_food 0 38 16 801 685 18 13 left top
+sprite sc_g_special 0 82 19 662 667 40 13 left top
+sprite sc_s_done 0 28 10 94 726 26 8 left top
+sprite sc_s_taken 0 30 11 707 725 28 9 left top
+sprite sc_s_trips 0 27 13 804 705 25 9 left top
+sprite sc_s_points 0 31 11 672 725 29 9 left top
+sprite sc_s_bombs 0 49 11 578 725 47 9 left top
+sprite sc_s_fires 0 37 11 631 725 35 9 left top
+sprite sc_s_raids 0 28 11 2 726 26 9 left top
+sprite sc_s_loot 0 24 10 126 726 22 8 left top
+sprite sc_k_winner 0 59 13 515 709 2 10 left top
+sprite sc_k_colony 0 163 13 348 709 1 10 left top
+sprite sc_k_play 0 115 12 804 723 2 9 left top
+sprite sc_k_mvp 0 28 12 1080 723 14 9 left top
+sprite sc_k_blood 0 78 12 923 723 38 9 left top
+sprite sc_k_raid 0 81 12 134 710 40 9 left top
+sprite sc_k_stand 0 71 12 1005 723 36 9 left top
+sprite sc_leave_word_up 0 111 19 117 668 56 16 left top
+sprite sc_sw_allstats_up 0 59 15 285 709 30 12 left top
+sprite sc_sw_back_up 0 99 15 1049 704 50 12 left top
+sprite sc_sw_room_up 0 106 15 112 691 53 12 left top
+sprite sc_sw_hub_up 0 132 15 368 690 66 12 left top
+sprite sc_bw_room_up 0 155 20 259 666 78 17 left top
+sprite sc_bw_hub_up 0 194 20 61 644 97 17 left top
+sprite sc_leave_word_hover 0 111 19 2 668 56 16 left top
+sprite sc_sw_allstats_hover 0 59 15 222 709 30 12 left top
+sprite sc_sw_back_hover 0 99 15 946 704 50 12 left top
+sprite sc_sw_room_hover 0 106 15 2 691 53 12 left top
+sprite sc_sw_hub_hover 0 132 15 232 690 66 12 left top
+sprite sc_bw_room_hover 0 155 20 930 661 78 17 left top
+sprite sc_bw_hub_hover 0 194 20 573 643 97 17 left top
+sprite sc_leave_word_down 0 111 19 547 667 54 15 left top
+sprite sc_sw_allstats_down 0 59 15 741 707 28 11 left top
+sprite sc_sw_back_down 0 99 15 843 704 48 11 left top
+sprite sc_sw_room_down 0 106 15 979 685 52 11 left top
+sprite sc_sw_hub_down 0 132 15 843 685 65 11 left top
+sprite sc_bw_room_down 0 155 20 771 661 76 16 left top
+sprite sc_bw_hub_down 0 194 20 375 642 96 16 left top
+sprite op_part_00 0 380 127 610 136 44 40 left top
+sprite op_part_01 0 116 15 504 690 65 176 left top
+sprite op_part_02 0 238 32 819 488 186 177 left top
+sprite op_part_03 0 113 15 624 690 68 213 left top
+sprite op_part_04 0 238 32 2 503 186 214 left top
+sprite op_part_05 0 125 19 418 666 56 251 left top
+sprite op_part_06 0 238 30 819 524 186 251 left top
+sprite op_part_07 0 55 22 2 625 39 288 left top
+sprite op_part_08 0 126 35 287 476 213 288 left top
+sprite op_part_09 0 419 109 515 267 30 327 left top
+sprite qh_part_00 0 495 40 610 444 72 9 left top
+sprite qh_part_01 0 247 92 359 380 14 53 left top
+sprite qh_part_02 0 353 411 2 2 273 54 left top
+sprite qh_part_03 0 247 130 610 2 14 159 left top
+sprite qh_part_04 0 247 162 359 2 14 302 left top
+sprite cd_title 0 216 28 244 526 132 18 left top
+sprite qh_pedestal_move 0 41 56 1050 126 217 201 left top
+sprite qh_pedestal_special 0 41 56 1095 126 474 404 left top
 anim buthlpu
 frame 1000 button_help_up 788 7
 anim buthlpr

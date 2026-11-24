@@ -4,16 +4,15 @@
 // setting "HUD art" chooses between this set (New, the default) and the original's own pieces (Classic, drawn exactly as before). Look only: nothing here reaches the simulation, the rules or a
 // replay. No SDL in this header: the manifest, the layout of the pieces at every shape of the picture and the choice of the sheet are plain numbers, so that a test can run them.
 //
-// The files: `hud_art.txt` (the manifest, one record a line) and a PNG sheet for each scale, 1x, 2x and 3x (the same drawing, drawn again at 1, 2 and 3 pixels for each canvas pixel). All numbers
-// of the manifest are canvas pixels, in the 960 x 540 layout (the sheet's own pixels are that times the scale). Its records:
-//     ants-hud-art 1
+// The files: `hud_art.txt` (the manifest, one record a line) and the PNG sheets of its pages (art_sheets.hpp: the `sheet` records, which every manifest of the new art writes the same way, and how a pack
+// is split over pages: a set whose pieces do not fit one sheet has a second page). Each page has a sheet for each scale, 1x, 2x and 3x (the same drawing, drawn again at 1, 2 and 3 pixels for each canvas
+// pixel). All numbers of the manifest are canvas pixels, in the 960 x 540 layout (the sheet's own pixels are that times the scale: the 2x and 3x sheet of a page are two and three times the size of its
+// 1x sheet, which parse() holds the manifest to). Its records:
+//     ants-hud-art 2
 //     canvas 960 540
-//     sheetsize <w> <h>                                 the 1x sheet's size (the others are that times the scale)
-//     derive2x <rows>                                   optional: the first <rows> rows of the 2x sheet are not in its file: sheet_pixels makes them from the same rows of the 3x sheet (derive_two_thirds)
-//     sheet <scale> <png file>
-//     sheet2size <w> <h>                                optional: a SECOND sheet, when the first is full (a texture holds 4096 pixels at most: 1365 canvas pixels at 3x), and then
-//     sheet2 <scale> <png file>                         its three files, as `sheet`; the sprites on it are written `sprite2` (the same fields) and the sheet's own size is `sheet2size`
-//     sprite <name> <w> <h> <sheet x> <sheet y> <x> <y> <anchor x> <anchor y> [<axis> <start> <tile from> <tile to> <end>]
+//     derive2x <rows>                                   optional: the first <rows> rows of the first page's 2x sheet are not in its file: sheet_pixels makes them from the same rows of the 3x sheet (derive_two_thirds)
+//     sheet <page> <scale> <png file> <width> <height>  (art_sheets.hpp)
+//     sprite <name> <page> <w> <h> <sheet x> <sheet y> <x> <y> <anchor x> <anchor y> [<axis> <start> <tile from> <tile to> <end>]
 //     anim <name> [cursor]                              the original's animation that this set replaces
 //     frame <ms> <sprite> <x> <y> [<sprite> <x> <y> ...]  one frame of it: the original's time, and the pieces that make the frame
 // A sprite's anchor says how its place (x, y) follows a picture of another size: `right` moves x by (width - 960), `bottom` moves y by (height - 540), `left`, `top` keep it, `stretch` (with a
@@ -30,6 +29,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "ants_app/art_sheets.hpp"
 #include "ants_app/png_decode.hpp"
 #include "ants_app/screen_layout.hpp"
 
@@ -55,9 +55,9 @@ struct Sprite {
     std::string name;
     int32_t w{0};
     int32_t h{0};
-    int32_t sheet_x{0};         // where it is in the 1x sheet (the other sheets: times the scale)
+    int32_t sheet_x{0};         // where it is in the 1x sheet of its page (the other sheets: times the scale)
     int32_t sheet_y{0};
-    int32_t sheet{0};           // which sheet: 0, or 1 for the second one (`sprite2`)
+    int32_t page{0};            // the page whose sheets hold it
     int32_t x{0};               // its place in the 960 x 540 layout
     int32_t y{0};
     AnchorX anchor_x{AnchorX::Left};
@@ -100,7 +100,6 @@ struct Draw {
 
 class Art {
 public:
-    static constexpr std::array<int32_t, 3> kScales = {1, 2, 3};
     static constexpr int32_t kReferenceWidth = 960;
     static constexpr int32_t kReferenceHeight = 540;
 
@@ -117,19 +116,18 @@ public:
     const Sprite* sprite_at(int32_t index) const noexcept { return index >= 0 && static_cast<size_t>(index) < sprites_.size() ? &sprites_[static_cast<size_t>(index)] : nullptr; }
     int32_t find_sprite(const std::string& name) const noexcept;
     const Animation* find_animation(const std::string& name) const noexcept;
-    /// The file of a sheet at a scale (`sheet`: 0, or 1 for the second sheet)
-    const std::string& sheet_file(int32_t scale, int32_t sheet = 0) const;
-    /// The set has a second sheet (the first was full)
-    bool has_second_sheet() const noexcept { return sheet2_w_ > 0; }
+    /// How many pages the set has (a second one when the pieces did not fit one sheet), and the file of a page's sheet at a scale
+    int32_t pages() const noexcept { return sheets_.pages(); }
+    const std::string& sheet_file(int32_t scale, int32_t page = 0) const { return sheets_.file(page, scale); }
 
-    /// The pixels of the sheet of a scale, read and decoded from its file (the first `derive2x` rows of the 2x sheet: made from the 3x sheet, of which only those rows are decoded). False (what() says why)
-    /// when a file is missing or damaged, or is not the size that the manifest's sprites need
-    bool sheet_pixels(int32_t scale, DecodedImage& out, int32_t sheet = 0) const;
+    /// The pixels of the sheet of a page at a scale, read and decoded from its file (the first `derive2x` rows of the first page's 2x sheet: made from the 3x sheet, of which only those rows are decoded).
+    /// False when a file is missing or damaged, or is not the size that the manifest states
+    bool sheet_pixels(int32_t scale, DecodedImage& out, int32_t page = 0) const;
     /// How many rows (canvas pixels, from the top) of the 2x sheet the game makes from the 3x sheet: the lettering of the windows, whose 2x pictures would only repeat the 3x ones (0: none)
     int32_t derived_rows() const noexcept { return derived_rows_; }
-    /// The size of a sheet in canvas pixels (the manifest's sprites end inside it)
-    int32_t sheet_width(int32_t sheet = 0) const noexcept { return sheet == 0 ? sheet_w_ : sheet2_w_; }
-    int32_t sheet_height(int32_t sheet = 0) const noexcept { return sheet == 0 ? sheet_h_ : sheet2_h_; }
+    /// The size of a page's 1x sheet in canvas pixels (the manifest's sprites end inside it)
+    int32_t sheet_width(int32_t page = 0) const noexcept { return sheets_.width(page, 1); }
+    int32_t sheet_height(int32_t page = 0) const noexcept { return sheets_.height(page, 1); }
 
     /// A number that changes with every manifest that was read (a renderer that keeps textures of a set knows it by this, not by the address)
     uint64_t generation() const noexcept { return generation_; }
@@ -154,17 +152,12 @@ private:
     std::string folder_;
     bool loaded_{false};
     uint64_t generation_{0};
-    int32_t sheet_w_{0};
-    int32_t sheet_h_{0};
+    ArtSheets sheets_;
     int32_t derived_rows_{0};
     std::vector<Sprite> sprites_;
     std::vector<Animation> animations_;
     std::unordered_map<std::string, int32_t> sprite_index_;
     std::unordered_map<std::string, size_t> animation_index_;
-    std::array<std::string, 3> sheets_;
-    int32_t sheet2_w_{0};                                  // the second sheet (0: there is none)
-    int32_t sheet2_h_{0};
-    std::array<std::string, 3> sheets2_;
 };
 
 /// Where a sprite stands in a picture of `layout`'s size: its place at 960 x 540 moved by the anchors

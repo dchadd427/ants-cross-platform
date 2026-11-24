@@ -236,7 +236,7 @@ void test_cursors(const assets::AssetArchive& arc, const Art& art) {
     // every sprite is in the sheet of every scale, drawn on that scale's own pixels: it has opaque pixels, about the scale squared times as many as at 1x
     DecodedImage one;
     check(art.sheet_pixels(1, one), "the sheet of 1x is read");
-    for (const int32_t k : hud_art::Art::kScales) {
+    for (const int32_t k : kArtScales) {
         DecodedImage sheet;
         if (!art.sheet_pixels(k, sheet) || one.rgba.empty()) {
             check(false, "the sheet of " + std::to_string(k) + "x is read");
@@ -282,7 +282,7 @@ void test_cursors(const assets::AssetArchive& arc, const Art& art) {
 
 void test_cursor_draw(const assets::AssetArchive& arc, const Art& art) {
     group("cursor-draw", "the real renderer at 1x, 2x and 3x: the art's pointer stands where the original's sprite stands, for every cursor and every frame");
-    for (const int32_t k : hud_art::Art::kScales) {
+    for (const int32_t k : kArtScales) {
         ScaledRig rig(arc, k);
         check(rig.ok && rig.renderer.art_scale_now() == k, std::to_string(k) + "x: the renderer is up, and takes the sheet of its scale");
         if (!rig.ok) continue;
@@ -424,8 +424,8 @@ void test_cursor_damaged(const assets::AssetArchive& arc, const Art& art) {
         check(loaded->load(art_variant(tag, [&](const std::string& m) { return replace_first(m, from, to); })) && loaded->loaded(), "the art with a sprite of another size (" + tag + ") is read");
         return loaded;
     };
-    const auto wider = sized("wider", "sprite cursor_c_normal 13 23 ", "sprite cursor_c_normal 14 23 ");
-    const auto taller = sized("taller", "sprite cursor_c_normal 13 23 ", "sprite cursor_c_normal 13 24 ");
+    const auto wider = sized("wider", "sprite cursor_c_normal 0 13 23 ", "sprite cursor_c_normal 0 14 23 ");
+    const auto taller = sized("taller", "sprite cursor_c_normal 0 13 23 ", "sprite cursor_c_normal 0 13 24 ");
     check(!fits(*wider, "c_normal", normal) && !fits(*taller, "c_normal", normal) && fits(*wider, "c_attack", attack), "a sprite a pixel wider, or a pixel taller, than the original's does not fit");
     const auto unmarked = variant("unmarked", "c_normal", [](std::vector<std::string> b) {                // its pieces would be placed by the layout's rules
         b[0] = "anim c_normal";

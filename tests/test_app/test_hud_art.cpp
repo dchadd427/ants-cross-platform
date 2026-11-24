@@ -271,7 +271,7 @@ void test_png() {
     // the shipped sheets: every scale decodes to the size of the 1x sheet times the scale
     hud_art::Art art;
     if (load_art(art)) {
-        for (const int32_t k : hud_art::Art::kScales) {
+        for (const int32_t k : kArtScales) {
             DecodedImage sheet;
             check(art.sheet_pixels(k, sheet) && sheet.width == art.sheet_width() * k && sheet.height == art.sheet_height() * k, "the sheet of " + std::to_string(k) + "x decodes to " + std::to_string(art.sheet_width() * k) + " x " + std::to_string(art.sheet_height() * k));
             // the sheets are one drawing at three sizes: the average color of the 3x sheet is the 1x sheet's (within the rounding of the downscale)
@@ -422,10 +422,10 @@ void test_derive() {
 
 }  // namespace
 
-// A second sheet (the first was full): the sprites of `sprite2` are read from its files and drawn from its textures, checked with pixels. The shipped manifest with a second sheet of 16 x 16 canvas pixels (three
-// files of one color) and a sprite2 on it, drawn by the real renderer: the pixel that comes out is the second sheet's, never the first sheet's at the same place
+// A second page (the first was full): the sprites of page 1 are read from its files and drawn from its textures, checked with pixels. The shipped manifest with a second page of sheets of 16 x 16 canvas pixels (three
+// files of one color) and a sprite on it, drawn by the real renderer: the pixel that comes out is the second page's, never the first page's at the same place
 void test_second_sheet(const assets::AssetArchive& arc) {
-    group("second_sheet", "a sprite on a second sheet is read from its own files and drawn from its own texture");
+    group("second_sheet", "a sprite on a second page is read from its own files and drawn from its own texture");
     namespace fs = std::filesystem;
     const fs::path dir = fs::temp_directory_path() / ("ants_hud_art_second_" + std::to_string(static_cast<long long>(SDL_GetTicks())));
     std::error_code ignored;
@@ -433,7 +433,7 @@ void test_second_sheet(const assets::AssetArchive& arc) {
     fs::create_directories(dir, ignored);
     std::ifstream in(art_folder() + "/hud_art.txt", std::ios::binary);
     std::string manifest((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    manifest.insert(manifest.find("sprite "), "sheet2size 16 16\nsheet2 1 sheet2_1x.png\nsheet2 2 sheet2_2x.png\nsheet2 3 sheet2_3x.png\nsprite2 second_dot 8 8 4 4 0 0 left top\n");
+    manifest.insert(manifest.find("sprite "), "sheet 1 1 sheet2_1x.png 16 16\nsheet 1 2 sheet2_2x.png 32 32\nsheet 1 3 sheet2_3x.png 48 48\nsprite second_dot 1 8 8 4 4 0 0 left top\n");
     {
         std::ofstream out(dir / "hud_art.txt", std::ios::binary | std::ios::trunc);
         out.write(manifest.data(), static_cast<std::streamsize>(manifest.size()));
@@ -448,10 +448,10 @@ void test_second_sheet(const assets::AssetArchive& arc) {
         out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
     }
     hud_art::Art art;
-    check(art.load(dir.string()) && art.has_second_sheet() && art.sheet_width(1) == 16, "a set with a second sheet is read, and its three files are checked against its size");
+    check(art.load(dir.string()) && art.pages() == 2 && art.sheet_width(1) == 16, "a set with a second page is read, and its three files are checked against its size");
     DecodedImage image;
-    check(art.sheet_pixels(1, image, 1) && image.width == 16 && image.rgba[0] == color[0] && image.rgba[1] == color[1] && image.rgba[2] == color[2], "...its own file is what a second sheet's pixels are");
-    check(art.sheet_pixels(3, image, 1) && image.width == 48 && image.height == 48 && !art.sheet_pixels(3, image, 2), "...at every scale, and there is no third sheet");
+    check(art.sheet_pixels(1, image, 1) && image.width == 16 && image.rgba[0] == color[0] && image.rgba[1] == color[1] && image.rgba[2] == color[2], "...its own file is what a second page's pixels are");
+    check(art.sheet_pixels(3, image, 1) && image.width == 48 && image.height == 48 && !art.sheet_pixels(3, image, 2), "...at every scale, and there is no third page");
     const QuietStdout quiet;
     SDL_Window* win = SDL_CreateWindow("hud-art-second", 0, 0, 960, 540, SDL_WINDOW_HIDDEN);
     Renderer renderer;
@@ -460,15 +460,15 @@ void test_second_sheet(const assets::AssetArchive& arc) {
         return;
     }
     renderer.set_canvas_size(960, 540);
-    check(renderer.preload_art(art), "the renderer makes the textures of both sheets");
+    check(renderer.preload_art(art), "the renderer makes the textures of both pages' sheets");
     renderer.begin_frame();
     renderer.draw_art(art, art.find_sprite("second_dot"), 100, 100, 8, 8, 0, 0, 8, 8);
     renderer.draw_art(art, art.card, 300, 100, 182, 116, 0, 0, 182, 116);
     std::vector<uint8_t> px(960u * 540u * 4u, 0);
     SDL_RenderReadPixels(renderer.get_sdl_renderer(), nullptr, SDL_PIXELFORMAT_RGBA32, px.data(), 960 * 4);
     const auto at = [&](int x, int y) { return &px[(static_cast<size_t>(y) * 960u + static_cast<size_t>(x)) * 4u]; };
-    check(at(103, 103)[0] == color[0] && at(103, 103)[1] == color[1] && at(103, 103)[2] == color[2], "a sprite2 is drawn from the second sheet's pixels (" + std::to_string(at(103, 103)[0]) + ", " + std::to_string(at(103, 103)[1]) + ", " + std::to_string(at(103, 103)[2]) + ")");
-    check(!(at(350, 150)[0] == color[0] && at(350, 150)[1] == color[1] && at(350, 150)[2] == color[2]) && (at(350, 150)[0] != 0 || at(350, 150)[1] != 0 || at(350, 150)[2] != 0), "...a sprite of the first sheet still comes from the first");
+    check(at(103, 103)[0] == color[0] && at(103, 103)[1] == color[1] && at(103, 103)[2] == color[2], "a sprite of the second page is drawn from its sheet's pixels (" + std::to_string(at(103, 103)[0]) + ", " + std::to_string(at(103, 103)[1]) + ", " + std::to_string(at(103, 103)[2]) + ")");
+    check(!(at(350, 150)[0] == color[0] && at(350, 150)[1] == color[1] && at(350, 150)[2] == color[2]) && (at(350, 150)[0] != 0 || at(350, 150)[1] != 0 || at(350, 150)[2] != 0), "...a sprite of the first page still comes from the first");
     renderer.shutdown();
     SDL_DestroyWindow(win);
     fs::remove_all(dir, ignored);

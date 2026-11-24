@@ -166,8 +166,8 @@
   {
    "id": "preload_says_yes_without_a_texture",
    "file": "src/ants_app/renderer_art.cpp",
-   "old": "return art_texture(art, scale) != nullptr && (!art.has_second_sheet() || art_texture(art, scale, 1) != nullptr);",
-   "new": "return art_texture(art, scale) != nullptr || true;",
+   "old": "        if (art_texture(art, scale, page) == nullptr) return false;",
+   "new": "        (void)art_texture(art, scale, page);",
    "build": "test_hud_art",
    "test": "./build/tests/test_app/test_hud_art",
    "expect": "preload_art says"
@@ -526,8 +526,8 @@
   {
    "id": "derive_only_applies_to_the_3x_sheet",
    "file": "src/ants_app/hud_art.cpp",
-   "old": "if (sheet == 0 && scale == 2 && derived_rows_ > 0) {",
-   "new": "if (sheet == 0 && scale == 3 && derived_rows_ > 0) {",
+   "old": "if (page == 0 && scale == 2 && derived_rows_ > 0) {",
+   "new": "if (page == 0 && scale == 3 && derived_rows_ > 0) {",
    "build": "test_hud_art",
    "test": "./build/tests/test_app/test_hud_art",
    "expect": "[png]"
@@ -535,8 +535,8 @@
   {
    "id": "derive_reads_too_few_rows_of_the_3x_sheet",
    "file": "src/ants_app/hud_art.cpp",
-   "old": "bytes3.size(), three, derived_rows_ * 3)",
-   "new": "bytes3.size(), three, derived_rows_ * 2)",
+   "old": "sheets_.pixels(folder_, 0, 3, three, derived_rows_ * 3)",
+   "new": "sheets_.pixels(folder_, 0, 3, three, derived_rows_ * 2)",
    "build": "test_hud_art",
    "test": "./build/tests/test_app/test_hud_art",
    "expect": "[png]"
@@ -544,8 +544,8 @@
   {
    "id": "derive_rows_may_pass_the_sheet",
    "file": "src/ants_app/hud_art.cpp",
-   "old": "if (derived_rows_ > sheet_h_) return fail(",
-   "new": "if (derived_rows_ > sheet_h_ * 2) return fail(",
+   "old": "if (derived_rows_ > sheet_height(0)) return fail(",
+   "new": "if (derived_rows_ > sheet_height(0) * 2) return fail(",
    "build": "test_hud_art",
    "test": "./build/tests/test_app/test_hud_art",
    "expect": "[manifest]"
@@ -569,37 +569,37 @@
    "expect": "[png]"
   },
   {
-   "id": "a_sprite2_is_a_sprite_of_the_first_sheet",
+   "id": "a_sprite_of_the_second_page_is_a_sprite_of_the_first",
    "file": "src/ants_app/hud_art.cpp",
-   "old": "s.sheet = w[0] == \"sprite2\" ? 1 : 0;",
-   "new": "s.sheet = 0;",
+   "old": "if (s.page < 0 || s.page >= sheets_.pages()) return fail(where + \"a sprite on a page that the manifest does not have\");",
+   "new": "s.page = 0;",
    "build": "test_hud_art",
    "test": "./build/tests/test_app/test_hud_art",
    "expect": "[manifest]"
   },
   {
-   "id": "a_sprite2_is_checked_against_the_first_sheet",
+   "id": "a_sprite_of_the_second_page_is_checked_against_the_first_page",
    "file": "src/ants_app/hud_art.cpp",
-   "old": "if (s.sheet_x + s.w > sheet_width(s.sheet) || s.sheet_y + s.h > sheet_height(s.sheet))",
+   "old": "if (s.sheet_x + s.w > sheet_width(s.page) || s.sheet_y + s.h > sheet_height(s.page))",
    "new": "if (s.sheet_x + s.w > sheet_width(0) || s.sheet_y + s.h > sheet_height(0))",
    "build": "test_hud_art",
    "test": "./build/tests/test_app/test_hud_art",
    "expect": "[manifest]"
   },
   {
-   "id": "a_second_sheet_is_drawn_from_the_first_texture",
+   "id": "a_second_page_is_drawn_from_the_first_texture",
    "file": "src/ants_app/renderer_art.cpp",
-   "old": "SDL_Texture* tex = art_texture(art, scale, s->sheet);",
+   "old": "SDL_Texture* tex = art_texture(art, scale, s->page);",
    "new": "SDL_Texture* tex = art_texture(art, scale);",
    "build": "test_hud_art",
    "test": "./build/tests/test_app/test_hud_art",
    "expect": "[second_sheet]"
   },
   {
-   "id": "preload_does_not_make_the_second_sheet",
+   "id": "preload_does_not_make_the_second_page",
    "file": "src/ants_app/renderer_art.cpp",
-   "old": " && (!art.has_second_sheet() || art_texture(art, scale, 1) != nullptr);",
-   "new": ";",
+   "old": "for (int32_t page = 0; page < art.pages(); ++page) {",
+   "new": "for (int32_t page = 0; page < 1; ++page) {",
    "build": "test_hud_art",
    "test": "./build/tests/test_app/test_hud_art",
    "expect": "[unusable]"

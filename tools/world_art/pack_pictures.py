@@ -6,8 +6,9 @@ usage: pack_pictures.py [--out DIR] [--page N] [--name NAME] FOLDER
     python3 tools/world_art/pack_pictures.py --page 1 --name plants FOLDER
 
 FOLDER holds `1x/`, `2x/` and `3x/` with one `sprite_NNNN.png` for each picture (NNNN is the original sprite's number; each picture the original sprite's size times its scale, 8-bit RGBA with its
-own alpha). They are packed into the sheets `NAME_1x.png`, `NAME_2x.png` and `NAME_3x.png` of page N of `assets/world_art/` (or --out), and the page's records replace its old ones in `world_art.txt`;
-the other pages of the manifest stay as they are (make_world_art.py draws page 0). The pictures themselves are not kept in the repository: the sheets are their only copy. The format and the layout rule
+own alpha). They are packed into the sheets `NAME_1x.png`, `NAME_2x.png` and `NAME_3x.png` of page N of `assets/world_art/` (or --out; when they do not fit one page the rest go on the next, as
+`NAME2_1x.png` ... and the page after N: tools/art_sheets.py), and the pages' records replace their old ones in `world_art.txt`; the other pages of the manifest stay as they are (make_world_art.py
+draws page 0). The pictures themselves are not kept in the repository: the sheets are their only copy. The format and the layout rule
 are in README.md, "The files".
 
 Needs Python 3 with Pillow and numpy; the libdeflate library is optional (sheets 5% smaller: tools/hud_art/png_write.py).

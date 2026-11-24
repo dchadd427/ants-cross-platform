@@ -10,21 +10,20 @@ using hud_art::Draw;
 // ---- a small valid manifest to break in one place at a time --------------------------------------------------------------------------------------------------------------------
 
 std::vector<std::string> small_manifest() {
-    return {"ants-hud-art 1",
+    return {"ants-hud-art 2",
             "canvas 960 540",
-            "sheetsize 1000 800",
-            "sheet 1 a.png",
-            "sheet 2 b.png",
-            "sheet 3 c.png",
-            "sprite top_bar 960 22 0 0 0 0 stretch top x 140 140 332 320",
-            "sprite left_strip 17 618 0 30 0 22 left stretch y 270 270 398 120",
-            "sprite bottom_strip 943 19 0 60 17 521 stretch bottom x 0 0 192 206",
-            "sprite lower_panel 182 353 0 90 778 268 right stretch y 92 92 220 104",
-            "sprite panel_top 182 8 0 120 778 22 right top",
-            "sprite minimap_frame 182 106 0 130 778 30 right top",
-            "sprite card 182 116 0 240 778 136 right top",
-            "sprite status_box 182 16 0 360 778 252 right top",
-            "sprite thing 10 10 200 0 800 100 right bottom",
+            "sheet 0 1 a.png 1000 800",
+            "sheet 0 2 b.png 2000 1600",
+            "sheet 0 3 c.png 3000 2400",
+            "sprite top_bar 0 960 22 0 0 0 0 stretch top x 140 140 332 320",
+            "sprite left_strip 0 17 618 0 30 0 22 left stretch y 270 270 398 120",
+            "sprite bottom_strip 0 943 19 0 60 17 521 stretch bottom x 0 0 192 206",
+            "sprite lower_panel 0 182 353 0 90 778 268 right stretch y 92 92 220 104",
+            "sprite panel_top 0 182 8 0 120 778 22 right top",
+            "sprite minimap_frame 0 182 106 0 130 778 30 right top",
+            "sprite card 0 182 116 0 240 778 136 right top",
+            "sprite status_box 0 182 16 0 360 778 252 right top",
+            "sprite thing 0 10 10 200 0 800 100 right bottom",
             "anim one",
             "frame 100 thing 800 100 card 778 136"};
 }
@@ -77,35 +76,35 @@ void test_manifest() {
         check(second.parse(joined(small_manifest())) && second.generation() != g1 && second.generation() != 0, "every manifest that is read has a generation of its own (a renderer's textures follow it)");
     }
     refused("hello\n", "not a manifest");
-    refused(changed("ants-hud-art", "ants-hud-art 2"), "another version");
+    refused(changed("ants-hud-art", "ants-hud-art 1"), "another version");
     refused(changed("canvas", "canvas 640 480"), "a canvas that is not 960 x 540");
-    refused(changed("sheetsize", ""), "no sheet size");
-    refused(changed("sheetsize", "sheetsize 0 300"), "a sheet without a width");
-    refused(changed("sheet 3", ""), "no sheet for the scale 3");
-    refused(changed("sheet 1", "sheet 4 a.png"), "a sheet of the scale 4");
-    refused(changed("sheetsize", "sheetsize 1000 800\nderive2x 0"), "a derive2x of no rows");
-    refused(changed("sheetsize", "sheetsize 1000 800\nderive2x -4"), "a derive2x of a negative number of rows");
-    refused(changed("sheetsize", "sheetsize 1000 800\nderive2x x"), "a derive2x that is not a number");
-    refused(changed("sheetsize", "sheetsize 1000 800\nderive2x 801"), "a derive2x of more rows than the sheet has");
-    refused(changed("sheetsize", "sheetsize 1000 800\nderive2x 40 40"), "a derive2x with two numbers");
+    refused(changed("sheet 0 3", ""), "no sheet for the scale 3");
+    refused(changed("sheet 0 2", "sheet 0 2 b.png 2001 1600"), "a 2x sheet that is not twice the 1x one");
+    refused(changed("sheet 0 3", "sheet 0 3 c.png 3000 2399"), "a 3x sheet that is not three times the 1x one");
+    refused(changed("sheet 0 1", "sheet 0 1 ../a.png 1000 800"), "a sheet outside the folder (the shared reader's rules for the records are held in test_art_sheets)");
+    refused(changed("canvas", "canvas 960 540\nderive2x 0"), "a derive2x of no rows");
+    refused(changed("canvas", "canvas 960 540\nderive2x -4"), "a derive2x of a negative number of rows");
+    refused(changed("canvas", "canvas 960 540\nderive2x x"), "a derive2x that is not a number");
+    refused(changed("canvas", "canvas 960 540\nderive2x 801"), "a derive2x of more rows than the sheet has");
+    refused(changed("canvas", "canvas 960 540\nderive2x 40 40"), "a derive2x with two numbers");
     {
         Art art;
-        check(art.parse(changed("sheetsize", "sheetsize 1000 800\nderive2x 800")) && art.derived_rows() == 800, "a derive2x of all the rows of the sheet is read");
-        check(art.parse(changed("sheetsize", "sheetsize 1000 800\nderive2x 40")) && art.derived_rows() == 40, "a derive2x names the rows");
+        check(art.parse(changed("canvas", "canvas 960 540\nderive2x 800")) && art.derived_rows() == 800, "a derive2x of all the rows of the sheet is read");
+        check(art.parse(changed("canvas", "canvas 960 540\nderive2x 40")) && art.derived_rows() == 40, "a derive2x names the rows");
         check(art.parse(joined(small_manifest())) && art.derived_rows() == 0, "a manifest without one derives nothing");
     }
-    {   // a second sheet, when the first is full: its size, its three files, and the sprites on it (`sprite2`)
+    {   // a second page, when the first is full: its three sheets, and the sprites on it (their page is 1)
         std::vector<std::string> lines = small_manifest();
-        lines.insert(lines.begin() + 6, {"sheet2size 500 400", "sheet2 1 d.png", "sheet2 2 e.png", "sheet2 3 f.png"});
-        lines.insert(lines.begin() + 11, "sprite2 extra 20 20 480 380 100 100 left top");
+        lines.insert(lines.begin() + 5, {"sheet 1 1 d.png 500 400", "sheet 1 2 e.png 1000 800", "sheet 1 3 f.png 1500 1200"});
+        lines.insert(lines.begin() + 8, "sprite extra 1 20 20 480 380 100 100 left top");
         Art art;
-        check(art.parse(joined(lines)) && art.has_second_sheet() && art.sheet_width(1) == 500 && art.sheet_height(1) == 400 && art.sheet_width() == 1000 && art.sheet_file(2, 1) == "e.png" && art.sheet_file(2) == "b.png",
-              "a second sheet is read: its size, its files, and the first sheet's are the first sheet's");
+        check(art.parse(joined(lines)) && art.pages() == 2 && art.sheet_width(1) == 500 && art.sheet_height(1) == 400 && art.sheet_width() == 1000 && art.sheet_file(2, 1) == "e.png" && art.sheet_file(2) == "b.png",
+              "a second page is read: its sheets' size and files, and the first page's are the first page's");
         const hud_art::Sprite* extra = art.sprite_at(art.find_sprite("extra"));
         const hud_art::Sprite* thing = art.sprite_at(art.find_sprite("thing"));
-        check(extra != nullptr && extra->sheet == 1 && extra->sheet_x == 480 && thing != nullptr && thing->sheet == 0, "...a sprite2 is on the second sheet, a sprite on the first");
+        check(extra != nullptr && extra->page == 1 && extra->sheet_x == 480 && thing != nullptr && thing->page == 0, "...a sprite of page 1 is on the second page, a sprite of page 0 on the first");
         Art plain;
-        check(plain.parse(joined(small_manifest())) && !plain.has_second_sheet() && plain.sprite_at(plain.find_sprite("thing"))->sheet == 0 && plain.sheet_file(2, 1).empty(), "a manifest without one has none");
+        check(plain.parse(joined(small_manifest())) && plain.pages() == 1 && plain.sprite_at(plain.find_sprite("thing"))->page == 0 && plain.sheet_file(2, 1).empty(), "a manifest without one has none");
         const auto with = [&](const std::string& prefix, const std::string& line) {
             std::vector<std::string> l = lines;
             for (std::string& x : l) {
@@ -117,30 +116,25 @@ void test_manifest() {
             l.erase(std::remove(l.begin(), l.end(), std::string()), l.end());
             return joined(l);
         };
-        refused(with("sprite2 extra", "sprite2 extra 20 20 490 380 100 100 left top"), "a sprite that ends outside the second sheet (but would be inside the first)");
-        refused(with("sprite2 extra", "sprite2 extra 20 20 480 395 100 100 left top"), "a sprite that ends below the second sheet");
-        refused(with("sheet2size", ""), "a second sheet without a size");
-        refused(with("sheet2 3", ""), "a second sheet without its 3x file");
-        refused(with("sheet2size", "sheet2size 0 400"), "a second sheet without a width");
-        refused(with("sheet2 1", "sheet2 1 ../d.png"), "a second sheet outside the folder");
-        refused(with("sheet2 1", "sheet2 4 d.png"), "a second sheet of the scale 4");
-        refused(changed("sheet 1", "sheet 1 a.png\nsprite2 extra 20 20 480 380 100 100 left top"), "a sprite on a second sheet that the manifest does not have");
-        refused(with("sprite thing", "sprite extra 10 10 200 0 800 100 right bottom"), "a sprite and a sprite2 of one name");
+        refused(with("sprite extra", "sprite extra 1 20 20 490 380 100 100 left top"), "a sprite that ends outside the second page's sheet (but would be inside the first's)");
+        refused(with("sprite extra", "sprite extra 1 20 20 480 395 100 100 left top"), "a sprite that ends below the second page's sheet");
+        refused(with("sheet 1 3", ""), "a second page without its 3x sheet");
+        refused(with("sheet 1 2", "sheet 1 2 e.png 1000 799"), "a second page whose 2x sheet is not twice its 1x one");
+        refused(changed("sheet 0 3", "sheet 0 3 c.png 3000 2400\nsprite extra 1 20 20 480 380 100 100 left top"), "a sprite on a page that the manifest does not have");
+        refused(with("sprite thing", "sprite extra 0 10 10 200 0 800 100 right bottom"), "two sprites of one name on two pages");
     }
-    refused(changed("sheet 1", "sheet 1 ../a.png"), "a sheet outside the folder");
-    refused(changed("sheet 1", "sheet 1 sub/a.png"), "a sheet in a folder");
-    refused(changed("sprite card", "sprite card 182 116 0 240 778 136 right"), "a sprite with too few fields");
-    refused(changed("sprite card", "sprite card 182 116 0 240 778 136 diagonal top"), "an anchor that does not exist");
-    refused(changed("sprite card", "sprite card 182 116 0 240 778 136 right middle"), "a vertical anchor that does not exist");
-    refused(changed("sprite card", "sprite card 0 116 0 240 778 136 right top"), "a sprite without a width");
-    refused(changed("sprite card", "sprite card 182 116 x 240 778 136 right top"), "a number that is not one");
-    refused(changed("sprite card", "sprite card 182 116 900 240 778 136 right top"), "a sprite that ends outside its sheet");
-    refused(changed("sprite thing", "sprite card 10 10 200 0 800 100 right bottom"), "a sprite twice");
-    refused(changed("sprite top_bar", "sprite top_bar 960 22 0 0 0 0 stretch top z 140 140 332 320"), "a slice along no axis");
-    refused(changed("sprite top_bar", "sprite top_bar 960 22 0 0 0 0 stretch top x 140 140 332 900"), "a slice whose start and end are longer than the sprite");
-    refused(changed("sprite top_bar", "sprite top_bar 960 22 0 0 0 0 stretch top x 140 332 140 320"), "a slice whose run is backwards");
-    refused(changed("sprite top_bar", "sprite top_bar 960 22 0 0 0 0 stretch top x 140 140 961 320"), "a slice whose run ends outside the sprite");
-    refused(changed("sprite top_bar", "sprite top_bar 960 22 0 0 0 0 stretch top"), "a long piece of the frame without a slice");
+    refused(changed("sprite card", "sprite card 0 182 116 0 240 778 136 right"), "a sprite with too few fields");
+    refused(changed("sprite card", "sprite card 0 182 116 0 240 778 136 diagonal top"), "an anchor that does not exist");
+    refused(changed("sprite card", "sprite card 0 182 116 0 240 778 136 right middle"), "a vertical anchor that does not exist");
+    refused(changed("sprite card", "sprite card 0 0 116 0 240 778 136 right top"), "a sprite without a width");
+    refused(changed("sprite card", "sprite card 0 182 116 x 240 778 136 right top"), "a number that is not one");
+    refused(changed("sprite card", "sprite card 0 182 116 900 240 778 136 right top"), "a sprite that ends outside its sheet");
+    refused(changed("sprite thing", "sprite card 0 10 10 200 0 800 100 right bottom"), "a sprite twice");
+    refused(changed("sprite top_bar", "sprite top_bar 0 960 22 0 0 0 0 stretch top z 140 140 332 320"), "a slice along no axis");
+    refused(changed("sprite top_bar", "sprite top_bar 0 960 22 0 0 0 0 stretch top x 140 140 332 900"), "a slice whose start and end are longer than the sprite");
+    refused(changed("sprite top_bar", "sprite top_bar 0 960 22 0 0 0 0 stretch top x 140 332 140 320"), "a slice whose run is backwards");
+    refused(changed("sprite top_bar", "sprite top_bar 0 960 22 0 0 0 0 stretch top x 140 140 961 320"), "a slice whose run ends outside the sprite");
+    refused(changed("sprite top_bar", "sprite top_bar 0 960 22 0 0 0 0 stretch top"), "a long piece of the frame without a slice");
     refused(changed("sprite card", ""), "a frame without its card");
     refused(changed("sprite lower_panel", ""), "a frame without its lower panel");
     refused(changed("sprite status_box", ""), "a frame without its status box");
@@ -449,8 +443,8 @@ static std::string cut_art_folder(const std::string& tag, const std::vector<int3
     return dir.string();
 }
 
-// A copy of the shipped art with a second sheet: the shipped sheets again, as sheet2_1x.png .. sheet2_3x.png (the second sheet of the manifest is as large as the first), and a sprite `second_card` on it that is the card; the
-// second sheet's files are cut a few bytes after their header when `cut_second` is 1
+// A copy of the shipped art with a second page: the shipped sheets again, as sheet2_1x.png .. sheet2_3x.png (the second page's sheets are as large as the first's), and a sprite `second_card` on it that is the card; the
+// second page's files are cut a few bytes after their header when `cut_second` is 1
 static std::string second_sheet_folder(const std::string& tag, int cut_second) {
     namespace fs = std::filesystem;
     const fs::path dir = fs::temp_directory_path() / ("ants_hud_art_" + tag + "_" + std::to_string(static_cast<long long>(SDL_GetTicks())));
@@ -459,16 +453,21 @@ static std::string second_sheet_folder(const std::string& tag, int cut_second) {
     fs::create_directories(dir, ignored);
     std::ifstream in(art_folder() + "/hud_art.txt", std::ios::binary);
     std::string manifest((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    std::string size_line, card_line;
+    std::string card_line, rows;
     {
         std::istringstream lines(manifest);
         std::string line;
         while (std::getline(lines, line)) {
-            if (line.rfind("sheetsize ", 0) == 0) size_line = line;
+            if (line.rfind("sheet 0 ", 0) == 0) {                                      // the first page's rows, again for the second page (its files, its sizes)
+                std::istringstream words(line);
+                std::string kind, page, scale, file, w, h;
+                words >> kind >> page >> scale >> file >> w >> h;
+                rows += "sheet 1 " + scale + " sheet2_" + scale + "x.png " + w + " " + h + "\n";
+            }
             if (line.rfind("sprite card ", 0) == 0) card_line = line;
         }
     }
-    const std::string extra = "sheet2size" + size_line.substr(std::string("sheetsize").size()) + "\nsheet2 1 sheet2_1x.png\nsheet2 2 sheet2_2x.png\nsheet2 3 sheet2_3x.png\nsprite2 second_card" + card_line.substr(std::string("sprite card").size()) + "\n";
+    const std::string extra = rows + "sprite second_card 1" + card_line.substr(std::string("sprite card 0").size()) + "\n";
     const size_t at = manifest.find("sprite ");
     manifest.insert(at, extra);
     std::ofstream out(dir / "hud_art.txt", std::ios::binary | std::ios::trunc);
@@ -527,11 +526,11 @@ void test_unusable() {
     check(cut_other.load(cut_art_folder("cut3", {3})), "a folder with only its 3x sheet cut is read");
     check(renderer.art_scale_now() == 1 && renderer.preload_art(cut_other) && drawn(cut_other) == 1, "...and a window of 1x, which draws from the 1x sheet, makes its texture");
 
-    // a second sheet (the first was full): a copy of the shipped sheets as sheet2_Nx.png with a sprite2 that is the card, and the same card on the first sheet
+    // a second page (the first was full): a copy of the shipped sheets as sheet2_Nx.png with a sprite on page 1 that is the card, and the same card on the first page
     {
         const std::string good = second_sheet_folder("second", 0);
         hud_art::Art two;
-        check(two.load(good) && two.has_second_sheet() && two.find_sprite("second_card") >= 0 && two.sprite_at(two.find_sprite("second_card"))->sheet == 1, "a set with a second sheet is read: the header of each of its sheets is checked");
+        check(two.load(good) && two.pages() == 2 && two.find_sprite("second_card") >= 0 && two.sprite_at(two.find_sprite("second_card"))->page == 1, "a set with a second page is read: the header of each of its sheets is checked");
         DecodedImage first, second;
         check(two.sheet_pixels(1, first, 0) && two.sheet_pixels(1, second, 1) && first.rgba == second.rgba && second.width == two.sheet_width(1), "...the pixels of the second sheet are read from its own file");
         check(renderer.art_scale_now() == 1 && renderer.preload_art(two) && renderer.art_textures() == 2, "...preload_art makes the texture of each sheet at the output's scale");

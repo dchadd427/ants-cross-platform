@@ -3,10 +3,10 @@
 
 usage: check_sheets.py [--assets DIR] [--work DIR] [--chrome PROGRAM] [--strict]
 
-    python3 tools/hud_art/check_sheets.py          about a minute; exit 0 when the manifest and the three sheets are the same files, 1 when they are not
+    python3 tools/hud_art/check_sheets.py          about a minute; exit 0 when the manifest and its sheets are the same files, 1 when they are not
 
 Needs what make_hud_art.py needs (Python 3 with Pillow and numpy, Google Chrome or Chromium), so it is not part of the tests that CI runs: run it after a change to the generator, and before the sheets are
-committed. The drawing is deterministic on one machine with one browser; a different browser can draw a pixel differently, and a machine without libdeflate writes the same pixels in larger files (README.md,
+committed. The comparison itself is tools/art_sheets.py's, the same as the world art's (tools/world_art/check_sheets.py). The drawing is deterministic on one machine with one browser; a different browser can draw a pixel differently, and a machine without libdeflate writes the same pixels in larger files (README.md,
 "Size"): when only the compression differs, the check says so and passes, and `--strict` makes it fail.
 """
 import argparse
@@ -15,49 +15,18 @@ import subprocess
 import sys
 import tempfile
 
-import numpy as np
-from PIL import Image
-
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, '..', '..'))
-FILES = ('hud_art.txt', 'sheet_1x.png', 'sheet_2x.png', 'sheet_3x.png')
-SECOND = ('sheet2_1x.png', 'sheet2_2x.png', 'sheet2_3x.png')         # (a second sheet, when the first was full: compared when either folder has one)
+sys.path.insert(0, os.path.join(ROOT, 'tools'))
 
+import art_sheets  # noqa: E402  (the one home of how a pack is split over sheets, and of this comparison)
 
-def read(path):
-    with open(path, 'rb') as f:
-        return f.read()
-
-
-def same_pixels(a, b):
-    """True when two PNG files hold the same 8-bit RGBA picture"""
-    x = np.asarray(Image.open(a).convert('RGBA'))
-    y = np.asarray(Image.open(b).convert('RGBA'))
-    return x.shape == y.shape and bool(np.array_equal(x, y))
+MANIFEST = 'hud_art.txt'
 
 
 def compare(assets, built, strict=False):
-    """(exit code, lines of the report) for the files of `assets` against the ones in `built`"""
-    lines = []
-    code = 0
-    names = FILES + (SECOND if any(os.path.isfile(os.path.join(folder, name)) for folder in (assets, built) for name in SECOND) else ())
-    for name in names:
-        have, made = os.path.join(assets, name), os.path.join(built, name)
-        if not os.path.isfile(made):
-            lines.append('%-14s the generator did not write it' % name)
-            code = 1
-        elif not os.path.isfile(have):
-            lines.append('%-14s the repository has no such file' % name)
-            code = 1
-        elif read(have) == read(made):
-            lines.append('%-14s the same bytes (%d)' % (name, os.path.getsize(have)))
-        elif name.endswith('.png') and same_pixels(have, made):
-            lines.append('%-14s the same pixels, other bytes (%d in the repository, %d built): the compression differs, libdeflate is not the one that made the repository\'s' % (name, os.path.getsize(have), os.path.getsize(made)))
-            code = 1 if strict else code
-        else:
-            lines.append('%-14s DIFFERENT (%d in the repository, %d built)' % (name, os.path.getsize(have), os.path.getsize(made)))
-            code = 1
-    return code, lines
+    """(exit code, lines of the report) for the files of `assets` against the ones in `built`: the manifest and every sheet that it names (art_sheets.compare)"""
+    return art_sheets.compare(assets, built, MANIFEST, strict)
 
 
 def main():

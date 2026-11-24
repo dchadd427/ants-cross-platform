@@ -1,0 +1,141 @@
+{
+ "note": "Mutants of the sheets of a pack of new pictures: the game's reader (src/ants_app/art_sheets.cpp, noticed by test_art_sheets) and the same rules in Python (tools/art_sheets.py, noticed by tests/scripts/test_art_sheets.py): pages in order, a page that is whole, the files' headers and sizes looked at for every page, the decoding by rows, how a page is filled, the records written and read, the comparison of a generator. Run: python3 tools/mutate.py tests/data/art_sheets_mutants.json --keep-going --jobs 1, from the repository folder (the Python ones need no build).",
+ "mutants": [
+  {
+   "id": "a_page_out_of_order_is_taken",
+   "file": "src/ants_app/art_sheets.cpp",
+   "old": "if (at >= sheets_.size() || page != rows_ / 3 || scale != rows_ % 3 + 1)",
+   "new": "if (at >= sheets_.size() || scale != rows_ % 3 + 1)",
+   "build": "test_art_sheets",
+   "test": "./build/tests/test_app/test_art_sheets",
+   "expect": "[records]"
+  },
+  {
+   "id": "a_page_that_is_not_whole_is_finished",
+   "file": "src/ants_app/art_sheets.cpp",
+   "old": "if (rows_ == 0 || rows_ % 3 != 0) return",
+   "new": "if (rows_ == 0) return",
+   "build": "test_art_sheets",
+   "test": "./build/tests/test_app/test_art_sheets",
+   "expect": "[records]"
+  },
+  {
+   "id": "a_back_slash_is_a_name_in_the_folder",
+   "file": "src/ants_app/art_sheets.cpp",
+   "old": " || file.find('\\\\') != std::string::npos",
+   "new": "",
+   "build": "test_art_sheets",
+   "test": "./build/tests/test_app/test_art_sheets",
+   "expect": "[records]"
+  },
+  {
+   "id": "the_size_in_the_record_is_not_looked_at",
+   "file": "src/ants_app/art_sheets.cpp",
+   "old": "be32(16) != sheet.w || be32(20) != sheet.h",
+   "new": "be32(16) < 0 || be32(20) < 0",
+   "build": "test_art_sheets",
+   "test": "./build/tests/test_app/test_art_sheets",
+   "expect": "[files]"
+  },
+  {
+   "id": "the_files_of_later_pages_are_not_looked_at",
+   "file": "src/ants_app/art_sheets.cpp",
+   "old": "for (int32_t page = 0; page < pages(); ++page) {",
+   "new": "for (int32_t page = 0; page < 1; ++page) {",
+   "build": "test_art_sheets",
+   "test": "./build/tests/test_app/test_art_sheets",
+   "expect": "[files]"
+  },
+  {
+   "id": "a_sheet_without_alpha_is_taken",
+   "file": "src/ants_app/art_sheets.cpp",
+   "old": "|| head[24] != 8 || head[25] != 6)",
+   "new": "|| head[24] != 8)",
+   "build": "test_art_sheets",
+   "test": "./build/tests/test_app/test_art_sheets",
+   "expect": "[files]"
+  },
+  {
+   "id": "the_rows_of_a_decode_are_not_limited",
+   "file": "src/ants_app/art_sheets.cpp",
+   "old": "decode_png_rgba(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), out, rows)",
+   "new": "decode_png_rgba(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), out)",
+   "build": "test_art_sheets",
+   "test": "./build/tests/test_app/test_art_sheets",
+   "expect": "[pixels]"
+  },
+  {
+   "id": "a_file_that_is_not_the_size_is_decoded",
+   "file": "src/ants_app/art_sheets.cpp",
+   "old": "if (out.width != sheet.w || (rows <= 0 && out.height != sheet.h)) {",
+   "new": "if (false) {",
+   "build": "test_art_sheets",
+   "test": "./build/tests/test_app/test_art_sheets",
+   "expect": "[pixels]"
+  },
+  {
+   "id": "a_page_is_not_filled_as_far_as_it_goes",
+   "file": "tools/art_sheets.py",
+   "old": "        layout = fits(page, left[:lo])\n",
+   "new": "        lo = max(0, lo - 1)\n        layout = fits(page, left[:lo])\n",
+   "test": "python3 tests/scripts/test_art_sheets.py",
+   "expect": "test_a_page_is_filled_as_far_as_it_goes_and_the_rest_go_on_the_next_in_order"
+  },
+  {
+   "id": "the_first_page_may_not_hold_nothing",
+   "file": "tools/art_sheets.py",
+   "old": "        if lo == 0 and page > 0:",
+   "new": "        if lo == 0:",
+   "test": "python3 tests/scripts/test_art_sheets.py",
+   "expect": "test_the_first_page_may_hold_only_what_always_sits_on_it"
+  },
+  {
+   "id": "one_page_too_many_is_made",
+   "file": "tools/art_sheets.py",
+   "old": "        if page >= max_pages:",
+   "new": "        if page > max_pages:",
+   "test": "python3 tests/scripts/test_art_sheets.py",
+   "expect": "test_what_cannot_be_held_is_an_error_and_nothing_is_dropped"
+  },
+  {
+   "id": "the_scales_are_written_the_other_way_round",
+   "file": "tools/art_sheets.py",
+   "old": "        for scale in SCALES:\n            if (page, scale) not in sheets:",
+   "new": "        for scale in reversed(SCALES):\n            if (page, scale) not in sheets:",
+   "test": "python3 tests/scripts/test_art_sheets.py",
+   "expect": "test_what_is_written_is_what_is_read"
+  },
+  {
+   "id": "a_leading_zero_is_a_number",
+   "file": "tools/art_sheets.py",
+   "old": "_NUMBER = re.compile(r'0|[1-9][0-9]*')",
+   "new": "_NUMBER = re.compile(r'[0-9]+')",
+   "test": "python3 tests/scripts/test_art_sheets.py",
+   "expect": "test_the_reader_refuses_what_the_games_reader_refuses"
+  },
+  {
+   "id": "a_page_that_is_not_whole_is_read",
+   "file": "tools/art_sheets.py",
+   "old": "    if not sheets or len(sheets) % 3:\n        raise ValueError('every page has the three sheet records",
+   "new": "    if not sheets:\n        raise ValueError('every page has the three sheet records",
+   "test": "python3 tests/scripts/test_art_sheets.py",
+   "expect": "test_the_reader_refuses_what_the_games_reader_refuses"
+  },
+  {
+   "id": "other_bytes_fail_without_strict",
+   "file": "tools/art_sheets.py",
+   "old": "            code = 1 if strict else code",
+   "new": "            code = 1",
+   "test": "python3 tests/scripts/test_art_sheets.py",
+   "expect": "test_the_same_pixels_in_other_bytes_pass_unless_strict"
+  },
+  {
+   "id": "a_page_that_only_the_repository_has_is_not_compared",
+   "file": "tools/art_sheets.py",
+   "old": "    for folder in (built, assets):",
+   "new": "    for folder in (built,):",
+   "test": "python3 tests/scripts/test_art_sheets.py",
+   "expect": "test_a_page_that_only_the_repository_has_fails_too"
+  }
+ ]
+}

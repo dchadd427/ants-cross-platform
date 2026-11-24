@@ -78,17 +78,8 @@ SDL_Texture* Renderer::world_art_texture(int32_t page, int32_t scale) {
         std::cerr << "[Renderer] The world art's sheet " << world_art_->sheet_file(page, scale) << " cannot be read" << std::endl;
         return nullptr;
     }
-    if (art_texture_limit_ > 0 && (image.width > art_texture_limit_ || image.height > art_texture_limit_)) {
-        std::cerr << "[Renderer] The world art's sheet " << world_art_->sheet_file(page, scale) << " is larger than a texture of this device" << std::endl;
-        return nullptr;
-    }
-    SDL_Texture* tex = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, image.width, image.height);
-    if (!tex) {
-        std::cerr << "[Renderer] The world art's sheet " << world_art_->sheet_file(page, scale) << " cannot be made a texture: " << SDL_GetError() << std::endl;
-        return nullptr;
-    }
-    SDL_UpdateTexture(tex, nullptr, image.rgba.data(), image.width * 4);
-    SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+    SDL_Texture* tex = make_sheet_texture(image, "world art", world_art_->sheet_file(page, scale));
+    if (tex == nullptr) return nullptr;
     world_art_failed_[k] = false;
     world_art_textures_[k] = tex;
     return tex;

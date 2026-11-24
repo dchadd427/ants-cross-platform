@@ -149,7 +149,7 @@ void test_manifest(const assets::AssetArchive& arc) {
     }
     check(bigger == 320, "the medium and the large bubble have a picture for each of the ten frames and sixteen variants: " + std::to_string(bigger));
     for (int32_t page = 0; page < pack.page_count(); ++page) {
-        for (const int32_t scale : world_art::kScales) {
+        for (const int32_t scale : kArtScales) {
             const std::string what = "the sheet of page " + std::to_string(page) + " at scale " + std::to_string(scale);
             check(pack.sheet_width(page, scale) > 0 && pack.sheet_width(page, scale) <= 4096 && pack.sheet_height(page, scale) > 0 && pack.sheet_height(page, scale) <= 4096, what + " fits a texture of 4096");
             DecodedImage image;
@@ -225,10 +225,10 @@ void test_manifest(const assets::AssetArchive& arc) {
     check(!p.parse(tiny("", "sheet 1 1 d.png 50 50\nsheet 1 2 e.png 100 100\nsheet 1 3 f.png 150 150\nsheet 0 1 a.png 100 100\nsheet 0 2 b.png 200 200\nsheet 0 3 c.png 300 300\n")), "pages out of order are refused");
     check(!p.parse(pages + "sprite 1 0 0 10 10 1 1 1 1 1 1\nsheet 2 1 g.png 10 10\n"), "a sheet row after a sprite is refused");
     std::string many = "";
-    for (int32_t page = 0; page <= world_art::kMaxPages; ++page) {
+    for (int32_t page = 0; page <= kArtMaxPages; ++page) {
         for (int32_t scale = 1; scale <= 3; ++scale) many += "sheet " + std::to_string(page) + " " + std::to_string(scale) + " p" + std::to_string(page * 3 + scale) + ".png 100 100\n";
     }
-    check(!p.parse(tiny("", many)), "more pages than the game keeps (" + std::to_string(world_art::kMaxPages) + ") are refused");
+    check(!p.parse(tiny("", many)), "more pages than the game keeps (" + std::to_string(kArtMaxPages) + ") are refused");
     std::error_code ignored_error;
     const std::string cut = pack_copy("manifest_cut", identity, {2});
     world_art::Pack cut_pack;
@@ -468,7 +468,7 @@ void look_at_treasure(zoomtest::PixelRig& rig) { rig.look(320, 672); }
 void test_draw(const assets::AssetArchive& arc, const world_art::Pack& pack) {
     group("draw", "the real renderer's ground at 1x, 2x and 3x is the sheet's picture of the cell, with the variant the rule chose");
     DecodedImage sheets[3];
-    for (const int32_t s : world_art::kScales) {
+    for (const int32_t s : kArtScales) {
         if (!pack.sheet_pixels(world_art::kGroundPage, s, sheets[s - 1])) {
             check(false, "the sheet of scale " + std::to_string(s) + " is read");
             return;
@@ -948,12 +948,12 @@ void make_effect_pictures(const assets::AssetArchive& arc, const world_art::Pack
     namespace fs = std::filesystem;
     std::error_code ignored;
     fs::create_directories(dir, ignored);
-    struct Scene {
+    struct EffectScene {
         std::string name, map;
         int32_t col, row;
     };
-    const std::vector<Scene> scenes = {{"gravel", "ISLANDS", 23, 26}, {"mud", std::string(ANTS_SOURCE_DIR) + "/Community-Maps/Mud Wars.lvl", 8, 14}, {"water", "ISLANDS", 7, 21}};
-    for (const Scene& sc : scenes) {
+    const std::vector<EffectScene> scenes = {{"gravel", "ISLANDS", 23, 26}, {"mud", std::string(ANTS_SOURCE_DIR) + "/Community-Maps/Mud Wars.lvl", 8, 14}, {"water", "ISLANDS", 7, 21}};
+    for (const EffectScene& sc : scenes) {
         for (const int32_t os : {1, 2, 3}) {
             zoomtest::PixelRig rig(arc, sc.map, kW, kH, 0, os);
             if (!rig.ok) {

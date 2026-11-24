@@ -847,6 +847,40 @@ target_link_libraries(test_world_art_effects PRIVATE ants_test_paths)
 add_test(NAME test_world_art_effects COMMAND test_world_art_effects)
 set_tests_properties(test_world_art_effects PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# The sheets of a pack of new pictures (art_sheets.hpp): the records, the look at the files, the decoding: the one reader of the HUD art and the world art
+add_executable(test_art_sheets
+    test_art_sheets.cpp
+)
+
+target_include_directories(test_art_sheets PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_art_sheets PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_art_sheets PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_art_sheets PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_art_sheets PRIVATE ants_test_paths)
+
+add_test(NAME test_art_sheets COMMAND test_art_sheets)
+set_tests_properties(test_art_sheets PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # The grass and the plants of the world art (the second page of the pack): their pictures by sprite number, the page's textures made only for a plant in view, the fallbacks, the animated flower
 add_executable(test_world_art_plants
     test_world_art_plants.cpp
