@@ -32,6 +32,9 @@ Work that is not released yet is written in the same template under a heading th
 - **New ground** (the first part of the new world art). The settings row **HUD art** is now **Art**: one switch, New (the default) or Classic, for the whole look. Big mud fields get a deeper look in the middle (darker and wetter, faint ripples, color patches, bigger and more bubbles), growing with the distance from the banks. Where two plain tiles of different ground meet in a hard line (water against gravel, slate against dirt, and every other pair, in the players' maps), a natural transition is drawn: a bank on the water, soft steps between mud, gravel and dirt, rock for slate, thin on checkerboards. Gravel, dirt, slate, mud with its bubbles, water, the edges between them and the bridge the Swimmer digs are redrawn in the game's own matte, hand-drawn look, sharper at 2x and 3x, with sixteen pictures for a plain tile so that a field does not repeat. The tiles, the animations and the rules are the original's; Classic draws the original's sprites exactly as before.
 - **Special ants on a match's page.** A new section under the Scoreboard shows what each type of ant did: a card for each type that somebody had (Swimmer: bridges built and taken down; Fire Ant: fires lit and put out; Bomber: bombs set, defused and gone off; Thief: raids that brought loot home, "5 of 8", and the loot), and a card for food and fighting. A type that nobody used is left out with one line. Bombs set, Defused and Fires lit moved there from the Scoreboard. A match played before this release shows what was counted then (no bridges, fires put out or loot).
 
+**Fixes:**
+- On a phone, the "What's new" window fits the screen, so its Close button is no longer below the bottom of the page.
+
 ## v0.21.3 - 2026-11-24 - Follows, private messages, replay likes and the activity curve
 
 **For players:**
