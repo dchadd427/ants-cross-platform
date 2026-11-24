@@ -37,6 +37,8 @@ add_library(ants_server_core STATIC
     upload_common.cpp
     admin_audit.cpp
     admin_pass.cpp
+    like_pass.cpp
+    replay_counts_api.cpp
     private_files.cpp
 )
 target_include_directories(ants_server_core PUBLIC

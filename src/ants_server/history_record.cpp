@@ -237,6 +237,8 @@ JsonValue history_record_to_json(const HistoryRecord& r, bool full) {
     o.set("draw", JsonValue::make_bool(r.draw));
     o.set("result", JsonValue::make_string(r.result()));
     o.set("computers_only", JsonValue::make_bool(r.computers_only));
+    o.set("plays", JsonValue::make_int(r.plays));
+    o.set("likes", JsonValue::make_int(r.likes));
     JsonValue seats = JsonValue::make_array();
     for (const HistorySeat& s : r.seats) seats.push_back(seat_json(s, full));
     o.set("seats", std::move(seats));

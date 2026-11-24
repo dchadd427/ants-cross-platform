@@ -39,6 +39,7 @@ CHAT_FILES = ("chat.js", "chat.css")                  # the chat dock, loaded af
 PLAYERS_FILES = ("players.js", "players.css")         # the players list, loaded after the dock: its own budgets and tests are tests/scripts/test_web_home_players.py
 VP_FILES = ("vp.js",)                                 # the screen numbers of "/?vp", loaded only for that address: its own budget and tests are tests/scripts/test_web_home_height.py
 ALERTS_FILES = ("alerts.js", "alerts.css")              # the alerts sheet and the join alert of Home, loaded after the first paint: its own budgets and tests are tests/scripts/test_web_home_alerts.py
+MESSAGES_FILES = ("messages.js", "messages.css")        # the Messages button and its panel, loaded after the dock for a person who is logged in: its own budget and tests are tests/scripts/test_web_home_messages.py
 SPLIT_FILES = ("split.js", "split.css")                 # the drag handles of Home, loaded after the first paint: its own budgets and tests are tests/scripts/test_web_home_split.py
 IMAGES_FILES = ("pics.js", "pics.css", "post.js", "post.css")      # the images of the chat (the thumbnails and the viewer, the poster), loaded by the dock: its own budgets and tests are tests/scripts/test_web_home_images.py
 TALK_FILES = ("talk.js", "talk.css")                  # the emoji and microphone buttons of the chat, loaded after the dock: its own budgets and tests are tests/scripts/test_web_home_talk.py
@@ -141,7 +142,7 @@ class ThePage(unittest.TestCase):
 
 class TheFolder(unittest.TestCase):
     def test_it_holds_the_two_screens_the_games_list_the_chat_dock_and_the_players_list_and_nothing_else(self):
-        self.assertEqual(sorted(n for n in os.listdir(HOME) if not n.endswith(".mutbak")), sorted(FILES + LATER + CHAT_FILES + PLAYERS_FILES + TALK_FILES + IMAGES_FILES + MOD_FILES + CMDS_FILES + SPLIT_FILES + ALERTS_FILES + VP_FILES + ROOM_FILES))      # (tools/mutate.py keeps FILE.mutbak while it changes a file)
+        self.assertEqual(sorted(n for n in os.listdir(HOME) if not n.endswith(".mutbak")), sorted(FILES + LATER + CHAT_FILES + PLAYERS_FILES + TALK_FILES + IMAGES_FILES + MOD_FILES + CMDS_FILES + SPLIT_FILES + ALERTS_FILES + MESSAGES_FILES + VP_FILES + ROOM_FILES))      # (tools/mutate.py keeps FILE.mutbak while it changes a file)
 
     def test_it_is_under_its_budgets(self):
         raw = zipped = 0
@@ -333,7 +334,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_screen_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
-    FILES = ["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/alert_core.js", "web/front/player_name.js", "web/home/home.js", "web/home/home.css", "web/home/room.css", "web/home/roomchat.js", "web/home/roomchat.css", "web/home/chat.js", "web/home/chat.css", "web/home/games.js", "web/home/alerts.js", "web/home/alerts.css", "web/home/games.css", "web/home/players.js", "web/home/players.css", "web/home/talk.js", "web/home/talk.css", "web/home/mod.js", "web/home/mod.css", "web/home/split.js", "web/home/split.css", "web/home/cmds.js", "web/home/cmds.css", "web/home/pics.js", "web/home/pics.css", "web/home/post.js", "web/home/post.css", "web/home/vp.js", "web/shapes.js", "tests/scripts/test_web_home_screen.py", "tests/scripts/web_home_screen_check.js", "tests/scripts/web_page_harness.js",
+    FILES = ["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/alert_core.js", "web/front/player_name.js", "web/home/home.js", "web/home/home.css", "web/home/room.css", "web/home/roomchat.js", "web/home/roomchat.css", "web/home/chat.js", "web/home/chat.css", "web/home/games.js", "web/home/alerts.js", "web/home/alerts.css", "web/home/messages.js", "web/home/messages.css", "web/home/games.css", "web/home/players.js", "web/home/players.css", "web/home/talk.js", "web/home/talk.css", "web/home/mod.js", "web/home/mod.css", "web/home/split.js", "web/home/split.css", "web/home/cmds.js", "web/home/cmds.css", "web/home/pics.js", "web/home/pics.css", "web/home/post.js", "web/home/post.css", "web/home/vp.js", "web/shapes.js", "tests/scripts/test_web_home_screen.py", "tests/scripts/web_home_screen_check.js", "tests/scripts/web_page_harness.js",
              "tests/scripts/web_home_check.py", "tests/scripts/fake_media.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml", "docker/nginx.conf", "docs/PLAY_IN_BROWSER.md"] + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "room_fog.js", "room_sheet.js", "seat_menu.js", "map_picker.js", "map_maker_link.js")]
 
     SPEC = "home_screen_mutants.json"

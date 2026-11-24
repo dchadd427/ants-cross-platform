@@ -276,6 +276,7 @@ class Presence:
             data = self.dumps(self.frame(view, previous))
             for peer in list(self.watchers):
                 peer.send_text(data)
+        self.chat.follows.after_refresh()           # (the people who follow somebody are sent their list again: the numbers of the rows of those who came or went)
 
     def snapshot(self):
         if self.sent_bytes is None:
@@ -308,6 +309,7 @@ class Presence:
             self.rooms.pop(peer, None)
         else:
             self.rooms[peer] = room
+        self.chat.follows.room_opened(peer, where)          # (a public room that its host's page says: the people who follow the host are told, hub/follows.py)
 
     # ---- what an account is doing, for invitations ----------------------------------------------------------------------------------------------------------------------------------------
 

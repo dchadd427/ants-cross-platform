@@ -14,8 +14,8 @@
   {
    "id": "gate_believes_the_visitors_address",
    "file": "docker/nginx.conf",
-   "old": "Cookie $hub_cookie_session;\n        proxy_set_header X-Client-Address $remote_addr;",
-   "new": "Cookie $hub_cookie_session;\n        proxy_set_header X-Client-Address $http_x_client_address;"
+   "old": "proxy_pass http://$ants_hub/hub/admin/gate;               # (an explicit address: the visitor's query is not passed on)\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Cookie $hub_cookie_session;\n        proxy_set_header X-Client-Address $remote_addr;",
+   "new": "proxy_pass http://$ants_hub/hub/admin/gate;               # (an explicit address: the visitor's query is not passed on)\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Cookie $hub_cookie_session;\n        proxy_set_header X-Client-Address $http_x_client_address;"
   },
   {
    "id": "gate_is_asked_with_the_visitors_headers",

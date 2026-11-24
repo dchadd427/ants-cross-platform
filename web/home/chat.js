@@ -45,6 +45,7 @@
         kicked: 'A moderator removed you from the chat. You can log in again.', banned: 'You are banned from the chat. You can still read it.', banField: 'You are banned from the chat'
     };
     var DONE = { mute: 'Done: the person is muted.', unmute: 'Done: the person can write again.', del: 'Done: the line is gone.', kick: 'Done: the person was removed.', ban: 'Done: the person is banned.', unban: 'Done: the ban is lifted.', noimages: 'Done: the person cannot post images.', images: 'Done: the person can post images again.' };
+    var SHEET = ['invite', 'follow', 'unfollow', 'msg', 'ignore', 'unignore'];       // the commands that the person's sheet and the Messages part send: the answer is theirs
     var MAXBANS = 50;                                                    // (the hub sends the newest 50)
     var ABOUT = ['power', 'role', 'who'];                                // the codes that are only for a command (a line is never refused with them)
     var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young', 'quota', 'bad'];       // the codes that the hub answers a line with: an err of any other code (a refused `here` has its own) is not about a line
@@ -251,7 +252,7 @@
         var barredShown = false;                                                 // (whether the last paint showed the field off for a ban: the pieces that stand beside the field are told when it changes)
         var picsApi = null, picsAsked = false, postAsked = false, delWait = [];                                  // the readers' part (pics.js), the posters' part (post.js: asked once), the author's deletes that wait
         var cmdsApi = null, cmdsRows = [], cmdsAsked = false, cmdsHeld = [];       // the helper (cmds.js), the hub's `cmds` rows, replies that came before it was there
-        var taps = [], hello = null, rowFns = [], arrivalFns = [], lastAlerts = null, directoryFn = null;                                             // the players list listens through this socket: fn(kind, frame), kind 'live' (the welcome), 'who', 'lost' or 'shown' (Home shows or not); hello: the open socket's welcome
+        var taps = [], hello = null, rowFns = [], arrivalFns = [], lastAlerts = null, lastFollows = null, lastMsgs = null, directoryFn = null;                                             // the players list listens through this socket: fn(kind, frame), kind 'live' (the welcome), 'who', 'lost' or 'shown' (Home shows or not); hello: the open socket's welcome
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -497,7 +498,7 @@
         function lost() {                                                        // the socket is gone (closed, failed, silent, or it sent what no hub sends): say so, and try again later
             drop();
             if (liveSince !== null && now() - liveSince >= MS.stable) attempt = 0;       // (a link that held for a while starts over at 1 s; one that is closed at once keeps growing)
-            liveSince = null; welcomed = false; state = 'offline'; hello = null; lastAlerts = null;
+            liveSince = null; welcomed = false; state = 'offline'; hello = null; lastAlerts = null; lastFollows = null; lastMsgs = null;
             if (!stopped) { var soon = wokeAt !== null && now() - wokeAt < MS.wake; wokeAt = null; timers.retry = setTimeout(guard(go), soon ? 0 : delayOf(attempt, rnd())); attempt++; }
             tapped('lost');
             render();
@@ -662,8 +663,9 @@
         }
         function onReply(m) {                                                   // the hub's private answer to a command: the oldest command that waits is answered, as with `ok`
             var at = oldest(true), entry = at >= 0 ? unanswered.splice(at, 1)[0] : null, typed = entry ? entry.text : '';
-            if (entry && entry.done && m.c === 'invite') entry.done('reply', m);              // (the invitation of the person's sheet: it says the words of the answer)
+            if (entry && entry.done && SHEET.indexOf(m.c) !== -1) entry.done('reply', m);      // (the invitation, the follow, the message and the block of the person's sheet: it says the words of the answer)
             else if (entry && entry.done) entry.done(m.r === 'rate' ? 'rate' : m.r === 'unknown' ? 'power' : 'bad');       // (the sheet's own command: the sheet says the words)
+            else if (m.c === 'msg' && m.r === 'open') tapped('open', m);       // (a typed /msg: the Messages part opens the conversation)
             else if (cmdsApi) cmdsApi.reply(m, typed); else if (cmdsHeld.length < 10) cmdsHeld.push([m, typed]);
         }
         function onOk(m) {                                                       // a command was done: the oldest command that waits is answered
@@ -690,6 +692,9 @@
             else if (m.t === 'who') tapped('who', m);
             else if (m.t === 'alerts') { lastAlerts = m; tapped('alerts', m); }
             else if (m.t === 'alert') tapped('alert', m);
+            else if (m.t === 'follows') { lastFollows = m; tapped('follows', m); }                   // (the people that this account follows, for the players list and the sheet: to its own sockets only)
+            else if (m.t === 'msgs') { lastMsgs = m; tapped('msgs', m); }
+            else if (m.t === 'msg' || m.t === 'thread' || m.t === 'dmx' || m.t === 'dmreported') tapped(m.t, m);       // (private messages: the Messages part, web/home/messages.js, draws them)
             else if (m.t === 'err' && picWait && (m.code === 'pics' || m.code === 'login')) failPic(m.code === 'login');
             else if (m.t === 'err' && (SAID.indexOf(m.code) !== -1 || ABOUT.indexOf(m.code) !== -1)) refuse(m.code);
             else if (m.t === 'err' && m.code === 'pick') tell('failed');
@@ -780,7 +785,7 @@
             sendHeld(entry, { t: 'say', text: entry.text });
         }
         function lineById(id) {                                                 // a copy of a person's line of the log (never a private answer), or null
-            for (var i = 0; i < feed.length; i++) { var e = feed[i]; if (!e.priv && e.id === id) return { id: e.id, who: e.who, text: e.text, role: e.role, sys: e.sys, u: e.u, img: !!e.img, own: !!e.own }; }
+            for (var i = 0; i < feed.length; i++) { var e = feed[i]; if (!e.priv && e.id === id) return { id: e.id, who: e.who, text: e.text, role: e.role, sys: e.sys, u: e.u, img: !!e.img, own: !!e.own, k: e.k || '' }; }
             return null;
         }
         function byAuthor(id) {                                                 // staff only: the lines of the log (no private answer, no hub line) that the account of line `id` wrote, newest first, as { id, text, at, img (whether it carries an image) }; matched by the hub's key, never a name
@@ -809,7 +814,7 @@
         }
         function relink() {                                                     // the login changed (the hub closes the sockets of the old one): this page connects again at once, and is told who it is now
             drop();
-            liveSince = null; welcomed = false; attempt = 0; you = null; menuOn = false; hello = null; removed = ''; lastAlerts = null;
+            liveSince = null; welcomed = false; attempt = 0; you = null; menuOn = false; hello = null; removed = ''; lastAlerts = null; lastFollows = null; lastMsgs = null;
             for (var i = feed.length - 1; i >= 0; i--) if (feed[i].priv) feed.splice(i, 1);       // (the private answers go too: a list of bans is not for the next person)
             setCmds([]); cmdsHeld.length = 0;
             stale = true;                                                        // (the log is made again at once, without the usernames and numbers of a moderator: nobody sees them after a Log out)
@@ -893,7 +898,7 @@
         return {
             root: box, slot: slot, field: field, log: log, grow: grow, say: sendLine, state: function () { return state; },
             you: function () { return you ? { name: you.name, role: you.role } : null; }, line: lineById, by: byAuthor, when: clockOf, arrived: function (fn) { arrivalFns.push(fn); }, command: guard(command), mutes: guard(function (done) { command('/mutes', done, true); }), note: guard(function (text) { answer([String(text)]); }), rows: function (fn) { rowFns.push(fn); },
-            tap: function (fn) { taps.push(fn); if (hello) { tell1(fn, 'live', hello); if (lastAlerts) tell1(fn, 'alerts', lastAlerts); } else if (state === 'offline') tell1(fn, 'lost'); },
+            tap: function (fn) { taps.push(fn); if (hello) { tell1(fn, 'live', hello); if (lastAlerts) tell1(fn, 'alerts', lastAlerts); if (lastFollows) tell1(fn, 'follows', lastFollows); if (lastMsgs) tell1(fn, 'msgs', lastMsgs); } else if (state === 'offline') tell1(fn, 'lost'); },
             send: out,
             block: guard(function (draw, cls) { var e = answer([], draw, cls); return { redraw: function () { redraw(e); } }; }), call: guard(function (text, done) { command(text, done, false, true); }), onScreen: function () { return seen() && !stale; },
             words: function (m) { try { return cmdsApi && cmdsApi.words ? cmdsApi.words(m) : ''; } catch (e) { return ''; } }, authors: authors, directory: function (fn) { directoryFn = typeof fn === 'function' ? fn : null; }, people: roster,

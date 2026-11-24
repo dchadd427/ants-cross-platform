@@ -308,8 +308,8 @@
   {
    "id": "history_does_not_know_approved_maps",
    "file": "src/ants_server/history_store.cpp",
-   "old": "        if (!path.empty()) return replay::load_map_file(head, path, level, why);\n",
-   "new": "",
+   "old": "const std::string approved = approved_path_ ? approved_path_(head.map_name) : std::string();",
+   "new": "const std::string approved;",
    "build": [
     "test_map_plays"
    ],

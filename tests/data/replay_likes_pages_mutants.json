@@ -1,0 +1,92 @@
+{
+ "note": "Mutants of the WIRING and the style of the plays and hearts (web/matches.html, web/match.html, web/matches.css; docs/REPLAYS.md 'The match pages') for tools/mutate.py, against the part likes of the opt-in real-browser check (tests/scripts/web_matches_check.py --only likes: a Chromium-based browser is needed, about a minute for each mutant): the way in that goes to the wrong address on either page, a recording that is gone that gets a button, a count of the sort that is not brightened or is not bright, a page that never looks at the door or has no hearts, a Sort box that is a sixth of the row and cuts its words, the group of a phone shown on a computer, and a zero that is not dim; every one must be caught (python3 tools/mutate.py tests/data/replay_likes_pages_mutants.json --keep-going --jobs 1; the mutants of the code of web/replay_likes.js are in tests/data/replay_likes_mutants.json and run in the quick tier).",
+ "baseline": {
+  "test": "python3 tests/scripts/web_matches_check.py --only likes"
+ },
+ "mutants": [
+  {
+   "id": "the_list_way_in_goes_nowhere_in_particular",
+   "file": "web/matches.html",
+   "old": "login: function () { return '/hub/login?next=matches'; }",
+   "new": "login: function () { return '/hub/login'; }",
+   "test": "python3 tests/scripts/web_matches_check.py --only likes"
+  },
+  {
+   "id": "a_gone_recording_on_the_list_gets_a_button",
+   "file": "web/matches.html",
+   "old": "{ plain: s.kind !== 'watch', key:",
+   "new": "{ plain: false, key:",
+   "test": "python3 tests/scripts/web_matches_check.py --only likes"
+  },
+  {
+   "id": "the_list_does_not_brighten_the_count_of_the_sort",
+   "file": "web/matches.html",
+   "old": "key: state.sort === 'plays' || state.sort === 'likes' ? state.sort : '' });",
+   "new": "key: '' });",
+   "test": "python3 tests/scripts/web_matches_check.py --only likes"
+  },
+  {
+   "id": "the_list_never_looks_at_the_door",
+   "file": "web/matches.html",
+   "old": "likes.look();\n",
+   "new": "",
+   "test": "python3 tests/scripts/web_matches_check.py --only likes"
+  },
+  {
+   "id": "the_match_way_in_goes_nowhere_in_particular",
+   "file": "web/match.html",
+   "old": "return '/hub/login?next=match&id=' + encodeURIComponent(match);",
+   "new": "return '/hub/login?next=match';",
+   "test": "python3 tests/scripts/web_matches_check.py --only likes"
+  },
+  {
+   "id": "the_match_page_has_no_hearts",
+   "file": "web/match.html",
+   "old": "likes.hero(s, rec, { plain: st.kind !== 'watch' });",
+   "new": "",
+   "test": "python3 tests/scripts/web_matches_check.py --only likes"
+  },
+  {
+   "id": "a_gone_recording_on_the_match_page_gets_a_button",
+   "file": "web/match.html",
+   "old": "{ plain: st.kind !== 'watch' }",
+   "new": "{ plain: false }",
+   "test": "python3 tests/scripts/web_matches_check.py --only likes"
+  },
+  {
+   "id": "the_match_page_never_looks_at_the_door",
+   "file": "web/match.html",
+   "old": "likes.look();\n",
+   "new": "",
+   "test": "python3 tests/scripts/web_matches_check.py --only likes"
+  },
+  {
+   "id": "the_sort_box_is_a_sixth",
+   "file": "web/matches.css",
+   "old": "repeat(5, minmax(0, 1fr)) max-content",
+   "new": "repeat(6, minmax(0, 1fr))",
+   "test": "python3 tests/scripts/web_matches_check.py --only likes"
+  },
+  {
+   "id": "a_computer_shows_the_group_of_a_phone",
+   "file": "web/matches.css",
+   "old": ".m .info .pl { display: none; }",
+   "new": "",
+   "test": "python3 tests/scripts/web_matches_check.py --only likes"
+  },
+  {
+   "id": "a_zero_is_not_dim",
+   "file": "web/matches.css",
+   "old": ".pl .pv.zero, .lk.zero .n { opacity: .55; }",
+   "new": ".pl .pv.zero, .lk.zero .n { opacity: 1; }",
+   "test": "python3 tests/scripts/web_matches_check.py --only likes"
+  },
+  {
+   "id": "the_count_of_the_sort_is_not_bright",
+   "file": "web/matches.css",
+   "old": ".pl .pv.key, .lk.key { color: var(--cream); }",
+   "new": ".pl .pv.key, .lk.key { color: var(--muted); }",
+   "test": "python3 tests/scripts/web_matches_check.py --only likes"
+  }
+ ]
+}

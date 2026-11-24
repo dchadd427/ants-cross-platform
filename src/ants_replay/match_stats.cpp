@@ -319,16 +319,24 @@ void MatchStatsCollector::on_tick(uint32_t turns, sim::SimulationEngine& engine)
     }
 }
 
-StatsPlay play_with_stats(const Replay& replay, const assets::LevelData& level) {
+StatsPlayback::StatsPlayback(const Replay& replay, const assets::LevelData& level) : collector_(replay), playback_(replay, level, collector_.hooks()) {}
+
+StatsPlay StatsPlayback::take() {
     StatsPlay out;
-    MatchStatsCollector collector(replay);
-    out.outcome = play(replay, level, collector.hooks());
-    out.stats = collector.take(out.outcome.turns);
+    out.outcome = playback_.outcome();
+    out.stats = collector_.take(out.outcome.turns);
     if (!out.outcome.ok) {
         out.stats.ok = false;
         if (out.stats.why.empty()) out.stats.why = out.outcome.error.empty() ? std::string("the match did not play out") : out.outcome.error;
     }
     return out;
+}
+
+StatsPlay play_with_stats(const Replay& replay, const assets::LevelData& level) {
+    StatsPlayback playback(replay, level);
+    while (!playback.advance(replay.total_turns + 1u)) {
+    }
+    return playback.take();
 }
 
 }  // namespace ants::replay

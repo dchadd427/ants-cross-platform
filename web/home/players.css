@@ -64,3 +64,15 @@
 
 .pl-card .pl-av[data-pic="on"] { color: transparent; }       /* (after the role colors: a picture hides the letter whatever its ring) */
 @media (max-height: 500px) and (orientation: landscape) { .pl-head { min-height: 52px; } .pl-card { min-height: 44px; } .pl-card.has-sub { min-height: 48px; } .pl-you .pl-card { min-height: 46px; } .pl-div { margin: 6px 2px 0; } .pl-gh { margin: 8px 0 4px; } .pl-guests { min-height: 40px; margin-top: 4px; padding-top: 6px; } .pl-guests.in-list { display: flex; } .pl-guests.pinned { display: none; } }
+
+/* ---- the tabs, the stars and the Following tab (docs/HUB_PEOPLE.md, "Follows"): only a person who is logged in has them ---- */
+.pl-tabs { flex: none; display: flex; gap: 8px; margin: 0 0 6px; }
+.pl-tab { flex: 1 1 0; min-width: 0; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 4px 8px; font: inherit; font-size: 16px; color: var(--cream); background: #0a1016; border: 2px solid #17382f; border-radius: 6px; cursor: pointer; }
+.pl-tab[data-on="true"] { background: #0b1a17; border-color: #2b6b4f; border-bottom: 4px solid var(--gold); }
+.pl-tc { font-size: 14px; color: #a8cfc0; }
+.pl-star { display: inline-block; flex: none; width: 13px; height: 13px; margin-left: 6px; vertical-align: -1px; background: var(--gold); clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); }
+.pl-tab .pl-star { width: 15px; height: 15px; margin-left: 0; }
+.pl-star.big { display: block; width: 26px; height: 26px; margin: 0 auto 8px; }
+.pl-none { padding: 16px 10px; border: 1px dashed #2b6b4f; border-radius: 8px; }
+.pl-nt { font-weight: 500; }
+.pl-keep { flex: none; margin: 8px 4px 0; font-size: 13px; line-height: 1.35; color: #a8cfc0; }

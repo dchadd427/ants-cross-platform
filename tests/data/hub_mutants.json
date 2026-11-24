@@ -238,15 +238,15 @@
   {
    "id": "duplicate_window_29_seconds",
    "file": "hub/limits.py",
-   "old": "duplicate_seconds: float = 30.0 ",
-   "new": "duplicate_seconds: float = 29.0 ",
+   "old": "\n    duplicate_seconds: float = 30.0 ",
+   "new": "\n    duplicate_seconds: float = 29.0 ",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "duplicate_window_31_seconds",
    "file": "hub/limits.py",
-   "old": "duplicate_seconds: float = 30.0 ",
-   "new": "duplicate_seconds: float = 31.0 ",
+   "old": "\n    duplicate_seconds: float = 30.0 ",
+   "new": "\n    duplicate_seconds: float = 31.0 ",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -2345,8 +2345,8 @@
   {
    "id": "the_key_is_short",
    "file": "hub/chat.py",
-   "old": ".hexdigest()[:12]",
-   "new": ".hexdigest()[:4]",
+   "old": "account.encode(\"utf-8\"), hashlib.sha256).hexdigest()[:12]",
+   "new": "account.encode(\"utf-8\"), hashlib.sha256).hexdigest()[:4]",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
