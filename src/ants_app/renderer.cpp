@@ -365,6 +365,7 @@ void Renderer::shutdown() {
     drop_art_textures();
     drop_world_art_textures();
     drop_mud_caches();
+    drop_edge_caches();
     for (PassTexture& t : pass_levels_) destroy_texture(t);
     pass_levels_.clear();
     destroy_texture(lattice_);

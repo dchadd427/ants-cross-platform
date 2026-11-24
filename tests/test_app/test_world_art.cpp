@@ -97,10 +97,11 @@ std::string pack_copy(const std::string& tag, const std::function<std::string(co
 
 std::string identity(const std::string& s) { return s; }
 
-/// The world art of the batch of the ground alone: the looks of big mud fields are made over frames and have their own test (test_world_art_mud.cpp)
+/// The world art of the batch of the ground alone: the looks of big mud fields and the transitions are made over frames and have their own tests (test_world_art_mud.cpp, test_world_art_edges.cpp)
 void use_art(Renderer& renderer, const world_art::Pack& pack) {
     renderer.set_world_art(&pack);
     renderer.set_dense_mud(false);
+    renderer.set_transitions(false);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -825,6 +826,54 @@ void make_mud_pictures(const assets::AssetArchive& arc, const world_art::Pack& p
     std::printf("pictures written to %s\n", dir.c_str());
 }
 
+/// The pictures of the automatic transitions (ANTS_WORLD_ART_SHOTS=FOLDER ANTS_WORLD_ART_SET=edges): players' maps whose plain tiles meet in a hard line, at 1x, 2x and 3x, with and without the transitions
+void make_edge_pictures(const assets::AssetArchive& arc, const world_art::Pack& pack, const std::string& dir) {
+    namespace fs = std::filesystem;
+    std::error_code ignored;
+    fs::create_directories(dir, ignored);
+    const std::vector<std::pair<std::string, std::string>> maps = {
+        {"greatsea_water_gravel", "TheGreatSea.lvl"}, {"magnetic_water_gravel_dirt", "MaGnEtiC iSLaNd.lvl"}, {"coaster_water_dirt", "A_Coaster_Mix_Turnament_Map.lvl"}, {"arrowhead_water_slate", "ArrowHead.lvl"},
+        {"bombraces_slate_gravel", "Bomb Races.lvl"}, {"chess_mud_gravel_grid", "CHESS.lvl"}, {"thegrid_water_mud_grid", "TheGrid.LVL"}, {"ants1998_dirt_slate_grid", "aNtS_oF_1998.lvl"},
+    };
+    for (const auto& entry : maps) {
+        for (const int32_t os : {1, 2, 3}) {
+            zoomtest::PixelRig rig(arc, std::string(ANTS_SOURCE_DIR) + "/Community-Maps/" + entry.second, kW, kH, 0, os);
+            if (!rig.ok) {
+                std::fprintf(stderr, "picture: cannot start %s\n", entry.second.c_str());
+                continue;
+            }
+            rig.renderer.set_world_art(&pack);
+            rig.renderer.set_dense_mud(false);
+            rig.renderer.set_dense_mud_budget_ms(-1);
+            // the window of 15 x 9 cells with the most transitions, not at the map's rim (a join there has nothing outside the picture)
+            const int32_t cols = os == 3 ? 10 : 15, rows = os == 3 ? 6 : 9;
+            int32_t best = -1, bx = 0, by = 0;
+            for (int32_t y = 0; y + rows <= static_cast<int32_t>(rig.tiles_h); ++y) {
+                for (int32_t x = 0; x + cols <= static_cast<int32_t>(rig.tiles_w); ++x) {
+                    int32_t count = 0;
+                    for (int32_t j = 0; j < rows; ++j) {
+                        for (int32_t i = 0; i < cols; ++i) count += rig.renderer.cell_has_transition(x + i, y + j) ? 1 : 0;
+                    }
+                    if (count > best) best = count, bx = x, by = y;
+                }
+            }
+            rig.world = rig.engine.get_world_state();
+            rig.look(bx * 32, by * 32);
+            const LayoutRect view = rig.layout.view();
+            const auto cut = [&](const zoomtest::Picture& pic, const char* tag) {
+                const std::string path = dir + "/" + entry.first + "_" + std::to_string(os) + "x_" + tag + ".png";
+                if (!write_crop(path, pic, view.x * os, view.y * os, cols * 32 * os, rows * 32 * os)) std::fprintf(stderr, "picture: cannot write %s\n", path.c_str());
+            };
+            rig.renderer.set_transitions(false);
+            cut(rig.shoot(), "without");
+            rig.renderer.set_transitions(true);
+            cut(rig.shoot(), "with");
+            std::printf("%s at %dx: window (%d, %d), %d cells with a transition\n", entry.first.c_str(), os, bx, by, best);
+        }
+    }
+    std::printf("pictures written to %s\n", dir.c_str());
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -840,6 +889,7 @@ int main(int argc, char* argv[]) {
         const zoomtest::QuietStdout quiet;
         const char* set = std::getenv("ANTS_WORLD_ART_SET");
         if (set != nullptr && std::string(set) == "mud") make_mud_pictures(arc, pack, shots);
+        else if (set != nullptr && std::string(set) == "edges") make_edge_pictures(arc, pack, shots);
         else make_pictures(arc, pack, shots);
         return 0;
     }

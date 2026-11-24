@@ -34,6 +34,11 @@ void Renderer::set_world_art(const world_art::Pack* pack) {
         drop_mud_caches();
         for (auto& pictures : mud_pictures_) pictures.clear();
         mud_pictures_state_.fill(0);
+        drop_edge_caches();
+        for (auto& pictures : edge_pictures_) {
+            for (auto& picture : pictures) picture.clear();
+        }
+        edge_pictures_state_.fill(0);
     }
 }
 
@@ -122,6 +127,10 @@ void Renderer::index_ground(const ants::assets::LevelData& level) {
     mud_depth_ = world_art::mud::Depth{};
     mud_depth_ready_ = false;
     drop_mud_caches();
+    edge_map_ = world_art::edges::EdgeMap{};
+    edge_has_.clear();
+    edge_ready_ = false;
+    drop_edge_caches();
     const int32_t w = static_cast<int32_t>(level.width());
     const int32_t h = static_cast<int32_t>(level.height());
     if (w <= 0 || h <= 0 || !archive_) return;

@@ -288,6 +288,87 @@
    "build": "test_world_art_mud",
    "test": "./build/tests/test_app/test_world_art_mud",
    "expect": "[render]"
+  },
+  {
+   "id": "edge_a_lower_cell_beside_a_lower_one_has_one",
+   "file": "src/ants_app/world_art_edges.cpp",
+   "old": "if (k != kNoKind && k > lo) return true;",
+   "new": "if (k != kNoKind && k != lo) return true;",
+   "build": "test_world_art_edges",
+   "test": "./build/tests/test_app/test_world_art_edges",
+   "expect": "[kinds]"
+  },
+  {
+   "id": "edge_border_casts_a_shadow",
+   "file": "src/ants_app/world_art_edges.cpp",
+   "old": "bank[at] = other != kNoKind && other > lo ? 1 : 0;",
+   "new": "bank[at] = (other == kNoKind || other <= lo || other > lo) ? 1 : 0;",
+   "build": "test_world_art_edges",
+   "test": "./build/tests/test_app/test_world_art_edges",
+   "expect": "[overlay]"
+  },
+  {
+   "id": "edge_grids_are_not_thin",
+   "file": "src/ants_app/world_art_edges.cpp",
+   "old": "const bool cell_thin = thin[cb + 1][ca + 1];",
+   "new": "const bool cell_thin = false;",
+   "build": "test_world_art_edges",
+   "test": "./build/tests/test_app/test_world_art_edges",
+   "expect": "[overlay]"
+  },
+  {
+   "id": "edge_bank_is_too_wide",
+   "file": "src/ants_app/world_art_edges.cpp",
+   "old": "if (lo == kWater) w = clamp(3.3 + wobble, 0.7, 8.5);",
+   "new": "if (lo == kWater) w = clamp(13.3 + wobble, 0.7, 18.5);",
+   "build": "test_world_art_edges",
+   "test": "./build/tests/test_app/test_world_art_edges",
+   "expect": "[overlay]"
+  },
+  {
+   "id": "edge_lit_lip_on_the_wrong_side",
+   "file": "src/ants_app/world_art_edges.cpp",
+   "old": "const bool lit = !bank_at(i - shift_lit, j - shift_lit);",
+   "new": "const bool lit = !bank_at(i + shift_lit, j + shift_lit);",
+   "build": "test_world_art_edges",
+   "test": "./build/tests/test_app/test_world_art_edges",
+   "expect": "[overlay]"
+  },
+  {
+   "id": "edge_transitions_switch_is_ignored",
+   "file": "src/ants_app/renderer_world_edges.cpp",
+   "old": "    if (!transitions_ || world_art_ == nullptr) return;",
+   "new": "    if (world_art_ == nullptr) return;",
+   "build": "test_world_art_edges",
+   "test": "./build/tests/test_app/test_world_art_edges",
+   "expect": "[render]"
+  },
+  {
+   "id": "edge_limit_is_not_enforced",
+   "file": "src/ants_app/renderer_world_edges.cpp",
+   "old": "    if (edge_bytes_ + bytes <= edge_cache_limit_) return true;\n    std::vector<std::pair<uint64_t, uint64_t>> order;",
+   "new": "    if (true) return true;\n    std::vector<std::pair<uint64_t, uint64_t>> order;",
+   "build": "test_world_art_edges",
+   "test": "./build/tests/test_app/test_world_art_edges",
+   "expect": "[render]"
+  },
+  {
+   "id": "edge_scale_limit_is_ignored",
+   "file": "src/ants_app/renderer_world_edges.cpp",
+   "old": "    scale = std::min(scale, edge_max_scale_);",
+   "new": "    (void)edge_max_scale_;",
+   "build": "test_world_art_edges",
+   "test": "./build/tests/test_app/test_world_art_edges",
+   "expect": "[render]"
+  },
+  {
+   "id": "edge_budget_is_ignored",
+   "file": "src/ants_app/renderer_world_edges.cpp",
+   "old": "        if (!mud_work_left() || !ensure_edge_pictures(scale)) return;",
+   "new": "        if (!ensure_edge_pictures(scale)) return;",
+   "build": "test_world_art_edges",
+   "test": "./build/tests/test_app/test_world_art_edges",
+   "expect": "[render]"
   }
  ]
 }

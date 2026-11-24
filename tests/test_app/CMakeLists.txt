@@ -743,6 +743,40 @@ target_link_libraries(test_world_art_mud PRIVATE ants_test_paths)
 add_test(NAME test_world_art_mud COMMAND test_world_art_mud)
 set_tests_properties(test_world_art_mud PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# The automatic transitions of the world art (world_art_edges.hpp): which cells have one, the picture of one, the real renderer's shores
+add_executable(test_world_art_edges
+    test_world_art_edges.cpp
+)
+
+target_include_directories(test_world_art_edges PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_world_art_edges PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_world_art_edges PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_world_art_edges PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_world_art_edges PRIVATE ants_test_paths)
+
+add_test(NAME test_world_art_edges COMMAND test_world_art_edges)
+set_tests_properties(test_world_art_edges PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # The PNG writer of the server's pictures (png_encode.hpp): the deflate stream, the zlib wrapper and the PNG file, read back by the repository's own reader and checked against the formats. No window
 add_executable(test_png_encode
     test_png_encode.cpp

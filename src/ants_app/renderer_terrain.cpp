@@ -61,6 +61,7 @@ void Renderer::render_terrain_layer1(const ants::sim::Grid& grid) {
                     }
                     if (world_art_ == nullptr || !draw_dense_mud_cell(c, r, id, sx, sy)) draw_template_screen(id, sx, sy);        // (a cell of a big mud field has its looks: renderer_world_mud.cpp)
                     world_variant_ = 0;
+                    if (world_art_ != nullptr) draw_transition(c, r, sx, sy);                                                  // (the transition of a join with a higher kind, over the ground and under everything else: renderer_world_edges.cpp)
                 }
                 continue;
             }

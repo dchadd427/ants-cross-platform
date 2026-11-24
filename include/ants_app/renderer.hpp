@@ -37,6 +37,7 @@
 #include "ants_app/screen_layout.hpp"
 #include "ants_app/view_zoom.hpp"
 #include "ants_app/world_art.hpp"
+#include "ants_app/world_art_edges.hpp"
 #include "ants_app/world_art_mud.hpp"
 #include "ants_assets/asset_archive.hpp"
 #include "ants_assets/lvl_parser.hpp"
@@ -552,6 +553,15 @@ public:
     size_t mud_looks_bytes() const noexcept { return mud_looks_bytes_; }
     size_t mud_pictures_bytes() const noexcept;
     size_t mud_cache_limit() const noexcept { return mud_cache_limit_; }
+    /// The automatic transitions (world_art_edges.hpp): on by default while the world art is. They are made cell by cell as the cells come into view, within the same work for each frame as the dense mud's (a cell that
+    /// is not made yet shows the ground alone), and kept within `limit_bytes` (what was used least recently goes first; a cell that does not fit has none) and made at a scale of at most `max_scale`.
+    void set_transitions(bool on) noexcept { transitions_ = on; }
+    void set_transition_cache_limit(size_t limit_bytes) noexcept { edge_cache_limit_ = limit_bytes; }
+    void set_transition_max_scale(int32_t max_scale) noexcept { edge_max_scale_ = std::clamp(max_scale, 1, 3); }
+    /// (for the tests) whether a cell has a transition, and how many transitions with pictures are kept and the bytes they take
+    bool cell_has_transition(int32_t col, int32_t row);
+    size_t transition_cells() const noexcept;
+    size_t transition_bytes() const noexcept { return edge_bytes_; }
     /// (for the tests) pretends that the device takes no texture with a side above `limit` pixels, as a small phone's does (0: the device's own limit); it applies to the HUD art and the world art alike
     void set_art_texture_limit(int32_t limit) noexcept { art_texture_limit_ = limit; }
     void set_origin(int32_t x, int32_t y) override { origin_ = LayoutPoint{x, y}; }
@@ -727,6 +737,9 @@ private:
         std::vector<uint8_t> ground_variant;
         world_art::mud::Depth mud_depth;
         bool mud_depth_ready{false};
+        world_art::edges::EdgeMap edge_map;
+        std::vector<uint8_t> edge_has;
+        bool edge_ready{false};
     };
     void swap_level_state(LevelState& other) noexcept;
 
@@ -791,6 +804,21 @@ private:
     int32_t mud_budget_ms_{8};                             // the work for the looks that a frame may take (set_dense_mud_budget_ms)
     size_t mud_cache_limit_{world_art::mud::kCacheLimit};  // the bytes that the baked cell pictures and the looks may take together (set_dense_mud_cache_limit)
     int32_t mud_max_scale_{world_art::mud::kMaxScale};     // the largest scale the mud is baked at (set_dense_mud_max_scale)
+    bool transitions_{true};                               // the automatic transitions (world_art_edges.hpp), while the world art is on
+    size_t edge_cache_limit_{world_art::edges::kCacheLimit};
+    int32_t edge_max_scale_{world_art::edges::kMaxScale};
+    world_art::edges::EdgeMap edge_map_;                   // the kinds of the cells, made when the first cell is drawn (ensure_edge_map)
+    std::vector<uint8_t> edge_has_;                        // for every cell: 1 when it has a transition
+    bool edge_ready_{false};
+    struct EdgeOverlay {
+        SDL_Texture* texture{nullptr};                     // null: the cell was looked at and has nothing to draw
+        uint64_t used{0};
+        size_t bytes{0};
+    };
+    std::unordered_map<uint64_t, EdgeOverlay> edge_overlays_;    // by cell and scale
+    size_t edge_bytes_{0};
+    std::array<std::array<std::vector<uint8_t>, world_art::edges::kKinds>, 3> edge_pictures_;   // the RGB pictures of the plain mud, gravel, dirt and slate at each scale, cut from the sheet when first needed
+    std::array<uint8_t, 3> edge_pictures_state_{};         // 0: not read, 1: read, 2: could not be read
     world_art::mud::Depth mud_depth_;                      // the depth of the mud, made when the first mud cell is drawn (ensure_mud_depth)
     bool mud_depth_ready_{false};
     struct MudLooks {
@@ -823,8 +851,13 @@ private:
     bool draw_dense_mud_cell(int32_t col, int32_t row, int32_t anim_id, int32_t sx, int32_t sy);
     bool make_room_for_mud(size_t bytes);
     bool mud_work_left() const;
+    void ensure_edge_map();
+    bool ensure_edge_pictures(int32_t scale);
+    bool make_room_for_edges(size_t bytes);
+    void draw_transition(int32_t col, int32_t row, int32_t sx, int32_t sy);
     void mud_work_done(uint64_t since);
     void drop_mud_caches();
+    void drop_edge_caches();
     void drop_art_textures();
     SDL_Texture* art_texture(const hud_art::Art& art, int32_t scale);
     int32_t art_scale_for_output(double* out = nullptr) const;

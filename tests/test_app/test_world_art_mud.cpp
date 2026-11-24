@@ -292,6 +292,7 @@ void test_render(const assets::AssetArchive& arc, const world_art::Pack& pack) {
         return;
     }
     rig.renderer.set_world_art(&pack);
+    rig.renderer.set_transitions(false);                                  // (the transitions have their own test)
     rig.renderer.set_dense_mud_budget_ms(-1);
     // the place of the map whose view has the most cells beside a bank and the most deep ones
     int32_t best_x = 0, best_y = 0, best_score = -1;
@@ -361,6 +362,7 @@ void test_render(const assets::AssetArchive& arc, const world_art::Pack& pack) {
     {
         zoomtest::PixelRig slow(arc, mud_wars(), kW, kH);
         slow.renderer.set_world_art(&pack);
+        slow.renderer.set_transitions(false);                                  // (the transitions have their own test)
         slow.renderer.set_dense_mud_budget_ms(0);
         slow.look(best_x, best_y);
         const zoomtest::Picture first = slow.shoot();
@@ -381,6 +383,7 @@ void test_render(const assets::AssetArchive& arc, const world_art::Pack& pack) {
         const auto kept = [](zoomtest::PixelRig& r) { return r.renderer.mud_baked_bytes() + r.renderer.mud_looks_bytes(); };
         zoomtest::PixelRig only(arc, mud_wars(), kW, kH);                         // the second view alone, without a limit that matters
         only.renderer.set_world_art(&pack);
+        only.renderer.set_transitions(false);                                  // (the transitions have their own test)
         only.renderer.set_dense_mud_budget_ms(-1);
         only.look(230, best_y);
         const zoomtest::Picture second = only.shoot();
@@ -389,6 +392,7 @@ void test_render(const assets::AssetArchive& arc, const world_art::Pack& pack) {
         // a limit that holds one view but not two: the first view goes, the second is complete
         zoomtest::PixelRig lim(arc, mud_wars(), kW, kH);
         lim.renderer.set_world_art(&pack);
+        lim.renderer.set_transitions(false);                                  // (the transitions have their own test)
         lim.renderer.set_dense_mud_budget_ms(-1);
         const size_t limit = second_bytes + second_bytes / 20;
         lim.renderer.set_dense_mud_cache_limit(limit);
@@ -406,6 +410,7 @@ void test_render(const assets::AssetArchive& arc, const world_art::Pack& pack) {
         // a limit far too small for the view: within it, and what does not fit is the approved picture; no room at all is the approved picture exactly
         zoomtest::PixelRig tiny(arc, mud_wars(), kW, kH);
         tiny.renderer.set_world_art(&pack);
+        tiny.renderer.set_transitions(false);                                  // (the transitions have their own test)
         tiny.renderer.set_dense_mud_budget_ms(-1);
         tiny.renderer.set_dense_mud_cache_limit(second_bytes / 4);
         tiny.look(230, best_y);
@@ -413,6 +418,7 @@ void test_render(const assets::AssetArchive& arc, const world_art::Pack& pack) {
         check(kept(tiny) <= second_bytes / 4 && tiny.renderer.mud_baked_cells() > 0 && tiny.renderer.mud_baked_cells() < second_cells && !same_pixels(partial, second), "a quarter of the room: within it, some cells have their looks (" + std::to_string(tiny.renderer.mud_baked_cells()) + " of " + std::to_string(second_cells) + ") and the rest the approved picture");
         zoomtest::PixelRig none(arc, mud_wars(), kW, kH);
         none.renderer.set_world_art(&pack);
+        none.renderer.set_transitions(false);                                  // (the transitions have their own test)
         none.renderer.set_dense_mud_budget_ms(-1);
         none.renderer.set_dense_mud_cache_limit(0);
         none.look(230, best_y);
@@ -425,6 +431,7 @@ void test_render(const assets::AssetArchive& arc, const world_art::Pack& pack) {
     {
         zoomtest::PixelRig big(arc, mud_wars(), kW, kH, 0, 3);
         big.renderer.set_world_art(&pack);
+        big.renderer.set_transitions(false);                                  // (the transitions have their own test)
         big.renderer.set_dense_mud_budget_ms(-1);
         big.look(best_x, best_y);
         big.renderer.set_dense_mud_max_scale(2);
@@ -462,6 +469,7 @@ void test_render(const assets::AssetArchive& arc, const world_art::Pack& pack) {
     {
         zoomtest::PixelRig islands(arc, "ISLANDS", kW, kH);
         islands.renderer.set_world_art(&pack);
+        islands.renderer.set_transitions(false);                                  // (the transitions have their own test)
         islands.renderer.set_dense_mud_budget_ms(-1);
         bool unchanged = true;
         for (const double x : {0.0, 600.0, 1100.0, 1500.0}) {
