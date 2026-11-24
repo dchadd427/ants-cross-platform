@@ -56,10 +56,10 @@
       "expect": "[rows]"
     },
     {
-      "id": "the_winners_score_is_not_gold",
+      "id": "the_second_row_has_the_gold_score",
       "file": "src/ants_app/scorecard_new.cpp",
       "old": "i == 0 && c == 0 ? kGold : kCream",
-      "new": "kCream",
+      "new": "i == 1 && c == 0 ? kGold : kCream",
       "build": "test_scorecard_new",
       "test": "./build/tests/test_app/test_scorecard_new",
       "expect": "[rows]"
