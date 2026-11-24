@@ -237,6 +237,9 @@ class TheRealPagesRun(unittest.TestCase):
             docroot = os.path.join(cls.tmp, "html")
             shutil.copytree(os.path.join(REPO, "web"), docroot, ignore=shutil.ignore_patterns("*.map"))
             subprocess.run([sys.executable, os.path.join(REPO, "tools", "seo_files.py"), "https://site.example", docroot], check=True)       # (the two files for search engines: the image's build makes them with this tool)
+            import map_pages_rig                                                                          # (the map pages of the real library: the image's build makes them with the tool of that name)
+            moved = os.path.join(cls.tmp, "ants-map-pages")
+            map_pages_rig.put_pages(docroot, moved)
             for name in ("lobby.html", "matches.html", "match.html", "mapmaker.html", "shell.html"):
                 path = os.path.join(docroot, name)
                 with open(path, encoding="utf-8") as f:
@@ -268,7 +271,7 @@ class TheRealPagesRun(unittest.TestCase):
             cls.port = H.free_port()
             dead = H.free_port()
             text = RAW.replace("    listen 80;", "    listen 127.0.0.1:%d;" % cls.port).replace("    listen [::]:80;", "")
-            text = text.replace("/usr/share/nginx/html", docroot).replace("/srv/community-maps", maps)
+            text = text.replace("/usr/share/nginx/html", docroot).replace("/srv/community-maps", maps).replace("/etc/nginx/ants-map-pages", moved)
             text = text.replace("/var/cache/nginx/ants_stats", folder + "/cache_stats").replace("/var/cache/nginx/ants_history", folder + "/cache_history").replace("/var/cache/nginx/ants_hub_pics", folder + "/cache_hub_pics")
             text = re.sub(r"set \$(\w+) [a-z-]+:\d+;", lambda m: "set $%s 127.0.0.1:%d;" % (m.group(1), dead), text)
             text = text.replace("access_log /dev/stdout ants_noquery;", "access_log %s/access.log ants_noquery;" % folder).replace("error_log /dev/stderr crit;", "error_log %s/loc.log crit;" % folder)

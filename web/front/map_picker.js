@@ -1,6 +1,7 @@
 // The front page's map picker (docs/PLAY_IN_BROWSER.md "Choosing a map"): the maps that the game server offers (GET /maps/all), as a Detail list or a Thumbnails grid, with a search and four sorts, under two
 // headings by default, the room's map marked In this room, and on a wide screen a preview of the map that is picked. The map card's Change map button opens it; choosing a map hands the entry to the page. Until
-// the list is there, and when it cannot be had, the six originals are shown from the page's own table (opts.originals).
+// the list is there, and when it cannot be had, the six originals are shown from the page's own table (opts.originals). The Random map row under the sorts puts a map that the list shows into the room at once
+// (Pick one, then Pick another): a map that is shown, that the room can play and that is not the room's map now; the list stays open, so that it can be pressed again.
 //   * ES5 and no module system: a page gets the global AntsMapPicker, node gets module.exports (tests/scripts/web_map_picker_check.js).
 //   * Nothing a server says is ever written as markup: names, descriptions and addresses are set as text or as an attribute of an element made here.
 (function (root, factory) {
@@ -189,7 +190,7 @@
         var doc = opts.doc, host = opts.host;
         var later = opts.setTimeout || function (f, ms) { return setTimeout(f, ms); }, unlater = opts.clearTimeout || function (t) { clearTimeout(t); };
         var clock = opts.now || function () { return Date.now(); };
-        var list = null, status = 'idle', view = recall(opts.storage), sort = 'default', query = '', picked = '', shown = [], opened = false, byFile = {}, byLower = {};
+        var list = null, status = 'idle', view = recall(opts.storage), sort = 'default', query = '', picked = '', shown = [], opened = false, byFile = {}, byLower = {}, rolled = '', hereAt = '';
         var parts = {}, typing = 0, failedAt = 0, attempt = 0, fb = null, fbList = [], sections = 0;
 
         function el(tag, cls, txt) { var e = doc.createElement(tag); if (cls) e.className = cls; if (txt !== undefined) e.textContent = txt; return e; }
@@ -227,6 +228,12 @@
             sorts.appendChild(el('span', '', 'Sort by'));
             parts.sorts = {};
             SORTS.forEach(function (s) { var b = button('pk-chip', s.label); b.setAttribute('data-sort', s.id); parts.sorts[s.id] = b; sorts.appendChild(b); });
+            parts.rand = el('div', 'pk-rand'); parts.rand.setAttribute('role', 'group'); parts.rand.setAttribute('aria-label', 'Random map');
+            var tile = el('span', 'pk-dt'); tile.setAttribute('aria-hidden', 'true'); tile.appendChild(el('span', 'pk-die'));
+            var rbody = el('div', 'pk-body'); parts.rsub = el('div', 'pk-meta'); parts.rsub.setAttribute('role', 'status'); parts.rsub.setAttribute('aria-live', 'polite');
+            rbody.appendChild(el('div', 'pk-nm', 'Random map')); rbody.appendChild(parts.rsub);
+            parts.rgo = button('btn sm', 'Pick one');
+            parts.rand.appendChild(tile); parts.rand.appendChild(rbody); parts.rand.appendChild(parts.rgo);
             parts.out = el('div', 'pk-out');
             parts.pane = el('div', 'pk-pane'); parts.pane.setAttribute('role', 'group'); parts.pane.setAttribute('aria-label', 'The map picked');       // (a wide screen shows it beside the list; a phone's sheet has none)
             parts.pimg = el('img', 'pk-pic'); parts.pimg.setAttribute('alt', ''); parts.pname = el('p', 'pk-pn'); parts.pmeta = el('p', 'pk-meta'); parts.pdesc = el('p', 'pk-pd');
@@ -236,7 +243,7 @@
             parts.count = el('span', 'pk-count'); parts.count.setAttribute('role', 'status'); parts.count.setAttribute('aria-live', 'polite');
             parts.go = button('btn', 'Choose map');
             foot.appendChild(parts.count); foot.appendChild(parts.go);
-            [head, bar, sorts, parts.out, parts.pane, parts.fine, foot].forEach(function (n) { host.appendChild(n); });
+            [head, bar, sorts, parts.rand, parts.out, parts.pane, parts.fine, foot].forEach(function (n) { host.appendChild(n); });
 
             parts.close.addEventListener('click', close);
             onBackdrop(host.parentNode, close);       // (a press on the dimmed page around the list is its close button)
@@ -246,6 +253,7 @@
             parts.vT.addEventListener('click', function () { setView('thumbs'); });
             SORTS.forEach(function (s) { parts.sorts[s.id].addEventListener('click', function () { flush(); sort = s.id; paint('picked'); }); });
             parts.go.addEventListener('click', choose);
+            parts.rgo.addEventListener('click', roll);
             parts.out.addEventListener('click', function (e) {
                 var node = e.target && e.target.closest ? e.target.closest('[data-file]') : null;
                 if (node) { picked = node.getAttribute('data-file'); markPicked(); }
@@ -310,6 +318,7 @@
             if (e.key !== 'Tab') return;
             var stops = [parts.close, parts.q, parts.vD, parts.vT];
             SORTS.forEach(function (s) { stops.push(parts.sorts[s.id]); });
+            if (!parts.rgo.disabled) stops.push(parts.rgo);
             var cur = parts.out.querySelector ? parts.out.querySelector('[data-file][tabindex="0"]') : null;
             if (cur) stops.push(cur);
             var retry = parts.out.querySelector ? parts.out.querySelector('[data-retry]') : null;
@@ -392,8 +401,44 @@
             if (frag !== parts.out) parts.out.appendChild(frag);
         }
 
+        // The Random map row: what is on offer (the maps that the list shows, but the room's own, the one that was just picked and those that the room cannot play), what was picked, and the button for the next
+        function mayChoose() { return !opts.canChoose || opts.canChoose(); }                     // (the room may have changed hands, or START been pressed, while the list was open: nothing is chosen then)
+        function here() { return opts.room ? canon(opts.room() || '') : ''; }
+        function pool() {
+            var room = here(), out = shown.filter(function (m) { return !m.tooManyAnts && m.file !== room; });
+            if (rolled && out.length > 1) out = out.filter(function (m) { return m.file !== rolled; });      // (a second press is another map, also before the server has said that the first one is the room's)
+            return out;
+        }
+        function paintRand() {
+            var m = rolled ? lookup(rolled) : null, n = shown.length, any = pool().length;
+            parts.rsub.textContent = '';
+            if (m) { parts.rsub.appendChild(doc.createTextNode('Picked ' + m.name)); parts.rsub.appendChild(el('span', 'pk-rof', '. Press again for another one')); }
+            else if (!n) parts.rsub.appendChild(doc.createTextNode('No map is shown'));
+            else if (!any) parts.rsub.appendChild(doc.createTextNode('No other map is shown'));
+            else { parts.rsub.appendChild(doc.createTextNode('Pick one now')); parts.rsub.appendChild(el('span', 'pk-rof', ', from the ' + n + (n === 1 ? ' map' : ' maps') + ' shown')); }
+            parts.rgo.textContent = m ? 'Pick another' : 'Pick one';
+            parts.rgo.disabled = !any;
+        }
+        function roll() {
+            flush();
+            var from = pool();
+            if (!from.length) return;
+            if (!mayChoose()) { close(); return; }
+            var at = Math.min(from.length - 1, Math.floor((opts.random || Math.random)() * from.length)), m = from[at];
+            picked = rolled = m.file;
+            if (opts.onChoose) opts.onChoose(m);
+            paint('picked');
+        }
+        // the page says that the room's map may have changed: the marks of the list are made again (the scroll stays where it is), when the room's map is not the one that they were made for
+        function refresh() {
+            if (!opened || here() === hereAt) return;
+            var was = parts.out.scrollTop || 0;
+            paint('');
+            parts.out.scrollTop = was;
+        }
+        function paint(where) { paintList(where); paintRand(); hereAt = here(); }
         // afterwards: 'top' a search, 'picked' a sort or a view (the chosen row is brought into view), '' nothing is moved
-        function paint(where) {
+        function paintList(where) {
             var was = parts.out.scrollTop || 0;
             parts.vD.setAttribute('aria-pressed', String(view === 'detail')); parts.vT.setAttribute('aria-pressed', String(view === 'thumbs'));
             SORTS.forEach(function (s) { parts.sorts[s.id].setAttribute('aria-pressed', String(sort === s.id)); });
@@ -462,7 +507,7 @@
         function open(file) {
             if (opts.canOpen && !opts.canOpen()) return;
             if (!parts.out) build();
-            opened = true; picked = canon(file || ''); query = ''; parts.q.value = '';
+            opened = true; picked = canon(file || ''); rolled = ''; query = ''; parts.q.value = '';
             host.parentNode.hidden = false;
             if (doc.addEventListener) doc.addEventListener('keydown', onDocKey);
             if (opts.onOpen) opts.onOpen();
@@ -492,12 +537,12 @@
             flush();
             var m = lookup(picked);
             if (!m) return;
-            var allowed = !opts.canChoose || opts.canChoose();                     // (the room may have changed hands, or START been pressed, while the list was open)
+            var allowed = mayChoose();
             close();
             if (allowed && opts.onChoose) opts.onChoose(m);
         }
         return {
-            open: open, close: close, load: function () { load(false); }, isOpen: function () { return opened; },
+            open: open, close: close, refresh: refresh, load: function () { load(false); }, isOpen: function () { return opened; },
             find: find, status: function () { return status; }, view: function () { return view; }, entries: function () { return list; }
         };
     }

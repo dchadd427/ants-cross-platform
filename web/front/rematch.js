@@ -331,7 +331,7 @@
     // The strip at the top of the page: "Back from the match." The match's stats and replay are looked up in the public list (a moment after the match, twice more if they are not there yet: the list is cached
     // for five seconds). Also drives an unlisted test-map room opened from the map maker (?testroom=<id>). env: { doc, win, before (the element that the strip goes in front of), fetch (window.fetch or null), later(fn, ms) }.
     function frontStrip(env) {
-        var bar = null, link = null, round = 0, tbar = null, known = Object.create(null), pendingTest = null, lastTest = null, testError = false, handoffId = '', paintedKey = '';
+        var bar = null, link = null, round = 0, tbar = null, known = Object.create(null), pendingTest = null, lastTest = null, testError = false, handoffId = '', paintedKey = '', pendingHost = null;
         function tell(back, id) { if (env.over) { try { env.over(back, id); } catch (e) { /* the bell is the page's own */ } } }      // (the bell is told once the match is found, or when it will not be: web/home/alerts.js)
         function look(back, mine, tries) {
             if (mine !== round) return;
@@ -424,6 +424,10 @@
                 return { name: title, info: details };      // (its picture is the address that AntsMapPicker.previewPath makes of the file name)
             },
             sync: function (model, sendPlan, warmMap) {
+                if (pendingHost && !pendingHost.sent && model && !model.guest && !model.starting) {            // (the room that the address /?hostmap=<file> asked for: its map, once, as soon as the room lets its leader plan; a later room of the page is an ordinary one)
+                    if (String(model.mapFile).toUpperCase() === pendingHost.file.toUpperCase()) pendingHost.sent = true;
+                    else if (sendPlan && sendPlan({ file: pendingHost.file })) { if (warmMap) warmMap(pendingHost.file); pendingHost.sent = true; }
+                }
                 if (pendingTest && !pendingTest.sent && model && !model.guest && !model.starting && model.mapFile !== pendingTest.file) {
                     var kinds = [0, 0, 0, 0], moveTo = -1;
                     if (Array.isArray(pendingTest.usable)) {
@@ -450,12 +454,21 @@
             },
             // The page made its room again (the first one was closed, the server restarted, the link was lost for long): the new room has the default map, so the test map is sent to it again
             remade: function () { if (lastTest) { pendingTest = lastTest; pendingTest.sent = false; } },
-            begin: function (onReady) {
+            // The two addresses that make a room: /?testroom=<id> (a test map from the Map Maker, below) and /?hostmap=<file name> (a map of the library, from the Play it button of its page, docs/MAP_PAGES.md): `held` says that the page
+            // holds a room already, in which case the second makes no room and changes none (the front page's own answer to a press on Quick host while it holds one), and the address loses its query either way.
+            begin: function (onReady, held) {
                 var win = env.win;
                 if (!win || !win.location) return false;
                 var q = null;
                 try { q = new URLSearchParams(win.location.search || ''); } catch (e) { return false; }
-                var id = q.get('testroom');
+                var id = q.get('testroom'), file = q.get('hostmap');
+                if (!id && file !== null) {
+                    try { win.history.replaceState(null, '', win.location.pathname.replace(/^\/+/, '/')); } catch (e) {}
+                    if (held || !validMap(file)) return false;
+                    pendingHost = { file: file, sent: false };
+                    onReady();
+                    return true;
+                }
                 if (!id || !/^[a-z0-9]{6,32}$/.test(id)) return false;
                 handoffId = id;
                 try { win.history.replaceState(null, '', win.location.pathname.replace(/^\/+/, '/')); } catch (e) {}

@@ -1,6 +1,6 @@
 # The bar at the top of every page
 
-Every page of the site except the game itself starts with one bar (the game page, which holds the game, has it too: ["The game page"](#the-game-page)), so that each page has a way to the others: **Matches** (`/matches`), **Match** (`/match`), **Legal** (`/legal`), **What’s new** (`/changelog`), **Map maker** (`/mapmaker`) and **Sprites and sounds** (`/asset_catalog/`). The front page has its own top bar and its own Menu (`web/home/home.js`), which lists the same links. The files are `web/site_nav.css` and `web/site_nav.js` (at the root of `web/`, like `matches.css`: the folder `web/front/` has no room left), each copied once by the `Dockerfile`.
+Every page of the site except the game itself starts with one bar (the game page, which holds the game, has it too: ["The game page"](#the-game-page)), so that each page has a way to the others: **Matches** (`/matches`), **Match** (`/match`), **Legal** (`/legal`), **What’s new** (`/changelog`), **Map maker** (`/mapmaker`) and **Sprites and sounds** (`/asset_catalog/`). The front page has its own top bar and its own Menu (`web/home/home.js`), which lists the same links. The map pages ([`MAP_PAGES.md`](MAP_PAGES.md)) have the bar too, with **Maps** (`/map-library`) between Matches and Map maker; the other pages' bars do not have it yet. The files are `web/site_nav.css` and `web/site_nav.js` (at the root of `web/`, like `matches.css`: the folder `web/front/` has no room left), each copied once by the `Dockerfile`.
 
 ## The markup
 
