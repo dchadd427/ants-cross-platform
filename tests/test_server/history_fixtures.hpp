@@ -113,6 +113,7 @@ struct MatchSpec {
     int quit_seat{-1};                                  // that seat quits after the last tick (a Quit that ends a match of two seats)
     std::array<std::string, sim::MAX_PLAYERS> names;
     uint16_t sim_rules{replay::kSimRules};
+    bool dig{false};                                    // from tick 600, every 100 ticks, a Swimmer of each seat is sent to dig away a finished bridge (the computer players never dig one away): a recording with a build and a dig
 };
 
 // A match on a shipped map (TINY unless the spec says another): the standard computer players gather food (the scores move), and on top of what they do every seat hatches an ant every 100 ticks and, from tick 1000, sends all its ants
@@ -188,6 +189,35 @@ struct MatchSpec {
                 if (!attack.ants.empty() && attack.tile_x != 0) extra.push_back(attack);
             }
         }
+        if (spec.dig && step >= 600 && step % 100 == 25) {
+            const sim::Grid& grid = engine.grid();
+            int16_t bridge_x = -1, bridge_y = -1;
+            for (uint32_t y = 0; y < grid.height() && bridge_x < 0; ++y) {
+                for (uint32_t x = 0; x < grid.width() && bridge_x < 0; ++x) {
+                    if (grid.get_cell(x, y).interactive_id == sim::TILE_BRIDGE4) {
+                        bridge_x = static_cast<int16_t>(x);
+                        bridge_y = static_cast<int16_t>(y);
+                    }
+                }
+            }
+            if (bridge_x >= 0) {
+                const sim::WorldState& world = engine.get_world_state();
+                for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+                    if (((spec.roster >> seat) & 1u) == 0) continue;
+                    for (const sim::AntSnapshot& a : world.ants) {
+                        if (a.player_id != seat || a.type != sim::AntType::Swimmer || a.hp == 0) continue;
+                        sim::Command dig;
+                        dig.type = sim::CommandType::GroupSpecial;
+                        dig.issuer = seat;
+                        dig.ants.push_back(a.id);
+                        dig.tile_x = bridge_x;
+                        dig.tile_y = bridge_y;
+                        extra.push_back(dig);
+                        break;
+                    }
+                }
+            }
+        }
         for (const sim::Command& c : extra) {
             engine.apply_command(c);
             rec.on_command(c);
@@ -216,8 +246,8 @@ struct MatchSpec {
     return rec.finish(engine, error);
 }
 
-// Six recordings that the tests share (made once): 0 four people free for all, 1 two people, 2 two people where the second one quits, 3 four people in two teams, 4 and 5 four computer players on TREASURE
-// (the map that has power-ups, thieves and bombs: the first four are on TINY, which has none; in 5 a seat runs out of ants)
+// Seven recordings that the tests share (made once): 0 four people free for all, 1 two people, 2 two people where the second one quits, 3 four people in two teams, 4 and 5 four computer players on TREASURE
+// (the map that has power-ups, thieves and bombs: the first four are on TINY, which has none; in 5 a seat runs out of ants), 6 four computer players on ISLANDS (Swimmers build bridges there, and a Swimmer of each seat is sent to dig one away)
 [[maybe_unused]] const std::vector<uint8_t>& match_file(int k) {
     static std::map<int, std::vector<uint8_t>> cache;
     auto it = cache.find(k);
@@ -247,6 +277,13 @@ struct MatchSpec {
             spec.map = "TREASURE";
             spec.seed = k == 4 ? 23u : 2u;                              // (5: a seat that runs out of ants, 4: none does, and bombs are laid and thieves raid; with the counters on the own ground, seed 10 laid no bomb that the orders show, so 4 plays seed 21; with the bots' order of the contested food, 31 and 23 lost their premises, with the quick kill 57 and 4 did, with the answer of every ant that can strike 60 and 6 did, and with that answer kept up from 60 percent of the enemy's strength 6, 8, 11, 13, 15, 18, 19 and 20 did, and with the hits without pauses 11 did, and with their lane of 4 ticks 21 wipes a seat and 22 has no bomb that goes off; 4 plays seed 23 and 5 plays seed 2)
             spec.turns = 7000;
+            spec.names = {"Bot (Hard)", "Bot (Hard)", "Bot (Hard)", "Bot (Hard)"};
+            break;
+        case 6:
+            spec.map = "ISLANDS";                                      // (the map that has to be bridged: the computer players dig bridges; the extra orders send a Swimmer of each seat to dig one away)
+            spec.seed = 4;
+            spec.turns = 6000;
+            spec.dig = true;
             spec.names = {"Bot (Hard)", "Bot (Hard)", "Bot (Hard)", "Bot (Hard)"};
             break;
         default:
