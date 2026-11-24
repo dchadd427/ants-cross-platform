@@ -61,7 +61,7 @@ const IDS = Array.from({ length: 80 }, (_, i) => 'ants-TREASURE-20261124-' + Str
 const TOKEN = 'a1b2c3d4e5f60718293a4b5c6d7e8f90', TOKEN2 = '0f9e8d7c6b5a49382716f5e4d3c2b1a0';
 function setup(o) {
     o = o || {};
-    const doc = new Doc(), timers = [], door = { signed: o.signed !== false, liked: new Set(o.liked || []), csrf: TOKEN, counts: {}, log: [], queue: [], held: [], offline: !!o.offline, off: !!o.off };
+    const doc = new Doc(), timers = [], door = { signed: o.signed !== false, liked: new Set(o.liked || []), csrf: TOKEN, counts: {}, log: [], queue: [], held: [], offline: !!o.offline, off: !!o.off, offWord: o.offWord === undefined ? 'likes_off' : o.offWord };
     const win = { innerWidth: 1000, scrollX: 0, scrollY: 0, setTimeout: (fn, ms) => { timers.push({ fn, ms, on: true }); return timers.length; }, clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].on = false; } };
     const reply = (status, body) => ({ status, ok: status >= 200 && status < 300, json: () => (body === undefined ? Promise.reject(new Error('no json')) : Promise.resolve(body)) });
     function fetcher(url, init) {
@@ -75,7 +75,7 @@ function setup(o) {
             const u = new URL(url, 'http://x'), m = /^\/counts\/(like|unlike)\/(.+)$/.exec(u.pathname);
             if (u.pathname === '/counts/mine') {
                 const ids = (u.searchParams.get('ids') || '').split(',').filter(Boolean);
-                out = door.off ? reply(503, { error: 'likes_off' }) : door.signed ? reply(200, { signed_in: true, liked: ids.filter((i) => door.liked.has(i)), csrf: door.csrf }) : reply(200, { signed_in: false, liked: [] });
+                out = door.off ? reply(503, door.offWord === null ? undefined : { error: door.offWord }) : door.signed ? reply(200, { signed_in: true, liked: ids.filter((i) => door.liked.has(i)), csrf: door.csrf }) : reply(200, { signed_in: false, liked: [] });
             } else if (m) {
                 if (door.off) out = reply(503, { error: 'likes_off' });
                 else if (!door.signed) out = reply(401, { error: 'not_signed_in' });
@@ -211,6 +211,22 @@ const cardsOf = (s) => s.doc.body.byClass('lkask');
         expect('likes that are off make every heart a plain count, in the same place, with its number', [heartsOf(li).map((h) => h.tag), heartsOf(li).map((h) => [h.parentNode.className, h.parentNode.children.indexOf(h)]), numbers(li), heartsOf(li).map((h) => h.className)], [['span', 'span'], where, ['9', '9'], ['lk flat', 'lk flat']]);
         heartsOf(li).forEach((h) => h.click());
         expect('... and a tap on one asks nothing more', s.door.log.length, 1);
+    }
+    {
+        const c = setup({ off: true, offWord: 'counts_off' });
+        const li = card(); c.likes.card(li, rec(0, 4, 9), {});
+        await c.likes.look();
+        expect('a counts door that is off makes the hearts plain counts as well', heartsOf(li).map((h) => h.className), ['lk flat', 'lk flat']);
+    }
+    for (const word of ['busy', 'unavailable', null, 'something else']) {
+        const b = setup({ off: true, offWord: word });
+        const li = card(); b.likes.card(li, rec(0, 4, 9), {});
+        const first = await b.likes.look();
+        expect('a 503 that is not "likes are off" (' + word + ') is a moment: the look failed and the hearts stay what they were', [first, heartsOf(li).map((h) => h.tag), heartsOf(li).map((h) => h.className.indexOf('flat') !== -1)], [false, ['button', 'button'], [false, false]]);
+        b.door.off = false;
+        heartsOf(li)[0].click();
+        await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+        expect('... and the next tap asks the door again (the look, then the like)', [b.door.log.length >= 2, b.door.log[1] && b.door.log[1].url.indexOf('/counts/mine') === 0], [true, true]);
     }
     for (const [what, set] of [['an answer that is a 500', (s) => s.say(500, { error: 'x' })], ['an answer that is not JSON', (s) => s.say(200, undefined)], ['an answer with no word of who is logged in', (s) => s.say(200, { liked: [] })], ['a logged-in answer with no token', (s) => s.say(200, { signed_in: true, liked: [] })],
         ['a logged-in answer with a token that is not 32 hex characters', (s) => s.say(200, { signed_in: true, liked: [], csrf: '<b>' })], ['a logged-in answer whose list is not a list', (s) => s.say(200, { signed_in: true, liked: 'x', csrf: TOKEN })], ['a network that is down', (s) => { s.door.offline = true; }], ['no fetch at all', null]]) {

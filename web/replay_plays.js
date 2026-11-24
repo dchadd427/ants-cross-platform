@@ -4,7 +4,7 @@
      and only when both looks found the game playing and the tab shown, so a pause, a jump, a hidden tab and a computer that slept add nothing.
    * Once a day: the id of a counted recording is remembered in this browser (localStorage "ants.plays", { id: milliseconds }, a day long, 200 at the most), BEFORE the play is sent, so that two tabs do not both send it.
      A browser that refuses its storage counts once for each page view.
-   * What is sent: POST /counts/play/<id>, no body, no cookies (credentials "omit"); an answer, or none, is ignored and nothing is sent again. Nothing is shown.
+   * What is sent: POST /counts/play/<id>, no body, no cookies (credentials "omit"); an answer, or none, is ignored and nothing is sent again, except that a 429 (the door's budget was used up) is tried once more a minute or so later. Nothing is shown.
    ES5, no module system: the page gets AntsPlays, node gets module.exports (tests/scripts/web_plays_check.js runs it with fakes). */
 (function (root, factory) {
     'use strict';
@@ -20,6 +20,8 @@
     var DAY_MS = 24 * 60 * 60 * 1000;                // how long a counted recording is remembered
     var KEEP = 200;                                  // how many are remembered
     var KEY = 'ants.plays';
+    var RETRY_MS = 60000;                            // a play that the door answered with 429 (its budget was used up) is sent once more, this long after, and a little more by chance so that the pages that were turned away together do not come back together
+    var RETRY_MORE_MS = 30000;
     var ID = /^[A-Za-z0-9_-]{1,64}$/;                // (the page passes an id that passed the stricter shape of web/history_page.js: this one keeps odd text out of an address)
 
     function clock(win) { return (win.Date || Date).now(); }
@@ -47,10 +49,14 @@
         remember(store, seen);
         return true;
     }
-    function send(win, id) {
+    function send(win, id, again) {
         try {
             var sent = win.fetch('/counts/play/' + id, { method: 'POST', credentials: 'omit' });
-            if (sent && typeof sent.then === 'function') sent.then(null, function () { /* a play that did not arrive is not counted: nothing is sent again */ });
+            if (sent && typeof sent.then === 'function') {
+                sent.then(function (answer) {
+                    if (!again && answer && answer.status === 429 && typeof win.setTimeout === 'function') win.setTimeout(function () { send(win, id, true); }, RETRY_MS + Math.floor(Math.random() * RETRY_MORE_MS));
+                }, function () { /* a play that did not arrive is not counted: nothing is sent again */ });
+            }
         } catch (e) { /* the same */ }
     }
 

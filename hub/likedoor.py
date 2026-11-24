@@ -5,7 +5,9 @@ the game server's counts door.
                                `X-Ants-Like-Pass` for ANY account that is logged in (a ban or a mute of the chat does not stop a like), 401 when nobody is, 503 when the door is shut (no good key: for
                                everybody, nobody logged in too; a shut door is never a 401), 400 when the request has no usable `X-Client-Address`, 429 beyond the address's limit. A GET with no body and no
                                query; any other method is a 405, anything else under /hub/likes/ a 404. No CORS.
-  POST <ANTS_HUB_COUNTS_URL>/counts/forget      the hub's call (`forget_likes`): every like of an account's reference is removed, before Forget me deletes anything (hub/login.py `forget`)
+  POST <ANTS_HUB_COUNTS_URL>/counts/forget      the hub's call (`forget_likes`): every like of an account's reference is removed. Forget me makes it first and never depends on it: when the door is on and does not answer,
+                               Forget me goes on and deletes what the hub owns, and the reference is queued here (`queue`): the hub's clock asks again (`on_tick`: after 30 seconds, then twice as long each time, at
+                               most an hour apart, for a day; at most 1,000 references, held in memory only, so a restart of the hub forgets the queue). What is queued is the reference and nothing else.
 
 The keys: the secret is the admin page's one (`ANTS_ADMIN_GATE_SECRET`, hub/config.py `admin_gate_on` is the one rule of whether it is good), and the two keys here are not the admin page's: the pass key is the
 RAW 32-byte digest of HMAC-SHA-256 with the secret (ASCII) as the KEY and the label `ants-like-pass-v1` as the MESSAGE, the token key the same with `ants-like-csrf-v1`. The pass is `v1.<payload>.<mac>` (the admin
@@ -19,6 +21,7 @@ is a failure, the answer must be status 200 and a JSON object with a whole numbe
 cause is in it or in a log line.
 """
 import asyncio
+import collections
 import hashlib
 import hmac
 import json
@@ -36,6 +39,10 @@ FORGET_PATH = "/counts/forget"
 PASS_LABEL = b"ants-like-pass-v1"
 CSRF_LABEL = b"ants-like-csrf-v1"
 PASS_SECONDS = 60
+RETRY_MAX = 1000                  # the people whose likes are waiting to be taken back (memory only: the oldest goes first)
+RETRY_FIRST = 30.0                # seconds to the first new try; each next one waits twice as long, up to RETRY_LAST
+RETRY_LAST = 3600.0
+RETRY_GIVE_UP = 86400.0           # a day: then the hub stops asking (the person can log in and use Forget me again)
 
 
 def keys(secret):
@@ -67,6 +74,8 @@ class Door:
             self.host, self.port = host, int(port)
         self.rate = limitmod.RateByAddress(hub.limits.like_burst, hub.limits.like_refill_seconds)
         self.next_address_log = float("-inf")
+        self.pending = collections.OrderedDict()                 # the reference -> [when it was queued, when to ask again, the tries made]: the likes that the door could not take back yet
+        self.retrying = None                                      # the try that is under way
 
     @property
     def wanted(self):
@@ -75,6 +84,53 @@ class Door:
 
     def forget_idle(self, now):
         self.rate.forget_idle(now)
+
+    # ---- the likes that the door could not take back ----------------------------------------------------------------------------------------
+
+    def queue(self, ref):
+        """Queues the reference for a new try; True. A reference that is queued already is not queued twice, and a full queue drops its oldest."""
+        if ref in self.pending:
+            return True
+        now = self.hub.clock()
+        while len(self.pending) >= RETRY_MAX:
+            self.pending.popitem(last=False)
+            self.hub.log.event("warning", what="forget_likes_queue_full")
+        self.pending[ref] = [now, now + RETRY_FIRST, 0]
+        return True
+
+    def on_tick(self, now):
+        """Called by the hub's clock: one try at a time, for the first reference that is due; a reference that has waited a day is let go."""
+        for ref in [r for r, entry in self.pending.items() if now - entry[0] >= RETRY_GIVE_UP]:
+            del self.pending[ref]
+            self.hub.log.event("forget_likes_given_up")
+        if self.retrying is not None and not self.retrying.done():
+            return
+        for ref, entry in self.pending.items():
+            if entry[1] <= now:
+                self.retrying = asyncio.ensure_future(self.retry(ref))
+                return
+
+    def stop(self):
+        """The hub stops: a try that is under way is cancelled (the queue is memory only)."""
+        if self.retrying is not None:
+            self.retrying.cancel()
+
+    async def retry(self, ref):
+        entry = self.pending.get(ref)
+        try:
+            removed = await self.forget_likes(ref)
+        except DoorError as e:
+            kind = e.kind
+        except Exception as e:                                    # (a bug costs one try, never the hub: the class of the error is all that is logged)
+            kind = type(e).__name__
+        else:
+            self.pending.pop(ref, None)
+            self.hub.log.event("forget_likes_retried", likes=removed)
+            return
+        if entry is not None:
+            entry[2] += 1
+            entry[1] = self.hub.clock() + min(RETRY_LAST, RETRY_FIRST * 2 ** entry[2])
+        self.hub.log.event("forget_likes_retry_failed", kind=kind)
 
     @staticmethod
     def fail(status, code, headers=None):

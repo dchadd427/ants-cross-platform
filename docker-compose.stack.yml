@@ -54,7 +54,7 @@
 #   ANTS_COUNTS_PORT=4032                           the port, inside the container, of the COUNTS door (docs/REPLAY_COUNTS.md): ON by default. The plays of the replays (the game page's POST /counts/play/<id>) and the likes (the matches'
 #                                                   pages' hearts) are counted there; docker/nginx.conf passes them here, and the chat hub calls it once more, for Forget me. It needs the database (the match history). Plays need no
 #                                                   key; likes need ANTS_ADMIN_GATE_SECRET below (the same key as the admin page's: without a good one likes are off and say so). Leave it at 4032, the one that nginx and the
-#                                                   hub's ANTS_HUB_COUNTS_URL use, or set 0, which switches plays and likes off. Not published on the host.
+#                                                   hub's ANTS_HUB_COUNTS_URL use, or set 0, which switches plays and likes off and needs ANTS_HUB_COUNTS_URL empty as well (Forget me then asks nobody; with the URL still set it asks, finds nobody and tries again for a day). Not published on the host.
 #   ANTS_ADMIN_GATE_SECRET=<32+ characters>         the ONE key of the admin page (docs/MAP_SUBMISSIONS.md, "The admin page"; docs/HUB_ROLES.md, "The admin page's door"): this stack hands it to the chat hub, which signs the
 #                                                   pass with it, and to the game server, which checks the pass (32 to 256 printable characters, no blank: openssl rand -hex 32). The page also needs
 #                                                   ANTS_SUBMIT_PORT=4030 above. Without a good key the hub's door is shut (nginx says door_off); without the key at the game server every /admin/api path

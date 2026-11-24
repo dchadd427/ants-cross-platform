@@ -76,7 +76,10 @@ PassVerdict LikeGate::check(std::string_view header, int64_t now, PersonIdentity
         by_age_.pop_front();
     }
     if (seen_.count(nonce) != 0) return PassVerdict::Replayed;
-    if (seen_.size() >= max_remembered_) return PassVerdict::Full;
+    while (seen_.size() >= max_remembered_ && !by_age_.empty()) {          // (a full table forgets the nonce that was accepted first: a flood of passes can never stop a person from liking; the passes never leave the machine's network, so
+        seen_.erase(by_age_.front().second);                               // the one thing that a flood buys is that a pass of the minute before may be used twice)
+        by_age_.pop_front();
+    }
     seen_.insert(nonce);
     by_age_.emplace_back(exp, nonce);
 

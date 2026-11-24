@@ -86,10 +86,11 @@ struct World {
     int64_t now_s{kT0};
     uint32_t now_ms{1000};
 
-    explicit World(const std::string& secret = kSecret) {
+    explicit World(const std::string& secret = kSecret, const std::function<void(ReplayCountsConfig&)>& tune = nullptr) {
         maker.secret = secret;
         ReplayCountsConfig config;
         config.gate_secret = secret;
+        if (tune) tune(config);
         config.clock_s = [this]() { return now_s; };
         api = std::make_unique<ReplayCountsApi>(rig.history, &rig.replays, config);
     }
@@ -359,14 +360,20 @@ int main() {
         // no good key: nothing is accepted, and a key that is the documents' sample is no key
         ASSERT_TRUE(!LikeGate("").open() && !LikeGate("short").open() && !LikeGate(std::string(kSampleGateKey)).open());
         ASSERT_TRUE(LikeGate("").check(m.make(kT0), kT0, who) == PassVerdict::NoKey && LikeGate("").csrf_token(kRefAnn).empty());
-        // the table of the used passes is bounded, and a pass that has ended is forgotten
+        // the table of the used passes is bounded and a full one forgets the oldest pass (it never refuses a new one); a pass that has ended is forgotten too
         LikeGate small(kSecret, 3);
-        for (int k = 0; k < 3; ++k) ASSERT_TRUE(small.check(m.make(kT0), kT0, who) == PassVerdict::Ok);
-        ASSERT_TRUE(small.check(m.make(kT0), kT0, who) == PassVerdict::Full && small.remembered() == 3);
+        const std::string first = m.make(kT0);
+        ASSERT_TRUE(small.check(first, kT0, who) == PassVerdict::Ok);
+        for (int k = 0; k < 2; ++k) ASSERT_TRUE(small.check(m.make(kT0), kT0, who) == PassVerdict::Ok);
+        ASSERT_TRUE(small.remembered() == 3 && small.check(first, kT0, who) == PassVerdict::Replayed);
+        const std::string newest = m.make(kT0);
+        ASSERT_TRUE(small.check(newest, kT0, who) == PassVerdict::Ok && small.remembered() == 3);                               // (the table was full: the oldest nonce went, the new pass was taken)
+        ASSERT_TRUE(small.check(newest, kT0, who) == PassVerdict::Replayed && small.check(first, kT0, who) == PassVerdict::Ok);       // (the newest is remembered; the one that went can be used once more)
+        ASSERT_TRUE(small.remembered() == 3);
         ASSERT_TRUE(small.check(m.make(kT0 + 200), kT0 + 200, who) == PassVerdict::Ok && small.remembered() == 1);
     } TEST_END();
 
-    TEST_CASE("RC2.2 The door's table of used passes is bounded: when 50,000 passes of one minute are remembered no pass is accepted until some have ended, and the answer says busy, not that the person is nobody") {
+    TEST_CASE("RC2.2 A flood of passes cannot stop a person: when 50,000 passes of one minute are remembered the next pass is still taken (the table forgets its oldest)") {
         if (match_file(0).empty()) {
             std::cout << "SKIPPED (no map)\n";
             return;
@@ -374,13 +381,9 @@ int main() {
         World w;
         ASSERT_TRUE(w.open());
         int served = 0;
-        for (size_t k = 0; k < kPassNoncesMax; ++k) served += w.call("GET", "/counts/mine", "", {{"x-ants-like-pass", w.maker.make(kT0)}}).status == 200 ? 1 : 0;
-        ASSERT_EQ(served, static_cast<int>(kPassNoncesMax));
-        const HttpResponse full = w.call("GET", "/counts/mine", "", {{"x-ants-like-pass", w.maker.make(kT0)}});
-        ASSERT_TRUE(full.status == 503 && error_of(full) == "busy");
-        w.now_s += 100;                                                                                                          // (the passes of the minute have ended: the table is empty again)
-        ASSERT_EQ(w.call("GET", "/counts/mine", "", {{"x-ants-like-pass", w.maker.make(w.now_s)}}).status, 200);
-        ASSERT_TRUE(!w.api->take_notices().empty());                                                                             // (said once in the log)
+        for (size_t k = 0; k < kPassNoncesMax + 5; ++k) served += w.call("GET", "/counts/mine", "", {{"x-ants-like-pass", w.maker.make(kT0)}}).status == 200 ? 1 : 0;
+        ASSERT_EQ(served, static_cast<int>(kPassNoncesMax + 5));
+        ASSERT_EQ(w.as(kRefAnn, "POST", "/counts/like/" + w.ids[0]).status, 200);
     } TEST_END();
 
     TEST_CASE("RC3.1 POST /counts/play/<id>: one play of a recording that can be watched, 204; an id that is unknown, malformed or whose recording is gone is 404 and changes nothing; the other shapes of a request are refused") {
@@ -416,35 +419,50 @@ int main() {
         ASSERT_EQ(w.number("SELECT count(*) FROM pragma_table_info('history_matches') WHERE name LIKE '%addr%' OR name LIKE '%ip%' OR name LIKE '%cookie%'"), int64_t{0});
     } TEST_END();
 
-    TEST_CASE("RC3.2 The door's budget of plays: a burst of 100 and ten a second after it, over all visitors; the answer is 429 and the count is not touched") {
+    TEST_CASE("RC3.2 The door's budgets of plays: one for each replay (a burst of 20, then one every 10 seconds) and one over all visitors (a burst of 100 and ten a second); a request that is no play costs none, the replay's is charged before the shared one; the answer is 429 and the count is not touched") {
         if (match_file(0).empty()) {
             std::cout << "SKIPPED (no map)\n";
             return;
         }
         World w;
         ASSERT_TRUE(w.open());
+        ASSERT_TRUE(ReplayCountsApi::kPlayIdBurst == 20 && ReplayCountsApi::kPlayBurst == 100 && ReplayCountsApi::kPlaysPerSecond == 10 && ReplayCountsApi::kPlayIdPerSecond == 0.1);       // (the numbers of the document)
         int taken = 0, refused = 0;
-        for (int k = 0; k < 130; ++k) {
+        for (int k = 0; k < 30; ++k) {
             const int status = w.call("POST", "/counts/play/" + w.ids[0]).status;
             taken += status == 204 ? 1 : 0;
             refused += status == 429 ? 1 : 0;
         }
-        ASSERT_TRUE(taken == 100 && refused == 30);
-        ASSERT_EQ(w.number("SELECT plays FROM history_matches WHERE id = '" + w.ids[0] + "'"), int64_t{100});
+        ASSERT_TRUE(taken == 20 && refused == 10);                                                                               // (one replay: 20 and no more)
+        ASSERT_EQ(w.number("SELECT plays FROM history_matches WHERE id = '" + w.ids[0] + "'"), int64_t{20});
         ASSERT_EQ(error_of(w.call("POST", "/counts/play/" + w.ids[0])), std::string("rate"));
-        w.now_ms += 500;                                                                                                       // (half a second: five plays)
+        ASSERT_EQ(w.call("POST", "/counts/play/" + w.ids[1]).status, 204);                                                        // (another replay has its own)
+        w.now_ms += 25000;                                                                                                       // (25 seconds: two more for the first)
         int again = 0;
-        for (int k = 0; k < 8; ++k) again += w.call("POST", "/counts/play/" + w.ids[0]).status == 204 ? 1 : 0;
-        ASSERT_EQ(again, 5);
-        w.now_ms += 60000;                                                                                                     // (a minute: the bucket is full again, and no more)
-        taken = 0;
-        for (int k = 0; k < 130; ++k) taken += w.call("POST", "/counts/play/" + w.ids[0]).status == 204 ? 1 : 0;
-        ASSERT_EQ(taken, 100);
-        // a request that is refused for its shape does not spend the budget
-        World fresh;
+        for (int k = 0; k < 5; ++k) again += w.call("POST", "/counts/play/" + w.ids[0]).status == 204 ? 1 : 0;
+        ASSERT_EQ(again, 2);
+        // the shared budget, with small numbers so that one budget is held apart from the other
+        World shared(kSecret, [](ReplayCountsConfig& c) { c.plays_burst = 4; c.plays_per_second = 1; });
+        ASSERT_TRUE(shared.open());
+        int a = 0, b = 0;
+        for (size_t k = 0; k < 3; ++k) a += shared.call("POST", "/counts/play/" + shared.ids[k]).status == 204 ? 1 : 0;
+        for (size_t k = 0; k < 3; ++k) b += shared.call("POST", "/counts/play/" + shared.ids[k]).status == 204 ? 1 : 0;
+        ASSERT_TRUE(a == 3 && b == 1);                                                                                           // (four plays of any replay, then 429 for all)
+        ASSERT_EQ(shared.call("POST", "/counts/play/" + shared.ids[2]).status, 429);
+        shared.now_ms += 2000;                                                                                                   // (two seconds: two more)
+        ASSERT_TRUE(shared.call("POST", "/counts/play/" + shared.ids[1]).status == 204 && shared.call("POST", "/counts/play/" + shared.ids[2]).status == 204 && shared.call("POST", "/counts/play/" + shared.ids[0]).status == 429);
+        // a request that is no play costs no budget of either kind: ids that are none and replays that cannot be watched do not use it up
+        World fresh(kSecret, [](ReplayCountsConfig& c) { c.plays_burst = 2; });
         ASSERT_TRUE(fresh.open());
-        for (int k = 0; k < 200; ++k) fresh.call("POST", "/counts/play/ants-TINY-x");
-        ASSERT_EQ(fresh.call("POST", "/counts/play/" + fresh.ids[0]).status, 204);
+        ASSERT_TRUE(fresh.rig.replays.remove(history_recording_file(fresh.ids[1])));
+        for (int k = 0; k < 50; ++k) {
+            fresh.call("POST", "/counts/play/ants-TINY-x");
+            ASSERT_EQ(fresh.call("POST", "/counts/play/" + fresh.ids[1]).status, 404);
+            ASSERT_EQ(fresh.call("POST", "/counts/play/" + id_at(kT0 + 5, "TINY")).status, 404);
+        }
+        ASSERT_TRUE(fresh.call("POST", "/counts/play/" + fresh.ids[0]).status == 204 && fresh.call("POST", "/counts/play/" + fresh.ids[2]).status == 204);
+        // the replays that are remembered are bounded, and a replay whose budget is full again is forgotten
+        ASSERT_EQ(fresh.call("POST", "/counts/play/" + fresh.ids[0]).status, 429);
     } TEST_END();
 
     TEST_CASE("RC4.1 GET /counts/mine: a person's own likes among the ids asked (at most 50, every one a match id) and the token of their changes; no pass, a bad pass and no key are told apart; nobody else's likes are in it") {

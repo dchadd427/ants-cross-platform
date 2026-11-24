@@ -14,6 +14,7 @@ The counts door (ants_server --counts-port 4032, docs/REPLAY_COUNTS.md) is reach
 """
 import json
 import os
+import re
 import shutil
 import sys
 import unittest
@@ -196,8 +197,16 @@ class TheAllowances(unittest.TestCase):
     def test_each_kind_has_a_zone_of_its_own_and_a_flood_is_a_429_that_neither_the_gate_nor_the_door_sees(self):
         rig = Rig(relaxed=False)
         try:
-            plays = [rig.ask("POST", "/counts/play/" + ID)[0] for _ in range(26)]
-            self.assertEqual(set(plays[:21]), {200})                                                             # (30 a minute with a burst of 20: twenty-one in a row pass)
+            same = [rig.ask("POST", "/counts/play/" + ID)[0] for _ in range(6)]
+            self.assertEqual(set(same[:3]), {200})                                                               # (one replay from one address: 2 a minute with a burst of 2, three in a row pass)
+            self.assertEqual(set(same[3:]), {429})
+            self.assertEqual(rig.ask("POST", "/counts/play/" + ID2)[0], 200)                                     # (another replay of the same address has its own)
+        finally:
+            rig.stop()
+        rig = Rig(relaxed=False)
+        try:
+            plays = [rig.ask("POST", "/counts/play/" + ("ants-TINY-20261008-1%05dZ" % k))[0] for k in range(26)]
+            self.assertEqual(set(plays[:21]), {200})                                                             # (30 a minute for an address with a burst of 20, whatever the replays: twenty-one in a row pass)
             self.assertEqual(set(plays[21:]), {429})
             with rig.counts_door.lock:
                 reached = len(rig.counts_door.seen)
@@ -215,6 +224,23 @@ class TheAllowances(unittest.TestCase):
             self.assertEqual(rig.ask("POST", "/counts/play/" + ID, source="127.0.0.2")[0], 200)                  # (another address has its own allowance)
         finally:
             rig.stop()
+
+
+class TheStackStartsTheDoor(unittest.TestCase):
+    """The door is only reached if the program listens on the stack's network: a published port does not reach a program on the container's loopback address, and nginx does not either (the other doors' tests do the same)."""
+
+    def test_the_image_makes_the_door_listen_on_every_interface_and_the_stack_gives_the_port_and_the_hub_its_address(self):
+        with open(os.path.join(rig_module.REPO, "Dockerfile.server"), encoding="utf-8") as f:
+            dockerfile = f.read()
+        entry = re.findall(r"(?m)^ENTRYPOINT \[(.*)\]$", dockerfile)[-1]                                       # (the last stage is the server)
+        self.assertIn('"--counts-any-interface"', entry)
+        self.assertNotIn("--counts-port", entry)                                                              # (off in the program and in the image: the stack file gives the port)
+        stack = open(os.path.join(rig_module.REPO, "docker-compose.stack.yml"), encoding="utf-8").read()
+        code = "\n".join(l for l in stack.splitlines() if not l.lstrip().startswith("#"))
+        self.assertIn('"--counts-port", "${ANTS_COUNTS_PORT:-4032}"', code)
+        self.assertNotIn("4032:4032", code)                                                                   # (not published on the host)
+        self.assertIn("ANTS_HUB_COUNTS_URL: ${ANTS_HUB_COUNTS_URL-http://ants-server:4032}", code)            # (the hub's address of the door: the same port)
+        self.assertIn("ants-server:4032", rig_module.RAW)                                                      # (nginx's address of the door: the same port)
 
 
 class TheDoorIsDown(unittest.TestCase):

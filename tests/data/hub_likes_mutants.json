@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the likes' gate, Forget me's call to the counts door and the login's way back to a match (hub/likedoor.py, hub/login.py `way_back` and `MATCH_ID`, hub/config.py `ANTS_HUB_COUNTS_URL`, hub/server.py, hub/limits.py; docs/HUB.md, docs/REPLAY_COUNTS.md) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose (a pass for nobody, a shut door that is a 401 or is not shut, a ban that stops a like, a gate that answers a POST, takes a body, a query or a longer path, needs no address or says the missing address every time, has no limit or one limit for everybody or asks the login before the limit; the keys of the admin page's labels, the admin page's header, a nonce that is not fresh, a pass that lives ten minutes, the account's id for its reference; a Forget me that goes on when the door fails, answers it with a 500, skips the call, calls with no setting or with no good key, names the account by its id, sends no pass, no token or the wrong token, a length that is not 0 or a cookie, takes any status, any count, `true` or a negative one, waits for ever or reads without a limit; the login's words that go to the wrong page, an id that is not checked, that may have anything after it, a newline, a longer name, any character or a longer number, a way back with no id that goes home or forgets it; a gate that is not routed, a setting that is not read or takes any port, a start that says nothing of a setting with no key, a default limit of 6 or 600), and a test of tests/scripts/test_hub_likes.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hub_likes_mutants.json --keep-going --jobs 1 --baseline-every 15; every mutant must be caught.",
+ "note": "Mutants of the likes' gate, Forget me's call to the counts door and the login's way back to a match (hub/likedoor.py, hub/login.py `way_back` and `MATCH_ID`, hub/config.py `ANTS_HUB_COUNTS_URL`, hub/server.py, hub/limits.py; docs/HUB.md, docs/REPLAY_COUNTS.md) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose (a pass for nobody, a shut door that is a 401 or is not shut, a ban that stops a like, a gate that answers a POST, takes a body, a query or a longer path, needs no address or says the missing address every time, has no limit or one limit for everybody or asks the login before the limit; the keys of the admin page's labels, the admin page's header, a nonce that is not fresh, a pass that lives ten minutes, the account's id for its reference; a Forget me that is stopped by a door that fails or has no key, does not queue the likes or does not say `later`, a queue that takes a reference twice, is not bounded or drops the newest, a try that is never made, overlaps another, never ends or keeps the reference when the door answered, a pause that does not grow, a clock that never asks again; a Forget me that skips the call, calls with no setting or with no good key, names the account by its id, sends no pass, no token or the wrong token, a length that is not 0 or a cookie, takes any status, any count, `true` or a negative one, waits for ever or reads without a limit; the login's words that go to the wrong page, an id that is not checked, that may have anything after it, a newline, a longer name, any character or a longer number, a way back with no id that goes home or forgets it; a gate that is not routed, a setting that is not read or takes any port, a start that says nothing of a setting with no key, a default limit of 6 or 600), and a test of tests/scripts/test_hub_likes.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hub_likes_mutants.json --keep-going --jobs 1 --baseline-every 15; every mutant must be caught.",
  "baseline": {
   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest tests.scripts.test_hub_likes tests.scripts.test_hub_admin_door.TheLoginReturnsToTheAdminPage"
  },
@@ -152,20 +152,6 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
   },
   {
-   "id": "forget_goes_on_when_the_door_fails",
-   "file": "hub/login.py",
-   "old": "self.log.event(\"forget_likes_failed\", kind=e.kind)\n                    return self.fail(503, \"busy\")",
-   "new": "self.log.event(\"forget_likes_failed\", kind=e.kind)",
-   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
-  },
-  {
-   "id": "forget_answers_a_failed_door_with_a_500",
-   "file": "hub/login.py",
-   "old": "self.log.event(\"forget_likes_failed\", kind=e.kind)\n                    return self.fail(503, \"busy\")",
-   "new": "self.log.event(\"forget_likes_failed\", kind=e.kind)\n                    return self.fail(500, \"error\")",
-   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
-  },
-  {
    "id": "forget_skips_the_call",
    "file": "hub/login.py",
    "old": "if self.hub.likes.wanted:",
@@ -180,17 +166,10 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
   },
   {
-   "id": "forget_calls_with_no_good_key",
-   "file": "hub/likedoor.py",
-   "old": "if self.host is None or self.key is None:",
-   "new": "if self.host is None:",
-   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
-  },
-  {
    "id": "forget_names_the_account_by_its_id",
    "file": "hub/login.py",
-   "old": "await self.hub.likes.forget_likes(self.hub.chat.ref(who.account_id))",
-   "new": "await self.hub.likes.forget_likes(who.account_id)",
+   "old": "ref = self.hub.chat.ref(who.account_id)",
+   "new": "ref = who.account_id",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
   },
   {
@@ -380,6 +359,125 @@
    "file": "hub/limits.py",
    "old": "like_burst: int = 60",
    "new": "like_burst: int = 600",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_refuses_when_the_door_fails",
+   "file": "hub/login.py",
+   "old": "later = self.hub.likes.queue(ref)",
+   "new": "return self.fail(503, \"busy\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_does_not_queue",
+   "file": "hub/login.py",
+   "old": "later = self.hub.likes.queue(ref)",
+   "new": "later = False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_does_not_say_later",
+   "file": "hub/login.py",
+   "old": "{\"ok\": True, \"likes\": \"later\"} if later else {\"ok\": True}",
+   "new": "{\"ok\": True}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_queues_what_has_no_key",
+   "file": "hub/login.py",
+   "old": "if e.kind == \"off\":",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_without_a_key_refuses",
+   "file": "hub/login.py",
+   "old": "self.log.event(\"forget_likes_skipped\", kind=e.kind)",
+   "new": "return self.fail(503, \"busy\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "forget_calls_with_no_good_key",
+   "file": "hub/likedoor.py",
+   "old": "if self.host is None or self.key is None:",
+   "new": "if self.host is None:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "queue_takes_a_reference_twice",
+   "file": "hub/likedoor.py",
+   "old": "        if ref in self.pending:\n            return True\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "queue_is_not_bounded",
+   "file": "hub/likedoor.py",
+   "old": "while len(self.pending) >= RETRY_MAX:",
+   "new": "while False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "queue_drops_the_newest",
+   "file": "hub/likedoor.py",
+   "old": "self.pending.popitem(last=False)",
+   "new": "self.pending.popitem(last=True)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "retry_is_never_started",
+   "file": "hub/likedoor.py",
+   "old": "self.retrying = asyncio.ensure_future(self.retry(ref))",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "retry_does_not_wait_for_the_last_try",
+   "file": "hub/likedoor.py",
+   "old": "        if self.retrying is not None and not self.retrying.done():\n            return\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "retry_goes_on_for_ever",
+   "file": "hub/likedoor.py",
+   "old": "if now - entry[0] >= RETRY_GIVE_UP]",
+   "new": "if False]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "retry_keeps_the_reference_when_the_door_answers",
+   "file": "hub/likedoor.py",
+   "old": "            self.pending.pop(ref, None)\n",
+   "new": "            pass\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "retry_has_no_pause",
+   "file": "hub/likedoor.py",
+   "old": "entry[1] = self.hub.clock() + min(RETRY_LAST, RETRY_FIRST * 2 ** entry[2])",
+   "new": "entry[1] = self.hub.clock()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "retry_pause_never_grows",
+   "file": "hub/likedoor.py",
+   "old": "RETRY_FIRST * 2 ** entry[2]",
+   "new": "RETRY_FIRST",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "the_clock_never_asks_again",
+   "file": "hub/server.py",
+   "old": "            self.likes.on_tick(now)\n",
+   "new": "            pass\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
+  },
+  {
+   "id": "a_stopped_hub_leaves_the_try",
+   "file": "hub/likedoor.py",
+   "old": "            self.retrying.cancel()",
+   "new": "            pass",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_likes"
   }
  ]

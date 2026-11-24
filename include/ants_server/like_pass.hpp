@@ -12,7 +12,8 @@
 //    compared in constant time before anything else is looked at. The payload is base64url (no padding) of a JSON object with exactly the members ref (16 lower-case hex characters: the account's reference, never an
 //    account id), exp (seconds since 1970, an integer) and nonce (16 hex characters).
 //  * exp is checked against this program's clock: a pass that has ended is refused, and so is one that claims to last longer than the hub makes them.
-//  * A pass is used ONCE: the nonces of the accepted passes are remembered until the pass would have ended anyway (bounded: when the table is full nothing new is accepted).
+//  * A pass is used ONCE: the nonces of the accepted passes are remembered until the pass would have ended anyway. The table is bounded, and a full table forgets its oldest nonce instead of refusing the new pass: nobody
+//    can fill it to stop a person from liking (a pass never leaves the network between nginx and this server, so the only thing that a flood buys is a second use of a pass that was accepted a minute ago).
 //  * The token of a change (the page's CSRF token) is the first 32 hex characters of HMAC-SHA-256 under a key of its own (the secret with the label `ants-like-csrf-v1`) of `csrf1\0` and the reference: the same for a
 //    person until the secret changes, and not the token of the admin page.
 // One thread, like the rest of the server.
@@ -37,7 +38,7 @@ struct PersonIdentity {
 
 class LikeGate {
 public:
-    /// `setting` is the text of ANTS_ADMIN_GATE_SECRET ("" when it is not set); `max_remembered` bounds the table of used passes (a test makes it small)
+    /// `setting` is the text of ANTS_ADMIN_GATE_SECRET ("" when it is not set); `max_remembered` bounds the table of used passes (a test makes it small); a full table forgets its oldest nonce
     explicit LikeGate(std::string_view setting, size_t max_remembered = kPassNoncesMax);
 
     /// Whether passes can be checked at all

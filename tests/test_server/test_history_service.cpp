@@ -256,10 +256,10 @@ std::string dump_table(db::Database& d, const std::string& table, const std::str
     return out;
 }
 
-// The tables of the history (and the likes of the replays), as one text; the plays and the likes' numbers are columns of the matches. The counted_at column is left out of the matches (the time a row was made): a row is copied with its own, and the rest must be equal
+// The tables of the history, as one text; the plays and the likes' numbers are columns of the matches (the rows of the likes, which hold references, are not copied: HV1.2). The counted_at column is left out of the matches (the time a row was made): a row is copied with its own, and the rest must be equal
 std::string dump_history(db::Database& d) {
     return dump_table(d, "history_matches", "id") + "--\n" + dump_table(d, "history_seats", "match_id, seat") + "--\n" + dump_table(d, "history_markers", "id") + "--\n" + dump_table(d, "history_deaths", "id") + "--\n" +
-           dump_table(d, "history_action", "id") + "--\n" + dump_table(d, "map_plays", "map, hash") + "--\n" + dump_table(d, "replay_likes", "id, ref");
+           dump_table(d, "history_action", "id") + "--\n" + dump_table(d, "map_plays", "map, hash");
 }
 
 size_t table_rows(db::Database& d, const std::string& table) {
@@ -498,7 +498,8 @@ int main() {
         std::cout << "\n    tables: " << theirs.size() << " bytes, " << table_rows(copy, "history_deaths") << " maps of deaths, " << table_rows(copy, "history_action") << " actions, " << table_rows(copy, "map_plays") << " play counts";
         ASSERT_TRUE(theirs.size() > 1000 && table_rows(copy, "history_deaths") >= 1 && table_rows(copy, "history_action") >= 1 && table_rows(copy, "map_plays") > 0);
         ASSERT_EQ(service.import_report().action, table_rows(copy, "history_action"));
-        ASSERT_TRUE(service.import_report().replay_likes == 2 && table_rows(copy, "replay_likes") == 2);
+        ASSERT_EQ(table_rows(game.server.database, "replay_likes"), size_t{2});
+        ASSERT_EQ(table_rows(copy, "replay_likes"), size_t{0});                       // (the numbers are copied with the matches; the rows that say who liked are not: they hold the hub's references, and Forget me does not reach this file)
     } TEST_END();
 
     TEST_CASE("HV1.2c A game database that is older than the plays and the likes (schema 11, no such column, no table of likes) is copied with 0 in their place, and the service's file has them from then on") {
@@ -525,7 +526,7 @@ int main() {
         HistoryService service(cfg);
         std::string why;
         ASSERT_TRUE(service.start(why));
-        ASSERT_TRUE(service.import_report().imported && service.import_report().matches == 1 && service.import_report().replay_likes == 0);
+        ASSERT_TRUE(service.import_report().imported && service.import_report().matches == 1);
         const ctl::JsonValue one = json_of(ask(service, "GET", "/history/" + id));
         ASSERT_TRUE(one.get("id").str() == id && one.get("plays").as_int_or(-1) == 0 && one.get("likes").as_int_or(-1) == 0);
         service.stop();

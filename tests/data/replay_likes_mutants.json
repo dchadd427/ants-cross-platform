@@ -526,6 +526,27 @@
    "old": "hatched: ['Most hatched', 'hatched'] };",
    "new": "hatched: ['Most hatched', 'hatched'], plays: ['Most watched', 'plays'] };",
    "test": "node tests/scripts/web_history_check.js web/history_page.js"
+  },
+  {
+   "id": "a_busy_door_turns_the_hearts_into_counts",
+   "file": "web/replay_likes.js",
+   "old": "status === 503 && a && (a.error === 'likes_off' || a.error === 'counts_off')",
+   "new": "status === 503",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_counts_door_that_is_off_is_not_likes_off",
+   "file": "web/replay_likes.js",
+   "old": "(a.error === 'likes_off' || a.error === 'counts_off')",
+   "new": "(a.error === 'likes_off')",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
+  },
+  {
+   "id": "a_likes_off_answer_is_not_likes_off",
+   "file": "web/replay_likes.js",
+   "old": "(a.error === 'likes_off' || a.error === 'counts_off')",
+   "new": "(a.error === 'counts_off')",
+   "test": "node tests/scripts/web_likes_check.js web/replay_likes.js web/history_page.js"
   }
  ]
 }

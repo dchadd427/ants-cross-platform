@@ -167,6 +167,7 @@ class Hub:
         for task in list(self.chat.busy.values()):
             task.cancel()
         self.chat.commands.stop()
+        self.likes.stop()
         self.ai.relay.stop()
         if self.server:
             self.server.close()
@@ -416,6 +417,10 @@ class Hub:
             self.ai.relay.on_tick(now)                   # (the armed tabs: pings, the silent, an hour with no call, a login that ran out)
         except Exception as e:
             self.log.event("error", kind=type(e).__name__, where="ai")
+        try:                                             # (the likes of replays that the counts door could not take back at Forget me: hub/likedoor.py)
+            self.likes.on_tick(now)
+        except Exception as e:
+            self.log.event("error", kind=type(e).__name__, where="likes")
         pictures = getattr(self.sessions, "pictures", None)
         if pictures is not None:
             try:                                         # (the pictures are read again once a tick when something changed, here or in the command line: the pages of an account whose picture changed are told, and the list's rows read this)

@@ -62,12 +62,11 @@ struct ImportReport {
     size_t action{0};
     size_t action_refused{0};                         // rows of history_action that were not copied: their text is not a field of this version (the page and the route take only a text that put() would have kept)
     size_t map_plays{0};
-    size_t replay_likes{0};                           // the rows of the likes of replays (docs/REPLAY_COUNTS.md): copied as they are (the numbers of plays and likes go with the matches' own rows)
     std::string note;                                 // one line for the log
 };
 
 /// Copies the match history of the game server's database file (`source_path`, opened read only) into `target`, once: the matches, their seats, the markers of matches that the operator took out, the maps of deaths, the actions of the matches, the
-/// play counts of the maps and the likes of the replays (the plays and the likes' numbers are columns of the matches), in ONE transaction together with the marker row `history_import` of `meta`. A target that has the marker is left as it is (`already_done`); one that has records and no marker is left as it
+/// play counts of the maps (the numbers of plays and likes of the replays are columns of the matches' rows and go with them; the rows of the likes, which hold the hub's references, are NOT copied: docs/REPLAY_COUNTS.md), in ONE transaction together with the marker row `history_import` of `meta`. A target that has the marker is left as it is (`already_done`); one that has records and no marker is left as it
 /// is too (`not_empty`). False, with `why`, when the source cannot be read (it has no history, is not a database, is this very file) or the copy fails: the target is then as it was. `target` must have the schema of
 /// history_db_migrations().
 bool import_game_history(db::Database& target, const std::string& source_path, ImportReport& report, std::string& why);

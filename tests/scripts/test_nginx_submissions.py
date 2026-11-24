@@ -240,7 +240,7 @@ class Rig:
             text = re.sub(r"(zone=ants_submit_read:1m rate=)10r/s", r"\g<1>100000r/s", text)
             text = re.sub(r"(zone=ants_test_maps:1m rate=)10r/m", r"\g<1>100000r/s", text)
             text = re.sub(r"(zone=ants_admin_api:1m rate=)1r/s", r"\g<1>100000r/s", text)
-            text = re.sub(r"(zone=ants_counts_(?:play|like|mine):1m rate=)\d+r/m", r"\g<1>100000r/s", text)
+            text = re.sub(r"(zone=ants_counts_(?:play_one|play|like|mine):1m rate=)\d+r/m", r"\g<1>100000r/s", text)
         text = text.replace("/srv/community-maps/", self.work + "/srv/").replace("/var/cache/nginx/", self.work + "/cache/")
         self.log_file = os.path.join(self.work, "access.log")
         text = text.replace("access_log /dev/stdout ants_noquery;", ("access_log %s ants_noquery;" % self.log_file) if log else "access_log off;")          # (the image logs to its output)

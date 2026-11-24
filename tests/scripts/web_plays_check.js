@@ -32,11 +32,12 @@ function fakeStore(initial) {
 // One page view: its own window (document, fetch, timers, storage), a clock that may be shared with another page view, and a game that is playing or not
 function rig(o) {
     o = o || {};
-    const r = { clock: o.clock || { now: T0 }, posts: [], timers: [], visible: true, playing: true, store: 'store' in o ? o.store : fakeStore() };
+    const r = { clock: o.clock || { now: T0 }, posts: [], timers: [], later: [], visible: true, playing: true, store: 'store' in o ? o.store : fakeStore() };
     r.win = {
         Date: { now: () => r.clock.now },
         document: { get visibilityState() { return r.visible ? 'visible' : 'hidden'; } },
         fetch(url, init) { r.posts.push({ url, init }); return o.fetch ? o.fetch(url, init, r) : Promise.resolve({ ok: true, status: 204 }); },
+        setTimeout(fn, ms) { r.later.push({ fn, ms }); return r.later.length; },
         setInterval(fn, ms) { r.timers.push({ fn, ms, on: true }); return r.timers.length; },
         clearInterval(id) { r.timers[id - 1].on = false; }
     };
@@ -216,12 +217,30 @@ const settle = () => new Promise((resolve) => setImmediate(resolve));
     }
 
     // ---- a play that does not arrive ----
-    for (const [what, fetch] of [['is refused (rejected)', () => Promise.reject(new Error('down'))], ['throws at once', () => { throw new Error('no network'); }], ['answers 429', () => Promise.resolve({ ok: false, status: 429 })], ['answers 404', () => Promise.resolve({ ok: false, status: 404 })]]) {
+    for (const [what, fetch] of [['is refused (rejected)', () => Promise.reject(new Error('down'))], ['throws at once', () => { throw new Error('no network'); }], ['answers 404', () => Promise.resolve({ ok: false, status: 404 })]]) {
         const r = rig({ fetch }); r.start();
         let threw = null;
         try { r.run(10 * SEC); r.run(60 * SEC); } catch (e) { threw = String(e); }
         await settle();                                 // (what a rejected play does happens after this turn)
         expect('a play that ' + what + ' is ignored and sent once, never again', [threw, r.posts.length], [null, 1]);
+    }
+    {
+        const r = rig({ fetch: () => Promise.resolve({ ok: false, status: 429 }) }); r.start(); r.run(10 * SEC); await settle();
+        expect('a play that the door answers with 429 is tried once more later: one timer, a minute or more but under two', [r.posts.length, r.later.length, r.later[0] && r.later[0].ms >= 60000 && r.later[0].ms < 90000], [1, 1, true]);
+        const real = Math.random;
+        try {
+            Math.random = () => 0; const low = rig({ fetch: () => Promise.resolve({ ok: false, status: 429 }) }); low.start(); low.run(10 * SEC); await settle();
+            Math.random = () => 0.999; const high = rig({ fetch: () => Promise.resolve({ ok: false, status: 429 }) }); high.start(); high.run(10 * SEC); await settle();
+            expect('... the wait is a minute and a chance of up to half a minute more, so that the pages that were turned away together do not come back together', [low.later[0].ms, high.later[0].ms > 89000 && high.later[0].ms < 90000], [60000, true]);
+        } finally { Math.random = real; }
+        r.later[0].fn(); await settle();
+        expect('... the second try is a POST to the same address, and a second 429 is not tried again', [r.posts.length, r.posts[1].url, r.posts[1].init.method, r.later.length], [2, r.posts[0].url, 'POST', 1]);
+        const ok = rig({ fetch: () => Promise.resolve({ ok: true, status: 204 }) }); ok.start(); ok.run(10 * SEC); await settle();
+        expect('a play that is counted is not tried again', [ok.posts.length, ok.later.length], [1, 0]);
+        const away = rig({ fetch: () => Promise.resolve({ ok: false, status: 404 }) }); away.start(); away.run(10 * SEC); await settle();
+        expect('... nor one that the door does not know (404)', [away.posts.length, away.later.length], [1, 0]);
+        const none = rig({ fetch: () => Promise.reject(new Error('down')) }); none.start(); none.run(10 * SEC); await settle();
+        expect('... nor one that did not arrive at all', [none.posts.length, none.later.length], [1, 0]);
     }
     {
         const r = rig({ fetch: () => Promise.reject(new Error('down')) }); r.start(); r.run(10 * SEC); await settle();

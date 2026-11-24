@@ -608,39 +608,41 @@ class TheForget(ForgetTest):
         for secret in (OLD, "maple.leaf", cookie, self.my_ref(), self.door.calls[0].headers["x-ants-like-pass"], self.door.calls[0].headers["x-ants-csrf"], self.door.url, "127.0.0.1"):
             self.assertNotIn(secret, log)
 
-    def test_a_door_that_does_not_answer_with_a_200_and_a_whole_number_is_a_503_and_nothing_is_deleted_and_it_can_be_tried_again(self):
-        v = self.member()
+    def test_a_door_that_does_not_answer_with_a_200_and_a_whole_number_does_not_stop_the_forget_and_the_likes_are_queued(self):
         modes = [("status:%d" % s, None) for s in (201, 202, 204, 301, 302, 400, 401, 403, 404, 429, 500, 502, 503)]
         modes += [("body", body) for body in (b"<html>not json</html>", b"", b"[1]", b'{"removed":"3"}', b'{"removed":true}', b'{"removed":-1}', b'{"removed":1.5}', b'{"removed":1e3}', b"{}", b"null",
                                               b'{"removed":NaN}', b'{"removed":Infinity}', b'{"removed":null}', b'"3"', b'{"removed":[3]}')]
         modes += [(mode, None) for mode in ("close", "short", "big", "chunked_garbage", "status_line", "double_length")]
         for mode, body in modes:
             with self.subTest(mode=mode, body=body):
+                v = self.member()
                 self.door.mode = mode
                 self.door.body = body or b""
                 before = len(self.door.calls)
                 r = self.forget(v)
-                self.assertEqual((r.status, r.json()), (503, {"error": "busy"}))
-                self.assertEqual(r.all("set-cookie"), [], "the login stays")
+                self.assertEqual((r.status, r.json()), (200, {"ok": True, "likes": "later"}))               # (the hub's own data is deleted, and the answer says that the likes are not yet)
+                self.assertEqual(r.all("set-cookie"), [CLEARED_SESSION])
                 self.assertEqual(len(self.door.calls), before + 1, "one call, and a redirect is not followed")
-                self.assert_everything_is_still_there(v)
+                self.assert_it_is_all_gone()
+                self.assertEqual(list(self.rig.call(lambda: list(self.rig.hub.likes.pending))), [self.my_ref()])
         log = self.log()
         self.assertEqual(len(re.findall(r" forget_likes_failed kind=(?:down|bad)\n", log)), len(modes), log)
         self.door.mode = "ok"
+        v = self.member()
         r = self.forget(v)
         self.assertEqual((r.status, r.json()), (200, {"ok": True}))
         self.assert_it_is_all_gone()
         self.assertEqual(self.door.problems, [])
         self.assertEqual(self.door.calls[-1].headers["x-ants-csrf"], token_of(SECRET, self.my_ref()))
 
-    def test_a_door_that_is_not_there_is_a_503_that_deletes_nothing(self):
+    def test_a_door_that_is_not_there_does_not_stop_the_forget(self):
         v = self.member()
         self.door.stop()
         r = self.forget(v)
-        self.assertEqual((r.status, r.json()), (503, {"error": "busy"}))
-        self.assert_everything_is_still_there(v)
+        self.assertEqual((r.status, r.json()), (200, {"ok": True, "likes": "later"}))
+        self.assert_it_is_all_gone()
 
-    def test_a_door_that_does_not_answer_in_time_is_a_503_in_time_and_the_hub_goes_on_answering_meanwhile(self):
+    def test_a_door_that_does_not_answer_in_time_does_not_hold_the_forget_for_longer_and_the_hub_goes_on_answering_meanwhile(self):
         v = self.member()
         self.door.mode = "hang"
         done = {}
@@ -663,16 +665,17 @@ class TheForget(ForgetTest):
             worst = max(worst, time.monotonic() - started)
             time.sleep(0.02)
         thread.join()
-        self.assertEqual(done["status"], 503)
+        self.assertEqual(done["status"], 200)
         self.assertLess(done["took"], 3.0, "the call ends when its time is up, not when the door answers")
         self.assertLess(worst, 0.5, "the hub answered another request while the door was silent")
-        self.assert_everything_is_still_there(v)
+        self.assert_it_is_all_gone()
 
     def test_each_call_has_a_pass_of_its_own_for_the_same_reference(self):
         v = self.member()
         self.door.mode = "status:500"
-        self.assertEqual(self.forget(v).status, 503)
+        self.assertEqual(self.forget(v).status, 200)
         self.door.mode = "ok"
+        v = self.member()
         self.assertEqual(self.forget(v).status, 200)
         first, second = (verify(c.headers["x-ants-like-pass"], SECRET, time.time() - 30) for c in self.door.calls)
         self.assertEqual(first["ref"], second["ref"])
@@ -714,13 +717,81 @@ class TheSettingIsEmpty(ForgetTest):
 class TheSettingHasNoGoodKey(ForgetTest):
     secret = None
 
-    def test_a_door_that_is_wanted_and_cannot_be_asked_is_a_503_that_deletes_nothing_and_makes_no_call(self):
+    def test_a_door_that_is_wanted_and_cannot_be_asked_is_no_reason_to_keep_anything_and_makes_no_call(self):
         v = self.member()
         r = self.forget(v)
-        self.assertEqual((r.status, r.json()), (503, {"error": "busy"}))
+        self.assertEqual((r.status, r.json()), (200, {"ok": True}))                       # (no good key: no like can be made, so there is nothing to ask for and nothing to say "later" about)
         self.assertEqual(self.door.calls, [])
-        self.assert_everything_is_still_there(v)
-        self.assertEqual(self.log().count(" forget_likes_failed kind=off\n"), 1, self.log())
+        self.assert_it_is_all_gone()
+        self.assertEqual(self.rig.call(lambda: len(self.rig.hub.likes.pending)), 0)
+        self.assertEqual(self.log().count(" forget_likes_skipped kind=off\n"), 1, self.log())
+        self.assertNotIn("forget_likes_failed", self.log())
+
+
+class TheQueue(ForgetTest):
+    """The likes that the door could not take back are asked for again by the hub's clock: after RETRY_FIRST seconds, twice as long each time, a day at the most, a thousand people at the most, memory only."""
+
+    def setUp(self):
+        patcher = mock.patch.multiple(likedoor, RETRY_FIRST=0.15, RETRY_LAST=0.3)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        super().setUp()
+
+    def wait(self, condition, seconds=8.0):
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            if condition():
+                return True
+            time.sleep(0.02)
+        return False
+
+    def pending(self):
+        return self.rig.call(lambda: {ref: list(entry) for ref, entry in self.rig.hub.likes.pending.items()})
+
+    def test_the_hub_asks_again_until_the_door_answers_and_then_lets_the_reference_go(self):
+        v = self.member()
+        self.door.mode = "status:500"
+        self.assertEqual(self.forget(v).json(), {"ok": True, "likes": "later"})
+        ref = self.my_ref()
+        self.assertTrue(self.wait(lambda: len(self.door.calls) >= 3), "the hub asked again, and again")
+        self.assertIn(ref, self.pending())
+        self.assertGreaterEqual(self.pending()[ref][2], 1)
+        self.door.mode = "ok"
+        self.assertTrue(self.wait(lambda: not self.pending()), "the door answered: the reference is let go")
+        passes = [verify(c.headers["x-ants-like-pass"], SECRET, time.time() - 30) for c in self.door.calls]
+        self.assertTrue(all(p["ref"] == ref for p in passes))
+        self.assertEqual(len({p["nonce"] for p in passes}), len(passes), "every try has a pass of its own")
+        self.assertEqual(self.door.problems, [])
+        self.assertTrue(self.wait(lambda: " forget_likes_retried likes=" in self.log()))
+        log = self.log()
+        self.assertIn(" forget_likes_retry_failed kind=bad\n", log)
+        for secret in (OLD, "maple.leaf", ref, self.door.calls[-1].headers["x-ants-like-pass"], self.door.url):
+            self.assertNotIn(secret, log)
+
+    def test_a_reference_is_queued_once_and_only_a_thousand_are_held_the_oldest_going_first(self):
+        refs = ["%016x" % n for n in range(1, 6)]
+        with mock.patch.object(likedoor, "RETRY_MAX", 3):
+            for ref in refs + [refs[-1]]:
+                self.rig.call(self.rig.hub.likes.queue, ref)
+        self.assertEqual(list(self.pending()), refs[2:])
+        self.assertEqual(self.log().count("queue_full"), 2)
+        self.assertEqual(likedoor.RETRY_MAX, 1000)
+
+    def test_a_reference_that_has_waited_a_day_is_let_go_and_the_hub_says_so_once(self):
+        self.door.mode = "status:500"
+        self.rig.call(self.rig.hub.likes.queue, "0123456789abcdef")
+        with mock.patch.object(likedoor, "RETRY_GIVE_UP", 0.3):
+            self.assertTrue(self.wait(lambda: not self.pending()))
+        self.assertEqual(self.log().count(" forget_likes_given_up\n"), 1)
+        self.assertEqual(likedoor.RETRY_GIVE_UP, 86400.0)
+
+    def test_one_try_at_a_time_and_none_while_the_door_is_silent_for_the_others(self):
+        self.door.mode = "hang"
+        for n in range(1, 4):
+            self.rig.call(self.rig.hub.likes.queue, "%016x" % n)
+        self.assertTrue(self.wait(lambda: len(self.door.calls) >= 1))
+        time.sleep(0.3)
+        self.assertEqual(len(self.door.calls), 1, "the second try waits for the first")
 
 
 class TheForgetOfSeveralPeople(ForgetTest):

@@ -136,7 +136,7 @@
             });
         }
         function take(status, a, ids, from) {
-            if (status === 503) { state.known = true; state.off = true; state.signed = false; state.liked = Object.create(null); sync(); return true; }
+            if (status === 503 && a && (a.error === 'likes_off' || a.error === 'counts_off')) { state.known = true; state.off = true; state.signed = false; state.liked = Object.create(null); sync(); return true; }      // (only the two words that say that the likes are off: a 503 that says busy is a moment, and the hearts stay as they are)
             if (status !== 200 || !a || typeof a.signed_in !== 'boolean') return false;
             if (a.signed_in && (typeof a.csrf !== 'string' || !CSRF.test(a.csrf) || !Array.isArray(a.liked))) return false;
             state.off = false; state.known = true; state.signed = a.signed_in;

@@ -8,8 +8,8 @@ The pages (nginx passes these five, /hub/pic/<name>.png and /hub/ws to the hub, 
                                    visitor goes back to the front page
   GET  /hub/me                     who the cookie says the visitor is: what the welcome's `you` says (same origin only)
   POST /hub/logout                 ends this login (same origin only: the Origin and Sec-Fetch-Site of a page of the site)
-  POST /hub/forget                 ends every login of the account and deletes its chat lines (same origin only), after the person's likes of replays were removed at the game server's counts door (hub/likedoor.py;
-                                   a door that is on and does not answer is a 503 `busy` and nothing at all is deleted: the person tries again); a ban or a mute stays, by id, whatever the account does
+  POST /hub/forget                 ends every login of the account and deletes its chat lines (same origin only), after the person's likes of replays were asked back at the game server's counts door (hub/likedoor.py;
+                                   a door that is on and does not answer does not stop it: the answer says `"likes":"later"` and the hub asks again by its clock, see hub/likedoor.py); a ban or a mute stays, by id, whatever the account does
   GET  /hub/pic/<name>.png         the small copy of a Discord picture that hub/pictures.py kept (it is fetched after the callback has answered, never before; a login does not wait for it)
 and, for a WebSocket, identify(): the login's cookie in the handshake is who the socket is for its whole life.
 
@@ -349,13 +349,17 @@ class DiscordLogin(session.Sessions):
             who = self.who_of(request.headers)
             if who is None:
                 return self.fail(401, "login", [("Set-Cookie", cookie_line(COOKIE, "", 0, "Strict"))])
-            likes = 0
-            if self.hub.likes.wanted:                                # (the likes of replays go first, at the game server: a door that does not answer means that nothing at all is deleted here,
-                try:                                                 # and the person tries again; forgetting is all or nothing)
-                    likes = await self.hub.likes.forget_likes(self.hub.chat.ref(who.account_id))
+            likes, later = 0, False
+            if self.hub.likes.wanted:                                # (the likes of replays are taken back first, at the game server; Forget me never depends on that door: what it does not answer is tried
+                ref = self.hub.chat.ref(who.account_id)              # again by the hub's clock, and everything that the hub owns is deleted here and now)
+                try:
+                    likes = await self.hub.likes.forget_likes(ref)
                 except gamedoor.DoorError as e:
-                    self.log.event("forget_likes_failed", kind=e.kind)
-                    return self.fail(503, "busy")
+                    if e.kind == "off":                              # (no good key: no pass can be made, so nothing can be asked; the setting is on, the door is shut: there is nothing to queue)
+                        self.log.event("forget_likes_skipped", kind=e.kind)
+                    else:
+                        self.log.event("forget_likes_failed", kind=e.kind)
+                        later = self.hub.likes.queue(ref)
             lines = self.store.forget(who.account_id, self.hub.chat.deleted_seq)
         except StoreError:
             return self.fail(503, "busy")
@@ -365,4 +369,4 @@ class DiscordLogin(session.Sessions):
         self.sync_pictures()
         self.hub.chat.drop_lines(lines)
         self.log.event("forget", tag=self.log.tag(address), lines=len(lines), likes=likes)
-        return http.response(200, {"ok": True}, [("Set-Cookie", cookie_line(COOKIE, "", 0, "Strict"))])
+        return http.response(200, {"ok": True, "likes": "later"} if later else {"ok": True}, [("Set-Cookie", cookie_line(COOKIE, "", 0, "Strict"))])

@@ -29,13 +29,20 @@ namespace ants::server {
 struct ReplayCountsConfig {
     std::string gate_secret;                         // ANTS_ADMIN_GATE_SECRET ("" or not good: likes are off, plays still count)
     std::function<int64_t()> clock_s;                // seconds since 1970 UTC (empty: the system clock)
+    double plays_burst{100};                         // the door's budgets of plays (the defaults are the numbers of ReplayCountsApi; a test makes them small so that one budget is held apart from the other)
+    double plays_per_second{10};
+    double play_id_burst{20};
+    double play_id_per_second{0.1};
 };
 
 class ReplayCountsApi {
 public:
     static constexpr size_t kMaxIds = 50;            // the matches that one GET /counts/mine asks about
-    static constexpr double kPlayBurst = 100;        // the door's budget of plays: a token bucket over all visitors, 10 a second with a burst of 100 (nginx limits each address first)
+    static constexpr double kPlayBurst = 100;        // the door's budget of plays: a token bucket over all visitors, 10 a second with a burst of 100 (nginx limits each address and each replay of an address first)
     static constexpr double kPlaysPerSecond = 10;
+    static constexpr double kPlayIdBurst = 20;       // and one for each replay: a burst of 20 plays, then one every 10 seconds (8,640 a day at the most), so that nobody can push one replay up the list of the most watched
+    static constexpr double kPlayIdPerSecond = 0.1;
+    static constexpr size_t kPlayIdsKept = 4096;     // the replays whose budget is remembered (one that is full again is forgotten)
     static constexpr double kPersonBurst = 10;       // the changes of one person: a burst of 10, then one every 2 seconds
     static constexpr double kPersonPerSecond = 0.5;
     static constexpr size_t kPersonsKept = 4096;     // the people whose budget is remembered (one that is full again is forgotten)
@@ -63,8 +70,9 @@ private:
     ctl::HttpResponse play(const std::string& id, uint32_t now_ms);
     ctl::HttpResponse mine(const ctl::HttpRequest& request, int64_t now_s);
     ctl::HttpResponse change(const ctl::HttpRequest& request, const std::string& kind, const std::string& id, int64_t now_s, uint32_t now_ms);
+    /// One token of the bucket of `key` in `table` (made full when new); false when the bucket is empty, or when the table is full of buckets that are not full again
+    static bool take(std::unordered_map<std::string, Bucket>& table, const std::string& key, uint32_t now_ms, double burst, double per_second, size_t kept);
     bool take_play(uint32_t now_ms);
-    bool take_person(const std::string& ref, uint32_t now_ms);
     /// The person of the request's pass, or the answer that refuses it
     bool person_of(const ctl::HttpRequest& request, int64_t now_s, PersonIdentity& who, ctl::HttpResponse& refusal);
     void notice(const std::string& kind, int64_t now_s, const std::string& text);
@@ -73,8 +81,10 @@ private:
     const ReplayStore* replays_;
     std::function<int64_t()> clock_s_;
     LikeGate gate_;
+    ReplayCountsConfig limits_;
     Bucket plays_;
     bool plays_armed_{false};
+    std::unordered_map<std::string, Bucket> play_ids_;
     std::unordered_map<std::string, Bucket> persons_;
     std::unordered_map<std::string, int64_t> notice_at_;
     std::vector<std::string> notices_;

@@ -56,18 +56,13 @@ bool ids_of(const std::string& query, std::vector<std::string>& ids) {
     return true;
 }
 
-const char* kind_word(PassVerdict v) {
-    switch (v) {
-        case PassVerdict::NoKey: return "no_key";
-        case PassVerdict::Full: return "full";
-        default: return "bad_pass";
-    }
-}
+const char* kind_word(PassVerdict v) { return v == PassVerdict::NoKey ? "no_key" : "bad_pass"; }
 
 }  // namespace
 
 ReplayCountsApi::ReplayCountsApi(HistoryStore& history, const ReplayStore* replays, ReplayCountsConfig config)
-    : history_(history), replays_(replays), clock_s_(std::move(config.clock_s)), gate_(config.gate_secret) {
+    : history_(history), replays_(replays), clock_s_(config.clock_s), gate_(config.gate_secret), limits_(config) {
+    limits_.gate_secret.clear();                                                           // (the key is held by the gate alone, as the derived keys)
     if (!clock_s_) clock_s_ = []() { return static_cast<int64_t>(std::time(nullptr)); };
 }
 
@@ -89,36 +84,36 @@ bool ReplayCountsApi::playable(const std::string& id) const {
     return e != nullptr && (e->pending || (e->readable && entry_plays_here(*e)));        // (a file whose head is not read yet, in the first minutes after a start, is there: the list shows it as one that can be watched)
 }
 
-bool ReplayCountsApi::take_play(uint32_t now_ms) {
-    if (!plays_armed_) {
-        plays_armed_ = true;
-        plays_.tokens = kPlayBurst;
-        plays_.at_ms = now_ms;
+bool ReplayCountsApi::take(std::unordered_map<std::string, Bucket>& table, const std::string& key, uint32_t now_ms, double burst, double per_second, size_t kept) {
+    if (table.size() >= kept && table.count(key) == 0) {
+        for (auto it = table.begin(); it != table.end();) {                                 // (a bucket that is full again is as good as unknown)
+            const double back = std::min(burst, it->second.tokens + (now_ms - it->second.at_ms) * per_second / 1000.0);
+            it = back >= burst ? table.erase(it) : std::next(it);
+        }
+        if (table.size() >= kept) return false;                                             // (that many at once is a flood: nobody new is let in until some budgets are full again)
     }
-    const uint32_t elapsed = now_ms - plays_.at_ms;                                        // (unsigned: a clock that wraps still gives the time that passed)
-    plays_.at_ms = now_ms;
-    plays_.tokens = std::min(kPlayBurst, plays_.tokens + elapsed * kPlaysPerSecond / 1000.0);
-    if (plays_.tokens < 1) return false;
-    plays_.tokens -= 1;
+    auto it = table.find(key);
+    if (it == table.end()) it = table.emplace(key, Bucket{burst, now_ms}).first;
+    Bucket& b = it->second;
+    const uint32_t elapsed = now_ms - b.at_ms;                                              // (unsigned: a clock that wraps still gives the time that passed)
+    b.at_ms = now_ms;
+    b.tokens = std::min(burst, b.tokens + elapsed * per_second / 1000.0);
+    if (b.tokens < 1) return false;
+    b.tokens -= 1;
     return true;
 }
 
-bool ReplayCountsApi::take_person(const std::string& ref, uint32_t now_ms) {
-    if (persons_.size() >= kPersonsKept && persons_.count(ref) == 0) {
-        for (auto it = persons_.begin(); it != persons_.end();) {                           // (a person whose budget is full again is as good as unknown)
-            const double back = std::min(kPersonBurst, it->second.tokens + (now_ms - it->second.at_ms) * kPersonPerSecond / 1000.0);
-            it = back >= kPersonBurst ? persons_.erase(it) : std::next(it);
-        }
-        if (persons_.size() >= kPersonsKept) return false;                                  // (that many people at once is a flood: nobody new is let in until some budgets are full again)
+bool ReplayCountsApi::take_play(uint32_t now_ms) {
+    if (!plays_armed_) {
+        plays_armed_ = true;
+        plays_.tokens = limits_.plays_burst;
+        plays_.at_ms = now_ms;
     }
-    auto it = persons_.find(ref);
-    if (it == persons_.end()) it = persons_.emplace(ref, Bucket{kPersonBurst, now_ms}).first;
-    Bucket& b = it->second;
-    const uint32_t elapsed = now_ms - b.at_ms;
-    b.at_ms = now_ms;
-    b.tokens = std::min(kPersonBurst, b.tokens + elapsed * kPersonPerSecond / 1000.0);
-    if (b.tokens < 1) return false;
-    b.tokens -= 1;
+    const uint32_t elapsed = now_ms - plays_.at_ms;
+    plays_.at_ms = now_ms;
+    plays_.tokens = std::min(limits_.plays_burst, plays_.tokens + elapsed * limits_.plays_per_second / 1000.0);
+    if (plays_.tokens < 1) return false;
+    plays_.tokens -= 1;
     return true;
 }
 
@@ -129,9 +124,6 @@ bool ReplayCountsApi::person_of(const HttpRequest& request, int64_t now_s, Perso
     if (verdict == PassVerdict::NoKey) {
         notice("no_key", now_s, "replay counts: likes are OFF (ANTS_ADMIN_GATE_SECRET is not set, or is not 32 to 256 printable characters without a blank, or is the sample key of the documents)");
         refusal = error_reply(503, "likes_off");
-    } else if (verdict == PassVerdict::Full) {
-        notice("full", now_s, "replay counts: the table of used passes is full, no pass is accepted until some have ended");
-        refusal = error_reply(503, "busy");
     } else {
         if (verdict != PassVerdict::NoPass) notice(kind_word(verdict), now_s, std::string("replay counts: a pass was refused (") + pass_verdict_word(verdict) + ")");
         refusal = error_reply(401, "not_signed_in");
@@ -167,8 +159,9 @@ HttpResponse ReplayCountsApi::handle(const HttpRequest& request, uint32_t now_ms
 }
 
 HttpResponse ReplayCountsApi::play(const std::string& id, uint32_t now_ms) {
+    if (!playable(id)) return error_reply(404, "not found");                                // (a request that is no play of anything costs no budget)
+    if (!take(play_ids_, id, now_ms, limits_.play_id_burst, limits_.play_id_per_second, kPlayIdsKept)) return error_reply(429, "rate");
     if (!take_play(now_ms)) return error_reply(429, "rate");
-    if (!playable(id)) return error_reply(404, "not found");
     switch (history_.add_play(id)) {
         case HistoryStore::Counted::Done: return no_content();
         case HistoryStore::Counted::Failed: return error_reply(503, "unavailable");
@@ -207,7 +200,7 @@ HttpResponse ReplayCountsApi::change(const HttpRequest& request, const std::stri
         o.set("removed", JsonValue::make_int(static_cast<int64_t>(removed)));
         return json_reply(200, o);
     }
-    if (!take_person(who.ref, now_ms)) return error_reply(429, "rate");
+    if (!take(persons_, who.ref, now_ms, kPersonBurst, kPersonPerSecond, kPersonsKept)) return error_reply(429, "rate");
     const bool liking = kind == "like";
     if (liking && !playable(id)) return error_reply(404, "not found");                      // (nothing new is liked on a recording that is gone or that this version cannot play; a like can always be taken back)
     uint32_t likes = 0;
