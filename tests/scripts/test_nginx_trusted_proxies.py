@@ -194,9 +194,10 @@ class TheWiring(unittest.TestCase):
         self.assertEqual(set(told), {"$remote_addr"})
         self.assertEqual(len(re.findall(r"X-Client-Address", CONF)), len(told))                 # (no other use of the name: nothing reads a header that a visitor wrote)
         keys = set(re.findall(r"limit_(?:req|conn)_zone\s+(\S+)\s+zone=", CONF))
-        self.assertEqual(keys - {"$binary_remote_addr"}, {"$history_plain_key", "$history_query_key", "$submit_post_key", "$test_map_post_key"})
-        for key in keys - {"$binary_remote_addr"}:
+        self.assertEqual(keys - {"$binary_remote_addr"}, {"$history_plain_key", "$history_query_key", "$submit_post_key", "$test_map_post_key", "$binary_remote_addr$uri"})
+        for key in keys - {"$binary_remote_addr", "$binary_remote_addr$uri"}:
             self.assertLessEqual(map_values(key[1:]), {"$binary_remote_addr", '""'}, key)         # (a key is the address, or nothing)
+        self.assertEqual(len(re.findall(r"limit_req_zone \$binary_remote_addr\$uri zone=", CONF)), 1)   # (the one key of the address and the path that nginx cleaned, for one replay from one address: the path is never a header of the visitor's)
 
     def test_the_compose_files_mount_the_operators_list_by_a_full_path_with_nothing_as_the_default(self):
         folder = re.search(r"include (/etc/nginx/ants-trusted-proxies\.d)/\*\.conf;", CONF).group(1)

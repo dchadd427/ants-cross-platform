@@ -42,7 +42,7 @@ bool entry_plays_here(const ReplayEntry& entry) noexcept;
 
 /// What a list asks for (`GET /history`): the controls of the page's list
 struct HistoryQuery {
-    enum class Sort : uint8_t { New, Old, Score, Kills, Hatched, Long, Short };
+    enum class Sort : uint8_t { New, Old, Score, Kills, Hatched, Long, Short, Plays, Likes };
     enum class Format : uint8_t { All, OneVsOne, Teams, Free };            // all, 1v1, 2v1 and 2v2, ffa3 and ffa4
     enum class Result : uint8_t { All, Decided, Draw, Cut };               // cut: a player left, or the time ran out
     enum class Who : uint8_t { Anyone, People, Computers };
@@ -132,6 +132,22 @@ public:
     Removal remove(const std::string& id, bool keep_marker, std::string& why);
     /// Deletes the markers of matches that `still_needed` does not know any more (their recording has gone). Returns how many it deleted.
     size_t prune_markers(const std::function<bool(const std::string& id)>& still_needed);
+
+    /// Plays and likes of a replay (docs/REPLAY_COUNTS.md; the columns `plays` and `likes` of history_matches and the table replay_likes, migration 12). Each call is one transaction on the store's writer connection: a store that only reads (the
+    /// history service's HTTP side) cannot call them. The count of likes is kept equal to the rows of the match in the transaction that changes either, so a list reads both numbers with the match and sorts by them with an index.
+    static constexpr int64_t kMaxCount = 1000000;            // the most plays, and the most likes, that a replay shows: the counters stop there
+    static constexpr size_t kMaxLikesOfAPerson = 1000;       // the most matches that one person (one reference) likes at a time
+    enum class Counted : uint8_t { Done, Unknown, Limit, Failed };         // Unknown: the match is not in the history; Limit: a like over kMaxLikesOfAPerson; Failed: the database does not answer
+    /// One more play of the match (nothing added at kMaxCount, and still Done). Nothing is kept about who played.
+    Counted add_play(const std::string& id);
+    /// The person `ref` (the hub's reference: 16 lower-case hex digits) likes the match: once (a second call changes nothing). `likes` is the match's count afterwards.
+    Counted like(const std::string& id, const std::string& ref, uint32_t& likes);
+    /// The person takes the like back (a match that is in the history, whatever became of its recording; a like that is not there changes nothing). `likes` is the count afterwards.
+    Counted unlike(const std::string& id, const std::string& ref, uint32_t& likes);
+    /// Which of `ids` the person likes, in the order of `ids`. False when the database does not answer. Only the person's own: nothing lists the people of a match.
+    bool liked_among(const std::string& ref, const std::vector<std::string>& ids, std::vector<std::string>& out) const;
+    /// Every like of the person is taken back and the counts drop (Forget me). `removed` is how many were. False when the database does not answer; nothing is changed then.
+    bool forget_likes(const std::string& ref, size_t& removed);
 
     /// The play count of every map that was played, ordered by file name and hash (for the list of maps). False, with `out` empty, when the database does not answer (the store is unavailable then).
     bool map_plays(std::vector<MapPlays>& out) const;

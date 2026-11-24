@@ -159,6 +159,13 @@ for (const text of ['Pip (bot, Hard)', "it's!", 'a(b)c*d~e', 'x&y=z%w+v', 'a b',
 }
 same('the chips of what is not the default', H.activeOf(H.stateOf('?who=computers&format=ffa&q=Pip&sort=kills')).map((a) => [a.key, a.label, a.value]), [['who', 'Who', 'Computers only'], ['format', 'Format', 'Free for all'], ['q', 'Search', '“Pip”']]);
 same('the sort is not a filter', H.activeOf(H.stateOf('?sort=long')), []);
+same('the Sort box: the server\'s words in its order, the sorts by plays and by likes at the end', H.SORTS.map((x) => x[0]), ['new', 'old', 'score', 'kills', 'hatched', 'long', 'short', 'plays', 'likes']);
+same('... "Most watched" is the sort by plays and "Most liked" the sort by likes', [H.sortLabel('plays'), H.sortLabel('likes')], ['Most watched', 'Most liked']);
+same('an address with a sort by plays or by likes is read, written and asked of the server in the server\'s words', [H.stateOf('?sort=plays').sort, H.stateOf('?sort=likes').sort, H.urlOf(H.stateOf('?sort=plays')), H.urlOf(H.stateOf('?who=people&sort=likes')), H.planOf(H.stateOf('?sort=plays')).query, H.planOf(H.stateOf('?sort=likes&page=2')).query],
+    ['plays', 'likes', '/matches?sort=plays', '/matches?who=people&sort=likes', 'sort=plays&limit=25&offset=0', 'sort=likes&limit=25&offset=25']);
+check('... and those queries are ones that nginx lets through', ['?sort=plays', '?sort=likes&q=a%20b&page=3'].every((q) => NGINX.test(H.planOf(H.stateOf(q)).query)));
+same('a sort by plays or by likes keeps the length as the big number of a card: no seat\'s count is shown for it', [H.sortKeyOf(rec2v2, 'plays'), H.sortKeyOf(rec2v2, 'likes')], [null, null]);
+same('the line over the list says "most watched" and "most liked"', [H.rangeText(296, 296, 0, 25, 'plays'), H.rangeText(296, 296, 25, 25, 'likes')], ['Showing 1 to 25 of 296 matches, most watched', 'Showing 26 to 50 of 296 matches, most liked']);
 same('what a sort by a count shows on a card', [H.sortKeyOf(rec2v2, 'kills'), H.sortKeyOf(rec2v2, 'hatched'), H.sortKeyOf(rec2v2, 'score'), H.sortKeyOf(rec2v2, 'new'), H.sortKeyOf(rec2v2, 'long')],
     [{ label: 'Most kills', value: 7 }, { label: 'Most hatched', value: 1 }, { label: 'Top score', value: 2040 }, null, null]);
 same('mode 187 has no score: a sort by score shows the kills, whatever the card', [H.sortKeyOf(rec187, 'score'), H.sortKeyOf(rec187, 'kills')], [{ label: 'Most kills', value: 12 }, { label: 'Most kills', value: 12 }]);

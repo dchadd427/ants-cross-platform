@@ -11,6 +11,7 @@
 # The replay port (--replay-port, off unless a command gives it; docker-compose.stack.yml starts the server with 4020) is the read-only list and download of the kept matches: it needs no secret, so
 # do not publish it either: the site's nginx reaches it over the network of the stack, and its rate limits and its five-second cache of the list stand in front of it (docker/nginx.conf).
 # The test-map door (--test-map-port, off unless a command gives it; docker-compose.stack.yml starts the server with 4031) takes the Map Maker's draft maps (POST /test-maps) and nothing else: it is not published either.
+# The counts door (--counts-port, off unless a command gives it; docker-compose.stack.yml starts the server with 4032) counts the plays and the likes of replays (docs/REPLAY_COUNTS.md) and nothing else: it is not published either.
 # =============================================================================
 # The base image is pinned by tag and digest: the digest is what is pulled, the tag is for the reader and for Dependabot (.github/dependabot.yml), which raises the pair to a newer one in a pull request that CI builds.
 FROM debian:13-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS builder
@@ -99,5 +100,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/4001"]
 
 # Every interface inside the container (a published port does not reach the container's loopback address): the published ports decide who can reach it, see the header
-ENTRYPOINT ["/usr/local/bin/ants_server", "--maps", "/maps", "--community-maps", "/community-maps", "--public", "--ws-any-interface", "--ctl-any-interface", "--replay-any-interface", "--submit-any-interface", "--test-map-any-interface", "--results-dir", "/results", "--map-picture-program", "/usr/local/bin/ants_thumb", "--map-picture-archive", "/usr/local/share/ants/ants.chd"]
+ENTRYPOINT ["/usr/local/bin/ants_server", "--maps", "/maps", "--community-maps", "/community-maps", "--public", "--ws-any-interface", "--ctl-any-interface", "--replay-any-interface", "--submit-any-interface", "--test-map-any-interface", "--counts-any-interface", "--results-dir", "/results", "--map-picture-program", "/usr/local/bin/ants_thumb", "--map-picture-archive", "/usr/local/share/ants/ants.chd"]
 CMD ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010"]

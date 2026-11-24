@@ -422,6 +422,24 @@ set_tests_properties(test_bot_rotation PROPERTIES COST 3)
 
 # The admin page's pass (ants_server/admin_pass.hpp) and the door that checks it (ants_server/submissions_http.hpp): the key, the known answers of docs/HUB.md, every reason a pass is refused, a pass used once, the one answer without a good pass,
 # the token of a change, the retired routes, the decisions signed with the username and the reference. Requests made by hand: no network
+# The plays and the likes of replays (ants_server/history_store.hpp, like_pass.hpp, replay_counts_api.hpp; docs/REPLAY_COUNTS.md): the numbers on a match's row and the table of the likes, the list's two sorts, the pass that names
+# a person, and the door's routes with every refusal and limit, in front of real recordings of the shipped TINY map. No network
+add_executable(test_replay_counts
+    test_replay_counts.cpp
+)
+
+target_link_libraries(test_replay_counts PRIVATE
+    ants_server_core
+    ants_test_paths
+)
+
+target_include_directories(test_replay_counts PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_replay_counts COMMAND test_replay_counts)
+set_tests_properties(test_replay_counts PROPERTIES COST 5)
+
 add_executable(test_admin_pass
     test_admin_pass.cpp
 )

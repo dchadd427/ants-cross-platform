@@ -16,6 +16,7 @@ struct Column {
     const char* name;
     char kind;                                         // 'i' integer, 't' text
     bool nullable;
+    bool newer{false};                                 // a column of a later migration: a game database that does not have it yet (it is at an older schema) is copied with a 0 in its place
 };
 
 struct Table {
@@ -39,7 +40,7 @@ const std::vector<Table>& tables() {
         {"history_matches",
          {{"id", 't', false}, {"ended", 'i', false}, {"map", 't', false}, {"game", 't', false}, {"turns", 'i', false}, {"finished", 'i', false}, {"quitter", 'i', true}, {"mode", 't', false},
           {"format", 't', false}, {"result", 't', false}, {"computers_only", 'i', false}, {"best_score", 'i', false}, {"best_kills", 'i', false}, {"best_hatched", 'i', false}, {"search", 't', false},
-          {"rows_json", 't', false}, {"details", 't', true}, {"counted_at", 'i', false}},
+          {"rows_json", 't', false}, {"details", 't', true}, {"counted_at", 'i', false}, {"plays", 'i', false, true}, {"likes", 'i', false, true}},
          false},
         {"history_seats",
          {{"match_id", 't', false}, {"seat", 'i', false}, {"name", 't', false}, {"bot", 't', false}, {"score", 'i', false}, {"killed", 'i', false}, {"lost", 'i', false}, {"hatched", 'i', false},
@@ -75,11 +76,22 @@ int64_t count_rows(db::Database& d, const std::string& table, db::Error& e) {
     return st.column_int64(0);
 }
 
-std::string joined(const Table& t, bool marks) {
+bool has_column(db::Database& d, const char* table, const char* column) {
+    db::Statement st;
+    db::Error e = d.prepare(st, "SELECT count(*) FROM pragma_table_info(?1) WHERE name = ?2");
+    if (e.ok()) e = st.bind_text(1, table);
+    if (e.ok()) e = st.bind_text(2, column);
+    return e.ok() && st.step() == db::Statement::Step::Row && st.column_int64(0) > 0;
+}
+
+// The list of columns: the names (the source's: `from` says which database the names are read from, and a column that it does not have yet is read as 0) or the numbered marks of an INSERT
+std::string joined(const Table& t, bool marks, db::Database* from = nullptr) {
     std::string out;
     for (size_t k = 0; k < t.columns.size(); ++k) {
         if (k > 0) out += ", ";
-        out += marks ? "?" + std::to_string(k + 1) : std::string(t.columns[k].name);
+        if (marks) out += "?" + std::to_string(k + 1);
+        else if (from != nullptr && t.columns[k].newer && !has_column(*from, t.name, t.columns[k].name)) out += "0";
+        else out += t.columns[k].name;
     }
     return out;
 }
@@ -89,7 +101,7 @@ db::Error copy_table(db::Database& from, db::Database& to, const Table& t, size_
     rows = 0;
     refused = 0;
     db::Statement select;
-    db::Error e = from.prepare(select, "SELECT " + joined(t, false) + " FROM " + t.name);
+    db::Error e = from.prepare(select, "SELECT " + joined(t, false, &from) + " FROM " + t.name);
     if (!e.ok()) return e;
     db::Statement insert;
     e = to.prepare(insert, std::string("INSERT INTO ") + t.name + " (" + joined(t, false) + ") VALUES (" + joined(t, true) + ")");

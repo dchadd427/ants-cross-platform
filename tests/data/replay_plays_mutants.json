@@ -1,0 +1,358 @@
+{
+ "note": "Mutants of the play counter (web/replay_plays.js and its call in web/shell.html; docs/REPLAYS.md 'Watching a replay') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_plays_check.js (a fake clock, window, storage and fetch, and the page's own call): a play that is 9 or 11 seconds, a pause, a jump, a hidden tab or a shown tab that counts wrongly, a look after a pause that counts, a gap between two looks that is not capped or takes time away, the page that looks too rarely, the once-a-day rule forgotten, never written, written after the play, a day that is two days or an hour, an old entry or one from the future that stays, a memory that keeps all, 201, 199 or the oldest, a storage that throws when it is asked for, read or written, a page view that cannot remember and counts again and again, a play that fails and is sent again or is not caught, a fetch that throws, a play that carries cookies, is a GET or names no recording, a timer that never stops, a game that throws, any text taken for an id, and the page's call: a live match, a file of your own or an address that is no recording that counts, a jump or anything but playing that counts, the wrong value, the script fetched without the build's version or never started or given the file for the id; every one must be caught (tools/mutate.py tests/data/replay_plays_mutants.json --keep-going --jobs 1).",
+ "baseline": {
+  "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+ },
+ "mutants": [
+  {
+   "id": "a_play_is_nine_seconds",
+   "file": "web/replay_plays.js",
+   "old": "var NEED_MS = 10000;",
+   "new": "var NEED_MS = 9000;",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_play_is_eleven_seconds",
+   "file": "web/replay_plays.js",
+   "old": "var NEED_MS = 10000;",
+   "new": "var NEED_MS = 11000;",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_pause_counts",
+   "file": "web/replay_plays.js",
+   "old": "return !!playing() && !(doc && doc.visibilityState === 'hidden');",
+   "new": "return !(doc && doc.visibilityState === 'hidden');",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_hidden_tab_counts",
+   "file": "web/replay_plays.js",
+   "old": "return !!playing() && !(doc && doc.visibilityState === 'hidden');",
+   "new": "return !!playing();",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_shown_tab_does_not_count",
+   "file": "web/replay_plays.js",
+   "old": "doc.visibilityState === 'hidden'",
+   "new": "doc.visibilityState === 'visible'",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "the_first_look_after_a_pause_counts",
+   "file": "web/replay_plays.js",
+   "old": "if (lastOn && now) total +=",
+   "new": "if (now) total +=",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_gap_is_not_capped",
+   "file": "web/replay_plays.js",
+   "old": "total += Math.min(GAP_MS, Math.max(0, t - last));",
+   "new": "total += Math.max(0, t - last);",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_gap_may_be_a_minute",
+   "file": "web/replay_plays.js",
+   "old": "var GAP_MS = 1000;",
+   "new": "var GAP_MS = 60000;",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_clock_that_goes_back_takes_time_away",
+   "file": "web/replay_plays.js",
+   "old": "Math.min(GAP_MS, Math.max(0, t - last))",
+   "new": "Math.min(GAP_MS, t - last)",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "the_page_looks_every_five_seconds",
+   "file": "web/replay_plays.js",
+   "old": "var STEP_MS = 250;",
+   "new": "var STEP_MS = 5000;",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_day_is_forgotten",
+   "file": "web/replay_plays.js",
+   "old": "if (seen[id] !== undefined) return false;",
+   "new": "",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "the_memory_is_never_written",
+   "file": "web/replay_plays.js",
+   "old": "if (store) store.setItem(KEY, JSON.stringify(out));",
+   "new": "if (store) JSON.stringify(out);",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "the_memory_is_written_after_the_play",
+   "file": "web/replay_plays.js",
+   "old": "if (first(win, id)) send(win, id);",
+   "new": "if (recall(storeOf(win), clock(win))[id] === undefined) { send(win, id); first(win, id); }",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_day_old_entry_stays",
+   "file": "web/replay_plays.js",
+   "old": "v <= t && t - v < DAY_MS",
+   "new": "v <= t",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "an_entry_from_the_future_stays",
+   "file": "web/replay_plays.js",
+   "old": "v <= t && t - v < DAY_MS",
+   "new": "t - v < DAY_MS",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_day_is_two_days",
+   "file": "web/replay_plays.js",
+   "old": "var DAY_MS = 24 * 60 * 60 * 1000;",
+   "new": "var DAY_MS = 48 * 60 * 60 * 1000;",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_day_is_an_hour",
+   "file": "web/replay_plays.js",
+   "old": "var DAY_MS = 24 * 60 * 60 * 1000;",
+   "new": "var DAY_MS = 60 * 60 * 1000;",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "the_memory_keeps_every_recording",
+   "file": "web/replay_plays.js",
+   "old": ".slice(0, KEEP).forEach",
+   "new": ".forEach",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "the_memory_keeps_201",
+   "file": "web/replay_plays.js",
+   "old": ".slice(0, KEEP).forEach",
+   "new": ".slice(0, KEEP + 1).forEach",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "the_memory_keeps_199",
+   "file": "web/replay_plays.js",
+   "old": ".slice(0, KEEP).forEach",
+   "new": ".slice(0, KEEP - 1).forEach",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "the_memory_keeps_the_oldest",
+   "file": "web/replay_plays.js",
+   "old": "return seen[b] - seen[a];",
+   "new": "return seen[a] - seen[b];",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_storage_that_throws_throws",
+   "file": "web/replay_plays.js",
+   "old": "function storeOf(win) { try { return win.localStorage || null; } catch (e) { return null; } }",
+   "new": "function storeOf(win) { return win.localStorage || null; }",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_storage_that_cannot_be_read_throws",
+   "file": "web/replay_plays.js",
+   "old": "try { var raw = store ? store.getItem(KEY) : null; data = raw ? JSON.parse(raw) : null; } catch (e) { data = null; }",
+   "new": "var raw = store ? store.getItem(KEY) : null; data = raw ? JSON.parse(raw) : null;",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_storage_that_is_full_throws",
+   "file": "web/replay_plays.js",
+   "old": "try { if (store) store.setItem(KEY, JSON.stringify(out)); } catch (e) { /* nothing is kept: this page view counts once all the same */ }",
+   "new": "if (store) store.setItem(KEY, JSON.stringify(out));",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_page_view_that_cannot_remember_counts_again_and_again",
+   "file": "web/replay_plays.js",
+   "old": "if (total >= NEED_MS) { over = true; if",
+   "new": "if (total >= NEED_MS) { if",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_play_that_failed_is_sent_again",
+   "file": "web/replay_plays.js",
+   "old": "}, function () { /* a play that did not arrive is not counted: nothing is sent again */ });",
+   "new": "}, function () { win.fetch('/counts/play/' + id, { method: 'POST', credentials: 'omit' }); });",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_play_that_failed_is_not_caught",
+   "file": "web/replay_plays.js",
+   "old": "}, function () { /* a play that did not arrive is not counted: nothing is sent again */ });",
+   "new": "}, undefined);",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_fetch_that_throws_throws",
+   "file": "web/replay_plays.js",
+   "old": "} catch (e) { /* the same */ }",
+   "new": "} catch (e) { throw e; }",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "the_play_carries_the_cookies",
+   "file": "web/replay_plays.js",
+   "old": "credentials: 'omit'",
+   "new": "credentials: 'include'",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "the_play_is_a_get",
+   "file": "web/replay_plays.js",
+   "old": "method: 'POST'",
+   "new": "method: 'GET'",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "the_play_names_no_recording",
+   "file": "web/replay_plays.js",
+   "old": "win.fetch('/counts/play/' + id,",
+   "new": "win.fetch('/counts/play/',",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "the_timer_never_stops",
+   "file": "web/replay_plays.js",
+   "old": "if (c.done()) win.clearInterval(timer);",
+   "new": "",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_game_that_throws_throws",
+   "file": "web/replay_plays.js",
+   "old": "try { return !!playing() && !(doc && doc.visibilityState === 'hidden'); } catch (e) { return false; }",
+   "new": "return !!playing() && !(doc && doc.visibilityState === 'hidden');",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "any_text_is_an_id",
+   "file": "web/replay_plays.js",
+   "old": "if (!win || typeof win.setInterval !== 'function' || typeof id !== 'string' || !ID.test(id)) return null;",
+   "new": "if (!win || typeof win.setInterval !== 'function') return null;",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_live_match_counts",
+   "file": "web/shell.html",
+   "old": "if (!ANTS_LIVE_MODE && !ANTS_OWN_MODE && window.AntsHistory.idOfFile(FILE)) {",
+   "new": "if (!ANTS_OWN_MODE && window.AntsHistory.idOfFile(FILE)) {",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_file_of_your_own_counts",
+   "file": "web/shell.html",
+   "old": "if (!ANTS_LIVE_MODE && !ANTS_OWN_MODE && window.AntsHistory.idOfFile(FILE)) {",
+   "new": "if (!ANTS_LIVE_MODE && window.AntsHistory.idOfFile(FILE)) {",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "any_address_counts",
+   "file": "web/shell.html",
+   "old": "if (!ANTS_LIVE_MODE && !ANTS_OWN_MODE && window.AntsHistory.idOfFile(FILE)) {",
+   "new": "if (!ANTS_LIVE_MODE && !ANTS_OWN_MODE) {",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_jump_counts",
+   "file": "web/shell.html",
+   "old": "return get(VALUE.state) === STATE.playing;",
+   "new": "return get(VALUE.state) === STATE.playing || get(VALUE.state) === STATE.jumping;",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_game_that_is_not_failed_counts",
+   "file": "web/shell.html",
+   "old": "return get(VALUE.state) === STATE.playing;",
+   "new": "return get(VALUE.state) !== STATE.failed;",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "the_wrong_value_is_read",
+   "file": "web/shell.html",
+   "old": "return get(VALUE.state) === STATE.playing;",
+   "new": "return get(VALUE.turn) === STATE.playing;",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "the_counter_is_fetched_without_the_builds_version",
+   "file": "web/shell.html",
+   "old": "plays.src = 'replay_plays.js?v=' + ANTS_BUILD_VER;",
+   "new": "plays.src = 'replay_plays.js';",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "the_counter_is_not_started_when_it_is_loaded",
+   "file": "web/shell.html",
+   "old": "plays.onload = function",
+   "new": "plays.onerror = function",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "the_counter_is_given_the_file_not_the_id",
+   "file": "web/shell.html",
+   "old": "window.AntsPlays.start(window, window.AntsHistory.idOfFile(FILE),",
+   "new": "window.AntsPlays.start(window, FILE,",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "the_counter_is_never_fetched",
+   "file": "web/shell.html",
+   "old": "document.head.appendChild(plays);",
+   "new": "void plays;",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_429_is_not_tried_again",
+   "file": "web/replay_plays.js",
+   "old": "answer.status === 429",
+   "new": "answer.status === 0",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_429_is_tried_for_ever",
+   "file": "web/replay_plays.js",
+   "old": "if (!again && answer &&",
+   "new": "if (answer &&",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_404_is_tried_again",
+   "file": "web/replay_plays.js",
+   "old": "answer.status === 429",
+   "new": "answer.status >= 400",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_retry_has_no_wait",
+   "file": "web/replay_plays.js",
+   "old": "var RETRY_MS = 60000;",
+   "new": "var RETRY_MS = 0;",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_retry_has_no_chance_in_it",
+   "file": "web/replay_plays.js",
+   "old": "RETRY_MS + Math.floor(Math.random() * RETRY_MORE_MS)",
+   "new": "RETRY_MS",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  },
+  {
+   "id": "a_retry_waits_for_an_hour",
+   "file": "web/replay_plays.js",
+   "old": "var RETRY_MS = 60000;",
+   "new": "var RETRY_MS = 3600000;",
+   "test": "node tests/scripts/web_plays_check.js web/replay_plays.js web/shell.html web/history_page.js include/ants_app/replay_view.hpp"
+  }
+ ]
+}

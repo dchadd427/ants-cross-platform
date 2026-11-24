@@ -10,7 +10,7 @@ import signal
 import sys
 import time
 
-from . import admindoor, aidoor, chat as chatmod, config as configmod, gamedoor, http, images as imagesmod, imgdoor, limits as limitmod, roles as rolesmod, session as sessionmod, store as storemod, text as textrules, ws
+from . import admindoor, aidoor, chat as chatmod, config as configmod, gamedoor, http, images as imagesmod, imgdoor, likedoor, limits as limitmod, roles as rolesmod, session as sessionmod, store as storemod, text as textrules, ws
 from .log import Log
 
 WS_PATH = "/hub/ws"
@@ -131,6 +131,7 @@ class Hub:
         self.pruning = False                        # True while the oldest lines are being deleted to make room (from prune_from_percent of the limit down to prune_to_percent)
         self.routes = getattr(sessions, "routes", None) or {}
         self.admin = admindoor.Door(self)                # (the admin page's door: hub/admindoor.py)
+        self.likes = likedoor.Door(self)                 # (the likes' gate, and Forget me's call to the counts door: hub/likedoor.py)
         self.ai = aidoor.Door(self)                      # (the doors of the AI keys, and the relay to the armed tab: hub/aidoor.py, hub/airelay.py, docs/MAP_AI.md)
         self.chat.commands.is_owner = self.admin.is_owner
         self.converter = imgdoor.Converter(cfg.image_converter_url, self.limits)       # (the images: hub/images.py says who may post and keeps the files, hub/imgdoor.py is the upload and the call to the converter)
@@ -166,6 +167,7 @@ class Hub:
         for task in list(self.chat.busy.values()):
             task.cancel()
         self.chat.commands.stop()
+        self.likes.stop()
         self.ai.relay.stop()
         if self.server:
             self.server.close()
@@ -205,6 +207,8 @@ class Hub:
                 return await self.ai_page(request, reader, writer, release)
             if request.split()[0].startswith(admindoor.ROUTE_PREFIX):             # (the place of the connection is kept until it is answered: a body that is promised and not sent holds a place, not a free one)
                 return await self.admin_page(request, reader, writer)
+            if request.split()[0].startswith(likedoor.ROUTE_PREFIX):              # (the same: the place of the connection is kept until it is answered)
+                return await self.likes_page(request, writer)
             if request.split()[0] == imgdoor.UP_PATH:
                 return await self.image_page(request, reader, writer)
             route = self.routes.get(request.split()[0])
@@ -256,6 +260,10 @@ class Hub:
     async def admin_page(self, request, reader, writer):
         """One request of the admin page's door: the gate, or the page's API (its POST has a body, which hub/admindoor.py reads); the answer ends the connection."""
         writer.write(await self.admin.serve(request, reader, self.address_of(request.headers, writer)))
+
+    async def likes_page(self, request, writer):
+        """One request of the likes' gate (hub/likedoor.py): it takes no body (one that is sent is refused there), and the answer ends the connection."""
+        writer.write(await self.likes.serve(request, self.address_of(request.headers, writer)))
 
     async def ai_page(self, request, reader, writer, release):
         """One request of the AI keys' doors (hub/aidoor.py): the key pages of the Map Maker and the doors that an AI uses with a key; the body of a POST is read there, the answer ends the connection."""
@@ -411,6 +419,10 @@ class Hub:
             self.ai.relay.on_tick(now)                   # (the armed tabs: pings, the silent, an hour with no call, a login that ran out)
         except Exception as e:
             self.log.event("error", kind=type(e).__name__, where="ai")
+        try:                                             # (the likes of replays that the counts door could not take back at Forget me: hub/likedoor.py)
+            self.likes.on_tick(now)
+        except Exception as e:
+            self.log.event("error", kind=type(e).__name__, where="likes")
         pictures = getattr(self.sessions, "pictures", None)
         if pictures is not None:
             try:                                         # (the pictures are read again once a tick when something changed, here or in the command line: the pages of an account whose picture changed are told, and the list's rows read this)
@@ -449,6 +461,7 @@ class Hub:
             self.chat.follows.forget_idle(now)
             self.chat.messages.forget_idle(now)
             self.admin.forget_idle(now)
+            self.likes.forget_idle(now)
             self.ai.forget_idle(now)
             if hasattr(self.sessions, "forget_idle"):
                 self.sessions.forget_idle(now, wall)
@@ -525,6 +538,8 @@ def main(env=None):
     admindoor.warn(cfg, log)
     if cfg.game_admin_url and not cfg.admin_gate_on:
         log.event("warning", what="bots_command_off_no_good_admin_key")
+    if cfg.counts_url and not cfg.admin_gate_on:
+        log.event("warning", what="forget_me_cannot_reach_the_likes_no_good_admin_key")
     if cfg.roles_partial:
         log.event("warning", what="discord_roles_off_needs_token_server_and_a_role")
     if (os.environ if env is None else env).get("ANTS_HUB_MODS", "").strip():
