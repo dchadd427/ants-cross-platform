@@ -67,8 +67,8 @@
   {
    "id": "mvp_counts_banked_points_below_zero",
    "file": "src/ants_app/match_report.cpp",
-   "old": "things[3][s] = std::max<int64_t>(0, st.banked[s]);",
-   "new": "things[3][s] = st.banked[s];",
+   "old": "things[2][s] = std::max<int64_t>(0, st.banked[s]);",
+   "new": "things[2][s] = st.banked[s];",
    "expect": "MR1.2",
    "build": "test_match_report",
    "test": "timeout 600 ./build/tests/test_app/test_match_report"
@@ -319,8 +319,8 @@
   {
    "id": "of_two_equal_windows_the_later",
    "file": "src/ants_app/match_report.cpp",
-   "old": "        if (score > best_score) {",
-   "new": "        if (score >= best_score) {",
+   "old": "windows.emplace_back(score, b);",
+   "new": "windows.insert(windows.begin(), std::make_pair(score, b));",
    "expect": "MR1.6",
    "build": "test_match_report",
    "test": "timeout 600 ./build/tests/test_app/test_match_report"
@@ -625,8 +625,8 @@
   {
    "id": "mvp_counts_carried_food_not_banked_points",
    "file": "src/ants_app/match_report.cpp",
-   "old": "things[3][s] = std::max<int64_t>(0, st.banked[s]);",
-   "new": "things[3][s] = std::max<int64_t>(0, st.food_points[s]);",
+   "old": "things[2][s] = std::max<int64_t>(0, st.banked[s]);",
+   "new": "things[2][s] = std::max<int64_t>(0, st.food_points[s]);",
    "expect": "MR1.1",
    "build": "test_match_report",
    "test": "timeout 600 ./build/tests/test_app/test_match_report"
@@ -637,6 +637,33 @@
    "old": "    if (!impl_->world_state_dirty_) return impl_->world_state_cache_.ants;\n    impl_->snapshot_ants(impl_->ant_snapshots_.ants);",
    "new": "    if (true) return impl_->world_state_cache_.ants;\n    impl_->snapshot_ants(impl_->ant_snapshots_.ants);",
    "expect": "MR3.4",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "mvp_counts_loot_again",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "std::array<std::array<int64_t, kSeats>, 3> things{};",
+   "new": "std::array<std::array<int64_t, kSeats>, 4> things{};\n    for (const MatchStats::Raid& raid : st.raids) {\n        if (raid.thief < kSeats) things[3][raid.thief] += std::max<int32_t>(0, raid.points);\n    }",
+   "expect": "MR1.1",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_play_has_no_next_window",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "        if (play.present) return play;\n    }",
+   "new": "        return play;\n    }",
+   "expect": "MR1.9",
+   "build": "test_match_report",
+   "test": "timeout 600 ./build/tests/test_app/test_match_report"
+  },
+  {
+   "id": "the_play_is_the_least_busy_window",
+   "file": "src/ants_app/match_report.cpp",
+   "old": "return x.first > y.first;",
+   "new": "return x.first < y.first;",
+   "expect": "MR1.9",
    "build": "test_match_report",
    "test": "timeout 600 ./build/tests/test_app/test_match_report"
   },

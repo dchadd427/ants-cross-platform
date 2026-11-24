@@ -622,7 +622,7 @@ int main(int argc, char* argv[]) {
 
     // ---- MR1: what the counts say -----------------------------------------------------------------------------------------------------------------------
 
-    TEST_CASE("MR1.1 The MVP share is the average of the seat's shares of the four things (damage done, kills, loot, points banked) in thousandths, each share rounded down, a thing that nobody did left out of the average") {
+    TEST_CASE("MR1.1 The MVP share is the average of the seat's shares of the three things (damage done, kills, points banked) in thousandths, each share rounded down, a thing that nobody did left out of the average") {
         MatchStats st = empty_stats();
         ASSERT_EQ(mvp_share(st, 0), 0u);                                            // (nothing was done at all)
         st.damage_dealt = {300, 100, 0, 0};                                        // 750 and 250 thousandths
@@ -631,14 +631,14 @@ int main(int argc, char* argv[]) {
         st.kills.push_back(kill_of(210, 2, 0, 10, 10, true));                      // (a death by drowning is nobody's kill)
         st.kills.push_back(kill_of(220, kNone, 0));                                // (and nor is one that no team did)
         st.banked = {100, 300, 0, 0};                                              // 250 and 750
-        ASSERT_EQ(mvp_share(st, 0), (750u + 750u + 250u) / 3u);                    // (no raids: the fourth thing is left out, not counted as 0: 583, not 437)
+        ASSERT_EQ(mvp_share(st, 0), (750u + 750u + 250u) / 3u);                    // (a thing that nobody did is left out, not counted as 0: 583, not 437 of four things)
         ASSERT_EQ(mvp_share(st, 1), (250u + 250u + 750u) / 3u);                    // (416: the sum is divided, never each share rounded up)
         ASSERT_EQ(mvp_share(st, 2), 0u);
         ASSERT_EQ(mvp_share(st, 3), 0u);
         st.raids.push_back(raid_of(300, 0, 1, 30));
         st.raids.push_back(raid_of(310, 1, 0, 10));                                // loot 30 of 40 and 10 of 40
-        ASSERT_EQ(mvp_share(st, 0), (750u + 750u + 750u + 250u) / 4u);             // (now four things: 625)
-        ASSERT_EQ(mvp_share(st, 1), (250u + 250u + 250u + 750u) / 4u);
+        ASSERT_EQ(mvp_share(st, 0), (750u + 750u + 250u) / 3u);                    // (loot is no thing of its own: the points banked have it already, and it would count twice; the shares are what they were)
+        ASSERT_EQ(mvp_share(st, 1), (250u + 250u + 750u) / 3u);
         ASSERT_EQ(mvp_share(st, 9), 0u);                                           // (no such seat)
     } TEST_END();
 
@@ -661,7 +661,7 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(mvp_share(kills, 1), 666u);
     } TEST_END();
 
-    TEST_CASE("MR1.3 The MVP is the seat of the winning side with the highest share, the lower seat on a tie, none when the winner did none of the four things; an alliance wins as two seats; the local seat breaks a tie of scores") {
+    TEST_CASE("MR1.3 The MVP is the seat of the winning side with the highest share, the lower seat on a tie, none when the winner did none of the three things; an alliance wins as two seats; the local seat breaks a tie of scores") {
         MatchStats st = empty_stats();
         st.damage_dealt = {100, 900, 300, 0};
         st.banked = {50, 0, 150, 0};
@@ -993,6 +993,30 @@ int main(int argc, char* argv[]) {
         add_bomb(nothing_counts, 1010, 1, 60, 61);
         add_bomb(nothing_counts, 1020, 1, 60, 62);
         ASSERT_FALSE(report_of(nothing_counts, seat_wins(1)).play.present);
+        // when the busiest window has no play to tell, the next busiest has one (still at least 28): the card of a match in which anything real happened
+        MatchStats later = empty_stats();                                          // (turns 1000 to 1100: five bombs (50) near nobody; turns 3000 to 3100: seat 2's two kills (28))
+        for (uint32_t i = 0; i < 5; ++i) add_bomb(later, 1000 + 10 * i, 1, 60, 60 + static_cast<int32_t>(i));
+        add_kill(later, kill_of(3010, 2, 0, 5, 5));
+        add_kill(later, kill_of(3020, 2, 0, 6, 6));
+        r = report_of(later, seat_wins(1));
+        ASSERT_TRUE(r.play.present && r.play.seat == 2 && r.play.kind == MatchReport::PlayKind::Fight && r.play.count == 2 && r.play.turn == 3010);
+        MatchStats earlier_wins = empty_stats();                                   // the busiest window that has a play wins, not the earliest: seat 2's two kills at 3000 (28) against seat 3's three kills at 5000 (42)
+        add_kill(earlier_wins, kill_of(3010, 2, 0, 5, 5));
+        add_kill(earlier_wins, kill_of(3020, 2, 0, 6, 6));
+        for (uint32_t i = 0; i < 3; ++i) add_kill(earlier_wins, kill_of(5010 + 10 * i, 3, 0, 7, 7));
+        r = report_of(earlier_wins, seat_wins(1));
+        ASSERT_TRUE(r.play.present && r.play.seat == 3 && r.play.count == 3);
+        MatchStats below_the_floor = empty_stats();                                // a window under 28 is no window, whatever it holds (one kill and a bomb that took out nobody: 24)
+        add_kill(below_the_floor, kill_of(3010, 2, 0, 5, 5));
+        add_bomb(below_the_floor, 1000, 1, 60, 60);
+        ASSERT_FALSE(report_of(below_the_floor, seat_wins(1)).play.present);
+        MatchStats equal_windows = empty_stats();                                  // two windows of the same activity that both have a play: the earlier
+        add_kill(equal_windows, kill_of(1010, 2, 0, 5, 5));
+        add_kill(equal_windows, kill_of(1020, 2, 0, 6, 6));
+        add_kill(equal_windows, kill_of(4010, 3, 0, 5, 5));
+        add_kill(equal_windows, kill_of(4020, 3, 0, 6, 6));
+        r = report_of(equal_windows, seat_wins(1));
+        ASSERT_TRUE(r.play.present && r.play.seat == 2 && r.play.turn == 1010);
     } TEST_END();
 
     TEST_CASE("MR1.10 The totals come from the counts, by seat; a count that is not ok, or whose bombs and fires cannot be placed, gives a report that is not ok and holds nothing but its length") {
@@ -1090,8 +1114,8 @@ int main(int argc, char* argv[]) {
         }
         ASSERT_TRUE(all.kills > 0 && all.raids > 0 && all.bombs > 0 && all.fires > 0 && all.hits > 0 && all.credited_hits > 0 && all.damage > 0 && all.food_trips > 0);
         ASSERT_EQ(all.fires_with_tile, all.fires);                                 // (a fire wall was there for each fire: none of these matches lit one at the entrance of a hill)
-        ASSERT_TRUE(m.treasure.live_report.play.present);                          // (a real match has a play: but only a play that counts something: the busiest window of another has bombs and deaths that no team did, and no card)
-        for (const Played* p : {&m.hellraiser, &m.treasure, &m.popcorn}) ASSERT_TRUE(!p->live_report.play.present || p->live_report.play.count > 0);
+        ASSERT_TRUE(m.hellraiser.live_report.play.present && m.treasure.live_report.play.present);         // (a real match has a play: the busiest window of hellraiser has bombs and deaths that no team did, the next busiest one has a play to tell)
+        for (const Played* p : {&m.hellraiser, &m.treasure, &m.popcorn}) ASSERT_TRUE(!p->live_report.play.present || p->live_report.play.count > 0);          // (and a play always counts something)
         std::cout << "(" << all.kills << " kills, " << all.raids << " raids, " << all.bombs << " bombs, " << all.fires << " fires, " << all.hits << " hits, " << all.credited_hits << " of them credited) ";
     } TEST_END();
 

@@ -41,7 +41,7 @@ struct MatchReport {
         int64_t value{0};
         uint32_t turn{0};
     };
-    Honor mvp;                                                             // of the winning side: the highest mixed share (mvp_share), `value` that share in thousandths (the card says "62% of the play"); none when no seat of the side did any of the four things
+    Honor mvp;                                                             // of the winning side: the highest mixed share (mvp_share), `value` that share in thousandths (the card says "62% of the play"); none when no seat of the side did any of the three things
     Honor first_blood;                                                     // the first kill by a seat that is not its own victim's, none that drowned: the killer, `turn` when
     Honor biggest_raid;                                                    // the raid with the most loot (a raid that took nothing is none, the earlier of two equal ones wins); `value` the points. Never in 187
     Honor last_stand;                                                      // 187 only: the seat that was out of ants last of those that did not win; `turn` when it ran out. Never in the original's game
@@ -61,7 +61,7 @@ struct MatchReport {
     Play play;
 };
 
-/// The mixed share that decides the MVP: of the four things that a side does (damage done, kills, loot, points banked: what the hill gained, a thief's loot included) the share of the seat in each total of the match, the shares of the things that anyone
+/// The mixed share that decides the MVP: of the three things that a side does (damage done, kills, points banked: what the hill gained, a thief's loot included, so loot is not counted twice) the share of the seat in each total of the match, the shares of the things that anyone
 /// did averaged with equal weight (a thing that nobody did is left out), in thousandths. Public so that a test can say it.
 uint32_t mvp_share(const replay::MatchStats& stats, uint8_t seat);
 

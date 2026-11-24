@@ -10,15 +10,17 @@
 // THE DEFINITIONS (the owner's; docs/REPLAYS.md "The match pages" has them too)
 //   Winning side   the seats of the first row of result.rows(local_seat): one seat, or two for an alliance. The honors and the play are about every seat of the match, except the MVP (a seat of the winning side) and the Last stand (a
 //                  seat that is not on it).
-//   MVP            the seat of the winning side with the highest mvp_share (ties: the lower seat); no MVP when that share is 0. `value` is that share (thousandths). The fourth thing is the points that the seat's hill gained (MatchStats::banked, a thief's loot included).
+//   MVP            the seat of the winning side with the highest mvp_share (ties: the lower seat); no MVP when that share is 0. `value` is that share (thousandths). The three things are the damage done, the kills and the points that the seat's hill gained (MatchStats::banked, a thief's loot
+//                  included, so loot is not a thing of its own).
 //   First blood    the first kill, by turn and then by the order they were counted, whose killer is a real team that is not its victim's own. A death by drowning has no killer and is nobody's. None when there is none.
 //   Biggest raid   the raid that took the most points (more than 0; ties: the earlier). Not in 187, which has the Last stand instead: of the seats that are not on the winning side and ran out of ants for good during the match
 //                  (no ant, no egg, no hatch: stats.out_turn), the one that did LAST; none when none did. (A seat that was wiped out and came back from an egg did not run out.)
-//   Play of the game  the busiest 10 seconds: two neighboring buckets of 100 turns (b and b + 1, for every b; a bucket that the match did not reach is empty) with the most activity, the activity being the sum of count times weight
-//                  (death 14, bomb 10, theft 6, fire 5, hit 2: the activity curve's). The earlier window wins a tie; under 28 (two deaths) there is no play. The events of the window belong to seats: a death to the team of the last damage
+//   Play of the game  the busiest 10 seconds that have a play to tell: two neighboring buckets of 100 turns (b and b + 1, for every b; a bucket that the match did not reach is empty) with the most activity, the activity being
+//                  the sum of count times weight (death 14, bomb 10, theft 6, fire 5, hit 2: the activity curve's). The earlier window wins a tie; a window under 28 (two deaths) is no window; when the busiest has no play to tell
+//                  (see below), the next busiest is tried, and so on. The events of the window belong to seats: a death to the team of the last damage
 //                  (none when it drowned, or the team was its own), a bomb to its planter, a theft to its thief, a fire to the seat that lit it, a hit to the team of the damage (never to the seat that was hurt). The seat with the most weighted
 //                  activity in the window gets the play (ties: the lower seat); its biggest KIND of event, by weighted activity (ties: the order death, bomb, theft, fire, hit), says the kind and the count (a kind that counts
-//                  nothing, a bomb that took out nobody or a fight without a kill of its own, is no play: the seat's next kind, then the next seat, else no play at all, so the sentence never says "0"):
+//                  nothing, a bomb that took out nobody or a fight without a kill of its own, is no play: the seat's next kind, then the next seat, else no play in this window, so the sentence never says "0"):
 //                    bomb -> Bomb   the ants of other seats that died within 20 turns after, and within 4 tiles of, one of its bombs that went off in the window; the busiest of those bombs is the moment (the earlier of two equal ones)
 //                    theft -> Raid  the points that its raids of the window took; the raid with the most points is the moment
 //                    death, hit -> Fight   the kills that it made in the window; the middle one is the moment: a window of blows alone, or of the kills of others, has no place to show and is no play for the seat
@@ -58,24 +60,9 @@ bool in_window(uint32_t turn, uint32_t lo, uint32_t hi) { return turn >= lo && t
 
 // ---- the Play of the game ----------------------------------------------------------------------------------------------------------------------------
 
-MatchReport::Play make_play(const MatchStats& st) {
+// The play of one window (the bucket `best_bucket` and the next); present is false when nobody did anything there that counts something
+MatchReport::Play play_in_window(const MatchStats& st, size_t best_bucket) {
     MatchReport::Play none;
-
-    // 1. the busiest window
-    size_t buckets = st.hit_credit.size();
-    for (const std::vector<uint32_t>& series : st.action) buckets = std::max(buckets, series.size());
-    const auto count_at = [&](size_t kind, size_t bucket) -> uint32_t { return bucket < st.action[kind].size() ? st.action[kind][bucket] : 0u; };
-    uint32_t best_score = 0;
-    size_t best_bucket = 0;
-    for (size_t b = 0; b < buckets; ++b) {
-        uint32_t score = 0;
-        for (size_t k = 0; k < kKinds; ++k) score += kWeight[k] * (count_at(k, b) + count_at(k, b + 1));
-        if (score > best_score) {                                           // (strictly: the earlier of two equal windows stays)
-            best_score = score;
-            best_bucket = b;
-        }
-    }
-    if (best_score < kMinPlayScore) return none;
     const uint32_t lo = static_cast<uint32_t>(best_bucket) * MatchStats::kSampleTurns;
     const uint32_t hi = lo + 2 * MatchStats::kSampleTurns;
 
@@ -213,21 +200,38 @@ MatchReport::Play make_play(const MatchStats& st) {
     return none;
 }
 
+// The Play of the game: of the windows that have at least kMinPlayScore of activity, the busiest (the earlier on a tie) that has a play to tell; when its seats did nothing that counts (a bomb that took out
+// nobody, hits and no kill), the next busiest, and so on, so that a match in which anything real happened has a card
+MatchReport::Play make_play(const MatchStats& st) {
+    size_t buckets = st.hit_credit.size();
+    for (const std::vector<uint32_t>& series : st.action) buckets = std::max(buckets, series.size());
+    const auto count_at = [&](size_t kind, size_t bucket) -> uint32_t { return bucket < st.action[kind].size() ? st.action[kind][bucket] : 0u; };
+    std::vector<std::pair<uint32_t, size_t>> windows;                       // (the activity, the bucket b: the window is b and b + 1)
+    for (size_t b = 0; b < buckets; ++b) {
+        uint32_t score = 0;
+        for (size_t k = 0; k < kKinds; ++k) score += kWeight[k] * (count_at(k, b) + count_at(k, b + 1));
+        if (score >= kMinPlayScore) windows.emplace_back(score, b);
+    }
+    std::stable_sort(windows.begin(), windows.end(), [](const std::pair<uint32_t, size_t>& x, const std::pair<uint32_t, size_t>& y) { return x.first > y.first; });       // (stable: of two equal windows the earlier stays first)
+    for (const auto& window : windows) {
+        const MatchReport::Play play = play_in_window(st, window.second);
+        if (play.present) return play;
+    }
+    return MatchReport::Play{};
+}
+
 }  // namespace
 
 uint32_t mvp_share(const replay::MatchStats& st, uint8_t seat) {
     if (!plays(st.roster, seat)) return 0;
-    // the four things, for every seat: damage done, kills (a drowned ant is nobody's), loot that raids took, points banked (the hill's gain, a thief's loot included; never below 0)
-    std::array<std::array<int64_t, kSeats>, 4> things{};
+    // the three things, for every seat: damage done, kills (a drowned ant is nobody's), points banked (the hill's gain, a thief's loot included: loot is not a thing of its own, it would count twice; never below 0)
+    std::array<std::array<int64_t, kSeats>, 3> things{};
     for (size_t s = 0; s < kSeats; ++s) {
         things[0][s] = st.damage_dealt[s];
-        things[3][s] = std::max<int64_t>(0, st.banked[s]);
+        things[2][s] = std::max<int64_t>(0, st.banked[s]);
     }
     for (const MatchStats::Kill& kill : st.kills) {
         if (is_kill_of_a_seat(kill)) ++things[1][kill.killer];
-    }
-    for (const MatchStats::Raid& raid : st.raids) {
-        if (raid.thief < kSeats) things[2][raid.thief] += std::max<int32_t>(0, raid.points);
     }
     int64_t sum = 0;
     int64_t done = 0;                                                        // the things that somebody did
