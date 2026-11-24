@@ -244,7 +244,7 @@ Every level also puts out enemy fire walls with a Fire Ant and defuses enemy bom
 
 Everything else is the same at every level: a hit carrier is sent home at once, an enemy that stands on a power-up is never attacked, a power-up tile is never clicked by accident, a special order never names a tile with an ant on it, the last ants stay out of every fight, an invitation to team up is answered by the accept rule ("Alliances"). What the tournaments measured as a loss is OFF in every shipped plan and stays in the code behind a flag ("Aggression").
 
-### Task ranks
+## Task ranks
 
 Every task of the standard bot claims its ants in one ledger (`AntLedger`: an ant belongs to at most one task), and a task may TAKE an ant from a task of a lower rank (`standard_bot.cpp`; `AI21.1` pins the table):
 
@@ -260,7 +260,7 @@ Every task of the standard bot claims its ants in one ledger (`AntLedger`: an an
 
 The two batches were joined with this order on purpose. The island tasks sit with the power-up task at 3: a pick-up on its way and a flight do not break each other off, both take free ants and the economy's, and neither takes an ant from a fight, a wall, a bomb, a strike or a squad. Above 3 they would take ants from the defence; below 3 the fights could draw the crew away, and the crew is the only use of the hill's ants on ISLANDS for the first minutes (a team without a Swimmer scores nothing there): `AI21.2` hits the crew with an enemy Combat Ant and finds no ant of it in a fight. The strike and the squad recruit Combat Ants, the walls take Fire Ants and the bombs Bombers, so no task of rank 4 takes a plain ant of the crew; the Bomber of a leg is the one ant that the bomb task could take, to defuse an enemy bomb at the hill, and none lies there while the expedition flies. The ferry sits with the guard at 2 because its Swimmers are not plain ants: no fight, hunt, pick-up or raid can use one (their filters take the level's plain ant and the Combat Ant), the economy never claims one, and the island task (3) takes one as a builder (a lab; the level plans have no builder). No task orders a special order onto a tile that an ant stands on (`AI20.8`, `AI15.16`: the controller refuses it).
 
-### Strategy
+## Strategy
 
 The reasons for the tactics are the way strong players play the original; each point is built, measured, or left out with the numbers that say so (no player is named).
 
@@ -284,7 +284,7 @@ The reasons for the tactics are the way strong players play the original; each p
 
 10. **Three fire walls in front of the thief hole stop a thief.** Built at every level ("Defence").
 
-### Power-ups
+## Power-ups
 
 Power-ups are tile ids 62 to 66 on the map; an ant that walks onto one takes it, keeps the type for life and plays 17 ticks of the pick-up clip in which it takes no order. The tactics rest on these facts, measured in the engine:
 
@@ -300,7 +300,7 @@ Power-ups are tile ids 62 to 66 on the map; an ant that walks onto one takes it,
 
 - **Stealing is Hard's.** A trip may go to another side's power-up (never the ally's, but on a gate map the ally's too when no ant of the ally can walk to it) when no ant of its owner is quicker there; Medium and Easy take their own side's only (a measured loss otherwise: Medium stole its neighbours' Thief and scored less). The trip knows only the power-ups of the start, so the drop of a flower is nobody's in it; what a bot wants of a drop is in "The flowers".
 
-### The flowers
+## The flowers
 
 How a flower dropper works, and the intervals and the odds of every map, are described in [GAMEPLAY.md](GAMEPLAY.md#flower-droppers); where the flowers are, and how many drops a match sees:
 
@@ -333,7 +333,7 @@ TINY and TREASURE have no flower that drops, and no hill walks to the flowers of
 
 - **Fair.** A bot uses what the screen shows: the flower, the droplet with its picture and its age, what has landed and when it was seen. It sends ordinary moves, pick-ups and stops, never reads the dropper's interval, its clock or the kind before its droplet falls, and keeps no table of the maps. What it takes from the analysis is where the plants stand and how far each hill walks to the tile in front of them, as for a power-up of the start (a person judges the distance by eye).
 
-### Dropped power-ups
+## Dropped power-ups
 
 A typed ant that dies leaves its power-up on a free neighbour tile (`docs/GAME_REVERSE_ENGINEERING.md`). Before this section a bot took such a drop only by the rules of the start: a kind that the plan wants for its own side (`secure_kinds`: Fire, Bomber, Thief) when the drop lay nearer to its hill than to any other, a Fire for the walls, or a kind that a fight or the guard wanted at that look. A drop of a Combat or Swimmer Ant, a drop that lay nearer to another hill, and every drop after the last 2,400 ticks of the Thief and Combat wants stayed where it fell: in the arena's matches (seeds 1 to 30, four bots of a level) about one dropped power-up in ten was taken back by the team that lost it, and (Hard) more than four in ten by another team.
 
@@ -345,7 +345,7 @@ A typed ant that dies leaves its power-up on a free neighbour tile (`docs/GAME_R
 - **What was measured.** Four Hard bots, then four Medium bots, 30 seeds on SMALL, MEDIUM, GAUNTLET and TREASURE, shipped bot against `drops=0`: the drops that the dropper's team took back rose from 62 to 74 for Hard and from 24 to 38 for Medium; the median time from drop to pick-up stayed at 250 to 530 ticks; the mean score per seat and the losses did not move beyond the noise (Hard 263.6 to 260.4 on GAUNTLET, 2004.0 to 2002.8 on TREASURE; Medium 355.5 to 355.5 and 2036.2 to 2035.6). Most drops stay where they fall because the team has no usable worker at that moment: all its remaining ants are typed (a typed ant never takes another kind), carry food, or belong to a fight. A bot with no worker left does not hatch one for a power-up.
 - **Tests.** `AI47.1` to `AI47.6` (hand-made worlds and two arena matches); the mutants are `tests/data/bot_drops_mutants.json`.
 
-### Defence
+## Defence
 
 - **The thief hole.** A thief reaches the raid tile `(bx + 3, by + 2)` of a hill only by stepping from one of the three tiles `(bx + 4, by + 1 .. by + 3)` east of it, so a fire wall on each of them stops every raid (verified against the engine's own raid order: with the three walls the order ends in "Can't go there." and the victim keeps its points; with two walls, or three one tile further east, the raid goes through; the walls burn for exactly 3,600 ticks; the owner's deposits are not affected). `WallTask` keeps the walls with a Fire Ant (the first wall comes 67 ticks after the order from four tiles away, then 51 and 41), renews them before they burn out by the level's lead, never lights one on a tile that holds a power-up and cannot shut a hole whose tiles are mud (no wall can stand on mud). A Fire power-up is taken for it at every level. Reachable Fire power-ups on foot exist on TREASURE only (four, 185 to 211 ticks from the hills' queues); the flower droppers of MEDIUM, GAUNTLET and SMALL drop a Fire power-up in 25, 40 and 45 percent of their drops.
 
@@ -355,11 +355,11 @@ A typed ant that dies leaves its power-up on a free neighbour tile (`docs/GAME_R
 
 - **Never wiped out.** No ant is sent to a fight while the bot has two or fewer (three when no egg is left); a fight that is on ends when it is down to them.
 
-### Raids
+## Raids
 
 A Thief raids, again and again: a special order onto an enemy hill makes it walk to the raid tile, play 75 ticks of the raid clip (nothing can interrupt it) and take `min(the victim's score, 50)` points, which it walks home with. `RaidTask` picks the **leading team (by the score boxes)** that has points to take (30 at Medium, 15 at Hard), is not an ally, is not shut by three fire walls or bombs (a tile in front of its hole on which an ant stands still is no free tile, and a hole with an ant on its raid tile is left alone: the order would end in "Can't go there.", see "The can't-go loop"), can be reached on foot from where the thief stands and leaves time for the round trip; the cheap checks (the hole's state, the score) come before the search of the map, because a thief that looks every four ticks must not search the map for nothing (a full search per look and thief was the most expensive thing the bot did: the overhead of a whole Hard match on TREASURE fell from 2.2 to 0.9 s). A hill that could not be reached is left alone for 600 ticks (300 for the Raider style). No level keeps away from a hill that an enemy Combat Ant stands near: an enemy Combat Ant is a worker that fights, not a guard (measured: keeping away lost raids and gained nothing). Raids pay: without them Hard won 74.5 instead of 96.7 percent against Medium, Medium and Easy (margin +155 instead of +515).
 
-### Thieves: the answer to a raid
+## Thieves: the answer to a raid
 
 A raid needs no fire and no bomb to meet. Medium and Hard look again at their own raids on the way (`LevelPlan::raid_recheck`) and do not take a Fire power-up that the ant could not carry home (`fire_home_only`): these two rules are on. A meeting with an enemy Thief at the own hole (`thief_guard`) and a trap for one that the own walls shut in (`thief_trap`) are built and **off in every plan**, because they were not measured to win (below, "Why the meeting and the trap are off"). `bot_arena --tune thief_batch=0` is the bot before this batch, `thief_batch=1` the plan that ships, and the keys `rr`, `fhome`, `tguard`, `ttrap` switch one rule each. What the engine does, measured on hand-made worlds with the real engine, is what the rules rest on:
 
@@ -390,7 +390,7 @@ A later change would block only tiles that no wall needs, put out one wall at mo
 
 **Measured** (`bot_arena`, the six shipped maps, seeds 1 to 12, every match replay-checked). Four Hard seats with the batch against four without it (72 matches each): 1,176 against 1,175 points a seat, and 84 against 98 points a seat lost to raids (on TREASURE 111 against 172). Four Medium seats: 1,197 against 1,190, and 52 against 57. One Hard seat with the batch against three without it, seats rotated (288 matches): 17 points more (standard error 19), 101 against 99 points raided, 2.1 against 1.8 kills and 1.8 against 1.9 losses. On TREASURE beside the aggressor bench bot (144 matches): 48 points more (standard error 46), which is the look again alone: the Fire Ant rule changes nothing there. None of these differences is outside the noise; the look again is kept because a Thief no longer walks to a hole that is shut and stands in front of it (AI53.4). With `--tune thief_batch=0` the 144 matches of the four-seat runs play hash for hash as they did before the batch.
 
-### Aggression
+## Aggression
 
 The requirement: Hard bots should be really aggressive. Every number below is TREASURE, the map that is played most, judged by the **win rate** (the seat's score is strictly above the best of all the others) and the **margin** (its score minus the best other score; in 2 + 2 the best of the pair against the best of the other pair), the score being secondary, against opponents that fight: mirrors of the bot itself, the bench aggressor and the centre rusher (bots that exist only in `tools/`), and the other styles. The economy tournaments (A1 to A5) are a sanity check, not the measure. What the tournaments found:
 
@@ -398,15 +398,15 @@ The requirement: Hard bots should be really aggressive. Every number below is TR
 
 - **Left out and why** (flags kept, `bot_arena --tune`, `tools/bot_arena.cpp`): the parked guard, the interception of thieves (the Defensive style won 13.9 percent against the mix of aggressor, rusher and plain bots with it and 29.2 without), hatching, the strict contest order, strikes and the wipe-out focus (they never trigger in symmetric play and cost in the benches; the strike is part of Hard aggressive), the ambush, the skirmish of the bot's own and workers in the strike (the contest batch: "Fights of its own", "Behind the leader and the endgame"), the sabotage with a single Fire Ant (the Hard aggressive style steals a second one: its walls round the best opponent's gate, `SabotageTask`: eight tiles, the queue row sealed, until the victim puts one out or they burn out, 3,600 ticks).
 
-### Contested food
+## Contested food
 
 Which food a bot eats first when other teams want it too, the classes of the piles (who else reaches a pile how soon), the denial order of Medium and Hard, the race of Easy and what was measured, is in [BOT_FOOD.md](BOT_FOOD.md).
 
-### The quick kill
+## The quick kill
 
 Hard strikes an enemy that one blow kills (beside water, a bomb or a fire wall) from the tile that makes it so, sends no fight at an enemy that no walk reaches, and hunts when it has nothing to bank: [BOT_FIGHT.md](BOT_FIGHT.md).
 
-### Fights of its own: health, the kill and the skirmish (contest batch)
+## Fights of its own: health, the kill and the skirmish (contest batch)
 
 *What the engine allows* (`kill_plan` in `standard_tasks.hpp`, measured with the bot's own orders on a clear field). One blow lands per hit clip (about 22 ticks) however many ants strike. A worker's blow takes 1 hit point, a Combat Ant's punch 2 and throws the victim four tiles. An ant left with ONE hit point walks home at the speed of its hunters and is not caught (the engine's `low_hp_check`). So only punches finish an ant, workers kill nothing above two hit points, and the order that gets the kill is: a Combat Ant strikes alone while the hit points are even, and when they are odd (3 or more) one other ant opens first so that no ant is left standing with one. A Combat Ant and a worker kill every wounded worker of 2 and of 4 to 9 hit points (12 of 12 arrangements of side and enemy hill), two Combat Ants the even numbers 12 of 12 and the odd ones 3 to 4 of 12, three workers only 1 and 2.
 
@@ -416,7 +416,7 @@ Hard strikes an enemy that one blow kills (beside water, a bomb or a fire wall) 
 
 *The skirmish* (`plan.skirmish`: with the stronger force, 150 percent, three ants attack a carrier on its way or a worker at a pile without waiting for a blow) is built and **off in every plan**. Against three bots of v0.5.0, Hard won 14.1 percent with it and 28.6 without (TREASURE, 96 matches each, 25 percent being equal): the force walks away from the economy and the enemy's defenders come.
 
-### Fire play (contest batch)
+## Fire play (contest batch)
 
 *The fire-in is safe* (`SabotageTask`, `plan.sabotage_safe`; the Hard aggressive style lights the ring round the best opponent's gate with a stolen Fire Ant). (The war batch below turns the safety off at Medium and Hard: the rule stays as written.) The bot lights it only when the enemy cannot simply put it out: no Fire Ant of that team (or its ally) is alive, and no Fire power-up is on the field that the team reaches (a Fire Ant that dies drops its power-up, so its death alone is not enough: the drop has to be taken). Otherwise the Fire Ant goes with at least two Combat Ants (`sabotage_escort`) that walk to the entrance first (the first wall waits for them, at most `sabotage_escort_wait`, 2,400 ticks: then the team is left alone for 3,600 ticks) and stay until 900 ticks after the ring stands; with fewer, or with an entrance that no ant can stand on and walk to, there is no fire-in, and no Combat Ant is called to a gate without a Fire Ant to light it and a wall to light (a ring that stands already, lit by another bot, needs none; when a wall has to be renewed the escorts are called again before it is lit). A wall that is gone long before its 3,600 ticks were put out; walls put out twice end the attempt at that team for 3,600 ticks.
 
@@ -424,7 +424,7 @@ Hard strikes an enemy that one blow kills (beside water, a bomb or a fire wall) 
 
 *No special order onto an ant* (project rule 5: what a person's click can do). The HUD shows the target cursor of a special order (extinguish, defuse, plant, ignite, bridge, demolish, a thief's raid) only where no ant is under the pointer; a click on an ant selects it or attacks it (`evaluate_cursor` in `src/ants_app/hud_input.cpp`). `BotController::allowed` therefore refuses (`Fate::Filtered`) a special order whose tile holds an ant of any team, the seat's own included, one that dies on its clip (about 42 ticks) too (`BotView::dying_at`: it is in no list of the view, but the standard bot's tasks look there; the island tasks do not, and a bridge or bomb order onto such a tile is refused and asked again). The tasks never propose one: the keeper steps aside before it puts out or renews a wall it stands on, the sabotage and the raid pass over an occupied tile (a thief raids by any free tile of the enemy mound), the extinguish job leaves a tile with an ant to the fights. **The simulation is not changed**: the engine rejects bomb and fire placement on a tile with a living ant (`docs/GAME_REVERSE_ENGINEERING.md`, about line 2837) and documents no occupant check for putting a fire out; settling that for the engine needs the original program.
 
-### Behind the leader and the endgame (contest batch)
+## Behind the leader and the endgame (contest batch)
 
 *The pressure* replaces the fixed margin (`Standing::behind`: a margin of 150 points or 12 percent of the leader's box, with the leader at 300 points or more; `standing_of`): the deficit (the leader's box above the own, by the boxes a person reads) in percent of what can still be earned, the less of the food on the field in points and the clock at 0.16 points per tick (the best bots bank about 2,200 points in 14,400 ticks). Its **tiers** begin at 40, 80 and 130 percent at Hard, 1.5 times that at Medium and 2.5 times at Easy: the weaker the level, the later it escalates. Tier 1: the strike with Combat Ants (more Combat Ants wanted) and raids for two thirds of the loot. Tier 2: raids for a third, a hill with a guard is raided, and Easy (which does not raid) raids and wants a Thief. Tier 3: all-in: raids for 10 points, odds of 100 percent, hunts at half the odds, the strike's reserve is two ants and its stop moves from the last 900 ticks to the last 240. The leader must hold 300 points. (The shipped plans reach these tiers earlier than the marks say: the war tier of the losers' rule, "The war batch", raises the tier at its lower marks and with a leader of 150 points.)
 
@@ -432,11 +432,11 @@ Hard strikes an enemy that one blow kills (beside water, a bomb or a fire wall) 
 
 *The last minute* (1,200 ticks, `plan.endgame`). The bot that leads guards: no hunt, skirmish, harassment, sabotage or strike, one defender more answers a blow, and what it carries is banked (the endgame veto that already keeps trips that cannot finish from starting). The bot that is behind is at tier 3.
 
-### When the food is gone
+## When the food is gone
 
 With no food that the hill can walk to (every pile eaten, or what is left out of reach and the island, gate and field work banking nothing), a bot does not stand: its free ants steal for a smaller loot (an idle Swimmer becomes the Thief when a hill that the own hill walks to has the points), fight only the fights that a clear lead wins, and heal; and at any time of a match an idle Bomber or Swimmer takes a Fire power-up within a trip while the bot has no Fire Ant (the idle swap, Medium and Hard). The rules, the numbers of the three levels, the measurements and what is not built are in [BOT_GONE.md](BOT_GONE.md); `bot_arena --tune gone=0` is the bot before them.
 
-### The war batch
+## The war batch
 
 - **The assault** (`plan.assault`, every level; `FightTask::start_offence`). Once the plan's time has come (`assault_after`: 600 ticks at Hard, 900 at Medium, 1,800 at Easy) the ants that the economy has nowhere to send (`Tactics::surplus`, at least `assault_min` of them) go for an enemy ant within `assault_reach` tiles: a force of `assault_force` (3, 2, 2) of free ants (standing idle with empty hands; a worker on its way to a pile or with food is never taken), a Combat Ant first, when it has `assault_odds_percent` of the strength near the target (Hard 60, Medium 100, Easy 200: the weaker the level, the better the odds it asks for). The target is the nearest enemy ant that the force outweighs, a Fire or Bomber Ant, a wounded ant and a carrier first; the fight is a hunt of its own (one attack order per blow, 900 ticks at the most, not followed further than `assault_chase` tiles) and ends when the force falls below 80 percent of the odds it asked for, but never above the 80 percent of the strength of the enemy that `skirmish_abort_percent` names (so at Easy, which asks for 200, the fight ends at 80, not at 160; at Hard, which asks for 60, at 48; a bot that is behind asks for less, see below). Workers kill nothing above two hit points ("Fights of its own"), so the assault is pressure, kills come from the Combat Ants a map gives; it cost nothing in score where it was measured alone (+11 points at Hard on SMALL).
 
@@ -452,7 +452,7 @@ With no food that the hill can walk to (every pile eaten, or what is left out of
 
 The tuning keys of `bot_arena --tune` (the plan fields of `LevelPlan`, "the war batch"): `war=0` (all of it off; the tests use `without_war_batch(plan)`, and a `LevelPlan` made by hand has none of it), `assault`, `asforce`, `asmin`, `asodds`, `asreach`, `aschase`, `asticks`, `asafter`; `sabotage`, `sabsafe`, `sabafter`, `wfire`; `raider`, `raiderr`, `raiderp`, `raiderx`; `mines`, `minegate`, `minemin`, `minepct`, `minere`, `wbomb`, `warfree`; `behind`, `bt1`, `bt2`, `bt3`, `bmin`, `bfree`, `bease`, `bafter`, `bsab`. In `--seat N=standard+K=V,K=V:LEVEL` a seat with no style plays the level's neutral plan (no style; Medium and Hard have the fire-in on in it, as in every style): add `styled=1` to compare with the bots that ship.
 
-### The stand batch
+## The stand batch
 
 - **The fire duel** (`plan.fire_duel`, every level; `FightTask::start_fire_defence`). An own Fire Ant that can strike (healthy, no food, takes orders) within 20 tiles is sent at the enemy Fire Ant standing on a wall of the own gate ring. Its blow takes 1 hit point and throws the target one tile off the wall and out of its job; the other fighters wait until the blow throws it off, then finish it. The wall keeper (rank 4) may be taken **except while a thief threatens** (`Tactics::wall_demand`; `plan.fire_duel_walls` lets it go: taking it let thieves raid 100 points more on TREASURE).
 
@@ -472,7 +472,7 @@ The tuning keys of `bot_arena --tune` (the plan fields of `LevelPlan`, "the war 
 
 The tuning keys: `stand=0` (all of it off; the tests use `without_stand_batch(plan)`, and a `LevelPlan` made by hand has none of it), `duel`, `duelwalls`, `draft`, `draftfar`, `rampunjam`, `rampticks`, `bmine`, `bmgate`, `mines`, `mineapart`, `minehome`, `minehomeapart`, `homeroute`, `minehomeafter`, `rush`, `rushworkers`, `rushtier`, `rushdef`, `rushafter`, `rushleft`, `rushticks`. In `--seat N=standard+K=V,K=V:LEVEL` add `styled=1` to compare with the bots that ship.
 
-### Styles
+## Styles
 
 A standard bot draws a **style** at the start of a match from its own seat's random generator (`mix64(seat seed ^ 0x57A1E57A1E)`: the same match seed and seat give the same style and the same plan, so a replay needs no bot) or the spec pins it: `--bot 2:standard:hard:raider`, `--bot 1:medium:defensive`, the room specification's `"bot": "hard:raider"`; without one it draws. The style never changes what a level may do (the profile, and the tactics a level unlocks: theft and the gate are Hard's, raids Medium's and Hard's): it picks among them and says how early and how hard; Easy keeps its plan (only its numbers move). The numbers of a plan also move by 10 to 25 percent from the seat's generator (raid thresholds, waits, leash, strike margin), and the Thief and the Combat Ant, which a person values equally, come in an order of their own half of the time. **Hard plays Aggressive or Raider only; Easy and Medium draw from all four.** The name of a bot seat stays "Bot (Level)" (project rule 5: nothing pretends that a bot is a person, and the style is not in the name nor on the wire); the status JSON of a server's room lists the style of every bot (`style`: "random" for one that draws). At Hard every style has to stay above a floor: at least 80 percent against Medium, Medium and Easy, with a clearly positive margin.
 
@@ -485,17 +485,17 @@ A standard bot draws a **style** at the start of a match from its own seat's ran
 
 **Proposal (not built):** show the style on the results screen ("Pip (bot, Hard) - raider") after the match, never before; nothing in the lobby or on the wire would change.
 
-### The gate
+## The gate
 
 Guiding for eating is bypassing the queue by manually controlling which ant deposits food. The engine's queue caps a hill at 10 to 13 deposits a minute: an ant that finds the entrance busy goes to a waiting tile on the far side of the mound `(bx - 1, by + 3)` and the hill's task dispatches it from there on a walk of 44 to 68 ticks around the mound, one deposit per 93 to 116 ticks (the original's rule, `Ants.exe` `FUN_0100ff1f` ANTHILLQ, `FUN_0101f780`, `FUN_010202e7`: the same waiting ring, the same FIFO order and about 100 ticks per queued deposit, so the economy that the measurements rest on is the original's; a click on the entrance is redirected to the ring while the entrance is occupied or claimed or any own ant is queued). By hand a deposit takes 55 to 65 ticks: carriers are staged on slots of the queue row away from the exit tile (two kept filled) and a buffer four rows north, and one is clicked onto the entrance at the moment the gate will be free (predictively, a look's latency early), never while a bite runs. Measured with a Hard-limited client in the engine: +55 to +86 percent for 8 to 12 workers on a pile 8 to 20 tiles away, 70 to 91 percent of the ideal, 0.4 to 1.05 commands a second. `GateTask` plays it at Hard only (the economy's rescue and the carrier aid are off while it runs: the gate owns every carrier, a thief's loot included; one thief at the far ring poisons the FIFO). Alone against three idle bots Hard scores +4 to +23 percent over the worker (A1); at Medium the gate measured +1.3 to +7 percent and is left off by decision (the Hard bot uses it). Two deposits can never overlap; the engine's gate is the bottleneck of a seat alone (TREASURE alone 2,962 points = rate times length), four teams exceed the pot (8,900) so a full table is limited by the pot, and a 16th or 20th worker adds nothing. A click that the controller refuses (a power-up on the tile) blocks that tile for 900 ticks, and with the entrance blocked the gate does not guide. Nor does it while a ring of fire walls cuts the doorstep off from the hill or place a carrier that no walk joins to it, and it waits while an own ant stands on the ramp (at most 200 ticks) or an own ant without food is on it on its way out (at most 60) ("The can't-go loop"). A run of 16 clicks onto the entrance that delivered nothing (the carriers are boxed in, as on a causeway jammed head on; a healthy gate fails up to 10 in a row on the shipped maps): the gate stops for 900 ticks, which turns the economy's rescue and the carrier aid on.
 
-### The stall detector
+## The stall detector
 
 The safety net of a seat that spends its command budget and banks nothing, for the worlds that no rule foresees (a jammed causeway, a hill that the carriers cannot reach, an order that the world never carries out). The only progress is the score rising. A seat plays the **plain economy** for `fallback_ticks` (2,400, doubled at every later stall, at most 9,600) when nothing was banked for `stall_ticks` (3,600: three minutes) while it has ants and food that its hill can reach lies on the map, or when it sent the same order (type, tile, first ant; an attack is one blow and is exempt) `repeat_limit` (12) times within `repeat_window` (1,200 ticks) and nothing was banked for that whole window (a jam that clears by itself is no stall: a fallback costs the gate for minutes). The plain economy is the worker's harvest with its default parameters (no contested piles, the rescue on, the plan's can't-go check), no gate, no raids, the carrier aid on; defence and fights go on. Every level has it; the numbers are `LevelPlan` fields (`stall_ticks`, `repeat_limit`, `repeat_window`, `fallback_ticks`, `gate_user_fails`, 0 switches a trigger off) and `bot_arena` tuning keys (`stall`, `repeat`, `repwindow`, `fallback`, `gatefails`); the report counts the stalls of a seat (`stalls`). It uses nothing but the ticks of the views and of the release: no clock, no random draw. Tests AI7.29, AI10.6 and AI10.7.
 
 The food that "its hill can reach" is food that the hill's ants walk to: a lunchbox that no walk joins to the hill (a dead ant's, in the field of bombs of a walled map) is none of it. Counted as food, it made every seat of POPcOrN that had not banked by the third minute play the plain economy, which gave the breach's ant back for 2,400 ticks and more ([BOT_GATES.md](BOT_GATES.md#why-seats-bank-nothing)); `bot_arena --tune stallwalk=0` is the bot before. Test AI56.12.
 
-### The can't-go loop
+## The can't-go loop
 
 "Can't go there." (a walk finds no path) and "Can't do that..." (a special order is refused) are the engine's answers to an order that cannot be carried out: the ant plays its can't-go clip (a worker 0.36 s, a thief 0.89 s) with a sound, and the status line shows the words for the person's own ants. Phase A (84 matches of the v0.5.0 bots) found that a bot's own refused orders are rare (546 of 28,016 group orders, 9.6 percent of the reactions) and that most of what a person hears is the original's own **can't-go loop** (79 percent of the reactions): an ant that stands on a special tile of a hill (queue row, ramp, entrance, raid tile; of ANY hill) and is shut in by fire walls and ants shows the clip, and when the clip ends the engine orders it to its own waiting tile; the walk fails in the same tick and the clip starts again, every 8 ticks for a worker and 18 for a thief, until a wall burns out or an ant leaves. Until the rules number 14 no order of a bot ended it (a Stop or a move at every tick for 300 ticks changed nothing): the engine ran the path manager before the next commands, so no command met an ant between the clip's end and the manager's answer. From 14 the one turn of each cycle that follows a clip takes a move to a tile that can be reached (and only a move: a Stop does nothing for an ant that has no path), and the loop is over ([GAME_REVERSE_ENGINEERING.md](GAME_REVERSE_ENGINEERING.md) 5.40, "The gap before the path manager's answer"). The loops come from two plays: a thief shut in on the raid tile by the walls of the hole that it raided (TREASURE), and the ring that the sabotage lights round a gate (SMALL, Aggressive Hard).
 
@@ -527,7 +527,7 @@ The food that "its hill can reach" is food that the hill's ants walk to: a lunch
 
 **What is left.** The loops of thieves that raid a hole with one free tile and are shut in stay (TREASURE: 6.5 and 8 reactions per 1,000 ticks and seat at Medium and Hard), and so do the loops of the enemy ants that a ring or the walls of a hole shut in; what a person hears of them is left open: the quiet raid rule (a thief raids a hole only with at least two free tiles in front of it: `LevelPlan::raid_min_free` 2 instead of 1, `bot_arena --tune raidfree=2`), or the limit on the sound (the sound for the person's own ants only, as in the original, silences every bot's loop and costs the bots nothing). The bots' own refused orders after the fixes (a match and seat at Hard, measured before the wait for the ant that leaves, which moves them little: 3.66 on TREASURE, 1.23 on SMALL, 1.04 on GAUNTLET, 0.63 on MEDIUM, 0.31 on TINY, 0.26 on ISLANDS): a carrier clicked onto the entrance just before an ant that has banked steps onto the ramp, or while it is held up at the hill (the view cannot tell a waiting walker from a moving one), a thief's special order onto an enemy entrance or hole that shuts while it walks, an attack at a target that no walk reaches.
 
-### Bombs on the way
+## Bombs on the way
 
 The engine's path finder walks straight over a bomb of ANOTHER team (only the ant's own and its ally's bombs are walls) and the bomb goes off under the walker: 2 hit points, a throw of four tiles, a lost order and a stun. A person sees every bomb in its owner's color and clicks round it. Three parts of the standard bot do the same (Easy none of them):
 
@@ -536,7 +536,7 @@ The engine's path finder walks straight over a bomb of ANOTHER team (only the an
 - **Measured** (`bot_arena` matches of four bots of one level, every seat, seeds 1 to 20 on the six maps and Mega Treasure, against the same matches with `--tune det=0,broute=0,nohope=0`; the bombs of other teams walked into, per seat and match, were counted with a local counter that the arena's report does not carry: the event is the one that AI51.9 counts, a bomb of another team that vanishes while an ant of another team stands on its tile): Hard TREASURE 4.60 to 3.10, MEDIUM 2.69 to 0.93, GAUNTLET 0.57 to 0.21, SMALL 4.76 to 3.21, Mega Treasure 5.01 to 3.88, ISLANDS 3.21 to 3.10; Medium TREASURE 2.29 to 1.39 and SMALL 2.76 to 2.33, the other Medium cells within noise. The cut is 4 to 66 percent, not the three quarters that the walk round alone could give: more than half of the blasts that are left come from an ant that no order of the bot is behind (the engine's repeat of a harvest, an ant that takes the next pile when its own is eaten, a chase after an enemy that moves), from a bomb planted on the tile the ant is about to enter, and from goals ringed by bombs. The score per seat does not move beyond noise (the paired difference is within about one standard error in all 14 cells; the largest are Hard Mega Treasure -161 +- 159 and Medium TREASURE +56 +- 61; one Hard bot with the rules against three without, rotated over the seats, 10 seeds: TREASURE -63 +- 69, Mega Treasure +16 +- 138). A match with no bomb of another team replays as it did (TINY, 8 of 8 hashes equal with `nohope=0`).
 - **What is left**: a goal that bombs surround (a pile in a ring of mines) has no walk round; the order goes as it is and the Bomber's route rule is what clears it. Ants that the engine moves without an order (a chase after an enemy that moves, a pile eaten and the next one taken) are looked at only through the last order they were given.
 
-### Alliances
+## Alliances
 
 An invitation to team up is answered by one rule at every level (`StandardBot::accepts_invitation`): accept unless the alliance would unite all live teams (the match would end at once: the last two live teams that ally win), or the bot or the inviter already has an ally. A team counts as live when it plays, has not dropped out and has an ant in sight. The bot never invites, never withdraws and never breaks an alliance (the worker still says no once). With an ally the bot's score box is the sum of the two; a raid never goes to an ally's hill, an attack never to its ants (the controller refuses it) and the ally's piles come last in the contest-aware order (an option that is off). The Defensive style answers a blow on an ally's ant with the own ants within 10 tiles of it, and the counters reach the ally's hill and piles; help beyond that (following a thief to the ally's base) is not built.
 
@@ -544,7 +544,7 @@ An invitation to team up is answered by one rule at every level (`StandardBot::a
 
 **Teams at the start of a local game.** `--teams ffa|A+B` (default `ffa`, free for all): seats A and B (0 to 3, different) are a team, and the two other seats too when both play. The game makes them with the original's own commands before the first tick (the first seat of a pair invites, the second accepts, applied straight to the simulation), so the engine's own News Flash "... are a team now!" is in the chat log and no invitation dialog opens; the standard bot never breaks a team. A pair with a seat that does not play, or a team that would be the whole match (it would be over as soon as the pair's score is above 0, the original's end rule: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) section 5.47), is told ("--teams 0+3: seat 3 does not play in this match. The game starts without teams.") and the game starts without teams. A room accepts it since network protocol 13: the leader's choice for the START it leads (a room that has teams of its own, set when it was made, makes those for every start, and the leader's choice does not count), made by every engine of the room before the first tick (`docs/NETWORK_PORT.md`, "Protocol 13"; a team that the seats which play cannot make is told to everybody in the room and the match starts without). The desktop start menu's Single player panel (Teams row) chooses the same thing for a game on this computer, offered only while two or more bots play (the game page still reads `&teams=0%2BN` from a typed address, but no page makes that link). The Host panel and the front page's card choose a room's teams (four players: Green with Red, Blue or Black, and the two others are a team too; three players: any two of the three) and make them the room's own teams (a field of the create block since protocol 15; a word of the room's code, `t01` to `t23`, in protocol 13). Tests 7.6f and 7.6g, AI6.13 (a room accepts `--teams`), M2.5, A2.3, N1.23 / N1.24, N5.78.
 
-### Islands
+## Islands
 
 ISLANDS has no food that a hill can walk to (0 of 5,600 points), SMALL has 1,000 of its 4,000 on an island: both need a way across water. The analysis (`island_info.hpp`, `IslandInfo::analyse`: per team, from `MapInfo`) was measured on the real engine and every line below is pinned by `AI14.x`; what the bots do with it is further down.
 
@@ -625,7 +625,7 @@ ISLANDS has no food that a hill can walk to (0 of 5,600 points), SMALL has 1,000
 - **Limits.** The bridges are small: a bot has about 0.2 stranded ants at a look, and the pot is eaten whatever they do when four bots play. A hurt ant that is home again has nothing of its own to harvest on ISLANDS (no pile lies within a walk of a hill's island): it heals and is a spare ant, and the gain of Return is that it is not lost and that the economy can use it where a Feeder bridge stands. Power rarely fires: a Hard bot wants one Bomber at most (`war_bombers`) and its ants have taken the one on the hill's island before one is idle for 300 ticks. A job whose next tile has an ant on it for 200 ticks leaves the tile alone for 600 and gives the Swimmer back; a flower link still waits for ever for such a tile, as it did. An ant is still lost to a bridge that falls now and then, as it was: with four Hard bots (120 seeds, 480 seat-games) 3 ants with the rules on and 3 with them off. TINY, SMALL, MEDIUM, GAUNTLET and TREASURE, Easy and Medium on ISLANDS and the community maps that have no flower links are bit for bit as before (state hash); on the shipped ISLANDS and the five island maps of the library that have them the rules play ("Measured, the library"). On a map whose hills share one island (a library map) no job is dug: the island of another team's hill is closed to it, and that is the bot's own as well. Pinned by `AI54.x`; the mutants are in `tests/data/bot_island_bridges_mutants.json`.
 
 
-### Walled maps (the gate goals)
+## Walled maps (the gate goals)
 
 A Medium or Hard bot plays the gate goals (`GateGoalTask`: put a fire wall out, defuse a bomb that plugs a tunnel, hop a Bomber over a wall; the rules and the numbers are in [bomb_gates.md](reverse_engineering/bomb_gates.md#gate-goals-ants_ai-medium-and-hard-walled-maps)) when `GateInfo::walled()` finds no pile that is free for its seat (also with the power-ups cleared away) and the island play does not own the map. `StandardBot::decide_gate_map` decides once, at the first look (`Tactics::gate_map`, and `Tactics::gate_beside`: an own worker that stands next to a pile, for which the opening is not held back); Easy never plays it, and a map that is open at the start stays open for the bot, so every other map is played exactly as before (state-hash identical, AI27.10 and AI27.11). A pile that lies beyond a field of bombs, a fire wall and water (POPcOrN and its family) is the **field breach**'s: one ant opens the way, and the gate goals leave that pile alone ([BOT_GATES.md](BOT_GATES.md#the-field-breach), `FieldTask`, `--tune field=0` is the bot before). The map's own bombs, left to the gate goals, and the measurements: [BOT_GATES.md](BOT_GATES.md). Known limits:
 
@@ -634,7 +634,7 @@ A Medium or Hard bot plays the gate goals (`GateGoalTask`: put a fire wall out, 
 - **A bot that is created in the middle of a match** (a server that restores a match after a restart) decides on the grid of that moment, not of the start. Low impact; not redesigned.
 - **The carrier is not protected.** The other team's Combat start ants stand in the home quadrant of a vault map (HELLRAISER) and knock a landing Bomber back; a thief takes the food back. The bot lands as far from them as the hops allow and kills none of them ([BOT_GATES.md](BOT_GATES.md#hellraiser-with-four-bots)).
 
-### 187: the brawl
+## 187: the brawl
 
 In the game type 187 ([GAMEPLAY.md](GAMEPLAY.md#187-a-game-type-of-the-remake): no food, no power-up, the kills are the score) a standard bot of any level plays `BrawlTask` instead of every task above: packs of ants on the enemy ants it can reach, no hurt ant sent home (the hill is closed), a march to the enemy hill when nobody can be struck. `StandardBot::think` reads the mode from the engine (`BotView::game_mode()`); the original's game never reaches the code (AI30.3), and `bot_arena --tune brawl=0` is the bot before. What the engine allows, what was measured, tried and left out, and the limits: [BOT_187.md](BOT_187.md).
 
