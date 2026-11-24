@@ -104,7 +104,9 @@ bool has_results_page(const hud_art::Art& art) {
     for (const char* state : {"up", "hover", "down"}) {
         const std::string st = state;
         if (!size_is(("sc_btn_l_" + st).c_str(), e, scorecard_layout::kBigH) || !size_is(("sc_btn_m_" + st).c_str(), scorecard_layout::kBigRun, scorecard_layout::kBigH) ||
-            !size_is(("sc_btn_r_" + st).c_str(), e, scorecard_layout::kBigH) || !size_is(("sc_leave_" + st).c_str(), scorecard_layout::kLeaveW, scorecard_layout::kLeaveH)) {
+            !size_is(("sc_btn_r_" + st).c_str(), e, scorecard_layout::kBigH) || !size_is(("sc_leave_" + st).c_str(), scorecard_layout::kLeaveW, scorecard_layout::kLeaveH) ||
+            !size_is(("sc_tab_l_" + st).c_str(), e, scorecard_layout::kTabH) || !size_is(("sc_tab_m_" + st).c_str(), scorecard_layout::kBigRun, scorecard_layout::kTabH) ||
+            !size_is(("sc_tab_r_" + st).c_str(), e, scorecard_layout::kTabH) || !size_is(("sc_watch_" + st).c_str(), scorecard_layout::kWatchW, scorecard_layout::kWatchH)) {
             return false;
         }
     }

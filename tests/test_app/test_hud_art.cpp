@@ -413,11 +413,11 @@ void test_derive() {
     }
     const hud_art::Sprite* top = art.sprite_at(art.find_sprite("top_bar"));
     check(top != nullptr && top->sheet_y >= rows, "the HUD's own pieces are below the derived rows (their 2x pictures are drawn, not derived)");
-    // what the web build downloads for the art: the windows' pictures added about 1.4 MB to the 4.65 MB of the HUD's own, the results screen's about 0.4 MB more, and the folder must not grow past what a visitor is asked to wait for
+    // what the web build downloads for the art: the windows' pictures added about 1.4 MB to the 4.65 MB of the HUD's own, the results screen's about 0.5 MB more, and the folder must not grow past what a visitor is asked to wait for
     std::uintmax_t folder_bytes = 0;
     std::error_code ignored;
     for (const auto& entry : std::filesystem::directory_iterator(art_folder(), ignored)) folder_bytes += entry.is_regular_file(ignored) ? entry.file_size(ignored) : 0;
-    check(folder_bytes > 4000000 && folder_bytes <= 6500000, "the art's folder (sheets, manifest, font) is at most 6.5 MB: " + std::to_string(folder_bytes) + " bytes");
+    check(folder_bytes > 4000000 && folder_bytes <= 6700000, "the art's folder (sheets, manifest, font) is at most 6.7 MB: " + std::to_string(folder_bytes) + " bytes");
 }
 
 }  // namespace

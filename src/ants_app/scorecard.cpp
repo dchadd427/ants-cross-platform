@@ -37,18 +37,15 @@ void ScorecardModal::set_wide_layout(bool wide) {
     update_button();
 }
 
-// The Leave button's rectangles: the new page's face, or the original's pictures (a button whose rectangles did not change keeps its state)
+// The Leave button's rectangles: the original's pictures (the new page's buttons: update_new_buttons); a button whose rectangles did not change keeps its state
 void ScorecardModal::update_button() {
-    ButtonRect up;
-    ButtonRect pressed;
     if (new_look_) {
-        const LayoutRect r = scale_.rect(layout_.leave);
-        up = pressed = ButtonRect{r.x, r.y, r.w, r.h};
-    } else {
-        const ResultsLayout& l = ResultsLayout::of(wide_);
-        up = ButtonRect{l.leave.x, l.leave.y, l.leave.w, l.leave.h};
-        pressed = ButtonRect{l.leave_pressed.x, l.leave_pressed.y, l.leave_pressed.w, l.leave_pressed.h};
+        update_new_buttons();
+        return;
     }
+    const ResultsLayout& l = ResultsLayout::of(wide_);
+    const ButtonRect up{l.leave.x, l.leave.y, l.leave.w, l.leave.h};
+    const ButtonRect pressed{l.leave_pressed.x, l.leave_pressed.y, l.leave_pressed.w, l.leave_pressed.h};
     if (quit_.up_rect() == up && quit_.pressed_rect() == pressed) return;
     quit_ = ScreenButton(up, pressed);
 }
@@ -61,42 +58,12 @@ void ScorecardModal::set_art(const hud_art::Art* art) {
     update_new_look();
 }
 
-void ScorecardModal::set_text_source(const IRenderer* renderer) {
-    if (renderer == text_source_) return;
-    text_source_ = renderer;
-    update_new_look();
-}
-
 void ScorecardModal::set_screen(int32_t canvas_w, int32_t canvas_h, double output_scale) {
     if (canvas_w == canvas_w_ && canvas_h == canvas_h_ && output_scale == output_) return;
     canvas_w_ = canvas_w;
     canvas_h_ = canvas_h;
     output_ = output_scale;
     update_new_look();
-}
-
-// The new page (scorecard_layout.hpp) is there while the art has every piece of it and the canvas holds 360 units on its shorter side; its layout follows the canvas, the rows and the headline
-void ScorecardModal::update_new_look() {
-    new_look_ = false;
-    if (art_ != nullptr && canvas_w_ > 0 && canvas_h_ > 0 && window_art::has_results_page(*art_)) {
-        scale_ = scorecard_layout::scale_for(canvas_w_, canvas_h_, output_);
-        new_look_ = scale_.usable();
-    }
-    if (new_look_) {
-        scorecard_layout::Input in;
-        in.w = scale_.w;
-        in.h = scale_.h;
-        in.rows = !rows_.empty() ? rows_.size() : std::max<size_t>(1, result_.rows(local_player_id_).size());      // (before the rows are built: the rows that will be)
-        in.columns = mode_ == sim::GameMode::Kills187 ? 3 : 4;
-        headline_text_.clear();
-        if (!headline_.empty()) {                       // (the box that the headline's lines stand in does not depend on how many they are: lay out for one, wrap, lay out for what came)
-            in.headline_lines = 1;
-            headline_text_ = wrap_headline(scorecard_layout::compute(in).headline_w);
-            in.headline_lines = std::max<int32_t>(1, static_cast<int32_t>(headline_text_.size()));
-        }
-        layout_ = scorecard_layout::compute(in);
-    }
-    update_button();
 }
 
 // FUN_010153a1: the screen is created; its portraits exist but are not on the screen yet, the Leave button does not exist yet, a label says that it waits, and a
@@ -113,6 +80,7 @@ void ScorecardModal::show(const sim::MatchResult& result, uint8_t local_player_i
     rows_.clear();
     result_ = result;
     result_.present_mask = static_cast<uint8_t>(result.present_mask & shown_mask_);
+    page_ = Page::Results;
     update_new_look();
 }
 
@@ -136,9 +104,14 @@ void ScorecardModal::build_rows() {
         Row row;
         row.first = r.first;
         row.second = r.second;
+        row.score_value = r.score;
         row.name = name_of(r.first);
         if (r.has_second()) row.name += " & " + name_of(r.second);
-        if (row.name.size() > NAME_MAX_CHARS) row.name.resize(NAME_MAX_CHARS);        // the label's buffer holds 35 characters
+        if (row.name.size() > NAME_MAX_CHARS) {                                         // the label's buffer holds 35 characters (a character of UTF-8 is never cut in two)
+            size_t cut = NAME_MAX_CHARS;
+            while (cut > 0 && (static_cast<unsigned char>(row.name[cut]) & 0xC0) == 0x80) --cut;
+            row.name.resize(cut);
+        }
         if (mode_ == sim::GameMode::Kills187) {
             row.numbers = {std::to_string(r.score), std::to_string(r.friendly_lost), std::to_string(r.ants_left), std::string()};       // (the score is the kills; no hatches)
         } else {
@@ -174,6 +147,7 @@ std::string ScorecardModal::headline_187() const {
 
 bool ScorecardModal::handle_mouse_down(int32_t x, int32_t y) {
     if (!is_active_) return false;
+    if (new_look_) return new_mouse_down(x, y);
 
     if (phase_ == Phase::Rows && quit_.on_press(x, y)) {
         play_sfx(sim::SoundID::ButtonClick);   // leave3 carries sound 0 (buttonclick.wav)
@@ -185,6 +159,7 @@ bool ScorecardModal::handle_mouse_down(int32_t x, int32_t y) {
 
 bool ScorecardModal::handle_mouse_up(int32_t x, int32_t y) {
     if (!is_active_) return false;
+    if (new_look_) return new_mouse_up(x, y);
 
     if (phase_ == Phase::Rows && quit_.on_release(x, y)) {      // the callback runs at the release, on the button, while it is still captured
         if (on_quit_) on_quit_();
@@ -196,6 +171,10 @@ bool ScorecardModal::handle_mouse_up(int32_t x, int32_t y) {
 
 void ScorecardModal::handle_mouse_motion(int32_t x, int32_t y) {
     if (!is_active_) return;
+    if (new_look_) {
+        new_mouse_motion(x, y);
+        return;
+    }
     if (phase_ == Phase::Rows) quit_.on_move(x, y);
     else quit_.reset();
 }

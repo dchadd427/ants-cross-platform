@@ -7,6 +7,7 @@
 #include <functional>
 
 #include "ants_app/hud_art.hpp"
+#include "ants_app/match_report.hpp"
 #include "ants_app/scorecard_layout.hpp"
 #include "ants_assets/asset_archive.hpp"
 #include "ants_sim/game_mode.hpp"
@@ -69,6 +70,7 @@ public:
         uint8_t second{sim::PLAYER_NEUTRAL};       // its ally, PLAYER_NEUTRAL for a single team
         std::string name;                          // "A" or "A & B", at most 35 characters
         std::array<std::string, 4> numbers;        // score, friendly lost, enemy killed, new hatched (187: kills, ants lost, ants left, and nothing)
+        int32_t score_value{0};                    // the score (187: the kills) as a number: the new page's bars
         bool has_second() const noexcept { return second != sim::PLAYER_NEUTRAL; }
     };
 
@@ -100,13 +102,38 @@ public:
     void set_art(const hud_art::Art* art);
     /// The canvas that the page is drawn on, in canvas pixels, and how many device pixels one of them is (IRenderer::output_scale): the new page's layout follows both
     void set_screen(int32_t canvas_w, int32_t canvas_h, double output_scale);
-    /// The renderer that the new page measures its text with (the 187 headline is wrapped into one or two lines, and the layout makes room for them when the rows are built, not when they are drawn). Null:
-    /// the headline is one line
-    void set_text_source(const IRenderer* renderer);
     /// The new page is the one that shows: its picture is the whole canvas (Application::picture_for_state)
     bool new_look() const noexcept { return new_look_; }
     const scorecard_layout::Scale& scale() const noexcept { return scale_; }
-    const scorecard_layout::Layout& new_layout() const noexcept { return layout_; }
+
+    /// What the counting of the match made of its numbers (match_report.hpp), set before show(): a report that is `ok` gives the new page its two tabs, the damage, the honors, the Play of the game and a
+    /// second page "Match stats"; a report that is not shows the original's numbers only
+    void set_report(const MatchReport& report) { report_ = report; update_new_look(); }
+    const MatchReport& report() const noexcept { return report_; }
+    /// The new page's pages: the results (the podium) and the second page of counted numbers (only with a report that is ok)
+    enum class Page : uint8_t { Results, Stats };
+    Page page() const noexcept { return page_; }
+    void show_page(Page page);
+    /// What the layouts of the new page have made of the screen (the page that shows now; the waiting page until the rows are built)
+    const scorecard_layout::Podium& podium() const noexcept { return podium_; }
+    const scorecard_layout::Waiting& waiting_layout() const noexcept { return waiting_; }
+    const scorecard_layout::StatsPage& stats_layout() const noexcept { return stats_; }
+    /// What the new page's drawing reads: the name of a team's row, the local team, the screen's clock (the ants animate with it), the place of the local team's row (0: the first; -1: none) and the match's
+    /// result (the 187 page names the last colony that stands)
+    std::string seat_name(uint8_t team) const { return name_of(team); }
+    uint8_t local_seat() const noexcept { return local_player_id_; }
+    double clock_ms() const noexcept { return elapsed_ms_; }
+    int viewer_rank() const noexcept;
+    const sim::MatchResult& result() const noexcept { return result_; }
+    /// How a button of the new page is drawn now: resting, pointed at, pressed
+    enum class Look : uint8_t { Up, Hover, Down };
+    Look leave_look() const noexcept { return quit_.pressed() ? Look::Down : quit_.hovered() ? Look::Hover : Look::Up; }
+    Look tab_look(Page which) const noexcept;
+    Look watch_look() const noexcept { return watch_.pressed() ? Look::Down : watch_.hovered() ? Look::Hover : Look::Up; }
+    /// The rectangles of the new page's buttons on the canvas (empty where the page has none now)
+    LayoutRect leave_rect() const noexcept;
+    LayoutRect tab_rect(Page page) const noexcept;
+    LayoutRect watch_rect() const noexcept;
 
     /// The Leave button only exists once the rows do
     bool handle_mouse_down(int32_t x, int32_t y);
@@ -124,6 +151,8 @@ public:
     // Action callbacks
     void set_on_replay(std::function<void()> cb) { on_replay_ = std::move(cb); }
     void set_on_quit(std::function<void()> cb) { on_quit_ = std::move(cb); }
+    /// Watch (the Play of the game's button) was pressed: the replay opens at this turn, five seconds before the moment
+    void set_on_watch(std::function<void(uint32_t)> cb) { on_watch_ = std::move(cb); }
     void set_on_play_sfx(std::function<void(uint32_t)> cb) { on_play_sfx_ = std::move(cb); }
     void play_sfx(uint32_t sound_id) { if (on_play_sfx_) on_play_sfx_(sound_id); }
 
@@ -135,9 +164,12 @@ private:
 
     void build_rows();
     void update_new_look();                  // the new page's scale, layout and Leave button from the art, the canvas and the rows
-    void update_button();                    // the Leave button's rectangles: the new page's or the page's own
+    void update_button();                    // the Leave button's rectangles: the page's own (the new page's buttons: update_new_buttons)
+    void update_new_buttons();               // the new page's buttons from the layout of the page that shows
+    bool new_mouse_down(int32_t x, int32_t y);
+    bool new_mouse_up(int32_t x, int32_t y);
+    void new_mouse_motion(int32_t x, int32_t y);
     void render_new(IRenderer& renderer, const assets::AssetArchive& assets);
-    std::vector<std::string> wrap_headline(int32_t max_w_units) const;      // the 187 headline in one or two lines of the new page (scorecard_new.cpp)
     std::string headline_187() const;
     std::string name_of(uint8_t team) const;
     void draw_portrait(IRenderer& renderer, const assets::AssetArchive& assets, uint8_t team, int32_t x, int32_t y) const;
@@ -153,9 +185,11 @@ private:
     double output_{1.0};
     bool new_look_{false};                // the new page shows (art_ has the pieces, the canvas is big enough)
     scorecard_layout::Scale scale_{};
-    scorecard_layout::Layout layout_{};
-    const IRenderer* text_source_{nullptr};          // what the new page's text is measured with (set_text_source)
-    std::vector<std::string> headline_text_{};       // the 187 headline's lines on the new page, as they were wrapped when the layout was made: the frame draws these
+    scorecard_layout::Podium podium_{};   // the layouts of the new page (update_new_look)
+    scorecard_layout::Waiting waiting_{};
+    scorecard_layout::StatsPage stats_{};
+    MatchReport report_{};
+    Page page_{Page::Results};
     bool wide_{false};                    // the page is the 16:9 one
     bool is_active_{false};
     Phase phase_{Phase::Waiting};
@@ -166,10 +200,14 @@ private:
     sim::MatchResult result_{};           // what the screen was created with, reduced to the shown teams
     std::vector<Row> rows_{};
     uint32_t audio_to_play_{0};           // Sound 56 (winner) vs Sound 42 (loser), set when the rows are built
-    ScreenButton quit_{ButtonRect{QUIT_BTN_X, QUIT_BTN_Y, QUIT_BTN_W, QUIT_BTN_H}, QUIT_BTN_PRESSED};      // exists once the rows are there
+    ScreenButton quit_{ButtonRect{QUIT_BTN_X, QUIT_BTN_Y, QUIT_BTN_W, QUIT_BTN_H}, QUIT_BTN_PRESSED};      // exists once the rows are there (on the new page: from the first moment)
+    ScreenButton tab_results_;            // the new page's tabs, and Watch
+    ScreenButton tab_stats_;
+    ScreenButton watch_;
 
     std::function<void()> on_replay_;
     std::function<void()> on_quit_;
+    std::function<void(uint32_t)> on_watch_;
     std::function<void(uint32_t)> on_play_sfx_{nullptr};
 };
 
