@@ -20,8 +20,8 @@ PUBLIC_PAGES = ("/", "/matches", "/mapmaker", "/changelog", "/legal")
 # itself, with a query, and as a folder (/history, /history?limit=3, /history/deaths), so that /history_page.js, a script of the pages, stays open. The admin page is not named: it says noindex itself, and a
 # robots file that named it would only advertise its address.
 DOORS = (
-    ("The game server's doors: the game connection, the status, the live matches, the recorded matches and their data, the list of rooms, the maps, the numbers, the submissions",
-     ("/ws", "/busy", "/live", "/replays", "/history", "/lobbies", "/maps", "/stats", "/submissions", "/test-maps")),
+    ("The game server's doors: the game connection, the status, the live matches, the recorded matches and their data, the list of rooms, the maps, the numbers, the submissions, the plays and likes of replays",
+     ("/ws", "/busy", "/live", "/replays", "/history", "/lobbies", "/maps", "/stats", "/submissions", "/test-maps", "/counts")),
 )
 FOLDERS = (("The chat hub: the login, the connection, the pictures and images", ("/hub/",)),)
 QUERIES = ("Addresses that hold a room (room=, join=, code=, hostmap=: the Play it button of a map), a live match (live=) or a recording (replay=), or open a library map in the Map Maker (mapfile=): a link that someone pasted into the chat is not for a search engine",

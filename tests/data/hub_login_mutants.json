@@ -1274,8 +1274,8 @@
   {
    "id": "nginx_admin_gate_gets_every_cookie",
    "file": "docker/nginx.conf",
-   "old": "Cookie $hub_cookie_session;\n        proxy_set_header X-Client-Address $remote_addr;",
-   "new": "Cookie $http_cookie;\n        proxy_set_header X-Client-Address $remote_addr;",
+   "old": "proxy_pass http://$ants_hub/hub/admin/gate;               # (an explicit address: the visitor's query is not passed on)\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Cookie $hub_cookie_session;\n        proxy_set_header X-Client-Address $remote_addr;",
+   "new": "proxy_pass http://$ants_hub/hub/admin/gate;               # (an explicit address: the visitor's query is not passed on)\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Cookie $http_cookie;\n        proxy_set_header X-Client-Address $remote_addr;",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
   },
   {

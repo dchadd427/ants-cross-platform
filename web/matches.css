@@ -303,8 +303,6 @@ button { font: inherit; color: inherit; }
     .sc-card.tot .top { margin-bottom: 4px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
     .rhead .r .btn { flex: 1 1 auto; }
     .player iframe { aspect-ratio: auto; height: 560px; min-height: 0; max-height: none; }
-}
-@media (max-width: 720px) {
     .m .info .pl { display: inline-flex; order: 5; margin-left: auto; }
     .m .info .pl .lk { padding: 4px 11px 4px 9px; }
     .hero .meta .pvdot { display: none; }
