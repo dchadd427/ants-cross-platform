@@ -3,6 +3,7 @@
 //
 //   AI58.1  two ants face to face on a bridge: the engine leaves them standing for ever, the bot's head-on rule steps one back to land and the other crosses; with the rule off they stand
 //   AI58.2  one free ant beside an enemy that stands still strikes it (and not when the enemy is the stronger, when an enemy Combat Ant stands near, with the rule off)
+//   AI58.3  an enemy Thief that walks to the own hole is met by the idle ants (blockers on the three tiles, a blow for the Thief): the hill keeps its points; with the rule off the raid goes through
 //   AI58.4  with the food gone the idle ants hold the three tiles in front of the thief hole, and a raid of a Thief of another team ends in the can't-go clip; with the rule off it takes its 50 points
 //   AI58.5  a hurt ant that stands idle walks home and is whole again; with the rule off it stands
 #include <algorithm>
@@ -141,6 +142,37 @@ void run_idle_tests() {
         ASSERT_EQ(weaker.enemy_hp, 10u);
         const Out combat = play(true, 10, 10, true);                                             // an enemy Combat Ant stands near: a person looks first
         ASSERT_EQ(combat.started, 0u);
+    } TEST_END();
+
+    TEST_CASE("AI58.3 An Enemy Thief That Walks To The Own Hole Is Met By The Idle Ants: Blockers Stand On The Tiles In Front Of It, The Hill Keeps Its Points, The Thief Is Struck; With The Rule Off The Raid Goes Through (A Hard Bot, Six Idle Workers)") {
+        struct Out {
+            int32_t score{0};
+            uint16_t thief_hp{0};
+            uint32_t meets{0};
+        };
+        const auto play = [&](bool rule) {
+            sim::SimulationEngine sim;
+            empty_field(sim, 35);
+            sim.set_player_score(0, 300);
+            for (int i = 0; i < 6; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{10 + i % 3, 8 + i / 3});
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_of(Level::Hard, [&](LevelPlan& p) { p.thief_answer = rule; })), 4, 4);
+            rig.run(120);                                                                       // (a match is some ticks old when a Thief comes: the posts are walked to at once)
+            const uint32_t thief = sim.spawn_unit(1, sim::AntType::Thief, TileCoord{19, 6});
+            send_raid(sim, thief);
+            rig.run(700);
+            Out out;
+            out.score = sim.get_player_score(0);
+            out.thief_hp = hp_of(sim, thief);
+            out.meets = rig.as<StandardBot>().thief_guard().meets_started();
+            return out;
+        };
+        const Out off = play(false);
+        ASSERT_EQ(off.score, 250);                                                               // the raid took its 50 points
+        ASSERT_EQ(off.meets, 0u);
+        const Out on = play(true);
+        ASSERT_TRUE(on.meets >= 1u);
+        ASSERT_EQ(on.score, 300);                                                                // the hole was shut: the Thief took nothing
+        ASSERT_TRUE(on.thief_hp < 10u);                                                          // and it was struck on the tiles in front of the hole
     } TEST_END();
 
     TEST_CASE("AI58.4 With The Food Gone The Idle Ants Hold The Three Tiles In Front Of The Thief Hole: A Raid Of Another Team's Thief Then Ends In The Can't-Go Clip And The Hill Keeps Its Points; With The Rule Off It Takes 50 (A Hard Bot, Six Idle Workers)") {
