@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the settings menu's two rows that are the page's own, for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the page's object `antsLock` of web/shell.html (what the Fullscreen mouse row reads and writes) against tests/scripts/web_edge_check.js (node, the block run with a page of fakes), and the page's hand-over to the menu (the call of AntsGameMenu.forPage: the Picture shape row's `pickShape`, the Fullscreen mouse row's `lock`) against tests/scripts/web_menu_handover_check.js. Run from the checkout: tools/mutate.py tests/data/pointer_lock_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_edge.py runs them on a copy of the page.",
+  "note": "Mutants of the settings menu's two rows that are the page's own, for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the page's object `antsLock` of web/shell.html (what the Fullscreen mouse row reads and writes) against tests/scripts/web_edge_check.js (node, the block run with a page of fakes), and the page's hand-over to the menu (the call of AntsGameMenu.forPage: the Picture shape row's `pickShape`, the Fullscreen mouse row's `lock`) and where the page loads the menu (the frame of a match page has it too) against tests/scripts/web_menu_handover_check.js. Run from the checkout: tools/mutate.py tests/data/pointer_lock_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_edge.py runs them on a copy of the page.",
   "mutants": [
     {
       "id": "lock_choice_not_remembered",
@@ -48,6 +48,20 @@
       "file": "web/shell.html",
       "old": ", cancelsKey: ANTS_PAGE.cancelsBrowserKey });",
       "new": " });",
+      "test": "node tests/scripts/web_menu_handover_check.js web/shell.html"
+    },
+    {
+      "id": "frame_loads_no_menu",
+      "file": "web/shell.html",
+      "old": "antsLoadGameMenu();",
+      "new": "if (!ANTS_EMBED) antsLoadGameMenu();",
+      "test": "node tests/scripts/web_menu_handover_check.js web/shell.html"
+    },
+    {
+      "id": "page_loads_no_menu",
+      "file": "web/shell.html",
+      "old": "antsLoadGameMenu();",
+      "new": "void 0;",
       "test": "node tests/scripts/web_menu_handover_check.js web/shell.html"
     }
   ]

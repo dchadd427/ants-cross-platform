@@ -32,6 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 - **Where the action is, on a replay.** A soft curve over the replay's timeline shows the fights: deaths most of all, then bombs, thefts, fires and hits. On a computer it shows while the pointer is over the timeline, with the time and what happened ("2:41 · 3 deaths, 1 bomb"); on a phone it is always there, faint, and solid under your finger. The timeline has a row of its own on a computer now, as wide as the picture. Matches played before this version show a curve of their deaths alone.
 
 **Fixes:**
+- Watching a replay on a match page has the Settings button too.
 - A match you played shows on the Matches page right after it ends, not only when the server is idle.
 
 **For operators:**
