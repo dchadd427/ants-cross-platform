@@ -30,6 +30,35 @@ bool held_by_standing_ant(const BotView& v, sim::TileCoord tile) noexcept {
     return false;
 }
 
+// The least life that a finished bridge tile on the walk from the source of `field` to `to` has left (Tactics::bridge_life), by walking down the cost field from `to` to the source; Tactics::kForever when
+// no bridge tile lies on it (or the tiles are not known)
+int32_t route_life(const sim::Grid& grid, const std::vector<int32_t>& field, sim::TileCoord to, const std::vector<int32_t>& life) {
+    int32_t least = Tactics::kForever;
+    sim::TileCoord cur = to;
+    for (int guard = 0; guard < 4096 && grid.in_bounds(cur); ++guard) {
+        const size_t idx = tile_index(grid, cur);
+        if (idx >= field.size() || field[idx] < 0) break;
+        if (idx < life.size() && life[idx] >= 0) least = std::min(least, life[idx]);
+        if (field[idx] == 0) break;
+        sim::TileCoord next = cur;
+        int32_t next_cost = field[idx];
+        for (int32_t dy = -1; dy <= 1; ++dy) {
+            for (int32_t dx = -1; dx <= 1; ++dx) {
+                const sim::TileCoord n{cur.x + dx, cur.y + dy};
+                if ((dx == 0 && dy == 0) || !grid.in_bounds(n)) continue;
+                const int32_t k = field[tile_index(grid, n)];
+                if (k >= 0 && k < next_cost) {
+                    next = n;
+                    next_cost = k;
+                }
+            }
+        }
+        if (next == cur) break;
+        cur = next;
+    }
+    return least;
+}
+
 }  // namespace
 
 // ---- RaidTask -------------------------------------------------------------------------------------------------------------------------------------------
@@ -88,6 +117,16 @@ RaidTask::Hole RaidTask::hole_state(TaskContext& c, uint8_t t, uint32_t thief_id
 
 bool RaidTask::hole_shut(TaskContext& c, uint8_t t, uint32_t thief_id) const { return hole_state(c, t, thief_id) != Hole::Open; }
 
+const MapInfo::NowField& RaidTask::joined_now(TaskContext& c) {
+    const uint64_t now = c.view.tick();
+    if (!stage_joined_made_ || now >= stage_joined_tick_ + kJoinedTicks) {
+        stage_joined_ = c.map.field_now(c.view.grid(), c.seat, c.view.walk_context(), c.view.walkable_mask(c.seat));
+        stage_joined_tick_ = now;
+        stage_joined_made_ = true;
+    }
+    return stage_joined_;
+}
+
 bool RaidTask::launch(TaskContext& c, const AntView& thief) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
@@ -108,23 +147,53 @@ bool RaidTask::launch(TaskContext& c, const AntView& thief) {
     teams.erase(std::remove_if(teams.begin(), teams.end(), [&](uint8_t t) { return hole_shut(c, t, thief.id); }), teams.end());
     if (teams.empty()) return false;
     std::stable_sort(teams.begin(), teams.end(), [&](uint8_t x, uint8_t y) { return v.rows()[x].score > v.rows()[y].score; });
-    const std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, c.seat, v.walk_context());
+    const std::vector<uint8_t>& mask = v.walkable_mask(c.seat);
     const std::vector<int32_t> field = MapInfo::cost_field(grid, mask, thief.tile);
     if (field.empty()) return false;
+    const bool island_mode = plan.island_endraid && tactics_.island_play;                    // (the island play: the hills are joined by bridges that go, and the loot is banked at the own hill)
     for (const uint8_t t : teams) {
         const HillInfo& hill = c.map.hill(t);
         int32_t best = -1;
+        sim::TileCoord best_tile{-1, -1};
         for (const sim::TileCoord& e : east_tiles(hill)) {
             if (!grid.in_bounds(e) || e.x < 0) continue;
             const int32_t cost = field[tile_index(grid, e)];
-            if (cost >= 0 && (best < 0 || cost < best)) best = cost;
+            if (cost >= 0 && (best < 0 || cost < best)) {
+                best = cost;
+                best_tile = e;
+            }
         }
         if (best < 0) continue;                                                        // not on foot from where the thief stands
         const int32_t home = c.map.walking_cost(c.seat, east_tiles(hill)[1]);          // back to the own gate (the analysis of the start; the way is the same both ways)
         const uint64_t go = static_cast<uint64_t>(MapInfo::walking_ticks(best)) + 10u;
         const uint64_t back = home < 0 ? go : static_cast<uint64_t>(MapInfo::walking_ticks(home)) + 30u;
         const uint64_t round = go + 80u + back + 30u;
-        if (static_cast<uint64_t>(v.ticks_left()) < round + 2u * c.profile.reaction_delay + 60u) continue;
+        if (!island_mode && static_cast<uint64_t>(v.ticks_left()) < round + 2u * c.profile.reaction_delay + 60u) continue;
+        if (island_mode) {                                                               // the way home from the raid side exists as the map is now, and every bridge on the way there and back outlives the round trip
+            const HillInfo& own = c.map.hill(c.seat);
+            if (!own.present || go > plan.endraid_walk) continue;                          // (a long walk is a way round, not the raid chain: the bridges last 3,600 ticks)
+            int32_t life = route_life(grid, field, best_tile, tactics_.bridge_life);
+            const int64_t keep_life = static_cast<int64_t>(plan.endraid_min_life);                  // (the bridges on the way outlive the round trip by this much)
+            if (life < Tactics::kForever && static_cast<int64_t>(life) < static_cast<int64_t>(go) + keep_life) continue;       // (the way there alone is too short-lived: no flood to look for the way back)
+            if (!c.map.reaches_hill(joined_now(c), best_tile, thief.type)) continue;
+            if (back_tick_ != now) {
+                back_fields_.clear();
+                back_tick_ = now;
+            }
+            const size_t back_key = tile_index(grid, best_tile);
+            auto back_it = back_fields_.find(back_key);
+            if (back_it == back_fields_.end()) back_it = back_fields_.emplace(back_key, MapInfo::cost_field(grid, mask, best_tile)).first;
+            const std::vector<int32_t>& back_field = back_it->second;
+            int32_t home_cost = -1;                                                       // (the way back to the own hill from the raid side, as the map is now: the start analysis knows none over water)
+            for (const sim::TileCoord& s : own.starts) {
+                life = std::min(life, route_life(grid, back_field, s, tactics_.bridge_life));
+                const int32_t k = back_field[tile_index(grid, s)];
+                if (k >= 0 && (home_cost < 0 || k < home_cost)) home_cost = k;
+            }
+            const uint64_t island_round = go + 80u + (home_cost < 0 ? go : static_cast<uint64_t>(MapInfo::walking_ticks(home_cost)) + 30u) + 30u;
+            if (static_cast<uint64_t>(v.ticks_left()) < island_round + 2u * c.profile.reaction_delay + 60u) continue;
+            if (life < Tactics::kForever && static_cast<int64_t>(life) < static_cast<int64_t>(island_round) + keep_life) continue;
+        }
         if (plan.avoids_guarded_hills && tier < 2) {
             bool guarded = false;
             for (const AntView& e : v.others()) {
@@ -176,7 +245,7 @@ bool RaidTask::recheck(TaskContext& c, const AntView& thief, std::map<uint32_t, 
         r.next_path = now + 60u;
         const HillInfo& hill = c.map.hill(r.team);
         const sim::Grid& grid = v.grid();
-        const std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, c.seat, v.walk_context());
+        const std::vector<uint8_t>& mask = v.walkable_mask(c.seat);
         const std::vector<int32_t> field = MapInfo::cost_field(grid, mask, thief.tile);
         bool reach = false;
         for (const sim::TileCoord& e : east_tiles(hill)) reach = reach || (grid.in_bounds(e) && !field.empty() && field[tile_index(grid, e)] >= 0);
@@ -339,6 +408,8 @@ void RaidTask::step(TaskContext& c) {
         else ++it;
     }
     for (auto it = black_.begin(); it != black_.end();) it = it->second <= now ? black_.erase(it) : std::next(it);
+    for (auto it = nolaunch_.begin(); it != nolaunch_.end();) it = it->second <= now ? nolaunch_.erase(it) : std::next(it);
+    for (auto it = homing_.begin(); it != homing_.end();) it = it->second + 2400u <= now ? homing_.erase(it) : std::next(it);
     // the thieves of the bot: one is claimed only for a raid that is under way or about to be ordered; between raids (and while no hill is worth a trip) it harvests like a worker. A
     // task of a higher rank may take one for a fight: then it is not ours
     for (auto it = raids_.begin(); it != raids_.end();) {
@@ -385,11 +456,31 @@ void RaidTask::step(TaskContext& c) {
             if (held && waiting_.count(a.id) == 0) c.ledger.release(a.id, id());        // walking, carrying, hurt: the economy's again (a thief on its way to its waiting place stays ours)
             continue;
         }
+        if (tactics_.plan.island_endraid && tactics_.island_play && tactics_.endraid) {    // the island play: a Thief far from the own hill walks home first when a walk leads there, and raids from its island (the loop is a short walk then)
+            const HillInfo& own = c.map.hill(c.seat);
+            if (own.present && a.tile.chebyshev_dist(own.entrance) > 12) {
+                if (c.map.reaches_hill(joined_now(c), a.tile, a.type)) {
+                    uint64_t& next = homing_[a.id];
+                    if (now >= next) {
+                        c.orders.move({a.id}, own.tile42, Priority::Normal);
+                        next = now + 400u;
+                        ++homed_;
+                    }
+                    if (held) c.ledger.release(a.id, id());
+                    continue;
+                }
+            }
+        }
         if (!held && !c.ledger.take(a.id, id())) continue;                              // a task of a higher rank has it
-        if (launch(c, a)) {
+        const bool island_play = tactics_.plan.island_endraid && tactics_.island_play;
+        const auto later = nolaunch_.find(a.id);
+        const bool looked = island_play && later != nolaunch_.end() && later->second > now;     // (an island Thief that found nothing to raid: the search floods the map, it waits for the next one)
+        if (!looked && launch(c, a)) {
+            nolaunch_.erase(a.id);
             waiting_.erase(a.id);
             continue;
         }
+        if (island_play && !looked) nolaunch_[a.id] = now + kRelaunchTicks;
         if (!ambush(c, a)) c.ledger.release(a.id, id());                                // nothing to raid, and nothing to wait for: back to the economy
     }
 }

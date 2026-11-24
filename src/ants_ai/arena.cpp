@@ -29,6 +29,11 @@ struct Recorder {
     void applied(const sim::Command& c) const {
         if (log != nullptr) log->push_back(RecordedCommand{*steps, sim->current_tick(), c});
         if (tally != nullptr) tally->command(c, sim->current_tick());
+        if (tally != nullptr && c.type == sim::CommandType::GroupSpecial && !c.ants.empty()) {       // a Swimmer's dig: the special order onto a water tile that holds no bridge yet
+            const sim::TileCoord t{c.tile_x, c.tile_y};
+            const sim::Grid& grid = sim->grid();
+            if (grid.in_bounds(t) && grid.terrain_class_at(t) == sim::movement::kTerrainWater && !grid.get_cell(t).has_any_bridge()) tally->bridge_order(c.issuer);
+        }
     }
 };
 
@@ -305,6 +310,7 @@ void IdleTally::scan(sim::SimulationEngine& sim) {
         for (Seat& s : seats_) {
             s.after_ant_ticks = 0;
             s.after_idle_ticks = 0;
+            s.after_idle_long_ticks = 0;
         }
     }
     units_ = units;
@@ -357,6 +363,10 @@ void IdleTally::scan(sim::SimulationEngine& sim) {
         if (tick - idle_since_[a.id] >= kIdleTicks) {
             seat.idle_ticks += kPeriod;
             seat.after_idle_ticks += kPeriod;
+        }
+        if (tick - idle_since_[a.id] >= kIdleLongTicks) {
+            seat.idle_long_ticks += kPeriod;
+            seat.after_idle_long_ticks += kPeriod;
         }
     }
 }
@@ -609,6 +619,18 @@ ArenaResult play_match(const ArenaSpec& spec) {
             r.rush_ticks = static_cast<uint32_t>(sb->rush().rush_ticks());
             r.rush_attacks = sb->rush().attacks_ordered();
             r.expedition = read_expedition(sb->expedition());
+            r.idle_batch.headon_jams = sb->head_on().jams();
+            r.idle_batch.headon_backoffs = sb->head_on().backoffs();
+            r.idle_batch.contact_jobs = sb->contact().started();
+            r.idle_batch.contact_blows = sb->contact().blows();
+            r.idle_batch.meets = sb->thief_guard().meets_started();
+            r.idle_batch.meet_strikes = sb->thief_guard().strikes();
+            r.idle_batch.holds = sb->idle_jobs().holds();
+            r.idle_batch.heals = sb->idle_jobs().heals();
+            r.idle_batch.swarm_thieves = sb->swarm().thieves();
+            r.idle_batch.homed = sb->raids().homed();
+            r.idle_batch.raid_tiles = sb->flower_link().bridges().tiles_ordered(BridgeJob::Kind::Raid);
+            r.idle_batch.home_tiles = sb->flower_link().bridges().tiles_ordered(BridgeJob::Kind::Home);
             r.miner_flight = read_miner_flight(sb->miner_flight());
         }
         read_seat_result(sim, b.seat, r);
@@ -626,6 +648,9 @@ ArenaResult play_match(const ArenaSpec& spec) {
         r.idle_ticks = idle_tally.seat(b.seat).idle_ticks;
         r.after_ant_ticks = idle_tally.seat(b.seat).after_ant_ticks;
         r.after_idle_ticks = idle_tally.seat(b.seat).after_idle_ticks;
+        r.idle_long_ticks = idle_tally.seat(b.seat).idle_long_ticks;
+        r.after_idle_long_ticks = idle_tally.seat(b.seat).after_idle_long_ticks;
+        r.bridge_orders = tally.seat(b.seat).bridge_orders;
         r.steals = idle_tally.seat(b.seat).steals;
         r.steal_points = idle_tally.seat(b.seat).steal_points;
         r.raids = idle_tally.seat(b.seat).raids;

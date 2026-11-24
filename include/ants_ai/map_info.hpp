@@ -206,6 +206,9 @@ public:
     };
     /// One walkable mask and one Dijkstra over the whole map (about 70 to 300 microseconds on the shipped maps in a release build, about 5 ms on a 256 x 256 map)
     NowField field_now(const sim::Grid& grid, uint8_t team, const WalkContext& ctx = WalkContext{}) const;
+    /// The same over a mask that the caller has (BotView::walkable_mask: made once a look). The field is a function of the mask (the walls, bombs and bridges of the moment) and of the hill's queue
+    /// row, so the last field of a team is kept and given back while the mask is the same: no flood for a look that finds the map as the last one did
+    NowField field_now(const sim::Grid& grid, uint8_t team, const WalkContext& ctx, const std::vector<uint8_t>& mask) const;
     /// Whether an ant on `tile` can walk to the queue row of the hill that `field` was made for, as the map was then (a ring of fire walls shuts it: every walk in is refused). True for a tile of the
     /// mound or next to one that the field reaches, for an empty field, and for every Swimmer (the field is the walkers': water and fire are not checked for a swimmer).
     bool reaches_hill(const NowField& field, sim::TileCoord tile, sim::AntType type = sim::AntType::Worker) const noexcept;
@@ -232,6 +235,14 @@ public:
     const FlowerInfo* flower_at(sim::TileCoord tile) const noexcept;
 
 private:
+    /// The last field_now of each team with the mask and the context it was made for (see field_now over a mask)
+    struct NowMemo {
+        std::vector<uint8_t> mask;
+        WalkContext ctx;
+        NowField field;
+        bool made{false};
+    };
+    mutable std::array<NowMemo, sim::MAX_PLAYERS> now_memo_;
     void build(const sim::Grid& grid);
     void add_flowers(const sim::Grid& grid, const std::vector<sim::FlowerDropperSnapshot>& droppers);
     size_t at(sim::TileCoord t) const noexcept { return static_cast<size_t>(t.y) * static_cast<size_t>(w_) + static_cast<size_t>(t.x); }

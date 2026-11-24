@@ -584,7 +584,7 @@ void run_thief_tests() {
         pa.thief_guard = pa.thief_trap = true;                                                                  // (the meeting is on until the switch turns it off)
         without_thief_batch(pa);
         LevelPlan pb = plan_for(Level::Hard);
-        pb.raid_recheck = pb.thief_guard = pb.thief_trap = pb.fire_home_only = false;
+        pb.raid_recheck = pb.thief_guard = pb.thief_trap = pb.fire_home_only = pb.thief_answer = false;                  // (the answer of the idle batch is a meeting too: the switch takes it out with the others)
         LevelPlan pc = pb;
         pc.thief_guard_force = 5;
         pc.thief_guard_block = 0;

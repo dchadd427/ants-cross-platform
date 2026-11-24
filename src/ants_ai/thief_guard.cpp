@@ -43,8 +43,8 @@ size_t wall_east_tiles(const sim::Grid& grid, const HillInfo& hill) noexcept {
 }
 
 // An ant that may be sent: it can strike at all, is of the level's own kind, a Combat Ant, or a Swimmer that stands on land, and is free or holds a chore of rank 2 or less (the economy, the guard, the ferry)
-bool fighter_ok(const BotView& v, const AntLedger& ledger, TaskId mine, const AntView& a) noexcept {
-    if (!can_strike(v, a)) return false;
+bool fighter_ok(const BotView& v, const AntLedger& ledger, TaskId mine, const AntView& a, bool idle_only) noexcept {
+    if (!can_strike(v, a) || (idle_only && !a.idle() && ledger.owner(a.id) != mine)) return false;               // (the answer mode: an ant that stands idle, not a worker on its way to a pile)
     if (a.type == sim::AntType::Swimmer) {
         if (!v.has_grid() || v.grid().terrain_class_at(a.tile) == sim::movement::kTerrainWater) return false;
     } else if (a.type != v.default_ant_type() && a.type != sim::AntType::Combat) {
@@ -149,7 +149,7 @@ void ThiefGuardTask::top_up(TaskContext& c, Meet& meet, const AntView& thief, co
     };
     std::vector<Cand> cands;
     for (const AntView& a : v.mine()) {
-        if (!fighter_ok(v, c.ledger, id(), a) || c.ledger.owner(a.id) == id()) continue;
+        if (!fighter_ok(v, c.ledger, id(), a, !plan.thief_guard) || c.ledger.owner(a.id) == id()) continue;
         const int32_t d = a.tile.chebyshev_dist(centre);
         if (d > static_cast<int32_t>(plan.thief_guard_reach)) continue;
         if (!walk_reaches(c.map, c.seat, a.tile, centre)) continue;
@@ -261,7 +261,7 @@ void ThiefGuardTask::step(TaskContext& c) {
     const uint64_t now = v.tick();
     const LevelPlan& plan = tactics_.plan;
     const HillInfo& hill = c.map.hill(c.seat);
-    if (!plan.thief_guard || !v.has_grid() || !hill.present || tactics_.guard_stance) {
+    if (!(plan.thief_guard || plan.thief_answer) || !v.has_grid() || !hill.present || tactics_.guard_stance) {
         if (!meets_.empty()) release_all(c);
         return;
     }

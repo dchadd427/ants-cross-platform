@@ -54,6 +54,8 @@ public:
     size_t staged() const noexcept { return staged_.size(); }
     uint32_t pickups() const noexcept { return pickups_; }
     uint32_t made() const noexcept { return made_; }
+    /// Ants that became the Thief of the endgame at a strip (plan.island_endraid)
+    uint32_t thieves() const noexcept { return thieves_; }
     uint32_t sent() const noexcept { return sent_; }
     /// The tick of the first and of the third Swimmer made (0: not yet)
     uint64_t first_made() const noexcept { return first_made_; }
@@ -75,10 +77,13 @@ private:
     const IslandTask* islands_{nullptr};
     std::map<uint32_t, Place> staged_;       // ant -> where it waits
     std::vector<std::vector<int32_t>> fields_;   // by link: the walking cost onto the drop tile from every tile, searched at fields_tick_
+    std::vector<uint8_t> fields_mask_;       // the mask that fields_ were searched over (a refresh that finds the same mask and context keeps them: the walks are a function of it)
+    WalkContext fields_ctx_;
     uint64_t fields_tick_{0};
     bool fields_valid_{false};
     uint32_t pickups_{0};
     uint32_t made_{0};
+    uint32_t thieves_{0};
     uint32_t sent_{0};
     uint64_t first_made_{0};
 };

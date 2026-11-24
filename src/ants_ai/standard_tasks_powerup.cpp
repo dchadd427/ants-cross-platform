@@ -56,6 +56,7 @@ bool PowerUpTask::swappable(const AntView& a, sim::AntType kind, uint64_t now) c
     const LevelPlan& plan = tactics_.plan;
     if (!a.idle()) return false;
     if (kind == sim::AntType::Thief) {
+        if (plan.island_endraid && tactics_.endraid && a.type == sim::AntType::Swimmer && swimmers_ > plan.endraid_keep_swimmers) return true;      // (the island play: an idle Swimmer swims to the strip for the Thief that fell; the ferry keeps its own)
         return tactics_.gone && tactics_.gone_thief && plan.gone && plan.gone_swap && a.type == sim::AntType::Swimmer;
     }
     if (kind != sim::AntType::Fire || !plan.idle_swap || (a.type != sim::AntType::Bomber && a.type != sim::AntType::Swimmer)) return false;
@@ -99,22 +100,22 @@ void PowerUpTask::on_command(const sim::Command& command, Bot::Fate fate, uint64
 const std::vector<int32_t>& PowerUpTask::field_for(TaskContext& c, sim::TileCoord tile) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
-    if (mask_tick_ != now) {
-        mask_ = MapInfo::walkable_mask(v.grid(), c.seat, v.walk_context());
-        for (size_t i = 0; i < mask_.size() && i < tactics_.shut_tiles.size(); ++i) {
-            if (tactics_.shut_tiles[i] != 0) mask_[i] = 0;                                         // (the bridges that will not last the trip: the island task)
-        }
-        if (tactics_.gate_map) {
-            for (const BombView& b : v.bombs()) {
-                if (b.owner != c.seat && !(v.ally() < sim::MAX_PLAYERS && b.owner == v.ally()) && v.grid().in_bounds(b.tile)) {
-                    mask_[tile_index(v.grid(), b.tile)] = 0;                                        // (map bombs are not walked into on a pick-up trip while gate goals run)
-                }
-            }
-        }
-        mask_tick_ = now;
-    }
     Cached& e = fields_[key_of(tile)];
     if (e.field.empty() || now >= e.tick + params_.field_ttl_ticks) {
+        if (mask_tick_ != now) {                                                                   // (the mask is made when a field is made: a look that finds every field fresh floods nothing)
+            mask_ = v.walkable_mask(c.seat);
+            for (size_t i = 0; i < mask_.size() && i < tactics_.shut_tiles.size(); ++i) {
+                if (tactics_.shut_tiles[i] != 0) mask_[i] = 0;                                     // (the bridges that will not last the trip: the island task)
+            }
+            if (tactics_.gate_map) {
+                for (const BombView& b : v.bombs()) {
+                    if (b.owner != c.seat && !(v.ally() < sim::MAX_PLAYERS && b.owner == v.ally()) && v.grid().in_bounds(b.tile)) {
+                        mask_[tile_index(v.grid(), b.tile)] = 0;                                    // (map bombs are not walked into on a pick-up trip while gate goals run)
+                    }
+                }
+            }
+            mask_tick_ = now;
+        }
         e.field = MapInfo::cost_field_onto(v.grid(), mask_, c.seat, tile, v.walk_context());
         e.tick = now;
         ++searches_;
@@ -135,7 +136,7 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
     for (const PowerUpView& p : v.powerups()) {
         if (p.kind != kind || p.standing_ant != 0 || tile_blacklisted(p.tile, now)) continue;
         if (std::find(tactics_.plug_tiles.begin(), tactics_.plug_tiles.end(), p.tile) != tactics_.plug_tiles.end()) continue;        // (the plug task has an ant on its way to it)
-        if (kind == sim::AntType::Thief && is_link_flower(p.tile)) continue;       // (a Thief of the strip: nothing uses it there)
+        if (kind == sim::AntType::Thief && is_link_flower(p.tile) && !(tactics_.plan.island_endraid && tactics_.endraid)) continue;       // (a Thief of the strip: nothing uses it there, except the Thief of the endgame, which a chain takes to the hills)
         const int side = power_up_side(c.map, p.tile, present);
         const bool ally_side = v.ally() < sim::MAX_PLAYERS && side == v.ally();
         if (side >= 0 && side != c.seat && (!(tactics_.plan.steals || tactics_.gate_map) || (ally_side && !(tactics_.gate_map && !ally_reaches(v, c.map, p.tile))))) continue;       // another side's power-up is a theft: Hard's alone (and a gate map's: the start ants of a walled map stand beside the power-ups of the hill that cannot reach them), and never the ally's (except, on a gate map, one that no ant of the ally can walk to: the start ants of two allies stand in each other's quadrants of HELLRAISER, and the one power-up they can reach lies on the ally's side)
@@ -175,7 +176,9 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
             const HillInfo& own = c.map.hill(c.seat);
             bool home = !own.present || own.starts.empty();
             for (const sim::TileCoord& s : own.starts) home = home || (v.grid().in_bounds(s) && f[tile_index(v.grid(), s)] >= 0);
-            if (!home) {
+            // (plan.fire_hats: the chain home is dug for it, BridgeJob::Kind::Home, while the bot has Swimmers to spare for the dig and time to use the Fire Ant)
+            const bool chain_home = tactics_.plan.fire_hats && tactics_.plan.island_flower_link && swimmers_ > tactics_.plan.endraid_keep_swimmers && v.ticks_left() > 3600;
+            if (!home && !chain_home) {
                 ++stranded_skips_;
                 continue;
             }
@@ -184,7 +187,8 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
         int32_t best_cost = 0;
         for (const AntView* a : ants) {                                                 // the closest ant by the walking cost from its own tile (a lower id wins a tie)
             if (blacklisted(a->id, p.tile, now) || !grid.in_bounds(a->tile)) continue;
-            const int32_t cost = f[tile_index(grid, a->tile)];
+            int32_t cost = f[tile_index(grid, a->tile)];
+            if (cost < 0 && (tactics_.plan.island_endraid || tactics_.plan.fire_hats) && a->type == sim::AntType::Swimmer && a->type != v.default_ant_type() && swappable(*a, kind, now)) cost = 21 * a->tile.chebyshev_dist(p.tile);       // (a Swimmer swims over the water that the walkers' field leaves out: a step costs 21)
             if (cost < 0 || (best != nullptr && cost >= best_cost)) continue;
             best = a;
             best_cost = cost;
@@ -403,6 +407,8 @@ void PowerUpTask::step(TaskContext& c) {
             for (auto it = idle_since_.begin(); it != idle_since_.end();) it = find_ant(v.mine(), it->first) == nullptr ? idle_since_.erase(it) : std::next(it);
         }
     }
+    swimmers_ = 0;
+    for (const AntView& a : v.mine()) swimmers_ += a.type == sim::AntType::Swimmer ? 1u : 0u;
     for (auto it = black_.begin(); it != black_.end();) it = it->second <= now ? black_.erase(it) : std::next(it);
     for (auto it = tile_black_.begin(); it != tile_black_.end();) it = it->second <= now ? tile_black_.erase(it) : std::next(it);
     for (auto it = fields_.begin(); it != fields_.end();) it = now >= it->second.tick + params_.field_ttl_ticks ? fields_.erase(it) : std::next(it);        // (a field that is older than its time is searched again when it is asked for)

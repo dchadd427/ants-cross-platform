@@ -1,6 +1,7 @@
 #include "ants_ai/island_bridge.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <limits>
 #include <numeric>
@@ -113,7 +114,7 @@ void BridgePlanner::upkeep(TaskContext& c, const IslandInfo& info) {
         if (left > static_cast<int64_t>(params_.evacuate_life) || !a.takes_orders() || c.ledger.owner(a.id) == StandardBot::kIslands) continue;       // (an ant of the island task has that task's guard)
         const auto last = evacuated_at_.find(a.id);
         if (last != evacuated_at_.end() && now < last->second + params_.evacuate_gap) continue;
-        if (walk.empty()) walk = MapInfo::walkable_mask(grid, c.seat, v.walk_context());
+        if (walk.empty()) walk = v.walkable_mask(c.seat);
         // the nearest land tile that the ant can walk to now, round the ants that stand in the way (an ant on the only shore tile shuts that end: the other end is the way off): not water, not a piece of a bridge
         std::vector<uint8_t> free_walk = walk;
         for (const AntView& o : v.others()) {
@@ -151,35 +152,54 @@ const BridgeJob* BridgePlanner::look(TaskContext& c, const Tactics& tactics, con
     const bool return_on = plan.island_return;
     const bool feeder_on = plan.island_feeder;
     const bool power_on = plan.island_power_bridge;
-    if (!(return_on || feeder_on || power_on) || info.empty()) {
+    const bool raid_on = plan.island_endraid && tactics.endraid;                                  // an own Thief that no walk joins to a hill that it could raid (docs/BOT_IDLE.md)
+    const bool home_on = plan.fire_hats;                                                          // a Fire Ant that took a hat where no walk leads home
+    walk_ttl_ = (plan.island_endraid || plan.fire_hats || plan.bridge_more) ? kWalkTicks : 0u;
+    if (!(return_on || feeder_on || power_on || raid_on || home_on) || info.empty()) {
         still_.clear();
         return nullptr;
     }
     // the ants that stand free and still: since when
     std::map<uint32_t, Still> next;
     for (const AntView& a : v.mine()) {
-        if (a.type == sim::AntType::Swimmer || !a.idle() || a.holding || a.carried_points > 0 || c.ledger.owner(a.id) != kNoTask) continue;
+        // (a Thief with loot that no walk takes home stands idle or in its can't-go clip: it waits for a chain home like the others, plan.island_endraid)
+        const bool loaded_thief = raid_on && a.type == sim::AntType::Thief && (a.holding || a.carried_points > 0);
+        if (a.type == sim::AntType::Swimmer || !(a.idle() || (loaded_thief && a.state == sim::UnitState::CantGo)) || ((a.holding || a.carried_points > 0) && !loaded_thief) || c.ledger.owner(a.id) != kNoTask) continue;
         const auto was = still_.find(a.id);
         next[a.id] = was != still_.end() && was->second.tile == a.tile ? was->second : Still{a.tile, now};
     }
     still_ = std::move(next);
-    if (swimmers < params_.min_swimmers || v.ticks_left() < params_.min_ticks_left) return nullptr;
+    // with the food gone (plan.bridge_more) the Swimmers have nothing to ferry: the chains of the older kinds may be longer, an ant waits for its bridge a shorter time, one Swimmer is enough to dig
+    const bool more = plan.bridge_more && tactics.late;
+    more_ = more;
+    const uint32_t chain_tiles = more ? std::max(plan.island_bridge_tiles, plan.bridge_more_tiles) : plan.island_bridge_tiles;
+    const uint32_t idle_wait = more ? std::min(plan.island_bridge_idle, plan.bridge_more_idle) : plan.island_bridge_idle;
+    if (swimmers < (more ? 1u : params_.min_swimmers) || v.ticks_left() < (more ? std::min<uint32_t>(params_.min_ticks_left, 1800u) : params_.min_ticks_left)) return nullptr;
     const int32_t hill_comp = c.map.hill_component(c.seat);
     if (hill_comp < 0) return nullptr;
     // the ants that wait for a bridge
     std::vector<const AntView*> waiting;
     for (const AntView& a : v.mine()) {
         const auto s = still_.find(a.id);
-        if (s == still_.end() || now < s->second.since + plan.island_bridge_idle || !a.takes_orders() || a.hp == 0) continue;
+        const uint32_t wait = a.type == sim::AntType::Thief ? plan.endraid_wait : a.type == sim::AntType::Fire && home_on ? plan.fire_hat_wait : idle_wait;
+        if (s == still_.end() || now < s->second.since + wait || !a.takes_orders() || a.hp == 0) continue;
         if (c.map.ant_component(c.seat, a.tile) < 0) continue;                                    // (on a bridge, or on no island at all)
         waiting.push_back(&a);
     }
     if (waiting.empty()) return nullptr;
+    if (more) {                                                                                   // an idle ant that a walk joins to the hill now comes home too (plan.bridge_more): the bridge that was dug for another ant of its island is its way as well
+        const MapInfo::NowField& walk = walk_now(c);
+        for (const AntView* a : waiting) {
+            if (!(raid_on && a->type == sim::AntType::Thief) && a->tile.chebyshev_dist(c.map.hill(c.seat).entrance) > 3 && c.map.reaches_hill(walk, a->tile, a->type)) returning_.insert(a->id);
+        }
+    }
 
     // the islands that stand joined now, and the channels that are still to be dug
     const std::vector<IslandComponent>& comps = info.components();
     Sets sets(comps.size());
     std::vector<bool> foreign(comps.size(), false);                                              // the island of another team's hill: no bridge leads there
+    std::array<int32_t, sim::MAX_PLAYERS> team_island;                                            // ... and whose it is (-1: no hill, or the seat's own)
+    team_island.fill(-1);
     for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
         const HillInfo& other = c.map.hill(t);
         if (t == c.seat || !other.present) continue;
@@ -198,7 +218,10 @@ const BridgeJob* BridgePlanner::look(TaskContext& c, const Tactics& tactics, con
                 island = e.first;
             }
         }
-        if (island >= 0 && static_cast<size_t>(island) < foreign.size()) foreign[static_cast<size_t>(island)] = true;
+        if (island >= 0 && static_cast<size_t>(island) < foreign.size()) {
+            foreign[static_cast<size_t>(island)] = true;
+            team_island[t] = island;
+        }
     }
     std::vector<const Channel*> open;
     for (const Channel& ch : info.channels()) {
@@ -212,13 +235,15 @@ const BridgeJob* BridgePlanner::look(TaskContext& c, const Tactics& tactics, con
     for (size_t k = 0; k < comps.size(); ++k) {
         if (foreign[k]) foreign_set[static_cast<size_t>(sets.find(static_cast<int32_t>(k)))] = true;
     }
-    std::vector<Edge> edges;
+    std::vector<Edge> edges;                                                                      // the channels that no foreign hill's island touches: the chains of the older kinds
+    std::vector<Edge> all_edges;                                                                  // ... and every channel that can be dug, the foreign hills' islands too: the Raid chain
+    const int32_t hop_limit = static_cast<int32_t>(std::max<uint32_t>(chain_tiles, raid_on || home_on ? 4u : 0u));
     for (const Channel* ch : open) {
         Edge e;
         e.channel = ch;
         e.a = sets.find(ch->a);
         e.b = sets.find(ch->b);
-        if (e.a == e.b || foreign_set[static_cast<size_t>(e.a)] || foreign_set[static_cast<size_t>(e.b)]) continue;
+        if (e.a == e.b && !raid_on) continue;                                                     // (a channel inside a set: the Raid hop may be one, a short way beside a long walk)
         bool usable = true;
         for (const sim::TileCoord t : ch->tiles) {
             const sim::TileCell& cell = grid.get_cell(t);
@@ -226,10 +251,12 @@ const BridgeJob* BridgePlanner::look(TaskContext& c, const Tactics& tactics, con
             ++e.missing;
             usable = usable && (cell.has_partial_bridge() || (bridge_water(grid, t) && !blocked(t)));
         }
-        if (usable && e.missing > 0 && e.missing <= static_cast<int32_t>(plan.island_bridge_tiles)) edges.push_back(e);
+        if (!usable || e.missing <= 0 || e.missing > hop_limit) continue;
+        if (raid_on) all_edges.push_back(e);
+        if (e.a != e.b && !foreign_set[static_cast<size_t>(e.a)] && !foreign_set[static_cast<size_t>(e.b)]) edges.push_back(e);
     }
-    if (edges.empty()) return nullptr;
-    const MapInfo::NowField now_field = c.map.field_now(grid, c.seat, v.walk_context());
+    if (edges.empty() && all_edges.empty()) return nullptr;
+    const MapInfo::NowField& now_field = walk_now(c);
     const int32_t hill_set = sets.find(hill_comp);
 
     // the food on the islands, by the pile table's number (what each island holds is in the analysis of the start; what is left of it is on the view)
@@ -256,30 +283,169 @@ const BridgeJob* BridgePlanner::look(TaskContext& c, const Tactics& tactics, con
 
     const BridgeJob* best = nullptr;
     BridgeJob candidate;
-    const auto consider = [&](BridgeJob job, const std::vector<size_t>& path, int32_t from_set) {
-        const Edge& first = edges[path.front()];
+    const BridgeJob* raid_best = nullptr;                                                         // (the chain of the Thief that is being judged: the best target so far)
+    BridgeJob raid_job;
+    std::vector<Edge> raid_pool;
+    std::vector<size_t> raid_path;
+    bool raid_hop_only = false;                                                                   // (the chain is the one hop from the hill's island: its tiles are dug from that island outward)
+    int32_t raid_key = 0;
+    const auto consider = [&](BridgeJob job, const std::vector<size_t>& path, int32_t from_set, const std::vector<Edge>& pool, int32_t start_comp = -1) {
+        const Edge& first = pool[path.front()];
         job.tiles = first.channel->tiles;
-        if (sets.find(first.channel->a) != from_set) std::reverse(job.tiles.begin(), job.tiles.end());   // (from the ant's side outward)
+        const bool reverse = start_comp >= 0 ? first.channel->b == start_comp : sets.find(first.channel->a) != from_set;
+        if (reverse) std::reverse(job.tiles.begin(), job.tiles.end());                              // (from the ant's side outward)
         job.missing = 0;
-        for (const size_t i : path) job.missing += edges[i].missing;
+        for (const size_t i : path) job.missing += pool[i].missing;
         if (best == nullptr || job.missing < candidate.missing || (job.missing == candidate.missing && (static_cast<int>(job.kind) < static_cast<int>(candidate.kind) ||
                                                                                                      (job.kind == candidate.kind && job.ant < candidate.ant)))) {
             candidate = std::move(job);
             best = &candidate;
         }
     };
+    // The Raid chain of a Thief that stands on the island `from`: the cheapest way to join it to the own hill's island (the loot is banked there, and the Thief waits there) and ONE channel from the own hill's
+    // island to the island of an enemy hill whose hole is open, never through the island of another enemy hill; at most plan.endraid_tiles tiles in all. The richest hill among the cheap ones is the target.
+    // The edges of the chain, the Thief's side first
+    const auto consider_raid = [&](const AntView& thief, int32_t from) {
+        raid_best = nullptr;
+        raid_key = 0;
+        bool raid_ready = false;
+        if (hill_set < 0 || all_edges.empty()) return;
+        const uint32_t min_loot = std::min(plan.raid_min_loot, tactics.gone ? plan.gone_raid_min : plan.raid_min_loot);
+        for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+            const TeamRow& row = v.rows()[t];
+            const HillInfo& other = c.map.hill(t);
+            if (t == c.seat || !other.present || !row.present || row.dropped || (v.ally() < sim::MAX_PLAYERS && t == v.ally()) || team_island[t] < 0) continue;
+            if (row.score < static_cast<int32_t>(min_loot)) continue;
+            size_t open_tiles = 0;                                                                // (a hole that the walls have shut is no target: three fire walls stop every raid)
+            for (const sim::TileCoord& e : east_tiles(other)) {
+                const EastTile k = classify_tile(grid, e);
+                open_tiles += (k == EastTile::Open || k == EastTile::Bare) ? 1u : 0u;
+            }
+            if (open_tiles < plan.raid_min_free) continue;
+            const int32_t target = sets.find(team_island[t]);
+            // the islands of the other enemy hills are left out of the chain (a way to them would be a way for them)
+            std::vector<Edge> pool;
+            for (const Edge& e : all_edges) {
+                bool shut = false;
+                for (uint8_t u = 0; u < sim::MAX_PLAYERS; ++u) {
+                    if (u == t || team_island[u] < 0) continue;
+                    const int32_t island = sets.find(team_island[u]);
+                    if (island == hill_set || island == target || island == from) continue;      // (an enemy hill joined to the own hill's island already, or to the Thief's, is no new way for anybody)
+                    shut = shut || e.a == island || e.b == island;
+                }
+                if (!shut) pool.push_back(e);
+            }
+            const int32_t limit = static_cast<int32_t>(plan.endraid_tiles);
+            // the chain: the Thief's island to the hill's (the loot is banked there, and the Thief waits there between raids: the raid is a short walk), then ONE channel from the hill's island to the
+            // target's (the neighbor hills are 3 or 4 tiles apart: a bridge for the Thief to cross, and a short way home)
+            std::vector<size_t> best_path;
+            int32_t best_total = 1 << 20;
+            // a hill whose raid tiles the own hill's ants reach now over a short walk needs no chain: the raid task raids it (and nothing is dug for a Thief that can go)
+            int32_t walk = -1;
+            for (const sim::TileCoord& e : east_tiles(other)) {
+                const int32_t k = grid.in_bounds(e) && now_field.valid() ? now_field.cost[static_cast<size_t>(e.y) * grid.width() + static_cast<size_t>(e.x)] : -1;
+                if (k >= 0 && (walk < 0 || k < walk)) walk = k;
+            }
+            const bool walks = walk >= 0 && static_cast<uint32_t>(MapInfo::walking_ticks(walk)) <= plan.endraid_walk;
+            std::vector<size_t> first = chain(pool, comps.size(), from, hill_set, limit);
+            bool hop_only = false;
+            if (from == hill_set || !first.empty()) {
+                int32_t total = 0;
+                for (const size_t i : first) total += pool[i].missing;
+                if (walks) {
+                    if (first.empty()) {
+                        raid_ready = true;
+                        continue;
+                    }
+                    best_total = total;                                                           // (the Thief only has to get home: the walk to the hill is there already)
+                    best_path = first;
+                } else {
+                    // the one channel between the hill's island and the target's, the fewest tiles to dig (a channel whose two islands stand joined by a long way round counts: the short way is the one that is dug)
+                    size_t hop = pool.size();
+                    for (size_t k = 0; k < pool.size(); ++k) {
+                        const Channel& ch = *pool[k].channel;
+                        const bool between = (ch.a == hill_comp && ch.b == team_island[t]) || (ch.b == hill_comp && ch.a == team_island[t]);
+                        if (between && (hop == pool.size() || pool[k].missing < pool[hop].missing)) hop = k;
+                    }
+                    if (hop != pool.size() && total + pool[hop].missing <= limit) {
+                        best_total = total + pool[hop].missing;
+                        best_path = first;
+                        best_path.push_back(hop);
+                        hop_only = first.empty();
+                    }
+                }
+            }
+            if (best_path.empty() || best_total <= 0) continue;
+            // the richest hill among the cheap ones: a tile is worth about 60 points of the victim's box
+            BridgeJob job;
+            job.ant = thief.id;
+            job.kind = BridgeJob::Kind::Raid;
+            const int32_t key = best_total * 60 - row.score;
+            if (raid_best == nullptr || key < raid_key) {
+                raid_key = key;
+                raid_pool = pool;
+                raid_path = best_path;
+                raid_job = job;
+                raid_hop_only = hop_only;
+                raid_best = &raid_job;
+            }
+        }
+        if (raid_ready) return;                                                                    // (a hill is raidable already: no chain)
+        if (raid_best != nullptr) consider(raid_job, raid_path, from, raid_pool, raid_hop_only ? hill_comp : -1);
+    };
     for (const AntView* a : waiting) {
         const int32_t from = sets.find(c.map.ant_component(c.seat, a->tile));
+        if (raid_on && a->type == sim::AntType::Thief) {                                         // (a Thief waits for its raid chain; the older kinds are for the other ants)
+            if (a->holding || a->carried_points > 0) {                                           // ... one that has the loot waits for the way home (the engine walks it, when a walk leads there)
+                if (from != hill_set && !c.map.reaches_hill(now_field, a->tile, a->type) && hill_set >= 0) {
+                    std::vector<Edge> pool;                                                       // (the islands of enemy hills are left out, but the one that it stands on and the own)
+                    for (const Edge& e : all_edges) {
+                        bool shut = false;
+                        for (uint8_t u = 0; u < sim::MAX_PLAYERS; ++u) {
+                            if (team_island[u] < 0) continue;
+                            const int32_t island = sets.find(team_island[u]);
+                            if (island == hill_set || island == from) continue;
+                            shut = shut || e.a == island || e.b == island;
+                        }
+                        if (!shut) pool.push_back(e);
+                    }
+                    const std::vector<size_t> path = chain(pool, comps.size(), from, hill_set, static_cast<int32_t>(plan.endraid_tiles));
+                    if (!path.empty()) {
+                        BridgeJob job;
+                        job.ant = a->id;
+                        job.kind = BridgeJob::Kind::Return;
+                        consider(job, path, from, pool);
+                    }
+                }
+                continue;
+            }
+            if (a->hp >= 4) {
+                consider_raid(*a, from);
+                continue;
+            }
+        }
         if (foreign_set[static_cast<size_t>(from)]) continue;                                    // (it stands on an island that is joined to another team's hill: no bridge for it)
         const bool home = c.map.reaches_hill(now_field, a->tile, a->type);
+        // a Fire Ant that took a hat where no walk leads home: the chain to the hill's island (plan.fire_hats), longer than the other kinds' because the hats lie on the ring
+        if (home_on && a->type == sim::AntType::Fire && !home && from != hill_set) {
+            const std::vector<size_t> path = chain(edges, comps.size(), from, hill_set, static_cast<int32_t>(plan.fire_hat_tiles));
+            if (!path.empty()) {
+                BridgeJob job;
+                job.ant = a->id;
+                job.kind = BridgeJob::Kind::Home;
+                consider(job, path, from, edges);
+                if (best != nullptr && best->kind == BridgeJob::Kind::Home && best->ant == a->id) home_ants_.insert(a->id);
+            }
+            continue;
+        }
         // the way to the hill's island: for a hurt ant (Return) or one whose island has food that the hill cannot walk to (Feeder)
         if (!home && from != hill_set && (return_on || feeder_on)) {
-            const std::vector<size_t> path = chain(edges, comps.size(), from, hill_set, static_cast<int32_t>(plan.island_bridge_tiles));
+            const std::vector<size_t> path = chain(edges, comps.size(), from, hill_set, static_cast<int32_t>(chain_tiles));
             if (!path.empty()) {
                 BridgeJob job;
                 job.ant = a->id;
                 bool wanted = false;
-                if (return_on && a->hp <= params_.return_hp) {
+                if (return_on && (a->hp <= params_.return_hp || more)) {
                     job.kind = BridgeJob::Kind::Return;
                     wanted = true;
                 } else if (feeder_on) {
@@ -301,7 +467,7 @@ const BridgeJob* BridgePlanner::look(TaskContext& c, const Tactics& tactics, con
                     job.kind = BridgeJob::Kind::Feeder;
                     wanted = points >= static_cast<int64_t>(params_.food_min_points);
                 }
-                if (wanted) consider(job, path, from);
+                if (wanted) consider(job, path, from, edges);
             }
         }
         // a power-up that the plan wants and that lies on another island, for a whole plain ant with empty hands
@@ -319,20 +485,30 @@ const BridgeJob* BridgePlanner::look(TaskContext& c, const Tactics& tactics, con
                     if (s.p->kind != kind) continue;
                     const int32_t to = sets.find(s.comp);
                     if (to == from || foreign_set[static_cast<size_t>(to)]) continue;
-                    const std::vector<size_t> path = chain(edges, comps.size(), from, to, static_cast<int32_t>(plan.island_bridge_tiles));
+                    const std::vector<size_t> path = chain(edges, comps.size(), from, to, static_cast<int32_t>(chain_tiles));
                     if (path.empty()) continue;
                     BridgeJob job;
                     job.kind = BridgeJob::Kind::Power;
                     job.ant = a->id;
-                    consider(job, path, from);
+                    consider(job, path, from, edges);
                 }
             }
         }
     }
-    if (best != nullptr && best->kind == BridgeJob::Kind::Return) returning_.insert(best->ant);
+    if (best != nullptr && (best->kind == BridgeJob::Kind::Return || best->kind == BridgeJob::Kind::Home)) returning_.insert(best->ant);
     if (best == nullptr) return nullptr;
     job_ = candidate;
     return &job_;
+}
+
+const MapInfo::NowField& BridgePlanner::walk_now(TaskContext& c) {
+    const uint64_t now = c.view.tick();
+    if (!walk_made_ || (walk_ttl_ == 0 ? now > walk_tick_ : now >= walk_tick_ + walk_ttl_)) {
+        walk_ = c.map.field_now(c.view.grid(), c.seat, c.view.walk_context(), c.view.walkable_mask(c.seat));
+        walk_tick_ = now;
+        walk_made_ = true;
+    }
+    return walk_;
 }
 
 void BridgePlanner::walk_home(TaskContext& c) {
@@ -340,9 +516,8 @@ void BridgePlanner::walk_home(TaskContext& c) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
     const HillInfo& hill = c.map.hill(c.seat);
-    MapInfo::NowField field;
-    bool made = false;
     std::vector<uint32_t> go;
+    std::vector<uint32_t> go_whole;
     for (auto it = returning_.begin(); it != returning_.end();) {
         const uint32_t id = *it;
         const AntView* a = find_ant(v.mine(), id);
@@ -352,19 +527,18 @@ void BridgePlanner::walk_home(TaskContext& c) {
             it = returning_.erase(it);
             continue;
         }
-        if (a->hp > params_.return_hp || !hill.present) {                                                          // healed (or no hill to go to): the economy has it again
+        const bool fire_home = more_ || home_ants_.count(id) != 0;                              // (a Fire Ant that took a hat far from the hill, or any ant that the food-gone bridges brought, is the planner's until it is home: its hit points are no reason to let it go)
+        if ((!fire_home && a->hp > params_.return_hp) || !hill.present || (fire_home && a->tile.chebyshev_dist(hill.entrance) <= 3)) {                  // healed (or no hill to go to, or home): the economy has it again
             if (owner == owner_) c.ledger.release(id, owner_);
             home_.erase(id);
+            home_ants_.erase(id);
             it = returning_.erase(it);
             continue;
         }
         Home& h = home_[id];
         ++it;
         if (!a->takes_orders() || a->holding || a->carried_points > 0 || a->tile.chebyshev_dist(hill.entrance) <= 1) continue;
-        if (!made) {
-            field = c.map.field_now(v.grid(), c.seat, v.walk_context());
-            made = true;
-        }
+        const MapInfo::NowField& field = walk_now(c);
         if (!c.map.reaches_hill(field, a->tile, a->type)) continue;                                // (the way does not stand yet)
         // a way that stands now is no way home if a tile of a bridge of the planner's goes before the ant has walked it: the ant would be on the bridge when it falls. The tile with the least life left
         // counts, wherever it is (the planner does not know which tiles the walk takes), and the walk gets the margin of the evacuation's gap
@@ -381,10 +555,13 @@ void BridgePlanner::walk_home(TaskContext& c) {
         if (h.orders == 0) ++homeward_;
         h.last = now;
         ++h.orders;
-        go.push_back(id);
+        (a->hp <= params_.return_hp ? go : go_whole).push_back(id);
     }
     if (!go.empty()) {
         c.orders.move(go, hill.entrance, Priority::Normal);                                        // (an order onto the own hill is a walk home: the door heals)
+    }
+    if (!go_whole.empty()) {
+        c.orders.move(go_whole, hill.tile42, Priority::Normal);                                    // (a whole ant has nothing to heal: it goes to the tile where the ants of the hill wait)
     }
 }
 
