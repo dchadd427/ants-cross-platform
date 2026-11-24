@@ -189,10 +189,10 @@ same('... nothing when nobody led', MS.leadSentence([]), null);
     some.economy.taken = [[1, 1, 0, 2, 0], [0, 2, 0, 1, 0], [2, 1, 0, 0, 0], [3, 0, 0, 3, 0]];
     some.special = { built: [0, 0, 0, 0], undug: [0, 0, 0, 0], out: [2, 0, 7, 0], raids: [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]] };
     const partial = S.special(withSpecial(some));
-    same('only the types that were used have a card; a line says which were not', [partial.byClass('abcard').map((c) => text(c.byTag('h3')[0])), partial.byClass('abnote').map(text)], [['Fire Ant', 'Bomber', 'Food and fighting'], ['Nobody had a Swimmer or Thief in this match.']]);
+    same('only the types that were used have a card; a line says which were not', [partial.byClass('abcard').map((c) => text(c.byTag('h3')[0])), partial.byClass('abnote').map(text)], [['Fire Ant', 'Bomber', 'Food and fighting'], ['No Swimmer or Thief took a power-up or did anything in this match.']]);
     some.economy.taken = [[1, 0, 0, 2, 0], [0, 0, 0, 1, 0], [2, 0, 0, 0, 0], [3, 0, 0, 3, 0]]; some.special.out = [0, 0, 0, 0];
     same('a type is used when its numbers say so (the fires lit are in the seats\' rows), whatever the count of its power-ups', S.special(withSpecial(some)).byClass('abcard').map((c) => text(c.byTag('h3')[0])), ['Fire Ant', 'Bomber', 'Food and fighting']);
-    same('three types that nobody had are listed with commas and an or', S.special(withSpecial(some, { seats: SEATS4.map((x) => Object.assign({}, x, { fires_lit: 0 })) })).byClass('abnote').map(text), ['Nobody had a Swimmer, Fire Ant or Thief in this match.']);
+    same('three types that nobody used are listed with commas and an or (the line says what is true: no power-up taken and nothing done, not that nobody had one: a level may start its ants as a type)', S.special(withSpecial(some, { seats: SEATS4.map((x) => Object.assign({}, x, { fires_lit: 0 })) })).byClass('abnote').map(text), ['No Swimmer, Fire Ant or Thief took a power-up or did anything in this match.']);
 
     // a Thief that raided and brought nothing home, on a level whose ants are Thieves from the start (no power-up was taken): the raids say that the type was used
     const raided = JSON.parse(JSON.stringify(SP));
@@ -203,13 +203,19 @@ same('... nothing when nobody led', MS.leadSentence([]), null);
     same('raids that were tried make the type used, and "0 of 3" is not dimmed', [lone.byClass('abcard').map((c) => text(c.byTag('h3')[0])), lone.byClass('abt')[0].byTag('tbody')[0].byTag('tr').map((r) => r.className), text(lone.byClass('abt')[0].byTag('tbody')[0].byTag('tr')[0].byTag('td')[2])],
         [['Thief', 'Food and fighting'], ['', 'none', 'none', 'none'], '0of 3']);
 
+    // a level that starts its ants as Thieves, none of which raided: nothing was taken and nothing done, and that is all that the line says
+    const idle = JSON.parse(JSON.stringify(raided));
+    idle.special.raids = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    const calm = S.special(withSpecial(idle, { seats: SEATS4.map((x) => Object.assign({}, x, { fires_lit: 0, bombs_planted: 0, bombs_defused: 0 })) }));
+    same('Thieves from the start that did nothing: the line names the Thief among the types that took no power-up and did nothing', [calm.byClass('abnote').map(text), /Nobody had/.test(calm.textContent)], [['No Swimmer, Fire Ant, Bomber or Thief took a power-up or did anything in this match.'], false]);
+
     // nobody took a power-up: one line before the card of food and fighting
     const bare = { economy: { food: [[19, 475], [12, 300], [0, 0], [0, 0]], bombs_off: [0, 0, 0, 0], taken: [[0, 0, 0, 2, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]] },
         combat: { kills: [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], dealt: [30, 12, 0, 0], taken: [12, 30, 0, 0] }, special: { built: [0, 0, 0, 0], undug: [0, 0, 0, 0], out: [0, 0, 0, 0], raids: [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]] } };
     const quietSeats = SEATS4.map((x) => Object.assign({}, x, { fires_lit: 0, bombs_planted: 0, bombs_defused: 0 }));
     const nobody = S.special(withSpecial(bare, { seats: quietSeats }));
-    same('no power-up at all: the line, then the card of food and fighting, and no line of Ants', [nobody.children.map((c) => c.className || c.tag), nobody.byClass('abnote').map(text), nobody.byClass('abcard').map((c) => text(c.byTag('h3')[0]))],
-        [['head', 'abnote', 'abgrid'], ['No ant took a power-up in this match.'], ['Food and fighting']]);
+    same('no power-up of the four types, and Combat Ants among the ants (Combat is not one of them: the line does not say that no ant took a power-up at all): the line, then the card of food and fighting, and no line of Ants', [nobody.children.map((c) => c.className || c.tag), nobody.byClass('abnote').map(text), nobody.byClass('abcard').map((c) => text(c.byTag('h3')[0]))],
+        [['head', 'abnote', 'abgrid'], ['No Swimmer, Fire Ant, Bomber or Thief took a power-up or did anything in this match.'], ['Food and fighting']]);
 }
 
 // ---- special ants in a record that lacks some of the numbers: it shows what it has and hides what it lacks ----
@@ -249,6 +255,11 @@ same('... nothing when nobody led', MS.leadSentence([]), null);
     const debt = S.special(record({ economy: { taken: [[0, 0, 1, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]] }, special: { raids: [[1, 1, -30], [0, 0, 0], [0, 0, 0], [0, 0, 0]] } }, { seats, rows: [{ seats: [0] }, { seats: [1] }] }));
     const thief = debt.byClass('abt')[1].byTag('tbody')[0].byTag('tr')[0].byTag('td');
     same('a loot below zero is shown with its sign, and its bar is empty', [text(thief[3].byTag('b')[0]), thief[3].byClass('mb')[0].children[0].style.width], ['\u221230', '0%']);
+    const below = (key, value) => S.special(record({ economy: { taken: [[0, 1, 0, 0, 0], [0, 1, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]], bombs_off: [1, 1, 1, 1], food: [[1, 1], [1, 1], [1, 1], [1, 1]] }, combat: { dealt: [1, 1, 1, 1], taken: [1, 1, 1, 1] }, special: Object.assign({ built: [1, 1, 1, 1], undug: [1, 1, 1, 1], out: [1, 1, 1, 1], raids: [[1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1]] }, { [key]: value }) },
+        { seats: [seat(0, 'Hazel', '', { fires_lit: 1 }), seat(1, 'Clover', '', { fires_lit: 1 })], rows: [{ seats: [0] }, { seats: [1] }] }));
+    const headers = (sec) => sec.byClass('abt').map((t) => t.byTag('th').map(text).join('|'));
+    same('a count below zero is no count: its column is not shown (only a loot can be a debt)', [headers(below('out', [-1, 1, 1, 1])).some((h) => h.includes('Put out')), headers(below('out', [0, 1, 1, 1])).some((h) => h.includes('Put out')),
+        headers(below('raids', [[1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, -1]])).some((h) => h.includes('Loot')), headers(below('raids', [[1, -1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1]])).some((h) => h.includes('Raids'))], [false, true, true, false]);
     const hostile = { economy: { taken: [['a', null, 1e999, { x: 1 }, -5], 'text', [1e12, -1e12, NaN, 3.7, 2], null], food: 5, bombs_off: 'x', banked: 1 }, combat: { dealt: [1e30, 'x'], taken: 7, raids: 'no' },
         special: { built: [2e9, -2e9, 'z', null], undug: 'x', out: { a: 1 }, raids: [[1e20, 0, 0], 'x', [1, 1], null] } };
     let threw = null, sec = null;

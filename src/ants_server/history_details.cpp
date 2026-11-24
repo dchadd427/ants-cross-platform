@@ -342,7 +342,6 @@ JsonValue special(const MatchStats& st) {
     return o;
 }
 
-// `shed` makes the text smaller, step by step: 1 no list of kills, 2 no list of raids either, 3 and 4 a series of half and a quarter the points, 5 no combat and no economy
 JsonValue heavy_seats(uint8_t mask) {
     JsonValue seats = JsonValue::make_array();
     for (int seat = 0; seat < 4; ++seat) {
@@ -351,7 +350,9 @@ JsonValue heavy_seats(uint8_t mask) {
     return seats;
 }
 
-std::string build(const MatchStats& st, const HistoryRecord& record, int shed) {
+// `shed` makes the text smaller, step by step: 1 no list of kills, 2 no list of raids either, 3 and 4 a series of half and a quarter the points, 5 no combat and no economy. `special` (a fixed size of about
+// 150 bytes, whatever the match) stays at every step, step 5 included, and goes only in the very last try (make_history_details), when the text is too long with it and fits without it.
+std::string build(const MatchStats& st, const HistoryRecord& record, int shed, bool with_special) {
     JsonValue d = JsonValue::make_object();
     d.set("v", num(kDetailsVersion));
     d.set("turns", num(st.turns));
@@ -364,8 +365,8 @@ std::string build(const MatchStats& st, const HistoryRecord& record, int shed) {
     if (shed < 5) {
         d.set("combat", combat(st, shed < 1, shed < 2));
         d.set("economy", economy(st));
-        d.set("special", special(st));
     }
+    if (with_special) d.set("special", special(st));
     return ctl::to_json(d);
 }
 
@@ -375,9 +376,11 @@ std::string make_history_details(const replay::MatchStats& stats, const HistoryR
     if (!stats.ok) return std::string();
     std::string text;
     for (int shed = 0; shed <= 5; ++shed) {
-        text = build(stats, record, shed);
+        text = build(stats, record, shed, true);
         if (text.size() <= kDetailsMaxBytes) return text;
     }
+    text = build(stats, record, 5, false);                            // (a text that fitted before `special` was added still fits: the last try leaves it out rather than make the marker)
+    if (text.size() <= kDetailsMaxBytes) return text;
     return history_details_marker(record.heavy_orders);               // (a match so long, with numbers so large, that its minutes of orders alone do not fit: told as not counted, the cap is never passed)
 }
 

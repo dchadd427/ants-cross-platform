@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the special ants' counts (docs/REPLAYS.md 'The match pages', 'Special ants'): bridges built and dug away, fires put out, raids that got home, and the key `special` of a match's details, for tools/mutate.py (docs/TESTING.md 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/special_ants_mutants.json --keep-going --jobs 1 --timeout 600. Every mutant must be caught by test_history_details (HD1.5, HD1.7, HD2.8, HD3.1, HD3.4); the page's own rules are the broken copies of tests/scripts/test_web_match_stats.py.",
+ "note": "Mutants of the special ants' counts (docs/REPLAYS.md 'The match pages', 'Special ants'): bridges built and dug away, fires put out, raids that got home, and the key `special` of a match's details, for tools/mutate.py (docs/TESTING.md 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/special_ants_mutants.json --keep-going --jobs 1 --timeout 600. Every mutant must be caught by test_history_details (HD1.5, HD1.5b, HD1.7, HD2.8, HD3.1, HD3.5); the page's own rules are the broken copies of tests/scripts/test_web_match_stats.py.",
  "defaults": {},
  "mutants": [
   {
@@ -171,10 +171,18 @@
    "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
   },
   {
-   "id": "the_special_counts_stay_when_combat_and_economy_go",
+   "id": "the_special_counts_go_with_combat_and_economy",
    "file": "src/ants_server/history_details.cpp",
-   "old": "        d.set(\"special\", special(st));\n    }\n    return ctl::to_json(d);",
-   "new": "    }\n    d.set(\"special\", special(st));\n    return ctl::to_json(d);",
+   "old": "if (with_special) d.set(\"special\", special(st));",
+   "new": "if (with_special && shed < 5) d.set(\"special\", special(st));",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "a_text_that_fits_without_the_special_counts_is_the_marker",
+   "file": "src/ants_server/history_details.cpp",
+   "old": "    text = build(stats, record, 5, false);                            // (a text that fitted before `special` was added still fits: the last try leaves it out rather than make the marker)\n    if (text.size() <= kDetailsMaxBytes) return text;",
+   "new": "",
    "build": "test_history_details",
    "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
   }

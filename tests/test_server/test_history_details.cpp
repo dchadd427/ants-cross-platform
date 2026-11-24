@@ -102,6 +102,32 @@ int64_t sum_of(const A& values) {
     return n;
 }
 
+// A match of `minutes` minutes with the biggest numbers that every field can hold (the worst case for the size of the text): orders in every minute, scores, damage, bridges, raids and loot
+MatchStats heavy_match(uint32_t minutes) {
+    MatchStats st = blank(minutes * 1200);
+    for (MatchStats::Sample& sm : st.samples) {
+        for (size_t s = 0; s < 4; ++s) {
+            sm.score[s] = sm.box[s] = 2000000000 - static_cast<int32_t>(sm.turn);
+            sm.killed[s] = 4000000000u - sm.turn;
+        }
+    }
+    for (auto& kind : st.orders) {
+        kind.resize(minutes);
+        for (auto& minute : kind) {
+            for (size_t s = 0; s < 4; ++s) minute[s] = 4000000000u;
+        }
+    }
+    for (size_t s = 0; s < 4; ++s) {
+        st.food_points[s] = st.banked[s] = st.hatch_cost[s] = INT64_C(9000000000000000000);
+        for (size_t t = 0; t < 6; ++t) st.orders_naming[s][t] = 4000000000u;
+        for (size_t t = 0; t < 4; ++t) st.damage_from[s][t] = 4000000000u;
+        st.damage_dealt[s] = st.damage_taken[s] = 4000000000u;
+        st.bridges_built[s] = st.bridges_undug[s] = st.fires_out[s] = st.raids_home[s] = 4000000000u;
+        st.loot_home[s] = INT64_C(-9000000000000000000);
+    }
+    return st;
+}
+
 int64_t at_int(const JsonValue& v, size_t i, size_t j) { return v.at(i).at(j).as_int_or(-999); }
 
 // ---- the real matches ---------------------------------------------------------------------------------------------------------------------------
@@ -163,6 +189,15 @@ struct Oracle {
     std::array<uint32_t, 4> loot_home{};                  // raids whose loot a thief took into its own hill: its hands were empty again while it was still in the world
     std::array<int64_t, 4> loot_points{};
     std::array<uint32_t, 4> fires_out{};                  // "Fire put out.": the engine's own news, said to the seat of the Fire Ant that put a fire out
+    // Bridges, found from the tiles alone (the collector watches the Swimmers at work): a tile is built when it first shows the fourth stage after it showed none; it is dug away when a finished bridge went down
+    // through the lower stages (a bridge that falls by itself goes from the fourth stage to nothing, a dig that is cut short goes back up) and then no bridge is left; the digger is the owner of the tile then
+    struct Tile {
+        bool finished{false};                              // it has shown the fourth stage since it last showed no bridge
+        bool lowered{false};                               // ... and has gone down since then
+        uint8_t owner{255};
+    };
+    std::vector<Tile> tiles;
+    std::array<uint32_t, 4> built{}, undug{};
     std::array<int32_t, 4> wipe_turn{-1, -1, -1, -1}, out_turn{-1, -1, -1, -1};
     std::array<uint32_t, 4> wipes{};
     std::array<bool, 4> was_zero{};
@@ -171,6 +206,28 @@ struct Oracle {
     void tick(uint32_t turns, sim::SimulationEngine& engine) {
         for (const sim::NewsEvent& ev : engine.poll_news_events()) {
             if (ev.string_id == sim::strings::kFirePutOut && ev.target_player < 4) ++fires_out[ev.target_player];
+        }
+        const sim::Grid& grid = engine.grid();
+        if (tiles.empty()) tiles.resize(size_t{grid.width()} * grid.height());
+        for (uint32_t y = 0; y < grid.height(); ++y) {
+            for (uint32_t x = 0; x < grid.width(); ++x) {
+                const sim::TileCell& cell = grid.get_cell(x, y);
+                Tile& t = tiles[size_t{y} * grid.width() + x];
+                const bool bridge = cell.interactive_id >= sim::TILE_BRIDGE1 && cell.interactive_id <= sim::TILE_BRIDGE4;
+                if (!bridge) {
+                    if (t.finished && t.lowered && t.owner < 4) ++undug[t.owner];
+                    t = Tile{};
+                    continue;
+                }
+                t.owner = cell.interactive_owner;
+                if (cell.interactive_id == sim::TILE_BRIDGE4) {
+                    if (!t.finished && t.owner < 4) ++built[t.owner];
+                    t.finished = true;
+                    t.lowered = false;
+                } else if (t.finished) {
+                    t.lowered = true;
+                }
+            }
         }
         std::array<uint32_t, 4> alive{};
         for (uint32_t id = 1;; ++id) {
@@ -452,9 +509,9 @@ int main() {
         ASSERT_TRUE(!d.outcome.ran && !d.stats.ok);
     } TEST_END();
 
-    TEST_CASE("HD1.5b A play in pieces (StatsPlayback, 1, 3 and 97 turns at a time) gives what play_with_stats() gives, on four kinds of recording: the outcome and its state hash, the record that is made of it (as the doors give it), the details, the action and the map of deaths") {
+    TEST_CASE("HD1.5b A play in pieces (StatsPlayback, 1, 3 and 97 turns at a time) gives what play_with_stats() gives, on five kinds of recording: the outcome and its state hash, the record that is made of it (as the doors give it), the details, the action and the map of deaths") {
         bool some_action = false, some_deaths = false;                                                 // (the comparison is of something: a recording or two have an action and a map of deaths)
-        for (const int k : {0, 2, 4, 5}) {
+        for (const int k : {0, 2, 4, 5, 6}) {
             Real m = load(k);
             if (!m.ok) {
                 std::cout << "SKIPPED (no map)\n";
@@ -471,6 +528,7 @@ int main() {
             ASSERT_FALSE(whole_details.empty());
             some_action = some_action || !whole_action.empty();
             some_deaths = some_deaths || !whole_deaths.empty();
+            if (k == 6) ASSERT_TRUE(sum_of(whole.stats.bridges_built) > 0 && sum_of(whole.stats.bridges_undug) > 0 && whole_details.find("\"special\":{\"built\":[1,1,4,0]") != std::string::npos);      // (a recording with Swimmers at work: the pieces must agree on bridges too)
             for (const uint32_t piece : {1u, 3u, 97u}) {
                 replay::StatsPlayback playback(m.rep, m.level);
                 while (!playback.advance(piece)) {
@@ -487,8 +545,8 @@ int main() {
         ASSERT_TRUE(some_action && some_deaths);
     } TEST_END();
 
-    TEST_CASE("HD1.5 Held against an observer of its own that finds the same facts another way (the engine's record of every ant, read by number): the kills, the hit points of each team on each seat, the power-ups, the raids, the food trips and the seats that ran out of ants are the same, on matches with power-ups, thieves, bombs, drownings and a wiped out seat") {
-        for (int k : {4, 5}) {
+    TEST_CASE("HD1.5 Held against an observer of its own that finds the same facts another way (the engine's record of every ant, read by number): the kills, the hit points of each team on each seat, the power-ups, the raids, the food trips and the seats that ran out of ants are the same, on matches with power-ups, thieves, bombs, drownings, bridges and a wiped out seat") {
+        for (int k : {4, 5, 6}) {
             Real m = load(k);
             if (!m.ok) {
                 std::cout << "SKIPPED (no map)\n";
@@ -520,11 +578,15 @@ int main() {
             for (const MatchStats::Raid& r : st.raids) ASSERT_TRUE(r.points >= 0 && r.points <= 50);
             // the loot that got home (the observer watches the thieves' hands) and the fires put out (the observer reads the engine's own news): the same numbers, and both happen in these matches
             ASSERT_TRUE(st.raids_home == oracle.loot_home && st.loot_home == oracle.loot_points && st.fires_out == oracle.fires_out);
-            ASSERT_TRUE(sum_of(st.raids_home) >= 1 && sum_of(st.fires_out) >= 1);
-            if (k == 5) {
-                ASSERT_TRUE(st.raids_home == A4({1, 0, 1, 1}) && st.loot_home == L4({50, 0, 50, 50}) && st.fires_out == A4({0, 0, 0, 1}));
-                ASSERT_TRUE(sum_of(st.bridges_built) == 0 && sum_of(st.bridges_undug) == 0);              // (no Swimmer builds in these matches; the hand-made worlds of HD1.7 do)
+            ASSERT_TRUE(k == 6 || (sum_of(st.raids_home) >= 1 && sum_of(st.fires_out) >= 1));
+            // the bridges built and dug away (the observer reads the tiles, the collector watches the Swimmers): the same, and recording 6 has both
+            ASSERT_TRUE(st.bridges_built == oracle.built && st.bridges_undug == oracle.undug);
+            if (k == 6) {
+                ASSERT_TRUE(st.bridges_built == A4({1, 1, 4, 0}) && st.bridges_undug == A4({1, 0, 3, 0}));          // (ISLANDS, seed 4: 6 bridges built, 4 of them dug away by the Swimmers that the extra orders send)
+            } else {
+                ASSERT_TRUE(sum_of(st.bridges_built) == 0 && sum_of(st.bridges_undug) == 0);                // (no Swimmer builds on TREASURE)
             }
+            if (k == 5) ASSERT_TRUE(st.raids_home == A4({1, 0, 1, 1}) && st.loot_home == L4({50, 0, 50, 50}) && st.fires_out == A4({0, 0, 0, 1}));
             if (k == 5) ASSERT_TRUE(st.wipes[3] == 1 && st.wipe_turn[3] == 6014 && st.out_turn[3] == -1);           // (a seat with no ant gets one for free from an egg)
             if (k != 4) continue;
             // the numbers of this recording are fixed (seed 21, 7000 turns, four Hard computer players): the golden values
@@ -784,6 +846,7 @@ int main() {
             ASSERT_TRUE(debt.st.raids_home == A4({1, 0, 0, 0}) && debt.st.loot_home == L4({-30, 0, 0, 0}));
         }
     } TEST_END();
+
 
     // ---- the rules of the JSON on hand-made numbers ---------------------------------------------------------------------------------------------
 
@@ -1218,35 +1281,35 @@ int main() {
     } TEST_END();
 
     TEST_CASE("HD3.4 The cap is hard: a match so long that even its minutes of orders do not fit leaves the marker, and one that fits once combat and economy are dropped keeps the rest, a valid text under 5000 bytes") {
-        const auto fill = [](uint32_t minutes) {
-            MatchStats st = blank(minutes * 1200);
-            for (MatchStats::Sample& sm : st.samples) {
-                for (size_t s = 0; s < 4; ++s) {
-                    sm.score[s] = sm.box[s] = 2000000000 - static_cast<int32_t>(sm.turn);
-                    sm.killed[s] = 4000000000u - sm.turn;
-                }
-            }
-            for (auto& kind : st.orders) {
-                kind.resize(minutes);
-                for (auto& minute : kind) {
-                    for (size_t s = 0; s < 4; ++s) minute[s] = 4000000000u;
-                }
-            }
-            for (size_t s = 0; s < 4; ++s) {
-                st.food_points[s] = st.banked[s] = st.hatch_cost[s] = INT64_C(9000000000000000000);
-                for (size_t t = 0; t < 6; ++t) st.orders_naming[s][t] = 4000000000u;
-                for (size_t t = 0; t < 4; ++t) st.damage_from[s][t] = 4000000000u;
-                st.damage_dealt[s] = st.damage_taken[s] = 4000000000u;
-            }
-            return st;
-        };
+        const auto fill = [](uint32_t minutes) { return heavy_match(minutes); };
         const std::string hour = make_history_details(fill(60), record_for({0}));
         ASSERT_TRUE(!hour.empty() && hour.size() <= 5000);
         const JsonValue h = parse_text(hour);
-        ASSERT_TRUE(h.get("v").as_int_or(0) == 1 && h.has("activity") && h.get("activity").get("per_minute").at(0).size() == 60 && !h.has("combat") && !h.has("economy") && !h.has("special"));   // (the last lists to go)
+        ASSERT_TRUE(h.get("v").as_int_or(0) == 1 && h.has("activity") && h.get("activity").get("per_minute").at(0).size() == 60 && !h.has("combat") && !h.has("economy"));   // (the last lists to go: combat and economy; what happens to `special`, which is small, is HD3.5)
         const std::string two_hours = make_history_details(fill(120), record_for({0}));
         ASSERT_EQ(two_hours, history_details_marker());                                         // (nothing short enough is left to say: the pass is told as not counted)
         ASSERT_TRUE(two_hours.size() <= 5000);
+    } TEST_END();
+
+    TEST_CASE("HD3.5 `special` (about 150 bytes, whatever the match) stays at every step of the trimming, step 5 included, and goes only in the very last try, when the text fits without it and not with it: a sweep of lengths with the biggest numbers that it can hold finds each of the three and the marker, and no text passes 5000 bytes") {
+        bool all = false, no_combat = false, last_try = false, marker = false;
+        for (uint32_t minutes = 20; minutes <= 119; ++minutes) {
+            const std::string text = make_history_details(heavy_match(minutes), record_for({0}));
+            ASSERT_TRUE(!text.empty() && text.size() <= kDetailsMaxBytes);
+            if (text == history_details_marker()) {
+                marker = true;
+                continue;
+            }
+            const JsonValue d = parse_text(text);
+            const bool combat = d.has("combat"), economy = d.has("economy"), special = d.has("special");
+            ASSERT_TRUE(combat == economy);                                                    // (the two go together)
+            if (special) ASSERT_TRUE(d.get("special").get("loot_home").is_null() && d.get("special").get("raids").size() == 4 && at_int(d.get("special").get("raids"), 0, 2) == INT64_C(-9000000000000000000));
+            if (combat && special) all = true;
+            else if (!combat && special) no_combat = true;
+            else if (!combat && !special) last_try = true;
+            ASSERT_TRUE(!(combat && !special));                                                // (never combat and economy without `special`: it goes after them)
+        }
+        ASSERT_TRUE(all && no_combat && last_try && marker);
     } TEST_END();
 
     TEST_CASE("HD3.3 A text that is too long sheds its lists in a fixed order: the list of kills goes first, then the list of raids, then points; the sizes of a sweep of match lengths cross every step and the text stays under the cap") {

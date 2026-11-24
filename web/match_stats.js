@@ -35,10 +35,10 @@
     // trips), `details.combat` (the damage) and `details.special` (bridges, fires put out, the raids: only a record counted by a build that has them). A column is shown only when every seat has its number, so an older
     // record shows what it has and hides what it lacks; a type that nobody used is left out, with one line that says so.
     var MAX_COUNT = 1000000000;
-    function whole(x) { return typeof x === 'number' && isFinite(x) ? Math.max(-MAX_COUNT, Math.min(MAX_COUNT, Math.round(x))) : null; }      // a number that a record holds (a loot can be a debt), or null when it holds none
+    function whole(x, debt) { return typeof x === 'number' && isFinite(x) && (x >= 0 || debt === true) ? Math.max(-MAX_COUNT, Math.min(MAX_COUNT, Math.round(x))) : null; }      // a number that a record holds, or null when it holds none; only a loot can be below zero (a debt)
     function bySeat(a, seat) { return whole(list(a)[seat]); }
-    function inSeat(a, seat, i) { return whole(list(list(a)[seat])[i]); }
-    function seatRow(ctx, seat, key) { var r = ctx.by[seat]; return r && typeof r === 'object' && typeof r[key] === 'number' && r[key] >= 0 ? whole(r[key]) : null; }
+    function inSeat(a, seat, i, debt) { return whole(list(list(a)[seat])[i], debt); }
+    function seatRow(ctx, seat, key) { var r = ctx.by[seat]; return r && typeof r === 'object' ? whole(r[key]) : null; }
     function one(n) { return n === null ? null : { n: n }; }
     // the raids that an older record has: only how many were begun, counted from the list of raids when that is whole (the list is cut at 30 and left out when the text was too long)
     function beganOf(combat) {
@@ -67,7 +67,7 @@
                        ['Defused', 'Enemy bombs that its Bombers took away', function (c, s) { return one(seatRow(c, s, 'bombs_defused')); }, 'Defused: enemy bombs taken away.'],
                        ['Went off', 'Its bombs that an ant stepped on', function (c, s) { return one(bySeat(c.eco.bombs_off, s)); }, 'Went off: its bombs that an ant stepped on.']]],
         ['Thief', 2, [['Raids', 'Raids that brought loot home, of the raids tried', raidCell, RAIDS_NOTE],
-                      ['Loot', 'Points that its Thieves brought home', function (c, s) { return one(inSeat(c.sp.raids, s, 2)); }, 'Loot: the points brought home.']]]];
+                      ['Loot', 'Points that its Thieves brought home', function (c, s) { return one(inSeat(c.sp.raids, s, 2, true)); }, 'Loot: the points brought home.']]]];
     var OTHER = ['Food and fighting', [['Food trips', 'Times an ant picked food up', function (c, s) { return c.mode187 ? null : one(inSeat(c.eco.food, s, 0)); }, 'Food trips: times an ant picked food up.'],
                                       ['Combat Ants', 'Ants that took the Combat power-up', function (c, s) { return one(inSeat(c.eco.taken, s, 3)); }, 'Combat Ants: ants that took the Combat power-up.'],
                                       ['Damage dealt', 'Hit points its ants took from enemy ants', function (c, s) { return one(bySeat(c.com.dealt, s)); }, 'Damage: hit points taken from enemy ants, and lost to them.'],
@@ -464,9 +464,11 @@
             }
             model.cards.forEach(function (card) { add(card, false); });
             if (model.other) add(model.other, true);
-            if (!model.cards.length && model.known) s.appendChild(el('p', 'abnote', 'No ant took a power-up in this match.'));
+            // what nobody did: a type that was not taken as a power-up and did nothing (a level may start its ants as a type, so "nobody had one" would not always be true); said before the cards when no type was used
+            var gone = model.gone && model.gone.length ? el('p', 'abnote', 'No ' + listOf(model.gone) + ' took a power-up or did anything in this match.') : null;
+            if (gone && !model.cards.length) s.appendChild(gone);
             if (grid.children.length) s.appendChild(grid);
-            if (model.cards.length && model.gone && model.gone.length) s.appendChild(el('p', 'abnote', 'Nobody had a ' + listOf(model.gone) + ' in this match.'));
+            if (gone && model.cards.length) s.appendChild(gone);
             if (model.cards.length && model.cards.some(function (c) { return c.cols[0].pu; })) s.appendChild(el('p', 'lgd', 'Ants: how many of the seat\u2019s ants took the power-up and became this type.'));
             return s;
         }
