@@ -33,7 +33,6 @@ Work that is not released yet is written in the same template under a heading th
 - **Plays and likes of replays.** A replay counts as played after 10 seconds of playing (pauses do not count), once a day in a browser. The list of matches and a match's page show how often it was played and how many people like it; a logged-in person taps the heart to like and taps again to take it back, and nobody sees who liked. New sorts, **Most watched** and **Most liked**; the Sort box is wider so no name is cut. Not logged in, a tap on a heart says "Log in to like a replay."
 - **Follow** a player from the same menu (or **/follow NAME**): a **Following** tab in the players list, a star by their name, and an alert with Join when they open a public room. Nobody is told that you follow them, and nobody sees who follows whom.
 - Write to a player **privately**: **Message** in the menu, a **Messages** button in the chat (a panel, or a sheet on a phone), a count and a bell row for each new message. Messages are kept for 7 days and only the two of you can read them; **Ignore** blocks a person, and **Report** sends a message and the 5 before it to the admins.
-- **A new results screen.** With the New HUD art the end of a match is a podium: the winner, the others ranked, honors, the Play of the game and a page of numbers. Classic keeps the original's page.
 
 **Fixes:**
 - Watching a replay on a match page has the Settings button too, and a match you played shows on the Matches page right after it ends, not only when the server is idle.
