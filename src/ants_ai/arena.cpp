@@ -29,6 +29,11 @@ struct Recorder {
     void applied(const sim::Command& c) const {
         if (log != nullptr) log->push_back(RecordedCommand{*steps, sim->current_tick(), c});
         if (tally != nullptr) tally->command(c, sim->current_tick());
+        if (tally != nullptr && c.type == sim::CommandType::GroupSpecial && !c.ants.empty()) {       // a Swimmer's dig: the special order onto a water tile that holds no bridge yet
+            const sim::TileCoord t{c.tile_x, c.tile_y};
+            const sim::Grid& grid = sim->grid();
+            if (grid.in_bounds(t) && grid.terrain_class_at(t) == sim::movement::kTerrainWater && !grid.get_cell(t).has_any_bridge()) tally->bridge_order(c.issuer);
+        }
     }
 };
 
@@ -305,6 +310,7 @@ void IdleTally::scan(sim::SimulationEngine& sim) {
         for (Seat& s : seats_) {
             s.after_ant_ticks = 0;
             s.after_idle_ticks = 0;
+            s.after_idle_long_ticks = 0;
         }
     }
     units_ = units;
@@ -357,6 +363,10 @@ void IdleTally::scan(sim::SimulationEngine& sim) {
         if (tick - idle_since_[a.id] >= kIdleTicks) {
             seat.idle_ticks += kPeriod;
             seat.after_idle_ticks += kPeriod;
+        }
+        if (tick - idle_since_[a.id] >= kIdleLongTicks) {
+            seat.idle_long_ticks += kPeriod;
+            seat.after_idle_long_ticks += kPeriod;
         }
     }
 }
@@ -626,6 +636,9 @@ ArenaResult play_match(const ArenaSpec& spec) {
         r.idle_ticks = idle_tally.seat(b.seat).idle_ticks;
         r.after_ant_ticks = idle_tally.seat(b.seat).after_ant_ticks;
         r.after_idle_ticks = idle_tally.seat(b.seat).after_idle_ticks;
+        r.idle_long_ticks = idle_tally.seat(b.seat).idle_long_ticks;
+        r.after_idle_long_ticks = idle_tally.seat(b.seat).after_idle_long_ticks;
+        r.bridge_orders = tally.seat(b.seat).bridge_orders;
         r.steals = idle_tally.seat(b.seat).steals;
         r.steal_points = idle_tally.seat(b.seat).steal_points;
         r.raids = idle_tally.seat(b.seat).raids;

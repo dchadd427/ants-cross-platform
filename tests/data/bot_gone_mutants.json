@@ -123,7 +123,7 @@
     {
       "id": "after_the_food_never_restarts",
       "file": "src/ants_ai/arena.cpp",
-      "old": "        for (Seat& s : seats_) {\n            s.after_ant_ticks = 0;\n            s.after_idle_ticks = 0;\n        }",
+      "old": "        for (Seat& s : seats_) {\n            s.after_ant_ticks = 0;\n            s.after_idle_ticks = 0;\n            s.after_idle_long_ticks = 0;\n        }",
       "new": "",
       "test": "timeout 900 env ANTS_TEST_FILTER='AI56.7 ' ./build/tests/test_ai/test_ai",
       "expect": "AI56.7"

@@ -598,7 +598,7 @@ bool same_match(const ai::ArenaResult& a, const ai::ArenaResult& b) {
             x.banked != y.banked || x.raided != y.raided || x.kills != y.kills || x.losses != y.losses || x.stats.decisions != y.stats.decisions || x.stats.intents != y.stats.intents ||
             x.stats.released != y.stats.released || x.stats.expired != y.stats.expired || x.stats.pruned != y.stats.pruned || x.stats.superseded != y.stats.superseded ||
             x.stats.filtered != y.stats.filtered || x.stats.rejected != y.stats.rejected || x.stalls != y.stalls || x.cantgo != y.cantgo || x.cantgo_began != y.cantgo_began ||
-            x.orders != y.orders || x.attack_orders != y.attack_orders || x.bombs_planted != y.bombs_planted || x.fires_lit != y.fires_lit || x.war_ticks != y.war_ticks || x.fire_hunts != y.fire_hunts || x.mines_planted != y.mines_planted || x.ramp_unjams != y.ramp_unjams || x.rushes != y.rushes || x.rush_ticks != y.rush_ticks || x.rush_attacks != y.rush_attacks || x.refused_orders != y.refused_orders || x.refused_again != y.refused_again || x.took != y.took || x.took_at_flowers != y.took_at_flowers || x.ant_ticks != y.ant_ticks || x.idle_ticks != y.idle_ticks || x.after_ant_ticks != y.after_ant_ticks || x.after_idle_ticks != y.after_idle_ticks || x.raids != y.raids || x.raid_points != y.raid_points || x.steals != y.steals || x.steal_points != y.steal_points || x.stuck_ants != y.stuck_ants || x.stuck_ticks != y.stuck_ticks || x.stuck_looping != y.stuck_looping || x.stuck_blocked != y.stuck_blocked || x.stuck_carriers != y.stuck_carriers || !(x.expedition == y.expedition) || !(x.miner_flight == y.miner_flight)) {
+            x.orders != y.orders || x.attack_orders != y.attack_orders || x.bombs_planted != y.bombs_planted || x.fires_lit != y.fires_lit || x.war_ticks != y.war_ticks || x.fire_hunts != y.fire_hunts || x.mines_planted != y.mines_planted || x.ramp_unjams != y.ramp_unjams || x.rushes != y.rushes || x.rush_ticks != y.rush_ticks || x.rush_attacks != y.rush_attacks || x.refused_orders != y.refused_orders || x.refused_again != y.refused_again || x.took != y.took || x.took_at_flowers != y.took_at_flowers || x.ant_ticks != y.ant_ticks || x.idle_ticks != y.idle_ticks || x.after_ant_ticks != y.after_ant_ticks || x.after_idle_ticks != y.after_idle_ticks || x.idle_long_ticks != y.idle_long_ticks || x.after_idle_long_ticks != y.after_idle_long_ticks || x.bridge_orders != y.bridge_orders || x.raids != y.raids || x.raid_points != y.raid_points || x.steals != y.steals || x.steal_points != y.steal_points || x.stuck_ants != y.stuck_ants || x.stuck_ticks != y.stuck_ticks || x.stuck_looping != y.stuck_looping || x.stuck_blocked != y.stuck_blocked || x.stuck_carriers != y.stuck_carriers || !(x.expedition == y.expedition) || !(x.miner_flight == y.miner_flight)) {
             return false;
         }
     }
@@ -970,7 +970,7 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
     JsonWriter j(&out);
     j.begin_object();
     j.field("tool", "bot_arena");
-    j.field("format", uint64_t{8});                                   // 2: banked and raided replace the engine's food_deposited, food_stolen and food_lost (never fed, always 0); 3: the can't-go counts per seat; 4: the flowers (landings per match, the power-ups taken per seat); 5: the expedition per seat; 6: the Bomber flight to the ring pile per seat; 7: the idle tally per seat, last_food and reachable_units_left per match; 8: the stuck tally per seat and the steals completed (idle.steals, idle.steal_points)
+    j.field("format", uint64_t{9});                                   // 2: banked and raided replace the engine's food_deposited, food_stolen and food_lost (never fed, always 0); 3: the can't-go counts per seat; 4: the flowers (landings per match, the power-ups taken per seat); 5: the expedition per seat; 6: the Bomber flight to the ring pile per seat; 7: the idle tally per seat, last_food and reachable_units_left per match; 8: the stuck tally per seat and the steals completed (idle.steals, idle.steal_points); 9: the idle ants of 10 seconds (idle.idle_long_ticks, idle.after_idle_long_ticks), and the bridge tiles ordered (bridge_orders) per seat
     j.field("note", kKindsNote);
     j.key("options");
     j.begin_object();
@@ -1055,6 +1055,7 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
             j.field("attack_orders", uint64_t{s.attack_orders});
             j.field("bombs_planted", uint64_t{s.bombs_planted});
             j.field("fires_lit", uint64_t{s.fires_lit});
+            j.field("bridge_orders", uint64_t{s.bridge_orders});             // the water tiles the seat's Swimmers were told to dig
             j.key("war_ticks");                                             // the ticks a standard bot spent at every war tier (0: not behind enough .. 3)
             j.begin_object();
             for (size_t k = 0; k < s.war_ticks.size(); ++k) j.field("t" + std::to_string(k), uint64_t{s.war_ticks[k]});
@@ -1083,6 +1084,8 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
             j.field("idle_ticks", s.idle_ticks);
             j.field("after_ant_ticks", s.after_ant_ticks);
             j.field("after_idle_ticks", s.after_idle_ticks);
+            j.field("idle_long_ticks", s.idle_long_ticks);                  // the same for the ants that stood idle for 10 seconds (docs/BOT_IDLE.md)
+            j.field("after_idle_long_ticks", s.after_idle_long_ticks);
             j.field("raids", uint64_t{s.raids});
             j.field("raid_points", uint64_t{s.raid_points});
             j.field("steals", uint64_t{s.steals});
