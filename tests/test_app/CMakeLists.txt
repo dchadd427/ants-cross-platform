@@ -1440,6 +1440,42 @@ target_link_libraries(test_health_changes PRIVATE ants_test_paths)
 add_test(NAME test_health_changes COMMAND test_health_changes)
 set_tests_properties(test_health_changes PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# The numbers of the results screen besides the original's four (match_report.hpp, live_match_stats.hpp): the honors and the Play of the game on made-up counts, the live pass against the recording's pass
+# (a game on one machine, a match of the network, a catch-up) field by field, a tick that was missed, and that counting changes nothing
+add_executable(test_match_report
+    test_match_report.cpp
+)
+
+target_include_directories(test_match_report PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_match_report PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_replay
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_match_report PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_match_report PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_match_report PRIVATE ants_test_paths)
+
+add_test(NAME test_match_report COMMAND test_match_report)
+set_tests_properties(test_match_report PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # The numbers in the game's font: the sizes against the classic drawing, the shrink, the output's pixels, the cache and the fallback
 add_executable(test_font_numbers
     test_font_numbers.cpp

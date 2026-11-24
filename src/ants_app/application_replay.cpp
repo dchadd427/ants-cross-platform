@@ -134,6 +134,7 @@ void Application::begin_recording(replay::Header head) {
 // The Start of a network match, as net_load_match has just applied it: the same data on every machine, so every machine's file holds the same match (the seat that wrote it is the only difference)
 void Application::begin_net_recording() {
     recorder_.reset();
+    live_stats_.start(sim_);                                                 // (the count of the numbers of the results: from the first turn, with or without a file; the web build keeps none)
     const net::StartMsg& start = net_->start_info();
     replay::Header head;
     head.venue = "network game";
@@ -153,6 +154,7 @@ void Application::begin_net_recording() {
 // is kept when something happened in it, the player at this machine gave an order (the quit is one; the computer players' orders and the other machines' do not count) or a minute went by
 // (docs/REPLAYS.md); one that is left at once leaves nothing. A recording that cannot be a file is dropped with a line on the console and the match goes on as it did.
 void Application::finish_recording() {
+    if (!sim_.is_match_over()) live_stats_.abandon();          // (a match that is left has no results: what was counted is dropped; the report of one that ended stays until the next begins)
     if (!recorder_) return;
     if (!sim_.is_match_over() && recorder_->own_commands() == 0 && recorder_->turns() < kLeftMatchKeptTurns) {
         recorder_.reset();
@@ -300,6 +302,7 @@ void Application::start_replay() {
     if (!discard_sink_) discard_sink_ = std::make_unique<DiscardSink>();
     hud_.set_command_sink(discard_sink_.get());
     recorder_.reset();                                                     // (a viewer records nothing)
+    live_stats_.reset();                                                   // (and counts nothing: no numbers of an earlier match, which the results of a viewed recording would show)
     withdraw_replay();
     if (!replay_file_ || replay_failure_ != ReplayFailure::None) {
         report_replay_to_page();

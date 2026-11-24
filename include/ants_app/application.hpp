@@ -41,6 +41,7 @@
 #include "ants_app/fps_overlay.hpp"
 #include "ants_app/game_menu.hpp"
 #include "ants_app/health_changes.hpp"
+#include "ants_app/live_match_stats.hpp"
 #include "ants_app/connections_overlay.hpp"
 #include "ants_app/latency_corner.hpp"
 #include "ants_app/local_teams.hpp"
@@ -317,6 +318,11 @@ public:
     const replay::Replay* replay_file() const noexcept { return replay_file_.get(); }
     /// The recording of the match that is being played (null: none is made, or the match has ended)
     const replay::Recorder* recorder() const noexcept { return recorder_.get(); }
+    /// The numbers of the results screen besides the original's four (match_report.hpp), counted while the match was played on the confirmed engine, whole or not at all: valid from the end of a match until the next one begins, and
+    /// `ok` is false for a match that was not counted from its first turn to its last (the screen then shows the original's numbers only). A viewer of a recording counts nothing. Made in check_match_over, before the results open.
+    const MatchReport& match_report() const noexcept { return live_stats_.report(); }
+    /// The count itself, for the tests (what the pass counted in the match whose report that is)
+    const LiveMatchStats& live_stats() const noexcept { return live_stats_; }
     /// The engine that the match screen SHOWS and that the HUD asks (the picture, the minimap, the panel, the selection, the pointer's cursor, what a click picks): `sim()`, the confirmed
     /// engine, except in a match of the network that predicts the player's own orders (net::Prediction, docs/NETWORK_PORT.md "Prediction of one's own orders"), where it is the predicted
     /// engine: the player's orders show at once and everything else is the confirmed state a few ticks ahead. The cues, the news, the scores, the end of the match and the hashes stay the
@@ -732,6 +738,7 @@ private:
     uint8_t local_player_id_{0};
     uint8_t local_roster_{0x0F};                           // the seats of the local game that was started (all four, or the local player and the bots)
     std::unique_ptr<replay::Recorder> recorder_;          // the recording of the match that is on (replay.hpp; empty: none is made, or the match has ended); the sinks below hold a reference to it
+    LiveMatchStats live_stats_;                           // the count of the match that is on (the web build has it too: it records nothing, and counts the same); fed from the places that the recorder is, and the report of the match that ended
     bool replay_mode_{false};                             // --replay: the game shows a recording
     health::ChangeTracker health_changes_;                // the damage and heal numbers (health_changes.hpp): read from the confirmed engine after every tick, drawn by the renderer; view only
     double health_clock_ms_{0.0};                         // ... their clock: real milliseconds that pass while the match runs (it stops while a match or a replay is paused)
