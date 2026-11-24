@@ -31,8 +31,8 @@ body > .upd-strip { width: 100%; max-width: 1280px; margin-bottom: 16px; }      
 @media (max-width: 359px) { .upd .u-b { padding: 6px 14px; } .upd-strip .u-tx { flex-basis: 100%; } .upd-strip .u-ac { margin-left: 0; width: 100%; } .upd-strip .u-ac .u-b { flex: 1 1 0; } }
 
 /* the window: What's new */
-.upd-win { position: fixed; inset: 0; z-index: 95; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(2, 6, 5, .66); }
-.upd-win .upd-box { width: 580px; max-width: 100%; max-height: min(86vh, 760px); display: flex; flex-direction: column; overflow: hidden; background: var(--u-inset); border: 3px solid var(--u-hi);
+.upd-win { position: fixed; inset: 0; z-index: 95; display: flex; align-items: center; justify-content: center; padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px)); background: rgba(2, 6, 5, .66); }
+.upd-win .upd-box { width: 580px; max-width: 100%; max-height: min(86vh, 760px); max-height: min(86dvh, 760px); display: flex; flex-direction: column; overflow: hidden; background: var(--u-inset); border: 3px solid var(--u-hi);
     border-color: var(--u-hi) var(--u-lo) var(--u-lo) var(--u-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--u-edge), 3px 4px 0 2px var(--u-shadow); }
 .upd-win .u-wh { padding: 16px 22px 12px; border-bottom: 1px solid #1d3a31; }
 .upd-win .u-wh h2 { margin: 0; font-size: 24px; font-weight: 500; line-height: 1.2; color: var(--u-cream); }
@@ -63,13 +63,14 @@ body > .upd-strip { width: 100%; max-width: 1280px; margin-bottom: 16px; }      
 .upd-win .u-fold[open] > summary { margin-bottom: 4px; }
 .upd-win .u-fold:not([open]) { padding-bottom: 0; }
 @media (max-width: 719px) {
-    .upd-win { padding: 10px; }
-    .upd-win .upd-box { max-height: calc(100vh - 28px); }
+    .upd-win { padding: 10px 10px calc(10px + env(safe-area-inset-bottom, 0px)); }
+    .upd-win .upd-box { max-height: calc(100vh - 28px); max-height: calc(100dvh - 28px); }
     .upd-win .u-wh { padding: 14px 16px 10px; }
     .upd-win .u-wh h2 { font-size: 22px; }
     .upd-win .u-wb { padding: 4px 16px 6px; }
     .upd-win .u-wf { padding: 10px 16px 12px; }
     .upd-win .u-rt { font-size: 16px; }
 }
+@media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) { .upd-win .upd-box { max-height: min(calc(100dvh - 28px), calc(100svh - 28px)); } }       /* (an installed window: the smaller height, so the Close button is never below the window; the bug: 100vh is the height without the browser bar, so on a phone the foot with Close was cut off) */
 @media (forced-colors: active) { .upd-strip, .upd-win .upd-box { border: 2px solid CanvasText; box-shadow: none; } .upd .u-b { border: 2px solid ButtonText; } }
 @media (prefers-reduced-motion: no-preference) { .upd-win .upd-box { animation: upd-in .18s ease-out; } @keyframes upd-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } } }
