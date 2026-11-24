@@ -1,6 +1,6 @@
 """Follows (docs/HUB_PEOPLE.md, "Follows"): a person follows another person, and nobody is told. A follow is one row of the account's own list, by the pseudonymous references of both people (hub/store/, never an id); only its
 owner ever gets the list, and no frame, log or page holds who follows whom, or how many people follow somebody. What a follow gives: the Following tab of the players list and a star by the name, and the alert `room`
-("<person> opened a room") when the person opens a PUBLIC room. A person who ignores the follower gives them nothing, and nothing tells the follower.
+("<person> opened a room") when the person opens a PUBLIC room. A person who ignores the other, either way (the follower ignores the host, or the host ignores the follower), gives the follower nothing, and nothing tells either.
 
 Down, to the account's own sockets only: {"t":"follows","rows":[{"h","name","i","k"}]} (sent after the welcome of a login when the list is not empty, and again whenever it changed: a follow, an unfollow, a person who came or went). `h`
 is the person's handle (hub/chat.py `handle`: a keyed mark that is new with every start; a page names a person to the hub by it, and only a handle that the hub sent to this account can be used), `name` the name that is shown now (the
@@ -11,7 +11,7 @@ The commands (hub/commands.py): /follow WORD and /unfollow WORD, where WORD is a
 `nobody`, `ambiguous`, `self`, `full`, and for /unfollow `not`.
 
 ROOM ALERTS. When a page that waits in a PUBLIC room says its code (the host's page does; hub/presence.py), the people who follow the host and are here get a `room` alert (hub/people.py: the same row as an invitation's, `from`, `map`,
-`n`, `of`, `o` and `code` while the room is open, and the same end: the room closes, fills or is left), unless they are in a match or in that room already, ignore the host, have had 6 room alerts in the day or were told of a room of the host in
+`n`, `of`, `o` and `code` while the room is open, and the same end: the room closes, fills or is left), unless they are in a match or in that room already, ignore the host or are ignored by the host, have had 6 room alerts in the day or were told of a room of the host in
 the last hour. The host is never told that anybody was. Never an invite-only room: its page says no code to the hub's list.
 """
 import collections
@@ -74,6 +74,10 @@ class Follows:
         there = self.chat.account_of_ref(ref)
         return Person(ref, there, (self.chat.shown_name(there) or name) if there is not None else name)
 
+    def is_banned(self, ref):
+        """Whether the person with this reference is banned from the chat now (all that is known of a person who is not here is the reference: a handle that was given before the ban still names them)."""
+        return any(self.chat.ref(a) == ref for a in self.chat.presence.restricted()[0])
+
     def resolve(self, me, word, banned_ok=False):
         """(Person, None) for the person that `word` means, or (None, `nobody`), or (None, `ambiguous`) for a name that two people show: a shown name (any letter case; a person who is here or wrote lately), `row:N` (a person who is here),
         `#N` (the author of a line in the history that the pages are sent: the name is the line's own) or `h:HANDLE`. A person who is banned from the chat is nobody here (`banned_ok`: for /ignore, which may name them)."""
@@ -81,7 +85,7 @@ class Follows:
         banned = set() if banned_ok else chat.presence.restricted()[0]
         if HANDLE_WORD.match(word):
             person = self.by_handle(me, word[2:])
-            return (person, None) if person is not None and (person.account is None or person.account not in banned) else (None, "nobody")
+            return (person, None) if person is not None and (banned_ok or not self.is_banned(person.ref)) else (None, "nobody")
         if ROW_WORD.match(word):
             found = {a: chat.shown_name(a) for a, i in chat.presence.ids.items() if i == int(word[4:]) and chat.presence.sockets(a)}
         elif LINE_WORD.match(word):
@@ -263,6 +267,8 @@ class Follows:
                 continue
             if chat.presence.doing(target) == "play" or (chat.presence.room_of(target) is not None and chat.presence.room_of(target).code == where.code):
                 continue
+            if chat.commands.ignores_person(account, target):
+                continue                            # (the host blocked the follower: they are given nothing of the host's rooms, and nothing tells them)
             if chat.commands.ignores_person(target, account) or not self.days.take(chat.key_of(target), now):
                 continue
             alert = chat.people.add(target, "room", body, from_account=account)

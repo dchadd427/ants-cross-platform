@@ -1447,6 +1447,57 @@ class Contract(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.report_add(a, b, "Anna", "Ben", "rude", last.id)
 
+    def test_what_is_hidden_from_the_other_person_is_cut_by_itself_and_never_takes_the_place_of_what_they_see(self):
+        a, b = self.REF_A, self.REF_B
+        for n in range(3):
+            self.store.dm_add(a, b, "Anna", "Ben", "v%d" % n, keep=4)
+        for n in range(6):
+            self.store.dm_add(a, b, "Anna", "Ben", "h%d" % n, hide=True, keep=4)
+        self.assertEqual([m.text for m in self.store.dm_thread(b, a, 100)], ["v0", "v1", "v2"])
+        self.assertEqual([m.text for m in self.store.dm_thread(a, b, 100)], ["v0", "v1", "v2", "h2", "h3", "h4", "h5"])
+        self.assertEqual(self.store.dm_usage()[0], 7)
+        for n in range(3, 6):
+            self.store.dm_add(a, b, "Anna", "Ben", "v%d" % n, keep=4)                                  # (what they see is cut at its own number, and the hidden ones stay)
+        self.assertEqual([m.text for m in self.store.dm_thread(b, a, 100)], ["v2", "v3", "v4", "v5"])
+        self.assertEqual([m.text for m in self.store.dm_thread(a, b, 100)], ["v2", "h2", "h3", "h4", "h5", "v3", "v4", "v5"])
+        self.assertEqual(self.store.dm_usage()[0], 8)
+
+    def test_a_message_past_its_days_cannot_be_got_to_report_even_before_the_purge_has_run(self):
+        a, b = self.REF_A, self.REF_B
+        one = self.store.dm_add(b, a, "Ben", "Anna", "one")
+        self.clock.now += 7 * DAY - 1
+        self.assertEqual(self.store.dm_get(a, b, one.id).text, "one")
+        self.clock.now += 2
+        self.assertIsNone(self.store.dm_get(a, b, one.id))
+        self.assertEqual(self.store.dm_usage()[0], 1)
+
+    def test_the_copy_of_a_report_holds_only_what_the_reporter_could_see_not_what_they_deleted_and_not_what_is_past_its_days(self):
+        a, b = self.REF_A, self.REF_B
+        self.store.dm_add(b, a, "Ben", "Anna", "past its days")
+        self.clock.now += 6 * DAY
+        self.store.dm_add(b, a, "Ben", "Anna", "deleted by anna")
+        self.store.dm_add(a, b, "Anna", "Ben", "anna s, deleted")
+        self.clock.now += 2 * DAY
+        self.store.dm_delete(a, b)
+        self.store.dm_add(b, a, "Ben", "Anna", "after the delete")
+        self.store.dm_add(a, b, "Anna", "Ben", "anna s answer")
+        last = self.store.dm_add(b, a, "Ben", "Anna", "reported")
+        self.store.report_add(a, b, "Anna", "Ben", "abuse", last.id)
+        self.assertEqual([(who, text) for _, who, text in self.store.reports()[0].messages], [("d", "after the delete"), ("r", "anna s answer"), ("d", "reported")])
+
+    def test_a_report_is_found_by_its_reporter_and_the_message_and_closing_it_writes_its_note_in_the_same_step(self):
+        a, b = self.REF_A, self.REF_B
+        one = self.store.dm_add(b, a, "Ben", "Anna", "one")
+        self.assertIsNone(self.store.report_find(a, one.id))
+        first = self.store.report_add(a, b, "Anna", "Ben", "abuse", one.id)
+        self.assertEqual((self.store.report_find(a, one.id), self.store.report_find(b, one.id), self.store.report_find(a, one.id + 1)), (first, None, None))
+        with self.assertRaises(ValueError):
+            self.store.report_close(first, note=("1234", "report_close", "", str(first)))              # (a note that is refused closes nothing)
+        self.assertEqual([r.closed for r in self.store.reports()], [0])
+        self.assertTrue(self.store.report_close(first, note=(base.TERMINAL, "report_close", "", str(first))))
+        self.assertFalse(self.store.report_close(first, note=(base.TERMINAL, "report_close", "", str(first))))
+        self.assertEqual([(r.actor, r.action, r.target, r.detail) for r in self.store.actions()], [(base.TERMINAL, "report_close", "", "1")])
+
     def test_a_report_is_closed_once_and_kept_30_days_after_that_or_90_if_nobody_closes_it(self):
         a, b = self.REF_A, self.REF_B
         one = self.store.dm_add(b, a, "Ben", "Anna", "one")

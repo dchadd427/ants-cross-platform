@@ -129,6 +129,20 @@
    "old": "if not self.list_of(account) and account not in self.last:\n                continue",
    "new": "continue",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_follows tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_host_who_blocked_the_follower_gives_them_no_room_alert",
+   "file": "hub/follows.py",
+   "old": "if chat.commands.ignores_person(account, target):\n                continue",
+   "new": "if False:\n                continue",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_follows tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_handle_that_was_given_before_a_ban_means_nobody",
+   "file": "hub/follows.py",
+   "old": "(banned_ok or not self.is_banned(person.ref))",
+   "new": "True",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_follows tests.scripts.test_hub_store_contract"
   }
  ]
 }

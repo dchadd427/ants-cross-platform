@@ -622,7 +622,11 @@ class Store(StoreBase):
         now = int(self.clock())
         with self.transaction():
             cur = self.db.execute("INSERT INTO dms (at, frm, tor, frm_name, to_name, text, hide) VALUES (?, ?, ?, ?, ?, ?, ?)", (now, frm, to, frm_name, to_name, text, 1 if hide else 0))
-            self.db.execute("DELETE FROM dms WHERE id IN (SELECT id FROM dms WHERE (frm = ? AND tor = ?) OR (frm = ? AND tor = ?) ORDER BY id DESC LIMIT -1 OFFSET ?)", (frm, to, to, frm, int(keep)))
+            if hide:
+                scope, args = "frm = ? AND tor = ? AND hide = 1", (frm, to)                              # (what is hidden from the other person is cut by itself: it never takes the place of what they see)
+            else:
+                scope, args = "((frm = ? AND tor = ?) OR (frm = ? AND tor = ?)) AND hide = 0", (frm, to, to, frm)
+            self.db.execute("DELETE FROM dms WHERE id IN (SELECT id FROM dms WHERE %s ORDER BY id DESC LIMIT -1 OFFSET ?)" % scope, args + (int(keep),))
         return Message(cur.lastrowid, now, frm, to, text, frm_name, to_name)
 
     def dm_thread(self, ref, other, limit=100):
@@ -669,7 +673,8 @@ class Store(StoreBase):
     def dm_get(self, ref, other, message_id):
         if not self.has_dms():
             return None
-        row = self.db.execute("SELECT %s FROM dms WHERE id = ? AND frm = ? AND tor = ? AND gone_to = 0 AND hide = 0" % self.COLUMNS_DM, (int(message_id), other, ref)).fetchone()
+        row = self.db.execute("SELECT %s FROM dms WHERE id = ? AND frm = ? AND tor = ? AND gone_to = 0 AND hide = 0 AND at >= ?" % self.COLUMNS_DM,
+                              (int(message_id), other, ref, int(self.clock()) - int(self.dm_days * 86400))).fetchone()
         return Message(*row) if row else None
 
     def dm_partners(self, ref):
@@ -694,15 +699,21 @@ class Store(StoreBase):
         with self.transaction():
             if self.dm_get(reporter, reported, message_id) is None:
                 return None
-            old = self.db.execute("SELECT id FROM reports WHERE reporter = ? AND msg = ?", (reporter, int(message_id))).fetchone()
+            old = self.report_find(reporter, message_id)
             if old is not None:
-                return old[0]
-            rows = self.db.execute("SELECT at, frm, text FROM dms WHERE id <= :m AND ((frm = :a AND tor = :b) OR (frm = :b AND tor = :a AND hide = 0)) ORDER BY id DESC LIMIT :n",
-                                   {"m": int(message_id), "a": reporter, "b": reported, "n": int(context) + 1}).fetchall()
+                return old
+            rows = self.db.execute("SELECT at, frm, text FROM dms WHERE id <= :m AND at >= :cut AND %s ORDER BY id DESC LIMIT :n" % self.VISIBLE_DM,
+                                   {"m": int(message_id), "r": reporter, "o": reported, "cut": now - int(self.dm_days * 86400), "n": int(context) + 1}).fetchall()
             copy = json.dumps([[at, "r" if frm == reporter else "d", text] for at, frm, text in reversed(rows)], ensure_ascii=False, separators=(",", ":"))
             cur = self.db.execute("INSERT INTO reports (at, reporter, reported, reporter_name, reported_name, why, msg, copy) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                                   (now, reporter, reported, reporter_name, reported_name, why, int(message_id), copy))
         return cur.lastrowid
+
+    def report_find(self, reporter, message_id):
+        if not self.has_reports():
+            return None
+        row = self.db.execute("SELECT id FROM reports WHERE reporter = ? AND msg = ?", (reporter, int(message_id))).fetchone()
+        return row[0] if row else None
 
     def reports(self, closed=False):
         if not self.has_reports():
@@ -710,11 +721,14 @@ class Store(StoreBase):
         rows = self.db.execute("SELECT id, at, reporter, reported, reporter_name, reported_name, why, closed, copy FROM reports %s ORDER BY id DESC" % ("" if closed else "WHERE closed = 0")).fetchall()
         return [Report(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], [tuple(m) for m in json.loads(r[8])]) for r in rows]
 
-    def report_close(self, report_id):
+    def report_close(self, report_id, note=None):
         if not self.has_reports():
             return False
         with self.transaction():
-            return self.db.execute("UPDATE reports SET closed = ? WHERE id = ? AND closed = 0", (max(1, int(self.clock())), int(report_id))).rowcount > 0
+            if self.db.execute("UPDATE reports SET closed = ? WHERE id = ? AND closed = 0", (max(1, int(self.clock())), int(report_id))).rowcount == 0:
+                return False
+            self.write_note(note)                                  # (a report that was closed by this call: the row of the log is written in the same step; a note that is refused closes nothing)
+            return True
 
     # ---- profiles -------------------------------------------------------------------------------------------------------------------------
 

@@ -38,7 +38,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **For operators:**
 - The game server's database moves to schema version 11 (the table `history_action`, the counts that the activity curve is drawn from; the history service's own file to its version 5): an older program refuses the newer file, and the update does not copy it, so stop the server and copy `ants.db` before the update; that copy is the way back ([`docs/HEATMAPS.md`](docs/HEATMAPS.md#the-activity-curve)).
-- New `follows`, `dms` (private messages, 7 days) and `reports` tables, made by the first use and deleted by Forget me; reports are read with `python -m hub.admin reports` and closed with `report-close ID` ([private messages](docs/HUB_MESSAGES.md)). The Legal page has a section for them.
+- New `follows`, `dms` (private messages, 7 days) and `reports` tables, made by the first use and deleted by Forget me; reports are read with `python -m hub.admin reports` and closed with `report-close ID`, and each report, look and close is a row of the moderators' log ([private messages](docs/HUB_MESSAGES.md)). The Legal page has a section for them.
 
 ## v0.21.2 - 2026-11-23 - Invites, mentions, the bell, map pages and Random map
 

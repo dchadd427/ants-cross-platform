@@ -7,6 +7,8 @@ here: they stay on that backend's class. tests/scripts/test_hub_store_contract.p
 import collections
 import re
 
+from ..limits import Limits
+
 Line = collections.namedtuple("Line", "id at account name text mod img", defaults=(None,))        # img: None, or the Image of the line (docs/HUB_IMAGES.md)
 Line.__repr__ = lambda self: "<Line %d>" % self.id                 # (the default shows the account's Discord id: that is like a password and is in no representation)
 Image = collections.namedtuple("Image", "name x w h tw th anim")     # a posted image: its public name (32 random hex digits), its type (`jpg`, `png` or `gif`), the size of the image and of its thumbnail, and whether it is animated
@@ -31,7 +33,7 @@ PICKS = ("display", "username")
 MAX_LINES = 200                                # the store keeps the newest this many chat lines (every line counts, a moderator's and a deleted one too), and no line older than `retention`: whichever limit is smaller deletes first
 MODLOG_DAYS = 30                        # the moderators' log keeps an action this long ...
 MODLOG_ROWS = 10000                     # ... and at most this many rows (the newest)
-ACTIONS = ("mute", "unmute", "del", "kick", "ban", "unban", "nopic", "pic", "noimages", "images", "del_img", "bots_start", "bots_stop")     # what the log can say was done
+ACTIONS = ("mute", "unmute", "del", "kick", "ban", "unban", "nopic", "pic", "noimages", "images", "del_img", "bots_start", "bots_stop", "report", "report_read", "report_close")     # what the log can say was done
 BOTS_DETAILS = {"bots_start": re.compile(r"[0-9]{1,6} every [0-9]{1,5}s\Z"), "bots_stop": re.compile(r"stopped [0-9]{1,6} dropped [0-9]{1,6}\Z")}      # the detail of a `/bots` row: numbers and fixed words, each number short of an id's length
 TERMINAL = "terminal"                   # the actor of an action that the command line did
 REFERENCE = re.compile(r"[0-9a-f]{16}\Z")      # the pseudonymous reference of an account (hub/pseudo.py)
@@ -264,13 +266,14 @@ class StoreBase:
 
     # ---- private messages (hub/messages.py), by the references of both people, never by an id; kept `dm_days` days ----
 
-    dm_days = 7
-    report_open_days = 90
-    report_closed_days = 30
+    dm_days = Limits.dm_days                    # (the hub sets them from its limits, hub/messages.py; the command line has these)
+    report_open_days = Limits.report_open_days
+    report_closed_days = Limits.report_closed_days
 
     def dm_add(self, frm, to, frm_name, to_name, text, hide=False, keep=300):
         """Keep a message from `frm` to `to` (references) with the names that are shown now, and give back its Message; `hide`: the person it is to never sees it (they ignore the sender: the sender's own copy is as any other). The
-        conversation keeps its newest `keep` messages: the rest go with this call. The table is made by the first message."""
+        conversation keeps its newest `keep` messages that the other person may see: the rest go with this call. A message that is hidden from the other person is cut by itself (the newest `keep` of them from the same sender), and so never
+        takes the place of a message that the other person sees. The table is made by the first message."""
         raise NotImplementedError
 
     def dm_thread(self, ref, other, limit=100):
@@ -294,7 +297,7 @@ class StoreBase:
         raise NotImplementedError
 
     def dm_get(self, ref, other, message_id):
-        """The message with this number when it is from `other` to `ref` and `ref` may see it, else None."""
+        """The message with this number when it is from `other` to `ref`, `ref` may see it and it is not past `dm_days` days, else None."""
         raise NotImplementedError
 
     def dm_partners(self, ref):
@@ -307,15 +310,20 @@ class StoreBase:
 
     def report_add(self, reporter, reported, reporter_name, reported_name, why, message_id, context=5):
         """A report of the message `message_id` (from `reported` to `reporter`, which `reporter` may see): the message and up to `context` messages before it in the conversation are COPIED into the report, as the store holds them (a
-        message that was hidden from the reporter is not in the copy). `why` is one of REPORT_REASONS. Returns the report's number; the same person's second report of the same message is the first one's number. None when the message is not there."""
+        message that was hidden from the reporter is not in the copy, nor one that the reporter deleted, nor one past `dm_days` days: the copy holds what the reporter could see). `why` is one of REPORT_REASONS. Returns the report's number;
+        the same person's second report of the same message is the first one's number. None when the message is not there."""
+        raise NotImplementedError
+
+    def report_find(self, reporter, message_id):
+        """The number of the report that `reporter` made of this message, or None."""
         raise NotImplementedError
 
     def reports(self, closed=False):
         """The reports that nobody closed (with `closed`, the closed ones as well), newest first."""
         raise NotImplementedError
 
-    def report_close(self, report_id):
-        """The report is closed (the store deletes it `report_closed_days` days later). False when there is none that is open."""
+    def report_close(self, report_id, note=None):
+        """The report is closed (the store deletes it `report_closed_days` days later), and `note` is written to the moderators' log in the same step. False when there is none that is open."""
         raise NotImplementedError
 
     # ---- pictures: the small copy of an account's Discord picture (hub/pictures.py), keyed by the account's pseudonymous reference, never by its id ----

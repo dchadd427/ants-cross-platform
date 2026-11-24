@@ -184,8 +184,13 @@ class People:
         """Keep an alert for the account: the new Alert, or None when the database refused it (the page that asked is not told: an alert is news, and a lost one is not a wrong answer). With `replace`, the account's alerts of this kind from
         the same person go first (one row for each person: the private messages)."""
         chat = self.chat
+        return self.add_for_ref(chat.ref(account), kind, body, chat.ref(from_account) if from_account else "", line, unread, replace)
+
+    def add_for_ref(self, ref, kind, body, from_ref="", line=None, unread=1, replace=False):
+        """The same for an account that is known by its reference only (a person who is not here: the row waits in its list until it comes back)."""
+        chat = self.chat
         try:
-            alert = chat.store.add_alert(chat.ref(account), kind, json.dumps(body, ensure_ascii=False, separators=(",", ":")), chat.ref(from_account) if from_account else "", line, self.limits.alerts_keep, self.limits.alerts_days, unread, replace)
+            alert = chat.store.add_alert(ref, kind, json.dumps(body, ensure_ascii=False, separators=(",", ":")), from_ref, line, self.limits.alerts_keep, self.limits.alerts_days, unread, replace)
         except StoreError as e:
             if chat.on_store_error:
                 chat.on_store_error(e)

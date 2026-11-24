@@ -194,6 +194,23 @@ class TheList(Base):
         self.say(self.anna, "/follow h:%s" % ("0" * 12))
         self.assertEqual(self.replies(self.anna)[-1]["r"], "nobody")
 
+    def test_a_handle_that_was_given_before_a_ban_means_nobody_after_it_for_a_person_who_is_here_and_for_one_who_is_not_and_a_block_may_still_name_them(self):
+        self.say(self.anna, "/follow ben")
+        handle = self.lists(self.anna)[-1][0]["h"]
+        ghost = self.w.chat.ref("8411000099990077")                                              # (a person who is not here, and never was: all that is known is the reference)
+        gone = self.w.chat.follows.teach(ANNA_ID, ghost, "ghost")
+        self.say(self.anna, "/unfollow ben")
+        self.w.store.ban(BEN_ID, "by", "ben")
+        self.w.store.ban("8411000099990077", "by", "ghost")
+        self.say(self.anna, "/follow h:%s" % handle)
+        self.say(self.anna, "/follow h:%s" % gone)
+        self.assertEqual([m["r"] for m in self.replies(self.anna)][-2:], ["nobody", "nobody"])
+        self.assertEqual(self.w.store.follows(self.w.chat.ref(ANNA_ID)), [])
+        self.say(self.anna, "/ignore h:%s" % gone)
+        self.assertEqual(self.replies(self.anna, "ignore")[-1]["r"], "ok")                         # (a block may name a banned person: they may come back)
+        self.say(self.anna, "/unignore h:%s" % gone)
+        self.assertEqual(self.replies(self.anna, "unignore")[-1]["r"], "ok")
+
     def test_the_follows_are_there_after_a_restart(self):
         self.say(self.anna, "/follow ben")
         w = World(mods=(), limits=LIMITS, db=self.w.db)
@@ -282,6 +299,20 @@ class TheRoomAlert(Base):
         self.host(self.anna)
         for p in (self.ben, self.cleo, self.dan):
             self.assertEqual(self.alerts_of(p), [], p.identity.username)
+
+    def test_a_host_who_blocked_the_follower_gives_them_no_room_alert_and_nothing_tells_either(self):
+        for p in (self.ben, self.cleo):
+            self.follow(p)
+        self.say(self.anna, "/ignore ben")
+        self.host(self.anna)
+        self.assertEqual(self.alerts_of(self.ben), [], "a follower that the host blocked was told of the room")
+        self.assertNotIn("abc234", json.dumps(self.ben.sent), "the follower's pages hold the room's code")
+        self.assertEqual([r["code"] for r in self.alerts_of(self.cleo)], ["abc234"])                      # (the other follower still is)
+        self.assertEqual([m for m in self.anna.sent if m["t"] == "alert"], [], "the host was sent an alert")
+        self.say(self.anna, "/unignore ben")
+        self.w.clock.now += 3600
+        self.host(self.anna, code="yyy888")                                                    # (a block that is lifted gives the follow its alerts back)
+        self.assertEqual([r["code"] for r in self.alerts_of(self.ben)], ["yyy888"])
 
     def test_a_person_who_does_not_follow_the_host_any_more_is_told_nothing(self):
         self.follow(self.ben)

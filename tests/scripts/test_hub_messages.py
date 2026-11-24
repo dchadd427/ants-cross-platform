@@ -6,7 +6,8 @@
   TheRefusals       every refusal and every limit: the chat's rules, the text, the handles, the burst, the day, the new conversations, the dropped copy, the size of the tables
   TheBlock          a person who blocks another is sent nothing of theirs, and the sender sees an ordinary send; a person who holds a role is never blocked
   TheThread         opening, reading and deleting a conversation, what is kept (7 days, 300 messages, 100 shown), and what is sent after a purge
-  TheReport         a report is the message and the 5 before it, copied by the hub, once, 5 a day, and the reported person is told nothing
+  TheReport         a report is the message and the 5 before it (what the reporter could see), copied by the hub, once, 5 a day, a row of the moderators' log, and the reported person is told nothing
+  TheDaysAreTheLimits  the days of a message and of a report are the hub's limits, which the store reads
   TheAdminsCannotRead  no frame, command or screen of the staff holds anybody's message but the copy of a reported one, which only the command line prints
   TheForgetting     an account that forgets itself takes its messages, for the other people of them as well
   TheLiveHub        real sockets: a message reaches the person alone, and a blocked sender's frames are those of any sender
@@ -137,6 +138,33 @@ class TheSending(Base):
         self.assertEqual((listing["n"], [(r["name"], r["text"], r["u"], r["me"]) for r in listing["rows"]]), (1, [("anna", "when you are back", 1, 0)]))
         self.assertEqual([r["text"] for r in self.thread(back, listing["rows"][0]["h"])["rows"]], ["when you are back"])
 
+    def test_a_person_who_is_not_here_has_one_bell_row_waiting_for_each_sender_and_reading_the_conversation_takes_it_away(self):
+        h, hc = self.handle(self.anna, "ben"), self.handle(self.cleo, "ben")
+        self.w.chat.peers.discard(self.ben)
+        self.w.chat.peers.discard(self.ben_tab)
+        self.dm(self.anna, h, "secret one")
+        self.dm(self.anna, h, "secret two")
+        self.dm(self.cleo, hc, "secret three")
+        kept = self.w.store.alerts(self.mine("ben"))
+        self.assertEqual(sorted((a.kind, json.loads(a.body)["from"]) for a in kept), [("msg", "anna"), ("msg", "cleo")])
+        for word in ("secret one", "secret two", "secret three"):
+            self.assertFalse(any(word in a.body for a in kept), "the bell holds the words of a message")
+        back = self.w.join(BEN)
+        self.w.chat.people.send_list(back)
+        rows = self.of(back, "alerts")[-1]["rows"]
+        self.assertEqual(sorted((r["k"], r["from"], r["u"]) for r in rows), [("msg", "anna", 1), ("msg", "cleo", 1)])
+        self.assertTrue(all(set(r) == {"id", "at", "k", "u", "from", "h"} for r in rows))
+        self.frame(back, t="dmopen", h=[r["h"] for r in rows if r["from"] == "anna"][0])
+        self.assertEqual([json.loads(a.body)["from"] for a in self.w.store.alerts(self.mine("ben"))], ["cleo"])
+
+    def test_a_person_who_is_not_here_and_blocked_the_sender_has_no_bell_row_waiting(self):
+        h = self.handle(self.anna, "ben")
+        self.say(self.ben, "/ignore anna")
+        self.w.chat.peers.discard(self.ben)
+        self.w.chat.peers.discard(self.ben_tab)
+        self.dm(self.anna, h, "hidden")
+        self.assertEqual(self.w.store.alerts(self.mine("ben")), [])
+
     def test_the_list_after_the_welcome_is_there_for_a_person_with_conversations_and_not_for_one_with_none_or_a_reader(self):
         h = self.handle(self.anna, "ben")
         self.dm(self.anna, h, "one")
@@ -211,6 +239,22 @@ class TheRefusals(Base):
         self.w.chat.follows.teach(ANNA_ID, mine, "anna")
         self.dm(self.anna, self.w.chat.handle(mine), "to myself")
         self.assertEqual(self.why(self.anna)[-1], "who")
+
+    def test_a_person_who_is_banned_now_is_nobody_to_write_to_whatever_handle_was_given_before_and_the_conversation_stays_readable(self):
+        h, hb = self.handle(self.anna, "ben"), self.handle(self.ben, "anna")
+        self.dm(self.ben, hb, "before the ban")
+        self.w.store.ban(BEN_ID, "by", "ben")
+        mark = len(self.ben.sent)
+        self.dm(self.anna, h, "after the ban")
+        self.assertEqual((self.why(self.anna), self.ben.sent[mark:]), (["who"], []))
+        self.assertEqual(self.w.store.dm_thread(self.mine("anna"), self.mine("ben"), 100)[-1].text, "before the ban")
+        self.assertEqual(len(self.thread(self.anna, h)["rows"]), 1)                                # (what was written stays: the reader may open it, delete it and report it)
+        self.frame(self.anna, t="dmreport", h=h, id=self.theirs(self.anna)[-1]["id"], why="abuse")
+        self.assertEqual(len(self.w.store.reports()), 1)
+        self.w.chat.peers.discard(self.ben)
+        self.w.chat.peers.discard(self.ben_tab)
+        self.dm(self.anna, h, "and not here either")
+        self.assertEqual(self.why(self.anna), ["who", "who"])
 
     def test_a_refusal_is_no_mistake_of_the_socket_but_it_costs_a_frame(self):
         h = self.handle(self.anna, "ben")
@@ -351,6 +395,39 @@ class TheBlock(Base):
         self.assertEqual(self.thread(self.ben, hab).get("b"), 1)
         self.say(self.ben, "/unignore h:%s" % hab)
         self.assertNotIn("b", self.of(self.ben, "msgs")[-1]["rows"][0])
+
+    def test_what_a_blocked_sender_wrote_is_cut_by_itself_and_never_takes_the_place_of_what_the_receiver_sees(self):
+        w = World(mods=(), limits=dataclasses.replace(LIMITS, dm_burst=1000, dm_day=100000, dm_thread_max=5, dm_refill_seconds=0.001))
+        self.addCleanup(w.close)
+        anna, ben = w.join(ANNA), w.join(BEN)
+
+        def send(peer, h, text):
+            w.clock.now += 1
+            w.chat.on_text(peer, json.dumps({"t": "dm", "h": h, "text": text}))
+
+        def handle(peer, name):
+            w.clock.now += 3
+            w.say(peer, "/msg " + name)
+            return [m for m in peer.sent if m["t"] == "reply" and m["c"] == "msg"][-1]["h"]
+
+        h, hb = handle(anna, "ben"), handle(ben, "anna")
+        send(anna, h, "visible a1")
+        send(ben, hb, "visible b1")
+        send(anna, h, "visible a2")
+        send(ben, hb, "visible b2")
+        w.clock.now += 3
+        w.say(ben, "/ignore anna")
+        for n in range(8):
+            send(anna, h, "hidden %d" % n)
+        theirs, mine = w.chat.ref(BEN_ID), w.chat.ref(ANNA_ID)
+        self.assertEqual([m.text for m in w.store.dm_thread(theirs, mine, 100)], ["visible a1", "visible b1", "visible a2", "visible b2"], "the receiver's history was pushed out")
+        self.assertEqual([m.text for m in w.store.dm_thread(mine, theirs, 100)], ["visible a1", "visible b1", "visible a2", "visible b2"] + ["hidden %d" % n for n in range(3, 8)])
+        self.assertEqual(w.store.db.execute("SELECT COUNT(*) FROM dms WHERE hide = 1").fetchone()[0], 5)                  # (the hidden ones are cut at the same number, by themselves)
+        w.clock.now += 3
+        w.say(ben, "/unignore anna")
+        send(anna, h, "visible a3")
+        send(anna, h, "visible a4")
+        self.assertEqual([m.text for m in w.store.dm_thread(theirs, mine, 100)], ["visible b1", "visible a2", "visible b2", "visible a3", "visible a4"])      # (what the receiver sees is cut at 5, as ever)
 
     def test_a_person_who_holds_a_role_is_never_blocked(self):
         hm = self.handle(self.mod, "ben")
@@ -506,22 +583,69 @@ class TheReport(Base):
         self.frame(self.anna, t="dmreport", h=h, id=self.theirs(self.anna)[-1]["id"], why="abuse")
         self.assertEqual([text for _, _, text in self.w.store.reports()[0].messages], ["first", "last"])
 
-    def test_the_same_message_reported_twice_is_one_report_and_5_reports_are_the_most_in_a_day(self):
+    def test_the_same_message_reported_twice_is_one_report_that_costs_one_of_the_budget_and_5_reports_are_the_most_in_a_day(self):
         h, hb = self.handle(self.anna, "ben"), self.handle(self.ben, "anna")
         for n in range(7):
             self.dm(self.ben, hb, "message %d" % n)
         ids = [m["id"] for m in self.theirs(self.anna)]
         self.frame(self.anna, t="dmreport", h=h, id=ids[0], why="abuse")
-        self.frame(self.anna, t="dmreport", h=h, id=ids[0], why="spam")
-        self.assertEqual(len(self.w.store.reports()), 1)
-        for i in ids[1:4]:
+        for _ in range(3):
+            self.frame(self.anna, t="dmreport", h=h, id=ids[0], why="spam")                          # (the same message again: the same report, and it costs nothing)
+        self.assertEqual((len(self.w.store.reports()), self.why(self.anna), len(self.of(self.anna, "dmreported"))), (1, [], 4))
+        for i in ids[1:5]:
             self.frame(self.anna, t="dmreport", h=h, id=i, why="other")
-        self.assertEqual((len(self.w.store.reports()), self.why(self.anna)), (4, []))
-        self.frame(self.anna, t="dmreport", h=h, id=ids[4], why="other")                          # (the sixth call of the day: the repeat counted as one)
-        self.assertEqual((len(self.w.store.reports()), self.why(self.anna)), (4, ["rate"]))
+        self.assertEqual((len(self.w.store.reports()), self.why(self.anna)), (5, []))
+        self.frame(self.anna, t="dmreport", h=h, id=ids[5], why="other")                          # (the sixth report of the day)
+        self.assertEqual((len(self.w.store.reports()), self.why(self.anna)), (5, ["rate"]))
+        self.frame(self.anna, t="dmreport", h=h, id=ids[0], why="other")                          # (a repeat is still no report, and is not refused)
+        self.assertEqual((len(self.w.store.reports()), self.why(self.anna)), (5, ["rate"]))
         self.w.clock.now += DAY
-        self.frame(self.anna, t="dmreport", h=h, id=ids[4], why="other")
-        self.assertEqual(len(self.w.store.reports()), 5)
+        self.frame(self.anna, t="dmreport", h=h, id=ids[5], why="other")
+        self.assertEqual(len(self.w.store.reports()), 6)
+
+    def test_a_report_is_a_row_of_the_moderators_log_with_its_number_and_both_references_and_never_a_word_of_the_messages(self):
+        h, hb = self.conversation(4)
+        self.frame(self.anna, t="dmreport", h=h, id=self.theirs(self.anna)[1]["id"], why="abuse")
+        self.frame(self.anna, t="dmreport", h=h, id=self.theirs(self.anna)[1]["id"], why="spam")         # (the same report again: no second row)
+        rows = [(a.actor, a.action, a.target, a.detail) for a in self.w.store.actions()]
+        self.assertEqual(rows, [(self.mine("anna"), "report", self.mine("ben"), "1")])
+        self.assertNotIn("ben 2", json.dumps([tuple(a) for a in self.w.store.actions()]))
+        self.assertEqual(self.w.store.db.execute("SELECT COUNT(*) FROM modlog").fetchone()[0], 1)
+
+    def test_a_look_at_the_reports_and_a_close_are_rows_of_the_moderators_log_and_a_close_that_changes_nothing_is_none(self):
+        h, hb = self.conversation(4)
+        self.frame(self.anna, t="dmreport", h=h, id=self.theirs(self.anna)[1]["id"], why="abuse")
+        adminmod.show_reports(self.w.store, False, io.StringIO())
+        adminmod.show_reports(self.w.store, True, io.StringIO())
+        self.assertEqual(adminmod.run(["--db", self.w.db, "report-close", "1"], io.StringIO(), io.StringIO()), 0)
+        self.assertEqual(adminmod.run(["--db", self.w.db, "report-close", "1"], io.StringIO(), io.StringIO()), 1)           # (closed already: nothing was done, nothing is written)
+        self.assertEqual(adminmod.run(["--db", self.w.db, "report-close", "99"], io.StringIO(), io.StringIO()), 1)
+        adminmod.show_reports(self.w.store, False, io.StringIO())                                                           # (none left to show: the look is a row all the same, with 0)
+        rows = [(a.actor, a.action, a.target, a.detail) for a in reversed(self.w.store.actions())]
+        self.assertEqual(rows, [(self.mine("anna"), "report", self.mine("ben"), "1"), ("terminal", "report_read", "", "1"), ("terminal", "report_read", "", "1"), ("terminal", "report_close", "", "1"), ("terminal", "report_read", "", "0")])
+        for a in self.w.store.actions():
+            self.assertNotIn("ben", a.detail)
+
+    def test_the_copy_holds_only_what_the_reporter_could_see_not_a_conversation_that_they_deleted_and_not_a_message_past_its_7_days(self):
+        h, hb = self.handle(self.anna, "ben"), self.handle(self.ben, "anna")
+        self.dm(self.ben, hb, "old, deleted")
+        self.dm(self.anna, h, "my old, deleted")
+        self.frame(self.anna, t="dmdel", h=h)                                                        # (the conversation is gone for anna: ben keeps his copy)
+        self.dm(self.ben, hb, "after the delete")
+        self.dm(self.anna, h, "my answer")
+        self.dm(self.ben, hb, "the one reported")
+        self.frame(self.anna, t="dmreport", h=h, id=self.theirs(self.anna)[-1]["id"], why="abuse")
+        self.assertEqual([text for _, _, text in self.w.store.reports()[0].messages], ["after the delete", "my answer", "the one reported"])
+        self.w.wall.now += 6 * DAY
+        self.dm(self.ben, hb, "six days later")
+        self.w.wall.now += 2 * DAY                                                                   # (the first ones are 8 days old now, and the purge has not run)
+        self.dm(self.ben, hb, "much later")
+        self.assertEqual(self.w.store.db.execute("SELECT COUNT(*) FROM dms WHERE text = 'the one reported'").fetchone()[0], 1)
+        self.frame(self.anna, t="dmreport", h=h, id=self.theirs(self.anna)[-3]["id"], why="spam")      # (a message past its days is gone, whatever the file still holds)
+        self.assertEqual(self.why(self.anna), ["gone"])
+        self.frame(self.anna, t="dmreport", h=h, id=self.theirs(self.anna)[-1]["id"], why="other")
+        newest = self.w.store.reports()[0]
+        self.assertEqual([text for _, _, text in newest.messages], ["six days later", "much later"])
 
     def test_the_command_line_prints_the_copy_and_nothing_else_and_closes_a_report(self):
         h, hb = self.conversation(4)
@@ -564,6 +688,39 @@ class TheReport(Base):
         self.w.store.purge()
         self.assertEqual(len(self.w.store.reports(True)), 1)
         self.w.wall.now += 2 * DAY
+        self.w.store.purge()
+        self.assertEqual(self.w.store.reports(True), [])
+
+
+class TheDaysAreTheLimits(Base):
+    """The days of a message and of a report are the hub's limits (`dm_days`, `report_open_days`, `report_closed_days`): the store reads them, so changing one changes what is kept."""
+    limits = dataclasses.replace(LIMITS, dm_days=1, report_open_days=2, report_closed_days=1)
+
+    def test_a_message_is_kept_for_the_days_of_the_limit_not_for_7(self):
+        h = self.handle(self.anna, "ben")
+        self.dm(self.anna, h, "short lived")
+        self.w.wall.now += DAY - 60
+        self.assertEqual(len(self.w.store.dm_thread(self.mine("ben"), self.mine("anna"), 100)), 1)
+        self.w.wall.now += 120
+        self.assertEqual(self.w.store.dm_thread(self.mine("ben"), self.mine("anna"), 100), [])
+        self.w.store.purge()
+        self.assertEqual(self.w.store.db.execute("SELECT COUNT(*) FROM dms").fetchone()[0], 0)
+
+    def test_a_report_is_kept_for_the_days_of_the_limits_open_or_closed(self):
+        h, hb = self.handle(self.anna, "ben"), self.handle(self.ben, "anna")
+        self.dm(self.ben, hb, "first")
+        self.frame(self.anna, t="dmreport", h=h, id=self.theirs(self.anna)[0]["id"], why="abuse")
+        self.assertEqual(self.w.store.report_closed_days, 1)
+        self.w.wall.now += 2 * DAY - 60
+        self.w.store.purge()
+        self.assertEqual(len(self.w.store.reports()), 1)
+        self.w.wall.now += 120
+        self.w.store.purge()
+        self.assertEqual(self.w.store.reports(True), [])
+        self.dm(self.ben, hb, "second")
+        self.frame(self.anna, t="dmreport", h=h, id=self.theirs(self.anna)[-1]["id"], why="abuse")
+        self.assertTrue(self.w.store.report_close(self.w.store.reports()[0].id))
+        self.w.wall.now += DAY + 60
         self.w.store.purge()
         self.assertEqual(self.w.store.reports(True), [])
 

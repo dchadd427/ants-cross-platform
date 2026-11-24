@@ -15,12 +15,12 @@ Down, to the account's own sockets: {"t":"msgs","n":unread,"rows":[{"h","name","
 {"t":"dmx","h","why"} (a refusal, to the asking socket: `empty`, `long`, `bad`, `banned`, `muted`, `young`, `who`, `dup`, `rate`, `quota`, `new`, `full`, `busy`, `gone`) and {"t":"dmreported","h","id"}. Everything of the same kind that is said to the
 receiver's pages is the alert `msg` of the bell (hub/people.py): one row for each person, replaced by their next message, with no words of it, and gone when the conversation is read.
 
-WHO MAY. A person who is logged in, not banned, not muted and not too new (the chat's own rules: `banned`, `muted`, `young`), to a person that the hub told them of (`who` for any other handle, and for themselves). The text is a line of the chat by the same text
+WHO MAY. A person who is logged in, not banned, not muted and not too new (the chat's own rules: `banned`, `muted`, `young`), to a person that the hub told them of (`who` for any other handle, for themselves and for a person who is banned now). The text is a line of the chat by the same text
 rules (no markup, the invisible characters out), at most 500 characters. A BLOCKED sender (the receiver ignores them, and they hold no role) gets the same answer as anybody: the message is kept for them, in their own copy of the conversation, and is
 hidden from the receiver for good; nothing is sent to the receiver's pages and nothing tells the sender (no receipt, no mark).
 LIMITS. A burst of 5, then one every 2 seconds, and 300 a day for an account across all its tabs; the same text to the same person twice in 30 seconds is `dup`; 10 new conversations an hour (`new`); the calls that only read or delete are a burst of 30, then two a
-second (`rate`); 5 reports a day. A report is the message and up to 5 before it in the conversation (the ones that the reporter could see, and what they sent), with both names and one of the three reasons, copied from the store; the reported person is not told who reported,
-and a message that was reported once by the same person is the same report. A report is deleted 30 days after it was closed, 90 if nobody closed it.
+second (`rate`); 5 reports a day. A report is the message and up to 5 before it in the conversation (the ones that the reporter could see, and what they sent: not what they deleted, not past the days), with both names and one of the three reasons, copied from the store; the reported person is not told who reported,
+and a message that was reported once by the same person is the same report (the repeat costs nothing of the 5). A report is deleted 30 days after it was closed, 90 if nobody closed it. The making of a report is a row of the moderators' log (a number, no words).
 FORGET ME. The account's messages go, for the other people of them as well, and the pages that are open are sent their lists again.
 """
 import re
@@ -47,6 +47,9 @@ class Messages:
         self.limits = limits
         self.clock = clock
         self.dumps = dumps
+        chat.store.dm_days = limits.dm_days                                            # (the regular purge and the reads of the store: how long a message is kept, and a report)
+        chat.store.report_open_days = limits.report_open_days
+        chat.store.report_closed_days = limits.report_closed_days
         self.sends = {}                          # the run's key of an account -> [burst bucket, day bucket, new-conversation bucket, {(the other person's reference, text): when}, last use]
         self.reads = RateByAccount(30, 0.5)      # the calls of an account that only read or delete: a burst of 30, then two a second
         self.reports = RateByAccount(limits.dm_report_day, 86400.0 / max(1, limits.dm_report_day))       # an account's reports (keyed by the run's key of the account)
@@ -222,8 +225,8 @@ class Messages:
             return self.refuse(peer, handle, "young")
         person = chat.follows.by_handle(me, handle)
         mine = chat.ref(me)
-        if person is None or person.ref == mine:
-            return self.refuse(peer, handle, "who")
+        if person is None or person.ref == mine or chat.follows.is_banned(person.ref):
+            return self.refuse(peer, handle, "who")                    # (a person who is banned now is nobody to write to, whatever handle the page was given before the ban)
         if self.full():
             return self.refuse(peer, handle, "full")
         new = not chat.store.dm_thread(mine, person.ref, 1)
@@ -249,16 +252,18 @@ class Messages:
         for peer in chat.presence.sockets(me):
             peer.send_text(data)
         self.last.pop(me, None)
-        if blocked or person.account is None or not chat.presence.sockets(person.account):
+        if blocked:
             return
+        alert = chat.people.add_for_ref(person.ref, "msg", {"from": name, "fr": mine}, from_ref=mine, replace=True)         # (the row of the bell is kept for a receiver who is not here as well: it is what they find when they come back)
         receiver = person.account
+        if receiver is None or not chat.presence.sockets(receiver):
+            return
         unread = chat.store.dm_unread(person.ref, mine)
         theirs, _ = self.flags(receiver, mine)
         data = self.dumps({"t": "msg", "h": chat.follows.teach(receiver, mine, name), "name": name, "id": kept.id, "at": kept.at, "text": kept.text, "me": 0, "u": unread, "f": 1 if theirs else 0})
         for peer in chat.presence.sockets(receiver):
             peer.send_text(data)
         self.last.pop(receiver, None)
-        alert = chat.people.add(receiver, "msg", {"from": name, "fr": mine}, from_account=me, replace=True)
         if alert is not None:
             chat.people.deliver(receiver, alert)
             chat.people.send_lists(receiver)
@@ -305,11 +310,14 @@ class Messages:
         mine = chat.ref(me)
         if person is None or chat.store.dm_get(mine, person.ref, number) is None:
             return self.refuse(peer, handle, "gone" if person is not None else "who")
-        if not self.reports.take(key, now):
-            return self.refuse(peer, handle, "rate")
+        first = chat.store.report_find(mine, number) is None
+        if first and not self.reports.take(key, now):
+            return self.refuse(peer, handle, "rate")                    # (a message that was reported already is the same report: it costs nothing of the day's budget)
         done = chat.store.report_add(mine, person.ref, peer.identity.name, person.name, why, number, self.limits.report_context)
         if done is None:
             return self.refuse(peer, handle, "gone")
+        if first:
+            chat.store.log_action((mine, "report", person.ref, str(done)))          # (the moderators' log: that a report was made, by whom and about whom, and its number; never a word of the messages)
         self.used = None
         peer.send_text(self.dumps({"t": "dmreported", "h": handle, "id": number}))
 

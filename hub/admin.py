@@ -11,8 +11,8 @@
     docker exec ants-hub python -m hub.admin aikeys                      (the keys of people's AIs that work now, docs/MAP_AI.md: key id, account reference, scope, when made and ended, last use, calls)
     docker exec ants-hub python -m hub.admin aikey-revoke KEY_ID         (one key stops working at once)
     docker exec ants-hub python -m hub.admin aikeys-revoke ACCOUNT       (every key of an account stops working at once)
-    docker exec ants-hub python -m hub.admin reports [--all]             (the reports of private messages that nobody closed, docs/HUB_MESSAGES.md: each is the reported message and the 5 before it, with both names and the reason; --all adds the closed ones)
-    docker exec ants-hub python -m hub.admin report-close REPORT_ID      (a closed report is deleted 30 days later)
+    docker exec ants-hub python -m hub.admin reports [--all]             (the reports of private messages that nobody closed, docs/HUB_MESSAGES.md: each is the reported message and the 5 before it, with both names and the reason; --all adds the closed ones; a look is a row of the moderators' log)
+    docker exec ants-hub python -m hub.admin report-close REPORT_ID      (a closed report is deleted 30 days later; the close is a row of the moderators' log)
     docker exec ants-hub python -m hub.admin del LINE_ID
     docker exec ants-hub python -m hub.admin log [--days N] [--lines N]
     docker exec ants-hub python -m hub.admin status
@@ -116,6 +116,7 @@ def show_log(store, days, count, out):
 def show_reports(store, closed, out):
     """The reports of private messages (docs/HUB_MESSAGES.md), newest first: what the hub copied when somebody reported a message, and nothing else of anybody's messages. The person's reference is what `ban` and `mute` take."""
     rows = store.reports(closed)
+    store.log_action((TERMINAL, "report_read", "", str(len(rows))))                   # (a look at the reports is a row of the moderators' log: who, and how many; never a word of them)
     out.write("reports of private messages (newest first; %d days after they were closed, %d if nobody closes them):\n" % (store.report_closed_days, store.report_open_days))
     for row in rows:
         out.write("  report %d, %s, %s, reason %s\n" % (row.id, when(row.at), "closed %s" % when(row.closed) if row.closed else "open", row.why))
@@ -287,7 +288,7 @@ def run(argv, out=None, err=None, env=None):
             show_reports(store, args.all, out)
             return 0
         if args.command == "report-close":
-            if not store.report_close(args.report_id):
+            if not store.report_close(args.report_id, note=(TERMINAL, "report_close", "", str(args.report_id))):
                 err.write("hub.admin: no such report, or it is closed already\n")
                 return 1
             out.write("report %d closed\n" % args.report_id)

@@ -7,8 +7,8 @@
   {
    "id": "a_message_to_oneself",
    "file": "hub/messages.py",
-   "old": "if person is None or person.ref == mine:\n            return self.refuse(peer, handle, \"who\")",
-   "new": "if person is None:\n            return self.refuse(peer, handle, \"who\")",
+   "old": "person is None or person.ref == mine or",
+   "new": "person is None or",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
   },
   {
@@ -84,8 +84,8 @@
   {
    "id": "a_blocked_sender_sends_the_receiver_nothing",
    "file": "hub/messages.py",
-   "old": "if blocked or person.account is None or not chat.presence.sockets(person.account):",
-   "new": "if person.account is None or not chat.presence.sockets(person.account):",
+   "old": "if blocked:\n            return\n        alert = chat.people.add_for_ref(",
+   "new": "if False:\n            return\n        alert = chat.people.add_for_ref(",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
   },
   {
@@ -98,8 +98,8 @@
   {
    "id": "one_bell_row_for_each_sender",
    "file": "hub/messages.py",
-   "old": "from_account=me, replace=True)",
-   "new": "from_account=me, replace=False)",
+   "old": "from_ref=mine, replace=True)",
+   "new": "from_ref=mine, replace=False)",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
   },
   {
@@ -133,29 +133,29 @@
   {
    "id": "a_hidden_message_is_not_in_the_copy",
    "file": "hub/store/sqlite.py",
-   "old": "(frm = :b AND tor = :a AND hide = 0)",
-   "new": "(frm = :b AND tor = :a)",
+   "old": "AND at >= :cut AND %s ORDER BY id DESC LIMIT :n\" % self.VISIBLE_DM,",
+   "new": "AND at >= :cut AND ((frm = :r AND tor = :o AND gone_frm = 0) OR (frm = :o AND tor = :r AND gone_to = 0)) ORDER BY id DESC LIMIT :n\" % (),",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
   },
   {
    "id": "only_a_message_that_was_sent_to_the_reporter_is_reported",
    "file": "hub/store/sqlite.py",
-   "old": "WHERE id = ? AND frm = ? AND tor = ? AND gone_to = 0 AND hide = 0\" % self.COLUMNS_DM, (int(message_id), other, ref)",
-   "new": "WHERE id = ? AND (frm = ? OR 1) AND tor = ? AND gone_to = 0 AND hide = 0\" % self.COLUMNS_DM, (int(message_id), other, ref)",
+   "old": "WHERE id = ? AND frm = ? AND tor = ? AND gone_to = 0 AND hide = 0 AND at >= ?\" % self.COLUMNS_DM,",
+   "new": "WHERE id = ? AND (frm = ? OR 1) AND tor = ? AND gone_to = 0 AND hide = 0 AND at >= ?\" % self.COLUMNS_DM,",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
   },
   {
    "id": "five_reports_a_day",
    "file": "hub/messages.py",
-   "old": "if not self.reports.take(key, now):\n            return self.refuse(peer, handle, \"rate\")",
+   "old": "if first and not self.reports.take(key, now):\n            return self.refuse(peer, handle, \"rate\")",
    "new": "if False:\n            return self.refuse(peer, handle, \"rate\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
   },
   {
    "id": "a_message_reported_twice_is_one_report",
    "file": "hub/store/sqlite.py",
-   "old": "if old is not None:\n                return old[0]",
-   "new": "",
+   "old": "if old is not None:\n                return old",
+   "new": "if False:\n                return old",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
   },
   {
@@ -247,6 +247,125 @@
    "file": "hub/messages.py",
    "old": "text, why = textrules.clean_line(raw)",
    "new": "text, why = (raw if isinstance(raw, str) else None), (None if isinstance(raw, str) else \"bad\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_person_who_is_banned_now_is_nobody_to_write_to",
+   "file": "hub/messages.py",
+   "old": "person.ref == mine or chat.follows.is_banned(person.ref):",
+   "new": "person.ref == mine:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_report_that_was_made_already_costs_nothing_again",
+   "file": "hub/messages.py",
+   "old": "first = chat.store.report_find(mine, number) is None",
+   "new": "first = True",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_report_is_a_row_of_the_moderators_log",
+   "file": "hub/messages.py",
+   "old": "chat.store.log_action((mine, \"report\", person.ref, str(done)))",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_person_who_is_not_here_has_a_bell_row_waiting",
+   "file": "hub/messages.py",
+   "old": "alert = chat.people.add_for_ref(person.ref, \"msg\", {\"from\": name, \"fr\": mine}, from_ref=mine, replace=True)",
+   "new": "alert = chat.people.add_for_ref(person.ref, \"msg\", {\"from\": name, \"fr\": mine}, from_ref=mine, replace=True) if person.account is not None and chat.presence.sockets(person.account) else None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_days_of_a_message_are_the_limit",
+   "file": "hub/messages.py",
+   "old": "chat.store.dm_days = limits.dm_days",
+   "new": "chat.store.dm_days = 7",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_days_of_an_open_report_are_the_limit",
+   "file": "hub/messages.py",
+   "old": "chat.store.report_open_days = limits.report_open_days",
+   "new": "chat.store.report_open_days = 90",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_days_of_a_closed_report_are_the_limit",
+   "file": "hub/messages.py",
+   "old": "chat.store.report_closed_days = limits.report_closed_days",
+   "new": "chat.store.report_closed_days = 30",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_look_at_the_reports_is_a_row_of_the_log",
+   "file": "hub/admin.py",
+   "old": "store.log_action((TERMINAL, \"report_read\", \"\", str(len(rows))))",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "closing_a_report_is_a_row_of_the_log",
+   "file": "hub/admin.py",
+   "old": "if not store.report_close(args.report_id, note=(TERMINAL, \"report_close\", \"\", str(args.report_id))):",
+   "new": "if not store.report_close(args.report_id):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_report_that_is_closed_writes_its_note",
+   "file": "hub/store/sqlite.py",
+   "old": "return False\n            self.write_note(note)",
+   "new": "return False\n            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_report_is_found_by_its_reporter",
+   "file": "hub/store/sqlite.py",
+   "old": "\"SELECT id FROM reports WHERE reporter = ? AND msg = ?\", (reporter, int(message_id))).fetchone()\n        return row[0]",
+   "new": "\"SELECT id FROM reports WHERE (reporter = ? OR 1) AND msg = ?\", (reporter, int(message_id))).fetchone()\n        return row[0]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "what_the_reporter_deleted_is_not_in_the_copy",
+   "file": "hub/store/sqlite.py",
+   "old": "AND at >= :cut AND %s ORDER BY id DESC LIMIT :n\" % self.VISIBLE_DM,",
+   "new": "AND at >= :cut AND ((frm = :r AND tor = :o) OR (frm = :o AND tor = :r AND hide = 0)) ORDER BY id DESC LIMIT :n\" % (),",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_message_past_its_days_is_not_in_the_copy",
+   "file": "hub/store/sqlite.py",
+   "old": "WHERE id <= :m AND at >= :cut AND %s ORDER BY",
+   "new": "WHERE id <= :m AND %s ORDER BY",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_message_past_its_days_cannot_be_reported",
+   "file": "hub/store/sqlite.py",
+   "old": "AND gone_to = 0 AND hide = 0 AND at >= ?\" % self.COLUMNS_DM,",
+   "new": "AND gone_to = 0 AND hide = 0 AND ? > 0\" % self.COLUMNS_DM,",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "what_is_hidden_from_the_receiver_is_cut_with_what_they_see",
+   "file": "hub/store/sqlite.py",
+   "old": "if hide:\n                scope, args =",
+   "new": "if False:\n                scope, args =",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "what_is_hidden_from_the_receiver_is_cut_by_itself",
+   "file": "hub/store/sqlite.py",
+   "old": "\"frm = ? AND tor = ? AND hide = 1\", (frm, to)",
+   "new": "\"frm = ? AND tor = ? AND hide = 7\", (frm, to)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "what_the_receiver_sees_is_cut_without_what_is_hidden",
+   "file": "hub/store/sqlite.py",
+   "old": "\"((frm = ? AND tor = ?) OR (frm = ? AND tor = ?)) AND hide = 0\", (frm, to, to, frm)",
+   "new": "\"((frm = ? AND tor = ?) OR (frm = ? AND tor = ?))\", (frm, to, to, frm)",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_messages tests.scripts.test_hub_store_contract"
   }
  ]
