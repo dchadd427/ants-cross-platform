@@ -136,6 +136,16 @@ void StandardBot::think(const BotView& view, Orders& orders) {
         else if (no_work_since_ == 0) no_work_since_ = std::max<uint64_t>(now, 1u);
     }
     tactics_.gone = plan.gone && view.game_mode() == sim::GameMode::HighestScore && no_work_since_ != 0 && !fallback && now >= no_work_since_ + plan.gone_wait && view.ticks_left() > 300;       // (the game type 187 has no food by its rules: its brawl is its own)
+    // The Thief of the island play (LevelPlan::island_endraid, docs/BOT_IDLE.md): once the food is nearly gone, or from plan.endraid_from, an own Thief is wanted for the steals (the first Thief that falls at a strip is the bot's)
+    tactics_.endraid = false;
+    tactics_.late = false;
+    if (plan.islands && plan.island_flower_link && island_.active()) {
+        uint64_t points = 0;                                                                    // (what the piles still hold: the food is nearly gone when it is at most plan.endraid_food)
+        for (const PileView& p : view.piles()) points += p.lunchbox ? 0u : static_cast<uint64_t>(p.remaining) * p.value;
+        tactics_.late = tactics_.gone || points <= plan.endraid_food;
+        tactics_.endraid = plan.island_endraid && view.game_mode() == sim::GameMode::HighestScore && !fallback && view.ticks_left() > 2400 && (tactics_.late || now >= plan.endraid_from);
+    }
+    if (tactics_.endraid) tactics_.wants[static_cast<size_t>(sim::AntType::Thief)] = std::max<uint8_t>(tactics_.wants[static_cast<size_t>(sim::AntType::Thief)], static_cast<uint8_t>(plan.endraid_thieves));
     const bool gate_breaching = tactics_.gate_map && !tactics_.gate_beside && !fallback && !gate_goals_.exhausted() && !any_reachable_pile && now < kBreachTicks && (view.score() == 0 || gate_goals_.phase() != GateGoalTask::Phase::Idle);
     if (plan.rescue_thief) note_shut_in_thieves(tactics_, view, *map);                       // (the Thieves that are walled in, for the Fire Ant's wish and its walls)
     tactics_.wall_demand = !gate_breaching && wall_demand(tactics_, view, *map);
@@ -237,7 +247,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     powerups_.step(context);
     bombs_.step(context);
     if (plan.mine_per_pile > 0 || plan.mine_gate > 0 || plan.mine_home > 0 || mines_.jobs() != 0) mines_.step(context);       // (when the plan has no mines the task only gives back what it held)
-    const bool raiding = plan.raids || (plan.catchup && st.tier >= plan.catchup_lift_tier) || tactics_.gone;
+    const bool raiding = plan.raids || (plan.catchup && st.tier >= plan.catchup_lift_tier) || tactics_.gone || tactics_.endraid;
     raids_.set_launching(raiding);
     if ((raiding || ledger_.count(kRaids) != 0) && !fallback) raids_.step(context);         // (when the pressure falls the raid under way is seen out: the thief is not kept for ever)
     if (plan.guards) guard_.step(context);

@@ -38,9 +38,9 @@
 
 #include "ants_ai/bomb_detour.hpp"
 #include "ants_ai/bridge_headon.hpp"
+#include "ants_ai/contact_task.hpp"
 #include "ants_ai/bot.hpp"
 #include "ants_ai/brawl_task.hpp"
-#include "ants_ai/contact_task.hpp"
 #include "ants_ai/field_task.hpp"
 #include "ants_ai/free_thief_task.hpp"
 #include "ants_ai/gate_task.hpp"

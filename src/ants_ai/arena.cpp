@@ -619,6 +619,18 @@ ArenaResult play_match(const ArenaSpec& spec) {
             r.rush_ticks = static_cast<uint32_t>(sb->rush().rush_ticks());
             r.rush_attacks = sb->rush().attacks_ordered();
             r.expedition = read_expedition(sb->expedition());
+            r.idle_batch.headon_jams = sb->head_on().jams();
+            r.idle_batch.headon_backoffs = sb->head_on().backoffs();
+            r.idle_batch.contact_jobs = sb->contact().started();
+            r.idle_batch.contact_blows = sb->contact().blows();
+            r.idle_batch.meets = sb->thief_guard().meets_started();
+            r.idle_batch.meet_strikes = sb->thief_guard().strikes();
+            r.idle_batch.holds = sb->idle_jobs().holds();
+            r.idle_batch.heals = sb->idle_jobs().heals();
+            r.idle_batch.swarm_thieves = sb->swarm().thieves();
+            r.idle_batch.homed = sb->raids().homed();
+            r.idle_batch.raid_tiles = sb->flower_link().bridges().tiles_ordered(BridgeJob::Kind::Raid);
+            r.idle_batch.home_tiles = sb->flower_link().bridges().tiles_ordered(BridgeJob::Kind::Home);
             r.miner_flight = read_miner_flight(sb->miner_flight());
         }
         read_seat_result(sim, b.seat, r);

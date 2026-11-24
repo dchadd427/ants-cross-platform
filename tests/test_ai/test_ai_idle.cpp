@@ -6,6 +6,9 @@
 //   AI58.3  an enemy Thief that walks to the own hole is met by the idle ants (blockers on the three tiles, a blow for the Thief): the hill keeps its points; with the rule off the raid goes through
 //   AI58.4  with the food gone the idle ants hold the three tiles in front of the thief hole, and a raid of a Thief of another team ends in the can't-go clip; with the rule off it takes its 50 points
 //   AI58.5  a hurt ant that stands idle walks home and is whole again; with the rule off it stands
+//   AI58.6  whole matches on ISLANDS: with the endgame Thief on the bots take the Thieves that fall at the strips, dig the chains and steal; with it off nobody steals; the matches replay
+//   AI58.7  whole matches on ISLANDS: with the Fire hats the bots take more of the Fire hats of the corner rows (the ring, 3 to 6 water tiles from a hill) and Swimmers dig the chain home for the Fire Ant; with the rule off none is dug
+//   AI58.8  a whole ant that stands idle on a satellite gets the bridge home when the bridge rule is on (and the endgame wants a Thief); with it off it stays
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -16,6 +19,7 @@
 #include "ants_ai/arena.hpp"
 #include "ants_ai/standard_bot.hpp"
 #include "b41_helpers.hpp"
+#include "flower_lab.hpp"
 
 namespace {
 
@@ -23,6 +27,7 @@ using namespace ai_test;
 using namespace ants;
 using namespace ants::ai;
 using namespace b41;
+using flower_lab::Lab;
 
 constexpr int kBridgeX = 30;                    // the bridge across the river: x 30, y 25 .. 29 (finished tiles), the river is the rows 25 to 29 across the whole field
 constexpr int kRiverTop = 25;
@@ -232,5 +237,120 @@ void run_idle_tests() {
         ASSERT_EQ(play(false, 4).first, 4u);
         ASSERT_EQ(play(true, 4).first, 10u);
         ASSERT_TRUE(play(true, 10).second == (TileCoord{30, 30}));                               // a whole ant has nothing to heal: it stays where it is
+    } TEST_END();
+    TEST_CASE("AI58.6 Whole Matches Of Four Hard Bots On ISLANDS: With The Endgame Thief The Bots Take The Thieves That Fall At The Strips, Dig The Chains To The Hills And Steal (More Than Once A Match, Two Thieves At Most A Seat); With It Off Nobody Steals; Every Match Replays") {
+        assets::LevelData level;
+        ASSERT_TRUE(level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/ISLANDS.LVL"));
+        struct Sum {
+            uint32_t steals{0};
+            uint32_t thieves{0};
+            uint32_t raided{0};
+            uint32_t bridges{0};
+            uint32_t homed{0};
+            bool replayed{true};
+        };
+        const auto play = [&](bool rule) {
+            Sum sum;
+            for (uint32_t seed = 1; seed <= 3; ++seed) {
+                ArenaSpec spec;
+                spec.level = &level;
+                spec.seed = seed;
+                spec.record = true;
+                for (uint8_t seat = 0; seat < 4; ++seat) {
+                    BotSpec b;
+                    b.seat = seat;
+                    b.level = Level::Hard;
+                    spec.bots.push_back(b);
+                }
+                spec.factory = [rule](const BotSpec& b) {
+                    return std::unique_ptr<Bot>(std::make_unique<StandardBot>(b.level, Style::Random, [rule](LevelPlan& plan) { plan.island_endraid = rule; }));
+                };
+                const ArenaResult r = play_match(spec);
+                sum.replayed = sum.replayed && r.error.empty() && replay_commands(spec, r).ok;
+                for (const ArenaSeatResult& seat : r.seats) {
+                    sum.steals += seat.steals;
+                    sum.thieves += seat.took[static_cast<size_t>(sim::AntType::Thief)];
+                    sum.raided += seat.raided;
+                    sum.bridges += seat.bridge_orders;
+                    sum.homed += seat.idle_batch.homed;
+                }
+            }
+            return sum;
+        };
+        const Sum off = play(false);
+        ASSERT_EQ(off.steals, 0u);
+        ASSERT_TRUE(off.replayed);
+        const Sum on = play(true);
+        ASSERT_TRUE(on.replayed);
+        ASSERT_TRUE(on.thieves >= 6u);                                                           // three matches of four seats: the Thieves that fell were taken
+        ASSERT_TRUE(on.steals >= 6u);                                                            // ... and they stole (an own Thief with a chain to a hill and a way home)
+        ASSERT_TRUE(on.raided >= 300u);                                                          // ... from each other: the points that the raids took
+        ASSERT_TRUE(on.bridges > off.bridges);                                                   // ... over bridges that the Swimmers dug for them
+        ASSERT_TRUE(on.homed >= 3u);                                                             // ... after the Thief of a strip had walked home (it raids from its island: the loop is short)
+    } TEST_END();
+    TEST_CASE("AI58.7 Whole Matches Of Four Hard Bots On ISLANDS: With The Fire Hats On The Bots Take The Fire Hats Of The Corner Rows And Swimmers Dig The Chain Home For The Fire Ant; With The Rule Off No Chain Is Dug For A Fire Ant And Fewer Hats Are Taken") {
+        assets::LevelData level;
+        ASSERT_TRUE(level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/ISLANDS.LVL"));
+        struct Sum {
+            uint32_t fire{0};
+            uint32_t chains{0};
+        };
+        const auto play = [&](bool rule) {
+            Sum sum;
+            for (uint32_t seed = 1; seed <= 4; ++seed) {
+                ArenaSpec spec;
+                spec.level = &level;
+                spec.seed = seed;
+                for (uint8_t seat = 0; seat < 4; ++seat) {
+                    BotSpec b;
+                    b.seat = seat;
+                    b.level = Level::Hard;
+                    spec.bots.push_back(b);
+                }
+                spec.factory = [rule](const BotSpec& b) {
+                    return std::unique_ptr<Bot>(std::make_unique<StandardBot>(b.level, Style::Random, [rule](LevelPlan& plan) { plan.fire_hats = rule; }));
+                };
+                const ArenaResult r = play_match(spec);
+                for (const ArenaSeatResult& seat : r.seats) {
+                    sum.fire += seat.took[static_cast<size_t>(sim::AntType::Fire)];
+                    sum.chains += seat.idle_batch.home_tiles;
+                }
+            }
+            return sum;
+        };
+        const Sum off = play(false);
+        const Sum on = play(true);
+        ASSERT_EQ(off.chains, 0u);
+        ASSERT_TRUE(on.chains >= 3u);                                                            // a chain was dug for a Fire Ant that stood where no walk leads home
+        ASSERT_TRUE(on.fire > off.fire);                                                         // and more of the hats of the rows are taken
+    } TEST_END();
+
+    TEST_CASE("AI58.8 More Bridges: Two Whole Workers That Stand Idle On The Satellite West Of The Hill Get The Two Tiles Home Within 2,400 Ticks And Both Walk Home (The Bridge Was Dug For One Of Them); With The Bridge Rule Off They Stay Where They Are (A Hard Bot, ISLANDS, Three Swimmers, The Food Nearly Gone)") {
+        const TileCoord satellite{12, 23};
+        const TileCoord channel[2] = {TileCoord{17, 21}, TileCoord{16, 22}};
+        for (const bool on : {true, false}) {
+            Lab lab([on](LevelPlan& p) {
+                p.island_return = true;
+                p.island_ferry = false;
+                p.island_endraid = false;
+                p.endraid_food = 1000000;                                                        // (the food is nearly gone, as far as the bot can tell: the late game of the island play)
+                p.bridge_more = on;
+            });
+            std::vector<uint32_t> start_ants;                                                    // (the start ants of the satellites would be stranded ants too: only the two of the test are)
+            for (const auto& a : lab.sim.get_world_state().ants) start_ants.push_back(a.id);
+            for (const uint32_t id : start_ants) lab.sim.kill_unit(id);
+            for (int i = 0; i < 3; ++i) lab.sim.spawn_unit(0, sim::AntType::Swimmer, TileCoord{14 + i, 19});
+            const uint32_t first = lab.sim.spawn_unit(0, sim::AntType::Worker, satellite);
+            const uint32_t second = lab.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{12, 25});
+            lab.run(2400);
+            const sim::AntSnapshot* a = lab.ant(first);
+            const sim::AntSnapshot* b = lab.ant(second);
+            ASSERT_TRUE(a != nullptr && b != nullptr);
+            const int stands = (lab.bridge_at(channel[0]) ? 1 : 0) + (lab.bridge_at(channel[1]) ? 1 : 0);
+            ASSERT_EQ(stands == 2, on);
+            ASSERT_EQ(a->tile_x >= 17, on);                                                      // both walked home over the bridge (the hill's island starts at x 18)
+            ASSERT_EQ(b->tile_x >= 17, on);
+            ASSERT_EQ(lab.bot()->flower_link().bridges().tiles_ordered(BridgeJob::Kind::Return) > 0u, on);
+        }
     } TEST_END();
 }

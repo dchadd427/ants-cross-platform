@@ -282,6 +282,28 @@ inline bool operator==(const ExpeditionResult& a, const ExpeditionResult& b) noe
            a.swimmers_taken == b.swimmers_taken && a.first_plant == b.first_plant && a.first_landing == b.first_landing && a.first_swimmer == b.first_swimmer;
 }
 
+/// What the tasks of the idle batch did (docs/BOT_IDLE.md); everything is 0 for a seat that has no standard bot or no work for the task
+struct IdleBatchResult {
+    uint32_t headon_jams{0};                   // pairs of ants face to face on a bridge for 3 seconds, with an own ant (BridgeHeadOnTask::jams), and the ants that stepped back
+    uint32_t headon_backoffs{0};
+    uint32_t contact_jobs{0};                  // single ants that struck at an enemy beside them (ContactTask::started), and their blows
+    uint32_t contact_blows{0};
+    uint32_t meets{0};                         // enemy Thieves that the idle ants met at the own hole (ThiefGuardTask::meets_started), and the blows they struck
+    uint32_t meet_strikes{0};
+    uint32_t holds{0};                         // posts taken in front of the own thief hole (IdleJobsTask::holds) and hurt ants sent home to heal
+    uint32_t heals{0};
+    uint32_t swarm_thieves{0};                 // ants that became a Thief at a strip while they waited there (SwarmTask::thieves)
+    uint32_t homed{0};                         // Thieves sent home before their first raid (RaidTask::homed)
+    uint32_t raid_tiles{0};                    // water tiles that Swimmers were told to dig for a Thief's chain, and for a Fire Ant's way home (BridgePlanner::tiles_ordered)
+    uint32_t home_tiles{0};
+};
+
+inline bool operator==(const IdleBatchResult& a, const IdleBatchResult& b) noexcept {
+    return a.headon_jams == b.headon_jams && a.headon_backoffs == b.headon_backoffs && a.contact_jobs == b.contact_jobs && a.contact_blows == b.contact_blows && a.meets == b.meets &&
+           a.meet_strikes == b.meet_strikes && a.holds == b.holds && a.heals == b.heals && a.swarm_thieves == b.swarm_thieves && a.homed == b.homed && a.raid_tiles == b.raid_tiles &&
+           a.home_tiles == b.home_tiles;
+}
+
 /// What a standard bot's Bomber flight to the island of the ring pile did (MinerFlightTask); the ticks are 0 for what never happened
 struct MinerFlightResult {
     uint32_t started{0};
@@ -355,6 +377,7 @@ struct ArenaSeatResult {
     uint32_t stuck_carriers{0};
     ExpeditionResult expedition;
     MinerFlightResult miner_flight;
+    IdleBatchResult idle_batch;
     BotController::SeatStats stats;
     /// commands released per second of game time, in thousandths
     uint32_t milli_commands_per_second(uint64_t ticks) const noexcept {
