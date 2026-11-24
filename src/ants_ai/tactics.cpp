@@ -348,10 +348,21 @@ void without_stand_batch(LevelPlan& p) noexcept {
 void without_home_mines(LevelPlan& p) noexcept { p.home_on_route = p.home_first = false; }
 
 void without_thief_batch(LevelPlan& p) noexcept {
+    p.thief_answer = false;                                                         // (the answer of the idle batch is the meeting of the thief batch with the idle ants: the bot as it was has neither)
     p.raid_recheck = false;
     p.thief_guard = false;
     p.thief_trap = false;
     p.fire_home_only = false;
+}
+
+void without_idle_batch(LevelPlan& p) noexcept {
+    p.bridge_headon = false;
+    p.contact_strike = false;
+    p.island_endraid = false;
+    p.thief_answer = false;
+    p.fire_hats = false;
+    p.bridge_more = false;
+    p.idle_jobs = false;
 }
 
 void without_unstick_batch(LevelPlan& p) noexcept {

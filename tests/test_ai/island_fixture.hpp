@@ -118,12 +118,14 @@ struct Match {
             std::unique_ptr<StandardBot> bot;
             if (styled) {
                 bot = std::make_unique<StandardBot>(level, ants::ai::Style::Random, [tweak](LevelPlan& p) {
+                    ants::ai::without_idle_batch(p);                                                          // (the older rules are the fixture's subject: the idle batch's cases are AI58)
                     p.island_crew_spare = 1;                                                                  // (the expedition alone: the swarm that Hard sends to the flower strips, AI44, would take Swimmers more in the tests that count them)
                     p.island_flower_link = false;
                     if (tweak) tweak(p);
                 });
             } else {
                 LevelPlan plan = ants::ai::plan_for(level);
+                ants::ai::without_idle_batch(plan);
                 plan.island_expedition = expedition;
                 plan.island_ferry = ferry;
                 plan.island_builders = builders;
