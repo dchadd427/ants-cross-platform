@@ -114,6 +114,7 @@ void Application::update_simulation(float dt) {
                 }
                 sim_.tick();
                 if (recorder_) recorder_->on_tick(sim_);
+                live_stats_.on_tick(sim_);
                 post_tick();
             }
             tick_accumulator_ -= 0.050f;
@@ -205,6 +206,7 @@ void Application::check_match_over() {
     if (!sim_.is_match_over() || match_over_handled_) return;
     match_over_handled_ = true;
     finish_recording();                                          // (the replay is the match as it ended: every command and every tick are in it)
+    live_stats_.finish(sim_, local_player_id_);                  // (the numbers of the results: counted for every tick of the match, or not at all; before the screen opens)
     const auto& world = sim_.get_world_state();
     scorecard_.show(world.match_result, local_player_id_, world.game_mode);       // "Waiting for scores..."; the cue plays when the rows appear (update_scorecard)
     update_picture();                                            // the results are the whole canvas (their wide page, or the original's own page)

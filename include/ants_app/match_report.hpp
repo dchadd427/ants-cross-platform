@@ -23,6 +23,8 @@ struct MatchReport {
 
     bool ok{false};
     uint32_t turns{0};                                                     // how long the match ran, in turns (20 a second)
+    uint8_t roster{0};                                                     // bit s: seat s plays
+    uint8_t winners{0};                                                    // bit s: seat s is on the winning side, the seats of the first row of result.rows(local_seat) (an alliance is two seats)
     std::array<uint32_t, kSeats> damage_done{};                            // hit points that the seat's ants took from the other seats' ants
     std::array<uint32_t, kSeats> damage_taken{};
     std::array<uint32_t, kSeats> food_trips{};                             // times an ant of the seat picked food up
@@ -39,10 +41,10 @@ struct MatchReport {
         int64_t value{0};
         uint32_t turn{0};
     };
-    Honor mvp;                                                             // of the winning side: the highest mixed share (mvp_share), `value` the damage it did
-    Honor first_blood;                                                     // the first kill by a seat that is not its own victim's: the killer
-    Honor biggest_raid;                                                    // the raid with the most loot (a raid that took nothing is none); `value` the points
-    Honor last_stand;                                                      // 187 only: the side that was out of ants last of the sides that did not win; `turn` when it ran out
+    Honor mvp;                                                             // of the winning side: the highest mixed share (mvp_share), `value` the damage it did; none when no seat of the side did any of the four things
+    Honor first_blood;                                                     // the first kill by a seat that is not its own victim's, none that drowned: the killer, `turn` when
+    Honor biggest_raid;                                                    // the raid with the most loot (a raid that took nothing is none, the earlier of two equal ones wins); `value` the points. Never in 187
+    Honor last_stand;                                                      // 187 only: the seat that was out of ants last of those that did not win; `turn` when it ran out. Never in the original's game
 
     /// The Play of the game: the busiest 10 seconds of the match by the activity curve's weights (death 14, bomb 10, theft 6, fire 5, hit 2), credited to the seat with the largest share of them
     enum class PlayKind : uint8_t { Bomb, Raid, Fight, Fire };
@@ -63,7 +65,9 @@ struct MatchReport {
 /// did averaged with equal weight (a thing that nobody did is left out), in thousandths. Public so that a test can say it.
 uint32_t mvp_share(const replay::MatchStats& stats, uint8_t seat);
 
-/// The report of a match from what the stats pass counted. `result` says who won (its rows and alliances); `mode` is the rules (187 has Last stand instead of Biggest raid). ok is false when `stats.ok` is not.
+/// The report of a match from what the stats pass counted. `result` says who won (its rows and alliances: the seats of the first row of result.rows(local_seat)); `mode` is the rules (187 has Last stand instead of Biggest raid).
+/// ok is false (and nothing but `turns` is filled) when `stats.ok` is not, or `stats.events_ok` is not: the pass could not count the match, or could not tell the owner of a bomb or the place of a fire for sure.
+/// The definitions of every number and honor are in the .cpp (and in docs/REPLAYS.md, "The match pages"). A pure function of its arguments: no clock, no disk, no floating point.
 MatchReport make_match_report(const replay::MatchStats& stats, const sim::MatchResult& result, sim::GameMode mode, uint8_t local_seat);
 
 }  // namespace ants::app

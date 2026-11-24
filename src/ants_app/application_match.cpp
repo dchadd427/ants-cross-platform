@@ -305,6 +305,7 @@ void Application::use_local_sink() {
 // -N, a name typed in the start menu; what the program makes of the system user ("user@machine") stays out of a file that may be sent to somebody.
 void Application::begin_local_recording(uint32_t seed, bool teams_made) {
     recorder_.reset();
+    live_stats_.start(sim_);                                      // (the numbers of the results are counted from here whether the match can be recorded or not)
     withdraw_replay();
     replay::Header head;
     head.map_name = std::filesystem::path(config_.default_map_path).filename().string();
