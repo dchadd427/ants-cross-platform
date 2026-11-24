@@ -1,4 +1,4 @@
-// AI21: what the contest batch and the island batch of the standard bot have to agree on (docs/BOTS.md, "Task ranks"): the order in which the tasks take ants, that the fights never
+// AI21: what the contest batch and the island batch of the standard bot have to agree on (docs/BOT_TACTICS.md, "Task ranks"): the order in which the tasks take ants, that the fights never
 // draw the crew of the expedition away, and that the controller of the contest (no special order names a tile with an ant on it) refuses nothing that the island play proposes (AI21.3;
 // the builder of the island task, which the level plans do not have, is tested with the controller in AI15.16 and AI18.3).
 #include <algorithm>

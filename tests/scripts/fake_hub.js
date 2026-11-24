@@ -5,7 +5,7 @@
 // The two names (docs/HUB.md "Names"): a `you` with `k` (the key of the account), `pick` ("display" or "username") and `other` (the name that is not shown) is an account that can choose; its lines carry its key,
 // and a {"t":"pick","pick":...} is answered as the real hub does: the names change places, every socket is closed (1000) and the next welcome says who the account is now; where the account cannot choose it is
 // {"t":"err","code":"pick"}. `line(id, who, text, mod, extra)` takes more fields (k, u).
-// The roles (docs/HUB.md "Roles", "Moderation"): `you.role` is none, mod or admin (`mod` is true for both); `hub.you(you)` changes it and tells every socket with a `you` frame; a moderator's command in a `say`
+// The roles (docs/HUB_ROLES.md "Roles", docs/HUB_COMMANDS.md "Moderation"): `you.role` is none, mod or admin (`mod` is true for both); `hub.you(you)` changes it and tells every socket with a `you` frame; a moderator's command in a `say`
 // is read as the hub reads it (the seven words, any case; a role of none gets `bad` and nothing is posted; a role that may not gets `power`; a name that is nobody's in `people` ({ name: role }) gets `who`; a
 // person of the same or a higher rank, or oneself, gets `power`; `o.roleDown` makes every command `role`; a done one is answered `ok`, a kick and a ban also make the hub's own line `<name> was kicked.` with
 // `sys: true`, a line of a moderator or an administrator carries `role`, and /bans answers the private `bans` frame from `o.bans`); `hub.bye(why)` sends the `bye` frame and closes the sockets (a kick also ends the login: the next welcome names nobody).

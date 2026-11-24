@@ -1,4 +1,4 @@
-"""The admin page's door (docs/HUB.md, "The admin page's door"): who may use the admin page, decided here and nowhere else, and the hub's side of what the page does.
+"""The admin page's door (docs/HUB_ROLES.md, "The admin page's door"): who may use the admin page, decided here and nowhere else, and the hub's side of what the page does.
 
   GET  /hub/admin/gate         asked only by the site's nginx (auth_request) before it passes an /admin/api request on, with the visitor's own headers: 204 and a signed pass in
                                `X-Ants-Admin-Pass` when the visitor may, 401 when nobody is logged in, 403 when somebody is but may not, 503 when the door is shut (no good key: for everybody, nobody

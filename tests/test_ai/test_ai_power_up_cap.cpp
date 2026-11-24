@@ -1,4 +1,4 @@
-// AI33: how many power-ups the bot of a gate map looks at (PowerUpTask::try_start, docs/BOTS.md "Power-ups"). Elsewhere a bot looks at the nearest three power-ups of the kind that it wants; on a gate map (its hill
+// AI33: how many power-ups the bot of a gate map looks at (PowerUpTask::try_start, docs/BOT_TACTICS.md "Power-ups"). Elsewhere a bot looks at the nearest three power-ups of the kind that it wants; on a gate map (its hill
 // reaches no pile) it looks at every one, and each one it looks at costs a search of the whole map (a walking-cost field, kept for field_ttl_ticks), so a map of 65,536 cells and 1,000 power-ups made one look
 // cost a thousand searches. It now looks at the nearest ones for as long as their searches add up to PowerUpTask::Params::gate_search_cells (never fewer than gate_min_candidates): 138 on a map of 60 x 60
 // (more than every shipped map has of one kind), 12 on 200 x 200, 7 on 256 x 256.

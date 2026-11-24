@@ -1,8 +1,8 @@
 #pragma once
 
-// The miner's flight (docs/BOTS.md, "Islands"; plan.island_fly_miner, Hard): once the expedition is over, one free Bomber is flown to the island of the ring pile (the food that no walker
+// The miner's flight (docs/BOT_ISLANDS.md, "Islands"; plan.island_fly_miner, Hard): once the expedition is over, one free Bomber is flown to the island of the ring pile (the food that no walker
 // reaches and that the Swimmers of several hills carry from), on bombs of its own, as the Bomber of the expedition flies on: it plants on B from a tile beside it, walks to the shore tile S and steps
-// onto the bomb, and is thrown onto L (island_info.hpp, Flight). From there MineTask lays mines round the pile (docs/BOTS.md, "The mines at the ring pile"). The flight is retried after a dud
+// onto the bomb, and is thrown onto L (island_info.hpp, Flight). From there MineTask lays mines round the pile (docs/BOT_ISLANDS.md, "The mines at the ring pile"). The flight is retried after a dud
 // (an ant burning on B), at most four times; it is given up after 1,500 ticks. The task reads only the view and the analysis of the start; it sends plain moves and the plant order.
 
 #include <cstdint>

@@ -1,4 +1,4 @@
-// The war batch (docs/BOTS.md, "The war batch"): a report of a match of four bots on SMALL: they just don't fight, they just eat; they need to start more fights with each other, fire at
+// The war batch (docs/BOT_TACTICS.md, "The war batch"): a report of a match of four bots on SMALL: they just don't fight, they just eat; they need to start more fights with each other, fire at
 // their opponent, and try to kill their fire ant if they try to come for them; the bomber doesn't place any bombs currently, but should be bombing up the food so they can't eat it. Hand-made
 // worlds (b41_helpers.hpp) hold the four rules; whole matches show what they add up to.
 //
@@ -109,7 +109,7 @@ void run_war_tests() {
         ASSERT_TRUE(easy.behind_free_tier >= medium.behind_free_tier && medium.behind_free_tier >= hard.behind_free_tier);
         ASSERT_TRUE(easy.behind_odds_ease <= medium.behind_odds_ease && medium.behind_odds_ease <= hard.behind_odds_ease);
         ASSERT_TRUE(easy.behind_assault_after >= medium.behind_assault_after && medium.behind_assault_after >= hard.behind_assault_after);
-        // ... and the numbers themselves (docs/BOTS.md, "The war batch")
+        // ... and the numbers themselves (docs/BOT_TACTICS.md, "The war batch")
         ASSERT_TRUE(easy.behind_tier1 == 45 && easy.behind_tier2 == 100 && easy.behind_tier3 == 180);
         ASSERT_TRUE(medium.behind_tier1 == 25 && medium.behind_tier2 == 55 && medium.behind_tier3 == 105);
         ASSERT_TRUE(hard.behind_tier1 == 15 && hard.behind_tier2 == 35 && hard.behind_tier3 == 70);

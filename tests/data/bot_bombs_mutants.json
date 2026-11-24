@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the walk round bombs, the Bomber's way and the Hopeless rule of the computer players (docs/BOTS.md, 'Bombs on the way') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the detour's levels and limits, the carrier, the Bomber's route and its side walk, the route bombs, the Hopeless piles and the plan against test_ai AI51. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_bombs_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "note": "Mutants of the walk round bombs, the Bomber's way and the Hopeless rule of the computer players (docs/BOT_PLAY.md, 'Bombs on the way') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the detour's levels and limits, the carrier, the Bomber's route and its side walk, the route bombs, the Hopeless piles and the plan against test_ai AI51. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_bombs_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
  "mutants": [
   {
    "id": "bomb_detour_off_in_apply",

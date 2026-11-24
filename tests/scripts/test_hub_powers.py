@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The moderators' powers (hub/chat.py `allowed`, `command`; hub/roles.py `fresh`, `confirm`; hub/pseudo.py; the moderators' log in hub/store/; hub/admin.py `log`; docs/HUB.md "Moderation" and
-"The moderators' log"; run by ./run_tests.sh --fast and by the CI). Every id, token and name here is made up.
+docs/HUB_ROLES.md "The moderators' log"; run by ./run_tests.sh --fast and by the CI). Every id, token and name here is made up.
 
   ThePowerTable          who may do what to whom: the function against a model written the other way round, and the chat's answer for every command, every role of the actor, every kind of target
   TheCommands            kick, ban, unban, bans, mute, unmute, del one by one: the answers, the closed sockets, the ended logins, the named line (and never for a refused command), case
@@ -1896,7 +1896,7 @@ class TheRealProcess(unittest.TestCase):
 class TheDocumentsSayWhatTheCodeDoes(unittest.TestCase):
     def setUp(self):
         self.doc = ""
-        for name in ("HUB.md", "HUB_COMMANDS.md"):                                                  # (the moderation section is in the second: a pure move of the first)
+        for name in ("HUB.md", "HUB_COMMANDS.md", "HUB_ROLES.md", "HUB_LOGIN.md"):                  # (the moderation section is in the second, the roles and the login in the last two: pure moves of the first)
             with open(os.path.join(REPO, "docs", name), encoding="utf-8") as f:
                 self.doc += f.read()
 

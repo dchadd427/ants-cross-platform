@@ -1,4 +1,4 @@
-// AI48: the reach guard (docs/BOTS.md, "The can't-go loop", orders over water): a standard bot does not order an ant to a place that its own walk cannot reach on the map as it is now.
+// AI48: the reach guard (docs/BOT_PLAY.md, "The can't-go loop", orders over water): a standard bot does not order an ant to a place that its own walk cannot reach on the map as it is now.
 // The world of the first six is b41_helpers.hpp's field of 60 x 60 with four hills and a band of water across the middle; the engine's own answer to the click (a can't-go reaction) is
 // the yardstick: what the guard takes out is refused by the engine, what it keeps is not.
 //

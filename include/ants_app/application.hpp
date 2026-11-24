@@ -203,7 +203,7 @@ struct ApplicationConfig {
     /// holds but waits there, and ReplayControl::Extend reads the file again when the page has put a longer copy of the same match in it; ReplayControl::LiveOver says that no more will come. The game stays kLiveHoldTurns
     /// behind the newest turn. Only a file that is not complete is followed.
     bool replay_live{false};
-    /// --teams ffa | A+B (docs/BOTS.md, "Alliances"): ffa (the default) is free for all; A+B (two seats, 0 - 3) makes them a team, the two others too when both play. Made at the match start with the
+    /// --teams ffa | A+B (docs/BOT_PLAY.md, "Alliances"): ffa (the default) is free for all; A+B (two seats, 0 - 3) makes them a team, the two others too when both play. Made at the match start with the
     /// original's commands: in a game on this computer by Application::form_start_teams (a pair that cannot be made starts the game without teams and says why), in a room (protocol 13) by every machine
     /// from the Start message, which the room's START puts them into: this player's START (the leader of a server's room, the host of a room on the local network) carries the choice.
     LocalTeams teams;

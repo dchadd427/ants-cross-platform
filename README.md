@@ -28,7 +28,9 @@ The script builds the game each time it starts (quick when nothing changed) and 
 
 **Playing**
 
-- [Play in the browser](docs/PLAY_IN_BROWSER.md): the front page, rooms and rejoining, the 16:9 picture and mouse lock in the browser, hidden tabs, sound, the asset catalog (a page of every sprite, sound and animation of `ants.chd`)
+- [Play in the browser](docs/PLAY_IN_BROWSER.md): the front page, rooms and rejoining, the game page and its addresses, the Legal page, hidden tabs and the screen lock
+- [Setting up a match in the browser](docs/PLAY_MATCH_SETUP.md): players' maps, choosing a map, Game type and Fog of War in a room
+- [The browser's picture and sound](docs/PLAY_PICTURE.md): the data package, the 16:9 picture and mouse lock, sound, the asset catalog (a page of every sprite, sound and animation of `ants.chd`)
 - [Home and the Room](docs/HOME_SCREEN.md): the front page's two screens, the top bar, My room, the Menu, the addresses and the START hand-off
 - [Home's chat](docs/HOME_CHAT.md): the chat dock, its roles and moderation sheet, emoji and voice, and the login
 - [Home's games](docs/HOME_GAMES.md): the Games list, Quick join, Quick host and the public Room
@@ -49,11 +51,15 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [Kept matches on the server](docs/SERVER_REPLAYS.md): the replay store, its limits and matches of computer players
 - [Public rooms and the list of games](docs/PUBLIC_ROOMS.md): the leader's choice, the idle rule and `GET /lobbies` of the game server (network protocol 22)
 - [The site statistics](docs/SITE_STATS.md): `GET /stats` and `POST /stats/local`, the counters and the nginx blocks
-- [The chat hub](docs/HUB.md): `ants-hub`, the global chat service next to the game server: its protocol and limits, the text rules, moderation from a terminal, the stack and nginx wiring
+- [The chat hub](docs/HUB.md): `ants-hub`, the global chat service next to the game server: its protocol and limits, the text rules, names and presence, the settings, the stack and nginx wiring
+- [Roles, the moderators' log and the admin page's door](docs/HUB_ROLES.md): who is a moderator or an administrator (the Discord roles), what is written down about their actions, who may use the admin page
+- [The hub's data and the login](docs/HUB_LOGIN.md): what the hub keeps in its database, and the login with Discord
 - [Alerts, invitations and mentions](docs/HUB_PEOPLE.md): the account's list behind the bell, `/invite` and `@name`: the frames, the limits and who is never told
 - [The chat commands](docs/HUB_COMMANDS.md): the slash commands of the chat, who may use which, the helper, `/bots` and the hub's door to the game server
 - [Images in the chat](docs/HUB_IMAGES.md): who may post images, the converter that re-encodes them, the limits, moderation and `/noimages`, how they are stored and served
-- [Testing and CI](docs/TESTING.md): the test suites and tiers, the browser checks, continuous integration
+- [Testing and CI](docs/TESTING.md): the tiers, how to run a suite, the rules for tests and mutants, the E2E runner, continuous integration
+- [What the test suites cover](docs/TESTING_SUITES.md): the table of the C++ suites by number and what each one checks
+- [The python tests](docs/TESTING_PYTHON.md): suite 5.2: what the scripts of `tests/scripts` cover
 - [Workflow](docs/WORKFLOW.md): branches, pull requests, releases and the deploy; the rules for contributors are in [`AGENTS.md`](AGENTS.md)
 
 **How it works**
@@ -63,11 +69,16 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [`GAME_REVERSE_ENGINEERING.md`](docs/GAME_REVERSE_ENGINEERING.md): the specification of the original game, system by system
 - [`MAP_FORMAT.md`](docs/MAP_FORMAT.md): the map file (`.lvl`): its layout as the remake reads and writes it, the limits, the rules of a map that loads in the original, the round-trip law of the writer, the dictionary and the blank map of a new map, `lvl_tool`, the core in the browser (`lvl_core.wasm`)
 - [`MAP_EDITOR.md`](docs/MAP_EDITOR.md): the map maker's page: the two kinds of map (including per-spawn starting ant types on Extended maps and playing Extended maps up to 512 x 512, with limits on long orders), loading any current game map as a starting point, the rules that keep a map from ever being written over, the pull requests of the editor and which are done, how the page is made
+- [`MAP_EDITOR_TESTS.md`](docs/MAP_EDITOR_TESTS.md): the map maker's tests: the node checks, the page's wiring and the opt-in browser checks
 - [`MAP_PAGES.md`](docs/MAP_PAGES.md): the public page of every library map (`/map/NAME`) and the index (`/map-library`): the addresses and their ledger, what a page holds and where each fact comes from, the maker rule, the index's search, how `tools/map_pages.py` makes them at the image's build, the nginx routes and the tests
 - [`MAP_AI.md`](docs/MAP_AI.md): a person's own AI in the open Map Maker tab: the keys (made on the Connect an AI sheet, look or edit, 7, 30 or 90 days), the hub's HTTP and MCP doors and the relay to the one tab that is armed, the tools the AI may call and what they never reach, the six skills served under `/ai/skills/`, the limits, the switch (`ANTS_HUB_AI_KEYS`) and what is never logged
 - [`MAP_SUBMISSIONS.md`](docs/MAP_SUBMISSIONS.md): a player sends a map for approval and the maintainer decides: the rules, the API that the editor's Submit button uses (limits, states, error codes), the admin page at `/admin` and its door (no accounts of its own: the chat hub's Discord login decides who may use it, and the server checks the hub's signed pass), the lists the lobby reads (`/maps`, `/maps/all`, including approved Extended maps with an `Extended` badge in the lobby and map maker), how to deploy it and what is off until it is configured
 - [`NETWORK_PORT.md`](docs/NETWORK_PORT.md): the network design and the protocol by version
-- [`BOTS.md`](docs/BOTS.md): the computer players: the rule, the architecture, the levels and tactics, the known limits (and [`docs/reverse_engineering/bomb_gates.md`](docs/reverse_engineering/bomb_gates.md) for the bomb-gate analysis and universal gate-goal planner)
+- [`BOTS.md`](docs/BOTS.md): the computer players: the rule, fairness, the architecture and interfaces, the levels, the standard bot, running bots (and [`docs/reverse_engineering/bomb_gates.md`](docs/reverse_engineering/bomb_gates.md) for the bomb-gate analysis and universal gate-goal planner)
+- [`BOT_TACTICS.md`](docs/BOT_TACTICS.md): the standard bot's tactics: task ranks, strategy, power-ups and the flowers, defence, raids and thieves, aggression and fights, the war and stand batches
+- [`BOT_PLAY.md`](docs/BOT_PLAY.md): how the standard bot plays: styles, the gate, the stall detector, the can't-go loop, bombs on the way, alliances, walled maps and the game type 187
+- [`BOT_ISLANDS.md`](docs/BOT_ISLANDS.md): the computer players on water maps (ISLANDS and SMALL): the expedition, the ferry, the swarm and the bridges
+- [`BOT_LIMITS.md`](docs/BOT_LIMITS.md): the known limits of the computer players
 - [`BOT_GATES.md`](docs/BOT_GATES.md): walled maps: the map's own bombs left to the gate goals, the field breach (food beyond a field of bombs, a fire wall and water: POPcOrN and its family), the measurements, and POPcOrN in a match
 - [`BOT_FIGHT.md`](docs/BOT_FIGHT.md): the Hard computer player's quick kill (an enemy beside water, a bomb or a fire wall, struck from the tile that throws it in), fights that a walk reaches, hunting when there is nothing to bank, and the measuring tool `bot_watch`
 - [`BOT_187.md`](docs/BOT_187.md): the computer players in the game type 187: the brawl (packs on the enemy ants, no ant sent home because the hill is closed, what the engine allows), the measurements, what was tried and left out

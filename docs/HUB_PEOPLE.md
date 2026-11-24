@@ -4,7 +4,7 @@ This document is the part of [HUB.md](HUB.md) that belongs to the people of the 
 
 ## Alerts: the account's list
 
-An alert is one row of the account's own list: the newest **30** of the last **7 days**, kept by the account's pseudonymous reference ([HUB.md](HUB.md#data): never the account's id), so it is the same on every device of the account. A visitor who is not logged in has no list on the hub (the page keeps a few alerts of its own in the browser). There are four kinds:
+An alert is one row of the account's own list: the newest **30** of the last **7 days**, kept by the account's pseudonymous reference ([HUB_LOGIN.md](HUB_LOGIN.md#data): never the account's id), so it is the same on every device of the account. A visitor who is not logged in has no list on the hub (the page keeps a few alerts of its own in the browser). There are four kinds:
 
 | Kind | What happened | Fields of its row |
 |---|---|---|
@@ -22,7 +22,7 @@ Every row is `{"id", "at", "k": kind, "u": 1 while it is unread, ...}`. Down: `{
 | `{"t":"note","k":"join","name":...,"seat":...}` | the account's page says that a person joined its room; it becomes a `join` alert of the account's own list (a burst of 10, then one every 6 seconds; `rate` beyond). A name that cannot be used is answered `bad` and is not a mistake of the socket: it is the lobby's, not the visitor's |
 | `{"t":"note","k":"over","map":...[,"place":n][,"match":id]}` | the account's page says that the match it came back from is over; it becomes an `over` alert, read (a burst of 3, then one a minute; `rate` beyond; a match that is in the list already is not a second alert; a map, a place or a match that is not the right shape is `bad`) |
 
-An account that forgets itself ([HUB.md](HUB.md#login)) loses its list and every alert of the others that is from it (an invitation or a mention carries the sender's name). A line that a moderator deletes takes its mention alerts out of every list. **How long it is kept.** The hub's regular purge cuts every alert that is older than the 7 days (`limits.alerts_days`) from the file, whether or not its account gets another one, so "kept on your account for 7 days" is true of the database as well as of the list. The mention of a chat line goes with the line when the purge or the store's making of room deletes it (the quote must not outlive the line), and the open pages are sent their lists again when that took an alert out. The tables of the alerts and of the ignored people are made by the first alert and the first `/ignore`: a hub that never has one holds nothing of them.
+An account that forgets itself ([HUB_LOGIN.md](HUB_LOGIN.md#login)) loses its list and every alert of the others that is from it (an invitation or a mention carries the sender's name). A line that a moderator deletes takes its mention alerts out of every list. **How long it is kept.** The hub's regular purge cuts every alert that is older than the 7 days (`limits.alerts_days`) from the file, whether or not its account gets another one, so "kept on your account for 7 days" is true of the database as well as of the list. The mention of a chat line goes with the line when the purge or the store's making of room deletes it (the quote must not outlive the line), and the open pages are sent their lists again when that took an alert out. The tables of the alerts and of the ignored people are made by the first alert and the first `/ignore`: a hub that never has one holds nothing of them.
 
 ## Invitations
 

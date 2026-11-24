@@ -1,4 +1,4 @@
-// AI19: the island machinery on SMALL and on the maps without water (docs/BOTS.md "Islands"). SMALL: the two Swimmers lie on the banks of the lake and every hill reaches them on foot, the flowers
+// AI19: the island machinery on SMALL and on the maps without water (docs/BOT_ISLANDS.md "Islands"). SMALL: the two Swimmers lie on the banks of the lake and every hill reaches them on foot, the flowers
 // drop more; the island in the middle has 1,000 of the 4,000 points. The other four maps: nothing may change where nothing lies beyond water.
 #include "ai_test.hpp"
 #include "island_fixture.hpp"

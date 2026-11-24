@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# OPT-IN, not part of ./run_tests.sh: the players' maps in REAL browsers (docs/PLAY_IN_BROWSER.md, "Players' maps in the browser"): a room of the game server on a map of the community, two browsers that
+# OPT-IN, not part of ./run_tests.sh: the players' maps in REAL browsers (docs/PLAY_MATCH_SETUP.md, "Players' maps in the browser"): a room of the game server on a map of the community, two browsers that
 # must fetch the file from the site before the match loads (and play the same match), a third that watches the match live (a recording of such a map), the map that is not on the site (a message, no
 # match, then the match once it is) and the map whose copy on the server is not the site's (a message, no match).
 #

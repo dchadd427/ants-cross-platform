@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Who is a moderator or an administrator (hub/roles.py, the bot's lookup in hub/discord.py; docs/HUB.md "Roles"; run by ./run_tests.sh --fast and by the CI), against a FAKE Discord
+"""Who is a moderator or an administrator (hub/roles.py, the bot's lookup in hub/discord.py; docs/HUB_ROLES.md "Roles"; run by ./run_tests.sh --fast and by the CI), against a FAKE Discord
 (tests/scripts/fake_discord.py: every id and the token in these tests are made up) and, for the scheduler, against a stub of the client and a clock that the test moves.
 
   TheMapping                       admin, mod, both roles (admin), none, not in the server, one role configured, the owner account, a role that a client says is never read
@@ -1341,8 +1341,10 @@ class TheSettings(unittest.TestCase):
             proc.wait(5)
 
     def test_the_limits_of_the_roles_are_in_the_documents(self):
-        with open(os.path.join(REPO, "docs", "HUB.md"), encoding="utf-8") as f:
-            doc = f.read()
+        doc = ""
+        for name in ("HUB.md", "HUB_ROLES.md", "HUB_LOGIN.md"):                                    # (the page and the two parts that were split from it)
+            with open(os.path.join(REPO, "docs", name), encoding="utf-8") as f:
+                doc += f.read()
         limits = limitmod.Limits()
         for needle in ("two a second", "a burst of 5", "10 minutes", "a tenth", "ANTS_HUB_ROLE_RECHECK_SECONDS", "ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_OWNER", "60 to 3600"):
             self.assertIn(needle, doc, needle)

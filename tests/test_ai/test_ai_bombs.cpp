@@ -1,4 +1,4 @@
-// AI51: bombs on the way and far food (docs/BOTS.md, "Bombs on the way"; docs/BOT_FOOD.md): a standard bot walks round the bombs of other teams that it sees, a Bomber defuses the bomb
+// AI51: bombs on the way and far food (docs/BOT_PLAY.md, "Bombs on the way"; docs/BOT_FOOD.md): a standard bot walks round the bombs of other teams that it sees, a Bomber defuses the bomb
 // that it can reach over a clear walk and that shuts a route, and a pile that a nearer enemy eats first is left alone while another pile has food. Hand-made worlds on the 60 x 60 field
 // of b41_helpers.hpp (four hills, grass, nothing else): seat 0's hill is at (4, 4); the bombs are team 1's. The engine itself is the yardstick: a walk that goes over a bomb sets it off.
 //

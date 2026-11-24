@@ -1,5 +1,5 @@
 // The styles of the standard bot and the plans of the levels (B4-1, AI11.x): some aggressiveness / randomness between the bots was wanted. Hand-made worlds and plain logic, quick enough for
-// suite 2.20. What a style is: docs/BOTS.md, "Styles".
+// suite 2.20. What a style is: docs/BOT_PLAY.md, "Styles".
 //
 //   AI11.1  the words of the styles, which style a level may play (Hard: aggressive or raider only)
 //   AI11.2  --bot SEAT:KIND:LEVEL:STYLE and SEAT:LEVEL:STYLE: every spelling, every refusal, the name of the seat (the style is not in it), the setup check

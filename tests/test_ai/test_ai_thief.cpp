@@ -1,4 +1,4 @@
-// AI53: the answer to a raid (docs/BOTS.md, "Thieves: the answer to a raid"): the thief batch of the standard bot in hand-made worlds with the real engine.
+// AI53: the answer to a raid (docs/BOT_TACTICS.md, "Thieves: the answer to a raid"): the thief batch of the standard bot in hand-made worlds with the real engine.
 //
 // The meeting (ThiefGuardTask) and the trap are built and OFF in every plan (docs/BOTS.md says why): the tests of them (AI53.1 to AI53.3) switch them on themselves.
 //

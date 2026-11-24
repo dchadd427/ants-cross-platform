@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The lobby's Game type control (run by ./run_tests.sh --fast, with the other python tests of tests/scripts, and by the CI): the leader's field with its list, the guest's read-only line and the tag by the
-room's name, all made from the ROWS of web/front/game_modes.js (the page needs no new button or code for a new type; the type's number must still become the protocol's last game mode), with the leader's last choice kept in the browser (docs/PLAY_IN_BROWSER.md,
+room's name, all made from the ROWS of web/front/game_modes.js (the page needs no new button or code for a new type; the type's number must still become the protocol's last game mode), with the leader's last choice kept in the browser (docs/PLAY_MATCH_SETUP.md,
 "Game type").
 
   - the code is RUN (node, when it is installed): the rows and the pure functions (the mode a new room starts with, the tag, the guest's line, the mode that this browser does not know, storage that is

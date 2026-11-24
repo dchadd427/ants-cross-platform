@@ -1,6 +1,6 @@
 // The hash ledger: one line for each of the 540 maps of the library with the full state hash of the scripted play (the four teams, the map sweep's players and seeds,
 // tests/common/map_library.hpp) at tick 0, tick 200 and tick 2,400, written to a file that two builds can be compared with (`diff`): a change that must not move any play of
-// any map (docs/TESTING.md, "The hash ledger") leaves the file byte for byte as it was on main.
+// any map (docs/TESTING_SUITES.md, "The hash ledger") leaves the file byte for byte as it was on main.
 //
 //   hash_ledger --out FILE [--extended] [--rules1 | --rules2] [--fire-wall-named] [--answers-at-end] [--only TEXT] [--ticks A,B,...]
 //

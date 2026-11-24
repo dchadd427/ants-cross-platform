@@ -1,6 +1,6 @@
 #pragma once
 
-// The island task of the standard bot (docs/BOTS.md, "Islands"): food that lies beyond water, reached with the original's own means (island_info.hpp) through the door a person uses.
+// The island task of the standard bot (docs/BOT_ISLANDS.md, "Islands"): food that lies beyond water, reached with the original's own means (island_info.hpp) through the door a person uses.
 //
 //   bridges      a Swimmer ant digs the chain of water tiles that makes the cheapest walk from the hill to a pile that no walker reaches (a special order onto one water tile at a time, from
 //                the shore outward); the workers of the economy (HarvestTask) walk over it, because the pile has become reachable in the map as it is now
