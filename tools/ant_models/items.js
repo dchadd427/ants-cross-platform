@@ -243,9 +243,11 @@
       const horizSpan = w * cy + d * sy;
       const depthSpan = w * sy + d * cy;
       const vertSpan = h * cp + depthSpan * sp;
-      const pad = isOrtho ? 0.62 : 0.66;
-      const halfV = Math.max(0.16, vertSpan * pad);
-      const halfH = Math.max(0.16, horizSpan * pad);
+      // `viewer_render.js` already adds a 1.16x perspective margin, so use a matching horizontal pad (~80% panel width like the 1998 pane).
+      const padV = isOrtho ? 0.62 : 0.64;
+      const padH = isOrtho ? 0.60 : 0.55;
+      const halfV = Math.max(0.16, vertSpan * padV);
+      const halfH = Math.max(0.16, horizSpan * padH);
       return Math.max(halfV, halfH / Math.max(0.32, aspect));
     }
 

@@ -465,23 +465,25 @@ def build_stick1() -> SceneBuilder:
 
 
 def build_stick2a() -> SceneBuilder:
-    """Slender gnarled Y-forked woodland branch with snapped wood ends, mossy green shoot & twin tip leaves (`328:stick2a`)."""
+    """Long slender gnarled Y-forked woodland branch matching 1998 `198x56` (3.54:1) proportions (`328:stick2a`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_stick2a")
 
-    # 1. Main slender undulating fallen branch running left -> Y-fork -> tapered mossy-green far-right shoot (`stick2a_4x.png` 1:1!).
+    # 1. Long whip-slender undulating branch traced 1:1 from `stick2a` (198x56px: stem thickness = 2.0-3.0% of total length!).
     main_pts = [
-        (-0.470, 0.028, +0.040),
-        (-0.335, 0.034, +0.036),
-        (-0.195, 0.042, +0.008),
-        (-0.060, 0.046, -0.004),
-        (+0.075, 0.044, +0.008),
-        (+0.180, 0.042, +0.018),
-        (+0.310, 0.037, +0.040),
-        (+0.420, 0.032, +0.064),
-        (+0.478, 0.028, +0.078),
+        (-0.500, 0.016, +0.020),
+        (-0.395, 0.026, +0.018),
+        (-0.275, 0.040, +0.002),
+        (-0.155, 0.052, -0.024),
+        (-0.045, 0.054, -0.030),
+        (+0.035, 0.048, -0.016),
+        (+0.105, 0.046, -0.020),
+        (+0.205, 0.042, +0.000),
+        (+0.315, 0.036, +0.018),
+        (+0.420, 0.029, +0.036),
+        (+0.492, 0.022, +0.050),
     ]
-    main_rads = [0.017, 0.020, 0.022, 0.021, 0.023, 0.018, 0.014, 0.010, 0.006]
+    main_rads = [0.0095, 0.0120, 0.0138, 0.0142, 0.0136, 0.0118, 0.0145, 0.0112, 0.0092, 0.0072, 0.0044]
     main_branch = _sculpt_bark_branch(
         main_pts,
         main_rads,
@@ -490,27 +492,27 @@ def build_stick2a() -> SceneBuilder:
         radial_segs=20,
         samples_per_seg=6,
         seed=3.1,
-        jagged_start=0.022,
+        jagged_start=0.014,
         jagged_end=0.0,
-        knuckles=((0.34, 0.14, 0.045), (0.58, 0.22, 0.055), (0.82, 0.14, 0.040)),
+        knuckles=((0.34, 0.14, 0.040), (0.60, 0.20, 0.045), (0.82, 0.12, 0.035)),
         base_rgb=(1.02, 0.96, 0.88),
-        green_tip_start=0.56,
+        green_tip_start=0.58,
         cap_start=False,
         cap_end=True,
     )
     parts: List[MeshPart] = [main_branch]
 
-    # Fresh mossy-green living shoot overlay creeping organically along the slender right-hand twig tip (`stick2a_4x.png`!)
+    # Fresh mossy-green living shoot overlay creeping cleanly along the long slender right-hand tip (`x = +0.18..+0.496`).
     green_shoot = tint_part(
         curved_tube(
-            [(+0.205, 0.042, +0.022), (+0.315, 0.039, +0.041), (+0.425, 0.035, +0.065), (+0.492, 0.030, +0.082)],
-            [0.011, 0.0135, 0.0105, 0.0055],
+            [(+0.185, 0.043, -0.004), (+0.295, 0.038, +0.015), (+0.405, 0.031, +0.034), (+0.496, 0.023, +0.051)],
+            [0.0085, 0.0096, 0.0074, 0.0042],
             samples_per_seg=4,
             radial_segs=12,
             cap_rings=2,
             name="branch_green_shoot",
             material="item_stem_green",
-        ).deform(lambda p: p + 0.0018 * np.sin(p * 88.0)),
+        ).deform(lambda p: p + 0.0012 * np.sin(p * 110.0)),
         lambda pos, nrm: np.clip(
             np.column_stack([
                 0.56 + 0.24 * np.clip(nrm[:, 1] + 0.4, 0.0, 1.0),
@@ -523,14 +525,14 @@ def build_stick2a() -> SceneBuilder:
     )
     parts.append(green_shoot)
 
-    # 2. Iconic upper-right broken Y-fork side branch spur (`stick2a_4x.png`!) with gnarled crotch collar & snapped wood tip.
+    # 2. Iconic upper-right broken Y-fork side branch spur (`x = +0.10 -> +0.265`, exact 1998 length & angle!).
     fork_pts = [
-        (+0.060, 0.044, +0.006),
-        (+0.118, 0.047, -0.022),
-        (+0.195, 0.046, -0.076),
-        (+0.278, 0.040, -0.132),
+        (+0.088, 0.046, -0.018),
+        (+0.135, 0.050, -0.042),
+        (+0.198, 0.048, -0.078),
+        (+0.262, 0.042, -0.112),
     ]
-    fork_rads = [0.021, 0.019, 0.017, 0.015]
+    fork_rads = [0.0132, 0.0120, 0.0110, 0.0098]
     fork_branch = _sculpt_bark_branch(
         fork_pts,
         fork_rads,
@@ -540,53 +542,54 @@ def build_stick2a() -> SceneBuilder:
         samples_per_seg=5,
         seed=5.2,
         jagged_start=0.0,
-        jagged_end=0.020,
-        knuckles=((0.22, 0.16, 0.09),),
-        base_rgb=(0.96, 0.90, 0.82),
+        jagged_end=0.013,
+        knuckles=((0.22, 0.15, 0.09),),
+        base_rgb=(0.98, 0.92, 0.84),
         cap_start=False,
         cap_end=False,
     )
     parts.append(fork_branch)
 
     # Jagged snapped pale-heartwood fracture tips on BOTH far-left main stem AND upper-right broken fork!
-    _add_snapped_wood_end(parts, "stick2_left", main_pts[0], (-1.00, -0.06, +0.05), main_rads[0], seed=1.1)
-    _add_snapped_wood_end(parts, "stick2_fork", fork_pts[-1], (+0.82, -0.06, -0.56), fork_rads[-1], seed=3.7)
+    _add_snapped_wood_end(parts, "stick2_left", main_pts[0], (-1.00, -0.06, +0.04), main_rads[0], seed=1.1)
+    _add_snapped_wood_end(parts, "stick2_fork", fork_pts[-1], (+0.86, -0.04, -0.50), fork_rads[-1], seed=3.7)
 
-    # Tiny dormant bark knots along the weathered branch
-    parts.append(_make_bark_knot("branch_knot_a", (-0.245, 0.040, +0.020), (-0.30, 0.58, -0.75), 0.009, 0.018))
-    parts.append(_make_bark_knot("branch_knot_b", (-0.035, 0.048, -0.002), (+0.25, 0.65, +0.72), 0.008, 0.016))
+    # Tiny dormant bark knots along the long slender weathered stem
+    parts.append(_make_bark_knot("branch_knot_a", (-0.285, 0.041, +0.003), (-0.30, 0.58, -0.75), 0.0062, 0.013))
+    parts.append(_make_bark_knot("branch_knot_b", (-0.060, 0.055, -0.029), (+0.25, 0.65, +0.72), 0.0058, 0.012))
 
-    # 3. Delicate short green leaf petioles & twin slender drooping pointed green leaves right at the far-right tip (`stick2a_4x.png`!).
+    # 3. Delicate short green leaf petioles & twin compact slender drooping pointed leaves right at the far-right tip!
     pet_a = curved_tube(
-        [(+0.340, 0.036, +0.045), (+0.354, 0.035, +0.064), (+0.365, 0.032, +0.082)],
-        [0.006, 0.0045, 0.0035],
+        [(+0.358, 0.034, +0.026), (+0.368, 0.032, +0.040), (+0.376, 0.028, +0.052)],
+        [0.0044, 0.0034, 0.0026],
         samples_per_seg=2,
         radial_segs=8,
         name="branch_petiole_a",
         material="item_stem_green",
     )
     pet_b = curved_tube(
-        [(+0.388, 0.034, +0.056), (+0.405, 0.035, +0.072), (+0.422, 0.034, +0.088)],
-        [0.0055, 0.004, 0.003],
+        [(+0.398, 0.031, +0.034), (+0.412, 0.032, +0.046), (+0.424, 0.030, +0.058)],
+        [0.0040, 0.0030, 0.0024],
         samples_per_seg=2,
         radial_segs=8,
         name="branch_petiole_b",
         material="item_stem_green",
     )
     leaf_a = (
-        _sculpt_pointed_blade("branch_leaf_a", length=0.200, width=0.084, material="item_leaf_rich", arch=0.018, vein_glow=0.28)
+        _sculpt_pointed_blade("branch_leaf_a", length=0.142, width=0.058, material="item_leaf_rich", arch=0.014, vein_glow=0.28)
         .rotate_xyz(rx=0.12, ry=0.34, rz=-0.06)
-        .translate(+0.365, 0.032, +0.064)
+        .translate(+0.366, 0.028, +0.038)
     )
     leaf_b = (
-        _sculpt_pointed_blade("branch_leaf_b", length=0.232, width=0.100, material="item_leaf_bright", arch=0.022, vein_glow=0.34)
-        .rotate_xyz(rx=0.10, ry=0.66, rz=-0.08)
-        .translate(+0.405, 0.037, +0.070)
+        _sculpt_pointed_blade("branch_leaf_b", length=0.168, width=0.072, material="item_leaf_bright", arch=0.016, vein_glow=0.34)
+        .rotate_xyz(rx=0.10, ry=0.68, rz=-0.08)
+        .translate(+0.398, 0.033, +0.042)
     )
     parts.extend([pet_a, pet_b, leaf_a, leaf_b])
 
     sc.add("stick_leafy", parts)
-    return _finalize_item(sc, target_span=0.98)
+    # True 1998 scale relative to `stick1` (198px vs 137px -> 1.38 world span, exact 3.54:1 visual aspect ratio!)
+    return _finalize_item(sc, target_span=1.38)
 
 
 def build_plant1() -> SceneBuilder:
