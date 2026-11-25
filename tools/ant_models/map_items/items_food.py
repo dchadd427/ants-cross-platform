@@ -59,8 +59,8 @@ if np is not None:
 
 
 def _project_bites(pos: np.ndarray, bites: List[Tuple[float, float, float]]) -> Tuple[np.ndarray, np.ndarray]:
-    """Carve clean concave crescent tooth-bites into any 3D food mesh and return `(positions, is_bitten_mask)`."""
-    p = pos.copy()
+    """Carve distinct concave crescent tooth-bites with vertical incisor fluting and return `(positions, is_bitten_mask)`."""
+    p = pos.astype(np.float64).copy()
     bitten = np.zeros(len(p), dtype=bool)
     for bx, bz, br in bites:
         dx = p[:, 0] - bx
@@ -75,13 +75,14 @@ def _project_bites(pos: np.ndarray, bites: List[Tuple[float, float, float]]) -> 
         ix, iz = dx[inside], dz[inside]
         s = ix * dir_x + iz * dir_z
         t = -ix * dir_z + iz * dir_x
-        scallop = 0.0065 * np.sin(t * 40.0 + p[inside, 1] * 14.0)
+        # Authentic vertical tooth-bite corrugations matching the fluted white-crumb marks in `fdburgr2`/`fdburgr3`!
+        scallop = 0.0072 * np.sin(t * 54.0) + 0.0022 * np.cos(t * 108.0)
         s_wall = np.sqrt(np.maximum(0.0, br * br - t * t)) + scallop
         shift = np.maximum(0.0, s_wall - s)
         p[inside, 0] += dir_x * shift
         p[inside, 2] += dir_z * shift
         bitten[inside] = True
-    return p, bitten
+    return p.astype(np.float32), bitten
 
 
 def _split_mesh_by_mask(part: MeshPart, mask: np.ndarray, alt_material: str, alt_suffix: str) -> List[MeshPart]:
@@ -105,6 +106,12 @@ def _split_mesh_by_mask(part: MeshPart, mask: np.ndarray, alt_material: str, alt
         sub_pos = part.positions[uniq].copy()
         sub_idx = inv.astype(np.uint32)
         sub_uv = part.uvs[uniq].copy() if part.uvs is not None else None
+        if drop_tint and len(sub_pos) > 0:
+            # Isotropic triplanar-like UVs on carved bite walls so spongy white-bread crumb pores NEVER stretch horizontally!
+            sub_uv = np.column_stack([
+                (sub_pos[:, 0] + sub_pos[:, 2]) * 3.8,
+                sub_pos[:, 1] * 4.4,
+            ]).astype(np.float32)
         sub_nrm = recompute_smooth_normals(sub_pos, sub_idx)
         sub_part = MeshPart(f"{part.name}{suffix}", mat_name, sub_pos, sub_nrm, sub_idx, uvs=sub_uv)
         if not drop_tint and part.colors is not None:
@@ -222,28 +229,59 @@ def _build_crisp_lettuce_sheet(
     return leaf
 
 
-def _build_tomato_wheel(name: str, radius: float = 0.138, thick: float = 0.026, *, open_pockets: bool = False) -> List[MeshPart]:
-    """Build a realistic cross-sectioned red tomato wheel with fleshy outer wall, organic tapered septa & juicy pulp."""
+def _build_tomato_wheel(name: str, radius: float = 0.145, thick: float = 0.026, *, open_pockets: bool = False) -> List[MeshPart]:
+    """Build a realistic juicy sliced red tomato cross-section with organic thick fleshy wall, curved septa & seeds."""
     parts: List[MeshPart] = []
-    rim = torus_arc(radius * 0.86, thick * 0.54, u_segs=28, v_segs=10, plane="xz", name=f"{name}_rim", material="item_tomato")
+
+    def _organic_rim(pos: np.ndarray) -> np.ndarray:
+        p = pos.copy()
+        ang = np.arctan2(p[:, 2], p[:, 0])
+        # Irregular natural heirloom-tomato oval waviness (never a rigid bicycle wheel!)
+        wobble = 1.0 + 0.08 * np.sin(ang * 3.0 + 0.5) + 0.045 * np.cos(ang * 5.0 - 0.8)
+        p[:, 0] *= wobble * 1.05
+        p[:, 2] *= wobble * 0.94
+        p[:, 1] += 0.004 * np.sin(ang * 2.0 + 0.3)
+        return p
+
+    rim = tint_part(
+        torus_arc(radius * 0.84, thick * 0.68, u_segs=32, v_segs=12, plane="xz", name=f"{name}_rim", material="item_tomato")
+        .deform(_organic_rim),
+        lambda pos, nrm: np.clip(
+            np.column_stack([
+                0.92 + 0.08 * nrm[:, 1],
+                0.78 + 0.18 * np.clip(1.0 - np.hypot(pos[:, 0], pos[:, 2]) / max(1e-4, radius), 0.0, 1.0),
+                0.68 + 0.18 * np.clip(1.0 - np.hypot(pos[:, 0], pos[:, 2]) / max(1e-4, radius), 0.0, 1.0),
+            ]),
+            0.45,
+            1.0,
+        ),
+    )
     parts.append(rim)
-    hub = ellipsoid(radius * 0.25, thick * 0.46, radius * 0.22, u_segs=16, v_segs=10, name=f"{name}_hub", material="item_tomato_pulp")
+
+    # Plump fleshy irregular central tomato core/placenta
+    hub = ellipsoid(radius * 0.31, thick * 0.52, radius * 0.27, u_segs=16, v_segs=10, name=f"{name}_hub", material="item_tomato_pulp").translate(radius * 0.04, 0.0, -radius * 0.03)
     parts.append(hub)
-    # 3 soft organic fleshy radial septa separating the tomato seed chambers (`255:fdburgr3` lower-left!)
-    for k in range(3):
-        ang = 2.0 * math.pi * k / 3.0 + 0.42
+
+    # 3 broad curved organic fleshy septa flaring seamlessly from core to rind (not thin steering-wheel rods!)
+    for k, (ang, curve_s) in enumerate(((0.55, +0.018), (2.68, -0.016), (4.72, +0.014))):
         spoke = (
-            ellipsoid(radius * 0.44, thick * 0.36, radius * 0.10, u_segs=14, v_segs=8, name=f"{name}_spoke_{k}", material="item_tomato")
-            .translate(radius * 0.42, 0.0, 0.0)
+            ellipsoid(radius * 0.48, thick * 0.46, radius * 0.17, u_segs=16, v_segs=10, name=f"{name}_spoke_{k}", material="item_tomato")
+            .deform(lambda p, cs=curve_s: np.column_stack([p[:, 0], p[:, 1], p[:, 2] + cs * np.sin((p[:, 0] / max(1e-4, radius * 0.48)) * math.pi)]))
+            .translate(radius * 0.40, 0.0, 0.0)
             .rotate_xyz(ry=ang)
         )
         parts.append(spoke)
+
     if open_pockets:
-        # Thin glossy moist inner fleshy lip hugging inside the red tomato rind
-        inner_lip = torus_arc(radius * 0.74, thick * 0.30, u_segs=24, v_segs=8, plane="xz", name=f"{name}_lip", material="item_tomato_pulp")
+        # Glossy inner fleshy pericarp wall + tiny pale-ivory tomato seeds tucked along the chamber edges (`255:fdburgr3`)
+        inner_lip = torus_arc(radius * 0.72, thick * 0.38, u_segs=28, v_segs=10, plane="xz", name=f"{name}_lip", material="item_tomato_pulp").deform(_organic_rim)
         parts.append(inner_lip)
+        for k, ang in enumerate((1.35, 1.75, 3.45, 3.90, 5.45, 5.85)):
+            sx = radius * 0.56 * math.cos(ang)
+            sz = radius * 0.52 * math.sin(ang)
+            parts.append(ellipsoid(0.011, 0.0055, 0.0065, u_segs=8, v_segs=6, name=f"{name}_seed_{k}", material="item_sesame").rotate_xyz(ry=ang).translate(sx, thick * 0.14, sz))
     else:
-        pulp = cylinder(radius * 0.84, radius * 0.84, thick * 0.62, radial_segs=24, bevel=0.002, axis="y", name=f"{name}_pulp", material="item_tomato_pulp")
+        pulp = cylinder(radius * 0.84, radius * 0.84, thick * 0.66, radial_segs=24, bevel=0.003, axis="y", name=f"{name}_pulp", material="item_tomato_pulp").deform(_organic_rim)
         tint_part(
             pulp,
             lambda pos, _n: np.column_stack([
@@ -256,237 +294,289 @@ def _build_tomato_wheel(name: str, radius: float = 0.138, thick: float = 0.026, 
     return parts
 
 
-def _build_pickle_chip(name: str, radius: float = 0.095) -> MeshPart:
-    """Crinkle-cut dark-green dill pickle slice matching `254:fdburgr2` & `255:fdburgr3`."""
+def _build_pickle_chip(name: str, radius: float = 0.095, *, curl: float = 0.0, half_chip: bool = False) -> MeshPart:
+    """Crinkle-cut dark-green dill pickle slice with deep cucumber rind rim, ribbed ridges & pale seed core."""
     def _crinkle(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
-        p[:, 1] += 0.0045 * np.sin(p[:, 0] * 78.0)
+        if half_chip:
+            p[:, 2] = p[:, 2] * 0.60 - 0.22 * radius * (p[:, 0] / max(1e-4, radius)) ** 2
+        # Crisp crinkle-cut pickle ridges clearly visible in Studio lighting!
+        p[:, 1] += 0.0068 * np.sin(p[:, 0] * 96.0)
+        if curl > 0.0:
+            p[:, 1] += curl * ((p[:, 0] / max(1e-4, radius)) ** 2)
         return p
 
-    chip = cylinder(radius, radius * 0.96, 0.018, radial_segs=22, bevel=0.003, axis="y", name=name, material="item_pickle").deform(_crinkle)
+    chip = cylinder(radius, radius * 0.96, 0.020, radial_segs=30, bevel=0.003, axis="y", name=name, material="item_pickle").deform(_crinkle)
     return tint_part(
         chip,
-        lambda pos, _n: np.column_stack([
-            0.70 + 0.30 * np.clip(1.0 - np.hypot(pos[:, 0], pos[:, 2]) / max(1e-4, radius), 0.0, 1.0),
-            0.84 + 0.16 * np.clip(1.0 - np.hypot(pos[:, 0], pos[:, 2]) / max(1e-4, radius), 0.0, 1.0),
-            0.55 + 0.30 * np.clip(1.0 - np.hypot(pos[:, 0], pos[:, 2]) / max(1e-4, radius), 0.0, 1.0),
-        ]),
+        lambda pos, nrm: np.clip(
+            np.column_stack([
+                (0.46 + 0.44 * np.clip(1.0 - (np.hypot(pos[:, 0], pos[:, 2]) / max(1e-4, radius)) ** 1.8, 0.0, 1.0)) * (0.80 + 0.20 * np.sin(pos[:, 0] * 96.0)) + 0.10 * nrm[:, 1],
+                (0.72 + 0.26 * np.clip(1.0 - (np.hypot(pos[:, 0], pos[:, 2]) / max(1e-4, radius)) ** 1.8, 0.0, 1.0)) * (0.84 + 0.16 * np.sin(pos[:, 0] * 96.0)) + 0.08 * nrm[:, 1],
+                (0.32 + 0.42 * np.clip(1.0 - (np.hypot(pos[:, 0], pos[:, 2]) / max(1e-4, radius)) ** 1.8, 0.0, 1.0)) * (0.80 + 0.20 * np.sin(pos[:, 0] * 96.0)),
+            ]),
+            0.18,
+            1.0,
+        ),
     )
 
 
+def _sculpt_bun_dome(pos: np.ndarray) -> np.ndarray:
+    """Organic bakery sesame top bun silhouette with flat seated base & signature diagonal crown dimple crease."""
+    p = pos.copy()
+    p[:, 1] = np.where(p[:, 1] < 0.0, p[:, 1] * 0.18, p[:, 1])
+    # Subtle irregular hand-baked bakery puffiness (breaks sterile sphere perfection!)
+    ang = np.arctan2(p[:, 2], p[:, 0])
+    r = np.hypot(p[:, 0], p[:, 2])
+    puff = 1.0 + 0.022 * np.sin(ang * 3.0 + 0.4) + 0.014 * np.cos(ang * 5.0 - 0.7)
+    p[:, 0] *= puff
+    p[:, 2] *= puff
+    # Iconic diagonal bakery dimple fold across upper-left-center crown matching `fdburgr1` & `fdburgr2`!
+    u_diag = (p[:, 0] + p[:, 2]) * 0.707
+    v_diag = (p[:, 0] - p[:, 2]) * 0.707
+    crease = -0.019 * np.exp(-(((v_diag + 0.03) / 0.048) ** 2 + ((u_diag + 0.02) / 0.17) ** 2)) * np.clip(p[:, 1] / 0.11, 0.0, 1.0)
+    # Soft pillowy crown dimples around the perimeter
+    micro_puff = 0.004 * np.sin(p[:, 0] * 24.0 + 0.5) * np.cos(p[:, 2] * 22.0 - 0.3) * np.clip(r / 0.18, 0.0, 1.0)
+    p[:, 1] += crease + micro_puff
+    return p
+
+
+def _tint_baked_bun(part: MeshPart) -> MeshPart:
+    """Rich oven-toasted bun shading: pale warm cream lower skirt -> golden-russet toasted top with dimple AO."""
+    y0 = float(part.positions[:, 1].min())
+    y1 = float(part.positions[:, 1].max())
+    span = max(1e-5, y1 - y0)
+
+    def _bun_col(pos: np.ndarray, nrm: np.ndarray) -> np.ndarray:
+        t = np.clip((pos[:, 1] - y0) / span, 0.0, 1.0)
+        # Warm pale-tan lower bakery rim -> toasted warm golden-russet crown matching `burgers_sheet.png`!
+        u_diag = (pos[:, 0] + pos[:, 2]) * 0.707
+        v_diag = (pos[:, 0] - pos[:, 2]) * 0.707
+        fold_ao = 1.0 - 0.22 * np.exp(-(((v_diag + 0.03) / 0.055) ** 2 + ((u_diag + 0.02) / 0.18) ** 2)) * (t > 0.45)
+        lo = np.array([[1.00, 0.94, 0.84]], dtype=np.float64)
+        hi = np.array([[0.96, 0.82, 0.66]], dtype=np.float64)
+        toast_var = 1.0 + 0.06 * np.sin(pos[:, 0] * 14.0 + pos[:, 2] * 12.0) * np.cos(pos[:, 2] * 16.0 - pos[:, 0] * 11.0)
+        col = (lo * (1.0 - t[:, None]) + hi * t[:, None]) * fold_ao[:, None] * toast_var[:, None] * (0.92 + 0.08 * np.clip(nrm[:, 1:2], 0.0, 1.0))
+        return np.clip(col, 0.45, 1.0)
+
+    return tint_part(part, _bun_col)
+
+
 def _build_burger(stage: int) -> SceneBuilder:
-    """Build realistic soft white-bun sesame cheeseburger (`fdburgr1` full, `fdburgr2` bitten, `fdburgr3` remnants)."""
+    """Build authentic 1998 toasted sesame hamburger (`fdburgr1` full, `fdburgr2` 3-bite, `fdburgr3` scraps)."""
     register_item_materials()
     sc = SceneBuilder(name=f"item_fdburgr{stage}")
 
     if stage == 3:
-        # Final stage (`255:fdburgr3`): flat torn white-bread sesame bun wedge with fluffy white crumb rim,
-        # spoked hollow red tomato slice, thin crisp white onion ring, organic crinkled lettuce, dill pickle & torn beef scraps!
-        rem_bites = [(+0.15, +0.20, 0.23), (-0.23, +0.18, 0.17)]
-
-        def _dome_rem(pos: np.ndarray) -> np.ndarray:
-            p = pos.copy()
-            p[:, 1] = np.where(p[:, 1] < 0.0, p[:, 1] * 0.18, p[:, 1])
-            return p
-
-        raw_bun = gradient_y_tint(
-            superellipsoid(0.28, 0.095, 0.25, e1=0.82, e2=0.96, u_segs=44, v_segs=22, name="bun_remnant", material="item_bun_golden")
-            .deform(_dome_rem)
-            .translate(0.0, 0.056, -0.06),
-            (1.00, 0.96, 0.88),
-            (0.98, 0.86, 0.68),
+        # Final stage (`255:fdburgr3`): compact jagged upper-right bun wedge with fluted white crumb,
+        # spilled organic hollow red tomato slice on left, ONE large oval white onion ring front-center,
+        # crinkled bright-lime lettuce + ribbed pickle inside ring, charred beef remnant, & loose curled pickle far right!
+        rem_bites = [(-0.22, -0.22, 0.175), (+0.14, +0.20, 0.225), (-0.12, +0.24, 0.185)]
+        raw_bun = _tint_baked_bun(
+            superellipsoid(0.255, 0.112, 0.220, e1=0.82, e2=0.96, u_segs=52, v_segs=24, name="bun_remnant", material="item_bun_golden")
+            .deform(_sculpt_bun_dome)
+            .translate(0.0, 0.062, -0.05)
         )
         new_pos, b_mask = _project_bites(raw_bun.positions, rem_bites)
-        raw_bun = MeshPart(raw_bun.name, raw_bun.material, new_pos, recompute_smooth_normals(new_pos, raw_bun.indices), raw_bun.indices, uvs=raw_bun.uvs)
-        raw_bun.colors = None
-        gradient_y_tint(raw_bun, (1.00, 0.96, 0.88), (0.98, 0.86, 0.68))
-        for bp in _split_mesh_by_mask(raw_bun, b_mask, "item_bun_crumb", "_white_crumb"):
-            sc.add("burger", bp.rotate_xyz(rx=0.22, ry=-0.10).translate(+0.02, 0.012, -0.05))
+        raw_bun = _tint_baked_bun(MeshPart(raw_bun.name, raw_bun.material, new_pos, recompute_smooth_normals(new_pos, raw_bun.indices), raw_bun.indices, uvs=raw_bun.uvs))
+        bun_parts = [bp.rotate_xyz(rx=0.22, ry=-0.18).translate(+0.04, 0.012, -0.11) for bp in _split_mesh_by_mask(raw_bun, b_mask, "item_bun_crumb", "_white_crumb")]
+        sc.add("burger", bun_parts)
 
-        # Subtle golden sesame seeds resting flush on the tilted surviving bun crust!
-        bun_top_y = float(max(p.positions[:, 1].max() for p in sc.all_parts()))
-        for k, (sx, sz) in enumerate(((-0.12, -0.20), (-0.02, -0.24), (+0.09, -0.21), (+0.16, -0.15), (-0.07, -0.13), (+0.03, -0.14), (-0.17, -0.13), (+0.11, -0.10))):
-            r2 = (sx - 0.02) ** 2 + (sz + 0.11) ** 2
-            sy = bun_top_y - 0.004 - 0.52 * r2 - 0.18 * (sz + 0.16)
-            sc.add("burger", ellipsoid(0.0085, 0.0045, 0.015, u_segs=8, v_segs=6, name=f"rem_sesame_{k}", material="item_sesame").rotate_xyz(rx=0.22, ry=k * 0.9).translate(sx, sy, sz))
+        # Anchor warm sesame seeds directly onto actual surviving golden-crust surface vertices (ZERO floating seeds!)
+        golden_part = next((bp for bp in bun_parts if bp.material == "item_bun_golden"), None)
+        if golden_part is not None and len(golden_part.positions) > 0:
+            cands = np.where((golden_part.normals[:, 1] > 0.62) & (golden_part.positions[:, 1] > 0.09))[0]
+            placed: List[Tuple[float, float]] = []
+            for idx in cands[::max(1, len(cands) // 28)]:
+                px, py, pz = [float(v) for v in golden_part.positions[idx]]
+                if any(math.hypot(px - qx, pz - qz) < 0.062 for qx, qz in placed):
+                    continue
+                nx, ny, nz = [float(v) for v in golden_part.normals[idx]]
+                placed.append((px, pz))
+                k = len(placed)
+                sc.add(
+                    "burger",
+                    ellipsoid(0.0076, 0.0038, 0.0138, u_segs=8, v_segs=6, name=f"rem_sesame_{k}", material="item_sesame")
+                    .rotate_xyz(rx=math.atan2(nz, max(0.2, ny)), ry=k * 1.1, rz=-math.atan2(nx, max(0.2, ny)))
+                    .translate(px + nx * 0.001, py + ny * 0.001, pz + nz * 0.001),
+                )
+                if len(placed) >= 12:
+                    break
 
-        # Irregular craggy seared beef patty scraps tucked underneath the lettuce & onion (`255:fdburgr3`).
-        for idx, (cx, cz, cr) in enumerate(((-0.02, +0.04, 0.088), (+0.11, +0.10, 0.068), (-0.11, +0.02, 0.062))):
+        # Craggy flame-seared ground-beef patty remnants tucked underneath bottom-right edge (`255:fdburgr3`).
+        for idx, (cx, cz, cr, sy_m) in enumerate(((+0.09, +0.18, 0.096, 0.30), (+0.14, +0.06, 0.072, 0.26), (-0.03, +0.10, 0.068, 0.26))):
             scrap = (
-                superellipsoid(cr, cr * 0.30, cr * 0.86, e1=0.62, e2=0.88, u_segs=16, v_segs=10, name=f"patty_crumb_{idx}", material="item_beef_patty")
-                .deform(lambda p, k=idx: p + 0.011 * np.sin(p * 42.0 + k * 1.7) * np.cos(np.roll(p, 1, axis=1) * 34.0))
-                .translate(cx, cr * 0.28 + 0.004, cz)
+                superellipsoid(cr, cr * sy_m, cr * 0.88, e1=0.60, e2=0.88, u_segs=18, v_segs=12, name=f"patty_crumb_{idx}", material="item_beef_patty")
+                .deform(lambda p, k=idx: p + 0.011 * np.sin(p * 42.0 + k * 1.7) * np.cos(np.roll(p, 1, axis=1) * 36.0))
+                .translate(cx, cr * sy_m * 0.85 + 0.003, cz)
             )
             sc.add("burger", scrap)
 
-        # Organic crinkled pale-veined lettuce leaves lying naturally across the remnants!
+        # Crumpled bright-lime crinkled lettuce peeking behind upper-left bun notch, under crumb & inside onion ring!
         for k, (lx, ly, lz, rot_y, sc_w, sc_l, sd) in enumerate((
-            (-0.04, 0.034, +0.02, 0.65, 0.14, 0.22, 0.4),
-            (+0.04, 0.038, +0.05, 2.25, 0.13, 0.20, 1.8),
-            (-0.08, 0.030, +0.08, -1.15, 0.13, 0.20, 3.1),
-            (+0.10, 0.034, -0.02, 1.30, 0.12, 0.18, 4.4),
+            (-0.06, 0.056, -0.22, 3.05, 0.085, 0.13, 0.2),   # tiny green tuft peeking top-left of bun!
+            (+0.06, 0.050, -0.04, 1.45, 0.125, 0.18, 1.3),   # ruffled lettuce spilling under bitten bun crumb
+            (-0.04, 0.044, +0.02, 0.45, 0.125, 0.19, 2.6),   # bright ruffled lettuce bridging into onion ring
+            (+0.03, 0.046, +0.07, -0.25, 0.110, 0.16, 3.9),  # bright lime heart filling upper half of onion ring
         )):
-            sc.add("burger", _build_crisp_lettuce_sheet(f"lettuce_rem_{k}", width=sc_w, length=sc_l, bend_down=0.012, seed=sd).rotate_xyz(ry=rot_y).translate(lx, ly, lz))
+            sc.add("burger", _build_crisp_lettuce_sheet(f"lettuce_rem_{k}", width=sc_w, length=sc_l, bend_down=0.010, seed=sd).rotate_xyz(ry=rot_y).translate(lx, ly, lz))
 
-        # Real organic spoked hollowed red tomato wheel slice bottom-left matching `255:fdburgr3`!
-        for tp in _build_tomato_wheel("tomato_rem", radius=0.140, thick=0.022, open_pockets=True):
-            sc.add("burger", tp.rotate_xyz(rx=0.14, rz=-0.16).translate(-0.17, 0.044, +0.10))
+        # Organic fleshy hollowed red tomato wheel slice spilled onto bottom-left (`255:fdburgr3`)!
+        for tp in _build_tomato_wheel("tomato_rem", radius=0.140, thick=0.024, open_pockets=True):
+            sc.add("burger", tp.rotate_xyz(rx=0.30, ry=-0.28, rz=-0.26).translate(-0.20, 0.060, +0.09))
 
-        # Slender crisp white sliced onion ring resting casually across front-center (`255:fdburgr3`!)
-        onion_a = torus_arc(0.118, 0.0090, u_segs=32, v_segs=10, plane="xz", name="onion_rem_a", material="item_onion").scale(0.86, 1.0, 1.16).rotate_xyz(rx=0.14, rz=-0.10).translate(+0.02, 0.056, +0.13)
-        onion_b = torus_arc(0.072, 0.0075, u_segs=26, v_segs=10, plane="xz", name="onion_rem_b", material="item_onion").rotate_xyz(rx=0.10, rz=0.14).translate(+0.04, 0.048, +0.11)
-        sc.add("burger", [onion_a, onion_b])
+        # Crinkle-cut dark-green dill pickle slice nestled prominently inside the large white onion ring!
+        sc.add("burger", _build_pickle_chip("pickle_rem_in", radius=0.082).rotate_xyz(rx=0.16, ry=0.25, rz=-0.08).translate(+0.01, 0.056, +0.14))
 
-        # Crinkle-cut dark-green dill pickle chip lying lower-right (`255:fdburgr3` lower-right green curl!).
-        sc.add("burger", _build_pickle_chip("pickle_rem", radius=0.088).rotate_xyz(rx=0.10, rz=0.14).translate(+0.22, 0.026, +0.11))
+        # ONE iconic slender crisp white oval onion ring draped cleanly ON TOP across front-center (`255:fdburgr3`)!
+        onion_a = (
+            torus_arc(0.132, 0.0082, u_segs=36, v_segs=10, plane="xz", name="onion_rem_a", material="item_onion")
+            .scale(0.82, 1.0, 1.24)
+            .rotate_xyz(rx=0.12, ry=-0.16, rz=-0.06)
+            .translate(+0.02, 0.082, +0.16)
+        )
+        sc.add("burger", onion_a)
+
+        # Detached curled dark-green ribbed pickle half-chip lying loose on the FAR RIGHT (`255:fdburgr3`)!
+        sc.add("burger", _build_pickle_chip("pickle_rem_loose", radius=0.088, curl=0.048, half_chip=True).rotate_xyz(rx=0.26, ry=-0.58, rz=0.44).translate(+0.28, 0.042, +0.14))
         return _finalize_item(sc, target_span=0.92)
 
-    # Authentic bite placement matching `254:fdburgr2`: crisp top-left nibble + big lower-right double crescent bites!
-    bites = [(-0.27, -0.27, 0.16), (+0.23, +0.20, 0.25), (+0.30, -0.02, 0.18)] if stage == 2 else []
+    # Stage 2 (`254:fdburgr2`): EXACTLY THREE SEPARATE SCALLOPED BITES — NEVER CUT IN HALF!
+    # 1. Back-left (~10:30) nibble  2. Front-right (~4:30) deep bite exposing pickle  3. Right-rim (~2:30) separate bite!
+    top_bites = [(-0.25, -0.24, 0.148), (+0.17, +0.26, 0.148), (+0.36, -0.02, 0.128)] if stage == 2 else []
+    # Lower patty & bottom heel only bitten cleanly at front-bottom-right so left tomato/onion/patty stay full & intact!
+    lower_bites = [(+0.14, +0.30, 0.146), (+0.35, +0.02, 0.112)] if stage == 2 else []
 
-    def _carve_filling(part: MeshPart) -> MeshPart:
-        if not bites:
+    def _carve_with(part: MeshPart, bite_list: List[Tuple[float, float, float]]) -> MeshPart:
+        if not bite_list:
             return part
-        p_new, _ = _project_bites(part.positions, bites)
+        p_new, _ = _project_bites(part.positions, bite_list)
         out = MeshPart(part.name, part.material, p_new, recompute_smooth_normals(p_new, part.indices), part.indices, uvs=part.uvs)
         if part.colors is not None:
             out.colors = part.colors.copy()
             out._base_tint = part.colors.copy()
         return out
 
-    def _is_inside_any_bite(x: float, z: float, margin: float = 0.0) -> bool:
-        return any(math.hypot(x - bx, z - bz) < (br + margin) for bx, bz, br in bites)
+    def _in_bites(x: float, z: float, bite_list: List[Tuple[float, float, float]], margin: float = 0.0) -> bool:
+        return any(math.hypot(x - bx, z - bz) < (br + margin) for bx, bz, br in bite_list)
 
-    # 1. Soft white-bread bottom bun heel (clean vertical separation from patty so bitten face has zero z-fighting!).
+    # 1. Compact tucked bottom bun heel (`y ∈ [0.00, 0.068]`, realistic thin base letting the seared patty shine!).
     bot_bun_raw = gradient_y_tint(
-        superellipsoid(0.312, 0.058, 0.312, e1=0.60, e2=0.96, u_segs=44, v_segs=18, name="bun_bottom", material="item_bun_golden")
-        .translate(0.0, 0.056, 0.0),
-        (0.95, 0.84, 0.66),
-        (1.00, 0.98, 0.92),
+        superellipsoid(0.300, 0.036, 0.300, e1=0.62, e2=0.96, u_segs=44, v_segs=16, name="bun_bottom", material="item_bun_golden")
+        .translate(0.0, 0.036, 0.0),
+        (0.92, 0.80, 0.64),
+        (1.00, 0.96, 0.88),
     )
-    if bites:
-        bp_pos, bp_mask = _project_bites(bot_bun_raw.positions, bites)
+    if lower_bites:
+        bp_pos, bp_mask = _project_bites(bot_bun_raw.positions, lower_bites)
         bot_bun_raw = MeshPart(bot_bun_raw.name, bot_bun_raw.material, bp_pos, recompute_smooth_normals(bp_pos, bot_bun_raw.indices), bot_bun_raw.indices, uvs=bot_bun_raw.uvs)
-        gradient_y_tint(bot_bun_raw, (0.95, 0.84, 0.66), (1.00, 0.98, 0.92))
+        gradient_y_tint(bot_bun_raw, (0.92, 0.80, 0.64), (1.00, 0.96, 0.88))
         sc.add("burger", _split_mesh_by_mask(bot_bun_raw, bp_mask, "item_bun_crumb", "_white_crumb"))
     else:
         sc.add("burger", bot_bun_raw)
 
-    # 2. Thick char-seared dimpled beef patty sitting cleanly above bottom bun (`y ∈ [0.114, 0.214]`, zero overlap!).
-    patty_bites = [(bx, bz, br + 0.006) for bx, bz, br in bites]
-    patty_raw = tint_part(
-        superellipsoid(0.318, 0.050, 0.318, e1=0.58, e2=0.98, u_segs=42, v_segs=16, name="beef_patty", material="item_beef_patty")
-        .deform(lambda p: p + 0.007 * np.sin(p * 36.0) * np.cos(np.roll(p, 1, axis=1) * 32.0))
-        .translate(0.0, 0.160, 0.0),
-        lambda pos, _n: np.clip(0.84 + 0.16 * np.sin(pos[:, 0] * 28.0 + pos[:, 2] * 24.0)[:, None], 0.65, 1.0) * np.ones((1, 3)),
-    )
-    if patty_bites:
-        pp_pos, _ = _project_bites(patty_raw.positions, patty_bites)
-        patty = MeshPart(patty_raw.name, patty_raw.material, pp_pos, recompute_smooth_normals(pp_pos, patty_raw.indices), patty_raw.indices, uvs=patty_raw.uvs)
-        patty.colors = patty_raw.colors.copy()
-        patty._base_tint = patty_raw.colors.copy()
-    else:
-        patty = patty_raw
-    sc.add("burger", patty)
-
-    # 3. Softly melted cheddar cheese slice hugging warmly over the patty edge.
-    def _drape_cheese(pos: np.ndarray) -> np.ndarray:
+    # 2. Thick craggy flame-broiled seared ground-beef patty (`y ∈ [0.064, 0.156]`, rich `beef_seared` PBR + bumpy hand-pressed edge!).
+    def _patty_shape(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
-        r = np.hypot(p[:, 0], p[:, 2])
-        over = np.clip((r - 0.25) / 0.13, 0.0, 1.0)
-        p[:, 1] -= 0.044 * (over ** 1.55)
+        ang = np.arctan2(p[:, 2], p[:, 0])
+        edge_bump = 1.0 + 0.035 * np.sin(ang * 7.0 + 0.6) + 0.024 * np.cos(ang * 13.0 - 0.4)
+        p[:, 0] *= edge_bump
+        p[:, 2] *= edge_bump
+        p += 0.0085 * np.sin(p * 38.0) * np.cos(np.roll(p, 1, axis=1) * 34.0)
         return p
 
-    cheese = _carve_filling(
-        rounded_box(0.54, 0.014, 0.54, bevel=0.005, segs=3, name="cheese_slice", material="item_cheese")
-        .rotate_xyz(ry=28.0, degrees=True)
-        .deform(_drape_cheese)
-        .translate(0.0, 0.205, 0.0)
+    patty_raw = tint_part(
+        superellipsoid(0.336, 0.048, 0.336, e1=0.58, e2=0.98, u_segs=48, v_segs=18, name="beef_patty", material="item_beef_patty")
+        .deform(_patty_shape)
+        .translate(0.0, 0.110, 0.0),
+        lambda pos, nrm: np.clip(
+            (0.84 + 0.14 * np.sin(pos[:, 0] * 26.0 + pos[:, 2] * 24.0) + 0.12 * nrm[:, 1])[:, None] * np.array([[1.0, 0.96, 0.92]]),
+            0.55,
+            1.0,
+        ),
     )
-    sc.add("burger", cheese)
+    sc.add("burger", _carve_with(patty_raw, lower_bites))
 
-    # 4. Juicy red sliced tomato wheel + crisp delicate white onion ring peeking warmly on lower-left (`253:fdburgr1` / `254:fdburgr2`)!
-    for idx, (tx, tz) in enumerate(((-0.14, +0.20), (+0.11, +0.16), (-0.05, -0.16))):
-        if stage == 2 and _is_inside_any_bite(tx, tz, margin=-0.04):
-            continue
-        for tp in _build_tomato_wheel(f"tomato_{idx}", radius=0.145, thick=0.025, open_pockets=False):
-            sc.add("burger", _carve_filling(tp.translate(tx, 0.222, tz)))
+    # 3. Juicy bright red-orange sliced tomato wheels peeking prominently front-bottom-left (`253:fdburgr1` & `254:fdburgr2` — NO loud orange cheese!).
+    tomato_spots = ((-0.13, +0.24, 0.158), (+0.15, +0.16, 0.135), (-0.06, -0.16, 0.135))
+    for idx, (tx, tz, tr) in enumerate(tomato_spots):
+        if stage == 2 and idx == 1:
+            # On Stage 2, shift right tomato slightly back so it peeks cleanly under Bite 3 right edge!
+            tx, tz = +0.20, +0.02
+        for tp in _build_tomato_wheel(f"tomato_{idx}", radius=tr, thick=0.025, open_pockets=False):
+            sc.add("burger", _carve_with(tp.translate(tx, 0.162, tz), lower_bites))
 
-    onion_a = _carve_filling(
-        torus_arc(0.138, 0.0095, u_segs=32, v_segs=10, plane="xz", name="burger_onion_a", material="item_onion")
-        .translate(-0.08, 0.236, +0.20)
-    )
-    onion_b = _carve_filling(
-        torus_arc(0.102, 0.0085, u_segs=28, v_segs=10, plane="xz", name="burger_onion_b", material="item_onion")
-        .translate(-0.08, 0.236, +0.20)
-    )
+    # 4. Crisp slender white sliced onion rings arcing boldly right above the front-bottom-left tomato!
+    onion_rad = 0.152 if stage == 2 else 0.144
+    onion_pos = (-0.11, 0.180, +0.21) if stage == 2 else (-0.10, 0.178, +0.22)
+    onion_a = _carve_with(torus_arc(onion_rad, 0.0080, u_segs=34, v_segs=10, plane="xz", name="burger_onion_a", material="item_onion").translate(*onion_pos), lower_bites)
+    onion_b = _carve_with(torus_arc(onion_rad * 0.72, 0.0072, u_segs=28, v_segs=10, plane="xz", name="burger_onion_b", material="item_onion").translate(onion_pos[0] + 0.02, onion_pos[1], onion_pos[2] - 0.01), lower_bites)
     sc.add("burger", [onion_a, onion_b])
 
-    # Crisp ridged dark-green dill pickle slice nestled cleanly inside the bitten edge on Stage 2 (`254:fdburgr2`!)
-    if stage == 2:
-        sc.add("burger", _carve_filling(_build_pickle_chip("burger_pickle_bite", radius=0.092).rotate_xyz(rx=0.05, rz=-0.06).translate(+0.02, 0.238, +0.10)))
-
-    # 5. Organic crinkled iceberg/green-leaf lettuce leaves with pale crisp ribs & curly ruffled edges (ZERO scallop fans!).
-    lettuce_placements = (
-        (0.28, 0.16, 0.235, 0.17, 0.22, 0.036, 0.4),
-        (1.22, 0.15, 0.240, 0.16, 0.21, 0.032, 1.7),
-        (2.18, 0.16, 0.236, 0.17, 0.22, 0.038, 3.0),
-        (3.25, 0.15, 0.240, 0.16, 0.20, 0.030, 4.3),
-        (4.35, 0.16, 0.236, 0.17, 0.21, 0.034, 5.5),
-        (5.38, 0.16, 0.238, 0.17, 0.22, 0.036, 6.8),
-    )
-    for k, (ang, rad, ly, lw, ll, bd, sd) in enumerate(lettuce_placements):
-        lx, lz = rad * math.sin(ang), rad * math.cos(ang)
-        if stage == 2 and _is_inside_any_bite(lx * 1.35, lz * 1.35, margin=-0.03):
-            continue
-        leaf = (
-            _build_crisp_lettuce_sheet(f"lettuce_{k}", width=lw, length=ll, bend_down=bd, seed=sd)
-            .rotate_xyz(ry=ang)
-            .translate(lx, ly, lz)
+    # 5. Organic crinkled bright-lime lettuce billowing naturally around left & right rims (extra lush on `fdburgr2`!)
+    if stage == 1:
+        lettuce_specs = (
+            (+1.26, 0.18, 0.186, 0.18, 0.23, 0.028, 0.5),   # lush right flank (`3:00-4:30`)
+            (+0.78, 0.17, 0.184, 0.16, 0.21, 0.026, 1.8),   # lower-right peek
+            (-1.28, 0.18, 0.186, 0.17, 0.22, 0.028, 3.1),   # crisp left flank (`8:30-9:30`)
+            (-0.62, 0.17, 0.182, 0.15, 0.19, 0.024, 4.4),   # tucked behind front-left tomato/onion
+            (+2.50, 0.16, 0.186, 0.16, 0.19, 0.026, 5.7),   # back-right
+            (-2.45, 0.16, 0.186, 0.16, 0.19, 0.026, 6.9),   # back-left
         )
-        sc.add("burger", _carve_filling(leaf))
+    else:
+        lettuce_specs = (
+            (-1.05, 0.20, 0.184, 0.19, 0.24, 0.028, 0.6),   # lush ruffled left-front lettuce (`fdburgr2`!)
+            (-0.42, 0.19, 0.180, 0.17, 0.22, 0.024, 1.9),   # peeking under white onion ring front-left
+            (+0.82, 0.18, 0.182, 0.18, 0.23, 0.026, 3.2),   # spilling out front-right under pickle bite!
+            (+1.42, 0.18, 0.186, 0.17, 0.21, 0.026, 4.5),   # peeking right edge under Bite 3
+            (-2.25, 0.16, 0.184, 0.15, 0.18, 0.022, 5.8),   # back-left
+            (+2.40, 0.16, 0.184, 0.15, 0.18, 0.022, 6.9),   # back-right
+        )
+    for k, (ang, rad, ly, lw, ll, bd, sd) in enumerate(lettuce_specs):
+        lx, lz = rad * math.sin(ang), rad * math.cos(ang)
+        leaf = _build_crisp_lettuce_sheet(f"lettuce_{k}", width=lw, length=ll, bend_down=bd, seed=sd).rotate_xyz(ry=ang).translate(lx, ly, lz)
+        sc.add("burger", _carve_with(leaf, lower_bites if stage == 2 else []))
 
-    # 6. Soft pillowy smooth light-golden WHITE-BREAD sesame top bun (with pale creamy-white lower skirt,
-    #    subtle natural diagonal crown crease like `253:fdburgr1`, and REAL fluffy white-bread bitten cross-section!).
-    def _dome_white_bun(pos: np.ndarray) -> np.ndarray:
-        p = pos.copy()
-        p[:, 1] = np.where(p[:, 1] < 0.0, p[:, 1] * 0.20, p[:, 1])
-        # Subtle organic pillowy dimple crease across upper-left crown matching `fdburgr1` & `fdburgr2`!
-        u_diag = (p[:, 0] + p[:, 2]) * 0.707
-        v_diag = (p[:, 0] - p[:, 2]) * 0.707
-        crease = -0.012 * np.exp(-((v_diag / 0.055) ** 2 + ((u_diag + 0.03) / 0.18) ** 2)) * np.clip(p[:, 1] / 0.12, 0.0, 1.0)
-        p[:, 1] += crease
-        return p
+    # 6. Crinkle-cut dark-green ribbed dill pickle slice:
+    #    - Stage 1: peeking front-right (`4:30-5:30`) right above beef patty (`fdburgr1`)!
+    #    - Stage 2: prominently exposed RIGHT INSIDE Bite 2 (`4:30`) underneath the bitten white bread crumb (`fdburgr2`)!
+    if stage == 1:
+        sc.add("burger", _build_pickle_chip("burger_pickle", radius=0.095).rotate_xyz(rx=0.10, ry=0.25, rz=-0.06).translate(+0.13, 0.176, +0.25))
+    else:
+        sc.add("burger", _build_pickle_chip("burger_pickle_bite", radius=0.088).rotate_xyz(rx=0.14, ry=-0.18, rz=-0.06).translate(+0.09, 0.194, +0.18))
 
-    top_bun_raw = gradient_y_tint(
-        superellipsoid(0.328, 0.172, 0.328, e1=0.84, e2=0.96, u_segs=52, v_segs=26, name="bun_top", material="item_bun_golden")
-        .deform(_dome_white_bun)
-        .translate(0.0, 0.268, 0.0),
-        (1.00, 0.97, 0.90),  # classic pale creamy-white lower white-bread bun rim!
-        (0.95, 0.84, 0.68),  # soft warm light-golden baked top (zero dark wheat look!)
+    # 7. Plump wide oven-toasted golden-russet sesame top bun with authentic diagonal crown dimple & 3 separate bites on Stage 2!
+    top_bun_raw = _tint_baked_bun(
+        superellipsoid(0.348, 0.164, 0.342, e1=0.84, e2=0.96, u_segs=56, v_segs=28, name="bun_top", material="item_bun_golden")
+        .deform(_sculpt_bun_dome)
+        .translate(0.0, 0.214, -0.010)
     )
-    if bites:
-        tb_pos, tb_mask = _project_bites(top_bun_raw.positions, bites)
-        top_bun_raw = MeshPart(top_bun_raw.name, top_bun_raw.material, tb_pos, recompute_smooth_normals(tb_pos, top_bun_raw.indices), top_bun_raw.indices, uvs=top_bun_raw.uvs)
-        gradient_y_tint(top_bun_raw, (1.00, 0.97, 0.90), (0.95, 0.84, 0.68))
+    if top_bites:
+        tb_pos, tb_mask = _project_bites(top_bun_raw.positions, top_bites)
+        top_bun_raw = _tint_baked_bun(MeshPart(top_bun_raw.name, top_bun_raw.material, tb_pos, recompute_smooth_normals(tb_pos, top_bun_raw.indices), top_bun_raw.indices, uvs=top_bun_raw.uvs))
         sc.add("burger", _split_mesh_by_mask(top_bun_raw, tb_mask, "item_bun_crumb", "_white_crumb"))
     else:
         sc.add("burger", top_bun_raw)
 
-    # 7. Delicate pale golden-ivory sesame seeds nestled half-flush into the pillowy white-bread dome!
+    # 8. Delicate scattered warm-ivory toasted sesame seeds nestled flush onto the bun crown (excluded cleanly from bites!).
     golden_angle = 2.39996323
-    for i in range(38):
-        f = (i + 0.5) / 38.0
-        r_frac = 0.82 * math.sqrt(f)
+    for i in range(40):
+        f = (i + 0.5) / 40.0
+        r_frac = 0.80 * math.sqrt(f)
         th = i * golden_angle
-        sx = 0.318 * r_frac * math.cos(th)
-        sz = 0.318 * r_frac * math.sin(th)
-        if stage == 2 and _is_inside_any_bite(sx, sz, margin=0.025):
+        sx = 0.336 * r_frac * math.cos(th)
+        sz = 0.330 * r_frac * math.sin(th) - 0.010
+        if top_bites and _in_bites(sx, sz, top_bites, margin=0.024):
             continue
-        sy = 0.268 + 0.172 * ((max(0.01, 1.0 - (r_frac ** (2.0 / 0.84)))) ** (0.84 * 0.5)) + 0.0015
+        # Match the diagonal crown dimple depression so seeds never float over the crease!
+        u_d = (sx + (sz + 0.010)) * 0.707
+        v_d = (sx - (sz + 0.010)) * 0.707
+        sy_base = 0.164 * ((max(0.01, 1.0 - (r_frac ** (2.0 / 0.84)))) ** (0.84 * 0.5))
+        crease_y = -0.019 * math.exp(-(((v_d + 0.03) / 0.048) ** 2 + ((u_d + 0.02) / 0.17) ** 2)) * min(1.0, sy_base / 0.11)
+        sy = 0.214 + sy_base + crease_y + 0.0012
         seed = (
-            ellipsoid(0.0085, 0.0042, 0.0155, u_segs=8, v_segs=6, name=f"sesame_{i}", material="item_sesame")
-            .rotate_xyz(rx=0.52 * r_frac * math.sin(th), ry=th + 0.8 * i, rz=-0.52 * r_frac * math.cos(th))
+            ellipsoid(0.0078, 0.0038, 0.0142, u_segs=8, v_segs=6, name=f"sesame_{i}", material="item_sesame")
+            .rotate_xyz(rx=0.48 * r_frac * math.sin(th), ry=th + 0.8 * i, rz=-0.48 * r_frac * math.cos(th))
             .translate(sx, sy, sz)
         )
         sc.add("burger", seed)

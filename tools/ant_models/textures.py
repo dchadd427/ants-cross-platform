@@ -28,6 +28,10 @@ FAMILY_TEXTURE_SIZES: Dict[str, int] = {
     "rubber": 128,
     "fur": 128,
     "bread": 128,
+    "bun_white": 256,
+    "white_crumb": 128,
+    "beef_seared": 256,
+    "lettuce_leaf": 128,
     "foliage": 128,
     "leaf_vein": 128,
     "stone": 128,
@@ -447,37 +451,72 @@ def _build_bread_pack(size: int) -> TexturePack:
 
 
 def _build_bun_white_pack(size: int) -> TexturePack:
-    """Silky-smooth soft white-bread hamburger bun crust: gentle oven blush, ultra-fine matte dough grain."""
-    blush = _tile_noise(size, 5, 5, seed=611)
-    soft_dimple = _tile_noise(size, 14, 14, seed=612)
-    micro_flour = _tile_noise(size, 40, 40, seed=613)
-    height = np.clip(0.46 * soft_dimple + 0.34 * blush + 0.20 * micro_flour, 0.0, 1.0)
-    albedo = 0.91 + 0.05 * blush + 0.025 * soft_dimple + 0.015 * micro_flour
-    rough_mult = 0.76 + 0.16 * (1.0 - blush) + 0.08 * micro_flour
+    """Realistic oven-baked toasted hamburger bun crust: warm Maillard mottling, fine dough blisters & satin egg-wash sheen."""
+    blush = _tile_noise(size, 6, 6, seed=611)
+    mottle = _tile_noise(size, 12, 12, seed=614)
+    pores = _tile_pores(size, 28, seed=612)
+    micro = _tile_noise(size, 48, 48, seed=613)
+    blister = _smoothstep(0.14, 0.56, pores)
+    height = np.clip(0.38 * blister + 0.28 * mottle + 0.20 * blush + 0.14 * micro, 0.0, 1.0)
+    # Rich bakery palette: warm golden-russet toast patches + creamy pale-tan crust creases + subtle satin sheen
+    toast = np.clip(0.55 * blush + 0.30 * mottle + 0.15 * blister, 0.0, 1.0)
+    pale_crust = np.array([0.92, 0.68, 0.42], dtype=np.float32)
+    warm_toast = np.array([0.74, 0.46, 0.24], dtype=np.float32)
+    pore_shade = 0.88 + 0.12 * blister
+    rgb = (pale_crust[None, None, :] * (1.0 - toast[:, :, None]) + warm_toast[None, None, :] * toast[:, :, None]) * pore_shade[:, :, None]
+    rough_mult = np.clip(0.54 + 0.24 * (1.0 - toast) + 0.16 * (1.0 - blister) + 0.06 * micro, 0.48, 0.94)
     return TexturePack(
         family="bun_white",
         size=size,
-        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.89, 1.0)),
-        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=1.15)),
-        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.72, 1.0)),
+        base_color_png=_rgb_to_png(np.clip(rgb, 0.0, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=2.8)),
+        metallic_roughness_png=_mr_to_rgb_png(rough_mult),
     )
 
 
 def _build_white_crumb_pack(size: int) -> TexturePack:
-    """Airy spongy torn white-bread interior crumb: soft yeast pockets, bright clean matte ivory pores."""
-    cells_a = _tile_pores(size, 22, seed=621)
-    cells_b = _tile_pores(size, 44, seed=622)
+    """Airy spongy torn white-bread interior crumb: deep yeast air-pockets, fibrous soft matte ivory tear."""
+    cells_a = _tile_pores(size, 20, seed=621)
+    cells_b = _tile_pores(size, 42, seed=622)
     sponge = _tile_noise(size, 18, 18, seed=623)
-    pocket = _smoothstep(0.14, 0.56, cells_a) * 0.58 + _smoothstep(0.12, 0.48, cells_b) * 0.42
-    height = np.clip(0.60 * pocket + 0.40 * sponge, 0.0, 1.0)
-    albedo = 0.84 + 0.10 * pocket + 0.06 * sponge
+    pocket = _smoothstep(0.12, 0.54, cells_a) * 0.60 + _smoothstep(0.10, 0.46, cells_b) * 0.40
+    height = np.clip(0.66 * pocket + 0.34 * sponge, 0.0, 1.0)
+    albedo = 0.72 + 0.20 * pocket + 0.08 * sponge
     rough_mult = 0.88 + 0.12 * (1.0 - pocket)
     return TexturePack(
         family="white_crumb",
         size=size,
-        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.82, 1.0)),
-        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=3.2)),
+        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.70, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=4.6)),
         metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.86, 1.0)),
+    )
+
+
+def _build_beef_seared_pack(size: int) -> TexturePack:
+    """Coarse flame-broiled seared ground-beef patty: dark Maillard char ridges, meat crumbles & juicy seared glints."""
+    f1_a, edge_a = _tile_voronoi_f1_f2(size, 16, seed=631)
+    f1_b, _edge_b = _tile_voronoi_f1_f2(size, 34, seed=632)
+    char_noise = _tile_noise(size, 9, 9, seed=633)
+    grain = _tile_noise(size, 44, 44, seed=634)
+    chunks = 0.60 * (1.0 - _smoothstep(0.05, 0.58, f1_a)) + 0.40 * (1.0 - _smoothstep(0.06, 0.54, f1_b))
+    crevice = _smoothstep(0.02, 0.20, edge_a)
+    height = np.clip(0.52 * chunks + 0.24 * crevice + 0.14 * grain + 0.10 * char_noise, 0.0, 1.0)
+    char_col = np.array([0.11, 0.055, 0.035], dtype=np.float32)
+    sear_mid = np.array([0.33, 0.165, 0.10], dtype=np.float32)
+    juicy_hi = np.array([0.48, 0.25, 0.15], dtype=np.float32)
+    t1 = _smoothstep(0.18, 0.55, height)
+    t2 = _smoothstep(0.58, 0.88, height * (0.7 + 0.3 * char_noise))
+    rgb = char_col[None, None, :] * (1.0 - t1[:, :, None]) + sear_mid[None, None, :] * t1[:, :, None]
+    rgb = rgb * (1.0 - t2[:, :, None]) + juicy_hi[None, None, :] * t2[:, :, None]
+    # Juicy sizzling fat speckles catch crisp highlights while char crevices stay matte!
+    juice = _smoothstep(0.68, 0.90, chunks * 0.65 + grain * 0.35)
+    rough_mult = np.clip(0.92 - 0.52 * juice - 0.12 * t2, 0.34, 0.96)
+    return TexturePack(
+        family="beef_seared",
+        size=size,
+        base_color_png=_rgb_to_png(np.clip(rgb, 0.0, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=6.0)),
+        metallic_roughness_png=_mr_to_rgb_png(rough_mult),
     )
 
 
@@ -1057,6 +1096,7 @@ def get_texture_pack(family: str, size: Optional[int] = None) -> TexturePack:
         "bread": _build_bread_pack,
         "bun_white": _build_bun_white_pack,
         "white_crumb": _build_white_crumb_pack,
+        "beef_seared": _build_beef_seared_pack,
         "lettuce_leaf": _build_lettuce_leaf_pack,
         "foliage": _build_foliage_pack,
         "leaf_vein": _build_leaf_vein_pack,

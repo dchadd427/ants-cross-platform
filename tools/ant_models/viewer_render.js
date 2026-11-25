@@ -93,10 +93,10 @@
   const LIGHTING_PRESETS = {
     studio: {
       id: "studio", label: "Studio",
-      keyBasis: [0.90, 0.24, -0.24], fillBasis: [0.56, -0.18, 0.80], rimBasis: [-0.58, 0.68, 0.44],
-      keyColor: [2.35, 2.303, 2.2325], fillColor: [0.2352, 0.2576, 0.28], rimColor: [0.4048, 0.4416, 0.46],
-      envKeyTint: [1.0, 0.95, 0.87], envFillTint: [0.64, 0.88, 1.0], envRimTint: [0.84, 0.96, 1.0],
-      spotParams: [0.48, 1.12, 1.15], lightMix: [1.0, 1.0, 1.02, 0.0], pal: null,
+      keyBasis: [0.64, 0.56, -0.52], fillBasis: [0.42, 0.14, 0.89], rimBasis: [-0.54, 0.64, 0.54],
+      keyColor: [2.75, 2.64, 2.46], fillColor: [0.36, 0.44, 0.56], rimColor: [0.68, 0.76, 0.86],
+      envKeyTint: [1.0, 0.96, 0.88], envFillTint: [0.62, 0.82, 1.0], envRimTint: [0.84, 0.94, 1.0],
+      spotParams: [0.42, 1.16, 1.15], lightMix: [0.96, 1.12, 1.04, 0.0], pal: null,
     },
     daylight: {
       id: "daylight", label: "Sunlit Meadow",
@@ -300,13 +300,18 @@
   }
   vec3 F_Schlick(float c, vec3 F0) { return F0 + (1.0 - F0) * pow(clamp(1.0 - c, 0.0, 1.0), 5.0); }
   vec3 studioEnv(vec3 R, float rough) {
-    vec3 env = mix(u_groundColor * 0.58, u_skyColor * 1.14, smoothstep(0.14, 0.90, clamp(R.y * 0.5 + 0.5, 0.0, 1.0)));
+    float upT = clamp(R.y * 0.5 + 0.5, 0.0, 1.0);
+    vec3 env = mix(u_groundColor * 0.62, u_skyColor * 1.18, smoothstep(0.12, 0.88, upT));
+    // Warm studio cyclorama floor bounce band near horizon + crisp overhead softbox canopy
+    float horizon = exp(-abs(R.y + 0.06) * 5.5);
+    env += mix(u_groundColor, u_envKeyTint * 0.42, 0.45) * horizon * 0.22;
     float sharp = (1.0 - rough) * (1.0 - rough);
-    float glintExp = mix(22.0, 220.0, sharp);
-    float keySoft = smoothstep(0.72, 0.97, dot(R, u_keyDir)) * 0.95 + pow(max(dot(R, u_keyDir), 0.0), glintExp) * 1.10 * sharp;
-    float fillStrip = smoothstep(0.78, 0.98, dot(R, u_fillDir)) * 0.22;
-    float rimSoft = smoothstep(0.74, 0.97, dot(R, u_rimDir)) * 0.34 + pow(max(dot(R, u_rimDir), 0.0), glintExp * 0.7) * 0.40 * sharp;
-    return env + u_envKeyTint * keySoft * sharp + u_envFillTint * fillStrip * sharp + u_envRimTint * rimSoft * sharp;
+    float glintExp = mix(20.0, 240.0, sharp);
+    float topSoftbox = smoothstep(0.56, 0.94, R.y) * (0.32 + 0.38 * sharp);
+    float keySoft = smoothstep(0.68, 0.96, dot(R, u_keyDir)) * 1.05 + pow(max(dot(R, u_keyDir), 0.0), glintExp) * 1.35 * sharp;
+    float fillStrip = smoothstep(0.74, 0.97, dot(R, u_fillDir)) * 0.30;
+    float rimSoft = smoothstep(0.70, 0.96, dot(R, u_rimDir)) * 0.44 + pow(max(dot(R, u_rimDir), 0.0), glintExp * 0.7) * 0.52 * sharp;
+    return env + u_envKeyTint * (keySoft * sharp + topSoftbox * 0.55) + u_envFillTint * (fillStrip * sharp + topSoftbox * 0.28) + u_envRimTint * rimSoft * sharp;
   }
   vec3 evalLight(vec3 L, vec3 lCol, vec3 N, vec3 V, vec3 albedo, float met, float rough, vec3 F0, float coatW, float coatRough, vec3 coatTint, inout vec3 specAcc) {
     float NoL = max(dot(N, L), 0.0);
@@ -343,49 +348,69 @@
     float met = clamp(u_metallic * mrSample.b, 0.0, 1.0);
     float microCav = 1.0;
     if (u_hasNormalTex == 1) {
-      float pitDepth = smoothstep(0.62, 0.98, mrSample.g);
-      microCav = clamp(1.0 - (pitDepth * 0.60 + clamp(normSlope, 0.0, 1.0) * 0.45) * mix(0.03, 0.015, met), 0.94, 1.0);
+      float pitDepth = smoothstep(0.56, 0.96, mrSample.g);
+      microCav = clamp(1.0 - (pitDepth * 0.55 + clamp(normSlope, 0.0, 1.0) * 0.52) * mix(0.16, 0.05, met), 0.80, 1.0);
     }
     vec3 bakedCol = clamp(v_color, 0.0, 1.0);
     float vMax = max(max(bakedCol.r, bakedCol.g), bakedCol.b);
     vec3 vChroma = vMax > 1e-4 ? (bakedCol / vMax) : vec3(1.0);
     vec3 albedo = max(u_baseColor * baseSample.rgb * vChroma * microCav, 0.0);
 
-    float coatW = u_matKind == 1 ? 0.34 * (1.0 - smoothstep(0.18, 0.42, rough)) : (u_matKind == 2 ? 0.36 : 0.0);
-    float coatR = u_matKind == 2 ? 0.28 : 0.16;
-    float keyCoat = u_matKind == 2 ? 0.48 : coatW;
+    // Clearcoat for glossy glass/wet/tomato/eye (1), chitin carapace (2), and subtle waxy cuticle on foliage (3)
+    float coatW = u_matKind == 1 ? 0.42 * (1.0 - smoothstep(0.16, 0.44, rough))
+                : (u_matKind == 2 ? 0.38 : (u_matKind == 3 ? 0.14 : 0.0));
+    float coatR = u_matKind == 2 ? 0.26 : (u_matKind == 3 ? 0.36 : 0.14);
+    float keyCoat = u_matKind == 2 ? 0.50 : coatW;
     vec3 coatTint = u_matKind == 2 ? mix(vec3(1.0), clamp(albedo * 1.9 + vec3(0.24), 0.0, 1.0), 0.38) : vec3(1.0);
     float keyDot = max(dot(N, u_keyDir), 0.0);
     float spotFocus = mix(u_spotParams.x, u_spotParams.y, pow(keyDot, u_spotParams.z));
     vec3 F0 = mix(vec3(0.045), albedo, met), specAcc = vec3(0.0);
     vec3 Lo = evalLight(u_keyDir, u_keyColor * spotFocus, N, V, albedo, met, rough, F0, keyCoat, coatR, coatTint, specAcc)
-            + evalLight(u_fillDir, u_fillColor, N, V, albedo, met, rough, F0, coatW * 0.15, coatR, coatTint, specAcc)
-            + evalLight(u_rimDir, u_rimColor, N, V, albedo, met, rough, F0, coatW * 0.20, coatR, coatTint, specAcc);
+            + evalLight(u_fillDir, u_fillColor, N, V, albedo, met, rough, F0, coatW * 0.18, coatR, coatTint, specAcc)
+            + evalLight(u_rimDir, u_rimColor, N, V, albedo, met, rough, F0, coatW * 0.24, coatR, coatTint, specAcc);
 
     vec3 bakedAo = vec3(vMax);
-    vec3 aoSoft = mix(vec3(1.0), bakedAo, 0.72);
+    vec3 aoSoft = mix(vec3(1.0), bakedAo, 0.78);
     float aoScalar = dot(aoSoft, vec3(0.2126, 0.7152, 0.0722)) * microCav;
-    float geoAo = mix(0.84, 1.0, smoothstep(0.0, 0.24, v_worldPos.y)) * mix(0.82, 1.0, smoothstep(-0.42, 0.48, N.y));
-    vec3 directAo = mix(vec3(1.0), aoSoft, u_alpha < 0.99 ? 0.16 : 0.50);
+    float geoAo = mix(0.80, 1.0, smoothstep(0.0, 0.26, v_worldPos.y)) * mix(0.78, 1.0, smoothstep(-0.46, 0.50, N.y));
+    vec3 directAo = mix(vec3(1.0), aoSoft, u_alpha < 0.99 ? 0.16 : 0.56);
 
     vec3 R = reflect(-V, N); float NoV = max(dot(N, V), 0.0);
     float specOccl = clamp(pow(NoV + aoScalar, exp2(-16.0 * rough - 1.0)) - 1.0 + aoScalar, 0.0, 1.0);
-    vec3 ambDiff = mix(u_groundColor * 0.94, u_skyColor, N.y * 0.5 + 0.5) * albedo * (1.0 - met) * 0.20 * u_lightMix.x * aoSoft * geoAo;
+    vec3 ambDiff = mix(u_groundColor * 0.96, u_skyColor * 1.05, N.y * 0.5 + 0.5) * albedo * (1.0 - met) * 0.22 * u_lightMix.x * aoSoft * geoAo;
     float envAtten = (1.0 - rough) * (1.0 - rough);
     vec3 F_env = F0 + (max(vec3(1.0 - rough), F0) - F0) * pow(1.0 - NoV, 5.0);
-    vec3 envSpec = studioEnv(R, rough) * F_env * mix(0.08, 0.78, envAtten) * mix(envAtten, 1.0, met) * specOccl * geoAo * u_lightMix.y;
-    vec3 envCoat = studioEnv(R, coatR) * coatTint * ((0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coatW) * (u_matKind == 2 ? 0.08 : 0.22) * specOccl * u_lightMix.y;
+    vec3 envSpec = studioEnv(R, rough) * F_env * mix(0.10, 0.84, envAtten) * mix(envAtten, 1.0, met) * specOccl * geoAo * u_lightMix.y;
+    vec3 envCoat = studioEnv(R, coatR) * coatTint * ((0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coatW) * (u_matKind == 2 ? 0.09 : 0.24) * specOccl * u_lightMix.y;
 
+    // Physically-motivated Subsurface Scattering (SSS) & soft micro-velvet sheen per organic material class!
     vec3 sssBounce = vec3(0.0);
+    float rawKeyN = dot(N, u_keyDir);
     if (u_matKind == 2) {
-      float wrapKey = clamp((dot(N, u_keyDir) + 0.22) / 1.22, 0.0, 1.0);
+      float wrapKey = clamp((rawKeyN + 0.24) / 1.24, 0.0, 1.0);
       float termBand = wrapKey * (1.0 - keyDot);
-      sssBounce = (albedo * vec3(1.14, 1.08, 0.94) + vec3(0.008, 0.008, 0.006)) * termBand * 0.14 * aoSoft * geoAo * min(u_lightMix.x, 1.15);
+      sssBounce = (albedo * vec3(1.16, 1.08, 0.92) + vec3(0.008, 0.008, 0.006)) * termBand * 0.16 * aoSoft * geoAo * min(u_lightMix.x, 1.15);
+    } else if (u_matKind == 3) {
+      // Botanical foliage & flower petals: backlit chlorophyll/petal transmission + soft translucent terminator glow!
+      float wrapLeaf = clamp((rawKeyN + 0.38) / 1.38, 0.0, 1.0);
+      float termLeaf = wrapLeaf * (1.0 - keyDot * 0.85);
+      vec3 backH = normalize(u_keyDir + N * 0.42);
+      float backTrans = pow(clamp(dot(V, -backH), 0.0, 1.0), 2.8) * 0.45 + pow(clamp(dot(V, -u_rimDir), 0.0, 1.0), 3.0) * 0.28;
+      vec3 leafTint = albedo * vec3(1.22, 1.18, 0.72) + vec3(0.012, 0.018, 0.004);
+      sssBounce = leafTint * (termLeaf * 0.22 + backTrans * 0.34) * u_keyColor * 0.28 * aoSoft * geoAo * min(u_lightMix.x, 1.2);
+    } else if (u_matKind == 4) {
+      // Soft food, bakery crust, skin & fabric: warm amber-rose subsurface terminator wrap + soft crust/velvet sheen!
+      float wrapSoft = clamp((rawKeyN + 0.34) / 1.34, 0.0, 1.0);
+      float termSoft = wrapSoft * (1.0 - keyDot * 0.88);
+      float velvet = pow(1.0 - NoV, 3.6) * rough * 0.14;
+      vec3 warmSss = albedo * vec3(1.26, 1.04, 0.82) + vec3(0.012, 0.006, 0.003);
+      sssBounce = (warmSss * termSoft * 0.20 * u_keyColor * 0.26 + (albedo * 0.7 + vec3(0.18)) * velvet) * aoSoft * geoAo * min(u_lightMix.x, 1.2);
     }
-    float fresnelRim = pow(1.0 - NoV, 3.2) * smoothstep(-0.25, 0.72, N.y);
+    float fresnelRim = pow(1.0 - NoV, 3.0) * smoothstep(-0.28, 0.72, N.y);
     float rimMask = mix(0.45, 1.0, clamp(dot(N, u_rimDir) * 0.55 + 0.55, 0.0, 1.0));
-    vec3 rimTint = mix(u_envRimTint, albedo * 1.55 + u_envRimTint * 0.28, u_matKind == 2 ? 0.65 : 0.18);
-    vec3 rimGlow = rimTint * fresnelRim * rimMask * (u_matKind == 1 ? 0.24 : 0.15) * u_rimBoost * aoSoft * geoAo;
+    vec3 rimTint = mix(u_envRimTint, albedo * 1.45 + u_envRimTint * 0.30, (u_matKind == 2 || u_matKind == 3) ? 0.58 : 0.22);
+    float rimStr = u_matKind == 1 ? 0.28 : (u_matKind == 3 ? 0.22 : 0.17);
+    vec3 rimGlow = rimTint * fresnelRim * rimMask * rimStr * u_rimBoost * aoSoft * geoAo;
 
     vec3 outCol = linearToSrgb(acesFilm((Lo * directAo + ambDiff + envSpec + envCoat + sssBounce + rimGlow + u_emissive) * u_lightMix.z));
     if (u_lightMix.w > 0.001) {
@@ -493,8 +518,23 @@
 
   function matKindFor(mat) {
     const n = mat.name || "";
-    if (n.startsWith("eye_") || n.startsWith("glass_") || (mat.metallic < 0.35 && mat.roughness < 0.22 && !mat.normalTex)) return 1;
+    if (
+      n.startsWith("eye_") || n.startsWith("glass_") || n.startsWith("item_tomato")
+      || n.startsWith("item_jello") || n.startsWith("item_candy") || n === "item_mustard"
+      || n === "item_pickle" || (mat.metallic < 0.35 && mat.roughness < 0.24 && !mat.normalTex)
+    ) return 1;
     if (n.startsWith("chitin_")) return 2;
+    if (
+      n.startsWith("item_leaf") || n.startsWith("item_grass") || n.startsWith("item_petal")
+      || n === "item_lettuce" || n === "item_stem_green" || n === "item_onion"
+    ) return 3;
+    if (
+      n.startsWith("item_bun") || n.startsWith("item_chicken") || n.startsWith("item_corndog")
+      || n.startsWith("item_beef") || n.startsWith("item_hotdog") || n.startsWith("item_mush")
+      || n.startsWith("item_bear") || n.startsWith("item_flag") || n.startsWith("cloth_")
+      || n.startsWith("fur_") || n === "item_banana_slice" || n === "item_groucho_nose"
+      || n === "item_tongue_pink" || n === "item_cotton_fluff" || n === "item_cheese"
+    ) return 4;
     return 0;
   }
 
