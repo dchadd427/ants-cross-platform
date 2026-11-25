@@ -32,8 +32,10 @@ class MapItemsTests(unittest.TestCase):
             MAP_ITEM_SPECS,
             build_items,
             item_materials,
+            items_foliage,
             items_food,
             items_plants,
+            items_structures,
             items_toys,
             items_world,
         )
@@ -41,14 +43,19 @@ class MapItemsTests(unittest.TestCase):
         before_order = list(materials.MATERIAL_ORDER)
         item_materials.register_item_materials()
         self.assertEqual(list(materials.MATERIAL_ORDER), before_order)
-        self.assertGreater(len(materials.EXTRA_MATERIALS), 20)
-        self.assertGreaterEqual(len(MAP_ITEM_SPECS), 22)
+        self.assertGreater(len(materials.EXTRA_MATERIALS), 35)
+        self.assertGreaterEqual(len(MAP_ITEM_SPECS), 68)
         self.assertEqual(CATEGORIES[0][0], "all")
         self.assertTrue(callable(build_items.build_all_items))
         self.assertTrue(callable(items_toys.build_bearhed))
         self.assertTrue(callable(items_food.build_fdburgr1))
         self.assertTrue(callable(items_plants.build_grass1))
+        self.assertTrue(callable(items_foliage.build_flower3c))
+        self.assertTrue(callable(items_structures.build_wallup04))
         self.assertTrue(callable(items_world.build_greenhill))
+        # Plants & Grass (35) and Hills & Gear (19) are 100% covered.
+        self.assertEqual(sum(1 for s in MAP_ITEM_SPECS if s.category == "plants"), 35)
+        self.assertEqual(sum(1 for s in MAP_ITEM_SPECS if s.category == "structures"), 19)
 
     def test_catalog_matches_authentic_1998_chd_sprites_and_excludes_tiles_hud_cursors(self):
         from tools.ant_models.map_items import CATEGORIES, MAP_ITEM_SPECS
@@ -109,8 +116,9 @@ class MapItemsTests(unittest.TestCase):
                 self.assertTrue(all(dim > 0.05 for dim in info["size"]), f"{spec.id} degenerate size {info['size']}")
                 self.assertIn(spec.id, orig_bundle["items"])
 
-            # Jell-O item must carry its live wobble Idle animation clip.
-            self.assertIn("Idle", by_id["fdjelo1"]["animations"])
+            # Animated items must carry their live Idle animation clip.
+            for anim_id in ("fdjelo1", "redbomb", "greenbomb", "blackbomb", "bluebomb", "wallup04"):
+                self.assertIn("Idle", by_id[anim_id]["animations"], f"{anim_id} missing Idle animation")
 
             # Verify viewer_gltf.js parses a generated map item GLB cleanly under Node if available.
             node = shutil.which("node")

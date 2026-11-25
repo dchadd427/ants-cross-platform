@@ -184,14 +184,101 @@ def build_grass1() -> SceneBuilder:
     return _build_grass_cluster("item_grass1", n_blades=24, spread_x=0.16, spread_z=0.12, h_min=0.40, h_max=0.72, width_scale=1.08, lean_bias_x=-0.22, seed=1320)
 
 
+def build_grass2() -> SceneBuilder:
+    """Wind-swept small backyard grass tuft variant (`1321:grass2`)."""
+    return _build_grass_cluster("item_grass2", n_blades=26, spread_x=0.17, spread_z=0.13, h_min=0.38, h_max=0.74, width_scale=1.06, lean_bias_x=-0.26, seed=1321)
+
+
 def build_grass3() -> SceneBuilder:
     """Full fanning medium backyard meadow grass tuft (`1322:grass3`)."""
     return _build_grass_cluster("item_grass3", n_blades=42, spread_x=0.26, spread_z=0.19, h_min=0.34, h_max=0.68, width_scale=1.02, lean_bias_x=0.0, seed=1322)
 
 
+def build_grass4() -> SceneBuilder:
+    """Wide-splayed wild tall grass blades fanning outward (`1323:grass4`)."""
+    return _build_grass_cluster("item_grass4", n_blades=20, spread_x=0.24, spread_z=0.16, h_min=0.44, h_max=0.76, width_scale=1.14, lean_bias_x=0.0, seed=1323)
+
+
 def build_grassbig1() -> SceneBuilder:
     """Dense broad wild lawn grass clump with layered arching blades (`1325:grassbig1`)."""
     return _build_grass_cluster("item_grassbig1", n_blades=72, spread_x=0.38, spread_z=0.28, h_min=0.36, h_max=0.78, width_scale=0.98, lean_bias_x=0.0, seed=1325)
+
+
+def _build_grass_strip(
+    name: str,
+    *,
+    n_blades: int,
+    length: float,
+    thickness: float,
+    strip_angle_deg: float,
+    h_min: float,
+    h_max: float,
+    curve_amp: float = 0.0,
+    seed: int = 1324,
+) -> SceneBuilder:
+    """Build a dense linear or curving hedge ribbon of V-ribbed 3D grass blades (`grassmed1..4`, `grassbig2`)."""
+    register_item_materials()
+    sc = SceneBuilder(name=name)
+    rng = np.random.default_rng(seed)
+    rad_ang = math.radians(strip_angle_deg)
+    ca, sa = math.cos(rad_ang), math.sin(rad_ang)
+
+    for k in range(n_blades):
+        u = float(rng.uniform(-0.5, 0.5))
+        v = float(rng.uniform(-0.5, 0.5))
+        along = u * length
+        across = v * thickness + curve_amp * math.sin(u * math.pi * 1.6)
+        bx = along * ca - across * sa
+        bz = along * sa + across * ca
+        edge_frac = min(1.0, abs(v) * 2.0)
+        height = float(rng.uniform(h_min, h_max)) * (1.08 - 0.24 * edge_frac)
+        width = float(rng.uniform(0.052, 0.082))
+        out_yaw = math.atan2(-sa * (1.0 if v >= 0 else -1.0), ca * (1.0 if v >= 0 else -1.0)) + float(rng.uniform(-0.95, 0.95))
+        lean = float(rng.uniform(0.06, 0.19)) * (0.45 + 0.75 * edge_frac)
+        droop = float(rng.uniform(0.05, 0.22)) * (0.50 + 0.65 * edge_frac)
+        twist = float(rng.uniform(-0.55, 0.55))
+        hue = (float(rng.uniform(0.84, 1.18)), float(rng.uniform(0.92, 1.06)), float(rng.uniform(0.76, 1.08)))
+        sc.add(
+            "grass",
+            _curved_grass_blade(
+                f"blade_{k}",
+                base_xz=(bx, bz),
+                height=height,
+                width=width,
+                yaw=out_yaw,
+                lean=lean,
+                droop=droop,
+                twist=twist,
+                hue_shift=hue,
+                segs=8,
+            ),
+        )
+    return _finalize_item(sc, target_span=0.96)
+
+
+def build_grassmed1() -> SceneBuilder:
+    """Horizontal meadow grass hedge strip (`1324:grassmed1`)."""
+    return _build_grass_strip("item_grassmed1", n_blades=96, length=0.92, thickness=0.22, strip_angle_deg=0.0, h_min=0.30, h_max=0.52, seed=1324)
+
+
+def build_grassmed2() -> SceneBuilder:
+    """Vertical narrow meadow grass row (`1326:grassmed2`)."""
+    return _build_grass_strip("item_grassmed2", n_blades=104, length=1.10, thickness=0.20, strip_angle_deg=90.0, h_min=0.34, h_max=0.58, seed=1326)
+
+
+def build_grassmed3() -> SceneBuilder:
+    """Diagonal SW-to-NE lush grass hedge ribbon (`1327:grassmed3`)."""
+    return _build_grass_strip("item_grassmed3", n_blades=104, length=1.02, thickness=0.24, strip_angle_deg=-42.0, h_min=0.34, h_max=0.58, curve_amp=0.07, seed=1327)
+
+
+def build_grassbig2() -> SceneBuilder:
+    """Curving wide NW-to-SE lush wild grass hedge (`1328:grassbig2`)."""
+    return _build_grass_strip("item_grassbig2", n_blades=120, length=1.04, thickness=0.30, strip_angle_deg=+36.0, h_min=0.36, h_max=0.62, curve_amp=0.09, seed=1328)
+
+
+def build_grassmed4() -> SceneBuilder:
+    """Diagonal NW-to-SE meadow grass hedge ribbon (`1329:grassmed4`)."""
+    return _build_grass_strip("item_grassmed4", n_blades=104, length=1.02, thickness=0.24, strip_angle_deg=+48.0, h_min=0.34, h_max=0.58, curve_amp=-0.06, seed=1329)
 
 
 def _heart_leaflet(name: str, *, scale: float = 1.0) -> MeshPart:
@@ -225,34 +312,124 @@ def _heart_leaflet(name: str, *, scale: float = 1.0) -> MeshPart:
     return tint_part(leaf, _clover_chevron)
 
 
+def _build_single_clover_parts(
+    prefix: str,
+    *,
+    stem_pts: List[Tuple[float, float, float]],
+    n_leaves: int = 4,
+    yaw_offset: float = 0.35,
+    tilt_rx: float = 0.0,
+    tilt_rz: float = 0.0,
+    leaf_scale: float = 0.98,
+) -> List[MeshPart]:
+    """Build one clover stem + radiating heart leaflets anchored at the stem's last point."""
+    parts: List[MeshPart] = []
+    stem = curved_tube(
+        stem_pts,
+        [0.015, 0.013, 0.012, 0.015][: len(stem_pts)],
+        samples_per_seg=4,
+        radial_segs=10,
+        cap_rings=2,
+        name=f"{prefix}_stem",
+        material="item_stem_green",
+    )
+    parts.append(stem)
+    hx, hy, hz = stem_pts[-1]
+    for k in range(n_leaves):
+        ang = k * (2.0 * math.pi / n_leaves) + yaw_offset
+        pitch = 0.14 + 0.05 * (k % 2)
+        lf = (
+            _heart_leaflet(f"{prefix}_leaf_{k}", scale=leaf_scale - 0.05 * (k % 2))
+            .rotate_xyz(rx=pitch, ry=ang)
+            .rotate_xyz(rx=tilt_rx, rz=tilt_rz)
+            .translate(hx, hy + 0.005 * (k % 2), hz)
+        )
+        parts.append(lf)
+    return parts
+
+
 def build_clover1() -> SceneBuilder:
     """Realistic lucky 4-leaf clover with separated notched heart leaflets & sweeping curved stem (`404:clover1`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_clover1")
-
-    # Visible slender sweeping stem arching cleanly down-right just like `404:clover1`!
-    stem = curved_tube(
-        [(+0.24, 0.00, +0.26), (+0.15, 0.06, +0.16), (+0.05, 0.15, +0.06), (0.00, 0.23, 0.00)],
-        [0.015, 0.013, 0.012, 0.015],
-        samples_per_seg=5,
-        radial_segs=12,
-        cap_rings=2,
-        name="clover_stem",
-        material="item_stem_green",
+    sc.add(
+        "clover",
+        _build_single_clover_parts(
+            "clover1",
+            stem_pts=[(+0.24, 0.00, +0.26), (+0.15, 0.06, +0.16), (+0.05, 0.15, +0.06), (0.00, 0.23, 0.00)],
+            n_leaves=4,
+            yaw_offset=0.35,
+        ),
     )
-    sc.add("clover", stem)
-
-    # 4 distinct heart leaflets with clear negative-space gaps between them!
-    for k in range(4):
-        ang = k * (0.5 * math.pi) + 0.35
-        pitch = 0.14 + 0.05 * (k % 2)
-        lf = (
-            _heart_leaflet(f"clover_leaf_{k}", scale=0.98 - 0.05 * (k % 2))
-            .rotate_xyz(rx=pitch, ry=ang)
-            .translate(0.0, 0.232 + 0.005 * (k % 2), 0.0)
-        )
-        sc.add("clover", lf)
     return _finalize_item(sc, target_span=0.90)
+
+
+def build_clover2() -> SceneBuilder:
+    """Symmetrical upright 4-leaf clover with straight vertical stem (`405:clover2`)."""
+    register_item_materials()
+    sc = SceneBuilder(name="item_clover2")
+    sc.add(
+        "clover",
+        _build_single_clover_parts(
+            "clover2",
+            stem_pts=[(0.00, 0.00, +0.28), (0.00, 0.08, +0.18), (0.00, 0.16, +0.08), (0.00, 0.24, 0.00)],
+            n_leaves=4,
+            yaw_offset=0.785,
+            leaf_scale=1.02,
+        ),
+    )
+    return _finalize_item(sc, target_span=0.90)
+
+
+def build_clover3() -> SceneBuilder:
+    """Wide tilted 4-leaf clover with long crooked stem sweeping bottom-left (`406:clover3`)."""
+    register_item_materials()
+    sc = SceneBuilder(name="item_clover3")
+    sc.add(
+        "clover",
+        _build_single_clover_parts(
+            "clover3",
+            stem_pts=[(-0.30, 0.00, +0.26), (-0.18, 0.05, +0.22), (-0.08, 0.14, +0.10), (0.00, 0.23, 0.00)],
+            n_leaves=4,
+            yaw_offset=0.20,
+            tilt_rz=-0.12,
+            leaf_scale=0.98,
+        ),
+    )
+    return _finalize_item(sc, target_span=0.92)
+
+
+def build_clover4() -> SceneBuilder:
+    """Plump lush 4-leaf clover tilted softly with diagonal stem (`407:clover4`)."""
+    register_item_materials()
+    sc = SceneBuilder(name="item_clover4")
+    sc.add(
+        "clover",
+        _build_single_clover_parts(
+            "clover4",
+            stem_pts=[(-0.24, 0.00, +0.24), (-0.14, 0.07, +0.15), (-0.05, 0.15, +0.06), (0.00, 0.24, 0.00)],
+            n_leaves=4,
+            yaw_offset=0.52,
+            tilt_rx=0.08,
+            leaf_scale=1.04,
+        ),
+    )
+    return _finalize_item(sc, target_span=0.90)
+
+
+def build_clovers() -> SceneBuilder:
+    """Wild patch bouquet of 4 intertwined clovers on sturdy arching stems (`408:clovers`)."""
+    register_item_materials()
+    sc = SceneBuilder(name="item_clovers")
+    bouquet = (
+        ("c0", [(-0.02, 0.00, 0.02), (-0.11, 0.14, 0.03), (-0.23, 0.27, 0.05), (-0.31, 0.34, 0.05)], 3, 0.4, 0.22, +0.34, 0.80),
+        ("c1", [(0.00, 0.00, 0.00), (-0.05, 0.18, -0.01), (-0.10, 0.34, -0.02), (-0.14, 0.44, -0.02)], 4, 0.6, 0.18, +0.16, 0.86),
+        ("c2", [(0.02, 0.00, 0.00), (+0.05, 0.22, -0.02), (+0.07, 0.40, -0.03), (+0.08, 0.52, -0.03)], 4, 0.2, 0.16, -0.08, 0.88),
+        ("c3", [(0.03, 0.00, 0.02), (+0.13, 0.15, 0.03), (+0.24, 0.28, 0.05), (+0.32, 0.36, 0.06)], 4, 0.9, 0.22, -0.32, 0.82),
+    )
+    for tag, pts, nl, yo, rx, rz, ls in bouquet:
+        sc.add("clovers", _build_single_clover_parts(tag, stem_pts=pts, n_leaves=nl, yaw_offset=yo, tilt_rx=rx, tilt_rz=rz, leaf_scale=ls))
+    return _finalize_item(sc, target_span=0.96)
 
 
 def _build_daisy_base(sc: SceneBuilder, *, petal_count: int = 16, tilt_deg: float = 28.0) -> Tuple[float, float, float]:

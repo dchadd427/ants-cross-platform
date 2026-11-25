@@ -662,7 +662,7 @@
       if (state.manifest) {
         const built = state.manifest.built_count || state.items.length;
         const total = state.manifest.total_catalog_sprites || 216;
-        badgeProgress.textContent = `Wave 1 \u00b7 ${built} / ${total}`;
+        badgeProgress.textContent = `${built} / ${total} items`;
         metaCatalog.textContent = `${built} / ${total} built`;
       }
       if (!item) {
