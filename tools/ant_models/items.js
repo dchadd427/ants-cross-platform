@@ -33,6 +33,7 @@
   }
 
   function main() {
+    const appShell = document.querySelector(".app-shell");
     const stageMain = document.getElementById("items-stage");
     const gridEl = document.getElementById("items-grid");
     const soloEl = document.getElementById("items-solo");
@@ -101,7 +102,7 @@
 
     const darkMq = window.matchMedia("(prefers-color-scheme: dark)");
     const reduceMotionMq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const mobileMq = window.matchMedia("(max-width: 900px)");
+    const mobileMq = window.matchMedia("(max-width: 960px)");
 
     populateLightingSelect(selectLighting);
 
@@ -146,6 +147,8 @@
       dark: darkMq.matches,
 
       gridYawOffset: 0,
+      gridPitchOffset: 0,
+      draggingGrid: false,
       soloYaw: null,
       soloPitch: null,
       soloZoom: 1.0,
@@ -208,7 +211,7 @@
       const base = getBaseAngles(item);
       return {
         yaw: wrapAngleDeg(base.yaw + state.gridYawOffset + (state.spin ? state.spinAngle : 0)),
-        pitch: base.pitch,
+        pitch: clamp(base.pitch + state.gridPitchOffset, -12, 85),
         zoom: 1.0,
         panX: 0.0,
         panY: 0.0,
@@ -799,6 +802,7 @@
       if (!CAM_PRESETS[presetId]) return;
       state.camPreset = presetId;
       state.gridYawOffset = 0;
+      state.gridPitchOffset = 0;
       state.soloYaw = null;
       state.soloPitch = null;
       state.soloZoom = 1.0;
@@ -823,6 +827,7 @@
 
     function resetCamera() {
       state.gridYawOffset = 0;
+      state.gridPitchOffset = 0;
       state.soloYaw = null;
       state.soloPitch = null;
       state.soloZoom = 1.0;
@@ -835,7 +840,8 @@
     }
 
     function renderAll() {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const baseDpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = state.draggingGrid ? Math.min(baseDpr, 1.25) : baseDpr;
       if (state.activeId && state.byId.has(state.activeId)) {
         const item = state.byId.get(state.activeId);
         const [ow, oh] = syncCanvasBacking(soloOrigCanvas, dpr);
@@ -902,11 +908,14 @@
       };
     }
 
-    // Panel Drawer Toggle
+    // Panel Drawer Toggle (mobile slide-over drawer + desktop collapsible sidebar)
     let panelOpen = !mobileMq.matches;
     function syncPanel() {
       const mobile = mobileMq.matches;
-      document.body.classList.toggle("panel-collapsed", !panelOpen);
+      if (appShell) {
+        appShell.classList.toggle("panel-collapsed", !mobile && !panelOpen);
+        appShell.classList.toggle("drawer-open", mobile && panelOpen);
+      }
       btnTogglePanel.setAttribute("aria-expanded", panelOpen ? "true" : "false");
       inspectorBackdrop.hidden = !(mobile && panelOpen);
       markDirty();
@@ -998,46 +1007,28 @@
       announce(state.showPlinth ? "Focus plinth enabled." : "Focus plinth hidden.");
     });
 
-    // Horizontal drag on grid cards to turn all cards; click to focus
-    let suppressCardClickUntil = 0;
-    let cardDrag = null;
-    gridEl.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0 && e.pointerType === "mouse") return;
-      const stageHit = e.target.closest("[data-stage-item]");
-      if (!stageHit) return;
-      cardDrag = { id: e.pointerId, startX: e.clientX, startY: e.clientY, lastX: e.clientX, active: false };
+    // Smooth 360° touch & mouse orbit on grid cards (vertical swipes scroll natively; tap opens focus)
+    const cardOrbit = window.__antTouch.attachCardOrbit(gridEl, {
+      matchFn: (t) => (t && t.closest ? t.closest("[data-stage-item]") : null),
+      onStateChange: (active) => {
+        state.draggingGrid = active;
+        if (!active) markDirty();
+      },
+      onOrbit: (dx, dy, target) => {
+        const halfW = Math.max(110, (target && target.clientWidth ? target.clientWidth : 280) * 0.5);
+        const hCss = Math.max(120, target && target.clientHeight ? target.clientHeight : 180);
+        const yawSens = clamp(290 / halfW, 0.90, 2.20);
+        const pitchSens = clamp(140 / hCss, 0.45, 1.05);
+        state.gridYawOffset = wrapAngleDeg(state.gridYawOffset - dx * yawSens);
+        state.gridPitchOffset = clamp(state.gridPitchOffset + dy * pitchSens, -28, 34);
+        markDirty();
+      },
     });
-    gridEl.addEventListener("pointermove", (e) => {
-      if (!cardDrag || e.pointerId !== cardDrag.id) return;
-      const tdx = Math.abs(e.clientX - cardDrag.startX);
-      const tdy = Math.abs(e.clientY - cardDrag.startY);
-      if (!cardDrag.active) {
-        if (e.pointerType === "touch" && tdy > 16 && tdy > tdx * 1.6) { cardDrag = null; return; }
-        if (tdx <= 4) return;
-        cardDrag.active = true;
-        try { gridEl.setPointerCapture(e.pointerId); } catch (_) {}
-      }
-      const dx = e.clientX - cardDrag.lastX;
-      cardDrag.lastX = e.clientX;
-      const cardEl = gridEl.querySelector(".item-card-stage");
-      const halfW = Math.max(120, (cardEl ? cardEl.clientWidth : 280) * 0.5);
-      const sens = clamp(260 / halfW, 0.75, 1.80);
-      state.gridYawOffset = wrapAngleDeg(state.gridYawOffset - dx * sens);
-      markDirty();
-    });
-    const endCardDrag = (e) => {
-      if (!cardDrag || e.pointerId !== cardDrag.id) return;
-      if (cardDrag.active) suppressCardClickUntil = performance.now() + 260;
-      cardDrag = null;
-    };
-    gridEl.addEventListener("pointerup", endCardDrag);
-    gridEl.addEventListener("pointercancel", endCardDrag);
-    gridEl.addEventListener("lostpointercapture", endCardDrag);
 
     gridEl.addEventListener("click", (e) => {
       const focusBtn = e.target.closest("button[data-focus-item]");
       if (focusBtn) { selectItem(focusBtn.dataset.focusItem); return; }
-      if (performance.now() < suppressCardClickUntil) return;
+      if (cardOrbit.shouldSuppressClick()) return;
       const stageHit = e.target.closest("[data-stage-item]");
       if (stageHit) selectItem(stageHit.dataset.stageItem);
     });
@@ -1148,7 +1139,8 @@
 
     document.addEventListener("keydown", (e) => {
       if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
-      if (e.key === "Escape" && state.activeId) { e.preventDefault(); selectItem(null); }
+      if (e.key === "Escape" && mobileMq.matches && panelOpen) { e.preventDefault(); panelOpen = false; syncPanel(); }
+      else if (e.key === "Escape" && state.activeId) { e.preventDefault(); selectItem(null); }
       else if (e.key === "[" && state.activeId) { e.preventDefault(); stepSoloItem(-1); }
       else if (e.key === "]" && state.activeId) { e.preventDefault(); stepSoloItem(1); }
       else if (e.key === "t" || e.key === "T") { e.preventDefault(); btnSpin.click(); }
@@ -1276,11 +1268,18 @@
       }, 3000);
     }
 
-    // Main Render Loop
+    // Main Render Loop (pauses work while backgrounded to save mobile battery)
     let prevTime = performance.now();
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") { prevTime = performance.now(); markDirty(); }
+    });
     function frame(now) {
       const dt = Math.min((now - prevTime) / 1000, 0.1);
       prevTime = now;
+      if (document.visibilityState === "hidden") {
+        requestAnimationFrame(frame);
+        return;
+      }
       if (state.playing) {
         state.simTime += dt;
         // Mark dirty only if an animated sprite or animated 3D model is visible

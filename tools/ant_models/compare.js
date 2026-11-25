@@ -214,6 +214,7 @@
       simTime: Number.isFinite(qTime) && qTime >= 0 ? qTime : 0,
       dark: darkMq.matches,
       soloOrbited: false,
+      draggingGrid: false,
       origBundle: null,
       origMetrics: null,
       extraBundles: new Map(),
@@ -986,19 +987,23 @@
     }
 
     function renderAll() {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const baseDpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = state.draggingGrid ? Math.min(baseDpr, 1.25) : baseDpr;
       const gridCam = { yaw: state.yaw, pitch: CANONICAL_PITCH, zoom: 1.0, panX: 0, panY: 0, projection: "ortho" };
       const soloCam = { yaw: state.yaw, pitch: state.pitch, zoom: state.zoom, panX: state.panX, panY: state.panY, projection: "ortho" };
 
       if (state.ant === "all") {
         let minHalfW = Infinity, minH = Infinity;
         const sizes = new Map();
+        const viewH = window.innerHeight || 900;
         for (const cls of ANT_CLASSES) {
           const rec = cardCanvases.get(cls);
           if (!rec) continue;
           const [w, h] = syncCanvasBacking(rec.canvas, dpr);
           const halfW = Math.max(1, Math.floor(w * 0.5));
-          sizes.set(cls, { w, h, halfW });
+          const rect = rec.canvas.getBoundingClientRect();
+          const inView = rect.width === 0 || (rect.bottom >= -140 && rect.top <= viewH + 140);
+          sizes.set(cls, { w, h, halfW, inView });
           if (halfW < minHalfW) minHalfW = halfW;
           if (h < minH) minH = h;
         }
@@ -1010,7 +1015,7 @@
         }
         for (const cls of ANT_CLASSES) {
           const rec = cardCanvases.get(cls), sz = sizes.get(cls);
-          if (!rec || !sz) continue;
+          if (!rec || !sz || !sz.inView) continue;
           const groundY = Math.round(sz.h * scParams.gFrac);
           const rightW = sz.w - sz.halfW;
           const halfHForCard = scParams.fixedHalfH * (sz.h / minH);
@@ -1130,50 +1135,30 @@
     if (actionSelect) actionSelect.addEventListener("change", () => selectAction(actionSelect.value));
     if (lightSelect) lightSelect.addEventListener("change", () => selectLighting(lightSelect.value));
 
-    let suppressStageClickUntil = 0;
     function attachHorizontalDrag(el, matchFn, sensitivity) {
-      let drag = null;
-      el.addEventListener("pointerdown", (e) => {
-        if (e.button !== 0 && e.pointerType === "mouse") return;
-        const target = matchFn(e.target);
-        if (!target) return;
-        drag = { id: e.pointerId, target, startX: e.clientX, startY: e.clientY, lastX: e.clientX, active: false };
+      return window.__antTouch.attachCardOrbit(el, {
+        matchFn,
+        onStateChange: (active) => {
+          state.draggingGrid = active && state.ant === "all";
+          if (!active) markDirty();
+        },
+        onOrbit: (dx, _dy, target) => {
+          const rectW = Math.max(110, ((target && target.clientWidth) || 240) * 0.5);
+          const effSens = Math.max(sensitivity, clamp(280 / rectW, 0.85, 2.1));
+          state.yaw = wrapAngleDeg(state.yaw - dx * effSens);
+          updateUiState();
+          markDirty();
+        },
       });
-      el.addEventListener("pointermove", (e) => {
-        if (!drag || e.pointerId !== drag.id) return;
-        const totalDx = Math.abs(e.clientX - drag.startX);
-        const totalDy = Math.abs(e.clientY - drag.startY);
-        if (!drag.active) {
-          if (e.pointerType === "touch" && totalDy > 16 && totalDy > totalDx * 1.6) { drag = null; return; }
-          if (totalDx <= 4) return;
-          drag.active = true;
-          try { el.setPointerCapture(e.pointerId); } catch (_) {}
-        }
-        const dx = e.clientX - drag.lastX;
-        drag.lastX = e.clientX;
-        const rectW = Math.max(120, (drag.target.clientWidth || 240) * 0.5);
-        const effSens = Math.max(sensitivity, clamp(260 / rectW, 0.75, 1.8));
-        state.yaw = wrapAngleDeg(state.yaw - dx * effSens);
-        updateUiState();
-        markDirty();
-      });
-      const finish = (e) => {
-        if (!drag || e.pointerId !== drag.id) return;
-        if (drag.active) suppressStageClickUntil = performance.now() + 260;
-        drag = null;
-      };
-      el.addEventListener("pointerup", finish);
-      el.addEventListener("pointercancel", finish);
-      el.addEventListener("lostpointercapture", finish);
     }
 
-    attachHorizontalDrag(gridEl, (t) => t.closest("[data-stage-ant]"), 0.55);
+    const gridOrbit = attachHorizontalDrag(gridEl, (t) => (t && t.closest ? t.closest("[data-stage-ant]") : null), 0.55);
     attachHorizontalDrag(soloOrigCanvas, () => soloOrigCanvas, 0.5);
 
     gridEl.addEventListener("click", (e) => {
       const focusBtn = e.target.closest("button[data-focus-ant]");
       if (focusBtn) { selectAnt(focusBtn.dataset.focusAnt); return; }
-      if (performance.now() < suppressStageClickUntil) return;
+      if (gridOrbit.shouldSuppressClick()) return;
       const stageHit = e.target.closest("[data-stage-ant]");
       if (stageHit) selectAnt(stageHit.dataset.stageAnt);
     });
@@ -1342,11 +1327,19 @@
     });
 
     new ResizeObserver(() => markDirty()).observe(stageMain);
+    stageMain.addEventListener("scroll", () => { if (state.ant === "all") markDirty(); }, { passive: true });
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") { prevTime = performance.now(); markDirty(); }
+    });
 
     let prevTime = performance.now();
     function frame(now) {
       const dt = Math.min((now - prevTime) / 1000, 0.1);
       prevTime = now;
+      if (document.visibilityState === "hidden") {
+        requestAnimationFrame(frame);
+        return;
+      }
       if (state.idle) {
         const sDt = dt * state.speed;
         state.simTime += sDt;

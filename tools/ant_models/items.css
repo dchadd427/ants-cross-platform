@@ -8,8 +8,12 @@
   position: relative;
   flex: 1 1 auto;
   min-block-size: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 12px;
+  scroll-padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
   container-type: inline-size;
   container-name: items-stage;
 }
@@ -23,7 +27,14 @@
 .items-cat-group {
   max-inline-size: 100%;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
   scrollbar-width: none;
+}
+
+.items-cat-group > button {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
 }
 
 .items-cat-group::-webkit-scrollbar {
@@ -65,6 +76,12 @@
   overflow: hidden;
   container-type: inline-size;
   container-name: item-card;
+}
+
+/* Defer off-screen layout/paint strictly for cards below the initial fold */
+.item-card:nth-child(n + 5) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto none auto 255px;
 }
 
 @media (hover: hover) {
@@ -139,14 +156,25 @@
   aspect-ratio: 16 / 9;
   min-block-size: 160px;
   background: var(--bg-canvas);
-  cursor: pointer;
+  cursor: grab;
   touch-action: pan-y;
+  overscroll-behavior-x: contain;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.item-card-stage:active {
+  cursor: grabbing;
 }
 
 .item-card-canvas {
   display: block;
   inline-size: 100%;
   block-size: 100%;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .item-card-loading {
@@ -211,19 +239,26 @@
   gap: 10px;
 }
 
-@container items-stage (inline-size < 460px) {
-  .items-solo-split {
-    gap: 6px;
-  }
-}
-
 .items-solo-panel {
   position: relative;
+  min-inline-size: 0;
   min-block-size: 240px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-subtle);
   overflow: hidden;
   background: var(--bg-canvas);
+}
+
+@container items-stage (inline-size < 520px) {
+  .items-solo-split {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(145px, 0.78fr) minmax(220px, 1.22fr);
+    gap: 8px;
+  }
+
+  .items-solo-panel {
+    min-block-size: 0;
+  }
 }
 
 .items-solo-panel canvas {
@@ -300,12 +335,65 @@
   }
 }
 
-/* Coarse pointer touch targets (>= 44px) */
+/* Coarse pointer touch targets (>= 44px) and iOS zoom prevention on search input */
 @media (pointer: coarse) {
   .items-dock button,
   .items-cat-group button,
-  .items-solo-header button {
+  .items-solo-header button,
+  .dock-toggle-btn,
+  .item-card-actions .card-focus-btn {
     min-inline-size: 44px;
     min-block-size: 44px;
+  }
+
+  .items-search-input {
+    font-size: 16px;
+    min-block-size: 44px;
+  }
+}
+
+@media (max-width: 640px) {
+  .items-main {
+    padding: 8px;
+  }
+
+  .items-grid {
+    gap: 8px;
+  }
+
+  .item-card-head {
+    padding: 5px 8px;
+  }
+
+  .item-card-stage {
+    aspect-ratio: 16 / 10;
+    min-block-size: 170px;
+  }
+
+  .items-solo {
+    gap: 6px;
+  }
+
+  .items-solo-header {
+    padding: 6px 8px;
+    gap: 6px;
+  }
+
+  .items-solo-header .solo-header-left,
+  .items-solo-header .solo-header-right {
+    gap: 6px;
+  }
+
+  .items-solo-header .solo-btn {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+
+  .items-solo-title-block .item-card-sub {
+    display: none;
+  }
+
+  .items-progress-badge {
+    display: none;
   }
 }
