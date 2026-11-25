@@ -502,144 +502,116 @@ def _build_cup_bomb(
     return parts
 
 
+def _snap_pts_to_thorax(
+    pts: List[Tuple[float, float, float]],
+    thorax_core: Optional[MeshPart],
+    center: Tuple[float, float, float],
+    offset: float = 0.0055,
+) -> List[Tuple[float, float, float]]:
+    """Ray-cast harness points onto `thorax_core` so straps hug Bomber's torso with zero gap."""
+    if thorax_core is None:
+        return pts
+    ctr = np.asarray(center, dtype=np.float64)
+    tri = thorax_core.positions.astype(np.float64)[thorax_core.indices.reshape(-1, 3)]
+    v0, e1, e2 = tri[:, 0] - ctr, tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]
+    snapped: List[Tuple[float, float, float]] = []
+    for pt in pts:
+        v = np.asarray(pt, dtype=np.float64) - ctr
+        norm = float(np.linalg.norm(v))
+        if norm < 1e-8:
+            snapped.append(pt)
+            continue
+        d = v / norm
+        h = np.cross(d[None, :], e2)
+        a = np.einsum("ij,ij->i", e1, h)
+        ok = np.abs(a) > 1e-12
+        f = np.where(ok, 1.0 / np.where(ok, a, 1.0), 0.0)
+        u, q = f * np.einsum("ij,ij->i", -v0, h), np.cross(-v0, e1)
+        vv, t = f * (q @ d), f * np.einsum("ij,ij->i", e2, q)
+        hit = ok & (u >= -1e-6) & (vv >= -1e-6) & (u + vv <= 1.0 + 1e-6) & (t > 0.0)
+        snapped.append(tuple(float(c) for c in (ctr + d * (float(np.max(t[hit])) + offset))) if np.any(hit) else pt)
+    return snapped
+
+
 def _build_dynamite_pack(
     scene: SceneBuilder,
     back_anchor: Tuple[float, float, float],
     thorax_center: Tuple[float, float, float],
     head_back_z: float,
 ) -> None:
-    """Build Bomber's sculpted tan-leather tactical backpack physically holding 3 riveted cup-bombs."""
-    bx, by, bz = back_anchor
-    _, ty, tz = thorax_center
-    pack_y = by + 0.112
-    pack_z = min(bz - 0.068, head_back_z - 0.028)
+    """Build Bomber's tan-leather tactical backpack seated flush against his back (zero air gap)."""
+    bx, _, bz = back_anchor
+    tx, ty, tz = thorax_center
+    # Front of pack embeds ~1.8 cm into rear dorsal thorax (`z ~ -0.088`), tilted cleanly behind cranium.
+    pack_y = ty + 0.060
+    pack_z = bz - 0.022
+    pack_rx = -0.36
 
-    # 1. Compact sculpted tan/brown canvas-leather main rucksack body flush against the dorsal carapace
-    # and extending solidly rearward to physically house & cradle all 3 fuller cup-bombs (zero floating!).
-    pack_body = (
-        rounded_box(0.194, 0.192, 0.142, bevel=0.028, segs=4, name="pack_rucksack_body", material="prop_brown")
-        .rotate_xyz(rx=-0.30)
-        .translate(bx, pack_y + 0.012, pack_z - 0.052)
-    )
-    scene.add("dynamite_pack", pack_body)
+    pack_body = rounded_box(0.188, 0.184, 0.138, bevel=0.028, segs=4, name="pack_rucksack_body", material="prop_brown").rotate_xyz(rx=pack_rx).translate(bx, pack_y + 0.010, pack_z - 0.046)
+    pack_base = rounded_box(0.174, 0.048, 0.126, bevel=0.015, segs=3, name="pack_base_boot", material="gear_dark").rotate_xyz(rx=pack_rx).translate(bx, pack_y - 0.072, pack_z - 0.018)
+    rear_pouch = rounded_box(0.136, 0.100, 0.042, bevel=0.015, segs=3, name="pack_rear_pouch", material="prop_brown").rotate_xyz(rx=pack_rx).translate(bx, pack_y - 0.010, pack_z - 0.112)
+    scene.add("dynamite_pack", [pack_body, pack_base, rear_pouch])
 
-    # Reinforced dark leather lower pack base pad (keeps tidy clearance above petiole/gaster).
-    pack_base = (
-        rounded_box(0.178, 0.052, 0.130, bevel=0.016, segs=3, name="pack_base_boot", material="gear_dark")
-        .rotate_xyz(rx=-0.30)
-        .translate(bx, pack_y - 0.072, pack_z - 0.026)
-    )
-    scene.add("dynamite_pack", pack_base)
-
-    # Sculpted rear flap / ordnance pouch on the back face of the backpack with a gleaming gold buckle.
-    rear_pouch = (
-        rounded_box(0.140, 0.104, 0.044, bevel=0.016, segs=3, name="pack_rear_pouch", material="prop_brown")
-        .rotate_xyz(rx=-0.30)
-        .translate(bx, pack_y - 0.008, pack_z - 0.118)
-    )
-    scene.add("dynamite_pack", rear_pouch)
-
-    # Side canvas holster pouches on left & right flanks of the rucksack cradling the two flanking bombs.
     for side_sign, tag in ((+1.0, "left"), (-1.0, "right")):
-        side_pouch = (
-            rounded_box(0.064, 0.116, 0.086, bevel=0.017, segs=3, name=f"pack_side_pouch_{tag}", material="prop_brown")
-            .rotate_xyz(rx=-0.30, rz=-side_sign * 0.24)
-            .translate(bx + side_sign * 0.094, pack_y + 0.024, pack_z - 0.062)
-        )
+        side_pouch = rounded_box(0.062, 0.112, 0.084, bevel=0.016, segs=3, name=f"pack_side_pouch_{tag}", material="prop_brown").rotate_xyz(rx=pack_rx, rz=-side_sign * 0.24).translate(bx + side_sign * 0.092, pack_y + 0.022, pack_z - 0.056)
         scene.add("dynamite_pack", side_pouch)
 
-    # Snug shoulder straps & chest belt routed cleanly from the backpack over Bomber's petite thorax.
+    # Thorax-hugging shoulder straps & lower waist side straps anchored directly into the rucksack.
+    thorax_core = next((p for p in scene.get_node("body") if p.name == "thorax_core"), None)
     for side_sign, tag in ((+1.0, "left"), (-1.0, "right")):
-        s_pts = [
-            (side_sign * 0.058, pack_y + 0.040, pack_z + 0.014),
-            (side_sign * 0.066, ty + 0.106, tz - 0.026),
-            (side_sign * 0.064, ty + 0.094, tz + 0.048),
-            (side_sign * 0.058, ty + 0.026, tz + 0.094),
-            (side_sign * 0.054, ty - 0.026, tz + 0.086),
-        ]
-        s_strap = curved_tube(
-            s_pts,
-            (0.0095, 0.0145),
-            samples_per_seg=4,
-            radial_segs=10,
-            cap_rings=2,
-            name=f"harness_shoulder_{tag}",
-            material="gear_dark",
+        upper_pack_anchor = (side_sign * 0.054, pack_y + 0.050, pack_z - 0.012)
+        shoulder_mid = _snap_pts_to_thorax(
+            [
+                (side_sign * 0.054, ty + 0.088, tz - 0.046),
+                (side_sign * 0.058, ty + 0.092, tz + 0.016),
+                (side_sign * 0.058, ty + 0.064, tz + 0.068),
+                (side_sign * 0.054, ty + 0.020, tz + 0.086),
+                (side_sign * 0.052, ty - 0.026, tz + 0.078),
+            ],
+            thorax_core, (tx, ty, tz), offset=0.0052,
         )
-        scene.add("dynamite_pack", s_strap)
+        scene.add("dynamite_pack", curved_tube([upper_pack_anchor, *shoulder_mid], (0.0092, 0.0135), samples_per_seg=4, radial_segs=10, cap_rings=2, name=f"harness_shoulder_{tag}", material="gear_dark"))
 
-        chest_buckle = (
-            rounded_box(0.024, 0.028, 0.016, bevel=0.0045, segs=2, name=f"harness_buckle_{tag}", material="gear_gold_metal")
-            .rotate_xyz(rx=-0.16, ry=side_sign * 0.28)
-            .translate(side_sign * 0.058, ty + 0.030, tz + 0.098)
+        lower_pack_anchor = (side_sign * 0.064, pack_y - 0.050, pack_z - 0.012)
+        side_mid = _snap_pts_to_thorax(
+            [
+                (side_sign * 0.056, ty - 0.024, tz + 0.072),
+                (side_sign * 0.074, ty - 0.022, tz + 0.022),
+                (side_sign * 0.072, ty - 0.014, tz - 0.038),
+            ],
+            thorax_core, (tx, ty, tz), offset=0.0048,
         )
-        scene.add("dynamite_pack", chest_buckle)
+        scene.add("dynamite_pack", curved_tube([*side_mid, lower_pack_anchor], (0.0085, 0.0115), samples_per_seg=4, radial_segs=8, cap_rings=2, name=f"harness_side_{tag}", material="gear_dark"))
 
-    chest_belt = curved_tube(
-        [
-            (-0.072, ty - 0.020, tz + 0.052),
-            (-0.046, ty - 0.020, tz + 0.096),
-            (0.000, ty - 0.020, tz + 0.104),
-            (0.046, ty - 0.020, tz + 0.096),
-            (0.072, ty - 0.020, tz + 0.052),
-        ],
-        (0.012, 0.0085),
-        samples_per_seg=4,
-        radial_segs=8,
-        cap_rings=2,
-        name="harness_chest_belt",
-        material="gear_dark",
+        b_pt = shoulder_mid[3]
+        scene.add("dynamite_pack", rounded_box(0.022, 0.026, 0.015, bevel=0.0042, segs=2, name=f"harness_buckle_{tag}", material="gear_gold_metal").rotate_xyz(rx=-0.16, ry=side_sign * 0.28).translate(b_pt[0], b_pt[1] + 0.004, b_pt[2] + 0.005))
+
+    belt_pts = _snap_pts_to_thorax(
+        [(-0.062, ty - 0.022, tz + 0.056), (-0.038, ty - 0.022, tz + 0.084), (0.0, ty - 0.022, tz + 0.092), (0.038, ty - 0.022, tz + 0.084), (0.062, ty - 0.022, tz + 0.056)],
+        thorax_core, (tx, ty, tz), offset=0.0052,
     )
-    scene.add("dynamite_pack", chest_belt)
+    scene.add("dynamite_pack", curved_tube(belt_pts, (0.011, 0.0082), samples_per_seg=4, radial_segs=8, cap_rings=2, name="harness_chest_belt", material="gear_dark"))
 
-    # Dark leather cinch straps wrapping tightly around the 3-pocket backpack with gleaming gold buckle!
-    for strap_idx, y_off, z_off in ((0, 0.044, -0.128), (1, -0.020, -0.132)):
+    for strap_idx, y_off, z_off in ((0, 0.040, -0.120), (1, -0.022, -0.124)):
         c_pts = [
-            (-0.128, pack_y + y_off - 0.012, pack_z - 0.044),
-            (-0.106, pack_y + y_off + 0.008, pack_z + z_off + 0.024),
-            (0.000, pack_y + y_off + 0.016, pack_z + z_off),
-            (+0.106, pack_y + y_off + 0.008, pack_z + z_off + 0.024),
-            (+0.128, pack_y + y_off - 0.012, pack_z - 0.044),
+            (-0.124, pack_y + y_off - 0.012, pack_z - 0.038), (-0.104, pack_y + y_off + 0.008, pack_z + z_off + 0.024),
+            (0.0, pack_y + y_off + 0.016, pack_z + z_off), (+0.104, pack_y + y_off + 0.008, pack_z + z_off + 0.024),
+            (+0.124, pack_y + y_off - 0.012, pack_z - 0.038),
         ]
-        c_strap = curved_tube(
-            c_pts,
-            (0.015, 0.011),
-            samples_per_seg=4,
-            radial_segs=10,
-            cap_rings=2,
-            name=f"pack_cinch_strap_{strap_idx}",
-            material="gear_dark",
-        )
-        scene.add("dynamite_pack", c_strap)
+        scene.add("dynamite_pack", curved_tube(c_pts, (0.014, 0.0105), samples_per_seg=4, radial_segs=10, cap_rings=2, name=f"pack_cinch_strap_{strap_idx}", material="gear_dark"))
 
-    rack_buckle = (
-        rounded_box(0.044, 0.038, 0.020, bevel=0.006, segs=3, name="bomb_rack_buckle", material="gear_gold_metal")
-        .rotate_xyz(rx=-0.30)
-        .translate(0.0, pack_y + 0.060, pack_z - 0.136)
-    )
-    scene.add("dynamite_pack", rack_buckle)
+    scene.add("dynamite_pack", rounded_box(0.042, 0.036, 0.018, bevel=0.0055, segs=3, name="bomb_rack_buckle", material="gear_gold_metal").rotate_xyz(rx=pack_rx).translate(0.0, pack_y + 0.058, pack_z - 0.128))
 
-    # Seat 3 fuller (~1.08x) hot-magenta cup-bombs SOLIDLY INTO the 3 pockets of the tan backpack (zero floating!):
-    # center bomb seated squarely in the middle pocket + left & right flanking bombs fanned cleanly outward.
+    # Seat 3 cup-bombs into rucksack pockets (`pack_bomb_center` node lets `PlantBomb` draw center bomb!).
     pack_specs = (
-        (+22.0, -19.0, -0.094, 0.052, -0.074, 0.088, -0.036),
-        (0.0, -23.0, 0.000, 0.086, -0.094, 0.091, 0.000),
-        (-22.0, -19.0, +0.094, 0.052, -0.074, 0.088, +0.036),
+        (+22.0, -24.0, -0.092, 0.048, -0.070, 0.086, -0.036, "dynamite_pack"),
+        (0.0, -27.0, 0.000, 0.080, -0.090, 0.089, 0.000, "pack_bomb_center"),
+        (-22.0, -24.0, +0.092, 0.048, -0.070, 0.086, +0.036, "dynamite_pack"),
     )
-    for idx, (rz_deg, rx_deg, ox, oy, oz, cup_h, fuse_dx) in enumerate(pack_specs):
-        holster = (
-            cylinder(0.50 * cup_h, 0.46 * cup_h, 0.048, radial_segs=16, bevel=0.006, axis="y", name=f"pack_holster_{idx}", material="gear_dark")
-            .rotate_xyz(rx=rx_deg, rz=rz_deg, degrees=True)
-            .translate(bx + ox, pack_y + oy, pack_z + oz)
-        )
-        scene.add("dynamite_pack", holster)
-
+    for idx, (rz_deg, rx_deg, ox, oy, oz, cup_h, fuse_dx, target_node) in enumerate(pack_specs):
+        scene.add("dynamite_pack", cylinder(0.50 * cup_h, 0.46 * cup_h, 0.046, radial_segs=16, bevel=0.006, axis="y", name=f"pack_holster_{idx}", material="gear_dark").rotate_xyz(rx=rx_deg, rz=rz_deg, degrees=True).translate(bx + ox, pack_y + oy, pack_z + oz))
         for part in _build_cup_bomb(f"pack_bomb_{idx}", cup_h, fuse_dx, lit=True, rivet_count=10):
-            placed = (
-                part.rotate_xyz(rx=rx_deg, rz=rz_deg, degrees=True)
-                .translate(bx + ox, pack_y + oy, pack_z + oz)
-            )
-            scene.add("dynamite_pack", placed)
+            scene.add(target_node, part.rotate_xyz(rx=rx_deg, rz=rz_deg, degrees=True).translate(bx + ox, pack_y + oy, pack_z + oz))
 
 
 def _add_bomber_idle(scene: SceneBuilder) -> AnimationClip:
@@ -1282,6 +1254,7 @@ def build_bomber(blink: float = 0.0) -> SceneBuilder:
     if head_xf is not None:
         scene.set_node_transform("goggles", translation=head_xf.translation)
     scene.attach_world_node("dynamite_pack", "upper_body", preserve_world_pose=False)
+    scene.attach_world_node("pack_bomb_center", "upper_body", preserve_world_pose=False)
     _add_bomber_idle(scene)
     _add_bomber_attack(scene)
     # Uniform similarity scale so Bomber lands cleanly at ~0.86-0.88 total height with smaller head & narrow stance.

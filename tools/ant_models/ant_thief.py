@@ -156,10 +156,10 @@ def _thief_head_deform(pos: np.ndarray) -> np.ndarray:
     p[:, 2] += 0.009 * brow_shelf
 
     socket = (
-        np.exp(-(((ax - 0.084) / 0.056) ** 2 + ((y + 0.012) / 0.050) ** 2))
+        np.exp(-(((ax - 0.074) / 0.052) ** 2 + ((y + 0.012) / 0.050) ** 2))
         * np.clip((z - 0.02) / 0.13, 0.0, 1.0)
     )
-    p[:, 2] -= 0.042 * socket
+    p[:, 2] -= 0.040 * socket
 
     seam_stem = np.exp(-((ax / 0.014) ** 2)) * np.exp(-(((y - 0.050) / 0.042) ** 2)) * front_mask
     branch_x = 0.014 + np.clip(y - 0.054, 0.0, 0.08) * 0.88
@@ -172,12 +172,12 @@ def _thief_head_deform(pos: np.ndarray) -> np.ndarray:
     radial = p / np.maximum(1e-6, np.linalg.norm(p, axis=1, keepdims=True))
     p -= (0.0044 * np.maximum(seam_stem, 0.65 * seam_branch))[:, None] * radial
 
-    # 3. Sleek wide cheekbones tapering cleanly into a sharp sneaky lower jaw.
+    # 3. Sleek cheekbones tapering cleanly into a sharp sneaky lower jaw.
     cheek = (
-        np.exp(-(((ax - 0.138) / 0.054) ** 2 + ((y + 0.022) / 0.038) ** 2))
+        np.exp(-(((ax - 0.118) / 0.050) ** 2 + ((y + 0.022) / 0.038) ** 2))
         * np.clip((z + 0.02) / 0.14, 0.0, 1.0)
     )
-    p[:, 0] += np.sign(x) * 0.007 * cheek
+    p[:, 0] += np.sign(x) * 0.006 * cheek
     p[:, 2] += 0.005 * cheek
 
     lower = np.clip((-y - 0.012) / 0.136, 0.0, 1.0)
@@ -203,13 +203,13 @@ def _paint_thief_cranium_colors(cranium: MeshPart) -> MeshPart:
     ax = np.abs(x)
     front_mask = np.clip((z - 0.01) / 0.14, 0.0, 1.0)
     socket_ring = (
-        np.exp(-(((ax - 0.084) / 0.056) ** 2 + ((y + 0.012) / 0.054) ** 2))
+        np.exp(-(((ax - 0.074) / 0.052) ** 2 + ((y + 0.012) / 0.054) ** 2))
         * np.clip((z - 0.02) / 0.12, 0.0, 1.0)
     )
     seam_stem = np.exp(-((ax / 0.016) ** 1.5)) * np.exp(-(((y - 0.058) / 0.048) ** 2)) * front_mask
     mouth_shadow = np.exp(-((ax / 0.064) ** 2 + ((y + 0.118) / 0.040) ** 2)) * front_mask
-    cheek_hi = np.exp(-(((ax - 0.118) / 0.056) ** 2 + ((y + 0.036) / 0.042) ** 2)) * front_mask
-    brow_hi = np.exp(-(((ax - 0.084) / 0.052) ** 2 + ((y - 0.064) / 0.026) ** 2)) * front_mask
+    cheek_hi = np.exp(-(((ax - 0.102) / 0.052) ** 2 + ((y + 0.036) / 0.042) ** 2)) * front_mask
+    brow_hi = np.exp(-(((ax - 0.074) / 0.048) ** 2 + ((y - 0.064) / 0.026) ** 2)) * front_mask
     lum = (
         0.89
         + 0.09 * cheek_hi
@@ -228,10 +228,10 @@ def _refit_thief_head(scene: SceneBuilder, anchors: dict) -> MeshPart:
     scale tusks to 0.78x flush under jaw, sweep antennae back, and recess 0.82x eyes deeply flush.
     """
     hx, hy, hz = anchors["head_center"]
-    # Sleek wide low-crowned oval-shield skull (`rx=0.216, ry=0.146, rz=0.178`, `e1=0.72, e2=0.88`)
-    # — organic oval planform (never boxy) with flatter wide profile (never a tall round marble!).
+    # Sleek, agile oval-shield roguish skull (`rx=0.184, ry=0.158, rz=0.174`, `e1=0.72, e2=0.84`)
+    # — balanced slimmer width (never pancake-wide) while keeping Thief's sly bandana silhouette!
     cranium = (
-        superellipsoid(0.216, 0.146, 0.178, e1=0.72, e2=0.88, u_segs=38, v_segs=30, name="cranium", material="chitin_team")
+        superellipsoid(0.184, 0.158, 0.174, e1=0.72, e2=0.84, u_segs=38, v_segs=30, name="cranium", material="chitin_team")
         .deform(_thief_head_deform)
     )
     cranium = _paint_thief_cranium_colors(cranium).translate(hx, hy, hz)
@@ -285,7 +285,7 @@ def _refit_thief_head(scene: SceneBuilder, anchors: dict) -> MeshPart:
         (
             "antenna_left",
             "left",
-            (+0.088, hy + 0.120, hz + 0.024),
+            (+0.076, hy + 0.128, hz + 0.022),
             [
                 (-0.005, -0.024, 0.002),
                 (0.000, 0.000, 0.000),
@@ -299,7 +299,7 @@ def _refit_thief_head(scene: SceneBuilder, anchors: dict) -> MeshPart:
         (
             "antenna_right",
             "right",
-            (-0.088, hy + 0.120, hz + 0.022),
+            (-0.076, hy + 0.128, hz + 0.020),
             [
                 (+0.005, -0.024, 0.002),
                 (0.000, 0.000, 0.000),
@@ -326,12 +326,11 @@ def _refit_thief_head(scene: SceneBuilder, anchors: dict) -> MeshPart:
         rel = np.asarray(base_w, dtype=np.float64) - neck_vec
         scene.set_node_transform(node_name, translation=(float(rel[0]), float(rel[1]), float(rel[2])))
 
-    # Recess Thief's smaller 0.82x eyes DEEPLY and flush inside the deep orbital hollows (`z = hz + 0.122`
-    # on `rz = 0.178` skull -> sclera front at `0.174`, completely flush with the domino mask, zero bulge!).
+    # Recess Thief's compact eyes deeply and flush inside the slimmer skull's orbital hollows.
     eye_y = hy - 0.012
-    eye_z = hz + 0.122
-    anchors["eye_left"] = (0.084, eye_y, eye_z)
-    anchors["eye_right"] = (-0.084, eye_y, eye_z)
+    eye_z = hz + 0.118
+    anchors["eye_left"] = (0.074, eye_y, eye_z)
+    anchors["eye_right"] = (-0.074, eye_y, eye_z)
     anchors["eye_center"] = (0.0, eye_y, eye_z + 0.010)
     return cranium
 
@@ -481,10 +480,10 @@ def _build_unified_domino_mask(
                 lo = mid
             else:
                 hi = mid
-        # Keep continuous nose bridge (>= 0.110 rad) and under-eye cheek strip cleanly clear.
+        # Keep continuous nose bridge (>= 0.085 rad) and under-eye cheek strip cleanly clear.
         max_s = dist_perim * 0.76
         if du_n < -1e-4:
-            max_s = min(max_s, (u_eye - 0.110) / (-du_n))
+            max_s = min(max_s, (u_eye - 0.085) / (-du_n))
         hole_s[k] = min(hi, max(0.16, max_s))
 
     # Light circular smoothing so the punched oval eye cutout is silky-smooth with zero kinks.
@@ -817,8 +816,8 @@ def _add_shifty_eyes(scene: SceneBuilder, anchors: dict, blink: float, gaze: flo
     sockets (zero frog-eye bulge!) with a crisp glossy jet-black dot pupil and ONE soft upper-left
     specular glint, tracking HARD left/right `+-0.72 rad` in `IdleLookout` with full blink clearance.
     """
-    sclera_r = 0.052
-    lid_outer_r = 0.065
+    sclera_r = 0.050
+    lid_outer_r = 0.062
     for side, sign in (("left", 1.0), ("right", -1.0)):
         eye = np.asarray(anchors[f"eye_{side}"], dtype=np.float64)
         yaw = 0.10 * sign
@@ -826,7 +825,7 @@ def _add_shifty_eyes(scene: SceneBuilder, anchors: dict, blink: float, gaze: flo
         # Subtle dark orbital socket rim framing the recessed compact spherical eye cleanly.
         scene.add(
             "eyes",
-            torus_arc(0.0545, 0.0044, u_segs=26, v_segs=8, plane="xy", name=f"eye_socket_rim_{side}", material="chitin_dark")
+            torus_arc(0.0525, 0.0042, u_segs=26, v_segs=8, plane="xy", name=f"eye_socket_rim_{side}", material="chitin_dark")
             .scale(0.98, 1.00, 0.86)
             .translate(0.0, 0.0, -0.002)
             .rotate_xyz(rx=-0.06, ry=yaw)
@@ -928,57 +927,55 @@ def _sculpted_strap_loop(pts: np.ndarray, out_normals: np.ndarray, half_w: float
 
 
 def _add_rogue_strap_and_loot_pouch(scene: SceneBuilder, anchors: dict) -> None:
-    """Add dark leather crossbody utility strap, brass chest buckle, and cinched brown loot pouch."""
-    # Anchor strap and pouch cleanly onto `core`'s petite slim thorax (`rx~0.078`, `z~[-0.096,+0.096]`).
+    """Add dark leather crossbody utility strap, brass chest buckle, and cinched brown loot pouch.
+
+    Ray-casts every spline sample directly onto `thorax_core` so the leather strap hugs the sculpted
+    chitin shoulder, chest, hip, and back completely flush with zero air gap.
+    """
     tc = np.asarray(anchors["thorax_center"], dtype=np.float64)
     dy_c = float(tc[1]) - 0.384
     strap_ctrl = [
-        (-0.062, 0.464 + dy_c, 0.006),   # over right shoulder beside neck
-        (-0.036, 0.430 + dy_c, 0.088),   # upper-right chest
-        (0.016, 0.384 + dy_c, 0.094),    # center-left chest
-        (0.066, 0.338 + dy_c, 0.048),    # left waist front
-        (0.066, 0.340 + dy_c, -0.046),   # left rear hip
-        (0.016, 0.392 + dy_c, -0.096),   # mid back
-        (-0.052, 0.440 + dy_c, -0.086),  # upper-right back
+        (-0.054, 0.448 + dy_c, 0.004),   # right shoulder saddle beside neck collar
+        (-0.042, 0.422 + dy_c, 0.072),   # upper-right chest
+        (0.012, 0.376 + dy_c, 0.086),    # center-left chest
+        (0.064, 0.334 + dy_c, 0.042),    # left waist front
+        (0.062, 0.336 + dy_c, -0.044),   # left rear hip
+        (0.010, 0.382 + dy_c, -0.084),   # mid back
+        (-0.048, 0.426 + dy_c, -0.068),  # upper-right back
     ]
-    pivot = np.array([0.0, 0.384 + dy_c, -0.006])
-    pts = catmull_rom_spline(strap_ctrl, samples_per_seg=6, closed=True)
-    out_n = np.array([_normalize(p - pivot + (np.array([0.0, 0.14, 0.0]) if p[1] > 0.435 + dy_c else 0.0)) for p in pts])
+    pivot = np.array([float(tc[0]), 0.384 + dy_c, float(tc[2])], dtype=np.float64)
+    raw_pts = catmull_rom_spline(strap_ctrl, samples_per_seg=7, closed=True)
 
-    # Push strap cleanly outside ONLY the neutral canonical thorax meshes (already in world coords).
-    thorax_parts = [
-        p for p in scene.get_node("body")
-        if not p.name.startswith(("gaster", "petiole"))
-    ]
-    body_verts = np.vstack([p.positions for p in thorax_parts]).astype(np.float64)
-    v_rel = body_verts - pivot[None, :]
-    shifts = np.zeros(len(pts))
-    for i, (p, o) in enumerate(zip(pts, out_n)):
-        sub = body_verts[(v_rel @ o) > 0.015]
-        if len(sub) == 0:
-            continue
-        diff = sub - p[None, :]
-        proj = diff @ o
-        perp = diff - proj[:, None] * o[None, :]
-        near = np.sum(perp * perp, axis=1) < (0.030 ** 2)
-        if np.any(near):
-            shifts[i] = float(np.max(proj[near])) + 0.005
-    for _ in range(2):
-        shifts = 0.25 * np.roll(shifts, 1) + 0.50 * shifts + 0.25 * np.roll(shifts, -1)
-    pts = pts + shifts[:, None] * out_n
-    scene.add("gear_rogue", _sculpted_strap_loop(pts, out_n, half_w=0.015, half_t=0.005, name="rogue_crossbody_strap"))
+    # Ray-cast directly onto `thorax_core` only (never `neck_joint`), keeping the inner face of the
+    # strap seated right onto the green chitin carapace (`r_surf + 0.0036` with `half_t = 0.0046`).
+    thorax_core = next((p for p in scene.get_node("body") if p.name == "thorax_core"), None)
+    if thorax_core is not None:
+        thorax_caster = _CraniumCaster(thorax_core, pivot)
+        dirs = np.array([_normalize(p - pivot) for p in raw_pts], dtype=np.float64)
+        radii = np.array([thorax_caster.radius(d) for d in dirs], dtype=np.float64)
+        smooth_r = radii.copy()
+        for _ in range(2):
+            smooth_r = 0.25 * np.roll(smooth_r, 1) + 0.50 * smooth_r + 0.25 * np.roll(smooth_r, -1)
+        fit_r = np.maximum(radii, smooth_r) + 0.0036
+        pts = pivot[None, :] + dirs * fit_r[:, None]
+        out_n = dirs
+    else:
+        pts = raw_pts
+        out_n = np.array([_normalize(p - pivot) for p in pts], dtype=np.float64)
 
-    # Crisp brass chest buckle + keeper bar seated right on the front strap segment.
+    scene.add("gear_rogue", _sculpted_strap_loop(pts, out_n, half_w=0.0145, half_t=0.0046, name="rogue_crossbody_strap"))
+
+    # Crisp brass chest buckle + keeper bar seated flush on the front strap segment.
     front_idx = int(np.argmax(pts[:, 2]))
-    b_pos = pts[front_idx] + 0.006 * out_n[front_idx]
+    b_pos = pts[front_idx] + 0.0045 * out_n[front_idx]
     buckle_frame = rounded_box(0.036, 0.032, 0.012, bevel=0.0035, segs=2, name="strap_buckle_frame", material="gear_gold_metal").rotate_xyz(rx=10.0, rz=-42.0, degrees=True).translate(b_pos)
     buckle_inner = rounded_box(0.020, 0.016, 0.015, bevel=0.0025, segs=2, name="strap_buckle_cut", material="gear_dark").rotate_xyz(rx=10.0, rz=-42.0, degrees=True).translate(b_pos)
     buckle_pin = rounded_box(0.0065, 0.029, 0.015, bevel=0.0025, segs=2, name="strap_buckle_pin", material="gear_brass_trim").rotate_xyz(rx=10.0, rz=-42.0, degrees=True).translate(b_pos + np.array([0.0, 0.0, 0.0025]))
     scene.add("gear_rogue", [buckle_frame, buckle_inner, buckle_pin])
 
-    # Compact cinched canvas/brown loot pouch slung neatly on the slim right-back flank (-X, -Z)
-    # clear above the crouched gaster and digitigrade backwards-knee rear leg.
-    pouch_ctr = np.array([-0.084, 0.418 + dy_c, -0.104])
+    # Compact cinched canvas/brown loot pouch seated snugly right against the rear-right thorax flank
+    # (clear above the crouched gaster & rear leg, tethered by a short taut clasp onto the strap).
+    pouch_ctr = np.array([-0.068, 0.394 + dy_c, -0.094])
     pouch_prof = [
         (0.000, -0.052),
         (0.028, -0.048),

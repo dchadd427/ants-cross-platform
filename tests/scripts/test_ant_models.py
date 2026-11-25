@@ -1238,7 +1238,7 @@ class All1998ClipsAndViewerTests(unittest.TestCase):
             "stun_stars", "swimmer_splash_ring", "swimmer_dirt_toss", "swimmer_water_toss",
             "snorkel_water_glob", "snorkel_water_spray_a", "snorkel_water_spray_b",
         ),
-        "fire": ("stun_stars", "drown_splash", "fire_mag_glass", "fire_spark", "fire_extinguisher", "fire_foam"),
+        "fire": ("stun_stars", "drown_splash", "fire_mag_glass", "fire_sunbeam", "fire_spark", "fire_extinguisher", "fire_foam"),
     }
 
     _SCENES_CACHE = None
@@ -1479,6 +1479,60 @@ class All1998ClipsAndViewerTests(unittest.TestCase):
         parsed = json.loads(run.stdout)
         self.assertEqual(parsed["idle"][0], "Idle")
         self.assertIn("IdleLookout", parsed["idle"])
+
+    @unittest.skipUnless(HAS_NUMPY, "numpy is needed")
+    def test_slim_heads_flush_gear_fire_holster_and_ability_swaps(self):
+        from tools.ant_models import ant_fire
+
+        scenes = self._build_all_six()
+        # 1. Worker & Thief heads stay well-proportioned (not overly wide).
+        for cls_name, max_ratio in (("worker", 1.06), ("thief", 1.24)):
+            cran = next(p for p in scenes[cls_name].world_parts() if p.name == "cranium")
+            b0, b1 = cran.bounds()
+            ratio = float((b1[0] - b0[0]) / (b1[1] - b0[1]))
+            self.assertLessEqual(ratio, max_ratio, f"{cls_name} cranium W/H {ratio:.3f} > {max_ratio}")
+
+        # 2. Bomber's backpack sits flush against the rear thorax (zero floating air gap).
+        bomber_wp = scenes["bomber"].world_parts()
+        b_thorax = next(p for p in bomber_wp if p.name == "thorax_core").bounds()
+        b_pack = next(p for p in bomber_wp if p.name == "pack_rucksack_body").bounds()
+        self.assertGreater(float(b_pack[1][2]), float(b_thorax[0][2]), "Bomber pack must contact rear thorax with zero air gap")
+
+        # 3. Thief's crossbody strap stays tight to thorax_core (no floating shoulder arc).
+        thief_wp = scenes["thief"].world_parts()
+        t_thorax = next(p for p in thief_wp if p.name == "thorax_core").bounds()
+        t_strap = next(p for p in thief_wp if p.name == "rogue_crossbody_strap").bounds()
+        self.assertLessEqual(float(t_strap[1][1]), float(t_thorax[1][1]) + 0.015, "Thief strap floats above thorax")
+
+        # 4. Fire Ant wears belt + side-holstered magnifying glass at rest; StartFire swaps belt glass -> hand glass + sunbeam.
+        fire = scenes["fire"]
+        self.assertIn("fire_belt", fire.nodes)
+        self.assertIn("fire_belt_mag_glass", fire.nodes)
+        sf_clip = next(c for c in fire.animations if c.name == "StartFire")
+        sf_by = {(ch.target_node, ch.path): ch for ch in sf_clip.channels}
+        belt_sc = sf_by[("fire_belt_mag_glass", "scale")].values
+        hand_sc = sf_by[("fire_mag_glass", "scale")].values
+        beam_sc = sf_by[("fire_sunbeam", "scale")].values
+        self.assertGreater(belt_sc[0][0], 0.9)
+        self.assertGreater(belt_sc[-1][0], 0.9)
+        self.assertLess(min(v[0] for v in belt_sc), 1e-3, "belt glass must hide while held during StartFire")
+        self.assertGreater(max(v[0] for v in hand_sc), 0.9, "hand glass must appear during StartFire")
+        self.assertGreater(max(v[0] for v in beam_sc), 0.9, "sunbeam must activate during StartFire")
+        # Never show BOTH holstered belt glass and hand-held glass at the same keyframe!
+        for b_v, h_v in zip(belt_sc, hand_sc):
+            self.assertFalse(b_v[0] > 0.5 and h_v[0] > 0.5, "duplicate Fire magnifying glasses visible simultaneously")
+        # hold_magnifying_glass=True omits belt-holstered copy.
+        fire_held = ant_fire.build_fire(hold_magnifying_glass=True)
+        self.assertNotIn("fire_belt_mag_glass", fire_held.nodes)
+
+        # 5. Bomber PlantBomb pulls center bomb out of pack and plants it solidly on Y = 0.0.
+        pb_clip = next(c for c in scenes["bomber"].animations if c.name == "PlantBomb")
+        pb_by = {(ch.target_node, ch.path): ch for ch in pb_clip.channels}
+        pack_sc = pb_by[("pack_bomb_center", "scale")].values
+        self.assertGreater(pack_sc[0][0], 0.9)
+        self.assertLess(min(v[0] for v in pack_sc), 1e-3, "pack_bomb_center must hide while held/planted")
+        self.assertIn(("forearm_left", "rotation"), pb_by)
+        self.assertIn(("forearm_right", "rotation"), pb_by)
 
 
 if __name__ == "__main__":

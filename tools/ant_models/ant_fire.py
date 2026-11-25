@@ -30,6 +30,7 @@ try:
         quat_from_euler_xyz,
         quat_mul,
         recompute_smooth_normals,
+        rounded_box,
         sphere,
         swept_tube,
         torus_arc,
@@ -52,6 +53,7 @@ except ImportError:
         quat_from_euler_xyz,
         quat_mul,
         recompute_smooth_normals,
+        rounded_box,
         sphere,
         swept_tube,
         torus_arc,
@@ -512,17 +514,8 @@ def _build_fire_helmet(
         scene.add("fire_helmet", placed)
 
 
-def build_magnifying_glass(
-    scene: SceneBuilder,
-    right_hand: Tuple[float, float, float],
-    right_hand_dir: Tuple[float, float, float],
-) -> None:
-    """Build sleek realistic see-through brass magnifying glass gripped upright in right hand (-X)."""
-    hx, hy, hz = right_hand
-    dx, dy, dz = right_hand_dir
-    grip_x = hx + 0.022 * dx
-    grip_y = hy + 0.022 * dy
-    grip_z = hz + 0.022 * dz
+def _magnifying_glass_parts(prefix: str = "mag") -> List[MeshPart]:
+    """Build local-space brass magnifying glass parts (handle along -Y, lens centered at Y=+0.202)."""
     parts: List[MeshPart] = []
 
     handle_profile = [
@@ -535,23 +528,22 @@ def build_magnifying_glass(
         (0.021, +0.060),
         (0.000, +0.064),
     ]
-    handle = lathe(
-        handle_profile,
-        radial_segs=20,
-        cap_bottom=False,
-        cap_top=False,
-        axis="y",
-        name="mag_handle",
-        material="gear_accent",
+    parts.append(
+        lathe(
+            handle_profile,
+            radial_segs=20,
+            cap_bottom=False,
+            cap_top=False,
+            axis="y",
+            name=f"{prefix}_handle",
+            material="gear_accent",
+        )
     )
-    parts.append(handle)
-
-    pommel_cap = (
-        sphere(0.015, u_segs=12, v_segs=10, name="mag_pommel_cap", material="gear_gold_metal")
+    parts.append(
+        sphere(0.015, u_segs=12, v_segs=10, name=f"{prefix}_pommel_cap", material="gear_gold_metal")
         .scale(1.0, 0.72, 1.0)
         .translate(0.0, -0.138, 0.0)
     )
-    parts.append(pommel_cap)
 
     ferrule_profile = [
         (0.022, +0.056),
@@ -561,47 +553,160 @@ def build_magnifying_glass(
         (0.023, +0.110),
         (0.019, +0.116),
     ]
-    ferrule = lathe(
-        ferrule_profile,
-        radial_segs=20,
-        cap_bottom=True,
-        cap_top=True,
-        axis="y",
-        name="mag_ferrule",
-        material="gear_gold_metal",
+    parts.append(
+        lathe(
+            ferrule_profile,
+            radial_segs=20,
+            cap_bottom=True,
+            cap_top=True,
+            axis="y",
+            name=f"{prefix}_ferrule",
+            material="gear_gold_metal",
+        )
     )
-    parts.append(ferrule)
 
     lens_r = 0.090
     lens_cy = 0.112 + lens_r  # +0.202
-
-    outer_rim = (
-        torus_arc(lens_r + 0.004, 0.0125, u_segs=34, v_segs=12, plane="xy", name="mag_rim_outer", material="gear_gold_metal")
+    parts.append(
+        torus_arc(lens_r + 0.004, 0.0125, u_segs=34, v_segs=12, plane="xy", name=f"{prefix}_rim_outer", material="gear_gold_metal")
         .scale(1.0, 1.0, 0.88)
         .translate(0.0, lens_cy, 0.0)
     )
-    parts.append(outer_rim)
-
     for z_sign, tag in ((+1.0, "front"), (-1.0, "back")):
-        bezel = (
-            torus_arc(lens_r - 0.004, 0.0058, u_segs=30, v_segs=8, plane="xy", name=f"mag_bezel_{tag}", material="gear_brass_trim")
+        parts.append(
+            torus_arc(lens_r - 0.004, 0.0058, u_segs=30, v_segs=8, plane="xy", name=f"{prefix}_bezel_{tag}", material="gear_brass_trim")
             .translate(0.0, lens_cy, z_sign * 0.008)
         )
-        parts.append(bezel)
-
-    lens = (
-        ellipsoid(lens_r - 0.004, lens_r - 0.004, 0.012, u_segs=28, v_segs=16, name="mag_lens", material="glass_clear")
+    parts.append(
+        ellipsoid(lens_r - 0.004, lens_r - 0.004, 0.012, u_segs=28, v_segs=16, name=f"{prefix}_lens", material="glass_clear")
         .translate(0.0, lens_cy, 0.0)
     )
-    parts.append(lens)
+    return parts
 
-    for part in parts:
+
+def build_magnifying_glass(
+    scene: SceneBuilder,
+    right_hand: Tuple[float, float, float],
+    right_hand_dir: Tuple[float, float, float],
+) -> None:
+    """Build sleek realistic see-through brass magnifying glass gripped upright in right hand (-X)."""
+    hx, hy, hz = right_hand
+    dx, dy, dz = right_hand_dir
+    grip_x = hx + 0.022 * dx
+    grip_y = hy + 0.022 * dy
+    grip_z = hz + 0.022 * dz
+    for part in _magnifying_glass_parts("mag"):
         placed = part.rotate_xyz(rx=18.0, ry=-12.0, rz=10.0, degrees=True)
         scene.add("magnifying_glass", placed)
     scene.set_node_transform("magnifying_glass", translation=(grip_x, grip_y, grip_z))
 
 
 _build_magnifying_glass = build_magnifying_glass
+
+
+def _build_fire_belt_and_holster(
+    scene: SceneBuilder,
+    anchors: dict,
+    *,
+    include_holstered_glass: bool = True,
+) -> None:
+    """Build Fire Ant's snug firefighter waist belt, brass buckle, side holster ring, and holstered glass."""
+    tc = np.asarray(anchors["thorax_center"], dtype=np.float64)
+    belt_y = float(tc[1]) - 0.030  # ~0.299 world Y: snug waist below right arm, well above hips/legs
+    thorax_core = next((p for p in scene.get_node("body") if p.name == "thorax_core"), None)
+
+    # Ray-cast 28 horizontal radial spokes at `belt_y` straight onto `thorax_core` for zero air gap!
+    n_belt = 28
+    belt_pts: List[Tuple[float, float, float]] = []
+    if thorax_core is not None:
+        tri = thorax_core.positions.astype(np.float64)[thorax_core.indices.reshape(-1, 3)]
+        origin = np.array([float(tc[0]), belt_y, float(tc[2])], dtype=np.float64)
+        v0 = tri[:, 0] - origin
+        e1 = tri[:, 1] - tri[:, 0]
+        e2 = tri[:, 2] - tri[:, 0]
+        for k in range(n_belt):
+            ang = 2.0 * math.pi * k / n_belt
+            d = np.array([math.sin(ang), 0.0, math.cos(ang)], dtype=np.float64)
+            h = np.cross(d[None, :], e2)
+            a = np.einsum("ij,ij->i", e1, h)
+            ok = np.abs(a) > 1e-12
+            f = np.where(ok, 1.0 / np.where(ok, a, 1.0), 0.0)
+            u = f * np.einsum("ij,ij->i", -v0, h)
+            q = np.cross(-v0, e1)
+            vv = f * (q @ d)
+            t = f * np.einsum("ij,ij->i", e2, q)
+            hit = ok & (u >= -1e-6) & (vv >= -1e-6) & (u + vv <= 1.0 + 1e-6) & (t > 0.0)
+            r_hit = float(np.max(t[hit])) if np.any(hit) else 0.068
+            p = origin + d * (r_hit + 0.0042)
+            belt_pts.append((float(p[0]), float(p[1]), float(p[2])))
+    else:
+        for k in range(n_belt):
+            ang = 2.0 * math.pi * k / n_belt
+            belt_pts.append((0.072 * math.sin(ang), belt_y, 0.076 * math.cos(ang)))
+
+    belt_strap = swept_tube(
+        belt_pts,
+        (0.0115, 0.0056),
+        radial_segs=10,
+        closed=True,
+        cap_start=False,
+        cap_end=False,
+        name="fire_waist_belt",
+        material="gear_dark",
+    )
+    scene.add("fire_belt", belt_strap)
+
+    # Gleaming brass firefighter buckle centered cleanly on the front (+Z) of the waist belt.
+    front_pt = max(belt_pts, key=lambda pt: pt[2])
+    bx, by, bz = front_pt[0], front_pt[1], front_pt[2] + 0.0035
+    scene.add(
+        "fire_belt",
+        [
+            rounded_box(0.036, 0.028, 0.011, bevel=0.0032, segs=2, name="fire_belt_buckle_frame", material="gear_gold_metal").translate(bx, by, bz),
+            rounded_box(0.021, 0.015, 0.013, bevel=0.0022, segs=2, name="fire_belt_buckle_cut", material="gear_dark").translate(bx, by, bz),
+            rounded_box(0.0055, 0.025, 0.014, bevel=0.0020, segs=2, name="fire_belt_buckle_pin", material="gear_brass_trim").translate(bx, by, bz + 0.0018),
+        ],
+    )
+
+    # Right-hip (-X) leather holster loop & brass rivet stud anchoring the side-holstered magnifying glass.
+    hip_pt = min(belt_pts, key=lambda pt: pt[0] + 0.35 * abs(pt[2] + 0.022))
+    hx, hy, hz = hip_pt[0] - 0.005, hip_pt[1], hip_pt[2]
+    holster_tab = (
+        rounded_box(0.016, 0.030, 0.024, bevel=0.004, segs=2, name="fire_holster_tab", material="gear_dark")
+        .translate(hx - 0.004, hy, hz)
+    )
+    holster_stud = (
+        sphere(0.0075, u_segs=10, v_segs=8, name="fire_holster_stud", material="gear_gold_metal")
+        .translate(hx - 0.011, hy + 0.006, hz)
+    )
+    holster_ring = (
+        torus_arc(0.019, 0.0052, u_segs=20, v_segs=8, plane="xz", name="fire_holster_ring", material="gear_dark")
+        .rotate_xyz(rx=-30.0, rz=-6.0, degrees=True)
+        .translate(hx - 0.021, hy - 0.001, hz - 0.004)
+    )
+    brass_clip = (
+        torus_arc(0.015, 0.0040, u_segs=18, v_segs=8, plane="yz", name="fire_holster_d_ring", material="gear_gold_metal")
+        .translate(hx - 0.012, hy + 0.006, hz - 0.002)
+    )
+    scene.add("fire_belt", [holster_tab, holster_stud, holster_ring, brass_clip])
+    scene.attach_world_node("fire_belt", "upper_body", preserve_world_pose=False)
+
+    if include_holstered_glass:
+        # Seat the magnifying glass neatly through the right-hip holster ring (`0.68x` proportional scale):
+        # ferrule sits right inside the leather belt loop, crimson handle cants slightly outward (-6 deg rz)
+        # so it cleanly clears the right mid-leg femur, and the gleaming brass lens hugs his right flank!
+        holster_pos = (hx - 0.022, hy - 0.001, hz - 0.004)
+        sc_g = 0.68
+        for part in _magnifying_glass_parts("belt_mag"):
+            placed = (
+                part.translate(0.0, -0.072, 0.0)
+                .scale(sc_g, sc_g, sc_g)
+                .rotate_xyz(rx=0.0, ry=84.0, rz=0.0, degrees=True)
+                .rotate_xyz(rx=-32.0, ry=0.0, rz=-6.0, degrees=True)
+                .translate(*holster_pos)
+            )
+            scene.add("fire_belt_mag_glass", placed)
+        scene.attach_world_node("fire_belt_mag_glass", "upper_body", preserve_world_pose=False)
 
 
 def _add_fire_idle(scene: SceneBuilder, *, hold_magnifying_glass: bool = False) -> AnimationClip:
@@ -855,6 +960,8 @@ def build_fire(blink: float = 0.0, *, hold_magnifying_glass: bool = False) -> Sc
     head_xf = scene.get_node_transform("head")
     if head_xf is not None:
         scene.set_node_transform("fire_helmet", translation=head_xf.translation)
+
+    _build_fire_belt_and_holster(scene, anchors, include_holstered_glass=not hold_magnifying_glass)
 
     if hold_magnifying_glass:
         build_magnifying_glass(scene, anchors["right_hand"], anchors["right_hand_dir"])

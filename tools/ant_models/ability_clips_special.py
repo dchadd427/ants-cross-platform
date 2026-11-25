@@ -316,8 +316,8 @@ def _add_bomber_ability_props(scene: SceneBuilder) -> Tuple[str, str, Vec3]:
     hide_origin: Vec3 = (bx, by, bz)
 
     bomb_node = "bomber_held_bomb"
-    h = 0.112
-    # Compact faithful cup-bomb resting with bottom at local Y = 0.0 so placing at Y = 0.0 sits flush on ground!
+    h = 0.126
+    # Chunky faithful cup-bomb resting with bottom at local Y = 0.0 so placing at Y = 0.0 sits flush on ground!
     b_parts: List[MeshPart] = [
         cylinder(0.50 * h, 0.54 * h, 0.18 * h, radial_segs=18, bevel=0.008 * h, axis="y", name="hb_bot", material="bomb_cup_trim").translate(0.0, 0.09 * h, 0.0),
         cylinder(0.55 * h, 0.62 * h, 0.66 * h, radial_segs=18, bevel=0.012 * h, axis="y", name="hb_wall", material="chitin_team").translate(0.0, 0.49 * h, 0.0),
@@ -339,7 +339,11 @@ def _add_bomber_ability_props(scene: SceneBuilder) -> Tuple[str, str, Vec3]:
             name="hb_fuse",
             material="fuse_white",
         ),
-        sphere(0.096 * h, u_segs=10, v_segs=8, name="hb_spark", material="gear_gold").translate(0.58 * h, 2.54 * h, -0.04 * h),
+        sphere(0.115 * h, u_segs=10, v_segs=8, name="hb_spark", material="gear_yellow_plastic").translate(0.58 * h, 2.54 * h, -0.04 * h),
+        sphere(0.072 * h, u_segs=8, v_segs=6, name="hb_spark_core", material="eye_catchlight").translate(0.58 * h, 2.54 * h, -0.04 * h),
+        ellipsoid(0.22 * h, 0.042 * h, 0.042 * h, u_segs=8, v_segs=6, name="hb_spark_ray_x", material="gear_gold").translate(0.58 * h, 2.54 * h, -0.04 * h),
+        ellipsoid(0.042 * h, 0.22 * h, 0.042 * h, u_segs=8, v_segs=6, name="hb_spark_ray_y", material="gear_gold").translate(0.58 * h, 2.54 * h, -0.04 * h),
+        ellipsoid(0.042 * h, 0.042 * h, 0.22 * h, u_segs=8, v_segs=6, name="hb_spark_ray_z", material="gear_gold").translate(0.58 * h, 2.54 * h, -0.04 * h),
     ]
     for p in b_parts:
         scene.add(bomb_node, p)
@@ -363,56 +367,67 @@ def _add_bomber_ability_props(scene: SceneBuilder) -> Tuple[str, str, Vec3]:
 
 
 def _add_bomber_plant_bomb(scene: SceneBuilder, bomb_node: str, hide_origin: Vec3) -> AnimationClip:
-    """Attach Bomber's authentic 1998 1.36s (`absb`, 17f) bomb-planting `"PlantBomb"` clip."""
-    # Exact 1998 absb 17-frame total duration = 1.36 s with key story beats:
-    # f0-f2 (0.00-0.18s) reach back to backpack -> f3-f8 (0.24-0.84s) hold cup-bomb & arm/light fuse ->
-    # f9-f13 (0.90-1.14s) crouch & plant solidly on ground -> f14-f16 (1.20-1.36s) hop upright & wrap.
-    times = [0.00, 0.12, 0.24, 0.44, 0.64, 0.84, 0.96, 1.08, 1.18, 1.28, 1.34, 1.36]
+    """Attach Bomber's authentic 1998 1.36 s (`absb`, 17f) bomb-planting `"PlantBomb"` clip.
+
+    Matches every 1998 `absb301`/`absb901` story beat:
+    - f0-f2 (0.00-0.18s): reach back to rucksack & draw center cup-bomb (`pack_bomb_center` hides)
+    - f3-f4 (0.22-0.42s): cradle sparking bomb out front in BOTH hands (zero goggle collision!)
+    - f5-f8 (0.46-0.86s): sneaky look hard LEFT then hard RIGHT checking coast is clear!
+    - f9-f13 (0.90-1.16s): deep crouch/bend forward lowering bomb squarely onto Y = 0.0 with both hands
+    - f14-f16 (1.20-1.36s): release & spring upright leaving armed sparking bomb planted on ground
+    """
+    times = [0.00, 0.12, 0.22, 0.36, 0.50, 0.64, 0.76, 0.88, 0.98, 1.08, 1.16, 1.24, 1.32, 1.36]
     bx, by, bz = rest_t(scene, "upper_body")
 
     ub_d: List[Vec3] = [
         (0.0,  0.000,  0.000),  # 0.00 rest
-        (0.0, +0.008, -0.006),  # 0.12 reach back toward pack
-        (0.0, -0.006, +0.008),  # 0.24 pull bomb forward
-        (0.0, -0.010, +0.012),  # 0.44 hold & inspect left
-        (0.0, -0.012, +0.012),  # 0.64 arm / flick spark fuse
-        (0.0, -0.018, +0.016),  # 0.84 tilt to lower bomb
-        (0.0, -0.050, +0.036),  # 0.96 crouch & set bomb on ground!
-        (0.0, -0.056, +0.040),  # 1.08 press bomb firmly upright on Y=0
-        (0.0, -0.016, +0.010),  # 1.18 push back off ground
-        (0.0, +0.014, -0.008),  # 1.28 celebratory hop back!
-        (0.0, +0.004, -0.002),  # 1.34 settle
+        (0.0, +0.006, -0.006),  # 0.12 reach back to backpack
+        (0.0, -0.008, +0.006),  # 0.22 draw bomb forward
+        (0.0, -0.010, +0.010),  # 0.36 hold out front in both hands
+        (0.0, -0.012, +0.010),  # 0.50 sneaky check LEFT!
+        (0.0, -0.012, +0.010),  # 0.64 hold check LEFT
+        (0.0, -0.012, +0.010),  # 0.76 whip check RIGHT!
+        (0.0, -0.014, +0.012),  # 0.88 snap forward ready to plant
+        (0.0, -0.044, +0.024),  # 0.98 bend forward lowering bomb!
+        (0.0, -0.058, +0.028),  # 1.08 deep crouch setting bomb solidly on Y = 0.0!
+        (0.0, -0.052, +0.024),  # 1.16 steady release pat on Y = 0.0
+        (0.0, +0.010, -0.012),  # 1.24 spring cleanly back upright!
+        (0.0, +0.004, -0.004),  # 1.32 settle proud
         (0.0,  0.000,  0.000),  # 1.36 exact rest wrap
     ]
     ub_eulers: List[Vec3] = [
         ( 0.00,  0.00,  0.00),
-        (-0.14, -0.22, +0.08),
-        (+0.10, +0.08, -0.04),
-        (+0.16, +0.10, -0.06),
-        (+0.18, -0.10, +0.06),
-        (+0.32,  0.00,  0.00),
-        (+0.68,  0.00,  0.00),
-        (+0.74,  0.00,  0.00),
-        (+0.22,  0.00,  0.00),
-        (-0.12,  0.00,  0.00),
+        (-0.14, -0.20, +0.06),
+        (+0.10, +0.04,  0.00),
+        (+0.12,  0.00,  0.00),
+        (+0.12, +0.10, -0.04),
+        (+0.12, +0.12, -0.04),
+        (+0.12, -0.12, +0.04),
+        (+0.18,  0.00,  0.00),
+        (+0.44,  0.00,  0.00),
+        (+0.52,  0.00,  0.00),
+        (+0.48,  0.00,  0.00),
+        (-0.10,  0.00,  0.00),
         (-0.04,  0.00,  0.00),
         ( 0.00,  0.00,  0.00),
     ]
     head_eulers: List[Vec3] = [
         ( 0.00,  0.00,  0.00),
-        (-0.08, -0.24, +0.08),
-        (+0.16,  0.00,  0.00),
-        (+0.20, +0.18, -0.12),
-        (+0.22, -0.18, +0.12),
-        (+0.26,  0.00,  0.00),
-        (+0.22,  0.00,  0.00),
-        (+0.20,  0.00,  0.00),
-        (+0.06,  0.00,  0.00),
-        (-0.10,  0.00,  0.00),
+        (-0.08, -0.22, +0.06),
+        (+0.12,  0.00,  0.00),
+        (+0.14,  0.00,  0.00),
+        (+0.06, +0.62, -0.08),  # f5: sneaky look HARD LEFT!
+        (+0.06, +0.68, -0.10),  # f6: hold look LEFT!
+        (+0.06, -0.66, +0.10),  # f7-f8: whip look HARD RIGHT!
+        (+0.14,  0.00,  0.00),  # f9: snap back forward!
+        (+0.06,  0.00,  0.00),  # f10: watching bomb descend (goggles clear!)
+        (-0.04,  0.00,  0.00),  # f11-f12: peering cleanly above planted bomb!
+        (+0.02,  0.00,  0.00),  # f13: releasing
+        (-0.10,  0.00,  0.00),  # f14-f15: upright admiring!
         (-0.04,  0.00,  0.00),
         ( 0.00,  0.00,  0.00),
     ]
-    gaster_rx = [0.00, +0.10, -0.06, -0.08, -0.10, -0.16, -0.34, -0.38, -0.12, +0.10, +0.04, 0.00]
+    gaster_rx = [0.00, +0.10, -0.06, -0.08, -0.08, -0.08, -0.08, -0.12, -0.28, -0.34, -0.30, +0.08, +0.03, 0.00]
 
     channels: List[AnimationChannel] = [
         AnimationChannel("upper_body", "translation", list(times), [(bx + dx, by + dy, bz + dz) for dx, dy, dz in ub_d]),
@@ -424,85 +439,142 @@ def _add_bomber_plant_bomb(scene: SceneBuilder, bomb_node: str, hide_origin: Vec
             AnimationChannel("gaster_group", "rotation", list(times), quat_track(rest_r(scene, "gaster_group"), [(rx, 0.0, 0.0) for rx in gaster_rx]))
         )
 
-    # Tiny spry hop back onto ready stance at f15 (1.28 s), grounded Y=0 everywhere else!
+    # Spry subtle step-back recoil at f15 (1.24s) while keeping feet solidly grounded at Y = 0.0!
     root_t: List[Vec3] = [(0.0, 0.0, 0.0)] * len(times)
-    root_t[9] = (0.0, 0.036, -0.024)
-    root_t[10] = (0.0, 0.006, -0.006)
+    root_t[11] = (0.0, 0.022, -0.022)
+    root_t[12] = (0.0, 0.004, -0.008)
     channels.append(AnimationChannel("root", "translation", list(times), root_t))
 
-    # Right arm reaches back over shoulder to grab bomb, both arms cradle & plant it on Y=0, then hop clear!
+    # Coordinated two-handed reach back -> forward hold -> deep ground plant -> release!
+    # Negative `ry` on left arm (+X) and positive `ry` on right arm (-X) pull BOTH hands INWARD
+    # to physically grip the left & right sides of the cup-bomb at every held and ground-plant frame!
     arm_left_d = [
         ( 0.00,  0.00,  0.00),
-        (-0.18, -0.14, +0.26),  # balance while right reaches back
-        (-0.36, +0.34, +0.10),  # catch bomb in front
-        (-0.42, +0.38, +0.08),  # cradle & inspect
-        (-0.38, +0.36, +0.10),  # steady while lighting fuse
-        (-0.34, +0.34, +0.06),  # lowering bomb
-        (-0.24, +0.30, +0.04),  # setting on ground
-        (-0.20, +0.28, +0.04),  # patting upright
-        (-0.30, -0.20, +0.38),  # pull hands clear
-        (-0.36, -0.26, +0.52),  # spry hop wide arms
-        (-0.12, -0.08, +0.18),
+        (-0.22, +0.16, +0.26),  # balance while right pulls bomb
+        (-0.14, -0.18, -0.06),  # reach forward & cup bomb sides
+        (-0.10, -0.22, -0.08),  # hands gripping bomb sides out front!
+        (-0.10, -0.22, -0.08),  # steady while looking left
+        (-0.10, -0.22, -0.08),  # steady
+        (-0.10, -0.22, -0.08),  # steady while looking right
+        (-0.14, -0.22, -0.06),  # starting to lower forward
+        (-0.18, -0.20, -0.04),  # reaching forward & down as torso pitches +0.44
+        (-0.22, -0.20, -0.04),  # hands gripping bomb sides squarely on Y = 0.0!
+        (-0.20, -0.18, -0.04),  # patting upright on ground
+        (-0.26, +0.20, +0.36),  # pull hands clear as he springs back!
+        (-0.10, +0.08, +0.14),
         ( 0.00,  0.00,  0.00),
     ]
     arm_right_d = [
         ( 0.00,  0.00,  0.00),
-        (-1.15, +0.42, -0.45),  # reach back over shoulder toward 3-bomb pack!
-        (-0.38, -0.34, -0.10),  # bring bomb forward
-        (-0.42, -0.38, -0.08),  # hold & inspect
-        (-0.56, -0.26, -0.16),  # flick/light spark fuse!
-        (-0.34, -0.34, -0.06),  # lowering bomb
-        (-0.24, -0.30, -0.04),  # setting on ground
-        (-0.20, -0.28, -0.04),  # patting upright
-        (-0.30, +0.20, -0.38),  # pull hands clear
-        (-0.36, +0.26, -0.52),  # spry hop wide arms
-        (-0.12, +0.08, -0.18),
+        (-1.18, +0.38, -0.44),  # reach back over shoulder to grab center pack bomb!
+        (-0.14, +0.18, +0.06),  # bring bomb forward between both hands
+        (-0.10, +0.22, +0.08),  # hands gripping bomb sides out front!
+        (-0.10, +0.22, +0.08),  # steady while looking left
+        (-0.10, +0.22, +0.08),  # steady
+        (-0.10, +0.22, +0.08),  # steady while looking right
+        (-0.14, +0.22, +0.06),  # starting to lower forward
+        (-0.18, +0.20, +0.04),  # reaching forward & down as torso pitches +0.44
+        (-0.22, +0.20, +0.04),  # hands gripping bomb sides squarely on Y = 0.0!
+        (-0.20, +0.18, +0.04),  # patting upright on ground
+        (-0.26, -0.20, -0.36),  # pull hands clear!
+        (-0.10, -0.08, -0.14),
         ( 0.00,  0.00,  0.00),
     ]
-    if "arm_left" in scene.nodes:
-        channels.append(AnimationChannel("arm_left", "rotation", list(times), quat_track(rest_r(scene, "arm_left"), arm_left_d)))
-    if "arm_right" in scene.nodes:
-        channels.append(AnimationChannel("arm_right", "rotation", list(times), quat_track(rest_r(scene, "arm_right"), arm_right_d)))
+    fore_left_d = [
+        ( 0.00,  0.00, 0.00),
+        (-0.14,  0.00, 0.00),
+        (+0.10, -0.06, 0.00),
+        (+0.14, -0.08, 0.00),
+        (+0.14, -0.08, 0.00),
+        (+0.14, -0.08, 0.00),
+        (+0.14, -0.08, 0.00),
+        (+0.16, -0.08, 0.00),
+        (+0.20, -0.08, 0.00),
+        (+0.22, -0.08, 0.00),
+        (+0.20, -0.06, 0.00),
+        (-0.22,  0.00, 0.00),
+        (-0.08,  0.00, 0.00),
+        ( 0.00,  0.00, 0.00),
+    ]
+    fore_right_d = [
+        ( 0.00,  0.00, 0.00),
+        (-0.36,  0.00, 0.00),
+        (+0.10, +0.06, 0.00),
+        (+0.14, +0.08, 0.00),
+        (+0.14, +0.08, 0.00),
+        (+0.14, +0.08, 0.00),
+        (+0.14, +0.08, 0.00),
+        (+0.16, +0.08, 0.00),
+        (+0.20, +0.08, 0.00),
+        (+0.22, +0.08, 0.00),
+        (+0.20, +0.06, 0.00),
+        (-0.22,  0.00, 0.00),
+        (-0.08,  0.00, 0.00),
+        ( 0.00,  0.00, 0.00),
+    ]
+    for node_n, track in (
+        ("arm_left", arm_left_d),
+        ("arm_right", arm_right_d),
+        ("forearm_left", fore_left_d),
+        ("forearm_right", fore_right_d),
+    ):
+        if node_n in scene.nodes:
+            channels.append(AnimationChannel(node_n, "rotation", list(times), quat_track(rest_r(scene, node_n), track)))
+
     for node_n, side in (("antenna_left", +1.0), ("antenna_right", -1.0)):
         if node_n in scene.nodes and scene.get_node(node_n):
-            ant_del = [(-0.25 * urx, 0.0, side * 0.10 * hrz) for (urx, _, _), (_, _, hrz) in zip(ub_eulers, head_eulers)]
+            ant_del = [(-0.24 * urx, 0.0, side * 0.14 * hry) for (urx, _, _), (_, hry, _) in zip(ub_eulers, head_eulers)]
             channels.append(AnimationChannel(node_n, "rotation", list(times), quat_track(rest_r(scene, node_n), ant_del)))
 
-    # Held cup-bomb path: emerges from shoulder -> held cleanly in front of hands -> planted on Y=0.0 -> sits armed -> wraps.
+    # Hide center backpack bomb while Bomber holds & plants it, restoring cleanly on wrap!
+    if "pack_bomb_center" in scene.nodes:
+        pack_sc: List[Vec3] = [
+            _ONE, _TINY, _TINY, _TINY, _TINY, _TINY, _TINY,
+            _TINY, _TINY, _TINY, _TINY, _TINY, _TINY, _ONE,
+        ]
+        channels.append(AnimationChannel("pack_bomb_center", "scale", list(times), pack_sc))
+
+    # Held/planted cup-bomb trajectory: drawn from pack -> held cleanly OUT FRONT between both hands
+    # (zero goggle clipping!) -> lowered squarely onto Y = 0.000 at Z = +0.36 -> stays planted solidly
+    # on Y = 0.000 in world space (compensating `root_t` step-back!) while Bomber springs upright!
     bomb_pos: List[Vec3] = [
-        hide_origin,           # 0.00 hidden
-        (-0.14, 0.56, -0.10),  # 0.12 grabbed from pack
-        ( 0.00, 0.34, +0.28),  # 0.24 pulled forward between hands
-        ( 0.00, 0.33, +0.30),  # 0.44 held & inspected
-        ( 0.00, 0.32, +0.30),  # 0.64 fuse lit!
-        ( 0.00, 0.22, +0.32),  # 0.84 lowering to ground
-        ( 0.00, 0.01, +0.34),  # 0.96 touching down
-        ( 0.00, 0.00, +0.34),  # 1.08 planted solidly on Y=0.0!
-        ( 0.00, 0.00, +0.34),  # 1.18 sitting armed while Bomber rises!
-        ( 0.00, 0.00, +0.36),  # 1.28 sitting armed on ground as Bomber hops back!
-        ( 0.00, 0.00, +0.34),  # 1.34 quick fade-out before wrap
-        hide_origin,           # 1.36 hidden wrap
+        hide_origin,            # 0.00 hidden in pack
+        (-0.08, 0.42, -0.14),   # 0.12 lifted from backpack pocket
+        ( 0.00, 0.21, +0.27),   # 0.22 swung forward between both hands
+        ( 0.00, 0.20, +0.28),   # 0.36 held cleanly out front between hands!
+        ( 0.00, 0.20, +0.28),   # 0.50 held while looking left
+        ( 0.00, 0.20, +0.28),   # 0.64 held while looking left
+        ( 0.00, 0.20, +0.28),   # 0.76 held while looking right
+        ( 0.00, 0.14, +0.30),   # 0.88 starting descent
+        ( 0.00, 0.05, +0.33),   # 0.98 lowering cleanly toward ground
+        ( 0.00, 0.00, +0.34),   # 1.08 planted squarely upright on Y = 0.000!
+        ( 0.00, 0.00, +0.34),   # 1.16 released solidly on Y = 0.000!
+        ( 0.00, -0.022, +0.362),  # 1.24 world (0, 0.000, +0.34) while root hops (+0.022, -0.022)!
+        ( 0.00, -0.004, +0.348),  # 1.32 world (0, 0.000, +0.34) as Bomber settles!
+        hide_origin,            # 1.36 wrap
     ]
     bomb_rot = quat_track(
         (0.0, 0.0, 0.0, 1.0),
         [
             (0.0, 0.0, 0.0),
-            (-0.35, 0.0, +0.30),
-            (+0.18, 0.0, +0.06),
-            (+0.14, 0.0, -0.08),
-            (+0.16, 0.0, +0.06),
-            (+0.10, 0.0, 0.0),
-            (0.00, 0.0, 0.0),
-            (0.00, 0.0, 0.0),
-            (0.00, 0.0, 0.0),
-            (0.00, 0.0, 0.0),
-            (0.00, 0.0, 0.0),
-            (0.00, 0.0, 0.0),
+            (-0.32, 0.0, +0.26),
+            (+0.12, 0.0,  0.00),
+            (+0.10, 0.0,  0.00),
+            (+0.10, +0.10, -0.04),
+            (+0.10, +0.12, -0.04),
+            (+0.10, -0.12, +0.04),
+            (+0.08, 0.0,  0.00),
+            (+0.04, 0.0,  0.00),
+            ( 0.00, 0.0,  0.00),
+            ( 0.00, 0.0,  0.00),
+            ( 0.00, 0.0,  0.00),
+            ( 0.00, 0.0,  0.00),
+            ( 0.00, 0.0,  0.00),
         ],
     )
     bomb_sc: List[Vec3] = [
-        _TINY, (0.75, 0.75, 0.75), _ONE, _ONE, _ONE,
-        _ONE, _ONE, _ONE, _ONE, _ONE, _TINY, _TINY,
+        _TINY, (0.82, 0.82, 0.82), _ONE, _ONE, _ONE, _ONE, _ONE,
+        _ONE, _ONE, _ONE, _ONE, _ONE, _ONE, _TINY,
     ]
     channels.append(AnimationChannel(bomb_node, "translation", list(times), bomb_pos))
     channels.append(AnimationChannel(bomb_node, "rotation", list(times), bomb_rot))

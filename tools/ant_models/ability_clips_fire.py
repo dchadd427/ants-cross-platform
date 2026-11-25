@@ -126,7 +126,8 @@ def _attach_fire_mag_glass(
     tmp = SceneBuilder(name="mag_tmp")
     mag_builder(tmp, (0.0, 0.0, 0.0), (0.0, 0.0, 1.0))
     raw_parts = tmp.nodes.get("magnifying_glass", [])
-    # Reorient so the handle extends forward from right hand and the brass lens hovers flat horizontally (`afsf`).
+    # Reorient cleanly in forearm_right space so extending the arm forward holds the brass rim
+    # flat horizontally (lens facing UP/DOWN) out over the ignition spot, matching 1998 `afsf901`!
     placed_parts = [
         MeshPart(
             f"fire_{p.name}",
@@ -134,7 +135,10 @@ def _attach_fire_mag_glass(
             p.positions.copy(),
             p.normals.copy(),
             p.indices.copy(),
-        ).rotate_xyz(rx=84.0, ry=16.0, rz=-10.0, degrees=True)
+        )
+        .scale(1.16, 1.16, 1.16)
+        .rotate_xyz(rx=78.0, ry=8.0, rz=-14.0, degrees=True)
+        .translate(0.0, 0.0, 0.055)
         for p in raw_parts
     ]
     rh = anchors["right_hand"]
@@ -145,24 +149,72 @@ def _attach_fire_mag_glass(
     return "fire_mag_glass", hand_local
 
 
-def _attach_fire_spark(scene: SceneBuilder) -> str:
-    """Attach hidden glowing golden-orange ignition ember & roaring flame burst on `fire_spark`."""
+def _attach_fire_sunbeam(scene: SceneBuilder) -> str:
+    """Attach hidden focused golden-white sunbeam column + ground hotspot + rising smoke (`afsf f7-f17`)."""
+    # Built in local coords with ground hotspot at Y = 0.0 and beam rising cleanly up to the held lens (`Y = 0.402`).
     parts: List[MeshPart] = [
-        # Bright hot yellow inner ember core + bold central flame tongue resting cleanly above Y = 0.0.
-        ellipsoid(0.072, 0.088, 0.072, u_segs=14, v_segs=10, name="fire_ember_core", material="gear_yellow_plastic")
-        .translate(0.0, 0.084, 0.0),
-        cone(0.068, 0.21, radial_segs=12, name="fire_tongue_center", material="gear_yellow_plastic")
-        .translate(0.0, 0.145, 0.0),
+        # Bright glowing white-hot solar inner core ray shooting straight down from lens center to ground.
+        cylinder(0.011, 0.014, 0.402, radial_segs=14, bevel=0.003, axis="y", name="sunbeam_core", material="eye_catchlight")
+        .translate(0.0, 0.204, 0.0),
+        # Warm golden sunlight shaft wrapping the white-hot core (`afsf901` iconic yellow-white ray!).
+        cylinder(0.019, 0.024, 0.396, radial_segs=16, bevel=0.003, axis="y", name="sunbeam_gold_shaft", material="gear_yellow_plastic")
+        .translate(0.0, 0.201, 0.0),
+        # Translucent outer focus beam halo tapering cleanly down from lens to focal spot.
+        cylinder(0.028, 0.056, 0.402, radial_segs=18, bevel=0.004, axis="y", name="sunbeam_cone", material="glass_clear")
+        .translate(0.0, 0.204, 0.0),
+        # Glowing golden solar hotspot ember disc + bright center spark right on the ground (`Y = 0.006`).
+        ellipsoid(0.056, 0.014, 0.056, u_segs=16, v_segs=10, name="sunbeam_hotspot", material="gear_yellow_plastic")
+        .translate(0.0, 0.014, 0.0),
+        ellipsoid(0.030, 0.018, 0.030, u_segs=12, v_segs=8, name="sunbeam_flash_core", material="eye_catchlight")
+        .translate(0.0, 0.018, 0.0),
+        # Delicate curling wisps of white smoke rising beside the beam toward the magnifying lens (`afsf f8-f16`).
+        ellipsoid(0.015, 0.022, 0.015, u_segs=10, v_segs=8, name="sunbeam_smoke_0", material="eye_white")
+        .translate(-0.028, 0.105, -0.014),
+        ellipsoid(0.019, 0.026, 0.019, u_segs=10, v_segs=8, name="sunbeam_smoke_1", material="eye_white")
+        .translate(+0.022, 0.225, +0.016),
+        ellipsoid(0.022, 0.024, 0.022, u_segs=10, v_segs=8, name="sunbeam_smoke_2", material="eye_white")
+        .translate(-0.018, 0.335, -0.018),
     ]
-    for i in range(6):
-        az = 2.0 * math.pi * i / 6.0
-        tall = 0.175 if i % 2 == 0 else 0.145
+    scene.add("fire_sunbeam", parts)
+    scene.set_node_transform("fire_sunbeam", translation=_HIDE_POS, scale=_HIDE_SCALE)
+    return "fire_sunbeam"
+
+
+def _attach_fire_spark(scene: SceneBuilder) -> str:
+    """Attach hidden roaring layered campfire flame + billowing ignition smoke cloud (`afsf f17-f21`)."""
+    # Built with flame base seated cleanly at local Y = 0.0 (`~0.38m` tall roaring flame matching `afsf901`!).
+    parts: List[MeshPart] = [
+        # Hot glowing white-yellow heart + tall vibrant golden flame spire.
+        ellipsoid(0.076, 0.084, 0.076, u_segs=16, v_segs=12, name="fire_ember_core", material="eye_catchlight")
+        .translate(0.0, 0.076, 0.0),
+        ellipsoid(0.112, 0.128, 0.112, u_segs=16, v_segs=12, name="fire_inner_body", material="gear_yellow_plastic")
+        .translate(0.0, 0.116, 0.0),
+        cone(0.098, 0.37, radial_segs=14, name="fire_tongue_center", material="gear_yellow_plastic")
+        .translate(0.0, 0.210, 0.0),
+    ]
+    # Ring of 7 tall dynamic outer flame tongues (alternating crimson-orange & bright gold) flaring outward!
+    for i in range(7):
+        az = 2.0 * math.pi * i / 7.0
+        tall = 0.32 if i % 2 == 0 else 0.26
+        tilt = 0.38 if i % 2 == 0 else 0.28
         mat = "gear_accent" if i % 2 == 0 else "gear_gold"
+        rad = 0.070 if i % 2 == 0 else 0.056
         parts.append(
-            cone(0.044, tall, radial_segs=10, name=f"fire_tongue_{i}", material=mat)
-            .rotate_xyz(rx=0.34)
+            cone(rad, tall, radial_segs=12, name=f"fire_tongue_{i}", material=mat)
+            .rotate_xyz(rx=tilt)
             .rotate_xyz(ry=az)
-            .translate(0.056 * math.sin(az), 0.105, 0.056 * math.cos(az))
+            .translate(0.082 * math.sin(az), 0.140, 0.082 * math.cos(az))
+        )
+    # Soft wide billowing white smoke cloud crowning the freshly ignited flame (`afsf901 f18-f19`).
+    for s_idx, (sx, sy, sz, rx, ry, rz) in enumerate((
+        (0.000, 0.385, 0.000, 0.096, 0.054, 0.092),
+        (+0.072, 0.398, +0.028, 0.068, 0.044, 0.064),
+        (-0.070, 0.402, -0.024, 0.066, 0.046, 0.064),
+        (+0.014, 0.432, -0.022, 0.064, 0.042, 0.060),
+    )):
+        parts.append(
+            ellipsoid(rx, ry, rz, u_segs=14, v_segs=10, name=f"fire_smoke_puff_{s_idx}", material="eye_white")
+            .translate(sx, sy, sz)
         )
     scene.add("fire_spark", parts)
     scene.set_node_transform("fire_spark", translation=_HIDE_POS, scale=_HIDE_SCALE)
@@ -204,21 +256,30 @@ def _attach_fire_extinguisher_and_foam(scene: SceneBuilder) -> Tuple[str, str]:
 
 
 def _add_start_fire(scene: SceneBuilder, hand_local: Vec3) -> AnimationClip:
-    """Authentic `afsf` 1.76 s (22f) magnifying-glass sunbeam focus -> flaming ground ignition."""
-    # Exact 22f cadence totals 1.76s: f0..f6 [100x7] -> 0.70s, f7..f17 [60x11] -> 1.36s, f18..f21 [100x4] -> 1.76s.
-    # (t, dy, dz, ub_rx, ub_ry, head_rx, gaster_rx, r_arm_rx, r_arm_ry, r_arm_rz, r_fore_rx, l_arm_rx, l_arm_rz, squint, mag_s, spark_s, spark_ry)
+    """Authentic `afsf` 1.76 s (22f): draw glass from belt -> focus golden sunbeam -> roar flame -> re-holster."""
+    # Exact 22f cadence = 1.76 s:
+    # f0..f2 (0.00-0.24s) reach to right-hip belt holster & draw magnifying glass (`fire_belt_mag_glass` hides)
+    # f3     (0.28-0.40s) flourish swing glass up-and-forward (`afsf f3`)
+    # f4..f6 (0.44-0.68s) lean forward holding lens horizontally level straight ahead (`afsf f4-f6`)
+    # f7..f16(0.70-1.26s) golden vertical sunbeam focuses onto ground hotspot with curling smoke (`afsf f7-f16`)
+    # f17    (1.30-1.36s) bright flash ignition at ground spot (`afsf f17`)
+    # f18..f21(1.38-1.76s) roaring campfire flame + smoke cloud, recoil & re-holster glass onto belt!
+    # (t, dy, dz, ub_rx, ub_ry, head_rx, head_ry, gaster_rx, r_arm_rx, r_arm_ry, r_arm_rz, r_fore_rx, l_arm_rx, l_arm_rz, squint, belt_s, mag_s, beam_s, spark_s, spark_ry)
     rows = [
-        (0.00, +0.000, +0.000, +0.00, +0.00, +0.00, +0.00, +0.00, +0.00, +0.00, +0.00, +0.00, +0.00, 0.00, 1e-4, 1e-4, 0.00),
-        (0.14, -0.022, +0.020, +0.44, -0.10, +0.16, +0.14, +0.20, -0.18, -0.12, -0.24, -0.10, +0.26, 0.12, 1e-4, 1e-4, 0.00),  # f1-f2: bend & draw glass
-        (0.32, -0.018, +0.026, +0.34, +0.06, +0.12, +0.10, -0.35, +0.24, +0.16, -0.38, -0.18, +0.32, 0.22, 0.95, 1e-4, 0.00),  # f3: pull glass forward
-        (0.50, -0.012, +0.032, +0.22, +0.10, +0.14, +0.08, -0.68, +0.36, +0.20, -0.22, -0.22, +0.38, 0.42, 1.00, 0.30, 0.00),  # f5: aim lens over ground
-        (0.70, -0.014, +0.036, +0.26, +0.12, +0.18, +0.10, -0.74, +0.40, +0.18, -0.18, -0.24, +0.40, 0.54, 1.00, 0.56, 0.65),  # f7: focusing sunbeam!
-        (0.94, -0.016, +0.038, +0.28, +0.08, +0.20, +0.12, -0.72, +0.38, +0.22, -0.16, -0.22, +0.42, 0.60, 1.00, 0.78, 1.55),  # f11: heating ember
-        (1.18, -0.018, +0.040, +0.30, +0.14, +0.22, +0.12, -0.76, +0.42, +0.18, -0.18, -0.26, +0.44, 0.62, 1.00, 0.96, 2.65),  # f15: glowing hot!
-        (1.36, -0.012, +0.030, +0.18, +0.04, +0.10, +0.06, -0.58, +0.28, +0.14, -0.28, -0.30, +0.52, 0.30, 0.85, 1.24, 3.60),  # f18: WHOOSH ignition!
-        (1.50, +0.014, -0.014, -0.22, -0.06, -0.14, -0.12, -0.28, -0.10, -0.45, -0.22, -0.38, +0.62, 0.00, 1e-4, 1.38, 4.55),  # f19: triumphant flame flare!
-        (1.64, +0.006, -0.006, -0.08, -0.02, -0.04, -0.04, -0.10, +0.00, -0.16, -0.08, -0.14, +0.24, 0.00, 1e-4, 0.85, 5.45),  # f21: flames dancing
-        (1.76, +0.000, +0.000, +0.00, +0.00, +0.00, +0.00, +0.00, +0.00, +0.00, +0.00, +0.00, +0.00, 0.00, 1e-4, 1e-4, 6.2832),
+        (0.00, +0.000, +0.000, +0.00, +0.00, +0.00, +0.00, +0.00, +0.00, +0.00, +0.00, +0.00, +0.00, +0.00, 0.00, 1.00, 1e-4, 1e-4, 1e-4, 0.00),
+        (0.14, -0.010, +0.004, +0.16, -0.34, +0.10, -0.22, +0.06, +0.52, -0.44, +0.28, -0.42, -0.06, +0.18, 0.08, 1.00, 1e-4, 1e-4, 1e-4, 0.00),  # f1: reach right hand to hip belt
+        (0.22, -0.012, +0.008, +0.18, -0.30, +0.08, -0.18, +0.06, +0.34, -0.32, +0.18, -0.36, -0.08, +0.22, 0.10, 1e-4, 0.92, 1e-4, 1e-4, 0.00),  # f2: unclip glass from belt!
+        (0.34, -0.008, +0.018, +0.12, -0.06, +0.04, -0.04, +0.04, -0.82, -0.18, -0.38, -0.16, -0.14, +0.28, 0.16, 1e-4, 1.04, 1e-4, 1e-4, 0.00),  # f3: flourish swing high & forward!
+        (0.48, -0.016, +0.030, +0.28, +0.10, +0.16, +0.06, +0.10, -0.58, +0.34, +0.12, -0.06, -0.20, +0.34, 0.36, 1e-4, 1.06, 1e-4, 1e-4, 0.00),  # f4-f5: level lens over target
+        (0.68, -0.018, +0.034, +0.30, +0.12, +0.18, +0.06, +0.12, -0.60, +0.36, +0.12, -0.06, -0.22, +0.36, 0.48, 1e-4, 1.06, 0.65, 1e-4, 0.00),  # f7: sunbeam strikes ground!
+        (0.92, -0.020, +0.036, +0.32, +0.10, +0.20, +0.04, +0.12, -0.58, +0.34, +0.14, -0.05, -0.22, +0.38, 0.56, 1e-4, 1.06, 1.04, 1e-4, 0.40),  # f11: focused golden beam + smoke
+        (1.16, -0.022, +0.038, +0.34, +0.12, +0.22, +0.06, +0.14, -0.60, +0.36, +0.12, -0.06, -0.24, +0.40, 0.62, 1e-4, 1.06, 1.12, 1e-4, 1.20),  # f15: glowing hot ember!
+        (1.30, -0.018, +0.034, +0.28, +0.08, +0.16, +0.04, +0.10, -0.56, +0.34, +0.12, -0.08, -0.28, +0.46, 0.40, 1e-4, 1.04, 1.32, 0.48, 2.20),  # f17: IGNITION FLASH!
+        (1.40, +0.014, -0.016, -0.22, -0.18, -0.14, -0.10, -0.12, -1.18, -0.34, -0.56, -0.36, -0.36, +0.58, 0.00, 1e-4, 0.96, 1e-4, 1.16, 3.30),  # f18: WHOOSH! whip glass HIGH & BACK away from flame!
+        (1.50, +0.008, -0.010, -0.06, -0.36, -0.04, -0.22, -0.02, -0.42, -0.62, -0.32, -0.42, -0.20, +0.34, 0.00, 1e-4, 0.88, 1e-4, 1.12, 4.30),  # f19: swing glass cleanly around outside to hip
+        (1.58, +0.004, -0.004, +0.06, -0.26, +0.02, -0.14, +0.02, +0.34, -0.36, +0.18, -0.32, -0.10, +0.18, 0.00, 1.00, 1e-4, 1e-4, 1.08, 5.15),  # f20: glass clipped back on belt!
+        (1.70, +0.002, -0.002, -0.02, -0.04, -0.02, -0.02, +0.00, +0.06, -0.06, +0.04, -0.06, -0.04, +0.06, 0.00, 1.00, 1e-4, 1e-4, 0.82, 5.95),  # f21: admire burning fire
+        (1.76, +0.000, +0.000, +0.00, +0.00, +0.00, +0.00, +0.00, +0.00, +0.00, +0.00, +0.00, +0.00, +0.00, 0.00, 1.00, 1e-4, 1e-4, 1e-4, 6.2832),
     ]
     times = [round(r[0], 4) for r in rows]
     bx, by, bz = _rest_t(scene, "upper_body")
@@ -230,22 +291,32 @@ def _add_start_fire(scene: SceneBuilder, hand_local: Vec3) -> AnimationClip:
     r_al0 = _rest_r(scene, "arm_left")
     r_fl0 = _rest_r(scene, "forearm_left")
 
+    # Target ground ignition spot mathematically aligned dead-center beneath `fire_mag_lens` during f7-f17!
+    spot_pos: Vec3 = (0.008, 0.002, 0.546)
+
     channels: List[AnimationChannel] = [
         AnimationChannel("upper_body", "translation", list(times), [(bx, by + r[1], bz + r[2]) for r in rows]),
         AnimationChannel("upper_body", "rotation", list(times), _align_quats([quat_mul(r_ub0, quat_from_euler_xyz(rx=r[3], ry=r[4])) for r in rows])),
-        AnimationChannel("head_group", "rotation", list(times), _align_quats([quat_mul(r_hd0, quat_from_euler_xyz(rx=r[5])) for r in rows])),
-        AnimationChannel("gaster_group", "rotation", list(times), _align_quats([quat_mul(r_gs0, quat_from_euler_xyz(rx=r[6])) for r in rows])),
-        AnimationChannel("arm_right", "rotation", list(times), _align_quats([quat_mul(r_ar0, quat_from_euler_xyz(rx=r[7], ry=r[8], rz=r[9])) for r in rows])),
-        AnimationChannel("forearm_right", "rotation", list(times), _align_quats([quat_mul(r_fr0, quat_from_euler_xyz(rx=r[10])) for r in rows])),
-        AnimationChannel("arm_left", "rotation", list(times), _align_quats([quat_mul(r_al0, quat_from_euler_xyz(rx=r[11], rz=r[12])) for r in rows])),
-        AnimationChannel("forearm_left", "rotation", list(times), _align_quats([quat_mul(r_fl0, quat_from_euler_xyz(rx=-0.18 * (r[12] > 0.2))) for r in rows])),
+        AnimationChannel("head_group", "rotation", list(times), _align_quats([quat_mul(r_hd0, quat_from_euler_xyz(rx=r[5], ry=r[6])) for r in rows])),
+        AnimationChannel("gaster_group", "rotation", list(times), _align_quats([quat_mul(r_gs0, quat_from_euler_xyz(rx=r[7])) for r in rows])),
+        AnimationChannel("arm_right", "rotation", list(times), _align_quats([quat_mul(r_ar0, quat_from_euler_xyz(rx=r[8], ry=r[9], rz=r[10])) for r in rows])),
+        AnimationChannel("forearm_right", "rotation", list(times), _align_quats([quat_mul(r_fr0, quat_from_euler_xyz(rx=r[11])) for r in rows])),
+        AnimationChannel("arm_left", "rotation", list(times), _align_quats([quat_mul(r_al0, quat_from_euler_xyz(rx=r[12], rz=r[13])) for r in rows])),
+        AnimationChannel("forearm_left", "rotation", list(times), _align_quats([quat_mul(r_fl0, quat_from_euler_xyz(rx=-0.18 * (r[13] > 0.2))) for r in rows])),
         AnimationChannel("fire_mag_glass", "translation", list(times), [hand_local for _ in rows]),
-        AnimationChannel("fire_mag_glass", "scale", list(times), [(r[14], r[14], r[14]) for r in rows]),
-        AnimationChannel("fire_spark", "translation", list(times), [(0.0, 0.008, 0.40) if r[15] > 1e-3 else _HIDE_POS for r in rows]),
-        AnimationChannel("fire_spark", "rotation", list(times), _align_quats([quat_from_euler_xyz(ry=r[16]) for r in rows])),
-        AnimationChannel("fire_spark", "scale", list(times), [(r[15], r[15], r[15]) for r in rows]),
+        AnimationChannel("fire_mag_glass", "scale", list(times), [(r[16], r[16], r[16]) for r in rows]),
+        AnimationChannel("fire_sunbeam", "translation", list(times), [spot_pos if r[17] > 1e-3 else _HIDE_POS for r in rows]),
+        AnimationChannel("fire_sunbeam", "rotation", list(times), _align_quats([quat_from_euler_xyz(ry=r[19] * 1.5) for r in rows])),
+        AnimationChannel("fire_sunbeam", "scale", list(times), [(r[17], 1.0 if r[17] > 1e-3 else 1e-4, r[17]) for r in rows]),
+        AnimationChannel("fire_spark", "translation", list(times), [spot_pos if r[18] > 1e-3 else _HIDE_POS for r in rows]),
+        AnimationChannel("fire_spark", "rotation", list(times), _align_quats([quat_from_euler_xyz(ry=r[19]) for r in rows])),
+        AnimationChannel("fire_spark", "scale", list(times), [(r[18], r[18], r[18]) for r in rows]),
     ]
-    channels.extend(_eyelid_channels(scene, times, [r[13] for r in rows]))
+    if "fire_belt_mag_glass" in scene.nodes:
+        channels.append(
+            AnimationChannel("fire_belt_mag_glass", "scale", list(times), [(r[15], r[15], r[15]) for r in rows])
+        )
+    channels.extend(_eyelid_channels(scene, times, [r[14] for r in rows]))
     clip = scene.add_animation("StartFire", channels, replace=True)
     sync_leg_flex_to_clip(scene, "StartFire", swivel=0.0)
     return clip
@@ -323,6 +394,7 @@ def add_fire_abilities(
 ) -> List[AnimationClip]:
     """Attach hidden Fire Ant ability props & both authentic 1998 clips (`StartFire`, `Extinguish`)."""
     _, hand_local = _attach_fire_mag_glass(scene, anchors, mag_builder)
+    _attach_fire_sunbeam(scene)
     _attach_fire_spark(scene)
     _attach_fire_extinguisher_and_foam(scene)
     return [

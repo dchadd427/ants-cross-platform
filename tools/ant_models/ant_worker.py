@@ -140,10 +140,10 @@ def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
     """
     hc = np.asarray(anchors["head_center"], dtype=np.float64)
     nc = np.asarray(anchors["neck_center"], dtype=np.float64)
-    x_scale = 1.10
-    z_scale = 0.86
-    face_dz = -0.022  # keeps front facial features flush on the 0.86x compressed cranium face
-    eye_out = 0.006  # pairs with symmetric 1.08x eyes to span ~66% of the wide face like ORIG agst301
+    x_scale = 0.94
+    z_scale = 0.88
+    face_dz = -0.018  # keeps front facial features flush on the 0.88x compressed cranium face
+    eye_out = -0.009  # centers eyes harmoniously inside the slimmer rounded cranium
 
     def _deform_head(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
@@ -249,8 +249,8 @@ def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
             cx = float(p.positions[:, 0].mean())
             part = (
                 p.translate(-cx, 0.0, 0.0)
-                .scale(1.12, 1.12, 1.10)
-                .translate(cx, -0.004, 0.004)
+                .scale(1.02, 1.08, 1.06)
+                .translate(cx * 0.94, -0.004, 0.004)
             )
             new_mands.append(part)
         scene.nodes["mandibles"] = new_mands
@@ -280,7 +280,7 @@ def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
         xf = scene.get_node_transform(ant_node)
         if xf is None:
             continue
-        bx = side * 0.168
+        bx = side * 0.136
         bz = float(hc[2]) + 0.010
         by = float(hc[1]) + 0.106
         if cr_pts is not None:
