@@ -26,6 +26,12 @@ FAMILY_TEXTURE_SIZES: Dict[str, int] = {
     "cloth": 128,
     "metal": 128,
     "rubber": 128,
+    "fur": 128,
+    "bread": 128,
+    "foliage": 128,
+    "stone": 128,
+    "soil": 128,
+    "wood": 128,
 }
 
 
@@ -359,19 +365,142 @@ def _build_rubber_pack(size: int) -> TexturePack:
     )
 
 
-@functools.lru_cache(maxsize=16)
+def _build_fur_pack(size: int) -> TexturePack:
+    """Soft combed plush teddy-bear fur: directional micro-strands, fleece clumps, velvety matte sheen."""
+    gx, gy = np.meshgrid(np.arange(size, dtype=np.float32), np.arange(size, dtype=np.float32))
+    warp = (_tile_noise(size, 6, 6, seed=501) - 0.5) * (size * 0.08)
+    strands_a = _sample_periodic_bilinear(_tile_noise(size, 64, 10, seed=502), gx + warp, gy + 0.4 * warp)
+    strands_b = _sample_periodic_bilinear(_tile_noise(size, 42, 16, seed=503), gx - 0.6 * warp, gy + warp)
+    clumps = _tile_noise(size, 14, 14, seed=504)
+    fuzz = _tile_noise(size, 48, 48, seed=505)
+    height = np.clip(0.42 * strands_a + 0.28 * strands_b + 0.18 * clumps + 0.12 * fuzz, 0.0, 1.0)
+    albedo = 0.74 + 0.14 * strands_a + 0.07 * clumps + 0.05 * fuzz
+    rough_mult = 0.86 + 0.14 * (1.0 - strands_a)
+    return TexturePack(
+        family="fur",
+        size=size,
+        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.72, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=5.4)),
+        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.84, 1.0)),
+    )
+
+
+def _build_bread_pack(size: int) -> TexturePack:
+    """Realistic baked bakery crust & crispy fried batter: porous crumb bubbles + Maillard mottling."""
+    pores_a = _tile_pores(size, 18, seed=601)
+    pores_b = _tile_pores(size, 34, seed=602)
+    crumb = _tile_noise(size, 28, 28, seed=603)
+    toast = _tile_noise(size, 7, 7, seed=604)
+    blister = _smoothstep(0.18, 0.58, pores_a) * 0.62 + _smoothstep(0.16, 0.50, pores_b) * 0.38
+    height = np.clip(0.56 * blister + 0.26 * crumb + 0.18 * toast, 0.0, 1.0)
+    albedo = 0.76 + 0.12 * toast + 0.08 * blister + 0.04 * crumb
+    rough_mult = 0.72 + 0.24 * (1.0 - blister) + 0.04 * (1.0 - toast)
+    return TexturePack(
+        family="bread",
+        size=size,
+        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.72, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=4.8)),
+        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.70, 1.0)),
+    )
+
+
+def _build_foliage_pack(size: int) -> TexturePack:
+    """Botanical grass/leaf venation: fine parallel veins, cellular ribbing, subtle waxy sheen."""
+    t = np.linspace(0.0, 2.0 * math.pi, size, endpoint=False, dtype=np.float32)
+    u, v = np.meshgrid(t, t)
+    ribs = 0.5 + 0.5 * np.cos(u * 18.0 + 0.35 * np.sin(v * 3.0))
+    micro_rib = 0.5 + 0.5 * np.cos(u * 44.0)
+    varieg = _tile_noise(size, 6, 12, seed=701)
+    cells = _tile_noise(size, 36, 20, seed=702)
+    height = np.clip(0.50 * ribs + 0.22 * micro_rib + 0.18 * cells + 0.10 * varieg, 0.0, 1.0)
+    albedo = 0.80 + 0.10 * ribs + 0.06 * varieg + 0.04 * cells
+    rough_mult = 0.56 + 0.24 * (1.0 - ribs) + 0.12 * (1.0 - varieg)
+    return TexturePack(
+        family="foliage",
+        size=size,
+        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.76, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=3.4)),
+        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.52, 1.0)),
+    )
+
+
+def _build_stone_pack(size: int) -> TexturePack:
+    """Weathered fractured granite/rock: crystalline mineral facets, fissures, and gritty pores."""
+    f1, edge = _tile_voronoi_f1_f2(size, 14, seed=801)
+    f2_fine = _tile_pores(size, 32, seed=802)
+    grit = _tile_noise(size, 44, 44, seed=803)
+    mottle = _tile_noise(size, 8, 8, seed=804)
+    crack = _smoothstep(0.02, 0.16, edge)
+    height = np.clip(0.36 * crack + 0.26 * (1.0 - f1) + 0.20 * grit + 0.18 * mottle, 0.0, 1.0)
+    albedo = 0.70 + 0.12 * crack + 0.10 * mottle + 0.08 * (1.0 - f2_fine)
+    rough_mult = 0.68 + 0.22 * (1.0 - crack) + 0.10 * grit
+    return TexturePack(
+        family="stone",
+        size=size,
+        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.66, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=5.6)),
+        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.65, 1.0)),
+    )
+
+
+def _build_soil_pack(size: int) -> TexturePack:
+    """Granular packed earth & anthill loam: pebble grains, crumbly clods, matte humus breakup."""
+    peb_a = _tile_pores(size, 22, seed=901)
+    peb_b = _tile_pores(size, 46, seed=902)
+    clod = _tile_noise(size, 10, 10, seed=903)
+    sand = _tile_noise(size, 52, 52, seed=904)
+    grains = 0.55 * (1.0 - peb_a) + 0.45 * (1.0 - peb_b)
+    height = np.clip(0.54 * grains + 0.26 * clod + 0.20 * sand, 0.0, 1.0)
+    albedo = 0.72 + 0.14 * clod + 0.08 * grains + 0.06 * sand
+    rough_mult = 0.82 + 0.18 * (1.0 - grains)
+    return TexturePack(
+        family="soil",
+        size=size,
+        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.68, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=5.8)),
+        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.80, 1.0)),
+    )
+
+
+def _build_wood_pack(size: int) -> TexturePack:
+    """Natural longitudinal wood grain with subtle growth rings and fibrous bark micro-relief."""
+    gx, gy = np.meshgrid(np.arange(size, dtype=np.float32), np.arange(size, dtype=np.float32))
+    warp = (_tile_noise(size, 5, 5, seed=951) - 0.5) * (size * 0.06)
+    rings = np.sin(((gx + warp) / float(size)) * 2.0 * math.pi * 12.0) * 0.5 + 0.5
+    fibers = _tile_noise(size, 48, 6, seed=952)
+    tone = _tile_noise(size, 8, 4, seed=953)
+    height = np.clip(0.45 * rings + 0.35 * fibers + 0.20 * tone, 0.0, 1.0)
+    albedo = 0.76 + 0.12 * rings + 0.07 * fibers + 0.05 * tone
+    rough_mult = 0.70 + 0.24 * (1.0 - rings) + 0.06 * fibers
+    return TexturePack(
+        family="wood",
+        size=size,
+        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.72, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=4.2)),
+        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.68, 1.0)),
+    )
+
+
+@functools.lru_cache(maxsize=32)
 def get_texture_pack(family: str, size: Optional[int] = None) -> TexturePack:
     """Return cached seamless PBR PNG TexturePack for `family`."""
     resolved = int(size) if size is not None else FAMILY_TEXTURE_SIZES.get(family, DEFAULT_TEXTURE_SIZE)
-    if family == "chitin":
-        return _build_chitin_pack(resolved)
-    if family == "cloth":
-        return _build_cloth_pack(resolved)
-    if family == "metal":
-        return _build_metal_pack(resolved)
-    if family == "rubber":
-        return _build_rubber_pack(resolved)
-    raise KeyError(f"Unknown texture family {family!r}; expected chitin, cloth, metal, or rubber")
+    builders = {
+        "chitin": _build_chitin_pack,
+        "cloth": _build_cloth_pack,
+        "metal": _build_metal_pack,
+        "rubber": _build_rubber_pack,
+        "fur": _build_fur_pack,
+        "bread": _build_bread_pack,
+        "foliage": _build_foliage_pack,
+        "stone": _build_stone_pack,
+        "soil": _build_soil_pack,
+        "wood": _build_wood_pack,
+    }
+    fn = builders.get(family)
+    if fn is not None:
+        return fn(resolved)
+    raise KeyError(f"Unknown texture family {family!r}; expected one of {', '.join(builders)}")
 
 
 # ---------------------------------------------------------------------------
@@ -521,5 +650,6 @@ def bake_scene_ao(scene: Any, *, grid_res: int = 56) -> Any:
             else:
                 floor_ao = 0.44
             ao = np.clip(ao, floor_ao, 1.0).astype(np.float32)
-            p.colors = np.clip(base_tint * ao[:, None], floor_ao, 1.0).astype(np.float32)
+            lo_clip = 0.0 if p.material.startswith("item_") else floor_ao
+            p.colors = np.clip(base_tint * ao[:, None], lo_clip, 1.0).astype(np.float32)
     return scene

@@ -247,6 +247,14 @@ _SPECS: Tuple[MaterialSpec, ...] = (
 
 MATERIAL_ORDER: Tuple[str, ...] = tuple(spec.name for spec in _SPECS)
 MATERIALS: Dict[str, MaterialSpec] = {spec.name: spec for spec in _SPECS}
+EXTRA_MATERIALS: Dict[str, MaterialSpec] = {}
+
+
+def register_extra_material(spec: MaterialSpec) -> MaterialSpec:
+    """Register an extension PBR material (used by map items) without altering canonical ant `MATERIAL_ORDER`."""
+    EXTRA_MATERIALS[spec.name] = spec
+    return spec
+
 
 TEAM_COLORS: Dict[str, Dict[str, List[float]]] = {
     "green": {
@@ -270,10 +278,12 @@ TEAM_COLORS: Dict[str, Dict[str, List[float]]] = {
 
 def get_material(name: str) -> MaterialSpec:
     """Return the MaterialSpec for `name`, raising KeyError if unknown."""
-    if name not in MATERIALS:
-        known = ", ".join(MATERIAL_ORDER)
-        raise KeyError(f"Unknown material {name!r}; expected one of: {known}")
-    return MATERIALS[name]
+    if name in MATERIALS:
+        return MATERIALS[name]
+    if name in EXTRA_MATERIALS:
+        return EXTRA_MATERIALS[name]
+    known = ", ".join(MATERIAL_ORDER)
+    raise KeyError(f"Unknown material {name!r}; expected one of: {known}")
 
 
 def material_color(name: str, team: str = "green") -> Tuple[float, float, float, float]:

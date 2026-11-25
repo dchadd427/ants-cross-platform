@@ -328,7 +328,10 @@
       float pitDepth = smoothstep(0.62, 0.98, mrSample.g);
       microCav = clamp(1.0 - (pitDepth * 0.60 + clamp(normSlope, 0.0, 1.0) * 0.45) * mix(0.03, 0.015, met), 0.94, 1.0);
     }
-    vec3 albedo = max(u_baseColor * baseSample.rgb * microCav, 0.0);
+    vec3 bakedCol = clamp(v_color, 0.0, 1.0);
+    float vMax = max(max(bakedCol.r, bakedCol.g), bakedCol.b);
+    vec3 vChroma = vMax > 1e-4 ? (bakedCol / vMax) : vec3(1.0);
+    vec3 albedo = max(u_baseColor * baseSample.rgb * vChroma * microCav, 0.0);
 
     float coatW = u_matKind == 1 ? 0.34 * (1.0 - smoothstep(0.18, 0.42, rough)) : (u_matKind == 2 ? 0.36 : 0.0);
     float coatR = u_matKind == 2 ? 0.28 : 0.16;
@@ -341,7 +344,7 @@
             + evalLight(u_fillDir, u_fillColor, N, V, albedo, met, rough, F0, coatW * 0.15, coatR, coatTint, specAcc)
             + evalLight(u_rimDir, u_rimColor, N, V, albedo, met, rough, F0, coatW * 0.20, coatR, coatTint, specAcc);
 
-    vec3 bakedAo = clamp(v_color, 0.0, 1.0);
+    vec3 bakedAo = vec3(vMax);
     vec3 aoSoft = mix(vec3(1.0), bakedAo, 0.72);
     float aoScalar = dot(aoSoft, vec3(0.2126, 0.7152, 0.0722)) * microCav;
     float geoAo = mix(0.84, 1.0, smoothstep(0.0, 0.24, v_worldPos.y)) * mix(0.82, 1.0, smoothstep(-0.42, 0.48, N.y));
