@@ -584,9 +584,9 @@ def _build_arms(scene: SceneBuilder) -> Tuple[np.ndarray, np.ndarray, np.ndarray
 
 def _sturdy_foot(name: str) -> MeshPart:
     """Broad armored segmented body-colored insect claw-foot tapering cleanly to a pointed claw on Y = 0.0."""
-    prof = [(0.000, -0.042), (0.034, -0.028), (0.048, 0.004), (0.040, 0.046), (0.020, 0.082), (0.007, 0.098), (0.000, 0.104)]
-    foot = lathe(prof, radial_segs=14, cap_bottom=False, cap_top=False, axis="z", name=name, material="chitin_team").scale(1.08, 0.72, 1.0)
-    foot = foot.deform(lambda p: np.column_stack([p[:, 0], np.maximum(p[:, 1], -0.018), p[:, 2]]))
+    prof = [(0.000, -0.048), (0.042, -0.030), (0.056, 0.004), (0.048, 0.050), (0.025, 0.088), (0.009, 0.104), (0.000, 0.110)]
+    foot = lathe(prof, radial_segs=14, cap_bottom=False, cap_top=False, axis="z", name=name, material="chitin_team").scale(1.10, 0.76, 1.0)
+    foot = foot.deform(lambda p: np.column_stack([p[:, 0], np.maximum(p[:, 1], -0.022), p[:, 2]]))
     return foot.translate(0.0, -float(foot.bounds()[0][1]), 0.0)
 
 
@@ -606,22 +606,22 @@ def _build_flowing_leg(
     leg_tube = curved_tube(
         [p_hip, p_f1, pre_knee, p_knee, post_knee, p_t1, pre_ank, p_ank, p_ft],
         [
-            (0.050, 0.054),
-            (0.053, 0.058),
-            (0.043, 0.047),
-            (0.040, 0.044),
-            (0.037, 0.040),
-            (0.034, 0.037),
-            (0.029, 0.032),
-            (0.028, 0.030),
-            (0.030, 0.032),
+            (0.064, 0.068),
+            (0.068, 0.074),
+            (0.058, 0.063),
+            (0.055, 0.060),
+            (0.052, 0.056),
+            (0.048, 0.052),
+            (0.043, 0.046),
+            (0.041, 0.044),
+            (0.043, 0.045),
         ],
         samples_per_seg=4,
         radial_segs=16,
         cap_rings=3,
         name=f"{node_name}_limb",
         material="chitin_team",
-    )
+    ).deform(lambda p: np.column_stack([p[:, 0], np.maximum(p[:, 1], 0.0), p[:, 2]]))
     yaw_s = side * foot_yaw
     foot_x = float(pts[-1][0])
     foot_z = float(pts[-1][2] + 0.008)

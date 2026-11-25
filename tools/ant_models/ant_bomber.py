@@ -1137,19 +1137,19 @@ def _rebuild_bomber_legs(scene: SceneBuilder, crouch: float) -> None:
     c = float(crouch)
     leg_mat = "chitin_team"
     radii = [
-        (0.0180, 0.0200),
-        (0.0205, 0.0235),
-        (0.0225, 0.0265),
-        (0.0180, 0.0205),
-        (0.0170, 0.0190),
-        (0.0156, 0.0174),
-        (0.0142, 0.0156),
-        (0.0124, 0.0136),
-        (0.0120, 0.0130),
-        (0.0112, 0.0120),
-        (0.0124, 0.0110),
-        (0.0110, 0.0096),
-        (0.0048, 0.0044),
+        (0.0255, 0.0280),
+        (0.0290, 0.0330),
+        (0.0325, 0.0375),
+        (0.0275, 0.0310),
+        (0.0260, 0.0290),
+        (0.0245, 0.0270),
+        (0.0230, 0.0252),
+        (0.0205, 0.0222),
+        (0.0195, 0.0210),
+        (0.0185, 0.0196),
+        (0.0195, 0.0175),
+        (0.0178, 0.0156),
+        (0.0086, 0.0078),
     ]
     lift = np.array([0.0, 1.0, 0.0], dtype=np.float64)
     specs = (
@@ -1172,10 +1172,10 @@ def _rebuild_bomber_legs(scene: SceneBuilder, crouch: float) -> None:
         post_knee = 0.86 * p_knee + 0.14 * p_ankle
         tibia_mid = 0.48 * p_knee + 0.52 * p_ankle + np.array([s * 0.001, 0.001, -0.002])
         pre_ankle = 0.14 * p_knee + 0.86 * p_ankle
-        tarsus_heel = p_foot + 0.0102 * lift - 0.005 * fwd
+        tarsus_heel = p_foot + 0.0150 * lift - 0.006 * fwd
         tarsus_mid = 0.50 * p_ankle + 0.50 * tarsus_heel
-        tarsus_ball = p_foot + 0.0086 * lift + 0.018 * fwd
-        tarsus_tip = p_foot + 0.0036 * lift + 0.044 * fwd
+        tarsus_ball = p_foot + 0.0130 * lift + 0.019 * fwd
+        tarsus_tip = p_foot + 0.0062 * lift + 0.046 * fwd
 
         leg_tube = curved_tube(
             [
