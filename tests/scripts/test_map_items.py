@@ -35,6 +35,7 @@ class MapItemsTests(unittest.TestCase):
             items_foliage,
             items_food,
             items_plants,
+            items_powerups,
             items_structures,
             items_toys,
             items_world,
@@ -51,6 +52,8 @@ class MapItemsTests(unittest.TestCase):
         self.assertTrue(callable(items_food.build_fdburgr1))
         self.assertTrue(callable(items_plants.build_grass1))
         self.assertTrue(callable(items_foliage.build_flower3c))
+        self.assertTrue(callable(items_powerups.build_pu_mason))
+        self.assertTrue(callable(items_powerups.build_pu_swim))
         self.assertTrue(callable(items_structures.build_wallup04))
         self.assertTrue(callable(items_world.build_greenhill))
         # Plants & Grass (35) and Hills & Gear (19) are 100% covered.
@@ -120,7 +123,7 @@ class MapItemsTests(unittest.TestCase):
             for anim_id in (
                 "fdjelo1", "dflower1",
                 "GREENHILL", "REDHILL", "BLUEHILL", "BLACKHILL",
-                "redbomb", "greenbomb", "blackbomb", "bluebomb", "wallup04",
+                "pu_bomb", "redbomb", "greenbomb", "blackbomb", "bluebomb", "wallup04",
             ):
                 self.assertIn("Idle", by_id[anim_id]["animations"], f"{anim_id} missing Idle animation")
 
