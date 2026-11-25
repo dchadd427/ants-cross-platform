@@ -234,45 +234,43 @@
       float rad = baseSz * R * mix(0.55, 2.2, age);
       wPos = wOrigin + off + (u_camRight * a_corner.x + u_camUp * a_corner.y) * rad;
     } else if (kind < 1.5) {
-      // Blazing sizzling incandescent white-hot molten fuse core + flickering orange plasma corona
-      float pulse = 0.86 + 0.24 * sin(u_time * 28.0 + rnd * 47.0) + 0.12 * cos(u_time * 43.0 + rnd * 13.0);
-      vec3 jitter = a_dir.xyz * (R * 0.22 * sin(u_time * 31.0 + rnd * 29.0));
+      // Compact sizzling incandescent fuse ember core + gentle golden corona
+      float pulse = 0.88 + 0.18 * sin(u_time * 26.0 + rnd * 47.0) + 0.08 * cos(u_time * 41.0 + rnd * 13.0);
+      vec3 jitter = a_dir.xyz * (R * 0.12 * sin(u_time * 31.0 + rnd * 29.0));
       float rad = baseSz * R * pulse;
-      float spin = u_time * (rnd > 0.5 ? 5.5 : -4.8) + rnd * 6.2831853;
+      float spin = u_time * (rnd > 0.5 ? 4.5 : -4.0) + rnd * 6.2831853;
       float cs = cos(spin), sn = sin(spin);
       vec2 rc = vec2(a_corner.x * cs - a_corner.y * sn, a_corner.x * sn + a_corner.y * cs);
       wPos = wOrigin + jitter + (u_camRight * rc.x + u_camUp * rc.y) * rad;
     } else if (kind < 2.5) {
-      // Velocity-aligned crackling ballistic golden spark streaks spraying outward & arcing with real gravity!
+      // Delicate velocity-aligned crackling golden spark streaks arcing naturally with gravity
       float burstId = floor(u_time * speed + a_dir.w);
       float jAng = fract(sin(burstId * 91.7 + rnd * 311.7) * 43758.5453) * 6.2831853;
-      vec3 ejDir = normalize(a_dir.xyz + vec3(cos(jAng) * 0.28, 0.22 + 0.18 * sin(jAng * 2.3), sin(jAng) * 0.28));
-      float v0 = R * (4.8 + 4.4 * fract(rnd * 13.7));
-      float grav = R * 6.8;
-      // Air drag slows sparks slightly while gravity bends them into real parabolic firework arcs!
-      float tDrag = (1.0 - exp(-age * 2.2)) / 2.2;
+      vec3 ejDir = normalize(a_dir.xyz + vec3(cos(jAng) * 0.30, 0.24 + 0.18 * sin(jAng * 2.3), sin(jAng) * 0.30));
+      float v0 = R * (2.2 + 2.3 * fract(rnd * 13.7));
+      float grav = R * 4.6;
+      float tDrag = (1.0 - exp(-age * 2.4)) / 2.4;
       vec3 disp = ejDir * (v0 * tDrag) + vec3(0.0, -0.5 * grav * age * age, 0.0);
-      vec3 vel = ejDir * (v0 * exp(-age * 2.2)) + vec3(0.0, -grav * age, 0.0);
-      // Project 3D velocity onto screen billboard plane so every streak stretches cleanly along its exact flight path!
+      vec3 vel = ejDir * (v0 * exp(-age * 2.4)) + vec3(0.0, -grav * age, 0.0);
       vec2 v2 = vec2(dot(vel, u_camRight), dot(vel, u_camUp));
       float vLen = length(v2);
       vec2 dir2 = vLen > 1e-4 ? (v2 / vLen) : vec2(0.0, 1.0);
       vec2 perp2 = vec2(-dir2.y, dir2.x);
-      float life = smoothstep(0.0, 0.07, age) * (1.0 - smoothstep(0.55, 1.0, age));
-      float streakLen = baseSz * R * mix(1.4, 3.8, clamp(vLen / max(R * 5.0, 0.01), 0.0, 1.0)) * life;
-      float streakW = baseSz * R * 0.30 * mix(1.0, 0.45, age);
+      float life = smoothstep(0.0, 0.08, age) * (1.0 - smoothstep(0.48, 1.0, age));
+      float streakLen = baseSz * R * mix(0.85, 2.25, clamp(vLen / max(R * 3.5, 0.01), 0.0, 1.0)) * life;
+      float streakW = baseSz * R * 0.24 * mix(1.0, 0.45, age);
       vec2 local2 = dir2 * (a_corner.y * streakLen) + perp2 * (a_corner.x * streakW);
       wPos = wOrigin + disp + u_camRight * local2.x + u_camUp * local2.y;
     } else {
-      // Micro-crackle star flares popping briefly mid-flight off outer spark tips!
+      // Subtle occasional micro-crackle star pops off outer spark tips
       float burstId = floor(u_time * speed + a_dir.w);
       float jAng = fract(sin(burstId * 67.3 + rnd * 197.1) * 43758.5453) * 6.2831853;
-      vec3 ejDir = normalize(a_dir.xyz + vec3(cos(jAng) * 0.35, 0.25, sin(jAng) * 0.35));
-      float dist = R * (1.4 + 2.6 * fract(rnd * 7.1)) * pow(age, 0.72);
-      vec3 disp = ejDir * dist + vec3(0.0, -R * 1.4 * age * age, 0.0);
-      float pop = smoothstep(0.0, 0.14, age) * (1.0 - smoothstep(0.28, 0.85, age));
-      float rad = baseSz * R * pop * (0.8 + 0.5 * sin(u_time * 40.0 + rnd * 61.0));
-      float spin = rnd * 6.2831853 + age * 2.4;
+      vec3 ejDir = normalize(a_dir.xyz + vec3(cos(jAng) * 0.35, 0.24, sin(jAng) * 0.35));
+      float dist = R * (0.85 + 1.45 * fract(rnd * 7.1)) * pow(age, 0.72);
+      vec3 disp = ejDir * dist + vec3(0.0, -R * 1.1 * age * age, 0.0);
+      float pop = smoothstep(0.0, 0.14, age) * (1.0 - smoothstep(0.26, 0.78, age));
+      float rad = baseSz * R * pop * (0.75 + 0.40 * sin(u_time * 36.0 + rnd * 61.0));
+      float spin = rnd * 6.2831853 + age * 2.2;
       float cs = cos(spin), sn = sin(spin);
       vec2 rc = vec2(a_corner.x * cs - a_corner.y * sn, a_corner.x * sn + a_corner.y * cs);
       wPos = wOrigin + disp + (u_camRight * rc.x + u_camUp * rc.y) * rad;
@@ -308,51 +306,51 @@
       if (u_silhouette != 0) discard;
       float r = length(v_uv);
       if (r > 1.0) discard;
-      float puff = smoothstep(1.0, 0.12, r);
+      float puff = smoothstep(1.0, 0.14, r);
       float fade = smoothstep(0.0, 0.22, age) * pow(1.0 - smoothstep(0.30, 1.0, age), 1.5);
-      float a = puff * fade * 0.20;
+      float a = puff * fade * 0.14;
       if (a < 0.005) discard;
       fragColor = vec4(mix(vec3(0.42, 0.36, 0.30), vec3(0.20, 0.22, 0.26), age), a);
       return;
     }
     if (kind < 1.5) {
-      // Intense molten fuse tip core with organic 6-point shimmering sparkler rays
+      // Compact glowing molten ember core with subtle delicate shimmer rays
       float r = length(v_uv);
       if (r > 1.0) discard;
       float ang = atan(v_uv.y, v_uv.x);
-      float rays = pow(abs(cos(ang * 3.0 + rnd * 6.283)), 10.0) * 0.45 + pow(abs(cos(ang * 5.0 - t * 6.0)), 14.0) * 0.30;
-      float core = exp(-r * r * 11.0);
-      float corona = exp(-r * r * 2.8) * (0.62 + rays);
-      float intensity = clamp(core * 1.35 + corona, 0.0, 1.0);
+      float rays = pow(abs(cos(ang * 3.0 + rnd * 6.283)), 12.0) * 0.26 + pow(abs(cos(ang * 5.0 - t * 5.0)), 16.0) * 0.18;
+      float core = exp(-r * r * 14.0);
+      float corona = exp(-r * r * 4.2) * (0.44 + rays);
+      float intensity = clamp(core * 1.05 + corona, 0.0, 1.0);
       if (intensity < 0.02) discard;
-      if (u_silhouette != 0) { if (intensity < 0.32) discard; fragColor = vec4(u_silhouetteColor, 1.0); return; }
-      float heat = clamp(core * 0.95 + corona * 0.58, 0.0, 1.0);
-      fragColor = vec4(sparkColor(heat), clamp(intensity * 0.94, 0.0, 0.98));
+      if (u_silhouette != 0) { if (intensity < 0.35) discard; fragColor = vec4(u_silhouetteColor, 1.0); return; }
+      float heat = clamp(core * 0.90 + corona * 0.45, 0.0, 1.0);
+      fragColor = vec4(sparkColor(heat), clamp(intensity * 0.66, 0.0, 0.78));
       return;
     }
     if (kind < 2.5) {
-      // Razor-bright tapered molten spark streak (white-hot head -> golden-orange fading tail!)
-      float headDist = length(vec2(v_uv.x * 1.15, (v_uv.y - 0.55) * 1.7));
+      // Crisp tapered golden spark streak (subtle & refined, never blinding!)
+      float headDist = length(vec2(v_uv.x * 1.20, (v_uv.y - 0.55) * 1.8));
       float tailProfile = smoothstep(-1.0, 0.65, v_uv.y) * smoothstep(1.0, 0.55, v_uv.y);
-      float widthMask = exp(-v_uv.x * v_uv.x * mix(7.5, 3.2, clamp(v_uv.y * 0.5 + 0.5, 0.0, 1.0)));
+      float widthMask = exp(-v_uv.x * v_uv.x * mix(8.5, 3.8, clamp(v_uv.y * 0.5 + 0.5, 0.0, 1.0)));
       float body = widthMask * tailProfile;
-      float head = exp(-headDist * headDist * 5.5);
-      float flicker = 0.65 + 0.35 * sin(t * 36.0 + rnd * 89.0);
-      float life = smoothstep(0.0, 0.06, age) * pow(1.0 - smoothstep(0.40, 1.0, age), 1.35);
-      float a = clamp((head * 1.15 + body * 0.82) * life * flicker, 0.0, 0.98);
+      float head = exp(-headDist * headDist * 6.5);
+      float flicker = 0.58 + 0.42 * sin(t * 32.0 + rnd * 89.0);
+      float life = smoothstep(0.0, 0.07, age) * pow(1.0 - smoothstep(0.36, 1.0, age), 1.45);
+      float a = clamp((head * 0.92 + body * 0.68) * life * flicker, 0.0, 0.86);
       if (a < 0.015) discard;
       if (u_silhouette != 0) { if (a < 0.25) discard; fragColor = vec4(u_silhouetteColor, 1.0); return; }
-      float heat = clamp((1.0 - age * 0.72) * 0.65 + head * 0.50 + max(0.0, v_uv.y) * 0.18, 0.0, 1.0);
+      float heat = clamp((1.0 - age * 0.78) * 0.58 + head * 0.42 + max(0.0, v_uv.y) * 0.14, 0.0, 1.0);
       fragColor = vec4(sparkColor(heat), a);
       return;
     }
-    // Starburst crackle flash!
+    // Subtle starburst crackle flash
     float r = length(v_uv);
     if (r > 1.0) discard;
-    float star = max(exp(-abs(v_uv.x) * 9.0) * exp(-abs(v_uv.y) * 2.2), exp(-abs(v_uv.y) * 9.0) * exp(-abs(v_uv.x) * 2.2));
-    float dotC = exp(-r * r * 12.0);
-    float fade = smoothstep(0.0, 0.12, age) * (1.0 - smoothstep(0.25, 0.85, age));
-    float a = clamp((dotC + star * 0.85) * fade, 0.0, 0.96);
+    float star = max(exp(-abs(v_uv.x) * 10.0) * exp(-abs(v_uv.y) * 2.6), exp(-abs(v_uv.y) * 10.0) * exp(-abs(v_uv.x) * 2.6));
+    float dotC = exp(-r * r * 14.0);
+    float fade = smoothstep(0.0, 0.12, age) * (1.0 - smoothstep(0.24, 0.80, age));
+    float a = clamp((dotC + star * 0.68) * fade * 0.80, 0.0, 0.82);
     if (a < 0.02) discard;
     if (u_silhouette != 0) { if (a < 0.25) discard; fragColor = vec4(u_silhouetteColor, 1.0); return; }
     fragColor = vec4(sparkColor(clamp(0.55 + dotC * 0.45 - age * 0.35, 0.0, 1.0)), a);
@@ -392,10 +390,10 @@
       }
       return { offset: startIndex * 2, count: idxArr.length - startIndex };
     }
-    const smokeRange = addGroup(22, 0.0, 0.55, 0.90, 0.72, 1.25, 0.65);
-    const coreRange = addGroup(12, 1.0, 1.40, 2.20, 1.15, 2.05, 0.15);
-    const streakRange = addGroup(88, 2.0, 1.35, 2.65, 0.42, 0.82, 0.35);
-    const burstRange = addGroup(26, 3.0, 1.65, 2.95, 0.58, 1.05, 0.30);
+    const smokeRange = addGroup(14, 0.0, 0.52, 0.86, 0.58, 0.98, 0.65);
+    const coreRange = addGroup(6, 1.0, 1.30, 2.00, 0.44, 0.76, 0.15);
+    const streakRange = addGroup(34, 2.0, 1.25, 2.35, 0.24, 0.44, 0.35);
+    const burstRange = addGroup(10, 3.0, 1.50, 2.60, 0.28, 0.50, 0.30);
     const vao = gl.createVertexArray();
     gl.bindVertexArray(vao);
     const bufs = [

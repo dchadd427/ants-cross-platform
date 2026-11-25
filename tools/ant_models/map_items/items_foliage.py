@@ -28,6 +28,7 @@ if np is not None:
             SceneBuilder,
             curved_tube,
             ellipsoid,
+            recompute_smooth_normals,
             rounded_box,
             sphere,
             superellipsoid,
@@ -45,6 +46,7 @@ if np is not None:
             SceneBuilder,
             curved_tube,
             ellipsoid,
+            recompute_smooth_normals,
             rounded_box,
             sphere,
             superellipsoid,
@@ -192,57 +194,399 @@ def build_leaf4() -> SceneBuilder:
     return _build_oak_leaf("item_leaf4", yaw_deg=176.0, width_scale=0.68)
 
 
+def _sculpt_bark_branch(
+    pts: List[Tuple[float, float, float]],
+    rads: List[float],
+    *,
+    name: str,
+    material: str = "item_twig_bark",
+    radial_segs: int = 22,
+    samples_per_seg: int = 7,
+    seed: float = 0.0,
+    jagged_start: float = 0.0,
+    jagged_end: float = 0.0,
+    knuckles: Tuple[Tuple[float, float, float], ...] = (),
+    base_rgb: Tuple[float, float, float] = (0.98, 0.94, 0.88),
+    green_tip_start: float = 2.0,
+    cap_start: bool = False,
+    cap_end: bool = False,
+) -> MeshPart:
+    """Build a realistic gnarled fallen woodland branch with 3D fluted bark ridges, node knuckles & jagged snapped cuffs."""
+    raw = curved_tube(
+        pts,
+        rads,
+        samples_per_seg=samples_per_seg,
+        radial_segs=radial_segs,
+        cap_start=cap_start,
+        cap_end=cap_end,
+        cap_rings=2,
+        name=name,
+        material=material,
+    )
+    pos = raw.positions.astype(np.float64).copy()
+    uvs = raw.uvs.astype(np.float32).copy()
+    # Scale cylindrical UVs so the seamless `bark_wood` fissures, bark plates & lenticels wrap crisply around slender twigs.
+    uvs[:, 0] *= 3.4
+    uvs[:, 1] *= 1.35
+
+    n_verts = len(pos)
+    ridge_h = np.zeros(n_verts, dtype=np.float64)
+    t_param = np.zeros(n_verts, dtype=np.float64)
+
+    ring_start = 1 if cap_start else 0
+    ring_end = n_verts - (1 if cap_end else 0)
+    n_ring_verts = ring_end - ring_start
+    if n_ring_verts > 0 and n_ring_verts % radial_segs == 0:
+        n_rings = n_ring_verts // radial_segs
+        rings = pos[ring_start:ring_end].reshape(n_rings, radial_segs, 3)
+        centers = rings.mean(axis=1)
+        tangents = np.zeros_like(centers)
+        tangents[0] = centers[1] - centers[0]
+        tangents[-1] = centers[-1] - centers[-2]
+        if n_rings > 2:
+            tangents[1:-1] = centers[2:] - centers[:-2]
+        tangents /= np.maximum(1e-6, np.linalg.norm(tangents, axis=1, keepdims=True))
+
+        thetas = np.linspace(0.0, 2.0 * math.pi, radial_segs, endpoint=False)[None, :]
+        t_vals = np.linspace(0.0, 1.0, n_rings)[:, None]
+        # Slowly twisting natural wood grain & branching bark flutes
+        phi = thetas + 2.1 * t_vals + 0.52 * np.sin(t_vals * 10.0 + seed)
+        flute_a = 0.14 * np.sin(phi * 5.0 + 0.85 * np.cos(t_vals * 13.0 + seed))
+        flute_b = 0.085 * (np.abs(np.cos(phi * 9.0 - t_vals * 7.5 + seed * 1.7)) * 2.0 - 1.0)
+        rough_c = 0.045 * np.sin(phi * 14.0 + t_vals * 34.0 + seed * 2.3)
+        asymm = 0.10 * np.cos(2.0 * phi + seed * 0.8) + 0.055 * np.sin(3.0 * phi - t_vals * 6.0)
+        # Organic longitudinal uneven thickness (real branches swell subtly at growth segments, never lathe-uniform!)
+        uneven = 0.07 * np.sin(t_vals * 19.0 + seed * 1.3) + 0.04 * np.cos(t_vals * 33.0 - seed)
+        swell = np.zeros_like(t_vals)
+        for kt, ka, kw in knuckles:
+            swell += ka * np.exp(-(((t_vals - kt) / max(0.015, kw)) ** 2))
+
+        rad_scale = 1.0 + flute_a + flute_b + rough_c + asymm + uneven + swell
+        radial_vecs = rings - centers[:, None, :]
+        rings = centers[:, None, :] + radial_vecs * rad_scale[:, :, None]
+
+        # Jagged broken bark collar teeth at open snapped ends (replaces smooth tube cuts!)
+        if not cap_start and jagged_start > 0.0:
+            teeth0 = (0.35 + 0.65 * np.sin(thetas * 3.0 + seed) * np.cos(thetas * 5.0 - seed * 0.7)) * jagged_start
+            rings[0] -= tangents[0][None, :] * teeth0[0, :, None]
+            if n_rings > 1:
+                rings[1] -= tangents[1][None, :] * (0.42 * teeth0[0, :, None])
+        if not cap_end and jagged_end > 0.0:
+            teeth1 = (0.35 + 0.65 * np.cos(thetas * 3.0 - seed * 1.1) * np.sin(thetas * 5.0 + seed)) * jagged_end
+            rings[-1] += tangents[-1][None, :] * teeth1[0, :, None]
+            if n_rings > 1:
+                rings[-2] += tangents[-2][None, :] * (0.42 * teeth1[0, :, None])
+
+        pos[ring_start:ring_end] = rings.reshape(n_ring_verts, 3)
+        ridge_h[ring_start:ring_end] = (flute_a + flute_b + 0.5 * rough_c).reshape(n_ring_verts)
+        t_param[ring_start:ring_end] = np.broadcast_to(t_vals, (n_rings, radial_segs)).reshape(n_ring_verts)
+        if cap_start:
+            t_param[0] = 0.0
+        if cap_end:
+            t_param[-1] = 1.0
+    else:
+        # Fallback organic relief for non-ring geometry
+        pos += 0.0028 * np.sin(pos * 64.0 + seed) * np.cos(np.roll(pos, 1, axis=1) * 48.0)
+
+    pos32 = pos.astype(np.float32)
+    nrms = recompute_smooth_normals(pos32, raw.indices)
+    branch = MeshPart(name, material, pos32, nrms, raw.indices, uvs=uvs)
+
+    def _bark_tint(p: np.ndarray, nrm: np.ndarray) -> np.ndarray:
+        up = np.clip(0.54 + 0.46 * nrm[:, 1], 0.0, 1.0)
+        # Deep umber shadow inside sculpted 3D bark fissures, warm sunlit wood crest on raised ridges
+        crevice = np.clip(0.5 + ridge_h * 2.5, 0.0, 1.0)
+        mottle = 0.07 * np.sin(p[:, 0] * 26.0 + p[:, 2] * 22.0 + seed) * np.cos(p[:, 2] * 38.0 - p[:, 0] * 18.0)
+        shade = (0.58 + 0.28 * crevice + 0.22 * up + mottle)[:, None]
+        col = np.asarray(base_rgb, dtype=np.float64)[None, :] * shade
+        # Subtle warm rubbed inner-wood sheen on upper crests + cool dark umber in deepest fissures
+        col[:, 0] *= 0.94 + 0.14 * crevice
+        col[:, 1] *= 0.90 + 0.14 * crevice
+        col[:, 2] *= 0.84 + 0.14 * crevice
+        if green_tip_start < 1.0:
+            g_blend = np.clip((t_param - green_tip_start) / max(0.05, 1.0 - green_tip_start), 0.0, 1.0)[:, None]
+            green_bark = np.array([[0.38, 0.96, 0.32]], dtype=np.float64) * (0.78 + 0.26 * up[:, None])
+            col = col * (1.0 - 0.92 * g_blend) + green_bark * (0.92 * g_blend)
+        return np.clip(col, 0.18, 1.0)
+
+    return tint_part(branch, _bark_tint)
+
+
+def _add_snapped_wood_end(
+    parts: List[MeshPart],
+    prefix: str,
+    end_pt: Tuple[float, float, float],
+    out_dir: Tuple[float, float, float],
+    radius: float,
+    *,
+    seed: float = 0.0,
+) -> None:
+    """Cap a broken twig end with an oblique snapped pale-heartwood fracture core and sharp wood splinters."""
+    p0 = np.asarray(end_pt, dtype=np.float64)
+    d = np.asarray(out_dir, dtype=np.float64)
+    d /= max(1e-6, float(np.linalg.norm(d)))
+    up = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+    side = np.cross(d, up)
+    if float(np.linalg.norm(side)) < 1e-4:
+        side = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+    else:
+        side /= float(np.linalg.norm(side))
+    ortho = np.cross(side, d)
+
+    # Recessed diagonal sheared pale-tan heartwood core inside the jagged bark cuff
+    c_in = p0 - d * (radius * 0.95)
+    c_mid = p0 + d * (radius * 0.12)
+    c_tip = p0 + d * (radius * 0.72) + side * (radius * 0.18 * math.sin(seed + 1.0)) + ortho * (radius * 0.14)
+    core = tint_part(
+        curved_tube(
+            [tuple(c_in), tuple(c_mid), tuple(c_tip)],
+            [radius * 0.84, radius * 0.76, radius * 0.34],
+            samples_per_seg=3,
+            radial_segs=12,
+            cap_rings=2,
+            name=f"{prefix}_heartwood",
+            material="item_wood_heart",
+        ).deform(lambda p: p + (radius * 0.10) * np.sin(p * 110.0 + seed)),
+        lambda pos, nrm: np.clip(
+            np.column_stack([
+                0.96 + 0.04 * nrm[:, 1],
+                0.88 + 0.06 * nrm[:, 1],
+                0.68 + 0.08 * nrm[:, 1],
+            ]),
+            0.58,
+            1.0,
+        ),
+    )
+    parts.append(core)
+
+    # Three sharp staggered wood splinters breaking off diagonally from the heartwood core!
+    for k, (ang, ln_mul, r_mul) in enumerate(((0.4 + seed, 1.55, 0.32), (2.5 + seed, 1.25, 0.26), (4.6 + seed, 1.05, 0.24))):
+        off = side * (math.cos(ang) * radius * 0.42) + ortho * (math.sin(ang) * radius * 0.36)
+        s0 = p0 - d * (radius * 0.35) + off
+        s1 = p0 + d * (radius * 0.55 * ln_mul) + off * 0.85
+        s2 = p0 + d * (radius * ln_mul) + off * 0.45
+        splint = tint_part(
+            curved_tube(
+                [tuple(s0), tuple(s1), tuple(s2)],
+                [radius * r_mul, radius * r_mul * 0.62, radius * 0.08],
+                samples_per_seg=2,
+                radial_segs=6,
+                cap_rings=2,
+                name=f"{prefix}_splinter_{k}",
+                material="item_wood_heart",
+            ),
+            lambda pos, _n: np.column_stack([
+                np.full(len(pos), 0.98),
+                np.full(len(pos), 0.90),
+                np.full(len(pos), 0.72),
+            ]),
+        )
+        parts.append(splint)
+
+
+def _make_bark_knot(
+    name: str,
+    center: Tuple[float, float, float],
+    out_dir: Tuple[float, float, float],
+    radius: float,
+    length: float,
+    *,
+    material: str = "item_twig_bark",
+) -> MeshPart:
+    """Tiny weathered dormant bud scar / broken twig knot flush along a branch bend."""
+    p0 = np.asarray(center, dtype=np.float64)
+    d = np.asarray(out_dir, dtype=np.float64)
+    d /= max(1e-6, float(np.linalg.norm(d)))
+    return tint_part(
+        curved_tube(
+            [tuple(p0 - d * (length * 0.30)), tuple(p0 + d * (length * 0.45)), tuple(p0 + d * length)],
+            [radius * 1.15, radius * 0.82, radius * 0.48],
+            samples_per_seg=2,
+            radial_segs=9,
+            cap_rings=2,
+            name=name,
+            material=material,
+        ).deform(lambda p: p + 0.002 * np.sin(p * 120.0)),
+        lambda pos, nrm: np.clip(
+            np.column_stack([
+                0.66 + 0.18 * np.clip(nrm[:, 1] + 0.4, 0.0, 1.0),
+                0.56 + 0.16 * np.clip(nrm[:, 1] + 0.4, 0.0, 1.0),
+                0.46 + 0.14 * np.clip(nrm[:, 1] + 0.4, 0.0, 1.0),
+            ]),
+            0.34,
+            0.92,
+        ),
+    )
+
+
 def build_stick1() -> SceneBuilder:
-    """Crooked peeled brown woodland twig curving diagonally (`327:stick1`)."""
+    """Weathered sinuous fallen woodland twig with gnarled bark ridges, knots & snapped splintered ends (`327:stick1`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_stick1")
+    # Exact 1:1 sinuous double-S curve traced from `stick1_4x.png` (vertical bottom-left shank -> graceful S-bend -> diagonal upper-right tip).
     pts = [
-        (-0.22, 0.024, +0.36),
-        (-0.26, 0.032, +0.16),
-        (-0.14, 0.042, +0.02),
-        (-0.02, 0.038, -0.10),
-        (+0.10, 0.048, -0.22),
-        (+0.26, 0.034, -0.36),
+        (-0.228, 0.024, +0.440),
+        (-0.240, 0.029, +0.285),
+        (-0.232, 0.036, +0.145),
+        (-0.155, 0.042, +0.048),
+        (-0.048, 0.045, -0.022),
+        (-0.005, 0.048, -0.145),
+        (+0.072, 0.046, -0.258),
+        (+0.178, 0.039, -0.340),
+        (+0.258, 0.031, -0.435),
     ]
-    rads = [0.024, 0.028, 0.025, 0.026, 0.022, 0.016]
-    twig = gradient_y_tint(
-        curved_tube(pts, rads, samples_per_seg=5, radial_segs=14, cap_rings=3, name="twig_main", material="item_wood_stick")
-        .deform(lambda p: p + 0.004 * np.sin(p * 48.0)),
-        (0.62, 0.48, 0.36),
-        (1.04, 0.92, 0.78),
-        noise_amp=0.06,
+    rads = [0.022, 0.024, 0.027, 0.025, 0.026, 0.025, 0.028, 0.024, 0.021]
+    twig = _sculpt_bark_branch(
+        pts,
+        rads,
+        name="twig_main",
+        material="item_twig_peeled",
+        radial_segs=22,
+        samples_per_seg=6,
+        seed=1.4,
+        jagged_start=0.024,
+        jagged_end=0.022,
+        knuckles=((0.26, 0.14, 0.045), (0.54, 0.16, 0.042), (0.75, 0.18, 0.045)),
+        base_rgb=(1.08, 1.01, 0.90),
     )
-    # Little broken bark nub along mid-bend
-    nub = curved_tube([(-0.14, 0.042, +0.02), (-0.175, 0.052, 0.00), (-0.21, 0.062, -0.02)], [0.015, 0.012, 0.008], samples_per_seg=3, radial_segs=8, cap_rings=2, name="twig_nub", material="item_twig_bark")
-    sc.add("stick", [twig, nub])
+    parts: List[MeshPart] = [twig]
+
+    # Jagged snapped pale-heartwood fracture tips at BOTH bottom-left & top-right ends!
+    _add_snapped_wood_end(parts, "stick1_bot", pts[0], (-0.08, -0.02, +1.00), rads[0], seed=0.6)
+    _add_snapped_wood_end(parts, "stick1_top", pts[-1], (+0.64, +0.18, -0.74), rads[-1] * 1.12, seed=2.2)
+
+    # Subtle weathered bark knots / dormant bud scars clinging organically at the natural wood bends (no big side spike!)
+    parts.append(_make_bark_knot("twig_knot_a", (-0.162, 0.044, +0.052), (-0.70, 0.55, -0.45), 0.011, 0.022, material="item_twig_bark"))
+    parts.append(_make_bark_knot("twig_knot_b", (+0.076, 0.050, -0.255), (-0.45, 0.60, -0.65), 0.012, 0.024, material="item_twig_bark"))
+    parts.append(_make_bark_knot("twig_knot_c", (-0.012, 0.050, -0.140), (+0.65, 0.52, +0.55), 0.010, 0.018, material="item_twig_bark"))
+
+    sc.add("stick", parts)
     return _finalize_item(sc, target_span=0.96)
 
 
 def build_stick2a() -> SceneBuilder:
-    """Horizontal woody brown branch twig with two hanging green pointed leaves (`328:stick2a`)."""
+    """Slender gnarled Y-forked woodland branch with snapped wood ends, mossy green shoot & twin tip leaves (`328:stick2a`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_stick2a")
-    branch = curved_tube(
-        [(-0.36, 0.052, -0.16), (-0.10, 0.062, -0.14), (+0.16, 0.056, -0.12), (+0.36, 0.044, -0.10)],
-        [0.028, 0.026, 0.023, 0.018],
-        samples_per_seg=4,
-        radial_segs=14,
-        cap_rings=3,
-        name="branch_wood",
+
+    # 1. Main slender undulating fallen branch running left -> Y-fork -> tapered mossy-green far-right shoot (`stick2a_4x.png` 1:1!).
+    main_pts = [
+        (-0.470, 0.028, +0.040),
+        (-0.335, 0.034, +0.036),
+        (-0.195, 0.042, +0.008),
+        (-0.060, 0.046, -0.004),
+        (+0.075, 0.044, +0.008),
+        (+0.180, 0.042, +0.018),
+        (+0.310, 0.037, +0.040),
+        (+0.420, 0.032, +0.064),
+        (+0.478, 0.028, +0.078),
+    ]
+    main_rads = [0.017, 0.020, 0.022, 0.021, 0.023, 0.018, 0.014, 0.010, 0.006]
+    main_branch = _sculpt_bark_branch(
+        main_pts,
+        main_rads,
+        name="branch_main",
         material="item_twig_bark",
+        radial_segs=20,
+        samples_per_seg=6,
+        seed=3.1,
+        jagged_start=0.022,
+        jagged_end=0.0,
+        knuckles=((0.34, 0.14, 0.045), (0.58, 0.22, 0.055), (0.82, 0.14, 0.040)),
+        base_rgb=(1.02, 0.96, 0.88),
+        green_tip_start=0.56,
+        cap_start=False,
+        cap_end=True,
+    )
+    parts: List[MeshPart] = [main_branch]
+
+    # Fresh mossy-green living shoot overlay creeping organically along the slender right-hand twig tip (`stick2a_4x.png`!)
+    green_shoot = tint_part(
+        curved_tube(
+            [(+0.205, 0.042, +0.022), (+0.315, 0.039, +0.041), (+0.425, 0.035, +0.065), (+0.492, 0.030, +0.082)],
+            [0.011, 0.0135, 0.0105, 0.0055],
+            samples_per_seg=4,
+            radial_segs=12,
+            cap_rings=2,
+            name="branch_green_shoot",
+            material="item_stem_green",
+        ).deform(lambda p: p + 0.0018 * np.sin(p * 88.0)),
+        lambda pos, nrm: np.clip(
+            np.column_stack([
+                0.56 + 0.24 * np.clip(nrm[:, 1] + 0.4, 0.0, 1.0),
+                0.86 + 0.14 * np.clip(nrm[:, 1] + 0.4, 0.0, 1.0),
+                0.42 + 0.16 * np.clip(nrm[:, 1] + 0.4, 0.0, 1.0),
+            ]),
+            0.35,
+            1.0,
+        ),
+    )
+    parts.append(green_shoot)
+
+    # 2. Iconic upper-right broken Y-fork side branch spur (`stick2a_4x.png`!) with gnarled crotch collar & snapped wood tip.
+    fork_pts = [
+        (+0.060, 0.044, +0.006),
+        (+0.118, 0.047, -0.022),
+        (+0.195, 0.046, -0.076),
+        (+0.278, 0.040, -0.132),
+    ]
+    fork_rads = [0.021, 0.019, 0.017, 0.015]
+    fork_branch = _sculpt_bark_branch(
+        fork_pts,
+        fork_rads,
+        name="branch_fork",
+        material="item_twig_bark",
+        radial_segs=18,
+        samples_per_seg=5,
+        seed=5.2,
+        jagged_start=0.0,
+        jagged_end=0.020,
+        knuckles=((0.22, 0.16, 0.09),),
+        base_rgb=(0.96, 0.90, 0.82),
+        cap_start=False,
+        cap_end=False,
+    )
+    parts.append(fork_branch)
+
+    # Jagged snapped pale-heartwood fracture tips on BOTH far-left main stem AND upper-right broken fork!
+    _add_snapped_wood_end(parts, "stick2_left", main_pts[0], (-1.00, -0.06, +0.05), main_rads[0], seed=1.1)
+    _add_snapped_wood_end(parts, "stick2_fork", fork_pts[-1], (+0.82, -0.06, -0.56), fork_rads[-1], seed=3.7)
+
+    # Tiny dormant bark knots along the weathered branch
+    parts.append(_make_bark_knot("branch_knot_a", (-0.245, 0.040, +0.020), (-0.30, 0.58, -0.75), 0.009, 0.018))
+    parts.append(_make_bark_knot("branch_knot_b", (-0.035, 0.048, -0.002), (+0.25, 0.65, +0.72), 0.008, 0.016))
+
+    # 3. Delicate short green leaf petioles & twin slender drooping pointed green leaves right at the far-right tip (`stick2a_4x.png`!).
+    pet_a = curved_tube(
+        [(+0.340, 0.036, +0.045), (+0.354, 0.035, +0.064), (+0.365, 0.032, +0.082)],
+        [0.006, 0.0045, 0.0035],
+        samples_per_seg=2,
+        radial_segs=8,
+        name="branch_petiole_a",
+        material="item_stem_green",
+    )
+    pet_b = curved_tube(
+        [(+0.388, 0.034, +0.056), (+0.405, 0.035, +0.072), (+0.422, 0.034, +0.088)],
+        [0.0055, 0.004, 0.003],
+        samples_per_seg=2,
+        radial_segs=8,
+        name="branch_petiole_b",
+        material="item_stem_green",
     )
     leaf_a = (
-        _sculpt_pointed_blade("branch_leaf_a", length=0.34, width=0.14, material="item_leaf_rich", arch=0.026, vein_glow=0.30)
-        .rotate_xyz(rx=0.12, ry=0.38)
-        .translate(-0.14, 0.046, -0.13)
+        _sculpt_pointed_blade("branch_leaf_a", length=0.200, width=0.084, material="item_leaf_rich", arch=0.018, vein_glow=0.28)
+        .rotate_xyz(rx=0.12, ry=0.34, rz=-0.06)
+        .translate(+0.365, 0.032, +0.064)
     )
     leaf_b = (
-        _sculpt_pointed_blade("branch_leaf_b", length=0.42, width=0.18, material="item_leaf_bright", arch=0.032, vein_glow=0.35)
-        .rotate_xyz(rx=0.10, ry=0.72)
-        .translate(+0.02, 0.048, -0.12)
+        _sculpt_pointed_blade("branch_leaf_b", length=0.232, width=0.100, material="item_leaf_bright", arch=0.022, vein_glow=0.34)
+        .rotate_xyz(rx=0.10, ry=0.66, rz=-0.08)
+        .translate(+0.405, 0.037, +0.070)
     )
-    sc.add("stick_leafy", [branch, leaf_a, leaf_b])
-    return _finalize_item(sc, target_span=0.96)
+    parts.extend([pet_a, pet_b, leaf_a, leaf_b])
+
+    sc.add("stick_leafy", parts)
+    return _finalize_item(sc, target_span=0.98)
 
 
 def build_plant1() -> SceneBuilder:

@@ -115,7 +115,7 @@ def build_pu_comb() -> SceneBuilder:
 
         # Dark mahogany leather under-backing peeking slightly at the X-notches (`pu_comb_4x`!).
         backing = (
-            rounded_box(0.84, 0.028, 0.242, bevel=0.010, segs=3, name=f"comb_leather_{tag}", material="item_twig_bark")
+            rounded_box(0.84, 0.028, 0.242, bevel=0.010, segs=3, name=f"comb_leather_{tag}", material="item_leather_brown")
             .deform(_arch_belt)
             .translate(0.0, 0.026, 0.0)
         )
@@ -459,7 +459,7 @@ def build_pu_bomb() -> SceneBuilder:
         cap_end=True,
         closed=False,
         name="pubomb_leather_strap",
-        material="item_twig_bark",
+        material="item_leather_brown",
     )
     goggle_parts.append(strap)
 

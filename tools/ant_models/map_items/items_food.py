@@ -928,51 +928,106 @@ def build_fdchick1() -> SceneBuilder:
             )
             parts.append(blister)
 
-    # Dark seared shrunken crispy-skin tendon collar right where fried crust grips the narrow ankle bone (`399:fdchick1`).
+    # Dark seared shrunken crispy-skin tendon sleeve gripping tightly onto the narrow bone neck (`399:fdchick1`, zero smooth torus ring!).
     tendon_cuff = tint_part(
-        torus_arc(0.036, 0.016, u_segs=20, v_segs=10, plane="xy", name="chicken_tendon_cuff", material="item_chicken_crust")
-        .deform(lambda p: p + 0.006 * np.sin(p * 72.0))
-        .translate(0.0, 0.080, -0.256),
-        lambda pos, _n: np.column_stack([
-            np.full(len(pos), 0.44),
-            np.full(len(pos), 0.28),
-            np.full(len(pos), 0.16),
-        ]),
+        curved_tube(
+            [(0.0, 0.082, -0.228), (0.0, 0.081, -0.252), (0.0, 0.080, -0.278), (0.0, 0.079, -0.296)],
+            [(0.044, 0.040), (0.034, 0.031), (0.026, 0.024), (0.020, 0.019)],
+            samples_per_seg=4,
+            radial_segs=18,
+            cap_rings=2,
+            name="chicken_tendon_cuff",
+            material="item_chicken_crust",
+        ).deform(lambda p: p + 0.0055 * np.sin(p * 78.0) * np.cos(np.roll(p, 1, axis=1) * 64.0)),
+        lambda pos, nrm: np.clip(
+            np.column_stack([
+                0.42 + 0.14 * np.clip(nrm[:, 1] + 0.4, 0.0, 1.0),
+                0.24 + 0.10 * np.clip(nrm[:, 1] + 0.4, 0.0, 1.0),
+                0.15 + 0.07 * np.clip(nrm[:, 1] + 0.4, 0.0, 1.0),
+            ]),
+            0.22,
+            0.64,
+        ),
     )
     parts.append(tendon_cuff)
 
-    # Short, realistic roasted ankle tibia stub (`~12%` of total length matching `399:fdchick1`, seared brownish-pink-ivory shaft!).
+    # Anatomically authentic chicken drumstick tibia ankle joint (`399:fdchick1`): slender fluted ivory bone shaft,
+    # realistic subtle double-condyle ankle epiphysis with shallow central trochlear groove, and seared tendon strips!
+    def _sculpt_tibia_bone(pos: np.ndarray) -> np.ndarray:
+        p = pos.copy()
+        # t=0 at meat collar (-0.244), t=1 at ankle joint tip (-0.365)
+        t = np.clip((-p[:, 2] - 0.244) / 0.121, 0.0, 1.0)
+        dy = p[:, 1] - 0.078
+        # Subtle realistic double-condyle flare right at the ankle joint (`t > 0.65`) with anatomical central pulley groove!
+        joint_flare = np.clip((t - 0.58) / 0.42, 0.0, 1.0) ** 1.35
+        # Slight horizontal widening into left/right condyle ridges + subtle central notch along x=0
+        condyle_w = 1.0 + 0.48 * joint_flare
+        notch = -0.0085 * joint_flare * np.exp(-((p[:, 0] / 0.014) ** 2))
+        # Subtle longitudinal bone shaft ridges & natural slight vertical compression
+        p[:, 0] *= condyle_w
+        p[:, 1] = 0.078 + dy * (0.88 + 0.22 * joint_flare) + notch * np.sign(dy + 1e-5)
+        p[:, 2] += -notch * 0.85
+        return p
+
     bone_shaft = tint_part(
         curved_tube(
-            [(0.0, 0.080, -0.246), (0.0, 0.078, -0.292), (0.0, 0.076, -0.332)],
-            [(0.028, 0.025), (0.022, 0.020), (0.028, 0.024)],
-            samples_per_seg=4,
-            radial_segs=16,
-            cap_rings=4,
+            [(0.0, 0.080, -0.242), (0.0, 0.079, -0.295), (0.0, 0.078, -0.342), (0.0, 0.078, -0.365)],
+            [(0.025, 0.023), (0.019, 0.017), (0.022, 0.020), (0.024, 0.022)],
+            samples_per_seg=6,
+            radial_segs=20,
+            cap_rings=5,
             name="chicken_bone_stub",
             material="item_bone_white",
-        ).deform(lambda p: p + 0.0025 * np.sin(p * 64.0)),
+        ).deform(_sculpt_tibia_bone),
         lambda pos, nrm: np.clip(
             np.column_stack([
-                0.62 + 0.30 * np.clip((-pos[:, 2] - 0.246) / 0.09, 0.0, 1.0) + 0.06 * nrm[:, 1],
-                0.50 + 0.34 * np.clip((-pos[:, 2] - 0.246) / 0.09, 0.0, 1.0) + 0.06 * nrm[:, 1],
-                0.48 + 0.34 * np.clip((-pos[:, 2] - 0.246) / 0.09, 0.0, 1.0),
-            ]),
-            0.36,
+                # Roasted warm rosy-tan shaft near meat -> clean pale pearly bone-ivory ankle condyles (darker in central groove!)
+                0.76 + 0.26 * np.clip((-pos[:, 2] - 0.245) / 0.105, 0.0, 1.0) - 0.12 * np.exp(-((pos[:, 0] / 0.011) ** 2)) * np.clip((-pos[:, 2] - 0.325) / 0.04, 0.0, 1.0),
+                0.68 + 0.30 * np.clip((-pos[:, 2] - 0.245) / 0.105, 0.0, 1.0) - 0.14 * np.exp(-((pos[:, 0] / 0.011) ** 2)) * np.clip((-pos[:, 2] - 0.325) / 0.04, 0.0, 1.0),
+                0.66 + 0.30 * np.clip((-pos[:, 2] - 0.245) / 0.105, 0.0, 1.0) - 0.14 * np.exp(-((pos[:, 0] / 0.011) ** 2)) * np.clip((-pos[:, 2] - 0.325) / 0.04, 0.0, 1.0),
+            ]) + 0.05 * nrm[:, 1:2],
+            0.46,
             1.0,
         ),
     )
-    bone_cap = tint_part(
-        ellipsoid(0.028, 0.023, 0.015, u_segs=14, v_segs=10, name="chicken_bone_end", material="item_bone_white")
-        .deform(lambda p: p + 0.002 * np.sin(p * 82.0))
-        .translate(0.0, 0.076, -0.335),
-        lambda pos, _n: np.column_stack([
-            0.84 + 0.14 * np.clip(1.0 - np.hypot(pos[:, 0], pos[:, 1] - 0.076) / 0.028, 0.0, 1.0),
-            0.76 + 0.16 * np.clip(1.0 - np.hypot(pos[:, 0], pos[:, 1] - 0.076) / 0.028, 0.0, 1.0),
-            0.72 + 0.18 * np.clip(1.0 - np.hypot(pos[:, 0], pos[:, 1] - 0.076) / 0.028, 0.0, 1.0),
-        ]),
+    # Pair of crisp subtle anatomical ankle condyle knuckles + delicate seared roasted tendon fibers hugging the shaft (`399:fdchick1`)!
+    condyle_l = tint_part(
+        ellipsoid(0.018, 0.022, 0.022, u_segs=14, v_segs=10, name="chicken_condyle_l", material="item_bone_white")
+        .rotate_xyz(ry=0.18)
+        .translate(+0.015, 0.078, -0.356),
+        lambda pos, nrm: np.clip(np.column_stack([0.94 + 0.06 * nrm[:, 1], 0.90 + 0.07 * nrm[:, 1], 0.86 + 0.08 * nrm[:, 1]]), 0.72, 1.0),
     )
-    parts.extend([bone_shaft, bone_cap])
+    condyle_r = tint_part(
+        ellipsoid(0.017, 0.021, 0.021, u_segs=14, v_segs=10, name="chicken_condyle_r", material="item_bone_white")
+        .rotate_xyz(ry=-0.18)
+        .translate(-0.014, 0.077, -0.355),
+        lambda pos, nrm: np.clip(np.column_stack([0.94 + 0.06 * nrm[:, 1], 0.90 + 0.07 * nrm[:, 1], 0.86 + 0.08 * nrm[:, 1]]), 0.72, 1.0),
+    )
+    tendon_strip_a = tint_part(
+        curved_tube(
+            [(+0.020, 0.088, -0.248), (+0.017, 0.086, -0.292), (+0.014, 0.084, -0.330)],
+            [0.009, 0.006, 0.003],
+            samples_per_seg=3,
+            radial_segs=8,
+            cap_rings=2,
+            name="chicken_tendon_a",
+            material="item_chicken_crust",
+        ),
+        lambda pos, _n: np.column_stack([np.full(len(pos), 0.42), np.full(len(pos), 0.24), np.full(len(pos), 0.16)]),
+    )
+    tendon_strip_b = tint_part(
+        curved_tube(
+            [(-0.018, 0.084, -0.248), (-0.015, 0.082, -0.288), (-0.012, 0.080, -0.322)],
+            [0.008, 0.0055, 0.0028],
+            samples_per_seg=3,
+            radial_segs=8,
+            cap_rings=2,
+            name="chicken_tendon_b",
+            material="item_chicken_crust",
+        ),
+        lambda pos, _n: np.column_stack([np.full(len(pos), 0.38), np.full(len(pos), 0.22), np.full(len(pos), 0.15)]),
+    )
+    parts.extend([bone_shaft, condyle_l, condyle_r, tendon_strip_a, tendon_strip_b])
     sc.add("chicken", parts)
 
     # Orient short roasted bone stub bottom-left -> plump crispy fried drumstick head top-right matching `399:fdchick1`!

@@ -32,6 +32,7 @@ FAMILY_TEXTURE_SIZES: Dict[str, int] = {
     "stone": 128,
     "soil": 128,
     "wood": 128,
+    "bark_wood": 256,
     "vinyl_rubber": 128,
     "dino_skin": 128,
     "organic_flesh": 128,
@@ -578,6 +579,51 @@ def _build_wood_pack(size: int) -> TexturePack:
     )
 
 
+def _build_bark_wood_pack(size: int) -> TexturePack:
+    """Authentic weathered woodland twig bark: domain-warped fissures, bark plates, pale lenticels, knots & lichen flecks (`327:stick1`, `328:stick2a`)."""
+    gx, gy = np.meshgrid(np.arange(size, dtype=np.float32), np.arange(size, dtype=np.float32))
+    # Heavy longitudinal domain warp so bark furrows branch, pinch, and twist organically (zero uniform stripes!)
+    wx = (_tile_noise(size, 6, 4, seed=955) - 0.5) * (size * 0.22) + (_tile_noise(size, 14, 7, seed=956) - 0.5) * (size * 0.08)
+    wy = (_tile_noise(size, 5, 8, seed=957) - 0.5) * (size * 0.14)
+    # Stretched Voronoi cells create real elongated rough bark plates separated by deep dark branching fissures!
+    # Integer X multipliers guarantee 100% seamless periodic tiling in BOTH U and V with 2x-3x vertical plate stretch.
+    f1_a, edge_a = _tile_voronoi_f1_f2(size, 10, seed=958)
+    f1_b, edge_b = _tile_voronoi_f1_f2(size, 22, seed=959)
+    plate_a = _sample_periodic_bilinear(edge_a, gx * 2.0 + wx, gy + wy)
+    plate_b = _sample_periodic_bilinear(edge_b, gx * 3.0 + wx * 1.15, gy + wy * 1.10)
+    fibers = _tile_noise(size, 42, 10, seed=960)
+    mottle = _tile_noise(size, 8, 6, seed=962)
+    # Horizontal bark lenticel dashes + weathered dusty grey lichen patches
+    lenticel = _smoothstep(0.76, 0.90, _tile_noise(size, 10, 46, seed=963)) * _smoothstep(0.38, 0.72, mottle)
+    lichen = _smoothstep(0.74, 0.88, _tile_noise(size, 9, 9, seed=964)) * _smoothstep(0.35, 0.65, plate_a)
+
+    furrow = _smoothstep(0.03, 0.24, plate_a) * 0.64 + _smoothstep(0.02, 0.22, plate_b) * 0.36
+    height = np.clip(0.56 * furrow + 0.26 * fibers + 0.18 * mottle - 0.10 * lenticel, 0.0, 1.0)
+
+    # Natural fallen twig wood tones: deep dark umber bark fissures -> weathered walnut/chestnut bark -> sun-rubbed dry tan ridges
+    crack_col = np.array([0.10, 0.06, 0.035], dtype=np.float32)
+    bark_mid = np.array([0.44, 0.29, 0.17], dtype=np.float32)
+    ridge_tan = np.array([0.80, 0.60, 0.40], dtype=np.float32)
+    lichen_grey = np.array([0.56, 0.55, 0.47], dtype=np.float32)
+    lent_pale = np.array([0.86, 0.72, 0.54], dtype=np.float32)
+
+    t1 = _smoothstep(0.16, 0.50, height)
+    t2 = _smoothstep(0.50, 0.84, height)
+    rgb = crack_col[None, None, :] * (1.0 - t1[:, :, None]) + bark_mid[None, None, :] * t1[:, :, None]
+    rgb = rgb * (1.0 - t2[:, :, None]) + ridge_tan[None, None, :] * t2[:, :, None]
+    rgb = rgb * (1.0 - 0.36 * lichen[:, :, None]) + lichen_grey[None, None, :] * (0.36 * lichen[:, :, None])
+    rgb = rgb * (1.0 - 0.44 * lenticel[:, :, None]) + lent_pale[None, None, :] * (0.44 * lenticel[:, :, None])
+
+    rough_mult = np.clip(0.96 - 0.12 * t2 + 0.04 * (1.0 - fibers), 0.78, 0.98)
+    return TexturePack(
+        family="bark_wood",
+        size=size,
+        base_color_png=_rgb_to_png(np.clip(rgb, 0.0, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=6.2)),
+        metallic_roughness_png=_mr_to_rgb_png(rough_mult),
+    )
+
+
 def _build_vinyl_rubber_pack(size: int) -> TexturePack:
     """Soft-touch matte bath rubber & tactile satin vinyl: micro-pebble grain, zero cheap plastic glare."""
     pebble_a = _tile_pores(size, 34, seed=961)
@@ -995,6 +1041,7 @@ def get_texture_pack(family: str, size: Optional[int] = None) -> TexturePack:
         "stone": _build_stone_pack,
         "soil": _build_soil_pack,
         "wood": _build_wood_pack,
+        "bark_wood": _build_bark_wood_pack,
         "vinyl_rubber": _build_vinyl_rubber_pack,
         "dino_skin": _build_dino_skin_pack,
         "organic_flesh": _build_organic_flesh_pack,
