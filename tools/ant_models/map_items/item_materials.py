@@ -27,11 +27,11 @@ def register_item_materials() -> None:
     if _REGISTERED:
         return
     specs = (
-        # --- Plush / Fabric / Cotton / Waving Flags (Teddy bear, stuffing, cloth flags) ---
-        MaterialSpec("item_bear_fur", (0.58, 0.36, 0.19, 1.0), 0.00, 0.92, texture_family="fur", normal_scale=0.74),
-        MaterialSpec("item_bear_muzzle", (0.78, 0.62, 0.40, 1.0), 0.00, 0.90, texture_family="fur", normal_scale=0.64),
-        MaterialSpec("item_bear_belly", (0.82, 0.66, 0.42, 1.0), 0.00, 0.90, texture_family="fur", normal_scale=0.64),
-        MaterialSpec("item_cotton_fluff", (0.94, 0.93, 0.90, 1.0), 0.00, 0.95, texture_family="fur", normal_scale=0.68),
+        # --- Plush / Fabric / Cotton / Waving Flags (Teddy bear shell-fur base, cotton batting, cloth flags) ---
+        MaterialSpec("item_bear_fur", (0.66, 0.41, 0.22, 1.0), 0.00, 0.98, texture_family="fur", normal_scale=0.20),
+        MaterialSpec("item_bear_muzzle", (0.90, 0.82, 0.55, 1.0), 0.00, 0.98, texture_family="fur", normal_scale=0.16),
+        MaterialSpec("item_bear_belly", (0.95, 0.88, 0.54, 1.0), 0.00, 0.98, texture_family="fur", normal_scale=0.16),
+        MaterialSpec("item_cotton_fluff", (0.96, 0.96, 0.95, 1.0), 0.00, 0.98, texture_family="fur", normal_scale=0.18),
         MaterialSpec("item_dark_stitch", (0.09, 0.07, 0.06, 1.0), 0.00, 0.78, texture_family="cloth", normal_scale=0.42),
         MaterialSpec("item_flag_black", (0.19, 0.21, 0.26, 1.0), 0.00, 0.84, double_sided=True, texture_family="cloth", normal_scale=0.56),
         MaterialSpec("item_flag_blue", (0.20, 0.38, 0.94, 1.0), 0.00, 0.82, double_sided=True, texture_family="cloth", normal_scale=0.56),

@@ -83,6 +83,21 @@ def _fur_bump(seed: float = 0.0, amp: float = 0.008):
     return _deform
 
 
+def _cotton_bump(seed: float = 0.0, amp: float = 0.015):
+    def _deform(pos: np.ndarray) -> np.ndarray:
+        p = pos.copy()
+        r = np.maximum(1e-5, np.linalg.norm(p, axis=1, keepdims=True))
+        n = p / r
+        wisp = (
+            np.sin(p[:, 0] * 28.0 + seed) * np.cos(p[:, 1] * 25.0 - seed * 0.7)
+            + 0.65 * np.sin(p[:, 2] * 35.0 - p[:, 0] * 21.0 + seed * 1.3)
+            + 0.40 * np.cos(p[:, 1] * 48.0 + p[:, 2] * 39.0 - seed * 2.1)
+        )
+        return p + (amp * wisp)[:, None] * n
+
+    return _deform
+
+
 def _plush_tint(part: MeshPart, warm_hi: Tuple[float, float, float] = (1.04, 0.98, 0.90), cool_lo: Tuple[float, float, float] = (0.74, 0.66, 0.58)) -> MeshPart:
     def _fn(pos: np.ndarray, nrm: np.ndarray) -> np.ndarray:
         up = np.clip(0.5 + 0.5 * nrm[:, 1], 0.0, 1.0)[:, None]
@@ -94,201 +109,391 @@ def _plush_tint(part: MeshPart, warm_hi: Tuple[float, float, float] = (1.04, 0.9
     return tint_part(part, _fn)
 
 
+def _add_ripped_neck_details(
+    sc: SceneBuilder,
+    node: str,
+    prefix: str,
+    *,
+    center: Tuple[float, float, float],
+    axis_out: Tuple[float, float, float],
+    radius_u: float,
+    radius_v: float,
+    flap_count: int = 11,
+    thread_count: int = 6,
+    seed: float = 0.0,
+) -> None:
+    """Build a dark hollow ripped fabric opening, jagged outward-curling torn plush flaps, and dangling snapped threads."""
+    cx, cy, cz = center
+    ax = np.asarray(axis_out, dtype=np.float64)
+    ax = ax / max(1e-6, float(np.linalg.norm(ax)))
+    ref = np.array([0.0, 1.0, 0.0], dtype=np.float64) if abs(ax[1]) < 0.85 else np.array([0.0, 0.0, 1.0], dtype=np.float64)
+    u_vec = np.cross(ref, ax)
+    u_vec /= max(1e-6, float(np.linalg.norm(u_vec)))
+    v_vec = np.cross(ax, u_vec)
+    c_vec = np.array([cx, cy, cz], dtype=np.float64)
+
+    def _to_world(p_local: np.ndarray) -> np.ndarray:
+        return c_vec[None, :] + p_local[:, 0:1] * u_vec[None, :] + p_local[:, 1:2] * v_vec[None, :] + p_local[:, 2:3] * ax[None, :]
+
+    # Deep dark recessed hollow interior cavity inside the ripped-off plush shell.
+    cavity = ellipsoid(radius_u * 0.94, radius_v * 0.94, 0.036, u_segs=20, v_segs=10, name=f"{prefix}_cavity", material="item_soil_hole").deform(
+        lambda p: _to_world(p - np.array([0.0, 0.0, 0.014], dtype=np.float64))
+    )
+    sc.add(node, cavity)
+
+    # Jagged, uneven outward-curling torn brown plush fabric flaps framing the raw rip.
+    for k in range(flap_count):
+        ang = (2.0 * math.pi * k / flap_count) + 0.14 * math.sin(k * 2.7 + seed)
+        ca, sa = math.cos(ang), math.sin(ang)
+        rad_dir = u_vec * ca + v_vec * sa
+        tan_dir = -u_vec * sa + v_vec * ca
+        base_pt = c_vec + u_vec * (radius_u * 0.96 * ca) + v_vec * (radius_v * 0.96 * sa) - ax * 0.012
+        flen = 0.044 + 0.034 * (0.5 + 0.5 * math.sin(k * 3.9 + seed * 1.7))
+        flare = 0.022 + 0.026 * (0.5 + 0.5 * math.cos(k * 2.3 + seed))
+        skew = 0.014 * math.sin(k * 4.5 - seed)
+        p0 = base_pt
+        p1 = base_pt + ax * (flen * 0.56) + rad_dir * (flare * 0.45) + tan_dir * (skew * 0.5)
+        p2 = base_pt + ax * flen + rad_dir * flare + tan_dir * skew
+        w0 = 0.026 + 0.010 * (0.5 + 0.5 * math.cos(k * 5.1 + seed))
+
+        def _flatten_flap(pos: np.ndarray, _mid: np.ndarray = p1, _rdir: np.ndarray = rad_dir) -> np.ndarray:
+            rel = pos - _mid[None, :]
+            r_proj = np.sum(rel * _rdir[None, :], axis=1, keepdims=True)
+            return pos - 0.52 * r_proj * _rdir[None, :]
+
+        flap = curved_tube(
+            [tuple(p0), tuple(p1), tuple(p2)],
+            [w0, w0 * 0.72, w0 * 0.24],
+            samples_per_seg=3,
+            radial_segs=8,
+            cap_rings=2,
+            name=f"{prefix}_flap_{k}",
+            material="item_bear_fur",
+        ).deform(_flatten_flap)
+        sc.add(node, _plush_tint(flap, warm_hi=(0.94, 0.86, 0.76), cool_lo=(0.56, 0.48, 0.40)))
+
+    # Loose snapped dark sewing threads curling out from the ripped seam.
+    for k in range(thread_count):
+        ang = (2.0 * math.pi * (k + 0.35) / thread_count) + 0.22 * math.cos(k * 3.1 + seed)
+        ca, sa = math.cos(ang), math.sin(ang)
+        rad_dir = u_vec * ca + v_vec * sa
+        tan_dir = -u_vec * sa + v_vec * ca
+        base_pt = c_vec + u_vec * (radius_u * 0.90 * ca) + v_vec * (radius_v * 0.90 * sa) + ax * 0.004
+        tlen = 0.055 + 0.042 * (0.5 + 0.5 * math.sin(k * 2.9 + seed * 2.1))
+        curl_sign = 1.0 if (k % 2 == 0) else -1.0
+        pts = [
+            tuple(base_pt),
+            tuple(base_pt + ax * (tlen * 0.42) + rad_dir * 0.024 + tan_dir * (0.018 * curl_sign)),
+            tuple(base_pt + ax * (tlen * 0.82) + rad_dir * 0.042 + tan_dir * (0.036 * curl_sign)),
+            tuple(base_pt + ax * (tlen * 0.96) + rad_dir * 0.026 + tan_dir * (0.052 * curl_sign)),
+        ]
+        thread = curved_tube(
+            pts,
+            [0.0046, 0.0040, 0.0032, 0.0020],
+            samples_per_seg=3,
+            radial_segs=6,
+            cap_rings=1,
+            name=f"{prefix}_thread_{k}",
+            material="item_dark_stitch",
+        )
+        sc.add(node, thread)
+
+
 def build_bearhed() -> SceneBuilder:
-    """Popped-off plush brown teddy bear head with X-stitch eye, tan muzzle & cotton stuffing (`345:bearhed`)."""
+    """Fuzzy ripped-off plush teddy bear head with X-stitch eye, glossy button eye & billowing neck cotton (`345:bearhed`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_bearhed")
 
-    # Plump, slightly squashed plush teddy bear cranium tilted playfully face-up/forward like `345:bearhed`.
+    # Plump, soft plush teddy bear cranium with flattened/recessed bottom tear socket (`y < -0.21`).
     def _sculpt_head(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
-        cheek = 0.032 * np.exp(-((p[:, 1] + 0.07) / 0.14) ** 2) * (p[:, 0] ** 2 / max(1e-4, 0.09))
-        seam_groove = -0.008 * np.exp(-((p[:, 0] / 0.022) ** 2)) * np.clip(p[:, 1] / 0.24, 0.0, 1.0)
-        fuzz = 0.007 * np.sin(p[:, 0] * 36.0 + p[:, 2] * 31.0) * np.cos(p[:, 1] * 34.0)
-        p[:, 0] *= 1.0 + 0.10 * np.exp(-((p[:, 1] + 0.06) / 0.16) ** 2)
-        p[:, 2] += cheek + seam_groove + fuzz
-        p[:, 1] += seam_groove + fuzz * 0.6
+        cheek = 0.034 * np.exp(-((p[:, 1] + 0.07) / 0.14) ** 2) * (p[:, 0] ** 2 / max(1e-4, 0.09))
+        fuzz = 0.007 * np.sin(p[:, 0] * 34.0 + p[:, 2] * 29.0) * np.cos(p[:, 1] * 32.0)
+        p[:, 0] *= 1.0 + 0.11 * np.exp(-((p[:, 1] + 0.06) / 0.16) ** 2)
+        p[:, 2] += cheek + fuzz
+        p[:, 1] += fuzz * 0.55
+        # Softly indent the bottom neck zone so the ripped socket & pouring cotton seat authentically.
+        neck_r = np.hypot(p[:, 0] / 0.16, (p[:, 2] - 0.02) / 0.15)
+        bottom_mask = np.clip((-p[:, 1] - 0.17) / 0.10, 0.0, 1.0) * np.clip(1.0 - neck_r * 0.72, 0.0, 1.0)
+        p[:, 1] += 0.042 * bottom_mask
         return p
 
     cranium = _plush_tint(
-        superellipsoid(0.30, 0.27, 0.28, e1=0.92, e2=0.94, u_segs=32, v_segs=22, name="bear_cranium", material="item_bear_fur")
-        .deform(_sculpt_head)
+        superellipsoid(0.305, 0.275, 0.285, e1=0.92, e2=0.94, u_segs=32, v_segs=22, name="bear_cranium", material="item_bear_fur")
+        .deform(_sculpt_head),
+        warm_hi=(1.06, 0.99, 0.90),
+        cool_lo=(0.72, 0.63, 0.54),
     )
     sc.add("bear_head", cranium)
 
-    # Rounded plush bear ears with recessed lighter inner-ear pads.
-    for side, tag in ((+1.0, "left"), (-1.0, "right")):
+    # Rounded furry plush bear ears with gently cupped darker brown inner hollows (matching `345:bearhed`, zero yellow stickers!).
+    for side, tag in ((+1.0, "right"), (-1.0, "left")):
+        def _cup_ear(pos: np.ndarray, _s: float = side) -> np.ndarray:
+            p = pos.copy()
+            r2 = (p[:, 0] / 0.068) ** 2 + (p[:, 1] / 0.066) ** 2
+            front = np.clip(p[:, 2] / 0.04, 0.0, 1.0)
+            p[:, 2] -= 0.022 * front * np.exp(-r2 * 1.4)
+            return p
+
         ear = _plush_tint(
-            ellipsoid(0.105, 0.102, 0.062, u_segs=20, v_segs=14, name=f"bear_ear_{tag}", material="item_bear_fur")
+            ellipsoid(0.112, 0.108, 0.066, u_segs=22, v_segs=14, name=f"bear_ear_{tag}", material="item_bear_fur")
+            .deform(_cup_ear)
             .deform(_fur_bump(side * 2.1, 0.006))
-            .rotate_xyz(rx=-0.18, ry=side * 0.28, rz=-side * 0.26)
-            .translate(side * 0.235, 0.215, -0.020)
+            .rotate_xyz(rx=-0.16, ry=side * 0.26, rz=-side * 0.24)
+            .translate(side * 0.242, 0.218, -0.018),
+            warm_hi=(1.08, 1.00, 0.90),
+            cool_lo=(0.68, 0.58, 0.48),
         )
+        # Soft shaded fuzzy inner ear hollow (same fur material, warmer/deeper plush tone).
         inner = _plush_tint(
-            ellipsoid(0.062, 0.060, 0.028, u_segs=16, v_segs=10, name=f"bear_ear_in_{tag}", material="item_bear_muzzle")
-            .rotate_xyz(rx=-0.18, ry=side * 0.28, rz=-side * 0.26)
-            .translate(side * 0.232, 0.210, +0.024),
-            warm_hi=(1.02, 0.96, 0.88),
-            cool_lo=(0.82, 0.74, 0.64),
+            ellipsoid(0.060, 0.056, 0.024, u_segs=14, v_segs=10, name=f"bear_ear_in_{tag}", material="item_bear_fur")
+            .rotate_xyz(rx=-0.16, ry=side * 0.26, rz=-side * 0.24)
+            .translate(side * 0.238, 0.214, +0.022),
+            warm_hi=(0.76, 0.66, 0.54),
+            cool_lo=(0.54, 0.44, 0.34),
         )
         sc.add("bear_head", [ear, inner])
 
-    # Lush cream-tan split plush cheeks + plump chin puff matching `345:bearhed`'s big smiling teddy muzzle!
-    for side, tag in ((+1.0, "l"), (-1.0, "r")):
+    # Lush velvety cream-tan split plush cheeks + plump chin puff matching `345:bearhed`'s iconic smiling muzzle.
+    for side, tag in ((+1.0, "r"), (-1.0, "l")):
         cheek = _plush_tint(
-            superellipsoid(0.118, 0.122, 0.118, e1=0.88, e2=0.92, u_segs=24, v_segs=16, name=f"bear_cheek_{tag}", material="item_bear_muzzle")
+            superellipsoid(0.132, 0.134, 0.124, e1=0.88, e2=0.92, u_segs=24, v_segs=16, name=f"bear_cheek_{tag}", material="item_bear_muzzle")
             .deform(_fur_bump(side * 3.1, 0.005))
-            .rotate_xyz(ry=side * 0.24, rz=-side * 0.14)
-            .translate(side * 0.092, -0.052, 0.238),
-            warm_hi=(1.06, 1.01, 0.92),
-            cool_lo=(0.82, 0.74, 0.62),
+            .rotate_xyz(ry=side * 0.22, rz=-side * 0.14)
+            .translate(side * 0.092, -0.044, 0.236),
+            warm_hi=(1.06, 1.03, 0.94),
+            cool_lo=(0.82, 0.75, 0.64),
         )
         sc.add("bear_head", cheek)
     chin_puff = _plush_tint(
-        superellipsoid(0.105, 0.082, 0.095, e1=0.88, e2=0.90, u_segs=20, v_segs=14, name="bear_chin", material="item_bear_muzzle")
+        superellipsoid(0.114, 0.094, 0.102, e1=0.88, e2=0.90, u_segs=20, v_segs=14, name="bear_chin", material="item_bear_muzzle")
         .deform(_fur_bump(4.7, 0.005))
-        .translate(0.0, -0.142, 0.228),
-        warm_hi=(1.05, 1.00, 0.90),
-        cool_lo=(0.80, 0.72, 0.60),
+        .translate(0.0, -0.142, 0.232),
+        warm_hi=(1.05, 1.01, 0.92),
+        cool_lo=(0.80, 0.73, 0.62),
     )
     sc.add("bear_head", chin_puff)
 
-    # Big velvety black stitched plush nose resting high between the plush cheeks + dark cleft crease.
+    # Glossy rounded-triangular black bear nose nestled high between cheeks + crisp catchlight + tucked subtle smile crease.
+    def _sculpt_nose(pos: np.ndarray) -> np.ndarray:
+        p = pos.copy()
+        taper = np.clip((0.050 - p[:, 1]) / 0.100, 0.0, 1.0)
+        p[:, 0] *= 1.08 - 0.34 * (taper ** 1.2)
+        return p
+
     nose = (
-        superellipsoid(0.064, 0.050, 0.044, e1=0.72, e2=0.78, u_segs=18, v_segs=12, name="bear_nose", material="item_dark_stitch")
-        .translate(0.0, 0.062, 0.326)
+        superellipsoid(0.062, 0.052, 0.046, e1=0.74, e2=0.80, u_segs=20, v_segs=14, name="bear_nose", material="eye_pupil")
+        .deform(_sculpt_nose)
+        .translate(0.0, 0.068, 0.316)
     )
-    mouth_stem = curved_tube(
-        [(0.0, 0.045, 0.334), (0.0, -0.032, 0.348), (0.0, -0.098, 0.332)],
-        [0.011, 0.012, 0.009],
+    nose_glint = sphere(0.011, u_segs=10, v_segs=8, name="bear_nose_glint", material="eye_catchlight").translate(-0.014, 0.074, 0.356)
+    # Softly tucked dark cleft right inside the cheek seam (no protruding black stick!).
+    mouth_cleft = curved_tube(
+        [(0.0, 0.036, 0.312), (0.0, -0.022, 0.314), (0.0, -0.078, 0.298)],
+        [0.0075, 0.0080, 0.0060],
         samples_per_seg=3,
-        radial_segs=10,
+        radial_segs=8,
         name="bear_mouth_cleft",
         material="item_dark_stitch",
     )
-    sc.add("bear_head", [nose, mouth_stem])
+    sc.add("bear_head", [nose, nose_glint, mouth_cleft])
 
-    # Iconic mismatched bear eyes from `345:bearhed`: stitched X-thread on left, glossy black button eye on right!
+    # Iconic mismatched eyes from `345:bearhed`: plump embroidered X-thread on left, big glossy black button eye on right!
+    x_center = np.array([-0.094, 0.144, 0.256], dtype=np.float64)
     for ang_deg, tag in ((+44.0, "a"), (-44.0, "b")):
-        x_bar = (
-            rounded_box(0.074, 0.018, 0.020, bevel=0.005, segs=2, name=f"bear_x_eye_{tag}", material="item_dark_stitch")
-            .rotate_xyz(rz=ang_deg, degrees=True)
-            .rotate_xyz(ry=-0.22)
-            .translate(-0.088, 0.138, 0.258)
-        )
+        rad = math.radians(ang_deg)
+        dx, dy = 0.040 * math.cos(rad), 0.040 * math.sin(rad)
+        pts = [
+            (x_center[0] - dx, x_center[1] - dy, x_center[2] - 0.008),
+            (x_center[0], x_center[1], x_center[2] + 0.006),
+            (x_center[0] + dx, x_center[1] + dy, x_center[2] - 0.008),
+        ]
+        x_bar = curved_tube(pts, [0.0085, 0.0105, 0.0085], samples_per_seg=3, radial_segs=8, cap_rings=2, name=f"bear_x_eye_{tag}", material="item_dark_stitch")
         sc.add("bear_head", x_bar)
-    right_eye = sphere(0.036, u_segs=16, v_segs=12, name="bear_button_eye", material="eye_pupil").translate(+0.072, 0.140, 0.272)
-    right_glint = sphere(0.010, u_segs=10, v_segs=8, name="bear_eye_glint", material="eye_catchlight").translate(+0.080, 0.152, 0.304)
+    right_eye = sphere(0.044, u_segs=18, v_segs=14, name="bear_button_eye", material="eye_pupil").translate(+0.064, 0.148, 0.264)
+    right_glint = sphere(0.011, u_segs=10, v_segs=8, name="bear_eye_glint", material="eye_catchlight").translate(+0.072, 0.158, 0.304)
     sc.add("bear_head", [right_eye, right_glint])
 
-    # Generous billowing white cotton stuffing tufts pouring out of the torn lower neck base (`345:bearhed`!).
-    fluff_specs = (
-        (0.00, -0.275, +0.06, 0.105, 0.072, 0.095),
-        (-0.09, -0.282, +0.10, 0.082, 0.060, 0.076),
-        (+0.09, -0.276, +0.08, 0.080, 0.062, 0.078),
-        (-0.03, -0.305, +0.14, 0.072, 0.052, 0.068),
-        (+0.06, -0.298, +0.14, 0.068, 0.048, 0.064),
-        (-0.11, -0.258, -0.02, 0.062, 0.048, 0.058),
+    # Ripped-off bottom neck opening: dark hollow interior cavity, jagged outward-flaring torn plush flaps, and dangling threads!
+    _add_ripped_neck_details(
+        sc,
+        "bear_head",
+        "bear_head_rip",
+        center=(0.015, -0.240, +0.025),
+        axis_out=(0.08, -0.96, 0.26),
+        radius_u=0.128,
+        radius_v=0.118,
+        flap_count=12,
+        thread_count=7,
+        seed=1.3,
     )
-    for idx, (fx, fy, fz, rx, ry, rz) in enumerate(fluff_specs):
+
+    # Sculpted irregular multi-cluster billowing white cotton stuffing spilling out of the ripped bottom (`345:bearhed`!).
+    head_cotton_puffs = (
+        # Core dense cotton bursting right out of the dark neck socket (leaving jagged brown torn collar flaps visible around rim!)
+        (+0.012, -0.266, +0.036, 0.084, 0.064, 0.078),
+        (-0.046, -0.278, +0.076, 0.068, 0.054, 0.064),
+        (+0.076, -0.274, +0.068, 0.072, 0.058, 0.068),
+        # Three distinct uneven trailing tufts matching `345:bearhed`'s bursting bottom-right cotton silhouette
+        (+0.008, -0.304, +0.106, 0.068, 0.054, 0.066),
+        (+0.102, -0.304, +0.104, 0.066, 0.050, 0.062),
+        (-0.042, -0.312, +0.126, 0.056, 0.044, 0.054),
+        (+0.048, -0.328, +0.136, 0.056, 0.042, 0.052),
+        (+0.136, -0.284, +0.056, 0.052, 0.042, 0.050),
+        (-0.082, -0.264, +0.006, 0.054, 0.044, 0.052),
+        (+0.014, -0.278, -0.042, 0.060, 0.046, 0.056),
+    )
+    for idx, (fx, fy, fz, rx, ry, rz) in enumerate(head_cotton_puffs):
         tuft = _plush_tint(
-            ellipsoid(rx, ry, rz, u_segs=14, v_segs=10, name=f"bear_stuffing_{idx}", material="item_cotton_fluff")
-            .deform(_fur_bump(idx * 1.7, 0.010))
+            ellipsoid(rx, ry, rz, u_segs=16, v_segs=12, name=f"bear_stuffing_{idx}", material="item_cotton_fluff")
+            .deform(_cotton_bump(idx * 1.9 + 0.4, 0.014))
             .translate(fx, fy, fz),
             warm_hi=(1.00, 1.00, 0.99),
-            cool_lo=(0.82, 0.81, 0.79),
+            cool_lo=(0.82, 0.84, 0.87),
         )
         sc.add("bear_head", tuft)
 
-    # Subtle embroidered dark stitch dashes along the plush cranium center seam for authentic stuffed-toy detail.
-    for k in range(5):
-        sy = 0.215 - k * 0.036
-        sz = 0.175 + k * 0.025
-        stitch = rounded_box(0.022, 0.008, 0.008, bevel=0.002, segs=1, name=f"bear_seam_st_{k}", material="item_dark_stitch").rotate_xyz(rx=0.45 - 0.10 * k).translate(0.0, sy, sz)
-        sc.add("bear_head", stitch)
+    # Pulled-apart wispy cotton tendrils stretching out from the ripped neck stuffing.
+    head_wisps = (
+        [(+0.02, -0.27, +0.07), (+0.06, -0.32, +0.13), (+0.09, -0.35, +0.17)],
+        [(+0.07, -0.27, +0.05), (+0.13, -0.31, +0.09), (+0.17, -0.32, +0.10)],
+        [(-0.03, -0.28, +0.08), (-0.07, -0.33, +0.13), (-0.10, -0.35, +0.16)],
+        [(+0.01, -0.27, -0.01), (+0.03, -0.32, -0.07), (+0.06, -0.34, -0.11)],
+    )
+    for idx, pts in enumerate(head_wisps):
+        wisp = _plush_tint(
+            curved_tube(pts, [0.028, 0.020, 0.009], samples_per_seg=3, radial_segs=10, cap_rings=2, name=f"bear_wisp_{idx}", material="item_cotton_fluff")
+            .deform(_cotton_bump(idx * 3.1 + 7.2, 0.007)),
+            warm_hi=(1.00, 1.00, 0.99),
+            cool_lo=(0.84, 0.85, 0.88),
+        )
+        sc.add("bear_head", wisp)
 
-    # Rest the popped-off head tilted back face-upward on the ground matching `345:bearhed`.
-    sc.nodes["bear_head"] = [p.rotate_xyz(rx=-44.0, ry=-12.0, rz=-22.0, degrees=True) for p in sc.nodes["bear_head"]]
-    return _finalize_item(sc, target_span=0.90)
+    # Rest the popped-off head tilted face-upward & counter-clockwise matching `345:bearhed` (right ear high, cotton spilling bottom-right!).
+    sc.nodes["bear_head"] = [p.rotate_xyz(rx=-50.0, ry=+8.0, rz=+20.0, degrees=True) for p in sc.nodes["bear_head"]]
+    return _finalize_item(sc, target_span=0.92)
 
 
 def build_bearbod() -> SceneBuilder:
-    """Sprawled headless plush teddy bear body with tan oval belly & torn neck stuffing (`346:bearbod`)."""
+    """Fuzzy sprawled headless plush teddy bear body with bright cream belly & ripped-neck cotton burst (`346:bearbod`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_bearbod")
 
-    # Plump horizontal sprawled plush bear torso resting flat on its back (matching `346:bearbod`).
+    # Plump, soft pear-shaped plush bear torso resting flat on its back, tapering into a ripped neck stump at `-Z`.
+    def _sculpt_torso(pos: np.ndarray) -> np.ndarray:
+        p = pos.copy()
+        neck_t = np.clip((-p[:, 2] - 0.12) / 0.22, 0.0, 1.0)
+        p[:, 0] *= 1.0 - 0.30 * (neck_t ** 1.35)
+        p[:, 1] *= 1.0 - 0.14 * (neck_t ** 1.5)
+        # Flatten the very front of the ripped neck stump so the hollow socket & billowing cotton emerge organically.
+        p[:, 2] = np.where(p[:, 2] < -0.295, -0.295 + 0.22 * (p[:, 2] + 0.295), p[:, 2])
+        return p
+
     torso = _plush_tint(
-        superellipsoid(0.24, 0.145, 0.30, e1=0.88, e2=0.90, u_segs=28, v_segs=20, name="bear_torso", material="item_bear_fur")
+        superellipsoid(0.275, 0.165, 0.315, e1=0.88, e2=0.90, u_segs=30, v_segs=20, name="bear_torso", material="item_bear_fur")
+        .deform(_sculpt_torso)
         .deform(_fur_bump(1.1, 0.007))
-        .translate(0.0, 0.145, 0.0)
+        .translate(0.0, 0.165, 0.0),
+        warm_hi=(1.06, 0.99, 0.90),
+        cool_lo=(0.72, 0.63, 0.54),
     )
+    # Lush bright sunny creamy-yellow furry oval belly patch matching `346:bearbod` (zero black stitch bricks!).
     belly = _plush_tint(
-        superellipsoid(0.155, 0.052, 0.205, e1=0.86, e2=0.88, u_segs=24, v_segs=14, name="bear_belly_patch", material="item_bear_belly")
+        superellipsoid(0.184, 0.068, 0.228, e1=0.86, e2=0.88, u_segs=26, v_segs=16, name="bear_belly_patch", material="item_bear_belly")
         .deform(_fur_bump(2.3, 0.004))
-        .translate(0.0, 0.256, -0.010),
-        warm_hi=(1.05, 1.00, 0.92),
-        cool_lo=(0.82, 0.76, 0.66),
+        .translate(0.0, 0.280, 0.012),
+        warm_hi=(1.06, 1.04, 0.88),
+        cool_lo=(0.82, 0.78, 0.62),
     )
     sc.add("bear_body", [torso, belly])
 
-    # Four chubby plush arms and legs splayed outward like a floppy stuffed animal on the ground.
+    # Four chubby, thick, shaggy furry plush arms & legs splayed playfully outward matching `346:bearbod` (zero yellow paw stickers!).
     limb_specs = (
-        ("arm_l", (+0.18, 0.14, -0.14), (+0.38, 0.11, -0.22), 0.092, 0.082),
-        ("arm_r", (-0.18, 0.14, -0.14), (-0.38, 0.11, -0.20), 0.092, 0.082),
-        ("leg_l", (+0.16, 0.12, +0.20), (+0.32, 0.095, +0.42), 0.098, 0.092),
-        ("leg_r", (-0.16, 0.12, +0.20), (-0.32, 0.095, +0.42), 0.098, 0.092),
+        ("arm_l", (-0.19, 0.155, -0.11), (-0.33, 0.140, -0.11), (-0.45, 0.122, -0.05), 0.114, 0.108, 0.098),
+        ("arm_r", (+0.19, 0.155, -0.12), (+0.34, 0.140, -0.14), (+0.45, 0.122, -0.10), 0.114, 0.108, 0.098),
+        ("leg_l", (-0.16, 0.138, +0.20), (-0.27, 0.125, +0.34), (-0.35, 0.112, +0.46), 0.120, 0.114, 0.105),
+        ("leg_r", (+0.16, 0.138, +0.20), (+0.29, 0.125, +0.32), (+0.39, 0.112, +0.43), 0.120, 0.114, 0.105),
     )
-    for idx, (tag, p0, p1, r0, r1) in enumerate(limb_specs):
-        mid = tuple(0.5 * (a + b) for a, b in zip(p0, p1))
+    for idx, (tag, p0, p1, p2, r0, r1, r2) in enumerate(limb_specs):
         limb = _plush_tint(
             curved_tube(
-                [p0, (mid[0], mid[1] + 0.015, mid[2]), p1],
-                [r0, 0.5 * (r0 + r1) * 1.04, r1],
+                [p0, p1, p2],
+                [r0, r1, r2],
                 samples_per_seg=4,
-                radial_segs=16,
-                cap_rings=4,
+                radial_segs=18,
+                cap_rings=5,
                 name=f"bear_{tag}",
                 material="item_bear_fur",
-            ).deform(_fur_bump(idx * 1.9, 0.006))
+            ).deform(_fur_bump(idx * 1.9, 0.007)),
+            warm_hi=(1.06, 0.99, 0.90),
+            cool_lo=(0.70, 0.61, 0.52),
         )
-        # Lighter plush paw pad facing upward on the feet & hands.
-        pad = _plush_tint(
-            ellipsoid(r1 * 0.62, r1 * 0.34, r1 * 0.68, u_segs=14, v_segs=10, name=f"bear_pad_{tag}", material="item_bear_belly")
-            .translate(p1[0], p1[1] + r1 * 0.72, p1[2]),
-            warm_hi=(1.04, 0.98, 0.90),
-            cool_lo=(0.82, 0.74, 0.64),
-        )
-        sc.add("bear_body", [limb, pad])
+        sc.add("bear_body", limb)
 
-    # Torn collar rim + billowing white cotton stuffing bursting out of the headless neck (`-Z` top).
-    neck_ring = torus_arc(0.092, 0.022, u_segs=20, v_segs=10, plane="xy", name="bear_torn_collar", material="item_bear_fur").translate(0.0, 0.165, -0.285)
-    sc.add("bear_body", _plush_tint(neck_ring))
-    for idx, (fx, fy, fz, rad) in enumerate((
-        (0.00, 0.175, -0.34, 0.068),
-        (-0.055, 0.200, -0.36, 0.052),
-        (+0.055, 0.185, -0.37, 0.050),
-        (0.00, 0.215, -0.33, 0.048),
-        (+0.03, 0.145, -0.35, 0.046),
-    )):
+    # Ripped-open top neck (`-Z`): dark hollow torn fabric cavity, jagged peeling plush collar flaps, and dangling snapped threads!
+    _add_ripped_neck_details(
+        sc,
+        "bear_body",
+        "bear_bod_rip",
+        center=(-0.012, 0.180, -0.290),
+        axis_out=(-0.04, 0.24, -0.97),
+        radius_u=0.122,
+        radius_v=0.105,
+        flap_count=12,
+        thread_count=7,
+        seed=4.1,
+    )
+
+    # Iconic sculptural double-winged billowing white cotton burst out of the torn neck (`346:bearbod` — distinct V-valley between wings!).
+    bod_cotton_puffs = (
+        # Core dense cotton wedged right inside the dark torn neck opening (keeps torn flaps & threads clearly visible!)
+        (-0.010, 0.192, -0.326, 0.072, 0.062, 0.066),
+        (-0.042, 0.174, -0.312, 0.056, 0.048, 0.056),
+        (+0.036, 0.182, -0.324, 0.058, 0.050, 0.056),
+        # Left pulled-out cotton wing + lower-left puff spilling gently over the ripped collar edge (like `346:bearbod`!)
+        (-0.088, 0.200, -0.362, 0.068, 0.056, 0.066),
+        (-0.112, 0.214, -0.398, 0.058, 0.048, 0.058),
+        (-0.098, 0.186, -0.286, 0.052, 0.046, 0.054),
+        # Right lofty double-lobed cotton wing bursting up-right matching `346:bearbod`'s dramatic right plume!
+        (+0.068, 0.206, -0.382, 0.072, 0.060, 0.072),
+        (+0.104, 0.220, -0.422, 0.064, 0.054, 0.064),
+        (+0.046, 0.226, -0.440, 0.058, 0.050, 0.058),
+        (+0.108, 0.184, -0.362, 0.052, 0.044, 0.052),
+        # Underside fullness so 360-degree side/underneath inspection shows torn cotton stuffing all around the neck rip
+        (-0.018, 0.140, -0.356, 0.058, 0.046, 0.056),
+        (+0.042, 0.144, -0.368, 0.056, 0.044, 0.054),
+    )
+    for idx, (fx, fy, fz, rx, ry, rz) in enumerate(bod_cotton_puffs):
         sc.add(
             "bear_body",
             _plush_tint(
-                ellipsoid(rad, rad * 0.85, rad * 1.05, u_segs=14, v_segs=10, name=f"bear_neck_fluff_{idx}", material="item_cotton_fluff")
-                .deform(_fur_bump(idx * 2.5, 0.008))
+                ellipsoid(rx, ry, rz, u_segs=16, v_segs=12, name=f"bear_neck_fluff_{idx}", material="item_cotton_fluff")
+                .deform(_cotton_bump(idx * 2.3 + 1.1, 0.014))
                 .translate(fx, fy, fz),
                 warm_hi=(1.00, 1.00, 0.99),
-                cool_lo=(0.84, 0.83, 0.80),
+                cool_lo=(0.82, 0.84, 0.87),
             ),
         )
 
-    # Subtle plush seam stitches running around the tan belly patch oval.
-    for k in range(10):
-        ang = 2.0 * math.pi * k / 10.0
-        st = rounded_box(0.018, 0.008, 0.008, bevel=0.002, segs=1, name=f"bear_belly_st_{k}", material="item_dark_stitch").rotate_xyz(ry=ang).translate(0.150 * math.cos(ang), 0.278, -0.010 + 0.198 * math.sin(ang))
-        sc.add("bear_body", st)
+    # Pulled-apart wispy cotton tendrils trailing off the left & right bursting neck lobes.
+    bod_wisps = (
+        [(-0.07, 0.20, -0.35), (-0.12, 0.22, -0.41), (-0.15, 0.21, -0.44)],
+        [(+0.06, 0.21, -0.38), (+0.11, 0.24, -0.45), (+0.14, 0.23, -0.49)],
+        [(+0.03, 0.22, -0.40), (+0.05, 0.25, -0.47), (+0.06, 0.24, -0.51)],
+        [(-0.06, 0.19, -0.31), (-0.11, 0.20, -0.25), (-0.13, 0.18, -0.22)],
+    )
+    for idx, pts in enumerate(bod_wisps):
+        wisp = _plush_tint(
+            curved_tube(pts, [0.028, 0.020, 0.009], samples_per_seg=3, radial_segs=10, cap_rings=2, name=f"bear_bod_wisp_{idx}", material="item_cotton_fluff")
+            .deform(_cotton_bump(idx * 2.9 + 5.4, 0.007)),
+            warm_hi=(1.00, 1.00, 0.99),
+            cool_lo=(0.84, 0.85, 0.88),
+        )
+        sc.add("bear_body", wisp)
 
-    return _finalize_item(sc, target_span=0.95)
+    # Slightly tilt the sprawled headless body counter-clockwise matching `346:bearbod`.
+    sc.nodes["bear_body"] = [p.rotate_xyz(ry=+7.0, degrees=True) for p in sc.nodes["bear_body"]]
+    return _finalize_item(sc, target_span=0.96)
 
 
 def _build_rubber_ducky(name: str, *, yaw_deg: float, head_yaw_deg: float, head_pitch_deg: float) -> SceneBuilder:

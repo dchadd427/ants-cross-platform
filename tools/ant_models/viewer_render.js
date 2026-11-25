@@ -700,6 +700,154 @@
     };
   }
 
+  // --- Real-Time Volumetric 3D Shell Fur & Pulled Cotton Batting Shaders ---
+  const FUR_PROFILES = {
+    item_bear_fur:    { length: 0.032, density: 108.0, droop: 0.22, isCotton: 0, shells: 16 },
+    item_bear_muzzle: { length: 0.021, density: 122.0, droop: 0.16, isCotton: 0, shells: 14 },
+    item_bear_belly:  { length: 0.025, density: 114.0, droop: 0.16, isCotton: 0, shells: 14 },
+    item_cotton_fluff:{ length: 0.044, density: 66.0,  droop: 0.10, isCotton: 1, shells: 16 },
+  };
+
+  const FUR_VS = `#version 300 es
+  layout(location = 0) in vec3 a_position;
+  layout(location = 1) in vec3 a_normal;
+  layout(location = 3) in vec3 a_color;
+  uniform mat4 u_model, u_viewProj;
+  uniform mat3 u_normalMat;
+  uniform float u_shellFrac, u_furLength, u_furDroop;
+  out vec3 v_worldPos, v_worldNormal, v_localPos, v_color;
+  void main() {
+    vec3 Nloc = normalize(a_normal);
+    vec3 wN = normalize(u_normalMat * Nloc);
+    vec4 wp = u_model * vec4(a_position, 1.0);
+    float mScale = length(u_model[0].xyz);
+    // Subtle plush fur clump curl + natural gravity comb droop along shells
+    float h = u_shellFrac;
+    vec3 comb = vec3(sin(a_position.y * 19.0 + a_position.z * 14.0) * 0.16, -u_furDroop * h, cos(a_position.x * 19.0 - a_position.y * 14.0) * 0.16);
+    wp.xyz += (wN + comb * h) * (h * u_furLength * mScale);
+    v_worldPos = wp.xyz;
+    v_worldNormal = wN;
+    v_localPos = a_position;
+    v_color = a_color;
+    gl_Position = u_viewProj * wp;
+  }`;
+
+  const FUR_FS = `#version 300 es
+  precision highp float;
+  in vec3 v_worldPos, v_worldNormal, v_localPos, v_color;
+  uniform vec3 u_cameraPos, u_viewDir, u_baseColor, u_keyDir, u_fillDir, u_rimDir, u_skyColor, u_groundColor, u_silhouetteColor;
+  uniform vec3 u_keyColor, u_fillColor, u_rimColor, u_envRimTint;
+  uniform vec4 u_lightMix;
+  uniform float u_shellFrac, u_furDensity, u_rimBoost;
+  uniform int u_isOrtho, u_isCotton, u_silhouette;
+  out vec4 fragColor;
+
+  vec3 hash33(vec3 p) {
+    p = fract(p * vec3(0.1031, 0.1030, 0.0973));
+    p += dot(p, p.yxz + 33.33);
+    return fract((p.xxy + p.yxx) * p.zyx);
+  }
+  float noise3(vec3 p) {
+    vec3 i = floor(p), f = fract(p);
+    vec3 u = f * f * (3.0 - 2.0 * f);
+    float n000 = hash33(i).x, n100 = hash33(i + vec3(1,0,0)).x;
+    float n010 = hash33(i + vec3(0,1,0)).x, n110 = hash33(i + vec3(1,1,0)).x;
+    float n001 = hash33(i + vec3(0,0,1)).x, n101 = hash33(i + vec3(1,0,1)).x;
+    float n011 = hash33(i + vec3(0,1,1)).x, n111 = hash33(i + vec3(1,1,1)).x;
+    return mix(mix(mix(n000, n100, u.x), mix(n010, n110, u.x), u.y),
+               mix(mix(n001, n101, u.x), mix(n011, n111, u.x), u.y), u.z);
+  }
+  vec3 acesFilm(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+  vec3 linearToSrgb(vec3 c) { return mix(c * 12.92, 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c)); }
+
+  void main() {
+    if (v_worldPos.y < -0.004) discard;
+    float h = u_shellFrac;
+    vec3 N = normalize(v_worldNormal);
+    if (!gl_FrontFacing) N = -N;
+    vec3 V = u_isOrtho == 1 ? normalize(u_viewDir) : normalize(u_cameraPos - v_worldPos);
+
+    float alpha = 1.0;
+    float strandVar = 0.0;
+    if (u_isCotton != 0) {
+      // Wispy pulled-apart cloudy cotton batting fibers + tangled micro-filaments
+      vec3 cp = v_localPos * (u_furDensity * 0.45) + vec3(0.0, h * 1.4, 0.0);
+      float nA = noise3(cp);
+      float nB = noise3(cp * 2.35 + vec3(nA * 1.4, -nA * 1.1, nA * 0.8));
+      float fibers = noise3(v_localPos * (u_furDensity * 1.65) + vec3(nB * 1.8));
+      float puff = nA * 0.50 + nB * 0.32 + fibers * 0.18;
+      float cut = mix(0.28, 0.72, pow(h, 0.90));
+      alpha = smoothstep(cut - 0.08, cut + 0.14, puff) * (1.0 - pow(h, 1.8) * 0.65);
+      if (alpha < 0.08) discard;
+      strandVar = (fibers - 0.5) * 0.10;
+    } else {
+      // Seamless 3D Voronoi plush hair tufts (zero UV seams across head, ears, cheeks, limbs & belly!)
+      vec3 clumpWarp = vec3(noise3(v_localPos * 18.0) - 0.5, noise3(v_localPos * 18.0 + 7.1) - 0.5, noise3(v_localPos * 18.0 + 13.7) - 0.5) * (0.65 * h);
+      vec3 p = v_localPos * u_furDensity + clumpWarp;
+      vec3 ip = floor(p), fp = fract(p);
+      float bestD = 9.0;
+      vec3 bestR = vec3(0.5);
+      for (int dz = -1; dz <= 1; dz++) {
+        for (int dy = -1; dy <= 1; dy++) {
+          for (int dx = -1; dx <= 1; dx++) {
+            vec3 off = vec3(float(dx), float(dy), float(dz));
+            vec3 rnd = hash33(ip + off);
+            vec3 diff = off + (0.18 + 0.64 * rnd) - fp;
+            float d = dot(diff, diff);
+            if (d < bestD) { bestD = d; bestR = rnd; }
+          }
+        }
+      }
+      float strandLen = 0.34 + 0.66 * bestR.x;
+      if (h > strandLen) discard;
+      float tipFrac = h / strandLen;
+      float rLim = mix(0.58, 0.14, pow(tipFrac, 0.85));
+      float dist = sqrt(bestD);
+      if (dist > rLim) discard;
+      alpha = smoothstep(rLim, rLim * 0.45, dist) * mix(1.0, 0.72, tipFrac);
+      strandVar = (bestR.y - 0.5) * 0.20;
+    }
+
+    if (u_silhouette != 0) {
+      if (alpha < 0.35) discard;
+      fragColor = vec4(u_silhouetteColor, 1.0);
+      return;
+    }
+
+    // Soft velvety plush fabric lighting (zero plastic specular, rich root-to-tip self-shadow & backlit peach fuzz!)
+    vec3 bakedCol = clamp(v_color, 0.0, 1.0);
+    float vMax = max(max(bakedCol.r, bakedCol.g), bakedCol.b);
+    vec3 vChroma = vMax > 1e-4 ? (bakedCol / vMax) : vec3(1.0);
+    float rootAo = u_isCotton != 0 ? mix(0.58, 1.10, pow(h, 0.62)) : mix(0.48, 1.12, pow(h, 0.68));
+    vec3 tipWarm = u_isCotton != 0
+      ? mix(vec3(0.84, 0.87, 0.93), vec3(1.02, 1.01, 1.00), pow(h, 0.65))
+      : mix(vec3(0.92, 0.84, 0.78), vec3(1.12, 1.04, 0.92), h);
+    vec3 albedo = max(u_baseColor * vChroma * (1.0 + strandVar) * tipWarm, 0.0);
+
+    // Kajiya-style soft wrapped diffuse for fuzzy plush fibers (light wraps gently around fur tips)
+    float wrapKey = clamp((dot(N, u_keyDir) + 0.42) / 1.42, 0.0, 1.0);
+    float wrapFill = clamp((dot(N, u_fillDir) + 0.48) / 1.48, 0.0, 1.0);
+    float wrapRim = clamp((dot(N, u_rimDir) + 0.35) / 1.35, 0.0, 1.0);
+    float NoV = max(dot(N, V), 0.0);
+    float velvetSheen = pow(1.0 - NoV, 2.3) * (0.28 + 0.48 * h);
+
+    vec3 diff = albedo / 3.14159265 * (
+      u_keyColor * wrapKey * 0.92 +
+      u_fillColor * wrapFill * 0.55 +
+      u_rimColor * wrapRim * 0.40
+    );
+    vec3 amb = mix(u_groundColor * 0.95, u_skyColor, N.y * 0.5 + 0.5) * albedo * 0.32 * u_lightMix.x;
+    vec3 sheenCol = mix(albedo * 1.45 + vec3(0.06), u_envRimTint * 0.6 + albedo * 0.9, 0.35) * velvetSheen * (u_isCotton != 0 ? 0.36 : 0.24) * u_rimBoost;
+    float aoScalar = mix(1.0, vMax, 0.55) * rootAo;
+    vec3 lit = (diff + amb + sheenCol) * aoScalar;
+    vec3 outCol = linearToSrgb(acesFilm(lit * u_lightMix.z));
+    if (u_lightMix.w > 0.001) {
+      vec3 flatCol = linearToSrgb(acesFilm(albedo * rootAo * 1.10));
+      outCol = mix(outCol, flatCol, u_lightMix.w);
+    }
+    fragColor = vec4(outCol, alpha);
+  }`;
+
   function createProgram(gl, vsSrc, fsSrc) {
     const mk = (type, src) => {
       const sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh);
@@ -841,6 +989,7 @@
       this.pbrProg = createProgram(gl, PBR_VS, PBR_FS);
       this.plinthProg = createProgram(gl, PLINTH_VS, PLINTH_FS);
       this.fireProg = createProgram(gl, FIRE_VS, FIRE_FS);
+      this.furProg = createProgram(gl, FUR_VS, FUR_FS);
       this.fireParticles = buildFireParticles(gl);
       this.emptyVao = gl.createVertexArray();
       this.fallbacks = createFallbackTextures(gl);
@@ -861,6 +1010,13 @@
       this.uFire = getUniforms(gl, this.fireProg, [
         "u_model", "u_viewProj", "u_camRight", "u_camUp", "u_emitterMin", "u_emitterMax",
         "u_time", "u_transparent", "u_silhouette", "u_silhouetteColor",
+      ]);
+      this.uFur = getUniforms(gl, this.furProg, [
+        "u_model", "u_normalMat", "u_viewProj", "u_cameraPos", "u_viewDir", "u_isOrtho",
+        "u_baseColor", "u_keyDir", "u_fillDir", "u_rimDir", "u_skyColor", "u_groundColor",
+        "u_keyColor", "u_fillColor", "u_rimColor", "u_envRimTint", "u_lightMix", "u_rimBoost",
+        "u_shellFrac", "u_furLength", "u_furDroop", "u_furDensity", "u_isCotton",
+        "u_silhouette", "u_silhouetteColor",
       ]);
       gl.useProgram(this.pbrProg);
       gl.uniform1i(this.uPbr.u_baseTex, 0);
@@ -975,6 +1131,7 @@
 
       const instMats = scene.instances.map((inst) => evaluateWorldMats(inst, opts));
       const fireEmitters = [];
+      const furCalls = [];
       for (let pass = 0; pass < 2; pass++) {
         const wantBlend = pass === 1;
         if (wantBlend) {
@@ -992,6 +1149,11 @@
                 fireEmitters.push({ modelMat, localMin: prim.localMin, localMax: prim.localMax, time: fxTime });
               }
               continue;
+            }
+            if (!wantBlend && FUR_PROFILES[mat.name]) {
+              const nodeMat = worldMats[item.nodeIndex] || item.worldMat;
+              const modelMat = inst.offsetMat ? mat4Multiply(inst.offsetMat, nodeMat) : nodeMat;
+              furCalls.push({ prim, mat, modelMat, profile: FUR_PROFILES[mat.name] });
             }
             if (Boolean(mat.isTranslucent) !== wantBlend) continue;
             let bc = mat.baseColor;
@@ -1018,6 +1180,48 @@
             if (prim.indexed) gl.drawElements(prim.mode, prim.drawCount, prim.indexType, 0); else gl.drawArrays(prim.mode, 0, prim.drawCount);
           }
         });
+      }
+      if (furCalls.length) {
+        gl.useProgram(this.furProg);
+        gl.enable(gl.DEPTH_TEST);
+        gl.depthMask(false);
+        gl.enable(gl.BLEND);
+        gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+        gl.disable(gl.CULL_FACE);
+        gl.uniformMatrix4fv(this.uFur.u_viewProj, false, camera.viewProj);
+        gl.uniform3fv(this.uFur.u_cameraPos, camera.eye);
+        gl.uniform3fv(this.uFur.u_viewDir, camera.viewDir);
+        gl.uniform1i(this.uFur.u_isOrtho, camera.isOrtho ? 1 : 0);
+        gl.uniform3fv(this.uFur.u_keyDir, keyDir);
+        gl.uniform3fv(this.uFur.u_fillDir, fillDir);
+        gl.uniform3fv(this.uFur.u_rimDir, rimDir);
+        gl.uniform3fv(this.uFur.u_keyColor, lp.keyColor);
+        gl.uniform3fv(this.uFur.u_fillColor, lp.fillColor);
+        gl.uniform3fv(this.uFur.u_rimColor, lp.rimColor);
+        gl.uniform3fv(this.uFur.u_envRimTint, lp.envRimTint);
+        gl.uniform4fv(this.uFur.u_lightMix, lp.lightMix);
+        gl.uniform3fv(this.uFur.u_skyColor, pal.sky);
+        gl.uniform3fv(this.uFur.u_groundColor, pal.ground);
+        gl.uniform1f(this.uFur.u_rimBoost, opts.transparent && !lp.pal ? (opts.dark ? 0.95 : 0.65) : pal.rimBoost);
+        gl.uniform1i(this.uFur.u_silhouette, isSil ? 1 : 0);
+        gl.uniform3fv(this.uFur.u_silhouetteColor, opts.dark ? [0.910, 0.933, 0.973] : [0.067, 0.086, 0.122]);
+
+        for (const fc of furCalls) {
+          const { prim, mat, modelMat, profile } = fc;
+          gl.uniformMatrix4fv(this.uFur.u_model, false, modelMat);
+          gl.uniformMatrix3fv(this.uFur.u_normalMat, false, mat3NormalFromMat4(modelMat));
+          gl.uniform3f(this.uFur.u_baseColor, mat.baseColor[0], mat.baseColor[1], mat.baseColor[2]);
+          gl.uniform1f(this.uFur.u_furLength, profile.length);
+          gl.uniform1f(this.uFur.u_furDroop, profile.droop);
+          gl.uniform1f(this.uFur.u_furDensity, profile.density);
+          gl.uniform1i(this.uFur.u_isCotton, profile.isCotton);
+          gl.bindVertexArray(prim.vao);
+          for (let sh = 1; sh <= profile.shells; sh++) {
+            gl.uniform1f(this.uFur.u_shellFrac, sh / profile.shells);
+            if (prim.indexed) gl.drawElements(prim.mode, prim.drawCount, prim.indexType, 0);
+            else gl.drawArrays(prim.mode, 0, prim.drawCount);
+          }
+        }
       }
       if (fireEmitters.length) {
         const vd = camera.viewDir;
