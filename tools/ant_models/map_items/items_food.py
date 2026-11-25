@@ -627,84 +627,168 @@ def build_fdcornd1() -> SceneBuilder:
     return _finalize_item(sc, target_span=0.96)
 
 
+def _build_banana_coin(name: str, radius: float = 0.080, thickness: float = 0.032, spin_rad: float = 0.0) -> MeshPart:
+    """Chunky 3-lobed organic sliced banana coin with centered planar face UVs for crisp seed-star texture."""
+    def _trilobe(pos: np.ndarray) -> np.ndarray:
+        p = pos.copy()
+        ang = np.arctan2(p[:, 2], p[:, 0]) + spin_rad
+        # Real banana cross-sections are softly 3-sided with a delicate vascular ridge notch.
+        shape = 1.0 + 0.056 * np.cos(ang * 3.0) - 0.024 * np.cos(ang * 6.0) - 0.030 * np.exp(-(((ang % (2.0 * math.pi)) - 0.55) / 0.24) ** 2)
+        p[:, 0] *= shape
+        p[:, 2] *= shape
+        return p
+
+    coin = cylinder(radius, radius, thickness, radial_segs=28, bevel=thickness * 0.18, axis="y", name=name, material="item_banana_slice").deform(_trilobe)
+    # Planar face UV projection centered at (0.5, 0.5) so the 3-armed banana seed star sits dead-center on both coin faces!
+    inv_r = 0.475 / max(1e-5, radius)
+    u = np.clip(0.5 + coin.positions[:, 0] * inv_r, 0.02, 0.98)
+    v = np.clip(0.5 + coin.positions[:, 2] * inv_r, 0.02, 0.98)
+    coin.uvs = np.column_stack([u, v]).astype(np.float32)
+    return tint_part(
+        coin,
+        lambda pos, nrm: np.where(
+            np.abs(nrm[:, 1:2]) > 0.45,
+            np.array([[1.00, 0.99, 0.93]]),
+            np.array([[0.92, 0.86, 0.72]]),
+        ) * np.ones((len(pos), 3), dtype=np.float64),
+    )
+
+
 def build_fdjelo1() -> SceneBuilder:
-    """Translucent ruby-red fluted molded Jell-O dome with visible banana coins & gentle wobble clip (`366:fdjelo1`)."""
+    """Tall conical-bell 10-lobe scalloped ruby Jell-O mold with fully encased banana coins & 1.05s wobble (`366:fdjelo1`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_fdjelo1")
 
-    # Classic deep 12-fluted scalloped gelatin Bundt mold dome!
-    prof = [
-        (0.000, 0.000),
-        (0.325, 0.000),
-        (0.334, 0.042),
-        (0.308, 0.140),
-        (0.262, 0.265),
-        (0.200, 0.352),
-        (0.136, 0.388),
-        (0.060, 0.384),
-        (0.000, 0.370),
+    # Classic tall conical-bell Victorian 10-lobe scalloped gelatin mold (wide wavy base -> graceful taper -> tight pinched rosette crown!).
+    mold_h = 0.610
+    outer_prof = [
+        (0.365, 0.000),
+        (0.382, 0.036),
+        (0.376, 0.105),
+        (0.352, 0.195),
+        (0.312, 0.295),
+        (0.258, 0.392),
+        (0.194, 0.478),
+        (0.128, 0.548),
+        (0.068, 0.596),
+        (0.028, 0.610),
+        (0.000, 0.586),
     ]
 
-    def _flute_mold(pos: np.ndarray) -> np.ndarray:
-        p = pos.copy()
-        ang = np.arctan2(p[:, 2], p[:, 0])
-        h_frac = np.clip(p[:, 1] / 0.388, 0.0, 1.0)
-        flute = 1.0 + 0.165 * np.cos(ang * 12.0) * np.sin(h_frac * math.pi * 0.94)
-        p[:, 0] *= flute
-        p[:, 2] *= flute
-        return p
+    def _lobe_arch(ang: np.ndarray) -> np.ndarray:
+        """10 fat rounded continuous scallop flutes separated by rich crimson valleys (valley dead front center at +Z)."""
+        s = np.abs(np.sin(5.0 * (ang - 0.5 * math.pi)))
+        arch = np.power(s * s + 0.045, 0.34)
+        return np.clip((arch - 0.348) / 0.668, 0.0, 1.0)
 
-    # Chunky creamy banana coin slices pressed close to the translucent outer shell (with delicate seed center)!
-    banana_specs = (
-        (+0.18, 0.125, +0.16, +0.75, -0.45),
-        (-0.18, 0.120, +0.15, +0.72, +0.48),
-        (+0.02, 0.115, +0.23, +0.92, +0.08),
-        (+0.16, 0.240, +0.08, +0.48, -0.58),
-        (-0.15, 0.245, +0.09, +0.46, +0.55),
-        (+0.00, 0.290, +0.11, +0.38, -0.05),
-        (+0.19, 0.145, -0.14, -0.68, -0.50),
-        (-0.19, 0.150, -0.13, -0.65, +0.52),
-        (+0.02, 0.220, -0.18, -0.55, +0.10),
-        (-0.04, 0.310, -0.06, -0.22, +0.18),
+    def _flute_scale(ang: np.ndarray, h_frac: np.ndarray, strength: float = 1.0) -> np.ndarray:
+        lobe = _lobe_arch(ang)
+        # Continuous scalloped petal skirt all the way down to y=0, smoothly tapering into the tight pinched crown rosette!
+        env = (0.88 + 0.14 * np.sin(np.clip(h_frac, 0.0, 1.0) * math.pi * 0.90)) * (1.0 - 0.36 * np.power(np.clip((h_frac - 0.78) / 0.22, 0.0, 1.0), 1.5))
+        return 1.0 + strength * env * (-0.115 + 0.225 * lobe)
+
+    def _outer_radius_at(y: float, ang: float) -> float:
+        ys = [pt[1] for pt in outer_prof[:-1]]
+        rs = [pt[0] for pt in outer_prof[:-1]]
+        r_base = float(np.interp(y, ys, rs))
+        sc_f = float(_flute_scale(np.array([ang]), np.array([y / mold_h]), 1.0)[0])
+        return r_base * sc_f
+
+    def _flute_mold(strength: float = 1.0):
+        def _deform(pos: np.ndarray) -> np.ndarray:
+            p = pos.copy()
+            ang = np.arctan2(p[:, 2], p[:, 0])
+            h_frac = np.clip(p[:, 1] / mold_h, 0.0, 1.0)
+            flute = _flute_scale(ang, h_frac, strength)
+            p[:, 0] *= flute
+            p[:, 2] *= flute
+            crown_w = np.clip((h_frac - 0.84) / 0.16, 0.0, 1.0) * np.clip(np.hypot(p[:, 0], p[:, 2]) / 0.05, 0.0, 1.0)
+            p[:, 1] += 0.012 * crown_w * (_lobe_arch(ang) - 0.5)
+            return p
+        return _deform
+
+    # 1. Deep translucent-looking garnet inner core recessed cleanly behind all banana coins (rich ruby glow all the way to the wavy skirt!).
+    core_prof = [(r * (0.68 - 0.10 * min(1.0, y / mold_h)), y * 0.88 + 0.010) for r, y in outer_prof]
+    inner_core = tint_part(
+        lathe(core_prof, radial_segs=80, cap_bottom=True, cap_top=False, axis="y", name="jello_inner_core", material="item_jello_core")
+        .deform(_flute_mold(strength=0.95)),
+        lambda pos, _n: np.column_stack([
+            0.46 + 0.54 * _lobe_arch(np.arctan2(pos[:, 2], pos[:, 0])) * (0.72 + 0.28 * np.clip(pos[:, 1] / mold_h, 0.0, 1.0)),
+            0.14 + 0.28 * _lobe_arch(np.arctan2(pos[:, 2], pos[:, 0])),
+            0.20 + 0.30 * _lobe_arch(np.arctan2(pos[:, 2], pos[:, 0])),
+        ]),
     )
-    for idx, (bx, by, bz, rx, rz) in enumerate(banana_specs):
-        sl = (
-            cylinder(0.064, 0.064, 0.022, radial_segs=18, bevel=0.005, axis="y", name=f"jello_banana_{idx}", material="item_banana_slice")
-            .rotate_xyz(rx=rx, rz=rz)
-            .translate(bx, by, bz)
-        )
-        # Delicate tan banana pith dot in the center (subtle realistic detail, not a dark ring!)
-        core = (
-            cylinder(0.008, 0.008, 0.024, radial_segs=10, axis="y", name=f"jello_banana_core_{idx}", material="item_wood_stick")
-            .rotate_xyz(rx=rx, rz=rz)
-            .translate(bx, by, bz)
-        )
-        sc.add("jello_body", [sl, core])
+    sc.add("jello_body", inner_core)
 
-    jelly_dome = lathe(prof, radial_segs=72, cap_bottom=False, cap_top=False, axis="y", name="jello_dome", material="item_jello_ruby").deform(_flute_mold)
+    # 2. Chunky, unmistakable 3-lobed creamy-yellow banana coins organically staggered & FULLY ENCASED INSIDE the glossy ruby gelatin!
+    # Spec: (ang_from_front_deg, y, radius, tilt_out_deg, side_roll_deg, spin_deg)
+    banana_specs = (
+        # Organically staggered front lower pair matching `366:fdjelo1` (lower-left slightly lower, lower-right slightly higher & fuller!)
+        (+22.0, 0.118, 0.076, 56.0, +14.0,  25.0),
+        (-21.0, 0.160, 0.078, 60.0, -12.0, 140.0),
+        # Organically staggered mid-slope pair (mid-left higher & angled, mid-right nestled slightly lower!)
+        (+20.0, 0.332, 0.074, 48.0, +18.0, 215.0),
+        (-19.0, 0.302, 0.074, 52.0, -16.0,  80.0),
+        # Peeking flank slices (mid-left & lower-right angled partially edge-on matching `366:fdjelo1`!)
+        (+58.0, 0.238, 0.068, 64.0, +24.0, 310.0),
+        (-54.0, 0.210, 0.068, 70.0, -28.0,  45.0),
+        # Upper shoulder / crown-hugging slices (top-left crown peek at ~11:30 & upper-right tilted slice at ~1:30!)
+        (+18.0, 0.482, 0.052, 30.0, +16.0, 175.0),
+        (-52.0, 0.412, 0.062, 42.0, -22.0, 260.0),
+        # Full 360-degree organically staggered coverage around sides & back lobes!
+        (+94.0, 0.150, 0.070, 58.0,  +8.0, 110.0),
+        (-92.0, 0.190, 0.070, 60.0, -14.0, 290.0),
+        (+126.0, 0.305, 0.070, 50.0, +12.0,  35.0),
+        (-130.0, 0.275, 0.070, 52.0, -10.0, 195.0),
+        (+160.0, 0.165, 0.074, 56.0,  +8.0, 125.0),
+        (-164.0, 0.365, 0.064, 44.0, -10.0, 245.0),
+    )
+    ys_prof = np.array([pt[1] for pt in outer_prof[:-1]], dtype=np.float64)
+    rs_prof = np.array([pt[0] for pt in outer_prof[:-1]], dtype=np.float64)
+
+    for idx, (ang_deg, by, rad, tilt_deg, roll_deg, spin_deg) in enumerate(banana_specs):
+        ang = 0.5 * math.pi + math.radians(ang_deg)
+        r_wall = _outer_radius_at(by, ang)
+        # Seat coin center cleanly inside the outer wall, then verify EVERY vertex stays strictly inside the jelly!
+        r_pos = max(0.04, r_wall - 0.076)
+        bx, bz = r_pos * math.cos(ang), r_pos * math.sin(ang)
+        yaw_out = math.atan2(bx, bz)
+        sl = (
+            _build_banana_coin(f"jello_banana_{idx}", radius=rad, thickness=0.026, spin_rad=math.radians(spin_deg))
+            .rotate_xyz(rx=tilt_deg, rz=roll_deg, degrees=True)
+            .rotate_xyz(ry=yaw_out)
+            .translate(bx, by, bz)
+        )
+        # Exact vertex-level radial containment check: gently pull coin inward along its radial axis if ANY rim vertex approaches outer shell!
+        vp = sl.positions.astype(np.float64)
+        v_ang = np.arctan2(vp[:, 2], vp[:, 0])
+        v_r = np.hypot(vp[:, 0], vp[:, 2])
+        v_rb = np.interp(np.clip(vp[:, 1], 0.0, mold_h), ys_prof, rs_prof)
+        v_lim = v_rb * _flute_scale(v_ang, np.clip(vp[:, 1] / mold_h, 0.0, 1.0), 1.0) - 0.015
+        excess = float(np.max(v_r - v_lim))
+        if excess > 0.0:
+            sl = sl.translate(-excess * math.cos(ang), 0.0, -excess * math.sin(ang))
+        sc.add("jello_body", sl)
+
+    # 3. Crystal-glossy translucent outer 10-lobe ruby gelatin skin (high-res 96 radial segs for liquid-smooth wet flutes!).
+    jelly_dome = lathe(outer_prof, radial_segs=96, cap_bottom=False, cap_top=False, axis="y", name="jello_dome", material="item_jello_ruby").deform(_flute_mold(strength=1.0))
     sc.add("jello_body", jelly_dome)
 
-    # Subtle authentic 1998 Jell-O wobble idle animation (7-frame elastic squash/shear jiggle!).
-    times = [0.00, 0.12, 0.24, 0.36, 0.48, 0.60, 0.72]
+    # Exact 1998 7-frame (7 x 150ms = 1.050s) grounded volume-conserving elastic squash-and-rebound clip (`366:fdjelo1`)!
+    times = [0.00, 0.15, 0.30, 0.45, 0.60, 0.75, 0.90, 1.05]
     scales = [
-        (1.00, 1.00, 1.00),
-        (1.045, 0.94, 1.035),
-        (0.965, 1.055, 0.975),
-        (1.030, 0.965, 1.025),
-        (0.980, 1.030, 0.985),
-        (1.012, 0.990, 1.010),
-        (1.00, 1.00, 1.00),
-    ]
-    rots = [
-        quat_from_euler_xyz(rz=a, rx=b)
-        for a, b in ((0.0, 0.0), (0.045, 0.02), (-0.042, -0.018), (0.028, 0.014), (-0.020, -0.010), (0.010, 0.005), (0.0, 0.0))
+        (1.000, 1.000, 1.000),  # F0 (sp 529): neutral tall dome
+        (1.022, 0.958, 1.022),  # F1 (sp 530): begins settling downward
+        (1.060, 0.892, 1.060),  # F2 (sp 531): drops deeper & widens
+        (1.084, 0.854, 1.084),  # F3 (sp 532): deepest squash
+        (0.954, 1.072, 0.954),  # F4 (sp 533): snappy elastic rebound upward & narrow
+        (0.974, 1.098, 0.974),  # F5 (sp 534): peak tall overshoot
+        (1.055, 0.920, 1.055),  # F6 (sp 535): secondary wide settle bounce
+        (1.000, 1.000, 1.000),  # Loop seamlessly into F0
     ]
     sc.add_animation(
         "Idle",
-        [
-            AnimationChannel("jello_body", "scale", times, scales),
-            AnimationChannel("jello_body", "rotation", times, rots),
-        ],
+        [AnimationChannel("jello_body", "scale", times, scales)],
     )
     return _finalize_item(sc, target_span=0.88)
 

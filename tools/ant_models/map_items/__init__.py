@@ -51,7 +51,7 @@ MAP_ITEM_SPECS: Tuple[MapItemSpec, ...] = (
     MapItemSpec("fdburgr2", "Cheeseburger (Bitten)", "food", 254, "fdburgr2", "burger", "Half-Eaten", default_yaw=0.0, default_pitch=40.0, builder_module="items_food", builder_fn="build_fdburgr2"),
     MapItemSpec("fdburgr3", "Cheeseburger (Remnants)", "food", 255, "fdburgr3", "burger", "Scraps", default_yaw=0.0, default_pitch=48.0, builder_module="items_food", builder_fn="build_fdburgr3"),
     MapItemSpec("fdcornd1", "Corn Dog & Mustard", "food", 361, "fdcornd1", "corndog", "Full", default_yaw=0.0, default_pitch=44.0, builder_module="items_food", builder_fn="build_fdcornd1"),
-    MapItemSpec("fdjelo1", "Ruby Jell-O & Banana", "food", 366, "fdjelo1", "jello", "Full", default_yaw=0.0, default_pitch=36.0, builder_module="items_food", builder_fn="build_fdjelo1"),
+    MapItemSpec("fdjelo1", "Ruby Jell-O & Banana", "food", 366, "fdjelo1", "jello", "Full", default_yaw=0.0, default_pitch=43.0, builder_module="items_food", builder_fn="build_fdjelo1"),
     MapItemSpec("fdchick1", "Fried Chicken Drumstick", "food", 399, "fdchick1", "chicken", "Full", default_yaw=0.0, default_pitch=46.0, builder_module="items_food", builder_fn="build_fdchick1"),
     MapItemSpec("fdsuckr1", "Peppermint Lollipop", "food", 256, "fdsuckr1", "lollipop", "Full", default_yaw=0.0, default_pitch=50.0, builder_module="items_food", builder_fn="build_fdsuckr1"),
     # --- Plants & Grass (ALL 35 / 35 COMPLETE!) ---

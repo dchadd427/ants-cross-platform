@@ -35,6 +35,7 @@ FAMILY_TEXTURE_SIZES: Dict[str, int] = {
     "vinyl_rubber": 128,
     "dino_skin": 128,
     "organic_flesh": 128,
+    "banana_slice": 128,
     "cola_label": 256,
     "cap_h2o": 128,
     "cap_soda": 128,
@@ -614,6 +615,63 @@ def _build_dino_skin_pack(size: int) -> TexturePack:
     )
 
 
+def _build_banana_slice_pack(size: int) -> TexturePack:
+    """Authentic sliced banana coin face: creamy pale-yellow flesh, outer cortex rim & 3-armed amber seed star (`366:fdjelo1`)."""
+    lin = np.linspace(-1.0, 1.0, size, dtype=np.float32)
+    px, py = np.meshgrid(lin, lin)
+    r = np.hypot(px, py)
+    ang = np.arctan2(py, px)
+    pulp_noise = _tile_noise(size, 22, 22, seed=985)
+    fine_grain = _tile_noise(size, 44, 44, seed=986)
+
+    # Creamy butter-yellow flesh with slightly brighter ivory outer cortex and faint warm skin-cut perimeter.
+    cream = np.array([1.00, 0.94, 0.66], dtype=np.float32)
+    outer_ivory = np.array([1.00, 0.97, 0.80], dtype=np.float32)
+    rim_tan = np.array([0.88, 0.74, 0.44], dtype=np.float32)
+    core_honey = np.array([0.96, 0.80, 0.44], dtype=np.float32)
+    star_amber = np.array([0.52, 0.30, 0.10], dtype=np.float32)
+    seed_dark = np.array([0.24, 0.12, 0.04], dtype=np.float32)
+
+    radial_fibers = 0.5 + 0.5 * np.cos(ang * 15.0 + pulp_noise * 2.2)
+    rgb = cream[None, None, :] * (0.93 + 0.07 * pulp_noise[:, :, None] + 0.03 * radial_fibers[:, :, None])
+    cortex = _smoothstep(0.62, 0.84, r) * (1.0 - _smoothstep(0.88, 0.97, r))
+    rgb = rgb * (1.0 - 0.55 * cortex[:, :, None]) + outer_ivory[None, None, :] * (0.55 * cortex[:, :, None])
+    rim = _smoothstep(0.89, 0.98, r)
+    rgb = rgb * (1.0 - 0.65 * rim[:, :, None]) + rim_tan[None, None, :] * (0.65 * rim[:, :, None])
+
+    # Slightly translucent golden-honey seed core zone in the center.
+    inner_core = 1.0 - _smoothstep(0.18, 0.48, r)
+    rgb = rgb * (1.0 - 0.36 * inner_core[:, :, None]) + core_honey[None, None, :] * (0.36 * inner_core[:, :, None])
+
+    # Iconic 3-armed Y-shaped banana carpel clefts (120 deg apart) + delicate dark banana seed specks!
+    d_star = np.full_like(px, 10.0)
+    d_seeds = np.full_like(px, 10.0)
+    for k in range(3):
+        a = k * (2.0 * math.pi / 3.0) + 0.35
+        ca, sa = math.cos(a), math.sin(a)
+        tx, ty = -sa, ca
+        d_star = np.minimum(d_star, _sdf_segment(px, py, 0.0, 0.0, 0.36 * ca, 0.36 * sa))
+        for sr, off in ((0.14, +0.048), (0.14, -0.048), (0.26, +0.052), (0.26, -0.052)):
+            sx = sr * ca + off * tx
+            sy = sr * sa + off * ty
+            d_seeds = np.minimum(d_seeds, np.hypot(px - sx, py - sy))
+    # Subtle fibrous radiating spokes extending gently from the Y-star into the creamy flesh.
+    star_mask = (1.0 - _smoothstep(0.018, 0.068, d_star)) * (0.78 + 0.22 * pulp_noise)
+    seed_mask = 1.0 - _smoothstep(0.018, 0.044, d_seeds)
+    rgb = rgb * (1.0 - 0.72 * star_mask[:, :, None]) + star_amber[None, None, :] * (0.72 * star_mask[:, :, None])
+    rgb = rgb * (1.0 - 0.85 * seed_mask[:, :, None]) + seed_dark[None, None, :] * (0.85 * seed_mask[:, :, None])
+
+    height = np.clip(0.55 + 0.20 * pulp_noise + 0.10 * fine_grain - 0.28 * star_mask - 0.16 * seed_mask, 0.0, 1.0)
+    rough_mult = np.clip(0.46 + 0.18 * (1.0 - inner_core) + 0.12 * fine_grain - 0.14 * star_mask, 0.30, 0.82)
+    return TexturePack(
+        family="banana_slice",
+        size=size,
+        base_color_png=_rgb_to_png(np.clip(rgb, 0.0, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=2.2)),
+        metallic_roughness_png=_mr_to_rgb_png(rough_mult),
+    )
+
+
 def _build_organic_flesh_pack(size: int) -> TexturePack:
     """Fine cellular matte-moist organic texture for meats, produce, cheese, petals, and food surfaces."""
     cells = _tile_pores(size, 28, seed=981)
@@ -871,6 +929,7 @@ def get_texture_pack(family: str, size: Optional[int] = None) -> TexturePack:
         "vinyl_rubber": _build_vinyl_rubber_pack,
         "dino_skin": _build_dino_skin_pack,
         "organic_flesh": _build_organic_flesh_pack,
+        "banana_slice": _build_banana_slice_pack,
         "cola_label": _build_cola_label_pack,
         "cap_h2o": _build_cap_h2o_pack,
         "cap_soda": _build_cap_soda_pack,
