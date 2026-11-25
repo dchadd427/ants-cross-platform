@@ -388,9 +388,9 @@ def _add_bomber_plant_bomb(scene: SceneBuilder, bomb_node: str, hide_origin: Vec
         (0.0, -0.012, +0.010),  # 0.64 hold check LEFT
         (0.0, -0.012, +0.010),  # 0.76 whip check RIGHT!
         (0.0, -0.014, +0.012),  # 0.88 snap forward ready to plant
-        (0.0, -0.044, +0.024),  # 0.98 bend forward lowering bomb!
-        (0.0, -0.058, +0.028),  # 1.08 deep crouch setting bomb solidly on Y = 0.0!
-        (0.0, -0.052, +0.024),  # 1.16 steady release pat on Y = 0.0
+        (0.0, -0.056, +0.026),  # 0.98 bend forward lowering bomb!
+        (0.0, -0.082, +0.032),  # 1.08 deep crouch setting bomb solidly on Y = 0.0!
+        (0.0, -0.074, +0.028),  # 1.16 steady release pat on Y = 0.0
         (0.0, +0.010, -0.012),  # 1.24 spring cleanly back upright!
         (0.0, +0.004, -0.004),  # 1.32 settle proud
         (0.0,  0.000,  0.000),  # 1.36 exact rest wrap
@@ -404,9 +404,9 @@ def _add_bomber_plant_bomb(scene: SceneBuilder, bomb_node: str, hide_origin: Vec
         (+0.12, +0.12, -0.04),
         (+0.12, -0.12, +0.04),
         (+0.18,  0.00,  0.00),
-        (+0.44,  0.00,  0.00),
-        (+0.52,  0.00,  0.00),
-        (+0.48,  0.00,  0.00),
+        (+0.50,  0.00,  0.00),
+        (+0.62,  0.00,  0.00),
+        (+0.56,  0.00,  0.00),
         (-0.10,  0.00,  0.00),
         (-0.04,  0.00,  0.00),
         ( 0.00,  0.00,  0.00),
@@ -539,14 +539,14 @@ def _add_bomber_plant_bomb(scene: SceneBuilder, bomb_node: str, hide_origin: Vec
     # on Y = 0.000 in world space (compensating `root_t` step-back!) while Bomber springs upright!
     bomb_pos: List[Vec3] = [
         hide_origin,            # 0.00 hidden in pack
-        (-0.08, 0.42, -0.14),   # 0.12 lifted from backpack pocket
-        ( 0.00, 0.21, +0.27),   # 0.22 swung forward between both hands
-        ( 0.00, 0.20, +0.28),   # 0.36 held cleanly out front between hands!
-        ( 0.00, 0.20, +0.28),   # 0.50 held while looking left
-        ( 0.00, 0.20, +0.28),   # 0.64 held while looking left
-        ( 0.00, 0.20, +0.28),   # 0.76 held while looking right
-        ( 0.00, 0.14, +0.30),   # 0.88 starting descent
-        ( 0.00, 0.05, +0.33),   # 0.98 lowering cleanly toward ground
+        (-0.08, 0.46, -0.14),   # 0.12 lifted from backpack pocket
+        ( 0.00, 0.255, +0.27),  # 0.22 swung forward between both hands
+        ( 0.00, 0.245, +0.28),  # 0.36 held cleanly out front between hands!
+        ( 0.00, 0.245, +0.28),  # 0.50 held while looking left
+        ( 0.00, 0.245, +0.28),  # 0.64 held while looking left
+        ( 0.00, 0.245, +0.28),  # 0.76 held while looking right
+        ( 0.00, 0.17, +0.30),   # 0.88 starting descent
+        ( 0.00, 0.06, +0.33),   # 0.98 lowering cleanly toward ground
         ( 0.00, 0.00, +0.34),   # 1.08 planted squarely upright on Y = 0.000!
         ( 0.00, 0.00, +0.34),   # 1.16 released solidly on Y = 0.000!
         ( 0.00, -0.022, +0.362),  # 1.24 world (0, 0.000, +0.34) while root hops (+0.022, -0.022)!

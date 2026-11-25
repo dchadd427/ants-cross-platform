@@ -1153,10 +1153,10 @@ def _rebuild_bomber_legs(scene: SceneBuilder, crouch: float) -> None:
     ]
     lift = np.array([0.0, 1.0, 0.0], dtype=np.float64)
     specs = (
-        ("mid_left", +1, 0.062, 0.326 - c, +0.044, (0.122, 0.214, +0.146), (0.118, 0.104, +0.076), (0.114, 0.0, +0.138), +0.15, +0.038),
-        ("mid_right", -1, 0.062, 0.326 - c, +0.044, (0.118, 0.218, +0.140), (0.114, 0.106, +0.072), (0.110, 0.0, +0.132), -0.14, +0.038),
-        ("rear_left", +1, 0.060, 0.302 - c, -0.062, (0.132, 0.194, -0.040), (0.128, 0.094, -0.132), (0.122, 0.0, -0.068), +0.20, -0.058),
-        ("rear_right", -1, 0.060, 0.302 - c, -0.062, (0.128, 0.198, -0.046), (0.124, 0.096, -0.138), (0.118, 0.0, -0.074), -0.18, -0.058),
+        ("mid_left", +1, 0.062, 0.320 - c, +0.042, (0.122, 0.252, +0.128), (0.118, 0.138, +0.056), (0.114, 0.0, +0.114), +0.15, +0.036),
+        ("mid_right", -1, 0.062, 0.320 - c, +0.042, (0.118, 0.256, +0.122), (0.114, 0.140, +0.052), (0.110, 0.0, +0.108), -0.14, +0.036),
+        ("rear_left", +1, 0.060, 0.298 - c, -0.062, (0.132, 0.244, -0.044), (0.128, 0.128, -0.132), (0.122, 0.0, -0.058), +0.20, -0.058),
+        ("rear_right", -1, 0.060, 0.298 - c, -0.062, (0.128, 0.248, -0.050), (0.124, 0.130, -0.138), (0.118, 0.0, -0.064), -0.18, -0.058),
     )
     for label, side, hx, hy, hz, knee, ankle, foot, foot_yaw, root_z in specs:
         s = 1.0 if side >= 0 else -1.0
@@ -1207,8 +1207,8 @@ def _rebuild_bomber_legs(scene: SceneBuilder, crouch: float) -> None:
 
 
 def build_bomber(blink: float = 0.0) -> SceneBuilder:
-    """Build the sculpted 3D Bomber Ant SceneBuilder with compact upright stance, goggles, Blink, and 1.70s Idle."""
-    bomber_crouch = 0.095
+    """Build the sculpted 3D Bomber Ant SceneBuilder with upright 1998 stance, goggles, Blink, and 1.70s Idle."""
+    bomber_crouch = 0.022
     scene, anchors = build_base_ant(
         scene_name="ant_bomber",
         include_antennae=True,
@@ -1257,8 +1257,8 @@ def build_bomber(blink: float = 0.0) -> SceneBuilder:
     scene.attach_world_node("pack_bomb_center", "upper_body", preserve_world_pose=False)
     _add_bomber_idle(scene)
     _add_bomber_attack(scene)
-    # Uniform similarity scale so Bomber lands cleanly at ~0.86-0.88 total height with smaller head & narrow stance.
-    scene.scale_all(1.072)
+    # Uniform similarity scale matching 1998 `abst901` (`0.96x` Worker height) with upright stance.
+    scene.scale_all(1.012)
     add_bomber_hit_animation(scene)
     add_bomber_abilities(scene)
     return scene

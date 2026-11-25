@@ -74,12 +74,11 @@ GAZE_ANGLE = 0.72
 _LID_REST_DROOP = 0.0
 _THIEF_BLINK_ANGLE = EYELID_CLOSED_ANGLE + 0.04
 
-# Compact athletic sneaking stance (`0.138`, paired with `_THIEF_HEAD_SCALE = 0.81` and
-# `_THIEF_UNIFORM_SCALE = 0.96` so Thief matches `ORIG atst901`/`atst701`/`atst301` head-to-body
-# ratio and compact tucked legs at ~0.78 world height!).
-THIEF_CROUCH = 0.138
+# Agile upright sneaking stance (`0.032` light knee flex instead of deep squat) paired with
+# `_THIEF_HEAD_SCALE = 0.81` and `_THIEF_UNIFORM_SCALE = 1.010` matching 1998 `atst901` (`0.96x` Worker).
+THIEF_CROUCH = 0.032
 _THIEF_HEAD_SCALE = 0.81
-_THIEF_UNIFORM_SCALE = 1.032
+_THIEF_UNIFORM_SCALE = 1.010
 _KNOT_THETA = math.radians(78.0)
 
 # Nimble forward-reaching sneaky rogue arms matching `ORIG atst901`/`atst301`, cleanly above knees.

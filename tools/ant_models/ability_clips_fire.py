@@ -151,17 +151,17 @@ def _attach_fire_mag_glass(
 
 def _attach_fire_sunbeam(scene: SceneBuilder) -> str:
     """Attach hidden focused golden-white sunbeam column + ground hotspot + rising smoke (`afsf f7-f17`)."""
-    # Built in local coords with ground hotspot at Y = 0.0 and beam rising cleanly up to the held lens (`Y = 0.402`).
+    # Built in local coords with ground hotspot at Y = 0.0 and beam rising cleanly up to the held lens (`Y = 0.456`).
     parts: List[MeshPart] = [
         # Bright glowing white-hot solar inner core ray shooting straight down from lens center to ground.
-        cylinder(0.011, 0.014, 0.402, radial_segs=14, bevel=0.003, axis="y", name="sunbeam_core", material="eye_catchlight")
-        .translate(0.0, 0.204, 0.0),
+        cylinder(0.011, 0.014, 0.456, radial_segs=14, bevel=0.003, axis="y", name="sunbeam_core", material="eye_catchlight")
+        .translate(0.0, 0.231, 0.0),
         # Warm golden sunlight shaft wrapping the white-hot core (`afsf901` iconic yellow-white ray!).
-        cylinder(0.019, 0.024, 0.396, radial_segs=16, bevel=0.003, axis="y", name="sunbeam_gold_shaft", material="gear_yellow_plastic")
-        .translate(0.0, 0.201, 0.0),
+        cylinder(0.019, 0.024, 0.450, radial_segs=16, bevel=0.003, axis="y", name="sunbeam_gold_shaft", material="gear_yellow_plastic")
+        .translate(0.0, 0.228, 0.0),
         # Translucent outer focus beam halo tapering cleanly down from lens to focal spot.
-        cylinder(0.028, 0.056, 0.402, radial_segs=18, bevel=0.004, axis="y", name="sunbeam_cone", material="glass_clear")
-        .translate(0.0, 0.204, 0.0),
+        cylinder(0.028, 0.056, 0.456, radial_segs=18, bevel=0.004, axis="y", name="sunbeam_cone", material="glass_clear")
+        .translate(0.0, 0.231, 0.0),
         # Glowing golden solar hotspot ember disc + bright center spark right on the ground (`Y = 0.006`).
         ellipsoid(0.056, 0.014, 0.056, u_segs=16, v_segs=10, name="sunbeam_hotspot", material="gear_yellow_plastic")
         .translate(0.0, 0.014, 0.0),
@@ -169,11 +169,11 @@ def _attach_fire_sunbeam(scene: SceneBuilder) -> str:
         .translate(0.0, 0.018, 0.0),
         # Delicate curling wisps of white smoke rising beside the beam toward the magnifying lens (`afsf f8-f16`).
         ellipsoid(0.015, 0.022, 0.015, u_segs=10, v_segs=8, name="sunbeam_smoke_0", material="eye_white")
-        .translate(-0.028, 0.105, -0.014),
+        .translate(-0.028, 0.115, -0.014),
         ellipsoid(0.019, 0.026, 0.019, u_segs=10, v_segs=8, name="sunbeam_smoke_1", material="eye_white")
-        .translate(+0.022, 0.225, +0.016),
+        .translate(+0.022, 0.250, +0.016),
         ellipsoid(0.022, 0.024, 0.022, u_segs=10, v_segs=8, name="sunbeam_smoke_2", material="eye_white")
-        .translate(-0.018, 0.335, -0.018),
+        .translate(-0.018, 0.380, -0.018),
     ]
     scene.add("fire_sunbeam", parts)
     scene.set_node_transform("fire_sunbeam", translation=_HIDE_POS, scale=_HIDE_SCALE)

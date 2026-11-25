@@ -1584,6 +1584,15 @@ class All1998ClipsAndViewerTests(unittest.TestCase):
                     f"Combat bandolier clips outer thigh of {ln}",
                 )
 
+        # 5. Thief, Bomber, and Fire stand upright matching 1998 proportions (not over-crouched).
+        for cls_name in ("thief", "bomber", "fire"):
+            tx = next(p for p in scenes[cls_name].world_parts() if p.name == "thorax_core")
+            self.assertGreaterEqual(
+                float(tx.bounds()[0][1]),
+                0.21,
+                f"{cls_name} thorax sits too low (over-crouched): {tx.bounds()[0][1]:.3f}",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -60,7 +60,7 @@ except ImportError:
     )
 
 _HAT_MAT = "gear_yellow_plastic"
-_FIRE_CROUCH = 0.055
+_FIRE_CROUCH = 0.000
 
 # Confident, open, alert idle firefighter arms poised slightly outward at his sides (never cowering/hugging chest!).
 _FIRE_LEFT_ARM_IDLE: List[Tuple[float, float, float]] = [
