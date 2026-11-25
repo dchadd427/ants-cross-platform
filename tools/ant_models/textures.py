@@ -1175,6 +1175,13 @@ def get_texture_pack(family: str, size: Optional[int] = None) -> TexturePack:
     fn = builders.get(family)
     if fn is not None:
         return fn(resolved)
+    try:
+        from .map_items import food_textures as _ft
+    except ImportError:
+        from map_items import food_textures as _ft  # type: ignore
+    ft_pack = _ft.build_food_texture_pack(family, int(size) if size is not None else _ft.FOOD_TEXTURE_SIZES.get(family, 128))
+    if ft_pack is not None:
+        return ft_pack
     raise KeyError(f"Unknown texture family {family!r}; expected one of {', '.join(builders)}")
 
 
