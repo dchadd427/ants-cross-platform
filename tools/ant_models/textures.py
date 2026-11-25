@@ -47,6 +47,8 @@ FAMILY_TEXTURE_SIZES: Dict[str, int] = {
     "cola_label": 256,
     "cap_h2o": 128,
     "cap_soda": 128,
+    "cap_win": 128,
+    "crayon_label": 128,
 }
 
 
@@ -1036,6 +1038,60 @@ def _build_cap_h2o_pack(size: int) -> TexturePack:
     )
 
 
+def _build_cap_win_pack(size: int) -> TexturePack:
+    """Upside-down silver bottle-cap liner stamped with 'YOU WIN!!!' (`316:botcap1`)."""
+    lin = np.linspace(-1.0, 1.0, size, dtype=np.float32)
+    px, py = np.meshgrid(lin, lin)
+    r, brush = np.hypot(px, py), _tile_noise(size, 26, 26, seed=997)
+    liner, ink, ring_col = np.array([0.88, 0.89, 0.90], np.float32), np.array([0.28, 0.30, 0.36], np.float32), np.array([0.74, 0.76, 0.82], np.float32)
+    rgb = liner[None, None, :] * (0.90 + 0.10 * brush[:, :, None])
+    rim = _smoothstep(0.76, 0.86, r)
+    rgb = rgb * (1.0 - rim[:, :, None]) + ring_col[None, None, :] * rim[:, :, None]
+    rx, ry = px * 0.92 + py * 0.38, -px * 0.38 + py * 0.92
+    d = _sdf_ring_arc(rx, ry, 0.00, -0.19, 0.11, 0.14, 0.0, 2.0 * math.pi)  # O
+    segs = (
+        (-0.42, -0.34, -0.33, -0.18), (-0.24, -0.34, -0.33, -0.18), (-0.33, -0.18, -0.33, -0.04),
+        (+0.22, -0.34, +0.22, -0.08), (+0.40, -0.34, +0.40, -0.08), (+0.22, -0.08, +0.40, -0.08),
+        (-0.56, +0.08, -0.50, +0.36), (-0.50, +0.36, -0.43, +0.18), (-0.43, +0.18, -0.36, +0.36), (-0.36, +0.36, -0.30, +0.08),
+        (-0.19, +0.08, -0.19, +0.36), (-0.07, +0.36, -0.07, +0.08), (-0.07, +0.08, +0.10, +0.36), (+0.10, +0.36, +0.10, +0.08),
+        (+0.22, +0.08, +0.22, +0.27), (+0.34, +0.08, +0.34, +0.27), (+0.46, +0.08, +0.46, +0.27),
+    )
+    for a, b, c, e in segs:
+        d = np.minimum(d, _sdf_segment(rx, ry, a, b, c, e))
+    for dx_dot in (0.22, 0.34, 0.46):
+        d = np.minimum(d, np.hypot(rx - dx_dot, ry - 0.345))
+    glyph = (1.0 - _smoothstep(0.026, 0.050, d)) * (r < 0.78)
+    rgb = rgb * (1.0 - glyph[:, :, None]) + ink[None, None, :] * glyph[:, :, None]
+    height = np.clip(0.45 * brush + 0.35 * rim - 0.18 * glyph, 0.0, 1.0)
+    return TexturePack("cap_win", size, _rgb_to_png(np.clip(rgb, 0.0, 1.0)), _encode_png_rgb(_height_to_normal_rgb(height, strength=2.2)), _mr_to_rgb_png(np.clip(0.64 - 0.20 * rim + 0.12 * brush, 0.32, 0.88)))
+
+
+def _build_crayon_label_pack(size: int) -> TexturePack:
+    """Matte paper 'Krayawn' crayon wrapper with twin dark end bands & wavy stripe (`352..355`)."""
+    lin = np.linspace(0.0, 1.0, size, dtype=np.float32)
+    u, v = np.meshgrid(lin, lin)
+    paper = _tile_noise(size, 32, 32, seed=998)
+    band = (
+        (1.0 - _smoothstep(0.025, 0.042, np.abs(v - 0.12))) + (1.0 - _smoothstep(0.025, 0.042, np.abs(v - 0.88)))
+        + 0.75 * (1.0 - _smoothstep(0.015, 0.030, np.abs(v - 0.20 - 0.016 * np.sin(u * 6.0 * math.pi))))
+        + 0.75 * (1.0 - _smoothstep(0.015, 0.030, np.abs(v - 0.80 - 0.016 * np.sin(u * 6.0 * math.pi))))
+    )
+    d = np.full_like(u, 10.0)
+    glyphs = (
+        (-0.18, -0.82, +0.18, -0.82), (-0.18, -0.82, +0.02, -0.66), (+0.18, -0.82, +0.02, -0.66),
+        (-0.14, -0.52, +0.14, -0.52), (-0.14, -0.52, -0.14, -0.38), (-0.12, -0.22, +0.14, -0.14), (+0.14, -0.14, -0.12, -0.04),
+        (-0.14, +0.10, +0.04, +0.18), (+0.16, +0.24, -0.14, +0.26), (-0.14, +0.42, +0.14, +0.48), (+0.14, +0.48, -0.10, +0.55),
+        (-0.10, +0.55, +0.14, +0.62), (-0.14, +0.76, +0.14, +0.76), (-0.14, +0.76, +0.14, +0.88),
+    )
+    for uc in (0.25, 0.75):
+        lu, lv = (u - uc) / 0.16, (v - 0.50) / 0.24
+        for a, b, c, e in glyphs:
+            d = np.minimum(d, _sdf_segment(lu, lv, a, b, c, e))
+    ink = np.clip(np.maximum(band, 1.0 - _smoothstep(0.055, 0.11, d)), 0.0, 1.0)
+    albedo = np.clip((0.92 + 0.08 * paper) * (1.0 - 0.78 * ink), 0.16, 1.0)
+    return TexturePack("crayon_label", size, _gray_to_rgb_png(albedo), _encode_png_rgb(_height_to_normal_rgb(np.clip(0.55 * paper + 0.12 * ink, 0.0, 1.0), strength=1.8)), _mr_to_rgb_png(np.clip(0.86 - 0.10 * ink + 0.08 * paper, 0.72, 0.96)))
+
+
 def _build_cap_soda_pack(size: int) -> TexturePack:
     """Crisp cherry-crimson metallic 'soda' bottle cap face (`247:REDHILL`)."""
     lin = np.linspace(-1.0, 1.0, size, dtype=np.float32)
@@ -1113,6 +1169,8 @@ def get_texture_pack(family: str, size: Optional[int] = None) -> TexturePack:
         "cola_label": _build_cola_label_pack,
         "cap_h2o": _build_cap_h2o_pack,
         "cap_soda": _build_cap_soda_pack,
+        "cap_win": _build_cap_win_pack,
+        "crayon_label": _build_crayon_label_pack,
     }
     fn = builders.get(family)
     if fn is not None:
