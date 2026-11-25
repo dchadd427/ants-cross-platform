@@ -1,4 +1,4 @@
-"""Registry of 3D map item models (food, toys, plants, grass, rocks, anthills, bridges, gear) for Ants (1998).
+"""Registry of 3D map item models (food, toys, plants, grass, rocks, anthills, gear) for Ants (1998).
 
 Pure-stdlib safe on import so CI without numpy can inspect metadata & catalog specs.
 """
@@ -36,8 +36,8 @@ CATEGORIES: Tuple[Tuple[str, str], ...] = (
 
 # Waves 1–2 realistic 3D showcase:
 # - Plants & Grass: 35 / 35 complete (100%)
-# - Hills & Gameplay Gear: 19 / 19 complete (100%)
-# - Food: 7 Wave 1 items, Toys & Props: 6 Wave 1 items, Rocks: 1 Wave 1 item (total 68 / 216).
+# - Hills & Gameplay Gear: 14 / 14 complete (100%; mud bridges excluded as ground tiles)
+# - Food: 7 Wave 1 items, Toys & Props: 6 Wave 1 items, Rocks: 1 Wave 1 item (total 63 / 211).
 MAP_ITEM_SPECS: Tuple[MapItemSpec, ...] = (
     # --- Toys & Props (Wave 1) ---
     MapItemSpec("bearhed", "Teddy Bear Head", "toys", 345, "bearhed", "bear", "Head", default_yaw=-8.0, default_pitch=46.0, builder_module="items_toys", builder_fn="build_bearhed"),
@@ -92,16 +92,11 @@ MAP_ITEM_SPECS: Tuple[MapItemSpec, ...] = (
     MapItemSpec("mush2a", "Spotted Mushroom", "plants", 329, "mush2a", "mushroom", "", default_yaw=0.0, default_pitch=34.0, builder_module="items_plants", builder_fn="build_mush2a"),
     # --- Rocks (Wave 1) ---
     MapItemSpec("bigrock2", "Mossy Granite Boulder", "rocks", 290, "bigrock2", "rock", "Big Mossy", default_yaw=0.0, default_pitch=44.0, builder_module="items_world", builder_fn="build_bigrock2"),
-    # --- Hills & Gameplay Gear (ALL 19 / 19 COMPLETE!) ---
+    # --- Hills & Gameplay Gear (ALL 14 / 14 COMPLETE!) ---
     MapItemSpec("GREENHILL", "Green Team Anthill", "structures", 248, "GREENHILL", "anthill", "Green", default_yaw=0.0, default_pitch=46.0, builder_module="items_world", builder_fn="build_greenhill"),
     MapItemSpec("REDHILL", "Red Team Anthill", "structures", 247, "REDHILL", "anthill", "Red", default_yaw=0.0, default_pitch=46.0, builder_module="items_structures", builder_fn="build_redhill"),
     MapItemSpec("BLUEHILL", "Blue Team Anthill", "structures", 246, "BLUEHILL", "anthill", "Blue", default_yaw=0.0, default_pitch=46.0, builder_module="items_structures", builder_fn="build_bluehill"),
     MapItemSpec("BLACKHILL", "Black Team Anthill", "structures", 245, "BLACKHILL", "anthill", "Black", default_yaw=0.0, default_pitch=46.0, builder_module="items_structures", builder_fn="build_blackhill"),
-    MapItemSpec("bridge1", "Mud Bridge (Stage 1)", "structures", 34, "bridge1", "bridge", "Stage 1", default_yaw=0.0, default_pitch=52.0, builder_module="items_structures", builder_fn="build_bridge1"),
-    MapItemSpec("bridge2", "Mud Bridge (Stage 2)", "structures", 35, "bridge2", "bridge", "Stage 2", default_yaw=0.0, default_pitch=52.0, builder_module="items_structures", builder_fn="build_bridge2"),
-    MapItemSpec("bridge3", "Mud Bridge (Stage 3)", "structures", 36, "bridge3", "bridge", "Stage 3", default_yaw=0.0, default_pitch=52.0, builder_module="items_structures", builder_fn="build_bridge3"),
-    MapItemSpec("bridge4", "Mud Bridge (Complete)", "structures", 37, "bridge4", "bridge", "Full A", default_yaw=0.0, default_pitch=52.0, builder_module="items_structures", builder_fn="build_bridge4"),
-    MapItemSpec("bridge4b", "Mud Bridge (Variant)", "structures", 38, "bridge4b", "bridge", "Full B", default_yaw=0.0, default_pitch=52.0, builder_module="items_structures", builder_fn="build_bridge4b"),
     MapItemSpec("pu_comb", "Power-Up: Combat Belt", "structures", 62, "pu_comb", "powerup", "Combat", default_yaw=0.0, default_pitch=44.0, builder_module="items_powerups", builder_fn="build_pu_comb"),
     MapItemSpec("pu_thief", "Power-Up: Thief Mask", "structures", 63, "pu_thief", "powerup", "Thief", default_yaw=0.0, default_pitch=36.0, builder_module="items_powerups", builder_fn="build_pu_thief"),
     MapItemSpec("pu_bomb", "Power-Up: Bomber Kit", "structures", 64, "pu_bomb", "powerup", "Bomber", default_yaw=0.0, default_pitch=32.0, builder_module="items_powerups", builder_fn="build_pu_bomb"),

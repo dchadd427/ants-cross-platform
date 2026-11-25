@@ -102,14 +102,12 @@ def register_item_materials() -> None:
         MaterialSpec("item_mush_orange", (0.86, 0.44, 0.18, 1.0), 0.00, 0.66, texture_family="soil", normal_scale=0.42),
         MaterialSpec("item_mush_spot", (0.30, 0.88, 0.54, 1.0), 0.00, 0.56, texture_family="organic_flesh", normal_scale=0.32),
         MaterialSpec("item_mush_stem", (0.66, 0.63, 0.58, 1.0), 0.00, 0.72, texture_family="wood", normal_scale=0.40),
-        # --- Rocks, Moss, Mud Bridges, Anthills & Gameplay Gear ---
+        # --- Rocks, Moss, Anthills & Gameplay Gear ---
         MaterialSpec("item_stone_granite", (0.56, 0.56, 0.54, 1.0), 0.02, 0.84, texture_family="stone", normal_scale=0.76),
         MaterialSpec("item_stone_moss", (0.28, 0.76, 0.16, 1.0), 0.00, 0.88, texture_family="soil", normal_scale=0.64),
         MaterialSpec("item_soil_mound", (0.64, 0.54, 0.44, 1.0), 0.00, 0.92, texture_family="soil", normal_scale=0.78),
         MaterialSpec("item_soil_grey", (0.68, 0.65, 0.58, 1.0), 0.00, 0.92, texture_family="soil", normal_scale=0.78),
         MaterialSpec("item_soil_pink", (0.82, 0.64, 0.58, 1.0), 0.00, 0.90, texture_family="soil", normal_scale=0.76),
-        MaterialSpec("item_soil_mud", (0.42, 0.37, 0.31, 1.0), 0.02, 0.72, texture_family="soil", normal_scale=0.72),
-        MaterialSpec("item_water_ripple", (0.24, 0.26, 0.64, 0.84), 0.04, 0.14, double_sided=True, alpha_mode="BLEND"),
         MaterialSpec("item_soil_hole", (0.08, 0.06, 0.05, 1.0), 0.00, 0.96, texture_family="soil", normal_scale=0.44),
         MaterialSpec("item_twig_bark", (0.98, 0.94, 0.90, 1.0), 0.00, 0.92, texture_family="bark_wood", normal_scale=0.88),
         MaterialSpec("item_twig_peeled", (1.00, 0.92, 0.80, 1.0), 0.00, 0.88, texture_family="bark_wood", normal_scale=0.80),

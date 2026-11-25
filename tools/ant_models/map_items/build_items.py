@@ -226,7 +226,7 @@ def build_all_items(out_dir: Path, only: Optional[Sequence[str]] = None) -> Dict
         "build_id": h.hexdigest()[:8],
         "categories": [{"id": cid, "label": lbl} for cid, lbl in CATEGORIES],
         "built_count": len(ordered_rows),
-        "total_catalog_sprites": 216,
+        "total_catalog_sprites": 211,
         "items": ordered_rows,
     }
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")

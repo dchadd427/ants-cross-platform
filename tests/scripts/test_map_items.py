@@ -45,7 +45,7 @@ class MapItemsTests(unittest.TestCase):
         item_materials.register_item_materials()
         self.assertEqual(list(materials.MATERIAL_ORDER), before_order)
         self.assertGreater(len(materials.EXTRA_MATERIALS), 35)
-        self.assertGreaterEqual(len(MAP_ITEM_SPECS), 68)
+        self.assertGreaterEqual(len(MAP_ITEM_SPECS), 63)
         self.assertEqual(CATEGORIES[0][0], "all")
         self.assertTrue(callable(build_items.build_all_items))
         self.assertTrue(callable(items_toys.build_bearhed))
@@ -56,9 +56,9 @@ class MapItemsTests(unittest.TestCase):
         self.assertTrue(callable(items_powerups.build_pu_swim))
         self.assertTrue(callable(items_structures.build_wallup04))
         self.assertTrue(callable(items_world.build_greenhill))
-        # Plants & Grass (35) and Hills & Gear (19) are 100% covered.
+        # Plants & Grass (35) and Hills & Gear (14; mud bridges excluded as ground tiles) are 100% covered.
         self.assertEqual(sum(1 for s in MAP_ITEM_SPECS if s.category == "plants"), 35)
-        self.assertEqual(sum(1 for s in MAP_ITEM_SPECS if s.category == "structures"), 19)
+        self.assertEqual(sum(1 for s in MAP_ITEM_SPECS if s.category == "structures"), 14)
 
     def test_catalog_matches_authentic_1998_chd_sprites_and_excludes_tiles_hud_cursors(self):
         from tools.ant_models.map_items import CATEGORIES, MAP_ITEM_SPECS
@@ -78,7 +78,7 @@ class MapItemsTests(unittest.TestCase):
             entry = by_id[spec.chd_id]
             self.assertEqual(entry.get("name"), spec.chd_name, f"chd_name mismatch for {spec.id}")
             low_name = spec.chd_name.lower()
-            for forbidden_prefix in ("cursor", "tile", "hud", "menu", "font"):
+            for forbidden_prefix in ("cursor", "tile", "hud", "menu", "font", "bridge"):
                 self.assertFalse(low_name.startswith(forbidden_prefix), f"excluded asset leaked into catalog: {spec.id}")
             # Verify first sprite PNG exists on disk in asset_catalog/sprites/.
             subitems = entry.get("subitems", [])

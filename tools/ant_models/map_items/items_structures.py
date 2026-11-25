@@ -1,8 +1,7 @@
-"""Realistic 3D sculptors for 1998 Ants team anthills, swimmer bridges, planted bombs, and fire wall (Wave 2).
+"""Realistic 3D sculptors for 1998 Ants team anthills, planted bombs, and fire wall (Wave 2).
 
 Covers:
 - `BLACKHILL` (245), `BLUEHILL` (246), `REDHILL` (247): Remaining 3 team anthills with waving flags & authentic decor
-- `bridge1`..`bridge4`, `bridge4b` (34–38): Progressive 5-stage swimmer mud & river-stone water bridge
 - `redbomb` (129), `greenbomb` (130), `blackbomb` (131), `bluebomb` (132): All 4 team planted bombs + spark pulse
 - `wallup04` (134): Blazing multi-layered 3D Fire Wall flame + animated flicker clip
 """
@@ -553,107 +552,6 @@ def build_redhill() -> SceneBuilder:
         sc.add("anthill", tine)
 
     return _finalize_item(sc, target_span=1.00)
-
-
-# ---------------------------------------------------------------------------
-# Swimmer-built progressive mud/river-stone water bridges (`34..38`)
-# ---------------------------------------------------------------------------
-
-def _build_bridge_stage(name: str, *, blobs: List[Tuple[float, float, float, float, float]], has_water: bool, seed: int) -> SceneBuilder:
-    """Build one stage of the swimmer's mud-and-cobble water bridge (`bridge1`..`bridge4b`)."""
-    register_item_materials()
-    sc = SceneBuilder(name=name)
-
-    if has_water:
-        def _ripple(pos: np.ndarray) -> np.ndarray:
-            p = pos.copy()
-            ang = np.arctan2(p[:, 2], p[:, 0])
-            edge = 1.0 + 0.14 * np.sin(ang * 4.0 + seed) + 0.09 * np.cos(ang * 7.0 - seed)
-            p[:, 0] *= edge
-            p[:, 2] *= edge
-            return p
-
-        water = cylinder(0.36, 0.36, 0.018, radial_segs=32, bevel=0.004, axis="y", name=f"{name}_water", material="item_water_ripple").deform(_ripple).translate(0.0, 0.010, 0.0)
-        sc.add("bridge", water)
-
-    for idx, (bx, bz, rx, ry, rz) in enumerate(blobs):
-        def _mud_lump(pos: np.ndarray, k=idx) -> np.ndarray:
-            p = pos.copy()
-            r = np.maximum(1e-5, np.linalg.norm(p, axis=1, keepdims=True))
-            n = p / r
-            lumpy = 0.016 * np.sin(p[:, 0] * 18.0 + k * 1.7 + seed) * np.cos(p[:, 2] * 17.0 - k)
-            p = p + lumpy[:, None] * n
-            p[:, 1] = np.where(p[:, 1] < -ry * 0.45, -ry * 0.45 + 0.12 * (p[:, 1] + ry * 0.45), p[:, 1])
-            return p
-
-        lump = gradient_y_tint(
-            superellipsoid(rx, ry, rz, e1=0.68, e2=0.82, u_segs=26, v_segs=16, name=f"{name}_mud_{idx}", material="item_soil_mud")
-            .deform(_mud_lump)
-            .translate(bx, ry * 0.55 + (0.012 if has_water else 0.0), bz),
-            (0.62, 0.58, 0.54),
-            (1.04, 0.98, 0.90),
-            noise_amp=0.06,
-        )
-        sc.add("bridge", lump)
-
-    return _finalize_item(sc, target_span=0.90)
-
-
-def build_bridge1() -> SceneBuilder:
-    """Bridge stage 1: tiny emerging mud shoal inside blue water ripple (`34:bridge1`)."""
-    return _build_bridge_stage("item_bridge1", blobs=[(0.00, 0.00, 0.14, 0.055, 0.12)], has_water=True, seed=34)
-
-
-def build_bridge2() -> SceneBuilder:
-    """Bridge stage 2: wet clustered river stones emerging from water (`35:bridge2`)."""
-    return _build_bridge_stage(
-        "item_bridge2",
-        blobs=[(-0.08, -0.04, 0.17, 0.075, 0.15), (+0.10, +0.06, 0.15, 0.068, 0.14), (+0.02, -0.10, 0.12, 0.058, 0.11)],
-        has_water=True,
-        seed=35,
-    )
-
-
-def build_bridge3() -> SceneBuilder:
-    """Bridge stage 3: three broad overlapping dark cobble mud mounds (`36:bridge3`)."""
-    return _build_bridge_stage(
-        "item_bridge3",
-        blobs=[(-0.14, -0.06, 0.22, 0.095, 0.18), (+0.14, -0.08, 0.21, 0.092, 0.19), (-0.02, +0.16, 0.20, 0.088, 0.17)],
-        has_water=True,
-        seed=36,
-    )
-
-
-def build_bridge4() -> SceneBuilder:
-    """Bridge stage 4: solid packed walkable mud-bridge crossing pad (`37:bridge4`)."""
-    return _build_bridge_stage(
-        "item_bridge4",
-        blobs=[
-            (0.00, 0.00, 0.38, 0.105, 0.38),
-            (-0.18, -0.18, 0.22, 0.098, 0.22),
-            (+0.18, -0.16, 0.21, 0.095, 0.21),
-            (-0.16, +0.18, 0.21, 0.096, 0.21),
-            (+0.18, +0.18, 0.22, 0.098, 0.22),
-        ],
-        has_water=False,
-        seed=37,
-    )
-
-
-def build_bridge4b() -> SceneBuilder:
-    """Bridge stage 4 variant: sculpted scalloped mud-bridge pad (`38:bridge4b`)."""
-    return _build_bridge_stage(
-        "item_bridge4b",
-        blobs=[
-            (0.00, 0.00, 0.36, 0.108, 0.36),
-            (-0.20, -0.10, 0.23, 0.100, 0.24),
-            (+0.16, -0.20, 0.22, 0.096, 0.22),
-            (+0.20, +0.14, 0.24, 0.102, 0.23),
-            (-0.12, +0.20, 0.22, 0.096, 0.21),
-        ],
-        has_water=False,
-        seed=38,
-    )
 
 
 # ---------------------------------------------------------------------------
