@@ -117,12 +117,13 @@ def register_item_materials() -> None:
         MaterialSpec("item_steel_dark", (0.24, 0.26, 0.30, 1.0), 0.82, 0.34, texture_family="metal", normal_scale=0.34),
         MaterialSpec("item_rubber_dark", (0.16, 0.18, 0.24, 1.0), 0.02, 0.62, texture_family="rubber", normal_scale=0.38),
         MaterialSpec("item_rubber_blue", (0.16, 0.18, 0.50, 1.0), 0.02, 0.68, texture_family="rubber", normal_scale=0.46),
-        MaterialSpec("item_bomb_purple", (0.64, 0.14, 0.56, 1.0), 0.22, 0.44, texture_family="metal", normal_scale=0.28),
-        MaterialSpec("item_bomb_red", (0.90, 0.10, 0.12, 1.0), 0.20, 0.42, texture_family="metal", normal_scale=0.28),
-        MaterialSpec("item_bomb_green", (0.14, 0.56, 0.18, 1.0), 0.20, 0.44, texture_family="metal", normal_scale=0.28),
-        MaterialSpec("item_bomb_blue", (0.20, 0.36, 0.88, 1.0), 0.20, 0.42, texture_family="metal", normal_scale=0.28),
-        MaterialSpec("item_bomb_black", (0.18, 0.20, 0.24, 1.0), 0.28, 0.42, texture_family="metal", normal_scale=0.30),
-        MaterialSpec("item_fuse_cord", (0.92, 0.88, 0.78, 1.0), 0.00, 0.88, texture_family="cloth", normal_scale=0.46),
+        MaterialSpec("item_bomb_purple", (0.76, 0.10, 0.62, 1.0), 0.36, 0.30, texture_family="metal", normal_scale=0.18),
+        MaterialSpec("item_bomb_crimson", (0.50, 0.04, 0.06, 1.0), 0.34, 0.32, texture_family="metal", normal_scale=0.18),
+        MaterialSpec("item_bomb_red", (0.92, 0.09, 0.11, 1.0), 0.34, 0.28, texture_family="metal", normal_scale=0.18),
+        MaterialSpec("item_bomb_green", (0.14, 0.62, 0.20, 1.0), 0.34, 0.30, texture_family="metal", normal_scale=0.18),
+        MaterialSpec("item_bomb_blue", (0.20, 0.42, 0.94, 1.0), 0.34, 0.28, texture_family="metal", normal_scale=0.18),
+        MaterialSpec("item_bomb_black", (0.20, 0.23, 0.28, 1.0), 0.42, 0.30, texture_family="metal", normal_scale=0.20),
+        MaterialSpec("item_fuse_cord", (0.94, 0.90, 0.80, 1.0), 0.00, 0.88, texture_family="cloth", normal_scale=0.46),
         MaterialSpec("item_charcoal_ember", (0.26, 0.17, 0.11, 1.0), 0.00, 0.94, texture_family="soil", normal_scale=0.84),
         MaterialSpec("item_flame_white", (1.00, 1.00, 0.96, 1.0), 0.00, 0.98, emissive=(1.00, 1.00, 0.96)),
         MaterialSpec("item_flame_core", (1.00, 0.94, 0.22, 1.0), 0.00, 0.97, emissive=(1.00, 0.90, 0.14)),
@@ -131,6 +132,7 @@ def register_item_materials() -> None:
         MaterialSpec("item_flame_crimson", (0.98, 0.20, 0.02, 0.74), 0.00, 0.97, double_sided=True, alpha_mode="BLEND", emissive=(0.98, 0.16, 0.01)),
         MaterialSpec("item_flame_spark", (0.98, 0.28, 0.02, 1.0), 0.00, 0.96, emissive=(0.98, 0.26, 0.02)),
         MaterialSpec("item_fire_volume", (1.00, 0.52, 0.04, 0.38), 0.00, 0.98, double_sided=True, alpha_mode="BLEND", emissive=(0.98, 0.42, 0.02)),
+        MaterialSpec("item_spark_volume", (1.00, 0.76, 0.18, 0.45), 0.00, 0.98, double_sided=True, alpha_mode="BLEND", emissive=(1.00, 0.64, 0.08)),
     )
     for spec in specs:
         register_extra_material(spec)

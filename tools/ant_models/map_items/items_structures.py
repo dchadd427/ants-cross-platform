@@ -661,64 +661,166 @@ def build_bridge4b() -> SceneBuilder:
 # ---------------------------------------------------------------------------
 
 def _build_team_bomb(name: str, body_mat: str, accent_mat: str) -> SceneBuilder:
-    """Team-colored cylindrical planted bomb with beveled purple collar, curving fuse & live animated spark."""
+    """High-craft tapered ordnance canister matching `129..132`: riveted foot, team enamel casing, dark-crimson shoulder, bolted magenta blast cap, braided fuse & real-time GPU sparkler."""
     register_item_materials()
     sc = SceneBuilder(name=name)
-
-    # Tapered cartoon dynamite canister with bold team stripes & dark metal bottom cap
-    base_cap = cylinder(0.118, 0.106, 0.055, radial_segs=26, bevel=0.008, axis="y", name=f"{name}_base", material=accent_mat).translate(0.0, 0.028, 0.0)
-    canister = cylinder(0.132, 0.118, 0.270, radial_segs=28, bevel=0.010, axis="y", name=f"{name}_body", material=body_mat).translate(0.0, 0.185, 0.0)
-    # Iconic wide purple top bevel flange (`129..132`)!
-    collar = cylinder(0.154, 0.140, 0.088, radial_segs=28, bevel=0.014, axis="y", name=f"{name}_collar", material="item_bomb_purple").translate(0.0, 0.340, 0.0)
-    plug = cylinder(0.042, 0.046, 0.034, radial_segs=16, bevel=0.005, axis="y", name=f"{name}_plug", material="item_steel_dark").translate(0.0, 0.396, 0.0)
-    fuse = curved_tube(
-        [(0.0, 0.405, 0.0), (0.015, 0.485, 0.01), (0.055, 0.545, 0.02), (0.105, 0.525, 0.01)],
-        [0.014, 0.013, 0.012, 0.010],
-        samples_per_seg=4,
-        radial_segs=10,
-        name=f"{name}_fuse",
-        material="item_fuse_cord",
-    )
     sc.set_node_transform("bomb_root", translation=(0.0, 0.0, 0.0))
-    sc.add("bomb_root", [base_cap, canister, collar, plug, fuse])
 
-    # Sizzling animated yellow-orange spark starburst mounted on its own child node for pulsing!
-    spark_core = sphere(0.032, u_segs=14, v_segs=10, name=f"{name}_spark_core", material="item_flame_core")
-    spark_rays: List[MeshPart] = [spark_core]
-    for k in range(6):
-        ang = 2.0 * math.pi * k / 6.0
-        ray = cone(0.012, 0.055, radial_segs=8, name=f"{name}_ray_{k}", material="item_flame_outer").rotate_xyz(rx=math.pi * 0.5, rz=ang).translate(0.032 * math.sin(ang), 0.032 * math.cos(ang), 0.0)
-        spark_rays.append(ray)
-    sc.add("bomb_spark", spark_rays)
+    # 1. Rounded riveted crimson-steel lower foot & gunmetal clamp ring (authentic tapered chalice base of `129..132`).
+    base_prof = [
+        (0.000, 0.000),
+        (0.094, 0.000),
+        (0.114, 0.016),
+        (0.122, 0.048),
+        (0.118, 0.066),
+    ]
+    base_cap = lathe(base_prof, radial_segs=32, cap_bottom=False, cap_top=True, axis="y", name=f"{name}_base", material="item_bomb_crimson")
+    foot_ring = torus_arc(0.120, 0.009, u_segs=32, v_segs=10, plane="xz", name=f"{name}_foot_ring", material="item_steel_dark").translate(0.0, 0.062, 0.0)
+
+    # 2. Tapered upward-flaring team-colored glossy enamel ordnance body with machined center channel & bolt studs!
+    body_prof = [
+        (0.116, 0.064),
+        (0.128, 0.105),
+        (0.136, 0.148),
+        (0.132, 0.156),
+        (0.138, 0.164),
+        (0.146, 0.215),
+        (0.150, 0.246),
+    ]
+    canister = gradient_y_tint(
+        lathe(body_prof, radial_segs=36, cap_bottom=True, cap_top=True, axis="y", name=f"{name}_body", material=body_mat),
+        (0.84, 0.84, 0.86),
+        (1.00, 1.00, 1.00),
+    )
+
+    # 3. Iconic deep crimson warning shoulder band present under the purple lid on ALL 4 1998 bombs (`129..132`)!
+    shoulder_prof = [
+        (0.148, 0.244),
+        (0.156, 0.260),
+        (0.166, 0.308),
+        (0.162, 0.328),
+    ]
+    crimson_band = lathe(shoulder_prof, radial_segs=36, cap_bottom=True, cap_top=True, axis="y", name=f"{name}_shoulder", material="item_bomb_crimson")
+    mid_clamp = torus_arc(0.152, 0.0085, u_segs=36, v_segs=10, plane="xz", name=f"{name}_mid_clamp", material="item_steel_dark").translate(0.0, 0.246, 0.0)
+
+    # 4. Signature overhanging domed magenta-purple metallic blast cap with dark rim seal, 8 perimeter hex bolts & brass fuse bushing!
+    cap_prof = [
+        (0.156, 0.324),
+        (0.184, 0.336),
+        (0.190, 0.362),
+        (0.184, 0.392),
+        (0.166, 0.412),
+        (0.126, 0.422),
+        (0.068, 0.418),
+        (0.044, 0.410),
+        (0.000, 0.408),
+    ]
+    purple_cap = gradient_y_tint(
+        lathe(cap_prof, radial_segs=40, cap_bottom=True, cap_top=False, axis="y", name=f"{name}_collar", material="item_bomb_purple"),
+        (0.76, 0.72, 0.82),
+        (1.04, 1.00, 1.04),
+    )
+    cap_seal = torus_arc(0.172, 0.009, u_segs=36, v_segs=10, plane="xz", name=f"{name}_cap_seal", material="item_steel_dark").translate(0.0, 0.328, 0.0)
+
+    parts: List[MeshPart] = [base_cap, foot_ring, canister, crimson_band, mid_clamp, purple_cap, cap_seal]
+
+    # Machined armor hardware: 8 lower foot rivets, 4 vertical armored strap ribs & 8 top hex bolts around the blast cap!
+    for k in range(8):
+        ang = 2.0 * math.pi * k / 8.0 + math.pi / 8.0
+        ca, sa = math.cos(ang), math.sin(ang)
+        parts.append(
+            sphere(0.0085, u_segs=10, v_segs=8, name=f"{name}_foot_rivet_{k}", material="item_steel_dark")
+            .translate(0.124 * ca, 0.044, 0.124 * sa)
+        )
+        parts.append(
+            cylinder(0.011, 0.011, 0.014, radial_segs=6, bevel=0.002, axis="y", name=f"{name}_cap_bolt_{k}", material="item_steel_dark")
+            .rotate_xyz(ry=ang)
+            .translate(0.136 * ca, 0.422, 0.136 * sa)
+        )
+    for k in range(4):
+        ang = 2.0 * math.pi * k / 4.0 + math.pi / 4.0
+        ca, sa = math.cos(ang), math.sin(ang)
+        strap = (
+            rounded_box(0.018, 0.178, 0.012, bevel=0.003, segs=2, name=f"{name}_strap_{k}", material="item_steel_dark")
+            .rotate_xyz(rx=+0.184)
+            .rotate_xyz(ry=math.atan2(ca, sa))
+            .translate(0.135 * ca, 0.155, 0.135 * sa)
+        )
+        parts.append(strap)
+
+    # Stepped gunmetal + knurled brass hex fuse bushing seated cleanly in the recessed blast cap dish!
+    grommet = cylinder(0.048, 0.042, 0.022, radial_segs=20, bevel=0.004, axis="y", name=f"{name}_grommet", material="item_steel_dark").translate(0.0, 0.420, 0.0)
+    brass_nut = cylinder(0.032, 0.030, 0.020, radial_segs=6, bevel=0.003, axis="y", name=f"{name}_brass_nut", material="item_gear_brass").translate(0.0, 0.436, 0.0)
+    parts.extend([grommet, brass_nut])
+
+    # 5. Authentic twisted braided cotton fuse cord sweeping gracefully up-left then arcing up-right (`129..132`)!
+    fuse_pts = [
+        (0.000, 0.440, 0.000),
+        (-0.026, 0.492, -0.006),
+        (-0.024, 0.548, 0.004),
+        (0.024, 0.592, 0.010),
+        (0.072, 0.596, 0.008),
+    ]
+
+    def _braid_fuse(pos: np.ndarray) -> np.ndarray:
+        p = pos.copy()
+        ang = np.arctan2(p[:, 2], p[:, 0])
+        h = p[:, 1]
+        twist = 0.0018 * np.sin(h * 115.0 + ang * 3.0)
+        r = np.maximum(1e-4, np.hypot(p[:, 0], p[:, 2]))
+        p[:, 0] += twist * (p[:, 0] / r)
+        p[:, 2] += twist * (p[:, 2] / r)
+        return p
+
+    fuse = tint_part(
+        curved_tube(fuse_pts, [0.0155, 0.0148, 0.0142, 0.0132, 0.0112], samples_per_seg=5, radial_segs=12, cap_rings=3, name=f"{name}_fuse", material="item_fuse_cord")
+        .deform(_braid_fuse),
+        lambda pos, _n: np.where(
+            pos[:, 0:1] > 0.052,
+            np.array([[0.32, 0.24, 0.20]]),
+            np.array([[0.98, 0.96, 0.90]]) - 0.14 * np.clip((pos[:, 0:1] - 0.020) / 0.040, 0.0, 1.0),
+        ) * np.ones((len(pos), 3), dtype=np.float64),
+    )
+    # Charred blackened ash collar + glowing incandescent molten ember bead right at the burning fuse end!
+    tip_pos = (0.074, 0.596, 0.008)
+    char_ring = sphere(0.0135, u_segs=12, v_segs=10, name=f"{name}_char_tip", material="item_charcoal_ember").translate(0.068, 0.596, 0.008)
+    ember_bead = sphere(0.013, u_segs=12, v_segs=10, name=f"{name}_ember_bead", material="item_flame_white").translate(*tip_pos)
+    parts.extend([fuse, char_ring, ember_bead])
+    sc.add("bomb_root", parts)
+
+    # 6. Real-time WebGL2 GPU Blazing Sparkler emitter (`item_spark_volume`) anchored right at the burning fuse tip!
+    #    - In Ants WebGL2 (`viewer_fx.js`), spawns a sizzling incandescent molten core, 88 ballistic gravity-arcing
+    #      golden-white spark streaks, 26 crackling starburst flashes, and 22 rising curls of gunpowder smoke!
+    #    - In external glTF viewers, renders as a warm glowing emissive spark bead with smooth pulsing Idle clip.
+    spark_emitter = sphere(0.058, u_segs=12, v_segs=10, name=f"{name}_spark_emitter", material="item_spark_volume")
+    sc.add("bomb_spark", spark_emitter)
     sc.set_node_parent("bomb_spark", "bomb_root")
-    sc.set_node_transform("bomb_spark", translation=(0.105, 0.525, 0.01))
+    sc.set_node_transform("bomb_spark", translation=tip_pos)
 
-    # Crisp 2-frame authentic sizzling spark flicker matching `129..132`!
-    times = [0.00, 0.12, 0.24, 0.36]
+    times = [0.00, 0.25, 0.50, 0.75, 1.00]
     sc.add_animation(
         "Idle",
         [
-            AnimationChannel("bomb_spark", "scale", times, [(0.88, 0.88, 0.88), (1.28, 1.28, 1.28), (0.94, 0.94, 0.94), (0.88, 0.88, 0.88)]),
-            AnimationChannel("bomb_spark", "rotation", times, [quat_from_euler_xyz(rz=a) for a in (0.0, 0.55, 1.10, 0.0)]),
+            AnimationChannel("bomb_spark", "scale", times, [(1.00, 1.00, 1.00), (1.06, 1.06, 1.06), (0.96, 0.96, 0.96), (1.04, 1.04, 1.04), (1.00, 1.00, 1.00)]),
         ],
     )
     return _finalize_item(sc, target_span=0.92)
 
 
 def build_redbomb() -> SceneBuilder:
-    return _build_team_bomb("item_redbomb", "item_bomb_red", "item_steel_dark")
+    return _build_team_bomb("item_redbomb", "item_bomb_red", "item_bomb_crimson")
 
 
 def build_greenbomb() -> SceneBuilder:
-    return _build_team_bomb("item_greenbomb", "item_bomb_green", "item_bomb_red")
+    return _build_team_bomb("item_greenbomb", "item_bomb_green", "item_bomb_crimson")
 
 
 def build_blackbomb() -> SceneBuilder:
-    return _build_team_bomb("item_blackbomb", "item_bomb_black", "item_bomb_red")
+    return _build_team_bomb("item_blackbomb", "item_bomb_black", "item_bomb_crimson")
 
 
 def build_bluebomb() -> SceneBuilder:
-    return _build_team_bomb("item_bluebomb", "item_bomb_blue", "item_bomb_red")
+    return _build_team_bomb("item_bluebomb", "item_bomb_blue", "item_bomb_crimson")
 
 
 def build_wallup04() -> SceneBuilder:

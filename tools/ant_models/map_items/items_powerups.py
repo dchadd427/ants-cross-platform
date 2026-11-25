@@ -473,35 +473,32 @@ def build_pu_bomb() -> SceneBuilder:
     bomb_band_red = cylinder(0.098, 0.098, 0.048, radial_segs=26, bevel=0.005, axis="y", name="pubomb_red_ring", material="item_bomb_red").translate(bx, 0.085, bz)
     bomb_collar_purp = cylinder(0.112, 0.106, 0.078, radial_segs=26, bevel=0.010, axis="y", name="pubomb_purple_collar", material="item_bomb_purple").translate(bx, 0.258, bz)
     bomb_cap_red = cylinder(0.114, 0.112, 0.105, radial_segs=26, bevel=0.015, axis="y", name="pubomb_red_top", material="item_bomb_red").translate(bx, 0.338, bz)
+    bomb_grommet = cylinder(0.034, 0.030, 0.016, radial_segs=18, bevel=0.003, axis="y", name="pubomb_grommet", material="item_steel_dark").translate(bx, 0.392, bz)
+    bomb_nut = cylinder(0.024, 0.022, 0.016, radial_segs=6, bevel=0.002, axis="y", name="pubomb_nut", material="item_gear_brass").translate(bx, 0.402, bz)
     fuse = curved_tube(
-        [(bx, 0.382, bz), (bx - 0.022, 0.455, bz - 0.008), (bx + 0.010, 0.515, bz + 0.005), (bx + 0.046, 0.502, bz + 0.010)],
-        [0.015, 0.014, 0.013, 0.011],
+        [(bx, 0.404, bz), (bx - 0.024, 0.464, bz - 0.006), (bx + 0.008, 0.520, bz + 0.004), (bx + 0.048, 0.514, bz + 0.010)],
+        [0.0145, 0.0138, 0.0128, 0.0105],
         samples_per_seg=4,
         radial_segs=10,
+        cap_rings=2,
         name="pubomb_fuse",
         material="item_fuse_cord",
     )
-    sc.add("pu_bomb", [bomb_lower, bomb_band_red, bomb_collar_purp, bomb_cap_red, fuse])
+    tip_pos = (bx + 0.050, 0.514, bz + 0.010)
+    char_tip = sphere(0.012, u_segs=12, v_segs=10, name="pubomb_char_tip", material="item_charcoal_ember").translate(bx + 0.044, 0.514, bz + 0.010)
+    ember_bead = sphere(0.0115, u_segs=12, v_segs=10, name="pubomb_ember_bead", material="item_flame_white").translate(*tip_pos)
+    sc.add("pu_bomb", [bomb_lower, bomb_band_red, bomb_collar_purp, bomb_cap_red, bomb_grommet, bomb_nut, fuse, char_tip, ember_bead])
 
-    # Sizzling animated spark starburst perched right at the fuse tip!
-    spark_core = sphere(0.028, u_segs=12, v_segs=10, name="pubomb_spark_core", material="item_flame_core")
-    spark_parts = [spark_core]
-    for k in range(6):
-        ang = 2.0 * math.pi * k / 6.0
-        spark_parts.append(
-            cone(0.011, 0.052, radial_segs=8, name=f"pubomb_ray_{k}", material="item_flame_outer")
-            .rotate_xyz(rx=math.pi * 0.5, rz=ang)
-            .translate(0.028 * math.sin(ang), 0.028 * math.cos(ang), 0.0)
-        )
+    # Real-time WebGL2 GPU blazing sparkler (`item_spark_volume`) perched right at the burning fuse tip!
+    spark_emitter = sphere(0.052, u_segs=12, v_segs=10, name="pubomb_spark_emitter", material="item_spark_volume")
     sc.set_node_parent("pubomb_spark", "pu_bomb")
-    sc.set_node_transform("pubomb_spark", translation=(bx + 0.046, 0.502, bz + 0.010))
-    sc.add("pubomb_spark", spark_parts)
-    times = [0.00, 0.12, 0.24, 0.36]
+    sc.set_node_transform("pubomb_spark", translation=tip_pos)
+    sc.add("pubomb_spark", spark_emitter)
+    times = [0.00, 0.25, 0.50, 0.75, 1.00]
     sc.add_animation(
         "Idle",
         [
-            AnimationChannel("pubomb_spark", "scale", times, [(0.86, 0.86, 0.86), (1.28, 1.28, 1.28), (0.94, 0.94, 0.94), (0.86, 0.86, 0.86)]),
-            AnimationChannel("pubomb_spark", "rotation", times, [quat_from_euler_xyz(rz=a) for a in (0.0, 0.6, 1.2, 0.0)]),
+            AnimationChannel("pubomb_spark", "scale", times, [(1.00, 1.00, 1.00), (1.06, 1.06, 1.06), (0.96, 0.96, 0.96), (1.04, 1.04, 1.04), (1.00, 1.00, 1.00)]),
         ],
         replace=True,
     )
