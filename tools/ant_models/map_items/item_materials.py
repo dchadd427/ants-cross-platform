@@ -86,9 +86,9 @@ def register_item_materials() -> None:
         MaterialSpec("item_chocolate", (0.28, 0.14, 0.08, 1.0), 0.00, 0.46, texture_family="organic_flesh", normal_scale=0.26),
         # --- Realistic Botanical Grass, Plants, Clovers, Flowers, Mushroom ---
         MaterialSpec("item_grass_blade", (0.36, 0.80, 0.16, 1.0), 0.00, 0.58, double_sided=True, texture_family="foliage", normal_scale=0.48),
-        MaterialSpec("item_leaf_rich", (0.30, 0.72, 0.18, 1.0), 0.00, 0.54, double_sided=True, texture_family="foliage", normal_scale=0.48),
-        MaterialSpec("item_leaf_oak", (0.20, 0.56, 0.16, 1.0), 0.00, 0.56, double_sided=True, texture_family="foliage", normal_scale=0.52),
-        MaterialSpec("item_leaf_bright", (0.42, 0.84, 0.22, 1.0), 0.00, 0.52, double_sided=True, texture_family="foliage", normal_scale=0.46),
+        MaterialSpec("item_leaf_rich", (0.28, 0.70, 0.17, 1.0), 0.00, 0.58, double_sided=True, texture_family="leaf_vein", normal_scale=0.34),
+        MaterialSpec("item_leaf_oak", (0.18, 0.54, 0.15, 1.0), 0.00, 0.60, double_sided=True, texture_family="leaf_vein", normal_scale=0.36),
+        MaterialSpec("item_leaf_bright", (0.40, 0.84, 0.20, 1.0), 0.00, 0.56, double_sided=True, texture_family="leaf_vein", normal_scale=0.32),
         MaterialSpec("item_stem_green", (0.26, 0.58, 0.16, 1.0), 0.00, 0.62, texture_family="foliage", normal_scale=0.42),
         MaterialSpec("item_petal_white", (0.97, 0.97, 0.94, 1.0), 0.00, 0.56, double_sided=True, texture_family="organic_flesh", normal_scale=0.26),
         MaterialSpec("item_petal_pink", (0.94, 0.30, 0.58, 1.0), 0.00, 0.52, double_sided=True, texture_family="organic_flesh", normal_scale=0.28),

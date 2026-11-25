@@ -29,6 +29,7 @@ FAMILY_TEXTURE_SIZES: Dict[str, int] = {
     "fur": 128,
     "bread": 128,
     "foliage": 128,
+    "leaf_vein": 128,
     "stone": 128,
     "soil": 128,
     "wood": 128,
@@ -519,6 +520,26 @@ def _build_foliage_pack(size: int) -> TexturePack:
         base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.76, 1.0)),
         normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=3.4)),
         metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.52, 1.0)),
+    )
+
+
+def _build_leaf_vein_pack(size: int) -> TexturePack:
+    """Velvety broadleaf epidermis: organic reticulated micro-veinlets & soft chlorophyll mottle (zero grass stripes!)."""
+    f1_a, edge_a = _tile_voronoi_f1_f2(size, 14, seed=731)
+    f1_b, edge_b = _tile_voronoi_f1_f2(size, 32, seed=732)
+    vein_a = 1.0 - _smoothstep(0.02, 0.16, edge_a)
+    vein_b = 1.0 - _smoothstep(0.02, 0.22, edge_b)
+    mottle = _tile_noise(size, 8, 8, seed=733)
+    cells = _tile_noise(size, 36, 36, seed=734)
+    height = np.clip(0.36 * vein_a + 0.20 * vein_b + 0.24 * (1.0 - f1_a) + 0.20 * cells, 0.0, 1.0)
+    albedo = 0.84 + 0.08 * vein_a + 0.05 * mottle + 0.03 * cells
+    rough_mult = 0.68 + 0.18 * (1.0 - vein_a) + 0.08 * (1.0 - mottle)
+    return TexturePack(
+        family="leaf_vein",
+        size=size,
+        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.80, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=2.0)),
+        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.60, 0.90)),
     )
 
 
@@ -1038,6 +1059,7 @@ def get_texture_pack(family: str, size: Optional[int] = None) -> TexturePack:
         "white_crumb": _build_white_crumb_pack,
         "lettuce_leaf": _build_lettuce_leaf_pack,
         "foliage": _build_foliage_pack,
+        "leaf_vein": _build_leaf_vein_pack,
         "stone": _build_stone_pack,
         "soil": _build_soil_pack,
         "wood": _build_wood_pack,

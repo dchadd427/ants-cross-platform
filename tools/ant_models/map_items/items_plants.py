@@ -535,35 +535,185 @@ def _sculpt_daisy_petal(
     )
 
 
-def _build_daisy_stem_leaf(name: str, *, length: float = 0.145, width: float = 0.092, side: float = 1.0) -> MeshPart:
-    """Compact broad-ovate pointed daisy stem leaf matching the crisp bright-green leaves on `flower1a..dflower1`."""
-    def _ovate(pos: np.ndarray) -> np.ndarray:
-        p = pos.copy()
-        u = np.clip((p[:, 2] + 0.5 * length) / max(1e-5, length), 0.0, 1.0)
-        # Broad plump lower belly (u ~ 0.32) tapering cleanly into a sharp pointed tip (`daisies_sheet.png`)!
-        env = (np.sin(u * math.pi) ** 0.65) * (1.24 - 0.54 * u)
-        # Subtle organic serration ripples along leaf margin
-        serr = 1.0 + 0.055 * np.sin(u * math.pi * 7.0) * np.sin(u * math.pi)
-        p[:, 0] *= np.maximum(0.03, env * serr)
-        p[:, 2] = u * length
-        p[:, 1] += 0.016 * np.sin(u * math.pi) - 0.014 * (u ** 2.2) + 0.010 * np.abs(p[:, 0]) / max(0.01, width * 0.5)
-        return p
+def _build_swept_leaf_sheet(
+    name: str,
+    *,
+    length: float,
+    w_left_fn,
+    w_right_fn,
+    spine_x_fn=None,
+    spine_y_fn=None,
+    thickness: float = 0.0085,
+    v_cup: float = 0.012,
+    lobe_sweep: float = 0.0,
+    ripple_amp: float = 0.003,
+    ripple_freq: float = 6.0,
+    n_u: int = 34,
+    n_half: int = 8,
+    material: str = "item_leaf_bright",
+    color_fn=None,
+) -> MeshPart:
+    """Build a watertight, outward-wound closed 3D botanical leaf sheet swept along a curved spine."""
+    ring_n = 2 * n_half
+    alphas = np.linspace(0.0, 2.0 * math.pi, ring_n, endpoint=False)
+    cos_a = np.cos(alphas)  # +1 right margin, 0 center, -1 left margin
+    sin_a = np.sin(alphas)  # >0 top surface, <0 bottom surface
+    abs_s = np.abs(cos_a)
+    # Subtle thicker midrib keel on underside + razor-tapered natural margin
+    midrib_keel = np.where(sin_a < 0.0, 0.45 * np.exp(-((cos_a / 0.22) ** 2)), 0.0)
 
-    return tint_part(
-        ellipsoid(width * 0.5, 0.007, length * 0.5, u_segs=20, v_segs=8, name=name, material="item_leaf_bright").deform(_ovate),
-        lambda pos, _n: np.clip(
-            np.array([[0.58, 0.96, 0.28]]) * (0.78 + 0.26 * np.clip(pos[:, 2] / max(1e-5, length), 0.0, 1.0)[:, None])
-            + 0.26 * np.exp(-((pos[:, 0] / max(0.008, width * 0.10)) ** 2))[:, None] * np.array([[0.94, 1.00, 0.52]]),
-            0.22,
-            1.0,
-        ),
-    ).rotate_xyz(rx=0.22, ry=side * 1.18, rz=-side * 0.08)
+    verts: List[Tuple[float, float, float]] = []
+    uvs_list: List[Tuple[float, float]] = []
+    u_meta: List[float] = []
+    s_meta: List[float] = []
+    top_meta: List[float] = []
+
+    def _eval_pt(u: float, s: float, sa: float, keel: float) -> Tuple[float, float, float]:
+        wl = max(0.0008, float(w_left_fn(u)))
+        wr = max(0.0008, float(w_right_fn(u)))
+        w_side = wr if s >= 0.0 else wl
+        sx = float(spine_x_fn(u)) if spine_x_fn is not None else 0.0
+        sy = float(spine_y_fn(u)) if spine_y_fn is not None else 0.0
+        lx = sx + s * w_side
+        lz = u * length + lobe_sweep * abs(s) * w_side * math.sin(u * math.pi)
+        # Organic V-trough cupping along midrib + subtle quilted lateral vein pillowing
+        pillowing = ripple_amp * math.sin((u * ripple_freq - abs(s) * 1.15) * math.pi) * math.sin(u * math.pi) * math.sin(abs(s) * math.pi)
+        half_t = thickness * (0.45 + 0.55 * math.sin(u * math.pi) ** 0.45) * (0.35 + 0.65 * (1.0 - s * s) ** 0.45)
+        ly = sy + v_cup * (abs(s) ** 1.25) * math.sin(u * math.pi) + pillowing + half_t * (sa - keel)
+        return (lx, ly, lz)
+
+    # Base pole (u = 0)
+    bx0 = float(spine_x_fn(0.0)) if spine_x_fn is not None else 0.0
+    by0 = float(spine_y_fn(0.0)) if spine_y_fn is not None else 0.0
+    verts.append((bx0, by0, 0.0))
+    uvs_list.append((0.5, 0.0))
+    u_meta.append(0.0)
+    s_meta.append(0.0)
+    top_meta.append(0.0)
+
+    # Interior rings (u in (0, 1))
+    u_vals = np.linspace(0.0, 1.0, n_u + 1)[1:-1]
+    for u_val in u_vals:
+        u = float(u_val)
+        for j in range(ring_n):
+            s = float(cos_a[j])
+            sa = float(sin_a[j])
+            keel = float(midrib_keel[j])
+            verts.append(_eval_pt(u, s, sa, keel))
+            uvs_list.append((0.5 + 0.5 * s, u))
+            u_meta.append(u)
+            s_meta.append(s)
+            top_meta.append(sa)
+
+    # Tip pole (u = 1)
+    bx1 = float(spine_x_fn(1.0)) if spine_x_fn is not None else 0.0
+    by1 = float(spine_y_fn(1.0)) if spine_y_fn is not None else 0.0
+    verts.append((bx1, by1, length))
+    uvs_list.append((0.5, 1.0))
+    u_meta.append(1.0)
+    s_meta.append(0.0)
+    top_meta.append(0.0)
+
+    tris: List[Tuple[int, int, int]] = []
+    n_rings = len(u_vals)
+    # Base fan
+    for j in range(ring_n):
+        j1 = (j + 1) % ring_n
+        tris.append((0, 1 + j1, 1 + j))
+    # Ring strips
+    for i in range(n_rings - 1):
+        r0 = 1 + i * ring_n
+        r1 = 1 + (i + 1) * ring_n
+        for j in range(ring_n):
+            j1 = (j + 1) % ring_n
+            tris.append((r0 + j, r0 + j1, r1 + j1))
+            tris.append((r0 + j, r1 + j1, r1 + j))
+    # Tip fan
+    tip_idx = len(verts) - 1
+    last_r = 1 + (n_rings - 1) * ring_n
+    for j in range(ring_n):
+        j1 = (j + 1) % ring_n
+        tris.append((last_r + j, last_r + j1, tip_idx))
+
+    pos = np.asarray(verts, dtype=np.float32)
+    idx = ensure_outward_winding(pos, np.asarray(tris, dtype=np.uint32).reshape(-1))
+    nrm = recompute_smooth_normals(pos, idx)
+    part = MeshPart(name, material, pos, nrm, idx, uvs=np.asarray(uvs_list, dtype=np.float32))
+
+    if color_fn is not None:
+        u_arr = np.asarray(u_meta, dtype=np.float64)
+        s_arr = np.asarray(s_meta, dtype=np.float64)
+        top_arr = np.asarray(top_meta, dtype=np.float64)
+        cols = np.clip(np.asarray(color_fn(pos.astype(np.float64), nrm.astype(np.float64), u_arr, s_arr, top_arr), dtype=np.float32), 0.14, 1.0)
+        part.colors = cols
+        part._base_tint = cols.copy()
+    return part
 
 
-def _build_daisy_base(sc: SceneBuilder, *, petal_count: int = 12, tilt_deg: float = 30.0) -> Tuple[float, float, float]:
+def _build_daisy_stem_leaf(
+    name: str,
+    *,
+    length: float = 0.215,
+    width: float = 0.145,
+    side: float = 1.0,
+    curve: float = 0.014,
+    pitch: float = 0.14,
+    yaw_mag: float = 1.38,
+    face_tilt: float = 0.72,
+    material: str = "item_leaf_bright",
+) -> MeshPart:
+    """Crisp broad triangular-ovate pointed flower stem leaf tilted to present its full sunlit face (`flower1a..3c`)."""
+    hw = width * 0.5
+
+    def _w(u: float) -> float:
+        if u <= 0.0 or u >= 1.0:
+            return 0.0008
+        # Smooth plump rounded ovate belly peaking at u=0.29 tapering to a RAZOR-SHARP botanical point (zero blunt tip!)
+        env = (u ** 0.45) * ((1.0 - u) ** 1.08) * 2.55
+        serr = 1.0 + 0.036 * math.sin(u * math.pi * 6.0) * math.sin(u * math.pi)
+        return hw * max(0.015, env * serr)
+
+    def _color(_pos: np.ndarray, nrm: np.ndarray, u: np.ndarray, s: np.ndarray, top: np.ndarray) -> np.ndarray:
+        mid_vein = np.exp(-((s / 0.085) ** 2)) * (1.0 - 0.30 * u)
+        lat_vein = np.maximum(0.0, np.cos((u * 5.2 - np.abs(s) * 1.4) * math.pi)) ** 5 * (1.0 - 0.30 * u) * (1.0 - np.abs(s) * 0.35)
+        vein = np.clip(mid_vein + 0.58 * lat_vein, 0.0, 1.0)[:, None]
+        # Crisp dark-emerald shaded stem base -> bright vivid backlit apple-lime leaf blade!
+        base_ao = (0.50 + 0.54 * np.clip(u / 0.28, 0.0, 1.0) + 0.10 * nrm[:, 1])[:, None]
+        side_lit = np.where(top >= -0.05, 1.0, 0.66)[:, None]
+        base = np.array([[0.36, 0.88, 0.16]], dtype=np.float64) * base_ao * side_lit
+        glow = np.array([[0.95, 1.00, 0.40]], dtype=np.float64) * side_lit
+        return base * (1.0 - 0.56 * vein) + glow * (0.56 * vein)
+
+    leaf = _build_swept_leaf_sheet(
+        name,
+        length=length,
+        w_left_fn=_w,
+        w_right_fn=_w,
+        spine_x_fn=lambda u: side * curve * (u ** 1.5),
+        spine_y_fn=lambda u: 0.010 * math.sin(u * math.pi) - 0.005 * (u ** 2.0),
+        thickness=0.0070,
+        v_cup=0.011,
+        ripple_amp=0.0020,
+        ripple_freq=5.0,
+        n_u=24,
+        n_half=7,
+        material=material,
+        color_fn=_color,
+    )
+    # Positive `side * face_tilt` rolls the +Y upper face toward -side*X, which `ry=side*yaw_mag` turns straight to +Z (camera)!
+    return leaf.rotate_xyz(rz=+side * face_tilt).rotate_xyz(rx=pitch, ry=side * yaw_mag)
+
+
+def _build_daisy_base(
+    sc: SceneBuilder,
+    *,
+    petal_count: int = 12,
+    tilt_deg: float = 30.0,
+    with_leaves: bool = True,
+) -> Tuple[float, float, float]:
     """Build shared 1998 Oxeye daisy stem, compact ovate leaves, calyx cup, and ring of long slender strap petals."""
     stem = curved_tube(
-        [(0.0, 0.00, -0.02), (0.008, 0.14, -0.015), (-0.006, 0.30, -0.005), (0.0, 0.44, +0.01)],
+        [(0.0, 0.00, -0.02), (0.008, 0.18, -0.016), (-0.006, 0.36, -0.006), (0.0, 0.54, +0.01)],
         [0.015, 0.013, 0.012, 0.013],
         samples_per_seg=5,
         radial_segs=10,
@@ -573,11 +723,12 @@ def _build_daisy_base(sc: SceneBuilder, *, petal_count: int = 12, tilt_deg: floa
     )
     sc.add("flower", stem)
 
-    # Twin compact broad-ovate bright-green stem leaves near base (right leaf slightly broader & higher, matching `flower1a`!).
-    sc.add("flower", _build_daisy_stem_leaf("daisy_leaf_l", length=0.125, width=0.078, side=-1.0).translate(0.0, 0.135, -0.012))
-    sc.add("flower", _build_daisy_stem_leaf("daisy_leaf_r", length=0.155, width=0.098, side=+1.0).translate(0.0, 0.175, -0.010))
+    if with_leaves:
+        # Twin crisp broad triangular-ovate bright-green stem leaves clearly visible below the petals (`flower1a`)!
+        sc.add("flower", _build_daisy_stem_leaf("daisy_leaf_l", length=0.195, width=0.132, side=-1.0, curve=0.014, pitch=0.16, yaw_mag=1.40, face_tilt=0.76).translate(0.0, 0.135, -0.014))
+        sc.add("flower", _build_daisy_stem_leaf("daisy_leaf_r", length=0.235, width=0.158, side=+1.0, curve=0.018, pitch=0.10, yaw_mag=1.34, face_tilt=0.74).translate(0.0, 0.175, -0.010))
 
-    head_ctr = (0.0, 0.46, +0.015)
+    head_ctr = (0.0, 0.56, +0.015)
     head_parts: List[MeshPart] = []
 
     calyx = superellipsoid(0.068, 0.038, 0.068, e1=0.80, e2=0.95, u_segs=20, v_segs=10, name="daisy_calyx", material="item_stem_green").translate(0.0, -0.020, 0.0)
@@ -635,7 +786,7 @@ def _build_groucho_daisy(name: str, *, animated: bool) -> SceneBuilder:
 
     # Slender wiry S-curved dark-green botanical stem + twin broad-ovate stem leaves clearly below the petals (`daisies_sheet.png`)!
     stem = curved_tube(
-        [(0.0, 0.00, -0.02), (-0.018, 0.17, -0.015), (+0.018, 0.38, -0.005), (0.0, 0.58, +0.01)],
+        [(0.0, 0.00, -0.02), (-0.018, 0.18, -0.015), (+0.018, 0.40, -0.005), (0.0, 0.62, +0.01)],
         [0.016, 0.014, 0.013, 0.014],
         samples_per_seg=5,
         radial_segs=10,
@@ -644,11 +795,11 @@ def _build_groucho_daisy(name: str, *, animated: bool) -> SceneBuilder:
         material="item_stem_green",
     )
     sc.add("dflower_stem", stem)
-    sc.add("dflower_stem", _build_daisy_stem_leaf("dflower_leaf_l", length=0.145, width=0.092, side=-1.0).translate(0.0, 0.145, -0.012))
-    sc.add("dflower_stem", _build_daisy_stem_leaf("dflower_leaf_r", length=0.175, width=0.108, side=+1.0).translate(0.0, 0.205, -0.010))
+    sc.add("dflower_stem", _build_daisy_stem_leaf("dflower_leaf_l", length=0.195, width=0.132, side=-1.0, curve=0.014, pitch=0.22, yaw_mag=1.38, face_tilt=0.80).translate(0.0, 0.135, -0.012))
+    sc.add("dflower_stem", _build_daisy_stem_leaf("dflower_leaf_r", length=0.225, width=0.148, side=+1.0, curve=-0.016, pitch=-0.08, yaw_mag=1.34, face_tilt=0.76).translate(0.0, 0.190, -0.010))
 
     # Pivoted flower bloom + Groucho disguise node (`dflower_head` parented cleanly to `dflower_stem`!)
-    head_pivot = (0.0, 0.62, +0.02)
+    head_pivot = (0.0, 0.66, +0.02)
     sc.set_node_parent("dflower_head", "dflower_stem")
     sc.set_node_transform("dflower_head", translation=head_pivot, rotation=quat_from_euler_xyz(rx=68.0, degrees=True))
 
