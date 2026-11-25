@@ -735,13 +735,6 @@ def build_pu_mason() -> SceneBuilder:
     shield_pos = (0.0, 0.158, dome_rz - 0.032)
 
     parts.append(_build_option3_wide_shield(shield_w, shield_h, shield_depth, curve_depth).rotate_xyz(rx=shield_tilt_x, degrees=True).translate(*shield_pos))
-    # Recessed rear collar tucked strictly BEHIND the shield's back wall so there is zero gap & zero front poke-through!
-    gusset = (
-        superellipsoid(dome_rx * 0.58, dome_ry * 0.34, 0.042, e1=0.70, e2=0.75, u_segs=22, v_segs=12, name="pumason_shield_gusset", material=_FIRE_HAT_MAT)
-        .rotate_xyz(rx=shield_tilt_x, degrees=True)
-        .translate(0.0, 0.144, dome_rz - 0.112)
-    )
-    parts.append(gusset)
     for a_part in _build_giant_letter_a(shield_w, shield_h, shield_depth, curve_depth, y_offset=-0.004):
         parts.append(a_part.rotate_xyz(rx=shield_tilt_x, degrees=True).translate(*shield_pos))
 

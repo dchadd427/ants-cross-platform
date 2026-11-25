@@ -35,11 +35,11 @@ if np is not None:
             torus_arc,
         )
         from .item_materials import gradient_y_tint, register_item_materials, tint_part
-        from .items_plants import _build_daisy_base
+        from .items_plants import _build_daisy_base, _build_groucho_daisy
         from .items_toys import _finalize_item
     except ImportError:
         from map_items.item_materials import gradient_y_tint, register_item_materials, tint_part  # type: ignore
-        from map_items.items_plants import _build_daisy_base  # type: ignore
+        from map_items.items_plants import _build_daisy_base, _build_groucho_daisy  # type: ignore
         from map_items.items_toys import _finalize_item  # type: ignore
         from mesh_core import (  # type: ignore
             MeshPart,
@@ -652,19 +652,26 @@ def build_flower1b() -> SceneBuilder:
     """Oxeye Daisy bloom seen in graceful 3/4 side profile (`411:flower1b`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_flower1b")
-    hx, hy, hz = _build_daisy_base(sc, petal_count=16, tilt_deg=44.0)
-    pollen = gradient_y_tint(
-        superellipsoid(0.104, 0.056, 0.104, e1=0.78, e2=0.98, u_segs=26, v_segs=14, name="daisy1b_pollen", material="item_pollen_gold")
-        .deform(lambda p: p + 0.005 * np.sin(p * 65.0) * np.cos(np.roll(p, 1, axis=1) * 60.0))
-        .translate(0.0, 0.018, 0.0)
-        .rotate_xyz(rx=44.0, degrees=True)
+    hx, hy, hz = _build_daisy_base(sc, petal_count=12, tilt_deg=48.0)
+    pollen = tint_part(
+        superellipsoid(0.076, 0.040, 0.076, e1=0.78, e2=0.98, u_segs=26, v_segs=14, name="daisy1b_pollen", material="item_pollen_gold")
+        .deform(lambda p: p + 0.0035 * np.sin(p * 78.0) * np.cos(np.roll(p, 1, axis=1) * 72.0))
+        .translate(0.0, 0.015, 0.0)
+        .rotate_xyz(rx=48.0, degrees=True)
         .translate(hx, hy, hz),
-        (0.84, 0.64, 0.42),
-        (1.04, 1.00, 0.86),
+        lambda pos, _n: np.clip(
+            np.column_stack([
+                0.96 - 0.14 * np.exp(-((np.hypot(pos[:, 0] - hx, pos[:, 2] - hz) / 0.034) ** 2)),
+                0.86 - 0.24 * np.exp(-((np.hypot(pos[:, 0] - hx, pos[:, 2] - hz) / 0.034) ** 2)),
+                0.38 - 0.16 * np.exp(-((np.hypot(pos[:, 0] - hx, pos[:, 2] - hz) / 0.034) ** 2)),
+            ]),
+            0.20,
+            1.0,
+        ),
     )
     sc.add("flower", pollen)
     # Turn side-profile bloom facing forward-right matching `411:flower1b`!
-    sc.nodes["flower"] = [p.rotate_xyz(ry=56.0, degrees=True) for p in sc.nodes["flower"]]
+    sc.nodes["flower"] = [p.rotate_xyz(ry=52.0, degrees=True) for p in sc.nodes["flower"]]
     return _finalize_item(sc, target_span=0.94)
 
 
@@ -871,31 +878,5 @@ def build_flower3c() -> SceneBuilder:
 
 
 def build_flower1() -> SceneBuilder:
-    """Resting open Groucho Disguise Daisy variant (`421:flower1`)."""
-    register_item_materials()
-    sc = SceneBuilder(name="item_flower1")
-    hx, hy, hz = _build_daisy_base(sc, petal_count=8, tilt_deg=44.0)
-    face_parts: List[MeshPart] = [
-        superellipsoid(0.105, 0.038, 0.105, e1=0.80, e2=0.96, u_segs=22, v_segs=12, name="flower1_center", material="item_dark_stitch").translate(0.0, 0.010, 0.0),
-    ]
-    for side, tag in ((+1.0, "l"), (-1.0, "r")):
-        face_parts.extend([
-            torus_arc(0.064, 0.015, u_segs=22, v_segs=10, plane="xz", name=f"f1_frame_{tag}", material="gear_dark").translate(side * 0.074, 0.060, -0.036),
-            ellipsoid(0.058, 0.012, 0.050, u_segs=18, v_segs=8, name=f"f1_lens_{tag}", material="eye_pupil").translate(side * 0.074, 0.062, -0.036),
-            ellipsoid(0.022, 0.006, 0.012, u_segs=10, v_segs=6, name=f"f1_glint_{tag}", material="eye_catchlight").rotate_xyz(ry=0.45).translate(side * 0.058, 0.075, -0.048),
-            rounded_box(0.090, 0.022, 0.026, bevel=0.007, segs=2, name=f"f1_brow_{tag}", material="item_dark_stitch").rotate_xyz(ry=-side * 0.14).translate(side * 0.074, 0.066, -0.096),
-            curved_tube(
-                [(0.0, 0.052, +0.068), (side * 0.060, 0.048, +0.094), (side * 0.122, 0.036, +0.078)],
-                [0.038, 0.042, 0.022],
-                samples_per_seg=4,
-                radial_segs=14,
-                cap_rings=3,
-                name=f"f1_stache_{tag}",
-                material="item_dark_stitch",
-            ),
-        ])
-    face_parts.append(rounded_box(0.052, 0.020, 0.022, bevel=0.005, segs=2, name="f1_bridge", material="gear_dark").translate(0.0, 0.064, -0.042))
-    face_parts.append(superellipsoid(0.054, 0.064, 0.076, e1=0.76, e2=0.82, u_segs=20, v_segs=14, name="f1_nose", material="item_groucho_nose").rotate_xyz(rx=0.25).translate(0.0, 0.080, +0.020))
-    for p in face_parts:
-        sc.add("flower", p.rotate_xyz(rx=44.0, degrees=True).translate(hx, hy, hz))
-    return _finalize_item(sc, target_span=0.92)
+    """Still centered Groucho Disguise Daisy matching `421:flower1` (exact same 8-petal disguise model as `dflower1`)."""
+    return _build_groucho_daisy("item_flower1", animated=False)

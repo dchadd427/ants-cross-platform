@@ -493,59 +493,105 @@ def build_clovers() -> SceneBuilder:
     return _finalize_item(sc, target_span=0.96)
 
 
-def _build_daisy_base(sc: SceneBuilder, *, petal_count: int = 16, tilt_deg: float = 28.0) -> Tuple[float, float, float]:
-    """Build shared realistic curved daisy stem, stem leaves, calyx cup, and ring of white petals."""
-    # Graceful curved botanical stem grounded cleanly on Y = 0.0.
+def _sculpt_daisy_petal(
+    name: str,
+    *,
+    length: float,
+    half_width: float,
+    thickness: float = 0.008,
+    arch: float = 0.011,
+    droop_tip: float = 0.016,
+) -> MeshPart:
+    """Build one authentic 1998 Oxeye daisy ray petal: slender strap widening slightly to a broad blunt rounded U-tip."""
+    def _strap_shape(pos: np.ndarray) -> np.ndarray:
+        p = pos.copy()
+        s = np.clip(p[:, 2] / max(1e-5, 0.5 * length), -1.0, 1.0)
+        u = 0.5 * (s + 1.0)  # 0 at receptacle base, 1 at outer petal tip
+        # Remove raw ellipsoid narrowing so the sculpted width profile controls the true paddle/strap outline!
+        raw_env = np.sqrt(np.maximum(0.05, 1.0 - s * s))
+        # Narrow base (0.44) -> gently widening straight strap (0.94..1.08 at u=0.78) -> broad blunt rounded U-tip!
+        base_w = 0.44 + 0.52 * np.clip(u / 0.28, 0.0, 1.0) ** 0.72
+        paddle_flare = 1.0 + 0.14 * np.clip((u - 0.25) / 0.58, 0.0, 1.0) * (1.0 - 0.45 * np.clip((u - 0.80) / 0.20, 0.0, 1.0))
+        tip_t = np.clip((u - 0.82) / 0.18, 0.0, 1.0)
+        tip_round = np.sqrt(np.maximum(0.0, 1.0 - tip_t * tip_t))
+        desired_env = np.where(u >= 0.998, 0.0, np.maximum(0.02, base_w * paddle_flare * tip_round))
+        p[:, 0] *= np.clip(desired_env / raw_env, 0.0, 3.2)
+        # Keep uniform crisp thin petal thickness across the full paddle, rounding smoothly at the tip
+        p[:, 1] *= np.clip(np.maximum(0.35, tip_round) / np.maximum(0.28, raw_env), 0.45, 1.55)
+        p[:, 2] = u * length
+        # Subtle botanical arch + gentle tip droop + soft concave midline crease catching realistic studio shading
+        p[:, 1] += arch * np.sin(u * math.pi) - droop_tip * (u ** 2.3)
+        p[:, 1] -= 0.0042 * np.exp(-((p[:, 0] / max(0.009, half_width * 0.48)) ** 2)) * np.sin(u * math.pi)
+        return p
+
+    return tint_part(
+        ellipsoid(half_width, thickness, 0.5 * length, u_segs=26, v_segs=14, name=name, material="item_petal_white").deform(_strap_shape),
+        lambda pos, nrm: np.clip(
+            (0.76 + 0.24 * np.clip(pos[:, 2] / max(1e-5, length), 0.0, 1.0) + 0.06 * nrm[:, 1])[:, None]
+            * np.array([[1.00, 0.99, 0.96]]),
+            0.68,
+            1.0,
+        ),
+    )
+
+
+def _build_daisy_stem_leaf(name: str, *, length: float = 0.145, width: float = 0.092, side: float = 1.0) -> MeshPart:
+    """Compact broad-ovate pointed daisy stem leaf matching the crisp bright-green leaves on `flower1a..dflower1`."""
+    def _ovate(pos: np.ndarray) -> np.ndarray:
+        p = pos.copy()
+        u = np.clip((p[:, 2] + 0.5 * length) / max(1e-5, length), 0.0, 1.0)
+        # Broad plump lower belly (u ~ 0.32) tapering cleanly into a sharp pointed tip (`daisies_sheet.png`)!
+        env = (np.sin(u * math.pi) ** 0.65) * (1.24 - 0.54 * u)
+        # Subtle organic serration ripples along leaf margin
+        serr = 1.0 + 0.055 * np.sin(u * math.pi * 7.0) * np.sin(u * math.pi)
+        p[:, 0] *= np.maximum(0.03, env * serr)
+        p[:, 2] = u * length
+        p[:, 1] += 0.016 * np.sin(u * math.pi) - 0.014 * (u ** 2.2) + 0.010 * np.abs(p[:, 0]) / max(0.01, width * 0.5)
+        return p
+
+    return tint_part(
+        ellipsoid(width * 0.5, 0.007, length * 0.5, u_segs=20, v_segs=8, name=name, material="item_leaf_bright").deform(_ovate),
+        lambda pos, _n: np.clip(
+            np.array([[0.58, 0.96, 0.28]]) * (0.78 + 0.26 * np.clip(pos[:, 2] / max(1e-5, length), 0.0, 1.0)[:, None])
+            + 0.26 * np.exp(-((pos[:, 0] / max(0.008, width * 0.10)) ** 2))[:, None] * np.array([[0.94, 1.00, 0.52]]),
+            0.22,
+            1.0,
+        ),
+    ).rotate_xyz(rx=0.22, ry=side * 1.18, rz=-side * 0.08)
+
+
+def _build_daisy_base(sc: SceneBuilder, *, petal_count: int = 12, tilt_deg: float = 30.0) -> Tuple[float, float, float]:
+    """Build shared 1998 Oxeye daisy stem, compact ovate leaves, calyx cup, and ring of long slender strap petals."""
     stem = curved_tube(
-        [(0.0, 0.00, -0.04), (0.015, 0.16, -0.03), (-0.01, 0.34, -0.01), (0.0, 0.48, +0.02)],
-        [0.022, 0.018, 0.016, 0.018],
+        [(0.0, 0.00, -0.02), (0.008, 0.14, -0.015), (-0.006, 0.30, -0.005), (0.0, 0.44, +0.01)],
+        [0.015, 0.013, 0.012, 0.013],
         samples_per_seg=5,
-        radial_segs=12,
+        radial_segs=10,
         cap_rings=2,
         name="daisy_stem",
         material="item_stem_green",
     )
     sc.add("flower", stem)
 
-    # Two pointed dark-green botanical stem leaves near base.
-    for side, tag, ly in ((+1.0, "l", 0.14), (-1.0, "r", 0.20)):
-        lf = (
-            ellipsoid(0.055, 0.008, 0.145, u_segs=16, v_segs=8, name=f"daisy_leaf_{tag}", material="item_leaf_rich")
-            .deform(lambda p: np.column_stack([p[:, 0] * (1.0 - 0.55 * np.clip((p[:, 2] + 0.14) / 0.28, 0.0, 1.0) ** 1.6), p[:, 1] - 0.025 * ((p[:, 2] + 0.14) / 0.28) ** 2, p[:, 2] + 0.14]))
-            .rotate_xyz(rx=0.35, ry=side * 1.15)
-            .translate(0.0, ly, -0.02)
-        )
-        sc.add("flower", lf)
+    # Twin compact broad-ovate bright-green stem leaves near base (right leaf slightly broader & higher, matching `flower1a`!).
+    sc.add("flower", _build_daisy_stem_leaf("daisy_leaf_l", length=0.125, width=0.078, side=-1.0).translate(0.0, 0.135, -0.012))
+    sc.add("flower", _build_daisy_stem_leaf("daisy_leaf_r", length=0.155, width=0.098, side=+1.0).translate(0.0, 0.175, -0.010))
 
-    head_ctr = (0.0, 0.50, +0.02)
+    head_ctr = (0.0, 0.46, +0.015)
     head_parts: List[MeshPart] = []
 
-    # Green calyx bowl under the bloom.
-    calyx = superellipsoid(0.088, 0.046, 0.088, e1=0.80, e2=0.95, u_segs=20, v_segs=10, name="daisy_calyx", material="item_stem_green").translate(0.0, -0.024, 0.0)
+    calyx = superellipsoid(0.068, 0.038, 0.068, e1=0.80, e2=0.95, u_segs=20, v_segs=10, name="daisy_calyx", material="item_stem_green").translate(0.0, -0.020, 0.0)
     head_parts.append(calyx)
 
-    # Ring of gracefully arched, lightly fluted white Oxeye daisy petals!
+    # 12 long slender separated strap petals with broad rounded blunt tips & crisp airy gaps (`flower1a_f0`, `flower1b_f0`)!
     for k in range(petal_count):
-        ang = 2.0 * math.pi * k / petal_count + (0.05 if k % 2 else -0.04)
-        droop = 0.14 + 0.08 * math.sin(k * 2.7)
-        plen = 0.22 + 0.018 * math.cos(k * 3.1)
-
-        def _petal_shape(pos: np.ndarray, pl=plen) -> np.ndarray:
-            p = pos.copy()
-            u = np.clip((p[:, 2] + 0.5 * pl) / pl, 0.0, 1.0)
-            p[:, 0] *= 0.45 + 0.65 * np.sin(u * math.pi * 0.85)
-            p[:, 2] = (u * pl)
-            p[:, 1] += 0.014 * np.sin(u * math.pi) - 0.032 * (u ** 2.2)
-            # Subtle central petal groove.
-            p[:, 1] -= 0.005 * np.exp(-((p[:, 0] / 0.015) ** 2))
-            return p
-
-        pet = tint_part(
-            ellipsoid(0.044, 0.007, 0.5 * plen, u_segs=16, v_segs=8, name=f"daisy_petal_{k}", material="item_petal_white")
-            .deform(_petal_shape)
+        ang = 2.0 * math.pi * k / petal_count + 0.04 * math.sin(k * 1.9)
+        droop = 0.09 + 0.05 * math.sin(k * 2.5)
+        plen = 0.275 + 0.016 * math.cos(k * 2.7)
+        pet = (
+            _sculpt_daisy_petal(f"daisy_petal_{k}", length=plen, half_width=0.031, thickness=0.007, arch=0.011, droop_tip=0.022)
             .rotate_xyz(rx=droop, ry=ang)
-            .translate(0.075 * math.sin(ang), 0.004 * (k % 2), 0.075 * math.cos(ang)),
-            lambda pos, _n: np.clip(0.90 + 0.10 * np.clip(np.hypot(pos[:, 0], pos[:, 2]) / 0.24, 0.0, 1.0)[:, None], 0.86, 1.0) * np.array([[1.0, 0.99, 0.95]]),
+            .translate(0.054 * math.sin(ang), 0.003 * (k % 2), 0.054 * math.cos(ang))
         )
         head_parts.append(pet)
 
@@ -555,158 +601,146 @@ def _build_daisy_base(sc: SceneBuilder, *, petal_count: int = 16, tilt_deg: floa
 
 
 def build_flower1a() -> SceneBuilder:
-    """Realistic Oxeye Daisy with bumpy golden pollen disc, curved petals & leafy stem (`410:flower1a`)."""
+    """Authentic 1998 Oxeye Daisy with 12 slender strap petals, compact golden pollen disc & ovate stem leaves (`410:flower1a`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_flower1a")
-    hx, hy, hz = _build_daisy_base(sc, petal_count=17, tilt_deg=32.0)
+    hx, hy, hz = _build_daisy_base(sc, petal_count=12, tilt_deg=30.0)
 
-    # Plump granular golden-yellow pollen center cushion with rich ochre-to-gold dome shading.
-    pollen = gradient_y_tint(
-        superellipsoid(0.102, 0.052, 0.102, e1=0.78, e2=0.98, u_segs=26, v_segs=14, name="daisy_pollen", material="item_pollen_gold")
-        .deform(lambda p: p + 0.005 * np.sin(p * 65.0) * np.cos(np.roll(p, 1, axis=1) * 60.0))
-        .translate(0.0, 0.016, 0.0)
-        .rotate_xyz(rx=32.0, degrees=True)
+    # Compact domed golden-yellow pollen disc with warm amber inner ring (`flower1a_f0`!).
+    pollen = tint_part(
+        superellipsoid(0.076, 0.038, 0.076, e1=0.78, e2=0.98, u_segs=26, v_segs=14, name="daisy_pollen", material="item_pollen_gold")
+        .deform(lambda p: p + 0.0035 * np.sin(p * 78.0) * np.cos(np.roll(p, 1, axis=1) * 72.0))
+        .translate(0.0, 0.014, 0.0)
+        .rotate_xyz(rx=30.0, degrees=True)
         .translate(hx, hy, hz),
-        (0.84, 0.64, 0.42),
-        (1.04, 1.00, 0.86),
+        lambda pos, _n: np.clip(
+            np.column_stack([
+                0.96 - 0.14 * np.exp(-((np.hypot(pos[:, 0] - hx, pos[:, 2] - hz) / 0.034) ** 2)),
+                0.86 - 0.24 * np.exp(-((np.hypot(pos[:, 0] - hx, pos[:, 2] - hz) / 0.034) ** 2)),
+                0.38 - 0.16 * np.exp(-((np.hypot(pos[:, 0] - hx, pos[:, 2] - hz) / 0.034) ** 2)),
+            ]),
+            0.20,
+            1.0,
+        ),
     )
     sc.add("flower", pollen)
     return _finalize_item(sc, target_span=0.94)
 
 
-def build_dflower1() -> SceneBuilder:
-    """Animated 1998 Groucho-Marx Disguise Daisy looking suspiciously left & right (700 ms Idle clip, `420:dflower1`)."""
+def _build_groucho_daisy(name: str, *, animated: bool) -> SceneBuilder:
+    """Shared authentic 1998 Groucho Disguise Daisy (`420:dflower1` animated & `421:flower1` still): 8 long slender strap petals, wayfarer shades, nose & bristly mustache."""
     register_item_materials()
-    sc = SceneBuilder(name="item_dflower1")
+    sc = SceneBuilder(name=name)
     sc.set_node_transform("dflower_stem", translation=(0.0, 0.0, 0.0))
 
-    # Taller graceful curvy dark-green botanical stem grounded on Y = 0.0 + twin vibrant leaves clearly visible below petals!
+    # Slender wiry S-curved dark-green botanical stem + twin broad-ovate stem leaves clearly below the petals (`daisies_sheet.png`)!
     stem = curved_tube(
-        [(0.0, 0.00, -0.02), (-0.020, 0.16, -0.01), (+0.022, 0.36, 0.00), (0.0, 0.56, +0.01)],
-        [0.022, 0.019, 0.017, 0.018],
+        [(0.0, 0.00, -0.02), (-0.018, 0.17, -0.015), (+0.018, 0.38, -0.005), (0.0, 0.58, +0.01)],
+        [0.016, 0.014, 0.013, 0.014],
         samples_per_seg=5,
-        radial_segs=12,
+        radial_segs=10,
         cap_rings=2,
         name="dflower_stem_mesh",
         material="item_stem_green",
     )
     sc.add("dflower_stem", stem)
-    for side, tag, ly in ((+1.0, "l", 0.16), (-1.0, "r", 0.21)):
-        lf = gradient_y_tint(
-            ellipsoid(0.062, 0.009, 0.155, u_segs=18, v_segs=8, name=f"dflower_leaf_{tag}", material="item_leaf_bright")
-            .deform(lambda p: np.column_stack([
-                p[:, 0] * (1.0 - 0.58 * np.clip((p[:, 2] + 0.155) / 0.31, 0.0, 1.0) ** 1.5),
-                p[:, 1] - 0.024 * ((p[:, 2] + 0.155) / 0.31) ** 2,
-                p[:, 2] + 0.155,
-            ]))
-            .rotate_xyz(rx=0.34, ry=side * 1.18)
-            .translate(0.0, ly, -0.01),
-            (0.68, 0.88, 0.56),
-            (1.02, 1.04, 0.86),
-        )
-        sc.add("dflower_stem", lf)
+    sc.add("dflower_stem", _build_daisy_stem_leaf("dflower_leaf_l", length=0.145, width=0.092, side=-1.0).translate(0.0, 0.145, -0.012))
+    sc.add("dflower_stem", _build_daisy_stem_leaf("dflower_leaf_r", length=0.175, width=0.108, side=+1.0).translate(0.0, 0.205, -0.010))
 
     # Pivoted flower bloom + Groucho disguise node (`dflower_head` parented cleanly to `dflower_stem`!)
-    head_pivot = (0.0, 0.58, +0.02)
+    head_pivot = (0.0, 0.62, +0.02)
     sc.set_node_parent("dflower_head", "dflower_stem")
-    sc.set_node_transform("dflower_head", translation=head_pivot, rotation=quat_from_euler_xyz(rx=56.0, degrees=True))
+    sc.set_node_transform("dflower_head", translation=head_pivot, rotation=quat_from_euler_xyz(rx=68.0, degrees=True))
 
     head_parts: List[MeshPart] = []
-    # Green sepal calyx cup under the bloom.
-    calyx = superellipsoid(0.088, 0.046, 0.088, e1=0.80, e2=0.95, u_segs=20, v_segs=10, name="dflower_calyx", material="item_stem_green").translate(0.0, -0.024, 0.0)
+    calyx = superellipsoid(0.068, 0.036, 0.068, e1=0.80, e2=0.95, u_segs=20, v_segs=10, name="dflower_calyx", material="item_stem_green").translate(0.0, -0.020, 0.0)
     head_parts.append(calyx)
 
-    # 9 iconic bold crisp white daisy petals radiating cleanly around the Groucho face (`dflower1_strip.png`).
-    for k in range(9):
-        ang = 2.0 * math.pi * k / 9.0 + 0.10
-        droop = 0.08 + 0.05 * math.sin(k * 2.3)
-        plen = 0.228 + 0.014 * math.cos(k * 3.1)
-
-        def _petal_shape(pos: np.ndarray, pl=plen) -> np.ndarray:
-            p = pos.copy()
-            u = np.clip((p[:, 2] + 0.5 * pl) / pl, 0.0, 1.0)
-            p[:, 0] *= 0.44 + 0.62 * np.sin(u * math.pi * 0.86)
-            p[:, 2] = u * pl
-            p[:, 1] += 0.012 * np.sin(u * math.pi) - 0.022 * (u ** 2.2)
-            p[:, 1] -= 0.005 * np.exp(-((p[:, 0] / 0.018) ** 2))
-            return p
-
-        pet = tint_part(
-            ellipsoid(0.048, 0.009, 0.5 * plen, u_segs=18, v_segs=8, name=f"dflower_petal_{k}", material="item_petal_white")
-            .deform(_petal_shape)
+    # EXACTLY 8 iconic broad-tipped slender straight-sided white daisy petals spaced at 45 deg (`12:00..10:30`) with wide open gaps!
+    for k in range(8):
+        ang = 2.0 * math.pi * k / 8.0
+        droop = 0.04 + 0.03 * math.sin(k * 2.1)
+        plen = 0.275 + 0.010 * math.cos(k * 2.0)
+        pet = (
+            _sculpt_daisy_petal(f"dflower_petal_{k}", length=plen, half_width=0.036, thickness=0.0085, arch=0.009, droop_tip=0.012)
             .rotate_xyz(rx=droop, ry=ang)
-            .translate(0.068 * math.sin(ang), 0.003 * (k % 2), 0.068 * math.cos(ang)),
-            lambda pos, _n: np.clip(0.88 + 0.12 * np.clip(np.hypot(pos[:, 0], pos[:, 2]) / 0.24, 0.0, 1.0)[:, None], 0.84, 1.0) * np.array([[1.0, 0.99, 0.96]]),
+            .translate(0.050 * math.sin(ang), 0.002 * (k % 2), 0.050 * math.cos(ang))
         )
         head_parts.append(pet)
 
-    # Dark golden-brown flower cushion behind the Groucho disguise.
-    disc = superellipsoid(0.098, 0.040, 0.098, e1=0.80, e2=0.96, u_segs=22, v_segs=12, name="dflower_center", material="item_pollen_gold").translate(0.0, 0.010, 0.0)
+    # Compact warm golden-ochre flower center tucked tightly behind the Groucho disguise.
+    disc = superellipsoid(0.076, 0.034, 0.076, e1=0.80, e2=0.96, u_segs=22, v_segs=12, name="dflower_center", material="item_pollen_gold").translate(0.0, 0.008, 0.0)
     head_parts.append(disc)
 
-    # Oversized glossy black wayfarer-style Groucho sunglasses (sleek dark frames + curved glossy lenses + brow rim)!
+    # Sleek glossy black wayfarer-style Groucho sunglasses (curved dark frames + glossy lenses + crisp diagonal catchlights)!
     for side, tag in ((+1.0, "l"), (-1.0, "r")):
-        frame = superellipsoid(0.068, 0.018, 0.056, e1=0.45, e2=0.55, u_segs=20, v_segs=10, name=f"groucho_frame_{tag}", material="gear_dark").rotate_xyz(ry=-side * 0.14).translate(side * 0.072, 0.054, -0.036)
-        lens = superellipsoid(0.058, 0.016, 0.046, e1=0.50, e2=0.55, u_segs=18, v_segs=8, name=f"groucho_lens_{tag}", material="eye_pupil").rotate_xyz(ry=-side * 0.14).translate(side * 0.072, 0.062, -0.036)
-        glint = ellipsoid(0.022, 0.005, 0.010, u_segs=10, v_segs=6, name=f"groucho_glint_{tag}", material="eye_catchlight").rotate_xyz(ry=0.48).translate(side * 0.056, 0.078, -0.046)
-        temple = rounded_box(0.014, 0.016, 0.11, bevel=0.004, segs=2, name=f"groucho_arm_{tag}", material="gear_dark").rotate_xyz(rx=0.40, ry=side * 0.18).translate(side * 0.132, 0.030, -0.065)
+        frame = superellipsoid(0.062, 0.016, 0.048, e1=0.45, e2=0.55, u_segs=20, v_segs=10, name=f"groucho_frame_{tag}", material="gear_dark").rotate_xyz(ry=-side * 0.14).translate(side * 0.066, 0.048, -0.032)
+        lens = superellipsoid(0.053, 0.015, 0.040, e1=0.50, e2=0.55, u_segs=18, v_segs=8, name=f"groucho_lens_{tag}", material="eye_pupil").rotate_xyz(ry=-side * 0.14).translate(side * 0.066, 0.056, -0.032)
+        glint = ellipsoid(0.020, 0.005, 0.009, u_segs=10, v_segs=6, name=f"groucho_glint_{tag}", material="eye_catchlight").rotate_xyz(ry=0.48).translate(side * 0.052, 0.070, -0.042)
+        temple = rounded_box(0.012, 0.014, 0.10, bevel=0.004, segs=2, name=f"groucho_arm_{tag}", material="gear_dark").rotate_xyz(rx=0.40, ry=side * 0.18).translate(side * 0.122, 0.026, -0.058)
         head_parts.extend([frame, lens, glint, temple])
-    bridge = rounded_box(0.056, 0.020, 0.022, bevel=0.006, segs=2, name="groucho_bridge", material="gear_dark").translate(0.0, 0.064, -0.046)
+    bridge = rounded_box(0.050, 0.018, 0.020, bevel=0.005, segs=2, name="groucho_bridge", material="gear_dark").translate(0.0, 0.056, -0.040)
     head_parts.append(bridge)
 
-    # Big bulbous peach-pink Groucho nose with sculpted nostril flares (`420:dflower1`)!
+    # Sculpted bulbous peach-pink Groucho nose with flared nostrils (`daisies_sheet.png`)!
     nose = (
-        superellipsoid(0.046, 0.062, 0.072, e1=0.74, e2=0.80, u_segs=22, v_segs=14, name="groucho_nose", material="item_groucho_nose")
+        superellipsoid(0.040, 0.054, 0.062, e1=0.74, e2=0.80, u_segs=22, v_segs=14, name="groucho_nose", material="item_groucho_nose")
         .rotate_xyz(rx=0.22)
-        .translate(0.0, 0.080, +0.018)
+        .translate(0.0, 0.072, +0.016)
     )
     head_parts.append(nose)
     for side, tag in ((+1.0, "l"), (-1.0, "r")):
-        nostril = ellipsoid(0.022, 0.018, 0.020, u_segs=12, v_segs=8, name=f"groucho_nostril_{tag}", material="item_groucho_nose").translate(side * 0.032, 0.062, +0.046)
+        nostril = ellipsoid(0.020, 0.016, 0.018, u_segs=12, v_segs=8, name=f"groucho_nostril_{tag}", material="item_groucho_nose").translate(side * 0.028, 0.054, +0.040)
         head_parts.append(nostril)
     sc.add("dflower_head", head_parts)
 
-    # Drooping bristly broom-style black Groucho mustache mounted on a child node for a cheeky twitch!
+    # Drooping bristly broom-style black Groucho mustache mounted on a child node!
     sc.set_node_parent("dflower_stache", "dflower_head")
-    sc.set_node_transform("dflower_stache", translation=(0.0, 0.052, +0.066))
+    sc.set_node_transform("dflower_stache", translation=(0.0, 0.046, +0.058))
     stache_parts: List[MeshPart] = []
     for k in range(-4, 5):
         u = k / 4.0
-        tx = u * 0.078
-        tz = 0.010 + 0.024 * abs(u)
-        ty = -0.016 * (u * u)
+        tx = u * 0.072
+        tz = 0.008 + 0.024 * abs(u)
+        ty = -0.014 * (u * u)
         tuft = (
-            ellipsoid(0.016, 0.015, 0.056 - 0.010 * abs(u), u_segs=10, v_segs=8, name=f"groucho_stache_{k + 4}", material="item_dark_stitch")
-            .rotate_xyz(rx=0.18, ry=u * 0.22)
-            .translate(tx, ty, tz + 0.032)
+            ellipsoid(0.014, 0.013, 0.052 - 0.009 * abs(u), u_segs=10, v_segs=8, name=f"groucho_stache_{k + 4}", material="item_dark_stitch")
+            .rotate_xyz(rx=0.18, ry=u * 0.24)
+            .translate(tx, ty, tz + 0.028)
         )
         stache_parts.append(tuft)
     sc.add("dflower_stache", stache_parts)
 
-    # Authentic 700 ms 7-frame 1998 `420:dflower1` suspicious left-to-right look-around animation!
-    times = [0.00, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70]
-    head_poses = [
-        (58.0, -28.0, +18.0),  # frame 0 (590): looking far LEFT
-        (56.0, -18.0, +12.0),  # frame 1 (594): glancing left
-        (54.0, -8.0, +5.0),    # frame 2 (597): turning toward center
-        (52.0, 0.0, 0.0),      # frame 3 (600): dead CENTER suspicious stare
-        (58.0, +28.0, -18.0),  # frame 4 (601): looking far RIGHT
-        (52.0, +4.0, -3.0),    # frame 5 (600): swinging back center
-        (55.0, -14.0, +9.0),   # frame 6 (597): swinging back left
-        (58.0, -28.0, +18.0),  # seamless loop closure
-    ]
-    stem_sways = [+5.0, +3.0, +1.5, 0.0, -5.0, -1.0, +2.5, +5.0]
-    stache_twitches = [+5.0, -3.0, +3.0, 0.0, -5.0, +3.0, -2.0, +5.0]
-    sc.add_animation(
-        "Idle",
-        [
-            AnimationChannel("dflower_head", "rotation", times, [quat_from_euler_xyz(rx=rx, ry=ry, rz=rz, degrees=True) for rx, ry, rz in head_poses]),
-            AnimationChannel("dflower_stem", "rotation", times, [quat_from_euler_xyz(rz=a, degrees=True) for a in stem_sways]),
-            AnimationChannel("dflower_stache", "rotation", times, [quat_from_euler_xyz(ry=a, rz=a * 0.6, degrees=True) for a in stache_twitches]),
-        ],
-        replace=True,
-    )
-    return _finalize_item(sc, target_span=0.92)
+    if animated:
+        # Authentic 700 ms 7-frame 1998 `420:dflower1` suspicious left-to-right look-around animation!
+        times = [0.00, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70]
+        head_poses = [
+            (70.0, -26.0, +16.0),  # frame 0 (590): looking far LEFT
+            (68.0, -16.0, +10.0),  # frame 1 (594): glancing left
+            (66.0, -7.0, +4.0),    # frame 2 (597): turning toward center
+            (66.0, 0.0, 0.0),      # frame 3 (600): dead CENTER suspicious stare
+            (70.0, +26.0, -16.0),  # frame 4 (601): looking far RIGHT
+            (66.0, +4.0, -3.0),    # frame 5 (600): swinging back center
+            (68.0, -13.0, +8.0),   # frame 6 (597): swinging back left
+            (70.0, -26.0, +16.0),  # seamless loop closure
+        ]
+        stem_sways = [+5.0, +3.0, +1.5, 0.0, -5.0, -1.0, +2.5, +5.0]
+        stache_twitches = [+5.0, -3.0, +3.0, 0.0, -5.0, +3.0, -2.0, +5.0]
+        sc.add_animation(
+            "Idle",
+            [
+                AnimationChannel("dflower_head", "rotation", times, [quat_from_euler_xyz(rx=rx, ry=ry, rz=rz, degrees=True) for rx, ry, rz in head_poses]),
+                AnimationChannel("dflower_stem", "rotation", times, [quat_from_euler_xyz(rz=a, degrees=True) for a in stem_sways]),
+                AnimationChannel("dflower_stache", "rotation", times, [quat_from_euler_xyz(ry=a, rz=a * 0.6, degrees=True) for a in stache_twitches]),
+            ],
+            replace=True,
+        )
+    return _finalize_item(sc, target_span=0.94)
+
+
+def build_dflower1() -> SceneBuilder:
+    """Animated 1998 Groucho-Marx Disguise Daisy looking suspiciously left & right (700 ms Idle clip, `420:dflower1`)."""
+    return _build_groucho_daisy("item_dflower1", animated=True)
 
 
 def build_mush2a() -> SceneBuilder:

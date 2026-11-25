@@ -124,8 +124,8 @@ def _subdivided_rounded_box(
                     tris.extend([(a, c, b), (a, d, c)])
                 else:
                     tris.extend([(a, b, c), (a, c, d)])
-    # +X and -X faces (subdivided ny x nz)
-    for ix, flip in ((nx, False), (0, True)):
+    # +X and -X faces (subdivided ny x nz): (b-a)x(c-a) = (+Y)x(+Z) = +X, so flip=True gives +X outward!
+    for ix, flip in ((nx, True), (0, False)):
         for k in range(nz):
             for j in range(ny):
                 a, b, c, d = _vid(ix, j, k), _vid(ix, j + 1, k), _vid(ix, j + 1, k + 1), _vid(ix, j, k + 1)
@@ -263,15 +263,20 @@ def _build_option3_wide_shield(
         front_mask = np.clip((uz - 0.20) / 0.55, 0.0, 1.0)
         border_relief = 0.010 * rim_step * front_mask
 
-        # Slightly lift rear-bottom edge so deep embedded back never pokes below front brow,
-        # and smoothly thin the rear face on the proud upper crest (`u_y > 0.50`) so side `901 E`
-        # reads as a sleek sculpted firefighter badge plate instead of a thick block.
+        # Seat the rear face cleanly back into the curved front dome across the lower/mid shield
+        # (zero gap on either side) while tapering smoothly at the upper crest so side profiles
+        # stay sleek like `afst901` & `pu_mason` without a bulky crown block.
         rear_mask = np.clip((-uz - 0.05) / 0.95, 0.0, 1.0)
         rear_bot = rear_mask * np.clip((0.26 - u_y) / 0.26, 0.0, 1.0)
-        p[:, 1] += 0.014 * rear_bot
-        top_thin_t = np.clip((u_y - 0.48) / 0.52, 0.0, 1.0)
+        p[:, 1] += 0.015 * rear_bot
+        rear_taper_x = 1.0 - 0.14 * rear_mask * (0.18 + 0.82 * (u_y ** 1.2))
+        p[:, 0] *= rear_taper_x
+        nx_eff = p[:, 0] / max(1e-6, half_w)
+        # Solid seat into front dome through u_y=0..0.72, smoothly thinning near the top crest lip
+        mid_seat = np.sin(np.clip(u_y / 0.85, 0.0, 1.0) * math.pi)
+        top_thin_t = np.clip((u_y - 0.62) / 0.38, 0.0, 1.0)
         top_thin = top_thin_t * top_thin_t * (3.0 - 2.0 * top_thin_t)
-        p[:, 2] += 0.048 * top_thin * rear_mask
+        p[:, 2] += (-0.042 * mid_seat * (1.0 - 0.25 * nx_eff * nx_eff) + 0.022 * top_thin) * rear_mask
 
         p[:, 2] += _shield_z_curve(p[:, 0], p[:, 1], shield_w, shield_h, curve_depth) + border_relief
         return p
