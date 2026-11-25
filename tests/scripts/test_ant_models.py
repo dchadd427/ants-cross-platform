@@ -1534,6 +1534,56 @@ class All1998ClipsAndViewerTests(unittest.TestCase):
         self.assertIn(("forearm_left", "rotation"), pb_by)
         self.assertIn(("forearm_right", "rotation"), pb_by)
 
+    @unittest.skipUnless(HAS_NUMPY, "numpy is needed")
+    def test_back_silhouette_tail_rings_burrow_dive_and_swimmer_flippers(self):
+        scenes = self._build_all_six()
+        # 1. No protruding dorsal lumps on the back/petiole; concentric tail seams stay present.
+        for cls_name, sc in scenes.items():
+            part_names = {p.name for p in sc.world_parts()}
+            for unwanted in ("dorsal_ridge", "dorsal_plate", "petiole_node"):
+                self.assertNotIn(unwanted, part_names, f"{cls_name} should not contain protruding lump {unwanted}")
+            self.assertIn("gaster_seam_0", part_names, f"{cls_name} missing gaster_seam_0")
+            self.assertIn("gaster_seam_1", part_names, f"{cls_name} missing gaster_seam_1")
+
+        # 2. Enter & Hatch keep every ant 100% full size (no shrink scale channel) and plunge below Y = 0.
+        for cls_name, sc in scenes.items():
+            for clip_name in ("Enter", "Hatch"):
+                clip = next(c for c in sc.animations if c.name == clip_name)
+                ub_scale = [ch for ch in clip.channels if ch.target_node == "upper_body" and ch.path == "scale"]
+                self.assertEqual(ub_scale, [], f"{cls_name} {clip_name} must stay full size instead of shrinking")
+                ub_t = next(ch for ch in clip.channels if ch.target_node == "upper_body" and ch.path == "translation")
+                self.assertLess(min(v[1] for v in ub_t.values), 0.0, f"{cls_name} {clip_name} must dive below Y=0")
+
+        # 3. Swimmer's 4 flippers attach directly onto individual `leg_*` nodes (never left grounded in static node).
+        swimmer = scenes["swimmer"]
+        self.assertNotIn("flippers", swimmer.nodes, "Swimmer flippers must ride on individual leg_* nodes")
+        for tag in ("mid_left", "mid_right", "rear_left", "rear_right"):
+            leg_parts = {p.name for p in swimmer.nodes[f"leg_{tag}"]}
+            self.assertIn(f"flipper_{tag}", leg_parts, f"flipper_{tag} missing from leg_{tag}")
+
+        # 4. Combat Ant's gold bandolier clears the outer thighs with zero intersection.
+        combat = scenes["combat"]
+        bm = combat.get_world_matrix("gear_bandolier")
+        bp = np.vstack([p.positions for p in combat.nodes["gear_bandolier"]])
+        bw = (bp @ bm[:3, :3].T) + bm[:3, 3]
+        for ln in ("leg_mid_left", "leg_mid_right", "leg_rear_left", "leg_rear_right"):
+            lm = combat.get_world_matrix(ln)
+            lp = np.vstack([p.positions for p in combat.nodes[ln]])
+            lw = (lp @ lm[:3, :3].T) + lm[:3, 3]
+            outer = lw[np.abs(lw[:, 0]) > 0.16]
+            near = bw[
+                (np.sign(bw[:, 0]) == np.sign(outer[0, 0]))
+                & (np.abs(bw[:, 0]) > 0.16)
+                & (bw[:, 2] >= outer[:, 2].min() - 0.02)
+                & (bw[:, 2] <= outer[:, 2].max() + 0.02)
+            ]
+            if len(near):
+                self.assertGreater(
+                    float(near[:, 1].min()),
+                    float(outer[:, 1].max()) - 0.01,
+                    f"Combat bandolier clips outer thigh of {ln}",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

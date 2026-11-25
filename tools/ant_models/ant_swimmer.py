@@ -573,7 +573,12 @@ def _make_diving_flipper(name: str, length: float = 0.155, blade_w: float = 0.08
 
 
 def _build_flippers(scene: SceneBuilder, anchors: Dict[str, Any]) -> None:
-    """Attach 4 forward-facing frogman diving flippers individually onto all 4 feet at Y = 0.0."""
+    """Attach 4 forward-facing frogman diving flippers directly onto their individual `leg_*` nodes.
+
+    Parenting each flipper into its own foot-pivoted `leg_<tag>` node ensures all 4 flippers walk,
+    flex, swim, dive, and plunge head-first into holes (`Enter` / `Hatch`) in 100% lockstep with
+    Swimmer's feet rather than remaining glued on the ground.
+    """
     mid_l = anchors.get("foot_mid_left", (0.152, 0.0, 0.094))
     mid_r = anchors.get("foot_mid_right", (-mid_l[0], 0.0, mid_l[2]))
     rear_l = anchors.get("foot_rear_left", (0.160, 0.0, -0.028))
@@ -590,22 +595,35 @@ def _build_flippers(scene: SceneBuilder, anchors: Dict[str, Any]) -> None:
         ("mid_right", mid_r, 0.214, 0.116, -mid_yaw, +0.018),
     ):
         fx, _, fz = foot_pos
-        fin = _make_diving_flipper(f"flipper_{tag}", length=length, blade_w=blade_w)
-        scene.add("flippers", fin.rotate_xyz(ry=yaw_signed).translate(fx, 0.0, fz))
+        leg_node = f"leg_{tag}"
+        leg_xf = scene.get_node_transform(leg_node)
+        px, py, pz = leg_xf.translation if leg_xf is not None else (0.0, 0.0, 0.0)
+        target_node = leg_node if leg_node in scene.nodes else "flippers"
 
+        fin = (
+            _make_diving_flipper(f"flipper_{tag}", length=length, blade_w=blade_w)
+            .rotate_xyz(ry=yaw_signed)
+            .translate(fx - px, -py, fz - pz)
+        )
         # Snug dark rubber boot pocket encasing the curved digitigrade tarsus cleanly above Y = 0.0.
         boot_vamp = (
             superellipsoid(0.028, 0.020, 0.052, e1=0.72, e2=0.76, u_segs=14, v_segs=10, name=f"flipper_boot_{tag}", material="gear_dark")
             .translate(0.0, 0.021, boot_z_off)
             .rotate_xyz(ry=yaw_signed)
-            .translate(fx, 0.0, fz)
+            .translate(fx - px, -py, fz - pz)
         )
         collar = (
             cylinder(0.030, 0.025, 0.040, radial_segs=14, bevel=0.005, axis="y", name=f"flipper_collar_{tag}", material="gear_dark")
-            .translate(fx, 0.026, fz)
+            .translate(fx - px, 0.026 - py, fz - pz)
         )
-        scene.add("flippers", boot_vamp)
-        scene.add("flippers", collar)
+        # Tuck the green tarsus sole 6 mm inside the rubber flipper boot pocket so zero green pixels
+        # poke through the underside of the flipper when Swimmer dives or kicks upside down.
+        if target_node == leg_node and leg_node in scene.nodes:
+            scene.nodes[leg_node] = [
+                part.deform(lambda p: np.column_stack([p[:, 0], np.maximum(p[:, 1], 0.006), p[:, 2]]))
+                for part in scene.nodes[leg_node]
+            ]
+        scene.add(target_node, [fin, boot_vamp, collar])
 
 
 def _subdivided_slab(

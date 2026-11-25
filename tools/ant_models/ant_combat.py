@@ -279,13 +279,13 @@ def _build_torso(scene: SceneBuilder) -> np.ndarray:
         .translate(0.0, 0.195, -0.345)
     )
     scene.add("gaster", gaster)
-    for idx, (z_ring, maj_r) in enumerate(((-0.224, 0.098), (-0.288, 0.062))):
-        y_ring = 0.195 + (z_ring + 0.345) * math.sin(-tilt)
+    for idx, (s_local, maj_r) in enumerate(((0.125, 0.100), (0.056, 0.064))):
         ring = (
-            torus_arc(maj_r, 0.0065, u_segs=20, v_segs=6, plane="xy", name=f"gaster_seam_{idx}", material="chitin_dark")
+            torus_arc(maj_r, 0.0068, u_segs=24, v_segs=8, plane="xy", name=f"gaster_seam_{idx}", material="chitin_dark")
+            .translate(0.0, 0.0, s_local)
             .scale(1.06, 0.94, 1.0)
             .rotate_xyz(rx=tilt)
-            .translate(0.0, y_ring, z_ring)
+            .translate(0.0, 0.195, -0.345)
         )
         scene.add("gaster", ring)
 
@@ -735,22 +735,22 @@ def _build_bandoliers(scene: SceneBuilder, torso_verts: np.ndarray) -> None:
     forming an unmistakable X across BOTH front chest/lower torso AND back (`acst301`/`701`).
     """
     # Strap 0: draped wide & proud OVER TOP of left shoulder/pauldron (+X) -> front X-center
-    # -> right lower waist (-X) -> right flank -> lower-right back -> rear X-center -> left shoulder.
+    # -> right waist (-X) cleanly ABOVE the thickened leg thighs -> rear X-center -> left shoulder.
     strap0_ctrl = [
         (+0.305, 0.858, -0.024),  # wide & proud ON TOP OF left shoulder/pauldron (zero arm clip!)
-        (+0.278, 0.720, +0.154),  # draping boldly down front-left shoulder cap
-        (+0.148, 0.606, +0.252),  # diagonal across left pectoral toward front X-center
-        ( 0.000, 0.514, +0.274),  # FRONT X-JUNCTION CENTER on mid-chest
-        (-0.144, 0.420, +0.204),  # diagonal down across lower-right ribs
-        (-0.214, 0.368, +0.068),  # wrapping right lower waist above mid-hip socket
-        (-0.216, 0.366, -0.098),  # right lower flank (cleanly inside flexing arms & above hip)
-        (-0.148, 0.418, -0.254),  # lower-right back rising diagonally
-        ( 0.000, 0.526, -0.332),  # REAR X-JUNCTION CENTER on mid-back
-        (+0.160, 0.668, -0.278),  # diagonal up across upper-left back
-        (+0.268, 0.778, -0.178),  # sweeping proudly up onto rear-left shoulder top
+        (+0.278, 0.726, +0.154),  # draping boldly down front-left shoulder cap
+        (+0.150, 0.624, +0.252),  # diagonal across left pectoral toward front X-center
+        ( 0.000, 0.550, +0.274),  # FRONT X-JUNCTION CENTER on mid-chest
+        (-0.154, 0.490, +0.204),  # diagonal down across lower-right ribs (clears mid thigh!)
+        (-0.228, 0.474, +0.068),  # wrapping right waist cleanly ABOVE mid-hip & thigh
+        (-0.230, 0.472, -0.098),  # right flank cleanly ABOVE rear-hip & thigh
+        (-0.158, 0.490, -0.254),  # lower-right back rising diagonally
+        ( 0.000, 0.558, -0.332),  # REAR X-JUNCTION CENTER on mid-back
+        (+0.160, 0.678, -0.278),  # diagonal up across upper-left back
+        (+0.268, 0.782, -0.178),  # sweeping proudly up onto rear-left shoulder top
     ]
     strap1_ctrl = [(-x, y, z) for (x, y, z) in strap0_ctrl]
-    pivot = np.array([0.0, 0.535, -0.028])
+    pivot = np.array([0.0, 0.555, -0.028])
 
     front_cross_pts: List[np.ndarray] = []
     back_cross_pts: List[np.ndarray] = []
@@ -761,7 +761,7 @@ def _build_bandoliers(scene: SceneBuilder, torso_verts: np.ndarray) -> None:
             _normalize(
                 p - pivot
                 + np.array([0.0, 0.46 * max(0.0, min(1.0, (p[1] - 0.62) / 0.22)), 0.0])
-                + np.array([0.0, -0.14 * max(0.0, min(1.0, (0.42 - p[1]) / 0.12)), 0.0])
+                + np.array([0.0, 0.08 * max(0.0, min(1.0, (0.52 - p[1]) / 0.10)), 0.0])
             )
             for p in pts
         ])

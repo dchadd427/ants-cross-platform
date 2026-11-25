@@ -150,22 +150,21 @@ def _visible_node_verts(scene: SceneBuilder) -> Dict[str, "np.ndarray"]:
     return out
 
 
-def _eval_pose_min_y(
+def _eval_pose_yz(
     scene: SceneBuilder,
     overrides: Dict[str, Dict[str, Tuple[float, ...]]],
     node_verts: Dict[str, "np.ndarray"],
-) -> float:
-    """Exact world-space minimum Y across every visible mesh vertex for a single pose."""
+) -> Tuple["np.ndarray", "np.ndarray"]:
+    """Return stacked world-space `(Y, Z)` arrays across all visible vertices for a single pose."""
     world: Dict[str, "np.ndarray"] = {}
 
     def _get(n: str) -> "np.ndarray":
         if n in world:
             return world[n]
-        xf = scene.get_node_transform(n)
-        ov = overrides.get(n, {})
-        t = ov.get("translation", xf.translation if xf is not None else (0.0, 0.0, 0.0))
-        r = ov.get("rotation", xf.rotation if xf is not None else (0.0, 0.0, 0.0, 1.0))
-        s = ov.get("scale", xf.scale if xf is not None else (1.0, 1.0, 1.0))
+        ov = overrides.get(n)
+        t = ov["translation"] if (ov and "translation" in ov) else _rest_t(scene, n)
+        r = ov["rotation"] if (ov and "rotation" in ov) else _rest_r(scene, n)
+        s = ov["scale"] if (ov and "scale" in ov) else _rest_s(scene, n)
         m = np.eye(4, dtype=np.float64)
         m[:3, :3] = _quat_rot_mat(r) * np.asarray(s, dtype=np.float64)[None, :]
         m[:3, 3] = np.asarray(t, dtype=np.float64)
@@ -175,12 +174,25 @@ def _eval_pose_min_y(
         world[n] = m
         return m
 
-    min_y = 1e9
+    ys_list: List["np.ndarray"] = []
+    zs_list: List["np.ndarray"] = []
     for n, verts in node_verts.items():
         m = _get(n)
-        ys = verts @ m[1, :3] + m[1, 3]
-        min_y = min(min_y, float(ys.min()))
-    return min_y
+        ys_list.append(verts @ m[1, :3] + m[1, 3])
+        zs_list.append(verts @ m[2, :3] + m[2, 3])
+    if not ys_list:
+        return np.zeros(1, dtype=np.float64), np.zeros(1, dtype=np.float64)
+    return np.concatenate(ys_list), np.concatenate(zs_list)
+
+
+def _eval_pose_min_y(
+    scene: SceneBuilder,
+    overrides: Dict[str, Dict[str, Tuple[float, ...]]],
+    node_verts: Dict[str, "np.ndarray"],
+) -> float:
+    """Exact world-space minimum Y across every visible mesh vertex for a single pose."""
+    ys, _ = _eval_pose_yz(scene, overrides, node_verts)
+    return float(ys.min())
 
 
 def _leg_infos(scene: SceneBuilder, node_verts: Dict[str, "np.ndarray"]) -> list:
@@ -603,12 +615,15 @@ def _build_burrow_clip(
     *,
     close_loop: bool,
 ) -> AnimationClip:
-    """Shared exact floor-safe (`min_y >= 0.0`), zero-hip-gap builder for `"Enter"` & `"Hatch"`.
+    """Full-size (`scale = 1.0`) face-down burrow dive (`"Enter"`) & hole emerge (`"Hatch"`) builder.
 
-    Row columns: `(u, sx, sy, sz, ub_rx, hd_rx, gs_rx, arm_rx, arm_rz, leg_kick, air_w)`
+    The ant never shrinks: it pitches face-down and plunges straight down through `Y = 0.0` into
+    the burrow hole (`sink_frac` 0.0 = grounded -> 1.04 = fully submerged below `Y = 0.0`), while
+    keeping every leg hip locked 0.000 mm onto `upper_body` and kicking skyward beside the gaster.
+
+    Row columns: `(u, sink_frac, ub_rx, hd_rx, gs_rx, arm_rx, arm_rz, leg_kick, air_w)`
     """
     dur = _DURATIONS[clip_name][ant_class]
-    # Dense uniform sampling (36 segments) prevents chord-dipping & keeps hip error sub-mm during dives.
     n_sub = 36
     us = [i / n_sub for i in range(n_sub + 1)]
     times = [round(dur * u, 5) for u in us]
@@ -616,7 +631,6 @@ def _build_burrow_clip(
 
     bx, by, bz = _rest_t(scene, "upper_body")
     r_ub0 = _rest_r(scene, "upper_body")
-    s_ub0 = np.asarray(_rest_s(scene, "upper_body"), dtype=np.float64)
     r_hd0 = _rest_r(scene, "head_group")
     r_gs0 = _rest_r(scene, "gaster_group") if "gaster_group" in scene.nodes else None
     arms = _arm_pairs(scene)
@@ -626,7 +640,6 @@ def _build_burrow_clip(
 
     ub_ts: List[Vec3] = []
     ub_rs: List[Quat] = []
-    ub_ss: List[Vec3] = []
     hd_rs: List[Quat] = []
     gs_rs: List[Quat] = []
     arm_rs: Dict[str, List[Quat]] = {n: [] for n in r_arms}
@@ -636,16 +649,14 @@ def _build_burrow_clip(
     leg_ss: Dict[str, List[Vec3]] = {info[0]: [] for info in legs}
 
     for row in samples:
-        _, sx, sy, sz, ub_rx, hd_rx, gs_rx, a_rx, a_rz, kick, air_w = row
-        s_vec = np.array([sx, sy, sz], dtype=np.float64)
-        s_ub = s_ub0 * s_vec
-        t_ub = np.array([bx * sx, by * sy, bz * sz], dtype=np.float64)
+        _, sink_frac, ub_rx, hd_rx, gs_rx, a_rx, a_rz, kick, air_w = row
+        t_ub = np.array([bx, by, bz], dtype=np.float64)
         q_ub = quat_mul(r_ub0, quat_from_euler_xyz(rx=ub_rx))
         q_delta_ub = quat_mul(q_ub, _quat_conj(r_ub0))
         q_hd = quat_mul(r_hd0, quat_from_euler_xyz(rx=hd_rx))
 
         ov: Dict[str, Dict[str, Tuple[float, ...]]] = {
-            "upper_body": {"translation": tuple(float(c) for c in t_ub), "rotation": q_ub, "scale": tuple(float(c) for c in s_ub)},
+            "upper_body": {"translation": tuple(float(c) for c in t_ub), "rotation": q_ub},
             "head_group": {"rotation": q_hd},
         }
         if r_gs0 is not None:
@@ -658,62 +669,74 @@ def _build_burrow_clip(
             ov[a_n] = {"rotation": qa}
             arm_rs[a_n].append(qa)
             if f_n:
-                qf = quat_mul(r_arms[f_n], quat_from_euler_xyz(rx=-0.22 * abs(a_rx) * k))
+                qf = quat_mul(r_arms[f_n], quat_from_euler_xyz(rx=-0.18 * abs(a_rx) * k))
                 ov[f_n] = {"rotation": qf}
                 arm_rs[f_n].append(qf)
         for idx_a, an in enumerate(ant_nodes):
             sgn = +1.0 if idx_a == 0 else -1.0
-            q_an = quat_mul(r_ants[an], quat_from_euler_xyz(rx=-0.16 * ub_rx, rz=sgn * 0.10 * abs(ub_rx)))
+            q_an = quat_mul(r_ants[an], quat_from_euler_xyz(rx=-0.12 * min(ub_rx, 1.5), rz=sgn * 0.08 * min(abs(ub_rx), 1.5)))
             ov[an] = {"rotation": q_an}
             ant_rs[an].append(q_an)
 
-        # Lock every leg's hip onto scaled/pitched `upper_body` (`0.000 mm` separation!).
-        # When `air_w == 0` and upright, legs stay grounded; during burrow dive (`air_w > 0`) they
-        # kick skyward beside the diving gaster just like `ORIG agen301..afen301` & `*hatch`!
+        # Lock every leg's hip onto full-size pitched `upper_body` (`0.000 mm` separation!).
+        # Grounded at rest (`air_w == 0`), kicking skyward beside the vertical gaster during burrow dive!
         frame_legs: Dict[str, Tuple[np.ndarray, Quat, np.ndarray]] = {}
         for node, lt0, lr0, ls0, hip_loc, hip_in_ub, v_rest, foot_low, foot_rest_min_y, side, is_rear in legs:
-            h_target = t_ub + _quat_rotate(q_ub, s_vec * hip_in_ub)
-            s_leg = ls0 * s_vec
+            h_target = t_ub + _quat_rotate(q_ub, hip_in_ub)
             if air_w <= 1e-4:
-                t_cur = np.array([lt0[0] * sx, 0.0, lt0[2] * sz], dtype=np.float64)
+                t_cur = np.array([lt0[0], 0.0, lt0[2]], dtype=np.float64)
                 d_vec = h_target - t_cur
-                s_rel = _solve_knee_scale(hip_loc * s_leg, max(0.02, float(v_rest[1]) * sy), d_vec, knee_bow=1.2, splay=0.30)
-                s_use = s_leg * s_rel
+                s_rel = _solve_knee_scale(hip_loc * ls0, max(0.02, float(v_rest[1])), d_vec, knee_bow=1.2, splay=0.30)
+                s_use = ls0 * s_rel
                 q_use = quat_mul(_shortest_arc_quat(_quat_rotate(lr0, hip_loc * s_use), d_vec), lr0)
                 foot_now = _quat_rotate(q_use, foot_low * s_use)
                 t_cur[1] = -float(foot_now[:, 1].min())
             else:
-                # Legs follow body dive & kick upward beside the skyward gaster!
-                kick_rx = kick * (-0.55 if is_rear else -0.85)
-                kick_rz = side * kick * (0.30 if is_rear else 0.42)
+                # Legs follow the face-down torso dive and splay/kick straight UP beside the gaster!
+                kick_rx = kick * (0.35 if is_rear else 0.15)
+                kick_rz = side * kick * (0.32 if is_rear else 0.44)
                 q_kick = quat_from_euler_xyz(rx=kick_rx, rz=kick_rz)
                 q_use = quat_mul(q_delta_ub, quat_mul(q_kick, lr0))
-                s_use = s_leg
+                s_use = ls0.copy()
                 t_cur = h_target - _quat_rotate(q_use, hip_loc * s_use)
             frame_legs[node] = (t_cur, q_use, s_use)
             ov[node] = {"translation": tuple(float(c) for c in t_cur), "rotation": q_use, "scale": tuple(float(c) for c in s_use)}
 
-        # Exact floor-clamp across EVERY visible vertex -> `min_y >= 0.000` (zero underground poke!).
-        cur_min_y = _eval_pose_min_y(scene, ov, node_verts)
-        if air_w > 1e-4:
-            lift = 0.0015 - cur_min_y
-        elif cur_min_y < 0.0:
-            lift = -cur_min_y
+        # Compute exact vertical shift: grounded at `sink_frac == 0`, plunging cleanly straight DOWN
+        # through the `Y = 0.0` hole rim (`sink_frac == 1.05` -> entire ant submerged below `Y = -0.04`).
+        ys, zs = _eval_pose_yz(scene, ov, node_verts)
+        cur_min_y, cur_max_y = float(ys.min()), float(ys.max())
+        if sink_frac <= 1e-4:
+            lift = -cur_min_y if (air_w > 1e-4 or cur_min_y < 0.0) else 0.0
         else:
-            lift = 0.0
+            span_y = max(0.35, cur_max_y - cur_min_y)
+            lift = -cur_min_y - sink_frac * (span_y + 0.05)
+
+        # Center the ground-rim cross-section (`|y| <= 0.08`) directly over the hole at `Z = 0.0`
+        # so the clipped entry rim sits dead-center on the shadow with zero floating or overhang!
+        y_sh = ys + lift
+        rim = np.abs(y_sh) <= 0.08
+        if not np.any(rim):
+            rim = y_sh >= -0.006
+        if np.any(rim):
+            z_rim = 0.5 * (float(zs[rim].min()) + float(zs[rim].max()))
+        else:
+            z_rim = float(zs.mean())
+        z_comp = -min(1.0, max(0.0, sink_frac / 0.14)) * z_rim
         t_ub[1] += lift
+        t_ub[2] += z_comp
         ub_ts.append((float(t_ub[0]), float(t_ub[1]), float(t_ub[2])))
         ub_rs.append(q_ub)
-        ub_ss.append((float(s_ub[0]), float(s_ub[1]), float(s_ub[2])))
         hd_rs.append(q_hd)
         for node, (t_l, q_l, s_l) in frame_legs.items():
             t_l[1] += lift
+            t_l[2] += z_comp
             leg_ts[node].append((float(t_l[0]), float(t_l[1]), float(t_l[2])))
             leg_rs[node].append(q_l)
             leg_ss[node].append((float(s_l[0]), float(s_l[1]), float(s_l[2])))
 
     if close_loop:
-        ub_ts[-1], ub_ss[-1] = ub_ts[0], ub_ss[0]
+        ub_ts[-1] = ub_ts[0]
         for info in legs:
             n = info[0]
             leg_ts[n][-1], leg_ss[n][-1] = leg_ts[n][0], leg_ss[n][0]
@@ -721,7 +744,6 @@ def _build_burrow_clip(
     channels: List[AnimationChannel] = [
         AnimationChannel("upper_body", "translation", list(times), ub_ts),
         AnimationChannel("upper_body", "rotation", list(times), _align_quats(ub_rs, close_loop=close_loop)),
-        AnimationChannel("upper_body", "scale", list(times), ub_ss),
         AnimationChannel("head_group", "rotation", list(times), _align_quats(hd_rs, close_loop=close_loop)),
     ]
     if r_gs0 is not None:
@@ -740,34 +762,53 @@ def _build_burrow_clip(
 
 
 def _add_enter_clip(scene: SceneBuilder, ant_class: str, node_verts: Dict[str, "np.ndarray"], legs: list) -> AnimationClip:
-    # Authentic `agen301..afen301`: dive head-first into burrow -> butt & legs sticking skyward ->
-    # shrink flush into hole at Y=0 -> emerge cleanly back upright so 1998 comparison loops in sync!
-    min_sc = 0.42 if ant_class == "fire" else 0.18
-    rows = [
-        (0.00, 1.00, 1.00, 1.00, +0.00, +0.00, +0.00, +0.00, +0.00, 0.00, 0.00),
-        (0.12, 0.96, 0.92, 0.96, +0.58, +0.12, +0.16, +0.44, +0.34, 0.20, 0.35),
-        (0.28, 0.78, 0.80, 0.78, +1.36, +0.18, +0.34, +0.62, +0.56, 0.52, 1.00),  # head-first burrow dive!
-        (0.44, min_sc, min_sc, min_sc, +1.50, +0.14, +0.40, +0.50, +0.48, 0.64, 1.00),  # tucked into hole at Y=0
-        (0.56, min_sc, min_sc, min_sc, +1.50, +0.14, +0.40, +0.50, +0.48, 0.64, 1.00),  # brief burrow pause
-        (0.72, 0.78, 0.80, 0.78, +1.36, +0.18, +0.34, +0.62, +0.56, 0.52, 1.00),  # reversing back up
-        (0.88, 0.96, 0.92, 0.96, +0.58, +0.12, +0.16, +0.44, +0.34, 0.20, 0.35),
-        (1.00, 1.00, 1.00, 1.00, +0.00, +0.00, +0.00, +0.00, +0.00, 0.00, 0.00),
-    ]
+    # Authentic `agen301..afen301`: stay FULL SIZE (1.0x!), dive face-down head-first straight into
+    # the burrow hole (gaster & legs pointing skyward as body descends below Y = 0.0!), pause inside,
+    # and reverse cleanly back out upright matching the 1998 deposit loop frame-for-frame!
+    # Columns: (u, sink_frac, ub_rx, hd_rx, gs_rx, arm_rx, arm_rz, leg_kick, air_w)
+    if ant_class == "fire":
+        # `afen301` (4f, 0.50s): wide yellow fire helmet tips face-down with gaster upright (`f1`),
+        # then plunges straight down into the burrow hole at 100% full size before popping back out (`f3`)!
+        rows = [
+            (0.00, 0.00, +0.00, +0.00, +0.00, +0.00, +0.00, 0.00, 0.00),
+            (0.10, 0.00, +0.85, +0.16, -0.14, +0.42, +0.20, 0.00, 0.00),
+            (0.24, 0.28, +1.95, +0.18, -0.52, +0.58, +0.28, 0.50, 1.00),  # f1: helmet diving forward, tail upright!
+            (0.45, 1.04, +2.78, +0.10, -1.02, +0.36, +0.18, 0.92, 1.00),  # f2: plunged full-size into hole!
+            (0.55, 1.04, +2.78, +0.10, -1.02, +0.36, +0.18, 0.92, 1.00),
+            (0.76, 0.28, +1.95, +0.18, -0.52, +0.58, +0.28, 0.50, 1.00),  # f3: rising back out!
+            (0.90, 0.00, +0.85, +0.16, -0.14, +0.42, +0.20, 0.00, 0.00),
+            (1.00, 0.00, +0.00, +0.00, +0.00, +0.00, +0.00, 0.00, 0.00),
+        ]
+    else:
+        rows = [
+            (0.00, 0.00, +0.00, +0.00, +0.00, +0.00, +0.00, 0.00, 0.00),  # f0: standing over hole
+            (0.07, 0.00, +0.82, +0.16, -0.12, +0.44, +0.20, 0.00, 0.00),  # f1: leaning face-down over rim
+            (0.16, 0.34, +2.05, +0.20, -0.58, +0.62, +0.34, 0.52, 1.00),  # f2-f3: face diving into hole!
+            (0.27, 0.58, +2.72, +0.14, -0.98, +0.48, +0.24, 0.80, 1.00),  # f4-f5: head underground, gaster & legs skyward!
+            (0.38, 0.82, +2.84, +0.10, -1.06, +0.38, +0.18, 0.92, 1.00),  # f6-f7: only gaster tip & toes poking out!
+            (0.47, 1.05, +2.86, +0.08, -1.08, +0.34, +0.16, 0.96, 1.00),  # f8: fully submerged inside hole!
+            (0.53, 1.05, +2.86, +0.08, -1.08, +0.34, +0.16, 0.96, 1.00),  # brief deposit beat inside hole
+            (0.62, 0.82, +2.84, +0.10, -1.06, +0.38, +0.18, 0.92, 1.00),  # backing back up out of hole!
+            (0.73, 0.58, +2.72, +0.14, -0.98, +0.48, +0.24, 0.80, 1.00),
+            (0.84, 0.34, +2.05, +0.20, -0.58, +0.62, +0.34, 0.52, 1.00),
+            (0.93, 0.00, +0.82, +0.16, -0.12, +0.44, +0.20, 0.00, 0.00),
+            (1.00, 0.00, +0.00, +0.00, +0.00, +0.00, +0.00, 0.00, 0.00),  # exact upright rest wrap
+        ]
     return _build_burrow_clip(scene, ant_class, "Enter", rows, node_verts, legs, close_loop=True)
 
 
 def _add_hatch_clip(scene: SceneBuilder, ant_class: str, node_verts: Dict[str, "np.ndarray"], legs: list) -> AnimationClip:
-    # Authentic `*hatch`: pop upward from tiny/tucked burrow at Y=0 with bouncy squash-and-stretch,
-    # flailing arms & kicking legs tumbling cleanly upright into rest pose!
-    start_sc = 0.28 if ant_class == "fire" else 0.08
+    # Authentic `*hatch` (`aghatch..afhatch`): separate 1-way exit/emerge animation — full-size (1.0x!)
+    # ant rises straight up out of the burrow hole from below Y = 0.0 and flips cleanly upright!
+    # Columns: (u, sink_frac, ub_rx, hd_rx, gs_rx, arm_rx, arm_rz, leg_kick, air_w)
     rows = [
-        (0.00, start_sc, start_sc, start_sc, +1.46, +0.12, +0.38, +0.48, +0.68, 0.62, 1.00),
-        (0.18, 0.44, 0.52, 0.44, +1.34, +0.16, +0.34, +0.52, +0.76, 0.56, 1.00),  # bursting up out of burrow!
-        (0.38, 0.78, 0.86, 0.78, +0.96, +0.10, +0.24, +0.26, +0.86, 0.40, 1.00),  # tumbling upright, arms flailing!
-        (0.58, 0.96, 1.07, 0.96, +0.26, -0.06, +0.06, -0.28, +0.64, 0.16, 0.45),  # energetic stretch overshoot!
-        (0.76, 1.05, 0.94, 1.05, -0.10, -0.08, -0.08, -0.18, +0.34, 0.00, 0.00),  # bouncy landing squash!
-        (0.90, 0.99, 1.02, 0.99, +0.02, +0.00, +0.00, -0.04, +0.08, 0.00, 0.00),
-        (1.00, 1.00, 1.00, 1.00, +0.00, +0.00, +0.00, +0.00, +0.00, 0.00, 0.00),  # exact upright rest pose!
+        (0.00, 1.05, +2.84, +0.08, -1.08, +0.34, +0.18, 0.96, 1.00),  # f0: inside burrow below Y = 0
+        (0.16, 0.80, +2.80, +0.10, -1.04, +0.40, +0.22, 0.90, 1.00),  # f1-f2: gaster & kicking toes emerging!
+        (0.36, 0.54, +2.64, +0.14, -0.94, +0.52, +0.30, 0.76, 1.00),  # f3-f4: full-size body rising out of hole!
+        (0.56, 0.26, +1.88, +0.20, -0.48, +0.56, +0.40, 0.46, 1.00),  # f5: head & shoulders clearing ground rim!
+        (0.76, 0.00, +0.72, +0.12, -0.10, +0.28, +0.26, 0.00, 0.00),  # f6-f7: flipping upright onto planted feet!
+        (0.90, 0.00, -0.08, -0.06, +0.04, -0.12, +0.16, 0.00, 0.00),  # crisp upright settle!
+        (1.00, 0.00, +0.00, +0.00, +0.00, +0.00, +0.00, 0.00, 0.00),  # f8: exact upright rest pose!
     ]
     return _build_burrow_clip(scene, ant_class, "Hatch", rows, node_verts, legs, close_loop=False)
 

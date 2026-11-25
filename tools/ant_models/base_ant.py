@@ -693,14 +693,6 @@ def _build_body(scene: SceneBuilder, *, y_off: float = 0.0) -> Dict[str, Tuple[f
     chest_plate = _paint_thorax_colors(chest_plate, y_ctr=y_ctr)
     scene.add("body", chest_plate)
 
-    dorsal_plate = (
-        ellipsoid(0.060, 0.060, 0.032, u_segs=22, v_segs=14, name="dorsal_plate", material="chitin_team")
-        .rotate_xyz(rx=-0.10)
-        .translate(0.0, 0.414 + y_off, -0.050)
-    )
-    dorsal_plate = _paint_thorax_colors(dorsal_plate, y_ctr=y_ctr)
-    scene.add("body", dorsal_plate)
-
     # Subtle recessed dark waist articulation seam & neat flush shoulder articulation sockets.
     waist_seam = (
         torus_arc(0.055, 0.0034, u_segs=24, v_segs=8, plane="xz", name="thorax_seam", material="chitin_dark")
@@ -720,25 +712,18 @@ def _build_body(scene: SceneBuilder, *, y_off: float = 0.0) -> Dict[str, Tuple[f
     c = max(0.0, -y_off)
     petiole_stem = swept_tube(
         [
-            (0.0, 0.296 + y_off, -0.056),
+            (0.0, 0.294 + y_off, -0.054),
             (0.0, 0.278 + y_off + 0.10 * c, -0.090),
             (0.0, 0.266 + y_off + 0.18 * c, -0.120),
         ],
-        [(0.030, 0.032), (0.022, 0.024), (0.028, 0.030)],
-        radial_segs=12,
+        [(0.032, 0.032), (0.024, 0.025), (0.030, 0.030)],
+        radial_segs=14,
         smooth_subdiv=2,
         cap_rings=2,
         name="petiole_stem",
         material="chitin_dark",
     )
     scene.add("body", petiole_stem)
-
-    petiole_node = (
-        ellipsoid(0.030, 0.036, 0.021, u_segs=14, v_segs=10, name="petiole_node", material="chitin_team")
-        .rotate_xyz(rx=-0.20)
-        .translate(0.0, 0.296 + y_off + 0.10 * c, -0.090)
-    )
-    scene.add("body", petiole_node)
 
     # Compact tucked insect gaster matching original 901 E / 701 N proportion.
     # When crouching (c > 0), gently perk the gaster upward around its petiole junction
@@ -774,14 +759,16 @@ def _build_body(scene: SceneBuilder, *, y_off: float = 0.0) -> Dict[str, Tuple[f
     )
     scene.add("gaster", gaster)
 
-    for idx, (s_local, maj_r) in enumerate([(0.130, 0.090), (0.072, 0.064)]):
-        y_ring = g_origin_y - s_local * math.sin(g_pitch)
-        z_ring = g_origin_z + s_local * math.cos(g_pitch)
+    # Seat dark segmentation rings directly inside the two gaster grooves and apply the EXACT same
+    # `_gaster_keel_fn` + scale + pitch pipeline as `gaster` so rings never phase into the dorsal keel!
+    for idx, (s_local, maj_r) in enumerate([(0.119, 0.0885), (0.066, 0.0638)]):
         band = (
-            torus_arc(maj_r, 0.0054, u_segs=22, v_segs=8, plane="xy", name=f"gaster_seam_{idx}", material="chitin_dark")
+            torus_arc(maj_r, 0.0056, u_segs=28, v_segs=8, plane="xy", name=f"gaster_seam_{idx}", material="chitin_dark")
+            .translate(0.0, 0.0, s_local)
+            .deform(_gaster_keel_fn)
             .scale(0.88, 0.86, 1.0)
             .rotate_xyz(rx=g_pitch)
-            .translate(0.0, y_ring, z_ring)
+            .translate(0.0, g_origin_y, g_origin_z)
         )
         scene.add("gaster", band)
 

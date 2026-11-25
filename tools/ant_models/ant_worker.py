@@ -54,13 +54,7 @@ def _add_carapace_details(scene: SceneBuilder, anchors: dict) -> None:
         .rotate_xyz(rx=0.10)
         .translate(0.0, 0.402, 0.072)
     )
-    # Sleek dorsal pronotum ridge sitting flush atop the fuller rear dorsal carapace (`z_min ~ -0.090`).
-    ridge = (
-        superellipsoid(0.031, 0.024, 0.029, e1=0.80, e2=0.84, u_segs=16, v_segs=10, name="dorsal_ridge", material="chitin_team")
-        .rotate_xyz(rx=-0.16)
-        .translate(0.0, 0.432, -0.068)
-    )
-    scene.add("worker_carapace", [crest, ridge])
+    scene.add("worker_carapace", [crest])
 
     # Subtle curved team-colored shoulder fairings anchored cleanly onto the fuller shoulders.
     sh_l = anchors["shoulder_left"]

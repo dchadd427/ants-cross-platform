@@ -323,7 +323,6 @@ def _add_swimmer_swim(scene: SceneBuilder) -> AnimationClip:
     ar_eulers: List[Vec3] = []
     fr_eulers: List[Vec3] = []
     legs_eulers: List[Vec3] = []
-    flip_eulers: List[Vec3] = []
     ant_l_eulers: List[Vec3] = []
     ant_r_eulers: List[Vec3] = []
 
@@ -343,10 +342,9 @@ def _add_swimmer_swim(scene: SceneBuilder) -> AnimationClip:
         # Right arm carries the yellow beach shovel cleanly tucked & paddling clear of body & legs!
         ar_eulers.append((-0.88 - 0.24 * s1, -0.10 + 0.10 * c1, -0.34 - 0.12 * c1))
         fr_eulers.append((-0.26 - 0.14 * c1, 0.0, -0.10))
-        # Synchronized dolphin-kick flutter on legs + flippers so all 4 flippers stay locked to all 4 feet!
+        # Dolphin-kick flutter on `legs` (each flipper rides directly on its individual `leg_*` foot node).
         kick = 0.13 * s2
         legs_eulers.append((kick, 0.0, 0.05 * s1))
-        flip_eulers.append((kick, 0.0, 0.05 * s1))
         ant_l_eulers.append((-0.24 + 0.10 * c1, 0.0, +0.08 * s1))
         ant_r_eulers.append((-0.24 - 0.10 * c1, 0.0, -0.08 * s1))
 
@@ -365,8 +363,6 @@ def _add_swimmer_swim(scene: SceneBuilder) -> AnimationClip:
         channels.append(AnimationChannel("forearm_right", "rotation", list(times), quat_track(rest_r(scene, "forearm_right"), fr_eulers)))
     if "legs" in scene.nodes:
         channels.append(AnimationChannel("legs", "rotation", list(times), quat_track(rest_r(scene, "legs"), legs_eulers)))
-    if "flippers" in scene.nodes:
-        channels.append(AnimationChannel("flippers", "rotation", list(times), quat_track(rest_r(scene, "flippers"), flip_eulers)))
     if "antenna_left" in scene.nodes:
         channels.append(AnimationChannel("antenna_left", "rotation", list(times), quat_track(rest_r(scene, "antenna_left"), ant_l_eulers)))
     if "antenna_right" in scene.nodes:
