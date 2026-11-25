@@ -534,6 +534,7 @@
       || n.startsWith("item_bear") || n.startsWith("item_flag") || n.startsWith("cloth_")
       || n.startsWith("fur_") || n === "item_banana_slice" || n === "item_groucho_nose"
       || n === "item_tongue_pink" || n === "item_cotton_fluff" || n === "item_cheese"
+      || n === "item_doll_skin" || n === "item_frog_green" || n.startsWith("item_wax_")
     ) return 4;
     return 0;
   }

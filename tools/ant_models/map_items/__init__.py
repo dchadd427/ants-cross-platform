@@ -34,10 +34,11 @@ CATEGORIES: Tuple[Tuple[str, str], ...] = (
     ("structures", "Hills & Gear"),
 )
 
-# Waves 1–2 realistic 3D showcase:
+# Waves 1–3 realistic 3D showcase:
 # - Plants & Grass: 35 / 35 complete (100%)
 # - Hills & Gameplay Gear: 14 / 14 complete (100%; mud bridges excluded as ground tiles)
-# - Food: 7 Wave 1 items, Toys & Props: 6 Wave 1 items, Rocks: 1 Wave 1 item (total 63 / 211).
+# - Toys, Props, Hardware, Doll & Characters: 51 / 51 complete (100%)
+# - Food: 7 Wave 1 items, Rocks: 1 Wave 1 item (total 108 / 211).
 MAP_ITEM_SPECS: Tuple[MapItemSpec, ...] = (
     # --- Toys & Props (Wave 1) ---
     MapItemSpec("bearhed", "Teddy Bear Head", "toys", 345, "bearhed", "bear", "Head", default_yaw=-8.0, default_pitch=46.0, builder_module="items_toys", builder_fn="build_bearhed"),
@@ -67,6 +68,32 @@ MAP_ITEM_SPECS: Tuple[MapItemSpec, ...] = (
     MapItemSpec("yelcray", "Yellow Krayawn Crayon", "toys", 354, "yelcray", "crayon", "Yellow", default_yaw=0.0, default_pitch=56.0, builder_module="items_props_toys", builder_fn="build_yelcray"),
     MapItemSpec("blucray", "Blue Krayawn Crayon", "toys", 355, "blucray", "crayon", "Blue", default_yaw=0.0, default_pitch=56.0, builder_module="items_props_toys", builder_fn="build_blucray"),
     MapItemSpec("lunchbox", "Mini Metal Lunchbox", "toys", 356, "lunchbox", "lunchbox", "", default_yaw=0.0, default_pitch=40.0, builder_module="items_props_toys", builder_fn="build_lunchbox"),
+    # --- Backyard Hardware & Debris (15 items) ---
+    MapItemSpec("papclp1", "Paperclip (Vertical)", "toys", 311, "papclp1", "paperclip", "Vertical", default_yaw=0.0, default_pitch=56.0, builder_module="items_props_hardware", builder_fn="build_papclp1"),
+    MapItemSpec("papclp2", "Paperclip (Diagonal)", "toys", 312, "papclp2", "paperclip", "Diagonal", default_yaw=0.0, default_pitch=56.0, builder_module="items_props_hardware", builder_fn="build_papclp2"),
+    MapItemSpec("pin1", "Blue Push-Pin", "toys", 313, "pin1", "pushpin", "Blue", default_yaw=0.0, default_pitch=34.0, builder_module="items_props_hardware", builder_fn="build_pin1"),
+    MapItemSpec("pin2", "Yellow Bent Push-Pin", "toys", 314, "pin2", "pushpin", "Yellow", default_yaw=0.0, default_pitch=30.0, builder_module="items_props_hardware", builder_fn="build_pin2"),
+    MapItemSpec("pin3", "Green Push-Pin", "toys", 315, "pin3", "pushpin", "Green", default_yaw=0.0, default_pitch=30.0, builder_module="items_props_hardware", builder_fn="build_pin3"),
+    MapItemSpec("botcap1", "YOU WIN Bottle Cap", "toys", 316, "botcap1", "botcap", "", default_yaw=0.0, default_pitch=50.0, builder_module="items_props_hardware", builder_fn="build_botcap1"),
+    MapItemSpec("bolt1", "Hex Steel Nut (Flat)", "toys", 317, "bolt1", "hexnut", "Flat", default_yaw=0.0, default_pitch=46.0, builder_module="items_props_hardware", builder_fn="build_bolt1"),
+    MapItemSpec("bolt2", "Hex Steel Nut (Tilted)", "toys", 318, "bolt2", "hexnut", "Tilted", default_yaw=0.0, default_pitch=40.0, builder_module="items_props_hardware", builder_fn="build_bolt2"),
+    MapItemSpec("screw1", "Flat-Head Wood Screw", "toys", 319, "screw1", "screw", "Wood", default_yaw=0.0, default_pitch=56.0, builder_module="items_props_hardware", builder_fn="build_screw1"),
+    MapItemSpec("screw2", "Phillips Machine Screw", "toys", 320, "screw2", "screw", "Phillips", default_yaw=0.0, default_pitch=38.0, builder_module="items_props_hardware", builder_fn="build_screw2"),
+    MapItemSpec("pencal1", "Hot-Pink Pen Cap", "toys", 321, "pencal1", "pencap", "", default_yaw=0.0, default_pitch=52.0, builder_module="items_props_hardware", builder_fn="build_pencal1"),
+    MapItemSpec("shtbut1", "Teal Shirt Button", "toys", 322, "shtbut1", "button", "", default_yaw=0.0, default_pitch=54.0, builder_module="items_props_hardware", builder_fn="build_shtbut1"),
+    MapItemSpec("broken1", "Pink High-Heel (Side)", "toys", 287, "broken1", "heels", "Side", default_yaw=0.0, default_pitch=52.0, builder_module="items_props_hardware", builder_fn="build_broken1"),
+    MapItemSpec("broken2", "Pink High-Heel (Upright)", "toys", 288, "broken2", "heels", "Upright", default_yaw=0.0, default_pitch=52.0, builder_module="items_props_hardware", builder_fn="build_broken2"),
+    MapItemSpec("broken3", "Silver Spoon Handle", "toys", 1334, "broken3", "spoon", "", default_yaw=0.0, default_pitch=54.0, builder_module="items_props_hardware", builder_fn="build_broken3"),
+    # --- Barbie Doll Parts & Easter-Egg Characters (9 items) ---
+    MapItemSpec("barbie", "Doll Torso (Pink Dress)", "toys", 330, "barbie", "doll", "Torso", default_yaw=0.0, default_pitch=28.0, builder_module="items_props_characters", builder_fn="build_barbie"),
+    MapItemSpec("leg1", "Doll Leg (Vertical)", "toys", 331, "leg1", "doll", "Leg 1", default_yaw=0.0, default_pitch=56.0, builder_module="items_props_characters", builder_fn="build_leg1"),
+    MapItemSpec("leg2", "Doll Leg (Diagonal)", "toys", 332, "leg2", "doll", "Leg 2", default_yaw=0.0, default_pitch=56.0, builder_module="items_props_characters", builder_fn="build_leg2"),
+    MapItemSpec("arm1", "Doll Arm (Straight)", "toys", 333, "arm1", "doll", "Arm 1", default_yaw=0.0, default_pitch=56.0, builder_module="items_props_characters", builder_fn="build_arm1"),
+    MapItemSpec("arm2", "Doll Arm (Bent)", "toys", 334, "arm2", "doll", "Arm 2", default_yaw=0.0, default_pitch=56.0, builder_module="items_props_characters", builder_fn="build_arm2"),
+    MapItemSpec("tad", "Tad the Space Frog (Back)", "toys", 427, "tad", "tad", "Lying", default_yaw=0.0, default_pitch=54.0, builder_module="items_props_characters", builder_fn="build_tad"),
+    MapItemSpec("tad2", "Tad the Space Frog (Puddle)", "toys", 428, "tad2", "tad", "Sitting", default_yaw=0.0, default_pitch=36.0, builder_module="items_props_characters", builder_fn="build_tad2"),
+    MapItemSpec("santahed", "Santa Claus Head", "toys", 429, "santahed", "santahed", "", default_yaw=0.0, default_pitch=26.0, builder_module="items_props_characters", builder_fn="build_santahed"),
+    MapItemSpec("elvished", "Elvis Head", "toys", 430, "elvished", "elvished", "", default_yaw=0.0, default_pitch=26.0, builder_module="items_props_characters", builder_fn="build_elvished"),
     # --- Food (Wave 1) ---
     MapItemSpec("fdburgr1", "Cheeseburger (Full)", "food", 253, "fdburgr1", "burger", "Full", default_yaw=0.0, default_pitch=40.0, builder_module="items_food", builder_fn="build_fdburgr1"),
     MapItemSpec("fdburgr2", "Cheeseburger (Bitten)", "food", 254, "fdburgr2", "burger", "Half-Eaten", default_yaw=0.0, default_pitch=40.0, builder_module="items_food", builder_fn="build_fdburgr2"),
