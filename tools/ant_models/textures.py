@@ -36,6 +36,8 @@ FAMILY_TEXTURE_SIZES: Dict[str, int] = {
     "dino_skin": 128,
     "organic_flesh": 128,
     "banana_slice": 128,
+    "fried_chicken": 256,
+    "cornmeal_batter": 128,
     "cola_label": 256,
     "cap_h2o": 128,
     "cap_soda": 128,
@@ -672,6 +674,73 @@ def _build_banana_slice_pack(size: int) -> TexturePack:
     )
 
 
+def _build_fried_chicken_pack(size: int) -> TexturePack:
+    """Photorealistic crispy Southern fried chicken crust: strongly domain-warped irregular batter flakes, oil bubbles & savory golden-brown Maillard tones (`399:fdchick1`)."""
+    gx, gy = np.meshgrid(np.arange(size, dtype=np.float32), np.arange(size, dtype=np.float32))
+    # Heavy two-octave organic domain warp eliminates any regular tile/cobblestone pattern!
+    wx1 = (_tile_noise(size, 5, 5, seed=741) - 0.5) * (size * 0.28)
+    wy1 = (_tile_noise(size, 5, 5, seed=742) - 0.5) * (size * 0.28)
+    wx2 = (_tile_noise(size, 13, 13, seed=748) - 0.5) * (size * 0.12)
+    wy2 = (_tile_noise(size, 13, 13, seed=749) - 0.5) * (size * 0.12)
+    sx, sy = gx + wx1 + wx2, gy + wy1 + wy2
+
+    raw_f1a, raw_ea = _tile_voronoi_f1_f2(size, 9, seed=743)
+    raw_f1b, raw_eb = _tile_voronoi_f1_f2(size, 22, seed=744)
+    ea = _sample_periodic_bilinear(raw_ea, sx, sy)
+    eb = _sample_periodic_bilinear(raw_eb, sx * 1.0, sy * 1.0)
+    f1b = _sample_periodic_bilinear(raw_f1b, sx, sy)
+    crumbs = _sample_periodic_bilinear(_tile_noise(size, 18, 18, seed=745), sx, sy)
+    micro = _tile_noise(size, 52, 52, seed=746)
+    pores = _tile_pores(size, 36, seed=747)
+    pepper = (micro > 0.88).astype(np.float32) * (crumbs < 0.52).astype(np.float32)
+
+    flake_ridge = _smoothstep(0.03, 0.30, ea) * 0.54 + _smoothstep(0.02, 0.28, eb) * 0.46
+    height = np.clip(0.38 * flake_ridge + 0.24 * (1.0 - f1b) + 0.24 * crumbs + 0.14 * micro - 0.18 * pores, 0.0, 1.0)
+
+    # Authentic fried chicken Maillard palette: deep toasted chestnut crevices -> savory golden-brown -> crisp pale honey-gold flakes!
+    deep_roast = np.array([0.26, 0.11, 0.04], dtype=np.float32)
+    golden_brown = np.array([0.68, 0.38, 0.14], dtype=np.float32)
+    honey_crisp = np.array([0.92, 0.68, 0.30], dtype=np.float32)
+    bright_flake = np.array([0.99, 0.84, 0.46], dtype=np.float32)
+
+    t1 = _smoothstep(0.14, 0.50, height)
+    t2 = _smoothstep(0.48, 0.78, height)
+    t3 = _smoothstep(0.76, 0.94, height)
+    rgb = deep_roast[None, None, :] * (1.0 - t1[:, :, None]) + golden_brown[None, None, :] * t1[:, :, None]
+    rgb = rgb * (1.0 - t2[:, :, None]) + honey_crisp[None, None, :] * t2[:, :, None]
+    rgb = rgb * (1.0 - t3[:, :, None]) + bright_flake[None, None, :] * t3[:, :, None]
+    rgb = rgb * (1.0 - 0.45 * pepper[:, :, None])
+
+    # Authentic dry crunchy flour crevices + warm oil-kissed blister peaks
+    rough_mult = np.clip(0.88 - 0.34 * t2 - 0.14 * t3 + 0.12 * pores, 0.40, 0.95)
+    return TexturePack(
+        family="fried_chicken",
+        size=size,
+        base_color_png=_rgb_to_png(np.clip(rgb, 0.0, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=4.6)),
+        metallic_roughness_png=_mr_to_rgb_png(rough_mult),
+    )
+
+
+def _build_cornmeal_batter_pack(size: int) -> TexturePack:
+    """Classic fairground fried corn-dog batter: fine sandy golden cornmeal pebble grain & micro fry-oil pinholes (`361:fdcornd1`)."""
+    coarse = _tile_noise(size, 14, 14, seed=761)
+    meal = _tile_noise(size, 36, 36, seed=762)
+    fine = _tile_noise(size, 64, 64, seed=763)
+    pinholes = _tile_pores(size, 34, seed=764)
+    height = np.clip(0.32 * coarse + 0.40 * meal + 0.28 * fine - 0.24 * pinholes, 0.0, 1.0)
+    # Warm golden fried cornmeal speckle tones
+    albedo = np.clip(0.82 + 0.10 * coarse + 0.08 * meal + 0.05 * fine - 0.16 * pinholes, 0.64, 1.0)
+    rough_mult = np.clip(0.68 + 0.18 * (1.0 - meal) + 0.14 * pinholes, 0.50, 0.94)
+    return TexturePack(
+        family="cornmeal_batter",
+        size=size,
+        base_color_png=_gray_to_rgb_png(albedo),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=3.0)),
+        metallic_roughness_png=_mr_to_rgb_png(rough_mult),
+    )
+
+
 def _build_organic_flesh_pack(size: int) -> TexturePack:
     """Fine cellular matte-moist organic texture for meats, produce, cheese, petals, and food surfaces."""
     cells = _tile_pores(size, 28, seed=981)
@@ -930,6 +999,8 @@ def get_texture_pack(family: str, size: Optional[int] = None) -> TexturePack:
         "dino_skin": _build_dino_skin_pack,
         "organic_flesh": _build_organic_flesh_pack,
         "banana_slice": _build_banana_slice_pack,
+        "fried_chicken": _build_fried_chicken_pack,
+        "cornmeal_batter": _build_cornmeal_batter_pack,
         "cola_label": _build_cola_label_pack,
         "cap_h2o": _build_cap_h2o_pack,
         "cap_soda": _build_cap_soda_pack,
