@@ -34,11 +34,12 @@ CATEGORIES: Tuple[Tuple[str, str], ...] = (
     ("structures", "Hills & Gear"),
 )
 
-# Waves 1–3 realistic 3D showcase:
+# Waves 1–4 realistic 3D showcase:
 # - Plants & Grass: 35 / 35 complete (100%)
 # - Hills & Gameplay Gear: 14 / 14 complete (100%; mud bridges excluded as ground tiles)
 # - Toys, Props, Hardware, Doll & Characters: 51 / 51 complete (100%)
-# - Food: 7 Wave 1 items, Rocks: 1 Wave 1 item (total 108 / 211).
+# - Food & Power-Up Nectar: 94 / 94 complete (100%)
+# - Rocks: 1 Wave 1 item (total 195 / 216; only 21 Rocks remain!).
 MAP_ITEM_SPECS: Tuple[MapItemSpec, ...] = (
     # --- Toys & Props (Wave 1) ---
     MapItemSpec("bearhed", "Teddy Bear Head", "toys", 345, "bearhed", "bear", "Head", default_yaw=-8.0, default_pitch=46.0, builder_module="items_toys", builder_fn="build_bearhed"),
@@ -179,6 +180,20 @@ MAP_ITEM_SPECS: Tuple[MapItemSpec, ...] = (
     MapItemSpec("fdfrl5", "Fruit Loop (Green)", "food", 284, "fdfrl5", "frootloop", "Green", default_yaw=0.0, default_pitch=54.0, builder_module="items_food_candy", builder_fn="build_fdfrl5"),
     MapItemSpec("fdfrl6", "Fruit Loop (Broken Purple)", "food", 285, "fdfrl6", "frootloop", "Broken", default_yaw=0.0, default_pitch=54.0, builder_module="items_food_candy", builder_fn="build_fdfrl6"),
     MapItemSpec("fdfrl7", "Fruit Loop (Lime Oval)", "food", 286, "fdfrl7", "frootloop", "Lime", default_yaw=0.0, default_pitch=54.0, builder_module="items_food_candy", builder_fn="build_fdfrl7"),
+    # --- Food Wave 4E: Cereal Bowls, Pez Bricks & Animated Power-Up Nectar (13 items) ---
+    MapItemSpec("cerbol", "Overturned Cereal Bowl", "food", 1330, "cerbol", "cereal", "Bowl", default_yaw=0.0, default_pitch=40.0, builder_module="items_food_cereal", builder_fn="build_cerbol"),
+    MapItemSpec("fdcer1", "Spilled Cereal Bowl (Full)", "food", 1331, "fdcer1", "cereal", "Full", default_yaw=0.0, default_pitch=52.0, builder_module="items_food_cereal", builder_fn="build_fdcer1"),
+    MapItemSpec("fdcer2", "Spilled Cereal Bowl (Half)", "food", 1332, "fdcer2", "cereal", "Half", default_yaw=0.0, default_pitch=52.0, builder_module="items_food_cereal", builder_fn="build_fdcer2"),
+    MapItemSpec("fdcer3", "Broken Cereal Bowl (Empty)", "food", 1333, "fdcer3", "cereal", "Empty", default_yaw=0.0, default_pitch=52.0, builder_module="items_food_cereal", builder_fn="build_fdcer3"),
+    MapItemSpec("fdpezp1", "Pink Pez Candy (Diagonal)", "food", 340, "fdpezp1", "pez", "Pink 1", default_yaw=0.0, default_pitch=54.0, builder_module="items_food_cereal", builder_fn="build_fdpezp1"),
+    MapItemSpec("fdpezb1", "Blue Pez Candy (Diagonal)", "food", 341, "fdpezb1", "pez", "Blue 1", default_yaw=0.0, default_pitch=54.0, builder_module="items_food_cereal", builder_fn="build_fdpezb1"),
+    MapItemSpec("fdpez2p1", "Pink Pez Candy (Vertical)", "food", 342, "fdpez2p1", "pez", "Pink 2", default_yaw=0.0, default_pitch=54.0, builder_module="items_food_cereal", builder_fn="build_fdpez2p1"),
+    MapItemSpec("fdpez2b1", "Blue Pez Candy (Flat)", "food", 343, "fdpez2b1", "pez", "Blue 2", default_yaw=0.0, default_pitch=54.0, builder_module="items_food_cereal", builder_fn="build_fdpez2b1"),
+    MapItemSpec("FD_COMB", "Power Nectar (Combat)", "food", 422, "FD_COMB", "nectar", "Combat", default_yaw=0.0, default_pitch=34.0, builder_module="items_food_cereal", builder_fn="build_fd_comb"),
+    MapItemSpec("FD_SWIM", "Power Nectar (Swimmer)", "food", 423, "FD_SWIM", "nectar", "Swimmer", default_yaw=0.0, default_pitch=34.0, builder_module="items_food_cereal", builder_fn="build_fd_swim"),
+    MapItemSpec("FD_THIEF", "Power Nectar (Thief)", "food", 424, "FD_THIEF", "nectar", "Thief", default_yaw=0.0, default_pitch=34.0, builder_module="items_food_cereal", builder_fn="build_fd_thief"),
+    MapItemSpec("FD_FIRE", "Power Nectar (Fire)", "food", 425, "FD_FIRE", "nectar", "Fire", default_yaw=0.0, default_pitch=34.0, builder_module="items_food_cereal", builder_fn="build_fd_fire"),
+    MapItemSpec("FD_BOMB", "Power Nectar (Bomber)", "food", 426, "FD_BOMB", "nectar", "Bomber", default_yaw=0.0, default_pitch=34.0, builder_module="items_food_cereal", builder_fn="build_fd_bomb"),
     # --- Plants & Grass (ALL 35 / 35 COMPLETE!) ---
     MapItemSpec("grass1", "Grass Tuft (Small)", "plants", 1320, "grass1", "grass", "Tuft 1", default_yaw=0.0, default_pitch=28.0, builder_module="items_plants", builder_fn="build_grass1"),
     MapItemSpec("grass2", "Grass Tuft (Swayed)", "plants", 1321, "grass2", "grass", "Tuft 2", default_yaw=0.0, default_pitch=28.0, builder_module="items_plants", builder_fn="build_grass2"),

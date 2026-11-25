@@ -521,7 +521,10 @@
     if (
       n.startsWith("eye_") || n.startsWith("glass_") || n.startsWith("item_tomato")
       || n.startsWith("item_jello") || n.startsWith("item_candy") || n === "item_mustard"
-      || n === "item_pickle" || (mat.metallic < 0.35 && mat.roughness < 0.24 && !mat.normalTex)
+      || n === "item_pickle" || n.startsWith("item_skit_") || n.startsWith("item_egg_")
+      || n === "item_cola_spill" || n === "item_milk_spill" || n === "item_nectar_gold"
+      || n === "item_bowl_yellow" || n === "item_pizza_sauce" || n === "item_pretzel_crust"
+      || (mat.metallic < 0.35 && mat.roughness < 0.24 && !mat.normalTex)
     ) return 1;
     if (n.startsWith("chitin_")) return 2;
     if (
@@ -535,6 +538,9 @@
       || n.startsWith("fur_") || n === "item_banana_slice" || n === "item_groucho_nose"
       || n === "item_tongue_pink" || n === "item_cotton_fluff" || n === "item_cheese"
       || n === "item_doll_skin" || n === "item_frog_green" || n.startsWith("item_wax_")
+      || n.startsWith("item_twinkie") || n.startsWith("item_cracker") || n === "item_cream_white"
+      || n === "item_pb_swirl" || n === "item_steak_paste" || n === "item_fish_green"
+      || n.startsWith("item_pez_")
     ) return 4;
     return 0;
   }

@@ -56,9 +56,11 @@ class MapItemsTests(unittest.TestCase):
         self.assertTrue(callable(items_powerups.build_pu_swim))
         self.assertTrue(callable(items_structures.build_wallup04))
         self.assertTrue(callable(items_world.build_greenhill))
-        # Plants & Grass (35) and Hills & Gear (14; mud bridges excluded as ground tiles) are 100% covered.
+        # Plants & Grass (35), Hills & Gear (14), Toys & Props (51), and Food & Power-Up Nectar (94) are 100% covered.
         self.assertEqual(sum(1 for s in MAP_ITEM_SPECS if s.category == "plants"), 35)
         self.assertEqual(sum(1 for s in MAP_ITEM_SPECS if s.category == "structures"), 14)
+        self.assertEqual(sum(1 for s in MAP_ITEM_SPECS if s.category == "toys"), 51)
+        self.assertEqual(sum(1 for s in MAP_ITEM_SPECS if s.category == "food"), 94)
 
     def test_catalog_matches_authentic_1998_chd_sprites_and_excludes_tiles_hud_cursors(self):
         from tools.ant_models.map_items import CATEGORIES, MAP_ITEM_SPECS
@@ -119,9 +121,12 @@ class MapItemsTests(unittest.TestCase):
                 self.assertTrue(all(dim > 0.05 for dim in info["size"]), f"{spec.id} degenerate size {info['size']}")
                 self.assertIn(spec.id, orig_bundle["items"])
 
-            # Animated items (waving anthill flags, Groucho daisy, Jell-O, bombs, fire wall) must carry their Idle clip.
+            # Animated items (anthill flags, Groucho daisy, Jell-O, Potted Meat, fizzy Cola, Power Nectar, bombs, fire) must carry Idle.
             for anim_id in (
-                "fdjelo1", "dflower1",
+                "fdjelo1", "fdjelo2", "fdjelo3", "fdpmeat1",
+                "fdcola1", "fdcola2", "fdcola3",
+                "FD_COMB", "FD_SWIM", "FD_THIEF", "FD_FIRE", "FD_BOMB",
+                "dflower1",
                 "GREENHILL", "REDHILL", "BLUEHILL", "BLACKHILL",
                 "pu_bomb", "redbomb", "greenbomb", "blackbomb", "bluebomb", "wallup04",
             ):

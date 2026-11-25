@@ -678,7 +678,7 @@
       const item = state.activeId ? state.byId.get(state.activeId) : null;
       if (state.manifest) {
         const built = state.manifest.built_count || state.items.length;
-        const total = state.manifest.total_catalog_sprites || 211;
+        const total = state.manifest.total_catalog_sprites || 216;
         badgeProgress.textContent = `${built} / ${total} items`;
         metaCatalog.textContent = `${built} / ${total} built`;
       }
