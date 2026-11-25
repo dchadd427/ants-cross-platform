@@ -441,6 +441,63 @@ def _build_bread_pack(size: int) -> TexturePack:
     )
 
 
+def _build_bun_white_pack(size: int) -> TexturePack:
+    """Silky-smooth soft white-bread hamburger bun crust: gentle oven blush, ultra-fine matte dough grain."""
+    blush = _tile_noise(size, 5, 5, seed=611)
+    soft_dimple = _tile_noise(size, 14, 14, seed=612)
+    micro_flour = _tile_noise(size, 40, 40, seed=613)
+    height = np.clip(0.46 * soft_dimple + 0.34 * blush + 0.20 * micro_flour, 0.0, 1.0)
+    albedo = 0.91 + 0.05 * blush + 0.025 * soft_dimple + 0.015 * micro_flour
+    rough_mult = 0.76 + 0.16 * (1.0 - blush) + 0.08 * micro_flour
+    return TexturePack(
+        family="bun_white",
+        size=size,
+        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.89, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=1.15)),
+        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.72, 1.0)),
+    )
+
+
+def _build_white_crumb_pack(size: int) -> TexturePack:
+    """Airy spongy torn white-bread interior crumb: soft yeast pockets, bright clean matte ivory pores."""
+    cells_a = _tile_pores(size, 22, seed=621)
+    cells_b = _tile_pores(size, 44, seed=622)
+    sponge = _tile_noise(size, 18, 18, seed=623)
+    pocket = _smoothstep(0.14, 0.56, cells_a) * 0.58 + _smoothstep(0.12, 0.48, cells_b) * 0.42
+    height = np.clip(0.60 * pocket + 0.40 * sponge, 0.0, 1.0)
+    albedo = 0.84 + 0.10 * pocket + 0.06 * sponge
+    rough_mult = 0.88 + 0.12 * (1.0 - pocket)
+    return TexturePack(
+        family="white_crumb",
+        size=size,
+        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.82, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=3.2)),
+        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.86, 1.0)),
+    )
+
+
+def _build_lettuce_leaf_pack(size: int) -> TexturePack:
+    """Crisp crinkled iceberg/leaf lettuce: organic branching cellular dimples & fresh dewy sheen (zero grass stripes)."""
+    gx, gy = np.meshgrid(np.arange(size, dtype=np.float32), np.arange(size, dtype=np.float32))
+    warp_x = (_tile_noise(size, 6, 6, seed=711) - 0.5) * (size * 0.12)
+    warp_y = (_tile_noise(size, 6, 6, seed=712) - 0.5) * (size * 0.12)
+    crinkle = _sample_periodic_bilinear(_tile_noise(size, 10, 10, seed=713), gx + warp_x, gy + warp_y)
+    f1, edge = _tile_voronoi_f1_f2(size, 16, seed=714)
+    veins = 1.0 - _smoothstep(0.02, 0.18, edge)
+    blisters = _smoothstep(0.08, 0.52, 1.0 - f1)
+    micro = _tile_noise(size, 36, 36, seed=715)
+    height = np.clip(0.42 * crinkle + 0.28 * blisters + 0.18 * veins + 0.12 * micro, 0.0, 1.0)
+    albedo = 0.82 + 0.10 * veins + 0.05 * crinkle + 0.03 * blisters
+    rough_mult = 0.44 + 0.26 * (1.0 - blisters) + 0.12 * veins
+    return TexturePack(
+        family="lettuce_leaf",
+        size=size,
+        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.80, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=2.6)),
+        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.40, 0.85)),
+    )
+
+
 def _build_foliage_pack(size: int) -> TexturePack:
     """Botanical grass/leaf venation: fine parallel veins, cellular ribbing, subtle waxy sheen."""
     t = np.linspace(0.0, 2.0 * math.pi, size, endpoint=False, dtype=np.float32)
@@ -804,6 +861,9 @@ def get_texture_pack(family: str, size: Optional[int] = None) -> TexturePack:
         "rubber": _build_rubber_pack,
         "fur": _build_fur_pack,
         "bread": _build_bread_pack,
+        "bun_white": _build_bun_white_pack,
+        "white_crumb": _build_white_crumb_pack,
+        "lettuce_leaf": _build_lettuce_leaf_pack,
         "foliage": _build_foliage_pack,
         "stone": _build_stone_pack,
         "soil": _build_soil_pack,
