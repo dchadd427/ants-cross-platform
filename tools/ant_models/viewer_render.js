@@ -419,6 +419,287 @@
     fragColor = vec4(pow(clamp(base, 0.0, 1.0), vec3(1.0 / 2.2)), 1.0);
   }`;
 
+  // --- Real-Time Volumetric GPU Fire, Dissipating Smoke & Rising Spark Particle Shaders ---
+  const FIRE_VS = `#version 300 es
+  layout(location = 0) in vec2 a_corner;
+  layout(location = 1) in vec4 a_seed;
+  layout(location = 2) in vec4 a_meta;
+  uniform mat4 u_model, u_viewProj;
+  uniform vec3 u_camRight, u_camUp, u_emitterMin, u_emitterMax;
+  uniform float u_time;
+  out vec2 v_uv;
+  out vec4 v_info;
+  out float v_worldY;
+  void main() {
+    float kind = a_meta.x;
+    float speed = a_meta.y;
+    float baseSz = a_meta.z;
+    float riseMax = a_meta.w;
+    float age = fract(u_time * speed + a_seed.x);
+    vec3 ext = max(u_emitterMax - u_emitterMin, vec3(0.08));
+    vec2 ctr = 0.5 * (u_emitterMin.xz + u_emitterMax.xz);
+    vec2 halfXZ = 0.5 * ext.xz;
+    float hSpan = ext.y;
+    float rnd = a_seed.w;
+    float ang0 = rnd * 6.2831853;
+
+    vec3 lp = vec3(ctr.x, u_emitterMin.y, ctr.y);
+    float radX = baseSz, radY = baseSz;
+    float yLiftBias = 0.0;
+    vec2 uv = a_corner;
+
+    if (kind < 0.5) {
+      // Wispy translucent charcoal smoke rising off upper flame tips & diffusing smoothly into air
+      float yFrac = 0.48 + pow(age, 0.86) * riseMax;
+      float drift = (0.10 + 0.36 * age) * halfXZ.x;
+      lp.x += a_seed.y * halfXZ.x * (0.55 + 0.45 * age) + sin(u_time * 1.2 + ang0 + age * 3.0) * drift;
+      lp.z += a_seed.z * halfXZ.y * (0.55 + 0.45 * age) + cos(u_time * 1.0 + ang0 * 1.3 + age * 2.6) * drift;
+      lp.y += yFrac * hSpan;
+      float grow = mix(0.65, 2.05, age);
+      radX = baseSz * grow;
+      radY = baseSz * grow * 1.15;
+    } else if (kind < 1.5) {
+      // Main turbulent volumetric fire wall plumes: erupting off the wood bed, curling & evaporating upward
+      float yFrac = pow(age, 1.12) * riseMax;
+      float pinch = mix(1.02, 0.72, smoothstep(0.10, 0.92, age));
+      float curlAmt = (0.05 + 0.22 * pow(age, 1.20)) * halfXZ.x;
+      float swX = sin(age * 5.2 + ang0 + u_time * 2.1) * curlAmt + sin(age * 9.0 - u_time * 2.9 + rnd * 19.0) * curlAmt * 0.32;
+      float swZ = cos(age * 4.8 + ang0 * 1.4 + u_time * 1.8) * curlAmt;
+      lp.x += a_seed.y * halfXZ.x * pinch + swX;
+      lp.z += a_seed.z * halfXZ.y * pinch + swZ;
+      lp.y += yFrac * hSpan;
+      float szEnv = smoothstep(0.0, 0.14, age) * mix(1.12, 0.48, smoothstep(0.22, 1.0, age));
+      radX = baseSz * szEnv * mix(1.06, 0.74, age);
+      radY = baseSz * szEnv * mix(1.15, 1.65, age);
+      yLiftBias = 0.58;
+    } else if (kind < 2.5) {
+      // Tight incandescent yellow-white inner hearth plasma ribbons surging off the glowing coals
+      float yFrac = pow(age, 1.06) * riseMax;
+      float pinch = mix(0.84, 0.50, age);
+      float curlAmt = (0.03 + 0.12 * age) * halfXZ.x;
+      lp.x += a_seed.y * halfXZ.x * 0.68 * pinch + sin(age * 6.0 + ang0 + u_time * 2.6) * curlAmt;
+      lp.z += a_seed.z * halfXZ.y * 0.68 * pinch + cos(age * 5.4 + ang0 + u_time * 2.2) * curlAmt;
+      lp.y += yFrac * hSpan;
+      float szEnv = smoothstep(0.0, 0.12, age) * mix(1.05, 0.36, smoothstep(0.20, 1.0, age));
+      radX = baseSz * szEnv * 0.85;
+      radY = baseSz * szEnv * 1.45;
+      yLiftBias = 0.62;
+    } else {
+      // Crisp glowing sparks & ember flecks spiraling upward off the flames and dying out in air
+      float yFrac = 0.12 + pow(age, 0.90) * riseMax;
+      float spiralR = (0.28 + 0.88 * pow(age, 0.85)) * halfXZ.x;
+      float theta = ang0 + age * (4.2 + 3.4 * fract(rnd * 7.3)) * (rnd > 0.5 ? 1.0 : -1.0);
+      lp.x += a_seed.y * halfXZ.x * 0.65 + cos(theta) * spiralR * 0.45 + sin(u_time * 2.5 + ang0) * 0.05;
+      lp.z += a_seed.z * halfXZ.y * 0.65 + sin(theta) * spiralR * 0.45;
+      lp.y += yFrac * hSpan;
+      float szEnv = smoothstep(0.0, 0.08, age) * (1.0 - smoothstep(0.50, 1.0, age) * 0.75);
+      radX = baseSz * szEnv;
+      radY = baseSz * szEnv * 1.85;
+    }
+
+    vec3 wCenter = (u_model * vec4(lp, 1.0)).xyz;
+    float mScale = length(u_model[0].xyz);
+    float spin = (kind < 2.5) ? (rnd - 0.5) * 0.36 + sin(u_time * 1.6 + ang0) * 0.12 : sin(age * 6.0 + ang0) * 0.40;
+    float cs = cos(spin), sn = sin(spin);
+    vec2 rotC = vec2(a_corner.x * cs - a_corner.y * sn, a_corner.x * sn + a_corner.y * cs);
+    vec3 wPos = wCenter + (u_camRight * (rotC.x * radX) + u_camUp * ((rotC.y + yLiftBias) * radY)) * mScale;
+    gl_Position = u_viewProj * vec4(wPos, 1.0);
+    v_uv = uv;
+    v_info = vec4(age, kind, rnd, u_time);
+    v_worldY = wPos.y;
+  }`;
+
+  const FIRE_FS = `#version 300 es
+  precision highp float;
+  in vec2 v_uv;
+  in vec4 v_info;
+  in float v_worldY;
+  uniform int u_transparent, u_silhouette;
+  uniform vec3 u_silhouetteColor;
+  out vec4 fragColor;
+
+  float hash21(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+  }
+  float vnoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    float a = hash21(i), b = hash21(i + vec2(1.0, 0.0));
+    float c = hash21(i + vec2(0.0, 1.0)), d = hash21(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+  }
+  float fbm(vec2 p) {
+    float v = 0.0, amp = 0.52;
+    mat2 rot = mat2(0.80, 0.60, -0.60, 0.80);
+    for (int i = 0; i < 4; i++) {
+      v += amp * vnoise(p);
+      p = rot * p * 2.04 + vec2(1.7, 9.2);
+      amp *= 0.50;
+    }
+    return v;
+  }
+  vec3 blackbodyFire(float t) {
+    t = clamp(t, 0.0, 1.0);
+    vec3 c0 = vec3(0.72, 0.05, 0.005);
+    vec3 c1 = vec3(0.98, 0.22, 0.01);
+    vec3 c2 = vec3(1.00, 0.54, 0.02);
+    vec3 c3 = vec3(1.00, 0.88, 0.16);
+    vec3 c4 = vec3(1.00, 0.99, 0.88);
+    if (t < 0.28) return mix(c0, c1, t / 0.28);
+    if (t < 0.58) return mix(c1, c2, (t - 0.28) / 0.30);
+    if (t < 0.84) return mix(c2, c3, (t - 0.58) / 0.26);
+    return mix(c3, c4, (t - 0.84) / 0.16);
+  }
+
+  void main() {
+    float age = v_info.x;
+    float kind = v_info.y;
+    float rnd = v_info.z;
+    float t = v_info.w;
+    float groundMask = smoothstep(0.012, 0.072, v_worldY);
+    if (groundMask < 0.005) discard;
+
+    if (kind < 0.5) {
+      // Subtle warm wispy smoke rising above the fire and diffusing away
+      if (u_silhouette != 0) discard;
+      float r = length(v_uv);
+      if (r > 1.0) discard;
+      vec2 np = v_uv * 2.1 + vec2(rnd * 13.1, -age * 2.6 - t * 0.45);
+      float n = fbm(np);
+      float mask = smoothstep(0.98, 0.16, r + (n - 0.5) * 0.52);
+      float fade = smoothstep(0.0, 0.24, age) * pow(1.0 - smoothstep(0.32, 1.0, age), 1.55);
+      float a = mask * fade * 0.17 * groundMask;
+      if (a < 0.004) discard;
+      vec3 smokeCol = mix(vec3(0.24, 0.13, 0.08), vec3(0.10, 0.10, 0.12), smoothstep(-0.5, 0.7, v_uv.y));
+      fragColor = vec4(smokeCol, a);
+      return;
+    }
+
+    if (kind > 2.5) {
+      // Crisp glowing rising spark / ember fleck
+      vec2 sv = v_uv * vec2(1.25, 0.90);
+      float r2 = dot(sv, sv);
+      if (r2 > 1.0) discard;
+      float core = exp(-r2 * 8.5);
+      float halo = exp(-r2 * 2.2) * 0.42;
+      float flicker = 0.62 + 0.38 * sin(t * 24.0 + rnd * 53.0);
+      float fade = smoothstep(0.0, 0.08, age) * pow(1.0 - smoothstep(0.45, 1.0, age), 1.45);
+      float a = clamp((core + halo) * fade * flicker * groundMask, 0.0, 0.96);
+      if (a < 0.01) discard;
+      if (u_silhouette != 0) { fragColor = vec4(u_silhouetteColor, step(0.18, a)); return; }
+      float temp = clamp((1.0 - age * 0.75) * 0.72 + core * 0.36, 0.0, 1.0);
+      vec3 col = blackbodyFire(temp);
+      fragColor = vec4(col, a);
+      return;
+    }
+
+    // Domain-warped upward-scrolling turbulent fire plume (zero blowout: crisp licking tongues!)
+    vec2 q = v_uv;
+    float pinchTop = mix(0.84, 1.60, smoothstep(-0.65, 0.92, q.y));
+    vec2 pq = vec2(q.x * pinchTop, q.y * 0.94 + 0.08);
+    float r = length(pq);
+    if (r > 1.10) discard;
+
+    vec2 nCoord = vec2(q.x * 2.5 + rnd * 19.7, q.y * 2.2 - age * 4.8 - t * 1.75);
+    float n1 = fbm(nCoord);
+    float n2 = fbm(nCoord * 1.55 + vec2((n1 - 0.5) * 1.45, -age * 2.4));
+
+    float baseShape = 1.0 - smoothstep(0.05, 1.02, r);
+    float turb = mix(0.46, 0.96, age);
+    float rawD = baseShape + (n2 - 0.47) * turb;
+    float erodeLo = mix(0.18, 0.62, pow(age, 1.10));
+    float erodeHi = erodeLo + mix(0.38, 0.24, age);
+    float density = smoothstep(erodeLo, erodeHi, rawD);
+
+    float lifeFade = smoothstep(0.0, 0.10, age) * pow(1.0 - smoothstep(0.38, 1.0, age), 1.40);
+    if (u_silhouette != 0) {
+      if (density * lifeFade * groundMask < 0.24) discard;
+      fragColor = vec4(u_silhouetteColor, 1.0);
+      return;
+    }
+
+    float isCore = step(1.5, kind);
+    if (isCore < 0.5) {
+      // Main volumetric fire (alpha-blended): preserves razor-sharp turbulent orange/crimson/gold fire structure!
+      float a = clamp(density * lifeFade * groundMask * 0.62, 0.0, 0.88);
+      if (a < 0.008) discard;
+      float heightCool = clamp(age * 0.92 + max(0.0, q.y) * 0.26, 0.0, 1.0);
+      float temp = clamp((1.0 - heightCool) * 0.72 + density * 0.34 - r * 0.26, 0.0, 0.86);
+      vec3 col = blackbodyFire(temp);
+      fragColor = vec4(col, a);
+    } else {
+      // Controlled luminous inner core plasma streaks (soft additive): blooms ONLY the hot hearth heart to solar yellow-white!
+      float a = clamp(density * lifeFade * groundMask * (u_transparent != 0 ? 0.22 : 0.26), 0.0, 0.52);
+      if (a < 0.006) discard;
+      float temp = clamp((1.0 - age * 0.75) * 0.65 + density * 0.45 - r * 0.20, 0.35, 1.0);
+      vec3 col = blackbodyFire(temp);
+      fragColor = vec4(col, a);
+    }
+  }`;
+
+  function buildFireParticles(gl) {
+    // Deterministic PRNG (Mulberry32) so fire looks smooth and consistent across runs
+    let s = 0x1998F12E;
+    const rand = () => {
+      s = (s + 0x6D2B79F5) >>> 0;
+      let t = Math.imul(s ^ (s >>> 15), 1 | s);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+    const cArr = [], seedArr = [], metaArr = [], idxArr = [];
+    let pCount = 0;
+
+    function addGroup(n, kind, speedLo, speedHi, szLo, szHi, riseLo, riseHi, spreadPow) {
+      const startIndex = idxArr.length;
+      for (let i = 0; i < n; i++) {
+        const phase = (i + rand() * 0.85) / n;
+        const rad = Math.pow(rand(), spreadPow);
+        const ang = rand() * Math.PI * 2;
+        const bx = Math.cos(ang) * rad;
+        const bz = Math.sin(ang) * rad;
+        const rnd = rand();
+        const speed = speedLo + rand() * (speedHi - speedLo);
+        const sz = szLo + rand() * (szHi - szLo);
+        const rise = riseLo + rand() * (riseHi - riseLo);
+        const baseV = pCount * 4;
+        for (let k = 0; k < 4; k++) {
+          cArr.push(corners[k][0], corners[k][1]);
+          seedArr.push(phase, bx, bz, rnd);
+          metaArr.push(kind, speed, sz, rise);
+        }
+        idxArr.push(baseV, baseV + 1, baseV + 2, baseV, baseV + 2, baseV + 3);
+        pCount++;
+      }
+      return { offset: startIndex * 2, count: idxArr.length - startIndex };
+    }
+
+    const smokeRange = addGroup(36, 0.0, 0.34, 0.54, 0.14, 0.22, 0.62, 0.86, 0.60);
+    const mainRange = addGroup(124, 1.0, 0.68, 1.15, 0.14, 0.23, 0.66, 0.98, 0.56);
+    const coreRange = addGroup(36, 2.0, 0.94, 1.48, 0.09, 0.16, 0.34, 0.58, 0.78);
+    const sparkRange = addGroup(74, 3.0, 0.56, 1.08, 0.014, 0.025, 0.78, 1.22, 0.52);
+
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    const bufs = [
+      uploadBuffer(gl, gl.ARRAY_BUFFER, new Float32Array(cArr), 0, 2),
+      uploadBuffer(gl, gl.ARRAY_BUFFER, new Float32Array(seedArr), 1, 4),
+      uploadBuffer(gl, gl.ARRAY_BUFFER, new Float32Array(metaArr), 2, 4),
+      uploadBuffer(gl, gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idxArr)),
+    ];
+    gl.bindVertexArray(null);
+    return {
+      vao,
+      smokeRange,
+      mainRange,
+      coreRange,
+      sparkRange,
+      dispose() { gl.deleteVertexArray(vao); bufs.forEach((b) => gl.deleteBuffer(b)); },
+    };
+  }
+
   function createProgram(gl, vsSrc, fsSrc) {
     const mk = (type, src) => {
       const sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh);
@@ -559,6 +840,8 @@
       this.backdropProg = createProgram(gl, BACKDROP_VS, BACKDROP_FS);
       this.pbrProg = createProgram(gl, PBR_VS, PBR_FS);
       this.plinthProg = createProgram(gl, PLINTH_VS, PLINTH_FS);
+      this.fireProg = createProgram(gl, FIRE_VS, FIRE_FS);
+      this.fireParticles = buildFireParticles(gl);
       this.emptyVao = gl.createVertexArray();
       this.fallbacks = createFallbackTextures(gl);
       this.plinth = null; this.plinthKey = "";
@@ -574,6 +857,10 @@
       this.uPlinth = getUniforms(gl, this.plinthProg, [
         "u_viewProj", "u_topBase", "u_sideBase", "u_ringColor", "u_keyDir",
         "u_shadows[0]", "u_shadowCount", "u_halfSpanX", "u_radius",
+      ]);
+      this.uFire = getUniforms(gl, this.fireProg, [
+        "u_model", "u_viewProj", "u_camRight", "u_camUp", "u_emitterMin", "u_emitterMax",
+        "u_time", "u_transparent", "u_silhouette", "u_silhouetteColor",
       ]);
       gl.useProgram(this.pbrProg);
       gl.uniform1i(this.uPbr.u_baseTex, 0);
@@ -687,6 +974,7 @@
       gl.uniform3fv(this.uPbr.u_silhouetteColor, opts.dark ? [0.910, 0.933, 0.973] : [0.067, 0.086, 0.122]);
 
       const instMats = scene.instances.map((inst) => evaluateWorldMats(inst, opts));
+      const fireEmitters = [];
       for (let pass = 0; pass < 2; pass++) {
         const wantBlend = pass === 1;
         if (wantBlend) {
@@ -696,6 +984,15 @@
           const worldMats = instMats[instIdx];
           for (const item of inst.model.drawCalls) {
             const prim = item.prim, mat = prim.material;
+            if (mat.name === "item_fire_volume") {
+              if (!wantBlend) {
+                const nodeMat = worldMats[item.nodeIndex] || item.worldMat;
+                const modelMat = inst.offsetMat ? mat4Multiply(inst.offsetMat, nodeMat) : nodeMat;
+                const fxTime = Number.isFinite(opts.fixedIdleTime) ? opts.fixedIdleTime : (inst.idleTime || 0);
+                fireEmitters.push({ modelMat, localMin: prim.localMin, localMax: prim.localMax, time: fxTime });
+              }
+              continue;
+            }
             if (Boolean(mat.isTranslucent) !== wantBlend) continue;
             let bc = mat.baseColor;
             if (mat.name === "chitin_team") bc = [team.team[0], team.team[1], team.team[2], bc[3]];
@@ -721,6 +1018,52 @@
             if (prim.indexed) gl.drawElements(prim.mode, prim.drawCount, prim.indexType, 0); else gl.drawArrays(prim.mode, 0, prim.drawCount);
           }
         });
+      }
+      if (fireEmitters.length) {
+        const vd = camera.viewDir;
+        const rLen = Math.hypot(vd[2], -vd[0]) || 1;
+        const camRight = [vd[2] / rLen, 0, -vd[0] / rLen];
+        const camUp = [
+          vd[1] * camRight[2] - vd[2] * camRight[1],
+          vd[2] * camRight[0] - vd[0] * camRight[2],
+          vd[0] * camRight[1] - vd[1] * camRight[0],
+        ];
+        gl.useProgram(this.fireProg);
+        gl.disable(gl.CULL_FACE);
+        gl.enable(gl.DEPTH_TEST);
+        gl.depthMask(false);
+        gl.enable(gl.BLEND);
+        gl.uniformMatrix4fv(this.uFire.u_viewProj, false, camera.viewProj);
+        gl.uniform3fv(this.uFire.u_camRight, camRight);
+        gl.uniform3fv(this.uFire.u_camUp, camUp);
+        gl.uniform1i(this.uFire.u_transparent, opts.transparent ? 1 : 0);
+        gl.uniform1i(this.uFire.u_silhouette, isSil ? 1 : 0);
+        gl.uniform3fv(this.uFire.u_silhouetteColor, opts.dark ? [0.910, 0.933, 0.973] : [0.067, 0.086, 0.122]);
+        gl.bindVertexArray(this.fireParticles.vao);
+
+        for (const em of fireEmitters) {
+          gl.uniformMatrix4fv(this.uFire.u_model, false, em.modelMat);
+          gl.uniform3fv(this.uFire.u_emitterMin, em.localMin);
+          gl.uniform3fv(this.uFire.u_emitterMax, em.localMax);
+          gl.uniform1f(this.uFire.u_time, em.time);
+
+          // 1. Subtle rising dark wispy smoke behind/above the blaze
+          gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+          gl.drawElements(gl.TRIANGLES, this.fireParticles.smokeRange.count, gl.UNSIGNED_SHORT, this.fireParticles.smokeRange.offset);
+
+          // 2. Main turbulent rising volumetric fire plumes (alpha-blended for sharp licking fiery detail, zero blowout!)
+          gl.drawElements(gl.TRIANGLES, this.fireParticles.mainRange.count, gl.UNSIGNED_SHORT, this.fireParticles.mainRange.offset);
+
+          // 3. Incandescent inner plasma core bloom (controlled additive)
+          if (!isSil) {
+            gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+          }
+          gl.drawElements(gl.TRIANGLES, this.fireParticles.coreRange.count, gl.UNSIGNED_SHORT, this.fireParticles.coreRange.offset);
+
+          // 4. Crisp glowing rising sparks & ember flecks
+          gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+          gl.drawElements(gl.TRIANGLES, this.fireParticles.sparkRange.count, gl.UNSIGNED_SHORT, this.fireParticles.sparkRange.offset);
+        }
       }
       gl.activeTexture(gl.TEXTURE0);
       gl.bindVertexArray(null); gl.frontFace(gl.CCW); gl.depthMask(true); gl.disable(gl.BLEND);

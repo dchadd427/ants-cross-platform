@@ -722,12 +722,12 @@ def build_bluebomb() -> SceneBuilder:
 
 
 def build_wallup04() -> SceneBuilder:
-    """Blazing multi-layered 3D Fire Wall with scorched coal bed, 4 temperature shells, close rising sparks & 5-beat roar (`134:wallup04`)."""
+    """Blazing 3D Fire Wall: scorched charred wood & pulsing ember coal bed + GPU volumetric fire emitter (`134:wallup04`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_wallup04")
     sc.set_node_transform("wallup04", translation=(0.0, 0.0, 0.0))
 
-    # 1. Grounded scorched earth / charred kindling & glowing coal bed matching the dark base of `134:wallup04`!
+    # 1. Grounded scorched earth crater, ash mound & charred kindling sticks matching the dark base of `134:wallup04`.
     def _scorch_deform(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
         ang = np.arctan2(p[:, 2], p[:, 0])
@@ -736,44 +736,47 @@ def build_wallup04() -> SceneBuilder:
         p[:, 0] *= jagged
         p[:, 2] *= jagged
         top_mask = p[:, 1] > 0.0
-        bump = 0.016 * np.sin(p[:, 0] * 26.0 + p[:, 2] * 19.0) * np.cos(p[:, 2] * 22.0 - p[:, 0] * 13.0)
-        p[:, 1] = np.where(top_mask, p[:, 1] + bump * np.clip(1.0 - r * 1.4, 0.2, 1.0), p[:, 1] * 0.12)
+        bump = 0.018 * np.sin(p[:, 0] * 26.0 + p[:, 2] * 19.0) * np.cos(p[:, 2] * 22.0 - p[:, 0] * 13.0)
+        p[:, 1] = np.where(top_mask, p[:, 1] + bump * np.clip(1.0 - r * 1.3, 0.2, 1.0), p[:, 1] * 0.10)
         return p
 
     base_parts: List[MeshPart] = []
     scorch_bed = (
-        ellipsoid(0.32, 0.056, 0.26, u_segs=26, v_segs=12, name="fire_scorch_bed", material="item_charcoal_ember")
+        ellipsoid(0.36, 0.056, 0.27, u_segs=28, v_segs=12, name="fire_scorch_bed", material="item_charcoal_ember")
         .deform(_scorch_deform)
-        .translate(0.0, 0.032, 0.0)
+        .translate(0.0, 0.030, 0.0)
     )
+    # Warm underlit radial ash-to-ember tint on the scorch mound so the fire bed glows hot in the center!
     tint_part(
         scorch_bed,
         lambda pos, _nrm: np.column_stack([
-            0.58 + 0.42 * np.clip(1.0 - np.hypot(pos[:, 0] / 0.31, pos[:, 2] / 0.25), 0.0, 1.0),
-            0.38 + 0.18 * np.clip(1.0 - np.hypot(pos[:, 0] / 0.31, pos[:, 2] / 0.25), 0.0, 1.0),
-            0.28 + 0.06 * np.clip(1.0 - np.hypot(pos[:, 0] / 0.31, pos[:, 2] / 0.25), 0.0, 1.0),
+            0.38 + 0.62 * np.clip(1.0 - np.hypot(pos[:, 0] / 0.34, pos[:, 2] / 0.25), 0.0, 1.0),
+            0.26 + 0.24 * np.clip(1.0 - np.hypot(pos[:, 0] / 0.34, pos[:, 2] / 0.25), 0.0, 1.0),
+            0.20 + 0.05 * np.clip(1.0 - np.hypot(pos[:, 0] / 0.34, pos[:, 2] / 0.25), 0.0, 1.0),
         ]),
     )
     base_parts.append(scorch_bed)
 
-    # Charred kindling sticks & protruding scorched wood stubs framing the bottom edge (`wallup04` dark brown base!).
+    # Stacked charred firewood sticks & jagged burnt roots anchored around the scorch bed (`wallup04` dark brown base!).
     kindling_specs = (
-        (-0.20, 0.034, +0.11, 0.18, 0.025, +0.22, +0.38, +0.12),
-        (+0.20, 0.034, +0.10, 0.19, 0.025, -0.20, -0.42, -0.14),
-        (-0.07, 0.046, +0.15, 0.22, 0.026, +0.16, +0.12, +0.16),
-        (+0.09, 0.042, -0.13, 0.21, 0.025, -0.14, -0.26, -0.14),
-        (-0.14, 0.040, -0.12, 0.20, 0.024, +0.18, +0.54, +0.10),
-        (+0.02, 0.028, +0.18, 0.14, 0.022, +0.08, +1.35, -0.10),
-        (-0.25, 0.028, -0.02, 0.14, 0.020, -0.10, +0.85, +0.16),
-        (+0.25, 0.028, -0.04, 0.14, 0.020, +0.12, -0.78, -0.14),
+        (-0.22, 0.036, +0.11, 0.24, 0.028, +0.20, +0.42, +0.14),
+        (+0.21, 0.036, +0.10, 0.25, 0.028, -0.18, -0.46, -0.15),
+        (-0.08, 0.048, +0.14, 0.28, 0.029, +0.15, +0.12, +0.18),
+        (+0.10, 0.044, -0.13, 0.26, 0.028, -0.14, -0.28, -0.15),
+        (-0.14, 0.042, -0.12, 0.24, 0.026, +0.18, +0.58, +0.12),
+        (+0.02, 0.030, +0.18, 0.16, 0.023, +0.08, +1.35, -0.10),
+        (-0.28, 0.028, -0.02, 0.17, 0.022, -0.10, +0.85, +0.16),
+        (+0.28, 0.028, -0.04, 0.17, 0.022, +0.12, -0.78, -0.14),
+        (0.00, 0.056, +0.02, 0.30, 0.027, +0.06, -0.22, +0.10),
+        (-0.02, 0.054, -0.03, 0.28, 0.026, -0.08, +0.62, -0.12),
     )
     for idx, (kx, ky, kz, klen, krad, rx, ry, rz) in enumerate(kindling_specs):
         log = (
             curved_tube(
                 [(-0.5 * klen, 0.0, 0.0), (0.0, 0.012, 0.008), (+0.5 * klen, -0.005, -0.005)],
-                [krad * 0.78, krad, krad * 0.65],
+                [krad * 0.78, krad, krad * 0.62],
                 samples_per_seg=2,
-                radial_segs=7,
+                radial_segs=8,
                 name=f"fire_char_stick_{idx}",
                 material="item_charcoal_ember",
             )
@@ -782,326 +785,81 @@ def build_wallup04() -> SceneBuilder:
         )
         base_parts.append(log)
 
-    # Smoldering glowing ember coals nestled right inside the charred wood bed!
-    coal_specs = (
-        (-0.18, 0.052, +0.13, 0.046, "item_flame_spark"),
-        (-0.08, 0.060, +0.15, 0.052, "item_flame_core"),
-        (+0.04, 0.062, +0.14, 0.054, "item_flame_core"),
-        (+0.16, 0.056, +0.12, 0.046, "item_flame_spark"),
-        (-0.22, 0.046, -0.02, 0.042, "item_flame_spark"),
-        (+0.22, 0.046, -0.02, 0.042, "item_flame_spark"),
-        (-0.10, 0.054, -0.14, 0.048, "item_flame_spark"),
-        (+0.09, 0.056, -0.14, 0.050, "item_flame_core"),
-        (0.00, 0.068, 0.00, 0.078, "item_flame_core"),
+    # Craggy blackened charcoal lumps framing the glowing coal pit.
+    char_lumps = (
+        (-0.25, 0.042, +0.07, 0.046),
+        (+0.25, 0.042, +0.06, 0.044),
+        (-0.18, 0.046, -0.13, 0.048),
+        (+0.19, 0.046, -0.12, 0.046),
+        (-0.04, 0.040, +0.19, 0.042),
+        (+0.07, 0.040, -0.18, 0.042),
     )
-    for idx, (cx, cy, cz, crad, cmat) in enumerate(coal_specs):
+    for idx, (lx, ly, lz, lrad) in enumerate(char_lumps):
         base_parts.append(
-            superellipsoid(crad, crad * 0.64, crad * 0.90, e1=0.68, e2=0.72, u_segs=8, v_segs=6, name=f"fire_coal_{idx}", material=cmat)
-            .rotate_xyz(ry=idx * 0.7)
-            .translate(cx, cy, cz)
+            superellipsoid(lrad, lrad * 0.62, lrad * 0.84, e1=0.62, e2=0.68, u_segs=8, v_segs=6, name=f"fire_char_lump_{idx}", material="item_charcoal_ember")
+            .rotate_xyz(rx=0.2 * idx, ry=0.9 * idx)
+            .translate(lx, ly, lz)
         )
     sc.add("wallup04", base_parts)
 
-    # 2. Sculpted billowing turbulent 3D flame plume: broad rounded burning root, spiral flutes & dramatic licking crest!
-    def _turbulent_plume(
-        name: str,
-        *,
-        rx: float,
-        rz: float,
-        height: float,
-        bend_x: float,
-        bend_z: float,
-        curl_amp: float,
-        flute_k: float,
-        flute_amp: float,
-        phase: float,
-        mat: str,
-        y0: float = 0.042,
-        tint_low: Tuple[float, float, float] | None = None,
-        tint_high: Tuple[float, float, float] | None = None,
-    ) -> MeshPart:
-        def _deform_plume(pos: np.ndarray) -> np.ndarray:
-            p = pos.copy()
-            u = np.clip((p[:, 1] + height * 0.5) / max(1e-5, height), 0.0, 1.0)
-            theta = np.arctan2(p[:, 2], p[:, 0])
-            # Full billowing fire volume through lower-mid belly, sweeping sharply into a licking tip at u=1!
-            rad_env = (0.76 + 0.56 * np.sin(np.minimum(1.0, u * 1.32) * math.pi * 0.66)) * ((1.0 - u) ** 0.72)
-            rad_env = np.maximum(0.015, rad_env)
-            flutes = 1.0 + flute_amp * np.sin(flute_k * theta + 3.8 * u + phase) * np.sin(u * math.pi)
-            ripple = 1.0 + 0.09 * np.cos((flute_k + 2.0) * theta - 5.0 * u + phase * 1.6) * u
-            scale_xz = rad_env * flutes * ripple
-            p[:, 0] *= scale_xz
-            p[:, 2] *= scale_xz
-            s_wave = curl_amp * np.sin(u * math.pi * 1.9 + phase) * (u ** 0.85)
-            p[:, 0] += bend_x * (u ** 1.42) + s_wave
-            p[:, 2] += bend_z * (u ** 1.42) + 0.50 * curl_amp * np.cos(u * math.pi * 1.7 + phase) * (u ** 0.9)
-            p[:, 1] = y0 + u * height
-            return p
-
-        mesh = ellipsoid(rx, height * 0.5, rz, u_segs=14, v_segs=14, name=name, material=mat).deform(_deform_plume)
-        if tint_low is not None and tint_high is not None:
-            gradient_y_tint(mesh, tint_low, tint_high, noise_amp=0.04)
-        return mesh
-
-    # Layer A: BOLD INCANDESCENT WHITE-HOT PLASMA STREAKS blazing prominently in the heart (`316..320` bright white core!).
-    white_specs = (
-        ("c", 0.00, +0.07, 0.096, 0.074, 0.62, -0.02, +0.02, 0.032, 3.0, 0.14, 0.2),
-        ("l1", -0.11, +0.08, 0.082, 0.064, 0.48, -0.10, +0.02, 0.026, 3.0, 0.14, 1.3),
-        ("r1", +0.11, +0.08, 0.082, 0.064, 0.50, +0.10, +0.02, 0.026, 3.0, 0.14, 2.4),
-        ("lb", -0.17, +0.10, 0.070, 0.052, 0.24, -0.12, +0.03, 0.018, 2.0, 0.12, 0.8),
-        ("rb", +0.17, +0.10, 0.070, 0.052, 0.25, +0.12, +0.03, 0.018, 2.0, 0.12, 3.1),
-        ("bc", 0.00, -0.08, 0.092, 0.072, 0.56, +0.03, -0.02, 0.030, 3.0, 0.14, 4.0),
-        ("bl", -0.10, -0.07, 0.074, 0.060, 0.44, -0.09, -0.02, 0.024, 3.0, 0.14, 5.1),
-        ("br", +0.10, -0.07, 0.074, 0.060, 0.45, +0.09, -0.02, 0.024, 3.0, 0.14, 1.9),
+    # 2. Smoldering glowing ember coals tucked deeply inside the charred kindling pit (subtle organic heat breath!).
+    coal_specs = (
+        (-0.15, 0.044, +0.08, 0.036, "item_flame_spark"),
+        (-0.07, 0.052, +0.09, 0.044, "item_flame_spark"),
+        (+0.04, 0.054, +0.08, 0.046, "item_flame_spark"),
+        (+0.14, 0.046, +0.07, 0.036, "item_flame_spark"),
+        (+0.18, 0.040, +0.01, 0.032, "item_flame_spark"),
+        (-0.18, 0.040, -0.02, 0.032, "item_flame_spark"),
+        (-0.10, 0.048, -0.09, 0.040, "item_flame_spark"),
+        (+0.08, 0.050, -0.09, 0.042, "item_flame_spark"),
+        (-0.04, 0.060, +0.01, 0.056, "item_flame_core"),
+        (+0.05, 0.058, -0.01, 0.054, "item_flame_core"),
+        (0.00, 0.058, +0.03, 0.052, "item_flame_core"),
     )
-    sc.set_node_parent("flame_white", "wallup04")
-    sc.set_node_transform("flame_white", translation=(0.0, 0.0, 0.0))
-    sc.add(
-        "flame_white",
-        [
-            _turbulent_plume(f"fire_white_{tag}", rx=rx, rz=rz, height=h, bend_x=bx, bend_z=bz, curl_amp=ca, flute_k=fk, flute_amp=fa, phase=ph, mat="item_flame_white", y0=0.055).translate(x, 0.0, z)
-            for tag, x, z, rx, rz, h, bx, bz, ca, fk, fa, ph in white_specs
-        ],
-    )
-
-    # Layer B: FULL ROARING SOLAR LEMON-YELLOW CORE PLUMES filling ~60% of the fire body (`134:wallup04` iconic glow!).
-    yellow_specs = (
-        ("c", 0.00, +0.01, 0.175, 0.148, 0.78, -0.02, +0.01, 0.044, 4.0, 0.18, 0.5),
-        ("l1", -0.14, +0.02, 0.148, 0.125, 0.66, -0.11, +0.02, 0.038, 3.0, 0.18, 1.6),
-        ("r1", +0.14, +0.02, 0.148, 0.125, 0.68, +0.12, +0.02, 0.038, 3.0, 0.18, 2.7),
-        ("l2", -0.22, +0.01, 0.118, 0.100, 0.48, -0.15, +0.01, 0.032, 3.0, 0.16, 0.9),
-        ("r2", +0.22, +0.01, 0.118, 0.100, 0.50, +0.16, +0.01, 0.032, 3.0, 0.16, 3.5),
-        ("fl", -0.08, +0.09, 0.110, 0.082, 0.46, -0.06, +0.04, 0.026, 3.0, 0.15, 2.1),
-        ("fr", +0.08, +0.09, 0.110, 0.082, 0.48, +0.07, +0.04, 0.026, 3.0, 0.15, 4.2),
-        ("bl", -0.10, -0.09, 0.132, 0.110, 0.62, -0.09, -0.04, 0.034, 3.0, 0.17, 1.1),
-        ("br", +0.10, -0.09, 0.132, 0.110, 0.64, +0.10, -0.04, 0.034, 3.0, 0.17, 3.8),
-    )
-    sc.set_node_parent("flame_yellow", "wallup04")
-    sc.set_node_transform("flame_yellow", translation=(0.0, 0.0, 0.0))
-    sc.add(
-        "flame_yellow",
-        [
-            _turbulent_plume(
-                f"fire_yellow_{tag}",
-                rx=rx,
-                rz=rz,
-                height=h,
-                bend_x=bx,
-                bend_z=bz,
-                curl_amp=ca,
-                flute_k=fk,
-                flute_amp=fa,
-                phase=ph,
-                mat="item_flame_core",
-                tint_low=(1.00, 1.00, 0.88),
-                tint_high=(1.00, 0.84, 0.24),
-            ).translate(x, 0.0, z)
-            for tag, x, z, rx, rz, h, bx, bz, ca, fk, fa, ph in yellow_specs
-        ],
-    )
-
-    # Layer C: Luminous translucent GOLDEN-AMBER volumetric fire aura wrapping cleanly behind & beside the yellow heart!
-    amber_l_specs = (
-        ("lc", -0.04, -0.02, 0.208, 0.174, 0.86, -0.04, +0.01, 0.050, 4.0, 0.22, 0.3),
-        ("l1", -0.17, -0.01, 0.168, 0.142, 0.76, -0.14, +0.02, 0.046, 4.0, 0.22, 1.4),
-        ("l2", -0.25, -0.02, 0.136, 0.118, 0.58, -0.18, +0.01, 0.040, 3.0, 0.20, 2.5),
-        ("l3", -0.11, -0.12, 0.155, 0.132, 0.74, -0.10, -0.06, 0.040, 4.0, 0.20, 3.7),
-        ("lw", -0.28, +0.03, 0.096, 0.082, 0.34, -0.19, +0.03, 0.028, 3.0, 0.18, 0.9),
-    )
-    amber_r_specs = (
-        ("rc", +0.04, -0.02, 0.206, 0.174, 0.84, +0.05, -0.01, 0.050, 4.0, 0.22, 1.9),
-        ("r1", +0.17, -0.01, 0.168, 0.142, 0.78, +0.15, +0.02, 0.046, 4.0, 0.22, 3.1),
-        ("r2", +0.25, -0.02, 0.136, 0.118, 0.60, +0.19, +0.01, 0.040, 3.0, 0.20, 4.3),
-        ("r3", +0.11, -0.12, 0.155, 0.132, 0.72, +0.11, -0.06, 0.040, 4.0, 0.20, 0.7),
-        ("rw", +0.28, +0.03, 0.096, 0.082, 0.36, +0.20, +0.03, 0.028, 3.0, 0.18, 5.1),
-    )
-    for node_name, specs in (("flame_amber_l", amber_l_specs), ("flame_amber_r", amber_r_specs)):
-        sc.set_node_parent(node_name, "wallup04")
-        sc.set_node_transform(node_name, translation=(0.0, 0.0, 0.0))
-        sc.add(
-            node_name,
-            [
-                _turbulent_plume(
-                    f"fire_amber_{tag}",
-                    rx=rx,
-                    rz=rz,
-                    height=h,
-                    bend_x=bx,
-                    bend_z=bz,
-                    curl_amp=ca,
-                    flute_k=fk,
-                    flute_amp=fa,
-                    phase=ph,
-                    mat="item_flame_amber",
-                    tint_low=(1.00, 0.88, 0.30),
-                    tint_high=(1.00, 0.36, 0.04),
-                ).translate(x, 0.0, z)
-                for tag, x, z, rx, rz, h, bx, bz, ca, fk, fa, ph in specs
-            ],
+    sc.set_node_parent("fire_coals", "wallup04")
+    sc.set_node_transform("fire_coals", translation=(0.0, 0.0, 0.0))
+    coal_parts: List[MeshPart] = []
+    for idx, (cx, cy, cz, crad, cmat) in enumerate(coal_specs):
+        c_mesh = (
+            superellipsoid(crad, crad * 0.56, crad * 0.86, e1=0.64, e2=0.70, u_segs=8, v_segs=6, name=f"fire_coal_{idx}", material=cmat)
+            .rotate_xyz(ry=idx * 0.7)
+            .translate(cx, cy, cz)
         )
+        # Glowing hot underside -> darker smoldering ash-crusted top on outer coals so they look like real burning embers!
+        if cmat == "item_flame_spark":
+            gradient_y_tint(c_mesh, (1.00, 0.52, 0.14), (0.48, 0.16, 0.06))
+        coal_parts.append(c_mesh)
+    sc.add("fire_coals", coal_parts)
 
-    # Layer D: Ragged VERMILION-CRIMSON perimeter crown licks & side wings framing the blazing white-yellow heart cleanly!
-    crimson_specs = (
-        ("t1", 0.00, -0.08, 0.122, 0.106, 0.94, +0.03, -0.03, 0.058, 5.0, 0.24, 0.4),
-        ("t2", -0.10, -0.07, 0.110, 0.095, 0.88, -0.09, -0.02, 0.054, 4.0, 0.24, 1.5),
-        ("t3", +0.10, -0.07, 0.110, 0.095, 0.90, +0.10, -0.02, 0.054, 4.0, 0.24, 2.8),
-        ("t4", -0.20, -0.04, 0.102, 0.090, 0.78, -0.16, +0.01, 0.050, 4.0, 0.24, 3.9),
-        ("t5", +0.20, -0.04, 0.102, 0.090, 0.80, +0.17, +0.01, 0.050, 4.0, 0.24, 5.0),
-        ("l1", -0.28, +0.00, 0.092, 0.084, 0.66, -0.20, +0.01, 0.046, 3.0, 0.22, 0.9),
-        ("r1", +0.28, +0.00, 0.092, 0.084, 0.68, +0.21, +0.01, 0.046, 3.0, 0.22, 2.2),
-        ("l2", -0.31, +0.03, 0.076, 0.066, 0.38, -0.22, +0.02, 0.034, 3.0, 0.20, 4.1),
-        ("r2", +0.31, +0.03, 0.076, 0.066, 0.40, +0.23, +0.02, 0.034, 3.0, 0.20, 1.2),
-        ("b1", -0.06, -0.17, 0.125, 0.102, 0.82, -0.06, -0.08, 0.048, 4.0, 0.22, 3.4),
-        ("b2", +0.07, -0.17, 0.122, 0.100, 0.84, +0.08, -0.08, 0.048, 4.0, 0.22, 5.6),
-        ("s1", -0.24, +0.08, 0.080, 0.066, 0.42, -0.20, +0.06, 0.030, 3.0, 0.20, 1.8),
-        ("s2", +0.24, +0.08, 0.080, 0.066, 0.44, +0.21, +0.06, 0.030, 3.0, 0.20, 4.5),
-    )
-    sc.set_node_parent("flame_crimson", "wallup04")
-    sc.set_node_transform("flame_crimson", translation=(0.0, 0.0, 0.0))
+    # 3. Data-driven 3D volumetric fire emitter envelope (`item_fire_volume`):
+    #    - Sets exact camera-framing bounds (0.78 x 0.92 x 0.56) and serves as a clean translucent flame silhouette in external glTF viewers.
+    #    - In Ants WebGL2 (`viewer_render.js`), automatically spawns 280+ real-time rising GPU fire plumes, curling wisps, smoke & rising sparks!
+    def _emitter_envelope(pos: np.ndarray) -> np.ndarray:
+        p = pos.copy()
+        u = np.clip((p[:, 1] + 0.44) / 0.88, 0.0, 1.0)
+        taper = (0.82 + 0.30 * np.sin(np.minimum(1.0, u * 1.35) * math.pi * 0.65)) * ((1.0 - u) ** 0.62)
+        p[:, 0] *= np.maximum(0.04, taper)
+        p[:, 2] *= np.maximum(0.04, taper)
+        p[:, 1] = 0.05 + u * 0.87
+        return p
+
+    sc.set_node_parent("fire_volume", "wallup04")
+    sc.set_node_transform("fire_volume", translation=(0.0, 0.0, 0.0))
     sc.add(
-        "flame_crimson",
-        [
-            _turbulent_plume(
-                f"fire_crim_{tag}",
-                rx=rx,
-                rz=rz,
-                height=h,
-                bend_x=bx,
-                bend_z=bz,
-                curl_amp=ca,
-                flute_k=fk,
-                flute_amp=fa,
-                phase=ph,
-                mat="item_flame_crimson",
-                tint_low=(1.00, 0.60, 0.14),
-                tint_high=(0.98, 0.14, 0.02),
-            ).translate(x, 0.0, z)
-            for tag, x, z, rx, rz, h, bx, bz, ca, fk, fa, ph in crimson_specs
-        ],
+        "fire_volume",
+        [ellipsoid(0.36, 0.44, 0.25, u_segs=14, v_segs=12, name="wallup04_fire_emitter", material="item_fire_volume").deform(_emitter_envelope)],
     )
 
-    # Layer E: Crisp tiny RISING EMBER SPARKS hugging tightly off the licking tips & flanks (`316..320` pixel sparks!).
-    sparks_a_specs = (
-        (-0.22, 0.84, +0.03, 0.011, 0.017, +0.25, "item_flame_spark"),
-        (-0.07, 0.90, -0.02, 0.011, 0.018, -0.18, "item_flame_spark"),
-        (+0.06, 0.92, +0.02, 0.012, 0.019, +0.15, "item_flame_spark"),
-        (+0.21, 0.86, -0.03, 0.011, 0.017, -0.28, "item_flame_spark"),
-        (-0.33, 0.68, +0.04, 0.011, 0.016, +0.38, "item_flame_spark"),
-        (+0.34, 0.70, +0.02, 0.011, 0.016, -0.35, "item_flame_spark"),
-        (-0.15, 0.77, +0.09, 0.010, 0.015, +0.22, "item_flame_core"),
-        (+0.15, 0.79, +0.08, 0.010, 0.015, -0.20, "item_flame_core"),
-        (-0.31, 0.48, -0.07, 0.010, 0.015, +0.32, "item_flame_spark"),
-        (+0.32, 0.50, -0.06, 0.010, 0.015, -0.30, "item_flame_spark"),
-        (0.00, 0.88, -0.14, 0.011, 0.017, +0.10, "item_flame_spark"),
-    )
-    sparks_b_specs = (
-        (-0.16, 0.87, -0.04, 0.010, 0.016, +0.22, "item_flame_spark"),
-        (-0.01, 0.94, +0.01, 0.012, 0.018, -0.12, "item_flame_spark"),
-        (+0.14, 0.88, +0.03, 0.010, 0.016, -0.22, "item_flame_spark"),
-        (+0.27, 0.80, -0.02, 0.011, 0.017, -0.34, "item_flame_spark"),
-        (-0.28, 0.77, +0.02, 0.011, 0.017, +0.36, "item_flame_spark"),
-        (-0.36, 0.57, +0.03, 0.010, 0.015, +0.42, "item_flame_spark"),
-        (+0.37, 0.59, +0.03, 0.010, 0.015, -0.40, "item_flame_spark"),
-        (-0.05, 0.81, +0.11, 0.009, 0.014, +0.18, "item_flame_core"),
-        (+0.07, 0.77, -0.12, 0.010, 0.015, -0.18, "item_flame_core"),
-        (+0.29, 0.40, +0.09, 0.010, 0.015, -0.28, "item_flame_spark"),
-        (-0.28, 0.38, +0.09, 0.010, 0.015, +0.28, "item_flame_spark"),
-    )
-    for node_name, s_specs in (("flame_sparks_a", sparks_a_specs), ("flame_sparks_b", sparks_b_specs)):
-        sc.set_node_parent(node_name, "wallup04")
-        sc.set_node_transform(node_name, translation=(0.0, 0.0, 0.0))
-        sc.add(
-            node_name,
-            [
-                superellipsoid(sr, sh, sr * 0.90, e1=0.68, e2=0.72, u_segs=6, v_segs=5, name=f"{node_name}_{k}", material=smat)
-                .rotate_xyz(rz=srz)
-                .translate(sx, sy, sz)
-                for k, (sx, sy, sz, sr, sh, srz, smat) in enumerate(s_specs)
-            ],
-        )
-
-    # 3. Lively 5-beat counter-phased roaring fire animation (0.50 s loop matching 1998's 5 fire frames `316..320`!)
-    times = [0.00, 0.10, 0.20, 0.30, 0.40, 0.50]
+    # Gentle organic breathing pulse on the glowing coal hearth (actual rising fire & dissipating sparks run smoothly at 60 FPS on GPU!).
+    times = [0.00, 0.35, 0.70, 1.05, 1.40]
     sc.add_animation(
         "Idle",
         [
             AnimationChannel(
-                "flame_white",
+                "fire_coals",
                 "scale",
                 times,
-                [(1.00, 1.00, 1.00), (0.94, 1.11, 0.96), (1.06, 0.92, 1.04), (0.96, 1.08, 0.98), (1.04, 0.96, 1.02), (1.00, 1.00, 1.00)],
-            ),
-            AnimationChannel(
-                "flame_yellow",
-                "scale",
-                times,
-                [(1.00, 1.00, 1.00), (1.04, 1.08, 1.02), (0.96, 0.94, 0.98), (1.05, 1.06, 1.03), (0.97, 0.96, 0.98), (1.00, 1.00, 1.00)],
-            ),
-            AnimationChannel(
-                "flame_yellow",
-                "rotation",
-                times,
-                [quat_from_euler_xyz(rz=a, ry=b) for a, b in ((0.0, 0.0), (0.04, 0.05), (-0.04, -0.05), (0.03, 0.04), (-0.03, -0.03), (0.0, 0.0))],
-            ),
-            AnimationChannel(
-                "flame_amber_l",
-                "scale",
-                times,
-                [(1.00, 1.00, 1.00), (1.06, 1.10, 1.03), (0.95, 0.92, 0.97), (1.04, 1.07, 1.02), (0.96, 0.95, 0.98), (1.00, 1.00, 1.00)],
-            ),
-            AnimationChannel(
-                "flame_amber_l",
-                "rotation",
-                times,
-                [quat_from_euler_xyz(rz=a, ry=b) for a, b in ((0.0, 0.0), (0.06, 0.08), (-0.05, -0.07), (0.05, 0.06), (-0.04, -0.05), (0.0, 0.0))],
-            ),
-            AnimationChannel(
-                "flame_amber_r",
-                "scale",
-                times,
-                [(1.00, 1.00, 1.00), (0.95, 0.92, 0.97), (1.06, 1.11, 1.04), (0.96, 0.94, 0.98), (1.05, 1.08, 1.03), (1.00, 1.00, 1.00)],
-            ),
-            AnimationChannel(
-                "flame_amber_r",
-                "rotation",
-                times,
-                [quat_from_euler_xyz(rz=a, ry=b) for a, b in ((0.0, 0.0), (-0.06, -0.08), (0.06, 0.09), (-0.04, -0.06), (0.04, 0.06), (0.0, 0.0))],
-            ),
-            AnimationChannel(
-                "flame_crimson",
-                "scale",
-                times,
-                [(1.00, 1.00, 1.00), (1.05, 1.09, 1.03), (0.96, 0.93, 0.97), (1.07, 1.12, 1.04), (0.97, 0.95, 0.98), (1.00, 1.00, 1.00)],
-            ),
-            AnimationChannel(
-                "flame_crimson",
-                "rotation",
-                times,
-                [quat_from_euler_xyz(rz=a, ry=b) for a, b in ((0.0, 0.0), (-0.07, 0.10), (0.07, -0.09), (-0.05, 0.08), (0.05, -0.07), (0.0, 0.0))],
-            ),
-            AnimationChannel(
-                "flame_sparks_a",
-                "translation",
-                times,
-                [(0.0, 0.00, 0.0), (0.012, 0.036, 0.0), (-0.010, 0.060, 0.0), (0.010, 0.024, 0.0), (-0.010, 0.048, 0.0), (0.0, 0.00, 0.0)],
-            ),
-            AnimationChannel(
-                "flame_sparks_a",
-                "scale",
-                times,
-                [(0.96, 0.96, 0.96), (1.14, 1.18, 1.14), (0.86, 0.88, 0.86), (1.12, 1.15, 1.12), (0.90, 0.92, 0.90), (0.96, 0.96, 0.96)],
-            ),
-            AnimationChannel(
-                "flame_sparks_b",
-                "translation",
-                times,
-                [(0.0, 0.032, 0.0), (-0.012, 0.060, 0.0), (0.010, 0.008, 0.0), (-0.008, 0.044, 0.0), (0.012, 0.066, 0.0), (0.0, 0.032, 0.0)],
-            ),
-            AnimationChannel(
-                "flame_sparks_b",
-                "scale",
-                times,
-                [(1.08, 1.12, 1.08), (0.86, 0.88, 0.86), (1.15, 1.20, 1.15), (0.92, 0.94, 0.92), (1.10, 1.14, 1.10), (1.08, 1.12, 1.08)],
+                [(1.00, 1.00, 1.00), (1.03, 1.07, 1.03), (0.98, 0.96, 0.98), (1.04, 1.08, 1.04), (1.00, 1.00, 1.00)],
             ),
         ],
         replace=True,

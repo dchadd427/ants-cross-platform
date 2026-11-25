@@ -127,6 +127,7 @@ def register_item_materials() -> None:
         MaterialSpec("item_flame_outer", (0.99, 0.48, 0.05, 0.80), 0.00, 0.96, double_sided=True, alpha_mode="BLEND", emissive=(0.94, 0.36, 0.02)),
         MaterialSpec("item_flame_crimson", (0.98, 0.20, 0.02, 0.74), 0.00, 0.97, double_sided=True, alpha_mode="BLEND", emissive=(0.98, 0.16, 0.01)),
         MaterialSpec("item_flame_spark", (0.98, 0.28, 0.02, 1.0), 0.00, 0.96, emissive=(0.98, 0.26, 0.02)),
+        MaterialSpec("item_fire_volume", (1.00, 0.52, 0.04, 0.38), 0.00, 0.98, double_sided=True, alpha_mode="BLEND", emissive=(0.98, 0.42, 0.02)),
     )
     for spec in specs:
         register_extra_material(spec)
