@@ -32,6 +32,12 @@ FAMILY_TEXTURE_SIZES: Dict[str, int] = {
     "stone": 128,
     "soil": 128,
     "wood": 128,
+    "vinyl_rubber": 128,
+    "dino_skin": 128,
+    "organic_flesh": 128,
+    "cola_label": 256,
+    "cap_h2o": 128,
+    "cap_soda": 128,
 }
 
 
@@ -199,6 +205,37 @@ def _height_to_normal_rgb(height: np.ndarray, strength: float) -> np.ndarray:
 def _gray_to_rgb_png(vals_01: np.ndarray) -> bytes:
     u8 = np.clip(vals_01 * 255.0 + 0.5, 0.0, 255.0).astype(np.uint8)
     return _encode_png_rgb(np.repeat(u8[:, :, None], 3, axis=2))
+
+
+def _rgb_to_png(rgb_01: np.ndarray) -> bytes:
+    """Encode an (H, W, 3) float array in [0, 1] directly to RGB PNG bytes."""
+    u8 = np.clip(rgb_01 * 255.0 + 0.5, 0.0, 255.0).astype(np.uint8)
+    return _encode_png_rgb(u8)
+
+
+def _sdf_segment(px: np.ndarray, py: np.ndarray, x0: float, y0: float, x1: float, y1: float) -> np.ndarray:
+    """Euclidean distance from 2D grid (px, py) to line segment (x0, y0)-(x1, y1)."""
+    vx, vy = x1 - x0, y1 - y0
+    l2 = max(1e-8, vx * vx + vy * vy)
+    t = np.clip(((px - x0) * vx + (py - y0) * vy) / l2, 0.0, 1.0)
+    return np.hypot(px - (x0 + t * vx), py - (y0 + t * vy))
+
+
+def _sdf_ring_arc(
+    px: np.ndarray, py: np.ndarray, cx: float, cy: float, rx: float, ry: float, a0: float, a1: float
+) -> np.ndarray:
+    """Approximate Euclidean distance to an elliptical arc spanning [a0, a1] radians."""
+    dx = px - cx
+    dy = py - cy
+    ang = np.arctan2(dy / max(1e-5, ry), dx / max(1e-5, rx))
+    # Unwrap angular difference relative to arc midpoint so wrap-around arcs work cleanly.
+    mid = 0.5 * (a0 + a1)
+    half = 0.5 * abs(a1 - a0)
+    diff = np.arctan2(np.sin(ang - mid), np.cos(ang - mid))
+    clamped = mid + np.clip(diff, -half, half)
+    ax = cx + rx * np.cos(clamped)
+    ay = cy + ry * np.sin(clamped)
+    return np.hypot(px - ax, py - ay)
 
 
 def _mr_to_rgb_png(rough_mult: np.ndarray, metal_mult: Optional[np.ndarray] = None) -> bytes:
@@ -481,6 +518,281 @@ def _build_wood_pack(size: int) -> TexturePack:
     )
 
 
+def _build_vinyl_rubber_pack(size: int) -> TexturePack:
+    """Soft-touch matte bath rubber & tactile satin vinyl: micro-pebble grain, zero cheap plastic glare."""
+    pebble_a = _tile_pores(size, 34, seed=961)
+    pebble_b = _tile_noise(size, 52, 52, seed=962)
+    mottle = _tile_noise(size, 8, 8, seed=963)
+    stipple = 1.0 - _smoothstep(0.10, 0.48, pebble_a)
+    height = np.clip(0.42 * stipple + 0.34 * pebble_b + 0.24 * mottle, 0.0, 1.0)
+    albedo = 0.90 + 0.05 * mottle + 0.03 * pebble_b + 0.02 * (1.0 - stipple)
+    rough_mult = 0.80 + 0.14 * stipple + 0.06 * (1.0 - mottle)
+    return TexturePack(
+        family="vinyl_rubber",
+        size=size,
+        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.86, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=2.6)),
+        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.78, 1.0)),
+    )
+
+
+def _build_dino_skin_pack(size: int) -> TexturePack:
+    """Pebbled reptilian dermal scales & matte sculpted toy-dinosaur hide with tactile micro-relief."""
+    f1_sc, edge_sc = _tile_voronoi_f1_f2(size, 18, seed=971)
+    f1_fine = _tile_pores(size, 42, seed=972)
+    mottle = _tile_noise(size, 7, 7, seed=973)
+    grit = _tile_noise(size, 44, 44, seed=974)
+    # Domed polygonal dermal scales separated by crisp dark grooves.
+    scale_dome = _smoothstep(0.04, 0.30, edge_sc) * (1.0 - 0.35 * f1_sc)
+    micro_peb = 1.0 - _smoothstep(0.12, 0.45, f1_fine)
+    height = np.clip(0.56 * scale_dome + 0.22 * micro_peb + 0.12 * grit + 0.10 * mottle, 0.0, 1.0)
+    albedo = 0.76 + 0.14 * scale_dome + 0.07 * mottle + 0.03 * grit
+    rough_mult = 0.74 + 0.22 * (1.0 - scale_dome) + 0.04 * grit
+    return TexturePack(
+        family="dino_skin",
+        size=size,
+        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.72, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=4.8)),
+        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.72, 1.0)),
+    )
+
+
+def _build_organic_flesh_pack(size: int) -> TexturePack:
+    """Fine cellular matte-moist organic texture for meats, produce, cheese, petals, and food surfaces."""
+    cells = _tile_pores(size, 28, seed=981)
+    fibers = _tile_noise(size, 36, 18, seed=982)
+    mottle = _tile_noise(size, 8, 8, seed=983)
+    cell_bump = _smoothstep(0.14, 0.56, cells)
+    height = np.clip(0.44 * cell_bump + 0.32 * fibers + 0.24 * mottle, 0.0, 1.0)
+    albedo = 0.84 + 0.08 * mottle + 0.05 * cell_bump + 0.03 * fibers
+    rough_mult = 0.74 + 0.18 * (1.0 - cell_bump) + 0.08 * fibers
+    return TexturePack(
+        family="organic_flesh",
+        size=size,
+        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.80, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=2.8)),
+        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.70, 1.0)),
+    )
+
+
+def _build_cola_label_pack(size: int) -> TexturePack:
+    """Crisp printed metallic Critter Cola can label (purple/crimson waves, white-outlined 'Cola', barcode)."""
+    u_1d = np.linspace(0.0, 1.0, size, endpoint=False, dtype=np.float32)
+    v_1d = np.linspace(0.0, 1.0, size, endpoint=False, dtype=np.float32)
+    u, v = np.meshgrid(u_1d, v_1d)
+
+    # Brushed aluminum grain + subtle crumpled metallic facets for realistic crushed soda can sheen.
+    brush = _tile_noise(size, 64, 8, seed=991)
+    crinkle = _tile_noise(size, 9, 9, seed=992)
+    base_indigo = np.array([0.24, 0.18, 0.72], dtype=np.float32)
+    deep_navy = np.array([0.11, 0.08, 0.42], dtype=np.float32)
+    crimson = np.array([0.90, 0.10, 0.20], dtype=np.float32)
+    magenta = np.array([0.82, 0.14, 0.56], dtype=np.float32)
+    white = np.array([0.98, 0.98, 1.00], dtype=np.float32)
+    gold = np.array([0.98, 0.74, 0.16], dtype=np.float32)
+    ink_dark = np.array([0.08, 0.08, 0.12], dtype=np.float32)
+
+    # Royal purple brushed gradient with dramatic diagonal crimson/magenta retro soda waves.
+    grad = 0.85 + 0.18 * brush + 0.07 * np.sin(u * 2.0 * math.pi * 2.0)
+    rgb = np.clip(base_indigo[None, None, :] * grad[:, :, None], 0.0, 1.0)
+
+    # Diagonal dynamic swoosh bands wrapping around the barrel.
+    wave_a = np.sin((u * 2.0 + v * 1.35) * math.pi * 2.0)
+    wave_b = np.cos((u * 3.0 - v * 1.8) * math.pi * 2.0)
+    mag_mask = _smoothstep(0.28, 0.48, wave_a * 0.65 + wave_b * 0.35)
+    rgb = rgb * (1.0 - 0.58 * mag_mask[:, :, None]) + magenta[None, None, :] * (0.58 * mag_mask[:, :, None])
+
+    # Deep navy shadow pockets framing the logo region for high-contrast pop.
+    logo_bg = np.exp(-(((u - 0.50) / 0.26) ** 2 + ((v - 0.60) / 0.22) ** 2))
+    rgb = rgb * (1.0 - 0.45 * logo_bg[:, :, None]) + deep_navy[None, None, :] * (0.45 * logo_bg[:, :, None])
+
+    # Top & bottom vivid crimson rim stripes with crisp thin white trim lines.
+    rim_red = np.maximum(1.0 - _smoothstep(0.09, 0.11, v), _smoothstep(0.89, 0.91, v))
+    rgb = rgb * (1.0 - rim_red[:, :, None]) + crimson[None, None, :] * rim_red[:, :, None]
+    rim_line = np.maximum(
+        1.0 - _smoothstep(0.004, 0.014, np.abs(v - 0.115)),
+        1.0 - _smoothstep(0.004, 0.014, np.abs(v - 0.885)),
+    )
+    rgb = rgb * (1.0 - rim_line[:, :, None]) + white[None, None, :] * rim_line[:, :, None]
+
+    # Crisp white barcode label box on rear-side panel (authentic `238:can1` detail!).
+    bc_box = (u >= 0.08) & (u <= 0.25) & (v >= 0.16) & (v <= 0.42)
+    bc_inner = (u >= 0.095) & (u <= 0.235) & (v >= 0.18) & (v <= 0.40)
+    bar_idx = np.floor((u - 0.095) / 0.0075).astype(np.int32)
+    bar_on = ((bar_idx * 7 + (bar_idx // 2) * 3) % 5) < 2
+    rgb = np.where(bc_box[:, :, None], white[None, None, :], rgb)
+    rgb = np.where((bc_inner & bar_on)[:, :, None], ink_dark[None, None, :], rgb)
+
+    # Retro white-outlined bold "Cola" lettering running cleanly across the hero face (u in [0.28, 0.82], v in [0.40, 0.72]).
+    # Evaluate in local logo coordinates (lx left->right, ly top->bottom so PNG y=0 is top!).
+    lx = (u - 0.55) / 0.26
+    ly = (0.56 - v) / 0.15
+    d_cola = np.full_like(u, 10.0)
+    # 'C' (open bold retro arc on left)
+    d_cola = np.minimum(d_cola, _sdf_ring_arc(lx, ly, -0.68, 0.02, 0.23, 0.52, 0.68, 2.0 * math.pi - 0.68))
+    # 'o' (plump oval)
+    d_cola = np.minimum(d_cola, _sdf_ring_arc(lx, ly, -0.22, -0.06, 0.17, 0.36, 0.0, 2.0 * math.pi))
+    # 'l' (tall tilted stem with retro curved bottom hook)
+    d_cola = np.minimum(d_cola, _sdf_segment(lx, ly, +0.10, -0.40, +0.16, +0.56))
+    d_cola = np.minimum(d_cola, _sdf_ring_arc(lx, ly, +0.19, -0.32, 0.10, 0.14, math.pi * 0.65, math.pi * 1.45))
+    # 'a' (round bowl + vertical right stem + playful spiral tail)
+    d_cola = np.minimum(d_cola, _sdf_ring_arc(lx, ly, +0.46, -0.06, 0.16, 0.34, 0.0, 2.0 * math.pi))
+    d_cola = np.minimum(d_cola, _sdf_segment(lx, ly, +0.62, -0.40, +0.62, +0.32))
+    d_cola = np.minimum(d_cola, _sdf_ring_arc(lx, ly, +0.72, -0.34, 0.10, 0.14, math.pi * 0.65, math.pi * 1.45))
+    # Iconic retro swoosh underline beneath "Cola"!
+    d_cola = np.minimum(d_cola, _sdf_ring_arc(lx, ly, 0.00, -1.02, 0.88, 0.42, 0.36 * math.pi, 0.66 * math.pi))
+
+    # Crisp smaller upper script "Critter" above "Cola" (v ~ 0.28, top of PNG = smaller v!).
+    cx = (u - 0.55) / 0.23
+    cy = (0.31 - v) / 0.08
+    d_crit = np.full_like(u, 10.0)
+    # C-r-i-t-t-e-r stylized SDF glyphs
+    d_crit = np.minimum(d_crit, _sdf_ring_arc(cx, cy, -0.78, 0.0, 0.13, 0.40, 0.72, 2.0 * math.pi - 0.72))
+    d_crit = np.minimum(d_crit, _sdf_segment(cx, cy, -0.52, -0.36, -0.52, +0.26))
+    d_crit = np.minimum(d_crit, _sdf_ring_arc(cx, cy, -0.42, +0.10, 0.10, 0.16, 0.0, math.pi))
+    d_crit = np.minimum(d_crit, _sdf_segment(cx, cy, -0.24, -0.36, -0.24, +0.20))
+    d_crit = np.minimum(d_crit, np.hypot(cx + 0.24, cy - 0.42))
+    d_crit = np.minimum(d_crit, _sdf_segment(cx, cy, -0.04, -0.36, -0.04, +0.46))
+    d_crit = np.minimum(d_crit, _sdf_segment(cx, cy, -0.14, +0.22, +0.06, +0.22))
+    d_crit = np.minimum(d_crit, _sdf_segment(cx, cy, +0.18, -0.36, +0.18, +0.46))
+    d_crit = np.minimum(d_crit, _sdf_segment(cx, cy, +0.08, +0.22, +0.28, +0.22))
+    d_crit = np.minimum(d_crit, _sdf_ring_arc(cx, cy, +0.44, -0.04, 0.12, 0.30, 0.35, 2.0 * math.pi - 0.35))
+    d_crit = np.minimum(d_crit, _sdf_segment(cx, cy, +0.34, +0.02, +0.55, +0.02))
+    d_crit = np.minimum(d_crit, _sdf_segment(cx, cy, +0.68, -0.36, +0.68, +0.26))
+    d_crit = np.minimum(d_crit, _sdf_ring_arc(cx, cy, +0.78, +0.10, 0.10, 0.16, 0.0, math.pi))
+
+    # Crisp layered white border + vivid crimson/gold letter fill for "Cola" + warm white/gold "Critter"!
+    outline_cola = 1.0 - _smoothstep(0.095, 0.135, d_cola)
+    fill_cola = 1.0 - _smoothstep(0.045, 0.075, d_cola)
+    inner_gold = 1.0 - _smoothstep(0.015, 0.036, d_cola)
+    outline_crit = 1.0 - _smoothstep(0.085, 0.135, d_crit)
+    fill_crit = 1.0 - _smoothstep(0.035, 0.070, d_crit)
+
+    # Dark drop shadow behind white lettering for razor readability from any angle.
+    d_shadow = np.roll(np.roll(d_cola, 4, axis=0), 3, axis=1)
+    sh_mask = (1.0 - _smoothstep(0.09, 0.15, d_shadow)) * (1.0 - outline_cola)
+    rgb = rgb * (1.0 - 0.62 * sh_mask[:, :, None]) + ink_dark[None, None, :] * (0.62 * sh_mask[:, :, None])
+
+    rgb = rgb * (1.0 - outline_cola[:, :, None]) + white[None, None, :] * outline_cola[:, :, None]
+    rgb = rgb * (1.0 - fill_cola[:, :, None]) + crimson[None, None, :] * fill_cola[:, :, None]
+    rgb = rgb * (1.0 - 0.65 * inner_gold[:, :, None]) + gold[None, None, :] * (0.65 * inner_gold[:, :, None])
+
+    rgb = rgb * (1.0 - outline_crit[:, :, None]) + white[None, None, :] * outline_crit[:, :, None]
+    rgb = rgb * (1.0 - 0.72 * fill_crit[:, :, None]) + gold[None, None, :] * (0.72 * fill_crit[:, :, None])
+
+    # Crisp metallic fizz stars/bubbles scattered on the purple field (`238:can1`).
+    for sx, sy, sr in ((0.32, 0.24, 0.020), (0.86, 0.34, 0.018), (0.84, 0.72, 0.022), (0.30, 0.76, 0.018), (0.92, 0.54, 0.016)):
+        star_d = np.minimum(
+            _sdf_segment(u, v, sx - sr, sy, sx + sr, sy),
+            _sdf_segment(u, v, sx, sy - sr, sx, sy + sr),
+        )
+        star_m = 1.0 - _smoothstep(0.002, 0.008, star_d)
+        rgb = rgb * (1.0 - star_m[:, :, None]) + white[None, None, :] * star_m[:, :, None]
+
+    # Normal map: brushed aluminum horizontal striations + slight ink emboss + subtle metallic crush ripples.
+    ink_emboss = np.clip(outline_cola * 0.45 + outline_crit * 0.25, 0.0, 1.0)
+    height = np.clip(0.30 * brush + 0.40 * crinkle + 0.30 * ink_emboss, 0.0, 1.0)
+    rough_mult = np.clip(0.55 + 0.20 * (1.0 - brush) + 0.18 * (bc_box.astype(np.float32)) - 0.12 * outline_cola, 0.38, 0.92)
+    metal_mult = np.clip(0.95 - 0.75 * (bc_box.astype(np.float32)) - 0.28 * outline_cola, 0.15, 1.0)
+    return TexturePack(
+        family="cola_label",
+        size=size,
+        base_color_png=_rgb_to_png(np.clip(rgb, 0.0, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=2.6)),
+        metallic_roughness_png=_mr_to_rgb_png(rough_mult, metal_mult),
+    )
+
+
+def _build_cap_h2o_pack(size: int) -> TexturePack:
+    """Crisp royal-blue metallic 'H2O' soda bottle cap face with cyan water waves (`246:BLUEHILL`)."""
+    lin = np.linspace(-1.0, 1.0, size, dtype=np.float32)
+    px, py = np.meshgrid(lin, lin)
+    r = np.hypot(px, py)
+    brush = _tile_noise(size, 28, 28, seed=994)
+
+    cobalt = np.array([0.14, 0.28, 0.84], dtype=np.float32)
+    cyan = np.array([0.62, 0.90, 1.00], dtype=np.float32)
+    silver = np.array([0.82, 0.86, 0.92], dtype=np.float32)
+    rgb = np.clip(cobalt[None, None, :] * (0.86 + 0.18 * brush[:, :, None]), 0.0, 1.0)
+
+    # Outer metallic rim ring + cyan wavy water accents at top and bottom.
+    rim = _smoothstep(0.76, 0.86, r)
+    rgb = rgb * (1.0 - rim[:, :, None]) + silver[None, None, :] * rim[:, :, None]
+    w_top = (1.0 - _smoothstep(0.025, 0.075, np.abs(py + 0.48 - 0.07 * np.sin(px * 9.0)))) * (r < 0.72)
+    w_bot = (1.0 - _smoothstep(0.025, 0.075, np.abs(py - 0.48 - 0.07 * np.cos(px * 9.0)))) * (r < 0.72)
+
+    # Crisp SDF 'H', '2', 'O' centered on the cap.
+    d = np.full_like(px, 10.0)
+    # 'H'
+    d = np.minimum(d, _sdf_segment(px, py, -0.58, -0.26, -0.58, +0.26))
+    d = np.minimum(d, _sdf_segment(px, py, -0.28, -0.26, -0.28, +0.26))
+    d = np.minimum(d, _sdf_segment(px, py, -0.58, 0.00, -0.28, 0.00))
+    # '2'
+    d = np.minimum(d, _sdf_ring_arc(px, py, 0.00, -0.10, 0.15, 0.15, math.pi * 0.95, math.pi * 2.15))
+    d = np.minimum(d, _sdf_segment(px, py, +0.13, -0.02, -0.15, +0.25))
+    d = np.minimum(d, _sdf_segment(px, py, -0.15, +0.25, +0.16, +0.25))
+    # 'O'
+    d = np.minimum(d, _sdf_ring_arc(px, py, +0.46, 0.00, 0.17, 0.25, 0.0, 2.0 * math.pi))
+
+    glyph = np.maximum(1.0 - _smoothstep(0.042, 0.078, d), np.maximum(w_top, w_bot))
+    rgb = rgb * (1.0 - glyph[:, :, None]) + cyan[None, None, :] * glyph[:, :, None]
+    height = np.clip(0.35 * brush + 0.40 * glyph + 0.25 * rim, 0.0, 1.0)
+    return TexturePack(
+        family="cap_h2o",
+        size=size,
+        base_color_png=_rgb_to_png(np.clip(rgb, 0.0, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=2.4)),
+        metallic_roughness_png=_mr_to_rgb_png(np.clip(0.55 - 0.12 * rim + 0.12 * brush, 0.35, 0.85)),
+    )
+
+
+def _build_cap_soda_pack(size: int) -> TexturePack:
+    """Crisp cherry-crimson metallic 'soda' bottle cap face (`247:REDHILL`)."""
+    lin = np.linspace(-1.0, 1.0, size, dtype=np.float32)
+    px, py = np.meshgrid(lin, lin)
+    r = np.hypot(px, py)
+    brush = _tile_noise(size, 28, 28, seed=996)
+
+    crimson = np.array([0.86, 0.12, 0.16], dtype=np.float32)
+    deep_red = np.array([0.48, 0.04, 0.08], dtype=np.float32)
+    white = np.array([0.98, 0.98, 0.98], dtype=np.float32)
+    silver = np.array([0.84, 0.86, 0.90], dtype=np.float32)
+    rgb = np.clip(crimson[None, None, :] * (0.88 + 0.16 * brush[:, :, None]), 0.0, 1.0)
+
+    # Diagonal sash behind 'soda' + outer silver metallic ring.
+    rx = px * 0.88 - py * 0.47
+    ry = px * 0.47 + py * 0.88
+    sash = (1.0 - _smoothstep(0.28, 0.36, np.abs(ry))) * (r < 0.78)
+    rgb = rgb * (1.0 - 0.45 * sash[:, :, None]) + deep_red[None, None, :] * (0.45 * sash[:, :, None])
+    rim = _smoothstep(0.76, 0.86, r)
+    rgb = rgb * (1.0 - rim[:, :, None]) + silver[None, None, :] * rim[:, :, None]
+
+    # Crisp SDF 's', 'o', 'd', 'a' along rotated sash coordinates (rx, ry).
+    d = np.full_like(px, 10.0)
+    # 's'
+    d = np.minimum(d, _sdf_ring_arc(rx, ry, -0.52, -0.09, 0.11, 0.09, math.pi * 0.45, math.pi * 1.90))
+    d = np.minimum(d, _sdf_ring_arc(rx, ry, -0.52, +0.09, 0.11, 0.09, -math.pi * 0.55, math.pi * 0.90))
+    # 'o'
+    d = np.minimum(d, _sdf_ring_arc(rx, ry, -0.18, 0.00, 0.13, 0.17, 0.0, 2.0 * math.pi))
+    # 'd'
+    d = np.minimum(d, _sdf_ring_arc(rx, ry, +0.15, +0.02, 0.12, 0.15, 0.0, 2.0 * math.pi))
+    d = np.minimum(d, _sdf_segment(rx, ry, +0.27, -0.26, +0.27, +0.18))
+    # 'a'
+    d = np.minimum(d, _sdf_ring_arc(rx, ry, +0.49, +0.02, 0.11, 0.15, 0.0, 2.0 * math.pi))
+    d = np.minimum(d, _sdf_segment(rx, ry, +0.60, -0.14, +0.60, +0.18))
+
+    glyph = (1.0 - _smoothstep(0.036, 0.068, d)) * (r < 0.76)
+    rgb = rgb * (1.0 - glyph[:, :, None]) + white[None, None, :] * glyph[:, :, None]
+    height = np.clip(0.35 * brush + 0.40 * glyph + 0.25 * rim, 0.0, 1.0)
+    return TexturePack(
+        family="cap_soda",
+        size=size,
+        base_color_png=_rgb_to_png(np.clip(rgb, 0.0, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=2.4)),
+        metallic_roughness_png=_mr_to_rgb_png(np.clip(0.54 - 0.12 * rim + 0.12 * brush, 0.35, 0.85)),
+    )
+
+
 @functools.lru_cache(maxsize=32)
 def get_texture_pack(family: str, size: Optional[int] = None) -> TexturePack:
     """Return cached seamless PBR PNG TexturePack for `family`."""
@@ -496,6 +808,12 @@ def get_texture_pack(family: str, size: Optional[int] = None) -> TexturePack:
         "stone": _build_stone_pack,
         "soil": _build_soil_pack,
         "wood": _build_wood_pack,
+        "vinyl_rubber": _build_vinyl_rubber_pack,
+        "dino_skin": _build_dino_skin_pack,
+        "organic_flesh": _build_organic_flesh_pack,
+        "cola_label": _build_cola_label_pack,
+        "cap_h2o": _build_cap_h2o_pack,
+        "cap_soda": _build_cap_soda_pack,
     }
     fn = builders.get(family)
     if fn is not None:

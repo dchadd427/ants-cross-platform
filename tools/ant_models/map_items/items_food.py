@@ -294,69 +294,122 @@ def build_fdburgr3() -> SceneBuilder:
 
 
 def build_fdcornd1() -> SceneBuilder:
-    """Golden fried cornmeal-crusted corn dog on a wooden stick with zigzag yellow mustard (`361:fdcornd1`)."""
+    """Golden fried cornmeal corn dog with slanted bitten crust & a visible chomped bite in the hot dog itself (`361:fdcornd1`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_fdcornd1")
 
-    # Plump deep-fried golden cornmeal batter cylinder with organic crispy surface bumps.
-    def _fry_crust(pos: np.ndarray) -> np.ndarray:
+    # Plump deep-fried golden cornmeal batter cylinder with craggy crispy bubbles + slanted open bitten front hood!
+    def _fry_and_bite_crust(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
         bump = (
-            0.008 * np.sin(p[:, 0] * 38.0 + p[:, 2] * 34.0) * np.cos(p[:, 1] * 36.0)
-            + 0.005 * np.sin(p[:, 2] * 58.0 - p[:, 0] * 42.0)
+            0.010 * np.sin(p[:, 0] * 38.0 + p[:, 2] * 34.0) * np.cos(p[:, 1] * 36.0)
+            + 0.006 * np.sin(p[:, 2] * 58.0 - p[:, 0] * 42.0)
+            + 0.004 * np.cos(p[:, 1] * 64.0 + p[:, 2] * 52.0)
         )
-        r = np.maximum(1e-5, np.hypot(p[:, 0], p[:, 1]))
+        r = np.maximum(1e-5, np.hypot(p[:, 0], p[:, 1] - 0.128))
         p[:, 0] += bump * (p[:, 0] / r)
-        p[:, 1] += bump * (p[:, 1] / r)
+        p[:, 1] += bump * ((p[:, 1] - 0.128) / r)
+        # Slanted bite opening across the front (+Z) end of the fried crust exposing the protruding hot dog!
+        scallop = 0.012 * np.cos(p[:, 0] * 26.0)
+        z_bite_limit = 0.255 - 0.32 * (p[:, 1] - 0.128) + scallop
+        p[:, 2] = np.minimum(p[:, 2], z_bite_limit)
         return p
 
     batter = gradient_y_tint(
         curved_tube(
-            [(0.0, 0.125, -0.20), (0.0, 0.128, -0.05), (0.0, 0.128, +0.18), (0.0, 0.122, +0.36)],
-            [(0.068, 0.066), (0.118, 0.112), (0.116, 0.110), (0.064, 0.062)],
-            samples_per_seg=6,
-            radial_segs=26,
+            [(0.0, 0.125, -0.24), (0.0, 0.128, -0.06), (0.0, 0.128, +0.16), (0.0, 0.126, +0.34)],
+            [(0.066, 0.064), (0.118, 0.112), (0.118, 0.112), (0.106, 0.102)],
+            samples_per_seg=7,
+            radial_segs=30,
             cap_rings=5,
             name="corndog_batter",
             material="item_corndog_crust",
-        ).deform(_fry_crust),
-        (0.76, 0.66, 0.52),
-        (1.04, 0.96, 0.80),
-        noise_amp=0.06,
+        ).deform(_fry_and_bite_crust),
+        (0.74, 0.62, 0.46),
+        (1.06, 0.96, 0.78),
+        noise_amp=0.07,
     )
-    # Wooden skewer stick protruding from the rear end.
+
+    # Slim HOLLOW pale-yellow spongy cornmeal cross-section lip ringing the batter mouth (keeps the hot dog 100% exposed!)
+    crumb_ring = (
+        torus_arc(0.084, 0.022, u_segs=32, v_segs=12, plane="xy", name="corndog_crumb_ring", material="item_bun_crumb")
+        .deform(lambda p: p + 0.004 * np.sin(p * 52.0))
+        .rotate_xyz(rx=0.30)
+        .translate(0.0, 0.128, +0.246)
+    )
+
+    # Prominent protruding pink-brown hot dog frankfurter WITH A HUGE UNMISTAKABLE CURVED BITE CHOMPED OUT OF ITS TIP!
+    def _bite_hotdog(pos: np.ndarray) -> np.ndarray:
+        p = pos.copy()
+        # Carve a deep bold U-shaped semicircular tooth-bite directly out of the upper-front end of the frankfurter!
+        # Center of bite arc sits at (x=0, z=+0.46), biting cleanly back to z=+0.35 in the center while leaving rounded
+        # casing cheeks on left/right and an angled bottom lip just like a real human bite out of a hot dog!
+        dx = p[:, 0]
+        in_front = p[:, 2] > 0.28
+        u_bite = 0.048 * np.exp(-((dx / 0.048) ** 2))
+        z_cut = 0.422 - 0.52 * (p[:, 1] - 0.120) - u_bite
+        p[:, 2] = np.where(in_front, np.minimum(p[:, 2], z_cut), p[:, 2])
+        # Also scoop slightly down into the top crown of the frankfurter where the upper teeth bit down!
+        top_scoop = 0.028 * np.exp(-((dx / 0.046) ** 2)) * np.clip((p[:, 2] - 0.30) / 0.10, 0.0, 1.0)
+        p[:, 1] = np.where(p[:, 1] > 0.125, p[:, 1] - top_scoop, p[:, 1])
+        return p
+
+    hotdog = gradient_y_tint(
+        curved_tube(
+            [(0.0, 0.128, +0.16), (0.0, 0.130, +0.30), (0.0, 0.132, +0.445)],
+            [(0.068, 0.066), (0.070, 0.068), (0.066, 0.064)],
+            samples_per_seg=8,
+            radial_segs=30,
+            cap_rings=6,
+            name="corndog_hotdog",
+            material="item_hotdog_pink",
+        ).deform(_bite_hotdog),
+        (0.76, 0.64, 0.56),
+        (1.04, 0.94, 0.86),
+        noise_amp=0.05,
+    )
+
+    # Bright pale-pink concave bitten inner meat cross-section face seated right inside the chomped bite of the hot dog!
+    def _cut_meat_scoop(pos: np.ndarray) -> np.ndarray:
+        p = pos.copy()
+        p[:, 2] -= 0.026 * np.exp(-((p[:, 0] / 0.046) ** 2))
+        return p
+
+    hotdog_bite_face = (
+        cylinder(0.060, 0.058, 0.016, radial_segs=24, bevel=0.004, axis="z", name="corndog_hotdog_bite", material="item_hotdog_inside")
+        .deform(_cut_meat_scoop)
+        .rotate_xyz(rx=0.66)
+        .translate(0.0, 0.140, +0.382)
+    )
+
+    # Textured wooden skewer stick protruding cleanly from the rear end.
     stick = (
-        cylinder(0.017, 0.016, 0.34, radial_segs=14, bevel=0.004, axis="z", name="corndog_stick", material="item_wood_stick")
-        .translate(0.0, 0.115, -0.34)
+        cylinder(0.017, 0.015, 0.36, radial_segs=14, bevel=0.004, axis="z", name="corndog_stick", material="item_wood_stick")
+        .translate(0.0, 0.115, -0.37)
     )
-    # Glossy squeezed zigzag yellow mustard squiggle draped smoothly along the top of the crust!
+
+    # Thick plump bright yellow squeezed mustard zigzag ribbon draped across the fried batter behind the bite!
     mustard_pts: List[Tuple[float, float, float]] = []
-    n_m = 28
+    n_m = 32
     for i in range(n_m + 1):
-        u = i / n_m
-        mz = -0.15 + 0.48 * u
-        mx = 0.052 * math.sin(u * math.pi * 6.5)
-        r_surf = 0.112 * math.sqrt(max(0.18, 1.0 - ((mx / 0.116) ** 2)))
-        # Taper down gently toward ends.
-        end_w = math.sin(u * math.pi) ** 0.25
-        my = 0.128 + r_surf * (0.86 + 0.14 * end_w) + 0.008
+        u = i / float(n_m)
+        mz = -0.18 + 0.37 * u
+        mx = 0.060 * math.sin(u * math.pi * 5.8)
+        r_surf = 0.116 * math.sqrt(max(0.18, 1.0 - ((mx / 0.120) ** 2)))
+        end_w = math.sin(u * math.pi) ** 0.22
+        my = 0.128 + r_surf * (0.86 + 0.14 * end_w) + 0.010
         mustard_pts.append((mx, my, mz))
     mustard = curved_tube(
         mustard_pts,
-        [0.0125] * len(mustard_pts),
+        [0.0155] * len(mustard_pts),
         samples_per_seg=2,
-        radial_segs=10,
+        radial_segs=12,
         cap_rings=2,
         name="corndog_mustard",
         material="item_mustard",
     )
-    # Small peek of glossy pink frankfurter exposed at the bitten tip just like `361:fdcornd1`!
-    hotdog_tip = (
-        ellipsoid(0.056, 0.054, 0.072, u_segs=18, v_segs=12, name="corndog_hotdog_tip", material="item_hotdog_pink")
-        .translate(0.0, 0.130, +0.365)
-    )
-    sc.add("corndog", [batter, hotdog_tip, stick, mustard])
-    # Angle top-left (hot dog tip) -> bottom-right (wooden stick) matching `361:fdcornd1`!
+    sc.add("corndog", [batter, crumb_ring, hotdog, hotdog_bite_face, stick, mustard])
+    # Angle top-left (bitten hot dog tip) -> bottom-right (wooden stick) matching `361:fdcornd1`!
     sc.nodes["corndog"] = [p.rotate_xyz(ry=-135.0, degrees=True) for p in sc.nodes["corndog"]]
     return _finalize_item(sc, target_span=0.96)
 

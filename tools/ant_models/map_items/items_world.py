@@ -31,10 +31,12 @@ if np is not None:
         )
         from .item_materials import gradient_y_tint, register_item_materials, tint_part
         from .items_plants import _curved_grass_blade
+        from .items_structures import _add_waving_flag, _build_anthill_base, _crimped_bottle_cap
         from .items_toys import _finalize_item
     except ImportError:
         from map_items.item_materials import gradient_y_tint, register_item_materials, tint_part  # type: ignore
         from map_items.items_plants import _curved_grass_blade  # type: ignore
+        from map_items.items_structures import _add_waving_flag, _build_anthill_base, _crimped_bottle_cap  # type: ignore
         from map_items.items_toys import _finalize_item  # type: ignore
         from mesh_core import (  # type: ignore
             MeshPart,
@@ -126,157 +128,127 @@ def build_bigrock2() -> SceneBuilder:
 
 
 def build_greenhill() -> SceneBuilder:
-    """Realistic sculpted Green Team Anthill mound with tunnel hole, twigs, curling vines, green cone & bottle cap (`248:GREENHILL`)."""
+    """Green Team Anthill with eroded earthen crater, braided twig/vine palisade, waving green flag & teal cap (`248:GREENHILL`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_greenhill")
-
-    # Sculpted earthen dirt volcano mound with crisp sunken crater entrance hole in the crown!
-    mound_prof = [
-        (0.000, 0.110),  # dark deep tunnel floor inside hole
-        (0.110, 0.115),  # tunnel shaft wall bottom
-        (0.125, 0.265),  # tunnel shaft upper inner wall
-        (0.165, 0.340),  # rounded earthen crater rim lip
-        (0.255, 0.305),  # upper hill shoulder
-        (0.380, 0.170),  # mid sloped dirt flank
-        (0.495, 0.035),  # wide flaring base skirt
-        (0.520, 0.000),  # grounded rim on Y = 0.0
-        (0.000, 0.000),
-    ]
-    slope_stations = [(0.165, 0.340), (0.255, 0.305), (0.380, 0.170), (0.495, 0.035), (0.520, 0.000)]
-
-    def _wobble_at(ang: float) -> float:
-        return 1.0 + 0.075 * math.sin(ang * 3.0 + 0.4) + 0.045 * math.cos(ang * 5.0 - 0.8)
-
-    def _mound_surface_y(x: float, z: float) -> float:
-        ang = math.atan2(z, x)
-        r_prof = math.hypot(x, z) / _wobble_at(ang)
-        if r_prof <= slope_stations[0][0]:
-            return slope_stations[0][1]
-        for (r0, y0), (r1, y1) in zip(slope_stations[:-1], slope_stations[1:]):
-            if r_prof <= r1:
-                t = (r_prof - r0) / max(1e-5, r1 - r0)
-                return y0 * (1.0 - t) + y1 * t
-        return 0.0
-
-    def _sculpt_dirt(pos: np.ndarray) -> np.ndarray:
-        p = pos.copy()
-        ang = np.arctan2(p[:, 2], p[:, 0])
-        wobble = 1.0 + 0.075 * np.sin(ang * 3.0 + 0.4) + 0.045 * np.cos(ang * 5.0 - 0.8)
-        p[:, 0] *= wobble
-        p[:, 2] *= wobble
-        clods = 0.014 * np.sin(p[:, 0] * 26.0 + p[:, 2] * 22.0) * np.cos(p[:, 1] * 28.0)
-        skirt_w = np.clip(p[:, 1] / 0.06, 0.0, 1.0)
-        p[:, 1] = np.maximum(0.0, p[:, 1] + clods * skirt_w)
-        return p
-
-    def _hill_dirt_tint(pos: np.ndarray, _nrm: np.ndarray) -> np.ndarray:
-        r = np.hypot(pos[:, 0], pos[:, 2])
-        hole_dark = np.clip((r - 0.105) / 0.080, 0.10, 1.0)[:, None]
-        height_w = np.clip(pos[:, 1] / 0.34, 0.0, 1.0)[:, None]
-        mottle = 0.07 * np.sin(pos[:, 0] * 22.0 + pos[:, 2] * 19.0)[:, None]
-        loam = np.array([[0.74, 0.70, 0.66]], dtype=np.float64) * (1.0 - height_w) + np.array([[1.02, 0.96, 0.90]], dtype=np.float64) * height_w
-        return np.clip((loam + mottle) * hole_dark, 0.06, 1.0)
-
-    mound = tint_part(
-        lathe(mound_prof, radial_segs=48, cap_bottom=False, cap_top=False, axis="y", name="hill_mound", material="item_soil_mound").deform(_sculpt_dirt),
-        _hill_dirt_tint,
+    surf_y = _build_anthill_base(
+        sc,
+        soil_mat="item_soil_mound",
+        seed=248,
+        loam_lo=(0.72, 0.66, 0.62),
+        loam_hi=(1.04, 0.96, 0.90),
+        pebble_count=34,
     )
-    sc.add("anthill", mound)
 
-    # Deep dark tunnel throat shadow plug inside the crater shaft.
-    hole_plug = cylinder(0.118, 0.118, 0.030, radial_segs=24, axis="y", name="hill_hole_dark", material="item_soil_hole").translate(0.0, 0.145, 0.0)
-    sc.add("anthill", hole_plug)
+    # 1. Crooked pale cream-white birch twig flagpole curving along the right crater lip (`248:GREENHILL`)!
+    px0, pz0 = +0.16, +0.06
+    py0 = surf_y(px0, pz0)
+    birch_pole = curved_tube(
+        [
+            (px0 - 0.02, py0 - 0.04, pz0 + 0.04),
+            (px0 + 0.01, py0 + 0.09, pz0 - 0.01),
+            (px0 + 0.03, py0 + 0.21, pz0 - 0.06),
+            (px0 + 0.01, py0 + 0.30, pz0 - 0.11),
+        ],
+        [0.024, 0.022, 0.020, 0.014],
+        samples_per_seg=4,
+        radial_segs=12,
+        cap_rings=2,
+        name="gh_birch_pole",
+        material="item_birch_pole",
+    )
+    sc.add("anthill", birch_pole)
 
-    # Scattered gritty dark-grey & tan pebbles seated cleanly ON TOP of the outer skirt (never poking underneath!).
-    rng = np.random.default_rng(248)
-    for k in range(20):
-        ang = 2.0 * math.pi * k / 20.0 + float(rng.uniform(-0.14, 0.14))
-        rad = float(rng.uniform(0.42, 0.56))
-        px, pz = rad * math.cos(ang), rad * math.sin(ang)
-        pr = float(rng.uniform(0.022, 0.044))
-        surf_y = _mound_surface_y(px, pz)
-        py = max(pr * 0.68, surf_y + pr * 0.28)
-        mat = "item_stone_granite" if (k % 2 == 0) else "item_soil_mound"
-        peb = (
-            ellipsoid(pr * 1.18, pr * 0.66, pr * 0.94, u_segs=10, v_segs=6, name=f"hill_pebble_{k}", material=mat)
-            .rotate_xyz(ry=ang)
-            .translate(px, py, pz)
-        )
-        sc.add("anthill", peb)
+    # Iconic bright-green triangular cloth pennant snapping & waving to the right (exact 700 ms wave of `248:GREENHILL`!)
+    _add_waving_flag(
+        sc,
+        prefix="gh",
+        anchor=(px0 + 0.024, py0 + 0.220, pz0 - 0.070),
+        yaw_deg=-8.0,
+        pitch_deg=14.0,
+        roll_deg=-12.0,
+        length=0.42,
+        base_height=0.195,
+        mat="item_flag_green",
+        period_sec=0.70,
+        wave_amp=0.30,
+        droop=-0.018,
+    )
 
-    # Signature Green Team scavenged decor from `248:GREENHILL`, every piece seated cleanly ON the mound surface!
-    # 1. Interwoven woody twigs hugging the front-lower dirt embankment (`+Z` rim) just like `248:GREENHILL`!
+    # 2. Rich braided wooden twig & vine fortress palisade cradling the entire front lower dirt skirt (`248:GREENHILL`)!
     twig_arcs = (
-        ((-0.34, +0.26), (-0.12, +0.42), (+0.16, +0.40)),
-        ((-0.24, +0.36), (+0.02, +0.45), (+0.26, +0.34)),
-        ((-0.36, +0.14), (-0.22, +0.34), (-0.02, +0.44)),
-        ((+0.06, +0.43), (+0.24, +0.36), (+0.34, +0.22)),
+        ((-0.40, +0.20), (-0.18, +0.42), (+0.12, +0.44), (+0.34, +0.28)),
+        ((-0.34, +0.30), (-0.06, +0.47), (+0.22, +0.38), (+0.38, +0.18)),
+        ((-0.42, +0.10), (-0.26, +0.34), (-0.02, +0.45), (+0.18, +0.40)),
+        ((-0.26, +0.36), (+0.04, +0.42), (+0.28, +0.32), (+0.36, +0.22)),
+        ((-0.38, +0.24), (-0.14, +0.38), (+0.08, +0.38), (+0.26, +0.30)),
+        ((-0.22, +0.42), (-0.04, +0.48), (+0.16, +0.44), (+0.30, +0.34)),
     )
-    for idx, (a, b, c) in enumerate(twig_arcs):
-        pts = [(x, max(0.025, _mound_surface_y(x, z) + 0.020), z) for x, z in (a, b, c)]
-        twig = curved_tube(pts, [0.018, 0.021, 0.015], samples_per_seg=4, radial_segs=10, cap_rings=2, name=f"hill_twig_{idx}", material="item_twig_bark")
+    for idx, arc in enumerate(twig_arcs):
+        y_off = 0.020 + 0.014 * (idx % 3)
+        pts = [(x, max(0.024, surf_y(x, z) + y_off), z) for x, z in arc]
+        rad = 0.018 + 0.004 * (idx % 2)
+        twig = curved_tube(
+            pts,
+            [rad * 0.9, rad * 1.15, rad * 1.05, rad * 0.78],
+            samples_per_seg=4,
+            radial_segs=10,
+            cap_rings=2,
+            name=f"hill_twig_{idx}",
+            material="item_twig_bark",
+        )
         sc.add("anthill", twig)
 
-    # 2. Lush bright-green curling grass vines sprouting right OFF the front dirt slope & twigs (`248:GREENHILL`)!
-    for k in range(20):
-        ang = 0.25 + (k / 19.0) * 2.60  # bold front/left/right wrap on +Z half
-        rad = 0.25 + 0.18 * ((k * 7) % 5) / 4.0
+    # 3. Dense vibrant curling green vine tendrils & meadow grass blades hugging the twig weave (keeping the burrow crater open!)
+    for k in range(28):
+        ang = 0.16 + (k / 27.0) * 2.82
+        rad = 0.30 + 0.18 * ((k * 7) % 6) / 5.0
         bx, bz = rad * math.cos(ang), rad * math.sin(ang)
-        by = max(0.01, _mound_surface_y(bx, bz) - 0.008)
+        by = max(0.012, surf_y(bx, bz) - 0.006)
         sc.add(
             "anthill",
             _curved_grass_blade(
                 f"hill_vine_{k}",
                 base_xz=(bx, bz),
                 base_y=by,
-                height=0.18 + 0.11 * (k % 3),
-                width=0.044,
-                yaw=ang + 0.42 * math.sin(k * 2.1),
-                lean=0.14,
-                droop=0.13,
-                twist=0.45 * math.cos(k),
+                height=0.14 + 0.10 * (k % 4) / 3.0,
+                width=0.044 + 0.010 * (k % 2),
+                yaw=ang + 0.45 * math.sin(k * 2.1),
+                lean=0.10 + 0.04 * (k % 3),
+                droop=0.11 + 0.04 * (k % 2),
+                twist=0.52 * math.cos(k),
                 segs=7,
             ),
         )
+    # Iconic lone forked bright-green grass sprig sprouting in the back-right soil (`248:GREENHILL`)!
+    for idx, (yo, lean) in enumerate(((0.5, 0.08), (1.1, 0.12), (-0.4, 0.10))):
+        bx, bz = +0.34, -0.32
+        sc.add(
+            "anthill",
+            _curved_grass_blade(
+                f"hill_back_sprig_{idx}",
+                base_xz=(bx, bz),
+                base_y=max(0.0, surf_y(bx, bz) - 0.005),
+                height=0.22 + 0.04 * idx,
+                width=0.040,
+                yaw=yo,
+                lean=lean,
+                droop=0.08,
+                twist=0.35,
+                segs=6,
+            ),
+        )
 
-    # 3. Bold bright-green white-rimmed party cone pointing right from the crater lip (`248:GREENHILL`)!
-    cone_x, cone_z = +0.24, -0.04
-    cone_y = _mound_surface_y(cone_x, cone_z) + 0.048
-    party_cone = (
-        cone(0.088, 0.30, radial_segs=22, name="hill_green_cone", material="item_party_green")
-        .rotate_xyz(rx=0.16, rz=-1.30)
-        .translate(cone_x, cone_y, cone_z)
+    # 4. Prominent scavenged crimped metallic silver & deep emerald-teal soda bottle cap on the far-right slope!
+    cap_x, cap_z = +0.40, +0.14
+    cap_y = surf_y(cap_x, cap_z) + 0.044
+    for p in _crimped_bottle_cap("gh_teal_cap", "item_bottle_teal", radius=0.114):
+        sc.add("anthill", p.rotate_xyz(rx=0.44, ry=-0.12, rz=-0.46).translate(cap_x, cap_y, cap_z))
+    # Glossy recessed emerald-green inner bevel ring inside the bottle cap for extra realism (`248:GREENHILL`)!
+    cap_ring = (
+        torus_arc(0.072, 0.012, u_segs=26, v_segs=8, plane="xz", name="gh_cap_inner_rim", material="item_aluminum")
+        .rotate_xyz(rx=0.44, ry=-0.12, rz=-0.46)
+        .translate(cap_x + 0.012, cap_y + 0.022, cap_z + 0.010)
     )
-    cone_rim = (
-        torus_arc(0.088, 0.016, u_segs=20, v_segs=8, plane="xz", name="hill_cone_rim", material="item_cotton_fluff")
-        .rotate_xyz(rx=0.16, rz=-1.30)
-        .translate(cone_x - 0.125, cone_y - 0.036, cone_z + 0.015)
-    )
-    sc.add("anthill", [party_cone, cone_rim])
-
-    # 4. Prominent scavenged crimped silver-and-teal soda bottle cap resting visibly on the right slope (`248:GREENHILL`)!
-    cap_x, cap_z = +0.36, +0.16
-    cap_y = _mound_surface_y(cap_x, cap_z) + 0.038
-
-    def _crimp_skirt(pos: np.ndarray) -> np.ndarray:
-        p = pos.copy()
-        ang = np.arctan2(p[:, 2], p[:, 0])
-        bot = np.clip(-p[:, 1] / 0.025, 0.0, 1.0)
-        flute = 1.0 + 0.11 * np.cos(ang * 21.0) * bot
-        p[:, 0] *= flute
-        p[:, 2] *= flute
-        return p
-
-    cap_metal = (
-        cylinder(0.105, 0.118, 0.042, radial_segs=42, bevel=0.006, axis="y", name="hill_cap_metal", material="item_aluminum")
-        .deform(_crimp_skirt)
-        .rotate_xyz(rx=0.38, rz=-0.46)
-        .translate(cap_x, cap_y, cap_z)
-    )
-    cap_top = (
-        cylinder(0.088, 0.088, 0.016, radial_segs=28, bevel=0.004, axis="y", name="hill_cap_green", material="item_bottle_teal")
-        .rotate_xyz(rx=0.38, rz=-0.46)
-        .translate(cap_x + 0.009, cap_y + 0.018, cap_z + 0.007)
-    )
-    sc.add("anthill", [cap_metal, cap_top])
+    sc.add("anthill", cap_ring)
     return _finalize_item(sc, target_span=1.00)

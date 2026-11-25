@@ -41,6 +41,13 @@ def build_orig_items_bundle(specs: Sequence[MapItemSpec], out_path: Path) -> Dic
             for entry in json.load(fh):
                 by_idx[int(entry["entry_index"])] = entry
 
+    try:
+        import io as _io
+        from PIL import Image as _PilImage
+    except ImportError:
+        _io = None  # type: ignore
+        _PilImage = None  # type: ignore
+
     items_out: Dict[str, Any] = {}
     for spec in specs:
         entry = by_idx.get(spec.chd_id)
@@ -48,32 +55,77 @@ def build_orig_items_bundle(specs: Sequence[MapItemSpec], out_path: Path) -> Dic
         total_ms = 0
         if entry is not None:
             total_ms = int(entry.get("total_duration_ms", 0) or 0)
-            seen_sids: List[int] = []
-            for sub in entry.get("subitems", []):
-                dur_ms = int(sub.get("duration_ms", 120) or 120)
-                sub_frames = sub.get("frames", [])
-                if not sub_frames:
-                    continue
-                sid = int(sub_frames[0]["sprite_index"])
-                sp_file = sprites_dir / f"sprite_{sid:04d}.png"
-                if not sp_file.exists():
-                    continue
-                if seen_sids and sid == seen_sids[-1]:
-                    continue
-                seen_sids.append(sid)
-                raw = sp_file.read_bytes()
-                # Parse PNG IHDR dimensions directly (pure stdlib, no PIL required!).
-                w = int.from_bytes(raw[16:20], "big") if len(raw) >= 24 else 0
-                h = int.from_bytes(raw[20:24], "big") if len(raw) >= 24 else 0
-                frames_out.append({
-                    "sprite_index": sid,
-                    "w": w,
-                    "h": h,
-                    "duration_ms": max(60, dur_ms),
-                    "data_uri": "data:image/png;base64," + base64.b64encode(raw).decode("ascii"),
-                })
-                if len(frames_out) >= 8:
-                    break
+            subitems = entry.get("subitems", [])
+            has_multi_layer = any(len(sub.get("frames", [])) > 1 for sub in subitems)
+
+            if has_multi_layer and _PilImage is not None and _io is not None:
+                # Composite all authentic 1998 CHD sprite layers (e.g. hill mound + waving flag, daisy stem + head)
+                # onto one shared bounding canvas so animation frames stay rock-steady with zero jitter!
+                loaded_subs = []
+                min_x, min_y, max_x, max_y = 99999, 99999, -99999, -99999
+                for sub in subitems:
+                    dur_ms = int(sub.get("duration_ms", 120) or 120)
+                    layers = []
+                    for fr in sub.get("frames", []):
+                        sid = int(fr["sprite_index"])
+                        sp_file = sprites_dir / f"sprite_{sid:04d}.png"
+                        if not sp_file.exists():
+                            continue
+                        im = _PilImage.open(sp_file).convert("RGBA")
+                        dx, dy = int(fr.get("dx", 0)), int(fr.get("dy", 0))
+                        min_x = min(min_x, dx)
+                        min_y = min(min_y, dy)
+                        max_x = max(max_x, dx + im.width)
+                        max_y = max(max_y, dy + im.height)
+                        layers.append((sid, dx, dy, im))
+                    if layers:
+                        loaded_subs.append((dur_ms, layers))
+                    if len(loaded_subs) >= 8:
+                        break
+                if loaded_subs and max_x > min_x and max_y > min_y:
+                    cw, ch = max_x - min_x, max_y - min_y
+                    for dur_ms, layers in loaded_subs:
+                        canvas = _PilImage.new("RGBA", (cw, ch), (0, 0, 0, 0))
+                        for _sid, dx, dy, im in reversed(layers):
+                            canvas.alpha_composite(im, (dx - min_x, dy - min_y))
+                        buf = _io.BytesIO()
+                        canvas.save(buf, format="PNG", optimize=True)
+                        raw = buf.getvalue()
+                        frames_out.append({
+                            "sprite_index": layers[0][0],
+                            "w": cw,
+                            "h": ch,
+                            "duration_ms": max(60, dur_ms),
+                            "data_uri": "data:image/png;base64," + base64.b64encode(raw).decode("ascii"),
+                        })
+
+            if not frames_out:
+                seen_sids: List[int] = []
+                for sub in subitems:
+                    dur_ms = int(sub.get("duration_ms", 120) or 120)
+                    sub_frames = sub.get("frames", [])
+                    if not sub_frames:
+                        continue
+                    sid = int(sub_frames[0]["sprite_index"])
+                    sp_file = sprites_dir / f"sprite_{sid:04d}.png"
+                    if not sp_file.exists():
+                        continue
+                    if seen_sids and sid == seen_sids[-1]:
+                        continue
+                    seen_sids.append(sid)
+                    raw = sp_file.read_bytes()
+                    # Parse PNG IHDR dimensions directly (pure stdlib, no PIL required!).
+                    w = int.from_bytes(raw[16:20], "big") if len(raw) >= 24 else 0
+                    h = int.from_bytes(raw[20:24], "big") if len(raw) >= 24 else 0
+                    frames_out.append({
+                        "sprite_index": sid,
+                        "w": w,
+                        "h": h,
+                        "duration_ms": max(60, dur_ms),
+                        "data_uri": "data:image/png;base64," + base64.b64encode(raw).decode("ascii"),
+                    })
+                    if len(frames_out) >= 8:
+                        break
         items_out[spec.id] = {
             "id": spec.id,
             "chd_id": spec.chd_id,

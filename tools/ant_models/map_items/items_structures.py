@@ -29,6 +29,7 @@ if np is not None:
             ellipsoid,
             lathe,
             quat_from_euler_xyz,
+            recompute_smooth_normals,
             rounded_box,
             sphere,
             superellipsoid,
@@ -49,6 +50,7 @@ if np is not None:
             ellipsoid,
             lathe,
             quat_from_euler_xyz,
+            recompute_smooth_normals,
             rounded_box,
             sphere,
             superellipsoid,
@@ -57,7 +59,7 @@ if np is not None:
 
 
 # ---------------------------------------------------------------------------
-# Shared sculpted earthen volcano anthill base (with exact surface height query)
+# Shared sculpted earthen volcano anthill base + waving cloth flag & cap helpers
 # ---------------------------------------------------------------------------
 
 def _build_anthill_base(
@@ -67,25 +69,37 @@ def _build_anthill_base(
     seed: int,
     loam_lo: Tuple[float, float, float],
     loam_hi: Tuple[float, float, float],
+    pebble_count: int = 30,
+    crater_scale: float = 0.80,
 ) -> Callable[[float, float], float]:
-    """Build organic cratered dirt anthill mound + burrow throat + pebbles, returning exact `_surface_y(x, z)`."""
+    """Build hyper-detailed sculpted volcanic earthen anthill mound + tight burrow throat + pebbles, returning `_surface_y(x, z)`."""
+    sc.set_node_transform("anthill", translation=(0.0, 0.0, 0.0))
     mound_prof = [
         (0.000, 0.110),
-        (0.110, 0.115),
-        (0.125, 0.265),
-        (0.165, 0.340),
-        (0.255, 0.305),
-        (0.380, 0.170),
-        (0.495, 0.035),
-        (0.520, 0.000),
+        (0.102 * crater_scale, 0.115),
+        (0.116 * crater_scale, 0.310),
+        (0.148 * crater_scale, 0.420),
+        (0.188 * crater_scale, 0.436),  # sculpted volcanic ant-burrow peak lip
+        (0.255, 0.370),
+        (0.345, 0.245),
+        (0.435, 0.125),
+        (0.515, 0.036),
+        (0.565, 0.000),
         (0.000, 0.000),
     ]
-    slope_stations = [(0.165, 0.340), (0.255, 0.305), (0.380, 0.170), (0.495, 0.035), (0.520, 0.000)]
+    slope_stations = [
+        (0.188 * crater_scale, 0.436),
+        (0.255, 0.370),
+        (0.345, 0.245),
+        (0.435, 0.125),
+        (0.515, 0.036),
+        (0.565, 0.000),
+    ]
     ph_a = 0.4 + 0.7 * (seed % 7)
     ph_b = -0.8 + 0.5 * (seed % 5)
 
     def _wobble(ang: float) -> float:
-        return 1.0 + 0.072 * math.sin(ang * 3.0 + ph_a) + 0.044 * math.cos(ang * 5.0 + ph_b)
+        return 1.0 + 0.075 * math.sin(ang * 3.0 + ph_a) + 0.048 * math.cos(ang * 5.0 + ph_b)
 
     def _surface_y(x: float, z: float) -> float:
         ang = math.atan2(z, x)
@@ -101,54 +115,209 @@ def _build_anthill_base(
     def _sculpt(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
         ang = np.arctan2(p[:, 2], p[:, 0])
-        wobble = 1.0 + 0.072 * np.sin(ang * 3.0 + ph_a) + 0.044 * np.cos(ang * 5.0 + ph_b)
+        r = np.hypot(p[:, 0], p[:, 2])
+        wobble = 1.0 + 0.075 * np.sin(ang * 3.0 + ph_a) + 0.048 * np.cos(ang * 5.0 + ph_b)
         p[:, 0] *= wobble
         p[:, 2] *= wobble
-        clods = 0.014 * np.sin(p[:, 0] * 25.0 + p[:, 2] * 21.0 + seed) * np.cos(p[:, 1] * 28.0)
-        p[:, 1] = np.maximum(0.0, p[:, 1] + clods * np.clip(p[:, 1] / 0.06, 0.0, 1.0))
+        # Pronounced radial rain-erosion gullies + crumbly soil ridges down the mound flanks!
+        mid_slope = np.clip((r - 0.14) / 0.16, 0.0, 1.0) * np.clip((0.54 - r) / 0.14, 0.0, 1.0)
+        gullies = (0.018 * np.sin(ang * 9.0 + ph_a) + 0.011 * np.cos(ang * 15.0 - ph_b)) * mid_slope
+        clods = 0.015 * np.sin(p[:, 0] * 26.0 + p[:, 2] * 23.0 + seed) * np.cos(p[:, 1] * 29.0)
+        p[:, 1] = np.maximum(0.0, p[:, 1] + (gullies + clods) * np.clip(p[:, 1] / 0.05, 0.0, 1.0))
         return p
 
-    def _tint(pos: np.ndarray, _nrm: np.ndarray) -> np.ndarray:
+    def _tint(pos: np.ndarray, nrm: np.ndarray) -> np.ndarray:
         r = np.hypot(pos[:, 0], pos[:, 2])
-        hole_dark = np.clip((r - 0.105) / 0.080, 0.10, 1.0)[:, None]
-        hw = np.clip(pos[:, 1] / 0.34, 0.0, 1.0)[:, None]
-        mottle = 0.06 * np.sin(pos[:, 0] * 22.0 + pos[:, 2] * 19.0 + seed)[:, None]
+        ang = np.arctan2(pos[:, 2], pos[:, 0])
+        hole_dark = np.clip((r - 0.105) / 0.085, 0.08, 1.0)[:, None]
+        hw = np.clip(pos[:, 1] / 0.36, 0.0, 1.0)[:, None]
+        gully_shade = (0.94 + 0.08 * np.sin(ang * 9.0 + ph_a))[:, None]
+        mottle = (0.07 * np.sin(pos[:, 0] * 24.0 + pos[:, 2] * 21.0 + seed) + 0.04 * np.cos(pos[:, 0] * 41.0 - pos[:, 2] * 37.0))[:, None]
+        rim_sun = 1.0 + 0.06 * np.clip(nrm[:, 1], 0.0, 1.0)[:, None]
         lo = np.asarray(loam_lo, dtype=np.float64)[None, :]
         hi = np.asarray(loam_hi, dtype=np.float64)[None, :]
-        return np.clip(((lo * (1.0 - hw) + hi * hw) + mottle) * hole_dark, 0.06, 1.0)
+        return np.clip(((lo * (1.0 - hw) + hi * hw) * gully_shade + mottle) * hole_dark * rim_sun, 0.05, 1.0)
 
     mound = tint_part(
-        lathe(mound_prof, radial_segs=48, cap_bottom=False, cap_top=False, axis="y", name="hill_mound", material=soil_mat).deform(_sculpt),
+        lathe(mound_prof, radial_segs=56, cap_bottom=False, cap_top=False, axis="y", name="hill_mound", material=soil_mat).deform(_sculpt),
         _tint,
     )
-    hole = cylinder(0.118, 0.118, 0.030, radial_segs=24, axis="y", name="hill_hole_dark", material="item_soil_hole").translate(0.0, 0.145, 0.0)
+    hole = cylinder(0.118 * crater_scale, 0.118 * crater_scale, 0.032, radial_segs=24, axis="y", name="hill_hole_dark", material="item_soil_hole").translate(0.0, 0.135, 0.0)
     sc.add("anthill", [mound, hole])
 
+    # Sculpted dirt clod collar lumps & varied scattered gravel/pebbles seated firmly ON the mound skirt (zero floating stones)!
     rng = np.random.default_rng(seed)
-    for k in range(16):
-        ang = 2.0 * math.pi * k / 16.0 + float(rng.uniform(-0.15, 0.15))
-        rad = float(rng.uniform(0.43, 0.56))
+    for k in range(pebble_count):
+        ang = 2.0 * math.pi * k / float(pebble_count) + float(rng.uniform(-0.18, 0.18))
+        rad = float(rng.uniform(0.34, 0.49)) * _wobble(ang)
         px, pz = rad * math.cos(ang), rad * math.sin(ang)
-        pr = float(rng.uniform(0.020, 0.040))
-        py = max(pr * 0.68, _surface_y(px, pz) + pr * 0.25)
-        peb = ellipsoid(pr * 1.15, pr * 0.64, pr * 0.94, u_segs=10, v_segs=6, name=f"hill_pebble_{k}", material=soil_mat if k % 2 else "item_stone_granite").rotate_xyz(ry=ang).translate(px, py, pz)
+        pr = float(rng.uniform(0.018, 0.044))
+        py = max(pr * 0.48, _surface_y(px, pz) + pr * 0.16)
+        mat = "item_stone_granite" if (k % 3 != 0) else soil_mat
+        peb = tint_part(
+            ellipsoid(pr * 1.22, pr * 0.62, pr * 0.96, u_segs=10, v_segs=6, name=f"hill_pebble_{k}", material=mat)
+            .rotate_xyz(rx=float(rng.uniform(-0.25, 0.25)), ry=ang, rz=float(rng.uniform(-0.25, 0.25)))
+            .translate(px, py, pz),
+            lambda pos, _n, shade=float(rng.uniform(0.62, 1.02)): np.full((len(pos), 3), shade, dtype=np.float64),
+        )
         sc.add("anthill", peb)
+
+    # Extra sculpted earthen clumps nestled right around the upper crater lip for natural ant-dug soil realism!
+    for k in range(10):
+        ang = 2.0 * math.pi * k / 10.0 + float(rng.uniform(-0.2, 0.2))
+        rad = float(rng.uniform(0.19, 0.28))
+        cx, cz = rad * math.cos(ang), rad * math.sin(ang)
+        cr = float(rng.uniform(0.024, 0.044))
+        clump = ellipsoid(cr * 1.3, cr * 0.65, cr * 1.1, u_segs=10, v_segs=6, name=f"hill_clod_{k}", material=soil_mat).rotate_xyz(ry=ang).translate(cx, _surface_y(cx, cz) + cr * 0.18, cz)
+        sc.add("anthill", clump)
     return _surface_y
 
 
-def _crimped_bottle_cap(prefix: str, top_mat: str, *, radius: float = 0.102) -> List[MeshPart]:
-    """Reusable realistic 21-tooth crimped metallic soda bottle cap."""
+def _cloth_flag_segment(
+    name: str,
+    *,
+    length: float,
+    h0: float,
+    h1: float,
+    mat: str,
+    thickness: float = 0.011,
+    u0: float = 0.0,
+    u1: float = 1.0,
+    droop_y: float = 0.0,
+) -> MeshPart:
+    """Build one tapered 3D cloth pennant segment extending along local +X from x=-0.012 to x=length."""
+    nx, ny = 8, 5
+    verts: List[Tuple[float, float, float]] = []
+    uvs: List[Tuple[float, float]] = []
+    tris: List[Tuple[int, int, int]] = []
+    cols: List[Tuple[float, float, float]] = []
+
+    # Build top (+Z) and bottom (-Z) cloth faces with thin rounded fabric edge so light catches folds from every side.
+    for side_sign in (+1.0, -1.0):
+        base_v = len(verts)
+        for ix in range(nx + 1):
+            t = ix / float(nx)
+            x = -0.010 + (length + 0.010) * t
+            u_tot = u0 + (u1 - u0) * t
+            half_h = 0.5 * (h0 * (1.0 - t) + h1 * t)
+            y_mid = droop_y * t
+            # Subtle fabric ripple built into rest geometry so it already reads like billowing cloth even paused!
+            fold_z = 0.012 * math.sin(u_tot * math.pi * 2.5)
+            for iy in range(ny + 1):
+                v = iy / float(ny)
+                y = y_mid + (v - 0.5) * 2.0 * half_h
+                edge_t = math.sin(v * math.pi)
+                z = fold_z + side_sign * (0.5 * thickness * (0.35 + 0.65 * edge_t))
+                verts.append((x, y, z))
+                uvs.append((u_tot * 1.4, v))
+                # Gentle warm cloth fold shading (slightly richer near pole & lower hem).
+                shade = 0.86 + 0.14 * (0.5 + 0.5 * math.cos(u_tot * math.pi * 2.5)) * (0.85 + 0.15 * v)
+                cols.append((shade, shade, shade))
+        stride = ny + 1
+        for ix in range(nx):
+            for iy in range(ny):
+                a = base_v + ix * stride + iy
+                b = base_v + (ix + 1) * stride + iy
+                c = base_v + (ix + 1) * stride + (iy + 1)
+                d = base_v + ix * stride + (iy + 1)
+                if side_sign > 0:
+                    tris.append((a, b, c))
+                    tris.append((a, c, d))
+                else:
+                    tris.append((a, c, b))
+                    tris.append((a, d, c))
+
+    pos = np.asarray(verts, dtype=np.float32)
+    idx = np.asarray(tris, dtype=np.uint32).reshape(-1)
+    nrm = recompute_smooth_normals(pos, idx)
+    part = MeshPart(name, mat, pos, nrm, idx, uvs=np.asarray(uvs, dtype=np.float32))
+    c_arr = np.clip(np.asarray(cols, dtype=np.float32), 0.12, 1.0)
+    part.colors = c_arr
+    part._base_tint = c_arr.copy()
+    return part
+
+
+def _add_waving_flag(
+    sc: SceneBuilder,
+    *,
+    prefix: str,
+    anchor: Tuple[float, float, float],
+    yaw_deg: float,
+    pitch_deg: float,
+    roll_deg: float,
+    length: float,
+    base_height: float,
+    mat: str,
+    period_sec: float,
+    wave_amp: float = 0.24,
+    droop: float = -0.025,
+) -> None:
+    """Attach a 3-segment articulated waving cloth pennant parented to `anthill` with an authentic `Idle` wave clip."""
+    root_node = f"{prefix}_flag_root"
+    sc.set_node_parent(root_node, "anthill")
+    sc.set_node_transform(
+        root_node,
+        translation=anchor,
+        rotation=quat_from_euler_xyz(rx=pitch_deg, ry=yaw_deg, rz=roll_deg, degrees=True),
+    )
+
+    seg_len = length / 3.0
+    heights = (base_height, base_height * 0.68, base_height * 0.34, 0.010)
+    seg_nodes = [f"{prefix}_flag_s0", f"{prefix}_flag_s1", f"{prefix}_flag_s2"]
+    for i, node_nm in enumerate(seg_nodes):
+        parent_nm = root_node if i == 0 else seg_nodes[i - 1]
+        sc.set_node_parent(node_nm, parent_nm)
+        sc.set_node_transform(node_nm, translation=(0.0 if i == 0 else seg_len, 0.0 if i == 0 else droop, 0.0))
+        seg = _cloth_flag_segment(
+            f"{prefix}_cloth_{i}",
+            length=seg_len,
+            h0=heights[i],
+            h1=heights[i + 1],
+            mat=mat,
+            u0=i / 3.0,
+            u1=(i + 1) / 3.0,
+            droop_y=droop,
+        )
+        sc.add(node_nm, seg)
+
+    # Smooth looping traveling wind-wave across the 3 cloth joints (exact 1998 cycle period!).
+    n_steps = 8
+    times = [period_sec * (k / float(n_steps)) for k in range(n_steps + 1)]
+    channels: List[AnimationChannel] = []
+    for i, node_nm in enumerate(seg_nodes):
+        phase = -1.15 * i
+        amp_y = wave_amp * (0.72 + 0.34 * i)
+        amp_z = wave_amp * (0.28 + 0.16 * i)
+        rots = []
+        for k in range(n_steps + 1):
+            ang = 2.0 * math.pi * (k / float(n_steps))
+            ry = amp_y * math.sin(ang + phase)
+            rz = amp_z * math.cos(ang + phase - 0.5)
+            rx = 0.08 * math.sin(ang * 2.0 + phase)
+            rots.append(quat_from_euler_xyz(rx=rx, ry=ry, rz=rz))
+        channels.append(AnimationChannel(node_nm, "rotation", times, rots))
+    sc.add_animation("Idle", channels, replace=True)
+
+
+def _crimped_bottle_cap(prefix: str, top_mat: str, *, radius: float = 0.106, planar_top_uv: bool = False) -> List[MeshPart]:
+    """Reusable realistic 21-tooth crimped metallic soda bottle cap with optional crisp planar printed-logo UVs."""
     def _crimp(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
         ang = np.arctan2(p[:, 2], p[:, 0])
         bot = np.clip(-p[:, 1] / 0.024, 0.0, 1.0)
-        flute = 1.0 + 0.11 * np.cos(ang * 21.0) * bot
+        flute = 1.0 + 0.12 * np.cos(ang * 21.0) * bot
         p[:, 0] *= flute
         p[:, 2] *= flute
         return p
 
-    metal = cylinder(radius, radius * 1.12, 0.038, radial_segs=42, bevel=0.005, axis="y", name=f"{prefix}_metal", material="item_aluminum").deform(_crimp)
-    top = cylinder(radius * 0.86, radius * 0.86, 0.015, radial_segs=28, bevel=0.004, axis="y", name=f"{prefix}_top", material=top_mat).translate(0.0, 0.016, 0.0)
+    metal = cylinder(radius, radius * 1.13, 0.042, radial_segs=42, bevel=0.005, axis="y", name=f"{prefix}_metal", material="item_aluminum").deform(_crimp)
+    top_r = radius * 0.88
+    top = cylinder(top_r, top_r, 0.016, radial_segs=32, bevel=0.004, axis="y", name=f"{prefix}_top", material=top_mat).translate(0.0, 0.017, 0.0)
+    if planar_top_uv:
+        # Clean top-down planar UV mapping so 'H2O' / 'soda' graphics render razor-sharp & upright!
+        u = np.clip(0.5 + top.positions[:, 0] / (2.0 * top_r * 1.05), 0.0, 1.0)
+        v = np.clip(0.5 + top.positions[:, 2] / (2.0 * top_r * 1.05), 0.0, 1.0)
+        top.uvs = np.column_stack([u, v]).astype(np.float32)
     return [metal, top]
 
 
@@ -165,142 +334,225 @@ def _paperclip(name: str, material: str = "item_aluminum", scale: float = 1.0) -
         (-0.082 * s, 0.0, +0.014 * s),
         (+0.055 * s, 0.0, +0.014 * s),
     ]
-    return curved_tube(pts, [0.008 * s] * len(pts), samples_per_seg=3, radial_segs=8, cap_rings=2, name=name, material=material)
+    return curved_tube(pts, [0.0085 * s] * len(pts), samples_per_seg=3, radial_segs=8, cap_rings=2, name=name, material=material)
 
 
 def build_blackhill() -> SceneBuilder:
-    """Black Team Anthill with bent nail, Phillips screws, hex nut, metal washers & bolt (`245:BLACKHILL`)."""
+    """Black Team Anthill with waving black nail-flag, Phillips screws, hex nut+bolt, washers & metal dome (`245:BLACKHILL`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_blackhill")
-    surf_y = _build_anthill_base(sc, soil_mat="item_soil_grey", seed=245, loam_lo=(0.74, 0.72, 0.68), loam_hi=(1.00, 0.98, 0.92))
+    surf_y = _build_anthill_base(sc, soil_mat="item_soil_grey", seed=245, loam_lo=(0.70, 0.68, 0.64), loam_hi=(1.02, 0.99, 0.92), pebble_count=34)
 
-    # 1. Giant bent steel carpentry nail stuck boldly into the upper-left crater rim (`245:BLACKHILL`)!
-    nx, nz = -0.22, -0.14
-    ny = surf_y(nx, nz) + 0.015
+    # 1. Iconic giant slanted steel carpentry nail driven into the upper-left crater shoulder (`245:BLACKHILL`)!
+    nx, nz = -0.22, -0.06
+    ny = surf_y(nx, nz) + 0.010
     nail_shaft = curved_tube(
-        [(nx, ny - 0.04, nz), (nx - 0.08, ny + 0.12, nz - 0.04), (nx - 0.16, ny + 0.24, nz - 0.08)],
-        [0.020, 0.022, 0.024],
+        [(nx + 0.03, ny - 0.04, nz + 0.02), (nx - 0.06, ny + 0.14, nz - 0.04), (nx - 0.15, ny + 0.30, nz - 0.09)],
+        [0.020, 0.023, 0.025],
         samples_per_seg=4,
-        radial_segs=12,
+        radial_segs=14,
         name="bh_nail_shaft",
         material="item_steel_dark",
     )
-    nail_head = cylinder(0.068, 0.064, 0.022, radial_segs=18, bevel=0.004, axis="y", name="bh_nail_head", material="item_aluminum").rotate_xyz(rx=-0.42, rz=0.58).translate(nx - 0.17, ny + 0.25, nz - 0.08)
-    sc.add("anthill", [nail_shaft, nail_head])
+    nail_head = cylinder(0.072, 0.066, 0.024, radial_segs=20, bevel=0.005, axis="y", name="bh_nail_head", material="item_aluminum").rotate_xyz(rx=-0.38, rz=0.52).translate(nx - 0.16, ny + 0.31, nz - 0.095)
+    nail_slot = rounded_box(0.095, 0.010, 0.014, bevel=0.002, segs=1, name="bh_nail_slot", material="item_steel_dark").rotate_xyz(rx=-0.38, rz=0.52).translate(nx - 0.166, ny + 0.322, nz - 0.098)
+    sc.add("anthill", [nail_shaft, nail_head, nail_slot])
 
-    # 2. Scattered metallic Phillips screws & flat dark washers across front-left & center skirt!
-    screw_specs = (
-        (-0.24, +0.34, 0.062, 0.45, 0.40),
-        (-0.08, +0.42, 0.056, 0.55, 0.18),
-        (+0.06, +0.36, 0.072, 0.35, -0.15),
+    # Waving black cloth pennant tied just below the giant nail head, fluttering boldly right-down across the slope (700 ms)!
+    _add_waving_flag(
+        sc,
+        prefix="bh",
+        anchor=(nx - 0.105, ny + 0.225, nz - 0.055),
+        yaw_deg=-24.0,
+        pitch_deg=12.0,
+        roll_deg=-28.0,
+        length=0.40,
+        base_height=0.165,
+        mat="item_flag_black",
+        period_sec=0.70,
+        wave_amp=0.28,
+        droop=-0.024,
     )
-    for idx, (sx, sz, rad, rx, rz) in enumerate(screw_specs):
-        sy = max(0.035, surf_y(sx, sz) + 0.024)
-        head = cylinder(rad, rad * 0.94, 0.034, radial_segs=18, bevel=0.005, axis="y", name=f"bh_screw_h_{idx}", material="item_aluminum").rotate_xyz(rx=rx, rz=rz).translate(sx, sy, sz)
-        slot_a = rounded_box(rad * 1.15, 0.010, 0.014, bevel=0.002, segs=1, name=f"bh_slot_a_{idx}", material="item_steel_dark").rotate_xyz(rx=rx, rz=rz).translate(sx, sy + 0.018, sz)
-        slot_b = rounded_box(0.014, 0.010, rad * 1.15, bevel=0.002, segs=1, name=f"bh_slot_b_{idx}", material="item_steel_dark").rotate_xyz(rx=rx, rz=rz).translate(sx, sy + 0.018, sz)
-        sc.add("anthill", [head, slot_a, slot_b])
 
-    # 3. Dark black flat hardware washers & long threaded bolt along front-right edge!
-    for idx, (wx, wz) in enumerate(((-0.26, +0.40), (-0.16, +0.46))):
-        wy = max(0.024, surf_y(wx, wz) + 0.016)
-        sc.add("anthill", torus_arc(0.056, 0.018, u_segs=20, v_segs=8, plane="xz", name=f"bh_washer_{idx}", material="item_steel_dark").rotate_xyz(rx=0.25).translate(wx, wy, wz))
+    # 2. Left slanted nail + pair of matte-black oval flat hardware buttons/washers along lower-left curve!
+    ln_x, ln_z = -0.38, +0.16
+    ln_y = max(0.04, surf_y(ln_x, ln_z) + 0.03)
+    sc.add("anthill", [
+        cylinder(0.014, 0.010, 0.16, radial_segs=10, axis="y", name="bh_left_nail", material="item_aluminum").rotate_xyz(rx=0.45, rz=-0.55).translate(ln_x, ln_y + 0.04, ln_z),
+        cylinder(0.042, 0.038, 0.016, radial_segs=14, bevel=0.004, axis="y", name="bh_left_nail_h", material="item_aluminum").rotate_xyz(rx=0.45, rz=-0.55).translate(ln_x + 0.04, ln_y + 0.10, ln_z + 0.03),
+    ])
+    for idx, (wx, wz, rz) in enumerate(((-0.34, +0.34, 0.38), (-0.22, +0.44, 0.22))):
+        wy = max(0.026, surf_y(wx, wz) + 0.020)
+        disc = cylinder(0.064, 0.068, 0.028, radial_segs=20, bevel=0.006, axis="y", name=f"bh_washer_{idx}", material="item_rubber_dark").rotate_xyz(rx=0.38, rz=rz).translate(wx, wy, wz)
+        hole = cylinder(0.024, 0.024, 0.032, radial_segs=14, axis="y", name=f"bh_washer_h_{idx}", material="item_soil_hole").rotate_xyz(rx=0.38, rz=rz).translate(wx, wy, wz)
+        sc.add("anthill", [disc, hole])
 
-    bolt = cylinder(0.026, 0.026, 0.34, radial_segs=14, bevel=0.004, axis="z", name="bh_bolt", material="item_steel_dark").rotate_xyz(rx=0.14, ry=1.08).translate(+0.22, max(0.032, surf_y(+0.22, +0.34) + 0.024), +0.34)
-    sc.add("anthill", bolt)
+    # 3. Three gleaming silver Phillips-head screws + chunky silver hex nut cradling the front center screw!
+    screw_specs = (
+        (-0.26, +0.30, 0.062, 0.42, +0.36, False),
+        (-0.08, +0.44, 0.056, 0.56, +0.12, False),
+        (+0.08, +0.36, 0.068, 0.40, -0.14, True),
+    )
+    for idx, (sx, sz, rad, rx, rz, with_nut) in enumerate(screw_specs):
+        sy = max(0.040, surf_y(sx, sz) + 0.030)
+        shaft = cylinder(rad * 0.40, rad * 0.36, 0.09, radial_segs=12, axis="y", name=f"bh_screw_s_{idx}", material="item_steel_dark").rotate_xyz(rx=rx, rz=rz).translate(sx, sy - 0.03, sz)
+        head = cylinder(rad, rad * 0.92, 0.036, radial_segs=20, bevel=0.006, axis="y", name=f"bh_screw_h_{idx}", material="item_aluminum").rotate_xyz(rx=rx, rz=rz).translate(sx, sy + 0.01, sz)
+        slot_a = rounded_box(rad * 1.18, 0.012, 0.016, bevel=0.002, segs=1, name=f"bh_slot_a_{idx}", material="item_steel_dark").rotate_xyz(rx=rx, rz=rz).translate(sx, sy + 0.028, sz)
+        slot_b = rounded_box(0.016, 0.012, rad * 1.18, bevel=0.002, segs=1, name=f"bh_slot_b_{idx}", material="item_steel_dark").rotate_xyz(rx=rx, rz=rz).translate(sx, sy + 0.028, sz)
+        sc.add("anthill", [shaft, head, slot_a, slot_b])
+        if with_nut:
+            nut = cylinder(0.102, 0.106, 0.044, radial_segs=6, bevel=0.008, axis="y", name="bh_center_nut", material="item_aluminum").rotate_xyz(rx=rx, rz=rz).translate(sx, sy - 0.012, sz)
+            sc.add("anthill", nut)
 
-    # 4. Scavenged silver hex nut & crumpled foil/gear dome on the right slope (`245:BLACKHILL`)!
-    gx, gz = +0.36, +0.06
-    gy = surf_y(gx, gz) + 0.044
-    nut = cylinder(0.095, 0.098, 0.058, radial_segs=6, bevel=0.008, axis="y", name="bh_hex_nut", material="item_aluminum").rotate_xyz(rx=0.22, rz=-0.42).translate(gx, gy, gz)
-    nut_hole = cylinder(0.044, 0.044, 0.064, radial_segs=14, axis="y", name="bh_hex_hole", material="item_steel_dark").rotate_xyz(rx=0.22, rz=-0.42).translate(gx, gy, gz)
-    sc.add("anthill", [nut, nut_hole])
+    # 4. Long matte-black cylindrical rod/pen barrel angled cleanly along the bottom-right rim (`245:BLACKHILL`)!
+    rod_a = (+0.02, max(0.032, surf_y(+0.02, +0.48) + 0.028), +0.48)
+    rod_b = (+0.34, max(0.044, surf_y(+0.34, +0.26) + 0.036), +0.26)
+    rod_mid = (0.5 * (rod_a[0] + rod_b[0]), 0.5 * (rod_a[1] + rod_b[1]) + 0.01, 0.5 * (rod_a[2] + rod_b[2]))
+    rod = curved_tube([rod_a, rod_mid, rod_b], [0.024, 0.034, 0.044], samples_per_seg=4, radial_segs=14, cap_rings=3, name="bh_black_rod", material="item_rubber_dark")
+    sc.add("anthill", rod)
+
+    # 5. Domed gleaming silver fluted metal cap / thimble resting prominently on the far-right slope (`245:BLACKHILL`)!
+    gx, gz = +0.38, +0.06
+    gy = surf_y(gx, gz) + 0.046
+    for p in _crimped_bottle_cap("bh_silver_cap", "item_aluminum", radius=0.112):
+        sc.add("anthill", p.rotate_xyz(rx=0.28, rz=-0.42).translate(gx, gy, gz))
+    dome = superellipsoid(0.095, 0.072, 0.095, e1=0.80, e2=0.92, u_segs=24, v_segs=14, name="bh_cap_dome", material="item_aluminum").rotate_xyz(rx=0.28, rz=-0.42).translate(gx + 0.024, gy + 0.034, gz + 0.010)
+    sc.add("anthill", dome)
     return _finalize_item(sc, target_span=1.00)
 
 
 def build_bluehill() -> SceneBuilder:
-    """Blue Team Anthill with blue flag pennant, thumbtacks, blue hose, paperclips & H2O bottle cap (`246:BLUEHILL`)."""
+    """Blue Team Anthill with cocktail-sword waving blue flag, H2O cap, ribbed rubber skirt, paperclips & pushpins (`246:BLUEHILL`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_bluehill")
-    surf_y = _build_anthill_base(sc, soil_mat="item_soil_mound", seed=246, loam_lo=(0.76, 0.72, 0.66), loam_hi=(1.02, 0.96, 0.88))
+    surf_y = _build_anthill_base(sc, soil_mat="item_soil_mound", seed=246, loam_lo=(0.72, 0.68, 0.62), loam_hi=(1.02, 0.96, 0.88), pebble_count=28)
 
-    # 1. Blue folded triangle flag/pennant stuck right beside the crater crown (`246:BLUEHILL`)!
-    fx, fz = +0.08, +0.08
-    fy = surf_y(fx, fz) + 0.035
-    flag_cone = cone(0.088, 0.28, radial_segs=4, name="bl_flag", material="item_plastic_blue").rotate_xyz(rx=0.35, ry=0.45, rz=-0.88).translate(fx + 0.04, fy + 0.06, fz + 0.06)
-    sc.add("anthill", flag_cone)
+    # 1. Iconic sky-blue plastic cocktail sword plunged blade-down into front-center right crater lip (`246:BLUEHILL`)!
+    sx, sz = +0.06, +0.16
+    sy = surf_y(sx, sz) + 0.015
+    sword_blade = rounded_box(0.032, 0.24, 0.010, bevel=0.003, segs=2, name="bl_sword_blade", material="item_sword_blue").rotate_xyz(rx=0.18, ry=0.20, rz=-0.10).translate(sx, sy + 0.07, sz)
+    sword_hilt = cylinder(0.018, 0.018, 0.10, radial_segs=12, bevel=0.004, axis="y", name="bl_sword_hilt", material="item_sword_blue").rotate_xyz(rx=0.18, ry=0.20, rz=-0.10).translate(sx + 0.016, sy + 0.22, sz + 0.028)
+    sword_guard = torus_arc(0.044, 0.010, u_segs=18, v_segs=8, plane="xy", name="bl_sword_guard", material="item_sword_blue").rotate_xyz(rx=0.18, ry=0.20, rz=-0.10).translate(sx - 0.020, sy + 0.195, sz + 0.022)
+    sc.add("anthill", [sword_blade, sword_hilt, sword_guard])
 
-    # 2. Curving dark-blue rubber gasket / strap hugging the front dirt skirt (`246:BLUEHILL`)!
+    # Vivid royal-blue waving triangular pennant tied below the cocktail-sword hilt (exact 400 ms brisk flutter!)
+    _add_waving_flag(
+        sc,
+        prefix="bl",
+        anchor=(sx + 0.020, sy + 0.175, sz + 0.025),
+        yaw_deg=-18.0,
+        pitch_deg=6.0,
+        roll_deg=-24.0,
+        length=0.35,
+        base_height=0.135,
+        mat="item_flag_blue",
+        period_sec=0.40,
+        wave_amp=0.24,
+        droop=-0.024,
+    )
+
+    # 2. Thick scalloped dark-indigo rubber band / tread collar hugging the entire front horseshoe skirt (`246:BLUEHILL`)!
     hose_pts = [
-        (-0.38, max(0.025, surf_y(-0.38, +0.16) + 0.025), +0.16),
-        (-0.24, max(0.030, surf_y(-0.24, +0.36) + 0.025), +0.36),
-        (+0.02, max(0.030, surf_y(+0.02, +0.44) + 0.025), +0.44),
-        (+0.28, max(0.028, surf_y(+0.28, +0.34) + 0.025), +0.34),
-        (+0.38, max(0.025, surf_y(+0.38, +0.16) + 0.025), +0.16),
+        (-0.44, max(0.032, surf_y(-0.44, +0.10) + 0.028), +0.10),
+        (-0.36, max(0.036, surf_y(-0.36, +0.30) + 0.030), +0.30),
+        (-0.14, max(0.036, surf_y(-0.14, +0.44) + 0.030), +0.44),
+        (+0.14, max(0.036, surf_y(+0.14, +0.44) + 0.030), +0.44),
+        (+0.36, max(0.034, surf_y(+0.36, +0.30) + 0.030), +0.30),
+        (+0.44, max(0.032, surf_y(+0.44, +0.12) + 0.028), +0.12),
     ]
-    hose = curved_tube(hose_pts, [0.026, 0.030, 0.032, 0.028, 0.024], samples_per_seg=5, radial_segs=14, cap_rings=3, name="bl_hose", material="item_bomb_blue")
+    hose = curved_tube(hose_pts, [0.032, 0.040, 0.044, 0.044, 0.038, 0.030], samples_per_seg=5, radial_segs=16, cap_rings=3, name="bl_rubber_skirt", material="item_rubber_blue")
     sc.add("anthill", hose)
 
-    # 3. Scavenged crimped silver-and-blue "H2O" soda bottle cap on the right slope (`246:BLUEHILL`)!
-    cx, cz = +0.36, +0.02
-    cy = surf_y(cx, cz) + 0.036
-    for p in _crimped_bottle_cap("bl_h2o_cap", "item_plastic_blue", radius=0.098):
-        sc.add("anthill", p.rotate_xyz(rx=0.22, rz=-0.48).translate(cx, cy, cz))
+    # 3. Scavenged crimped metallic silver & royal-blue "H2O" soda bottle cap on the far-right slope (`246:BLUEHILL`)!
+    cx, cz = +0.40, +0.02
+    cy = surf_y(cx, cz) + 0.048
+    for p in _crimped_bottle_cap("bl_h2o_cap", "item_cap_h2o", radius=0.112, planar_top_uv=True):
+        sc.add("anthill", p.rotate_xyz(rx=0.48, ry=-0.18, rz=-0.38).translate(cx, cy, cz))
 
-    # 4. Colorful red & blue pushpins/thumbtacks + silver paperclips jammed into the mound!
-    for idx, (tx, tz, mat, rz) in enumerate((
-        (-0.34, +0.14, "item_plastic_red", +0.85),
-        (-0.26, -0.22, "item_plastic_blue", +0.65),
-        (+0.26, -0.18, "item_plastic_blue", -0.70),
-    )):
-        ty = surf_y(tx, tz) + 0.032
-        pin = cylinder(0.008, 0.005, 0.09, radial_segs=8, axis="y", name=f"bl_pin_s_{idx}", material="item_aluminum").rotate_xyz(rz=rz).translate(tx, ty, tz)
-        knob = cylinder(0.036, 0.030, 0.024, radial_segs=14, bevel=0.005, axis="y", name=f"bl_pin_h_{idx}", material=mat).rotate_xyz(rz=rz).translate(tx - 0.04 * math.sin(rz), ty + 0.04 * math.cos(rz), tz)
+    # 4. Six vivid colored office thumbtacks / pushpins jammed into the mound (`246:BLUEHILL`)!
+    pin_specs = (
+        (-0.36, +0.14, "item_plastic_pink", +1.15, +0.15),   # hot-pink pin sticking horizontally left
+        (-0.16, +0.36, "item_plastic_blue", +0.32, +0.62),   # bright blue pin on front-left
+        (+0.02, +0.38, "item_pin_green", -0.10, +0.58),      # emerald green pin front-center
+        (+0.16, +0.16, "item_plastic_red", -0.45, +0.25),    # red pin behind flag
+        (-0.32, -0.22, "item_bottle_teal", +0.85, -0.45),    # teal pushpin sticking upper-left
+        (+0.22, -0.18, "item_plastic_blue", -0.82, -0.35),   # blue tack upper-right
+    )
+    for idx, (tx, tz, mat, rz, rx) in enumerate(pin_specs):
+        ty = surf_y(tx, tz) + 0.028
+        pin = cylinder(0.008, 0.004, 0.11, radial_segs=8, axis="y", name=f"bl_pin_s_{idx}", material="item_aluminum").rotate_xyz(rx=rx, rz=rz).translate(tx, ty + 0.02, tz)
+        knob = cylinder(0.042, 0.032, 0.028, radial_segs=16, bevel=0.006, axis="y", name=f"bl_pin_h_{idx}", material=mat).rotate_xyz(rx=rx, rz=rz).translate(tx - 0.048 * math.sin(rz), ty + 0.052 * math.cos(rz), tz + 0.036 * math.sin(rx))
         sc.add("anthill", [pin, knob])
 
-    for idx, (px, pz, ry) in enumerate(((-0.10, +0.38, 0.25), (+0.16, +0.34, -0.45))):
-        py = max(0.032, surf_y(px, pz) + 0.032)
-        sc.add("anthill", _paperclip(f"bl_clip_{idx}", "item_aluminum", scale=0.95).rotate_xyz(rx=0.35, ry=ry).translate(px, py, pz))
+    # 5. Gleaming silver bent wire paperclips hooked cleanly across the front rubber collar (`246:BLUEHILL`)!
+    for idx, (px, pz, ry, sc_clip) in enumerate(((+0.02, +0.46, 0.06, 1.45), (+0.26, +0.38, -0.42, 1.05), (-0.42, +0.28, 1.35, 0.90))):
+        py = max(0.048, surf_y(px, pz) + 0.046)
+        sc.add("anthill", _paperclip(f"bl_clip_{idx}", "item_aluminum", scale=sc_clip).rotate_xyz(rx=0.45, ry=ry).translate(px, py, pz))
 
     return _finalize_item(sc, target_span=1.00)
 
 
 def build_redhill() -> SceneBuilder:
-    """Red Team Anthill with warm clay mound, three crimson soda caps, red ribbon & silver paperclip (`247:REDHILL`)."""
+    """Red Team Anthill with warm clay crater, waving crimson pennant, 4 'soda' caps, giant paperclip & fork tines (`247:REDHILL`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_redhill")
-    surf_y = _build_anthill_base(sc, soil_mat="item_soil_pink", seed=247, loam_lo=(0.82, 0.72, 0.68), loam_hi=(1.04, 0.94, 0.90))
+    surf_y = _build_anthill_base(sc, soil_mat="item_soil_pink", seed=247, loam_lo=(0.82, 0.70, 0.66), loam_hi=(1.06, 0.94, 0.90), pebble_count=30)
 
-    # 1. Three iconic crimson-red crimped "Soda" bottle caps clustered on lower-left, top-left & right (`247:REDHILL`)!
-    cap_specs = (
-        (-0.28, +0.32, 0.102, 0.42, +0.46),
-        (-0.12, +0.40, 0.106, 0.48, +0.20),
-        (+0.38, +0.10, 0.104, 0.28, -0.52),
-        (-0.26, -0.32, 0.092, -0.35, +0.35),
+    # 1. Bent silver spoon/pin flagpole sticking out upper-right crater rim + waving crimson streamer (`247:REDHILL`, 500 ms)!
+    fx, fz = +0.24, -0.10
+    fy = surf_y(fx, fz) + 0.015
+    pole = curved_tube(
+        [(fx - 0.02, fy - 0.03, fz + 0.04), (fx + 0.04, fy + 0.14, fz - 0.03), (fx + 0.09, fy + 0.28, fz - 0.09)],
+        [0.018, 0.020, 0.024],
+        samples_per_seg=4,
+        radial_segs=12,
+        name="rd_flag_pole",
+        material="item_steel_dark",
     )
-    for idx, (cx, cz, rad, rx, rz) in enumerate(cap_specs):
-        cy = max(0.036, surf_y(cx, cz) + 0.032)
-        for p in _crimped_bottle_cap(f"rd_cap_{idx}", "item_can_red", radius=rad):
-            sc.add("anthill", p.rotate_xyz(rx=rx, rz=rz).translate(cx, cy, cz))
+    pole_head = ellipsoid(0.046, 0.056, 0.020, u_segs=16, v_segs=10, name="rd_pole_head", material="item_aluminum").rotate_xyz(rx=0.25, ry=-0.45, rz=-0.35).translate(fx + 0.105, fy + 0.305, fz - 0.105)
+    sc.add("anthill", [pole, pole_head])
 
-    # 2. Bright curved crimson plastic straw/ribbon tucked into the right crater rim (`247:REDHILL`)!
-    ribbon_pts = [
-        (+0.10, surf_y(+0.10, +0.02) + 0.020, +0.02),
-        (+0.22, surf_y(+0.22, -0.06) + 0.040, -0.06),
-        (+0.32, surf_y(+0.32, -0.18) + 0.055, -0.18),
-    ]
-    ribbon = curved_tube(ribbon_pts, [0.026, 0.032, 0.016], samples_per_seg=4, radial_segs=12, cap_rings=2, name="rd_ribbon", material="item_plastic_red")
-    sc.add("anthill", ribbon)
+    # Vivid crimson tapered pennant flying smoothly left-down across the pink clay slope (exact 500 ms wave!)
+    _add_waving_flag(
+        sc,
+        prefix="rd",
+        anchor=(fx + 0.052, fy + 0.195, fz - 0.042),
+        yaw_deg=142.0,
+        pitch_deg=10.0,
+        roll_deg=-34.0,
+        length=0.42,
+        base_height=0.150,
+        mat="item_flag_red",
+        period_sec=0.50,
+        wave_amp=0.26,
+        droop=-0.028,
+    )
 
-    # 3. Prominent shiny silver paperclip resting cleanly on the front-right dirt slope (`247:REDHILL`)!
-    px, pz = +0.16, +0.34
-    py = max(0.032, surf_y(px, pz) + 0.028)
-    clip = _paperclip("rd_paperclip", "item_aluminum", scale=1.35).rotate_xyz(rx=0.45, ry=0.68).translate(px, py, pz)
+    # 2. Four iconic crimped crimson "soda" soda bottle caps framing the base (`247:REDHILL`)!
+    cap_specs = (
+        (-0.34, +0.28, 0.112, 0.40, +0.22, +0.52),
+        (-0.14, +0.40, 0.116, 0.36, +0.16, +0.20),
+        (+0.40, +0.06, 0.114, 0.38, -0.22, -0.44),
+        (-0.28, -0.32, 0.104, -0.32, +0.25, +0.36),
+    )
+    for idx, (cx, cz, rad, rx, ry, rz) in enumerate(cap_specs):
+        cy = max(0.042, surf_y(cx, cz) + 0.038)
+        for p in _crimped_bottle_cap(f"rd_cap_{idx}", "item_cap_soda", radius=rad, planar_top_uv=True):
+            sc.add("anthill", p.rotate_xyz(rx=rx, ry=ry, rz=rz).translate(cx, cy, cz))
+
+    # 3. Prominent giant shiny silver oval paperclip resting cleanly on the front-right clay slope (`247:REDHILL`)!
+    px, pz = +0.16, +0.36
+    py = max(0.036, surf_y(px, pz) + 0.032)
+    clip = _paperclip("rd_paperclip", "item_aluminum", scale=1.65).rotate_xyz(rx=0.46, ry=0.68).translate(px, py, pz)
     sc.add("anthill", clip)
 
-    # 4. Small silver pull-tab resting on the upper-right slope
-    tab = torus_arc(0.044, 0.012, u_segs=18, v_segs=8, plane="xz", name="rd_pulltab", material="item_aluminum").rotate_xyz(rx=-0.25, rz=-0.40).translate(+0.28, surf_y(+0.28, -0.22) + 0.028, -0.22)
-    sc.add("anthill", tab)
+    # 4. Parallel silver wire fork tines / pins sticking out of the far-left embankment above the bottle caps!
+    for k, dz in enumerate((-0.04, 0.0, +0.04)):
+        tx, tz = -0.36 + k * 0.02, +0.08 + dz
+        ty = surf_y(tx, tz) + 0.03
+        tine = cylinder(0.009, 0.006, 0.24, radial_segs=8, axis="y", name=f"rd_tine_{k}", material="item_aluminum").rotate_xyz(rx=0.32, rz=-0.38).translate(tx, ty + 0.08, tz)
+        sc.add("anthill", tine)
+
     return _finalize_item(sc, target_span=1.00)
 
 
@@ -589,6 +841,7 @@ def _build_team_bomb(name: str, body_mat: str, accent_mat: str) -> SceneBuilder:
         name=f"{name}_fuse",
         material="item_fuse_cord",
     )
+    sc.set_node_transform("bomb_root", translation=(0.0, 0.0, 0.0))
     sc.add("bomb_root", [base_cap, canister, collar, plug, fuse])
 
     # Sizzling animated yellow-orange spark starburst mounted on its own child node for pulsing!

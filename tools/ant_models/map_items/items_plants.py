@@ -22,6 +22,7 @@ except ImportError:  # pragma: no cover - pure-stdlib import safety for CI
 if np is not None:
     try:
         from ..mesh_core import (
+            AnimationChannel,
             MeshPart,
             SceneBuilder,
             curved_tube,
@@ -29,6 +30,7 @@ if np is not None:
             ellipsoid,
             ensure_outward_winding,
             lathe,
+            quat_from_euler_xyz,
             recompute_smooth_normals,
             rounded_box,
             sphere,
@@ -41,6 +43,7 @@ if np is not None:
         from map_items.item_materials import gradient_y_tint, register_item_materials, tint_part  # type: ignore
         from map_items.items_toys import _finalize_item  # type: ignore
         from mesh_core import (  # type: ignore
+            AnimationChannel,
             MeshPart,
             SceneBuilder,
             curved_tube,
@@ -48,6 +51,7 @@ if np is not None:
             ellipsoid,
             ensure_outward_winding,
             lathe,
+            quat_from_euler_xyz,
             recompute_smooth_normals,
             rounded_box,
             sphere,
@@ -67,10 +71,12 @@ def _curved_grass_blade(
     lean: float,
     droop: float,
     twist: float,
+    sway: float = 0.0,
+    shade_mult: float = 1.0,
     hue_shift: Tuple[float, float, float] = (1.0, 1.0, 1.0),
-    segs: int = 10,
+    segs: int = 8,
 ) -> MeshPart:
-    """Build one realistic broad V-ribbed, gracefully arching 3D grass blade with rich root-to-tip chlorophyll gradient."""
+    """Build one realistic broad V-ribbed, gracefully arching & flexing 3D grass blade with rich root-to-tip chlorophyll gradient."""
     bx, bz = base_xz
     cy, sy = math.cos(yaw), math.sin(yaw)
     verts: List[Tuple[float, float, float]] = []
@@ -78,34 +84,35 @@ def _curved_grass_blade(
     cols: List[Tuple[float, float, float]] = []
     tris: List[Tuple[int, int, int]] = []
 
-    # 3 vertices across blade width (left edge, recessed V-midrib center, right edge) -> genuine 3D cross-section!
+    # 3 vertices across blade width (left edge, recessed V-midrib center, right edge) -> genuine sculpted 3D blade!
     for i in range(segs + 1):
-        u = i / segs
-        horiz = lean * (u ** 1.28) + droop * (u ** 2.45)
-        vy = base_y + height * (u - 0.22 * max(0.0, droop) * (u ** 2.8))
-        # Realistic tapered grass blade: full fleshy base -> graceful lance taper -> sharp tip
-        w = width * (1.0 - 0.88 * (u ** 1.65))
+        u = i / float(segs)
+        horiz = lean * (u ** 1.24) + droop * (u ** 2.30)
+        lat_bend = sway * math.sin(u * math.pi * 1.15) * (u ** 1.1)
+        vy = base_y + height * (u - 0.28 * max(0.0, droop) * (u ** 2.55))
+        # Natural botanical blade profile: sturdy broad lower sheath -> graceful lance swell -> crisp pointed tip!
+        w = width * (0.94 + 0.14 * math.sin(u * math.pi * 0.65)) * (1.0 - 0.90 * (u ** 1.65))
         if i == segs:
-            w = 0.0022
+            w = 0.0020
         tw = twist * u
         ct, st = math.cos(tw), math.sin(tw)
-        v_crease = 0.26 * w
+        v_crease = 0.34 * w
 
-        cx_w = bx + sy * horiz
-        cz_w = bz + cy * horiz
-        # Rich sunlit lawn grass gradient: deep emerald base -> vibrant meadow green -> bright lime-gold tips!
-        r_c = (0.30 + 0.64 * (u ** 1.10)) * hue_shift[0]
-        g_c = (0.62 + 0.38 * (u ** 0.70)) * hue_shift[1]
-        b_c = (0.22 + 0.16 * (u ** 1.40)) * hue_shift[2]
+        cx_w = bx + sy * horiz + cy * lat_bend
+        cz_w = bz + cy * horiz - sy * lat_bend
+        # Deep shaded forest-emerald base -> rich lush lawn green -> sunlit chartreuse-lime tips!
+        r_c = (0.24 + 0.66 * (u ** 1.08)) * hue_shift[0] * shade_mult
+        g_c = (0.52 + 0.48 * (u ** 0.68)) * hue_shift[1] * shade_mult
+        b_c = (0.18 + 0.18 * (u ** 1.35)) * hue_shift[2] * shade_mult
 
         for j, (s_w, rib) in enumerate(((-0.5, 0.0), (0.0, -v_crease), (+0.5, 0.0))):
             lat = s_w * w
-            px = cx_w + cy * (lat * ct) + sy * (rib - lat * st * 0.25)
-            pz = cz_w - sy * (lat * ct) + cy * (rib - lat * st * 0.25)
-            py = max(0.0, vy + abs(s_w) * v_crease * 0.55)
+            px = cx_w + cy * (lat * ct) + sy * (rib - lat * st * 0.28)
+            pz = cz_w - sy * (lat * ct) + cy * (rib - lat * st * 0.28)
+            py = max(0.0, vy + abs(s_w) * v_crease * 0.58)
             verts.append((px, py, pz))
-            uvs.append((j * 0.5, u * 2.2))
-            rib_shade = 0.86 if j == 1 else 1.00
+            uvs.append((j * 0.5, u * 2.4))
+            rib_shade = 0.82 if j == 1 else 1.02
             cols.append((min(1.0, r_c * rib_shade), min(1.0, g_c * rib_shade), min(1.0, b_c * rib_shade)))
 
     for i in range(segs):
@@ -120,7 +127,7 @@ def _curved_grass_blade(
     idx = np.asarray(tris, dtype=np.uint32).reshape(-1)
     nrm = recompute_smooth_normals(pos, idx)
     part = MeshPart(name, "item_grass_blade", pos, nrm, idx, uvs=np.asarray(uvs, dtype=np.float32))
-    col_arr = np.clip(np.asarray(cols, dtype=np.float32), 0.10, 1.0)
+    col_arr = np.clip(np.asarray(cols, dtype=np.float32), 0.08, 1.0)
     part.colors = col_arr
     part._base_tint = col_arr.copy()
     return part
@@ -136,31 +143,68 @@ def _build_grass_cluster(
     h_max: float,
     width_scale: float = 1.0,
     lean_bias_x: float = 0.0,
+    n_culms: int = 4,
     seed: int = 11,
 ) -> SceneBuilder:
-    """Build a dense, lush, soil-free realistic 3D grass tuft rooted directly on Y = 0.0."""
+    """Build a lush, dense, 3-tiered multi-culm 3D grass tuft rooted directly on Y = 0.0 (zero bare gaps)."""
     register_item_materials()
     sc = SceneBuilder(name=name)
     rng = np.random.default_rng(seed)
 
+    # Group blades into natural botanical root culms/rosettes so tufts read rich, clustered & organic!
+    culms: List[Tuple[float, float, float]] = [(0.0, 0.0, 1.0)]
+    for c in range(1, max(1, n_culms)):
+        ca = (2.0 * math.pi * c / float(max(1, n_culms - 1))) + float(rng.uniform(-0.35, 0.35))
+        cr = float(rng.uniform(0.32, 0.72))
+        culms.append((spread_x * cr * math.cos(ca), spread_z * cr * math.sin(ca), float(rng.uniform(0.84, 1.04))))
+
     for k in range(n_blades):
-        rad_u = math.sqrt(float(rng.uniform(0.01, 1.0)))
-        ang = float(rng.uniform(0.0, 2.0 * math.pi))
-        bx = spread_x * rad_u * math.cos(ang)
-        bz = spread_z * rad_u * math.sin(ang)
-        # Inner blades stand taller & prouder; outer rim blades arch gracefully outward!
-        height = float(rng.uniform(h_min, h_max)) * (1.12 - 0.30 * rad_u)
-        width = float(rng.uniform(0.056, 0.088)) * width_scale * (0.85 + 0.25 * (height / h_max))
-        if abs(lean_bias_x) > 0.02:
-            # Wind-swept tuft (`grass1`): fan strongly toward lean_bias_x with natural organic spread
-            base_yaw = math.atan2(lean_bias_x + 0.45 * bx, 0.35 * bz + 0.05)
-            out_yaw = base_yaw + float(rng.uniform(-0.75, 0.75))
+        cx0, cz0, ch_scale = culms[k % len(culms)]
+        # 3 upright botanical canopy tiers matching 1998 lush meadow grass:
+        # 0 = dense thick upright basal sheath (40%), 1 = tall lush full mid-canopy (42%), 2 = tall arching outer spires (18%)
+        tier_u = (k / float(max(1, n_blades)))
+        if tier_u < 0.40:
+            tier = 0
+            rad_local = math.sqrt(float(rng.uniform(0.01, 0.85))) * 0.44
+            h_mult = float(rng.uniform(0.54, 0.82))
+            w_mult = float(rng.uniform(1.18, 1.46))
+            lean_m, droop_m = 0.58, 0.55
+            shade_m = float(rng.uniform(0.74, 0.92))
+        elif tier_u < 0.82:
+            tier = 1
+            rad_local = math.sqrt(float(rng.uniform(0.01, 0.95))) * 0.48
+            h_mult = float(rng.uniform(0.78, 1.06))
+            w_mult = float(rng.uniform(1.04, 1.30))
+            lean_m, droop_m = 0.72, 0.65
+            shade_m = float(rng.uniform(0.88, 1.05))
         else:
-            out_yaw = math.atan2(bx, bz + 1e-4) + float(rng.uniform(-0.52, 0.52))
-        lean = float(rng.uniform(0.07, 0.22)) * (0.45 + 0.85 * rad_u)
-        droop = float(rng.uniform(0.06, 0.26)) * (0.50 + 0.70 * rad_u)
-        twist = float(rng.uniform(-0.60, 0.60))
-        hue = (float(rng.uniform(0.84, 1.18)), float(rng.uniform(0.92, 1.06)), float(rng.uniform(0.76, 1.08)))
+            tier = 2
+            rad_local = math.sqrt(float(rng.uniform(0.02, 1.0))) * 0.52
+            h_mult = float(rng.uniform(1.02, 1.28))
+            w_mult = float(rng.uniform(0.86, 1.08))
+            lean_m, droop_m = 1.05, 0.95
+            shade_m = float(rng.uniform(0.96, 1.12))
+
+        ang = float(rng.uniform(0.0, 2.0 * math.pi))
+        bx = cx0 + spread_x * rad_local * math.cos(ang)
+        bz = cz0 + spread_z * rad_local * math.sin(ang)
+        rad_global = min(1.0, math.hypot(bx / max(1e-4, spread_x), bz / max(1e-4, spread_z)))
+        height = float(rng.uniform(h_min, h_max)) * h_mult * ch_scale * (1.08 - 0.14 * rad_global)
+        width = float(rng.uniform(0.080, 0.118)) * width_scale * w_mult
+        if abs(lean_bias_x) > 0.02:
+            # Upright wind-swept tuft (`grass1`/`grass2`): rises vertically then bends gracefully left!
+            base_yaw = math.atan2(lean_bias_x + 0.35 * bx, 0.32 * bz + 0.05)
+            out_yaw = base_yaw + float(rng.uniform(-0.72, 0.72))
+        else:
+            out_yaw = math.atan2(bx - cx0 * 0.25, (bz - cz0 * 0.25) + 1e-4) + float(rng.uniform(-0.68, 0.68))
+        # Upright core blades stand tall & dense; outer rim blades sweep & arch gracefully outward like 1998 meadow tufts!
+        rim_boost = 1.95 if rad_global > 0.56 else 1.0
+        outer_flare = (0.18 + 1.05 * (rad_global ** 1.25)) * rim_boost
+        lean = float(rng.uniform(0.05, 0.17)) * lean_m * outer_flare
+        droop = float(rng.uniform(0.05, 0.20)) * droop_m * outer_flare
+        twist = float(rng.uniform(-0.62, 0.62))
+        sway = float(rng.uniform(-0.055, 0.055))
+        hue = (float(rng.uniform(0.82, 1.16)), float(rng.uniform(0.92, 1.08)), float(rng.uniform(0.74, 1.08)))
         sc.add(
             "grass",
             _curved_grass_blade(
@@ -172,36 +216,38 @@ def _build_grass_cluster(
                 lean=lean,
                 droop=droop,
                 twist=twist,
+                sway=sway,
+                shade_mult=shade_m,
                 hue_shift=hue,
-                segs=9,
+                segs=7 if tier == 0 else 8,
             ),
         )
-    return _finalize_item(sc, target_span=0.94)
+    return _finalize_item(sc, target_span=0.96)
 
 
 def build_grass1() -> SceneBuilder:
-    """Lush wind-swept small backyard grass tuft (`1320:grass1`)."""
-    return _build_grass_cluster("item_grass1", n_blades=24, spread_x=0.16, spread_z=0.12, h_min=0.40, h_max=0.72, width_scale=1.08, lean_bias_x=-0.22, seed=1320)
+    """Lush upright wind-swept small backyard grass tuft (`1320:grass1`)."""
+    return _build_grass_cluster("item_grass1", n_blades=76, spread_x=0.16, spread_z=0.13, h_min=0.58, h_max=0.92, width_scale=1.12, lean_bias_x=-0.16, n_culms=3, seed=1320)
 
 
 def build_grass2() -> SceneBuilder:
-    """Wind-swept small backyard grass tuft variant (`1321:grass2`)."""
-    return _build_grass_cluster("item_grass2", n_blades=26, spread_x=0.17, spread_z=0.13, h_min=0.38, h_max=0.74, width_scale=1.06, lean_bias_x=-0.26, seed=1321)
+    """Upright wind-swept small backyard grass tuft variant (`1321:grass2`)."""
+    return _build_grass_cluster("item_grass2", n_blades=80, spread_x=0.17, spread_z=0.14, h_min=0.56, h_max=0.94, width_scale=1.10, lean_bias_x=-0.18, n_culms=3, seed=1321)
 
 
 def build_grass3() -> SceneBuilder:
-    """Full fanning medium backyard meadow grass tuft (`1322:grass3`)."""
-    return _build_grass_cluster("item_grass3", n_blades=42, spread_x=0.26, spread_z=0.19, h_min=0.34, h_max=0.68, width_scale=1.02, lean_bias_x=0.0, seed=1322)
+    """Full tall lush backyard meadow grass tuft (`1322:grass3`)."""
+    return _build_grass_cluster("item_grass3", n_blades=116, spread_x=0.25, spread_z=0.20, h_min=0.56, h_max=0.90, width_scale=1.08, lean_bias_x=0.0, n_culms=5, seed=1322)
 
 
 def build_grass4() -> SceneBuilder:
-    """Wide-splayed wild tall grass blades fanning outward (`1323:grass4`)."""
-    return _build_grass_cluster("item_grass4", n_blades=20, spread_x=0.24, spread_z=0.16, h_min=0.44, h_max=0.76, width_scale=1.14, lean_bias_x=0.0, seed=1323)
+    """Wide-splayed lush tall grass blades fanning outward (`1323:grass4`)."""
+    return _build_grass_cluster("item_grass4", n_blades=92, spread_x=0.24, spread_z=0.18, h_min=0.60, h_max=0.96, width_scale=1.12, lean_bias_x=0.0, n_culms=4, seed=1323)
 
 
 def build_grassbig1() -> SceneBuilder:
-    """Dense broad wild lawn grass clump with layered arching blades (`1325:grassbig1`)."""
-    return _build_grass_cluster("item_grassbig1", n_blades=72, spread_x=0.38, spread_z=0.28, h_min=0.36, h_max=0.78, width_scale=0.98, lean_bias_x=0.0, seed=1325)
+    """Dense tall broad wild lawn grass clump with layered multi-culm blades (`1325:grassbig1`)."""
+    return _build_grass_cluster("item_grassbig1", n_blades=188, spread_x=0.34, spread_z=0.28, h_min=0.58, h_max=0.96, width_scale=1.06, lean_bias_x=0.0, n_culms=7, seed=1325)
 
 
 def _build_grass_strip(
@@ -216,28 +262,41 @@ def _build_grass_strip(
     curve_amp: float = 0.0,
     seed: int = 1324,
 ) -> SceneBuilder:
-    """Build a dense linear or curving hedge ribbon of V-ribbed 3D grass blades (`grassmed1..4`, `grassbig2`)."""
+    """Build a lush, thick, upright multi-tiered curving hedge ribbon of overlapping 3D grass culms (`grassmed1..4`, `grassbig2`)."""
     register_item_materials()
     sc = SceneBuilder(name=name)
     rng = np.random.default_rng(seed)
     rad_ang = math.radians(strip_angle_deg)
     ca, sa = math.cos(rad_ang), math.sin(rad_ang)
 
+    clump_us = [(-0.44 + 0.88 * (c / 6.0)) for c in range(7)]
     for k in range(n_blades):
-        u = float(rng.uniform(-0.5, 0.5))
+        cu = clump_us[k % len(clump_us)]
+        u = float(np.clip(cu + rng.uniform(-0.13, 0.13), -0.5, 0.5))
         v = float(rng.uniform(-0.5, 0.5))
         along = u * length
         across = v * thickness + curve_amp * math.sin(u * math.pi * 1.6)
         bx = along * ca - across * sa
         bz = along * sa + across * ca
         edge_frac = min(1.0, abs(v) * 2.0)
-        height = float(rng.uniform(h_min, h_max)) * (1.08 - 0.24 * edge_frac)
-        width = float(rng.uniform(0.052, 0.082))
-        out_yaw = math.atan2(-sa * (1.0 if v >= 0 else -1.0), ca * (1.0 if v >= 0 else -1.0)) + float(rng.uniform(-0.95, 0.95))
-        lean = float(rng.uniform(0.06, 0.19)) * (0.45 + 0.75 * edge_frac)
-        droop = float(rng.uniform(0.05, 0.22)) * (0.50 + 0.65 * edge_frac)
-        twist = float(rng.uniform(-0.55, 0.55))
-        hue = (float(rng.uniform(0.84, 1.18)), float(rng.uniform(0.92, 1.06)), float(rng.uniform(0.76, 1.08)))
+
+        tier_u = k / float(max(1, n_blades))
+        if tier_u < 0.38:
+            h_m, w_m, sh_m = float(rng.uniform(0.54, 0.80)), 1.28, float(rng.uniform(0.74, 0.92))
+        elif tier_u < 0.82:
+            h_m, w_m, sh_m = float(rng.uniform(0.78, 1.04)), 1.12, float(rng.uniform(0.88, 1.05))
+        else:
+            h_m, w_m, sh_m = float(rng.uniform(1.02, 1.24)), 0.94, float(rng.uniform(0.96, 1.12))
+
+        height = float(rng.uniform(h_min, h_max)) * h_m * (1.06 - 0.14 * edge_frac)
+        width = float(rng.uniform(0.072, 0.106)) * w_m
+        out_yaw = math.atan2(-sa * (1.0 if v >= 0 else -1.0), ca * (1.0 if v >= 0 else -1.0)) + float(rng.uniform(-1.0, 1.0))
+        outer_flare = 0.22 + 0.85 * (edge_frac ** 1.2)
+        lean = float(rng.uniform(0.04, 0.14)) * outer_flare
+        droop = float(rng.uniform(0.04, 0.15)) * outer_flare
+        twist = float(rng.uniform(-0.58, 0.58))
+        sway = float(rng.uniform(-0.048, 0.048))
+        hue = (float(rng.uniform(0.82, 1.16)), float(rng.uniform(0.92, 1.08)), float(rng.uniform(0.74, 1.08)))
         sc.add(
             "grass",
             _curved_grass_blade(
@@ -249,36 +308,38 @@ def _build_grass_strip(
                 lean=lean,
                 droop=droop,
                 twist=twist,
+                sway=sway,
+                shade_mult=sh_m,
                 hue_shift=hue,
-                segs=8,
+                segs=7,
             ),
         )
     return _finalize_item(sc, target_span=0.96)
 
 
 def build_grassmed1() -> SceneBuilder:
-    """Horizontal meadow grass hedge strip (`1324:grassmed1`)."""
-    return _build_grass_strip("item_grassmed1", n_blades=96, length=0.92, thickness=0.22, strip_angle_deg=0.0, h_min=0.30, h_max=0.52, seed=1324)
+    """Horizontal lush meadow grass hedge strip (`1324:grassmed1`)."""
+    return _build_grass_strip("item_grassmed1", n_blades=196, length=0.92, thickness=0.22, strip_angle_deg=0.0, h_min=0.42, h_max=0.68, seed=1324)
 
 
 def build_grassmed2() -> SceneBuilder:
-    """Vertical narrow meadow grass row (`1326:grassmed2`)."""
-    return _build_grass_strip("item_grassmed2", n_blades=104, length=1.10, thickness=0.20, strip_angle_deg=90.0, h_min=0.34, h_max=0.58, seed=1326)
+    """Vertical narrow lush meadow grass row (`1326:grassmed2`)."""
+    return _build_grass_strip("item_grassmed2", n_blades=200, length=1.08, thickness=0.20, strip_angle_deg=90.0, h_min=0.44, h_max=0.72, seed=1326)
 
 
 def build_grassmed3() -> SceneBuilder:
     """Diagonal SW-to-NE lush grass hedge ribbon (`1327:grassmed3`)."""
-    return _build_grass_strip("item_grassmed3", n_blades=104, length=1.02, thickness=0.24, strip_angle_deg=-42.0, h_min=0.34, h_max=0.58, curve_amp=0.07, seed=1327)
+    return _build_grass_strip("item_grassmed3", n_blades=204, length=1.00, thickness=0.24, strip_angle_deg=-42.0, h_min=0.44, h_max=0.72, curve_amp=0.07, seed=1327)
 
 
 def build_grassbig2() -> SceneBuilder:
     """Curving wide NW-to-SE lush wild grass hedge (`1328:grassbig2`)."""
-    return _build_grass_strip("item_grassbig2", n_blades=120, length=1.04, thickness=0.30, strip_angle_deg=+36.0, h_min=0.36, h_max=0.62, curve_amp=0.09, seed=1328)
+    return _build_grass_strip("item_grassbig2", n_blades=230, length=1.04, thickness=0.28, strip_angle_deg=+36.0, h_min=0.46, h_max=0.76, curve_amp=0.09, seed=1328)
 
 
 def build_grassmed4() -> SceneBuilder:
-    """Diagonal NW-to-SE meadow grass hedge ribbon (`1329:grassmed4`)."""
-    return _build_grass_strip("item_grassmed4", n_blades=104, length=1.02, thickness=0.24, strip_angle_deg=+48.0, h_min=0.34, h_max=0.58, curve_amp=-0.06, seed=1329)
+    """Diagonal NW-to-SE lush meadow grass hedge ribbon (`1329:grassmed4`)."""
+    return _build_grass_strip("item_grassmed4", n_blades=204, length=1.00, thickness=0.24, strip_angle_deg=+48.0, h_min=0.44, h_max=0.72, curve_amp=-0.06, seed=1329)
 
 
 def _heart_leaflet(name: str, *, scale: float = 1.0) -> MeshPart:
@@ -514,48 +575,137 @@ def build_flower1a() -> SceneBuilder:
 
 
 def build_dflower1() -> SceneBuilder:
-    """Iconic 1998 Groucho-Marx Disguise Daisy (oversized shades, big nose, bushy mustache, `420:dflower1`)."""
+    """Animated 1998 Groucho-Marx Disguise Daisy looking suspiciously left & right (700 ms Idle clip, `420:dflower1`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_dflower1")
-    hx, hy, hz = _build_daisy_base(sc, petal_count=9, tilt_deg=40.0)
+    sc.set_node_transform("dflower_stem", translation=(0.0, 0.0, 0.0))
 
-    face_parts: List[MeshPart] = []
-    # Dark brown inner flower cushion behind the big Groucho disguise.
-    disc = superellipsoid(0.105, 0.040, 0.105, e1=0.80, e2=0.96, u_segs=22, v_segs=12, name="dflower_center", material="item_dark_stitch").translate(0.0, 0.010, 0.0)
-    face_parts.append(disc)
-
-    # Bold glossy black Groucho sunglasses (oversized dark frames + shiny lenses + catchlight + eyebrows)!
-    for side, tag in ((+1.0, "l"), (-1.0, "r")):
-        frame = torus_arc(0.060, 0.014, u_segs=22, v_segs=10, plane="xz", name=f"groucho_frame_{tag}", material="gear_dark").translate(side * 0.072, 0.058, -0.036)
-        lens = ellipsoid(0.055, 0.012, 0.048, u_segs=18, v_segs=8, name=f"groucho_lens_{tag}", material="eye_pupil").translate(side * 0.072, 0.060, -0.036)
-        glint = ellipsoid(0.022, 0.006, 0.012, u_segs=10, v_segs=6, name=f"groucho_glint_{tag}", material="eye_catchlight").rotate_xyz(ry=0.45).translate(side * 0.056, 0.073, -0.048)
-        brow = rounded_box(0.088, 0.022, 0.026, bevel=0.007, segs=2, name=f"groucho_brow_{tag}", material="item_dark_stitch").rotate_xyz(ry=-side * 0.16).translate(side * 0.072, 0.064, -0.095)
-        face_parts.extend([frame, lens, glint, brow])
-    bridge = rounded_box(0.052, 0.020, 0.022, bevel=0.005, segs=2, name="groucho_bridge", material="gear_dark").translate(0.0, 0.064, -0.042)
-    face_parts.append(bridge)
-
-    # Big bulbous pinkish-peach plastic Groucho nose + thick bushy dark mustache (`420:dflower1`)!
-    nose = (
-        superellipsoid(0.052, 0.062, 0.074, e1=0.76, e2=0.82, u_segs=20, v_segs=14, name="groucho_nose", material="item_groucho_nose")
-        .rotate_xyz(rx=0.25)
-        .translate(0.0, 0.078, +0.020)
+    # Taller graceful curvy dark-green botanical stem grounded on Y = 0.0 + twin vibrant leaves clearly visible below petals!
+    stem = curved_tube(
+        [(0.0, 0.00, -0.02), (-0.020, 0.16, -0.01), (+0.022, 0.36, 0.00), (0.0, 0.56, +0.01)],
+        [0.022, 0.019, 0.017, 0.018],
+        samples_per_seg=5,
+        radial_segs=12,
+        cap_rings=2,
+        name="dflower_stem_mesh",
+        material="item_stem_green",
     )
-    face_parts.append(nose)
-
-    for side, tag in ((+1.0, "l"), (-1.0, "r")):
-        stache = curved_tube(
-            [(0.0, 0.052, +0.068), (side * 0.058, 0.048, +0.092), (side * 0.118, 0.036, +0.078)],
-            [0.038, 0.042, 0.022],
-            samples_per_seg=4,
-            radial_segs=14,
-            cap_rings=3,
-            name=f"groucho_mustache_{tag}",
-            material="item_dark_stitch",
+    sc.add("dflower_stem", stem)
+    for side, tag, ly in ((+1.0, "l", 0.16), (-1.0, "r", 0.21)):
+        lf = gradient_y_tint(
+            ellipsoid(0.062, 0.009, 0.155, u_segs=18, v_segs=8, name=f"dflower_leaf_{tag}", material="item_leaf_bright")
+            .deform(lambda p: np.column_stack([
+                p[:, 0] * (1.0 - 0.58 * np.clip((p[:, 2] + 0.155) / 0.31, 0.0, 1.0) ** 1.5),
+                p[:, 1] - 0.024 * ((p[:, 2] + 0.155) / 0.31) ** 2,
+                p[:, 2] + 0.155,
+            ]))
+            .rotate_xyz(rx=0.34, ry=side * 1.18)
+            .translate(0.0, ly, -0.01),
+            (0.68, 0.88, 0.56),
+            (1.02, 1.04, 0.86),
         )
-        face_parts.append(stache)
+        sc.add("dflower_stem", lf)
 
-    for p in face_parts:
-        sc.add("flower", p.rotate_xyz(rx=40.0, degrees=True).translate(hx, hy, hz))
+    # Pivoted flower bloom + Groucho disguise node (`dflower_head` parented cleanly to `dflower_stem`!)
+    head_pivot = (0.0, 0.58, +0.02)
+    sc.set_node_parent("dflower_head", "dflower_stem")
+    sc.set_node_transform("dflower_head", translation=head_pivot, rotation=quat_from_euler_xyz(rx=56.0, degrees=True))
+
+    head_parts: List[MeshPart] = []
+    # Green sepal calyx cup under the bloom.
+    calyx = superellipsoid(0.088, 0.046, 0.088, e1=0.80, e2=0.95, u_segs=20, v_segs=10, name="dflower_calyx", material="item_stem_green").translate(0.0, -0.024, 0.0)
+    head_parts.append(calyx)
+
+    # 9 iconic bold crisp white daisy petals radiating cleanly around the Groucho face (`dflower1_strip.png`).
+    for k in range(9):
+        ang = 2.0 * math.pi * k / 9.0 + 0.10
+        droop = 0.08 + 0.05 * math.sin(k * 2.3)
+        plen = 0.228 + 0.014 * math.cos(k * 3.1)
+
+        def _petal_shape(pos: np.ndarray, pl=plen) -> np.ndarray:
+            p = pos.copy()
+            u = np.clip((p[:, 2] + 0.5 * pl) / pl, 0.0, 1.0)
+            p[:, 0] *= 0.44 + 0.62 * np.sin(u * math.pi * 0.86)
+            p[:, 2] = u * pl
+            p[:, 1] += 0.012 * np.sin(u * math.pi) - 0.022 * (u ** 2.2)
+            p[:, 1] -= 0.005 * np.exp(-((p[:, 0] / 0.018) ** 2))
+            return p
+
+        pet = tint_part(
+            ellipsoid(0.048, 0.009, 0.5 * plen, u_segs=18, v_segs=8, name=f"dflower_petal_{k}", material="item_petal_white")
+            .deform(_petal_shape)
+            .rotate_xyz(rx=droop, ry=ang)
+            .translate(0.068 * math.sin(ang), 0.003 * (k % 2), 0.068 * math.cos(ang)),
+            lambda pos, _n: np.clip(0.88 + 0.12 * np.clip(np.hypot(pos[:, 0], pos[:, 2]) / 0.24, 0.0, 1.0)[:, None], 0.84, 1.0) * np.array([[1.0, 0.99, 0.96]]),
+        )
+        head_parts.append(pet)
+
+    # Dark golden-brown flower cushion behind the Groucho disguise.
+    disc = superellipsoid(0.098, 0.040, 0.098, e1=0.80, e2=0.96, u_segs=22, v_segs=12, name="dflower_center", material="item_pollen_gold").translate(0.0, 0.010, 0.0)
+    head_parts.append(disc)
+
+    # Oversized glossy black wayfarer-style Groucho sunglasses (sleek dark frames + curved glossy lenses + brow rim)!
+    for side, tag in ((+1.0, "l"), (-1.0, "r")):
+        frame = superellipsoid(0.068, 0.018, 0.056, e1=0.45, e2=0.55, u_segs=20, v_segs=10, name=f"groucho_frame_{tag}", material="gear_dark").rotate_xyz(ry=-side * 0.14).translate(side * 0.072, 0.054, -0.036)
+        lens = superellipsoid(0.058, 0.016, 0.046, e1=0.50, e2=0.55, u_segs=18, v_segs=8, name=f"groucho_lens_{tag}", material="eye_pupil").rotate_xyz(ry=-side * 0.14).translate(side * 0.072, 0.062, -0.036)
+        glint = ellipsoid(0.022, 0.005, 0.010, u_segs=10, v_segs=6, name=f"groucho_glint_{tag}", material="eye_catchlight").rotate_xyz(ry=0.48).translate(side * 0.056, 0.078, -0.046)
+        temple = rounded_box(0.014, 0.016, 0.11, bevel=0.004, segs=2, name=f"groucho_arm_{tag}", material="gear_dark").rotate_xyz(rx=0.40, ry=side * 0.18).translate(side * 0.132, 0.030, -0.065)
+        head_parts.extend([frame, lens, glint, temple])
+    bridge = rounded_box(0.056, 0.020, 0.022, bevel=0.006, segs=2, name="groucho_bridge", material="gear_dark").translate(0.0, 0.064, -0.046)
+    head_parts.append(bridge)
+
+    # Big bulbous peach-pink Groucho nose with sculpted nostril flares (`420:dflower1`)!
+    nose = (
+        superellipsoid(0.046, 0.062, 0.072, e1=0.74, e2=0.80, u_segs=22, v_segs=14, name="groucho_nose", material="item_groucho_nose")
+        .rotate_xyz(rx=0.22)
+        .translate(0.0, 0.080, +0.018)
+    )
+    head_parts.append(nose)
+    for side, tag in ((+1.0, "l"), (-1.0, "r")):
+        nostril = ellipsoid(0.022, 0.018, 0.020, u_segs=12, v_segs=8, name=f"groucho_nostril_{tag}", material="item_groucho_nose").translate(side * 0.032, 0.062, +0.046)
+        head_parts.append(nostril)
+    sc.add("dflower_head", head_parts)
+
+    # Drooping bristly broom-style black Groucho mustache mounted on a child node for a cheeky twitch!
+    sc.set_node_parent("dflower_stache", "dflower_head")
+    sc.set_node_transform("dflower_stache", translation=(0.0, 0.052, +0.066))
+    stache_parts: List[MeshPart] = []
+    for k in range(-4, 5):
+        u = k / 4.0
+        tx = u * 0.078
+        tz = 0.010 + 0.024 * abs(u)
+        ty = -0.016 * (u * u)
+        tuft = (
+            ellipsoid(0.016, 0.015, 0.056 - 0.010 * abs(u), u_segs=10, v_segs=8, name=f"groucho_stache_{k + 4}", material="item_dark_stitch")
+            .rotate_xyz(rx=0.18, ry=u * 0.22)
+            .translate(tx, ty, tz + 0.032)
+        )
+        stache_parts.append(tuft)
+    sc.add("dflower_stache", stache_parts)
+
+    # Authentic 700 ms 7-frame 1998 `420:dflower1` suspicious left-to-right look-around animation!
+    times = [0.00, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70]
+    head_poses = [
+        (58.0, -28.0, +18.0),  # frame 0 (590): looking far LEFT
+        (56.0, -18.0, +12.0),  # frame 1 (594): glancing left
+        (54.0, -8.0, +5.0),    # frame 2 (597): turning toward center
+        (52.0, 0.0, 0.0),      # frame 3 (600): dead CENTER suspicious stare
+        (58.0, +28.0, -18.0),  # frame 4 (601): looking far RIGHT
+        (52.0, +4.0, -3.0),    # frame 5 (600): swinging back center
+        (55.0, -14.0, +9.0),   # frame 6 (597): swinging back left
+        (58.0, -28.0, +18.0),  # seamless loop closure
+    ]
+    stem_sways = [+5.0, +3.0, +1.5, 0.0, -5.0, -1.0, +2.5, +5.0]
+    stache_twitches = [+5.0, -3.0, +3.0, 0.0, -5.0, +3.0, -2.0, +5.0]
+    sc.add_animation(
+        "Idle",
+        [
+            AnimationChannel("dflower_head", "rotation", times, [quat_from_euler_xyz(rx=rx, ry=ry, rz=rz, degrees=True) for rx, ry, rz in head_poses]),
+            AnimationChannel("dflower_stem", "rotation", times, [quat_from_euler_xyz(rz=a, degrees=True) for a in stem_sways]),
+            AnimationChannel("dflower_stache", "rotation", times, [quat_from_euler_xyz(ry=a, rz=a * 0.6, degrees=True) for a in stache_twitches]),
+        ],
+        replace=True,
+    )
     return _finalize_item(sc, target_span=0.92)
 
 

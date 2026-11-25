@@ -202,6 +202,8 @@
       yaw: initYaw,
       pitch: CANONICAL_PITCH,
       zoom: 1.0,
+      panX: 0.0,
+      panY: 0.0,
       idle: initIdle,
       action: initAction,
       lighting: initLight,
@@ -265,7 +267,8 @@
       const offYaw = Math.abs(wrapAngleDeg(state.yaw - comp.yaw)) >= 1.0;
       const offPitch = Math.abs(state.pitch - CANONICAL_PITCH) >= 0.5;
       const offZoom = Math.abs(state.zoom - 1.0) >= 0.01;
-      state.soloOrbited = offYaw || offPitch || offZoom;
+      const offPan = Math.hypot(state.panX, state.panY) >= 0.01;
+      state.soloOrbited = offYaw || offPitch || offZoom || offPan;
     }
 
     function syncStudioLink() {
@@ -501,6 +504,8 @@
       state.yaw = state.compass.yaw;
       state.pitch = CANONICAL_PITCH;
       state.zoom = 1.0;
+      state.panX = 0.0;
+      state.panY = 0.0;
       syncCompassFromYaw();
     }
 
@@ -510,6 +515,8 @@
       state.ant = next;
       state.pitch = CANONICAL_PITCH;
       state.zoom = 1.0;
+      state.panX = 0.0;
+      state.panY = 0.0;
       updateUiState();
       markDirty();
       if (changed) {
@@ -939,6 +946,11 @@
         ensureOffscreenSize(panelW, panelH);
         const gFrac = groundY / panelH;
         const targetY = (span.vMin + fixedHalfH * cam.zoom * (2 * gFrac - 1)) / Math.cos(anchorPitch * DEG);
+        const yRad = cam.yaw * DEG, pRad = cam.pitch * DEG;
+        const px = cam.panX || 0, py = cam.panY || 0;
+        const panWorldX = px * Math.cos(yRad) - py * Math.sin(pRad) * Math.sin(yRad);
+        const panWorldY = py * Math.cos(pRad);
+        const panWorldZ = -px * Math.sin(yRad) - py * Math.sin(pRad) * Math.cos(yRad);
         renderer.drawScene(sc, cam, {
           width: panelW,
           height: panelH,
@@ -954,7 +966,7 @@
           silhouette: state.silhouette,
           overrideProj: "ortho",
           fixedHalfH,
-          customTarget: [0, targetY, 0],
+          customTarget: [panWorldX, targetY + panWorldY, panWorldZ],
         });
         ctx.imageSmoothingEnabled = true;
         ctx.drawImage(offCanvas, 0, offCanvas.height - panelH, panelW, panelH, x0, 0, panelW, panelH);
@@ -975,8 +987,8 @@
 
     function renderAll() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const gridCam = { yaw: state.yaw, pitch: CANONICAL_PITCH, zoom: 1.0, projection: "ortho" };
-      const soloCam = { yaw: state.yaw, pitch: state.pitch, zoom: state.zoom, projection: "ortho" };
+      const gridCam = { yaw: state.yaw, pitch: CANONICAL_PITCH, zoom: 1.0, panX: 0, panY: 0, projection: "ortho" };
+      const soloCam = { yaw: state.yaw, pitch: state.pitch, zoom: state.zoom, panX: state.panX, panY: state.panY, projection: "ortho" };
 
       if (state.ant === "all") {
         let minHalfW = Infinity, minH = Infinity;
@@ -1132,14 +1144,16 @@
         const totalDx = Math.abs(e.clientX - drag.startX);
         const totalDy = Math.abs(e.clientY - drag.startY);
         if (!drag.active) {
-          if (e.pointerType === "touch" && totalDy > 10 && totalDy > totalDx * 1.2) { drag = null; return; }
-          if (totalDx <= 6) return;
+          if (e.pointerType === "touch" && totalDy > 16 && totalDy > totalDx * 1.6) { drag = null; return; }
+          if (totalDx <= 4) return;
           drag.active = true;
           try { el.setPointerCapture(e.pointerId); } catch (_) {}
         }
         const dx = e.clientX - drag.lastX;
         drag.lastX = e.clientX;
-        state.yaw = wrapAngleDeg(state.yaw - dx * sensitivity);
+        const rectW = Math.max(120, (drag.target.clientWidth || 240) * 0.5);
+        const effSens = Math.max(sensitivity, clamp(260 / rectW, 0.75, 1.8));
+        state.yaw = wrapAngleDeg(state.yaw - dx * effSens);
         updateUiState();
         markDirty();
       });
@@ -1178,50 +1192,86 @@
       announce(state.dark ? "Switched studio backdrop to dark theme." : "Switched studio backdrop to light theme.");
     });
 
-    // Solo 3D Orbit + Pinch Zoom + Keyboard Orbit
+    // Solo 3D Orbit (Yaw + Pitch) + Two-Finger / Right-Drag Pan + Pinch Zoom + Keyboard Orbit
     const pointers = new Map();
     let lastPinch = 0;
+    let lastMid = null;
+    let mousePanMode = false;
     const pinchDist = () => {
       const pts = Array.from(pointers.values());
       return pts.length < 2 ? 0 : Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
     };
+    const pinchMid = () => {
+      const pts = Array.from(pointers.values());
+      return pts.length < 2 ? null : { x: 0.5 * (pts[0].x + pts[1].x), y: 0.5 * (pts[0].y + pts[1].y) };
+    };
+    const applyPanDelta = (dx, dy) => {
+      const hCss = Math.max(140, solo3dCanvas.clientHeight || 300);
+      const worldPerPx = (1.9 * state.zoom) / hCss;
+      state.panX = clamp(state.panX - dx * worldPerPx, -1.6, 1.6);
+      state.panY = clamp(state.panY + dy * worldPerPx, -1.4, 1.4);
+    };
+    solo3dCanvas.addEventListener("contextmenu", (e) => e.preventDefault());
     solo3dCanvas.addEventListener("pointerdown", (e) => {
-      if (e.pointerType === "touch") e.preventDefault();
+      e.preventDefault();
       try { solo3dCanvas.setPointerCapture(e.pointerId); } catch (_) {}
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (pointers.size === 2) lastPinch = pinchDist();
+      mousePanMode = e.pointerType === "mouse" && (e.button === 2 || e.button === 1 || e.shiftKey);
+      if (pointers.size === 2) {
+        lastPinch = pinchDist();
+        lastMid = pinchMid();
+      }
     });
     solo3dCanvas.addEventListener("pointermove", (e) => {
       const prev = pointers.get(e.pointerId);
       if (!prev) return;
       const dx = e.clientX - prev.x;
+      const dy = e.clientY - prev.y;
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pointers.size === 1) {
-        state.yaw = wrapAngleDeg(state.yaw - dx * 0.45);
-        state.pitch = CANONICAL_PITCH;
+        if (mousePanMode || e.shiftKey) {
+          applyPanDelta(dx, dy);
+        } else {
+          const wCss = Math.max(120, solo3dCanvas.clientWidth || 240);
+          const hCss = Math.max(160, solo3dCanvas.clientHeight || 300);
+          const yawPerPx = clamp(280 / wCss, 0.70, 1.90);
+          const pitchPerPx = clamp(180 / hCss, 0.55, 1.25);
+          state.yaw = wrapAngleDeg(state.yaw - dx * yawPerPx);
+          state.pitch = clamp(state.pitch + dy * pitchPerPx, -12, 85);
+        }
         updateUiState();
         markDirty();
       } else if (pointers.size === 2) {
         const dist = pinchDist();
+        const mid = pinchMid();
         if (lastPinch > 1 && dist > 1) {
-          state.zoom = clamp(state.zoom * (lastPinch / dist), 0.45, 2.5);
-          updateUiState();
-          markDirty();
+          state.zoom = clamp(state.zoom * (lastPinch / dist), 0.35, 2.8);
+        }
+        if (lastMid && mid) {
+          applyPanDelta(mid.x - lastMid.x, mid.y - lastMid.y);
         }
         lastPinch = dist;
+        lastMid = mid;
+        updateUiState();
+        markDirty();
       }
     });
-    const endPtr = (e) => { pointers.delete(e.pointerId); if (pointers.size < 2) lastPinch = 0; };
+    const endPtr = (e) => {
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2) { lastPinch = 0; lastMid = null; }
+      if (pointers.size === 0) mousePanMode = false;
+    };
     solo3dCanvas.addEventListener("pointerup", endPtr);
     solo3dCanvas.addEventListener("pointercancel", endPtr);
     solo3dCanvas.addEventListener("lostpointercapture", endPtr);
-    const preventPinchZoom = (e) => { if (!e.touches || e.touches.length >= 2) e.preventDefault(); };
-    solo3dCanvas.addEventListener("touchmove", preventPinchZoom, { passive: false });
-    solo3dCanvas.addEventListener("gesturestart", preventPinchZoom, { passive: false });
-    solo3dCanvas.addEventListener("gesturechange", preventPinchZoom, { passive: false });
+    const preventCanvasTouch = (e) => { e.preventDefault(); };
+    solo3dCanvas.addEventListener("touchstart", preventCanvasTouch, { passive: false });
+    solo3dCanvas.addEventListener("touchmove", preventCanvasTouch, { passive: false });
+    solo3dCanvas.addEventListener("gesturestart", preventCanvasTouch, { passive: false });
+    solo3dCanvas.addEventListener("gesturechange", preventCanvasTouch, { passive: false });
     solo3dCanvas.addEventListener("wheel", (e) => {
       e.preventDefault();
-      state.zoom = clamp(state.zoom * Math.exp(e.deltaY * 0.0012), 0.45, 2.5);
+      state.zoom = clamp(state.zoom * Math.exp(e.deltaY * 0.0012), 0.35, 2.8);
       updateUiState();
       markDirty();
     }, { passive: false });

@@ -1125,9 +1125,15 @@ select.action-select[data-extended="true"] {
 #solo-3d-canvas {
   cursor: grab;
   touch-action: none;
+  overscroll-behavior: contain;
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
+}
+
+.solo-panel:has(#solo-3d-canvas) {
+  touch-action: none;
+  overscroll-behavior: contain;
 }
 
 #solo-3d-canvas:active {

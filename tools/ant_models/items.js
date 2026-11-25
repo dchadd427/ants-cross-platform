@@ -149,6 +149,8 @@
       soloYaw: null,
       soloPitch: null,
       soloZoom: 1.0,
+      soloPanX: 0.0,
+      soloPanY: 0.0,
       spinAngle: 0,
       simTime: 0,
       dirty: true,
@@ -208,6 +210,8 @@
         yaw: wrapAngleDeg(base.yaw + state.gridYawOffset + (state.spin ? state.spinAngle : 0)),
         pitch: base.pitch,
         zoom: 1.0,
+        panX: 0.0,
+        panY: 0.0,
         projection: state.projection,
       };
     }
@@ -220,6 +224,8 @@
         yaw: wrapAngleDeg(yawBase + (state.spin ? state.spinAngle : 0)),
         pitch: pitchBase,
         zoom: state.soloZoom,
+        panX: state.soloPanX,
+        panY: state.soloPanY,
         projection: state.projection,
       };
     }
@@ -412,6 +418,12 @@
       const gFrac = groundY / Math.max(1, panelH);
       const centerShiftFrac = (0.5 - (gFrac - 0.36));
       const targetY = clamp(model.size[1] * 0.46 + fitHalfH * centerShiftFrac * 0.22, model.size[1] * 0.25, model.size[1] * 0.72);
+      const yRad = cam.yaw * DEG, pRad = cam.pitch * DEG;
+      const px = cam.panX || 0, py = cam.panY || 0;
+      const panWorldX = px * Math.cos(yRad) - py * Math.sin(pRad) * Math.sin(yRad);
+      const panWorldY = py * Math.cos(pRad);
+      const panWorldZ = -px * Math.sin(yRad) - py * Math.sin(pRad) * Math.cos(yRad);
+      const customTarget = [panWorldX, targetY + panWorldY, panWorldZ];
       const hasAnim = model.idleAnims && model.idleAnims.length > 0;
 
       if (state.pixelMode && pxScale > 1.25) {
@@ -433,7 +445,7 @@
           silhouette: state.silhouette,
           overrideProj: cam.projection,
           fixedHalfH: fitHalfH,
-          customTarget: [0, targetY, 0],
+          customTarget,
         });
         const dstW = Math.round(lowW * pxScale);
         const dstH = Math.round(lowH * pxScale);
@@ -465,7 +477,7 @@
         silhouette: state.silhouette,
         overrideProj: cam.projection,
         fixedHalfH: fitHalfH,
-        customTarget: [0, targetY, 0],
+        customTarget,
       });
       ctx.save();
       ctx.beginPath();
@@ -764,6 +776,8 @@
       state.soloYaw = null;
       state.soloPitch = null;
       state.soloZoom = 1.0;
+      state.soloPanX = 0.0;
+      state.soloPanY = 0.0;
       const item = state.byId.get(id);
       queueLoad(item, true);
       updateUiState();
@@ -810,6 +824,8 @@
       state.soloYaw = null;
       state.soloPitch = null;
       state.soloZoom = 1.0;
+      state.soloPanX = 0.0;
+      state.soloPanY = 0.0;
       state.spinAngle = 0;
       updateUiState();
       markDirty();
@@ -994,14 +1010,17 @@
       const tdx = Math.abs(e.clientX - cardDrag.startX);
       const tdy = Math.abs(e.clientY - cardDrag.startY);
       if (!cardDrag.active) {
-        if (e.pointerType === "touch" && tdy > 10 && tdy > tdx * 1.2) { cardDrag = null; return; }
-        if (tdx <= 6) return;
+        if (e.pointerType === "touch" && tdy > 16 && tdy > tdx * 1.6) { cardDrag = null; return; }
+        if (tdx <= 4) return;
         cardDrag.active = true;
         try { gridEl.setPointerCapture(e.pointerId); } catch (_) {}
       }
       const dx = e.clientX - cardDrag.lastX;
       cardDrag.lastX = e.clientX;
-      state.gridYawOffset = wrapAngleDeg(state.gridYawOffset - dx * 0.55);
+      const cardEl = gridEl.querySelector(".item-card-stage");
+      const halfW = Math.max(120, (cardEl ? cardEl.clientWidth : 280) * 0.5);
+      const sens = clamp(260 / halfW, 0.75, 1.80);
+      state.gridYawOffset = wrapAngleDeg(state.gridYawOffset - dx * sens);
       markDirty();
     });
     const endCardDrag = (e) => {
@@ -1021,18 +1040,35 @@
       if (stageHit) selectItem(stageHit.dataset.stageItem);
     });
 
-    // Full 360 orbit + pitch + pinch/wheel zoom on Focus 3D Canvas
+    // Full 360 orbit + pitch + 2-finger/right-drag pan + pinch/wheel zoom on Focus 3D Canvas
     const pointers = new Map();
     let lastPinch = 0;
+    let lastMid = null;
+    let mousePanMode = false;
     const pinchDist = () => {
       const pts = Array.from(pointers.values());
       return pts.length < 2 ? 0 : Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
     };
+    const pinchMid = () => {
+      const pts = Array.from(pointers.values());
+      return pts.length < 2 ? null : { x: 0.5 * (pts[0].x + pts[1].x), y: 0.5 * (pts[0].y + pts[1].y) };
+    };
+    const applySoloPan = (dx, dy) => {
+      const hCss = Math.max(140, solo3dCanvas.clientHeight || 300);
+      const worldPerPx = (1.6 * state.soloZoom) / hCss;
+      state.soloPanX = clamp(state.soloPanX - dx * worldPerPx, -1.4, 1.4);
+      state.soloPanY = clamp(state.soloPanY + dy * worldPerPx, -1.2, 1.2);
+    };
+    solo3dCanvas.addEventListener("contextmenu", (e) => e.preventDefault());
     solo3dCanvas.addEventListener("pointerdown", (e) => {
-      if (e.pointerType === "touch") e.preventDefault();
+      e.preventDefault();
       try { solo3dCanvas.setPointerCapture(e.pointerId); } catch (_) {}
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (pointers.size === 2) lastPinch = pinchDist();
+      mousePanMode = e.pointerType === "mouse" && (e.button === 2 || e.button === 1 || e.shiftKey);
+      if (pointers.size === 2) {
+        lastPinch = pinchDist();
+        lastMid = pinchMid();
+      }
     });
     solo3dCanvas.addEventListener("pointermove", (e) => {
       const prev = pointers.get(e.pointerId);
@@ -1044,27 +1080,49 @@
       if (!item) return;
       const base = getBaseAngles(item);
       if (pointers.size === 1) {
-        const curYaw = state.soloYaw !== null ? state.soloYaw : base.yaw;
-        const curPitch = state.soloPitch !== null ? state.soloPitch : base.pitch;
-        state.soloYaw = wrapAngleDeg(curYaw - dx * 0.50);
-        state.soloPitch = clamp(curPitch + dy * 0.42, -10, 85);
+        if (mousePanMode || e.shiftKey) {
+          applySoloPan(dx, dy);
+        } else {
+          const curYaw = state.soloYaw !== null ? state.soloYaw : base.yaw;
+          const curPitch = state.soloPitch !== null ? state.soloPitch : base.pitch;
+          const wCss = Math.max(120, solo3dCanvas.clientWidth || 240);
+          const hCss = Math.max(160, solo3dCanvas.clientHeight || 300);
+          const yawPerPx = clamp(280 / wCss, 0.70, 1.90);
+          const pitchPerPx = clamp(180 / hCss, 0.55, 1.25);
+          state.soloYaw = wrapAngleDeg(curYaw - dx * yawPerPx);
+          state.soloPitch = clamp(curPitch + dy * pitchPerPx, -12, 85);
+        }
         markDirty();
       } else if (pointers.size === 2) {
         const dist = pinchDist();
+        const mid = pinchMid();
         if (lastPinch > 1 && dist > 1) {
-          state.soloZoom = clamp(state.soloZoom * (lastPinch / dist), 0.45, 2.6);
-          markDirty();
+          state.soloZoom = clamp(state.soloZoom * (lastPinch / dist), 0.35, 2.8);
+        }
+        if (lastMid && mid) {
+          applySoloPan(mid.x - lastMid.x, mid.y - lastMid.y);
         }
         lastPinch = dist;
+        lastMid = mid;
+        markDirty();
       }
     });
-    const endSoloPtr = (e) => { pointers.delete(e.pointerId); if (pointers.size < 2) lastPinch = 0; };
+    const endSoloPtr = (e) => {
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2) { lastPinch = 0; lastMid = null; }
+      if (pointers.size === 0) mousePanMode = false;
+    };
     solo3dCanvas.addEventListener("pointerup", endSoloPtr);
     solo3dCanvas.addEventListener("pointercancel", endSoloPtr);
     solo3dCanvas.addEventListener("lostpointercapture", endSoloPtr);
+    const preventSoloTouch = (e) => { e.preventDefault(); };
+    solo3dCanvas.addEventListener("touchstart", preventSoloTouch, { passive: false });
+    solo3dCanvas.addEventListener("touchmove", preventSoloTouch, { passive: false });
+    solo3dCanvas.addEventListener("gesturestart", preventSoloTouch, { passive: false });
+    solo3dCanvas.addEventListener("gesturechange", preventSoloTouch, { passive: false });
     solo3dCanvas.addEventListener("wheel", (e) => {
       e.preventDefault();
-      state.soloZoom = clamp(state.soloZoom * Math.exp(e.deltaY * 0.0012), 0.45, 2.6);
+      state.soloZoom = clamp(state.soloZoom * Math.exp(e.deltaY * 0.0012), 0.35, 2.8);
       markDirty();
     }, { passive: false });
 

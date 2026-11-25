@@ -116,8 +116,12 @@ class MapItemsTests(unittest.TestCase):
                 self.assertTrue(all(dim > 0.05 for dim in info["size"]), f"{spec.id} degenerate size {info['size']}")
                 self.assertIn(spec.id, orig_bundle["items"])
 
-            # Animated items must carry their live Idle animation clip.
-            for anim_id in ("fdjelo1", "redbomb", "greenbomb", "blackbomb", "bluebomb", "wallup04"):
+            # Animated items (waving anthill flags, Groucho daisy, Jell-O, bombs, fire wall) must carry their Idle clip.
+            for anim_id in (
+                "fdjelo1", "dflower1",
+                "GREENHILL", "REDHILL", "BLUEHILL", "BLACKHILL",
+                "redbomb", "greenbomb", "blackbomb", "bluebomb", "wallup04",
+            ):
                 self.assertIn("Idle", by_id[anim_id]["animations"], f"{anim_id} missing Idle animation")
 
             # Verify viewer_gltf.js parses a generated map item GLB cleanly under Node if available.
@@ -147,7 +151,7 @@ class MapItemsTests(unittest.TestCase):
         node = shutil.which("node")
         if not node:
             self.skipTest("node is not installed")
-        for fname in ("items.js", "viewer_render.js"):
+        for fname in ("compare.js", "items.js", "viewer_render.js"):
             js_path = os.path.join(REPO, "tools", "ant_models", fname)
             run = subprocess.run([node, "--check", js_path], capture_output=True, text=True, check=False)
             self.assertEqual(run.returncode, 0, f"JS syntax check failed for {fname}:\n{run.stderr}")
