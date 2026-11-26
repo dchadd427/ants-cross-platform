@@ -907,6 +907,7 @@
             .rbar.over { grid-template-columns: auto auto minmax(0, 1fr) auto auto auto; grid-template-areas: "tl tl tl tl tl tl" "play rew clock cam pic fsx" "speed speed speed speed speed speed"; }
             .rbar .clock { text-align: left; font-size: 19px; } @media (max-width: 520px) { .rbar:not(.islive) .clock { min-width: 0; font-size: clamp(14px, 4.4vw, 19px); } .rbar.over { grid-template-columns: auto auto minmax(0, 1fr) auto; grid-template-areas: "tl tl tl tl" "play rew clock clock" "speed speed speed speed" "cam pic pic fsx"; } .rbar.over .camb { justify-self: start; } .rbar.over .picwrap { justify-self: end; } } @media (max-width: 420px) { .rbar:not(.over) { grid-template-areas: "tl tl tl tl" "play rew clock clock" "speed speed speed speed" "cam cam cam pic"; } }
             .rbar .speed { justify-self: stretch; display: flex; } .rbar .speed button { flex: 1 1 0; min-width: 0; min-height: 40px; }
+            .rbar:not(.over) .speed button, .rbar:not(.over) .picwrap > .btn, .rbar:not(.over) .jtl { min-height: 44px; }          /* (a finger's size, every button of the bar in the page: a phone's bar has no smaller one) */
         }
         /* a phone on its side, or any short window: the title keeps one row, and in fullscreen the bar is one thin row */
         @media (max-height: 520px) {
@@ -946,6 +947,19 @@
             .rbar.over.islive { grid-template-columns: auto minmax(0, 1fr) auto auto auto auto; grid-template-areas: "tl tl tl tl tl tl" "play clock live cam pic fsx" "speed speed speed speed speed speed"; }
             .rbar.islive .clock { text-align: left; }
         }
+        /* a phone upright (under 500 px; the page's bar, not the fullscreen one): Play, the clock and the live button are one row that wraps by itself. The clock keeps all of its width, whatever it says and in
+           whatever font, and when the live button does not fit beside it, it goes to a row of its own under it. Picture is beside the camera button, as in a recording's bar (the four of them in the one row were
+           wider than the bar from 320 to about 490 px: the live button lay over the clock) */
+        @media (max-width: 499px) {
+            .rbar.islive:not(.over) { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+            .rbar.islive:not(.over) .tl { order: 1; flex: 0 0 100%; }
+            .rbar.islive:not(.over) .rplay { order: 2; flex: none; }
+            .rbar.islive:not(.over) .clock { order: 3; flex: 1 1 auto; min-width: max-content; }
+            .rbar.islive:not(.over) .livebox { order: 4; flex: none; margin-left: auto; }
+            .rbar.islive:not(.over) .speed { order: 5; flex: 0 0 100%; }
+            .rbar.islive:not(.over) .camb { order: 6; flex: 1 1 0; min-width: 0; }
+            .rbar.islive:not(.over) .picwrap { order: 7; flex: none; }
+        }
         @media (max-height: 520px) {
             .rbar.over.islive { grid-template-columns: auto minmax(0, 1fr) auto auto auto auto auto auto; grid-template-areas: "play tl clock live cam speed pic fsx"; }
             .rbar.over.islive .livenow, .rbar.over.islive .jtl { min-height: 32px; padding: 3px 10px; font-size: 14px; }
@@ -970,10 +984,10 @@
         <h1 class="sr">Ants (1998)</h1>
         <a class="btn sbhome" href="/" id="menu-btn" title="Home: play on this computer, host a match or join one"><span class="sbchev" aria-hidden="true">&lsaquo;</span>Home</a>
         <nav aria-label="Pages"><a class="btn" href="/">Home</a><a class="btn" href="/matches">Matches</a><a class="btn" href="/mapmaker">Map maker</a><a class="btn sbdc" href="https://discord.gg/WaWrXQnKPj" target="_blank" rel="noopener noreferrer" aria-label="Discord server"><svg class="dc" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="currentColor" d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a></nav>
-        <a href="/matches" id="all-btn" class="btn rep-only" title="Back to the list of matches">&lsaquo; All matches</a>
+        <a href="/matches" id="all-btn" class="btn rep-only" title="Back to the list of matches"><span class="btn-text">&lsaquo; All matches</span><span class="btn-text-short">&lsaquo; Matches</span></a>
         <div class="rhead rep-only"><h2 id="r-title"></h2><div id="r-meta"></div></div>
         <span class="sbgrow"></span><a class="btn sblive" href="/" hidden></a>
-        <button id="copy-btn" type="button" class="btn rep-only wide-only" title="Copy the link to this match">Copy link</button>
+        <button id="copy-btn" type="button" class="btn rep-only" title="Copy the link to this match" aria-label="Copy link"><svg class="cl-ic" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path d="M12 15V3M7.5 7.5L12 3l4.5 4.5M5 11v9h14v-9"/></svg><span class="cl-tx">Copy link</span></button>
         <button id="stats-btn" type="button" class="btn rep-only wide-only" title="The stats of this match" aria-expanded="false" aria-controls="mstats" hidden>Stats</button>
         <a href="#" data-dl="" class="btn rep-only wide-only" title="Download the recording (.antsrep)">Download</a>
         <button id="fullscreen-btn" type="button" class="btn" title="Toggle Fullscreen"><span class="btn-text">Fullscreen</span><span class="btn-text-short">Full</span></button>
@@ -3087,7 +3101,6 @@
                 var text = ($('game-version') || {}).textContent || '';
                 return text.indexOf('@') === -1 && text ? text : (info && info.version ? 'v' + info.version : 'this version');
             }
-            function replayUrl() { return window.location.origin + (FILE ? '/play?replay=' + encodeURIComponent(FILE) : '/play?live=' + encodeURIComponent(LIVE_ID || '')); }
 
             // ---- the header: what is playing ----
             function lengthSeconds() { return info && info.turns ? Math.floor(info.turns / TPS) : 0; }
@@ -3432,15 +3445,42 @@
                 var b = ev.target.closest('button');
                 if (b) { command(DO.speed, Math.round(parseFloat(b.dataset.s) * 100)); lastKey = ''; tick(); }
             });
-            var copy = function () {
-                var url = replayUrl();
-                var done = function () { say('Link to this match copied.'); };
-                try {
-                    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(url).then(done, function () { antsQuietly(function () { return window.prompt('Copy the link to this match:', url); }); }); return; }
-                } catch (e) { /* the prompt below */ }
-                antsQuietly(function () { return window.prompt('Copy the link to this match:', url); });
-            };
-            $('copy-btn').addEventListener('click', copy);
+            // COPY_LINK_BEGIN (tests/scripts/web_copy_link_check.js runs this block on a page of fakes)
+            // The bar's Copy link (docs/REPLAYS.md "Watching"): the address of the page that is watched, made of this site, play?live=<id> or play?replay=<file> and nothing else of the page's own address. Where the page
+            // has a phone's layout (the test of web/lobby.html's Share) and the browser has a share sheet, a press opens it with the address; anywhere else the address goes to the clipboard and the toast says "Copied!".
+            // A clipboard that refuses is tried the old way (a hidden field and the copy command), and when that fails too the browser's own box shows the address to copy by hand.
+            function copyAddress() { return window.location.origin + (FILE ? '/play?replay=' + encodeURIComponent(FILE) : '/play?live=' + encodeURIComponent(LIVE_ID || '')); }
+            function copyPhone() { try { return !!window.matchMedia && window.matchMedia('(max-width: 700px), (max-height: 500px)').matches; } catch (e) { return false; } }
+            function copyByHand(url) { antsQuietly(function () { return window.prompt('Copy the link to this match:', url); }); }
+            function copyField(url) {
+                var box = document.createElement('input'), copied = false;
+                box.value = url; box.setAttribute('readonly', ''); box.style.position = 'fixed'; box.style.opacity = '0';
+                document.body.appendChild(box);
+                try { box.select(); copied = document.execCommand('copy') === true; } catch (e) { copied = false; }
+                document.body.removeChild(box);
+                return copied;
+            }
+            function copyLink() {
+                var url = copyAddress();
+                var done = function () { say('Copied!'); };
+                var oldWay = function () { if (copyField(url)) done(); else copyByHand(url); };
+                var copyIt = function () {
+                    try {
+                        if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(url).then(done, oldWay); return; }
+                    } catch (e) { /* the old way */ }
+                    oldWay();
+                };
+                if (copyPhone() && typeof navigator.share === 'function') {
+                    try {
+                        var sheet = navigator.share({ url: url });
+                        if (sheet && sheet.catch) sheet.catch(function (e) { if (!e || e.name !== 'AbortError') copyIt(); });      // (a sheet that was only closed is done; one that could not open is a refusal)
+                        return;
+                    } catch (e) { /* no share sheet: copy it */ }
+                }
+                copyIt();
+            }
+            $('copy-btn').addEventListener('click', copyLink);
+            // COPY_LINK_END
             $('b-fsx').addEventListener('click', function () { $('fullscreen-btn').click(); });
             // PICTURE_POPOVER_BEGIN (tests/scripts/web_picture_popover_check.js runs this block on a page of fakes)
             // The Picture button: the small window with the dropdown of the shapes opens above the bar and closes with a second press, a click elsewhere, Esc (focus goes back to the button) or the focus leaving it. The

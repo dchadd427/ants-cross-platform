@@ -178,7 +178,7 @@ std::vector<sim::Command> ReachGuard::filter(const BotView& view, uint8_t seat, 
     std::vector<Intent> kept;
     kept.reserve(intents.size());
     for (Intent& in : intents) {
-        if (!walks(in.command.type) || in.command.ants.empty()) {
+        if (!walks(in.command.type) || in.command.ants.empty() || in.cancel) {                    // (the cancel of a stand is meant to be refused: no walk leads there)
             kept.push_back(std::move(in));
             continue;
         }

@@ -173,7 +173,7 @@ const GEOM = () => {
                 if (w <= 700 || h <= 500) { await page.click('.htab.t-games').catch(() => {}); }
                 await sleep(1500);
                 const g = await page.evaluate(() => ({ rows: document.querySelectorAll('.gdock .glive').length, box: Array.from(document.querySelectorAll('.glivebox')).some((b) => b.getClientRects().length),
-                    cards: document.querySelectorAll('.gdock .glist:not(.glivelist) .gitem').length, note: !!document.querySelector('.gpnote') && !document.querySelector('.gpnote').hidden, toast: !!document.querySelector('.gtoast') && !document.querySelector('.gtoast').hidden, head: document.querySelector('.gdock .gpcount').textContent }));
+                    cards: document.querySelectorAll('.gdock .glist:not(.glivelist) .gitem:not(.gslot)').length, note: !!document.querySelector('.gpnote') && !document.querySelector('.gpnote').hidden, toast: !!document.querySelector('.gtoast') && !document.querySelector('.gtoast').hidden, head: document.querySelector('.gdock .gpcount').textContent }));
                 check(name + '/' + mode + ': no row, and the open rooms stay', g.rows === 0 && g.cards === 3, JSON.stringify(g));
                 check(name + '/' + mode + ': the section is not there, with no notice, no toast and the head as before', !g.box && !g.note && !g.toast && /^3 waiting/.test(g.head), JSON.stringify(g));
                 await shot(page, name + '_' + mode);
@@ -191,19 +191,19 @@ const GEOM = () => {
                     await sleep(1500);
                     const g = await page.evaluate(() => {
                         const q = (e) => e && e.getClientRects().length ? e.getBoundingClientRect() : null;
-                        const body = q(document.querySelector('.gdock .gpbody')), empty = q(document.querySelector('.gdock .gempty')), row = q(document.querySelector('.gdock .glive')), list = q(document.querySelector('.gdock .glist:not(.glivelist)'));
-                        const e = document.querySelector('.gdock .gempty');
-                        return { body: body && [body.top, body.bottom], empty: empty && [empty.top, empty.height], row: row && [row.top, row.bottom], list: list && [list.top, list.bottom], shown: !!empty, ant: !!(e && q(e.querySelector('.ant'))), btns: e ? e.querySelectorAll('button').length : 0, code: !!q(document.querySelector('.gdock .gcodelink')), sideways: document.documentElement.scrollWidth > innerWidth };
+                        const body = q(document.querySelector('.gdock .gpbody')), row = q(document.querySelector('.gdock .glive')), list = q(document.querySelector('.gdock .glist:not(.glivelist)'));
+                        const slots = [...document.querySelectorAll('.gdock .gslot')].filter((e) => q(e)), open = [...document.querySelectorAll('.gdock .glist:not(.glivelist) .gitem:not(.gslot)')].filter((e) => q(e));
+                        return { body: body && [body.top, body.bottom], slots: slots.length, slotBtns: slots.every((e) => e.querySelectorAll('button').length === 1), open: open.length, row: row && [row.top, row.bottom], list: list && [list.top, list.bottom], code: !!q(document.querySelector('.gdock .gcodelink')), sideways: document.documentElement.scrollWidth > innerWidth };
                     });
                     const tag = name + '/' + label;
                     check(tag + ': no sideways scroll, Have a code? is shown', !g.sideways && g.code, JSON.stringify(g));
                     if (opts.noOpen && !opts.mode) {
-                        check(tag + ': no "No open games right now." card at all while a match is in progress (the matches are the first thing in the list)', !g.shown && !g.ant, JSON.stringify(g));
-                        if (name !== 'side') check(tag + ': the first match in progress shows in the list without a scroll (all of it for one match; 100 px of it, name and Watch, when its names wrap to three lines)', g.row && Math.min(g.row[1], g.body[1]) - g.row[0] >= Math.min(100, g.row[1] - g.row[0]) && (label !== '0 open, 1 live' || g.row[1] <= g.body[1] + 0.5), JSON.stringify(g));
+                        check(tag + ': one row of empty cards while a match is in progress (2 on a phone, 2 to 3 on a wide window) and no "No open games right now." card, then the matches', g.slots >= 2 && g.slots <= 3 && g.slotBtns && g.list && g.row && g.list[0] < g.row[0], JSON.stringify(g));
+                        if (name !== 'side' && h >= 700) check(tag + ': the head of the first match in progress shows under the empty cards without a scroll (100 px of it: its name and Watch)', g.row && Math.min(g.row[1], g.body[1]) - g.row[0] >= Math.min(100, g.row[1] - g.row[0]), JSON.stringify(g));
                     } else if (opts.mode === 'none') {
-                        check(tag + ': nothing at all keeps the full empty card (the picture, still no button)', g.shown && g.ant && g.btns === 0, JSON.stringify(g));
+                        check(tag + ': nothing at all: two rows of empty cards (4 to 6; 3 on a phone), each with its one button, and no match', g.slots >= 3 && g.slots <= 6 && g.slotBtns && !g.row, JSON.stringify(g));
                     } else {
-                        check(tag + ': open rooms first, the matches under them, no empty card', !g.empty && g.list && g.row && g.list[0] < g.row[0], JSON.stringify(g));
+                        check(tag + ': open rooms first, then the empty cards of one row (none when the rooms fill it), the matches under them', g.list && g.row && g.list[0] < g.row[0] && g.open === 3 && g.slots <= 3, JSON.stringify(g));
                     }
                     await shot(page, 'compact_' + label.replace(/[^0-9a-z]+/g, '_') + '_' + name);
                     await context.close();

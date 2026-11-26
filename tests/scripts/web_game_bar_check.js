@@ -11,8 +11,11 @@
 //   side:   a tab that the front page opened only because its person holds a room (Watch on a live match, Matches: web/site_nav.js, which every page with the bar loads): with a front page that answers on the channel
 //           "ants-watch" for it, its Home (the bar's and the Menu's) closes the tab and the front page's tab is not touched, also on the pages that the tab's links lead to; with none (not at all, not for that tab,
 //           not any more, a wrong token), no channel, a tab that cannot be closed, a press with a modifier key, a link that is not Home, or a page that is not such a tab, it is a plain link of the tab;
-//   Menu:   the lines the page adds each time it opens (the note while a match runs, "Reload page" last of the small links, a recording's Copy link, Download and Open another file on a narrow window only and
-//           not for a file of your own or a live view, each one pressing the button of the bar that it stands for).
+//   Menu:   the lines the page adds each time it opens (the note while a match runs, "Reload page" last of the small links, a recording's Download and Open another file on a narrow window only and
+//           not for a file of your own or a live view, each one pressing the button of the bar that it stands for; no Copy link: the bar has that button at every width);
+//   Copy:   the bar's Copy link at each width: its words on a wide window, the share glyph alone (a square of at least 44 px) on a phone, never for a file of your own;
+//   Row:    the controls row under the picture (Play, the clock, Jump to live or the Live mark, Picture, the speeds, the camera; the page's own style and markup) in a live view and a recording, from 320 to 700 px:
+//           no box lies on another, the clock's words included, nothing runs past the window, the clock is not cut off, every button is at least 44 px high.
 // usage: node web_game_bar_check.js game_bar.js game_bar.css [shell.html [site_nav.js site_nav.css]]     (exit 0: every check holds; 1: one fails; 3: no browser to run it in)
 'use strict';
 const fs = require('fs');
@@ -335,7 +338,7 @@ const active = (p) => p.evaluate(() => { const a = document.activeElement; retur
             expect('"Reload page" reloads and closes the Menu', [(await log(p)).reloads, await menuOpen(p)], [1, false]);
             for (let i = 0; i < 3; i++) { await p.click('.sbtn'); await p.click('.sbtn'); }
             await p.click('.sbtn');
-            expect('opened again and again: one "Reload page", and no line made twice', await p.evaluate(() => [document.querySelectorAll('#sbm .gb-reload').length, document.querySelectorAll('#sbm .gb-x').length]), [1, 3]);
+            expect('opened again and again: one "Reload page", and no line made twice', await p.evaluate(() => [document.querySelectorAll('#sbm .gb-reload').length, document.querySelectorAll('#sbm .gb-x').length]), [1, 2]);
             await p.click('.sbtn');
             await p.evaluate(() => { window.__busy = true; });
             await p.click('.sbtn');
@@ -345,9 +348,9 @@ const active = (p) => p.evaluate(() => { const a = document.activeElement; retur
             await context.close();
         }
         for (const [w, h, body, wanted, label] of [
-            [390, 844, 'replay', ['Copy link', 'Download'], 'a recording on a phone'],
+            [390, 844, 'replay', ['Download'], 'a recording on a phone'],
             [390, 844, 'replay ownfile', [], 'a file of your own on a phone'],
-            [390, 844, 'replay live', ['Copy link'], 'a live view on a phone'],
+            [390, 844, 'replay live', [], 'a live view on a phone'],
             [1280, 800, 'replay', [], 'a recording on a wide window (the bar has the buttons)'],
         ]) {
             const { context, p } = await open(browser, w, h, body);
@@ -369,15 +372,98 @@ const active = (p) => p.evaluate(() => { const a = document.activeElement; retur
         {
             const { context, p } = await open(browser, 390, 844, 'replay');
             await p.evaluate(() => {
-                document.getElementById('copy-btn').addEventListener('click', () => window.__log.clicks.push({ id: 'copy-pressed' }));
                 document.querySelector('[data-dl]').addEventListener('click', (e) => { e.preventDefault(); window.__log.clicks.push({ id: 'download-pressed' }); });
             });
             await p.click('.sbtn');
-            await p.click('#sbm .gb-copy');
-            await p.click('.sbtn');
             await p.click('#sbm .gb-dl');
             const ids = (await log(p)).clicks.map((c) => c.id);
-            expect('Copy link and Download of the Menu press the bar\'s own buttons', [ids.includes('copy-pressed'), ids.includes('download-pressed')], [true, true]);
+            expect('Download of the Menu presses the bar\'s own button', ids.includes('download-pressed'), true);
+            await context.close();
+        }
+        // ---- the bar's Copy link: words on a wide window, the glyph alone on a phone ----
+        for (const [w, h, body, label] of [[1280, 800, 'replay live', 'a live view on a wide window'], [390, 844, 'replay live', 'a live view on a phone'], [320, 640, 'replay live', 'a live view on the narrowest phone'],
+                                           [390, 844, 'replay', 'a recording on a phone'], [701, 800, 'replay', 'a recording at 701 px'], [700, 800, 'replay', 'a recording at 700 px']]) {
+            const { context, p } = await open(browser, w, h, body);
+            const g = await p.evaluate(() => {
+                const b = document.getElementById('copy-btn'), r = b.getBoundingClientRect(), shown = (n) => !!n && getComputedStyle(n).display !== 'none' && n.getClientRects().length > 0;
+                return { shown: shown(b), w: r.width, h: r.height, glyph: shown(b.querySelector('.cl-ic')), words: shown(b.querySelector('.cl-tx')), name: b.getAttribute('aria-label'), vw: window.innerWidth, right: r.right };
+            });
+            const phone = w <= 700;
+            expect(label + ': the button is in the bar, with the glyph alone on a phone and the words from 701 px', [g.shown, g.glyph, g.words, g.name], [true, phone, !phone, 'Copy link']);
+            if (phone) expect(label + ': a target of at least 44 px, inside the window', [g.w >= 44, g.h >= 44, g.right <= g.vw], [true, true, true]);
+            await context.close();
+        }
+        {
+            const { context, p } = await open(browser, 390, 844, 'replay ownfile');
+            expect('a file of your own: there is no link to copy, so no button', await p.evaluate(() => getComputedStyle(document.getElementById('copy-btn')).display), 'none');
+            await context.close();
+        }
+        // ---- the controls row of a live view and of a recording, on the page's own style and markup, in the page (not fullscreen): from 320 to 700 px nothing lies on anything (the clock's words included:
+        //      they lie past the clock's own box when it is squeezed), nothing runs past the window, the clock's words fit its box and every button is 44 px high ----
+        {
+            const sheets = (page.match(/<link rel="stylesheet" href="[^"]+">/g) || []).join('');
+            const styles = [...page.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
+            const rows = page.slice(page.indexOf('<div class="rbar rep-only" id="rbar">'), page.indexOf('<section class="mstats flow'));
+            const ROW = '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1">' + sheets + '<style>' + styles + '</style><body class="replay">' + bar + '<div id="game-stage" data-aspect="16:9"></div>' + rows;
+            const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+            await context.route('http://row.test/**', (route) => {      // (the page's own files: its style sheets and its font)
+                const name = decodeURIComponent(new URL(route.request().url()).pathname.slice(1)), file = path.resolve(WEB, name);
+                if (name === 'row.html') return route.fulfill({ contentType: 'text/html', body: ROW });
+                if (name && file.startsWith(path.resolve(WEB) + path.sep) && fs.existsSync(file) && fs.statSync(file).isFile()) return route.fulfill({ path: file });
+                return route.fulfill({ status: 404, body: '' });
+            });
+            const p = await context.newPage();
+            await p.goto('http://row.test/row.html');
+            await p.addScriptTag({ content: fs.readFileSync(path.join(WEB, 'replay_page.js'), 'utf8') });
+            await p.evaluate(() => { window.__rew = window.AntsReplay.rewindControl({ doc: document, turn: () => 0, seek: () => {} }); });      // (Back 30 seconds, made as the page makes it)
+            await p.evaluate(() => Promise.all([document.fonts.load('19px "Libre Franklin"'), document.fonts.load('700 19px "Libre Franklin"')]).then(() => document.fonts.ready));
+            const widths = [];
+            for (let w = 320; w <= 700; w += 10) widths.push(w);
+            for (const w of [375, 393, 412, 499, 500, 501, 699, 700]) if (!widths.includes(w)) widths.push(w);
+            widths.sort((a, b) => a - b);
+            const WORDS = 'the clock\'s words';
+            const measure = () => p.evaluate((WORDS) => {
+                const shown = (n) => !!n && getComputedStyle(n).display !== 'none' && n.getClientRects().length > 0, box = (r) => [r.left, r.top, r.right, r.bottom];
+                const boxes = {};
+                for (const id of ['b-play', 'b-rew', 'tl', 'clock', 'b-live', 'livenow', 'b-cam', 'speed', 'picwrap']) { const n = document.getElementById(id); if (shown(n)) boxes[id] = box(n.getBoundingClientRect()); }
+                const clock = document.getElementById('clock'), range = document.createRange();
+                range.selectNodeContents(clock);
+                boxes[WORDS] = box(range.getBoundingClientRect());
+                return { boxes, vw: window.innerWidth, scroll: document.documentElement.scrollWidth, clip: clock.scrollWidth - clock.clientWidth,
+                         short: [].slice.call(document.querySelectorAll('#rbar button')).filter(shown).map((b) => [b.id || b.textContent.trim(), b.getBoundingClientRect().height]).filter((b) => b[1] < 43.5).map((b) => b[0]) };
+            }, WORDS);
+            for (const [label, live, atPresent] of [['a live view, Jump to live', true, false], ['a live view at the present', true, true], ['a recording', false, false]]) {
+                for (const [now, all] of [['10:24', '11:14'], ['62:03', '62:03']]) {
+                    await p.evaluate(([live, atPresent, now, all]) => {
+                        document.getElementById('rbar').classList.toggle('islive', live);
+                        document.body.classList.toggle('live', live);
+                        document.getElementById('b-live').hidden = !(live && !atPresent);
+                        document.getElementById('livenow').hidden = !(live && atPresent);
+                        window.__rew.show(!live);
+                        document.getElementById('t-now').textContent = now;
+                        document.getElementById('t-all').textContent = '/ ' + all;
+                    }, [live, atPresent, now, all]);
+                    const faults = {};
+                    for (const w of widths) {
+                        await p.setViewportSize({ width: w, height: 844 });
+                        const g = await measure(), found = [], names = Object.keys(g.boxes);
+                        for (let i = 0; i < names.length; i++) {
+                            const a = g.boxes[names[i]];
+                            if (a[0] < -0.5 || a[2] > g.vw + 0.5) found.push(names[i] + ' runs past the window');
+                            for (const other of names.slice(i + 1)) {
+                                const b = g.boxes[other];
+                                if (names[i] === 'clock' && other === WORDS) continue;                    // (the words are in the clock's box, by definition)
+                                if (a[0] < b[2] - 0.5 && b[0] < a[2] - 0.5 && a[1] < b[3] - 0.5 && b[1] < a[3] - 0.5) found.push(names[i] + ' lies on ' + other);
+                            }
+                        }
+                        if (g.scroll > g.vw) found.push('the page scrolls sideways');
+                        if (g.clip > 0) found.push('the clock is cut off');
+                        for (const name of g.short) found.push(name + ' is under 44 px high');
+                        for (const what of found) faults[what] = faults[what] ? [faults[what][0], w, faults[what][2] + 1] : [w, w, 1];      // (what, from which width, to which, at how many)
+                    }
+                    expect(label + ' (' + now + ' / ' + all + ') from 320 to 700 px: nothing lies on anything or runs past the window, the clock is whole, every button is 44 px high', faults, {});
+                }
+            }
             await context.close();
         }
         // ---- Reload page asks while a game is played ----

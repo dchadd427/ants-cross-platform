@@ -157,7 +157,7 @@ async function flows() {
                     const top = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2); return !(top === b || b.contains(top));
                 }).length;
                 return { title: document.title, label: !!document.getElementById('site-label'), main: r(main), bar: r(bar), host: r(document.getElementById('home')), pop: r(pop), chat: r(chat), tabs: r(tabs), tabsShown: shown(tabs), popShown: shown(pop), chatShown: shown(chat), role: pop && pop.getAttribute('role'),
-                    yard: !!document.getElementById('yard') || !!document.querySelector('.standin, .ylabel, .yant'), rows: document.querySelectorAll('.gpop .gitem').length, joins: document.querySelectorAll('.gpop .gjoin').length, covered, tab: document.getElementById('home').getAttribute('data-tab'),
+                    yard: !!document.getElementById('yard') || !!document.querySelector('.standin, .ylabel, .yant'), rows: document.querySelectorAll('.gpop .gitem:not(.gslot)').length, joins: document.querySelectorAll('.gpop .gitem:not(.gslot) .gjoin').length, covered, tab: document.getElementById('home').getAttribute('data-tab'),
                     gamesInBar: document.querySelectorAll('.hbar .games').length, wide: document.documentElement.scrollWidth <= window.innerWidth, mapSize: (document.querySelector('.gpop .gmap') || { getBoundingClientRect: () => ({ width: 0 }) }).getBoundingClientRect().width };
             });
             for (const size of [['desktop', 1280, 800], ['laptop', 1366, 640], ['tablet', 900, 700], ['small window', 800, 600], ['701 wide', 701, 800], ['700 wide', 700, 800], ['phone', 390, 844], ['side', 844, 390], ['small side', 568, 320]]) {
@@ -186,15 +186,30 @@ async function flows() {
                 const many = await standIn(server, { lobbies: () => ({ format: 1, count: 12, lobbies: Array.from({ length: 12 }, (_, i) => ({ code: 'm' + (i + 2) + 'x2q' + i, host: 'Host' + i, map: 'TREASURE.LVL', mode: 'highest-score', people: 1, bots: 0, free: 3, size: 4, age: 10 + i })) }) });
                 for (const size of [['desktop', 1280, 800], ['phone', 390, 844], ['side', 844, 390]]) {
                     const empty = await newPage(browser, none, 'Maple', size, '/', true), long = await newPage(browser, many, 'Maple', size, '/', true);
-                    await empty.waitForSelector('.gpop .gempty:not([hidden])'); await long.waitForSelector('.gpop .gitem'); await long.waitForSelector('.gc', { state: 'attached' });
-                    check('' + size[0] + ': no open games shows the empty state (words only, no Quick host or Quick join: the bar has them) and Have a code? in the docked list', await empty.evaluate(() => { const p = document.querySelector('.gpop'), b = [...p.querySelectorAll('.gempty button')]; return p.textContent.indexOf('No open games right now.') !== -1 && !!p.querySelector('.gcodelink') && /none waiting/.test(p.textContent) && b.length === 0; }));
+                    await empty.waitForSelector('.gpop .gslot'); await long.waitForSelector('.gpop .gitem'); await long.waitForSelector('.gc', { state: 'attached' });
+                    check('' + size[0] + ': no open games shows the empty cards (each with its one button, Host here: the bar has Quick host and Quick join) and Have a code? in the docked list', await empty.evaluate(() => { const p = document.querySelector('.gpop'), c = [...p.querySelectorAll('.gslot')]; const list = p.querySelector('.glist'), tracks = getComputedStyle(list).gridTemplateColumns.split(/\s+/).filter(Boolean).length; return c.length === (tracks === 1 ? 3 : 2 * tracks) && c.every((e) => e.querySelectorAll('button').length === 1 && e.querySelector('button').textContent === 'Host here') && p.textContent.indexOf('No open games right now.') === -1 && !!p.querySelector('.gcodelink') && /none waiting/.test(p.textContent); }));
                     const m = await long.evaluate(async () => {
                         const p = document.querySelector('.gpop'), body = p.querySelector('.gpbody'), q = p.getBoundingClientRect(), y = document.getElementById('hmain').getBoundingClientRect(); const scrolls = body.scrollHeight > body.clientHeight + 4;
                         body.scrollTop = body.scrollHeight; await new Promise((r) => setTimeout(r, 50)); const c = p.querySelector('.gcodelink'), cr = c.getBoundingClientRect(), top = document.elementFromPoint(cr.left + cr.width / 2, cr.top + cr.height / 2), last = [...p.querySelectorAll('.gjoin')].pop(), lr = last.getBoundingClientRect(), lt = document.elementFromPoint(lr.left + lr.width / 2, lr.top + lr.height / 2);
-                        return { scrolls, bottom: q.bottom <= y.bottom + 1, codeReachable: top === c, lastReachable: lt === last || last.contains(lt), count: document.querySelectorAll('.gpop .gitem').length, wide: document.documentElement.scrollWidth <= window.innerWidth };
+                        return { scrolls, bottom: q.bottom <= y.bottom + 1, codeReachable: top === c, lastReachable: lt === last || last.contains(lt), count: document.querySelectorAll('.gpop .gitem:not(.gslot)').length, wide: document.documentElement.scrollWidth <= window.innerWidth };
                     });
                     check('' + size[0] + ': twelve games scroll inside the list (it stays in the body), the last Join can be reached, Have a code? stays in the heading, nothing sideways', m.scrolls && m.bottom && m.codeReachable && m.lastReachable && m.count === 12 && m.wide, JSON.stringify(m));
                     await empty.context().close(); await long.context().close();
+                }
+                // the REAL columns of the grid and the empty cards that follow them: two rows (4 at 1000 px, 6 at 1366 px with the players' column open, 3 on a phone), counted from the grid's own tracks; and again when the grid changes with no
+                // change of the window (the players' column is dragged wider by its splitter, web/home/split.js: its width is the property --pl-w of Home's div, set here by hand)
+                const grid = (p) => p.evaluate(() => { const list = document.querySelector('.gpop .glist'), tracks = getComputedStyle(list).gridTemplateColumns.split(/\s+/).filter(Boolean).length; return { slots: document.querySelectorAll('.gpop .gslot').length, tracks, fallback: window.AntsHomeGames.columnsFor(window.innerWidth, window.innerHeight), players: document.getElementById('home').classList.contains('pl-on') }; });
+                const pull = async (p, px) => { await p.evaluate((x) => { const h = document.getElementById('home'); if (x) { h.setAttribute('data-split-w', String(x)); h.style.setProperty('--pl-w', x + 'px'); } else { h.removeAttribute('data-split-w'); h.style.removeProperty('--pl-w'); } }, px); await sleep(500); return grid(p); };
+                for (const [label, w, h, want] of [['1000 x 800', 1000, 800, 4], ['1366 x 768', 1366, 768, 6], ['1366 x 640', 1366, 640, 6], ['phone 390 x 844', 390, 844, 3]]) {
+                    const p = await newPage(browser, none, 'Maple', [label, w, h], '/', true);
+                    await p.waitForSelector('.gpop .gslot'); await sleep(500);
+                    const m = await grid(p);
+                    check(label + ' (the players\' column ' + (m.players ? 'open' : 'NOT open') + '): ' + want + ' empty cards, two rows of the grid\'s real columns (the page\'s own count where there is no layout, columnsFor, says the same)', (w <= 700 || m.players) && m.slots === want && m.tracks === (want === 3 ? 1 : want / 2) && m.fallback === m.tracks, JSON.stringify(m));
+                    if (w >= 1366) {
+                        const narrow = await pull(p, 600), back = await pull(p, 0);
+                        check(label + ': the players\' column dragged to 600 px leaves the grid two columns and the empty cards follow it with no change of the window (4), and back to ' + want, narrow.tracks === 2 && narrow.slots === 4 && back.slots === want, JSON.stringify([m, narrow, back]));
+                    }
+                    await p.context().close();
                 }
                 none.close(); many.close();
             }
@@ -212,7 +227,7 @@ async function flows() {
             await page.waitForSelector('.gpop .gitem');
             await page.waitForFunction(() => [...document.querySelectorAll('.gpop .gmap')].every((q) => { const i = q.querySelector('img'); return !i || i.complete; }), null, { timeout: 10000 });
             await sleep(300);
-            const pics = await page.evaluate(() => [...document.querySelectorAll('.gpop .gitem')].map((li) => {
+            const pics = await page.evaluate(() => [...document.querySelectorAll('.gpop .gitem:not(.gslot)')].map((li) => {
                 const q = li.querySelector('.gmap'), i = q.querySelector('img'), b = q.getBoundingClientRect();
                 return { host: li.querySelector('.gname').textContent, img: !!i, loaded: !!i && i.complete && i.naturalWidth > 0, src: i ? i.getAttribute('src') : null, w: Math.round(b.width), h: Math.round(b.height), bg: getComputedStyle(q).backgroundColor };
             }));
@@ -244,8 +259,8 @@ async function flows() {
             check('the real /lobbies door holds the private room as a row of its own kind: private, the host\'s name, the map and the seats (one person, three free colors), and no code; the room\'s code is nowhere in the answer', body.lobbies.length === 1 && body.lobbies[0].private === true && !('code' in body.lobbies[0]) && body.lobbies[0].host === name && body.lobbies[0].people === 1 && body.lobbies[0].free === 3 && body.count === 0 && text.indexOf(code) === -1, text);
             await watcher.evaluate(() => document.querySelector('.htab.t-games').click());
             await until('the locked card is in the list', async () => (await watcher.evaluate(() => document.querySelectorAll('.glist .gpriv').length)) === 1, 12000);
-            const card = await watcher.evaluate(() => { const c = document.querySelector('.glist .gpriv'); return { name: c.querySelector('.gname').textContent, tag: c.querySelector('.gprivtag').textContent, count: c.querySelector('.gcount').textContent, controls: c.querySelectorAll('button, a, input, [tabindex], [href], [data-code]').length, lock: !!c.querySelector('.glockbox'), told: c.querySelector('.sr').textContent, head: document.querySelector('.gpcount').textContent, pill: document.querySelector('.htab.t-games .pill').textContent, joins: document.querySelectorAll('.glist .gjoin').length, strip: !document.querySelector('.gempty').hidden && document.querySelector('.gempty').classList.contains('gslim') }; });
-            check('a second browser: the Games list holds one card, the host\'s, tagged Invite only, with a padlock, one of four seats and NOTHING to press (no button, link, field, focus stop or code), a slim strip instead of the big empty card, no Join anywhere', card.name === name && card.tag === GT.privateTag && card.count === '1/4' && card.controls === 0 && card.lock && card.joins === 0 && card.strip, JSON.stringify(card));
+            const card = await watcher.evaluate(() => { const c = document.querySelector('.glist .gpriv'); return { name: c.querySelector('.gname').textContent, tag: c.querySelector('.gprivtag').textContent, count: c.querySelector('.gcount').textContent, controls: c.querySelectorAll('button, a, input, [tabindex], [href], [data-code]').length, lock: !!c.querySelector('.glockbox'), told: c.querySelector('.sr').textContent, head: document.querySelector('.gpcount').textContent, pill: document.querySelector('.htab.t-games .pill').textContent, joins: document.querySelectorAll('.glist .gitem:not(.gslot) .gjoin').length, slots: document.querySelectorAll('.glist .gslot').length }; });
+            check('a second browser: the Games list holds one card, the host\'s, tagged Invite only, with a padlock, one of four seats and NOTHING to press (no button, link, field, focus stop or code), the empty cards before it (it takes no place of them), no Join anywhere', card.name === name && card.tag === GT.privateTag && card.count === '1/4' && card.controls === 0 && card.lock && card.joins === 0 && card.slots > 0, JSON.stringify(card));
             check('... the heading says none open, 1 invite only; the count on the Games button is 0 (a locked room is not a game to join); a screen reader hears that it cannot be joined', card.head === 'none open, 1 ' + GT.privateTag.toLowerCase() && card.pill === '0' && card.told.indexOf(GT.privateRoom + ', cannot join.') === 0, JSON.stringify(card));
             const swept = await watcher.evaluate((c) => ({ html: document.documentElement.outerHTML.indexOf(c) !== -1, text: document.body.innerText.indexOf(c) !== -1, url: location.href.indexOf(c) !== -1 }), code);
             check('the room\'s code is nowhere in the second page: not in a text, not in an attribute, not in its address', !swept.html && !swept.text && !swept.url, JSON.stringify(swept));
@@ -433,7 +448,7 @@ async function flows() {
                 await shot(p, 'games', size);
                 const best = await p.evaluate(() => { const r = document.querySelector('.glist .gitem'), n = r.querySelector('.gname').getBoundingClientRect(), m = r.querySelector('.gmapname').getBoundingClientRect(), b = r.querySelector('.gbest').getBoundingClientRect(); return { nameTop: Math.round(n.top), nameBottom: Math.round(n.bottom), mapRight: Math.round(m.right), bestTop: Math.round(b.top), bestBottom: Math.round(b.bottom), bestLeft: Math.round(b.left) }; });
                 check(label + ': the BEST tag ' + (size[0] === 'phone' ? 'wraps under the name (the row is too narrow for it, as the phone picture draws it)' : 'stands beside the name and the map\'s name, on their line (the picture draws it so)'), size[0] === 'phone' ? best.bestTop >= best.nameBottom - 1 : best.bestTop >= best.nameTop - 1 && best.bestBottom <= best.nameBottom + 1 && best.bestLeft >= best.mapRight, JSON.stringify(best));
-                check(label + ': the Games list shows five rows, and every target in it is at least 44 px high and wide', (await p.evaluate(() => document.querySelectorAll('.glist .gitem').length)) === 5 && (await small(p, '.gpop')).length === 0, JSON.stringify(await small(p, '.gpop')));
+                check(label + ': the Games list shows five rows, and every target in it is at least 44 px high and wide', (await p.evaluate(() => document.querySelectorAll('.glist .gitem:not(.gslot)').length)) === 5 && (await small(p, '.gpop')).length === 0, JSON.stringify(await small(p, '.gpop')));
                 check(label + ': the list is inside the window and scrolls inside itself (it is no taller than what is left under the bar)', await p.evaluate(() => { const r = document.querySelector('.gpop').getBoundingClientRect(); return r.bottom <= window.innerHeight + 1 && r.right <= window.innerWidth + 1 && r.left >= 0 && r.top > 0; }));
                 await p.evaluate(() => { const j = document.querySelector('.gjoining'); j.hidden = false; j.firstChild.textContent = 'Joining Pebble’s room…'; });       // (the line of a Join that waits: shown by hand, the real one lasts a moment)
                 await shot(p, 'games_joining', size);
@@ -442,9 +457,9 @@ async function flows() {
                 await p.keyboard.press('Escape');
                 await p.context().close();
                 p = await newPage(browser, emptySite, 'Maple', size); await lit(p);
-                await p.evaluate(() => document.querySelector('.htab.t-games').click()); await p.waitForSelector('.gempty:not([hidden])');
+                await p.evaluate(() => document.querySelector('.htab.t-games').click()); await p.waitForSelector('.gslot');
                 await shot(p, 'games_empty', size);
-                check(label + ': the empty list says it, with no button of its own', (await p.evaluate(() => !!document.querySelector('.gempty') && document.querySelectorAll('.gempty button').length === 0)));
+                check(label + ': the empty list is empty cards, each with its one button Host here (44 px high and inside its card)', (await p.evaluate(() => { const c = [...document.querySelectorAll('.gslot')]; return c.length >= 2 && c.every((e) => { const b = e.querySelector('button'), r = e.getBoundingClientRect(), q = b.getBoundingClientRect(); return e.querySelectorAll('button').length === 1 && q.height >= 44 && q.left >= r.left && q.right <= r.right + 1; }); })));
                 await p.context().close();
                 p = await newPage(browser, offSite, 'Maple', size); await lit(p);
                 await p.evaluate(() => document.querySelector('.htab.t-games').click()); await p.waitForSelector('.goff:not([hidden])');

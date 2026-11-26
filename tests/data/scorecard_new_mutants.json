@@ -290,6 +290,51 @@
       "expect": "[counted]"
     },
     {
+      "id": "the_thief_card_counts_the_loot_that_was_taken",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "rep.loot_home[rep.top_thief.seat & 3u]",
+      "new": "rep.loot[rep.top_thief.seat & 3u]",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[counted]"
+    },
+    {
+      "id": "the_thief_card_says_one_raids_home",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "(n == 1 ? \" raid\" : \" raids\")",
+      "new": "\" raids\"",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[counted]"
+    },
+    {
+      "id": "the_thief_card_says_one_points",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "raids + \" home\" + loot + (points == 1 ? \" point\" : \" points\")",
+      "new": "raids + \" home\" + loot + \" points\"",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[counted]"
+    },
+    {
+      "id": "the_thief_card_is_never_shortened",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "if (c.pen.width(wording, em_units) <= room) return wording;",
+      "new": "if (c.pen.width(wording, em_units) >= 0 || room < 0) return wording;",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[counted]"
+    },
+    {
+      "id": "the_thief_card_is_shortened_on_a_wide_card",
+      "file": "src/ants_app/scorecard_new.cpp",
+      "old": "if (c.pen.width(wording, em_units) <= room) return wording;",
+      "new": "if (c.pen.width(wording, em_units) <= room / 2) return wording;",
+      "build": "test_scorecard_new",
+      "test": "./build/tests/test_app/test_scorecard_new",
+      "expect": "[counted]"
+    },
+    {
       "id": "the_originals_pressed_button_is_the_resting_one",
       "file": "src/ants_app/scorecard.cpp",
       "old": "const ButtonRect pressed{l.leave_pressed.x, l.leave_pressed.y, l.leave_pressed.w, l.leave_pressed.h};",

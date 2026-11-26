@@ -11,8 +11,8 @@ drawn as text only.
     address that is asked for (/lobbies, no query, no cookies);
   - the style: every target at least 44 px high and wide, a layout for a phone, a short window and a wide one, nothing loaded from another site, nothing that scrolls sideways;
   - the way into the image: the Dockerfile, the local web build and the CI's list of the image's files carry the two files;
-  - the code RUNS in the fake browser of tests/scripts/web_page_harness.js (node, when it is installed: tests/scripts/web_home_games_check.js, the list and its looks; web_home_games_room_check.js, the switch, Quick host
-    and Join; web_home_games_quickjoin_check.js, Quick join and the question before Leave room), and against a real server in tests/scripts/web_lobby_server_check.js; the real browser is the opt-in tests/scripts/web_home_games_browser.js;
+  - the code RUNS in the fake browser of tests/scripts/web_page_harness.js (node, when it is installed: tests/scripts/web_home_games_check.js, the list, its looks and the empty cards; web_home_games_room_check.js, the switch, Quick host
+    and Join; web_home_games_quickjoin_check.js, Quick join and the question before Leave room; web_home_games_live_check.js, the matches in progress and their scores), and against a real server in tests/scripts/web_lobby_server_check.js; the real browser is the opt-in tests/scripts/web_home_games_browser.js;
   - tests/data/home_games_mutants.json changes one thing at a time in a COPY of the files (a guest that can flip the switch, a second room made by Quick host, a list drawn as markup, a room left before the new one
     welcomes the page, a look while the tab is hidden, no backoff, a repeat from a hidden tab, a state that was only assumed, the page's own room in the list, no question with others in the room, a count that is not
     capped, a list that is off and throws, ...): the checks must then fail (the last class of this file; tools/mutate.py runs the same list).
@@ -333,14 +333,6 @@ class TheListIsDockedInHomesBody(unittest.TestCase):
         self.assertIn(".gdock .gitem:has(.gyours) { border-color: var(--gold); }", rules)
         self.assertIn(".gdock .glist { grid-template-columns: minmax(0, 1fr); }", rules, "one column on a phone")
 
-    def test_the_empty_state_is_text_only_the_bar_has_quick_host_and_join(self):
-        self.assertNotIn("gerow", self.js)
-        self.assertNotIn("gerow", self.homecss)
-        self.assertNotIn("emptyRow", self.js)
-        m = re.search(r"popEmpty[.]appendChild[(]el[(]'span', 'ant ant-green'.*\n.*\n", self.js)
-        self.assertIsNotNone(m)
-        self.assertNotIn("button(", m.group(0), "the card says it in words; the buttons are the bar's")
-
 
 class TheWayIntoTheImage(unittest.TestCase):
     def test_the_dockerfile_copies_the_folder_to_where_nginx_serves_home(self):
@@ -353,7 +345,7 @@ class TheWayIntoTheImage(unittest.TestCase):
         self.assertIn(" home/games.js home/games.css ", read(".github", "workflows", "ci.yml"))
 
 
-@unittest.skipUnless(NODE, "node is not installed: the Games list and the public Room were NOT run (tests/scripts/web_home_games_check.js, web_home_games_room_check.js)")
+@unittest.skipUnless(NODE, "node is not installed: the Games list and the public Room were NOT run (tests/scripts/web_home_games_check.js, web_home_games_room_check.js, web_home_games_quickjoin_check.js, web_home_games_live_check.js)")
 class TheCodeRuns(unittest.TestCase):
     def test_the_list_in_the_fake_browser(self):
         done = subprocess.run([NODE, CHECKS[0], LOBBY], capture_output=True, text=True, timeout=300, cwd=REPO)
@@ -364,6 +356,16 @@ class TheCodeRuns(unittest.TestCase):
         done = subprocess.run([NODE, CHECKS[1], LOBBY], capture_output=True, text=True, timeout=300, cwd=REPO)
         self.assertEqual(done.returncode, 0, done.stdout[-4000:] + done.stderr[-2000:])
         self.assertRegex(done.stdout, r"public room, Quick host and Join: \d+ checks, 0 failed")
+
+    def test_quick_join_and_the_question_before_leave_in_the_fake_browser(self):
+        done = subprocess.run([NODE, CHECKS[2], LOBBY], capture_output=True, text=True, timeout=300, cwd=REPO)
+        self.assertEqual(done.returncode, 0, done.stdout[-4000:] + done.stderr[-2000:])
+        self.assertRegex(done.stdout, r"Quick join and Leave room: \d+ checks, 0 failed")
+
+    def test_the_matches_in_progress_and_their_scores_in_the_fake_browser(self):
+        done = subprocess.run([NODE, CHECKS[3], LOBBY], capture_output=True, text=True, timeout=300, cwd=REPO)
+        self.assertEqual(done.returncode, 0, done.stdout[-4000:] + done.stderr[-2000:])
+        self.assertRegex(done.stdout, r"matches in progress: \d+ checks, 0 failed")
 
 
 class TheChecksAreNotVacuous(unittest.TestCase):

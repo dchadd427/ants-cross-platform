@@ -31,6 +31,7 @@ const assets::ColorRGBA kDivider{43, 58, 54, 255};           // the hairline bet
 const assets::ColorRGBA kRowDivider{93, 122, 112, 255};      // the line between two rows of the second page (an alliance's two players have a fainter one)
 const assets::ColorRGBA kTrack{27, 41, 37, 255};             // the track of a score bar
 const assets::ColorRGBA kTeam[4] = {{79, 191, 122, 255}, {224, 86, 79, 255}, {106, 124, 240, 255}, {185, 188, 198, 255}};      // the four colors of the ants: green, red, blue, grey
+constexpr double kHonorDetailEm = 8.2;                       // the small line under an honor's name
 
 /// The art's pieces, placed in units
 class Sheet {
@@ -302,6 +303,20 @@ std::string sentence_of(const Ctx& c, const Podium& p) {
     return fit_dialog(c.r, meter, win.name, std::max(0, room - width(fixed)), em, em_tenths) + fixed;
 }
 
+/// What the Top Thief's card says under the name: the raids whose loot got home and the points of them, the longest of three wordings that fits the card, so that a number is never cut: "3 raids home \xC2\xB7 150 points"
+/// (the middle dot is \xC2\xB7), then "3 raids \xC2\xB7 150 points" (the common 640 x 360 layout has room for this one), then "3 raids \xC2\xB7 150 pts". One is "1 raid", "1 point", "1 pt".
+std::string thief_detail(const Ctx& c, const MatchReport& rep, int32_t room, double em_units) {
+    const int64_t n = rep.top_thief.value;
+    const int64_t points = rep.loot_home[rep.top_thief.seat & 3u];
+    const std::string raids = grouped(n) + (n == 1 ? " raid" : " raids");
+    const std::string loot = " \xC2\xB7 " + grouped(points);
+    const std::string wordings[3] = {raids + " home" + loot + (points == 1 ? " point" : " points"), raids + loot + (points == 1 ? " point" : " points"), raids + loot + (points == 1 ? " pt" : " pts")};
+    for (const std::string& wording : wordings) {
+        if (c.pen.width(wording, em_units) <= room) return wording;
+    }
+    return wordings[2];
+}
+
 void draw_honors(const Ctx& c, const Podium& p) {
     const MatchReport& rep = c.m.report();
     const bool is_187 = c.m.game_mode() == sim::GameMode::Kills187;
@@ -314,7 +329,7 @@ void draw_honors(const Ctx& c, const Podium& p) {
         {"sc_k_mvp", &rep.mvp, std::to_string(rep.mvp.value / 10) + "% of the play"},
         {"sc_k_blood", &rep.first_blood, "at " + clock_of(rep.first_blood.turn)},
         is_187 ? Card{"sc_k_stand", &rep.last_stand, "out of ants at " + clock_of(rep.last_stand.turn)}
-               : Card{"sc_k_raid", &rep.biggest_raid, grouped(rep.biggest_raid.value) + " points at " + clock_of(rep.biggest_raid.turn)},
+               : Card{"sc_k_thief", &rep.top_thief, thief_detail(c, rep, c.W(p.honor[2].w - 6), kHonorDetailEm)},
     };
     for (size_t i = 0; i < 3; ++i) {
         const LayoutRect& w = p.honor[i];
@@ -329,7 +344,7 @@ void draw_honors(const Ctx& c, const Podium& p) {
         const double ant_scale = static_cast<double>(p.honor_ant_h) / static_cast<double>(kAntH);
         draw_ant(c, h.seat, w.x + w.w / 2.0 - kAntW * ant_scale / 2.0, w.y + p.honor_ant_y, ant_scale, false);
         c.pen.draw(name, c.X(w.x + w.w / 2), c.Y(w.y + p.honor_name_base), kCream, 11.5, 1);
-        c.pen.draw(fit_pen(c, cards[i].detail, c.W(w.w - 6), 8.2), c.X(w.x + w.w / 2), c.Y(w.y + p.honor_detail_base), kDim, 8.2, 1);
+        c.pen.draw(fit_pen(c, cards[i].detail, c.W(w.w - 6), kHonorDetailEm), c.X(w.x + w.w / 2), c.Y(w.y + p.honor_detail_base), kDim, kHonorDetailEm, 1);
     }
 }
 
@@ -398,10 +413,12 @@ void draw_podium(const Ctx& c) {
     c.pen.draw(win.numbers[0], c.X(p.name_x), c.Y(p.score_base), kGold, score_em, 0);
     c.pen.draw(is_187 ? "kills" : "score", c.X(p.name_x) + c.pen.width(win.numbers[0], score_em) + c.W(6), c.Y(p.score_base), kDim, 10.0, 0);
     std::vector<std::pair<std::string, std::string>> tiles;        // (value, label)
-    tiles.push_back({win.numbers[1], "Lost"});
-    if (is_187) tiles.push_back({win.numbers[2], "Left"});
-    else {
+    if (is_187) {                                                  // (187: the score is the kills)
+        tiles.push_back({win.numbers[1], "Lost"});
+        tiles.push_back({win.numbers[2], "Left"});
+    } else {                                                       // kills first, then deaths (the owner's order, as the history page has it)
         tiles.push_back({win.numbers[2], "Killed"});
+        tiles.push_back({win.numbers[1], "Lost"});
         tiles.push_back({win.numbers[3], "Hatched"});
     }
     if (counted) tiles.push_back({grouped(static_cast<int64_t>(damage_of(rep, win))), "Damage"});
@@ -433,9 +450,9 @@ void draw_podium(const Ctx& c) {
             c.pen.draw(r.numbers[0], c.X(o.score_right), c.Y(o.score_base), kCream, 16.0, 2);
             c.pen.draw(fit_pen(c, name, c.X(o.name_right) - c.X(o.name_x) - score_w, 14.0), c.X(o.name_x), c.Y(o.name_base), kCream, 14.0, 0);
             draw_bar(c, o.bar, top > 0 ? static_cast<double>(std::max(0, r.score_value)) / static_cast<double>(top) : 0.0, r);
-            std::string small = "Lost " + r.numbers[1];
-            if (is_187) small += "   Left " + r.numbers[2];
-            else small += "   Killed " + r.numbers[2] + "   Hatched " + r.numbers[3];
+            const std::string small_numbers = is_187 ? "Lost " + r.numbers[1] + "   Left " + r.numbers[2]
+                                                     : "Killed " + r.numbers[2] + "   Lost " + r.numbers[1] + "   Hatched " + r.numbers[3];
+            std::string small = small_numbers;
             if (counted) small += "   Damage " + grouped(static_cast<int64_t>(damage_of(rep, r)));
             c.pen.draw(fit_pen(c, small, c.X(o.score_right) - c.X(o.name_x), 8.6), c.X(o.name_x), c.Y(o.small_base), kDim, 8.6, 0);
         }

@@ -207,8 +207,8 @@
   {
    "id": "a_row_has_a_join_button_too",
    "file": "web/home/games.js",
-   "old": "li.appendChild(go);\n            liveLens.push",
-   "new": "li.appendChild(go); li.appendChild(el('button', 'gjoin', 'Join'));\n            liveLens.push",
+   "old": "li.appendChild(go);\n            var score = scoreNode(e, li);",
+   "new": "li.appendChild(go); li.appendChild(el('button', 'gjoin', 'Join'));\n            var score = scoreNode(e, li);",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
@@ -394,20 +394,6 @@
    "test": "python3 tests/scripts/test_web_home_games.py TheStyle"
   },
   {
-   "id": "empty_card_stays_with_matches",
-   "file": "web/home/games.js",
-   "old": "popEmpty.hidden = !(loaded && !off && !shown.length && (locks.length || !(liveShown() && live.length)));",
-   "new": "popEmpty.hidden = !(loaded && !off && !shown.length);",
-   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
-  },
-  {
-   "id": "empty_card_hidden_with_no_match_either",
-   "file": "web/home/games.js",
-   "old": "popEmpty.hidden = !(loaded && !off && !shown.length && (locks.length || !(liveShown() && live.length)));",
-   "new": "popEmpty.hidden = !(loaded && !off && !shown.length && (locks.length || !liveShown()));",
-   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
-  },
-  {
    "id": "an_old_stored_off_word_is_read",
    "file": "web/home/games.js",
    "old": "function liveShown() { return liveLoaded && !liveOff && loaded; }",
@@ -431,22 +417,22 @@
   {
    "id": "live_tag_on_every_match",
    "file": "web/home/games.js",
-   "old": "who: who, mode187: raw.mode === '187', starting: raw.turns === 0 };",
-   "new": "who: who, mode187: true, starting: raw.turns === 0 };",
+   "old": "who: who, mode187: raw.mode === '187', starting: raw.turns === 0,",
+   "new": "who: who, mode187: true, starting: raw.turns === 0 ,",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
    "id": "live_tag_on_no_match",
    "file": "web/home/games.js",
-   "old": "who: who, mode187: raw.mode === '187', starting: raw.turns === 0 };",
-   "new": "who: who, mode187: false, starting: raw.turns === 0 };",
+   "old": "who: who, mode187: raw.mode === '187', starting: raw.turns === 0,",
+   "new": "who: who, mode187: false, starting: raw.turns === 0 ,",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
    "id": "live_tag_on_any_word_that_is_not_highest_score",
    "file": "web/home/games.js",
-   "old": "mode187: raw.mode === '187', starting: raw.turns === 0 };",
-   "new": "mode187: typeof raw.mode === 'string' && raw.mode !== 'highest-score', starting: raw.turns === 0 };",
+   "old": "mode187: raw.mode === '187', starting: raw.turns === 0,",
+   "new": "mode187: typeof raw.mode === 'string' && raw.mode !== 'highest-score', starting: raw.turns === 0 ,",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
@@ -487,22 +473,22 @@
   {
    "id": "live_row_never_says_starting",
    "file": "web/home/games.js",
-   "old": "starting: raw.turns === 0 };",
-   "new": "starting: false };",
+   "old": "starting: raw.turns === 0,",
+   "new": "starting: false ,",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
    "id": "live_row_says_starting_for_every_match",
    "file": "web/home/games.js",
-   "old": "starting: raw.turns === 0 };",
-   "new": "starting: true };",
+   "old": "starting: raw.turns === 0,",
+   "new": "starting: true ,",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
    "id": "live_row_says_starting_for_a_match_that_has_run",
    "file": "web/home/games.js",
-   "old": "starting: raw.turns === 0 };",
-   "new": "starting: raw.turns <= 20 };",
+   "old": "starting: raw.turns === 0,",
+   "new": "starting: raw.turns <= 20 ,",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
@@ -517,6 +503,167 @@
    "file": "web/home/games.js",
    "old": "before.some(function (r) { return !rows.some(function (n) { return n.code === r.code; }); })",
    "new": "rows.some(function (n) { return !before.some(function (r) { return n.code === r.code; }); })",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_a_tie_marks_a_leader",
+   "file": "web/home/games.js",
+   "old": "x.lead = ties === 1 && top > 0 && x.n === top;",
+   "new": "x.lead = ties >= 1 && top > 0 && x.n === top;",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_a_zero_leads",
+   "file": "web/home/games.js",
+   "old": "x.lead = ties === 1 && top > 0 && x.n === top;",
+   "new": "x.lead = ties === 1 && x.n === top;",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_allies_are_not_one_side",
+   "file": "web/home/games.js",
+   "old": "k = e.scores ? 's' + e.sides[i] : 'p' + i;",
+   "new": "k = 'p' + i;",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_187_counts_score_not_kills",
+   "file": "web/home/games.js",
+   "old": "label: e.mode187 ? TEXT.kills : TEXT.score,",
+   "new": "label: TEXT.score,",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_a_covered_box_is_a_zero",
+   "file": "web/home/games.js",
+   "old": "scores.push(whole(raw.scores[i], BOX_MAX) ? raw.scores[i] : null);",
+   "new": "scores.push(whole(raw.scores[i], BOX_MAX) ? raw.scores[i] : 0);",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_a_box_is_not_cut_to_its_range",
+   "file": "web/home/games.js",
+   "old": "whole(raw.scores[i], BOX_MAX)",
+   "new": "whole(raw.scores[i], 1e12)",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_a_side_that_is_no_seat_joins_the_first",
+   "file": "web/home/games.js",
+   "old": "sides.push(whole(raw.sides[i], 3) ? raw.sides[i] : 10 + i);",
+   "new": "sides.push(whole(raw.sides[i], 3) ? raw.sides[i] : 0);",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_lists_of_another_length_are_taken",
+   "file": "web/home/games.js",
+   "old": "raw.scores.length === list.length && raw.sides.length === list.length",
+   "new": "true",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_card_starts_open",
+   "file": "web/home/games.js",
+   "old": "var on = opened[s.id] === true;",
+   "new": "var on = opened[s.id] !== false;",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_a_second_press_does_not_close",
+   "file": "web/home/games.js",
+   "old": "if (opened[e.id] === true) delete opened[e.id]; else opened[e.id] = true; openScore(s);",
+   "new": "opened[e.id] = true; openScore(s);",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_the_choice_outlives_the_match",
+   "file": "web/home/games.js",
+   "old": "            opened = keep;\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_the_bar_is_not_against_the_best",
+   "file": "web/home/games.js",
+   "old": "seg.style.width = Math.round(100 * x.n / b.top) + '%';",
+   "new": "seg.style.width = Math.round(100 * x.n / 100) + '%';",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_digits_are_not_grouped",
+   "file": "web/home/games.js",
+   "old": "function groupDigits(n) { return String(n).replace(/\\B(?=(\\d{3})+$)/g, ','); }",
+   "new": "function groupDigits(n) { return String(n); }",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_a_computer_player_is_a_filled_square",
+   "file": "web/home/games.js",
+   "old": "q.className += ' c' + seatClass(w) + (BOT_NAME.test(w.name) ? ' bot' : '');",
+   "new": "q.className += ' c' + seatClass(w);",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_a_computer_player_is_not_marked_in_the_board",
+   "file": "web/home/games.js",
+   "old": "(BOT_NAME.test(w.name) ? TEXT.bot : '')",
+   "new": "''",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_no_score_yet_says_nothing",
+   "file": "web/home/games.js",
+   "old": "if (!b.scored) s.nums.appendChild(el('span', 'gwait', TEXT.noScore));",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_a_server_without_scores_gets_a_strip",
+   "file": "web/home/games.js",
+   "old": "s.box.hidden = !(b.scored || e.starting);",
+   "new": "s.box.hidden = false;",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_are_live_is_always_said",
+   "file": "web/home/games.js",
+   "old": "liveNote.hidden = !live.some(function (e) { return !!e.scores; });",
+   "new": "liveNote.hidden = false;",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_the_leader_is_not_gold_in_the_strip",
+   "file": "web/home/games.js",
+   "old": "pair.appendChild(el('span', x.lead ? 'gn glead' : 'gn', numberText(x)));",
+   "new": "pair.appendChild(el('span', 'gn', numberText(x)));",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_the_leader_is_not_said_to_a_screen_reader",
+   "file": "web/home/games.js",
+   "old": "(x.lead ? TEXT.leading : '');",
+   "new": "'';",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_strip_controls_nothing",
+   "file": "web/home/games.js",
+   "old": "sum.setAttribute('aria-controls', board.id);",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_name_does_not_follow_the_state",
+   "file": "web/home/games.js",
+   "old": "(on ? TEXT.hideBoard : TEXT.showBoard)",
+   "new": "TEXT.showBoard",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_card_loses_its_other_classes",
+   "file": "web/home/games.js",
+   "old": "s.li.classList.toggle('gopen', on);",
+   "new": "s.li.className = on ? 'gitem glive gopen' : 'gitem glive';",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   }
  ]

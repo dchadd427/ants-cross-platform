@@ -654,6 +654,83 @@ int main() {
         ASSERT_TRUE(asked > 150);
     } TEST_END();
 
+    TEST_CASE("LB1.11 The Score Boxes Of A Match Are The Room's Last Sample, Shown At Once Whatever The Delay Is (Only What The Players See On Their Screens), Not Before The First Sample, Clamped To The Box's Range, For The Seats Of The Match Only, And Never For A Match That Is Not On The Board (Fog Of War, A Made-Up Id, One That Ended)") {
+        Clock clock;
+        LiveBoard board([&clock]() { return clock.now; });
+        Rec duel(f, 0, head_of("TINY.LVL", 0x05, {{"Ann", "", "Bob", ""}}));                // (seats 0 and 2)
+        const std::string id = board.begin(*duel.rec, 2);                                      // (two people: the snapshot is 30 seconds late)
+        ASSERT_FALSE(board.list()[0].scores.known);                                            // (no sample yet: the page says "no score yet")
+        ASSERT_EQ(board.list()[0].roster, uint8_t{0x05});
+        duel.run(f, 700);
+        LiveScores s;
+        s.known = true;
+        s.box = {{1234, 55, -40, 7}};                                                          // (seat 1 is not in the match; seat 2 is below 0)
+        s.side = {{0, 1, 2, 3}};
+        board.set_scores(id, s);
+        LiveMatch m = board.list()[0];
+        ASSERT_TRUE(m.scores.known && m.scores.box[0] == 1234 && m.scores.box[2] == 0);        // (a score below 0 shows 0 in the box)
+        ASSERT_TRUE(m.scores.box[1] == 0 && m.scores.box[3] == 0 && m.scores.side[1] == 1 && m.scores.side[3] == 3);       // (the seats that do not play have no number and are no part of a side)
+        ASSERT_TRUE(board.snapshot(id).shown + 600 <= board.snapshot(id).now);                 // (the snapshot is late, the numbers are not: they are the sample of this very moment)
+        // a later sample takes the place of the one before; a number over the box's range is cut, and allies share a side only when both are seats of the match
+        s.box = {{2000000, 0, 31, 0}};
+        s.side = {{0, 1, 0, 3}};                                                               // (seat 2 is Green's ally)
+        board.set_scores(id, s);
+        m = board.list()[0];
+        ASSERT_TRUE(m.scores.box[0] == LiveScores::kBoxMax && m.scores.box[2] == 31 && m.scores.side[0] == 0 && m.scores.side[2] == 0);
+        s.side = {{1, 1, 3, 3}};                                                               // (an ally that is not in the match, or a number that is no seat: each seat is a side of its own)
+        s.box = {{5, 0, 6, 0}};
+        board.set_scores(id, s);
+        m = board.list()[0];
+        ASSERT_TRUE(m.scores.side[0] == 0 && m.scores.side[2] == 2);
+        s.side = {{9, 1, 255, 3}};
+        board.set_scores(id, s);
+        m = board.list()[0];
+        ASSERT_TRUE(m.scores.side[0] == 0 && m.scores.side[2] == 2);
+        // a seat whose box is covered (it left the match) is marked, for the seats of the match only
+        s.covered = 0x06;
+        board.set_scores(id, s);
+        m = board.list()[0];
+        ASSERT_EQ(m.scores.covered, uint8_t{0x04});
+        // a sample that says it is not known keeps the page at "no score yet"
+        LiveScores unknown;
+        board.set_scores(id, unknown);
+        ASSERT_FALSE(board.list()[0].scores.known);
+        // an id that is not on the board is ignored: a made-up one, one with the wrong shape, none, a match that ended
+        board.set_scores("TINY-20261008-143210Z", s);
+        board.set_scores("", s);
+        board.set_scores("x", s);
+        ASSERT_EQ(board.list().size(), size_t{1});
+        ASSERT_FALSE(board.list()[0].scores.known);
+        board.set_scores(id, s);
+        ASSERT_TRUE(board.list()[0].scores.known);
+        board.end(id, "");
+        board.set_scores(id, s);
+        ASSERT_TRUE(board.list().empty());
+        ASSERT_EQ(board.running(), size_t{0});
+        // a match with Fog of War is not on the board, so its sample has nowhere to go: nothing is made for it, and the match beside it keeps its own numbers
+        replay::Header fogged = head_of("TINY.LVL", 0x03);
+        fogged.fog = true;
+        Rec hidden(f, 700, fogged), shown(f, 700);
+        const std::string hidden_id = board.begin(*hidden.rec, 0);
+        const std::string shown_id = board.begin(*shown.rec, 0);
+        ASSERT_EQ(hidden_id, std::string());
+        LiveScores one;
+        one.known = true;
+        one.box = {{10, 20, 0, 0}};
+        one.side = {{0, 1, 2, 3}};
+        board.set_scores(hidden_id, one);
+        board.set_scores(shown_id, one);
+        ASSERT_TRUE(board.list().size() == 1 && board.list()[0].scores.known && board.list()[0].scores.box[1] == 20 && board.running() == 1);
+        // a recording that failed is not listed, and no sample brings it back
+        Rec lost(f, 650, head_of("TREASURE.LVL"));
+        const std::string lost_id = board.begin(*lost.rec, 0);
+        net::TurnMsg late;
+        late.turn = 9;
+        lost.rec->on_turn(late, f.engine);
+        board.set_scores(lost_id, one);
+        ASSERT_TRUE(board.list().size() == 1 && board.list()[0].id == shown_id);
+    } TEST_END();
+
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Failed:           " << g_test_failures
               << "\n=======================================================\n";
     return g_test_failures == 0 ? 0 : 1;

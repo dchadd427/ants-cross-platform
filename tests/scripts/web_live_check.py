@@ -10,7 +10,8 @@ Parts (--only): watch (a match at its present: the tag, Pause and
 (a link to a match that is over, to one that is not live, an id that is not of the shape), replay (a plain replay is as it was: no live marks, no polling), rewind (Back 30 seconds: where a press seeks, play / pause and speed kept, not on a live match, the bar at 390 px), picture (a spectator's Picture button: the four shapes, the bar as wide as the picture, Esc and a click elsewhere, a phone's place for the button, fullscreen), bar (the REPLAY tag lies outside the picture
 in a phone's and a computer's window, and a phone's fullscreen bar: a finger on the picture never calls it, a tap or a swipe up from the bottom edge does, a swipe down or its tab hides it, the first time a
 note says how to bring it back; a mouse works as ever), gear (the Settings button of the bar, made as web/game_menu.js makes it, in a live bar and a recording's at the
-phone sizes: nothing past the screen, nothing on anything, the clock wide enough, the gear above the timeline).
+phone sizes: nothing past the screen, nothing on anything, the clock wide enough, the gear above the timeline), link (the bar's Copy link of a live view and a recording, with the site's own bar files: at every width
+it is in the bar, in one row with the others on a phone, a square of at least 44 px with the share glyph alone there and its words from 701 px; what a press copies, shares or shows: the match's own address and nothing else of the page's).
 
 Exit status 0: every check passed; 1: a check failed; 3: the check could not be made (no browser); 2 is the status of a bad command line.
 """
@@ -154,6 +155,7 @@ class Door:
         self.kept_at = 0.0                    # the kept replay is there from this time on (0: from the start)
         self.kept_listed = True
         self.names = PLAYERS
+        self.site_bar = False                 # True: the site's own files of the bar (site_nav, game_bar) are served too, so that the bar looks as it does on the site
         self.hits = []
         door = self
 
@@ -234,6 +236,8 @@ class Door:
             return self.send(h, 200, b"\0asm", "application/wasm")
         if path in ("/matches.css", "/match_stats.css", "/death_map.css", "/replay_stats.css", "/game_menu.css"):
             return self.send(h, 200, open(os.path.join(WEB, path[1:]), "rb").read(), "text/css")
+        if self.site_bar and path in ("/site_nav.css", "/game_bar.css", "/site_nav.js", "/game_bar.js"):
+            return self.send(h, 200, open(os.path.join(WEB, path[1:]), "rb").read(), "text/css" if path.endswith(".css") else "text/javascript")
         if path.startswith("/front/") or path in ("/favicon.png", "/favicon.ico"):
             f = os.path.join(WEB, path[1:])
             if os.path.isfile(f):
@@ -297,10 +301,10 @@ SHOWN = "function (id) { var e = document.getElementById(id); return !!e && !e.h
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--browser", default=os.environ.get("CHROME", ""), help="a Chromium-based browser (default: look for one)")
-    ap.add_argument("--only", default="", help="one part: watch, late, ends, cards, replay, rewind, picture, bar, hide, scrub or gear (default: all)")
+    ap.add_argument("--only", default="", help="one part: watch, late, ends, cards, replay, rewind, picture, bar, hide, scrub, gear or link (default: all)")
     ap.add_argument("--shots", default="", help="a folder to save screenshots in")
     args = ap.parse_args()
-    parts = ("watch", "late", "ends", "cards", "replay", "rewind", "picture", "bar", "hide", "scrub", "gear")
+    parts = ("watch", "late", "ends", "cards", "replay", "rewind", "picture", "bar", "hide", "scrub", "gear", "link")
     if args.only and args.only not in parts:
         print("--only is one of: " + ", ".join(parts))
         return 2
@@ -1202,6 +1206,87 @@ def main():
                 check(until(tab, "__stub.seeks.length === 1") is True and abs(tab.ev(seeks)[0] - want) <= 40, "fullscreen: a tap at %d%% of the bar seeks to turn about %d (got %r)" % (fraction * 100, want, tab.ev(seeks)))
                 time.sleep(0.6)
             tab.close()
+
+        if args.only in ("", "link"):
+            print("[web live] part link: the bar's Copy link, in a live view and a recording, with the site's own bar files")
+            door.set(site_bar=True)
+            mine = ("(function () { var o = { boxes: [], vw: window.innerWidth }; ['menu-btn', 'all-btn', 'copy-btn', 'fullscreen-btn'].forEach(function (id) { var e = document.getElementById(id); var r = e.getBoundingClientRect(); o.boxes.push([id, r.left, r.top, r.right, r.bottom]); });"
+                    " var m = document.querySelector('header.sb .sbtn').getBoundingClientRect(); o.boxes.push(['menu', m.left, m.top, m.right, m.bottom]); var c = document.getElementById('copy-btn'); var shown = function (n) { return !!n && getComputedStyle(n).display !== 'none' && n.getClientRects().length > 0; };"
+                    " o.shown = shown(c); o.glyph = shown(c.querySelector('.cl-ic')); o.words = shown(c.querySelector('.cl-tx')); o.text = c.textContent; o.name = c.getAttribute('aria-label'); return o; })()")
+            # every width of a phone and of a window: the button is there, the five buttons stand in one row on a phone (their middles are one line: the glyph's button hangs a pixel over each side) and none lies on another or past the window
+            for (width, height) in ((320, 640), (340, 640), (360, 800), (375, 812), (390, 844), (402, 874), (412, 915), (430, 932), (441, 844), (480, 844), (520, 844), (600, 900), (667, 375), (700, 900), (701, 900), (768, 1024), (844, 390), (1024, 768), (1280, 800)):
+                for mode in ("live", "replay"):
+                    fresh(kept_at=1.0) if mode == "replay" else fresh()
+                    tab = new_tab(width, height, 2 if width <= 700 else 1, width <= 700)
+                    open_page(tab, "/play?replay=" + KEPT if mode == "replay" else "/play?live=" + ID)
+                    until(tab, READY)
+                    time.sleep(0.4)
+                    g = tab.ev(mine)
+                    boxes = {b[0]: b for b in g["boxes"]}
+                    label = "%dx%d, %s" % (width, height, mode)
+                    phone = width <= 700
+                    check(g["shown"] is True and g["name"] == "Copy link" and g["glyph"] is phone and g["words"] is (not phone) and (phone or g["text"] == "Copy link"), "%s: the button is in the bar (%s)" % (label, "the glyph alone" if phone else "its words"))
+                    check(all(b[1] >= -0.5 and b[3] <= g["vw"] + 0.5 for b in g["boxes"]), "%s: no button runs past the window" % label)
+                    laps = [(a[0], b[0]) for n, a in enumerate(g["boxes"]) for b in g["boxes"][n + 1:] if a[0] != b[0] and a[1] < b[3] - 0.5 and b[1] < a[3] - 0.5 and a[2] < b[4] - 0.5 and b[2] < a[4] - 0.5 and {a[0], b[0]} != {"menu-btn", "menu"}]
+                    check(not laps, "%s: no button lies on another (%s)" % (label, laps or "none"))
+                    if phone:
+                        middles = [(b[2] + b[4]) / 2 for b in g["boxes"]]
+                        check(max(middles) - min(middles) <= 3, "%s: Home, the way back, Copy link, Full and Menu stand in one row (middles %s)" % (label, [round(m) for m in middles]))
+                        c = boxes["copy-btn"]
+                        check(c[3] - c[1] >= 44 and c[4] - c[2] >= 44, "%s: Copy link is a target of at least 44 px (%d x %d)" % (label, c[3] - c[1], c[4] - c[2]))
+                    if args.shots and mode == "live" and (width, height) in ((320, 640), (390, 844), (1280, 800)):
+                        shot(tab, "link-live-%dx%d" % (width, height))
+                    tab.close()
+            # what a press does (the page's own address, with the other words of the page left out)
+            stubs = ("window.__copied = []; window.__shared = []; window.__prompts = []; window.__refuse = false; window.__command = true;"
+                     " Object.defineProperty(navigator, 'clipboard', { value: { writeText: function (t) { if (window.__refuse) return Promise.reject(new Error('NotAllowedError')); window.__copied.push(t); return Promise.resolve(); } }, configurable: true });"
+                     " document.execCommand = function (c) { window.__commands = (window.__commands || []).concat([c]); return window.__command; };"
+                     " window.prompt = function (a, b) { window.__prompts.push([a, b]); return null; };"
+                     " Object.defineProperty(navigator, 'share', { value: window.__sheet ? function (d) { window.__shared.push(d); return Promise.resolve(); } : undefined, configurable: true });")
+            for (what, width, height, mobile, sheet) in (("a computer's window", 1280, 800, False, True), ("a phone with a share sheet", 390, 844, True, True), ("a phone with no share sheet", 390, 844, True, False), ("a phone on its side", 844, 390, True, True)):
+                for mode in ("live", "replay"):
+                    fresh(kept_at=1.0) if mode == "replay" else fresh()
+                    tab = new_tab(width, height, 2 if mobile else 1, mobile)
+                    open_page(tab, "/play?replay=" + KEPT + "&x=1" if mode == "replay" else "/play?live=" + ID + "&x=1")
+                    until(tab, READY)
+                    time.sleep(0.4)
+                    tab.ev("window.__sheet = %s" % ("true" if sheet else "false"))
+                    tab.ev(stubs)
+                    want = door.url("/play?replay=" + KEPT if mode == "replay" else "/play?live=" + ID)
+                    fx, fy = centre(tab, "copy-btn")
+                    (tab.tap if mobile else tab.click)(fx, fy)
+                    time.sleep(0.5)
+                    got = tab.ev("({ copied: window.__copied, shared: window.__shared, prompts: window.__prompts, toast: document.getElementById('toast').hidden ? '' : document.getElementById('toast').textContent })")
+                    label = "%s, %s" % (what, mode)
+                    if sheet and mobile:
+                        check(got["shared"] == [{"url": want}] and got["copied"] == [] and got["toast"] == "", "%s: the share sheet opens with the match's address and nothing else is done (%r)" % (label, got))
+                    else:
+                        check(got["copied"] == [want] and got["shared"] == [] and got["toast"] == "Copied!", "%s: the address is copied (no query of the page's own) and the toast says Copied! (%r)" % (label, got))
+                        if args.shots and mode == "live" and (width, height) in ((390, 844), (1280, 800)):
+                            shot(tab, "link-copied-live-%dx%d" % (width, height))
+                    tab.close()
+            # a clipboard that refuses: the copy command, then the browser's own box with the address
+            for command in (True, False):
+                fresh()
+                tab = new_tab(390, 844, 2, True)
+                open_page(tab, "/play?live=" + ID)
+                until(tab, READY)
+                time.sleep(0.4)
+                tab.ev("window.__sheet = false")
+                tab.ev(stubs)
+                tab.ev("window.__refuse = true; window.__command = %s" % ("true" if command else "false"))
+                fields = tab.ev("document.querySelectorAll('input[readonly]').length")
+                fx, fy = centre(tab, "copy-btn")
+                tab.tap(fx, fy)
+                time.sleep(0.5)
+                got = tab.ev("({ copied: window.__copied, commands: window.__commands || [], prompts: window.__prompts, toast: document.getElementById('toast').hidden ? '' : document.getElementById('toast').textContent, fields: document.querySelectorAll('input[readonly]').length - %d })" % fields)
+                want = door.url("/play?live=" + ID)
+                if command:
+                    check(got["commands"] == ["copy"] and got["prompts"] == [] and got["toast"] == "Copied!" and got["fields"] == 0, "a clipboard that refuses: the copy command copies it and the toast says Copied! (%r)" % got)
+                else:
+                    check(got["commands"] == ["copy"] and got["prompts"] == [["Copy the link to this match:", want]] and got["toast"] == "" and got["fields"] == 0, "a clipboard and a copy command that both refuse: the browser's own box shows the address (%r)" % got)
+                tab.close()
+            door.set(site_bar=False)
     except (RuntimeError, TimeoutError, ConnectionError) as e:
         check(False, "the browser or the page broke down: %s" % e)
     finally:

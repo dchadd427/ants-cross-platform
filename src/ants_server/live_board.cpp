@@ -10,6 +10,8 @@
 
 namespace ants::server {
 
+static_assert(LiveScores::kSeats == sim::MAX_PLAYERS, "the board's score boxes are one for each seat of the game");
+
 namespace {
 
 int64_t system_seconds() { return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count(); }
@@ -95,6 +97,7 @@ std::string LiveBoard::begin(const replay::Recorder& recorder, unsigned people) 
     match.id = id;
     match.map = head.map_name;
     match.mode = head.mode;
+    match.roster = head.roster;
     match.started = now;
     match.delay_turns = people >= kDelayMinPeople ? delay_s_ * static_cast<uint32_t>(net::kTurnsPerSecond) : 0u;       // (fixed here, from the seats at the start: nothing that happens in the match changes it)
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
@@ -103,6 +106,22 @@ std::string LiveBoard::begin(const replay::Recorder& recorder, unsigned people) 
     match.recorder = &recorder;
     running_.push_back(std::move(match));
     return id;
+}
+
+void LiveBoard::set_scores(const std::string& id, const LiveScores& scores) {
+    const auto it = std::find_if(running_.begin(), running_.end(), [&id](const Running& r) { return r.id == id; });
+    if (it == running_.end() || !listed(*it)) return;
+    LiveScores kept;
+    kept.known = scores.known;
+    for (uint8_t seat = 0; seat < LiveScores::kSeats; ++seat) {
+        kept.side[seat] = seat;                                              // (a seat that is not in the match, or says nothing sensible of its side, is a side of its own)
+        if ((it->roster & (1u << seat)) == 0) continue;                      // (only the seats of the match have a number)
+        kept.box[seat] = std::max(0, std::min(scores.box[seat], LiveScores::kBoxMax));
+        const uint8_t side = scores.side[seat];
+        if (side < LiveScores::kSeats && (it->roster & (1u << side)) != 0) kept.side[seat] = side;
+        if ((scores.covered & (1u << seat)) != 0) kept.covered = static_cast<uint8_t>(kept.covered | (1u << seat));
+    }
+    it->scores = kept;
 }
 
 void LiveBoard::end(const std::string& id, const std::string& kept_file) {
@@ -140,6 +159,8 @@ std::vector<LiveMatch> LiveBoard::list() const {
         m.id = it->id;
         m.map = it->map;
         m.mode = it->mode;
+        m.roster = it->roster;
+        m.scores = it->scores;
         m.started = it->started;
         m.turns = it->recorder->turns();
         m.players = it->players;

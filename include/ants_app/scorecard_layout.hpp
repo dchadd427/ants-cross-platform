@@ -35,7 +35,7 @@ inline constexpr size_t kMaxRows = 4;
 inline constexpr std::array<const char*, 79> kSprites = {
     "sc_victory_26", "sc_victory_22", "sc_defeat_26", "sc_defeat_22", "sc_gameover_36", "sc_gameover_26", "sc_matchstats_15", "sc_others", "sc_g_damage", "sc_g_food",
     "sc_g_special", "sc_s_done", "sc_s_taken", "sc_s_trips", "sc_s_points", "sc_s_bombs", "sc_s_fires", "sc_s_raids", "sc_s_loot", "sc_k_winner", "sc_k_colony",
-    "sc_k_play", "sc_k_mvp", "sc_k_blood", "sc_k_raid", "sc_k_stand", "sc_well_tl", "sc_well_t", "sc_well_tr", "sc_well_l", "sc_well_r", "sc_well_bl", "sc_well_b",
+    "sc_k_play", "sc_k_mvp", "sc_k_blood", "sc_k_thief", "sc_k_stand", "sc_well_tl", "sc_well_t", "sc_well_tr", "sc_well_l", "sc_well_r", "sc_well_bl", "sc_well_b",
     "sc_well_br", "sc_leave_up", "sc_leave_hover", "sc_leave_down", "sc_watch_up", "sc_watch_hover", "sc_watch_down", "sc_btn_l_up", "sc_btn_m_up", "sc_btn_r_up",
     "sc_btn_l_hover", "sc_btn_m_hover", "sc_btn_r_hover", "sc_btn_l_down", "sc_btn_m_down", "sc_btn_r_down", "sc_leave_word_up", "sc_leave_word_hover",
     "sc_leave_word_down", "sc_sm_l_up", "sc_sm_m_up", "sc_sm_r_up", "sc_sm_l_hover", "sc_sm_m_hover", "sc_sm_r_hover", "sc_sm_l_down", "sc_sm_m_down", "sc_sm_r_down",
