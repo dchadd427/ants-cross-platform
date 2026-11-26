@@ -582,7 +582,7 @@
       n.startsWith("eye_") || n.startsWith("glass_") || n.startsWith("item_tomato")
       || n.startsWith("item_candy") || n === "item_mustard"
       || n === "item_pickle" || n.startsWith("item_skit_")
-      || n === "item_bowl_yellow" || n === "item_pretzel_crust"
+      || n === "item_bowl_yellow"
       || (mat.metallic < 0.35 && mat.roughness < 0.24 && !mat.normalTex)
     ) return 1;
     if (n.startsWith("chitin_")) return 2;
@@ -600,7 +600,7 @@
       || n.startsWith("item_twinkie") || n.startsWith("item_cracker") || n === "item_cream_white"
       || n === "item_pb_swirl" || n === "item_steak_paste" || n === "item_fish_green"
       || n === "item_potted_fill" || n === "item_pizza_dough" || n === "item_chocolate"
-      || n.startsWith("item_pez_")
+      || n === "item_pretzel_crust" || n.startsWith("item_pez_")
     ) return 4;
     return 0;
   }
