@@ -280,14 +280,13 @@ def build_fdgumw4() -> SceneBuilder:
 # 3. FIZZY SPILLED COLA PUDDLES (`276..279:fdcola1..4`, `1..3` ANIMATED FIZZ!)
 # ---------------------------------------------------------------------------
 
-def _cola_puddle_mesh(name: str, lobes: Sequence[Tuple[float, float, float, float]], *, thick: float = 0.052) -> MeshPart:
-    """Glossy caramel-amber cola liquid puddle with surface-tension rounded meniscus & multi-lobe silhouette."""
-    n_r, n_a = 14, 56
-    verts, uvs, tris = [], [], []
+def _cola_puddle_mesh(name: str, lobes: Sequence[Tuple[float, float, float]], *, thick: float = 0.056) -> MeshPart:
+    """Glossy caramel-amber cola spill with crisp luminous surface-tension meniscus & organic multi-lobe splash (`276..278`)."""
+    n_r, n_a = 18, 72
+    verts, uvs, cols, tris = [], [], [], []
 
     def _lobe_r(ang: float) -> float:
-        # Smooth organic puddle outline formed by summing directional cosine lobes
-        r = 0.16
+        r = 0.145
         for la, lw, amp in lobes:
             da = math.atan2(math.sin(ang - la), math.cos(ang - la))
             r += amp * math.exp(-((da / lw) ** 2))
@@ -299,15 +298,23 @@ def _cola_puddle_mesh(name: str, lobes: Sequence[Tuple[float, float, float, floa
             ang = 2.0 * math.pi * j / float(n_a)
             rad = _lobe_r(ang) * rf
             x = rad * math.cos(ang)
-            z = rad * math.sin(ang) * 0.76
+            z = rad * math.sin(ang) * 0.80
             if is_top:
-                # Realistic rounded liquid surface-tension dome (thick flat center, curving cleanly down at meniscus!)
-                meniscus = (1.0 - (rf ** 4.0)) ** 0.42 if rf < 0.999 else 0.0
-                y = 0.008 + thick * meniscus
+                # Realistic surface-tension liquid pool: glossy flat center curving into crisp luminous meniscus rim!
+                meniscus = (1.0 - (rf ** 4.8)) ** 0.36 if rf < 0.999 else 0.0
+                rim_lip = 0.0055 * math.exp(-(((rf - 0.88) / 0.08) ** 2))
+                y = 0.007 + thick * meniscus + rim_lip
+                # Deep glowing golden-caramel cola center -> bright translucent honey-gold meniscus ring (`276..279`)!
+                rim_glow = math.exp(-(((rf - 0.91) / 0.09) ** 2))
+                r_c = 0.92 + 0.08 * rim_glow
+                g_c = 0.82 + 0.18 * rim_glow
+                b_c = 0.48 + 0.42 * rim_glow
             else:
                 y = 0.004 if rf > 0.96 else 0.001
+                r_c, g_c, b_c = 0.68, 0.50, 0.22
             verts.append((x, y, z))
             uvs.append((0.5 + x, 0.5 + z))
+            cols.append((r_c, g_c, b_c))
     stride = n_a + 1
     for ir in range(len(ring_specs) - 1):
         for j in range(n_a):
@@ -315,69 +322,85 @@ def _cola_puddle_mesh(name: str, lobes: Sequence[Tuple[float, float, float, floa
             tris.extend(((a, c, b), (a, d, c)))
     pos = np.asarray(verts, dtype=np.float32)
     idx = np.asarray(tris, dtype=np.uint32).reshape(-1)
-    mesh = MeshPart(name, "item_cola_spill", pos, recompute_smooth_normals(pos, idx), idx, uvs=np.asarray(uvs, dtype=np.float32))
-    return gradient_y_tint(mesh, (0.66, 0.30, 0.04), (1.00, 0.68, 0.22), noise_amp=0.02)
+    return MeshPart(
+        name,
+        "item_cola_spill",
+        pos,
+        recompute_smooth_normals(pos, idx),
+        idx,
+        uvs=np.asarray(uvs, dtype=np.float32),
+        colors=np.asarray(cols, dtype=np.float32),
+    )
 
 
 def _build_cola_spill(name: str, stage: int) -> SceneBuilder:
-    """Spilled fizzy caramel-amber cola puddles (`276..279`; stages 1..3 have animated rising fizz bubbles!)."""
+    """Spilled fizzy caramel-amber cola puddles (`276..279`; stages 1..3 have animated sparkling micro-fizz!)."""
     register_item_materials()
     sc = SceneBuilder(name=name)
     base_parts: List[MeshPart] = []
 
     if stage == 1:
-        # Large multi-lobed caramel cola puddle sweeping upper-right -> lower-left (`276:fdcola1`)
+        # Exact `#276:fdcola1`: broad amber pool with sweeping lower-left tongue, upper-left bulge & full right body!
         base_parts.append(
             _cola_puddle_mesh(
                 f"{name}_pool",
                 (
-                    (-0.45, 0.85, 0.28),
-                    (+0.35, 0.70, 0.16),
-                    (+2.35, 0.65, 0.30),
-                    (-1.75, 0.72, 0.14),
+                    (-0.25, 0.82, 0.30),
+                    (+0.55, 0.68, 0.18),
+                    (+2.38, 0.56, 0.34),
+                    (-2.35, 0.55, 0.22),
+                    (-1.35, 0.60, 0.18),
                 ),
                 thick=0.062,
             )
         )
-        bub_coords = ((-0.12, +0.06, 0.028), (+0.10, -0.08, 0.032), (+0.02, +0.01, 0.024), (-0.22, +0.14, 0.022), (+0.20, -0.02, 0.026), (-0.04, -0.10, 0.020))
+        bub_coords = ((-0.14, +0.08, 0.024), (+0.10, -0.07, 0.028), (+0.02, +0.01, 0.022), (-0.24, +0.16, 0.020), (+0.21, -0.02, 0.024), (-0.05, -0.10, 0.018), (+0.15, +0.09, 0.018))
     elif stage == 2:
-        # Medium 3-lobed splashing puddle (`277:fdcola2`)
+        # Exact `#277:fdcola2`: dynamic 3-lobe splash (long lower-left lobe, upper-left lobe, sleek upper-right tongue)!
         base_parts.append(
             _cola_puddle_mesh(
                 f"{name}_pool",
                 (
-                    (-0.55, 0.62, 0.22),
-                    (+2.25, 0.55, 0.26),
-                    (-1.45, 0.45, 0.14),
+                    (-0.42, 0.44, 0.26),
+                    (+2.28, 0.48, 0.28),
+                    (-1.95, 0.42, 0.18),
+                    (+0.85, 0.46, 0.12),
                 ),
                 thick=0.056,
             )
         )
-        bub_coords = ((-0.10, +0.08, 0.026), (+0.08, -0.06, 0.028), (-0.01, +0.01, 0.022), (+0.15, -0.02, 0.020))
+        bub_coords = ((-0.12, +0.08, 0.022), (+0.09, -0.05, 0.024), (-0.01, +0.01, 0.020), (+0.16, -0.04, 0.018))
     elif stage == 3:
-        # Diagonal peanut puddle + detached upper-right splash drop (`278:fdcola3`)
+        # Exact `#278:fdcola3`: plump curved peanut/boot puddle (lower-left heel, mid-right belly, upper-right head) + thin teardrop splash!
         base_parts.append(
             _cola_puddle_mesh(
                 f"{name}_pool",
                 (
-                    (-0.55, 0.62, 0.20),
-                    (+2.40, 0.60, 0.22),
+                    (-0.48, 0.62, 0.26),
+                    (+0.62, 0.52, 0.14),
+                    (+2.34, 0.58, 0.28),
+                    (-2.22, 0.44, 0.14),
                 ),
                 thick=0.056,
             )
         )
-        drop = ellipsoid(0.054, 0.044, 0.072, u_segs=14, v_segs=10, name=f"{name}_drop", material="item_cola_spill").translate(+0.10, 0.024, -0.26)
-        base_parts.append(gradient_y_tint(drop, (0.68, 0.32, 0.04), (1.00, 0.70, 0.24)))
-        bub_coords = ((-0.12, +0.08, 0.024), (+0.08, -0.06, 0.026), (-0.02, +0.01, 0.020))
+        drop = ellipsoid(0.036, 0.024, 0.058, u_segs=16, v_segs=10, name=f"{name}_drop", material="item_cola_spill").translate(+0.03, 0.016, -0.28)
+        base_parts.append(gradient_y_tint(drop, (0.86, 0.72, 0.36), (1.00, 0.96, 0.74)))
+        bub_coords = ((-0.12, +0.08, 0.020), (+0.08, -0.06, 0.022), (-0.02, +0.01, 0.018))
     else:
-        # Stage 4 (`279:fdcola4`): 4 glistening surface-tension cola droplets!
-        for k, (cx, cz, rx, rz) in enumerate(((-0.18, +0.05, 0.105, 0.095), (-0.01, +0.01, 0.078, 0.076), (+0.14, -0.10, 0.100, 0.098), (+0.15, +0.16, 0.048, 0.058))):
-            d = ellipsoid(rx, 0.048, rz, u_segs=16, v_segs=10, name=f"{name}_drop_{k}", material="item_cola_spill").translate(cx, 0.026, cz)
+        # Exact `#279:fdcola4`: 3 kissing diagonal amber droplets + small bottom-right teardrop splash!
+        for k, (cx, cz, rx, rz) in enumerate((
+            (-0.18, +0.06, 0.108, 0.092),
+            (-0.01, +0.02, 0.076, 0.074),
+            (+0.14, -0.10, 0.102, 0.096),
+            (+0.16, +0.16, 0.046, 0.056),
+        )):
+            d = ellipsoid(rx, 0.050, rz, u_segs=18, v_segs=12, name=f"{name}_drop_{k}", material="item_cola_spill").translate(cx, 0.026, cz)
             p = d.positions.astype(np.float64)
             p[:, 1] = np.maximum(p[:, 1], 0.002)
             d.positions = p.astype(np.float32)
             d.normals = recompute_smooth_normals(d.positions, d.indices)
-            base_parts.append(gradient_y_tint(d, (0.66, 0.30, 0.04), (1.00, 0.72, 0.24)))
+            base_parts.append(gradient_y_tint(d, (0.86, 0.72, 0.36), (1.00, 0.96, 0.74)))
         bub_coords = ()
 
     sc.add("cola", base_parts)

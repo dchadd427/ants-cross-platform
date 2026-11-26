@@ -73,51 +73,80 @@ def _const_tint(rgb: Tuple[float, float, float]):
 # ---------------------------------------------------------------------------
 
 def _shattered_yellow_bowl(name: str, *, overturned: bool = False) -> MeshPart:
-    """Thick glazed golden-yellow ceramic bowl with authentic jagged broken rim (`1330..1333`)."""
-    # Build open double-walled ceramic bowl shell (outer + rim + inner) around local Y axis
-    n_u, n_v = 44, 16
-    r_top = 0.30
-    r_bot = 0.14
-    h_bowl = 0.25
+    """Thick glazed golden-yellow ceramic bowl with jagged broken wall & white unglazed porcelain fracture edges (`1330..1333`)."""
+    n_u = 64
+    r_top = 0.31
+    r_bot = 0.165
+    h_bowl = 0.22
     wall = 0.024
 
-    def _rim_notch(ang: float) -> float:
-        # Authentic broken ceramic mouth: large jagged break facing front (+Z, ang ~ pi/2) + secondary right chip!
-        da1 = math.atan2(math.sin(ang - math.pi * 0.50), math.cos(ang - math.pi * 0.50))
-        da2 = math.atan2(math.sin(ang - 0.12), math.cos(ang - 0.12))
+    def _rim_notch(ang: float) -> Tuple[float, float]:
+        # Returns (height_factor, fracture_amount in [0,1]) around bowl circumference
+        da_front = math.atan2(math.sin(ang - math.pi * 0.50), math.cos(ang - math.pi * 0.50))
+        da_right = math.atan2(math.sin(ang - 0.18), math.cos(ang - 0.18))
+        da_left = math.atan2(math.sin(ang - 2.65), math.cos(ang - 2.65))
         if overturned:
-            # `1330:cerbol`: overturned dome with crisp right-shoulder chip!
-            return max(0.32, 1.0 - 0.42 * math.exp(-((da2 / 0.36) ** 2)) - 0.18 * math.exp(-((da1 / 0.55) ** 2)))
-        # `1331..1333:fdcer1..3`: bowl mouth shattered wide open toward front (+Z) so milk & cereal spill out!
-        return max(0.24, 1.0 - 0.68 * math.exp(-((da1 / 0.72) ** 2)) - 0.24 * math.exp(-((da2 / 0.38) ** 2)))
+            # `1330:cerbol`: overturned golden ceramic dome with crisp jagged right-shoulder notch!
+            chip = 0.44 * math.exp(-((da_right / 0.34) ** 2)) + 0.16 * math.exp(-((da_front / 0.52) ** 2))
+            jag = 0.05 * math.sin(ang * 13.0 + 0.4) * min(1.0, chip * 3.0)
+            h_f = max(0.32, 1.0 - chip + jag)
+            frac = min(1.0, max(0.0, (0.94 - h_f) * 6.0))
+            return h_f, frac
+        # `1331..1333:fdcer1..3`: upright bowl with entire FRONT half shattered jaggedly open down to the base floor!
+        front_break = 0.84 * math.exp(-((da_front / 0.88) ** 2))
+        side_chips = 0.26 * math.exp(-((da_right / 0.28) ** 2)) + 0.20 * math.exp(-((da_left / 0.26) ** 2))
+        # Sharp ceramic fracture zigzag along broken edge
+        jag = (0.065 * math.sin(ang * 11.0 + 0.3) + 0.035 * math.cos(ang * 19.0 - 0.7)) * min(1.0, (front_break + side_chips) * 2.2)
+        h_f = max(0.14, 1.0 - front_break - side_chips + jag)
+        frac = min(1.0, max(0.0, (0.95 - h_f) * 5.0))
+        return h_f, frac
 
-    # Profile parameter t in [0, 1]: bottom center -> outer wall -> rim -> inner wall -> inner floor!
+    # Double-walled ceramic profile: outer foot -> curved belly -> glazed/broken rim lip -> inner bowl wall -> flat floor
+    # Tuple: (radius, height, rim_weight, is_rim_lip)
     prof_pts = [
-        (0.000, 0.000, 0.0),
-        (r_bot, 0.004, 0.0),
-        (r_bot + 0.055, 0.055, 0.25),
-        (r_top - 0.035, 0.145, 0.65),
-        (r_top, h_bowl, 1.0),
-        (r_top - wall, h_bowl + 0.004, 1.0),
-        (r_top - 0.035 - wall, 0.150, 0.65),
-        (r_bot + 0.040, 0.068, 0.25),
-        (r_bot - 0.020, 0.026, 0.0),
-        (0.000, 0.024, 0.0),
+        (0.000, 0.000, 0.00, False),
+        (r_bot, 0.004, 0.00, False),
+        (r_bot + 0.058, 0.048, 0.20, False),
+        (r_top - 0.042, 0.128, 0.62, False),
+        (r_top, h_bowl, 1.00, True),
+        (r_top - wall * 0.5, h_bowl + 0.005, 1.00, True),
+        (r_top - wall, h_bowl, 1.00, True),
+        (r_top - 0.042 - wall, 0.132, 0.62, False),
+        (r_bot + 0.042, 0.060, 0.20, False),
+        (r_bot - 0.018, 0.024, 0.00, False),
+        (0.000, 0.022, 0.00, False),
     ]
-    verts, uvs, tris = [], [], []
-    for ir, (rad0, y0, rim_w) in enumerate(prof_pts):
+    verts, uvs, cols, tris = [], [], [], []
+    for ir, (rad0, y0, rim_w, is_lip) in enumerate(prof_pts):
         vf = ir / float(len(prof_pts) - 1)
         for j in range(n_u + 1):
             uf = j / float(n_u)
             ang = uf * 2.0 * math.pi
-            notch = _rim_notch(ang)
+            notch, frac = _rim_notch(ang)
             y = y0 * (1.0 - rim_w * (1.0 - notch))
-            # Slightly widen radius smoothly as y changes
-            r_scale = 1.0 - 0.14 * rim_w * (1.0 - notch)
+            # Lowering the rim naturally follows the bowl's tapered radius!
+            r_scale = 1.0 - 0.18 * rim_w * (1.0 - notch)
             px = rad0 * r_scale * math.cos(ang)
             pz = rad0 * r_scale * math.sin(ang)
             verts.append((px, y, pz))
             uvs.append((uf, vf))
+
+            # Vibrant glazed sunshine-yellow ceramic body + CRISP WHITE UNGLAZED PORCELAIN FRACTURE EDGES on broken rim!
+            if is_lip and frac > 0.22:
+                w = min(1.0, frac * 1.25)
+                # Unglazed cream-white porcelain bisque fracture edge contrasting sharply against sunshine-yellow glaze!
+                r_c = 0.98 * (1.0 - w) + 0.98 * w
+                g_c = 0.76 * (1.0 - w) + 0.96 * w
+                b_c = 0.07 * (1.0 - w) + 0.91 * w
+            else:
+                y_norm = max(0.0, min(1.0, y / h_bowl))
+                is_inner = ir >= 7
+                shade = 0.90 if is_inner else 1.0
+                r_c = (0.96 + 0.04 * y_norm) * shade
+                g_c = (0.56 + 0.22 * y_norm) * shade
+                b_c = (0.01 + 0.03 * y_norm) * shade
+            cols.append((r_c, g_c, b_c))
+
     stride = n_u + 1
     for ir in range(len(prof_pts) - 1):
         for j in range(n_u):
@@ -125,84 +154,110 @@ def _shattered_yellow_bowl(name: str, *, overturned: bool = False) -> MeshPart:
             tris.extend(((a, c, b), (a, d, c)))
     pos = np.asarray(verts, dtype=np.float32)
     idx = np.asarray(tris, dtype=np.uint32).reshape(-1)
-    bowl = MeshPart(name, "item_bowl_yellow", pos, recompute_smooth_normals(pos, idx), idx, uvs=np.asarray(uvs, dtype=np.float32))
-    bowl = gradient_y_tint(bowl, (0.94, 0.66, 0.04), (1.00, 0.94, 0.24), noise_amp=0.02)
+    bowl = MeshPart(
+        name,
+        "item_bowl_yellow",
+        pos,
+        recompute_smooth_normals(pos, idx),
+        idx,
+        uvs=np.asarray(uvs, dtype=np.float32),
+        colors=np.asarray(cols, dtype=np.float32),
+    )
     if overturned:
         # Overturned yellow ceramic dome resting cleanly on its rim with right-side chip (`1330:cerbol`)!
-        bowl = bowl.rotate_xyz(rx=168.0, ry=-18.0, rz=6.0, degrees=True).translate(0.0, 0.24, 0.0)
+        bowl = bowl.rotate_xyz(rx=172.0, ry=-14.0, rz=5.0, degrees=True).translate(0.0, 0.22, 0.0)
     else:
-        # Shattered bowl tilted open squarely toward front (+Z) behind the spoon & milk spill (`1331..1333`)!
-        bowl = bowl.rotate_xyz(rx=72.0, ry=-4.0, degrees=True).translate(0.00, 0.16, -0.26)
+        # Authentic `#1331..1333`: bowl sits UPRIGHT with gentle forward tilt (~14 deg) & wide-open shattered front wall!
+        bowl = bowl.rotate_xyz(rx=14.0, ry=-2.0, degrees=True).translate(0.01, 0.025, -0.14)
     return bowl
 
 
 def _ceramic_shards(name: str) -> List[MeshPart]:
-    """Three authentic jagged triangular broken golden-yellow ceramic shards scattered around the spilled bowl (`1331..1333`)."""
+    """Three curved thick-walled glazed golden-yellow porcelain shards with crisp white unglazed broken edges (`1331..1333`)."""
     shards: List[MeshPart] = []
+    # Exact `#1331..1333` scattered positions & irregular curved pottery wall contours!
     specs = (
-        (-0.34, +0.06, 0.115, 0.088, 28.0, 14.0),
-        (-0.18, +0.26, 0.086, 0.095, -24.0, 18.0),
-        (+0.31, +0.10, 0.125, 0.105, -42.0, -16.0),
+        (-0.34, +0.08, 0.145, 0.115, 28.0, 14.0, 1.1),
+        (-0.16, +0.28, 0.105, 0.112, -24.0, 18.0, 2.3),
+        (+0.31, +0.12, 0.155, 0.125, -36.0, -16.0, 3.7),
     )
-    for k, (cx, cz, sx, sz, ry, rx) in enumerate(specs):
-        sh = rounded_box(sx, 0.026, sz, bevel=0.005, segs=2, name=f"{name}_shard_{k}", material="item_bowl_yellow")
+    for k, (cx, cz, sx, sz, ry, rx, seed) in enumerate(specs):
+        sh = rounded_box(sx, 0.028, sz, bevel=0.004, segs=3, name=f"{name}_shard_{k}", material="item_bowl_yellow")
         p = sh.positions.astype(np.float64)
-        # Taper one end into a sharp triangular ceramic shard + gentle ceramic bowl curvature!
-        taper = np.clip((p[:, 2] / max(1e-4, sz * 0.5) + 1.0) * 0.5, 0.0, 1.0)
-        p[:, 0] *= 0.28 + 0.85 * taper
-        p[:, 1] += 0.016 * ((p[:, 0] / max(1e-4, sx * 0.5)) ** 2)
+        # Authentic asymmetric broken pottery wall sherd (curved lip + jagged snapped diagonal break — not plain triangles!)
+        ang = np.arctan2(p[:, 2] / max(1e-4, sz * 0.5), p[:, 0] / max(1e-4, sx * 0.5))
+        tz = np.clip((p[:, 2] / max(1e-4, sz * 0.5) + 1.0) * 0.5, 0.0, 1.0)
+        sherd = 0.42 + 0.62 * (tz ** 0.72) + 0.18 * np.sin(ang * 2.0 + seed) + 0.11 * np.cos(ang * 3.0 - seed * 1.4)
+        p[:, 0] *= np.clip(sherd, 0.28, 1.18)
+        p[:, 2] *= 1.0 + 0.12 * np.sin(ang * 2.0 - seed)
+        # Genuine concave spherical ceramic bowl wall curvature!
+        p[:, 1] += 0.028 * ((p[:, 0] / max(1e-4, sx * 0.5)) ** 2) + 0.018 * ((p[:, 2] / max(1e-4, sz * 0.5)) ** 2)
         sh.positions = p.astype(np.float32)
         sh.normals = recompute_smooth_normals(sh.positions, sh.indices)
-        sh = gradient_y_tint(sh, (0.94, 0.64, 0.04), (1.00, 0.94, 0.28))
-        shards.append(sh.rotate_xyz(rx=rx, ry=ry, degrees=True).translate(cx, 0.032, cz))
+
+        # Sunshine-yellow glazed porcelain top/bottom faces + CRISP WHITE UNGLAZED BROKEN PORCELAIN SIDE EDGES!
+        def _shard_tint(pos: np.ndarray, nrm: np.ndarray) -> np.ndarray:
+            side_w = np.clip((0.78 - np.abs(nrm[:, 1])) / 0.35, 0.0, 1.0)[:, None]
+            y_hi = np.clip((pos[:, 1] + 0.015) / 0.060, 0.0, 1.0)[:, None]
+            glaze = np.hstack([0.96 + 0.04 * y_hi, 0.56 + 0.22 * y_hi, 0.01 + 0.03 * y_hi])
+            bisque = np.array([[0.99, 0.97, 0.92]], dtype=np.float64)
+            return np.clip(glaze * (1.0 - side_w) + bisque * side_w, 0.03, 1.0)
+
+        sh = tint_part(sh, _shard_tint)
+        shards.append(sh.rotate_xyz(rx=rx, ry=ry, degrees=True).translate(cx, 0.024, cz))
     return shards
 
 
 def _cereal_spoon(name: str) -> List[MeshPart]:
-    """Gleaming silver cereal spoon extending horizontally from LEFT resting cleanly atop milk & bowl rim (`1331..1333`)."""
+    """Sleek stamped gleaming silver cereal spoon extending from LEFT resting cleanly on bowl lip (`1331..1333`)."""
     handle = curved_tube(
-        [(-0.48, 0.118, +0.01), (-0.34, 0.106, +0.01), (-0.20, 0.096, +0.01)],
-        [0.020, 0.016, 0.014],
-        samples_per_seg=4,
-        radial_segs=12,
+        [(-0.49, 0.124, +0.01), (-0.36, 0.112, +0.01), (-0.25, 0.102, +0.01), (-0.17, 0.096, +0.01)],
+        [0.024, 0.018, 0.014, 0.012],
+        samples_per_seg=5,
+        radial_segs=14,
         cap_rings=2,
         name=f"{name}_spoon_handle",
         material="item_aluminum",
     )
-    # Flatten handle slightly into real stamped silverware flatware!
     ph = handle.positions.astype(np.float64)
-    ph[:, 1] = 0.105 + (ph[:, 1] - 0.105) * 0.45
+    ph[:, 1] = 0.108 + (ph[:, 1] - 0.108) * 0.36
     handle.positions = ph.astype(np.float32)
     handle.normals = recompute_smooth_normals(handle.positions, handle.indices)
 
-    # Concave gleaming silver oval spoon scoop bowl resting cleanly above bowl rim & milk!
-    scoop = ellipsoid(0.114, 0.036, 0.070, u_segs=22, v_segs=14, name=f"{name}_spoon_bowl", material="item_aluminum")
+    # Polished concave oval silver spoon scoop nestled over the front-left bowl interior!
+    scoop = ellipsoid(0.118, 0.036, 0.072, u_segs=26, v_segs=14, name=f"{name}_spoon_bowl", material="item_aluminum")
     ps = scoop.positions.astype(np.float64)
     top = ps[:, 1] > 0.0
-    ps[top, 1] = -0.018 * (1.0 - np.clip((ps[top, 0] / 0.114) ** 2 + (ps[top, 2] / 0.070) ** 2, 0.0, 1.0)) + 0.008
+    ps[top, 1] = -0.020 * (1.0 - np.clip((ps[top, 0] / 0.118) ** 2 + (ps[top, 2] / 0.072) ** 2, 0.0, 1.0)) + 0.008
     scoop.positions = ps.astype(np.float32)
     scoop.normals = recompute_smooth_normals(scoop.positions, scoop.indices)
-    scoop = scoop.rotate_xyz(rz=-4.0, degrees=True).translate(-0.085, 0.096, +0.012)
+    scoop = scoop.rotate_xyz(rz=-4.0, degrees=True).translate(-0.075, 0.094, +0.012)
     return [handle, scoop]
 
 
 def _milk_puddle(name: str, scale: float, cz: float) -> MeshPart:
-    """Glossy creamy-white spilled milk pool flowing out of the shattered yellow bowl."""
-    n_r, n_a = 12, 48
+    """Glossy creamy-white spilled milk pool flowing cleanly out of the shattered bowl mouth (`1331..1332`)."""
+    n_r, n_a = 16, 64
     verts, uvs, tris = [], [], []
-    lobes = ((-0.4, 0.7, 0.18), (+0.6, 0.65, 0.22), (+1.65, 0.62, 0.26), (+2.55, 0.58, 0.14), (-1.6, 0.75, 0.16))
+    lobes = (
+        (-0.35, 0.65, 0.20),
+        (+0.55, 0.60, 0.24),
+        (+1.55, 0.62, 0.28),
+        (+2.45, 0.54, 0.16),
+        (-1.60, 0.72, 0.16),
+    )
     ring_specs = [(ir / float(n_r), True) for ir in range(n_r + 1)] + [(1.0 - ir / float(n_r), False) for ir in range(n_r + 1)]
     for rf, is_top in ring_specs:
         for j in range(n_a + 1):
             ang = 2.0 * math.pi * j / float(n_a)
-            r = 0.16
+            r = 0.165
             for la, lw, amp in lobes:
                 da = math.atan2(math.sin(ang - la), math.cos(ang - la))
                 r += amp * math.exp(-((da / lw) ** 2))
             rad = r * rf * scale
-            x = rad * math.cos(ang) + 0.03
-            z = rad * math.sin(ang) * 0.88 + cz
-            y = (0.006 + 0.030 * ((1.0 - rf ** 4.0) ** 0.45 if rf < 0.999 else 0.0)) if is_top else 0.002
+            x = rad * math.cos(ang) + 0.035
+            z = rad * math.sin(ang) * 0.90 + cz
+            y = (0.006 + 0.028 * ((1.0 - rf ** 4.2) ** 0.42 if rf < 0.999 else 0.0)) if is_top else 0.002
             verts.append((x, y, z))
             uvs.append((0.5 + x, 0.5 + z))
     stride = n_a + 1
@@ -216,18 +271,17 @@ def _milk_puddle(name: str, scale: float, cz: float) -> MeshPart:
 
 
 def _mini_frootloops(name: str, count: int) -> List[MeshPart]:
-    """Vibrant miniature 3D Fruit Loops floating in spilled milk & sitting inside the cereal spoon!"""
+    """Vibrant miniature 3D Fruit Loops cascading across the spilled milk & spoon (`1331..1332`)!"""
     palette = (
-        (0.94, 0.24, 0.34),  # coral-red/pink
-        (0.32, 0.28, 0.92),  # berry purple-blue
-        (0.16, 0.84, 0.18),  # lime green
-        (0.98, 0.78, 0.14),  # lemon yellow
-        (0.98, 0.44, 0.10),  # tangerine orange
-        (0.94, 0.26, 0.72),  # magenta pink
+        (0.96, 0.22, 0.34),  # strawberry red-pink
+        (0.34, 0.28, 0.94),  # blueberry purple-blue
+        (0.18, 0.86, 0.18),  # lime green
+        (0.99, 0.82, 0.14),  # lemon yellow
+        (0.99, 0.44, 0.10),  # tangerine orange
+        (0.94, 0.24, 0.76),  # raspberry magenta
     )
-    # Deterministic authentic cluster coordinates covering spoon, bowl mouth, spilled milk & stray bottom-right ring!
     coords = (
-        (-0.09, 0.112, +0.008), (-0.04, 0.110, +0.018),  # right inside the gleaming silver spoon!
+        (-0.085, 0.106, +0.006), (-0.032, 0.104, +0.018),  # nestled inside the gleaming silver spoon!
         (+0.02, 0.044, -0.10), (+0.10, 0.046, -0.06), (+0.18, 0.044, -0.02),
         (-0.04, 0.044, +0.02), (+0.04, 0.048, +0.05), (+0.14, 0.044, +0.08),
         (-0.10, 0.044, +0.09), (-0.01, 0.046, +0.14), (+0.09, 0.046, +0.16),
@@ -235,13 +289,16 @@ def _mini_frootloops(name: str, count: int) -> List[MeshPart]:
         (-0.05, 0.042, +0.24), (+0.06, 0.042, +0.26), (+0.17, 0.042, +0.22),
         (+0.28, 0.042, +0.16), (+0.32, 0.042, -0.02), (+0.03, 0.044, -0.16),
         (+0.13, 0.044, -0.14), (-0.11, 0.042, +0.17), (-0.02, 0.042, +0.32),
-        (+0.12, 0.042, +0.30), (+0.22, 0.038, +0.34), (+0.24, 0.036, +0.40),
+        (+0.12, 0.042, +0.30), (+0.22, 0.038, +0.34), (+0.25, 0.036, +0.41),
+        (-0.06, 0.044, -0.14), (+0.16, 0.044, -0.09), (+0.08, 0.044, +0.01),
+        (+0.01, 0.044, +0.20), (+0.21, 0.042, +0.12), (+0.14, 0.042, +0.25),
+        (-0.08, 0.042, +0.28), (+0.30, 0.042, +0.06),
     )
     loops: List[MeshPart] = []
     for k, (lx, ly, lz) in enumerate(coords[:count]):
         col = palette[k % len(palette)]
-        ring = torus_arc(0.034, 0.015, u_segs=14, v_segs=8, plane="xz", name=f"{name}_fl_{k}", material="item_cream_white")
-        ring = tint_part(ring, _const_tint(col)).rotate_xyz(rx=(k * 13 % 18) - 9, rz=(k * 19 % 18) - 9, degrees=True).translate(lx, ly, lz)
+        ring = torus_arc(0.032, 0.014, u_segs=14, v_segs=8, plane="xz", name=f"{name}_fl_{k}", material="item_cream_white")
+        ring = tint_part(ring, _const_tint(col)).rotate_xyz(rx=(k * 13 % 20) - 10, rz=(k * 19 % 20) - 10, degrees=True).translate(lx, ly, lz)
         loops.append(ring)
     return loops
 
@@ -255,18 +312,18 @@ def build_cerbol() -> SceneBuilder:
 
 
 def _build_cereal_spill(name: str, stage: int) -> SceneBuilder:
-    """Shattered golden cereal bowl with shards, silver spoon, milk puddle & Fruit Loops (`1331..1333`)."""
+    """Shattered upright golden cereal bowl with white-edged ceramic shards, spoon, milk & Fruit Loops (`1331..1333`)."""
     register_item_materials()
     sc = SceneBuilder(name=name)
     parts: List[MeshPart] = [_shattered_yellow_bowl(f"{name}_bowl", overturned=False)]
     parts.extend(_ceramic_shards(name))
     parts.extend(_cereal_spoon(name))
     if stage == 1:
-        parts.append(_milk_puddle(f"{name}_milk", scale=1.08, cz=+0.08))
-        parts.extend(_mini_frootloops(name, count=26))
+        parts.append(_milk_puddle(f"{name}_milk", scale=1.10, cz=+0.09))
+        parts.extend(_mini_frootloops(name, count=34))
     elif stage == 2:
-        parts.append(_milk_puddle(f"{name}_milk", scale=0.64, cz=-0.04))
-        parts.extend(_mini_frootloops(name, count=11))
+        parts.append(_milk_puddle(f"{name}_milk", scale=0.66, cz=-0.03))
+        parts.extend(_mini_frootloops(name, count=14))
     sc.add("cereal", parts)
     return _finalize_item(sc, target_span=0.98)
 
