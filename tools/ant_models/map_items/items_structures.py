@@ -352,7 +352,7 @@ def build_blackhill() -> SceneBuilder:
         name="bh_nail_shaft",
         material="item_steel_dark",
     )
-    nail_head = cylinder(0.072, 0.066, 0.024, radial_segs=20, bevel=0.005, axis="y", name="bh_nail_head", material="item_aluminum").rotate_xyz(rx=-0.38, rz=0.52).translate(nx - 0.16, ny + 0.31, nz - 0.095)
+    nail_head = cylinder(0.072, 0.066, 0.024, radial_segs=20, bevel=0.005, axis="y", name="bh_nail_head", material="item_machined_steel").rotate_xyz(rx=-0.38, rz=0.52).translate(nx - 0.16, ny + 0.31, nz - 0.095)
     nail_slot = rounded_box(0.095, 0.010, 0.014, bevel=0.002, segs=1, name="bh_nail_slot", material="item_steel_dark").rotate_xyz(rx=-0.38, rz=0.52).translate(nx - 0.166, ny + 0.322, nz - 0.098)
     sc.add("anthill", [nail_shaft, nail_head, nail_slot])
 
@@ -376,8 +376,8 @@ def build_blackhill() -> SceneBuilder:
     ln_x, ln_z = -0.38, +0.16
     ln_y = max(0.04, surf_y(ln_x, ln_z) + 0.03)
     sc.add("anthill", [
-        cylinder(0.014, 0.010, 0.16, radial_segs=10, axis="y", name="bh_left_nail", material="item_aluminum").rotate_xyz(rx=0.45, rz=-0.55).translate(ln_x, ln_y + 0.04, ln_z),
-        cylinder(0.042, 0.038, 0.016, radial_segs=14, bevel=0.004, axis="y", name="bh_left_nail_h", material="item_aluminum").rotate_xyz(rx=0.45, rz=-0.55).translate(ln_x + 0.04, ln_y + 0.10, ln_z + 0.03),
+        cylinder(0.014, 0.010, 0.16, radial_segs=10, axis="y", name="bh_left_nail", material="item_machined_steel").rotate_xyz(rx=0.45, rz=-0.55).translate(ln_x, ln_y + 0.04, ln_z),
+        cylinder(0.042, 0.038, 0.016, radial_segs=14, bevel=0.004, axis="y", name="bh_left_nail_h", material="item_machined_steel").rotate_xyz(rx=0.45, rz=-0.55).translate(ln_x + 0.04, ln_y + 0.10, ln_z + 0.03),
     ])
     for idx, (wx, wz, rz) in enumerate(((-0.34, +0.34, 0.38), (-0.22, +0.44, 0.22))):
         wy = max(0.026, surf_y(wx, wz) + 0.020)
@@ -385,7 +385,7 @@ def build_blackhill() -> SceneBuilder:
         hole = cylinder(0.024, 0.024, 0.032, radial_segs=14, axis="y", name=f"bh_washer_h_{idx}", material="item_soil_hole").rotate_xyz(rx=0.38, rz=rz).translate(wx, wy, wz)
         sc.add("anthill", [disc, hole])
 
-    # 3. Three gleaming silver Phillips-head screws + chunky silver hex nut cradling the front center screw!
+    # 3. Three machined steel Phillips-head screws + chunky steel hex nut cradling the front center screw!
     screw_specs = (
         (-0.26, +0.30, 0.062, 0.42, +0.36, False),
         (-0.08, +0.44, 0.056, 0.56, +0.12, False),
@@ -394,12 +394,12 @@ def build_blackhill() -> SceneBuilder:
     for idx, (sx, sz, rad, rx, rz, with_nut) in enumerate(screw_specs):
         sy = max(0.040, surf_y(sx, sz) + 0.030)
         shaft = cylinder(rad * 0.40, rad * 0.36, 0.09, radial_segs=12, axis="y", name=f"bh_screw_s_{idx}", material="item_steel_dark").rotate_xyz(rx=rx, rz=rz).translate(sx, sy - 0.03, sz)
-        head = cylinder(rad, rad * 0.92, 0.036, radial_segs=20, bevel=0.006, axis="y", name=f"bh_screw_h_{idx}", material="item_aluminum").rotate_xyz(rx=rx, rz=rz).translate(sx, sy + 0.01, sz)
+        head = cylinder(rad, rad * 0.92, 0.036, radial_segs=20, bevel=0.006, axis="y", name=f"bh_screw_h_{idx}", material="item_machined_steel").rotate_xyz(rx=rx, rz=rz).translate(sx, sy + 0.01, sz)
         slot_a = rounded_box(rad * 1.18, 0.012, 0.016, bevel=0.002, segs=1, name=f"bh_slot_a_{idx}", material="item_steel_dark").rotate_xyz(rx=rx, rz=rz).translate(sx, sy + 0.028, sz)
         slot_b = rounded_box(0.016, 0.012, rad * 1.18, bevel=0.002, segs=1, name=f"bh_slot_b_{idx}", material="item_steel_dark").rotate_xyz(rx=rx, rz=rz).translate(sx, sy + 0.028, sz)
         sc.add("anthill", [shaft, head, slot_a, slot_b])
         if with_nut:
-            nut = cylinder(0.102, 0.106, 0.044, radial_segs=6, bevel=0.008, axis="y", name="bh_center_nut", material="item_aluminum").rotate_xyz(rx=rx, rz=rz).translate(sx, sy - 0.012, sz)
+            nut = cylinder(0.102, 0.106, 0.044, radial_segs=6, bevel=0.008, axis="y", name="bh_center_nut", material="item_machined_steel").rotate_xyz(rx=rx, rz=rz).translate(sx, sy - 0.012, sz)
             sc.add("anthill", nut)
 
     # 4. Long matte-black cylindrical rod/pen barrel angled cleanly along the bottom-right rim (`245:BLACKHILL`)!

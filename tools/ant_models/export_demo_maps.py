@@ -29,10 +29,88 @@ HILL_TEAMS = {"BLACKHILL": "black", "GREENHILL": "green", "BLUEHILL": "blue", "R
 
 MAPS_TO_EXPORT = [
     ("treasure", "Treasure Map", "Original-Ants/Maps/TREASURE.LVL"),
+    ("popcorn",  "Popcorn",      "Community-Maps/POPcOrN.lvl"),
     ("tiny",     "Tiny Arena",   "Original-Ants/Maps/TINY.LVL"),
     ("small",    "Small Map",    "Original-Ants/Maps/SMALL.LVL"),
     ("islands",  "Islands",      "Original-Ants/Maps/ISLANDS.LVL"),
 ]
+
+# Canonical RGB centroids (0..255) for the 5 original 1998 ground terrain materials
+TERRAIN_RGB = {
+    "g": (141.4, 120.1, 112.6),  # warm dusty backyard clay/dirt
+    "m": (75.0,  75.0,  75.0),   # dark damp mud road
+    "d": (212.0, 200.0, 191.0),  # light cream beach sand / patio
+    "s": (148.0, 146.5, 169.5),  # cool slate / stone / ice
+    "w": (28.9,  61.4,  113.1),  # deep pond water
+}
+TERRAIN_CHAN = {"m": 0, "d": 1, "s": 2, "w": 3}  # g is implicit: 1 - (m + d + s + w)
+
+
+def build_smooth_ground_masks(t4_entries, sprites_dir, out_path, atlas_cols=16, tile_out=64):
+    """Build a 64x64-per-tile smooth anti-aliased RGBA terrain-weight atlas (R=mud, G=sand, B=slate, A=water)."""
+    import numpy as np
+    from PIL import Image
+
+    count = GROUND_LAST - GROUND_FIRST + 1
+    atlas_rows = (count + atlas_cols - 1) // atlas_cols
+    atlas = np.zeros((atlas_rows * tile_out, atlas_cols * tile_out, 4), dtype=np.uint8)
+
+    # 1D Gaussian kernel (sigma ~ 1.25 px at 64x64) for smooth staircase-free organic contours
+    rad = 3
+    ks = np.arange(-rad, rad + 1, dtype=np.float32)
+    kern = np.exp(-0.5 * (ks / 1.35) ** 2)
+    kern /= kern.sum()
+
+    def blur2d(arr):
+        p = np.pad(arr, ((rad, rad), (rad, rad)), mode="edge")
+        tmp = sum(kern[i + rad] * p[rad:-rad, i + rad : i + rad + arr.shape[1]] for i in range(-rad, rad + 1))
+        p2 = np.pad(tmp, ((rad, rad), (0, 0)), mode="edge")
+        return sum(kern[i + rad] * p2[i + rad : i + rad + arr.shape[0], :] for i in range(-rad, rad + 1))
+
+    for idx in range(count):
+        tid = GROUND_FIRST + idx
+        nm = t4_entries[tid]["name"].lower()
+        weights = np.zeros((tile_out, tile_out, 4), dtype=np.float32)
+
+        if len(nm) >= 3 and nm[1:3] == "01":
+            ch = TERRAIN_CHAN.get(nm[0])
+            if ch is not None:
+                weights[:, :, ch] = 1.0
+        else:
+            a_key, b_key = nm[0], nm[1]
+            sp_idx = t4_entries[tid]["subitems"][0]["frames"][0]["sprite_index"]
+            rgb = np.asarray(Image.open(os.path.join(sprites_dir, f"sprite_{sp_idx:04d}.png")).convert("RGB"), dtype=np.float32)
+            if {a_key, b_key} == {"m", "w"}:
+                # Water vs mud: detect blue water chroma (B - R > 12) cleanly even across 1px dark shore rim
+                is_w = ((rgb[:, :, 2] - rgb[:, :, 0]) > 12.0).astype(np.float32)
+                t_b = is_w if b_key == "w" else (1.0 - is_w)
+            else:
+                ca = np.array(TERRAIN_RGB[a_key], dtype=np.float32)
+                cb = np.array(TERRAIN_RGB[b_key], dtype=np.float32)
+                ab = cb - ca
+                denom = float(np.dot(ab, ab)) + 1e-5
+                proj = np.sum((rgb - ca[None, None, :]) * ab[None, None, :], axis=2) / denom
+                t_b = np.clip(proj, 0.0, 1.0)
+
+            # Upsample 32x32 -> 64x64 with bilinear + Gaussian contour smoothing + crisp organic S-curve
+            up = np.asarray(Image.fromarray(np.clip(t_b * 255.0, 0, 255).astype(np.uint8)).resize((tile_out, tile_out), Image.BILINEAR), dtype=np.float32) / 255.0
+            sm = blur2d(up)
+            # Crisp yet anti-aliased edge (kills 32px blocky stairs while keeping authentic shoreline waves)
+            u = np.clip((sm - 0.24) / 0.52, 0.0, 1.0)
+            w_b = u * u * (3.0 - 2.0 * u)
+            w_a = 1.0 - w_b
+            if a_key in TERRAIN_CHAN:
+                weights[:, :, TERRAIN_CHAN[a_key]] = w_a
+            if b_key in TERRAIN_CHAN:
+                weights[:, :, TERRAIN_CHAN[b_key]] = w_b
+
+        r_cell = idx // atlas_cols
+        c_cell = idx % atlas_cols
+        atlas[r_cell * tile_out : (r_cell + 1) * tile_out, c_cell * tile_out : (c_cell + 1) * tile_out] = np.clip(
+            np.round(weights * 255.0), 0, 255
+        ).astype(np.uint8)
+
+    Image.fromarray(atlas, mode="RGBA").save(out_path, optimize=True)
 
 
 def read_png_dims(path):
@@ -175,7 +253,7 @@ def parse_lvl(path, t4_entries, metrics):
             else:
                 tiles.append(54)  # fallback g01a (485 - 431 = 54)
 
-    # Layer 2 anchored objects + power-ups + anthills (exact renderer.cpp line 545 anchor flag)
+    # Layer 2 anchored objects + power-ups + bombs + fire walls + anthills (exact renderer.cpp lines 525..558)
     objects = []
     hills = {}
     for r in range(rows):
@@ -184,14 +262,28 @@ def parse_lvl(path, t4_entries, metrics):
             pos += 6
             if tid in (0, 0xFFFF, 0x7FFE):
                 continue
-            if tid >= len(dict_names):
-                continue
-            nm = dict_names[tid]
+            nm = dict_names[tid] if tid < len(dict_names) else ""
+            is_pu = (62 <= tid <= 66) or nm.lower().startswith("pu_")
+            is_bomb = 129 <= tid <= 132
+            is_fire = tid == 134
+            is_hill = 245 <= tid <= 248
+            is_special = is_pu or is_bomb or is_fire or is_hill
+            # Match renderer.cpp lines 526..537: only powerups (62..66), bombs (129..132), fire wall (134),
+            # and anthills (245..248) bypass empty/"." dictionary names in Layer 2!
+            if not nm or nm == ".":
+                if not is_special or tid >= len(t4_entries):
+                    continue
+                nm = t4_entries[tid]["name"]
             low = nm.lower()
-            is_pu = low.startswith("pu_")
-            if not is_pu and (flg & 1) == 0:
-                continue
+            if is_hill:
+                if (flg & 1) == 0:
+                    continue
+            elif not (is_pu or is_bomb or is_fire):
+                if (flg & 1) == 0:
+                    continue
             m = metrics.get(low)
+            if not m and is_special and tid < len(t4_entries):
+                m = metrics.get(t4_entries[tid]["name"].lower())
             if not m:
                 continue
             x = round(c + m["ox"], 2)
@@ -204,8 +296,9 @@ def parse_lvl(path, t4_entries, metrics):
                 "z": z,
                 "s": m["scale"],
             })
-            if nm in HILL_TEAMS:
-                hills[HILL_TEAMS[nm]] = [round(x, 2), round(z, 2), c, r]
+            hill_nm = t4_entries[tid]["name"] if (is_hill and tid < len(t4_entries)) else nm
+            if hill_nm in HILL_TEAMS:
+                hills[HILL_TEAMS[hill_nm]] = [round(x, 2), round(z, 2), c, r]
 
     # Block 1: team start markers (BSTART/GSTART/USTART/RSTART) and top-layer plants
     b1_count = u16()
@@ -304,6 +397,10 @@ def main():
         with open(src_ground, "rb") as sf, open(dst_ground, "wb") as df:
             df.write(sf.read())
 
+    # 1b. Build smooth 64x64 anti-aliased terrain-material weight atlas for new PBR lighting-reactive floor tiles
+    dst_masks = os.path.join(out_dir, "ground_masks.png")
+    build_smooth_ground_masks(t4_entries, sprites_dir, dst_masks, atlas_cols=map_atlas.GROUND_COLUMNS, tile_out=64)
+
     # 2. Export parsed classic .LVL maps
     metrics = build_sprite_metrics(t4_entries, items_manifest, sprites_dir)
     maps_out = []
@@ -331,7 +428,10 @@ def main():
     maps_path = os.path.join(out_dir, "maps.json")
     with open(maps_path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(payload, f, separators=(",", ":"))
-    print(f"Wrote {dst_ground} ({os.path.getsize(dst_ground):,} B) and {maps_path} ({os.path.getsize(maps_path):,} B)")
+    print(
+        f"Wrote {dst_ground} ({os.path.getsize(dst_ground):,} B), "
+        f"{dst_masks} ({os.path.getsize(dst_masks):,} B), and {maps_path} ({os.path.getsize(maps_path):,} B)"
+    )
 
 
 if __name__ == "__main__":

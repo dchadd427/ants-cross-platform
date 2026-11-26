@@ -279,80 +279,105 @@ def build_botcap1() -> SceneBuilder:
 
 
 def _build_hex_nut(name: str, *, rot_deg: Tuple[float, float, float]) -> SceneBuilder:
-    """Smooth CNC-machined 6-sided polished steel hex nut with crisp beveled faces & threaded bore (`317:bolt1`, `318:bolt2`)."""
+    """Machined forged blue-steel 6-sided hex nut with brushed faces, crisp specular chamfers & dark threaded bore (`317:bolt1`, `318:bolt2`)."""
     register_item_materials()
     sc = SceneBuilder(name=name)
     parts: List[MeshPart] = []
 
-    # Build cleanly separated smooth faces (6 crisp flat hex sidewalls, smooth top/bottom washers + beveled chamfers,
-    # and smooth circular inner bore) using mirror-smooth `item_chrome_polished` — ZERO streaky metal lines!
     n_ang = 48  # 8 segments per hex flat for crisp corners + silky-smooth circular bore
-    r_out_flat = 0.250
-    r_in = 0.118
-    h_half = 0.112
-    cham = 0.022
+    r_out_flat = 0.252
+    r_in = 0.102
+    h_half = 0.122
+    cham = 0.032
 
     def _hex_r(theta: float) -> float:
         a = ((theta + math.pi / 6.0) % (math.pi / 3.0)) - math.pi / 6.0
         return r_out_flat / max(0.5, math.cos(a))
 
-    def _band_mesh(tag: str, r0_spec: Tuple[str, float, float], r1_spec: Tuple[str, float, float], *, flat_hex: bool = False) -> MeshPart:
+    def _band_mesh(
+        tag: str,
+        r0_spec: Tuple[str, float, float],
+        r1_spec: Tuple[str, float, float],
+        *,
+        flat_hex: bool = False,
+        mat: str = "item_machined_steel",
+    ) -> MeshPart:
         verts: List[Tuple[float, float, float]] = []
         nrms: List[Tuple[float, float, float]] = []
+        uvs: List[Tuple[float, float]] = []
         tris: List[Tuple[int, int, int]] = []
         k0, s0, y0 = r0_spec
         k1, s1, y1 = r1_spec
         if flat_hex:
-            # 6 independent flat hex sidewalls with exact crisp planar normals per face!
+            # 6 independent flat hex sidewalls with slight bevel roll-off at top/bottom rims so specular light catches edges!
             for f in range(6):
                 a0 = f * (math.pi / 3.0) - math.pi / 6.0
                 a1 = a0 + (math.pi / 3.0)
                 amid = 0.5 * (a0 + a1)
                 fnx, fnz = math.cos(amid), math.sin(amid)
                 base = len(verts)
-                for ang in (a0, a1):
+                for u_i, ang in enumerate((a0, a1)):
                     rr0 = _hex_r(ang) * s0
                     rr1 = _hex_r(ang) * s1
                     verts.append((rr0 * math.cos(ang), y0, rr0 * math.sin(ang)))
                     verts.append((rr1 * math.cos(ang), y1, rr1 * math.sin(ang)))
-                    nrms.append((fnx, 0.0, fnz))
-                    nrms.append((fnx, 0.0, fnz))
+                    nrms.append((fnx * 0.985, -0.17, fnz * 0.985))
+                    nrms.append((fnx * 0.985, +0.17, fnz * 0.985))
+                    uvs.append((f * 0.38 + u_i * 0.36, 0.0))
+                    uvs.append((f * 0.38 + u_i * 0.36, 0.55))
                 tris.extend(((base, base + 1, base + 3), (base, base + 3, base + 2)))
             pos_a = np.asarray(verts, dtype=np.float32)
             idx_a = np.asarray(tris, dtype=np.uint32).reshape(-1)
             nrm_a = np.asarray(nrms, dtype=np.float32)
-            return MeshPart(f"{name}_{tag}", "item_chrome_polished", pos_a, nrm_a, idx_a)
+            uv_a = np.asarray(uvs, dtype=np.float32)
+            return MeshPart(f"{name}_{tag}", mat, pos_a, nrm_a, idx_a, uvs=uv_a)
 
         for ir, (kind, scale_r, yv) in enumerate((r0_spec, r1_spec)):
             for j in range(n_ang + 1):
                 ang = (j / float(n_ang)) * 2.0 * math.pi
                 rad = (_hex_r(ang) * scale_r) if kind == "hex" else scale_r
-                verts.append((rad * math.cos(ang), yv, rad * math.sin(ang)))
+                px, pz = rad * math.cos(ang), rad * math.sin(ang)
+                verts.append((px, yv, pz))
+                if abs(y0 - y1) < 0.004:
+                    uvs.append((px * 2.2 + 0.5, pz * 2.2 + 0.5))
+                else:
+                    uvs.append(((j / float(n_ang)) * 2.0, float(ir) * 0.45))
         st = n_ang + 1
         for j in range(n_ang):
             a, b, c, d = j, st + j, st + j + 1, j + 1
             tris.extend(((a, b, c), (a, c, d)))
         pos_a = np.asarray(verts, dtype=np.float32)
         idx_a = np.asarray(tris, dtype=np.uint32).reshape(-1)
-        return MeshPart(f"{name}_{tag}", "item_chrome_polished", pos_a, recompute_smooth_normals(pos_a, idx_a), idx_a)
+        uv_a = np.asarray(uvs, dtype=np.float32)
+        return MeshPart(f"{name}_{tag}", mat, pos_a, recompute_smooth_normals(pos_a, idx_a), idx_a, uvs=uv_a)
 
-    steel_tint = _const_tint((0.86, 0.88, 0.92))
+    def _forged_face_tint(pos: np.ndarray, nrm: np.ndarray) -> np.ndarray:
+        # Subtle machined forged blue-steel variation + darker bore rim cavity AO (never flat uniform white!)
+        r = np.hypot(pos[:, 0], pos[:, 2])
+        ang = np.arctan2(pos[:, 2], pos[:, 0])
+        grain = 0.90 + 0.10 * np.sin(pos[:, 0] * 34.0 + pos[:, 2] * 28.0) * np.cos(pos[:, 1] * 26.0 - ang * 3.0)
+        bore_ao = np.clip((r - r_in * 0.92) / 0.065, 0.46, 1.0)
+        cham_lift = np.where((np.abs(nrm[:, 1]) > 0.25) & (np.abs(nrm[:, 1]) < 0.92), 1.14, 0.96)
+        v = np.clip(grain * bore_ao * cham_lift, 0.36, 1.0)
+        return np.column_stack([v * 0.92, v * 0.95, np.clip(v * 1.04, 0.0, 1.0)])
+
     bands = [
-        _band_mesh("bore", ("in", r_in, +h_half - 0.010), ("in", r_in, -h_half + 0.010)),
-        _band_mesh("in_ch_b", ("in", r_in, -h_half + 0.010), ("in", r_in + 0.012, -h_half)),
-        _band_mesh("bot_face", ("in", r_in + 0.012, -h_half), ("hex", 0.93, -h_half)),
-        _band_mesh("bot_ch", ("hex", 0.93, -h_half), ("hex", 1.00, -h_half + cham)),
-        _band_mesh("hex_wall", ("hex", 1.00, -h_half + cham), ("hex", 1.00, +h_half - cham), flat_hex=True),
-        _band_mesh("top_ch", ("hex", 1.00, +h_half - cham), ("hex", 0.93, +h_half)),
-        _band_mesh("top_face", ("hex", 0.93, +h_half), ("in", r_in + 0.012, +h_half)),
-        _band_mesh("in_ch_t", ("in", r_in + 0.012, +h_half), ("in", r_in, +h_half - 0.010)),
+        (_band_mesh("bore", ("in", r_in, +h_half - 0.012), ("in", r_in, -h_half + 0.012), mat="item_machined_steel_dark"), True),
+        (_band_mesh("in_ch_b", ("in", r_in, -h_half + 0.012), ("in", r_in + 0.016, -h_half), mat="item_machined_steel_dark"), True),
+        (_band_mesh("bot_face", ("in", r_in + 0.016, -h_half), ("hex", 0.90, -h_half)), False),
+        (_band_mesh("bot_ch", ("hex", 0.90, -h_half), ("hex", 1.00, -h_half + cham)), False),
+        (_band_mesh("hex_wall", ("hex", 1.00, -h_half + cham), ("hex", 1.00, +h_half - cham), flat_hex=True), False),
+        (_band_mesh("top_ch", ("hex", 1.00, +h_half - cham), ("hex", 0.90, +h_half)), False),
+        (_band_mesh("top_face", ("hex", 0.90, +h_half), ("in", r_in + 0.016, +h_half)), False),
+        (_band_mesh("in_ch_t", ("in", r_in + 0.016, +h_half), ("in", r_in, +h_half - 0.012), mat="item_machined_steel_dark"), True),
     ]
-    parts.extend(tint_part(b, steel_tint) for b in bands)
+    for b, is_inner in bands:
+        parts.append(b if is_inner else tint_part(b, _forged_face_tint))
 
-    # Crisp machined internal screw thread ridges inside the central bore!
+    # Crisp dark machined internal screw thread ridges inside the central bore!
     for k in range(5):
-        ty = -0.072 + k * 0.036
-        parts.append(torus_arc(r_in - 0.004, 0.0075, u_segs=36, v_segs=8, plane="xz", name=f"{name}_thread_{k}", material="item_steel_dark").translate(0.0, ty, 0.0))
+        ty = -0.078 + k * 0.039
+        parts.append(torus_arc(r_in - 0.004, 0.0085, u_segs=36, v_segs=8, plane="xz", name=f"{name}_thread_{k}", material="item_steel_dark").translate(0.0, ty, 0.0))
 
     rx, ry, rz = rot_deg
     sc.add("nut", [p.rotate_xyz(rx=rx, ry=ry, rz=rz, degrees=True) for p in parts])
@@ -366,7 +391,7 @@ def build_bolt1() -> SceneBuilder:
 
 def build_bolt2() -> SceneBuilder:
     """Tilted upright hexagonal steel nut resting on one hex flat (`318:bolt2`)."""
-    return _build_hex_nut("item_bolt2", rot_deg=(68.0, -34.0, 16.0))
+    return _build_hex_nut("item_bolt2", rot_deg=(60.0, -34.0, 16.0))
 
 
 def build_screw1() -> SceneBuilder:
@@ -376,8 +401,8 @@ def build_screw1() -> SceneBuilder:
     parts: List[MeshPart] = []
 
     # Build along Z: sharp tip at -Z (-0.36), flared countersunk Phillips head at +Z (+0.34)!
-    shank = cylinder(0.004, 0.044, 0.64, radial_segs=24, axis="z", name="screw1_shank", material="item_chrome_polished").translate(0.0, 0.0, -0.02)
-    head = cylinder(0.044, 0.096, 0.072, radial_segs=32, bevel=0.005, axis="z", name="screw1_head", material="item_chrome_polished").translate(0.0, 0.0, +0.325)
+    shank = cylinder(0.004, 0.044, 0.64, radial_segs=24, axis="z", name="screw1_shank", material="item_machined_steel").translate(0.0, 0.0, -0.02)
+    head = cylinder(0.044, 0.096, 0.072, radial_segs=32, bevel=0.005, axis="z", name="screw1_head", material="item_machined_steel").translate(0.0, 0.0, +0.325)
     # Crisp recessed Phillips '+' cross-drive on the flat countersunk head!
     cross_a = rounded_box(0.118, 0.022, 0.018, bevel=0.003, segs=2, name="screw1_cross_a", material="item_steel_dark").translate(0.0, 0.0, +0.360)
     cross_b = rounded_box(0.022, 0.118, 0.018, bevel=0.003, segs=2, name="screw1_cross_b", material="item_steel_dark").translate(0.0, 0.0, +0.360)
@@ -390,7 +415,7 @@ def build_screw1() -> SceneBuilder:
         u = k / float(n_t - 1)
         tz = -0.29 + u * 0.54
         tr = 0.014 + 0.036 * (u ** 0.72)
-        ring = torus_arc(tr, 0.0085, u_segs=24, v_segs=8, plane="xy", name=f"screw1_th_{k}", material="item_chrome_polished").rotate_xyz(ry=0.14).translate(0.0, 0.0, tz)
+        ring = torus_arc(tr, 0.0085, u_segs=24, v_segs=8, plane="xy", name=f"screw1_th_{k}", material="item_machined_steel").rotate_xyz(ry=0.14).translate(0.0, 0.0, tz)
         parts.append(ring)
 
     # Diagonal pose matching `319:screw1`: pointed tip UP-LEFT, flared countersunk Phillips head DOWN-RIGHT!
@@ -406,17 +431,17 @@ def build_screw2() -> SceneBuilder:
 
     # Local Y: wide domed pan head at top (+0.20), chunky threaded shank descending to -0.20
     head_prof = [(0.000, 0.255), (0.115, 0.252), (0.172, 0.228), (0.184, 0.185), (0.176, 0.156), (0.088, 0.154)]
-    head = lathe(head_prof, radial_segs=32, cap_bottom=True, cap_top=True, axis="y", name="screw2_head", material="item_chrome_spring")
+    head = lathe(head_prof, radial_segs=32, cap_bottom=True, cap_top=True, axis="y", name="screw2_head", material="item_machined_steel")
     # Iconic bold recessed Phillips '+' cross slot on top of the screw head (`320:screw2`)!
     cross_a = rounded_box(0.215, 0.022, 0.044, bevel=0.005, segs=2, name="screw2_cross_a", material="item_steel_dark").translate(0.0, 0.254, 0.0)
     cross_b = rounded_box(0.044, 0.022, 0.215, bevel=0.005, segs=2, name="screw2_cross_b", material="item_steel_dark").translate(0.0, 0.254, 0.0)
-    shank = cylinder(0.068, 0.082, 0.34, radial_segs=22, bevel=0.008, axis="y", name="screw2_shank", material="item_chrome_spring").translate(0.0, -0.015, 0.0)
+    shank = cylinder(0.068, 0.082, 0.34, radial_segs=22, bevel=0.008, axis="y", name="screw2_shank", material="item_machined_steel").translate(0.0, -0.015, 0.0)
     parts.extend([head, cross_a, cross_b, shank])
 
     for k in range(7):
         ty = -0.155 + k * 0.046
         tr = 0.078 + 0.010 * (k / 6.0)
-        parts.append(torus_arc(tr, 0.014, u_segs=24, v_segs=6, plane="xz", name=f"screw2_th_{k}", material="item_aluminum").rotate_xyz(rx=0.10).translate(0.0, ty, 0.0))
+        parts.append(torus_arc(tr, 0.014, u_segs=24, v_segs=6, plane="xz", name=f"screw2_th_{k}", material="item_machined_steel_dark").rotate_xyz(rx=0.10).translate(0.0, ty, 0.0))
 
     # Tilt so bold '+' pan head faces UP-LEFT & threaded shank points DOWN-LEFT matching `320:screw2`!
     sc.add("screw2", [p.rotate_xyz(rx=18.0, ry=24.0, rz=-22.0, degrees=True) for p in parts])

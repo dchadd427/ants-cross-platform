@@ -24,13 +24,13 @@
 
   // Distinct Lighting Scenarios with tailored sun angle, shadow intensity, grid tint, and dynamic atmosphere glow!
   const LIGHT_SCENARIOS = {
-    daylight:  { label: "Daylight",  elev: 32, azim: -42, shadowStr: 0.68, gridAlpha: 0.24, gridCol: [0.05, 0.07, 0.06], glowMode: "none" },
-    golden:    { label: "Sunset",    elev: 19, azim: -68, shadowStr: 0.74, gridAlpha: 0.22, gridCol: [0.16, 0.08, 0.05], glowMode: "warm" },
-    night:     { label: "Night",     elev: 26, azim:  36, shadowStr: 0.72, gridAlpha: 0.22, gridCol: [0.22, 0.34, 0.58], glowMode: "night" },
-    moonlight: { label: "Moonlight", elev: 30, azim: -32, shadowStr: 0.72, gridAlpha: 0.24, gridCol: [0.30, 0.46, 0.74], glowMode: "moon" },
-    neon:      { label: "Neon",      elev: 28, azim: -50, shadowStr: 0.70, gridAlpha: 0.44, gridCol: [0.10, 0.92, 0.98], glowMode: "neon" },
-    overcast:  { label: "Overcast",  elev: 54, azim: -25, shadowStr: 0.44, gridAlpha: 0.22, gridCol: [0.08, 0.10, 0.12], glowMode: "none" },
-    flat:      { label: "1998 Flat", elev: 36, azim: -42, shadowStr: 0.42, gridAlpha: 0.24, gridCol: [0.05, 0.07, 0.06], glowMode: "none" },
+    daylight:  { label: "Daylight",  elev: 32, azim: -42, shadowStr: 0.68, gridAlpha: 0.13, gridCol: [0.05, 0.07, 0.06], glowMode: "none" },
+    golden:    { label: "Sunset",    elev: 19, azim: -68, shadowStr: 0.74, gridAlpha: 0.13, gridCol: [0.16, 0.08, 0.05], glowMode: "warm" },
+    night:     { label: "Night",     elev: 26, azim:  36, shadowStr: 0.72, gridAlpha: 0.16, gridCol: [0.22, 0.34, 0.58], glowMode: "night" },
+    moonlight: { label: "Moonlight", elev: 30, azim: -32, shadowStr: 0.72, gridAlpha: 0.16, gridCol: [0.30, 0.46, 0.74], glowMode: "moon" },
+    neon:      { label: "Neon",      elev: 28, azim: -50, shadowStr: 0.70, gridAlpha: 0.38, gridCol: [0.10, 0.92, 0.98], glowMode: "neon" },
+    overcast:  { label: "Overcast",  elev: 54, azim: -25, shadowStr: 0.44, gridAlpha: 0.12, gridCol: [0.08, 0.10, 0.12], glowMode: "none" },
+    flat:      { label: "1998 Flat", elev: 36, azim: -42, shadowStr: 0.42, gridAlpha: 0.14, gridCol: [0.05, 0.07, 0.06], glowMode: "none" },
   };
   const LIGHT_SCENARIO_ORDER = ["daylight", "golden", "night", "moonlight", "neon", "overcast", "flat"];
 
@@ -45,6 +45,13 @@
       { id: "chicken",  label: "Chicken & Pond",    target: [38.5, 0.3, 45.0], zoom: 0.72 },
       { id: "pizza",    label: "Pizza Tube",        target: [ 4.5, 0.3, 28.5], zoom: 0.52 },
       { id: "full",     label: "Full 60×60 Map",    target: [30.0, 0.2, 30.0], zoom: 2.55 },
+    ],
+    popcorn: [
+      { id: "center",   label: "Full Popcorn Arena", target: [15.5, 0.3, 15.5], zoom: 1.44 },
+      { id: "n_bolts",  label: "North Bolt Castle",  target: [15.5, 0.3,  5.5], zoom: 0.60 },
+      { id: "s_bolts",  label: "South Bolt Castle",  target: [15.5, 0.3, 25.5], zoom: 0.60 },
+      { id: "moat",     label: "Fire & Bomb Moat",   target: [15.5, 0.3, 15.5], zoom: 0.72 },
+      { id: "hills",    label: "Green Anthill",      target: [ 6.5, 0.3,  6.5], zoom: 0.56 },
     ],
     tiny: [
       { id: "center",   label: "Center Arena",      target: [15.5, 0.3, 15.5], zoom: 0.95 },
@@ -98,17 +105,23 @@
     { cls: "combat", team: "black", clip: "Attack",    x:  6.5, z: 28.5, face: [5.5, 29.5], phase: 0.55 },
   ];
 
-  const MAP_ORDER = ["treasure", "tiny", "small", "islands"];
+  const MAP_ORDER = ["treasure", "popcorn", "tiny", "small", "islands"];
   const START_CLASS_CYCLE = ["worker", "combat", "worker", "thief", "bomber", "fire"];
 
-  // --- Strict 8-Way Compass Movement (Exact 45-Degree Grid Increments Like 1998 Ants) ---
+  // --- Strict 8-Way Compass Movement (Exact 45-Degree Grid Legs + Smooth Corner Turning & Natural Cadence) ---
   const OCTANT = Math.PI / 4;
   function snapYaw8(rad) {
     return Math.round(rad / OCTANT) * OCTANT;
   }
 
-  // Expand any tile waypoint loop into strict 8-way (45 deg diagonal + 90 deg cardinal) tile-center legs!
-  function prepareEightWayPath(rawPts) {
+  function lerpAngleRad(cur, target, t) {
+    let diff = ((target - cur + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+    return cur + diff * t;
+  }
+
+  // Expand any tile waypoint loop into strict 8-way (45 deg diagonal + 90 deg cardinal) tile-center legs
+  // with smooth deceleration/acceleration around turns and brief natural pause beats at 180-deg turnarounds!
+  function prepareEightWayPath(rawPts, isSubmerged = false) {
     const snapped = rawPts.map(([x, z]) => [Math.floor(x) + 0.5, Math.floor(z) + 0.5]);
     const expanded = [];
     for (let i = 0; i < snapped.length; i++) {
@@ -119,20 +132,27 @@
       const adx = Math.abs(dx), adz = Math.abs(dz);
       const diag = Math.min(adx, adz);
       if (diag > 0.01 && Math.abs(adx - adz) > 0.01) {
-        // Pure 45-degree diagonal leg first, then pure N/S/E/W cardinal leg!
         expanded.push([ax + Math.sign(dx) * diag, az + Math.sign(dz) * diag]);
       }
     }
     const segs = [];
-    let total = 0;
     for (let i = 0; i < expanded.length; i++) {
       const a = expanded[i], b = expanded[(i + 1) % expanded.length];
       const dx = b[0] - a[0], dz = b[1] - a[1];
       const len = Math.hypot(dx, dz);
       if (len > 1e-4) {
-        segs.push({ ax: a[0], az: a[1], bx: b[0], bz: b[1], len, start: total, yaw: snapYaw8(Math.atan2(dx, dz)) });
-        total += len;
+        segs.push({ ax: a[0], az: a[1], bx: b[0], bz: b[1], len, yaw: snapYaw8(Math.atan2(dx, dz)), pause: 0 });
       }
+    }
+    // Add brief natural forage/lookout pause at sharp reversals (>120 deg) on land ants
+    let total = 0;
+    for (let i = 0; i < segs.length; i++) {
+      const prev = segs[(i + segs.length - 1) % segs.length];
+      const cur = segs[i];
+      const dAng = Math.abs(((cur.yaw - prev.yaw + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI);
+      cur.pause = (!isSubmerged && dAng > 2.1) ? 0.65 : ((!isSubmerged && dAng > 0.4) ? 0.14 : 0.0);
+      cur.start = total;
+      total += cur.len + cur.pause;
     }
     return { segs, total: Math.max(total, 1e-4) };
   }
@@ -142,12 +162,21 @@
     const d = ((distRaw % total) + total) % total;
     for (let i = 0; i < segs.length; i++) {
       const s = segs[i];
-      if (d <= s.start + s.len || i === segs.length - 1) {
-        const u = clamp((d - s.start) / s.len, 0, 1);
-        return { x: s.ax + (s.bx - s.ax) * u, z: s.az + (s.bz - s.az) * u, yaw: s.yaw };
+      if (d <= s.start + s.len + s.pause || i === segs.length - 1) {
+        const local = d - s.start;
+        if (local < s.pause) {
+          return { x: s.ax, z: s.az, yaw: s.yaw, moving: false, pauseRatio: local / Math.max(s.pause, 1e-4) };
+        }
+        const uRaw = clamp((local - s.pause) / s.len, 0, 1);
+        // Subtle S-curve speed easing near segment endpoints so ants lean into & out of corners smoothly!
+        const edge = Math.min(0.18, 0.25 / Math.max(s.len, 0.5));
+        const u = uRaw < edge
+          ? uRaw * (0.65 + 0.35 * (uRaw / edge))
+          : (uRaw > 1 - edge ? 1 - (1 - uRaw) * (0.65 + 0.35 * ((1 - uRaw) / edge)) : uRaw);
+        return { x: s.ax + (s.bx - s.ax) * u, z: s.az + (s.bz - s.az) * u, yaw: s.yaw, moving: true, pauseRatio: 0 };
       }
     }
-    return { x: 0, z: 0, yaw: 0 };
+    return { x: 0, z: 0, yaw: 0, moving: false, pauseRatio: 0 };
   }
 
   function buildWorldMat(model, x, z, scale, yawRad, yLift = 0) {
@@ -300,12 +329,24 @@
       const cls = START_CLASS_CYCLE[idx % START_CLASS_CYCLE.length];
       const sx = st.col + 0.5, sz = st.row + 0.5;
       const hill = mapData.hills[t];
+      // 1. Authentic team starting ants with lively short 8-way foraging & patrol steps!
       if (cls === "worker" && idx === 0 && hill) {
         const mc = Math.round((st.col + cx) * 0.5), mr = Math.round((st.row + cz) * 0.5);
         specs.push({
-          cls, team: t, clip: "Walk", phase: (idx * 0.23 + t.length * 0.11) % 1, speed: 1.25,
+          cls, team: t, clip: "Walk", phase: (idx * 0.23 + t.length * 0.11) % 1, speed: 1.35,
           path: [[st.col, st.row], [mc, mr], [st.col, st.row]],
         });
+      } else if (idx === 1 && !isWaterTile(st.col + Math.sign(cx - st.col), st.row + Math.sign(cz - st.row))) {
+        const dc = Math.sign(cx - st.col) || 1, dr = Math.sign(cz - st.row) || 1;
+        const p1 = [st.col + dc * 2, st.row], p2 = [st.col + dc * 2, st.row + dr * 2];
+        if (!isWaterTile(p1[0], p1[1]) && !isWaterTile(p2[0], p2[1])) {
+          specs.push({
+            cls, team: t, clip: "Walk", phase: (idx * 0.37 + t.length * 0.17) % 1, speed: 1.28,
+            path: [[st.col, st.row], p1, p2, [st.col, st.row + dr]],
+          });
+        } else {
+          specs.push({ cls, team: t, clip: "Idle", x: sx, z: sz, face: [cx, cz], phase: (idx * 0.31) % 1 });
+        }
       } else {
         const clip = cls === "thief" ? "IdleLookout" : "Idle";
         specs.push({ cls, team: t, clip, x: sx, z: sz, face: [cx, cz], phase: (idx * 0.31) % 1 });
@@ -317,7 +358,6 @@
     for (let i = 0; i < (mapData.ponds || []).length; i++) {
       const [px, pz] = mapData.ponds[i];
       const cc = Math.floor(px), cr = Math.floor(pz);
-      // Build a safe 8-way diamond/box loop strictly inside pure water cells (w01a)
       const candidates = [
         [cc - 1, cr], [cc, cr - 1], [cc + 1, cr], [cc, cr + 1],
       ].filter(([c, r]) => isWaterTile(c, r));
@@ -329,14 +369,21 @@
         submerged: true,
         yLift: SWIMMER_SUBMERGE_Y,
         phase: (i * 0.27) % 1,
-        speed: 0.92,
+        speed: 0.96,
         path: loop,
       });
     }
 
-    // 3. Curated active 8-way landmark battles & harvesters on Treasure Map
+    // 3. Curated active 8-way landmark battles & harvesters on Treasure Map & Popcorn Arena
     if (mapData.id === "treasure") {
       for (const a of TREASURE_LANDMARK_ANTS) specs.push(a);
+    } else if (mapData.id === "popcorn") {
+      specs.push(
+        { cls: "bomber", team: "green", clip: "Walk", phase: 0.1, speed: 1.38, path: [[4, 8], [8, 8], [8, 4], [4, 4]] },
+        { cls: "fire",   team: "blue",  clip: "Walk", phase: 0.3, speed: 1.38, path: [[26, 8], [22, 8], [22, 4], [26, 4]] },
+        { cls: "combat", team: "black", clip: "Walk", phase: 0.5, speed: 1.38, path: [[4, 22], [8, 22], [8, 26], [4, 26]] },
+        { cls: "thief",  team: "red",   clip: "Walk", phase: 0.7, speed: 1.48, path: [[26, 22], [22, 22], [22, 26], [26, 26]] },
+      );
     }
     return specs;
   }
@@ -451,8 +498,12 @@
       mapsCatalog = await res.json();
     }
     if (!atlasLoaded) {
-      const img = await loadImage("models/demo/ground.png");
+      const [img, maskImg] = await Promise.all([
+        loadImage("models/demo/ground.png"),
+        loadImage("models/demo/ground_masks.png"),
+      ]);
       renderer.uploadTileAtlas(img);
+      renderer.uploadMaskAtlas(maskImg);
       atlasLoaded = true;
     }
   }
@@ -513,7 +564,7 @@
       for (let i = 0; i < antSpecs.length; i++) {
         const spec = antSpecs[i];
         const model = await modelCache.get(`ant:${spec.cls}`);
-        const pathData = spec.path ? prepareEightWayPath(spec.path) : null;
+        const pathData = spec.path ? prepareEightWayPath(spec.path, Boolean(spec.submerged)) : null;
         let x = spec.x || 0, z = spec.z || 0, yawRad = snapYaw8((spec.yaw || 0) * DEG);
         if (pathData) {
           const p0 = sampleEightWayPath(pathData, (spec.phase || 0) * pathData.total);
@@ -532,7 +583,7 @@
           blink: { active: false, elapsed: 0, nextIn: 1.4 + ((i * 1.73) % 3.6) },
           offsetMat: buildWorldMat(model, x, z, ANT_SCALE, yawRad, spec.yLift || 0),
         };
-        antEntries.push({ inst, spec, pathData, x, z, yawRad });
+        antEntries.push({ inst, spec, pathData, x, z, yawRad, renderYaw: yawRad, walkDist: (spec.phase || 0) * 3.0 });
       }
 
       activeMap = {
@@ -604,23 +655,45 @@
 
     for (const e of antEntries) {
       const { inst, spec, pathData } = e;
+      let isWalking = false;
       if (pathData) {
-        const travel = state.patrols ? t * (spec.speed || 1.2) : 0;
+        const prevX = e.x, prevZ = e.z;
+        const travel = state.patrols ? t * (spec.speed || 1.25) : 0;
         const pose = sampleEightWayPath(pathData, (spec.phase || 0) * pathData.total + travel);
         e.x = pose.x;
         e.z = pose.z;
         e.yawRad = pose.yaw;
-        inst.clipName = state.patrols ? (spec.clip || "Walk") : (spec.submerged ? "Swim" : "Idle");
-        // Gentle snorkel bobbing while submerged underwater (matches 1998 assw301 vertical bob!)
-        const swimBob = spec.submerged ? Math.sin(t * 4.6 + (spec.phase || 0) * 6.28) * 0.028 : 0;
-        inst.offsetMat = buildWorldMat(inst.model, e.x, e.z, ANT_SCALE, e.yawRad, (spec.yLift || 0) + swimBob);
+        const stepDist = Math.hypot(e.x - prevX, e.z - prevZ);
+        if (state.playing && !state.fixedTime) {
+          // Crisp ~0.12 s turn interpolation into each exact 8-way compass heading (no jarring 1-frame snap!)
+          e.renderYaw = lerpAngleRad(e.renderYaw, e.yawRad, 1 - Math.exp(-dt * 15.0));
+          if (state.patrols && pose.moving) e.walkDist += stepDist;
+        } else {
+          e.renderYaw = e.yawRad;
+        }
+        isWalking = state.patrols && pose.moving;
+        if (spec.submerged) {
+          inst.clipName = "Swim";
+        } else if (isWalking) {
+          inst.clipName = spec.clip || "Walk";
+        } else {
+          inst.clipName = spec.cls === "worker" ? "Harvest" : (spec.cls === "thief" ? "IdleLookout" : "Idle");
+        }
+        // Subtle natural gait bounce while walking + gentle snorkel bobbing while submerged underwater
+        const bob = spec.submerged
+          ? Math.sin(t * 4.6 + (spec.phase || 0) * 6.28) * 0.028
+          : (isWalking ? Math.abs(Math.sin(e.walkDist * 14.5)) * 0.024 : 0);
+        inst.offsetMat = buildWorldMat(inst.model, e.x, e.z, ANT_SCALE, e.renderYaw, (spec.yLift || 0) + bob);
       }
       if (Math.abs(e.x - tx) > visHalfSpan + 2.0 || Math.abs(e.z - tz) > visHalfSpan + 2.0) continue;
-      inst.idleTime = t + (spec.phase || 0) * 1.4;
+      // Sync leg stride animation cadence directly to ground distance traveled (eliminates stiff foot sliding!)
+      inst.idleTime = (pathData && isWalking && !spec.submerged)
+        ? ((spec.phase || 0) * 0.6 + e.walkDist * 1.65)
+        : (t * (spec.submerged ? 1.25 : 1.0) + (spec.phase || 0) * 1.4);
       if (spec.submerged && ripples.length < 8) {
         // Place animated water splash collar & wake ring dead-center on the protruding yellow snorkel!
         const snkX = 0.23 * ANT_SCALE, snkZ = 0.30 * ANT_SCALE;
-        const cy = Math.cos(e.yawRad), sy = Math.sin(e.yawRad);
+        const cy = Math.cos(e.renderYaw), sy = Math.sin(e.renderYaw);
         const rx = e.x + snkX * cy + snkZ * sy;
         const rz = e.z - snkX * sy + snkZ * cy;
         ripples.push([rx, rz, (spec.phase || 0), 0.72]);
@@ -692,9 +765,12 @@
   function panByPixels(dx, dy) {
     camGoal = null;
     const viewH = Math.max(canvas.clientHeight, 300);
-    const worldPerPx = (2.0 * BASE_FIT_RADIUS * cam.zoom) / viewH;
+    const aspect = Math.max(0.2, canvas.clientWidth / viewH);
+    const fitHalfH = Math.max(BASE_FIT_RADIUS, (BASE_FIT_RADIUS * 1.35 / aspect) * 1.06) * cam.zoom;
+    const worldPerPx = (2.0 * fitHalfH) / viewH;
     const yawRad = cam.yaw * DEG;
-    const pitchSin = Math.max(0.32, Math.sin(cam.pitch * DEG));
+    const isSquare = state.camPreset === "game" && cam.projection === "ortho" && Math.abs(cam.yaw) < 0.01;
+    const pitchSin = isSquare ? 1.0 : Math.max(0.32, Math.sin(cam.pitch * DEG));
     const rightX = Math.cos(yawRad), rightZ = -Math.sin(yawRad);
     const fwdX = -Math.sin(yawRad), fwdZ = -Math.cos(yawRad);
     cam.target[0] -= (rightX * dx - fwdX * (dy / pitchSin)) * worldPerPx;
@@ -877,15 +953,20 @@
   $("range-sun-elev").addEventListener("input", (e) => { state.sunElev = Number(e.target.value); syncUi(); });
   $("range-sun-azim").addEventListener("input", (e) => { state.sunAzim = Number(e.target.value); syncUi(); });
 
-  // Responsive controls drawer
-  const panelEl = $("inspector-panel");
+  // Responsive controls drawer (matches viewer.css .app-shell.drawer-open & .panel-collapsed!)
+  const shellEl = document.querySelector(".app-shell");
   const backdropEl = $("inspector-backdrop");
   const toggleBtn = $("btn-toggle-panel");
-  let panelOpen = window.innerWidth > 960;
+  let wasNarrow = window.innerWidth <= 960;
+  let panelOpen = !wasNarrow;
   function applyPanelState() {
     const narrow = window.innerWidth <= 960;
-    panelEl.classList.toggle("is-collapsed", !panelOpen);
-    panelEl.classList.toggle("is-open", narrow && panelOpen);
+    if (narrow !== wasNarrow) {
+      panelOpen = !narrow;
+      wasNarrow = narrow;
+    }
+    shellEl.classList.toggle("panel-collapsed", !narrow && !panelOpen);
+    shellEl.classList.toggle("drawer-open", narrow && panelOpen);
     backdropEl.hidden = !(narrow && panelOpen);
     toggleBtn.setAttribute("aria-expanded", String(panelOpen));
   }
@@ -897,11 +978,14 @@
 
   // Keyboard shortcuts
   window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && window.innerWidth <= 960 && panelOpen) {
+      panelOpen = false; applyPanelState(); return;
+    }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const tag = document.activeElement && document.activeElement.tagName;
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
     const k = e.key.toLowerCase();
-    if (e.key >= "1" && e.key <= "4") {
+    if (e.key >= "1" && e.key <= "5") {
       const id = MAP_ORDER[Number(e.key) - 1];
       if (id) { e.preventDefault(); activateMap(id, false); }
     } else if (e.key === " " || k === "i") {
@@ -961,6 +1045,7 @@
         shadowMap: state.castShadows,
         shadowRadius,
         customTarget: cam.target,
+        squareGameView: state.camPreset === "game" && cam.projection === "ortho",
         tileGround: {
           cols: mapData.cols,
           rows: mapData.rows,
@@ -970,6 +1055,7 @@
           gridAlpha: state.showGrid ? ls.gridAlpha : 0.0,
           gridColor: ls.gridCol,
           crispPixels: !state.hiResTiles,
+          pbrFloor: state.hiResTiles,
           shadowStrength: ls.shadowStr,
           time: state.simTime,
           glows,

@@ -344,18 +344,25 @@
   }
   vec3 F_Schlick(float c, vec3 F0) { return F0 + (1.0 - F0) * pow(clamp(1.0 - c, 0.0, 1.0), 5.0); }
   vec3 studioEnv(vec3 R, float rough) {
-    float upT = clamp(R.y * 0.5 + 0.5, 0.0, 1.0);
-    vec3 env = mix(u_groundColor * 0.62, u_skyColor * 1.18, smoothstep(0.12, 0.88, upT));
-    // Warm studio cyclorama floor bounce band near horizon + crisp overhead softbox canopy
-    float horizon = exp(-abs(R.y + 0.06) * 5.5);
-    env += mix(u_groundColor, u_envKeyTint * 0.42, 0.45) * horizon * 0.22;
     float sharp = (1.0 - rough) * (1.0 - rough);
-    float glintExp = mix(20.0, 240.0, sharp);
-    float topSoftbox = smoothstep(0.56, 0.94, R.y) * (0.32 + 0.38 * sharp);
-    float keySoft = smoothstep(0.68, 0.96, dot(R, u_keyDir)) * 1.05 + pow(max(dot(R, u_keyDir), 0.0), glintExp) * 1.35 * sharp;
-    float fillStrip = smoothstep(0.74, 0.97, dot(R, u_fillDir)) * 0.30;
-    float rimSoft = smoothstep(0.70, 0.96, dot(R, u_rimDir)) * 0.44 + pow(max(dot(R, u_rimDir), 0.0), glintExp * 0.7) * 0.52 * sharp;
-    return env + u_envKeyTint * (keySoft * sharp + topSoftbox * 0.55) + u_envFillTint * (fillStrip * sharp + topSoftbox * 0.28) + u_envRimTint * rimSoft * sharp;
+    float upT = clamp(R.y * 0.5 + 0.5, 0.0, 1.0);
+    // High-contrast metallic reflection gradient: rich dark lower bounce + subtle horizon trough + bright sky & specular light strips!
+    vec3 darkGround = u_groundColor * mix(0.56, 0.30, sharp);
+    vec3 skyBand = u_skyColor * mix(1.08, 1.04, sharp);
+    vec3 env = mix(darkGround, skyBand, smoothstep(mix(0.14, 0.30, sharp), mix(0.84, 0.68, sharp), upT));
+    // Crisp dark horizon reflection band makes machined steel & chrome read unmistakably metallic instead of flat white!
+    float horizonTrough = exp(-abs(R.y + 0.08) * mix(4.0, 10.0, sharp));
+    env *= (1.0 - horizonTrough * 0.34 * sharp);
+    float glintExp = mix(18.0, 260.0, sharp);
+    // Narrow bright specular light strips across upper reflection dome
+    float stripeA = exp(-pow((R.y - 0.58) * 5.2, 2.0)) * smoothstep(-0.2, 0.85, R.x * 0.7 - R.z * 0.7) * 0.72;
+    float stripeB = exp(-pow((R.y - 0.84) * 6.0, 2.0)) * 0.55;
+    float keySoft = smoothstep(0.66, 0.96, dot(R, u_keyDir)) * 1.15 + pow(max(dot(R, u_keyDir), 0.0), glintExp) * 1.65 * sharp;
+    float fillStrip = smoothstep(0.72, 0.96, dot(R, u_fillDir)) * 0.36;
+    float rimSoft = smoothstep(0.68, 0.95, dot(R, u_rimDir)) * 0.52 + pow(max(dot(R, u_rimDir), 0.0), glintExp * 0.7) * 0.62 * sharp;
+    return env + u_envKeyTint * (keySoft * sharp + (stripeA + stripeB) * (0.28 + 0.58 * sharp))
+               + u_envFillTint * (fillStrip * sharp + stripeB * 0.24)
+               + u_envRimTint * rimSoft * sharp;
   }
   vec3 evalLight(vec3 L, vec3 lCol, vec3 N, vec3 V, vec3 albedo, float met, float rough, vec3 F0, float coatW, float coatRough, vec3 coatTint, inout vec3 specAcc) {
     float NoL = max(dot(N, L), 0.0);
@@ -711,9 +718,9 @@
       ]);
       this.uShadow = getUniforms(gl, this.shadowProg, ["u_model", "u_lightViewProj", "u_jelloWobble", "u_clipBelowWater"]);
       this.uTileGround = getUniforms(gl, this.tileGroundProg, [
-        "u_viewProj", "u_lightViewProj", "u_yOffset", "u_atlasTex", "u_mapTex", "u_shadowMap",
+        "u_viewProj", "u_lightViewProj", "u_yOffset", "u_atlasTex", "u_mapTex", "u_maskTex", "u_shadowMap",
         "u_mapSize", "u_atlasGrid", "u_viewport", "u_waterTile", "u_gridAlpha",
-        "u_shadowStrength", "u_time", "u_crispPixels", "u_useShadowMap", "u_isOrtho", "u_waterPass",
+        "u_shadowStrength", "u_time", "u_crispPixels", "u_pbrFloor", "u_useShadowMap", "u_isOrtho", "u_waterPass",
         "u_cameraPos", "u_viewDir", "u_keyDir", "u_fillDir", "u_keyColor", "u_fillColor",
         "u_skyColor", "u_groundColor", "u_bgTop", "u_bgMid", "u_bgBot", "u_gridColor", "u_lightMix",
         "u_glows[0]", "u_glowColors[0]", "u_glowCount", "u_ripples[0]", "u_rippleCount",
@@ -727,6 +734,7 @@
       gl.useProgram(this.tileGroundProg);
       gl.uniform1i(this.uTileGround.u_atlasTex, 0);
       gl.uniform1i(this.uTileGround.u_mapTex, 1);
+      gl.uniform1i(this.uTileGround.u_maskTex, 2);
       gl.uniform1i(this.uTileGround.u_shadowMap, 3);
       gl.useProgram(null);
       gl.vertexAttrib2f(2, 0, 0);
@@ -755,8 +763,16 @@
     }
 
     uploadTileAtlas(img) {
+      this.atlasTex = this._uploadLinearTex(img, this.atlasTex);
+    }
+
+    uploadMaskAtlas(img) {
+      this.maskTex = this._uploadLinearTex(img, this.maskTex);
+    }
+
+    _uploadLinearTex(img, prev) {
       const gl = this.gl;
-      if (this.atlasTex) gl.deleteTexture(this.atlasTex);
+      if (prev) gl.deleteTexture(prev);
       const tex = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
@@ -766,7 +782,7 @@
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       gl.bindTexture(gl.TEXTURE_2D, null);
-      this.atlasTex = tex;
+      return tex;
     }
 
     uploadMapGrid(cols, rows, tileArray) {
@@ -810,6 +826,19 @@
       const fitHalfH = Number.isFinite(opts.fixedHalfH)
         ? opts.fixedHalfH * cam.zoom
         : Math.max(scene.fitRadius, (scene.halfWidth / aspect) * 1.06) * cam.zoom;
+      // True 1998 Square-Grid 3D Oblique Orthographic projection: every ground tile projects as an exact 1:1 square
+      // while 3D height +Y lifts upward at a classic ~45° oblique angle with full WebGL depth occlusion!
+      if (isOrtho && opts.squareGameView && Math.abs(cam.yaw) < 0.01) {
+        const halfH = fitHalfH, halfW = halfH * aspect, kLift = 0.78, depthR = Math.max(halfH * 3.2, 28.0);
+        const vp = new Float32Array([
+          1 / halfW, 0, 0, 0,
+          0, kLift / halfH, -0.72 / depthR, 0,
+          0, -1 / halfH, -0.65 / depthR, 0,
+          -t[0] / halfW, t[2] / halfH, (0.65 * t[2]) / depthR, 1,
+        ]);
+        const vd = [0, 0.76, 0.65], dist = Math.max(8.0, halfH * 4.0);
+        return { eye: [t[0], vd[1] * dist, t[2] + vd[2] * dist], viewProj: vp, viewDir: vd, isOrtho: true, yaw: 0 };
+      }
       const dist = isOrtho ? Math.max(6.0, fitHalfH * 4.5) : (fitHalfH / Math.tan(fovy * 0.5)) * 1.16;
       const cp = Math.cos(pitch), sp = Math.sin(pitch), sy = Math.sin(yaw), cy = Math.cos(yaw);
       const eye = [t[0] + dist * cp * sy, t[1] + dist * sp, t[2] + dist * cp * cy];
@@ -928,6 +957,7 @@
         gl.useProgram(this.tileGroundProg);
         gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.atlasTex);
         gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.mapTex);
+        gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, this.maskTex || this.fallbacks.white);
         gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, useShadowMap ? this.shadowTex : this.fallbacks.white);
         gl.uniformMatrix4fv(this.uTileGround.u_viewProj, false, camera.viewProj);
         if (lightViewProj) gl.uniformMatrix4fv(this.uTileGround.u_lightViewProj, false, lightViewProj);
@@ -938,10 +968,11 @@
         gl.uniform2f(this.uTileGround.u_atlasGrid, tg.atlasCols || 16, tg.atlasRows || 15);
         gl.uniform2f(this.uTileGround.u_viewport, opts.width, opts.height);
         gl.uniform1f(this.uTileGround.u_waterTile, tg.waterTile !== undefined ? tg.waterTile : 45);
-        gl.uniform1f(this.uTileGround.u_gridAlpha, tg.gridAlpha !== undefined ? tg.gridAlpha : 0.24);
+        gl.uniform1f(this.uTileGround.u_gridAlpha, tg.gridAlpha !== undefined ? tg.gridAlpha : 0.16);
         gl.uniform1f(this.uTileGround.u_shadowStrength, tg.shadowStrength !== undefined ? tg.shadowStrength : 0.68);
         gl.uniform1f(this.uTileGround.u_time, tg.time || 0);
         gl.uniform1i(this.uTileGround.u_crispPixels, tg.crispPixels !== false ? 1 : 0);
+        gl.uniform1i(this.uTileGround.u_pbrFloor, (tg.pbrFloor !== false && this.maskTex) ? 1 : 0);
         gl.uniform1i(this.uTileGround.u_isOrtho, camera.isOrtho ? 1 : 0);
         gl.uniform3fv(this.uTileGround.u_cameraPos, camera.eye); gl.uniform3fv(this.uTileGround.u_viewDir, camera.viewDir);
         gl.uniform3fv(this.uTileGround.u_keyDir, keyDir); gl.uniform3fv(this.uTileGround.u_fillDir, fillDir);
@@ -1151,7 +1182,11 @@
         gl.uniform3fv(this.uFire.u_silhouetteColor, opts.dark ? [0.910, 0.933, 0.973] : [0.067, 0.086, 0.122]);
         gl.bindVertexArray(this.fireParticles.vao);
 
-        for (const em of fireEmitters) {
+        const tgtFx = opts.customTarget || scene.target;
+        const activeFire = fireEmitters.length > 72
+          ? fireEmitters.slice().sort((a, b) => Math.hypot(a.modelMat[12] - tgtFx[0], a.modelMat[14] - tgtFx[2]) - Math.hypot(b.modelMat[12] - tgtFx[0], b.modelMat[14] - tgtFx[2])).slice(0, 72)
+          : fireEmitters;
+        for (const em of activeFire) {
           gl.uniformMatrix4fv(this.uFire.u_model, false, em.modelMat);
           gl.uniform3fv(this.uFire.u_emitterMin, em.localMin);
           gl.uniform3fv(this.uFire.u_emitterMax, em.localMax);
@@ -1193,7 +1228,11 @@
         gl.uniform3fv(this.uSpark.u_silhouetteColor, opts.dark ? [0.910, 0.933, 0.973] : [0.067, 0.086, 0.122]);
         gl.bindVertexArray(this.sparkParticles.vao);
 
-        for (const em of sparkEmitters) {
+        const tgtSp = opts.customTarget || scene.target;
+        const activeSparks = sparkEmitters.length > 56
+          ? sparkEmitters.slice().sort((a, b) => Math.hypot(a.modelMat[12] - tgtSp[0], a.modelMat[14] - tgtSp[2]) - Math.hypot(b.modelMat[12] - tgtSp[0], b.modelMat[14] - tgtSp[2])).slice(0, 56)
+          : sparkEmitters;
+        for (const em of activeSparks) {
           gl.uniformMatrix4fv(this.uSpark.u_model, false, em.modelMat);
           gl.uniform3fv(this.uSpark.u_emitterCenter, em.center);
           gl.uniform1f(this.uSpark.u_emitterRadius, em.radius);

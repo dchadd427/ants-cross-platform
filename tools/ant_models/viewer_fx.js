@@ -576,11 +576,11 @@
   const TILE_GROUND_FS = `#version 300 es
   precision highp float;
   in vec3 v_worldPos;
-  uniform sampler2D u_atlasTex, u_mapTex, u_shadowMap;
+  uniform sampler2D u_atlasTex, u_mapTex, u_maskTex, u_shadowMap;
   uniform mat4 u_lightViewProj;
   uniform vec2 u_mapSize, u_atlasGrid, u_viewport;
   uniform float u_waterTile, u_gridAlpha, u_shadowStrength, u_time;
-  uniform int u_crispPixels, u_useShadowMap, u_isOrtho, u_waterPass;
+  uniform int u_crispPixels, u_pbrFloor, u_useShadowMap, u_isOrtho, u_waterPass;
   uniform vec3 u_cameraPos, u_viewDir, u_keyDir, u_fillDir, u_keyColor, u_fillColor, u_skyColor, u_groundColor;
   uniform vec3 u_bgTop, u_bgMid, u_bgBot, u_gridColor;
   uniform vec4 u_lightMix;
@@ -599,6 +599,28 @@
     vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
     return mix(mix(tgHash(i), tgHash(i + vec2(1.0, 0.0)), u.x), mix(tgHash(i + vec2(0.0, 1.0)), tgHash(i + vec2(1.0, 1.0)), u.x), u.y);
   }
+  float tgFbm(vec2 p) {
+    return tgNoise(p) * 0.54 + tgNoise(p * 2.13 + vec2(17.3, 9.1)) * 0.29 + tgNoise(p * 4.47 + vec2(5.7, 23.4)) * 0.17;
+  }
+  // Seamless cross-tile smooth terrain weight lookup: R=mud, G=sand, B=slate, A=water (dirt = 1 - sum)
+  vec4 sampleMask(vec2 wp) {
+    vec2 c = clamp(floor(wp), vec2(0.0), u_mapSize - 1.0);
+    vec2 uv = clamp(fract(wp), vec2(0.5 / 64.0), vec2(63.5 / 64.0));
+    float idx = floor(texture(u_mapTex, (c + 0.5) / u_mapSize).r * 255.0 + 0.5);
+    vec2 aCell = vec2(mod(idx, u_atlasGrid.x), floor(idx / u_atlasGrid.x));
+    return texture(u_maskTex, (aCell + uv) / u_atlasGrid);
+  }
+  float pbrTerrainHeight(vec2 wp, vec4 m) {
+    float wM = m.r, wS = m.g, wL = m.b, wW = m.a;
+    float wG = max(0.0, 1.0 - wM - wS - wL - wW);
+    float microG = tgNoise(wp * 11.5) * 0.55 + tgNoise(wp * 27.0) * 0.45;
+    float microM = tgFbm(wp * 5.2);
+    float duneS = 0.5 + 0.5 * sin(wp.x * 6.8 + wp.y * 4.2 + tgNoise(wp * 2.2) * 3.1);
+    float microL = tgNoise(wp * 8.4) * 0.65 + tgNoise(wp * 22.0) * 0.35;
+    float baseH = wG * (0.14 + 0.16 * microG) + wM * (-0.30 + 0.15 * microM) + wS * (0.28 + 0.14 * duneS) + wL * (0.20 + 0.14 * microL) - wW * 0.55;
+    return baseH;
+  }
+  float tgDggx(float NoH, float a) { float a2 = a * a, d = (NoH * NoH) * (a2 - 1.0) + 1.0; return a2 / (3.14159265 * d * d + 1e-5); }
 
   float sampleTileShadow(vec3 wp) {
     if (u_useShadowMap == 0) return 1.0;
@@ -630,87 +652,78 @@
       float dOut = length(edgeD);
       float frame = 1.0 - smoothstep(0.0, 0.24, dOut);
       float fade = (u_isOrtho != 0) ? 0.0 : smoothstep(1.2, 6.0, dOut);
-      vec3 matCol = mix(vec3(0.06, 0.072, 0.092), vec3(0.18, 0.21, 0.25), frame * 0.55);
+      vec3 matCol = mix(vec3(0.05, 0.06, 0.08), vec3(0.16, 0.19, 0.23), frame * 0.55);
       fragColor = vec4(mix(matCol, skyMatch, fade), 1.0);
       return;
     }
 
-    vec2 cell = floor(p);
-    vec2 localUv = fract(p);
-    float rawIdx = floor(texture(u_mapTex, (cell + 0.5) / u_mapSize).r * 255.0 + 0.5);
-    // Treat pure water (w01a = 45) AND water-mud shoreline tiles (MW02a..09a = 0..7, wm02a..09a = 46..53) carefully:
-    // Pure water tile w01a (45) renders translucent water surface in pass 2 over recessed pond bed so submerged swimmers show through!
-    bool isWater = abs(rawIdx - u_waterTile) < 0.5;
-
-    // Pass 1 (u_waterPass == 1): continuous deep submerged pond bed recessed below Y=0.
-    // Never discard on !isWater: Pass 0 opaque land at Y=0 already masks non-water cells in the depth buffer,
-    // so oblique rays looking under a pond shoreline hit shadowed underwater bank instead of sky!
+    // Pass 1 (u_waterPass == 1): seamless deep recessed underwater pond bed with subtle animated caustics (ZERO rectangular discontinuities!)
     if (u_waterPass == 1) {
-      float bedN = tgNoise(p * 3.5) * 0.6 + tgNoise(p * 11.0) * 0.4;
-      vec3 bedCol = mix(vec3(0.008, 0.026, 0.082), vec3(0.022, 0.068, 0.175), bedN);
-      bedCol *= isWater ? 1.0 : 0.45;
+      float bedN = tgFbm(p * 2.4);
+      float caust = pow(0.5 + 0.5 * sin(p.x * 5.2 + p.y * 3.8 + u_time * 1.7 + bedN * 4.2) * cos(p.x * 3.6 - p.y * 5.4 - u_time * 1.3), 3.0);
+      vec3 bedCol = mix(vec3(0.008, 0.028, 0.082), vec3(0.020, 0.064, 0.160), bedN) + vec3(0.014, 0.042, 0.072) * caust;
       float keyLum = clamp(dot(u_keyColor, vec3(0.299, 0.587, 0.114)) * 0.34, 0.14, 1.05);
       fragColor = vec4(tgToSrgb(tgAces(bedCol * (0.48 + 0.72 * keyLum) * u_lightMix.z)), 1.0);
       return;
     }
-    // Pass 0 (opaque land at Y=0): skip pure water tiles so submerged swimmers aren't occluded by Y=0 depth buffer
-    if (u_waterPass == 0 && isWater) discard;
-    // Pass 2 (translucent shimmering water surface at Y=0 over submerged swimmers): draw ONLY pure water tiles!
-    if (u_waterPass == 2 && !isWater) discard;
 
+    vec4 m0 = sampleMask(p);
+    float waterW = m0.a;
+    // Pass 0 (opaque land at Y=0): cut out ALL smooth water pixels seamlessly across w01a AND shoreline tiles!
+    if (u_waterPass == 0 && waterW > 0.54) discard;
+    // Pass 2 (translucent shimmering water surface at Y=0): draw seamlessly across ALL water pixels & shoreline transition!
+    if (u_waterPass == 2 && waterW < 0.04) discard;
+
+    vec2 cell = floor(p);
+    vec2 localUv = fract(p);
+    float rawIdx = floor(texture(u_mapTex, (cell + 0.5) / u_mapSize).r * 255.0 + 0.5);
     float aCol = mod(rawIdx, u_atlasGrid.x);
     float aRow = floor(rawIdx / u_atlasGrid.x);
     vec2 pxUv = (u_crispPixels != 0)
       ? (floor(localUv * 32.0) + 0.5) / 32.0
       : clamp(localUv, 0.5 / 32.0, 31.5 / 32.0);
-    vec2 atlasUv = (vec2(aCol, aRow) + pxUv) / u_atlasGrid;
-    vec3 texSrgb = texture(u_atlasTex, atlasUv).rgb;
-    vec3 albedo = tgToLinear(texSrgb);
+    vec3 texSrgb = texture(u_atlasTex, (vec2(aCol, aRow) + pxUv) / u_atlasGrid).rgb;
 
-    vec3 N = vec3(0.0, 1.0, 0.0);
-    if (isWater) {
-      float rip1 = sin(p.x * 9.5 + p.y * 5.2 + u_time * 2.4);
-      float rip2 = cos(p.x * 6.3 - p.y * 8.7 + u_time * 1.9);
-      N = normalize(vec3(rip1 * 0.065, 1.0, rip2 * 0.065));
-    } else if (u_crispPixels == 0) {
-      float grain = tgNoise(p * 18.0) * 0.55 + tgNoise(p * 46.0) * 0.45;
-      albedo *= 0.91 + 0.18 * grain;
-      float gx = tgNoise((p + vec2(0.025, 0.0)) * 22.0) - tgNoise((p - vec2(0.025, 0.0)) * 22.0);
-      float gz = tgNoise((p + vec2(0.0, 0.025)) * 22.0) - tgNoise((p - vec2(0.0, 0.025)) * 22.0);
-      N = normalize(vec3(-gx * 0.34, 1.0, -gz * 0.34));
-    }
-
+    vec3 V = u_isOrtho != 0 ? normalize(u_viewDir) : normalize(u_cameraPos - v_worldPos);
     float sh = sampleTileShadow(v_worldPos);
-    float NoL = max(dot(N, u_keyDir), 0.0);
-    float NoF = max(dot(N, u_fillDir), 0.0);
-
-    // True lighting-responsive exposure (Daylight bright, Golden warm, Nighttime dark indigo, Moonlight silver-blue, Neon magenta/cyan!)
-    float keyNorm = max(u_keyDir.y, 0.28);
-    float sunFactor = (NoL / keyNorm) * mix(1.0 - u_shadowStrength, 1.0, sh);
-    vec3 shadowCool = mix(vec3(0.70, 0.80, 1.08), vec3(1.0), sh);
-    vec3 lit = albedo * (u_keyColor * sunFactor * 0.26 + u_skyColor * 0.22 * u_lightMix.x * shadowCool + u_fillColor * NoF * 0.16);
-
+    vec3 albedo;
+    vec3 N = vec3(0.0, 1.0, 0.0);
+    float rough = 0.84;
+    float specBoost = 0.04;
     float outAlpha = 1.0;
-    if (isWater) {
-      float wave = 0.5 + 0.5 * sin(p.x * 7.5 + p.y * 4.5 + u_time * 2.2) * cos(p.x * 4.8 - p.y * 6.9 + u_time * 1.6);
-      vec3 V = u_isOrtho != 0 ? normalize(u_viewDir) : normalize(u_cameraPos - v_worldPos);
-      vec3 H = normalize(u_keyDir + V);
-      float spec = pow(max(dot(N, H), 0.0), 84.0) * 0.14 * sh;
-      lit *= 0.96 + 0.16 * wave;
-      lit += u_keyColor * (spec * 0.38 + wave * 0.012 * sh);
 
-      // Animated white-cyan snorkel splash & expanding wake ripple rings around underwater swimmers!
-      float foam = 0.0;
+    if (u_waterPass == 2) {
+      // Seamless coastal depth from nearby water mask (shallow turquoise shore -> deep royal cobalt water)
+      float wAvg = 0.25 * (
+        sampleMask(p + vec2(0.32, 0.0)).a + sampleMask(p - vec2(0.32, 0.0)).a +
+        sampleMask(p + vec2(0.0, 0.32)).a + sampleMask(p - vec2(0.0, 0.32)).a
+      );
+      float wDeep = smoothstep(0.28, 0.96, wAvg);
+      float w1 = sin(p.x * 7.8 + p.y * 4.6 + u_time * 2.1 + tgNoise(p * 2.2) * 2.4);
+      float w2 = cos(p.x * 5.2 - p.y * 7.4 - u_time * 1.7 + tgNoise(p * 3.1) * 2.0);
+      float w3 = sin((p.x - p.y) * 11.5 + u_time * 2.9) * 0.5;
+      N = normalize(vec3((w1 * 0.075 + w3 * 0.035), 1.0, (w2 * 0.075 - w3 * 0.035)));
+      vec3 shallowCol = vec3(0.042, 0.185, 0.310);
+      vec3 deepCol = vec3(0.018, 0.074, 0.235);
+      albedo = (u_pbrFloor != 0) ? mix(shallowCol, deepCol, wDeep) : mix(tgToLinear(texSrgb), deepCol, 0.35);
+      albedo *= 0.92 + 0.16 * (0.5 + 0.5 * w1 * w2);
+      rough = 0.14;
+      specBoost = 0.16;
+
+      // Subtle animated shoreline lap foam hugging curved pond/island banks
+      float shoreLine = smoothstep(0.08, 0.26, waterW) * (1.0 - smoothstep(0.30, 0.56, waterW));
+      float lapWave = 0.55 + 0.45 * sin(p.x * 6.0 + p.y * 5.0 + u_time * 2.6 + tgNoise(p * 5.0) * 3.0);
+      float foam = (u_pbrFloor != 0) ? (shoreLine * lapWave * 0.38) : 0.0;
+
+      // Animated white-cyan snorkel splash collar & concentric expanding wake ripple rings around underwater swimmers
       for (int i = 0; i < 8; i++) {
         if (i >= u_rippleCount) break;
         vec4 rp = u_ripples[i];
         float d = length(p - rp.xy);
         float maxR = max(rp.w, 0.55);
         if (d < maxR) {
-          // Tight bubbling snorkel collar splash right around the tube (authentic 1998 assw301 splash ring!)
           float collar = smoothstep(0.22, 0.09, d) * smoothstep(0.02, 0.065, d);
           float splashJitter = 0.74 + 0.26 * sin(atan(p.y - rp.y, p.x - rp.x) * 7.0 + u_time * 7.5 + float(i));
-          // Two staggered concentric expanding ripple rings
           float r1 = fract(u_time * 0.95 + rp.z) * maxR;
           float r2 = fract(u_time * 0.95 + rp.z + 0.5) * maxR;
           float ring1 = exp(-pow((d - r1) / 0.052, 2.0)) * (1.0 - r1 / maxR);
@@ -718,11 +731,116 @@
           foam = max(foam, clamp(collar * splashJitter * 0.94 + (ring1 + ring2) * 0.74, 0.0, 1.0));
         }
       }
-      vec3 foamCol = mix(vec3(0.45, 0.80, 1.0), vec3(0.96, 0.99, 1.0), foam * 0.78);
-      lit = mix(lit, foamCol * max(0.32, dot(u_keyColor, vec3(0.3, 0.5, 0.2)) * 0.38 + 0.25), foam * 0.88);
-      // Translucent pond surface (0.55) so submerged underwater swimmers remain clearly visible beneath the water,
-      // rising toward opaque on bright white splash foam rings!
-      outAlpha = mix(0.55, 0.94, foam);
+      float shoreAlpha = smoothstep(0.04, 0.36, waterW);
+      outAlpha = shoreAlpha * mix(mix(0.46, 0.62, wDeep), 0.95, foam);
+
+      float NoL = max(dot(N, u_keyDir), 0.0);
+      float NoF = max(dot(N, u_fillDir), 0.0);
+      float NoV = max(dot(N, V), 0.05);
+      float fres = 0.04 + 0.96 * pow(1.0 - NoV, 4.0);
+      vec3 H = normalize(u_keyDir + V);
+      float spec = tgDggx(max(dot(N, H), 0.0), 0.14) * 0.085 * sh;
+      vec3 lit = albedo * (u_keyColor * (NoL / max(u_keyDir.y, 0.28)) * mix(1.0 - u_shadowStrength, 1.0, sh) * 0.30
+                         + u_skyColor * 0.26 * u_lightMix.x + u_fillColor * NoF * 0.16);
+      lit += u_skyColor * fres * 0.32 * u_lightMix.x + u_keyColor * spec;
+      vec3 foamCol = mix(vec3(0.48, 0.82, 1.0), vec3(0.96, 0.99, 1.0), foam * 0.8);
+      lit = mix(lit, foamCol * max(0.32, dot(u_keyColor, vec3(0.3, 0.5, 0.2)) * 0.36 + 0.28), foam * 0.88);
+      for (int i = 0; i < 8; i++) {
+        if (i >= u_glowCount) break;
+        vec4 glw = u_glows[i];
+        float gd = length(p - glw.xy) / max(glw.z, 0.25);
+        float flick = 0.86 + 0.14 * sin(u_time * 10.5 + float(i) * 2.3);
+        lit += (albedo + vec3(0.08)) * u_glowColors[i] * exp(-gd * gd * 2.1) * glw.w * flick;
+      }
+      vec3 outCol = tgToSrgb(tgAces(lit * 1.06 * u_lightMix.z));
+      if (u_lightMix.w > 0.001) {
+        vec3 flatW = mix(texSrgb, vec3(0.86, 0.95, 1.0), foam * 0.78);
+        outCol = mix(outCol, flatW * mix(1.0 - u_shadowStrength * 0.55, 1.0, sh), u_lightMix.w);
+      }
+      if (u_gridAlpha > 0.001) {
+        vec2 gridD = abs(fract(p - 0.5) - 0.5) / max(fwidth(p), vec2(1e-4));
+        float line = 1.0 - clamp(min(gridD.x, gridD.y), 0.0, 1.0);
+        outCol = mix(outCol, u_gridColor, clamp(line * u_gridAlpha * 0.75, 0.0, 0.55));
+      }
+      fragColor = vec4(outCol, outAlpha);
+      return;
+    }
+
+    // Pass 0 (Opaque Land): Brand-New High-Res PBR Lighting-Reactive Floor Tiles (or Original 1998 Tiles toggle!)
+    if (u_pbrFloor != 0) {
+      float wM = m0.r, wS = m0.g, wL = m0.b;
+      float wG = max(0.0, 1.0 - wM - wS - wL - waterW);
+      float wSum = max(wG + wM + wS + wL, 1e-4);
+      wG /= wSum; wM /= wSum; wS /= wSum; wL /= wSum;
+
+      float macro = tgFbm(p * 0.42);
+      float med = tgFbm(p * 2.6);
+      float fine = tgNoise(p * 13.5) * 0.6 + tgNoise(p * 34.0) * 0.4;
+
+      // 1. Warm packed backyard clay/dirt (g): smooth organic soil + scattered warm pebbles (no harsh pixel noise!)
+      float peb = smoothstep(0.76, 0.90, tgNoise(p * 9.5 + vec2(4.2, 1.7)));
+      vec3 colDirt = mix(vec3(0.215, 0.146, 0.124), vec3(0.320, 0.228, 0.192), macro * 0.65 + med * 0.35);
+      colDirt = mix(colDirt, vec3(0.38, 0.30, 0.25), peb * 0.35) * (0.94 + 0.12 * fine);
+
+      // 2. Dark moist mud road (m): velvety rich loam with damp specular sheen catching angled sunlight/moonlight/neon!
+      float mudWet = smoothstep(0.34, 0.72, tgFbm(p * 1.45 + vec2(9.1, 3.3)));
+      vec3 colMud = mix(vec3(0.058, 0.055, 0.059), vec3(0.095, 0.088, 0.090), med) * mix(1.0, 0.76, mudWet);
+
+      // 3. Fine beach sand (d): silky cream-ivory sand with gentle wind-blown dune ripples & quartz sparkle!
+      float dune = 0.5 + 0.5 * sin(p.x * 6.8 + p.y * 4.2 + tgNoise(p * 2.2) * 3.1);
+      vec3 colSand = mix(vec3(0.56, 0.50, 0.43), vec3(0.72, 0.66, 0.58), dune * 0.55 + macro * 0.45) * (0.96 + 0.08 * fine);
+
+      // 4. Cool weathered slate stone (s): layered backyard shale/stone with subtle mineral variation
+      vec3 colSlate = mix(vec3(0.20, 0.21, 0.31), vec3(0.35, 0.36, 0.48), med * 0.7 + fine * 0.3);
+
+      albedo = colDirt * wG + colMud * wM + colSand * wS + colSlate * wL;
+      rough = wG * 0.86 + wM * mix(0.56, 0.24, mudWet) + wS * 0.76 + wL * 0.48;
+      specBoost = wG * 0.04 + wM * mix(0.08, 0.22, mudWet) + wS * 0.07 + wL * 0.14;
+
+      // Wet shoreline bank rim right along curved water edges (darkened glossy damp earth catching specular light!)
+      float nearW = max(waterW, 0.25 * (
+        sampleMask(p + vec2(0.18, 0.0)).a + sampleMask(p - vec2(0.18, 0.0)).a +
+        sampleMask(p + vec2(0.0, 0.18)).a + sampleMask(p - vec2(0.0, 0.18)).a
+      ));
+      float wetBank = smoothstep(0.02, 0.48, nearW);
+      albedo *= mix(1.0, 0.60, wetBank);
+      rough = mix(rough, 0.16, wetBank);
+      specBoost = mix(specBoost, 0.28, wetBank);
+
+      // Real 3D bumped normal map from continuous world-space terrain height + beveled border transitions!
+      float eps = 0.038;
+      float hL = pbrTerrainHeight(p - vec2(eps, 0.0), sampleMask(p - vec2(eps, 0.0)));
+      float hR = pbrTerrainHeight(p + vec2(eps, 0.0), sampleMask(p + vec2(eps, 0.0)));
+      float hD = pbrTerrainHeight(p - vec2(0.0, eps), sampleMask(p - vec2(0.0, eps)));
+      float hU = pbrTerrainHeight(p + vec2(0.0, eps), sampleMask(p + vec2(0.0, eps)));
+      N = normalize(vec3((hL - hR) * 1.45, 1.0, (hD - hU) * 1.45));
+
+      // Subtle crevice darkening right along sloped terrain transition banks
+      float slope = clamp(length(N.xz), 0.0, 1.0);
+      albedo *= 1.0 - slope * 0.14;
+    } else {
+      albedo = tgToLinear(texSrgb);
+      rough = 0.88;
+      specBoost = 0.03;
+    }
+
+    float NoL = max(dot(N, u_keyDir), 0.0);
+    float NoF = max(dot(N, u_fillDir), 0.0);
+    float keyNorm = max(u_keyDir.y, 0.28);
+    float sunFactor = (NoL / keyNorm) * mix(1.0 - u_shadowStrength, 1.0, sh);
+    vec3 shadowCool = mix(vec3(0.68, 0.78, 1.08), vec3(1.0), sh);
+    vec3 lit = albedo * (u_keyColor * sunFactor * 0.27 + u_skyColor * 0.23 * u_lightMix.x * shadowCool + u_fillColor * NoF * 0.16);
+
+    // Real GGX microfacet specular reaction to sunlight, moonlight, sunset & neon (wet mud, banks, sand glints, slate!)
+    if (u_pbrFloor != 0) {
+      vec3 H = normalize(u_keyDir + V);
+      float NoH = max(dot(N, H), 0.0);
+      float NoV = max(dot(N, V), 0.05);
+      float fres = 0.04 + 0.96 * pow(1.0 - NoV, 5.0);
+      float ggx = tgDggx(NoH, max(rough * rough, 0.035));
+      float sandSparkle = m0.g * smoothstep(0.86, 0.97, tgNoise(p * 62.0)) * pow(NoH, 32.0) * 0.42;
+      lit += u_keyColor * (ggx * specBoost * 0.055 * NoL + sandSparkle) * sh;
+      lit += u_skyColor * fres * specBoost * 0.24 * u_lightMix.x;
     }
 
     // Dynamic colored emissive ground glow pools (firelight in Night/Sunset, neon accents in Neon Arcade!)
@@ -731,26 +849,28 @@
       vec4 glw = u_glows[i];
       float d = length(p - glw.xy) / max(glw.z, 0.25);
       float flick = 0.86 + 0.14 * sin(u_time * 10.5 + float(i) * 2.3);
-      lit += (albedo + vec3(0.06)) * u_glowColors[i] * exp(-d * d * 2.1) * glw.w * flick;
+      vec3 gDir = normalize(vec3(glw.x - p.x, 0.9, glw.y - p.y));
+      float gWrap = 0.65 + 0.35 * max(dot(N, gDir), 0.0);
+      lit += (albedo + vec3(0.05)) * u_glowColors[i] * exp(-d * d * 2.1) * glw.w * flick * gWrap;
     }
 
     vec3 outCol = tgToSrgb(tgAces(lit * 1.06 * u_lightMix.z));
     if (u_lightMix.w > 0.001) {
-      vec3 flatCol = texSrgb * mix(1.0 - u_shadowStrength * 0.65, 1.0, sh);
+      vec3 flatCol = (u_pbrFloor != 0 ? tgToSrgb(tgAces(albedo * 1.25)) : texSrgb) * mix(1.0 - u_shadowStrength * 0.62, 1.0, sh);
       outCol = mix(outCol, flatCol, u_lightMix.w);
     }
 
-    // Razor-sharp 1px screen-space tile grid overlay aligned cleanly to every original 32x32 cell
+    // Refined hairline tile grid overlay aligned to every exact 1:1 square tile cell
     if (u_gridAlpha > 0.001) {
       vec2 gridD = abs(fract(p - 0.5) - 0.5) / max(fwidth(p), vec2(1e-4));
       float line = 1.0 - clamp(min(gridD.x, gridD.y), 0.0, 1.0);
       vec2 majD = abs(fract(p / 5.0 - 0.5) - 0.5) / max(fwidth(p / 5.0), vec2(1e-4));
       float majLine = 1.0 - clamp(min(majD.x, majD.y), 0.0, 1.0);
-      float alpha = clamp(line * u_gridAlpha + majLine * u_gridAlpha * 0.45, 0.0, 0.72);
+      float alpha = clamp(line * u_gridAlpha + majLine * u_gridAlpha * 0.38, 0.0, 0.65);
       outCol = mix(outCol, u_gridColor, alpha);
     }
 
-    fragColor = vec4(outCol, outAlpha);
+    fragColor = vec4(outCol, 1.0);
   }`;
 
   function buildTileGroundMesh(gl, cols, rows, pad = 6.0) {
