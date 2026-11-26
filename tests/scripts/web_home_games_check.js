@@ -17,7 +17,7 @@
 const fs = require('fs');
 const path = require('path');
 const R = require('./web_home_games_rig.js')(process.argv[2]);
-const { GUEST, check, same, flush, fakeSite, row, locked, lockedCards, listOf, page, wait, classes, find, first, home, tap, chooseHost, hostCard, pressEscape, pressElsewhere, popOf, rowsOf, slotsOf, joinOf, textOf, pillOf, myRoom, guestRoom, PUBLIC, PRIVATE, KEY, E, C, Games, RULES0, done, broke, helloRoom, runLobby, hex, helloBytes } = R;
+const { GUEST, check, same, flush, fakeSite, row, locked, lockedCards, listOf, page, wait, classes, find, first, home, tap, chooseHost, hostCard, pressEscape, pressElsewhere, popOf, rowsOf, slotsOf, joinOf, textOf, pillOf, roomMessage, seatsOf, STARTING, myRoom, guestRoom, PUBLIC, PRIVATE, KEY, E, C, Games, RULES0, done, broke, helloRoom, runLobby, hex, helloBytes } = R;
 const TEXT = Games.TEXT;                          // (the page's own words: a check names the tag, the button or the chip that the page has for a situation, and does not spell it)
 const LOCKED = TEXT.privateTag.toLowerCase(), LOCKED_ADJ = LOCKED.replace(' ', '-');      // the setting's one name: the tag of a locked card says it, and so do the list's head ("3 open, 3 invite only"), "and 6 more invite-only rooms", Quick join's line and the screen reader's sentence
 
@@ -918,6 +918,23 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
         const before = first(popOf(env), 'glist').children.slice();
         mine[0].fn([]);
         check('... a change that leaves the columns as they are paints nothing again', first(popOf(env), 'glist').children.every((li, i) => li === before[i]) && first(popOf(env), 'glist').children.length === before.length);
+    }
+    {   // the columns of the grid where there is no layout to ask: the page's own arithmetic on the dock's width (where there is a layout, the grid's own count is read: web_home_games_browser.js asserts the real numbers)
+        same('a phone is one column (up to 700 px), a window of 1000 px two, 1250 px two, 1366 px three, 1920 px five; a short window (up to 500 px high) has no players column: 844 x 390 holds two, 568 x 320 one',
+            [[390, 844], [700, 800], [701, 800], [900, 700], [1000, 800], [1250, 800], [1280, 800], [1366, 768], [1366, 640], [1920, 1080], [844, 390], [568, 320]].map(([w, h]) => Games.columnsFor(w, h)), [1, 1, 1, 1, 2, 2, 3, 3, 3, 5, 2, 1]);
+        same('a window of no size is one column (never none)', [Games.columnsFor(0, 0), Games.columnsFor(-5, 100)], [1, 1]);
+    }
+    {   // START reaches the page: the list stops watching its size, and the listener of the window that it added to paint the list again is taken away
+        const removed = [], watchers = [];
+        class Watch { constructor(fn) { this.fn = fn; this.gone = false; } observe(el) { if (String(el.className).indexOf('glist') !== -1) watchers.push(this); } unobserve() {} disconnect() { this.gone = true; } }
+        const env = await page({ search: '?room=k7m2xq', options: { stayHome: false, popover: false, win: { ResizeObserver: Watch, removeEventListener(t, fn) { removed.push([t, fn]); } } } });
+        const sock = guestRoom(env, 'Pebble', PUBLIC);
+        env.toggleRoom();
+        await wait(env, 1000);
+        const resizers = (env.win.listeners.resize || []).slice();
+        check('(the list watches its size: an observer, and listeners of the window)', watchers.length === 1 && !watchers[0].gone && resizers.length >= 2 && removed.length === 0);
+        sock.receive(roomMessage(seatsOf(['Pebble', 'Maya']), { you: 1, leader: 0, flags: STARTING }));
+        check('START is on its way: the observer is let go of, and a listener of the window that the list added is taken away again', watchers[0].gone && removed.some(([t, fn]) => t === 'resize' && resizers.indexOf(fn) !== -1));
     }
     {   // the window changes (a phone turned, a window made wider): the empty cards are painted again for the columns that there are
         const env = await docked(1000, 1, 0);

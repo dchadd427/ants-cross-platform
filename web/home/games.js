@@ -41,6 +41,7 @@
     var LIVE_EVERY = 5000, LIVE_SOON = 1500, LIVE_CAP = 300000;           // ms between two looks at /live (never less: the page's own door asks no faster), the shortest wait when a room has gone (it may have started its match), the longest wait after failures
     var LIVE_MAX = 50;                                   // matches that are shown (the door lists 50 at the most)
     var BOX_MAX = 999999;                                // the most that a score box shows (the door cuts to it; so does this page)
+    var CARD_MIN = 290, CARD_GAP = 12;                   // the grid's cards: at least 290 px wide, 12 px apart (home.css)
     var SLOT_ROWS = 2, SLOT_ROWS_LIVE = 1, SLOT_PHONE = 3, SLOT_PHONE_LIVE = 2;       // the empty cards: rows of the grid (a row while matches are in progress), and the cards of a one-column list
     var LIVE_ID = /^[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?$/;           // the shape of a match's id (docs/SERVER.md "Live matches"): nothing else is ever put into an address
     var BOT_NAME = /^Bot \(|\(bot(, [^()]+)?\)$/;           // a computer player's name as a server writes it ("Pip (bot, Hard)", "Kit (bot, idle)"; the older "Bot (Medium)"): the rule of the lobby's name check, which keeps these names from people
@@ -62,7 +63,7 @@
         privateTag: 'Invite only', fogTag: 'Fog',
         slotName: 'Open lobby', slotSay: 'Empty', slotHost: 'Host here', slotAria: 'Host a game here',
         watch: 'Watch', liveMark: 'Live', mode187: '187', inProgress: 'In progress', soFar: ' so far', starting: 'Starting\u2026', nobodyNamed: 'Players not named',
-        scoresLive: ' scores are live', score: 'Score', kills: 'Kills', noScore: 'no score yet', player: 'Player', team: 'Team', bot: ' (bot)', leading: ' leading',
+        scoresLive: ' scores are live', showBoard: 'Show the scoreboard', hideBoard: 'Hide the scoreboard', score: 'Score', kills: 'Kills', noScore: 'no score yet', player: 'Player', team: 'Team', bot: ' (bot)', leading: ' leading',
         full: 'That room is full.', started: 'The match in that room has already started.', gone: 'That game is not open any more.', silent: 'The server did not answer. Try again in a moment.'
     };
 
@@ -137,6 +138,13 @@
         sides.forEach(function (x) { if (x.n === null) return; if (x.n > top) { top = x.n; ties = 1; } else if (x.n === top) ties++; });
         sides.forEach(function (x) { x.lead = ties === 1 && top > 0 && x.n === top; });
         return { sides: sides, top: top, scored: !!e.scores, label: e.mode187 ? TEXT.kills : TEXT.score, team: sides.some(function (x) { return x.who.length > 1; }) };
+    }
+    // The columns that the docked grid has in a window of `width` x `height` when there is no layout to ask (a covered list, a fake browser): the grid is repeat(auto-fill, minmax(290px, 1fr)) with a gap of 12 px (web/home/home.css) on the dock's
+    // width. A phone (up to 700 px wide) is one column; a short window (up to 500 px high) has no players column, so the dock is the window less the page's margins and its own padding (50 px); else the players column (280 px at the most), its gap
+    // and the margins stand beside the dock (378 px in all, with the dock's padding). Where there is a layout the grid's own count is read instead (columns() in mount).
+    function columnsFor(width, height) {
+        if (width <= 700) return 1;
+        return Math.max(1, Math.floor((width - (height <= 500 ? 50 : 378) + CARD_GAP) / (CARD_MIN + CARD_GAP)));
     }
     // The wait before the next look at /live: 5 s doubled for every failure in a row up to 5 minutes, then 0 to +20 % (random: 0 to 1): never under 5 s
     function liveDelay(failures, random) {
@@ -628,19 +636,21 @@
         // its square(s), name(s), a bar against the best side, and the number; the leader is marked by a triangle too). The card starts with the strip; the visitor's choice stays while the match is listed, and is kept nowhere else. paintScore writes the numbers in place.
         function scoreNode(e, li) {
             var box = el('div', 'gscore'), sum = el('button', 'gsum'), nums = el('span', 'gnums'), foot = el('span', 'gfoot'), label = el('span', 'glabel'), share = el('span', 'gshare'), head = el('span', 'ghead'), headWho = el('span'), headLabel = el('span'), chev = el('i', 'gchev'), board = el('div', 'gboard');
-            var s = { box: box, sum: sum, nums: nums, share: share, label: label, headWho: headWho, headLabel: headLabel, board: board, li: li, id: e.id, sig: null };
+            var s = { box: box, sum: sum, nums: nums, share: share, label: label, headWho: headWho, headLabel: headLabel, board: board, li: li, id: e.id, sig: null, words: '' };
+            board.id = 'gboard-' + e.id; sum.setAttribute('aria-controls', board.id);       // (the match's id is letters, digits, _ and -: a good id)
             sum.type = 'button'; sum.setAttribute('data-score', e.id); chev.setAttribute('aria-hidden', 'true'); foot.setAttribute('aria-hidden', 'true'); nums.setAttribute('aria-hidden', 'true'); head.setAttribute('aria-hidden', 'true');
             foot.appendChild(label); foot.appendChild(share); head.appendChild(headWho); head.appendChild(headLabel);
             sum.appendChild(nums); sum.appendChild(foot); sum.appendChild(head); sum.appendChild(chev);
             box.appendChild(sum); box.appendChild(board);
             sum.addEventListener('click', guard(function () { if (opened[e.id] === true) delete opened[e.id]; else opened[e.id] = true; openScore(s); }));
-            openScore(s);
+            s.words = TEXT.noScore; openScore(s);
             return s;
         }
         function openScore(s) {                            // the card shows the strip or the scoreboard, as the visitor chose (the same press opens and closes it)
             var on = opened[s.id] === true;
-            s.li.className = on ? 'gitem glive gopen' : 'gitem glive';
+            s.li.classList.toggle('gopen', on);
             s.sum.setAttribute('aria-expanded', on ? 'true' : 'false');
+            s.sum.setAttribute('aria-label', s.words + '. ' + (on ? TEXT.hideBoard : TEXT.showBoard));       // (the name says what a press does now)
             s.board.hidden = !on;
         }
         function seatClass(w) { return w.seat < 0 ? 'n' : String(w.seat); }                  // (the color of a seat; a color that the door does not know is the neutral one)
@@ -662,7 +672,7 @@
             s.sig = sig;
             clear(s.nums); clear(s.share); clear(s.board);
             s.label.textContent = b.label; s.headWho.textContent = b.team ? TEXT.team : TEXT.player; s.headLabel.textContent = b.label;
-            s.sum.setAttribute('aria-label', scoreWords(e, b));
+            s.words = scoreWords(e, b); openScore(s);
             b.sides.forEach(function (x) { sum += x.n || 0; });
             if (!b.scored) s.nums.appendChild(el('span', 'gwait', TEXT.noScore));
             b.sides.forEach(function (x, k) {
@@ -742,9 +752,8 @@
                     n = tracks === 'none' ? 0 : tracks.split(/\s+/).filter(Boolean).length;
                 }
             } catch (e) { n = 0; }
-            if (n > 0 && n <= 8) return n;
-            var width = win.innerWidth || 0;
-            return width <= 700 ? 1 : width < 1250 ? 2 : 3;
+            if (n > 0 && n <= 40) return n;
+            return columnsFor(win.innerWidth || 0, win.innerHeight || 0);
         }
         function slotCount(taken) {                        // two rows of the grid (3 cards on a phone), one row while matches are in progress (2 on a phone); the rooms take the first places, and what is left is empty cards
             var cols = lastCols = columns(), places = cols === 1 ? (hasLive() ? SLOT_PHONE_LIVE : SLOT_PHONE) : cols * (hasLive() ? SLOT_ROWS_LIVE : SLOT_ROWS);
@@ -1058,7 +1067,8 @@
             poll(); schedule(); armRefresh(); pollLive();
         }));
         win.addEventListener('resize', guard(function () { if (isOpen) place(); placeToast(); }));
-        win.addEventListener('resize', guard(function () { if (isOpen) paintList(); }));          // (the list is painted again: its rows of cards may hold more or fewer, and the empty cards fill what is left)
+        var repaint = guard(function () { if (isOpen) paintList(); });
+        win.addEventListener('resize', repaint);          // (the list is painted again: its rows of cards may hold more or fewer, and the empty cards fill what is left)
         var gridWatch = win.ResizeObserver ? new win.ResizeObserver(guard(function () { if (isOpen && lastCols && columns() !== lastCols) paintList(); })) : null;          // (the grid took more or fewer columns without the window changing, for example when the players' column came in: the empty cards are counted again)
         if (gridWatch) gridWatch.observe(popList);
         var toastWatch = win.MutationObserver ? new win.MutationObserver(guard(function () { if (!toast.hidden) placeToast(); pollLive(); })) : null, lastFocus = null;
@@ -1075,6 +1085,7 @@
             gone = true; closeAll(); clearNotice();
             if (toastWatch) toastWatch.disconnect();
             if (gridWatch) gridWatch.disconnect();
+            win.removeEventListener('resize', repaint);
             [pollTimer, refreshTimer, pendingTimer, lockTimer, floorTimer, cancelTimer, liveTimer].forEach(function (t) { if (t !== null) cancel(t); });
             pollTimer = refreshTimer = pendingTimer = lockTimer = floorTimer = cancelTimer = liveTimer = null; liveRound++;
         }
@@ -1093,5 +1104,5 @@
         };
     }
 
-    return { TEXT: TEXT, rowOf: rowOf, parseList: parseList, lockedOf: lockedOf, parseLocked: parseLocked, liveOf: liveOf, parseLive: parseLive, liveDelay: liveDelay, clockText: clockText, groupDigits: groupDigits, plainName: plainName, boardOf: boardOf, LIVE_EVERY: LIVE_EVERY, LIVE_SOON: LIVE_SOON, delayOf: delayOf, countText: countText, bestOrder: bestOrder, seatsOf: seatsOf, mount: mount, EVERY_CLOSED: EVERY_CLOSED, EVERY_OPEN: EVERY_OPEN, REFRESH_MS: REFRESH_MS, ROWS_MAX: ROWS_MAX };
+    return { TEXT: TEXT, rowOf: rowOf, parseList: parseList, lockedOf: lockedOf, parseLocked: parseLocked, liveOf: liveOf, parseLive: parseLive, columnsFor: columnsFor, liveDelay: liveDelay, clockText: clockText, groupDigits: groupDigits, plainName: plainName, boardOf: boardOf, LIVE_EVERY: LIVE_EVERY, LIVE_SOON: LIVE_SOON, delayOf: delayOf, countText: countText, bestOrder: bestOrder, seatsOf: seatsOf, mount: mount, EVERY_CLOSED: EVERY_CLOSED, EVERY_OPEN: EVERY_OPEN, REFRESH_MS: REFRESH_MS, ROWS_MAX: ROWS_MAX };
 });

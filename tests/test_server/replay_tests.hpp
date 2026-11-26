@@ -1346,6 +1346,33 @@ void run_replay_tests() {
         ASSERT_EQ(live().get("live").size(), size_t{3});
     } TEST_END();
 
+    TEST_CASE("S3.178c A Seat That Really Leaves A Running Match Has Its Score Box Covered In The Game, So Its Number Is Null On The Live List While The Others Keep Theirs; The Match Of People Is Shown 30 Seconds Late And Its Numbers Are Not") {
+        ReplayClock clock;
+        World w;
+        std::string why;
+        ASSERT_TRUE(w.mgr.enable_replays(replay_config("live-left", &clock), false, why));
+        ASSERT_TRUE(w.mgr.create_room(spec_of("LEFT-3", 3), w.now).ok);
+        w.connect("Ann", "LEFT-3");
+        w.connect("Bob", "LEFT-3");
+        Client& cat = w.connect("Cat", "LEFT-3");
+        const auto entry = [&w]() { return replay_json_of(public_call(w.mgr, "GET", "/live")); };
+        for (int guard = 0; guard < 3000 && (entry().get("live").size() != 1 || entry().get("live").at(0).get("turns").as_int_or(0) < 100); ++guard) w.run(50);
+        ctl::JsonValue j = entry();
+        ASSERT_TRUE(j.get("live").size() == 1 && j.get("live").at(0).get("players").size() == 3);
+        const ctl::JsonValue* scores = &j.get("live").at(0).get("scores");
+        ASSERT_TRUE(scores->size() == 3 && scores->at(0).is_int() && scores->at(1).is_int() && scores->at(2).is_int());       // (three people at the table: three boxes, none covered; the match is shown 30 s late, its numbers are not)
+        ASSERT_TRUE(w.status("LEFT-3").state == RoomState::Running);
+        w.net.cut(cat.server_end);                                                                       // (Cat leaves: a room that holds no seats drops the seat, and the game covers its box)
+        w.run(4000);
+        ASSERT_MSG(w.status("LEFT-3").state == RoomState::Running, std::string("state ") + room_state_name(w.status("LEFT-3").state));
+        j = entry();
+        ASSERT_TRUE(j.get("live").size() == 1);
+        scores = &j.get("live").at(0).get("scores");
+        ASSERT_TRUE(scores->size() == 3 && scores->at(0).is_int() && scores->at(1).is_int());                       // (the two who stay keep their numbers)
+        ASSERT_TRUE(scores->at(2).is_null());                                                            // (the seat that left has none: its box is covered)
+        ASSERT_EQ(j.get("live").at(0).get("players").size(), size_t{3});                                 // (the list of players is the match's, as it began)
+    } TEST_END();
+
     TEST_CASE("S3.176b A Match With No Person, Or One Person, Is Shown As It Is (The Header Says A Delay Of 0 And The Snapshot Ends At The Turns Run); The People Of A Match Are The Seats That People Hold, Computer Players Are Not Counted (Two People And A Computer Player Is Shown Late)") {
         ReplayClock clock;
         ServerLimits limits;

@@ -187,7 +187,7 @@ async function flows() {
                 for (const size of [['desktop', 1280, 800], ['phone', 390, 844], ['side', 844, 390]]) {
                     const empty = await newPage(browser, none, 'Maple', size, '/', true), long = await newPage(browser, many, 'Maple', size, '/', true);
                     await empty.waitForSelector('.gpop .gslot'); await long.waitForSelector('.gpop .gitem'); await long.waitForSelector('.gc', { state: 'attached' });
-                    check('' + size[0] + ': no open games shows the empty cards (each with its one button, Host here: the bar has Quick host and Quick join) and Have a code? in the docked list', await empty.evaluate(() => { const p = document.querySelector('.gpop'), c = [...p.querySelectorAll('.gslot')]; return c.length >= 3 && c.every((e) => e.querySelectorAll('button').length === 1 && e.querySelector('button').textContent === 'Host here') && p.textContent.indexOf('No open games right now.') === -1 && !!p.querySelector('.gcodelink') && /none waiting/.test(p.textContent); }));
+                    check('' + size[0] + ': no open games shows the empty cards (each with its one button, Host here: the bar has Quick host and Quick join) and Have a code? in the docked list', await empty.evaluate(() => { const p = document.querySelector('.gpop'), c = [...p.querySelectorAll('.gslot')]; const list = p.querySelector('.glist'), tracks = getComputedStyle(list).gridTemplateColumns.split(/\s+/).filter(Boolean).length; return c.length === (tracks === 1 ? 3 : 2 * tracks) && c.every((e) => e.querySelectorAll('button').length === 1 && e.querySelector('button').textContent === 'Host here') && p.textContent.indexOf('No open games right now.') === -1 && !!p.querySelector('.gcodelink') && /none waiting/.test(p.textContent); }));
                     const m = await long.evaluate(async () => {
                         const p = document.querySelector('.gpop'), body = p.querySelector('.gpbody'), q = p.getBoundingClientRect(), y = document.getElementById('hmain').getBoundingClientRect(); const scrolls = body.scrollHeight > body.clientHeight + 4;
                         body.scrollTop = body.scrollHeight; await new Promise((r) => setTimeout(r, 50)); const c = p.querySelector('.gcodelink'), cr = c.getBoundingClientRect(), top = document.elementFromPoint(cr.left + cr.width / 2, cr.top + cr.height / 2), last = [...p.querySelectorAll('.gjoin')].pop(), lr = last.getBoundingClientRect(), lt = document.elementFromPoint(lr.left + lr.width / 2, lr.top + lr.height / 2);
@@ -195,6 +195,21 @@ async function flows() {
                     });
                     check('' + size[0] + ': twelve games scroll inside the list (it stays in the body), the last Join can be reached, Have a code? stays in the heading, nothing sideways', m.scrolls && m.bottom && m.codeReachable && m.lastReachable && m.count === 12 && m.wide, JSON.stringify(m));
                     await empty.context().close(); await long.context().close();
+                }
+                // the REAL columns of the grid and the empty cards that follow them: two rows (4 at 1000 px, 6 at 1366 px with the players' column open, 3 on a phone), counted from the grid's own tracks; and again when the grid changes with no
+                // change of the window (the players' column is dragged wider by its splitter, web/home/split.js: its width is the property --pl-w of Home's div, set here by hand)
+                const grid = (p) => p.evaluate(() => { const list = document.querySelector('.gpop .glist'), tracks = getComputedStyle(list).gridTemplateColumns.split(/\s+/).filter(Boolean).length; return { slots: document.querySelectorAll('.gpop .gslot').length, tracks, fallback: window.AntsHomeGames.columnsFor(window.innerWidth, window.innerHeight), players: document.getElementById('home').classList.contains('pl-on') }; });
+                const pull = async (p, px) => { await p.evaluate((x) => { const h = document.getElementById('home'); if (x) { h.setAttribute('data-split-w', String(x)); h.style.setProperty('--pl-w', x + 'px'); } else { h.removeAttribute('data-split-w'); h.style.removeProperty('--pl-w'); } }, px); await sleep(500); return grid(p); };
+                for (const [label, w, h, want] of [['1000 x 800', 1000, 800, 4], ['1366 x 768', 1366, 768, 6], ['1366 x 640', 1366, 640, 6], ['phone 390 x 844', 390, 844, 3]]) {
+                    const p = await newPage(browser, none, 'Maple', [label, w, h], '/', true);
+                    await p.waitForSelector('.gpop .gslot'); await sleep(500);
+                    const m = await grid(p);
+                    check(label + ' (the players\' column ' + (m.players ? 'open' : 'NOT open') + '): ' + want + ' empty cards, two rows of the grid\'s real columns (the page\'s own count where there is no layout, columnsFor, says the same)', (w <= 700 || m.players) && m.slots === want && m.tracks === (want === 3 ? 1 : want / 2) && m.fallback === m.tracks, JSON.stringify(m));
+                    if (w >= 1366) {
+                        const narrow = await pull(p, 600), back = await pull(p, 0);
+                        check(label + ': the players\' column dragged to 600 px leaves the grid two columns and the empty cards follow it with no change of the window (4), and back to ' + want, narrow.tracks === 2 && narrow.slots === 4 && back.slots === want, JSON.stringify([m, narrow, back]));
+                    }
+                    await p.context().close();
                 }
                 none.close(); many.close();
             }

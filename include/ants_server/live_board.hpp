@@ -19,8 +19,8 @@
 //    are more, the matches that have run kReplayMinTurns, the length that the store keeps, come before the younger ones, so that a stream of matches that end at once cannot push the others off the list), with the
 //    players in the strings of the replay list ("Green (Ann)", "Green", "Red (Bot (Medium))") and the match's game mode;
 //  * the score boxes (LiveScores): the number that each seat's score box shows in the game, and which seats are one side, sampled by the room from its referee's engine once a second (Room::publish_live_scores) and given to
-//    the list with no delay: only what every player of the match sees on the screen at that moment, nothing of the map, the ants, the orders or the other numbers of the match. A match that is not on the board
-//    (Fog of War, an unrecorded match) has none;
+//    the list with no delay: only what every player of the match sees on the screen at that moment, nothing of the map, the ants, the orders or the other numbers of the match. This exception to the delay below holds for EVERY listed
+//    match, one of an invite-only room included (the board knows nothing of a room's visibility, and the numbers are the same kind of thing for all). A match that is not on the board (Fog of War, an unrecorded match) has none;
 //  * the snapshot of one of them: the recorder's incomplete file with its `live` chunk, cut at the turns that the delay allows (Recorder::snapshot), cached for as long as the board's clock stays in one second, so a
 //    crowd of viewers costs one snapshot a second and the same bytes go to all of them meanwhile; with it the turns the match had run and the turns that the snapshot shows, so that a page can say how late it is;
 //  * the fate of a match that ended lately: the name that the store kept it under ("" when it was not kept) and the turns it ran, for 15 minutes, 256 matches at most, so that a page that watched it finds the

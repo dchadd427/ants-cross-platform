@@ -504,14 +504,20 @@ for (const [what, tweak] of [['404', (s) => { s.live.reject = false; s.live.stat
     check('a match that has run and that the door gives no scores for has no strip (the card is what it was: an older server)', first(L('old'), 'gscore').hidden === true);
     check('"scores are live" stands beside the heading of the matches when the door gives scores, and is not drawn when it gives none', first(boxOf(env), 'gnote').hidden === false && first(boxOf(env), 'gnote').textContent.trim() === 'scores are live');
     same('the strip is a button that names the numbers for a screen reader (the squares and bars are pictures), says it is closed, and stands in the card of the match', [toggleOf(L('four')).tagName, toggleOf(L('four')).getAttribute('aria-expanded'), toggleOf(L('four')).getAttribute('aria-label'), toggleOf(L('duel')).getAttribute('aria-label')],
-        ['button', 'false', 'Scores of the match on Treasure: Sage 2,040 leading, Rowan 1,310, Kit (bot) 900, moss 455', 'Scores of the match on Tiny: maple.leaf 300, Pip (bot) 300']);
+        ['button', 'false', 'Scores of the match on Treasure: Sage 2,040 leading, Rowan 1,310, Kit (bot) 900, moss 455. ' + TEXT.showBoard, 'Scores of the match on Tiny: maple.leaf 300, Pip (bot) 300. ' + TEXT.showBoard]);
     same('... for a 187 match, a team, a covered box and no score yet', [toggleOf(L('kills')).getAttribute('aria-label'), toggleOf(L('team')).getAttribute('aria-label'), toggleOf(L('fresh')).getAttribute('aria-label')],
-        ['Scores of the 187 match on Small: tess 14 leading, Fern 9, Bo (bot) left', 'Scores of the match on Islands: Pebble + Wren 2,310, juniper + Pip (bot) 2,680 leading', 'Scores of the match on Medium: no score yet']);
+        ['Scores of the 187 match on Small: tess 14 leading, Fern 9, Bo (bot) left. ' + TEXT.showBoard, 'Scores of the match on Islands: Pebble + Wren 2,310, juniper + Pip (bot) 2,680 leading. ' + TEXT.showBoard, 'Scores of the match on Medium: no score yet. ' + TEXT.showBoard]);
     check('Watch still names the match as it did, and has no score in its name', watchOf(L('four')).getAttribute('aria-label') === 'Watch the match on Treasure, Sage, Rowan, Kit (bot, Medium), moss, 12:05 so far');
     check('the card starts closed: no board, the names of the players in their line, the strip', classes(L('four')).indexOf('gopen') === -1 && first(L('four'), 'gboard').hidden === true && first(L('four'), 'gwho').textContent === 'Sage, Rowan, Kit (bot, Medium), moss');
 
     // the scoreboard that the strip opens
     const card = L('four'), button = toggleOf(card);
+    check('the strip controls the scoreboard (aria-controls is the id of the card\'s board, which is in the card)', button.getAttribute('aria-controls') === first(card, 'gboard').id && /^gboard-TREASURE-20261124-091500Z$/.test(first(card, 'gboard').id) && card.all().indexOf(first(card, 'gboard')) !== -1);
+    card.classList.add('mine');
+    openIt(card);
+    check('... a press opens it and the name says what the next press does ("Hide the scoreboard"), the numbers staying in it', /Rowan 1,310, Kit \(bot\) 900, moss 455\. Hide the scoreboard$/.test(button.getAttribute('aria-label')) && button.getAttribute('aria-expanded') === 'true');
+    openIt(card);
+    check('... and a press closes it again with the name of the first (the card has opened and closed by its one class: another class that it has is still there)', button.getAttribute('aria-label').slice(-TEXT.showBoard.length) === TEXT.showBoard && classes(card).indexOf('gopen') === -1 && classes(card).indexOf('mine') !== -1 && classes(card).indexOf('glive') !== -1);
     openIt(card);
     check('a press opens the card: the scoreboard shows, the button says it is open, the line of names is out (the board has them)', classes(card).indexOf('gopen') !== -1 && button.getAttribute('aria-expanded') === 'true' && first(card, 'gboard').hidden === false);
     same('the scoreboard has a line for each player: its square, its name (a computer player marked "(bot)", with no level), the number, the leader\'s with a triangle and said to a screen reader', [rowsOfBoard(card).map((r) => first(r, 'gpl').textContent), rowsOfBoard(card).map((r) => first(r, 'gn').children.length ? 'leads' : ''), rowsOfBoard(card).map((r) => first(r, 'gn').textContent), rowsOfBoard(card).map((r) => r.className)],

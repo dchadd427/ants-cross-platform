@@ -3168,15 +3168,15 @@
   {
    "id": "columns_of_a_window_are_always_two",
    "file": "web/home/games.js",
-   "old": "return width <= 700 ? 1 : width < 1250 ? 2 : 3;",
+   "old": "return columnsFor(win.innerWidth || 0, win.innerHeight || 0);",
    "new": "return 2;",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "slots_not_painted_again_when_the_window_changes",
    "file": "web/home/games.js",
-   "old": "win.addEventListener('resize', guard(function () { if (isOpen) paintList(); }));",
-   "new": "win.addEventListener('resize', guard(function () { }));",
+   "old": "var repaint = guard(function () { if (isOpen) paintList(); });",
+   "new": "var repaint = guard(function () { });",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -3205,6 +3205,27 @@
    "file": "web/home/games.js",
    "old": "if (isOpen && lastCols && columns() !== lastCols) paintList();",
    "new": "if (isOpen) { paintedSig = null; paintList(); }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "columns_fallback_ignores_the_players_column",
+   "file": "web/home/games.js",
+   "old": "(height <= 500 ? 50 : 378)",
+   "new": "(height <= 500 ? 50 : 60)",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "list_keeps_its_resize_listener_after_start",
+   "file": "web/home/games.js",
+   "old": "win.removeEventListener('resize', repaint);",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "list_keeps_watching_its_size_after_start",
+   "file": "web/home/games.js",
+   "old": "if (gridWatch) gridWatch.disconnect();",
+   "new": "",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   }
  ]

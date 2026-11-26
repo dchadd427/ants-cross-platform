@@ -644,6 +644,27 @@
    "old": "(x.lead ? TEXT.leading : '');",
    "new": "'';",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_strip_controls_nothing",
+   "file": "web/home/games.js",
+   "old": "sum.setAttribute('aria-controls', board.id);",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_name_does_not_follow_the_state",
+   "file": "web/home/games.js",
+   "old": "(on ? TEXT.hideBoard : TEXT.showBoard)",
+   "new": "TEXT.showBoard",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "scores_card_loses_its_other_classes",
+   "file": "web/home/games.js",
+   "old": "s.li.classList.toggle('gopen', on);",
+   "new": "s.li.className = on ? 'gitem glive gopen' : 'gitem glive';",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   }
  ]
 }
