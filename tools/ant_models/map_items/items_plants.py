@@ -500,6 +500,7 @@ def _sculpt_daisy_petal(
     thickness: float = 0.008,
     arch: float = 0.011,
     droop_tip: float = 0.016,
+    side_curve: float = 0.0,
 ) -> MeshPart:
     """Build one authentic 1998 Oxeye daisy ray petal: slender strap widening slightly to a broad blunt rounded U-tip."""
     def _strap_shape(pos: np.ndarray) -> np.ndarray:
@@ -518,9 +519,10 @@ def _sculpt_daisy_petal(
         # Keep uniform crisp thin petal thickness across the full paddle, rounding smoothly at the tip
         p[:, 1] *= np.clip(np.maximum(0.35, tip_round) / np.maximum(0.28, raw_env), 0.45, 1.55)
         p[:, 2] = u * length
-        # Subtle botanical arch + gentle tip droop + soft concave midline crease catching realistic studio shading
-        p[:, 1] += arch * np.sin(u * math.pi) - droop_tip * (u ** 2.3)
-        p[:, 1] -= 0.0042 * np.exp(-((p[:, 0] / max(0.009, half_width * 0.48)) ** 2)) * np.sin(u * math.pi)
+        # Graceful organic lateral sweep + lush botanical arch & backward-curving tip + soft midline cupping
+        p[:, 0] += side_curve * (u ** 1.75)
+        p[:, 1] += arch * np.sin(u * math.pi) - droop_tip * (u ** 2.15)
+        p[:, 1] -= 0.0055 * np.exp(-((p[:, 0] - side_curve * (u ** 1.75)) / max(0.009, half_width * 0.52)) ** 2) * np.sin(u * math.pi)
         return p
 
     petal = ellipsoid(half_width, thickness, 0.5 * length, u_segs=26, v_segs=14, name=name, material="item_petal_white").deform(_strap_shape)
@@ -788,11 +790,12 @@ def _build_groucho_daisy(name: str, *, animated: bool) -> SceneBuilder:
     register_item_materials()
     sc = SceneBuilder(name=name)
 
-    # 3-segment hierarchical articulated stem (`bot` -> `mid` -> `top` -> `head` -> `stache`) so the stem flexes organically in S-curves!
+    # Tall, straight-at-rest 3-segment articulated stem (`bot` -> `mid` -> `top` -> `head`) + independent level-poised
+    # `dflower_leaves` node so the stem visibly whips between straight `|` and big groovy left `(` bows just like `420:dflower1`!
     sc.set_node_transform("dflower_stem_bot", translation=(0.0, 0.0, 0.0))
     stem_bot = curved_tube(
-        [(0.0, 0.00, -0.020), (-0.014, 0.10, -0.017), (-0.012, 0.22, -0.014)],
-        [0.016, 0.015, 0.014],
+        [(0.0, 0.00, -0.020), (0.0, 0.12, -0.017), (0.0, 0.24, -0.014)],
+        [0.019, 0.017, 0.016],
         samples_per_seg=4,
         radial_segs=12,
         cap_rings=2,
@@ -800,13 +803,18 @@ def _build_groucho_daisy(name: str, *, animated: bool) -> SceneBuilder:
         material="item_stem_green",
     )
     sc.add("dflower_stem_bot", stem_bot)
-    sc.add("dflower_stem_bot", _build_daisy_stem_leaf("dflower_leaf_l", length=0.195, width=0.132, side=-1.0, curve=0.014, pitch=0.22, yaw_mag=1.38, face_tilt=0.80).translate(-0.010, 0.135, -0.015))
+
+    # Twin broad pointed green stem leaves on their own node so they stay poised & bob gently while stem snakes!
+    sc.set_node_parent("dflower_leaves", "dflower_stem_bot")
+    sc.set_node_transform("dflower_leaves", translation=(0.0, 0.23, -0.014))
+    sc.add("dflower_leaves", _build_daisy_stem_leaf("dflower_leaf_l", length=0.195, width=0.130, side=-1.0, curve=0.014, pitch=0.22, yaw_mag=1.38, face_tilt=0.80).translate(-0.006, 0.010, -0.002))
+    sc.add("dflower_leaves", _build_daisy_stem_leaf("dflower_leaf_r", length=0.230, width=0.148, side=+1.0, curve=-0.016, pitch=-0.08, yaw_mag=1.34, face_tilt=0.76).translate(+0.010, 0.042, +0.004))
 
     sc.set_node_parent("dflower_stem_mid", "dflower_stem_bot")
-    sc.set_node_transform("dflower_stem_mid", translation=(-0.012, 0.21, -0.014))
+    sc.set_node_transform("dflower_stem_mid", translation=(0.0, 0.23, -0.014))
     stem_mid = curved_tube(
-        [(0.0, -0.012, 0.0), (+0.022, 0.10, +0.004), (+0.016, 0.22, +0.010)],
-        [0.0145, 0.0135, 0.0135],
+        [(0.0, -0.012, 0.0), (0.0, 0.13, +0.006), (0.0, 0.27, +0.012)],
+        [0.016, 0.015, 0.0145],
         samples_per_seg=4,
         radial_segs=12,
         cap_rings=2,
@@ -814,13 +822,12 @@ def _build_groucho_daisy(name: str, *, animated: bool) -> SceneBuilder:
         material="item_stem_green",
     )
     sc.add("dflower_stem_mid", stem_mid)
-    sc.add("dflower_stem_mid", _build_daisy_stem_leaf("dflower_leaf_r", length=0.225, width=0.148, side=+1.0, curve=-0.016, pitch=-0.08, yaw_mag=1.34, face_tilt=0.76).translate(+0.008, 0.012, +0.002))
 
     sc.set_node_parent("dflower_stem_top", "dflower_stem_mid")
-    sc.set_node_transform("dflower_stem_top", translation=(+0.016, 0.21, +0.010))
+    sc.set_node_transform("dflower_stem_top", translation=(0.0, 0.26, +0.012))
     stem_top = curved_tube(
-        [(0.0, -0.012, 0.0), (-0.006, 0.11, +0.008), (-0.004, 0.22, +0.020)],
-        [0.0135, 0.013, 0.014],
+        [(0.0, -0.012, 0.0), (0.0, 0.15, +0.010), (0.0, 0.30, +0.022)],
+        [0.0145, 0.014, 0.015],
         samples_per_seg=4,
         radial_segs=12,
         cap_rings=2,
@@ -831,21 +838,30 @@ def _build_groucho_daisy(name: str, *, animated: bool) -> SceneBuilder:
 
     # Pivoted flower bloom + Groucho disguise node (`dflower_head` parented cleanly to `dflower_stem_top`!)
     sc.set_node_parent("dflower_head", "dflower_stem_top")
-    sc.set_node_transform("dflower_head", translation=(-0.004, 0.23, +0.022), rotation=quat_from_euler_xyz(rx=68.0, degrees=True))
+    sc.set_node_transform("dflower_head", translation=(0.0, 0.31, +0.024), rotation=quat_from_euler_xyz(rx=68.0, degrees=True))
 
     head_parts: List[MeshPart] = []
     calyx = superellipsoid(0.068, 0.036, 0.068, e1=0.80, e2=0.95, u_segs=20, v_segs=10, name="dflower_calyx", material="item_stem_green").translate(0.0, -0.020, 0.0)
     head_parts.append(calyx)
 
-    # EXACTLY 8 iconic broad-tipped slender straight-sided white daisy petals spaced at 45 deg (`12:00..10:30`) with wide open gaps!
+    # 8 gracefully curved, cupped white daisy petals (`12:00..10:30`) arching gently forward then curving softly back & sideways!
+    petal_sweeps = (0.018, -0.024, +0.022, -0.020, +0.026, -0.022, +0.020, -0.018)
     for k in range(8):
         ang = 2.0 * math.pi * k / 8.0
-        droop = 0.04 + 0.03 * math.sin(k * 2.1)
-        plen = 0.275 + 0.010 * math.cos(k * 2.0)
+        droop = 0.10 + 0.04 * math.sin(k * 2.1)
+        plen = 0.282 + 0.012 * math.cos(k * 2.0)
         pet = (
-            _sculpt_daisy_petal(f"dflower_petal_{k}", length=plen, half_width=0.036, thickness=0.0085, arch=0.009, droop_tip=0.012)
+            _sculpt_daisy_petal(
+                f"dflower_petal_{k}",
+                length=plen,
+                half_width=0.039,
+                thickness=0.0085,
+                arch=0.036,
+                droop_tip=0.068,
+                side_curve=petal_sweeps[k],
+            )
             .rotate_xyz(rx=droop, ry=ang)
-            .translate(0.050 * math.sin(ang), 0.002 * (k % 2), 0.050 * math.cos(ang))
+            .translate(0.048 * math.sin(ang), 0.002 * (k % 2), 0.048 * math.cos(ang))
         )
         head_parts.append(pet)
 
@@ -890,93 +906,115 @@ def _build_groucho_daisy(name: str, *, animated: bool) -> SceneBuilder:
         head_parts.append(nostril)
     sc.add("dflower_head", head_parts)
 
-    # Drooping bristly broom-style black Groucho mustache mounted on a child node!
+    # Full, bushy, cheerful broom-style black Groucho mustache clearly visible below the nose (level-to-upward corners, never sad!)
     sc.set_node_parent("dflower_stache", "dflower_head")
-    sc.set_node_transform("dflower_stache", translation=(0.0, 0.046, +0.058))
+    sc.set_node_transform("dflower_stache", translation=(0.0, 0.050, +0.056))
     stache_parts: List[MeshPart] = []
     for k in range(-4, 5):
         u = k / 4.0
-        tx = u * 0.072
-        tz = 0.008 + 0.024 * abs(u)
-        ty = -0.014 * (u * u)
+        tx = u * 0.078
+        # Gentle flat-to-lifted outer corners (`-Z` = up) with full bristly Groucho broom depth cleanly below the nose!
+        tz = 0.004 - 0.008 * (u * u)
+        ty = 0.004 - 0.010 * (u * u)
+        bristle_len = 0.044 - 0.005 * (u * u)
         tuft = (
-            ellipsoid(0.014, 0.013, 0.052 - 0.009 * abs(u), u_segs=10, v_segs=8, name=f"groucho_stache_{k + 4}", material="item_dark_stitch")
-            .rotate_xyz(rx=0.18, ry=u * 0.24)
-            .translate(tx, ty, tz + 0.028)
+            ellipsoid(0.016, 0.014, bristle_len, u_segs=10, v_segs=8, name=f"groucho_stache_{k + 4}", material="item_dark_stitch")
+            .rotate_xyz(rx=0.14, ry=u * 0.28)
+            .translate(tx, ty, tz + 0.024)
         )
         stache_parts.append(tuft)
     sc.add("dflower_stache", stache_parts)
 
     if animated:
-        # Exact 0.70s 1998 `420:dflower1` smooth rhythmic head-bobbing + graceful flexing stem (7 frames x 100ms!).
-        # Matched directly to `strip_dflower1.png`: steady grounded lower leaves, smooth organic stem sway,
-        # gentle left tilt (f0-f1) -> soft center glide (f2) -> slight lift (f3) -> signature cheerful right head-bob (f4) -> rebound (f5-f6).
-        times = [0.00, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70]
-        bot_rot = [
-            (+0.5, 0.0, +2.5),    # f0: grounded steady base, slight left lean
-            (+1.0, 0.0, +1.5),    # f1: smooth glide toward center
-            (+1.5, 0.0, +0.0),    # f2: center
-            (+0.5, 0.0, -1.5),    # f3: lifting into right lean
-            (+2.5, 0.0, -4.5),    # f4: smooth right bow on bob beat
-            (+1.0, 0.0, -1.5),    # f5: smooth elastic rebound
-            (+0.5, 0.0, +1.2),    # f6: returning left
-            (+0.5, 0.0, +2.5),    # seamless 700ms loop
-        ]
-        mid_rot = [
-            (+1.0, 0.0, +4.0),    # f0: smooth continuous arc (same direction as base, zero robotic kink!)
-            (+1.5, 0.0, +2.2),    # f1
-            (+2.5, 0.0, -0.5),    # f2
-            (+0.5, 0.0, -2.8),    # f3
-            (+4.5, 0.0, -7.5),    # f4: flexible stem bows smoothly right
-            (+1.5, 0.0, -2.5),    # f5
-            (+1.0, 0.0, +2.0),    # f6
-            (+1.0, 0.0, +4.0),
-        ]
-        top_rot = [
-            (-1.0, 0.0, +2.5),    # f0: gentle neck follow-through
-            (+0.5, 0.0, +1.2),    # f1
-            (+1.5, 0.0, -0.5),    # f2
-            (-1.5, 0.0, -1.8),    # f3: slight buoyant lift
-            (+4.0, 0.0, -5.5),    # f4: neck nods smoothly down-right
-            (-0.5, 0.0, -1.5),    # f5
-            (-0.5, 0.0, +1.2),    # f6
-            (-1.0, 0.0, +2.5),
-        ]
-        head_poses = [
-            (66.0, -5.0, +6.5),   # f0: gentle cheeky left tilt
-            (67.5, -2.5, +3.8),   # f1: gliding smoothly right
-            (69.5, +0.0, +0.5),   # f2: soft center bob
-            (64.5, +3.5, -2.5),   # f3: upright anticipation lift
-            (74.5, +8.5, -9.5),   # f4: iconic playful right-down head bob (`strip_dflower1.png` f4!)
-            (65.5, +3.0, -2.5),   # f5: buoyant rebound up-center
-            (67.0, -2.5, +3.5),   # f6: gliding back left
-            (66.0, -5.0, +6.5),   # seamless loop
-        ]
-        # Subtle rhythmic vertical head-bob translation matching the 10px vertical dip on f4!
-        head_trans = [
-            (-0.004, 0.230, +0.022),
-            (-0.004, 0.227, +0.022),
-            (-0.004, 0.224, +0.023),
-            (-0.004, 0.234, +0.021),
-            (-0.004, 0.208, +0.028),
-            (-0.004, 0.232, +0.022),
-            (-0.004, 0.228, +0.022),
-            (-0.004, 0.230, +0.022),
-        ]
-        stache_twitches = [
-            (-1.0, +1.0, +1.0),
-            (+0.5, +0.0, +0.0),
-            (+1.5, +0.0, +0.5),
-            (-1.5, -0.5, -0.5),
-            (+3.0, -2.0, -2.0),
-            (-1.0, +0.5, +0.5),
-            (+0.0, +0.5, +0.5),
-            (-1.0, +1.0, +1.0),
-        ]
+        # Exact 0.70s 1998 `420:dflower1` bobbing-to-music + rubbery animated stem (`strip_dflower1.png` 7 frames x 100ms!).
+        # Keys are placed at exact 2D frame midpoints (0.05..0.65s) with wrapped 0.00/0.70s endpoints so 3D and 2D stay
+        # in dead-on phase lockstep:
+        #   f0 (0.05s, 1/7): straight vertical stem `|`, head cocked jauntily UP-LEFT (`+15 deg`)
+        #   f1 (0.15s, 2/7): stem starts bowing LEFT `(`, head grooving toward level (`+11 deg`)
+        #   f2 (0.25s, 3/7): stem whips into BIG LEFT `(` C-bow, head level (`+3 deg`)
+        #   f3 (0.35s, 4/7): stem holds BIG LEFT `(` C-bow, head pops UP high on upbeat (`-6 deg`)
+        #   f4 (0.45s, 5/7): BIG MUSICAL DOWNBEAT BOB! Stem snaps straight `|`, head bobs BOLDLY DOWN & RIGHT (`-18 deg` + nod)!
+        #   f5 (0.55s, 6/7): stem springs straight & tall `|`, head bounces UP (`-5 deg`)
+        #   f6 (0.65s, 7/7): stem whips back into BIG LEFT `(` C-bow, head swings left (`+5 deg`) -> loops into f0!
+        times = [0.00, 0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.70]
+
+        def _wrap(vals):
+            # Seamless midpoint wrap at t=0.00 and t=0.70 between f6 (vals[-1]) and f0 (vals[0]).
+            mid = tuple(0.5 * (a + b) for a, b in zip(vals[-1], vals[0]))
+            return [mid] + list(vals) + [mid]
+
+        # Base stem: straight `|` on f0/f4/f5, dramatic left `(` bulge on f2/f3/f6!
+        bot_rot = _wrap([
+            (+0.0, 0.0, +1.0),    # f0 (1/7): straight vertical stem `|`
+            (+1.5, 0.0, +14.0),   # f1 (2/7): flexing left
+            (+3.0, 0.0, +28.0),   # f2 (3/7): BIG left `(` bow!
+            (+1.5, 0.0, +25.0),   # f3 (4/7): holding big left `(` bow
+            (+6.0, 0.0, -5.0),    # f4 (5/7): snaps straight/right & nods forward on downbeat!
+            (+0.5, 0.0, +3.0),    # f5 (6/7): straight rebound `|`
+            (+2.5, 0.0, +26.0),   # f6 (7/7): BIG left `(` bow!
+        ])
+        # Leaves counter-rotate against `bot_rot` so they stay horizontally poised & bob gently while stem snakes!
+        leaves_rot = _wrap([
+            (+0.0, 0.0, -1.0),
+            (-1.0, 0.0, -12.0),
+            (-2.0, 0.0, -24.0),
+            (-1.0, 0.0, -21.0),
+            (-2.0, 0.0, +4.0),
+            (-0.5, 0.0, -3.0),
+            (-2.0, 0.0, -22.0),
+        ])
+        # Mid stem bends sharply back RIGHT when base bows LEFT, forming the unmistakable arched `(` stem!
+        mid_rot = _wrap([
+            (+0.0, 0.0, -2.0),    # f0 (1/7): straight `|`
+            (+1.0, 0.0, -18.0),   # f1 (2/7): curving right back toward centerline
+            (+2.0, 0.0, -36.0),   # f2 (3/7): dramatic `(` C-curve arch!
+            (-1.5, 0.0, -31.0),   # f3 (4/7): dramatic `(` arch stretching tall
+            (+7.0, 0.0, +2.0),    # f4 (5/7): straight/forward on downbeat bob!
+            (-1.0, 0.0, -4.0),    # f5 (6/7): straight tall `|`
+            (+2.0, 0.0, -34.0),   # f6 (7/7): dramatic `(` C-curve arch!
+        ])
+        top_rot = _wrap([
+            (-2.0, 0.0, +3.0),    # f0 (1/7): neck upright
+            (+0.5, 0.0, +6.0),    # f1 (2/7)
+            (+2.0, 0.0, +10.0),   # f2 (3/7): counter-balancing top of `(` arch
+            (-3.0, 0.0, +4.0),    # f3 (4/7): upbeat lift
+            (+9.0, 0.0, -8.0),    # f4 (5/7): strong musical neck bob down-right!
+            (-2.5, 0.0, +0.0),    # f5 (6/7): elastic upbeat spring
+            (+1.5, 0.0, +9.0),    # f6 (7/7)
+        ])
+        # World-readable head-bobbing groove: jaunty LEFT tilt (1/7) -> center groove (3/7) -> upbeat lift (4/7) -> BIG DOWN-RIGHT BOB (5/7)!
+        head_poses = _wrap([
+            (64.0, -7.0, +15.0),  # f0 (1/7): cocked jauntily LEFT (`/`)
+            (66.5, -4.0, +11.0),  # f1 (2/7)
+            (69.5, +0.0, +2.0),   # f2 (3/7): level groove
+            (62.0, +4.0, -6.0),   # f3 (4/7): upbeat anticipation lift
+            (84.0, +10.0, -16.0), # f4 (5/7): BIG FUNKY HEAD-BOB DOWN & RIGHT (`\` + strong forward nod!)
+            (62.5, +3.0, -5.0),   # f5 (6/7): springy upbeat pop back up!
+            (68.5, -2.0, +5.0),   # f6 (7/7): grooving back left
+        ])
+        head_trans = _wrap([
+            (0.000, 0.312, +0.024),  # f0 (1/7)
+            (0.000, 0.318, +0.023),  # f1 (2/7)
+            (0.000, 0.306, +0.026),  # f2 (3/7): subtle center beat bounce
+            (0.000, 0.332, +0.020),  # f3 (4/7): highest upbeat peak!
+            (+0.022, 0.256, +0.044), # f4 (5/7): unmistakable musical down-right head bob!
+            (+0.004, 0.326, +0.021), # f5 (6/7): springy upbeat bounce!
+            (0.000, 0.306, +0.026),  # f6 (7/7)
+        ])
+        stache_twitches = _wrap([
+            (-2.0, +1.5, +1.5),
+            (+0.5, +0.5, +0.5),
+            (+1.5, +0.0, +0.0),
+            (-2.5, -1.0, -1.0),
+            (+6.0, -2.5, -2.5),
+            (-2.0, +1.0, +1.0),
+            (+1.0, +0.5, +0.5),
+        ])
         sc.add_animation(
             "Idle",
             [
                 AnimationChannel("dflower_stem_bot", "rotation", times, [quat_from_euler_xyz(rx=rx, ry=ry, rz=rz, degrees=True) for rx, ry, rz in bot_rot]),
+                AnimationChannel("dflower_leaves", "rotation", times, [quat_from_euler_xyz(rx=rx, ry=ry, rz=rz, degrees=True) for rx, ry, rz in leaves_rot]),
                 AnimationChannel("dflower_stem_mid", "rotation", times, [quat_from_euler_xyz(rx=rx, ry=ry, rz=rz, degrees=True) for rx, ry, rz in mid_rot]),
                 AnimationChannel("dflower_stem_top", "rotation", times, [quat_from_euler_xyz(rx=rx, ry=ry, rz=rz, degrees=True) for rx, ry, rz in top_rot]),
                 AnimationChannel("dflower_head", "rotation", times, [quat_from_euler_xyz(rx=rx, ry=ry, rz=rz, degrees=True) for rx, ry, rz in head_poses]),

@@ -199,36 +199,56 @@ def build_pin3() -> SceneBuilder:
 
 
 def build_botcap1() -> SceneBuilder:
-    """Upside-down 21-tooth crimped silver bottle cap stamped 'YOU WIN!!!' (`316:botcap1`)."""
+    """Upside-down 21-crimp stamped tinplate crown bottle cap with 'YOU WIN!!!' liner (`316:botcap1`)."""
     register_item_materials()
     sc = SceneBuilder(name="item_botcap1")
 
-    # Build authentic hollow open-top crimped crown cup so we look DOWN INTO the 'YOU WIN!!!' liner!
-    n_seg = 63  # multiple of 21 teeth for sharp crisp fluting
-    r_base = 0.240
-    r_rim = 0.285
-    h_cup = 0.095
-    wall_t = 0.022
+    # Authentic 21-flute rounded crown bottle cap: 168 radial segments (8 smooth samples per crimp, zero sawblade spikes!),
+    # compact vertical-ish flared skirt, thin rolled sheet-metal lip, and solid watertight stamped outer bottom.
+    n_teeth = 21
+    n_seg = n_teeth * 8  # 168 segments for silky rounded U-shaped crown scallops
+    r_flat = 0.222
+    r_base = 0.246
+    r_rim = 0.268
+    h_cup = 0.088
+    wall_t = 0.0085
+    flute_amp = 0.0115  # subtle realistic +/-4.3% rounded steel corrugation (not jagged spikes!)
 
-    # Profile around the open cup rim: outer bottom -> outer fluted rim -> top lip -> inner fluted wall -> inner floor!
+    # Closed watertight cross-section: outer bottom center -> outer rounded shoulder -> outer fluted skirt ->
+    # rolled top metal lip -> inner fluted skirt -> inner floor center!
+    # Tuple: (mean_radius, y_height, flute_weight, rim_wave_weight)
     ring_specs = (
-        (r_base * 0.96, 0.000, 0.00),
-        (r_base, 0.018, 0.15),
-        (r_rim, h_cup - 0.010, 1.00),
-        (r_rim + 0.006, h_cup, 1.00),
-        (r_rim - wall_t, h_cup, 0.85),
-        (r_base - wall_t, 0.026, 0.15),
-        (0.000, 0.024, 0.00),
+        (0.000,            0.000,         0.00, 0.00),
+        (r_flat,           0.000,         0.00, 0.00),
+        (r_base - 0.008,   0.007,         0.04, 0.00),
+        (r_base,           0.020,         0.20, 0.00),
+        (r_base + 0.008,   0.044,         0.58, 0.00),
+        (r_rim - 0.004,    0.070,         0.92, 0.45),
+        (r_rim,            h_cup - 0.004, 1.00, 1.00),
+        (r_rim - 0.0025,   h_cup,         1.00, 1.00),
+        (r_rim - wall_t + 0.0025, h_cup,  1.00, 1.00),
+        (r_rim - wall_t,   h_cup - 0.004, 1.00, 1.00),
+        (r_rim - wall_t - 0.004, 0.070,   0.92, 0.45),
+        (r_base - wall_t + 0.008, 0.044,  0.58, 0.00),
+        (r_base - wall_t,  0.022,         0.20, 0.00),
+        (r_flat - wall_t,  0.012,         0.00, 0.00),
+        (0.000,            0.012,         0.00, 0.00),
     )
-    verts, uvs, tris = [], [], []
-    for ir, (rad, yv, flute_w) in enumerate(ring_specs):
+    verts, uvs, cols, tris = [], [], [], []
+    for ir, (rad, yv, flute_w, rim_w) in enumerate(ring_specs):
         vf = ir / float(len(ring_specs) - 1)
         for j in range(n_seg + 1):
             uf = j / float(n_seg)
             ang = uf * 2.0 * math.pi
-            r_eff = rad * (1.0 + 0.088 * math.cos(ang * 21.0) * flute_w)
-            verts.append((r_eff * math.cos(ang), yv, r_eff * math.sin(ang)))
+            c_tooth = math.cos(ang * n_teeth)
+            r_eff = rad + flute_amp * c_tooth * flute_w if rad > 1e-6 else 0.0
+            # Subtle authentic crown-crimp edge wave along the rolled rim
+            y_eff = yv - 0.0022 * c_tooth * rim_w
+            verts.append((r_eff * math.cos(ang), y_eff, r_eff * math.sin(ang)))
             uvs.append((uf * 2.0, vf))
+            # Subtle warm tinplate valley-to-crest AO so every rounded crimp scallop pops naturally
+            ao = 0.84 + 0.16 * (0.5 + 0.5 * c_tooth) * flute_w + 0.08 * (1.0 - flute_w)
+            cols.append((min(1.0, ao * 0.94), min(1.0, ao * 0.91), min(1.0, ao * 0.86)))
     stride = n_seg + 1
     for ir in range(len(ring_specs) - 1):
         for j in range(n_seg):
@@ -236,19 +256,25 @@ def build_botcap1() -> SceneBuilder:
             tris.extend(((a, b, c), (a, c, d)))
     pos_c = np.asarray(verts, dtype=np.float32)
     idx_c = np.asarray(tris, dtype=np.uint32).reshape(-1)
-    cup = tint_part(
-        MeshPart("botcap_cup", "item_chrome_spring", pos_c, recompute_smooth_normals(pos_c, idx_c), idx_c, uvs=np.asarray(uvs, dtype=np.float32)),
-        _const_tint((0.86, 0.84, 0.80)),
+    cup = MeshPart(
+        "botcap_cup",
+        "item_tin_aluminum",
+        pos_c,
+        recompute_smooth_normals(pos_c, idx_c),
+        idx_c,
+        uvs=np.asarray(uvs, dtype=np.float32),
+        colors=np.asarray(cols, dtype=np.float32),
     )
 
-    # Recessed printed 'YOU WIN!!!' plastic cap liner disk resting cleanly inside the open crimped rim!
-    liner_r = r_base - wall_t * 0.85
-    liner = cylinder(liner_r, liner_r, 0.012, radial_segs=36, bevel=0.002, axis="y", name="botcap_liner", material="item_cap_win").translate(0.0, 0.032, 0.0)
-    u = np.clip(0.5 + liner.positions[:, 0] / (2.0 * liner_r * 1.04), 0.0, 1.0)
-    v = np.clip(0.5 + liner.positions[:, 2] / (2.0 * liner_r * 1.04), 0.0, 1.0)
+    # Full-width printed 'YOU WIN!!!' white PVC plastisol liner + thin raised sealing gasket ring inside the cap!
+    liner_r = r_base - wall_t - 0.005
+    liner = cylinder(liner_r, liner_r, 0.010, radial_segs=48, bevel=0.002, axis="y", name="botcap_liner", material="item_cap_win").translate(0.0, 0.019, 0.0)
+    u = np.clip(0.5 + liner.positions[:, 0] / (2.0 * liner_r * 1.02), 0.0, 1.0)
+    v = np.clip(0.5 + liner.positions[:, 2] / (2.0 * liner_r * 1.02), 0.0, 1.0)
     liner.uvs = np.column_stack([u, v]).astype(np.float32)
+    gasket = torus_arc(liner_r - 0.012, 0.0065, u_segs=48, v_segs=10, plane="xz", name="botcap_gasket", material="item_wireless_shell").translate(0.0, 0.025, 0.0)
 
-    sc.add("botcap1", [cup, liner])
+    sc.add("botcap1", [cup, liner, gasket])
     return _finalize_item(sc, target_span=0.80)
 
 

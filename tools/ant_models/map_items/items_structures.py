@@ -298,17 +298,17 @@ def _add_waving_flag(
 
 
 def _crimped_bottle_cap(prefix: str, top_mat: str, *, radius: float = 0.106, planar_top_uv: bool = False) -> List[MeshPart]:
-    """Reusable realistic 21-tooth crimped metallic soda bottle cap with optional crisp planar printed-logo UVs."""
+    """Reusable realistic 21-crimp rounded metallic soda bottle cap with optional crisp planar printed-logo UVs."""
     def _crimp(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
         ang = np.arctan2(p[:, 2], p[:, 0])
-        bot = np.clip(-p[:, 1] / 0.024, 0.0, 1.0)
-        flute = 1.0 + 0.12 * np.cos(ang * 21.0) * bot
+        bot = np.clip((0.014 - p[:, 1]) / 0.032, 0.0, 1.0)
+        flute = 1.0 + 0.048 * np.cos(ang * 21.0) * bot
         p[:, 0] *= flute
         p[:, 2] *= flute
         return p
 
-    metal = cylinder(radius, radius * 1.13, 0.042, radial_segs=42, bevel=0.005, axis="y", name=f"{prefix}_metal", material="item_aluminum").deform(_crimp)
+    metal = cylinder(radius, radius * 1.07, 0.040, radial_segs=126, bevel=0.004, axis="y", name=f"{prefix}_metal", material="item_tin_aluminum").deform(_crimp)
     top_r = radius * 0.88
     top = cylinder(top_r, top_r, 0.016, radial_segs=32, bevel=0.004, axis="y", name=f"{prefix}_top", material=top_mat).translate(0.0, 0.017, 0.0)
     if planar_top_uv:
