@@ -172,13 +172,22 @@ def build_sprite_metrics(t4_entries, items_manifest, sprites_dir):
             oz = 0.5 * (min_y + max_y) / TILE_PX
 
         sx, sy, sz = [max(0.08, float(v)) for v in item["size"]]
-        # Match 1998 projected width (sx) & 45-degree projected height (0.707*(sy+sz)) onto 32px tiles
-        scale_x = w_tiles / sx
-        scale_h = h_tiles / (0.7071 * (sy + sz))
-        if low.startswith(("grass", "ivy", "leaf")) or low in HILL_TEAMS or bw >= 60.0:
-            # Multi-tile walls/hills/large objects match exact horizontal tile span cleanly
+        # Match 1998 projected width (sx) & oblique Game View height (sz + 0.78*sy) onto 32px tiles
+        if low.startswith("grass"):
+            scale_x = w_tiles / sx
+            scale_y = h_tiles / (sz + 0.78 * sy)
+            scale = 0.5 * (scale_x + scale_y)
+            # Align 3D grass projected oblique box [oz - 0.5*sz*s - 0.78*sy*s .. oz + 0.5*sz*s]
+            # directly onto the 1998 sprite [min_y/32 .. max_y/32] so blades never poke north over food/powerups!
+            ox = 0.5 * (min_x + max_x) / TILE_PX
+            oz = 0.5 * (min_y + max_y) / TILE_PX + 0.5 * 0.78 * sy * scale
+        elif low.startswith(("ivy", "leaf")) or low in HILL_TEAMS or bw >= 60.0:
+            scale_x = w_tiles / sx
+            scale_h = h_tiles / (0.7071 * (sy + sz))
             scale = 0.72 * scale_x + 0.28 * scale_h
         else:
+            scale_x = w_tiles / sx
+            scale_h = h_tiles / (0.7071 * (sy + sz))
             scale = math.sqrt(scale_x * scale_h)
 
         metrics[low] = {

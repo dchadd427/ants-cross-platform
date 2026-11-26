@@ -12,7 +12,7 @@ Covers:
 from __future__ import annotations
 
 import math
-from typing import List, Tuple
+from typing import List, Sequence, Tuple
 
 try:
     import numpy as np
@@ -144,6 +144,7 @@ def _build_grass_cluster(
     width_scale: float = 1.0,
     lean_bias_x: float = 0.0,
     n_culms: int = 4,
+    flare_scale: float = 1.0,
     seed: int = 11,
 ) -> SceneBuilder:
     """Build a lush, dense, 3-tiered multi-culm 3D grass tuft rooted directly on Y = 0.0 (zero bare gaps)."""
@@ -154,56 +155,52 @@ def _build_grass_cluster(
     # Group blades into natural botanical root culms/rosettes so tufts read rich, clustered & organic!
     culms: List[Tuple[float, float, float]] = [(0.0, 0.0, 1.0)]
     for c in range(1, max(1, n_culms)):
-        ca = (2.0 * math.pi * c / float(max(1, n_culms - 1))) + float(rng.uniform(-0.35, 0.35))
-        cr = float(rng.uniform(0.32, 0.72))
-        culms.append((spread_x * cr * math.cos(ca), spread_z * cr * math.sin(ca), float(rng.uniform(0.84, 1.04))))
+        ca = (2.0 * math.pi * c / float(max(1, n_culms - 1))) + float(rng.uniform(-0.32, 0.32))
+        cr = float(rng.uniform(0.36, 0.78))
+        culms.append((spread_x * cr * math.cos(ca), spread_z * cr * math.sin(ca), float(rng.uniform(0.86, 1.04))))
 
     for k in range(n_blades):
         cx0, cz0, ch_scale = culms[k % len(culms)]
-        # 3 upright botanical canopy tiers matching 1998 lush meadow grass:
-        # 0 = dense thick upright basal sheath (40%), 1 = tall lush full mid-canopy (42%), 2 = tall arching outer spires (18%)
-        tier_u = (k / float(max(1, n_blades)))
-        if tier_u < 0.40:
+        tier_u = k / float(max(1, n_blades))
+        if tier_u < 0.42:
             tier = 0
-            rad_local = math.sqrt(float(rng.uniform(0.01, 0.85))) * 0.44
-            h_mult = float(rng.uniform(0.54, 0.82))
-            w_mult = float(rng.uniform(1.18, 1.46))
-            lean_m, droop_m = 0.58, 0.55
+            rad_local = math.sqrt(float(rng.uniform(0.01, 0.88))) * 0.42
+            h_mult = float(rng.uniform(0.56, 0.82))
+            w_mult = float(rng.uniform(1.16, 1.44))
+            lean_m, droop_m = 0.52, 0.46
             shade_m = float(rng.uniform(0.74, 0.92))
-        elif tier_u < 0.82:
+        elif tier_u < 0.84:
             tier = 1
-            rad_local = math.sqrt(float(rng.uniform(0.01, 0.95))) * 0.48
-            h_mult = float(rng.uniform(0.78, 1.06))
-            w_mult = float(rng.uniform(1.04, 1.30))
-            lean_m, droop_m = 0.72, 0.65
+            rad_local = math.sqrt(float(rng.uniform(0.01, 0.96))) * 0.46
+            h_mult = float(rng.uniform(0.78, 1.04))
+            w_mult = float(rng.uniform(1.02, 1.28))
+            lean_m, droop_m = 0.68, 0.58
             shade_m = float(rng.uniform(0.88, 1.05))
         else:
             tier = 2
-            rad_local = math.sqrt(float(rng.uniform(0.02, 1.0))) * 0.52
-            h_mult = float(rng.uniform(1.02, 1.28))
+            rad_local = math.sqrt(float(rng.uniform(0.02, 1.0))) * 0.48
+            h_mult = float(rng.uniform(0.98, 1.18))
             w_mult = float(rng.uniform(0.86, 1.08))
-            lean_m, droop_m = 1.05, 0.95
+            lean_m, droop_m = 0.92, 0.80
             shade_m = float(rng.uniform(0.96, 1.12))
 
         ang = float(rng.uniform(0.0, 2.0 * math.pi))
         bx = cx0 + spread_x * rad_local * math.cos(ang)
         bz = cz0 + spread_z * rad_local * math.sin(ang)
         rad_global = min(1.0, math.hypot(bx / max(1e-4, spread_x), bz / max(1e-4, spread_z)))
-        height = float(rng.uniform(h_min, h_max)) * h_mult * ch_scale * (1.08 - 0.14 * rad_global)
-        width = float(rng.uniform(0.080, 0.118)) * width_scale * w_mult
+        height = float(rng.uniform(h_min, h_max)) * h_mult * ch_scale * (1.06 - 0.14 * rad_global)
+        width = float(rng.uniform(0.074, 0.108)) * width_scale * w_mult
         if abs(lean_bias_x) > 0.02:
-            # Upright wind-swept tuft (`grass1`/`grass2`): rises vertically then bends gracefully left!
-            base_yaw = math.atan2(lean_bias_x + 0.35 * bx, 0.32 * bz + 0.05)
-            out_yaw = base_yaw + float(rng.uniform(-0.72, 0.72))
+            base_yaw = math.atan2(lean_bias_x + 0.32 * bx, 0.25 * bz + 0.04)
+            out_yaw = base_yaw + float(rng.uniform(-0.68, 0.68))
         else:
-            out_yaw = math.atan2(bx - cx0 * 0.25, (bz - cz0 * 0.25) + 1e-4) + float(rng.uniform(-0.68, 0.68))
-        # Upright core blades stand tall & dense; outer rim blades sweep & arch gracefully outward like 1998 meadow tufts!
-        rim_boost = 1.95 if rad_global > 0.56 else 1.0
-        outer_flare = (0.18 + 1.05 * (rad_global ** 1.25)) * rim_boost
-        lean = float(rng.uniform(0.05, 0.17)) * lean_m * outer_flare
-        droop = float(rng.uniform(0.05, 0.20)) * droop_m * outer_flare
-        twist = float(rng.uniform(-0.62, 0.62))
-        sway = float(rng.uniform(-0.055, 0.055))
+            out_yaw = math.atan2(bx - cx0 * 0.2, (bz - cz0 * 0.2) + 1e-4) + float(rng.uniform(-0.65, 0.65))
+        rim_boost = 1.65 if rad_global > 0.58 else 1.0
+        outer_flare = (0.16 + 0.88 * (rad_global ** 1.25)) * rim_boost * flare_scale
+        lean = float(rng.uniform(0.04, 0.14)) * lean_m * outer_flare
+        droop = float(rng.uniform(0.04, 0.16)) * droop_m * outer_flare
+        twist = float(rng.uniform(-0.56, 0.56))
+        sway = float(rng.uniform(-0.045, 0.045))
         hue = (float(rng.uniform(0.82, 1.16)), float(rng.uniform(0.92, 1.08)), float(rng.uniform(0.74, 1.08)))
         sc.add(
             "grass",
@@ -225,29 +222,88 @@ def _build_grass_cluster(
     return _finalize_item(sc, target_span=0.96)
 
 
+def _build_grass_lobes(
+    name: str,
+    *,
+    lobes: Sequence[Tuple[float, float, float, float, float]],
+    n_blades: int,
+    h_min: float,
+    h_max: float,
+    width_scale: float = 1.0,
+    seed: int = 1327,
+) -> SceneBuilder:
+    """Build a thick, lush multi-lobed grass thicket matching exact 1998 stepped/curved footprints (`grassmed3..4`, `grassbig2`)."""
+    register_item_materials()
+    sc = SceneBuilder(name=name)
+    rng = np.random.default_rng(seed)
+
+    for k in range(n_blades):
+        lx, lz, rx, rz, h_lobe = lobes[k % len(lobes)]
+        ang = float(rng.uniform(0.0, 2.0 * math.pi))
+        rad = math.sqrt(float(rng.uniform(0.0, 1.0)))
+        bx = lx + rx * rad * math.cos(ang)
+        bz = lz + rz * rad * math.sin(ang)
+
+        tier_u = k / float(max(1, n_blades))
+        if tier_u < 0.40:
+            h_m, w_m, sh_m = float(rng.uniform(0.56, 0.82)), 1.24, float(rng.uniform(0.74, 0.92))
+        elif tier_u < 0.84:
+            h_m, w_m, sh_m = float(rng.uniform(0.80, 1.04)), 1.10, float(rng.uniform(0.88, 1.05))
+        else:
+            h_m, w_m, sh_m = float(rng.uniform(1.00, 1.18)), 0.94, float(rng.uniform(0.96, 1.12))
+
+        height = float(rng.uniform(h_min, h_max)) * h_m * h_lobe * (1.05 - 0.14 * rad)
+        width = float(rng.uniform(0.068, 0.098)) * width_scale * w_m
+        out_yaw = math.atan2(bx - lx, (bz - lz) + 1e-4) + float(rng.uniform(-0.85, 0.85))
+        outer_flare = 0.18 + 0.72 * (rad ** 1.25)
+        lean = float(rng.uniform(0.03, 0.10)) * outer_flare
+        droop = float(rng.uniform(0.03, 0.11)) * outer_flare
+        twist = float(rng.uniform(-0.54, 0.54))
+        sway = float(rng.uniform(-0.04, 0.04))
+        hue = (float(rng.uniform(0.82, 1.16)), float(rng.uniform(0.92, 1.08)), float(rng.uniform(0.74, 1.08)))
+        sc.add(
+            "grass",
+            _curved_grass_blade(
+                f"blade_{k}",
+                base_xz=(bx, bz),
+                height=height,
+                width=width,
+                yaw=out_yaw,
+                lean=lean,
+                droop=droop,
+                twist=twist,
+                sway=sway,
+                shade_mult=sh_m,
+                hue_shift=hue,
+                segs=7,
+            ),
+        )
+    return _finalize_item(sc, target_span=0.96)
+
+
 def build_grass1() -> SceneBuilder:
-    """Lush upright wind-swept small backyard grass tuft (`1320:grass1`)."""
-    return _build_grass_cluster("item_grass1", n_blades=76, spread_x=0.16, spread_z=0.13, h_min=0.58, h_max=0.92, width_scale=1.12, lean_bias_x=-0.16, n_culms=3, seed=1320)
+    """Lush upright wind-swept small backyard grass tuft matching 2.16x2.91 tile 1998 footprint (`1320:grass1`)."""
+    return _build_grass_cluster("item_grass1", n_blades=96, spread_x=0.42, spread_z=0.16, h_min=0.72, h_max=0.96, width_scale=1.18, lean_bias_x=-0.18, n_culms=4, flare_scale=0.85, seed=1320)
 
 
 def build_grass2() -> SceneBuilder:
-    """Upright wind-swept small backyard grass tuft variant (`1321:grass2`)."""
-    return _build_grass_cluster("item_grass2", n_blades=80, spread_x=0.17, spread_z=0.14, h_min=0.56, h_max=0.94, width_scale=1.10, lean_bias_x=-0.18, n_culms=3, seed=1321)
+    """Upright wind-swept small backyard grass tuft variant matching 2.16x2.91 tile 1998 footprint (`1321:grass2`)."""
+    return _build_grass_cluster("item_grass2", n_blades=96, spread_x=0.33, spread_z=0.16, h_min=0.72, h_max=0.98, width_scale=1.16, lean_bias_x=-0.20, n_culms=4, flare_scale=0.85, seed=1321)
 
 
 def build_grass3() -> SceneBuilder:
-    """Full lush backyard meadow grass tuft matching 2x2 tile footprint (`1322:grass3`)."""
-    return _build_grass_cluster("item_grass3", n_blades=116, spread_x=0.28, spread_z=0.18, h_min=0.42, h_max=0.68, width_scale=1.08, lean_bias_x=0.0, n_culms=5, seed=1322)
+    """Full lush backyard meadow grass tuft matching 2.69x2.25 tile 1998 footprint (`1322:grass3`)."""
+    return _build_grass_cluster("item_grass3", n_blades=144, spread_x=0.44, spread_z=0.16, h_min=0.42, h_max=0.58, width_scale=1.18, lean_bias_x=0.0, n_culms=6, flare_scale=0.85, seed=1322)
 
 
 def build_grass4() -> SceneBuilder:
-    """Wide-splayed lush tall grass blades fanning outward (`1323:grass4`)."""
-    return _build_grass_cluster("item_grass4", n_blades=92, spread_x=0.24, spread_z=0.18, h_min=0.60, h_max=0.96, width_scale=1.12, lean_bias_x=0.0, n_culms=4, seed=1323)
+    """Wide-splayed bold fanning grass tuft matching 2.62x2.44 tile 1998 footprint (`1323:grass4`)."""
+    return _build_grass_cluster("item_grass4", n_blades=76, spread_x=0.36, spread_z=0.15, h_min=0.52, h_max=0.72, width_scale=1.30, lean_bias_x=0.0, n_culms=4, flare_scale=1.22, seed=1323)
 
 
 def build_grassbig1() -> SceneBuilder:
-    """Dense tall broad wild lawn grass clump with layered multi-culm blades (`1325:grassbig1`)."""
-    return _build_grass_cluster("item_grassbig1", n_blades=188, spread_x=0.34, spread_z=0.28, h_min=0.58, h_max=0.96, width_scale=1.06, lean_bias_x=0.0, n_culms=7, seed=1325)
+    """Dense broad rounded wild lawn thicket matching 4.91x4.38 tile 1998 footprint (`1325:grassbig1`)."""
+    return _build_grass_cluster("item_grassbig1", n_blades=240, spread_x=0.48, spread_z=0.28, h_min=0.32, h_max=0.45, width_scale=1.08, lean_bias_x=0.0, n_culms=9, flare_scale=0.78, seed=1325)
 
 
 def _build_grass_strip(
@@ -259,20 +315,22 @@ def _build_grass_strip(
     strip_angle_deg: float,
     h_min: float,
     h_max: float,
+    width_scale: float = 1.0,
     curve_amp: float = 0.0,
+    n_culms: int = 8,
     seed: int = 1324,
 ) -> SceneBuilder:
-    """Build a lush, thick, upright multi-tiered curving hedge ribbon of overlapping 3D grass culms (`grassmed1..4`, `grassbig2`)."""
+    """Build a lush, thick, upright multi-tiered grass hedge matching exact 1998 tile proportions (`grassmed1..2`)."""
     register_item_materials()
     sc = SceneBuilder(name=name)
     rng = np.random.default_rng(seed)
     rad_ang = math.radians(strip_angle_deg)
     ca, sa = math.cos(rad_ang), math.sin(rad_ang)
 
-    clump_us = [(-0.44 + 0.88 * (c / 6.0)) for c in range(7)]
+    clump_us = [(-0.47 + 0.94 * (c / float(max(1, n_culms - 1)))) for c in range(max(2, n_culms))]
     for k in range(n_blades):
         cu = clump_us[k % len(clump_us)]
-        u = float(np.clip(cu + rng.uniform(-0.13, 0.13), -0.5, 0.5))
+        u = float(np.clip(cu + rng.uniform(-0.12, 0.12), -0.5, 0.5))
         v = float(rng.uniform(-0.5, 0.5))
         along = u * length
         across = v * thickness + curve_amp * math.sin(u * math.pi * 1.6)
@@ -281,21 +339,21 @@ def _build_grass_strip(
         edge_frac = min(1.0, abs(v) * 2.0)
 
         tier_u = k / float(max(1, n_blades))
-        if tier_u < 0.38:
-            h_m, w_m, sh_m = float(rng.uniform(0.54, 0.80)), 1.28, float(rng.uniform(0.74, 0.92))
-        elif tier_u < 0.82:
-            h_m, w_m, sh_m = float(rng.uniform(0.78, 1.04)), 1.12, float(rng.uniform(0.88, 1.05))
+        if tier_u < 0.40:
+            h_m, w_m, sh_m = float(rng.uniform(0.58, 0.82)), 1.26, float(rng.uniform(0.74, 0.92))
+        elif tier_u < 0.84:
+            h_m, w_m, sh_m = float(rng.uniform(0.80, 1.04)), 1.12, float(rng.uniform(0.88, 1.05))
         else:
-            h_m, w_m, sh_m = float(rng.uniform(1.02, 1.24)), 0.94, float(rng.uniform(0.96, 1.12))
+            h_m, w_m, sh_m = float(rng.uniform(1.00, 1.18)), 0.94, float(rng.uniform(0.96, 1.12))
 
-        height = float(rng.uniform(h_min, h_max)) * h_m * (1.06 - 0.14 * edge_frac)
-        width = float(rng.uniform(0.072, 0.106)) * w_m
-        out_yaw = math.atan2(-sa * (1.0 if v >= 0 else -1.0), ca * (1.0 if v >= 0 else -1.0)) + float(rng.uniform(-1.0, 1.0))
-        outer_flare = 0.22 + 0.85 * (edge_frac ** 1.2)
-        lean = float(rng.uniform(0.04, 0.14)) * outer_flare
-        droop = float(rng.uniform(0.04, 0.15)) * outer_flare
-        twist = float(rng.uniform(-0.58, 0.58))
-        sway = float(rng.uniform(-0.048, 0.048))
+        height = float(rng.uniform(h_min, h_max)) * h_m * (1.05 - 0.14 * edge_frac)
+        width = float(rng.uniform(0.064, 0.094)) * width_scale * w_m
+        out_yaw = math.atan2(-sa * (1.0 if v >= 0 else -1.0), ca * (1.0 if v >= 0 else -1.0)) + float(rng.uniform(-0.95, 0.95))
+        outer_flare = 0.16 + 0.68 * (edge_frac ** 1.2)
+        lean = float(rng.uniform(0.025, 0.09)) * outer_flare
+        droop = float(rng.uniform(0.025, 0.10)) * outer_flare
+        twist = float(rng.uniform(-0.54, 0.54))
+        sway = float(rng.uniform(-0.04, 0.04))
         hue = (float(rng.uniform(0.82, 1.16)), float(rng.uniform(0.92, 1.08)), float(rng.uniform(0.74, 1.08)))
         sc.add(
             "grass",
@@ -318,28 +376,65 @@ def _build_grass_strip(
 
 
 def build_grassmed1() -> SceneBuilder:
-    """Horizontal lush meadow grass hedge strip matching 5x2 tile footprint (`1324:grassmed1`)."""
-    return _build_grass_strip("item_grassmed1", n_blades=196, length=1.12, thickness=0.20, strip_angle_deg=0.0, h_min=0.26, h_max=0.44, seed=1324)
+    """Horizontal lush 5-tile meadow hedge matching 4.88x2.16 tile 1998 footprint (`1324:grassmed1`)."""
+    return _build_grass_strip("item_grassmed1", n_blades=246, length=1.24, thickness=0.15, strip_angle_deg=0.0, h_min=0.22, h_max=0.30, width_scale=0.90, n_culms=10, seed=1324)
 
 
 def build_grassmed2() -> SceneBuilder:
-    """Vertical narrow lush meadow grass row (`1326:grassmed2`)."""
-    return _build_grass_strip("item_grassmed2", n_blades=200, length=1.08, thickness=0.20, strip_angle_deg=90.0, h_min=0.44, h_max=0.72, seed=1326)
+    """Full 2-tile-wide vertical meadow grass column matching 2.03x4.00 tile 1998 footprint (`1326:grassmed2`)."""
+    return _build_grass_strip("item_grassmed2", n_blades=244, length=1.14, thickness=0.58, strip_angle_deg=90.0, h_min=0.45, h_max=0.59, width_scale=1.16, n_culms=9, seed=1326)
 
 
 def build_grassmed3() -> SceneBuilder:
-    """Diagonal SW-to-NE lush grass hedge ribbon (`1327:grassmed3`)."""
-    return _build_grass_strip("item_grassmed3", n_blades=204, length=1.00, thickness=0.24, strip_angle_deg=-42.0, h_min=0.44, h_max=0.72, curve_amp=0.07, seed=1327)
+    """Thick lush SW-to-NE stepped diagonal meadow thicket matching 3.97x3.94 tile 1998 footprint (`1327:grassmed3`)."""
+    return _build_grass_lobes(
+        "item_grassmed3",
+        lobes=[
+            (-0.34, +0.24, 0.24, 0.20, 0.96),
+            (-0.02, +0.02, 0.26, 0.22, 1.04),
+            (+0.32, -0.22, 0.24, 0.20, 1.00),
+        ],
+        n_blades=246,
+        h_min=0.34,
+        h_max=0.46,
+        width_scale=1.08,
+        seed=1327,
+    )
 
 
 def build_grassbig2() -> SceneBuilder:
-    """Curving wide NW-to-SE lush wild grass hedge (`1328:grassbig2`)."""
-    return _build_grass_strip("item_grassbig2", n_blades=230, length=1.04, thickness=0.28, strip_angle_deg=+36.0, h_min=0.46, h_max=0.76, curve_amp=0.09, seed=1328)
+    """Massive curved NW-to-SE lush wild grass thicket matching 5.97x5.19 tile 1998 footprint (`1328:grassbig2`)."""
+    return _build_grass_lobes(
+        "item_grassbig2",
+        lobes=[
+            (-0.42, -0.06, 0.22, 0.18, 0.92),
+            (-0.10, -0.14, 0.26, 0.22, 1.08),
+            (+0.18, +0.06, 0.25, 0.20, 0.98),
+            (+0.42, +0.24, 0.22, 0.18, 0.92),
+        ],
+        n_blades=272,
+        h_min=0.30,
+        h_max=0.42,
+        width_scale=1.02,
+        seed=1328,
+    )
 
 
 def build_grassmed4() -> SceneBuilder:
-    """Diagonal NW-to-SE lush meadow grass hedge ribbon (`1329:grassmed4`)."""
-    return _build_grass_strip("item_grassmed4", n_blades=204, length=1.00, thickness=0.24, strip_angle_deg=+48.0, h_min=0.44, h_max=0.72, curve_amp=-0.06, seed=1329)
+    """Thick lush NW-to-SE stepped diagonal meadow thicket matching 3.97x3.94 tile 1998 footprint (`1329:grassmed4`)."""
+    return _build_grass_lobes(
+        "item_grassmed4",
+        lobes=[
+            (-0.32, -0.22, 0.24, 0.20, 1.00),
+            (+0.02, +0.02, 0.26, 0.22, 1.04),
+            (+0.34, +0.24, 0.24, 0.20, 0.96),
+        ],
+        n_blades=246,
+        h_min=0.34,
+        h_max=0.46,
+        width_scale=1.08,
+        seed=1329,
+    )
 
 
 def _heart_leaflet(name: str, *, scale: float = 1.0) -> MeshPart:
